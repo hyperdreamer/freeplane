@@ -116,19 +116,19 @@ class ChatPromptRunner {
             userNotifier.accept(TextUtils.getText("ai_prompt_request_active"), false);
             return;
         }
-        final String preparedMessage;
-        try {
-            preparedMessage = aiPromptRequestComposer.compose(prompt);
-        } catch (RuntimeException error) {
-            userNotifier.accept(error.getMessage(), true);
-            return;
-        }
         String selectedModelOverride = normalizeSelectionValue(prompt.getModelSelectionValue());
         String toolAvailabilitySelectionValue = prompt.getToolAvailabilitySelectionValue();
         ChatToolAvailability resolvedToolAvailability =
             promptToolSelectionResolver.resolveEffectiveToolAvailability(toolAvailabilitySelectionValue);
         ChatToolAvailability toolAvailabilityOverride =
             promptToolSelectionResolver.resolveShownChatOverride(toolAvailabilitySelectionValue);
+        final String preparedMessage;
+        try {
+            preparedMessage = aiPromptRequestComposer.compose(prompt, resolvedToolAvailability);
+        } catch (RuntimeException error) {
+            userNotifier.accept(error.getMessage(), true);
+            return;
+        }
         ChatMemory promptChatMemory = chatMemoryFactory.get();
         if (prompt.isShowInChat()) {
             AIChatService promptService = createPromptChatService(

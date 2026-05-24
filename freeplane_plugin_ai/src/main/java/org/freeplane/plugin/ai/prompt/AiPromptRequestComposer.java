@@ -9,6 +9,7 @@ import org.freeplane.features.map.MapModel;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.text.TextController;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
+import org.freeplane.plugin.ai.chat.ChatToolAvailability;
 import org.freeplane.plugin.ai.tools.selection.SelectionIdentifiersBuilder;
 import org.freeplane.plugin.ai.tools.selection.SelectionIdentifiersResponse;
 
@@ -28,10 +29,14 @@ public class AiPromptRequestComposer {
     }
 
     public String compose(AiPrompt prompt) {
-        return compose(prompt == null ? null : prompt.getPrompt());
+        return compose(prompt == null ? null : prompt.getPrompt(), ChatToolAvailability.EDITING);
     }
 
-    String compose(String promptText) {
+    public String compose(AiPrompt prompt, ChatToolAvailability toolAvailability) {
+        return compose(prompt == null ? null : prompt.getPrompt(), toolAvailability);
+    }
+
+    String compose(String promptText, ChatToolAvailability toolAvailability) {
         SelectionIdentifiersResponse response = selectionIdentifiersSupplier.get();
         SelectionIdentifiersResponse safeResponse = response == null
             ? new SelectionIdentifiersResponse(null, null, null, Collections.emptyList(), 0, 0)
@@ -39,6 +44,9 @@ public class AiPromptRequestComposer {
         try {
             String json = objectMapper.writeValueAsString(safeResponse);
             String safePromptText = promptText == null ? "" : promptText;
+            if (!toolAvailability.includesTools()) {
+                return safePromptText;
+            }
             return "Selected map and node identifiers:\n"
                 + json
                 + "\n\n"

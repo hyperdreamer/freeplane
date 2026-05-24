@@ -2,10 +2,10 @@
 - **Task Identifier:** 2026-05-17-prompt-overrides
 - **Scope:**
   Track the follow-up work from `031-add-ai-prompts.md` in a separate
-  task file. First align shown prompt chats with prompt-specific model
-  selection so model overrides survive follow-up messages and transcript
-  restore. Then add prompt-specific tool selection using the same
-  session-override pattern.
+  task file. Align shown prompt chats with prompt-specific model and
+  tool session overrides, then refine disabled-tool prompt launches so
+  toolless prompt requests do not inject selected map/node identifier
+  context.
 - **Motivation:**
   The prompt model path originally existed only for the first shown-
   prompt request, while prompt tools were still fixed to editing.
@@ -42,9 +42,11 @@
 - **Briefing:**
   The prompt manager and prompt persistence live under
   `org.freeplane.plugin.ai.prompt` and
-  `org.freeplane.plugin.ai.prompt.ui`. `AIChatPanel` owns prompt launch,
-  visible-chat activation, the chat model selector, and the popup-menu
-  tool control. Live session state lives in `LiveChatSession` and
+  `org.freeplane.plugin.ai.prompt.ui`. After
+  `033-refactor-ai-chat-panel.md`, `ChatPromptRunner` owns prompt
+  launch and first-turn request composition, while `AIChatPanel` still
+  owns visible-chat activation, the chat model selector, and the popup-
+  menu tool control. Live session state lives in `LiveChatSession` and
   `LiveChatController`, while transcript persistence uses
   `ChatTranscriptRecord` and `ChatTranscriptStore`.
 
@@ -592,3 +594,168 @@ AiPromptManagerDialog --> AiPromptToolSelectionController : tool combo keeps fix
       the tools selector stays fixed;
     - resize the dialog narrower and verify both selectors still honor
       usable preferred widths as far as the dialog size allows.
+
+## Subtask: Omit automatic selection context from disabled-tool prompts
+- **Status:** done
+- **Scope:**
+  When a prompt launch resolves to
+  `ChatToolAvailability.DISABLED`, send only the user-authored prompt
+  text. Do not prepend the automatic `Selected map and node
+  identifiers` block or any serialized selected map/node identifiers.
+  Keep the existing prepended selection JSON for `reading` and
+  `editing` prompt launches.
+- **Motivation:**
+  The disabled-tool prompt path currently contradicts the disabled-chat
+  contract. Even though no tools are exposed, prompt launch still leaks
+  automatic map and node context into the first user message.
+- **Scenario:**
+  A user saves prompt `Summarize branch` with `Disabled` tools and
+  `Show in chat` enabled. Running it opens a prompt chat whose first
+  user message contains only the saved prompt text. It does not contain
+  the `Selected map and node identifiers` heading or any map/node JSON.
+
+  Another prompt keeps `Use current tools` selected while the global
+  chat tool setting is `Disabled`. Running it behaves the same way,
+  because the launched request resolves to disabled tools at send time.
+
+  If the prompt instead resolves to `Reading` or `Editing`, the first
+  user message keeps the existing prepended selection JSON unchanged.
+- **Constraints:**
+  - Base the omission on the resolved effective tool availability for
+    the launched request, not only on the saved prompt selection
+    string. `Use current tools` plus a global `Disabled` setting must
+    omit selection context too.
+  - Change only the automatic prepended selection context. Do not
+    rewrite or normalize the saved prompt text itself.
+  - Preserve the existing first-turn request format exactly for
+    `reading` and `editing`.
+  - Preserve shown-vs-hidden prompt execution, session overrides,
+    transcript metadata, and prompt-manager persistence.
+  - Do not add new persisted fields, translation keys, or transcript
+    fields for this increment.
+- **Briefing:**
+  `ChatPromptRunner.runPrompt(...)` currently composes the first prompt
+  message through `AiPromptRequestComposer` before it resolves the
+  effective tool availability with `PromptToolSelectionResolver`.
+  `MessageBuilder.buildForChat(ChatToolAvailability.DISABLED)` already
+  makes disabled chats Freeplane-neutral, so this increment is the
+  remaining disabled-tool leak in prompt launch.
+- **Research:**
+  - `AiPromptRequestComposer.compose(AiPrompt)` currently serializes
+    `SelectionIdentifiersResponse` and always prefixes
+    `Selected map and node identifiers:\n<json>\n\n`, even when the
+    request will run with disabled tools.
+  - `ChatPromptRunner.runPrompt(...)` currently calls
+    `aiPromptRequestComposer.compose(prompt)` before it resolves
+    `resolvedToolAvailability`, so composition cannot currently depend
+    on whether tools are disabled.
+  - `PromptToolSelectionResolver.resolveEffectiveToolAvailability(...)`
+    already resolves both explicit `disabled` and blank `Use current
+    tools` selections, so the needed effective tool value already
+    exists on the prompt-launch path.
+  - `MessageBuilder.buildForChat(ChatToolAvailability.DISABLED)` omits
+    Freeplane/map/node guidance, while
+    `AiPromptRequestComposerTest` still asserts unconditional
+    selection-identifier prepending. That asymmetry matches the
+    reported defect.
+
+  ```plantuml
+  @startuml
+  actor User
+  participant "ChatPromptRunner" as Runner
+  participant "AiPromptRequestComposer" as Composer
+  participant "PromptToolSelectionResolver" as ToolResolver
+  participant "AIChatServiceFactory" as Factory
+
+  User -> Runner : runPrompt(prompt)
+  Runner -> Composer : compose(prompt)
+  Composer --> Runner : identifiers header + JSON + prompt
+  Runner -> ToolResolver : resolveEffectiveToolAvailability(...)
+  ToolResolver --> Runner : DISABLED
+  Runner -> Factory : createService(..., DISABLED)
+  @enduml
+  ```
+- **Design:**
+  1. `ChatPromptRunner.runPrompt(...)` resolves
+     `resolvedToolAvailability` before composing the first user
+     message.
+  2. `AiPromptRequestComposer.compose(AiPrompt prompt,
+     ChatToolAvailability toolAvailability)` becomes the prompt-entry
+     method used by `ChatPromptRunner`.
+  3. When `toolAvailability.includesTools()` is `false`,
+     `AiPromptRequestComposer` returns only the safe prompt text
+     (`prompt.getPrompt()` or the empty string when null).
+  4. When `toolAvailability.includesTools()` is `true`,
+     `AiPromptRequestComposer` keeps the current request format
+     exactly: `Selected map and node identifiers:\n`
+     + `<SelectionIdentifiersResponse JSON>` + `\n\n`
+     + `<prompt text>`.
+  5. `ChatPromptRunner` uses the same resolved tool value both for
+     request composition and for
+     `AIChatServiceFactory.createService(...)`.
+     `toolAvailabilityOverride` behavior for shown chats stays exactly
+     as delivered by the earlier tool-selection increment.
+  6. No new classes or persisted identifiers are introduced.
+
+  Structural review boundary for this increment:
+
+  Fixed by approved design and subject to prior review:
+
+  - `ChatPromptRunner.runPrompt(...)` resolves effective tool
+    availability before first-turn prompt composition;
+  - `AiPromptRequestComposer` gates automatic selection context on
+    `ChatToolAvailability.includesTools()`; and
+  - a disabled-tool first prompt turn contains only the saved prompt
+    text.
+
+  Left intentionally implementation-local:
+
+  - whether `AiPromptRequestComposer` keeps a private helper for the
+    selection-enabled formatting path; and
+  - the exact mocking mechanics used to isolate
+    `AIChatServiceFactory` and `AIToolSetBuilder` in prompt-run tests.
+
+  ```plantuml
+  @startuml
+  actor User
+  participant "ChatPromptRunner" as Runner
+  participant "PromptToolSelectionResolver" as ToolResolver
+  participant "AiPromptRequestComposer" as Composer
+  participant "AIChatServiceFactory" as Factory
+
+  User -> Runner : runPrompt(prompt)
+  Runner -> ToolResolver : resolveEffectiveToolAvailability(...)
+  ToolResolver --> Runner : resolvedToolAvailability
+  Runner -> Composer : compose(prompt, resolvedToolAvailability)
+  alt resolvedToolAvailability.includesTools()
+    Composer --> Runner : identifiers header + JSON + prompt
+  else disabled
+    Composer --> Runner : prompt text only
+  end
+  Runner -> Factory : createService(..., resolvedToolAvailability)
+  @enduml
+  ```
+- **Test specification:**
+  - Automated tests:
+    - extend `AiPromptRequestComposerTest` to verify
+      `compose(..., ChatToolAvailability.DISABLED)` returns only the
+      prompt text with no selection header or JSON;
+    - extend the same test class to verify `READING` and `EDITING`
+      still keep the existing selection-header + JSON format exactly;
+    - add `ChatPromptRunnerTest` that isolates
+      `AIChatServiceFactory.createService(...)` and
+      `AIToolSetBuilder`, then verifies the prepared first message
+      passed to the shown-prompt launcher omits selection context for:
+      - an explicit prompt tool selection of `disabled`;
+      - a blank prompt tool selection when the current global tool
+        setting resolves to `DISABLED`.
+  - Manual tests:
+    - save a shown prompt with `Disabled` tools, run it, and verify the
+      first user message in the shown prompt chat contains only the
+      saved prompt text;
+    - save a shown prompt with `Use current tools`, set the global chat
+      tool setting to `Disabled`, run it, and verify the first user
+      message still contains only the saved prompt text;
+    - change the same prompt to `Reading` or `Editing`, run it again,
+      and verify the existing `Selected map and node identifiers` block
+      is present before the prompt text.
