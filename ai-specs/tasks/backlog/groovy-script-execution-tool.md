@@ -5,9 +5,10 @@
   AI-script permission profile, optionally requires user review in tool
   chat before execution, accepts either inline script content or a
   script file path, and returns only plain tool data or captured text.
-  Add on-demand scripting API documentation tools so LLMs can inspect
-  the distributed Freeplane API documentation before writing unfamiliar
-  scripts without injecting the full API reference by default.
+  Add a build-generated Freeplane scripting API mind map so LLMs can
+  inspect current scripting/API information through Freeplane map
+  search/read tooling before writing unfamiliar scripts without
+  injecting the full API reference by default.
 - **Motivation:** Some workflows need traversal, aggregation,
   reporting, or direct API access that typed tools do not cover. LLMs
   can already draft Freeplane Groovy scripts, but there is no tool path
@@ -131,6 +132,8 @@ Engine --> ScriptSurface: result and stdout
   - Provide built-in usage guidance visible to both internal AI and MCP
     clients:
     - tool description explaining `c` and `node`,
+    - a short pointer to the generated Freeplane API map and whatever
+      map-query tooling exists for unfamiliar APIs,
     - a small cookbook with examples for traversal, aggregation, and
       converting results to lists or maps,
     - guidance about the default permission profile and how unsupported
@@ -228,317 +231,341 @@ ScriptExecutionStatus
       chat before execution, allow runs it, skip prevents execution, and
       the temporary editor disappears after either choice.
 
-## Subtask: Expose scripting API documentation tools
+## Subtask: Generate a Freeplane scripting API mind map for LLM scripting
 - **Status:** backlog
-- **Scope:** Add read-only, on-demand tools for internal AI and MCP to
-  search and read the distributed Freeplane scripting API documentation.
-  These tools support the Groovy script execution tool without adding the
-  full API reference to default chat or MCP context.
-- **Motivation:** The Groovy execution tool is only useful when the LLM
-  can discover the Freeplane scripting API. A user previously gave an LLM
-  a broad API reference and a large utility script so it could write
-  Freeplane Groovy, but injecting that volume of content by default would
-  be noisy and would duplicate generated documentation.
-- **Scenario:** An LLM wants to write or review a Groovy script for the
-  user. Before using unfamiliar Freeplane APIs, it calls
-  `getFreeplaneScriptingApiOverview`, then
-  `searchFreeplaneScriptingApi` with the needed concept, then
-  `getFreeplaneScriptingApiEntry` for exact type or member details. If it
-  needs a snippet, it calls `getFreeplaneScriptingApiExamples` for
-  examples extracted from the distributed Javadocs. The script execution
-  tool description tells the LLM that these documentation tools exist,
-  but no large API reference is injected unless requested by tool calls.
+- **Scope:** Add a build-generated Freeplane `.mm` mind map containing
+  the stable scripting/API surface exposed to script authors, following
+  the current curated documentation boundary shown by
+  `freeplane_plugin_script/scripts/apiGenerator.groovy` rather than
+  limiting v1 to `org.freeplane.api` alone, so internal AI and MCP-side
+  LLM workflows can inspect exact current API information through
+  Freeplane map search/read tooling before writing unfamiliar Groovy
+  scripts.
+- **Motivation:** Standard Javadoc HTML is useful for humans, but it is
+  not the best primary artifact for an LLM operating inside Freeplane
+  or through Freeplane-as-MCP. A generated map keeps the documentation
+  in a Freeplane-native format that can be queried with normal map tools
+  instead of injecting a large API reference into default chat context.
+- **Scenario:** An LLM wants to write or review a Groovy script. Before
+  using unfamiliar Freeplane APIs, it reads/searches a generated
+  `freeplane-api.mm` map, finds relevant sections such as `Proxy` and
+  `Utilities`, then the needed packages, types, methods, signatures,
+  and examples, then writes the script and executes it through the
+  Groovy tool. Future dedicated query tools may read that map, but this
+  first step only requires generating the map during the build.
 - **Constraints:**
-  - The runtime documentation source must be the distributed
-    `doc/api` tree under `ResourceController.getInstallationBaseDir()`;
-    in development this is `BIN/doc/api`.
-  - `DIST` copies are packaging output and must not be used as the
-    canonical documentation source.
-  - Source files under `freeplane_api` and `freeplane_plugin_script` are
-    useful for development research but must not be required at runtime.
-  - Do not maintain a second manual API reference. The tools must parse
-    generated Javadoc indexes and generated Javadoc HTML.
-  - Do not inject broad API documentation into the script execution tool
-    description or default chat system message.
-  - Expose the same documentation tools through LangChain4j and MCP.
-  - Documentation tools must be read-only and must not execute scripts or
-    inspect maps.
-  - Search results should prefer the supported scripting API surface:
-    `org.freeplane.plugin.script.proxy`, `org.freeplane.api`,
-    `org.freeplane.plugin.script`, `org.freeplane.core.util`, and
-    `org.freeplane.core.ui.components`.
-  - Search results should prefer proxy scripting entries over inherited
-    base API entries when both are relevant, because Groovy scripts use
-    the proxy surface.
-  - Internal Freeplane implementation APIs must not be promoted unless
-    the query explicitly asks for internals and those internals are
-    present in the distributed API documentation.
-  - If the distributed `doc/api` tree is missing or unreadable, the tools
-    must fail with a clear documentation-unavailable result instead of
-    silently falling back to source code.
-  - The user-provided `reference.md` and `utilityPanels.groovy` files are
-    research examples only. They must not become bundled default context;
-    `utilityPanels.groovy` demonstrates advanced Swing/internal usage and
-    should not bias normal scripting guidance toward fragile internals.
-- **Briefing:** Freeplane is used by LLMs through the internal
-  LangChain4j tool set and as an MCP server exposing the same tool set.
-  `ModelContextProtocolToolRegistry` builds MCP tool metadata from
-  LangChain4j tool specifications, so adding methods to `AIToolSet` makes
-  them available to both surfaces when wired normally. Existing scripting
-  documentation is already distributed under `doc/api`. The scripting
-  help action resolves it with
-  `ResourceController.getResourceController().getInstallationBaseDir()`
-  plus `/doc/api/index.html`.
+  - This backlog note records a directional idea, not a justified final
+    design decision. Implementation must re-check feasibility against
+    the actual build and doclet APIs.
+  - The primary artifact must be a Freeplane `.mm` mind map generated
+    from the current sources/build, not scraped Javadoc HTML.
+  - Do not build RAG, a vector store, JSON output, or Markdown output
+    as the primary artifact in this subtask.
+  - Do not treat `org.freeplane.api` alone as the whole scripting
+    surface. `freeplane_plugin_script/scripts/apiGenerator.groovy`
+    shows a curated surface centered on
+    `org.freeplane.plugin.script.proxy.Proxy.*` plus selected
+    `org.freeplane.api` and utility/supporting types.
+  - Keep v1 limited to that curated scripting surface or a verified
+    equivalent derived from it; do not expand to the whole codebase.
+  - Do not include internal implementation classes unless they are
+    clearly part of the scripting API.
+  - Keep the existing HTML Javadoc task intact. The new work must be a
+    separate Gradle task and must not replace current Javadoc
+    generation.
+  - The first version should work from existing Java source structure,
+    Javadoc comments, and standard Javadoc tags. Support custom
+    `@llm.*` tags only opportunistically if present.
+  - Do not require new LLM-specific tags or new Javadoc content for the
+    first version; both ideas remain questionable and unverified.
+  - The generated map must be queryable through existing or future
+    Freeplane map reading/search tooling without injecting the full API
+    reference by default.
+- **Briefing:** The intended source of truth is the modern Javadoc
+  doclet API over the exact current Freeplane sources/build, but the
+  current scripting-help boundary is already expressed by
+  `freeplane_plugin_script/scripts/apiGenerator.groovy`. The generated
+  map should let an LLM operating inside Freeplane or via MCP inspect
+  sections, packages, types, methods, signatures, descriptions,
+  parameters, returns, exceptions, deprecations, and examples in a
+  Freeplane-native structure.
 - **Research:**
-  - `BIN/doc/api` contains generated Javadoc output and is distributed.
-  - `BIN/doc/api/type-search-index.js`,
-    `BIN/doc/api/member-search-index.js`,
-    `BIN/doc/api/package-search-index.js`, and
-    `BIN/doc/api/tag-search-index.js` are generated search indexes with
-    JSON-like arrays assigned to JavaScript variables and followed by
-    `updateSearchResults();`.
-  - `BIN/doc/api/index.html` is the generated package index, while
-    `BIN/doc/api/overview-summary.html` redirects to `index.html`.
-  - `BIN/doc/api/org/freeplane/plugin/script/proxy/Proxy.html` documents
-    the proxy API and its read-only/read-write interface split.
-  - `BIN/doc/api/org/freeplane/plugin/script/FreeplaneScriptBaseClass.html`
-    documents global script helpers such as `ui`, `logger`, `htmlUtils`,
-    `textUtils`, `menuUtils`, and `config`.
-  - Type and member pages under `BIN/doc/api/org/freeplane/api` document
-    the inherited API used by the proxy scripting surface.
-  - Search index entries contain enough data to build documentation page
-    paths: package (`p`), class/type (`c`), label (`l`), and member
-    anchor (`u`) when an anchor is needed.
-  - Full descriptions, parameters, return values, examples, deprecation
-    notes, and since notes live in the generated HTML pages, not in the
-    search index files.
-  - Existing tool names are camelCase method names exposed from
-    `AIToolSet`; MCP uses the same names from the LangChain4j tool
-    specifications.
+  - If this research has not already been done for the current
+    implementation attempt, inspect
+    `freeplane_plugin_script/scripts/apiGenerator.groovy` first because
+    it shows the current curated scripting-help surface and grouping.
+  - If this research has not already been done for the current
+    implementation attempt, also inspect the existing Javadoc Gradle
+    configuration:
+    - `freeplane_plugin_script/build.gradle` `javadoc { ... }` because
+      it defines the current curated Javadoc source allowlist for
+      scripting docs and writes output to `globalBin + '/doc/api/'`.
+    - root `build.gradle` `subprojects { javadoc { ... } }` because it
+      defines default Javadoc behavior such as encoding/locale,
+      `enabled = false`, and `failOnError = false`, which the new task
+      must account for explicitly instead of assuming.
+  - The user-provided direction is to generate a Freeplane mind map with
+    API reference data during the build and then query that map instead
+    of scraping generated HTML.
+  - `freeplane_plugin_script/scripts/apiGenerator.groovy` is the
+    existing scripting API map generator.
+  - `freeplane_plugin_script/build.gradle` contains the current
+    scripting Javadoc source curation and output target.
+  - root `build.gradle` contains shared Javadoc defaults that may
+    otherwise disable or soften the behavior needed by the new task.
+  - That script uses a curated explicit class list, not package
+    scanning, and divides the scripting help mainly into `Proxy` and
+    `Utilities` sections.
+  - It includes key script-facing types such as `Proxy.Node`,
+    `Proxy.Controller`, `Proxy.MindMap`, `Proxy.Link`,
+    `Proxy.Attributes`, `Proxy.NodeStyle`, `Proxy.NodeGeometry`,
+    `FreeplaneScriptBaseClass`, `GroovyStaticImports`, `UITools`,
+    `TextUtils`, `HtmlUtils`, and `MenuUtils`.
+  - It synthesizes Groovy properties from getters/setters and includes
+    selected inherited members rather than all inherited members.
+  - It uses reflection and Javadoc links; it does not extract Javadoc
+    comment text.
+  - Its `icons`, `web`, and `legend` sections are auxiliary help
+    content and do not by themselves define the required API-doc scope
+    for this subtask.
+  - The need for new `@llm.*` tags is explicitly unverified and may turn
+    out to be unnecessary.
+  - It is also unverified whether any new information should be added to
+    existing Javadocs for this use case.
+  - Concrete Freeplane build/module placement, doclet wiring, and
+    map-query ergonomics still need project-specific verification before
+    implementation.
 - **Design:**
-  - Add a documentation package under the AI tool module:
-    `org.freeplane.plugin.ai.tools.scriptapi`.
-  - Add one shared `FreeplaneScriptingApiDocumentation` implementation
-    used by internal AI and MCP through `AIToolSet`.
-  - Resolve the documentation root from
-    `ResourceController.getResourceController().getInstallationBaseDir()`
-    plus `doc/api`.
-  - Add these `AIToolSet` methods and tool names:
-    - `getFreeplaneScriptingApiOverview`
-    - `searchFreeplaneScriptingApi`
-    - `getFreeplaneScriptingApiEntry`
-    - `getFreeplaneScriptingApiExamples`
-  - `getFreeplaneScriptingApiOverview` reads the generated docs and
-    returns concise orientation from:
-    - `index.html` for available packages,
-    - `org/freeplane/plugin/script/proxy/Proxy.html` for the proxy API
-      and read-only/read-write split,
-    - `org/freeplane/plugin/script/FreeplaneScriptBaseClass.html` for
-      script globals and utility shortcuts.
-  - The script execution tool description should contain only a short
-    pointer: scripts receive `node` and `c`; before using unfamiliar
-    Freeplane APIs, call the Freeplane scripting API documentation tools;
-    return only JSON-safe values or text.
-  - `searchFreeplaneScriptingApi` parses the generated Javadoc index
-    files on first use, caches an immutable in-memory index keyed by the
-    documentation root path and index file last-modified timestamps, and
-    invalidates the cache when those timestamps change.
-  - `limit` parameters default to 10 and are clamped to 25. Overview,
-    entry, and example responses must use bounded text excerpts and set
-    `truncated=true` when content is omitted to keep tool results small.
-  - The Javadoc index parser strips the generated JavaScript assignment
-    prefix and trailing `updateSearchResults();`, then parses the
-    remaining array with Jackson.
-  - Search ranking:
-    - exact type/member matches before partial matches,
-    - query matches in labels before package-only matches,
-    - `org.freeplane.plugin.script.proxy` before `org.freeplane.api`,
-    - `org.freeplane.api` before script utility packages,
-    - deprecated entries after non-deprecated matches with equal score,
-    - stable ordering by package, type, member, and anchor as a final
-      tie-breaker.
-  - `getFreeplaneScriptingApiEntry` accepts only an
-    `entryIdentifier` returned by search or examples. It resolves the
-    generated HTML path and optional member anchor, extracts the class or
-    member section, converts the bounded HTML to plain text with existing
-    Freeplane HTML utilities, and returns structured fields.
-  - Invalid or unknown `entryIdentifier` values return a clear
-    `errorMessage`; the tool must never treat `entryIdentifier` as a
-    caller-provided file path.
-  - `getFreeplaneScriptingApiExamples` searches generated Javadoc pages
-    for matching `<pre>` blocks and examples in bounded class/member
-    sections. It returns only examples that can be tied to a generated
-    documentation entry identifier.
-  - Use these stable entry identifier formats:
-    - `package:<packageName>`
-    - `type:<packageName>:<typeName>`
-    - `member:<packageName>:<typeName>:<anchor>`
-    - `tag:<label>:<anchor>`
-  - Do not expose file-system paths in `entryIdentifier`. Responses may
-    include `documentationPath` relative to the documentation root for
-    traceability.
+  - Implement a custom Javadoc doclet, tentatively named
+    `FreeplaneApiMapDoclet`, using the modern doclet API.
+  - Keep traversal and output separate:
+    - `FreeplaneApiMapDoclet` handles doclet lifecycle and options.
+    - `ApiModelBuilder` converts `DocletEnvironment` into an internal
+      model.
+    - `JavadocCommentExtractor` extracts body text, standard tags, and
+      optional custom tags when present.
+    - `FreeplaneMindMapWriter` serializes the internal model into
+      Freeplane `.mm` XML.
+  - For v1 scope selection, start from the curated class surface in
+    `freeplane_plugin_script/scripts/apiGenerator.groovy`.
+  - Prefer one centralized, maintainable scope definition over
+    scattered ad-hoc class selection. If v1 still needs an allowlist,
+    keep it explicit.
+  - Add a separate Gradle task named `generateFreeplaneApiMap`:
+    - use Gradle's `Javadoc` task type,
+    - set `options.doclet` to the custom doclet class,
+    - set `options.docletpath` to the doclet module/configuration,
+    - restrict `source` to the source files/packages needed for that
+      curated scripting/API surface,
+    - use the normal compile classpath of the selected scripting/API
+      source set(s),
+    - write the generated map under
+      `build/generated/freeplane-api/freeplane-api.mm` or equivalent
+      existing build layout,
+    - fail on doclet errors,
+    - do not wire the task into `assemble` or release tasks yet unless
+      later project research shows that generated docs belong there.
+  - If the multi-project build makes this cleaner, add a small separate
+    doclet project/module instead of mixing the doclet into application
+    code.
+  - Internal model should cover at least:
+    - section/group (for example `Proxy` and `Utilities`),
+    - package,
+    - type/class/interface/enum,
+    - property when synthesized from getter/setter pairs,
+    - method,
+    - parameter,
+    - return value,
+    - thrown exceptions,
+    - deprecation status,
+    - related types when easily available,
+    - optional LLM-oriented metadata when already present in source
+      comments.
+  - Generate one navigable `.mm` map with a stable structure, for
+    example:
+    - `Freeplane scripting API`
+    - `Proxy`
+    - `Node`
+    - `Type information`
+    - `Description`
+    - `Properties`
+    - `text : String (rw)`
+    - `Methods`
+    - `setText(String text) : void`
+    - `Parameters`
+    - `Returns`
+    - `Throws`
+    - `Examples`
+    - `Related types`
+    - `Utilities`
+    - `FreeplaneScriptBaseClass`
+  - Use readable node text plus machine-searchable attributes.
+    - Type nodes should include attributes such as:
+      - `kind=type`
+      - `typeKind=interface|class|enum`
+      - `package=...`
+      - `qualifiedName=...`
+      - `simpleName=...`
+      - `deprecated=true|false`
+    - Property nodes if synthesized should include attributes such as:
+      - `kind=property`
+      - `owner=fully.qualified.TypeName`
+      - `name=propertyName`
+      - `propertyType=...`
+      - `readable=true|false`
+      - `writable=true|false`
+      - `deprecated=true|false`
+    - Method nodes should include attributes such as:
+      - `kind=method`
+      - `owner=fully.qualified.TypeName`
+      - `name=methodName`
+      - `signature=...`
+      - `returnType=...`
+      - `deprecated=true|false`
+    - Parameter nodes should include attributes such as:
+      - `kind=parameter`
+      - `name=...`
+      - `type=...`
+  - Extract from Javadoc where available:
+    - main description/body,
+    - `@param`,
+    - `@return`,
+    - `@throws` / `@exception`,
+    - `@deprecated`,
+    - links when practical,
+    - package-level Javadoc,
+    - inherited method information only when it adds value without
+      making the map noisy.
+  - If custom `@llm.use`, `@llm.example`, `@llm.warning`,
+    `@llm.related`, `@llm.context`, `@llm.stability`, or
+    `@llm.keyConcept` tags already exist, map them to dedicated child
+    nodes or attributes, but do not make them a prerequisite for a
+    useful first version.
+  - Preserve a script-author-facing view by synthesizing Groovy
+    properties from getter/setter pairs instead of showing only raw
+    Java accessor methods.
+  - If v1 claims parity with the current generator, reimplement its
+    member-exposure rules explicitly instead of accidentally widening to
+    all inherited members.
+  - Preserve enough signature and parameter information that the LLM
+    can generate correct scripts without guessing names or types.
+  - Query/access strategy:
+    - prefer existing Freeplane map reading/search tools over inventing
+      a large separate documentation transport,
+    - dedicated API-map query tools for AI/MCP are follow-up work
+      unless the existing infrastructure makes them trivial.
+  - Output requirements:
+    - valid Freeplane XML that opens in Freeplane,
+    - UTF-8-safe text,
+    - correct XML escaping,
+    - deterministic ordering for diffs,
+    - no unnecessary volatile IDs or timestamps,
+    - no oversized unreadable text blobs; split long descriptions into
+      child nodes when needed.
+  - Stable ordering should be explicit:
+    - packages alphabetically,
+    - types alphabetically,
+    - methods alphabetically or source order, but choose one and keep
+      it stable,
+    - parameters in declaration order.
 
 ```plantuml
 @startuml
 actor "LLM" as LLM
-participant "AIToolSet / MCP registry" as ToolSurface
-participant "FreeplaneScriptingApiDocumentation" as Docs
-participant "Javadoc index cache" as IndexCache
-database "Installation doc/api" as DocApi
+participant "Freeplane map tools" as MapTools
+participant "Generated freeplane-api.mm" as ApiMap
+participant "Groovy script tool" as ScriptTool
 
-LLM -> ToolSurface: searchFreeplaneScriptingApi(query)
-ToolSurface -> Docs: search(request)
-Docs -> IndexCache: load or reuse parsed indexes
-IndexCache -> DocApi: read *-search-index.js when stale
-Docs --> ToolSurface: ranked entry identifiers
-LLM -> ToolSurface: getFreeplaneScriptingApiEntry(entryIdentifier)
-ToolSurface -> Docs: getEntry(request)
-Docs -> DocApi: read generated HTML page and anchor
-Docs --> ToolSurface: structured documentation entry
+LLM -> MapTools: search/read API map
+MapTools -> ApiMap: inspect section/type/member nodes
+ApiMap --> MapTools: signatures, docs, examples
+LLM -> ScriptTool: execute Groovy script
+ScriptTool --> LLM: structured result or text
 @enduml
 ```
 
-Target request and response structure:
-
-```text
-FreeplaneScriptingApiOverviewRequest
-  topic : String?
-
-FreeplaneScriptingApiOverviewResponse
-  documentationAvailable : boolean
-  overview : String?
-  entryPoints : List<ScriptingApiSearchResult>
-  truncated : boolean
-  errorMessage : String?
-
-FreeplaneScriptingApiSearchRequest
-  query : String
-  kind : ScriptingApiSearchKind?
-  limit : Integer?
-
-ScriptingApiSearchKind
-  ANY
-  PACKAGE
-  TYPE
-  MEMBER
-  TAG
-  EXAMPLE
-
-FreeplaneScriptingApiSearchResponse
-  documentationAvailable : boolean
-  results : List<ScriptingApiSearchResult>
-  truncated : boolean
-  errorMessage : String?
-
-ScriptingApiSearchResult
-  entryIdentifier : String
-  kind : ScriptingApiEntryKind
-  packageName : String?
-  typeName : String?
-  memberName : String?
-  displayName : String
-  documentationPath : String?
-  anchor : String?
-  summary : String?
-  deprecated : boolean
-
-ScriptingApiEntryKind
-  PACKAGE
-  TYPE
-  MEMBER
-  TAG
-  EXAMPLE
-
-FreeplaneScriptingApiEntryRequest
-  entryIdentifier : String
-
-FreeplaneScriptingApiEntryResponse
-  documentationAvailable : boolean
-  entryIdentifier : String
-  kind : ScriptingApiEntryKind
-  title : String?
-  signature : String?
-  description : String?
-  parameters : List<ScriptingApiParameter>
-  returnDescription : String?
-  examples : List<String>
-  relatedEntryIdentifiers : List<String>
-  documentationPath : String?
-  deprecated : boolean
-  since : String?
-  truncated : boolean
-  errorMessage : String?
-
-ScriptingApiParameter
-  name : String
-  description : String?
-
-FreeplaneScriptingApiExamplesRequest
-  topic : String
-  limit : Integer?
-
-FreeplaneScriptingApiExamplesResponse
-  documentationAvailable : boolean
-  examples : List<ScriptingApiExample>
-  truncated : boolean
-  errorMessage : String?
-
-ScriptingApiExample
-  entryIdentifier : String
-  title : String
-  code : String
-  documentationPath : String
-```
-
-  - Completeness check:
-    - Runtime documentation source is defined and limited to
-      distributed `doc/api`.
-    - Source and `DIST` fallback paths are explicitly excluded.
-    - Tool surfaces are covered through shared `AIToolSet` exposure to
-      LangChain4j and MCP.
-    - Default context size is controlled by on-demand tools instead of
-      API injection.
-    - Search, entry retrieval, examples, unavailable-docs failure mode,
-      caching, ranking, bounded results, invalid identifiers, and stable
-      identifiers are specified.
-    - Request and response structures are complete enough for schema
-      generation and MCP publication.
+- **What not to do:**
+  - Do not scrape generated Javadoc HTML.
+  - Do not build RAG or a vector store.
+  - Do not generate JSON or Markdown as the primary artifact in this
+    first step.
+  - Do not replace the existing HTML Javadoc task.
+  - Do not document the full internal Freeplane codebase.
+  - Do not pretend the scripting surface is derivable from
+    `org.freeplane.api` alone.
+  - If v1 uses a curated class list, keep it centralized and
+    maintainable rather than scattering ad-hoc selections through the
+    code.
+  - Do not assume that adding new LLM-specific Javadoc tags is
+    necessary.
+  - Do not assume that existing Javadocs need new content before a
+    first useful version exists.
+- **Intended future use:**
+  - Future tools may search the API map.
+  - Future tools may find API types and methods.
+  - Future tools may read nodes and child nodes from the generated map.
+  - Future tools may execute Freeplane scripts after consulting that
+    map.
+  - This subtask only needs to generate the API map and integrate it
+    into the build. Do not add new MCP/API-map query tools unless the
+    existing infrastructure makes that trivial.
+- **Acceptance criteria:**
+  1. A custom doclet exists in the Gradle build.
+  2. `gradle generateFreeplaneApiMap` generates a Freeplane `.mm` file.
+  3. The generated map opens in Freeplane.
+  4. The map contains the curated scripting surface used by current
+     scripting help, including key
+     `org.freeplane.plugin.script.proxy.Proxy.*` types and selected
+     support types; it is not limited to `org.freeplane.api` alone.
+  5. Type nodes include descriptions and searchable metadata
+     attributes.
+  6. Where Java bean accessors form Groovy properties, the map exposes
+     a script-author-friendly property view with searchable metadata.
+  7. Method nodes include signatures, descriptions, parameter
+     information, return information, deprecation status, and
+     searchable metadata attributes.
+  8. If custom `@llm.*` tags are present, the generator processes them,
+     but the task does not depend on adding such tags.
+  9. The task does not break or replace existing HTML Javadoc
+     generation.
+  10. The output is deterministic enough to review in diffs.
+  11. The implementation is structured around an internal model and a
+      separate writer rather than direct ad-hoc XML generation from
+      doclet traversal.
 - **Test specification:**
   - Automated tests:
-    - Verify the documentation root resolver uses
-      `ResourceController.getInstallationBaseDir()` plus `doc/api`.
-    - Verify missing `doc/api` returns
-      `documentationAvailable=false` with a clear `errorMessage`.
-    - Verify source directories and `DIST` paths are not used by the
-      production documentation resolver.
-    - Verify the Javadoc index parser reads type, member, package, and
-      tag entries from generated index JavaScript.
-    - Verify search ranking prefers proxy scripting entries over base API
-      entries for overlapping names.
-    - Verify search ranking demotes deprecated entries when an otherwise
-      equivalent non-deprecated entry exists.
-    - Verify `getFreeplaneScriptingApiEntry` resolves a type entry to
-      the expected generated HTML page.
-    - Verify `getFreeplaneScriptingApiEntry` resolves a member entry to
-      the expected generated HTML anchor.
-    - Verify invalid `entryIdentifier` input returns a clear error and
-      does not resolve as a file path.
-    - Verify HTML extraction returns bounded text for a type section and
-      does not return an entire Javadoc page.
-    - Verify search, entry, overview, and example responses honor size
-      limits and set `truncated=true` when applicable.
-    - Verify examples are extracted from generated Javadoc `<pre>`
-      blocks and include the source entry identifier.
-    - Verify all four documentation tools are advertised by LangChain4j
-      tool specifications and therefore appear in MCP tool listing.
-    - Verify the script execution tool description points to the
-      documentation tools without embedding broad API reference content.
+    - Verify the doclet task is registered separately from the normal
+      `javadoc` task.
+    - Verify the generated scope matches the intended curated scripting
+      surface from `apiGenerator.groovy`, including proxy and selected
+      utility/supporting classes, without expanding to the whole
+      codebase.
+    - Verify key script-facing types such as `Proxy.Node`,
+      `Proxy.Controller`, `Proxy.MindMap`, and
+      `FreeplaneScriptBaseClass` appear in the map.
+    - Verify the writer emits valid Freeplane `.mm` XML with correct
+      escaping and UTF-8 handling.
+    - Verify package, type, property, method, and parameter nodes
+      include the expected searchable attributes.
+    - Verify getter/setter pairs are exposed as Groovy properties with
+      readable/writeable metadata.
+    - Verify descriptions, `@param`, `@return`, `@throws`, and
+      `@deprecated` content are extracted when present.
+    - Verify inherited member exposure is bounded and does not widen to
+      full inheritance trees accidentally.
+    - Verify optional custom `@llm.*` tags are processed when present
+      and ignored safely when absent.
+    - Verify output ordering is deterministic across repeated runs with
+      unchanged inputs.
+    - Verify the implementation is not scraping generated Javadoc HTML.
   - Manual tests:
-    - Start Freeplane from `BIN` and verify a chat model can search for
-      node traversal APIs, read the relevant entry, and draft a script
-      returning JSON-safe plain data.
-    - Connect through MCP and verify the same documentation tools are
-      discoverable and usable before calling the script execution tool.
+    - Run `gradle generateFreeplaneApiMap` and open the resulting map in
+      Freeplane.
+    - Navigate/search the map for `Proxy.Node`, `Proxy.Controller`, and
+      `FreeplaneScriptBaseClass` entries and confirm signatures,
+      properties, and descriptions are readable.
+    - Use existing map search/read tooling to inspect the generated API
+      map before drafting a small Groovy script.
 
 ## Subtask: Enable formula authoring and migration through script tooling
 - **Status:** backlog
@@ -550,10 +577,11 @@ ScriptingApiExample
   automation, and scripting is the right surface for explicit power-user
   behavior.
 - **Scenario:** A user asks AI to convert selected node text to formulas
-  or replace existing formulas with plain values. AI uses the scripting
-  API documentation tools to verify the correct API, then executes a
-  reviewed Groovy script that applies formula changes. The tool returns
-  structured results and stdout so AI can confirm exactly what changed.
+  or replace existing formulas with plain values. AI consults the
+  generated Freeplane API map through map search/read tooling to verify
+  the correct API, then executes a reviewed Groovy script that applies
+  formula changes. The tool returns structured results and stdout so AI
+  can confirm exactly what changed.
 - **Constraints:**
   - Keep formula support in the scripting tool family; do not broaden
     typed edit support in this subtask.
@@ -567,15 +595,15 @@ ScriptingApiExample
     object graphs.
 - **Briefing:** Freeplane scripting already exposes `c` and `node` and
   can access write APIs unavailable in the typed edit contract. The
-  script execution and scripting-doc tools in this task are intended to
-  support these advanced operations with explicit user-controlled review
-  and permissions.
+  script execution tooling and generated API map in this task are
+  intended to support these advanced operations with explicit
+  user-controlled review and permissions.
 - **Research:** To be done when this subtask becomes current.
 - **Design:**
   - Add a formula-focused section to script tool guidance and cookbook
     examples.
-  - Add dedicated documentation-tool examples for discovering formula-
-    related APIs.
+  - Add dedicated API-map navigation/search examples for discovering
+    formula-related APIs.
   - Define deterministic result payloads for bulk formula migration
     scripts (counts, target IDs, and per-target outcomes in plain data).
   - Keep typed edit restrictions unchanged; reference this subtask as the
@@ -588,8 +616,8 @@ ScriptingApiExample
       plain values and report structured outcomes.
     - Verify formula scripts respect configured script permissions and
       review gate behavior.
-    - Verify documentation tools can locate and return formula-relevant
-      API entries/examples used by scripts.
+    - Verify the generated API map can surface formula-relevant API
+      entries/examples used by scripts.
   - Manual tests:
     - Run a reviewed script that converts a small subtree from plain text
       to formulas and verify map results.
