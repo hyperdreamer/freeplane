@@ -1,6 +1,7 @@
 package org.freeplane.plugin.script.proxy;
 
 import static org.freeplane.plugin.script.ScriptingPermissions.RESOURCES_EXECUTE_SCRIPTS_WITHOUT_ASKING;
+import static org.freeplane.plugin.script.ScriptingPermissions.RESOURCES_EXECUTE_SCRIPTS_WITHOUT_AI_REQUEST_RESTRICTION;
 import static org.freeplane.plugin.script.ScriptingPermissions.RESOURCES_EXECUTE_SCRIPTS_WITHOUT_EXEC_RESTRICTION;
 import static org.freeplane.plugin.script.ScriptingPermissions.RESOURCES_EXECUTE_SCRIPTS_WITHOUT_NETWORK_RESTRICTION;
 import static org.freeplane.plugin.script.ScriptingPermissions.RESOURCES_EXECUTE_SCRIPTS_WITHOUT_READ_RESTRICTION;
@@ -48,6 +49,12 @@ abstract class ScriptProxy implements Script {
 	}
 
 	@Override
+	public ScriptProxy accessingAi() {
+		permissions.put(RESOURCES_EXECUTE_SCRIPTS_WITHOUT_AI_REQUEST_RESTRICTION, true);
+		return this;
+	}
+
+	@Override
 	public ScriptProxy writingFiles() {
 		permissions.put(RESOURCES_EXECUTE_SCRIPTS_WITHOUT_WRITE_RESTRICTION, true);
 		return this;
@@ -58,6 +65,7 @@ abstract class ScriptProxy implements Script {
 		permissions.put(RESOURCES_EXECUTE_SCRIPTS_WITHOUT_READ_RESTRICTION, true);
 		permissions.put(RESOURCES_EXECUTE_SCRIPTS_WITHOUT_WRITE_RESTRICTION, true);
 		permissions.put(RESOURCES_EXECUTE_SCRIPTS_WITHOUT_NETWORK_RESTRICTION, true);
+		permissions.put(RESOURCES_EXECUTE_SCRIPTS_WITHOUT_AI_REQUEST_RESTRICTION, true);
 		permissions.put(RESOURCES_EXECUTE_SCRIPTS_WITHOUT_EXEC_RESTRICTION, true);
 		return this;
 	}

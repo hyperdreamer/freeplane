@@ -3,6 +3,7 @@ package org.freeplane.plugin.script.proxy;
 import java.util.function.Supplier;
 
 import org.freeplane.features.mode.Controller;
+import org.freeplane.plugin.script.ExecutingScriptContextStack;
 import org.freeplane.plugin.script.FormulaThreadLocalStacks;
 import org.freeplane.plugin.script.ScriptContext;
 
@@ -23,7 +24,7 @@ public class ScriptUtils {
 	}
 
 	private static ScriptContext getCurrentContext() {
-		return FormulaThreadLocalStacks.INSTANCE.getCurrentContext();
+		return ExecutingScriptContextStack.INSTANCE.getCurrentContext();
 	}
 
 	/**

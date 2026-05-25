@@ -16,9 +16,17 @@ public class ScriptContext implements AccessedNodes{
 
 	private final RelatedElements relatedElements;
 
+	private final ScriptingPermissions effectivePermissions;
+
 	public ScriptContext(NodeScript nodeScript) {
+		this(nodeScript, nodeScript != null ? new RelatedElements(nodeScript.node) : null, null);
+	}
+
+	private ScriptContext(NodeScript nodeScript, RelatedElements relatedElements,
+			ScriptingPermissions effectivePermissions) {
 		this.nodeScript = nodeScript;
-		this.relatedElements = nodeScript != null ? new RelatedElements(nodeScript.node) : null;
+		this.relatedElements = relatedElements;
+		this.effectivePermissions = effectivePermissions;
 	}
 
 	public NodeScript getNodeScript() {
@@ -27,6 +35,16 @@ public class ScriptContext implements AccessedNodes{
 
 	public URL getBaseUrl() {
 		return nodeScript != null ? nodeScript.getBaseUrl() : null;
+	}
+
+	public ScriptingPermissions getEffectivePermissions() {
+		return effectivePermissions;
+	}
+
+	public ScriptContext withEffectivePermissions(ScriptingPermissions effectivePermissions) {
+		if (this.effectivePermissions == effectivePermissions)
+			return this;
+		return new ScriptContext(nodeScript, relatedElements, effectivePermissions);
 	}
 
 	public File toAbsoluteFile(File file) {
@@ -117,7 +135,7 @@ public class ScriptContext implements AccessedNodes{
 
 	@Override
 	public String toString() {
-		return nodeScript.toString();
+		return String.valueOf(nodeScript);
 	}
 
 }

@@ -6,9 +6,7 @@ package org.freeplane.plugin.script.proxy;
 import java.awt.GraphicsEnvironment;
 import java.io.File;
 import java.io.InputStream;
-import java.net.SocketPermission;
 import java.net.URL;
-import java.security.AccessControlException;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.ArrayList;
@@ -56,7 +54,9 @@ import org.freeplane.features.text.mindmapmode.MTextController;
 import org.freeplane.features.ui.IMapViewManager;
 import org.freeplane.features.ui.ViewController;
 import org.freeplane.plugin.script.Activator;
+import org.freeplane.plugin.script.ExecutingScriptContextStack;
 import org.freeplane.plugin.script.ScriptContext;
+import org.freeplane.plugin.script.ScriptingPermissions;
 
 import groovy.lang.Closure;
 import org.osgi.framework.BundleContext;
@@ -65,18 +65,15 @@ import org.osgi.framework.ServiceReference;
 class ControllerProxy implements Proxy.Controller {
 	private final ScriptContext scriptContext;
     private final AiRequestServiceResolver aiRequestServiceResolver;
-    private final NetworkPermissionChecker networkPermissionChecker;
 
 	public ControllerProxy(final ScriptContext scriptContext) {
-		this(scriptContext, ControllerProxy::lookupAiRequestService, ControllerProxy::checkNetworkPermission);
+		this(scriptContext, ControllerProxy::lookupAiRequestService);
 	}
 
     ControllerProxy(final ScriptContext scriptContext,
-                    AiRequestServiceResolver aiRequestServiceResolver,
-                    NetworkPermissionChecker networkPermissionChecker) {
+                    AiRequestServiceResolver aiRequestServiceResolver) {
         this.scriptContext = scriptContext;
         this.aiRequestServiceResolver = aiRequestServiceResolver;
-        this.networkPermissionChecker = networkPermissionChecker;
     }
 
 	@Override
@@ -419,13 +416,10 @@ class ControllerProxy implements Proxy.Controller {
     public AiRequestHandle askAi(AiRequest request, AiRequestCallback callback) {
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(callback, "callback");
-        try {
-            networkPermissionChecker.check();
-        } catch (SecurityException permissionDenied) {
-            throw new AiRequestRejectedException(
-                AiRequestStatus.PERMISSION_DENIED,
-                permissionDenied.getMessage());
-        }
+        final ScriptContext originatingScriptContext = resolveOriginatingScriptContext();
+        assertAiRequestPermissionGranted(originatingScriptContext);
+        final AiRequestCallback wrappedCallback = result -> ExecutingScriptContextStack.INSTANCE
+            .withContext(originatingScriptContext, () -> callback.accept(result));
         return AccessController.doPrivileged(new PrivilegedAction<AiRequestHandle>() {
             @Override
             public AiRequestHandle run() {
@@ -435,7 +429,7 @@ class ControllerProxy implements Proxy.Controller {
                         AiRequestStatus.AI_UNAVAILABLE,
                         "AI request service is unavailable.");
                 }
-                return aiRequestService.askAi(request, callback);
+                return aiRequestService.askAi(request, wrappedCallback);
             }
         });
     }
@@ -457,26 +451,32 @@ class ControllerProxy implements Proxy.Controller {
         return bundleContext.getService(serviceReference);
     }
 
-    private static void checkNetworkPermission() {
-        SecurityManager securityManager = System.getSecurityManager();
-        if (securityManager == null) {
-            return;
+    private ScriptContext resolveOriginatingScriptContext() {
+        if (hasEffectivePermissions(scriptContext)) {
+            return scriptContext;
         }
-        try {
-            securityManager.checkPermission(new SocketPermission("*", "connect"));
-        } catch (AccessControlException accessControlException) {
-            String message = accessControlException.getMessage();
-            throw new SecurityException(message == null ? "AI request network access denied." : message,
-                accessControlException);
+        final ScriptContext currentContext = ExecutingScriptContextStack.INSTANCE.getCurrentContext();
+        if (hasEffectivePermissions(currentContext)) {
+            return currentContext;
+        }
+        return null;
+    }
+
+    private boolean hasEffectivePermissions(ScriptContext scriptContext) {
+        return scriptContext != null && scriptContext.getEffectivePermissions() != null;
+    }
+
+    private void assertAiRequestPermissionGranted(ScriptContext scriptContext) {
+        final ScriptingPermissions permissions = scriptContext != null ? scriptContext.getEffectivePermissions() : null;
+        if (permissions == null || !permissions.get(ScriptingPermissions.RESOURCES_EXECUTE_SCRIPTS_WITHOUT_AI_REQUEST_RESTRICTION)) {
+            throw new AiRequestRejectedException(
+                AiRequestStatus.PERMISSION_DENIED,
+                "AI request permission denied.");
         }
     }
 
     interface AiRequestServiceResolver {
         AiRequestService resolve();
-    }
-
-    interface NetworkPermissionChecker {
-        void check();
     }
 
 }

@@ -19,9 +19,10 @@
   outstanding request-routing scenarios reliably testable, replacing
   chat-panel singleton request state with factory-created request
   objects and serializing only `ADD_TO_CHAT` dispatch. The current
-  increment keeps AI requests gated by the existing script network
-  permission. A dedicated AI-request permission remains follow-up
-  backlog work.
+  increment adds a dedicated AI-request script permission and makes
+  `askAi(...)` consult the effective permissions of the running script
+  directly. Formula execution remains blocked by that permission gate
+  even if Groovy can reach the bound `ControllerProxy` runtime object.
 - **Motivation:**
   Scripts currently cannot reuse the AI plugin's provider/model/tool
   stack. Users can configure rich prompt execution from the AI UI, but
@@ -125,8 +126,9 @@
     service boundary instead.
   - Public LLM API types belong under `org.freeplane.api.ai`, not the
     root `org.freeplane.api` package.
-  - Restricted scripts must not bypass script network restrictions by
-    routing requests through the AI plugin.
+  - Restricted scripts must not reach the AI plugin through
+    `askAi(...)` unless their effective script permissions include the
+    dedicated AI-request permission.
   - Selection-context override input must use API-visible map and node
     identities, not internal AI-plugin map identifiers. The request may
     name a map through the public map proxy and nodes through that map's
@@ -140,8 +142,10 @@
     unavailable, generic provider error, unexpected internal failure,
     cancellation, timeout, and success.
   - Keep formulas/read-only scripting API unchanged. The new entry point
-    belongs only on the read-write scripting controller API, so
-    formulas must not gain `askAi(...)` access.
+    belongs only on the read-write scripting controller API, but
+    formula safety must be enforced by effective script permissions,
+    not by assuming the `ControllerRO` declaration alone blocks
+    dynamic Groovy access.
   - Reserve synchronous exceptions for programmer errors and for
     pre-acceptance same-thread rejection that can be decided before
     calling the AI service. If `askAi(...)` throws, no callback may be
@@ -228,9 +232,11 @@
     `ScriptingSecurityManager`, which uses `SocketPermission` for
     network access.
   - There is currently no dedicated AI-request script permission.
-  - Formula execution uses separate formula permissions and does not
-    grant network access. Together with the read-only controller
-    binding, that is the current main block on formula access to AI.
+  - Formula execution uses separate formula permissions.
+  - `ControllerRO` does not declare `askAi(...)`, but formula bindings
+    still receive a `ControllerProxy` runtime object through
+    `ProxyFactory.createController(...)`, so interface shape alone is
+    not a sufficient security boundary.
 
 ```plantuml
 @startuml
@@ -281,9 +287,9 @@ result contract for AI responses, and no script-owned cancel handle.
      - immutable `AiRequestResult` carrying terminal status, response
        text, and optional detail/error text;
      - `AiRequestRejectedException` for synchronous pre-acceptance
-       rejection such as missing network permission or missing AI
-       service, with an `AiRequestStatus` reason and no callback
-       delivery for that request;
+       rejection such as missing dedicated AI-request permission or
+       missing AI service, with an `AiRequestStatus` reason and no
+       callback delivery for that request;
      - `AiRequestCallback` single-abstract-method interface receiving one
        `AiRequestResult` whose status is the primary branch point for
        scripts; and
@@ -400,11 +406,12 @@ result contract for AI responses, and no script-owned cancel handle.
       scripting surface, while `Optional` adds no useful state model for
       accepted asynchronous requests. The handle owns cancellation and
       state inspection; the callback owns result delivery.
-  15. Preserve script security by performing an explicit network
-      permission check in the script plugin before any AI service
-      lookup, request startup, or delegation, using the same
-      `SocketPermission` semantics that the script security model
-      already relies on. If permission is denied, throw
+  15. Preserve script security by giving
+      `ControllerProxy.askAi(...)` direct access to the effective
+      `ScriptingPermissions` chosen for the running script, including
+      signed-script trust escalation. Require the dedicated AI-request
+      permission there before any AI service lookup, request startup,
+      or delegation. If permission is denied, throw
       `AiRequestRejectedException` with status `PERMISSION_DENIED` and
       do not invoke the callback.
   16. If the AI request service is unavailable during same-thread
@@ -476,14 +483,15 @@ ChatPromptRunner --> HiddenPromptRequestRunner : hidden path + response callback
       service is unavailable, and does not invoke the callback.
     - `freeplane_plugin_script` test: `ControllerProxy` throws
       `AiRequestRejectedException` with `PERMISSION_DENIED` when the
-      script network permission check fails, and does not invoke the
-      callback.
-    - `freeplane_plugin_script` test: the script network permission
-      check happens before AI service lookup or delegation.
+      effective script-permission snapshot lacks the dedicated AI-
+      request permission, and does not invoke the callback.
+    - `freeplane_plugin_script` test: the AI-request permission check
+      happens before AI service lookup or delegation.
     - `freeplane_plugin_script` test: Groovy/SAM callback adaptation and
       returned handle cancellation semantics.
-    - `freeplane_plugin_script` test: formula/read-only controller
-      bindings still do not expose `askAi(...)`.
+    - `freeplane_plugin_script` test: a formula call to `c.askAi(...)`
+      is denied before AI service lookup, even though the bound
+      runtime object is `ControllerProxy`.
     - `freeplane_plugin_ai` test: public API tool availability maps
       correctly to internal `ChatToolAvailability`, including `CURRENT`.
     - `freeplane_plugin_ai` test: public API model selection maps to the
@@ -1034,7 +1042,7 @@ end
       routing methods.
 
 ## Subtask: Unify manual prompt-action and script prompt concurrency behavior
-- **Status:** in-progress
+- **Status:** done
 - **Scope:**
   Remove the remaining behavior distinction between prompt launches from
   `AIChatPanel.runPrompt(...)` and script-originated prompt-style AI
@@ -1176,84 +1184,402 @@ end
       preserves a Groovy-free public Java API while still supporting
       dynamic script dispatch.
 
-## Subtask: Decide AI request script permission model
-- **Status:** backlog
+## Subtask: Use dedicated AI-request permission with direct effective script-permission access
+- **Status:** done
 - **Scope:**
-  Decide whether script-originated AI requests should use a dedicated
-  script permission in addition to the existing permissions or should
-  stay coupled to the existing network permission, then implement the
-  chosen gate without allowing formulas to call `askAi(...)`.
+  Adopt a dedicated AI-request script permission, make `askAi(...)`
+  read the running script's effective permissions directly, make
+  formula execution fail by permission if it reaches
+  `ControllerProxy.askAi(...)`, and preserve that same permission
+  context for later AI callback code that uses helper controller
+  lookups.
 - **Motivation:**
-  AI requests are network-backed but may deserve more explicit consent
-  than raw network access. The permission model should be deliberate,
-  not accidental.
+  Option A only works cleanly if `askAi(...)` checks the same effective
+  permission snapshot that already governs the script. The current
+  `SocketPermission` preflight is only an indirect proxy for option B.
 - **Scenario:**
-  A normal script that lacks the required permission is denied cleanly.
-  A formula still cannot call `askAi(...)`, regardless of whether the
-  final design uses a dedicated AI-request permission or the existing
-  network permission.
+  A normal script with
+  `execute_scripts_without_ai_request_restriction=false` is denied
+  before AI service lookup, even if generic network permission is true.
+
+  A normal script with
+  `execute_scripts_without_ai_request_restriction=true` may call
+  `askAi(...)` even when generic network permission stays false,
+  because the dedicated AI permission is now the gate.
+
+  A trusted signed script still succeeds because its effective
+  permissions are permissive.
+
+  A formula calling `c.askAi(...)` is denied with
+  `PERMISSION_DENIED` before AI service lookup.
+
+  A script starts `askAi(...)` with a callback that later calls
+  `scriptUtils.c().askAi(...)`. Freeplane restores the originating
+  script context for that callback, so the helper-created controller
+  sees the same dedicated AI permission decision as the original
+  script.
 - **Constraints:**
   - Formulas must not gain access to `askAi(...)`.
   - Do not silently widen permissions for existing restricted scripts.
-  - If AI requests stay coupled to network permission, document and test
-    that exact coupling explicitly.
+    Missing new properties or add-on attributes must default to `false`.
+  - `askAi(...)` must check the same effective permission snapshot that
+    already governs the running script, including signed-script trust
+    escalation and script/add-on-specific permissions.
+  - Remove the `SocketPermission`-based preflight from
+    `ControllerProxy.askAi(...)`. Do not keep option A and option B in
+    parallel.
   - Keep the public `askAi(...)` entry point on `Controller`, not
-    `ControllerRO`.
+    `ControllerRO`, but do not rely on that omission as the security
+    boundary.
+  - A later callback invocation must preserve the originating script
+    permission context for helper lookups such as `scriptUtils.c()`.
 - **Briefing:**
-  Script permissions currently live in
-  `org.freeplane.plugin.script.ScriptingPermissions`. The current
-  `ControllerProxy.askAi(...)` implementation enforces the existing
-  network restriction through `SocketPermission` before delegating.
+  Effective permissions are currently resolved in
+  `org.freeplane.plugin.script.ScriptSecurity` from either script-
+  specific permissions or secured global properties, with trusted
+  signed scripts upgraded to permissive execution.
+
+  `ControllerProxy` currently receives no permission object; it only
+  performs a `SocketPermission` check before
+  `AccessController.doPrivileged(...)`.
+
+  Script callbacks currently flow through
+  `ControllerProxy.askAi(AiRequest, Closure<?>)` ->
+  `ScriptAiRequestService` -> `AiRequestHandleImpl.complete(...)`, which
+  dispatches the callback later on the UI thread without restoring any
+  script-specific execution context.
 - **Research:**
-  - Existing configurable script permissions cover execute, read,
-    write, exec, and network access; there is no AI-specific permission
-    yet.
-  - Formula permissions are created separately in
-    `ScriptingPermissions.getFormulaPermissions()` and currently do not
-    grant network access.
-  - Formula bindings use the read-only controller API, and
-    `ControllerRO` does not expose `askAi(...)`.
-  - Adding a dedicated AI-request permission would touch more than the
-    runtime gate in `ControllerProxy`. It would also affect
-    `ScriptingPermissions.PERMISSION_NAMES`, default and permissive
-    permission construction, the scripting preferences XML, and likely
-    the public script builder API in `org.freeplane.api.Script` and
-    `ScriptProxy` if that permission should be expressible there.
-  - Script add-on metadata currently serializes and validates the known
-    permission names, and `installScriptAddOn.groovy` treats
-    `execute_*` permission attributes as required. A new
-    `execute_scripts_without_ai_request_restriction`-style attribute
-    would therefore need deliberate compatibility handling for add-on
-    install and export.
-  - A dedicated AI-request permission would be valuable only if
-    Freeplane wants AI access to stay narrower than arbitrary script
-    network access. If that distinction is not required, reusing the
-    existing network permission is materially cheaper.
-  - A dedicated AI-request permission/property becomes more compelling
-    if accepted script requests need a narrow internal privileged
-    configuration-capture step, because that is a stronger capability
-    boundary than generic outbound network access alone.
-  - Even with that stronger motivation, the current implementation may
-    still keep the existing network-permission check as the external
-    script preflight until the permission-model decision is made.
+  Current add-on permission application:
+
+  ```plantuml
+  @startuml
+  participant "Installed .script.xml" as Xml
+  participant "ScriptAddOnProperties" as AddOnProps
+  participant "ScriptingGuiConfiguration" as GuiConfig
+  participant "ScriptingMenuEntryVisitor" as MenuVisitor
+  participant "ExecuteScriptAction" as Action
+  participant "ScriptingEngine" as Engine
+  participant "GroovyScript / GenericScript" as ScriptImpl
+  participant "ScriptSecurity" as ScriptSecurity
+  participant "ScriptingPermissions" as Permissions
+
+  Xml -> AddOnProps : parse <script execute_* ...>
+  AddOnProps -> GuiConfig : Script.permissions
+  GuiConfig -> MenuVisitor : ScriptMetaData.permissions
+  MenuVisitor -> Action : new ExecuteScriptAction(..., permissions)
+  Action -> Engine : createScript(file, permissions, true)
+  Engine -> ScriptImpl : new ...(specificPermissions)
+  ScriptImpl -> ScriptSecurity : permissions()
+  ScriptSecurity -> Permissions : use specificPermissions when non-null
+  @enduml
+  ```
+
+  Current script-context resolution:
+
+  ```plantuml
+  @startuml
+  participant "ExecuteScriptAction / init script" as MenuRun
+  participant "FormulaUtils / ScriptCondition" as FormulaRun
+  participant "ScriptRunner" as ScriptRunner
+  participant "ScriptContext" as ScriptContext
+  participant "FormulaThreadLocalStacks" as FormulaStack
+  participant "ScriptUtils.c()" as ScriptUtils
+  participant "ControllerProxy" as ControllerProxy
+
+  MenuRun -> ScriptRunner : execute without setScriptContext(...)
+  ScriptRunner --> MenuRun : scriptContext == null
+
+  FormulaRun -> ScriptContext : new ScriptContext(new NodeScript(...))
+  FormulaRun -> FormulaStack : push(scriptContext)
+  FormulaRun -> ScriptRunner : setScriptContext(scriptContext)
+
+  ScriptUtils -> FormulaStack : getCurrentContext()
+  ScriptUtils -> ControllerProxy : new ControllerProxy(context)
+  @enduml
+  ```
+
+  Current callback dispatch gap:
+
+  ```plantuml
+  @startuml
+  participant "ControllerProxy" as ControllerProxy
+  participant "ScriptAiRequestService" as ScriptService
+  participant "AiRequestHandleImpl" as Handle
+  participant "UI dispatcher" as UiDispatcher
+  participant "Groovy Closure / AiRequestCallback" as Callback
+  participant "ScriptUtils.c()" as ScriptUtils
+  participant "FormulaThreadLocalStacks" as FormulaStack
+
+  ControllerProxy -> ScriptService : askAi(request, callback)
+  ScriptService -> Handle : store callback
+  Handle -> UiDispatcher : dispatch(() -> callback.accept(result))
+  UiDispatcher -> Callback : accept(result)
+  Callback -> ScriptUtils : c()
+  ScriptUtils -> FormulaStack : getCurrentContext()
+  FormulaStack --> ScriptUtils : null outside formula execution
+  @enduml
+  ```
+
+  - Add-on permissions are parsed from installed add-on XML into
+    `ScriptAddOnProperties.Script.permissions`.
+  - `ScriptingGuiConfiguration` copies those permissions into
+    `ScriptMetaData`, and `ScriptingMenuEntryVisitor` passes them to
+    `ExecuteScriptAction`.
+  - `ExecuteScriptAction` hands them to
+    `ScriptingEngine.createScript(...)` as `specificPermissions`.
+  - `ScriptSecurity.permissions()` currently chooses
+    `specificPermissions` when present and falls back to secured global
+    properties only when it is `null`. That is the current add-on-
+    permission application mechanism.
+  - Current `ScriptContext` is independent of that permission
+    selection.
+  - Menu, add-on, and init script execution paths normally do not call
+    `ScriptRunner.setScriptContext(...)`, so they usually run with
+    `scriptContext == null`.
+  - Formula and filter-script paths create a real `ScriptContext` and
+    also push it to `FormulaThreadLocalStacks`.
+  - `ScriptUtils.c()` currently resolves context only from
+    `FormulaThreadLocalStacks`, so in non-formula script execution it
+    creates `ControllerProxy(null)`.
+  - `ControllerProxy.askAi(AiRequest, Closure<?>)` currently adapts the
+    Groovy closure only as `result -> callback.call(result)`. It does
+    not capture or restore script execution context for later callback
+    delivery.
+  - `ScriptAiRequestService` and `AiRequestHandleImpl.complete(...)`
+    later dispatch the callback on the UI thread without restoring
+    script-specific context.
+  - A callback that reuses the originally bound `c` can keep the
+    original `ControllerProxy`, but helper lookups such as
+    `scriptUtils.c()` and the startup-registered shared `Controller`
+    service lose the originating script permission context unless it is
+    restored for the callback frame.
+  - `Activator` registers a shared `Controller` service by calling
+    `ScriptUtils.c()` at startup, outside any formula execution, so
+    that service instance also starts with `scriptContext == null`.
+  - `ScriptingPermissions.getPermissiveScriptingPermissions()` models
+    the unrestricted path, but `ScriptSecurity.isSignedScript()` only
+    treats `script instanceof String` as signable. File-based add-on
+    scripts therefore currently rely on their stored
+    `specificPermissions`, not on signed-script escalation.
+  - `ScriptAddOnProperties` already tolerates missing permission
+    attributes when reading installed add-on XML because absent keys
+    default to `false`. The compatibility problem is at install time:
+    `installScriptAddOn.groovy` currently requires every `execute_*`
+    attribute in the source add-on description.
+  - Adding `execute_scripts_without_ai_request_restriction` touches
+    `ScriptingPermissions`, `ScriptContext`, `ScriptSecurity`,
+    `GroovyScript`, `GenericScript`, `ScriptUtils`,
+    `preferences.xml`, `defaults.properties`, translations,
+    `installScriptAddOn.groovy`, and the programmatic script builder
+    API if that API should request AI explicitly.
 - **Design:**
-  - Option A: add a dedicated AI-request permission, plumb it through
-    script permission storage and UI, and require it for `askAi(...)`
-    without exposing the entry point to formulas.
-  - Option B: keep `askAi(...)` coupled to the existing network
-    permission and rely on the existing `Controller` vs `ControllerRO`
-    split to keep formulas out.
-  - Choose exactly one option before implementation. Do not ship both
-    paths in parallel.
+  Target permission plumbing, context resolution, and callback-context
+  restoration:
+
+  ```plantuml
+  @startuml
+  set separator none
+
+  package "org.freeplane.plugin.script" {
+    class ScriptContext
+    class ExecutingScriptContextStack
+    class ScriptSecurity
+    class ScriptingPermissions
+    class GroovyScript
+    class GenericScript
+  }
+
+  package "org.freeplane.plugin.script.proxy" {
+    class ProxyFactory
+    class ControllerProxy
+    class ScriptUtils
+    class ScriptProxy
+  }
+
+  package "org.freeplane.api" {
+    interface Script
+  }
+
+  package "org.freeplane.api.ai" {
+    interface AiRequestService
+  }
+
+  ScriptProxy ..|> Script
+  ScriptContext --> ScriptingPermissions : carries effective permissions
+  ScriptSecurity --> ScriptingPermissions : getEffectivePermissions()
+  GroovyScript --> ScriptSecurity : resolves final snapshot
+  GenericScript --> ScriptSecurity : resolves final snapshot
+  GroovyScript --> ScriptContext : enriches / synthesizes
+  GenericScript --> ScriptContext : enriches / synthesizes
+  GroovyScript --> ExecutingScriptContextStack : push / pop current context
+  GenericScript --> ExecutingScriptContextStack : push / pop current context
+  ProxyFactory --> ControllerProxy : bind c with ScriptContext
+  ScriptUtils --> ExecutingScriptContextStack : resolve current context
+  ScriptUtils --> ControllerProxy : helper proxy
+  ControllerProxy --> ScriptContext : instance permission source
+  ControllerProxy --> ExecutingScriptContextStack : fallback / callback context source
+  ControllerProxy --> AiRequestService : delegate wrapped callback
+  @enduml
+  ```
+
+  ```plantuml
+  @startuml
+  actor "Script code" as ScriptCode
+  participant "GroovyScript / GenericScript" as Engine
+  participant "ScriptSecurity" as ScriptSecurity
+  participant "ScriptContext" as ScriptContext
+  participant "ExecutingScriptContextStack" as ContextStack
+  participant "ControllerProxy" as ControllerProxy
+  participant "AiRequestService" as AiRequestService
+  participant "Wrapped callback" as WrappedCallback
+  participant "ScriptUtils" as ScriptUtils
+
+  ScriptCode -> Engine : execute(...)
+  Engine -> ScriptSecurity : getEffectivePermissions()
+  ScriptSecurity --> Engine : effectivePermissions
+
+  alt incoming scriptContext != null
+    Engine -> ScriptContext : withEffectivePermissions(effectivePermissions)
+  else incoming scriptContext == null
+    Engine -> ScriptContext : new ScriptContext(null)
+    Engine -> ScriptContext : withEffectivePermissions(effectivePermissions)
+  end
+
+  Engine -> ContextStack : push(effectiveScriptContext)
+  Engine -> ControllerProxy : bind c with effectiveScriptContext
+
+  ScriptCode -> ControllerProxy : askAi(request, callback)
+  ControllerProxy -> ScriptContext : resolve originating context
+  ControllerProxy -> AiRequestService : askAi(request, wrappedCallback)
+  AiRequestService --> ScriptCode : handle
+  Engine -> ContextStack : pop()
+
+  ... later on UI thread ...
+
+  AiRequestService -> WrappedCallback : accept(result)
+  WrappedCallback -> ContextStack : withContext(originatingScriptContext)
+  WrappedCallback -> ScriptCode : original callback body
+
+  alt callback uses bound c
+    ScriptCode -> ControllerProxy : askAi(...)
+  else callback uses scriptUtils.c()
+    ScriptCode -> ScriptUtils : c()
+    ScriptUtils -> ContextStack : getCurrentContext()
+    ScriptUtils --> ScriptCode : ControllerProxy
+  end
+  @enduml
+  ```
+
+  - Add constant
+    `RESOURCES_EXECUTE_SCRIPTS_WITHOUT_AI_REQUEST_RESTRICTION` with
+    property key `execute_scripts_without_ai_request_restriction` to
+    `ScriptingPermissions`; include it in `PERMISSION_NAMES`, default
+    it to `false`, set it to `true` in
+    `getPermissiveScriptingPermissions()`, and leave it `false` in
+    `getFormulaPermissions()`.
+  - Keep the current permission source-of-truth path: add-on and other
+    execution-specific permissions still enter through
+    `specificPermissions` and are resolved by `ScriptSecurity`.
+    `askAi(...)` must consume the resolved effective snapshot, not
+    re-read global properties.
+  - Extend `ScriptContext` with an optional effective-permissions field
+    plus accessor. Use exact names
+    `getEffectivePermissions()` and
+    `withEffectivePermissions(ScriptingPermissions effectivePermissions)`.
+  - Add thread-local class `ExecutingScriptContextStack` in
+    `org.freeplane.plugin.script` for the currently executing enriched
+    `ScriptContext`. Unlike `FormulaThreadLocalStacks`, it must allow
+    nested executions without cycle semantics and must also support
+    executions whose original `scriptContext` is `null`. Use exact
+    methods `getCurrentContext()` and
+    `withContext(ScriptContext scriptContext, Runnable runnable)` so
+    later callback delivery can temporarily restore the originating
+    context.
+  - Refactor `ScriptSecurity` to expose
+    `getEffectivePermissions()`, which resolves the final
+    `ScriptingPermissions` after `assertScriptExecutionAllowed()` and
+    any applicable signed-script trust escalation.
+  - In `GroovyScript.execute(...)` and `GenericScript.execute(...)`,
+    resolve the effective permissions once. If an incoming
+    `scriptContext` exists, enrich it with
+    `withEffectivePermissions(...)`. Otherwise synthesize
+    `new ScriptContext(null).withEffectivePermissions(...)`. Push that
+    enriched context to `ExecutingScriptContextStack`, use it for
+    controller binding creation and script execution, then pop it in
+    `finally`.
+  - Keep `ProxyFactory.createController(...)` context-based for the
+    bound `c` variable. Update `ControllerProxy` to resolve one
+    `originatingScriptContext` in this order: own `scriptContext` if it
+    has effective permissions, then
+    `ExecutingScriptContextStack.getCurrentContext()`, then `null`.
+    Use that same resolved context both for the preflight AI-
+    permission check and for callback wrapping.
+  - In `ControllerProxy.askAi(...)`, wrap the supplied
+    `AiRequestCallback` so callback delivery runs inside
+    `ExecutingScriptContextStack.withContext(originatingScriptContext,
+    ...)` before invoking the original callback or Groovy closure. This
+    closes the helper-lookup gap for callback-time `scriptUtils.c()`
+    and for the startup-registered shared `Controller` service.
+  - Remove the `SocketPermission`-based preflight from
+    `ControllerProxy.askAi(...)`. Replace it with the dedicated AI-
+    permission check on the resolved effective `ScriptingPermissions`.
+  - Update `ScriptUtils.getCurrentContext()` to read
+    `ExecutingScriptContextStack` instead of relying only on
+    `FormulaThreadLocalStacks`, so helper-created controller proxies in
+    normal execution and later callbacks see the same effective
+    permissions as the bound `c` variable.
+  - Expose the new permission through programmatic script execution by
+    adding `accessingAi()` to `org.freeplane.api.Script` and
+    implementing it in `ScriptProxy`. `withAllPermissions()` must also
+    grant the AI permission.
+  - Persist and surface the permission through script preferences and
+    add-on metadata. Newly written add-on XML should always emit the AI
+    attribute. `installScriptAddOn.groovy` must treat a missing AI
+    attribute in legacy add-on source as `false` instead of rejecting
+    installation.
+  - Keep `ControllerRO` and formula bindings unchanged as API shape,
+    but enforce formula denial through the effective AI permission on
+    the `ControllerProxy` runtime object reached by Groovy.
 - **Test specification:**
   - **Automated tests:**
-    - add tests for the chosen permission gate on normal scripts;
-    - add a regression test that formulas/read-only controller bindings
-      still cannot call `askAi(...)`;
-    - if a dedicated AI-request permission is chosen, add tests for its
-      stored property handling and denial path.
+    - update `ControllerProxyTest` to cover allowed and denied
+      `askAi(...)` calls under the dedicated AI permission and to
+      verify denial happens before AI service lookup;
+    - add a script-plugin test for `ScriptSecurity` or equivalent
+      execution-path coverage showing that trusted signed scripts hand
+      permissive permissions to `ControllerProxy`;
+    - add a script-plugin test that `Script.accessingAi()` /
+      `ScriptProxy` sets the new permission and `withAllPermissions()`
+      includes it;
+    - add a script-plugin test that legacy add-on installation input
+      without the AI attribute is accepted and defaults AI permission
+      to denied;
+    - add a regression test that a formula script can reach
+      `ControllerProxy.askAi(...)` dynamically via `c.askAi(...)` yet
+      still receives `PERMISSION_DENIED` before AI service lookup;
+    - add a regression test that a callback using
+      `scriptUtils.c().askAi(...)` sees the same permission outcome as
+      the original script that started the request;
+    - optionally keep the interface-exposure test as secondary,
+      non-security coverage.
   - **Manual tests:**
-    - run one allowed script and one denied script under the chosen
-      permission model and verify the callback result matches the
-      configured restriction;
-    - verify a formula still has no `askAi(...)` access.
+    - run one script with AI permission enabled and one with it
+      disabled, and verify only the enabled script can start
+      `askAi(...)`;
+    - install an older script add-on package without the AI attribute
+      and verify installation still works while `askAi(...)` remains
+      denied by default;
+    - verify `c.askAi(...)` is denied by permission in a formula and
+      does not start an AI request;
+    - verify a callback that uses `scriptUtils.c().askAi(...)` sees the
+      same allow-or-deny outcome as the original script request.
+- **Implementation notes:**
+  - **Tradeoffs:**
+    - Kept callback-context restoration in `ControllerProxy` instead of
+      moving it into the AI plugin so the script-permission replay stays
+      owned by the scripting boundary and automatically covers both SAM
+      and Groovy-closure callbacks.
+    - Centralized the legacy add-on compatibility rule in
+      `ScriptingPermissions.getRequiredExecutionPermissionNames()` so
+      the installer script and unit tests share the same required-
+      permission list.

@@ -98,19 +98,26 @@ public class GroovyScript implements IScript {
     	final PrintStream oldOut = System.out;
     	ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
     	try {
+    		final ScriptingPermissions effectivePermissions = getEffectivePermissions(outStream);
+    		final ScriptContext effectiveScriptContext = createEffectiveScriptContext(scriptContext, effectivePermissions);
     		return AccessController.doPrivileged(new PrivilegedExceptionAction<Object>(){
 
     			@Override
     			public Object run() throws Exception {
     				try {
-    					final ScriptingSecurityManager scriptingSecurityManager = createScriptingSecurityManager(outStream);
-    					compileAndCache(scriptingSecurityManager);
+    					compileAndCache(effectivePermissions.getScriptingSecurityManager());
         				Thread.currentThread().setContextClassLoader(scriptClassLoader);
-        				FreeplaneScriptBaseClass scriptWithBinding = compiledScript.withBinding(node, scriptContext);
-        				if(oldOut != outStream)
-        					System.setOut(outStream);
-        				final Object result = scriptWithBinding.run();
-        				return result;
+        				ExecutingScriptContextStack.INSTANCE.push(effectiveScriptContext);
+        				try {
+        					FreeplaneScriptBaseClass scriptWithBinding = compiledScript.withBinding(node, effectiveScriptContext);
+        					if(oldOut != outStream)
+        						System.setOut(outStream);
+        					final Object result = scriptWithBinding.run();
+        					return result;
+        				}
+        				finally {
+        					ExecutingScriptContextStack.INSTANCE.pop();
+        				}
     				} catch (Exception e) {
     					throw e;
     				} catch (Throwable e) {
@@ -142,9 +149,17 @@ public class GroovyScript implements IScript {
     	}
     }
 
-    private ScriptingSecurityManager createScriptingSecurityManager(PrintStream outStream) {
+    private ScriptingPermissions getEffectivePermissions(PrintStream outStream) {
         return new ScriptSecurity(script, specificPermissions, outStream)
-        		.getScriptingSecurityManager();
+        		.getEffectivePermissions();
+    }
+
+    private ScriptContext createEffectiveScriptContext(ScriptContext scriptContext,
+            ScriptingPermissions effectivePermissions) {
+        if (scriptContext != null) {
+            return scriptContext.withEffectivePermissions(effectivePermissions);
+        }
+        return new ScriptContext(null).withEffectivePermissions(effectivePermissions);
     }
 
     private static boolean accessPermissionCheckerChecked = false;

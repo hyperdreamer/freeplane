@@ -187,24 +187,31 @@ public class GenericScript implements IScript {
             final PrintStream oldOut = System.out;
 			ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
             try {
+                final ScriptingPermissions effectivePermissions = getEffectivePermissions(outStream);
+                final ScriptContext effectiveScriptContext = createEffectiveScriptContext(scriptContext, effectivePermissions);
 				AccessController.doPrivileged(new PrivilegedAction<Void>() {
 
 					@Override
 					public Void run() {
-						final ScriptingSecurityManager scriptingSecurityManager = createScriptingSecurityManager(outStream);
-						scriptClassLoader.setSecurityManager(scriptingSecurityManager);
+						scriptClassLoader.setSecurityManager(effectivePermissions.getScriptingSecurityManager());
 						return null;
 					}
 				});
 				Thread.currentThread().setContextClassLoader(scriptClassLoader);
-                final SimpleScriptContext context = createScriptContext(node, scriptContext, outStream);
-                if (compilationEnabled && engine instanceof Compilable) {
-                    compileAndCache((Compilable) engine);
-                    System.setOut(outStream);
-					return compiledScript.eval(context);
-                } else {
-                    System.setOut(outStream);
-					return engine.eval(scriptSource.getScript(), context);
+                ExecutingScriptContextStack.INSTANCE.push(effectiveScriptContext);
+                try {
+                    final SimpleScriptContext context = createScriptContext(node, effectiveScriptContext, outStream);
+                    if (compilationEnabled && engine instanceof Compilable) {
+                        compileAndCache((Compilable) engine);
+                        System.setOut(outStream);
+						return compiledScript.eval(context);
+                    } else {
+                        System.setOut(outStream);
+						return engine.eval(scriptSource.getScript(), context);
+                    }
+                }
+                finally {
+                    ExecutingScriptContextStack.INSTANCE.pop();
                 }
             } finally {
                 System.setOut(oldOut);
@@ -227,9 +234,17 @@ public class GenericScript implements IScript {
     }
 
 
-    private ScriptingSecurityManager createScriptingSecurityManager(PrintStream outStream) {
+    private ScriptingPermissions getEffectivePermissions(PrintStream outStream) {
         return new ScriptSecurity(scriptSource, specificPermissions, outStream)
-                .getScriptingSecurityManager();
+                .getEffectivePermissions();
+    }
+
+    private ScriptContext createEffectiveScriptContext(ScriptContext scriptContext,
+            ScriptingPermissions effectivePermissions) {
+        if (scriptContext != null) {
+            return scriptContext.withEffectivePermissions(effectivePermissions);
+        }
+        return new ScriptContext(null).withEffectivePermissions(effectivePermissions);
     }
 
     private boolean disableScriptCompilation(File scriptFile) {

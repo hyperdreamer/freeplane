@@ -27,39 +27,57 @@ import org.freeplane.core.resources.ResourceController;
  * @author Dimitry Polivaev 19.12.2012
  */
 public class ScriptSecurity {
+    interface SignedScriptChecker {
+        boolean isSignedScript(Object script, PrintStream outStream);
+    }
+
+    private static final SignedScriptChecker DEFAULT_SIGNED_SCRIPT_CHECKER = new SignedScriptChecker() {
+        @Override
+        public boolean isSignedScript(Object script, PrintStream outStream) {
+            return script instanceof String && new SignedScriptHandler().isScriptSigned((String) script,
+                    outStream);
+        }
+    };
+
     final private Object script;
 
     final private ScriptingPermissions specificPermissions;
 
     final private PrintStream outStream;
 
+    final private SignedScriptChecker signedScriptChecker;
+
     public ScriptSecurity(Object script, ScriptingPermissions specificPermissions,
             PrintStream outStream) {
+        this(script, specificPermissions, outStream, DEFAULT_SIGNED_SCRIPT_CHECKER);
+    }
+
+    ScriptSecurity(Object script, ScriptingPermissions specificPermissions,
+            PrintStream outStream, SignedScriptChecker signedScriptChecker) {
         super();
         this.script = script;
         this.specificPermissions = specificPermissions;
         this.outStream = outStream;
+        this.signedScriptChecker = signedScriptChecker;
     }
 
     ScriptingSecurityManager getScriptingSecurityManager() {
-        final ScriptingSecurityManager scriptingSecurityManager;
-        // get preferences (and store them again after the script execution,
-        // such that the scripts are not able to change them).
+        return getEffectivePermissions().getScriptingSecurityManager();
+    }
+
+    ScriptingPermissions getEffectivePermissions() {
         final ScriptingPermissions permissions = permissions();
         permissions.assertScriptExecutionAllowed();
         final boolean executeSignedScripts = permissions
                 .isExecuteSignedScriptsWithoutRestriction();
         if (executeSignedScripts && isSignedScript()) {
-            scriptingSecurityManager = permissions.getPermissiveScriptingSecurityManager();
-        } else {
-            scriptingSecurityManager = permissions.getScriptingSecurityManager();
+            return ScriptingPermissions.getPermissiveScriptingPermissions();
         }
-        return scriptingSecurityManager;
+        return permissions;
     }
 
     private boolean isSignedScript() {
-        return script instanceof String && new SignedScriptHandler().isScriptSigned((String) script,
-                outStream);
+        return signedScriptChecker.isSignedScript(script, outStream);
     }
 
     private ScriptingPermissions permissions() {
