@@ -227,10 +227,6 @@ public class ChatPromptRunnerTest {
             null,
             null,
             null,
-            () -> {
-            },
-            () -> {
-            },
             availableMaps,
             aiPromptRequestComposer,
             (sessionId, service, preparedMessage, requestFlow, requestTokenUsageTracker, requestCallbacks) ->
@@ -252,10 +248,6 @@ public class ChatPromptRunnerTest {
             null,
             null,
             null,
-            () -> {
-            },
-            () -> {
-            },
             availableMaps,
             new AiPromptRequestComposer(availableMaps, mock(TextController.class)),
             (sessionId, service, preparedMessage, requestFlow, requestTokenUsageTracker, requestCallbacks) -> {

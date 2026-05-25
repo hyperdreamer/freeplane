@@ -2,6 +2,7 @@ package org.freeplane.plugin.ai.chat;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -37,6 +38,7 @@ import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.text.TextController;
 import org.freeplane.plugin.ai.chat.history.ChatTranscriptStore;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
+import org.freeplane.plugin.ai.prompt.AiPrompt;
 import org.freeplane.plugin.ai.prompt.AiPromptRequestComposer;
 import org.freeplane.plugin.ai.tools.AIToolSet;
 import org.freeplane.plugin.ai.tools.AIToolSetBuilder;
@@ -285,6 +287,129 @@ public class AIChatPanelScriptRequestTest {
         assertThat(handle.isDone()).isTrue();
     }
 
+    @Test
+    public void runPromptShownStartsAfterHiddenPromptLaunch() throws Exception {
+        PanelHarness harness = newPanelHarness(true);
+        ChatRequestFlow requestFlow = mock(ChatRequestFlow.class);
+        ChatRequestFlowFactory chatRequestFlowFactory = mock(ChatRequestFlowFactory.class);
+        when(chatRequestFlowFactory.create(any(), any())).thenReturn(requestFlow);
+        setField(harness.panel, "chatRequestFlowFactory", chatRequestFlowFactory);
+        ChatPromptRunnerFactory chatPromptRunnerFactory = mock(ChatPromptRunnerFactory.class);
+        ChatPromptRunner hiddenRunner = mock(ChatPromptRunner.class);
+        ChatPromptRunner shownRunner = mock(ChatPromptRunner.class);
+        when(chatPromptRunnerFactory.createHidden()).thenReturn(hiddenRunner);
+        when(chatPromptRunnerFactory.createShown(any(), any(), any(), any(), any())).thenReturn(shownRunner);
+        when(hiddenRunner.submitHiddenRequest(
+            "Hidden prompt",
+            "Hidden body",
+            null,
+            ChatToolAvailability.EDITING,
+            null,
+            null,
+            true,
+            null)).thenReturn(true);
+        when(shownRunner.startShownPrompt("Prompt body", null, ChatToolAvailability.EDITING, null, null))
+            .thenReturn(true);
+        setField(harness.panel, "chatPromptRunnerFactory", chatPromptRunnerFactory);
+
+        try (MockedStatic<ResourceController> resourceControllers = mockStatic(ResourceController.class);
+             MockedStatic<TextUtils> textUtils = mockStatic(TextUtils.class)) {
+            ResourceController resourceController = mock(ResourceController.class);
+            resourceControllers.when(ResourceController::getResourceController).thenReturn(resourceController);
+            textUtils.when(() -> TextUtils.getText("ai_prompt_session_prefix")).thenReturn("Prompt: ");
+            textUtils.when(() -> TextUtils.getText("ai_prompt_untitled")).thenReturn("Untitled");
+
+            harness.panel.runPrompt(new AiPrompt("Hidden prompt", "Hidden body", false));
+            harness.panel.runPrompt(new AiPrompt("Shown prompt", "Prompt body", true));
+        }
+
+        verify(hiddenRunner).submitHiddenRequest(
+            "Hidden prompt",
+            "Hidden body",
+            null,
+            ChatToolAvailability.EDITING,
+            null,
+            null,
+            true,
+            null);
+        verify(chatPromptRunnerFactory).createShown(any(), any(), eq(requestFlow), any(), any());
+        verify(shownRunner).startShownPrompt("Prompt body", null, ChatToolAvailability.EDITING, null, null);
+    }
+
+    @Test
+    public void runPromptHiddenStartsWhileVisibleRequestIsTracked() throws Exception {
+        PanelHarness harness = newPanelHarness(true);
+        HashMap<LiveChatSessionId, ChatRequestFlow> activeVisibleRequestFlows =
+            new HashMap<LiveChatSessionId, ChatRequestFlow>();
+        activeVisibleRequestFlows.put(harness.sessionId, mock(ChatRequestFlow.class));
+        setField(harness.panel, "activeVisibleRequestFlows", activeVisibleRequestFlows);
+        ChatPromptRunnerFactory chatPromptRunnerFactory = mock(ChatPromptRunnerFactory.class);
+        ChatPromptRunner chatPromptRunner = mock(ChatPromptRunner.class);
+        when(chatPromptRunnerFactory.createHidden()).thenReturn(chatPromptRunner);
+        when(chatPromptRunner.submitHiddenRequest(
+            "Hidden prompt",
+            "Prompt body",
+            null,
+            ChatToolAvailability.EDITING,
+            null,
+            null,
+            true,
+            null)).thenReturn(true);
+        setField(harness.panel, "chatPromptRunnerFactory", chatPromptRunnerFactory);
+
+        harness.panel.runPrompt(new AiPrompt("Hidden prompt", "Prompt body", false));
+
+        verify(chatPromptRunnerFactory).createHidden();
+        verify(chatPromptRunner).submitHiddenRequest(
+            "Hidden prompt",
+            "Prompt body",
+            null,
+            ChatToolAvailability.EDITING,
+            null,
+            null,
+            true,
+            null);
+    }
+
+    @Test
+    public void runPromptShownCreatesFreshRequestScopedRuntimeObjectsAcrossLaunches() throws Exception {
+        PanelHarness harness = newPanelHarness(true);
+        ChatRequestFlow firstFlow = mock(ChatRequestFlow.class);
+        ChatRequestFlow secondFlow = mock(ChatRequestFlow.class);
+        ChatRequestFlowFactory chatRequestFlowFactory = mock(ChatRequestFlowFactory.class);
+        when(chatRequestFlowFactory.create(any(), any())).thenReturn(firstFlow, secondFlow);
+        setField(harness.panel, "chatRequestFlowFactory", chatRequestFlowFactory);
+        ChatPromptRunnerFactory chatPromptRunnerFactory = mock(ChatPromptRunnerFactory.class);
+        ChatPromptRunner firstRunner = mock(ChatPromptRunner.class);
+        ChatPromptRunner secondRunner = mock(ChatPromptRunner.class);
+        when(chatPromptRunnerFactory.createShown(any(), any(), eq(firstFlow), any(), any())).thenReturn(firstRunner);
+        when(chatPromptRunnerFactory.createShown(any(), any(), eq(secondFlow), any(), any())).thenReturn(secondRunner);
+        when(firstRunner.startShownPrompt("Prompt one", null, ChatToolAvailability.EDITING, null, null))
+            .thenReturn(true);
+        when(secondRunner.startShownPrompt("Prompt two", null, ChatToolAvailability.EDITING, null, null))
+            .thenReturn(true);
+        setField(harness.panel, "chatPromptRunnerFactory", chatPromptRunnerFactory);
+
+        try (MockedStatic<ResourceController> resourceControllers = mockStatic(ResourceController.class);
+             MockedStatic<TextUtils> textUtils = mockStatic(TextUtils.class)) {
+            ResourceController resourceController = mock(ResourceController.class);
+            resourceControllers.when(ResourceController::getResourceController).thenReturn(resourceController);
+            textUtils.when(() -> TextUtils.getText("ai_prompt_session_prefix")).thenReturn("Prompt: ");
+            textUtils.when(() -> TextUtils.getText("ai_prompt_untitled")).thenReturn("Untitled");
+
+            harness.panel.runPrompt(new AiPrompt("Prompt one", "Prompt one", true));
+            harness.panel.runPrompt(new AiPrompt("Prompt two", "Prompt two", true));
+        }
+
+        InOrder inOrder = inOrder(chatRequestFlowFactory, chatPromptRunnerFactory, firstRunner, secondRunner);
+        inOrder.verify(chatRequestFlowFactory).create(any(), any());
+        inOrder.verify(chatPromptRunnerFactory).createShown(any(), any(), eq(firstFlow), any(), any());
+        inOrder.verify(firstRunner).startShownPrompt("Prompt one", null, ChatToolAvailability.EDITING, null, null);
+        inOrder.verify(chatRequestFlowFactory).create(any(), any());
+        inOrder.verify(chatPromptRunnerFactory).createShown(any(), any(), eq(secondFlow), any(), any());
+        inOrder.verify(secondRunner).startShownPrompt("Prompt two", null, ChatToolAvailability.EDITING, null, null);
+    }
+
     private ChatRequestFlow createVisibleRequestFlow(AIChatPanel panel,
                                                      LiveChatSessionId sessionId,
                                                      ChatTokenUsageTracker requestTracker,
@@ -340,6 +465,7 @@ public class AIChatPanelScriptRequestTest {
         setField(panel, "chatInputControls", chatInputControls);
         setField(panel, "chatDisplaySettings", chatDisplaySettings);
         setField(panel, "chatToolAvailabilitySettings", chatToolAvailabilitySettings);
+        setField(panel, "promptToolSelectionResolver", new PromptToolSelectionResolver(chatToolAvailabilitySettings));
         setField(panel, "chatRequestFlowFactory", chatRequestFlowFactory);
         setField(panel, "visibleAiRequestCallbacksFactory", new VisibleAiRequestCallbacksFactory());
         setField(panel, "chatToolAvailabilityMenu", mock(ChatToolAvailabilityMenu.class));

@@ -146,7 +146,6 @@ public class AIChatPanel extends JPanel {
     private final AssistantProfileSelectionSync assistantProfileSelectionSync;
     private final AssistantProfilePaneBuilder assistantProfilePaneBuilder;
     private boolean currentSessionUsesAssistantProfile = true;
-    private int activeHiddenRequestCount;
 
     public AIChatPanel() {
         setLayout(new BorderLayout());
@@ -371,8 +370,6 @@ public class AIChatPanel extends JPanel {
             aiTabIcon,
             stopIcon,
             cancelTooltipText,
-            this::onHiddenRequestStarted,
-            this::onHiddenRequestFinished,
             availableMaps,
             aiPromptRequestComposer,
             this::openPromptChat,
@@ -607,10 +604,6 @@ public class AIChatPanel extends JPanel {
     }
 
     private void sendMessage() {
-        if (hasActiveHiddenRequests()) {
-            notifyUser(TextUtils.getText("ai_prompt_request_active"), false);
-            return;
-        }
         String userMessage = inputArea.getText().trim();
         if (userMessage.isEmpty()) {
             return;
@@ -636,10 +629,6 @@ public class AIChatPanel extends JPanel {
 
     public void runPrompt(AiPrompt prompt, Component owner) {
         if (prompt == null) {
-            return;
-        }
-        if (isAnyAiRequestActive()) {
-            notifyUser(TextUtils.getText("ai_prompt_request_active"), false);
             return;
         }
         String selectedModelOverride = normalizeSelectionValue(prompt.getModelSelectionValue());
@@ -1172,24 +1161,8 @@ public class AIChatPanel extends JPanel {
         return currentRequestFlow != null && currentRequestFlow.isRequestActive();
     }
 
-    private boolean isAnyAiRequestActive() {
-        return !activeVisibleRequestFlows.isEmpty() || hasActiveHiddenRequests();
-    }
-
-    private boolean hasActiveHiddenRequests() {
-        return activeHiddenRequestCount > 0;
-    }
-
-    private void onHiddenRequestStarted() {
-        activeHiddenRequestCount++;
-        updateInputState();
-    }
-
-    private void onHiddenRequestFinished() {
-        if (activeHiddenRequestCount > 0) {
-            activeHiddenRequestCount--;
-        }
-        updateInputState();
+    private boolean isChatAiRequestActive() {
+        return !activeVisibleRequestFlows.isEmpty();
     }
 
     private void notifyVisibleConfigurationError(LiveChatSessionId sessionId) {
@@ -1235,7 +1208,6 @@ public class AIChatPanel extends JPanel {
     private void updateInputState() {
         chatInputControls.update(
             isRequestActive(),
-            hasActiveHiddenRequests(),
             isProviderConfigured());
     }
 
@@ -1379,13 +1351,13 @@ public class AIChatPanel extends JPanel {
     }
 
     private void updateUndoRedoButtonState() {
-        boolean enabled = !isAnyAiRequestActive();
+        boolean enabled = !isChatAiRequestActive();
         undoButton.setEnabled(enabled && liveChatController.canUndo());
         redoButton.setEnabled(enabled && liveChatController.canRedo());
     }
 
     private void undoLastTurn() {
-        if (isAnyAiRequestActive()) {
+        if (isChatAiRequestActive()) {
             return;
         }
         boolean canUndo = liveChatController.canUndo();
@@ -1405,7 +1377,7 @@ public class AIChatPanel extends JPanel {
     }
 
     private void redoLastTurn() {
-        if (isAnyAiRequestActive()) {
+        if (isChatAiRequestActive()) {
             return;
         }
         if (!liveChatController.canRedo()) {

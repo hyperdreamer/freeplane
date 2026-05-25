@@ -11,8 +11,6 @@ class ChatPromptRunnerFactory {
     private final Icon aiTabIcon;
     private final Icon stopIcon;
     private final String cancelTooltipText;
-    private final Runnable hiddenRequestStartedHook;
-    private final Runnable hiddenRequestFinishedHook;
     private final AvailableMaps availableMaps;
     private final AiPromptRequestComposer aiPromptRequestComposer;
     private final ChatPromptRunner.VisiblePromptChatLauncher visiblePromptChatLauncher;
@@ -22,8 +20,6 @@ class ChatPromptRunnerFactory {
     ChatPromptRunnerFactory(Icon aiTabIcon,
                             Icon stopIcon,
                             String cancelTooltipText,
-                            Runnable hiddenRequestStartedHook,
-                            Runnable hiddenRequestFinishedHook,
                             AvailableMaps availableMaps,
                             AiPromptRequestComposer aiPromptRequestComposer,
                             ChatPromptRunner.VisiblePromptChatLauncher visiblePromptChatLauncher,
@@ -32,8 +28,6 @@ class ChatPromptRunnerFactory {
         this.aiTabIcon = aiTabIcon;
         this.stopIcon = stopIcon;
         this.cancelTooltipText = cancelTooltipText;
-        this.hiddenRequestStartedHook = hiddenRequestStartedHook;
-        this.hiddenRequestFinishedHook = hiddenRequestFinishedHook;
         this.availableMaps = availableMaps;
         this.aiPromptRequestComposer = aiPromptRequestComposer;
         this.visiblePromptChatLauncher = visiblePromptChatLauncher;
@@ -50,8 +44,6 @@ class ChatPromptRunnerFactory {
             aiTabIcon,
             stopIcon,
             cancelTooltipText,
-            hiddenRequestStartedHook,
-            hiddenRequestFinishedHook,
             availableMaps,
             aiPromptRequestComposer,
             visiblePromptChatLauncher,
@@ -69,8 +61,6 @@ class ChatPromptRunnerFactory {
             aiTabIcon,
             stopIcon,
             cancelTooltipText,
-            hiddenRequestStartedHook,
-            hiddenRequestFinishedHook,
             availableMaps,
             aiPromptRequestComposer,
             visiblePromptChatLauncher,

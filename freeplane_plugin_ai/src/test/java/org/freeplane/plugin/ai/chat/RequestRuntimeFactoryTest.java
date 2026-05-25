@@ -30,10 +30,6 @@ public class RequestRuntimeFactoryTest {
             null,
             null,
             null,
-            () -> {
-            },
-            () -> {
-            },
             mock(AvailableMaps.class),
             new AiPromptRequestComposer(mock(AvailableMaps.class), mock(TextController.class)),
             (sessionId, service, preparedMessage, requestFlow, requestTokenUsageTracker, requestCallbacks) -> {

@@ -40,8 +40,6 @@ class ChatPromptRunner {
     private final Icon aiTabIcon;
     private final Icon stopIcon;
     private final String cancelTooltipText;
-    private final Runnable hiddenRequestStartedHook;
-    private final Runnable hiddenRequestFinishedHook;
     private final AvailableMaps availableMaps;
     private final AiPromptRequestComposer aiPromptRequestComposer;
     private final VisiblePromptChatLauncher visiblePromptChatLauncher;
@@ -60,8 +58,6 @@ class ChatPromptRunner {
     ChatPromptRunner(Icon aiTabIcon,
                      Icon stopIcon,
                      String cancelTooltipText,
-                     Runnable hiddenRequestStartedHook,
-                     Runnable hiddenRequestFinishedHook,
                      AvailableMaps availableMaps,
                      AiPromptRequestComposer aiPromptRequestComposer,
                      VisiblePromptChatLauncher visiblePromptChatLauncher,
@@ -75,8 +71,6 @@ class ChatPromptRunner {
         this.aiTabIcon = aiTabIcon;
         this.stopIcon = stopIcon;
         this.cancelTooltipText = cancelTooltipText;
-        this.hiddenRequestStartedHook = hiddenRequestStartedHook;
-        this.hiddenRequestFinishedHook = hiddenRequestFinishedHook;
         this.availableMaps = availableMaps;
         this.aiPromptRequestComposer = aiPromptRequestComposer;
         this.visiblePromptChatLauncher = visiblePromptChatLauncher;
@@ -92,7 +86,6 @@ class ChatPromptRunner {
                 SwingUtilities.invokeLater(new Runnable() {
                     @Override
                     public void run() {
-                        hiddenRequestStartedHook.run();
                         if (showHiddenPromptProgressDialog) {
                             showHiddenPromptProgressDialog(promptName);
                         }
@@ -108,7 +101,6 @@ class ChatPromptRunner {
                         closeHiddenPromptProgressDialog();
                         hiddenRequestObserver = null;
                         showHiddenPromptProgressDialog = true;
-                        hiddenRequestFinishedHook.run();
                     }
                 });
             }

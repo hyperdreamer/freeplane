@@ -38,13 +38,8 @@ class ChatInputControls {
         this.undoRedoButtonStateUpdater = undoRedoButtonStateUpdater;
     }
 
-    void update(boolean requestActive, boolean hiddenPromptRequestActive, boolean providerConfigured) {
+    void update(boolean requestActive,  boolean providerConfigured) {
         if (requestActive) {
-            undoRedoButtonStateUpdater.run();
-            return;
-        }
-        if (hiddenPromptRequestActive) {
-            setHiddenPromptRunState();
             undoRedoButtonStateUpdater.run();
             return;
         }
@@ -83,8 +78,4 @@ class ChatInputControls {
         sendButton.setToolTipText(preferencesTooltipText);
     }
 
-    private void setHiddenPromptRunState() {
-        inputArea.setEditable(false);
-        sendButton.setEnabled(false);
-    }
 }

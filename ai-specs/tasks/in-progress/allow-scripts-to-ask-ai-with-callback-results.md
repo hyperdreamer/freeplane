@@ -1034,7 +1034,7 @@ end
       routing methods.
 
 ## Subtask: Unify manual prompt-action and script prompt concurrency behavior
-- **Status:** backlog
+- **Status:** in-progress
 - **Scope:**
   Remove the remaining behavior distinction between prompt launches from
   `AIChatPanel.runPrompt(...)` and script-originated prompt-style AI
