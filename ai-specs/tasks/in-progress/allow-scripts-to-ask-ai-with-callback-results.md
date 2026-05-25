@@ -1177,7 +1177,7 @@ end
       dynamic script dispatch.
 
 ## Subtask: Support privileged AI configuration capture for scripts
-- **Status:** backlog
+- **Status:** rejected
 - **Scope:**
   Make script-originated AI requests capture any protected AI
   configuration values inside a narrow privileged boundary before

@@ -22,8 +22,11 @@ import org.freeplane.api.ai.AiRequestResult;
 import org.freeplane.api.ai.AiRequestService;
 import org.freeplane.api.ai.AiRequestStatus;
 import org.freeplane.api.ai.AiToolAvailability;
+import org.freeplane.plugin.script.Activator;
 import org.junit.Test;
 import org.mockito.InOrder;
+import org.osgi.framework.BundleContext;
+import org.osgi.framework.ServiceReference;
 
 public class ControllerProxyTest {
 
@@ -50,6 +53,34 @@ public class ControllerProxyTest {
         assertThat(seenStatus.get()).isEqualTo(AiRequestStatus.SUCCEEDED);
         verify(requestService).askAi(org.mockito.ArgumentMatchers.eq(request), org.mockito.ArgumentMatchers.any());
         verify(expectedHandle).cancel();
+    }
+
+    @Test
+    public void askAi_defaultResolverUsesScriptActivatorBundleContext() throws Exception {
+        BundleContext bundleContext = mock(BundleContext.class);
+        @SuppressWarnings("unchecked")
+        ServiceReference<AiRequestService> serviceReference = mock(ServiceReference.class);
+        AiRequestService requestService = mock(AiRequestService.class);
+        AiRequestHandle expectedHandle = mock(AiRequestHandle.class);
+        when(bundleContext.getServiceReference(AiRequestService.class)).thenReturn(serviceReference);
+        when(bundleContext.getService(serviceReference)).thenReturn(requestService);
+        when(requestService.askAi(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+            .thenReturn(expectedHandle);
+        Activator activator = new Activator();
+        activator.start(bundleContext);
+
+        try {
+            ControllerProxy uut = new ControllerProxy(null);
+
+            AiRequestHandle actualHandle = uut.askAi(request(), result -> {
+            });
+
+            assertThat(actualHandle).isSameAs(expectedHandle);
+            verify(bundleContext).getServiceReference(AiRequestService.class);
+            verify(bundleContext).getService(serviceReference);
+        } finally {
+            activator.stop(bundleContext);
+        }
     }
 
     @Test

@@ -9,6 +9,8 @@ import java.io.InputStream;
 import java.net.SocketPermission;
 import java.net.URL;
 import java.security.AccessControlException;
+import java.security.AccessController;
+import java.security.PrivilegedAction;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -53,11 +55,11 @@ import org.freeplane.features.text.TextController;
 import org.freeplane.features.text.mindmapmode.MTextController;
 import org.freeplane.features.ui.IMapViewManager;
 import org.freeplane.features.ui.ViewController;
+import org.freeplane.plugin.script.Activator;
 import org.freeplane.plugin.script.ScriptContext;
 
 import groovy.lang.Closure;
 import org.osgi.framework.BundleContext;
-import org.osgi.framework.FrameworkUtil;
 import org.osgi.framework.ServiceReference;
 
 class ControllerProxy implements Proxy.Controller {
@@ -424,13 +426,18 @@ class ControllerProxy implements Proxy.Controller {
                 AiRequestStatus.PERMISSION_DENIED,
                 permissionDenied.getMessage());
         }
-        AiRequestService aiRequestService = aiRequestServiceResolver.resolve();
-        if (aiRequestService == null) {
-            throw new AiRequestRejectedException(
-                AiRequestStatus.AI_UNAVAILABLE,
-                "AI request service is unavailable.");
-        }
-        return aiRequestService.askAi(request, callback);
+        return AccessController.doPrivileged(new PrivilegedAction<AiRequestHandle>() {
+            @Override
+            public AiRequestHandle run() {
+                AiRequestService aiRequestService = aiRequestServiceResolver.resolve();
+                if (aiRequestService == null) {
+                    throw new AiRequestRejectedException(
+                        AiRequestStatus.AI_UNAVAILABLE,
+                        "AI request service is unavailable.");
+                }
+                return aiRequestService.askAi(request, callback);
+            }
+        });
     }
 
     public AiRequestHandle askAi(AiRequest request, Closure<?> callback) {
@@ -439,9 +446,7 @@ class ControllerProxy implements Proxy.Controller {
     }
 
     private static AiRequestService lookupAiRequestService() {
-        BundleContext bundleContext = FrameworkUtil.getBundle(ControllerProxy.class) == null
-            ? null
-            : FrameworkUtil.getBundle(ControllerProxy.class).getBundleContext();
+        BundleContext bundleContext = Activator.getBundleContext();
         if (bundleContext == null) {
             return null;
         }

@@ -12,12 +12,19 @@ import org.osgi.framework.BundleActivator;
 import org.osgi.framework.BundleContext;
 
 public class Activator implements BundleActivator {
+    private static volatile BundleContext bundleContext;
+
+    public static BundleContext getBundleContext() {
+        return bundleContext;
+    }
+
 	/*
 	 * (non-Javadoc)
 	 * @see org.osgi.framework.BundleActivator#start(org.osgi.framework.BundleContext)
 	 */
 	@Override
 	public void start(final BundleContext context) throws Exception {
+        bundleContext = context;
 		final Hashtable<String, String[]> props = new Hashtable<String, String[]>();
 		props.put("mode", new String[] { MModeController.MODENAME });
 		context.registerService(IModeControllerExtensionProvider.class.getName(),
@@ -36,5 +43,8 @@ public class Activator implements BundleActivator {
 	 */
 	@Override
 	public void stop(final BundleContext context) throws Exception {
+        if (bundleContext == context) {
+            bundleContext = null;
+        }
 	}
 }
