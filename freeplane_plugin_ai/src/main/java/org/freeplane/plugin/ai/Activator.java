@@ -22,7 +22,9 @@ import org.freeplane.features.mode.ModeController;
 import org.freeplane.features.mode.mindmapmode.MModeController;
 import org.freeplane.main.application.CommandLineOptions;
 import org.freeplane.main.osgi.IModeControllerExtensionProvider;
+import org.freeplane.api.ai.AiRequestService;
 import org.freeplane.plugin.ai.chat.AIChatPanel;
+import org.freeplane.plugin.ai.chat.ScriptAiRequestService;
 import org.freeplane.plugin.ai.edits.AIEdits;
 import org.freeplane.plugin.ai.edits.AiEditsPersistenceBuilder;
 import org.freeplane.plugin.ai.edits.AiEditsSettings;
@@ -37,6 +39,7 @@ import org.freeplane.plugin.ai.tools.MessageBuilder;
 import org.freeplane.plugin.ai.tools.utilities.ToolCaller;
 import org.osgi.framework.BundleActivator;
 import org.osgi.framework.BundleContext;
+import org.osgi.framework.ServiceRegistration;
 
 public class Activator implements BundleActivator {
 
@@ -49,6 +52,7 @@ public class Activator implements BundleActivator {
 	private ModelContextProtocolServer modelContextProtocolServer;
 	private AIChatPanel aiChatPanel;
 	private AiPromptActionRegistry promptActionRegistry;
+	private ServiceRegistration<?> aiRequestServiceRegistration;
 
 	/*
 	 * (non-Javadoc)
@@ -72,6 +76,7 @@ public class Activator implements BundleActivator {
 				    aiChatPanel = new AIChatPanel();
 				    tabs.addTab("", ResourceController.getResourceController().getIcon("/images/panelTabs/aiTab.svg?useAccentColor=true"),
 				        aiChatPanel, TextUtils.getText("ai_panel"));
+				    registerAiRequestService(context);
 				    promptActionRegistry = AiPromptMenuInstaller.install(modeController, aiChatPanel);
 				    startModelContextProtocolServer(aiChatPanel, modeController);
 				    addPreferencesToOptionPanel();
@@ -187,8 +192,22 @@ public class Activator implements BundleActivator {
 	 * (non-Javadoc)
 	 * @see org.osgi.framework.BundleActivator#stop(org.osgi.framework.BundleContext)
 	 */
+	private void registerAiRequestService(BundleContext context) {
+		if (aiRequestServiceRegistration != null) {
+			aiRequestServiceRegistration.unregister();
+		}
+		aiRequestServiceRegistration = context.registerService(
+			AiRequestService.class.getName(),
+			new ScriptAiRequestService(aiChatPanel),
+			new Hashtable<String, String[]>());
+	}
+
 	@Override
 	public void stop(final BundleContext context) throws Exception {
+		if (aiRequestServiceRegistration != null) {
+			aiRequestServiceRegistration.unregister();
+			aiRequestServiceRegistration = null;
+		}
 		if (aiChatPanel != null) {
 			aiChatPanel.persistCurrentChatIfNeeded();
 		}

@@ -1,0 +1,71 @@
+package org.freeplane.plugin.ai.chat;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import org.freeplane.api.ai.AiRequestStatus;
+import org.freeplane.plugin.ai.prompt.HiddenAiRequestObserverBridge;
+import org.junit.Test;
+
+public class HiddenAiRequestObserverBridgeTest {
+
+    @Test
+    public void succeededCompletesHandleWithResponse() {
+        AtomicReference<org.freeplane.api.ai.AiRequestResult> seenResult =
+            new AtomicReference<org.freeplane.api.ai.AiRequestResult>();
+        AiRequestHandleImpl handle = new AiRequestHandleImpl(Runnable::run, seenResult::set);
+        HiddenAiRequestObserverBridge uut = new HiddenAiRequestObserverBridge(handle);
+
+        uut.onSucceeded("response");
+
+        assertThat(handle.isDone()).isTrue();
+        assertThat(handle.getStatus()).isEqualTo(AiRequestStatus.SUCCEEDED);
+        assertThat(seenResult.get().getResponse()).isEqualTo("response");
+    }
+
+    @Test
+    public void failedMapsModelUnavailableStatus() {
+        AtomicReference<org.freeplane.api.ai.AiRequestResult> seenResult =
+            new AtomicReference<org.freeplane.api.ai.AiRequestResult>();
+        AiRequestHandleImpl handle = new AiRequestHandleImpl(Runnable::run, seenResult::set);
+        HiddenAiRequestObserverBridge uut = new HiddenAiRequestObserverBridge(handle);
+
+        uut.onFailed("model not found");
+
+        assertThat(handle.isDone()).isTrue();
+        assertThat(handle.getStatus()).isEqualTo(AiRequestStatus.MODEL_UNAVAILABLE);
+        assertThat(seenResult.get().getDetail()).isEqualTo("model not found");
+    }
+
+    @Test
+    public void cancelledCompletesExactlyOnce() {
+        AtomicInteger callbackCount = new AtomicInteger();
+        AtomicReference<AiRequestStatus> seenStatus = new AtomicReference<AiRequestStatus>();
+        AiRequestHandleImpl handle = new AiRequestHandleImpl(Runnable::run, result -> {
+            callbackCount.incrementAndGet();
+            seenStatus.set(result.getStatus());
+        });
+        HiddenAiRequestObserverBridge uut = new HiddenAiRequestObserverBridge(handle);
+
+        uut.onCancelled();
+        uut.onCancelled();
+
+        assertThat(callbackCount.get()).isEqualTo(1);
+        assertThat(seenStatus.get()).isEqualTo(AiRequestStatus.CANCELLED);
+    }
+
+    @Test
+    public void cancelledAfterTimeoutReportsTimedOut() {
+        AtomicReference<AiRequestStatus> seenStatus = new AtomicReference<AiRequestStatus>();
+        AiRequestHandleImpl handle = new AiRequestHandleImpl(Runnable::run, result ->
+            seenStatus.set(result.getStatus()));
+        handle.markTimedOut();
+        HiddenAiRequestObserverBridge uut = new HiddenAiRequestObserverBridge(handle);
+
+        uut.onCancelled();
+
+        assertThat(handle.getStatus()).isEqualTo(AiRequestStatus.TIMED_OUT);
+        assertThat(seenStatus.get()).isEqualTo(AiRequestStatus.TIMED_OUT);
+    }
+}

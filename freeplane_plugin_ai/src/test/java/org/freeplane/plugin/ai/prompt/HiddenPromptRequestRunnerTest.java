@@ -26,6 +26,8 @@ public class HiddenPromptRequestRunnerTest {
         assertThat(callbacks.startedPromptName).isEqualTo("Rewrite");
         assertThat(callbacks.failedPromptName).isEqualTo("Rewrite");
         assertThat(callbacks.failureMessage).isEqualTo("provider failure");
+        assertThat(callbacks.succeededResponse).isNull();
+        assertThat(callbacks.cancelledPromptName).isNull();
         assertThat(uut.isRequestActive()).isFalse();
     }
 
@@ -51,8 +53,23 @@ public class HiddenPromptRequestRunnerTest {
 
         assertThat(callbacks.awaitFinished()).isTrue();
         assertThat(callbacks.failedPromptName).isNull();
+        assertThat(callbacks.cancelledPromptName).isEqualTo("Rewrite");
         assertThat(uut.isRequestActive()).isFalse();
         assertThat(uut.cancellationSupplier().get()).isTrue();
+    }
+
+    @Test
+    public void submit_reportsSuccessfulResponse() throws Exception {
+        RecordingCallbacks callbacks = new RecordingCallbacks();
+        HiddenPromptRequestRunner uut = new HiddenPromptRequestRunner(callbacks);
+        AIChatService chatService = mock(AIChatService.class);
+        when(chatService.chat("prompt")).thenReturn("response");
+
+        uut.submit("Rewrite", chatService, "prompt");
+
+        assertThat(callbacks.awaitFinished()).isTrue();
+        assertThat(callbacks.succeededPromptName).isEqualTo("Rewrite");
+        assertThat(callbacks.succeededResponse).isEqualTo("response");
     }
 
     private static class RecordingCallbacks implements HiddenPromptRequestRunner.Callbacks {
@@ -60,6 +77,9 @@ public class HiddenPromptRequestRunnerTest {
         private final CountDownLatch finishedLatch = new CountDownLatch(1);
         private String startedPromptName;
         private String finishedPromptName;
+        private String succeededPromptName;
+        private String succeededResponse;
+        private String cancelledPromptName;
         private String failedPromptName;
         private String failureMessage;
 
@@ -72,6 +92,17 @@ public class HiddenPromptRequestRunnerTest {
         public void onRequestFinished(String promptName) {
             finishedPromptName = promptName;
             finishedLatch.countDown();
+        }
+
+        @Override
+        public void onRequestSucceeded(String promptName, String response) {
+            succeededPromptName = promptName;
+            succeededResponse = response;
+        }
+
+        @Override
+        public void onRequestCancelled(String promptName) {
+            cancelledPromptName = promptName;
         }
 
         @Override

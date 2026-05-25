@@ -3,9 +3,7 @@ package org.freeplane.plugin.ai.chat;
 import dev.langchain4j.memory.ChatMemory;
 import dev.langchain4j.model.output.TokenUsage;
 import java.awt.Component;
-import java.util.function.BiConsumer;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.function.Supplier;
 import javax.swing.Icon;
 import javax.swing.SwingUtilities;
@@ -13,160 +11,214 @@ import org.freeplane.core.ui.components.UITools;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
-import org.freeplane.plugin.ai.prompt.AiPrompt;
 import org.freeplane.plugin.ai.prompt.AiPromptRequestComposer;
+import org.freeplane.plugin.ai.prompt.HiddenAiRequestObserverBridge;
 import org.freeplane.plugin.ai.prompt.HiddenPromptRequestRunner;
+import org.freeplane.plugin.ai.prompt.HiddenPromptRequestRunnerFactory;
 import org.freeplane.plugin.ai.prompt.ui.AiPromptProgressDialog;
+import org.freeplane.plugin.ai.prompt.AiPromptProgressDialogFactory;
 import org.freeplane.plugin.ai.tools.AIToolSetBuilder;
+import org.freeplane.plugin.ai.tools.selection.SelectionIdentifiersResponse;
 import org.freeplane.plugin.ai.tools.utilities.ToolCallSummaryHandler;
 
 class ChatPromptRunner {
     interface VisiblePromptChatLauncher {
-        void openPromptChat(ChatMemory promptChatMemory,
+        void openPromptChat(LiveChatSessionId sessionId,
                             AIChatService promptService,
                             String preparedMessage,
-                            String promptDisplayName,
-                            String selectedModelOverride,
-                            ChatToolAvailability toolAvailabilityOverride);
+                            ChatRequestFlow requestFlow,
+                            ChatTokenUsageTracker requestTokenUsageTracker,
+                            VisiblePromptRequestCallbacks requestCallbacks);
+    }
+
+    interface VisiblePromptRequestCallbacks {
+        void onResponseAppended(String response);
+        void onFailed(String userText, String errorMessage);
+        void onCancelled();
     }
 
     private final Icon aiTabIcon;
     private final Icon stopIcon;
     private final String cancelTooltipText;
-    private final Runnable inputStateUpdater;
+    private final Runnable hiddenRequestStartedHook;
+    private final Runnable hiddenRequestFinishedHook;
     private final AvailableMaps availableMaps;
     private final AiPromptRequestComposer aiPromptRequestComposer;
-    private final PromptToolSelectionResolver promptToolSelectionResolver;
-    private final LiveChatController liveChatController;
-    private final ChatRequestFlow chatRequestFlow;
-    private final ChatTokenUsageTracker chatTokenUsageTracker;
-    private final Supplier<ChatMemory> chatMemoryFactory;
-    private final Function<String, String> configurationErrorMessageProvider;
-    private final BiConsumer<String, Boolean> userNotifier;
     private final VisiblePromptChatLauncher visiblePromptChatLauncher;
     private final HiddenPromptRequestRunner hiddenPromptRequestRunner;
+    private final AiPromptProgressDialogFactory aiPromptProgressDialogFactory;
+    private final ChatMemory shownPromptChatMemory;
+    private final AvailableMaps.MapAccessListener shownMapAccessListener;
+    private final ChatRequestFlow shownRequestFlow;
+    private final ChatTokenUsageTracker shownRequestTokenUsageTracker;
+    private final LiveChatSessionId shownSessionId;
     private AiPromptProgressDialog hiddenPromptProgressDialog;
     private Component hiddenPromptOwnerComponent;
+    private boolean showHiddenPromptProgressDialog = true;
+    private HiddenAiRequestObserverBridge hiddenRequestObserver;
 
     ChatPromptRunner(Icon aiTabIcon,
                      Icon stopIcon,
                      String cancelTooltipText,
-                     Runnable inputStateUpdater,
+                     Runnable hiddenRequestStartedHook,
+                     Runnable hiddenRequestFinishedHook,
                      AvailableMaps availableMaps,
                      AiPromptRequestComposer aiPromptRequestComposer,
-                     PromptToolSelectionResolver promptToolSelectionResolver,
-                     LiveChatController liveChatController,
-                     ChatRequestFlow chatRequestFlow,
-                     ChatTokenUsageTracker chatTokenUsageTracker,
-                     Supplier<ChatMemory> chatMemoryFactory,
-                     Function<String, String> configurationErrorMessageProvider,
-                     BiConsumer<String, Boolean> userNotifier,
-                     VisiblePromptChatLauncher visiblePromptChatLauncher) {
+                     VisiblePromptChatLauncher visiblePromptChatLauncher,
+                     HiddenPromptRequestRunnerFactory hiddenPromptRequestRunnerFactory,
+                     AiPromptProgressDialogFactory aiPromptProgressDialogFactory,
+                     ChatMemory shownPromptChatMemory,
+                     AvailableMaps.MapAccessListener shownMapAccessListener,
+                     ChatRequestFlow shownRequestFlow,
+                     ChatTokenUsageTracker shownRequestTokenUsageTracker,
+                     LiveChatSessionId shownSessionId) {
         this.aiTabIcon = aiTabIcon;
         this.stopIcon = stopIcon;
         this.cancelTooltipText = cancelTooltipText;
-        this.inputStateUpdater = inputStateUpdater;
+        this.hiddenRequestStartedHook = hiddenRequestStartedHook;
+        this.hiddenRequestFinishedHook = hiddenRequestFinishedHook;
         this.availableMaps = availableMaps;
         this.aiPromptRequestComposer = aiPromptRequestComposer;
-        this.promptToolSelectionResolver = promptToolSelectionResolver;
-        this.liveChatController = liveChatController;
-        this.chatRequestFlow = chatRequestFlow;
-        this.chatTokenUsageTracker = chatTokenUsageTracker;
-        this.chatMemoryFactory = chatMemoryFactory;
-        this.configurationErrorMessageProvider = configurationErrorMessageProvider;
-        this.userNotifier = userNotifier;
         this.visiblePromptChatLauncher = visiblePromptChatLauncher;
-        this.hiddenPromptRequestRunner = new HiddenPromptRequestRunner(new HiddenPromptRequestRunner.Callbacks() {
+        this.aiPromptProgressDialogFactory = aiPromptProgressDialogFactory;
+        this.shownPromptChatMemory = shownPromptChatMemory;
+        this.shownMapAccessListener = shownMapAccessListener;
+        this.shownRequestFlow = shownRequestFlow;
+        this.shownRequestTokenUsageTracker = shownRequestTokenUsageTracker;
+        this.shownSessionId = shownSessionId;
+        this.hiddenPromptRequestRunner = hiddenPromptRequestRunnerFactory.create(new HiddenPromptRequestRunner.Callbacks() {
             @Override
             public void onRequestStarted(String promptName) {
-                SwingUtilities.invokeLater(() -> {
-                    inputStateUpdater.run();
-                    showHiddenPromptProgressDialog(promptName);
+                SwingUtilities.invokeLater(new Runnable() {
+                    @Override
+                    public void run() {
+                        hiddenRequestStartedHook.run();
+                        if (showHiddenPromptProgressDialog) {
+                            showHiddenPromptProgressDialog(promptName);
+                        }
+                    }
                 });
             }
 
             @Override
             public void onRequestFinished(String promptName) {
-                SwingUtilities.invokeLater(() -> {
-                    closeHiddenPromptProgressDialog();
-                    inputStateUpdater.run();
+                SwingUtilities.invokeLater(new Runnable() {
+                    @Override
+                    public void run() {
+                        closeHiddenPromptProgressDialog();
+                        hiddenRequestObserver = null;
+                        showHiddenPromptProgressDialog = true;
+                        hiddenRequestFinishedHook.run();
+                    }
                 });
             }
 
             @Override
+            public void onRequestSucceeded(String promptName, String response) {
+                if (hiddenRequestObserver != null) {
+                    hiddenRequestObserver.onSucceeded(response);
+                }
+            }
+
+            @Override
+            public void onRequestCancelled(String promptName) {
+                if (hiddenRequestObserver != null) {
+                    hiddenRequestObserver.onCancelled();
+                }
+            }
+
+            @Override
             public void onRequestFailed(String promptName, String errorMessage) {
+                if (hiddenRequestObserver != null) {
+                    hiddenRequestObserver.onFailed(errorMessage);
+                    return;
+                }
                 UITools.errorMessage(promptFailureMessage(promptName, errorMessage));
             }
         });
     }
 
-    boolean isRequestActive() {
+    boolean isHiddenRequestActive() {
         return hiddenPromptRequestRunner.isRequestActive();
     }
 
-    void cancelActiveRequest() {
-        hiddenPromptRequestRunner.cancelActiveRequest();
+    HiddenPromptRequestRunner hiddenPromptRequestRunner() {
+        return hiddenPromptRequestRunner;
     }
 
-    void runPrompt(AiPrompt prompt, Component owner) {
-        if (prompt == null) {
-            return;
+    boolean startShownPrompt(String promptText,
+                             String selectedModelOverride,
+                             ChatToolAvailability resolvedToolAvailability,
+                             SelectionIdentifiersResponse selectionOverride,
+                             VisiblePromptRequestCallbacks requestCallbacks) {
+        if (shownPromptChatMemory == null || shownMapAccessListener == null
+            || shownRequestFlow == null || shownRequestTokenUsageTracker == null
+            || shownSessionId == null) {
+            throw new IllegalStateException("Shown prompt context is not configured.");
         }
-        if (chatRequestFlow.isRequestActive() || hiddenPromptRequestRunner.isRequestActive()) {
-            userNotifier.accept(TextUtils.getText("ai_prompt_request_active"), false);
-            return;
-        }
-        String selectedModelOverride = normalizeSelectionValue(prompt.getModelSelectionValue());
-        String toolAvailabilitySelectionValue = prompt.getToolAvailabilitySelectionValue();
-        ChatToolAvailability resolvedToolAvailability =
-            promptToolSelectionResolver.resolveEffectiveToolAvailability(toolAvailabilitySelectionValue);
-        ChatToolAvailability toolAvailabilityOverride =
-            promptToolSelectionResolver.resolveShownChatOverride(toolAvailabilitySelectionValue);
         final String preparedMessage;
         try {
-            preparedMessage = aiPromptRequestComposer.compose(prompt, resolvedToolAvailability);
+            preparedMessage = aiPromptRequestComposer.compose(promptText, resolvedToolAvailability, selectionOverride);
         } catch (RuntimeException error) {
-            userNotifier.accept(error.getMessage(), true);
-            return;
+            return false;
         }
-        ChatMemory promptChatMemory = chatMemoryFactory.get();
-        if (prompt.isShowInChat()) {
-            AIChatService promptService = createPromptChatService(
-                promptChatMemory,
-                liveChatController.mapAccessListener(),
-                chatRequestFlow::onToolCallSummary,
-                chatRequestFlow.cancellationSupplier(),
-                chatRequestFlow::onProviderUsage,
-                chatTokenUsageTracker,
-                selectedModelOverride,
-                resolvedToolAvailability);
-            if (promptService == null) {
-                return;
-            }
-            visiblePromptChatLauncher.openPromptChat(
-                promptChatMemory,
-                promptService,
-                preparedMessage,
-                promptSessionDisplayName(prompt.getName()),
-                selectedModelOverride,
-                toolAvailabilityOverride);
-        } else {
-            AIChatService promptService = createPromptChatService(
-                promptChatMemory,
-                null,
-                null,
-                hiddenPromptRequestRunner.cancellationSupplier(),
-                null,
-                new ChatTokenUsageTracker(totals -> {
-                }),
-                selectedModelOverride,
-                resolvedToolAvailability);
-            if (promptService == null) {
-                return;
-            }
-            hiddenPromptOwnerComponent = owner;
-            hiddenPromptRequestRunner.submit(prompt.getName(), promptService, preparedMessage);
+        AIChatService promptService = createPromptChatService(
+            shownPromptChatMemory,
+            shownMapAccessListener,
+            shownRequestFlow::onToolCallSummary,
+            shownRequestFlow.cancellationSupplier(),
+            shownRequestFlow::onProviderUsage,
+            shownRequestTokenUsageTracker,
+            selectedModelOverride,
+            resolvedToolAvailability);
+        if (promptService == null) {
+            return false;
         }
+        visiblePromptChatLauncher.openPromptChat(
+            shownSessionId,
+            promptService,
+            preparedMessage,
+            shownRequestFlow,
+            shownRequestTokenUsageTracker,
+            requestCallbacks);
+        return true;
+    }
+
+    boolean submitHiddenRequest(String requestName,
+                                String promptText,
+                                String selectedModelOverride,
+                                ChatToolAvailability resolvedToolAvailability,
+                                SelectionIdentifiersResponse selectionOverride,
+                                Component owner,
+                                boolean showProgressDialog,
+                                HiddenAiRequestObserverBridge observer) {
+        final String preparedMessage;
+        try {
+            preparedMessage = aiPromptRequestComposer.compose(promptText, resolvedToolAvailability, selectionOverride);
+        } catch (RuntimeException error) {
+            return false;
+        }
+        AIChatService promptService = createPromptChatService(
+            AssistantProfileChatMemory.withMaxTokens(new ChatMemorySettings().getMaximumTokenCount()),
+            null,
+            null,
+            hiddenPromptRequestRunner.cancellationSupplier(),
+            null,
+            new ChatTokenUsageTracker(new Consumer<ChatUsageTotals>() {
+                @Override
+                public void accept(ChatUsageTotals totals) {
+                }
+            }),
+            selectedModelOverride,
+            resolvedToolAvailability);
+        if (promptService == null) {
+            return false;
+        }
+        hiddenPromptOwnerComponent = owner;
+        hiddenRequestObserver = observer;
+        showHiddenPromptProgressDialog = showProgressDialog;
+        hiddenPromptRequestRunner.submit(requestName, promptService, preparedMessage);
+        return true;
     }
 
     private AIChatService createPromptChatService(ChatMemory promptChatMemory,
@@ -177,11 +229,6 @@ class ChatPromptRunner {
                                                   ChatTokenUsageTracker tokenUsageTracker,
                                                   String selectedModelOverride,
                                                   ChatToolAvailability toolAvailability) {
-        String configurationError = configurationErrorMessageProvider.apply(selectedModelOverride);
-        if (configurationError != null) {
-            userNotifier.accept(configurationError, true);
-            return null;
-        }
         return AIChatServiceFactory.createService(new AIToolSetBuilder()
                 .toolCallSummaryHandler(toolCallSummaryHandler)
                 .availableMaps(availableMaps)
@@ -192,16 +239,13 @@ class ChatPromptRunner {
             toolCallSummaryHandler,
             cancellationSupplier,
             tokenUsageConsumer,
-            () -> toolAvailability,
+            new Supplier<ChatToolAvailability>() {
+                @Override
+                public ChatToolAvailability get() {
+                    return toolAvailability;
+                }
+            },
             selectedModelOverride);
-    }
-
-    private String normalizeSelectionValue(String selectionValue) {
-        if (selectionValue == null) {
-            return null;
-        }
-        String normalized = selectionValue.trim();
-        return normalized.isEmpty() ? null : normalized;
     }
 
     private String promptFailureMessage(String promptName, String errorMessage) {
@@ -212,14 +256,6 @@ class ChatPromptRunner {
             safeErrorMessage.isEmpty() ? "Unknown error" : safeErrorMessage);
     }
 
-    private String promptSessionDisplayName(String promptName) {
-        String safePromptName = promptName == null ? "" : promptName.trim();
-        if (safePromptName.isEmpty()) {
-            safePromptName = TextUtils.getText("ai_prompt_untitled");
-        }
-        return TextUtils.getText("ai_prompt_session_prefix") + safePromptName;
-    }
-
     private void showHiddenPromptProgressDialog(String promptName) {
         Component owner = hiddenPromptOwnerComponent != null ? hiddenPromptOwnerComponent : UITools.getCurrentRootComponent();
         Component locationAnchor = hiddenPromptOwnerComponent == null
@@ -228,13 +264,18 @@ class ChatPromptRunner {
         if (hiddenPromptProgressDialog != null) {
             hiddenPromptProgressDialog.closeDialog();
         }
-        hiddenPromptProgressDialog = new AiPromptProgressDialog(
+        hiddenPromptProgressDialog = aiPromptProgressDialogFactory.create(
             owner,
             locationAnchor,
             aiTabIcon,
             stopIcon,
             cancelTooltipText,
-            this::cancelActiveRequest);
+            new Runnable() {
+                @Override
+                public void run() {
+                    hiddenPromptRequestRunner.cancelActiveRequest();
+                }
+            });
         hiddenPromptProgressDialog.showPrompt(promptName);
     }
 

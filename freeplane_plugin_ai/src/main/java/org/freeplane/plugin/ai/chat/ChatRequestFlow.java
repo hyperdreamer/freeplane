@@ -12,6 +12,7 @@ class ChatRequestFlow {
         void onRequestFinished();
         void onUserTextRestored(String userText);
         void onRequestFailed(String userText, String errorMessage);
+        void onRequestCancelled();
         void onAssistantResponse(String text);
         void onAssistantError(String text);
         void synchronizeTranscriptWithMemory();
@@ -120,6 +121,9 @@ class ChatRequestFlow {
             callbacks.onRequestFailed(snapshotUserText, requestFailureMessage);
         }
         callbacks.onRequestFinished();
+        if (requestFailureMessage == null && requestCancellation.isCancelled()) {
+            callbacks.onRequestCancelled();
+        }
         callbacks.refreshTokenCounters();
         clearRequestState();
     }

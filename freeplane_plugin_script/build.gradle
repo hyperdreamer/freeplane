@@ -50,7 +50,7 @@ javadoc {
       .include('**/ScriptUtils.java')
       .include('**/GroovyStaticImports.java') +
 		fileTree(dir: '../freeplane_api/src/main/java')
-		  .include('**/api/*.java') +
+		  .include('**/api/**/*.java') +
 		fileTree(dir: '../freeplane/src/main/java')
 		  .include('**/UITools.java')
 		  .include('**/TextUtils.java')

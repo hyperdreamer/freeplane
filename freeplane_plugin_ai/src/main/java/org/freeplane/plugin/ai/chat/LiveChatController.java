@@ -97,23 +97,25 @@ public class LiveChatController {
         sessionActivationHandler.activate(chatMemory, false);
     }
 
-    public void startNewChat() {
-        switchToNewSession();
+    public LiveChatSessionId startNewChat() {
+        return switchToNewSession();
     }
 
-    public void startNewPromptChat(ChatMemory chatMemory, String displayName) {
-        startNewPromptChat(chatMemory, displayName, null);
+    public LiveChatSessionId startNewPromptChat(ChatMemory chatMemory, String displayName) {
+        return startNewPromptChat(chatMemory, displayName, null);
     }
 
-    public void startNewPromptChat(ChatMemory chatMemory, String displayName, String selectedModelOverride) {
-        startNewPromptChat(chatMemory, displayName, selectedModelOverride, ChatToolAvailability.EDITING);
+    public LiveChatSessionId startNewPromptChat(ChatMemory chatMemory, String displayName,
+                                                String selectedModelOverride) {
+        return startNewPromptChat(chatMemory, displayName, selectedModelOverride,
+            ChatToolAvailability.EDITING);
     }
 
-    public void startNewPromptChat(ChatMemory chatMemory, String displayName,
-                                   String selectedModelOverride,
-                                   ChatToolAvailability toolAvailabilityOverride) {
+    public LiveChatSessionId startNewPromptChat(ChatMemory chatMemory, String displayName,
+                                                String selectedModelOverride,
+                                                ChatToolAvailability toolAvailabilityOverride) {
         if (chatMemory == null) {
-            return;
+            return null;
         }
         persistCurrentSession();
         String effectiveDisplayName = displayName == null || displayName.trim().isEmpty()
@@ -127,6 +129,7 @@ public class LiveChatController {
         promptSession.setSelectedModelOverride(selectedModelOverride);
         promptSession.setNameEdited(true);
         switchToSession(promptSession.getId(), false, false);
+        return promptSession.getId();
     }
 
     public boolean currentSessionUsesAssistantProfile() {
@@ -134,30 +137,79 @@ public class LiveChatController {
         return session == null || session.isAssistantProfileEnabled();
     }
 
+    public LiveChatSessionId currentSessionId() {
+        return liveChatSessionManager.getCurrentSessionId();
+    }
+
+    public boolean isCurrentSession(LiveChatSessionId sessionId) {
+        return sessionId != null && sessionId.equals(liveChatSessionManager.getCurrentSessionId());
+    }
+
+    public ChatMemory chatMemory(LiveChatSessionId sessionId) {
+        LiveChatSession session = liveChatSessionManager.findSession(sessionId);
+        return session == null ? null : session.getChatMemory();
+    }
+
     public ChatToolAvailability currentSessionToolAvailabilityOverride() {
-        LiveChatSession session = liveChatSessionManager.getCurrentSession();
+        return sessionToolAvailabilityOverride(liveChatSessionManager.getCurrentSessionId());
+    }
+
+    public ChatToolAvailability sessionToolAvailabilityOverride(LiveChatSessionId sessionId) {
+        LiveChatSession session = liveChatSessionManager.findSession(sessionId);
         return session == null ? null : session.getToolAvailabilityOverride();
     }
 
     public String currentSessionSelectedModelOverride() {
-        LiveChatSession session = liveChatSessionManager.getCurrentSession();
+        return sessionSelectedModelOverride(liveChatSessionManager.getCurrentSessionId());
+    }
+
+    public String sessionSelectedModelOverride(LiveChatSessionId sessionId) {
+        LiveChatSession session = liveChatSessionManager.findSession(sessionId);
         return session == null ? null : session.getSelectedModelOverride();
     }
 
     public void clearCurrentSessionSelectedModelOverride() {
-        LiveChatSession session = liveChatSessionManager.getCurrentSession();
+        setSessionSelectedModelOverride(liveChatSessionManager.getCurrentSessionId(), null);
+    }
+
+    public void setCurrentSessionSelectedModelOverride(String selectedModelOverride) {
+        setSessionSelectedModelOverride(liveChatSessionManager.getCurrentSessionId(), selectedModelOverride);
+    }
+
+    public void setSessionSelectedModelOverride(LiveChatSessionId sessionId, String selectedModelOverride) {
+        LiveChatSession session = liveChatSessionManager.findSession(sessionId);
         if (session == null) {
             return;
         }
-        session.setSelectedModelOverride(null);
+        session.setSelectedModelOverride(selectedModelOverride);
     }
 
     public void clearCurrentSessionToolAvailabilityOverride() {
-        LiveChatSession session = liveChatSessionManager.getCurrentSession();
+        setSessionToolAvailabilityOverride(liveChatSessionManager.getCurrentSessionId(), null);
+    }
+
+    public void setCurrentSessionToolAvailabilityOverride(ChatToolAvailability toolAvailabilityOverride) {
+        setSessionToolAvailabilityOverride(liveChatSessionManager.getCurrentSessionId(), toolAvailabilityOverride);
+    }
+
+    public void setSessionToolAvailabilityOverride(LiveChatSessionId sessionId,
+                                                   ChatToolAvailability toolAvailabilityOverride) {
+        LiveChatSession session = liveChatSessionManager.findSession(sessionId);
         if (session == null) {
             return;
         }
-        session.setToolAvailabilityOverride(null);
+        session.setToolAvailabilityOverride(toolAvailabilityOverride);
+    }
+
+    public void renameCurrentSession(String displayName) {
+        renameSession(liveChatSessionManager.getCurrentSessionId(), displayName);
+    }
+
+    public void renameSession(LiveChatSessionId sessionId, String displayName) {
+        if (sessionId == null || displayName == null || displayName.trim().isEmpty()) {
+            return;
+        }
+        liveChatSessionManager.rename(sessionId, displayName.trim());
     }
 
     public void openLiveChats() {
@@ -181,7 +233,11 @@ public class LiveChatController {
     }
 
     public AvailableMaps.MapAccessListener mapAccessListener() {
-        return this::recordMapAccess;
+        return mapAccessListener(liveChatSessionManager.getCurrentSessionId());
+    }
+
+    public AvailableMaps.MapAccessListener mapAccessListener(final LiveChatSessionId sessionId) {
+        return (mapIdentifier, mapModel) -> recordMapAccess(sessionId, mapIdentifier, mapModel);
     }
 
     public void recordUserMessage(String message) {
@@ -209,11 +265,20 @@ public class LiveChatController {
     }
 
     public ChatTokenUsageState getCurrentTokenUsageState() {
-        LiveChatSession session = liveChatSessionManager.getCurrentSession();
+        return getTokenUsageState(liveChatSessionManager.getCurrentSessionId());
+    }
+
+    public ChatTokenUsageState getTokenUsageState(LiveChatSessionId sessionId) {
+        LiveChatSession session = liveChatSessionManager.findSession(sessionId);
+        return session == null ? null : session.getTokenUsageState();
+    }
+
+    public void setTokenUsageState(LiveChatSessionId sessionId, ChatTokenUsageState tokenUsageState) {
+        LiveChatSession session = liveChatSessionManager.findSession(sessionId);
         if (session == null) {
-            return null;
+            return;
         }
-        return session.getTokenUsageState();
+        session.setTokenUsageState(tokenUsageState);
     }
 
     public boolean canUndo() {
@@ -246,7 +311,11 @@ public class LiveChatController {
     }
 
     public void synchronizeTranscriptWithMemory() {
-        LiveChatSession session = liveChatSessionManager.getCurrentSession();
+        synchronizeTranscriptWithMemory(liveChatSessionManager.getCurrentSessionId());
+    }
+
+    public void synchronizeTranscriptWithMemory(LiveChatSessionId sessionId) {
+        LiveChatSession session = liveChatSessionManager.findSession(sessionId);
         if (session == null) {
             return;
         }
@@ -254,11 +323,12 @@ public class LiveChatController {
         session.setLastActivityTimestamp(System.currentTimeMillis());
     }
 
-    private void switchToNewSession() {
+    private LiveChatSessionId switchToNewSession() {
         persistCurrentSession();
         ChatMemory newChatMemory = createChatMemory();
         LiveChatSession newSession = liveChatSessionManager.createSession(newChatMemory, buildDefaultChatName());
         switchToSession(newSession.getId(), false, false);
+        return newSession.getId();
     }
 
     private void switchToSession(LiveChatSessionId sessionId) {
@@ -368,11 +438,13 @@ public class LiveChatController {
         return builder.toString().trim();
     }
 
-    private void recordMapAccess(UUID mapIdentifier, @SuppressWarnings("unused") MapModel mapModel) {
+    private void recordMapAccess(LiveChatSessionId sessionId,
+                                 UUID mapIdentifier,
+                                 @SuppressWarnings("unused") MapModel mapModel) {
         if (mapIdentifier == null) {
             return;
         }
-        LiveChatSession session = liveChatSessionManager.getCurrentSession();
+        LiveChatSession session = liveChatSessionManager.findSession(sessionId);
         if (session == null) {
             return;
         }

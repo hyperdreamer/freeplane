@@ -57,6 +57,7 @@ public class ChatRequestFlowTest {
         assertThat(callbacks.assistantErrorCount).isZero();
         assertThat(callbacks.restoreCount).isEqualTo(1);
         assertThat(callbacks.failureRecoveryCount).isZero();
+        assertThat(callbacks.cancelledCount).isEqualTo(1);
     }
 
     @Test
@@ -216,6 +217,7 @@ public class ChatRequestFlowTest {
         private int assistantResponseCount;
         private int assistantErrorCount;
         private int failureRecoveryCount;
+        private int cancelledCount;
         private String lastFailureUserMessage;
         private String lastFailureMessage;
         private int synchronizeTranscriptCount;
@@ -246,6 +248,11 @@ public class ChatRequestFlowTest {
             failureRecoveryCount++;
             lastFailureUserMessage = userText;
             lastFailureMessage = errorMessage;
+        }
+
+        @Override
+        public void onRequestCancelled() {
+            cancelledCount++;
         }
 
         @Override

@@ -8,6 +8,9 @@ import java.util.concurrent.ExecutorService;
 
 import javax.swing.Icon;
 
+import org.freeplane.api.ai.AiRequest;
+import org.freeplane.api.ai.AiRequestCallback;
+import org.freeplane.api.ai.AiRequestHandle;
 
 
 /** Access to global state: in scripts, this is available as global variable <code>c</code> - read-write. */
@@ -162,5 +165,17 @@ public interface Controller extends ControllerRO, HeadlessMapCreator {
 	 * @since 1.7.10
 	 */
 	ExecutorService getMainThreadExecutorService();
+
+	/**
+	 * Starts an asynchronous AI request and delivers the terminal result
+	 * through the callback.
+	 * May throw {@link org.freeplane.api.ai.AiRequestRejectedException}
+	 * for same-thread pre-acceptance rejection.
+	 * In Groovy scripts, implementations may also support the natural
+	 * trailing-closure form, for example
+	 * <code>c.askAi(request) { result -&gt; println(result.status) }</code>.
+	 * @since 1.13.3
+	 */
+	AiRequestHandle askAi(AiRequest request, AiRequestCallback callback);
 
 }

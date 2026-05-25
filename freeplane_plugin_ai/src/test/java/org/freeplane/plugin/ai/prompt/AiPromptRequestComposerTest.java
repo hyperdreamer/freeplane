@@ -64,6 +64,33 @@ public class AiPromptRequestComposerTest {
     }
 
     @Test
+    public void compose_usesSelectionOverrideForReadingAndEditingPromptContext() {
+        SelectionIdentifiersResponse response = new SelectionIdentifiersResponse(
+            "map-current",
+            "node-current",
+            "root-current",
+            Arrays.asList(new SelectedNodeSummary("node-current", "Current")),
+            1,
+            1);
+        SelectionIdentifiersResponse override = new SelectionIdentifiersResponse(
+            "map-override",
+            "node-override",
+            "root-override",
+            Arrays.asList(new SelectedNodeSummary("node-override", "Override")),
+            1,
+            1);
+        AiPromptRequestComposer uut = new AiPromptRequestComposer(() -> response, new ObjectMapper());
+
+        String composed = uut.compose(
+            "Rewrite the selected nodes.",
+            ChatToolAvailability.READING,
+            override);
+
+        assertThat(composed).contains("\"mapIdentifier\":\"map-override\"")
+            .doesNotContain("map-current");
+    }
+
+    @Test
     public void compose_returnsOnlyPromptTextWhenToolsAreDisabled() {
         SelectionIdentifiersResponse response = new SelectionIdentifiersResponse(
             "map-1",

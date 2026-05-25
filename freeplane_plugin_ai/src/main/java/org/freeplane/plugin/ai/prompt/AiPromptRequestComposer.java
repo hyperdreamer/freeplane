@@ -33,11 +33,15 @@ public class AiPromptRequestComposer {
     }
 
     public String compose(AiPrompt prompt, ChatToolAvailability toolAvailability) {
-        return compose(prompt == null ? null : prompt.getPrompt(), toolAvailability);
+        return compose(prompt == null ? null : prompt.getPrompt(), toolAvailability, null);
     }
 
-    String compose(String promptText, ChatToolAvailability toolAvailability) {
-        SelectionIdentifiersResponse response = selectionIdentifiersSupplier.get();
+    public String compose(String promptText,
+                          ChatToolAvailability toolAvailability,
+                          SelectionIdentifiersResponse selectionIdentifiersOverride) {
+        SelectionIdentifiersResponse response = selectionIdentifiersOverride != null
+            ? selectionIdentifiersOverride
+            : selectionIdentifiersSupplier.get();
         SelectionIdentifiersResponse safeResponse = response == null
             ? new SelectionIdentifiersResponse(null, null, null, Collections.emptyList(), 0, 0)
             : response;
@@ -54,6 +58,10 @@ public class AiPromptRequestComposer {
         } catch (Exception error) {
             throw new IllegalStateException("Failed to compose AI prompt request.", error);
         }
+    }
+
+    String compose(String promptText, ChatToolAvailability toolAvailability) {
+        return compose(promptText, toolAvailability, null);
     }
 
     private static Supplier<SelectionIdentifiersResponse> createSelectionIdentifiersSupplier(

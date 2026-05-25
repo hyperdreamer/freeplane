@@ -1,5 +1,13 @@
 package org.freeplane.plugin.ai.chat;
 
+import org.freeplane.api.ai.AiRequest;
+import org.freeplane.api.ai.AiRequestCallback;
+import org.freeplane.api.ai.AiRequestHandle;
+import org.freeplane.api.ai.AiRequestResult;
+import org.freeplane.api.ai.AiRequestStatus;
+import org.freeplane.api.ai.AiRequestMode;
+import org.freeplane.api.ai.AiSelectionOverride;
+import org.freeplane.api.ai.AiToolAvailability;
 import org.freeplane.core.resources.IFreeplanePropertyListener;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.resources.SetBooleanPropertyAction;
@@ -26,12 +34,19 @@ import org.freeplane.plugin.ai.model.AIModelCatalog;
 import org.freeplane.plugin.ai.model.AIModelSelection;
 import org.freeplane.plugin.ai.model.AIProviderConfiguration;
 import org.freeplane.plugin.ai.prompt.AiPrompt;
+import org.freeplane.plugin.ai.prompt.AiPromptProgressDialogFactory;
 import org.freeplane.plugin.ai.prompt.AiPromptRequestComposer;
+import org.freeplane.plugin.ai.prompt.HiddenAiRequestObserverBridge;
+import org.freeplane.plugin.ai.prompt.HiddenAiRequestObserverFactory;
+import org.freeplane.plugin.ai.prompt.HiddenPromptRequestRunner;
+import org.freeplane.plugin.ai.prompt.HiddenPromptRequestRunnerFactory;
 import org.freeplane.plugin.ai.tools.AIToolSetBuilder;
+import org.freeplane.plugin.ai.tools.selection.SelectionIdentifiersResponse;
 import org.freeplane.plugin.ai.tools.utilities.ToolCallSummaryHandler;
 
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.memory.ChatMemory;
+import dev.langchain4j.model.output.TokenUsage;
 import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.BorderFactory;
@@ -67,7 +82,9 @@ import java.awt.event.KeyEvent;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class AIChatPanel extends JPanel {
     private static final int TOP_BAR_HORIZONTAL_GAP = 2;
@@ -94,7 +111,6 @@ public class AIChatPanel extends JPanel {
     private String redoTooltipText;
     private String preferencesTooltipText;
     private String noProviderConfiguredText;
-    private AIChatService chatService;
     private final JPopupMenu menuPopup;
     private final AIProviderConfiguration configuration;
     private final ChatToolAvailabilitySettings chatToolAvailabilitySettings;
@@ -104,7 +120,9 @@ public class AIChatPanel extends JPanel {
     private final ChatToolAvailabilityMenu chatToolAvailabilityMenu;
     private final ChatOutputView chatOutputView;
     private final ChatInputControls chatInputControls;
-    private final ChatPromptRunner chatPromptRunner;
+    private final AiPromptRequestComposer aiPromptRequestComposer;
+    private final AiRequestConfigurationResolver aiRequestConfigurationResolver;
+    private final AiSelectionOverrideResolver aiSelectionOverrideResolver;
     private ChatMemory chatMemory;
     private final ChatTokenUsageTracker chatTokenUsageTracker;
     private final JLabel tokenUsageLabel;
@@ -112,10 +130,23 @@ public class AIChatPanel extends JPanel {
     private final AvailableMaps availableMaps;
     private final DateTimeFormatter chatNameFormatter;
     private final LiveChatController liveChatController;
-    private final ChatRequestFlow chatRequestFlow;
+    private final ChatRequestFlowFactory chatRequestFlowFactory;
+    private final ChatPromptRunnerFactory chatPromptRunnerFactory;
+    private final VisibleAiRequestCallbacksFactory visibleAiRequestCallbacksFactory;
+    private final HiddenAiRequestObserverFactory hiddenAiRequestObserverFactory;
+    private final HiddenPromptRequestRunnerFactory hiddenPromptRequestRunnerFactory;
+    private final AiPromptProgressDialogFactory aiPromptProgressDialogFactory;
+    private final AiRequestTimeoutControllerFactory aiRequestTimeoutControllerFactory;
+    private final AddToChatDispatchJobFactory addToChatDispatchJobFactory;
+    private final AiRequestExecutionCoordinator aiRequestExecutionCoordinator;
+    private final Map<LiveChatSessionId, ChatRequestFlow> activeVisibleRequestFlows =
+        new HashMap<LiveChatSessionId, ChatRequestFlow>();
+    private final Map<LiveChatSessionId, ChatTokenUsageTracker> activeVisibleRequestTrackers =
+        new HashMap<LiveChatSessionId, ChatTokenUsageTracker>();
     private final AssistantProfileSelectionSync assistantProfileSelectionSync;
     private final AssistantProfilePaneBuilder assistantProfilePaneBuilder;
     private boolean currentSessionUsesAssistantProfile = true;
+    private int activeHiddenRequestCount;
 
     public AIChatPanel() {
         setLayout(new BorderLayout());
@@ -168,16 +199,20 @@ public class AIChatPanel extends JPanel {
         redoButton.setMaximumSize(sideButtonSize);
         chatToolAvailabilitySettings = new ChatToolAvailabilitySettings();
         configuration = new AIProviderConfiguration();
+        aiRequestConfigurationResolver = new AiRequestConfigurationResolver(configuration);
         chatDisplaySettings = new ChatDisplaySettings();
         modelSelectionController = new ChatModelSelector(configuration, new AIModelCatalog(configuration));
-        modelSelectionController.setModelSelectionChangeListener(modelDescriptor -> chatService = null);
+        modelSelectionController.setModelSelectionChangeListener(modelDescriptor -> {
+        });
         AssistantProfileSelectionModel assistantProfileSelectionModel = new AssistantProfileSelectionModel();
         chatMemory = createChatMemory();
         tokenUsageLabel = new JLabel();
         tokenUsageLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 20));
         chatTokenUsageTracker = new ChatTokenUsageTracker(this::updateTokenUsageLabel);
         availableMaps = new AvailableMaps(new ControllerMapModelProvider());
-        AiPromptRequestComposer aiPromptRequestComposer = new AiPromptRequestComposer(availableMaps, requireTextController());
+        TextController textController = requireTextController();
+        aiPromptRequestComposer = new AiPromptRequestComposer(availableMaps, textController);
+        aiSelectionOverrideResolver = new AiSelectionOverrideResolver(availableMaps, textController);
         chatNameFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
         liveChatController = new LiveChatController(
             this,
@@ -192,10 +227,8 @@ public class AIChatPanel extends JPanel {
             this::currentEffectiveToolAvailability,
             this::applyUserSelectedToolAvailability);
         chatOutputView = new ChatOutputView(messageHistory, liveChatController, tokenUsageLabel);
-        modelSelectionController.setExplicitUserModelSelectionChangeListener(modelDescriptor -> {
-            liveChatController.clearCurrentSessionSelectedModelOverride();
-            chatService = null;
-        });
+        modelSelectionController.setExplicitUserModelSelectionChangeListener(modelDescriptor ->
+            liveChatController.clearCurrentSessionSelectedModelOverride());
         assistantProfileSelectionSync = new AssistantProfileSelectionSync(
             assistantProfileSelectionModel,
             liveChatController);
@@ -207,74 +240,6 @@ public class AIChatPanel extends JPanel {
             assistantProfileIcon);
         menuPopup = buildMenuPopup();
         messageHistoryPane.setComponentPopupMenu(menuPopup);
-        chatRequestFlow = new ChatRequestFlow(new ChatRequestFlow.RequestCallbacks() {
-            @Override
-            public void onRequestStarted() {
-                inputArea.setEditable(false);
-                chatInputControls.setRequestActiveState();
-                updateUndoRedoButtonState();
-            }
-
-            @Override
-            public void onRequestFinished() {
-                liveChatController.synchronizeTranscriptWithMemory();
-                updateInputState();
-            }
-
-            @Override
-            public void onUserTextRestored(String userText) {
-                inputArea.setText(userText == null ? "" : userText);
-                inputArea.setCaretPosition(inputArea.getText().length());
-            }
-
-            @Override
-            public void onRequestFailed(String userText, String errorMessage) {
-                appendFailureMessages(userText, errorMessage);
-            }
-
-            @Override
-            public void onAssistantResponse(String text) {
-                appendAssistantMessage(text);
-                refreshTokenCounters();
-            }
-
-            @Override
-            public void onAssistantError(String text) {
-            }
-
-            @Override
-            public void synchronizeTranscriptWithMemory() {
-                liveChatController.synchronizeTranscriptWithMemory();
-            }
-
-            @Override
-            public void rebuildHistoryFromTranscript() {
-                AIChatPanel.this.rebuildHistoryFromMemory();
-            }
-
-            @Override
-            public void onPostResponseEviction() {
-                liveChatController.synchronizeTranscriptWithMemory();
-                rebuildHistoryFromMemory();
-                updateInputState();
-            }
-
-            @Override
-            public void refreshTokenCounters() {
-                AIChatPanel.this.refreshTokenCounters();
-            }
-
-            @Override
-            public boolean isToolCallHistoryVisible() {
-                return chatDisplaySettings.isToolCallHistoryVisible();
-            }
-
-            @Override
-            public void onToolSummaryAppended(ChatMemoryRenderEntry entry) {
-                AIChatPanel.this.appendHistoryEntry(entry);
-            }
-        }, chatTokenUsageTracker);
-        chatRequestFlow.updateChatMemory(chatMemory);
 
         JPanel inputPanel = new JPanel(new BorderLayout());
         inputPanel.add(new JScrollPane(inputArea), BorderLayout.CENTER);
@@ -395,21 +360,28 @@ public class AIChatPanel extends JPanel {
             preferencesTooltipText,
             noProviderConfiguredText,
             this::updateUndoRedoButtonState);
-        chatPromptRunner = new ChatPromptRunner(
+        chatRequestFlowFactory = new ChatRequestFlowFactory();
+        visibleAiRequestCallbacksFactory = new VisibleAiRequestCallbacksFactory();
+        hiddenAiRequestObserverFactory = new HiddenAiRequestObserverFactory();
+        hiddenPromptRequestRunnerFactory = new HiddenPromptRequestRunnerFactory();
+        aiPromptProgressDialogFactory = new AiPromptProgressDialogFactory();
+        aiRequestTimeoutControllerFactory = new AiRequestTimeoutControllerFactory();
+        addToChatDispatchJobFactory = new AddToChatDispatchJobFactory(this);
+        chatPromptRunnerFactory = new ChatPromptRunnerFactory(
             aiTabIcon,
             stopIcon,
             cancelTooltipText,
-            this::updateInputState,
+            this::onHiddenRequestStarted,
+            this::onHiddenRequestFinished,
             availableMaps,
             aiPromptRequestComposer,
-            promptToolSelectionResolver,
-            liveChatController,
-            chatRequestFlow,
-            chatTokenUsageTracker,
-            this::createChatMemory,
-            this::configurationErrorMessage,
-            this::notifyUser,
-            this::openPromptChat);
+            this::openPromptChat,
+            hiddenPromptRequestRunnerFactory,
+            aiPromptProgressDialogFactory);
+        aiRequestExecutionCoordinator = new AiRequestExecutionCoordinator(
+            this,
+            addToChatDispatchJobFactory,
+            aiRequestTimeoutControllerFactory);
         assistantProfilePaneBuilder.initialize();
         liveChatController.initialize(chatMemory);
         modelSelectionController.loadInitialModelSelectionList();
@@ -635,7 +607,7 @@ public class AIChatPanel extends JPanel {
     }
 
     private void sendMessage() {
-        if (chatPromptRunner.isRequestActive()) {
+        if (hasActiveHiddenRequests()) {
             notifyUser(TextUtils.getText("ai_prompt_request_active"), false);
             return;
         }
@@ -643,21 +615,19 @@ public class AIChatPanel extends JPanel {
         if (userMessage.isEmpty()) {
             return;
         }
-        chatRequestFlow.beginRequest(userMessage);
-        if (currentSessionUsesAssistantProfile) {
-            assistantProfileSelectionSync.maybeInjectBeforeUserMessage();
-        }
-        chatRequestFlow.captureChatSnapshot();
-        appendUserMessage(userMessage);
-        chatRequestFlow.refreshTokenCounters();
-        liveChatController.updateSessionNameFromFirstUserMessage(userMessage);
-        inputArea.setText("");
-        ensureChatService();
-        if (chatService == null) {
-            chatRequestFlow.restoreChatSnapshot();
+        LiveChatSessionId sessionId = liveChatController.currentSessionId();
+        if (sessionId == null) {
             return;
         }
-        chatRequestFlow.submitRequest(chatService);
+        ChatTokenUsageTracker requestTokenUsageTracker = createRequestTokenUsageTracker(sessionId);
+        ChatRequestFlow requestFlow = createVisibleRequestFlow(sessionId, requestTokenUsageTracker, null);
+        AIChatService requestService = createVisibleRequestService(sessionId, requestFlow, requestTokenUsageTracker);
+        if (requestService == null) {
+            notifyVisibleConfigurationError(sessionId);
+            return;
+        }
+        startVisibleRequest(sessionId, userMessage, requestService, requestFlow, requestTokenUsageTracker,
+            true, true);
     }
 
     public void runPrompt(AiPrompt prompt) {
@@ -665,47 +635,576 @@ public class AIChatPanel extends JPanel {
     }
 
     public void runPrompt(AiPrompt prompt, Component owner) {
-        chatPromptRunner.runPrompt(prompt, owner);
-    }
-
-    private void submitPreparedVisibleMessage(String userMessage) {
-        if (userMessage == null || userMessage.trim().isEmpty()) {
+        if (prompt == null) {
             return;
         }
-        chatRequestFlow.beginRequest(userMessage);
-        chatRequestFlow.captureChatSnapshot();
-        appendUserMessage(userMessage);
-        chatRequestFlow.refreshTokenCounters();
-        inputArea.setText("");
-        chatRequestFlow.submitRequest(chatService);
+        if (isAnyAiRequestActive()) {
+            notifyUser(TextUtils.getText("ai_prompt_request_active"), false);
+            return;
+        }
+        String selectedModelOverride = normalizeSelectionValue(prompt.getModelSelectionValue());
+        ChatToolAvailability resolvedToolAvailability =
+            promptToolSelectionResolver.resolveEffectiveToolAvailability(prompt.getToolAvailabilitySelectionValue());
+        ChatToolAvailability toolAvailabilityOverride =
+            promptToolSelectionResolver.resolveShownChatOverride(prompt.getToolAvailabilitySelectionValue());
+        AiRequestConfigurationResolver.Issue configurationIssue =
+            aiRequestConfigurationResolver.resolve(selectedModelOverride);
+        if (configurationIssue != null) {
+            notifyUser(configurationIssue.getDetail(), true);
+            return;
+        }
+        if (prompt.isShowInChat()) {
+            ChatMemory promptChatMemory = createChatMemory();
+            LiveChatSessionId sessionId = liveChatController.startNewPromptChat(
+                promptChatMemory,
+                promptDisplayName(prompt.getName()),
+                selectedModelOverride,
+                toolAvailabilityOverride);
+            ChatTokenUsageTracker requestTokenUsageTracker = createRequestTokenUsageTracker(sessionId);
+            ChatRequestFlow requestFlow = createVisibleRequestFlow(sessionId, requestTokenUsageTracker, null);
+            ChatPromptRunner chatPromptRunner = chatPromptRunnerFactory.createShown(
+                promptChatMemory,
+                liveChatController.mapAccessListener(sessionId),
+                requestFlow,
+                requestTokenUsageTracker,
+                sessionId);
+            if (!chatPromptRunner.startShownPrompt(
+                    prompt.getPrompt(),
+                    selectedModelOverride,
+                    resolvedToolAvailability,
+                    null,
+                    null)) {
+                notifyVisibleConfigurationError(sessionId);
+            }
+            return;
+        }
+        ChatPromptRunner chatPromptRunner = chatPromptRunnerFactory.createHidden();
+        if (!chatPromptRunner.submitHiddenRequest(
+                prompt.getName(),
+                prompt.getPrompt(),
+                selectedModelOverride,
+                resolvedToolAvailability,
+                null,
+                owner,
+                true,
+                null)) {
+            notifyUser(configurationErrorMessage(selectedModelOverride), true);
+        }
     }
 
-    private void openPromptChat(ChatMemory promptChatMemory,
-                                AIChatService promptService,
-                                String preparedMessage,
-                                String promptDisplayName,
-                                String selectedModelOverride,
-                                ChatToolAvailability toolAvailabilityOverride) {
-        liveChatController.startNewPromptChat(
+    AiRequestHandle askAi(AiRequest request, AiRequestHandleImpl handle) {
+        return aiRequestExecutionCoordinator.askAi(request, handle);
+    }
+
+    void startShownAiRequest(AiRequest request,
+                             AiRequestHandleImpl handle,
+                             AiRequestTimeoutController timeoutController) {
+        if (handle.isDone()) {
+            return;
+        }
+        String selectedModelOverride = AiRequestMappings.toSelectedModelOverride(request.getModelSelection());
+        AiRequestConfigurationResolver.Issue configurationIssue =
+            aiRequestConfigurationResolver.resolve(selectedModelOverride);
+        if (configurationIssue != null) {
+            handle.complete(new AiRequestResult(configurationIssue.getStatus(), null,
+                configurationIssue.getDetail()));
+            return;
+        }
+        ChatToolAvailability resolvedToolAvailability =
+            resolvePromptStyleToolAvailability(request.getToolAvailability());
+        ChatToolAvailability toolAvailabilityOverride =
+            explicitToolAvailabilityOverride(request.getToolAvailability());
+        ChatMemory promptChatMemory = createChatMemory();
+        LiveChatSessionId sessionId = liveChatController.startNewPromptChat(
             promptChatMemory,
-            promptDisplayName,
+            promptDisplayName(request.getName()),
             selectedModelOverride,
             toolAvailabilityOverride);
-        chatService = promptService;
+        ChatTokenUsageTracker requestTokenUsageTracker = createRequestTokenUsageTracker(sessionId);
+        ChatPromptRunner.VisiblePromptRequestCallbacks requestCallbacks =
+            visibleAiRequestCallbacksFactory.create(handle);
+        ChatRequestFlow requestFlow = createVisibleRequestFlow(
+            sessionId,
+            requestTokenUsageTracker,
+            requestCallbacks);
+        handle.setCancelAction(new Runnable() {
+            @Override
+            public void run() {
+                if (requestFlow.isRequestActive()) {
+                    requestFlow.cancelActiveRequest();
+                }
+                else {
+                    completeCancelledRequest(handle);
+                }
+            }
+        });
+        if (handle.isDone()) {
+            return;
+        }
+        ChatPromptRunner chatPromptRunner = chatPromptRunnerFactory.createShown(
+            promptChatMemory,
+            liveChatController.mapAccessListener(sessionId),
+            requestFlow,
+            requestTokenUsageTracker,
+            sessionId);
+        boolean started = chatPromptRunner.startShownPrompt(
+            request.getPrompt(),
+            selectedModelOverride,
+            resolvedToolAvailability,
+            resolveSelectionOverride(request.getSelectionOverride()),
+            requestCallbacks);
+        if (!started) {
+            handle.complete(configurationErrorOrFailedResult(selectedModelOverride, null));
+            return;
+        }
+        timeoutController.armAfterStart();
+    }
+
+    ChatRequestFlow startAddToChatAiRequestAtDispatch(AiRequest request, AiRequestHandleImpl handle) {
+        if (handle.isDone()) {
+            return null;
+        }
+        LiveChatSessionId sessionId;
+        if (isChatTabSelected()) {
+            sessionId = liveChatController.currentSessionId();
+        }
+        else {
+            sessionId = liveChatController.startNewChat();
+            if (request.getName() != null) {
+                liveChatController.renameSession(sessionId, request.getName());
+            }
+        }
+        if (sessionId == null || handle.isDone()) {
+            return null;
+        }
+        String selectedModelOverride = request.getModelSelection().isCurrent()
+            ? liveChatController.sessionSelectedModelOverride(sessionId)
+            : AiRequestMappings.toSelectedModelOverride(request.getModelSelection());
+        AiRequestConfigurationResolver.Issue configurationIssue =
+            aiRequestConfigurationResolver.resolve(selectedModelOverride);
+        if (configurationIssue != null) {
+            handle.complete(new AiRequestResult(configurationIssue.getStatus(), null,
+                configurationIssue.getDetail()));
+            return null;
+        }
+        applyAddToChatSessionOverrides(sessionId, request, selectedModelOverride);
+        ChatToolAvailability resolvedToolAvailability = resolveAddToChatToolAvailability(
+            sessionId,
+            request.getToolAvailability());
         showChatTab();
-        submitPreparedVisibleMessage(preparedMessage);
+        ChatTokenUsageTracker requestTokenUsageTracker = createRequestTokenUsageTracker(sessionId);
+        ChatRequestFlow requestFlow = createVisibleRequestFlow(
+            sessionId,
+            requestTokenUsageTracker,
+            visibleAiRequestCallbacksFactory.create(handle));
+        AIChatService requestService = createVisibleRequestService(sessionId, requestFlow, requestTokenUsageTracker);
+        if (requestService == null) {
+            handle.complete(configurationErrorOrFailedResult(
+                liveChatController.sessionSelectedModelOverride(sessionId),
+                null));
+            return null;
+        }
+        if (handle.isDone()) {
+            return null;
+        }
+        boolean started = startVisibleRequest(
+            sessionId,
+            request.getPrompt(),
+            requestService,
+            requestFlow,
+            requestTokenUsageTracker,
+            false,
+            false,
+            resolvedToolAvailability,
+            request.getSelectionOverride());
+        return started ? requestFlow : null;
+    }
+
+    void startHiddenAiRequest(AiRequest request,
+                              AiRequestHandleImpl handle,
+                              boolean showProgressDialog,
+                              AiRequestTimeoutController timeoutController) {
+        if (handle.isDone()) {
+            return;
+        }
+        String selectedModelOverride = AiRequestMappings.toSelectedModelOverride(request.getModelSelection());
+        AiRequestConfigurationResolver.Issue configurationIssue =
+            aiRequestConfigurationResolver.resolve(selectedModelOverride);
+        if (configurationIssue != null) {
+            handle.complete(new AiRequestResult(configurationIssue.getStatus(), null,
+                configurationIssue.getDetail()));
+            return;
+        }
+        ChatToolAvailability resolvedToolAvailability =
+            resolvePromptStyleToolAvailability(request.getToolAvailability());
+        ChatPromptRunner chatPromptRunner = chatPromptRunnerFactory.createHidden();
+        HiddenPromptRequestRunner hiddenPromptRequestRunner = chatPromptRunner.hiddenPromptRequestRunner();
+        handle.setCancelAction(new Runnable() {
+            @Override
+            public void run() {
+                if (hiddenPromptRequestRunner.isRequestActive()) {
+                    hiddenPromptRequestRunner.cancelActiveRequest();
+                }
+                else {
+                    completeCancelledRequest(handle);
+                }
+            }
+        });
+        if (handle.isDone()) {
+            return;
+        }
+        HiddenAiRequestObserverBridge hiddenRequestObserver = hiddenAiRequestObserverFactory.create(handle);
+        boolean started = chatPromptRunner.submitHiddenRequest(
+            request.getName(),
+            request.getPrompt(),
+            selectedModelOverride,
+            resolvedToolAvailability,
+            resolveSelectionOverride(request.getSelectionOverride()),
+            null,
+            showProgressDialog,
+            hiddenRequestObserver);
+        if (!started) {
+            handle.complete(configurationErrorOrFailedResult(selectedModelOverride, null));
+            return;
+        }
+        timeoutController.armAfterStart();
+    }
+
+    void completeCancelledRequest(AiRequestHandleImpl handle) {
+        AiRequestStatus status = handle.isTimedOut() ? AiRequestStatus.TIMED_OUT : AiRequestStatus.CANCELLED;
+        handle.complete(new AiRequestResult(status, null, null));
+    }
+
+    AiRequestResult failedResult(Throwable error) {
+        return new AiRequestResult(AiRequestStatus.FAILED, null,
+            AiRequestStatusMapper.detailMessage(error));
+    }
+
+    private AiRequestResult configurationErrorOrFailedResult(String selectedModelOverride,
+                                                             RuntimeException runtimeException) {
+        String configurationError = configurationErrorMessage(selectedModelOverride);
+        if (configurationError != null) {
+            return new AiRequestResult(AiRequestStatus.CONFIGURATION_ERROR, null, configurationError);
+        }
+        return failedResult(runtimeException == null
+            ? new RuntimeException("Failed to start AI request.")
+            : runtimeException);
+    }
+
+    private SelectionIdentifiersResponse resolveSelectionOverride(AiSelectionOverride selectionOverride) {
+        return aiSelectionOverrideResolver.resolve(selectionOverride);
+    }
+
+    private ChatToolAvailability resolvePromptStyleToolAvailability(AiToolAvailability toolAvailability) {
+        ChatToolAvailability mappedAvailability = AiRequestMappings.toChatToolAvailability(toolAvailability);
+        return mappedAvailability == null ? chatToolAvailabilitySettings.getToolAvailability() : mappedAvailability;
+    }
+
+    private ChatToolAvailability explicitToolAvailabilityOverride(AiToolAvailability toolAvailability) {
+        return toolAvailability == AiToolAvailability.CURRENT
+            ? null
+            : AiRequestMappings.toChatToolAvailability(toolAvailability);
+    }
+
+    private ChatToolAvailability resolveAddToChatToolAvailability(LiveChatSessionId sessionId,
+                                                                  AiToolAvailability toolAvailability) {
+        ChatToolAvailability mappedAvailability = AiRequestMappings.toChatToolAvailability(toolAvailability);
+        return mappedAvailability == null ? effectiveToolAvailability(sessionId) : mappedAvailability;
+    }
+
+    private void applyAddToChatSessionOverrides(LiveChatSessionId sessionId,
+                                                AiRequest request,
+                                                String selectedModelOverride) {
+        if (!request.getModelSelection().isCurrent()) {
+            liveChatController.setSessionSelectedModelOverride(sessionId, selectedModelOverride);
+        }
+        ChatToolAvailability explicitToolAvailability =
+            explicitToolAvailabilityOverride(request.getToolAvailability());
+        if (explicitToolAvailability != null) {
+            liveChatController.setSessionToolAvailabilityOverride(sessionId, explicitToolAvailability);
+        }
+        if (liveChatController.isCurrentSession(sessionId)) {
+            modelSelectionController.setDisplayedSelectionValueOverride(
+                liveChatController.sessionSelectedModelOverride(sessionId));
+            updateToolAvailabilityMenuSelection();
+        }
+    }
+
+    private String promptDisplayName(String requestName) {
+        String safeRequestName = requestName == null ? "" : requestName.trim();
+        if (safeRequestName.isEmpty()) {
+            safeRequestName = TextUtils.getText("ai_prompt_untitled");
+        }
+        return TextUtils.getText("ai_prompt_session_prefix") + safeRequestName;
+    }
+
+    boolean isChatTabSelected() {
+        return UITools.getFreeplaneTabbedPanel() != null
+            && UITools.getFreeplaneTabbedPanel().getSelectedComponent() == this;
+    }
+
+    private boolean startVisibleRequest(LiveChatSessionId sessionId,
+                                        String userMessage,
+                                        AIChatService requestService,
+                                        ChatRequestFlow requestFlow,
+                                        ChatTokenUsageTracker requestTokenUsageTracker,
+                                        boolean injectAssistantProfile,
+                                        boolean updateSessionName) {
+        return startVisibleRequest(sessionId, userMessage, requestService, requestFlow,
+            requestTokenUsageTracker, injectAssistantProfile, updateSessionName,
+            null, null);
+    }
+
+    private boolean startVisibleRequest(LiveChatSessionId sessionId,
+                                        String userMessage,
+                                        AIChatService requestService,
+                                        ChatRequestFlow requestFlow,
+                                        ChatTokenUsageTracker requestTokenUsageTracker,
+                                        boolean injectAssistantProfile,
+                                        boolean updateSessionName,
+                                        ChatToolAvailability resolvedToolAvailability,
+                                        AiSelectionOverride selectionOverride) {
+        if (sessionId == null || requestService == null) {
+            return false;
+        }
+        String preparedMessage = userMessage;
+        if (resolvedToolAvailability != null) {
+            try {
+                preparedMessage = aiPromptRequestComposer.compose(
+                    userMessage,
+                    resolvedToolAvailability,
+                    resolveSelectionOverride(selectionOverride));
+            } catch (RuntimeException error) {
+                return false;
+            }
+        }
+        registerVisibleRequest(sessionId, requestFlow, requestTokenUsageTracker);
+        requestFlow.updateChatMemory(liveChatController.chatMemory(sessionId));
+        requestFlow.beginRequest(preparedMessage);
+        if (injectAssistantProfile && currentSessionUsesAssistantProfile
+            && liveChatController.isCurrentSession(sessionId)) {
+            assistantProfileSelectionSync.maybeInjectBeforeUserMessage();
+        }
+        requestFlow.captureChatSnapshot();
+        if (liveChatController.isCurrentSession(sessionId)) {
+            appendUserMessage(preparedMessage);
+            inputArea.setText("");
+        }
+        if (updateSessionName && liveChatController.isCurrentSession(sessionId)) {
+            liveChatController.updateSessionNameFromFirstUserMessage(userMessage);
+        }
+        refreshRequestTokenCounters(sessionId, requestTokenUsageTracker);
+        requestFlow.submitRequest(requestService);
+        return true;
+    }
+
+    private ChatRequestFlow createVisibleRequestFlow(LiveChatSessionId sessionId,
+                                                     ChatTokenUsageTracker requestTokenUsageTracker,
+                                                     ChatPromptRunner.VisiblePromptRequestCallbacks requestCallbacks) {
+        return chatRequestFlowFactory.create(new ChatRequestFlow.RequestCallbacks() {
+            @Override
+            public void onRequestStarted() {
+                if (liveChatController.isCurrentSession(sessionId)) {
+                    inputArea.setEditable(false);
+                    chatInputControls.setRequestActiveState();
+                    updateUndoRedoButtonState();
+                }
+            }
+
+            @Override
+            public void onRequestFinished() {
+                liveChatController.synchronizeTranscriptWithMemory(sessionId);
+                syncRequestTrackerState(sessionId, requestTokenUsageTracker);
+                unregisterVisibleRequest(sessionId);
+                if (liveChatController.isCurrentSession(sessionId)) {
+                    refreshTokenCounters();
+                    updateInputState();
+                }
+            }
+
+            @Override
+            public void onUserTextRestored(String userText) {
+                if (!liveChatController.isCurrentSession(sessionId)) {
+                    return;
+                }
+                inputArea.setText(userText == null ? "" : userText);
+                inputArea.setCaretPosition(inputArea.getText().length());
+            }
+
+            @Override
+            public void onRequestFailed(String userText, String errorMessage) {
+                if (liveChatController.isCurrentSession(sessionId)) {
+                    appendFailureMessages(userText, errorMessage);
+                }
+                if (requestCallbacks != null) {
+                    requestCallbacks.onFailed(userText, errorMessage);
+                }
+            }
+
+            @Override
+            public void onRequestCancelled() {
+                if (requestCallbacks != null) {
+                    requestCallbacks.onCancelled();
+                }
+            }
+
+            @Override
+            public void onAssistantResponse(String text) {
+                if (liveChatController.isCurrentSession(sessionId)) {
+                    appendAssistantMessage(text);
+                }
+                refreshRequestTokenCounters(sessionId, requestTokenUsageTracker);
+                if (requestCallbacks != null) {
+                    requestCallbacks.onResponseAppended(text);
+                }
+            }
+
+            @Override
+            public void onAssistantError(String text) {
+            }
+
+            @Override
+            public void synchronizeTranscriptWithMemory() {
+                liveChatController.synchronizeTranscriptWithMemory(sessionId);
+            }
+
+            @Override
+            public void rebuildHistoryFromTranscript() {
+                if (liveChatController.isCurrentSession(sessionId)) {
+                    AIChatPanel.this.rebuildHistoryFromMemory();
+                }
+            }
+
+            @Override
+            public void onPostResponseEviction() {
+                liveChatController.synchronizeTranscriptWithMemory(sessionId);
+                if (liveChatController.isCurrentSession(sessionId)) {
+                    rebuildHistoryFromMemory();
+                    updateInputState();
+                }
+            }
+
+            @Override
+            public void refreshTokenCounters() {
+                refreshRequestTokenCounters(sessionId, requestTokenUsageTracker);
+            }
+
+            @Override
+            public boolean isToolCallHistoryVisible() {
+                return chatDisplaySettings.isToolCallHistoryVisible();
+            }
+
+            @Override
+            public void onToolSummaryAppended(ChatMemoryRenderEntry entry) {
+                if (liveChatController.isCurrentSession(sessionId)) {
+                    AIChatPanel.this.appendHistoryEntry(entry);
+                }
+            }
+        }, requestTokenUsageTracker);
+    }
+
+    private AIChatService createVisibleRequestService(LiveChatSessionId sessionId,
+                                                      ChatRequestFlow requestFlow,
+                                                      ChatTokenUsageTracker requestTokenUsageTracker) {
+        String selectedModelOverride = liveChatController.sessionSelectedModelOverride(sessionId);
+        if (configurationErrorMessage(selectedModelOverride) != null) {
+            return null;
+        }
+        ChatToolAvailability toolAvailabilityOverride =
+            liveChatController.sessionToolAvailabilityOverride(sessionId);
+        return AIChatServiceFactory.createService(new AIToolSetBuilder()
+                .toolCallSummaryHandler(requestFlow::onToolCallSummary)
+                .availableMaps(availableMaps)
+                .mapAccessListener(liveChatController.mapAccessListener(sessionId))
+                .build(),
+            liveChatController.chatMemory(sessionId),
+            requestTokenUsageTracker,
+            requestFlow::onToolCallSummary,
+            requestFlow.cancellationSupplier(),
+            requestFlow::onProviderUsage,
+            toolAvailabilityOverride == null ? null : () -> toolAvailabilityOverride,
+            selectedModelOverride);
+    }
+
+    private ChatTokenUsageTracker createRequestTokenUsageTracker(LiveChatSessionId sessionId) {
+        ChatTokenUsageTracker requestTokenUsageTracker = new ChatTokenUsageTracker(totals -> {
+        });
+        applyTokenCounterMode(requestTokenUsageTracker);
+        requestTokenUsageTracker.restoreState(liveChatController.getTokenUsageState(sessionId));
+        return requestTokenUsageTracker;
+    }
+
+    private void syncRequestTrackerState(LiveChatSessionId sessionId,
+                                         ChatTokenUsageTracker requestTokenUsageTracker) {
+        liveChatController.setTokenUsageState(sessionId, requestTokenUsageTracker.snapshotState());
+        if (liveChatController.isCurrentSession(sessionId)) {
+            chatTokenUsageTracker.restoreState(requestTokenUsageTracker.snapshotState());
+        }
+    }
+
+    private void refreshRequestTokenCounters(LiveChatSessionId sessionId,
+                                             ChatTokenUsageTracker requestTokenUsageTracker) {
+        syncRequestTrackerState(sessionId, requestTokenUsageTracker);
+        if (liveChatController.isCurrentSession(sessionId)) {
+            refreshTokenCounters();
+        }
+    }
+
+    private void registerVisibleRequest(LiveChatSessionId sessionId,
+                                        ChatRequestFlow requestFlow,
+                                        ChatTokenUsageTracker requestTokenUsageTracker) {
+        activeVisibleRequestFlows.put(sessionId, requestFlow);
+        activeVisibleRequestTrackers.put(sessionId, requestTokenUsageTracker);
+    }
+
+    private void unregisterVisibleRequest(LiveChatSessionId sessionId) {
+        activeVisibleRequestFlows.remove(sessionId);
+        activeVisibleRequestTrackers.remove(sessionId);
+    }
+
+    private ChatRequestFlow currentVisibleRequestFlow() {
+        LiveChatSessionId sessionId = liveChatController.currentSessionId();
+        return sessionId == null ? null : activeVisibleRequestFlows.get(sessionId);
     }
 
     private boolean isRequestActive() {
-        return chatRequestFlow.isRequestActive();
+        ChatRequestFlow currentRequestFlow = currentVisibleRequestFlow();
+        return currentRequestFlow != null && currentRequestFlow.isRequestActive();
     }
 
     private boolean isAnyAiRequestActive() {
-        return chatRequestFlow.isRequestActive() || chatPromptRunner.isRequestActive();
+        return !activeVisibleRequestFlows.isEmpty() || hasActiveHiddenRequests();
     }
 
-    private void cancelActiveRequest() {
-        chatRequestFlow.cancelActiveRequest();
+    private boolean hasActiveHiddenRequests() {
+        return activeHiddenRequestCount > 0;
+    }
+
+    private void onHiddenRequestStarted() {
+        activeHiddenRequestCount++;
+        updateInputState();
+    }
+
+    private void onHiddenRequestFinished() {
+        if (activeHiddenRequestCount > 0) {
+            activeHiddenRequestCount--;
+        }
+        updateInputState();
+    }
+
+    private void notifyVisibleConfigurationError(LiveChatSessionId sessionId) {
+        String message = configurationErrorMessage(liveChatController.sessionSelectedModelOverride(sessionId));
+        if (message != null) {
+            notifyUser(message, true);
+        }
+    }
+
+    private String normalizeSelectionValue(String selectionValue) {
+        if (selectionValue == null) {
+            return null;
+        }
+        String normalized = selectionValue.trim();
+        return normalized.isEmpty() ? null : normalized;
     }
 
     private AssistantProfileChatMemory activeAssistantProfileChatMemory() {
@@ -715,10 +1214,28 @@ public class AIChatPanel extends JPanel {
         return null;
     }
 
+    private void openPromptChat(LiveChatSessionId sessionId,
+                                AIChatService promptService,
+                                String preparedMessage,
+                                ChatRequestFlow requestFlow,
+                                ChatTokenUsageTracker requestTokenUsageTracker,
+                                ChatPromptRunner.VisiblePromptRequestCallbacks requestCallbacks) {
+        showChatTab();
+        startVisibleRequest(sessionId, preparedMessage, promptService, requestFlow,
+            requestTokenUsageTracker, false, false);
+    }
+
+    private void cancelActiveRequest() {
+        ChatRequestFlow currentRequestFlow = currentVisibleRequestFlow();
+        if (currentRequestFlow != null) {
+            currentRequestFlow.cancelActiveRequest();
+        }
+    }
+
     private void updateInputState() {
         chatInputControls.update(
             isRequestActive(),
-            chatPromptRunner.isRequestActive(),
+            hasActiveHiddenRequests(),
             isProviderConfigured());
     }
 
@@ -745,7 +1262,12 @@ public class AIChatPanel extends JPanel {
     }
 
     private ChatToolAvailability currentEffectiveToolAvailability() {
-        ChatToolAvailability toolAvailabilityOverride = liveChatController.currentSessionToolAvailabilityOverride();
+        return effectiveToolAvailability(liveChatController.currentSessionId());
+    }
+
+    private ChatToolAvailability effectiveToolAvailability(LiveChatSessionId sessionId) {
+        ChatToolAvailability toolAvailabilityOverride =
+            liveChatController.sessionToolAvailabilityOverride(sessionId);
         return toolAvailabilityOverride == null
             ? chatToolAvailabilitySettings.getToolAvailability()
             : toolAvailabilityOverride;
@@ -759,65 +1281,15 @@ public class AIChatPanel extends JPanel {
             ChatToolAvailabilitySettings.CHAT_TOOL_AVAILABILITY_PROPERTY,
             toolAvailability.getPreferenceValue());
         liveChatController.clearCurrentSessionToolAvailabilityOverride();
-        chatService = null;
     }
 
     private void updateToolAvailabilityMenuSelection() {
         chatToolAvailabilityMenu.refreshSelection();
     }
 
-    private void ensureChatService() {
-        if (chatService != null) {
-            return;
-        }
-        String selectedModelOverride = liveChatController.currentSessionSelectedModelOverride();
-        String configurationError = configurationErrorMessage(selectedModelOverride);
-        if (configurationError != null) {
-            appendAssistantMessage(configurationError);
-            return;
-        }
-        ChatToolAvailability toolAvailabilityOverride = liveChatController.currentSessionToolAvailabilityOverride();
-        chatService = AIChatServiceFactory.createService(new AIToolSetBuilder()
-                .toolCallSummaryHandler(chatRequestFlow::onToolCallSummary)
-                .availableMaps(availableMaps)
-                .mapAccessListener(liveChatController.mapAccessListener())
-                .build(),
-            chatMemory,
-            chatTokenUsageTracker,
-            chatRequestFlow::onToolCallSummary,
-            chatRequestFlow.cancellationSupplier(),
-            chatRequestFlow::onProviderUsage,
-            toolAvailabilityOverride == null
-                ? null
-                : () -> toolAvailabilityOverride,
-            selectedModelOverride);
-    }
-
     private String configurationErrorMessage(String selectedModelOverride) {
-        String effectiveSelectionValue = selectedModelOverride == null || selectedModelOverride.trim().isEmpty()
-            ? configuration.getSelectedModelValue()
-            : selectedModelOverride;
-        AIModelSelection selection = AIModelSelection.fromSelectionValue(effectiveSelectionValue);
-        if (selection == null) {
-            return "Missing AI model selection.";
-        }
-        String providerName = selection.getProviderName();
-        if (AIChatModelFactory.PROVIDER_NAME_OPENROUTER.equalsIgnoreCase(providerName)) {
-            if (configuration.getOpenRouterKey() == null || configuration.getOpenRouterKey().isEmpty()) {
-                return "Missing OpenRouter key setting.";
-            }
-        } else if (AIChatModelFactory.PROVIDER_NAME_GEMINI.equalsIgnoreCase(providerName)) {
-            if (configuration.getGeminiKey() == null || configuration.getGeminiKey().isEmpty()) {
-                return "Missing Gemini key setting.";
-            }
-        } else if (AIChatModelFactory.PROVIDER_NAME_OLLAMA.equalsIgnoreCase(providerName)) {
-            if (!configuration.hasOllamaServiceAddress()) {
-                return "Missing Ollama service address setting.";
-            }
-        } else {
-            return "Unknown AI provider selection.";
-        }
-        return null;
+        AiRequestConfigurationResolver.Issue issue = aiRequestConfigurationResolver.resolve(selectedModelOverride);
+        return issue == null ? null : issue.getDetail();
     }
 
     private void appendUserMessage(String text) {
@@ -859,7 +1331,12 @@ public class AIChatPanel extends JPanel {
     }
 
     public ToolCallSummaryHandler toolCallSummaryHandler() {
-        return chatRequestFlow::onToolCallSummary;
+        return summary -> {
+            ChatRequestFlow currentRequestFlow = currentVisibleRequestFlow();
+            if (currentRequestFlow != null) {
+                currentRequestFlow.onToolCallSummary(summary);
+            }
+        };
     }
 
     public void persistCurrentChatIfNeeded() {
@@ -877,19 +1354,25 @@ public class AIChatPanel extends JPanel {
 
     private void syncUiToActivatedSession(ChatMemory sessionChatMemory, boolean fromTranscriptRestore) {
         chatMemory = sessionChatMemory;
-        chatService = null;
         currentSessionUsesAssistantProfile = liveChatController.currentSessionUsesAssistantProfile();
         modelSelectionController.setDisplayedSelectionValueOverride(
             liveChatController.currentSessionSelectedModelOverride());
         updateToolAvailabilityMenuSelection();
-        chatTokenUsageTracker.restoreState(liveChatController.getCurrentTokenUsageState());
-        chatRequestFlow.updateChatMemory(chatMemory);
+        LiveChatSessionId sessionId = liveChatController.currentSessionId();
+        ChatTokenUsageTracker activeRequestTracker = sessionId == null
+            ? null
+            : activeVisibleRequestTrackers.get(sessionId);
+        if (activeRequestTracker != null) {
+            chatTokenUsageTracker.restoreState(activeRequestTracker.snapshotState());
+        }
+        else {
+            chatTokenUsageTracker.restoreState(liveChatController.getCurrentTokenUsageState());
+        }
         assistantProfileSelectionSync.setChatMemory(chatMemory);
         assistantProfilePaneBuilder.setSelectionEnabled(currentSessionUsesAssistantProfile);
         if (currentSessionUsesAssistantProfile) {
             assistantProfilePaneBuilder.syncSelection(fromTranscriptRestore);
         }
-        chatRequestFlow.resetRequestState();
         rebuildHistoryFromMemory();
         refreshTokenCounters();
         updateInputState();
@@ -971,8 +1454,10 @@ public class AIChatPanel extends JPanel {
     }
 
     private void refreshTokenCounterMode() {
-        ChatTokenCounterMode counterMode = new ChatTokenCounterSettings().getCounterMode();
-        chatTokenUsageTracker.setCounterMode(counterMode, tokenCounterModeLabel(counterMode));
+        applyTokenCounterMode(chatTokenUsageTracker);
+        for (ChatTokenUsageTracker requestTokenUsageTracker : activeVisibleRequestTrackers.values()) {
+            applyTokenCounterMode(requestTokenUsageTracker);
+        }
         refreshTokenCounters();
     }
 
@@ -990,8 +1475,17 @@ public class AIChatPanel extends JPanel {
             TextUtils.getOptionalText("ai_chat_token_counter.output"));
     }
 
+    private void applyTokenCounterMode(ChatTokenUsageTracker tokenUsageTracker) {
+        ChatTokenCounterMode counterMode = new ChatTokenCounterSettings().getCounterMode();
+        tokenUsageTracker.setCounterMode(counterMode, tokenCounterModeLabel(counterMode));
+    }
+
     private String currentModelNameForTokenEstimator() {
-        AIModelSelection selection = AIModelSelection.fromSelectionValue(configuration.getSelectedModelValue());
+        String effectiveSelectionValue = liveChatController.currentSessionSelectedModelOverride();
+        if (effectiveSelectionValue == null || effectiveSelectionValue.trim().isEmpty()) {
+            effectiveSelectionValue = configuration.getSelectedModelValue();
+        }
+        AIModelSelection selection = AIModelSelection.fromSelectionValue(effectiveSelectionValue);
         if (selection == null) {
             return null;
         }

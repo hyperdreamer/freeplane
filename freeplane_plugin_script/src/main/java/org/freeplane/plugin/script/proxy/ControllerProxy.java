@@ -6,13 +6,16 @@ package org.freeplane.plugin.script.proxy;
 import java.awt.GraphicsEnvironment;
 import java.io.File;
 import java.io.InputStream;
+import java.net.SocketPermission;
 import java.net.URL;
+import java.security.AccessControlException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
 
@@ -24,6 +27,12 @@ import org.freeplane.api.MindMap;
 import org.freeplane.api.Node;
 import org.freeplane.api.NodeCondition;
 import org.freeplane.api.Script;
+import org.freeplane.api.ai.AiRequest;
+import org.freeplane.api.ai.AiRequestCallback;
+import org.freeplane.api.ai.AiRequestHandle;
+import org.freeplane.api.ai.AiRequestRejectedException;
+import org.freeplane.api.ai.AiRequestService;
+import org.freeplane.api.ai.AiRequestStatus;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.ui.IEditHandler.FirstAction;
 import org.freeplane.core.undo.IUndoHandler;
@@ -47,13 +56,26 @@ import org.freeplane.features.ui.ViewController;
 import org.freeplane.plugin.script.ScriptContext;
 
 import groovy.lang.Closure;
+import org.osgi.framework.BundleContext;
+import org.osgi.framework.FrameworkUtil;
+import org.osgi.framework.ServiceReference;
 
 class ControllerProxy implements Proxy.Controller {
 	private final ScriptContext scriptContext;
+    private final AiRequestServiceResolver aiRequestServiceResolver;
+    private final NetworkPermissionChecker networkPermissionChecker;
 
 	public ControllerProxy(final ScriptContext scriptContext) {
-		this.scriptContext = scriptContext;
+		this(scriptContext, ControllerProxy::lookupAiRequestService, ControllerProxy::checkNetworkPermission);
 	}
+
+    ControllerProxy(final ScriptContext scriptContext,
+                    AiRequestServiceResolver aiRequestServiceResolver,
+                    NetworkPermissionChecker networkPermissionChecker) {
+        this.scriptContext = scriptContext;
+        this.aiRequestServiceResolver = aiRequestServiceResolver;
+        this.networkPermissionChecker = networkPermissionChecker;
+    }
 
 	@Override
 	public void centerOnNode(final Node center) {
@@ -390,5 +412,66 @@ class ControllerProxy implements Proxy.Controller {
 	public ExecutorService getMainThreadExecutorService() {
 		return Controller.getCurrentController().getMainThreadExecutorService();
 	}
+
+    @Override
+    public AiRequestHandle askAi(AiRequest request, AiRequestCallback callback) {
+        Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(callback, "callback");
+        try {
+            networkPermissionChecker.check();
+        } catch (SecurityException permissionDenied) {
+            throw new AiRequestRejectedException(
+                AiRequestStatus.PERMISSION_DENIED,
+                permissionDenied.getMessage());
+        }
+        AiRequestService aiRequestService = aiRequestServiceResolver.resolve();
+        if (aiRequestService == null) {
+            throw new AiRequestRejectedException(
+                AiRequestStatus.AI_UNAVAILABLE,
+                "AI request service is unavailable.");
+        }
+        return aiRequestService.askAi(request, callback);
+    }
+
+    public AiRequestHandle askAi(AiRequest request, Closure<?> callback) {
+        Objects.requireNonNull(callback, "callback");
+        return askAi(request, result -> callback.call(result));
+    }
+
+    private static AiRequestService lookupAiRequestService() {
+        BundleContext bundleContext = FrameworkUtil.getBundle(ControllerProxy.class) == null
+            ? null
+            : FrameworkUtil.getBundle(ControllerProxy.class).getBundleContext();
+        if (bundleContext == null) {
+            return null;
+        }
+        ServiceReference<AiRequestService> serviceReference = bundleContext.getServiceReference(AiRequestService.class);
+        if (serviceReference == null) {
+            return null;
+        }
+        return bundleContext.getService(serviceReference);
+    }
+
+    private static void checkNetworkPermission() {
+        SecurityManager securityManager = System.getSecurityManager();
+        if (securityManager == null) {
+            return;
+        }
+        try {
+            securityManager.checkPermission(new SocketPermission("*", "connect"));
+        } catch (AccessControlException accessControlException) {
+            String message = accessControlException.getMessage();
+            throw new SecurityException(message == null ? "AI request network access denied." : message,
+                accessControlException);
+        }
+    }
+
+    interface AiRequestServiceResolver {
+        AiRequestService resolve();
+    }
+
+    interface NetworkPermissionChecker {
+        void check();
+    }
 
 }

@@ -11,6 +11,8 @@ public class HiddenPromptRequestRunner {
     public interface Callbacks {
         void onRequestStarted(String promptName);
         void onRequestFinished(String promptName);
+        void onRequestSucceeded(String promptName, String response);
+        void onRequestCancelled(String promptName);
         void onRequestFailed(String promptName, String errorMessage);
     }
 
@@ -44,6 +46,7 @@ public class HiddenPromptRequestRunner {
             worker.cancel(true);
         }
         if (callbacks != null) {
+            callbacks.onRequestCancelled(promptName);
             callbacks.onRequestFinished(promptName);
         }
     }
@@ -67,8 +70,14 @@ public class HiddenPromptRequestRunner {
                     return;
                 }
                 try {
-                    get();
+                    String response = get();
+                    if (callbacks != null) {
+                        callbacks.onRequestSucceeded(promptName, response);
+                    }
                 } catch (CancellationException cancelled) {
+                    if (callbacks != null) {
+                        callbacks.onRequestCancelled(promptName);
+                    }
                     return;
                 } catch (Exception error) {
                     if (!requestCancellation.isCancelled() && callbacks != null) {
