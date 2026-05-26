@@ -20,4 +20,13 @@ public class AIToolSetToolExposureTest {
 
         assertThat(annotation).isNotNull();
     }
+
+    @Test
+    public void getApiDocumentation_isExposedAsToolMethod() throws Exception {
+        Method method = AIToolSet.class.getMethod("getApiDocumentation");
+
+        Tool annotation = method.getAnnotation(Tool.class);
+
+        assertThat(annotation).isNotNull();
+    }
 }

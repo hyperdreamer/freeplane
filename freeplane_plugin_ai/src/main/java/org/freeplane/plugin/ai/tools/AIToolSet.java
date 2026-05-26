@@ -37,6 +37,8 @@ import org.freeplane.plugin.ai.tools.create.NodeModelCreator;
 import org.freeplane.plugin.ai.tools.delete.DeleteNodesRequest;
 import org.freeplane.plugin.ai.tools.delete.DeleteNodesResponse;
 import org.freeplane.plugin.ai.tools.delete.DeleteNodesTool;
+import org.freeplane.plugin.ai.tools.documentation.GetApiDocumentationResponse;
+import org.freeplane.plugin.ai.tools.documentation.GetApiDocumentationTool;
 import org.freeplane.plugin.ai.tools.edit.AttributesContentEditor;
 import org.freeplane.plugin.ai.tools.edit.BatchEditTool;
 import org.freeplane.plugin.ai.tools.edit.EditRequest;
@@ -106,6 +108,7 @@ public class AIToolSet {
     private final ListTool listTool;
     private final ConnectorEditTool connectorEditTool;
     private final BatchEditTool batchEditTool;
+    private final GetApiDocumentationTool getApiDocumentationTool;
     private final GetTagCategoriesTool getTagCategoriesTool;
     private final EditTagCategoriesTool editTagCategoriesTool;
     private final ToolCallSummaryHandler toolCallSummaryHandler;
@@ -114,7 +117,7 @@ public class AIToolSet {
     AIToolSet(ToolCallSummaryHandler toolCallSummaryHandler, AvailableMaps availableMaps,
               AvailableMaps.MapAccessListener mapAccessListener, TextController textController,
               NodeContentFactories nodeContentFactories, MMapController mapController,
-              ToolCaller toolCaller) {
+              GetApiDocumentationTool getApiDocumentationTool, ToolCaller toolCaller) {
         Objects.requireNonNull(mapController, "mapController");
         Objects.requireNonNull(availableMaps, "availableMaps");
         NodeModelCreator nodeModelCreator = new NodeModelCreator();
@@ -191,6 +194,7 @@ public class AIToolSet {
         this.listTool = Objects.requireNonNull(listTool, "listTool");
         this.connectorEditTool = Objects.requireNonNull(connectorEditTool, "connectorEditTool");
         this.batchEditTool = Objects.requireNonNull(batchEditTool, "batchEditTool");
+        this.getApiDocumentationTool = Objects.requireNonNull(getApiDocumentationTool, "getApiDocumentationTool");
         this.getTagCategoriesTool = Objects.requireNonNull(getTagCategoriesTool, "getTagCategoriesTool");
         this.editTagCategoriesTool = Objects.requireNonNull(editTagCategoriesTool, "editTagCategoriesTool");
         this.toolCallSummaryHandler = toolCallSummaryHandler;
@@ -284,6 +288,18 @@ public class AIToolSet {
             return response;
         } catch (RuntimeException error) {
             publishToolCallSummary(searchNodesTool.buildToolCallErrorSummary(request, error));
+            throw error;
+        }
+    }
+
+    @Tool("Locate the generated Freeplane API documentation map, load it hidden with documentation semantics if needed, and return the map identifier, root node identifier, and map-derived traversal guidance.")
+    public GetApiDocumentationResponse getApiDocumentation() {
+        try {
+            GetApiDocumentationResponse response = getApiDocumentationTool.getApiDocumentation();
+            publishToolCallSummary(getApiDocumentationTool.buildToolCallSummary(response));
+            return response;
+        } catch (RuntimeException error) {
+            publishToolCallSummary(getApiDocumentationTool.buildToolCallErrorSummary(error));
             throw error;
         }
     }

@@ -1,3 +1,24 @@
+sourceSets {
+    doclet {
+        java {
+            srcDir 'src/doclet/java'
+        }
+        resources {
+            srcDirs = []
+        }
+        compileClasspath += sourceSets.main.compileClasspath
+        runtimeClasspath += output + compileClasspath
+    }
+    test {
+        compileClasspath += sourceSets.doclet.output
+        runtimeClasspath += sourceSets.doclet.output
+    }
+}
+
+configurations {
+    docletImplementation.extendsFrom implementation
+}
+
 dependencies {
     implementation project(':freeplane')
     implementation project(':freeplane_plugin_jsyntaxpane')
@@ -21,6 +42,16 @@ tasks.withType(JavaCompile) {
 		options.compilerArgs << '-parameters'
 }
 
+tasks.named('compileDocletJava', JavaCompile) {
+    sourceCompatibility = JavaVersion.VERSION_17.toString()
+    targetCompatibility = JavaVersion.VERSION_17.toString()
+    options.release = 17
+}
+
+tasks.named('compileTestJava', JavaCompile) {
+    dependsOn tasks.named('docletClasses')
+}
+
 ext.bundleImports = 'de.sciss.syntaxpane.*'
 
 ext.bundleExports = """\
@@ -38,31 +69,71 @@ task copyScripts(type: Copy) {
     into(globalBin + '/scripts')
 }
 
+def scriptApiDocumentationSources = {
+    fileTree(dir: 'src/main/java')
+        .include('**/Proxy.java')
+        .include('**/Convertible.java')
+        .include('**/FreeplaneScriptBaseClass.java')
+        .include('**/ScriptUtils.java')
+        .include('**/GroovyStaticImports.java') +
+    fileTree(dir: '../freeplane_api/src/main/java')
+        .include('**/api/**/*.java') +
+    fileTree(dir: '../freeplane/src/main/java')
+        .include('**/UITools.java')
+        .include('**/TextUtils.java')
+        .include('**/FreeplaneVersion.java')
+        .include('**/HtmlUtils.java')
+        .include('**/LogUtils.java')
+        .include('**/MenuUtils.java') +
+    fileTree(dir: '../freeplane_framework/src/main/java')
+        .include('**/Launcher.java')
+}
+
+def scriptApiDocumentationClasspath = files(
+    sourceSets.main.compileClasspath,
+    sourceSets.main.output,
+    project(':freeplane').sourceSets.main.output,
+    project(':freeplane').sourceSets.main.compileClasspath,
+    project(':freeplane_api').sourceSets.main.output,
+    project(':freeplane_api').sourceSets.main.compileClasspath,
+    project(':freeplane_framework').sourceSets.main.output,
+    project(':freeplane_framework').sourceSets.main.compileClasspath
+)
+
+def apiDocumentationOutputDir = file(globalBin + '/doc/api')
+def apiMapOutputFile = new File(apiDocumentationOutputDir, 'freeplane-api.mm')
+def docletClassName = 'org.freeplane.plugin.script.doclet.FreeplaneApiMapDoclet'
+def docletPathFiles = {
+    files(sourceSets.doclet.output, sourceSets.doclet.runtimeClasspath)
+}
+
+def configureScriptingApiJavadocTask = { Javadoc task, boolean generateMap ->
+    task.enabled = true
+    task.title = "Freeplane API ${project.version}"
+    task.source = scriptApiDocumentationSources()
+    task.classpath = scriptApiDocumentationClasspath
+    if (generateMap) {
+        task.dependsOn tasks.named('docletClasses')
+        task.dependsOn scriptApiDocumentationClasspath
+        task.dependsOn docletPathFiles()
+        task.options.doclet = docletClassName
+        task.options.docletpath = docletPathFiles().files as List
+        task.options.addStringOption('freeplaneApiMapOutput', apiMapOutputFile.absolutePath)
+        task.failOnError = true
+        task.outputs.file(apiMapOutputFile)
+    }
+    else {
+        task.destinationDir = apiDocumentationOutputDir
+    }
+}
+
 javadoc {
-    enabled = true
+    configureScriptingApiJavadocTask(delegate, false)
+}
 
-    title = "Freeplane API ${project.version}"
-
-    source = fileTree(dir: 'src/main/java')
-      .include('**/Proxy.java')
-      .include('**/Convertible.java')
-      .include('**/FreeplaneScriptBaseClass.java')
-      .include('**/ScriptUtils.java')
-      .include('**/GroovyStaticImports.java') +
-		fileTree(dir: '../freeplane_api/src/main/java')
-		  .include('**/api/**/*.java') +
-		fileTree(dir: '../freeplane/src/main/java')
-		  .include('**/UITools.java')
-		  .include('**/TextUtils.java')
-          .include('**/FreeplaneVersion.java')
-		  .include('**/HtmlUtils.java')
-		  .include('**/LogUtils.java')
-		  .include('**/MenuUtils.java') +
-	    fileTree(dir: '../freeplane_framework/src/main/java')
-		  .include('**/Launcher.java')
-
-
-    destinationDir = new File(globalBin + '/doc/api/')
+task generateFreeplaneApiMap(type: Javadoc) {
+    configureScriptingApiJavadocTask(delegate, true)
+    mustRunAfter tasks.named('javadoc')
 }
 
 // TODO: this doesn't work yet!
@@ -79,4 +150,5 @@ task zipJavadoc(type: Zip) {
 
 build.dependsOn copyScripts
 build.dependsOn javadoc
+build.dependsOn generateFreeplaneApiMap
 //build.dependsOn zipJavadoc

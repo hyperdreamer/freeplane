@@ -22,6 +22,7 @@ import org.freeplane.plugin.ai.tools.content.NodeContentReader;
 import org.freeplane.plugin.ai.tools.content.NodeStyleContentReader;
 import org.freeplane.plugin.ai.tools.content.TagsContentReader;
 import org.freeplane.plugin.ai.tools.content.TextualContentReader;
+import org.freeplane.plugin.ai.tools.documentation.GetApiDocumentationTool;
 import org.freeplane.plugin.ai.tools.text.DefaultEnglishTextProvider;
 import org.freeplane.plugin.ai.tools.text.EnglishTextProvider;
 import org.freeplane.plugin.ai.tools.utilities.ToolCallSummaryHandler;
@@ -86,8 +87,10 @@ public class AIToolSetBuilder {
         MMapController mapController = this.mapController != null ? this.mapController : createMapController();
         NodeContentFactories nodeContentFactories = createNodeContentFactories(textController, attributeController,
             iconController);
+        GetApiDocumentationTool getApiDocumentationTool = new GetApiDocumentationTool(
+            availableMaps, mapController, textController);
         return new AIToolSet(toolCallSummaryHandler, availableMaps, mapAccessListener, textController,
-            nodeContentFactories, mapController, toolCaller);
+            nodeContentFactories, mapController, getApiDocumentationTool, toolCaller);
     }
 
     private AvailableMaps createAvailableMaps() {
