@@ -1583,3 +1583,552 @@ end
       `ScriptingPermissions.getRequiredExecutionPermissionNames()` so
       the installer script and unit tests share the same required-
       permission list.
+
+## Subtask: Replace public `AiRequest` input with shared `AiRequestOptions` and add named-prompt script execution
+- **Status:** review
+- **Scope:**
+  Replace the script-facing public AI request input contract so raw
+  prompt execution uses `askAi(String prompt, AiRequestOptions options,
+  ...)`, named-prompt execution uses `runAiPrompt(String promptName,
+  Duration timeout, ...)` and `runAiPrompt(String promptName,
+  AiRequestOptions options, ...)`, and both entry points resolve into
+  the same internal fully specified AI request runtime.
+- **Motivation:**
+  The current public `AiRequest` object mixes prompt text, timeout,
+  mode, model selection, tool selection, selection override, and an
+  optional display name into one request-shaped API. That makes the new
+  named-prompt method family overlap awkwardly with raw `askAi(...)`.
+  One shared `AiRequestOptions` contract is simpler if prompt text is a
+  method argument for raw execution, saved prompt text stays in saved
+  prompts, and internal runtime code works only with fully resolved
+  request data.
+- **Scenario:**
+  A script calls
+  `c.askAi("Summarize the current node", AiRequestOptions.builder().timeout(Duration.ofSeconds(30)).mode(AiRequestMode.HIDDEN).build(), callback)`.
+  Freeplane treats the prompt text as a separate method argument,
+  requires `mode` because this is raw `askAi(...)`, resolves omitted
+  model selection and tool availability to current values, and starts a
+  hidden request without any request name input.
+
+  Another script calls
+  `c.runAiPrompt("Rewrite", Duration.ofSeconds(30)) { result -> ... }`.
+  Freeplane resolves the saved prompt named `Rewrite`, keeps that saved
+  prompt text, derives mode/model/tool behavior from the saved prompt,
+  and uses the saved prompt name only where the runtime needs a prompt
+  display name.
+
+  A third script calls `runAiPrompt(...)` with
+  `AiRequestOptions.builder()`
+  `.timeout(Duration.ofSeconds(30))`
+  `.mode(AiRequestMode.ADD_TO_CHAT)`
+  `.modelSelection(AiModelSelection.current())`
+  `.toolAvailability(AiToolAvailability.CURRENT)`
+  `.selectionOverride(...)`
+  `.build()`. Freeplane keeps the saved prompt text, overrides the
+  saved prompt's explicit model/tool settings back to current values,
+  targets `ADD_TO_CHAT`, and invokes the callback exactly once.
+
+  If no saved prompt matches the requested name,
+  `runAiPrompt(...)` throws `AiRequestRejectedException` with status
+  `PROMPT_NOT_FOUND` and does not invoke the callback.
+
+  If the user edits or deletes that saved prompt after
+  `runAiPrompt(...)` returns, the accepted request still uses the saved
+  prompt snapshot captured at acceptance time.
+- **Constraints:**
+  - This subtask supersedes the earlier public `AiRequest`-based API
+    shape described in older parts of this task file. For scripting AI
+    input signatures and public request-input types, this subtask is
+    the authoritative current implementation target.
+  - There are no backward-compatibility requirements for this subtask.
+    Remove the old public `AiRequest` input type and the old
+    `askAi(AiRequest, ...)` method family instead of keeping parallel
+    signatures.
+  - Raw `askAi(...)` must not gain a timeout-only convenience overload.
+  - Remove the public request-name field. Raw `askAi(...)` no longer
+    accepts an API-level name parameter.
+  - Use the same public `AiRequestOptions` type in both option-bearing
+    entry points: raw `askAi(...)` and override-capable
+    `runAiPrompt(...)`.
+  - `AiRequestOptions.timeout` is mandatory and script-specific. Do not
+    add timeout to `AiPrompt`, prompt persistence, or prompt-manager UI
+    state.
+  - `AiRequestOptions.mode`, `modelSelection`, and `toolAvailability`
+    may be `null` in the public options object, but `null` never means
+    the same thing as explicit `AiModelSelection.current()` or
+    `AiToolAvailability.CURRENT`.
+  - For raw `askAi(...)`, `options.mode` is required. Missing mode is a
+    programmer error and must throw synchronously with no callback.
+  - For named-prompt `runAiPrompt(...)`, `null` mode/model/tool fields
+    mean "derive from the saved prompt", while explicit
+    `current()` / `CURRENT` mean "override the saved explicit setting
+    back to current".
+  - Keep the saved prompt text authoritative. Named-prompt execution may
+    override runtime execution options, but it must not override the
+    stored prompt text.
+  - Prompt lookup must consider only saved prompts, not unsaved draft
+    state in the prompt manager dialog.
+  - Accepted named-prompt requests must capture a defensive copy of the
+    saved prompt at acceptance time so later prompt edits do not affect
+    that request.
+  - Missing saved prompt remains a same-thread rejection. If
+    `runAiPrompt(...)` throws `AiRequestRejectedException`, no callback
+    may be invoked for that request.
+  - `promptName` for `runAiPrompt(...)` must be nonblank. Null or blank
+    prompt names are programmer errors, not `PROMPT_NOT_FOUND`.
+  - A malformed saved explicit model selection must not be silently
+    reinterpreted as the current model.
+  - Keep the public Java API Groovy-free. Groovy closure convenience
+    stays on `ControllerProxy`, not on `Controller`.
+- **Briefing:**
+  Saved prompts currently live entirely inside the AI plugin prompt
+  subsystem in `AiPromptActionRegistry`, `AiPromptStore`,
+  `AiPromptManagerDialog`, and `AIChatPanel.runPrompt(...)`. Script
+  entry points currently expose the public `AiRequest` input contract
+  through `Controller.askAi(...)`, `ControllerProxy`,
+  `AiRequestService`, `ScriptAiRequestService`,
+  `AiRequestExecutionCoordinator`, `AddToChatDispatchJob`, and
+  `AIChatPanel`. This subtask replaces that public input shape with a
+  shared options contract and introduces one internal resolved-request
+  type so the runtime no longer depends on the public request object.
+- **Research:**
+  - `Controller` currently exposes only
+    `askAi(AiRequest, AiRequestCallback)`, while `ControllerProxy`
+    adds only the implementation-side Groovy `Closure<?>` overload for
+    that same method family.
+  - Public `AiRequest` currently carries `name`, `prompt`,
+    `modelSelection`, `toolAvailability`, `mode`, `timeout`, and
+    `selectionOverride`.
+  - `ScriptAiRequestService` currently accepts only `AiRequest`,
+    creates `AiRequestHandleImpl`, and dispatches the accepted work to
+    `AIChatPanel.askAi(...)` on the UI thread.
+  - `AiRequestExecutionCoordinator`, `AddToChatDispatchJob`,
+    `AiRequestTimeoutControllerFactory`, and `AIChatPanel` all still
+    accept the public `AiRequest` type directly.
+  - `AIChatPanel` currently uses `request.getName()` for shown prompt
+    chat display names and for `ADD_TO_CHAT` only when that mode starts
+    a new visible chat. Removing the public name field therefore
+    intentionally drops raw `askAi(...)` control over those names.
+  - Hidden prompt progress UI and shown prompt-chat naming already have
+    untitled fallbacks for blank names, so raw `askAi(...)` can safely
+    run without an API-level request name.
+  - Saved prompts are stored as `AiPrompt` values with exactly these
+    persisted fields: `name`, `prompt`, `showInChat`,
+    `modelSelectionValue`, and `toolAvailabilitySelectionValue`. There
+    is currently no timeout field.
+  - `AiPromptActionRegistry` currently supports running a prompt only
+    when some caller already holds an `AiPrompt` object. It exposes no
+    prompt-name lookup API and no thread-safe saved-prompt snapshot for
+    script use.
+  - `AIChatPanel.runPrompt(AiPrompt, Component)` already defines the
+    default prompt semantics that named-prompt script execution must
+    preserve: stored `showInChat=true` opens a shown prompt chat, while
+    `showInChat=false` uses the hidden request path with the existing
+    cancel dialog.
+  - `AiPromptNameValidator` trims prompt names and prevents duplicates
+    case-insensitively, so normalized saved prompt names are unique.
+  - `AIModelSelection.fromSelectionValue(...)` returns `null` for a
+    malformed nonblank saved model selection value, while
+    `ChatToolAvailability.fromPreferenceValue(...)` falls back to
+    `EDITING` for an unrecognized nonblank saved tool-selection value.
+
+  ```plantuml
+  @startuml
+  set separator none
+  package "freeplane_api" {
+    interface Controller
+    interface AiRequestService
+    class AiRequest
+  }
+  package "freeplane_plugin_script" {
+    class ControllerProxy
+  }
+  package "freeplane_plugin_ai.prompt" {
+    class AiPromptActionRegistry
+    class AiPromptStore
+    class AiPrompt
+  }
+  package "freeplane_plugin_ai.chat" {
+    class ScriptAiRequestService
+    class AiRequestExecutionCoordinator
+    class AddToChatDispatchJob
+    class AIChatPanel
+  }
+
+  ControllerProxy ..|> Controller
+  ControllerProxy --> AiRequestService : askAi(AiRequest,...)
+  ScriptAiRequestService ..|> AiRequestService
+  ScriptAiRequestService --> AiRequestExecutionCoordinator : route AiRequest
+  AiRequestExecutionCoordinator --> AddToChatDispatchJob : pass AiRequest
+  AiRequestExecutionCoordinator --> AIChatPanel : pass AiRequest
+  AiPromptActionRegistry --> AiPromptStore : load/save prompts
+  AiPromptActionRegistry --> AIChatPanel : runPrompt(AiPrompt,...)
+  @enduml
+  ```
+- **Design:**
+  - Replace the public scripting input contract under
+    `org.freeplane.api.ai`:
+    - remove public type `AiRequest`;
+    - add immutable public type `AiRequestOptions`; and
+    - keep `AiModelSelection`, `AiSelectionOverride`,
+      `AiRequestMode`, `AiToolAvailability`, `AiRequestStatus`,
+      `AiRequestResult`, `AiRequestRejectedException`,
+      `AiRequestCallback`, and `AiRequestHandle`.
+  - Add `PROMPT_NOT_FOUND` to `AiRequestStatus` for named-prompt
+    same-thread rejection.
+  - Replace the public `Controller` and `AiRequestService` signatures
+    with exactly these callback-based methods:
+
+    ```java
+    AiRequestHandle askAi(String prompt,
+                          AiRequestOptions options,
+                          AiRequestCallback callback);
+
+    AiRequestHandle runAiPrompt(String promptName,
+                                Duration timeout,
+                                AiRequestCallback callback);
+
+    AiRequestHandle runAiPrompt(String promptName,
+                                AiRequestOptions options,
+                                AiRequestCallback callback);
+    ```
+
+  - Add Groovy-friendly implementation overloads only on
+    `ControllerProxy` with exactly these signatures:
+
+    ```java
+    AiRequestHandle askAi(String prompt,
+                          AiRequestOptions options,
+                          Closure<?> callback)
+
+    AiRequestHandle runAiPrompt(String promptName,
+                                Duration timeout,
+                                Closure<?> callback)
+
+    AiRequestHandle runAiPrompt(String promptName,
+                                AiRequestOptions options,
+                                Closure<?> callback)
+    ```
+
+  - Add immutable public type `AiRequestOptions` with exact field set:
+    `Duration timeout`, optional `AiRequestMode mode`, optional
+    `AiModelSelection modelSelection`, optional
+    `AiToolAvailability toolAvailability`, and optional
+    `AiSelectionOverride selectionOverride`.
+  - `AiRequestOptions` uses an exact nested builder API:
+    - static factory `AiRequestOptions.builder()`;
+    - nested type `AiRequestOptions.Builder`;
+    - builder methods `timeout(...)`, `mode(...)`,
+      `modelSelection(...)`, `toolAvailability(...)`,
+      `selectionOverride(...)`, and `build()`.
+  - `AiRequestOptions.timeout` is always required and positive.
+    `mode`, `modelSelection`, `toolAvailability`, and
+    `selectionOverride` getters may return `null`.
+  - `AiRequestOptions` is intentionally a partially specified public
+    input object. Entry-point-specific resolution rules are fixed:
+    - raw `askAi(...)` requires non-null `prompt`, non-null `options`,
+      non-null `callback`, and non-null `options.mode`;
+    - raw `askAi(...)` resolves `null modelSelection` to
+      `AiModelSelection.current()`, `null toolAvailability` to
+      `AiToolAvailability.CURRENT`, and `null selectionOverride` to no
+      override;
+    - named-prompt `runAiPrompt(...)` requires nonblank `promptName`
+      and non-null callback, but allows `options.mode`,
+      `options.modelSelection`, and `options.toolAvailability` to stay
+      `null` so they can derive from the saved prompt.
+  - Keep `AiModelSelection.current()` and
+    `AiToolAvailability.CURRENT` as explicit override values distinct
+    from `null`. That distinction is required so named-prompt execution
+    can override a saved explicit model/tool setting back to current.
+  - Add package-private runtime type
+    `org.freeplane.plugin.ai.chat.ResolvedAiRequest` and migrate the AI
+    runtime to it. Use exact fields:
+    `String promptText`, optional `String promptDisplayName`,
+    `Duration timeout`, `AiRequestMode mode`,
+    `AiModelSelection modelSelection`,
+    `AiToolAvailability toolAvailability`, and optional
+    `AiSelectionOverride selectionOverride`.
+  - `ResolvedAiRequest` is fully specified. Below
+    `ScriptAiRequestService`, the runtime must not depend on public
+    `AiRequestOptions` semantics or on a removed public `AiRequest`
+    type.
+  - Change these exact runtime collaborators from public `AiRequest` to
+    `ResolvedAiRequest`:
+    - `ScriptAiRequestService` request starter / delegation path;
+    - `AiRequestExecutionCoordinator`;
+    - `AddToChatDispatchJobFactory` / `AddToChatDispatchJob`;
+    - `AiRequestTimeoutControllerFactory`; and
+    - `AIChatPanel` entrypoints that currently accept `AiRequest`.
+  - `ControllerProxy` must route both `askAi(...)` and
+    `runAiPrompt(...)` families through the same permission check,
+    callback-context restoration, and OSGi AI-service lookup path.
+    Refactor the shared proxy logic instead of duplicating it.
+  - `AiPromptActionRegistry` adds exact method
+    `public AiPrompt findSavedPromptByName(String promptName)`.
+    That method:
+    - normalizes lookup names with the same trim/case rules used for
+      saved prompt uniqueness;
+    - reads from a thread-safe snapshot keyed by normalized saved prompt
+      name;
+    - returns a defensive `AiPrompt.copy()` result; and
+    - ignores dirty unsaved draft state.
+  - `ScriptAiRequestService` implements both public method families and
+    owns all public-input-to-runtime resolution:
+    - `askAi(String, AiRequestOptions, ...)` validates arguments,
+      resolves defaults required by raw execution, creates one
+      `ResolvedAiRequest`, and delegates it through the existing handle
+      / UI-dispatch path;
+    - `runAiPrompt(String, Duration, ...)` is equivalent to
+      `runAiPrompt(promptName, AiRequestOptions.builder().timeout(timeout).build(), ... )`;
+    - `runAiPrompt(String, AiRequestOptions, ...)` validates
+      arguments, looks up a saved prompt snapshot, throws
+      `AiRequestRejectedException(PROMPT_NOT_FOUND, ...)` when none
+      exists, resolves saved-prompt defaults plus script overrides into
+      one `ResolvedAiRequest` or one accepted
+      `CONFIGURATION_ERROR` completion when saved prompt data is
+      malformed, and delegates through the same runtime path.
+  - Named-prompt resolution rules are fixed:
+    - `promptText` = saved `AiPrompt.getPrompt()` always;
+    - `promptDisplayName` = saved `AiPrompt.getName()` always;
+    - `timeout` = `AiRequestOptions.timeout` or the simple-overload
+      `Duration` argument;
+    - `mode` = explicit `AiRequestOptions.mode` when non-null,
+      otherwise `SHOW_IN_CHAT` for `showInChat=true` and
+      `HIDDEN_WITH_CANCEL_DIALOG` for `showInChat=false`;
+    - `modelSelection` = explicit
+      `AiRequestOptions.modelSelection` when non-null, otherwise the
+      saved prompt model selection;
+    - `toolAvailability` = explicit
+      `AiRequestOptions.toolAvailability` when non-null, otherwise the
+      saved prompt tool selection; and
+    - `selectionOverride` = explicit
+      `AiRequestOptions.selectionOverride` when non-null, otherwise no
+      override.
+  - Saved prompt model-selection mapping is fixed:
+    - blank saved value -> `AiModelSelection.current()`;
+    - valid saved `provider|model` value ->
+      `AiModelSelection.explicit(provider, model)`;
+    - malformed nonblank saved value -> accept the request and complete
+      it exactly once on the UI thread with
+      `AiRequestStatus.CONFIGURATION_ERROR` and no AI request start.
+  - Saved prompt tool-selection mapping is fixed:
+    - blank saved value -> `AiToolAvailability.CURRENT`;
+    - `disabled` -> `DISABLED`;
+    - `reading` -> `READING`;
+    - `editing` or any other nonblank unrecognized saved value ->
+      `EDITING`, matching current prompt fallback behavior.
+  - Raw `askAi(...)` has no API-level request name. Its naming behavior
+    is therefore fixed:
+    - shown prompt chats use the existing untitled fallback path;
+    - hidden progress UI uses the existing untitled fallback path; and
+    - `ADD_TO_CHAT` no longer renames a newly created visible chat.
+  - Named-prompt execution still uses the saved prompt name wherever
+    the runtime needs a prompt display name. In particular:
+    - `SHOW_IN_CHAT` titles the new prompt-style chat from the saved
+      prompt name;
+    - `HIDDEN_WITH_CANCEL_DIALOG` uses the saved prompt name in the
+      progress UI; and
+    - `ADD_TO_CHAT` renames a newly created visible chat from the saved
+      prompt name, but must not rename an already active visible chat.
+  - Accepted named-prompt requests capture the saved `AiPrompt` copy at
+    service acceptance time. Later prompt edits, deletions, or dialog
+    draft changes do not affect that accepted request.
+  - `Activator` must register `ScriptAiRequestService` only after
+    `AiPromptMenuInstaller.install(...)` returns the
+    `AiPromptActionRegistry`, so the service is created with both
+    `AIChatPanel` and prompt lookup access.
+  - Update public AI API javadocs and exposure tests so nothing in the
+    public scripting AI contract still refers to the removed public
+    `AiRequest` input type.
+
+  ```plantuml
+  @startuml
+  set separator none
+  package "freeplane_api" {
+    interface Controller {
+      +askAi(String, AiRequestOptions, AiRequestCallback)
+      +runAiPrompt(String, Duration, AiRequestCallback)
+      +runAiPrompt(String, AiRequestOptions, AiRequestCallback)
+    }
+    interface AiRequestService {
+      +askAi(String, AiRequestOptions, AiRequestCallback)
+      +runAiPrompt(String, Duration, AiRequestCallback)
+      +runAiPrompt(String, AiRequestOptions, AiRequestCallback)
+    }
+    class AiRequestOptions
+    class AiModelSelection
+    class AiSelectionOverride
+    class AiRequestRejectedException
+    enum AiRequestMode
+    enum AiToolAvailability
+    enum AiRequestStatus
+  }
+  package "freeplane_plugin_script" {
+    class ControllerProxy
+  }
+  package "freeplane_plugin_ai.prompt" {
+    class AiPromptActionRegistry {
+      +findSavedPromptByName(String)
+    }
+    class AiPrompt
+  }
+  package "freeplane_plugin_ai.chat" {
+    class ScriptAiRequestService
+    class ResolvedAiRequest
+    class AiRequestExecutionCoordinator
+    class AddToChatDispatchJob
+    class AIChatPanel
+  }
+
+  ControllerProxy ..|> Controller
+  ControllerProxy --> AiRequestService : askAi/runAiPrompt
+  ScriptAiRequestService ..|> AiRequestService
+  ScriptAiRequestService --> AiPromptActionRegistry : findSavedPromptByName(...)
+  ScriptAiRequestService --> ResolvedAiRequest : build fully resolved request
+  ScriptAiRequestService --> AiRequestExecutionCoordinator : delegate ResolvedAiRequest
+  AiRequestExecutionCoordinator --> AddToChatDispatchJob : pass ResolvedAiRequest
+  AiRequestExecutionCoordinator --> AIChatPanel : pass ResolvedAiRequest
+  AiRequestOptions --> AiModelSelection
+  AiRequestOptions --> AiSelectionOverride
+  AiRequestOptions --> AiRequestMode
+  AiRequestOptions --> AiToolAvailability
+  AiRequestRejectedException --> AiRequestStatus
+  @enduml
+  ```
+
+  ```plantuml
+  @startuml
+  actor Script
+  participant ControllerProxy
+  participant ScriptAiRequestService
+  participant AiPromptActionRegistry
+  participant AIChatPanel
+
+  alt raw askAi
+    Script -> ControllerProxy : askAi(prompt, options, callback)
+    ControllerProxy -> ControllerProxy : permission check + callback wrapping
+    ControllerProxy -> ScriptAiRequestService : askAi(prompt, options, callback)
+    ScriptAiRequestService -> ScriptAiRequestService : validate + resolve defaults
+    ScriptAiRequestService -> AIChatPanel : askAi(resolvedRequest,...)
+    AIChatPanel --> Script : existing callback path
+  else named runAiPrompt
+    Script -> ControllerProxy : runAiPrompt(promptName, timeout/options, callback)
+    ControllerProxy -> ControllerProxy : permission check + callback wrapping
+    ControllerProxy -> ScriptAiRequestService : runAiPrompt(...)
+    ScriptAiRequestService -> AiPromptActionRegistry : findSavedPromptByName(promptName)
+    alt prompt missing
+      ScriptAiRequestService --> ControllerProxy : throw PROMPT_NOT_FOUND
+    else prompt found
+      ScriptAiRequestService -> ScriptAiRequestService : map saved prompt + overrides to ResolvedAiRequest
+      alt malformed saved explicit model selection
+        ScriptAiRequestService --> Script : callback(CONFIGURATION_ERROR)
+      else mapped request
+        ScriptAiRequestService -> AIChatPanel : askAi(resolvedRequest,...)
+        AIChatPanel --> Script : existing callback path
+      end
+    end
+  end
+  @enduml
+  ```
+- **Test specification:**
+  - **Automated tests:**
+    - `freeplane_api` test: replace `AiRequestTest` with
+      `AiRequestOptionsTest` covering positive-timeout validation,
+      optional null fields, builder defaults, and explicit field values;
+    - `freeplane_api` test: `Controller` exposes only
+      `askAi(String, AiRequestOptions, AiRequestCallback)`,
+      `runAiPrompt(String, Duration, AiRequestCallback)`, and
+      `runAiPrompt(String, AiRequestOptions, AiRequestCallback)`;
+    - `freeplane_api` test: the public AI API no longer exports the old
+      `AiRequest` input type as part of the scripting entrypoint
+      contract;
+    - `freeplane_api` test: `AiRequestStatus` includes
+      `PROMPT_NOT_FOUND`;
+    - `freeplane_plugin_script` test: `ControllerProxy.askAi(...)` and
+      both `runAiPrompt(...)` overload families delegate to
+      `AiRequestService` and return the service handle;
+    - `freeplane_plugin_script` test: `PERMISSION_DENIED` and
+      `AI_UNAVAILABLE` still happen before AI-service lookup or
+      delegation for both method families;
+    - `freeplane_plugin_script` test: raw `askAi(...)` with missing mode
+      throws synchronously and does not invoke the callback;
+    - `freeplane_plugin_script` test: formula access to
+      `c.askAi(...)` and `c.runAiPrompt(...)` is denied before
+      AI-service lookup;
+    - `freeplane_plugin_script` test: Groovy closure overloads exist on
+      `ControllerProxy` but not on public `Controller`, and the old
+      `AiRequest`-based overloads are removed;
+    - `freeplane_plugin_script` test: callback-context restoration also
+      covers callbacks that call `scriptUtils.c().askAi(...)` and
+      `scriptUtils.c().runAiPrompt(...)`;
+    - `freeplane_plugin_ai` test:
+      `AiPromptActionRegistry.findSavedPromptByName(...)` trims and
+      case-normalizes names, ignores unsaved draft state, and returns a
+      defensive copy;
+    - `freeplane_plugin_ai` test: raw `askAi(...)` resolves null model
+      / tool options to current values and preserves explicit current
+      values as explicit current values in the resolved request;
+    - `freeplane_plugin_ai` test: raw `askAi(...)` no longer renames a
+      newly created `ADD_TO_CHAT` chat because public request names were
+      removed;
+    - `freeplane_plugin_ai` test: simple `runAiPrompt(...)` maps a
+      shown saved prompt to `SHOW_IN_CHAT`, a hidden saved prompt to
+      `HIDDEN_WITH_CANCEL_DIALOG`, and propagates the method timeout;
+    - `freeplane_plugin_ai` test: override `runAiPrompt(...)` preserves
+      the saved prompt text while applying mode, model-selection,
+      tool-selection, and selection-override runtime changes;
+    - `freeplane_plugin_ai` test: named-prompt null model/tool/mode
+      fields preserve saved prompt behavior, while explicit
+      `AiModelSelection.current()` / `AiToolAvailability.CURRENT`
+      override saved explicit values back to current;
+    - `freeplane_plugin_ai` test: named-prompt execution uses the saved
+      prompt name for shown prompt chat titles, hidden progress labels,
+      and new-chat naming for `ADD_TO_CHAT` without renaming an already
+      active visible chat;
+    - `freeplane_plugin_ai` test: missing saved prompt throws
+      `AiRequestRejectedException` with `PROMPT_NOT_FOUND` and does not
+      invoke the callback;
+    - `freeplane_plugin_ai` test: blank `promptName` throws
+      `IllegalArgumentException` and does not invoke the callback;
+    - `freeplane_plugin_ai` test: malformed saved explicit model
+      selection completes exactly once with `CONFIGURATION_ERROR` and
+      does not start an AI request;
+    - `freeplane_plugin_ai` test: accepted named-prompt execution uses
+      the saved prompt snapshot captured at acceptance time even if the
+      prompt registry changes afterward;
+    - `freeplane_plugin_ai` test: `Activator` registers
+      `ScriptAiRequestService` after prompt-registry installation so
+      named-prompt lookup dependency is present;
+    - rerun `gradle -Djava.net.preferIPv6Addresses=true
+      -Djava.awt.headless=true :freeplane_api:test
+      :freeplane_plugin_script:test :freeplane_plugin_ai:test`.
+  - **Manual tests:**
+    - run a Groovy script that calls raw `askAi(...)` with
+      `AiRequestOptions` and verify no API-level name can be supplied;
+    - run a Groovy script that calls
+      `c.runAiPrompt("Rewrite", Duration.ofSeconds(30)) { ... }` and
+      verify the saved prompt runs without restating its prompt text;
+    - run a hidden saved prompt by name and verify the existing cancel
+      dialog appears by default;
+    - run the same saved prompt with override mode `HIDDEN` and verify
+      no cancel dialog appears;
+    - run a saved prompt with override mode `ADD_TO_CHAT` while a
+      visible chat is open and verify the message is appended there;
+    - submit `runAiPrompt(...)`, then edit or delete that saved prompt
+      before completion, and verify the accepted request still uses the
+      original snapshot;
+    - run `runAiPrompt(...)` with a missing prompt name and verify it
+      throws `PROMPT_NOT_FOUND` immediately without callback delivery.
+- **Implementation notes:**
+  - **Interpretations:**
+    - Added package-private `ResolvedAiRequest` so one public
+      `AiRequestOptions` type can support different null-resolution
+      rules for raw `askAi(...)` and named-prompt `runAiPrompt(...)`
+      without leaking those entry-point-specific semantics into the
+      lower AI runtime.
+  - **Tradeoffs:**
+    - Kept saved-prompt lookup and saved-prompt-to-request resolution in
+      `ScriptAiRequestService` instead of pushing that logic into
+      `AIChatPanel`, which keeps the prompt registry dependency at the
+      script/service boundary and lets the lower request runtime work
+      only with fully resolved requests.

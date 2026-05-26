@@ -6,24 +6,32 @@ import java.util.Arrays;
 import java.util.stream.Collectors;
 import org.freeplane.api.Controller;
 import org.freeplane.api.ControllerRO;
-import org.freeplane.api.ai.AiRequest;
 import org.junit.Test;
 
 public class ControllerApiExposureTest {
 
     @Test
-    public void askAiIsExposedOnlyOnReadWriteControllerInterfaces() {
-        assertThat(methodNames(Controller.class)).contains("askAi");
-        assertThat(methodNames(Proxy.Controller.class)).contains("askAi");
-        assertThat(methodNames(ControllerRO.class)).doesNotContain("askAi");
-        assertThat(methodNames(Proxy.ControllerRO.class)).doesNotContain("askAi");
+    public void aiMethodsAreExposedOnlyOnReadWriteControllerInterfaces() {
+        assertThat(methodNames(Controller.class)).contains("askAi", "runAiPrompt");
+        assertThat(methodNames(Proxy.Controller.class)).contains("askAi", "runAiPrompt");
+        assertThat(methodNames(ControllerRO.class)).doesNotContain("askAi", "runAiPrompt");
+        assertThat(methodNames(Proxy.ControllerRO.class)).doesNotContain("askAi", "runAiPrompt");
     }
 
     @Test
-    public void groovyClosureAskAiOverloadExistsOnlyOnImplementingClass() {
-        assertThat(methodSignatures(Controller.class)).doesNotContain("askAi(AiRequest,Closure)");
-        assertThat(methodSignatures(Proxy.Controller.class)).doesNotContain("askAi(AiRequest,Closure)");
-        assertThat(methodSignatures(ControllerProxy.class)).contains("askAi(AiRequest,Closure)");
+    public void groovyClosureAiOverloadsExistOnlyOnImplementingClass() {
+        assertThat(methodSignatures(Controller.class))
+            .doesNotContain("askAi(String,AiRequestOptions,Closure)")
+            .doesNotContain("runAiPrompt(String,Duration,Closure)")
+            .doesNotContain("runAiPrompt(String,AiRequestOptions,Closure)");
+        assertThat(methodSignatures(Proxy.Controller.class))
+            .doesNotContain("askAi(String,AiRequestOptions,Closure)")
+            .doesNotContain("runAiPrompt(String,Duration,Closure)")
+            .doesNotContain("runAiPrompt(String,AiRequestOptions,Closure)");
+        assertThat(methodSignatures(ControllerProxy.class))
+            .contains("askAi(String,AiRequestOptions,Closure)")
+            .contains("runAiPrompt(String,Duration,Closure)")
+            .contains("runAiPrompt(String,AiRequestOptions,Closure)");
     }
 
     private java.util.List<String> methodNames(Class<?> type) {

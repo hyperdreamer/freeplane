@@ -141,6 +141,55 @@ public class AiPromptActionRegistryTest {
         }
     }
 
+    @Test
+    public void findSavedPromptByName_trimsAndCaseNormalizesAndReturnsDefensiveCopy() throws IOException {
+        Path tempDir = Files.createTempDirectory("ai-prompts");
+        try {
+            AIChatPanel aiChatPanel = mock(AIChatPanel.class);
+            Path path = tempDir.resolve(AiPromptStore.PROMPTS_FILE_NAME);
+            AiPromptActionRegistry registry = new AiPromptActionRegistry(
+                new AiPromptStore(new ObjectMapper(), path),
+                aiChatPanel,
+                () -> {
+                });
+            registry.getDialogState().loadSavedPrompts(Arrays.asList(new AiPrompt("Rewrite", "Prompt", false)));
+            registry.persistStateIfChanged();
+
+            AiPrompt found = registry.findSavedPromptByName("  rewrite  ");
+            found.setPrompt("Changed");
+
+            assertThat(found.getPrompt()).isEqualTo("Changed");
+            assertThat(registry.findSavedPromptByName("Rewrite").getPrompt()).isEqualTo("Prompt");
+        }
+        finally {
+            deleteRecursively(tempDir);
+        }
+    }
+
+    @Test
+    public void findSavedPromptByName_ignoresUnsavedDraftState() throws IOException {
+        Path tempDir = Files.createTempDirectory("ai-prompts");
+        try {
+            AIChatPanel aiChatPanel = mock(AIChatPanel.class);
+            Path path = tempDir.resolve(AiPromptStore.PROMPTS_FILE_NAME);
+            AiPromptActionRegistry registry = new AiPromptActionRegistry(
+                new AiPromptStore(new ObjectMapper(), path),
+                aiChatPanel,
+                () -> {
+                });
+            registry.getDialogState().loadSavedPrompts(Arrays.asList(new AiPrompt("Rewrite", "Prompt", false)));
+            registry.persistStateIfChanged();
+            registry.getDialogState().beginNewDraft();
+            registry.getDialogState().updateDraft("Draft only", "Draft prompt", true, "", "reading");
+
+            assertThat(registry.findSavedPromptByName("Draft only")).isNull();
+            assertThat(registry.findSavedPromptByName("Rewrite")).isNotNull();
+        }
+        finally {
+            deleteRecursively(tempDir);
+        }
+    }
+
     private static void deleteRecursively(Path root) throws IOException {
         if (root == null) {
             return;

@@ -76,8 +76,8 @@ public class Activator implements BundleActivator {
 				    aiChatPanel = new AIChatPanel();
 				    tabs.addTab("", ResourceController.getResourceController().getIcon("/images/panelTabs/aiTab.svg?useAccentColor=true"),
 				        aiChatPanel, TextUtils.getText("ai_panel"));
-				    registerAiRequestService(context);
 				    promptActionRegistry = AiPromptMenuInstaller.install(modeController, aiChatPanel);
+				    registerAiRequestService(context, promptActionRegistry);
 				    startModelContextProtocolServer(aiChatPanel, modeController);
 				    addPreferencesToOptionPanel();
 				}
@@ -192,13 +192,13 @@ public class Activator implements BundleActivator {
 	 * (non-Javadoc)
 	 * @see org.osgi.framework.BundleActivator#stop(org.osgi.framework.BundleContext)
 	 */
-	private void registerAiRequestService(BundleContext context) {
+	private void registerAiRequestService(BundleContext context, AiPromptActionRegistry promptActionRegistry) {
 		if (aiRequestServiceRegistration != null) {
 			aiRequestServiceRegistration.unregister();
 		}
 		aiRequestServiceRegistration = context.registerService(
 			AiRequestService.class.getName(),
-			new ScriptAiRequestService(aiChatPanel),
+			new ScriptAiRequestService(aiChatPanel, promptActionRegistry),
 			new Hashtable<String, String[]>());
 	}
 

@@ -11,8 +11,9 @@ import java.util.List;
 import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.TimeUnit;
 import org.freeplane.api.ai.AiModelSelection;
-import org.freeplane.api.ai.AiRequest;
+import org.freeplane.api.ai.AiRequestHandle;
 import org.freeplane.api.ai.AiRequestMode;
+import org.freeplane.api.ai.AiSelectionOverride;
 import org.freeplane.api.ai.AiToolAvailability;
 import org.junit.Test;
 
@@ -31,8 +32,8 @@ public class AiRequestExecutionCoordinatorTest {
             new AddToChatDispatchJobFactory(aiChatPanel),
             timeoutFactory,
             new RecordingExecutor());
-        AiRequest firstRequest = request(AiRequestMode.SHOW_IN_CHAT);
-        AiRequest secondRequest = request(AiRequestMode.SHOW_IN_CHAT);
+        ResolvedAiRequest firstRequest = request(AiRequestMode.SHOW_IN_CHAT);
+        ResolvedAiRequest secondRequest = request(AiRequestMode.SHOW_IN_CHAT);
         AiRequestHandleImpl firstHandle = new AiRequestHandleImpl(Runnable::run, result -> {
         });
         AiRequestHandleImpl secondHandle = new AiRequestHandleImpl(Runnable::run, result -> {
@@ -64,8 +65,8 @@ public class AiRequestExecutionCoordinatorTest {
         });
         AiRequestHandleImpl dialogHandle = new AiRequestHandleImpl(Runnable::run, result -> {
         });
-        AiRequest hiddenRequest = request(AiRequestMode.HIDDEN);
-        AiRequest dialogRequest = request(AiRequestMode.HIDDEN_WITH_CANCEL_DIALOG);
+        ResolvedAiRequest hiddenRequest = request(AiRequestMode.HIDDEN);
+        ResolvedAiRequest dialogRequest = request(AiRequestMode.HIDDEN_WITH_CANCEL_DIALOG);
 
         uut.askAi(hiddenRequest, hiddenHandle);
         uut.askAi(dialogRequest, dialogHandle);
@@ -98,13 +99,15 @@ public class AiRequestExecutionCoordinatorTest {
         assertThat(executor.submitted.get(0)).isNotSameAs(executor.submitted.get(1));
     }
 
-    private AiRequest request(AiRequestMode mode) {
-        return new AiRequest(
+    private ResolvedAiRequest request(AiRequestMode mode) {
+        return new ResolvedAiRequest(
             "Prompt",
+            null,
+            Duration.ofSeconds(10),
+            mode,
             AiModelSelection.current(),
             AiToolAvailability.CURRENT,
-            mode,
-            Duration.ofSeconds(10));
+            (AiSelectionOverride) null);
     }
 
     private static class RecordingExecutor extends AbstractExecutorService {

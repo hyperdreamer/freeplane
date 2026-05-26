@@ -2,7 +2,7 @@ package org.freeplane.api.ai;
 
 import java.util.Objects;
 
-/** Explicit or current model selection for an {@link AiRequest}.
+/** Explicit or current model selection for an {@link AiRequestOptions}.
  * @since 1.13.3 */
 public class AiModelSelection {
     private final String providerName;

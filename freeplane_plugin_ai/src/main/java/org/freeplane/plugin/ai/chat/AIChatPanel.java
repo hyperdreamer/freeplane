@@ -1,11 +1,8 @@
 package org.freeplane.plugin.ai.chat;
 
-import org.freeplane.api.ai.AiRequest;
-import org.freeplane.api.ai.AiRequestCallback;
 import org.freeplane.api.ai.AiRequestHandle;
 import org.freeplane.api.ai.AiRequestResult;
 import org.freeplane.api.ai.AiRequestStatus;
-import org.freeplane.api.ai.AiRequestMode;
 import org.freeplane.api.ai.AiSelectionOverride;
 import org.freeplane.api.ai.AiToolAvailability;
 import org.freeplane.core.resources.IFreeplanePropertyListener;
@@ -681,11 +678,11 @@ public class AIChatPanel extends JPanel {
         }
     }
 
-    AiRequestHandle askAi(AiRequest request, AiRequestHandleImpl handle) {
+    AiRequestHandle askAi(ResolvedAiRequest request, AiRequestHandleImpl handle) {
         return aiRequestExecutionCoordinator.askAi(request, handle);
     }
 
-    void startShownAiRequest(AiRequest request,
+    void startShownAiRequest(ResolvedAiRequest request,
                              AiRequestHandleImpl handle,
                              AiRequestTimeoutController timeoutController) {
         if (handle.isDone()) {
@@ -706,7 +703,7 @@ public class AIChatPanel extends JPanel {
         ChatMemory promptChatMemory = createChatMemory();
         LiveChatSessionId sessionId = liveChatController.startNewPromptChat(
             promptChatMemory,
-            promptDisplayName(request.getName()),
+            promptDisplayName(request.getPromptDisplayName()),
             selectedModelOverride,
             toolAvailabilityOverride);
         ChatTokenUsageTracker requestTokenUsageTracker = createRequestTokenUsageTracker(sessionId);
@@ -737,7 +734,7 @@ public class AIChatPanel extends JPanel {
             requestTokenUsageTracker,
             sessionId);
         boolean started = chatPromptRunner.startShownPrompt(
-            request.getPrompt(),
+            request.getPromptText(),
             selectedModelOverride,
             resolvedToolAvailability,
             resolveSelectionOverride(request.getSelectionOverride()),
@@ -749,7 +746,7 @@ public class AIChatPanel extends JPanel {
         timeoutController.armAfterStart();
     }
 
-    ChatRequestFlow startAddToChatAiRequestAtDispatch(AiRequest request, AiRequestHandleImpl handle) {
+    ChatRequestFlow startAddToChatAiRequestAtDispatch(ResolvedAiRequest request, AiRequestHandleImpl handle) {
         if (handle.isDone()) {
             return null;
         }
@@ -759,8 +756,8 @@ public class AIChatPanel extends JPanel {
         }
         else {
             sessionId = liveChatController.startNewChat();
-            if (request.getName() != null) {
-                liveChatController.renameSession(sessionId, request.getName());
+            if (request.getPromptDisplayName() != null) {
+                liveChatController.renameSession(sessionId, request.getPromptDisplayName());
             }
         }
         if (sessionId == null || handle.isDone()) {
@@ -798,7 +795,7 @@ public class AIChatPanel extends JPanel {
         }
         boolean started = startVisibleRequest(
             sessionId,
-            request.getPrompt(),
+            request.getPromptText(),
             requestService,
             requestFlow,
             requestTokenUsageTracker,
@@ -809,7 +806,7 @@ public class AIChatPanel extends JPanel {
         return started ? requestFlow : null;
     }
 
-    void startHiddenAiRequest(AiRequest request,
+    void startHiddenAiRequest(ResolvedAiRequest request,
                               AiRequestHandleImpl handle,
                               boolean showProgressDialog,
                               AiRequestTimeoutController timeoutController) {
@@ -844,8 +841,8 @@ public class AIChatPanel extends JPanel {
         }
         HiddenAiRequestObserverBridge hiddenRequestObserver = hiddenAiRequestObserverFactory.create(handle);
         boolean started = chatPromptRunner.submitHiddenRequest(
-            request.getName(),
-            request.getPrompt(),
+            request.getPromptDisplayName(),
+            request.getPromptText(),
             selectedModelOverride,
             resolvedToolAvailability,
             resolveSelectionOverride(request.getSelectionOverride()),
@@ -902,7 +899,7 @@ public class AIChatPanel extends JPanel {
     }
 
     private void applyAddToChatSessionOverrides(LiveChatSessionId sessionId,
-                                                AiRequest request,
+                                                ResolvedAiRequest request,
                                                 String selectedModelOverride) {
         if (!request.getModelSelection().isCurrent()) {
             liveChatController.setSessionSelectedModelOverride(sessionId, selectedModelOverride);

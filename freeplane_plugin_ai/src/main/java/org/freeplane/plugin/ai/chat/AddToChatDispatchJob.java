@@ -2,18 +2,17 @@ package org.freeplane.plugin.ai.chat;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.swing.SwingUtilities;
-import org.freeplane.api.ai.AiRequest;
 
 class AddToChatDispatchJob implements Runnable {
     private final AIChatPanel aiChatPanel;
-    private final AiRequest request;
+    private final ResolvedAiRequest request;
     private final AiRequestHandleImpl handle;
     private final AiRequestTimeoutController timeoutController;
     private final AtomicBoolean dispatchStarted = new AtomicBoolean(false);
     private volatile ChatRequestFlow activeFlow;
 
     AddToChatDispatchJob(AIChatPanel aiChatPanel,
-                         AiRequest request,
+                         ResolvedAiRequest request,
                          AiRequestHandleImpl handle,
                          AiRequestTimeoutController timeoutController) {
         this.aiChatPanel = aiChatPanel;

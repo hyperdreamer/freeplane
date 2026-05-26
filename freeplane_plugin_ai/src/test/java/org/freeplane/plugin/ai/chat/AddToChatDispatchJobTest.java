@@ -5,30 +5,24 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 
-import org.mockito.InOrder;
-
 import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.freeplane.api.ai.AiModelSelection;
-import org.freeplane.api.ai.AiRequest;
 import org.freeplane.api.ai.AiRequestMode;
 import org.freeplane.api.ai.AiRequestStatus;
+import org.freeplane.api.ai.AiSelectionOverride;
 import org.freeplane.api.ai.AiToolAvailability;
 import org.junit.Test;
+import org.mockito.InOrder;
 
 public class AddToChatDispatchJobTest {
 
     @Test
     public void cancelBeforeDispatchCompletesCancelledWithoutStartingRequest() throws Exception {
         AIChatPanel aiChatPanel = mock(AIChatPanel.class);
-        AiRequest request = new AiRequest(
-            "Prompt",
-            AiModelSelection.current(),
-            AiToolAvailability.CURRENT,
-            AiRequestMode.ADD_TO_CHAT,
-            Duration.ofSeconds(10));
+        ResolvedAiRequest request = request();
         CountDownLatch callbackLatch = new CountDownLatch(1);
         AtomicReference<AiRequestStatus> seenStatus = new AtomicReference<AiRequestStatus>();
         AiRequestHandleImpl handle = new AiRequestHandleImpl(Runnable::run, result -> {
@@ -96,12 +90,14 @@ public class AddToChatDispatchJobTest {
         inOrder.verify(timeoutController).armAfterStart();
     }
 
-    private AiRequest request() {
-        return new AiRequest(
+    private ResolvedAiRequest request() {
+        return new ResolvedAiRequest(
             "Prompt",
+            null,
+            Duration.ofSeconds(10),
+            AiRequestMode.ADD_TO_CHAT,
             AiModelSelection.current(),
             AiToolAvailability.CURRENT,
-            AiRequestMode.ADD_TO_CHAT,
-            Duration.ofSeconds(10));
+            (AiSelectionOverride) null);
     }
 }

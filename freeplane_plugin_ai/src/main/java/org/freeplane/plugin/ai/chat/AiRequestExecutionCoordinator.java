@@ -5,7 +5,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadFactory;
-import org.freeplane.api.ai.AiRequest;
 import org.freeplane.api.ai.AiRequestHandle;
 import org.freeplane.api.ai.AiRequestMode;
 import org.freeplane.api.ai.AiRequestResult;
@@ -45,7 +44,7 @@ class AiRequestExecutionCoordinator {
         this.addToChatExecutor = Objects.requireNonNull(addToChatExecutor, "addToChatExecutor");
     }
 
-    AiRequestHandle askAi(AiRequest request, AiRequestHandleImpl handle) {
+    AiRequestHandle askAi(ResolvedAiRequest request, AiRequestHandleImpl handle) {
         if (handle.isDone()) {
             return handle;
         }
@@ -73,7 +72,7 @@ class AiRequestExecutionCoordinator {
         }
     }
 
-    private void submitAddToChat(AiRequest request, AiRequestHandleImpl handle) {
+    private void submitAddToChat(ResolvedAiRequest request, AiRequestHandleImpl handle) {
         AddToChatDispatchJob job = addToChatDispatchJobFactory.create(
             request,
             handle,

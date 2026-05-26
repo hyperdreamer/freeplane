@@ -4,7 +4,6 @@ import java.util.Objects;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
-import org.freeplane.api.ai.AiRequest;
 
 class AiRequestTimeoutControllerFactory {
     private static final ScheduledExecutorService TIMEOUT_EXECUTOR = Executors.newSingleThreadScheduledExecutor(
@@ -27,7 +26,7 @@ class AiRequestTimeoutControllerFactory {
         this.timeoutScheduler = Objects.requireNonNull(timeoutScheduler, "timeoutScheduler");
     }
 
-    AiRequestTimeoutController create(AiRequest request, AiRequestHandleImpl handle) {
+    AiRequestTimeoutController create(ResolvedAiRequest request, AiRequestHandleImpl handle) {
         return new AiRequestTimeoutController(handle, timeoutScheduler, request.getTimeout());
     }
 }

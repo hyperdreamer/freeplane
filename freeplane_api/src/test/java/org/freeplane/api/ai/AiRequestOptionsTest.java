@@ -7,21 +7,58 @@ import static org.mockito.Mockito.mock;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
+import org.freeplane.api.Controller;
 import org.freeplane.api.MindMap;
 import org.junit.Test;
 
-public class AiRequestTest {
+public class AiRequestOptionsTest {
+
+    @Test
+    public void rejectsMissingTimeout() {
+        assertThatThrownBy(() -> AiRequestOptions.builder().build())
+            .isInstanceOf(NullPointerException.class)
+            .hasMessageContaining("timeout");
+    }
 
     @Test
     public void rejectsNonPositiveTimeout() {
-        assertThatThrownBy(() -> new AiRequest(
-            "Prompt",
-            AiModelSelection.current(),
-            AiToolAvailability.CURRENT,
-            AiRequestMode.HIDDEN,
-            Duration.ZERO))
+        assertThatThrownBy(() -> AiRequestOptions.builder().timeout(Duration.ZERO).build())
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("timeout");
+    }
+
+    @Test
+    public void builderAllowsOptionalFieldsToRemainNull() {
+        AiRequestOptions options = AiRequestOptions.builder()
+            .timeout(Duration.ofSeconds(10))
+            .build();
+
+        assertThat(options.getTimeout()).isEqualTo(Duration.ofSeconds(10));
+        assertThat(options.getMode()).isNull();
+        assertThat(options.getModelSelection()).isNull();
+        assertThat(options.getToolAvailability()).isNull();
+        assertThat(options.getSelectionOverride()).isNull();
+    }
+
+    @Test
+    public void builderExposesExplicitFieldValues() {
+        MindMap mindMap = mock(MindMap.class);
+        AiSelectionOverride override = new AiSelectionOverride(mindMap, Collections.singletonList("ID_1"));
+
+        AiRequestOptions options = AiRequestOptions.builder()
+            .timeout(Duration.ofSeconds(10))
+            .mode(AiRequestMode.ADD_TO_CHAT)
+            .modelSelection(AiModelSelection.explicit("openrouter", "openai/gpt-4.1-mini"))
+            .toolAvailability(AiToolAvailability.READING)
+            .selectionOverride(override)
+            .build();
+
+        assertThat(options.getTimeout()).isEqualTo(Duration.ofSeconds(10));
+        assertThat(options.getMode()).isEqualTo(AiRequestMode.ADD_TO_CHAT);
+        assertThat(options.getModelSelection())
+            .isEqualTo(AiModelSelection.explicit("openrouter", "openai/gpt-4.1-mini"));
+        assertThat(options.getToolAvailability()).isEqualTo(AiToolAvailability.READING);
+        assertThat(options.getSelectionOverride()).isSameAs(override);
     }
 
     @Test
@@ -53,22 +90,6 @@ public class AiRequestTest {
     }
 
     @Test
-    public void requestExposesOptionalSelectionOverride() {
-        MindMap mindMap = mock(MindMap.class);
-        AiSelectionOverride override = new AiSelectionOverride(mindMap, Collections.singletonList("ID_1"));
-
-        AiRequest request = new AiRequest(
-            "Prompt",
-            AiModelSelection.current(),
-            AiToolAvailability.READING,
-            AiRequestMode.HIDDEN,
-            Duration.ofSeconds(10),
-            override);
-
-        assertThat(request.getSelectionOverride()).isSameAs(override);
-    }
-
-    @Test
     public void exposesStablePublicEnumValues() {
         assertThat(AiRequestMode.values()).extracting(Enum::name)
             .containsExactly("SHOW_IN_CHAT", "ADD_TO_CHAT", "HIDDEN_WITH_CANCEL_DIALOG", "HIDDEN");
@@ -80,6 +101,7 @@ public class AiRequestTest {
                 "REJECTED_BUSY",
                 "PERMISSION_DENIED",
                 "AI_UNAVAILABLE",
+                "PROMPT_NOT_FOUND",
                 "CONFIGURATION_ERROR",
                 "AUTHENTICATION_ERROR",
                 "MODEL_UNAVAILABLE",
@@ -91,7 +113,7 @@ public class AiRequestTest {
 
     @Test
     public void keepsPublicAiTypesInAiPackage() {
-        assertThat(AiRequest.class.getPackage().getName()).isEqualTo("org.freeplane.api.ai");
+        assertThat(AiRequestOptions.class.getPackage().getName()).isEqualTo("org.freeplane.api.ai");
         assertThat(AiRequestResult.class.getPackage().getName()).isEqualTo("org.freeplane.api.ai");
         assertThat(AiModelSelection.class.getPackage().getName()).isEqualTo("org.freeplane.api.ai");
         assertThat(AiSelectionOverride.class.getPackage().getName()).isEqualTo("org.freeplane.api.ai");
@@ -102,6 +124,15 @@ public class AiRequestTest {
         assertThat(AiToolAvailability.class.getPackage().getName()).isEqualTo("org.freeplane.api.ai");
         assertThat(AiRequestStatus.class.getPackage().getName()).isEqualTo("org.freeplane.api.ai");
         assertThat(AiRequestService.class.getPackage().getName()).isEqualTo("org.freeplane.api.ai");
+    }
+
+    @Test
+    public void controllerExposesOnlyCurrentAiMethodSignatures() {
+        assertThat(Controller.class.getMethods())
+            .extracting(method -> method.getName() + "(" + Arrays.toString(method.getParameterTypes()) + ")")
+            .anyMatch(signature -> signature.contains("askAi") && signature.contains("AiRequestOptions"))
+            .anyMatch(signature -> signature.contains("runAiPrompt") && signature.contains("Duration"))
+            .anyMatch(signature -> signature.contains("runAiPrompt") && signature.contains("AiRequestOptions"));
     }
 
     @Test

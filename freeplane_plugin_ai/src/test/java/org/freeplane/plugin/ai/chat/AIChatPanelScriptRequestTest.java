@@ -28,7 +28,6 @@ import javax.swing.JButton;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
 import org.freeplane.api.ai.AiModelSelection;
-import org.freeplane.api.ai.AiRequest;
 import org.freeplane.api.ai.AiRequestMode;
 import org.freeplane.api.ai.AiRequestStatus;
 import org.freeplane.api.ai.AiToolAvailability;
@@ -85,12 +84,14 @@ public class AIChatPanelScriptRequestTest {
         AtomicReference<ChatToolAvailability> seenToolAvailability = new AtomicReference<ChatToolAvailability>();
         LiveChatSessionId originalSessionId = harness.sessionId;
         String explicitSelection = "openrouter|openai/gpt-4.1-mini";
-        AiRequest request = new AiRequest(
+        ResolvedAiRequest request = new ResolvedAiRequest(
             "Prompt",
+            null,
+            Duration.ofSeconds(10),
+            AiRequestMode.ADD_TO_CHAT,
             AiModelSelection.explicit("openrouter", "openai/gpt-4.1-mini"),
             AiToolAvailability.DISABLED,
-            AiRequestMode.ADD_TO_CHAT,
-            Duration.ofSeconds(10));
+            null);
         AiRequestHandleImpl handle = new AiRequestHandleImpl(Runnable::run, result -> {
         });
 
@@ -149,12 +150,14 @@ public class AIChatPanelScriptRequestTest {
         when(chatRequestFlowFactory.create(any(), any())).thenReturn(requestFlow);
         setField(harness.panel, "chatRequestFlowFactory", chatRequestFlowFactory);
         LiveChatSessionId originalSessionId = harness.sessionId;
-        AiRequest request = new AiRequest(
+        ResolvedAiRequest request = new ResolvedAiRequest(
             "Prompt",
+            null,
+            Duration.ofSeconds(10),
+            AiRequestMode.ADD_TO_CHAT,
             AiModelSelection.current(),
             AiToolAvailability.CURRENT,
-            AiRequestMode.ADD_TO_CHAT,
-            Duration.ofSeconds(10));
+            null);
 
         try (MockedStatic<TextUtils> textUtils = mockStatic(TextUtils.class);
              MockedStatic<ResourceController> resourceControllers = mockStatic(ResourceController.class);
@@ -192,6 +195,62 @@ public class AIChatPanelScriptRequestTest {
         }
 
         assertThat(harness.liveChatController.currentSessionId()).isNotEqualTo(originalSessionId);
+        assertThat(currentSession(harness.liveChatController).isNameEdited()).isFalse();
+    }
+
+    @Test
+    public void addToChatNewSessionUsesResolvedPromptDisplayNameWhenProvided() throws Exception {
+        PanelHarness harness = newPanelHarness(false);
+        ChatRequestFlow requestFlow = mock(ChatRequestFlow.class);
+        ChatRequestFlowFactory chatRequestFlowFactory = mock(ChatRequestFlowFactory.class);
+        when(chatRequestFlowFactory.create(any(), any())).thenReturn(requestFlow);
+        setField(harness.panel, "chatRequestFlowFactory", chatRequestFlowFactory);
+        ResolvedAiRequest request = new ResolvedAiRequest(
+            "Prompt",
+            "Rewrite",
+            Duration.ofSeconds(10),
+            AiRequestMode.ADD_TO_CHAT,
+            AiModelSelection.current(),
+            AiToolAvailability.CURRENT,
+            null);
+
+        try (MockedStatic<TextUtils> textUtils = mockStatic(TextUtils.class);
+             MockedStatic<ResourceController> resourceControllers = mockStatic(ResourceController.class);
+             MockedStatic<UITools> uiTools = mockStatic(UITools.class);
+             MockedStatic<AIChatServiceFactory> chatServiceFactory = mockStatic(AIChatServiceFactory.class);
+             MockedConstruction<AIToolSetBuilder> toolSetBuilders = mockConstruction(AIToolSetBuilder.class,
+                 (mock, context) -> {
+                     when(mock.toolCallSummaryHandler(any())).thenReturn(mock);
+                     when(mock.availableMaps(any())).thenReturn(mock);
+                     when(mock.mapAccessListener(any())).thenReturn(mock);
+                     when(mock.build()).thenReturn(mock(AIToolSet.class));
+                 })) {
+            ResourceController resourceController = mock(ResourceController.class);
+            resourceControllers.when(ResourceController::getResourceController).thenReturn(resourceController);
+            JTabbedPane tabs = mock(JTabbedPane.class);
+            when(tabs.getSelectedComponent()).thenReturn(new javax.swing.JPanel());
+            uiTools.when(UITools::getFreeplaneTabbedPanel).thenReturn(tabs);
+            chatServiceFactory.when(() -> AIChatServiceFactory.createService(
+                any(AIToolSet.class),
+                any(ChatMemory.class),
+                any(ChatTokenUsageTracker.class),
+                any(ToolCallSummaryHandler.class),
+                org.mockito.ArgumentMatchers.<Supplier<Boolean>>any(),
+                org.mockito.ArgumentMatchers.<Consumer<TokenUsage>>any(),
+                org.mockito.ArgumentMatchers.<Supplier<ChatToolAvailability>>any(),
+                nullable(String.class)))
+                .thenReturn(mock(AIChatService.class));
+
+            ChatRequestFlow started = harness.panel.startAddToChatAiRequestAtDispatch(
+                request,
+                new AiRequestHandleImpl(Runnable::run, result -> {
+                }));
+
+            assertThat(started).isSameAs(requestFlow);
+        }
+
+        assertThat(currentSession(harness.liveChatController).getDisplayName()).isEqualTo("Rewrite");
+        assertThat(currentSession(harness.liveChatController).isNameEdited()).isTrue();
     }
 
     @Test
@@ -206,12 +265,14 @@ public class AIChatPanelScriptRequestTest {
         setField(harness.panel, "chatRequestFlowFactory", chatRequestFlowFactory);
         AtomicReference<String> seenSelectedModel = new AtomicReference<String>();
         AtomicReference<ChatToolAvailability> seenToolAvailability = new AtomicReference<ChatToolAvailability>();
-        AiRequest request = new AiRequest(
+        ResolvedAiRequest request = new ResolvedAiRequest(
             "Prompt",
+            null,
+            Duration.ofSeconds(10),
+            AiRequestMode.ADD_TO_CHAT,
             AiModelSelection.current(),
             AiToolAvailability.CURRENT,
-            AiRequestMode.ADD_TO_CHAT,
-            Duration.ofSeconds(10));
+            null);
 
         try (MockedStatic<TextUtils> textUtils = mockStatic(TextUtils.class);
              MockedStatic<ResourceController> resourceControllers = mockStatic(ResourceController.class);
@@ -273,12 +334,14 @@ public class AIChatPanelScriptRequestTest {
         });
 
         ChatRequestFlow started = harness.panel.startAddToChatAiRequestAtDispatch(
-            new AiRequest(
+            new ResolvedAiRequest(
                 "Prompt",
+                null,
+                Duration.ofSeconds(10),
+                AiRequestMode.ADD_TO_CHAT,
                 AiModelSelection.current(),
                 AiToolAvailability.CURRENT,
-                AiRequestMode.ADD_TO_CHAT,
-                Duration.ofSeconds(10)),
+                null),
             handle);
 
         assertThat(started).isNull();
@@ -498,6 +561,13 @@ public class AIChatPanelScriptRequestTest {
         Field field = AIChatPanel.class.getDeclaredField(fieldName);
         field.setAccessible(true);
         field.set(target, value);
+    }
+
+    private LiveChatSession currentSession(LiveChatController liveChatController) throws Exception {
+        Field sessionManagerField = LiveChatController.class.getDeclaredField("liveChatSessionManager");
+        sessionManagerField.setAccessible(true);
+        LiveChatSessionManager sessionManager = (LiveChatSessionManager) sessionManagerField.get(liveChatController);
+        return sessionManager.getCurrentSession();
     }
 
     private static class CapturingChatRequestFlowFactory extends ChatRequestFlowFactory {

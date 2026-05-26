@@ -4,14 +4,19 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 import dev.langchain4j.memory.ChatMemory;
+import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.freeplane.api.ai.AiModelSelection;
+import org.freeplane.api.ai.AiRequestMode;
+import org.freeplane.api.ai.AiSelectionOverride;
+import org.freeplane.api.ai.AiToolAvailability;
+import org.freeplane.features.text.TextController;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.freeplane.plugin.ai.prompt.AiPromptProgressDialogFactory;
 import org.freeplane.plugin.ai.prompt.AiPromptRequestComposer;
 import org.freeplane.plugin.ai.prompt.HiddenAiRequestObserverFactory;
 import org.freeplane.plugin.ai.prompt.HiddenPromptRequestRunner;
 import org.freeplane.plugin.ai.prompt.HiddenPromptRequestRunnerFactory;
-import org.freeplane.features.text.TextController;
 import org.junit.Test;
 
 public class RequestRuntimeFactoryTest {
@@ -88,12 +93,14 @@ public class RequestRuntimeFactoryTest {
 
         AIChatPanel panel = mock(AIChatPanel.class);
         AddToChatDispatchJobFactory jobFactory = new AddToChatDispatchJobFactory(panel);
-        org.freeplane.api.ai.AiRequest request = new org.freeplane.api.ai.AiRequest(
+        ResolvedAiRequest request = new ResolvedAiRequest(
             "Prompt",
-            org.freeplane.api.ai.AiModelSelection.current(),
-            org.freeplane.api.ai.AiToolAvailability.CURRENT,
-            org.freeplane.api.ai.AiRequestMode.ADD_TO_CHAT,
-            java.time.Duration.ofSeconds(10));
+            null,
+            Duration.ofSeconds(10),
+            AiRequestMode.ADD_TO_CHAT,
+            AiModelSelection.current(),
+            AiToolAvailability.CURRENT,
+            (AiSelectionOverride) null);
         AddToChatDispatchJob firstJob = jobFactory.create(
             request,
             new AiRequestHandleImpl(Runnable::run, result -> {

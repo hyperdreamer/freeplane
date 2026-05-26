@@ -1,7 +1,5 @@
 package org.freeplane.plugin.ai.chat;
 
-import org.freeplane.api.ai.AiRequest;
-
 class AddToChatDispatchJobFactory {
     private final AIChatPanel aiChatPanel;
 
@@ -9,7 +7,7 @@ class AddToChatDispatchJobFactory {
         this.aiChatPanel = aiChatPanel;
     }
 
-    AddToChatDispatchJob create(AiRequest request,
+    AddToChatDispatchJob create(ResolvedAiRequest request,
                                 AiRequestHandleImpl handle,
                                 AiRequestTimeoutController timeoutController) {
         return new AddToChatDispatchJob(aiChatPanel, request, handle, timeoutController);
