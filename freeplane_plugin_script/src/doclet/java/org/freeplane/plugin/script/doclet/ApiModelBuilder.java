@@ -125,6 +125,8 @@ final class ApiModelBuilder {
     private String buildGuideText() {
         return String.join("\n",
             "Use API groups for the full merged documentation and Packages for the exact package/type index.",
+            "This mind map is large. Search before reading any branch in depth so you only read relevant parts.",
+            "Scanning API-group labels for orientation is fine before reading details.",
             "Search under API groups when you want the primary member documentation.",
             "Search under Packages when you want exact package placement or exact type names.",
             "Exact containing types can appear in multiple branches because later Packages appearances clone earlier API-groups type nodes.",

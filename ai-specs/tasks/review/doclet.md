@@ -46,6 +46,9 @@
     explains:
     - use `API groups` for full merged documentation,
     - use `Packages` for the exact package/type index,
+    - the map is large, so search before reading any branch in depth,
+    - scanning API-group labels is acceptable for orientation before
+      reading details,
     - clone appearances can duplicate broad search hits,
     - subtree-rooted search can limit results to one branch,
     - capability-marker semantics, and

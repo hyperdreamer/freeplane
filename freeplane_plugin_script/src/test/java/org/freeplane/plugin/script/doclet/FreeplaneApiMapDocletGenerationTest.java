@@ -52,7 +52,7 @@ public class FreeplaneApiMapDocletGenerationTest {
         assertThat(xml).contains("TEXT=\"Proxy.NodeRO [interface]\"");
         assertThat(xml).contains("TEXT=\"NodeRO [interface]\"");
         assertThat(xml).contains("TEXT=\"SampleUtility [class]\"");
-        assertThat(xml).contains("TEXT=\"Use API groups for the full merged documentation and Packages for the exact package/type index.\nSearch under API groups when you want the primary member documentation.");
+        assertThat(xml).contains("TEXT=\"Use API groups for the full merged documentation and Packages for the exact package/type index.\nThis mind map is large. Search before reading any branch in depth so you only read relevant parts.\nScanning API-group labels for orientation is fine before reading details.\nSearch under API groups when you want the primary member documentation.");
         assertThat(xml).contains("CONTENT_ID=\"");
         assertThat(xml).doesNotContain("TEXT=\"contains(text: String): boolean [read-write]\"");
         assertThat(xml).doesNotContain("TEXT=\"Concepts\"");
