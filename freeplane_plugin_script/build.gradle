@@ -4,19 +4,27 @@ sourceSets {
             srcDir 'src/doclet/java'
         }
         resources {
-            srcDirs = []
+            srcDirs = ['src/doclet/resources']
         }
         compileClasspath += sourceSets.main.compileClasspath
         runtimeClasspath += output + compileClasspath
     }
-    test {
-        compileClasspath += sourceSets.doclet.output
-        runtimeClasspath += sourceSets.doclet.output
+    docletTest {
+        java {
+            srcDir 'src/docletTest/java'
+        }
+        resources {
+            srcDirs = []
+        }
+        compileClasspath += sourceSets.test.compileClasspath + sourceSets.doclet.output
+        runtimeClasspath += output + sourceSets.test.runtimeClasspath + sourceSets.doclet.output
     }
 }
 
 configurations {
     docletImplementation.extendsFrom implementation
+    docletTestImplementation.extendsFrom testImplementation
+    docletTestRuntimeOnly.extendsFrom testRuntimeOnly
 }
 
 dependencies {
@@ -48,8 +56,31 @@ tasks.named('compileDocletJava', JavaCompile) {
     options.release = 17
 }
 
-tasks.named('compileTestJava', JavaCompile) {
+tasks.named('compileDocletTestJava', JavaCompile) {
     dependsOn tasks.named('docletClasses')
+}
+
+task docletTest(type: Test) {
+    testClassesDirs = sourceSets.docletTest.output.classesDirs
+    classpath = sourceSets.docletTest.runtimeClasspath
+}
+
+check.dependsOn docletTest
+
+eclipse {
+    classpath {
+        file {
+            whenMerged { classpath ->
+                classpath.entries.removeAll { entry ->
+                    entry.kind == 'src' && entry.path in [
+                        'src/doclet/java',
+                        'src/doclet/resources',
+                        'src/docletTest/java'
+                    ]
+                }
+            }
+        }
+    }
 }
 
 ext.bundleImports = 'de.sciss.syntaxpane.*'
@@ -134,6 +165,7 @@ javadoc {
 task generateFreeplaneApiMap(type: Javadoc) {
     configureScriptingApiJavadocTask(delegate, true)
     mustRunAfter tasks.named('javadoc')
+    mustRunAfter rootProject.tasks.named('cleanBUILD')
 }
 
 // TODO: this doesn't work yet!

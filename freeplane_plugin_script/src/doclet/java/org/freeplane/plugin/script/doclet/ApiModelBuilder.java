@@ -36,6 +36,7 @@ import jdk.javadoc.doclet.DocletEnvironment;
 final class ApiModelBuilder {
     private static final String ROOT_TITLE = "Freeplane scripting API";
     private static final String HOW_TO_USE_LABEL = "How to use this map";
+    private static final String API_MAP_GUIDE_RESOURCE = "/org/freeplane/plugin/script/doclet/api-map-how-to-use.txt";
     private static final String API_GROUPS_SECTION_LABEL = "API groups";
     private static final String PACKAGES_SECTION_LABEL = "Packages";
     private static final String TYPE_LABEL = "Type";
@@ -123,19 +124,7 @@ final class ApiModelBuilder {
     }
 
     private String buildGuideText() {
-        return String.join("\n",
-            "Use API groups for the full merged documentation and Packages for the exact package/type index.",
-            "This mind map is large. Search before reading any branch in depth so you only read relevant parts.",
-            "Scanning API-group labels for orientation is fine before reading details.",
-            "Search under API groups when you want the primary member documentation.",
-            "Search under Packages when you want exact package placement or exact type names.",
-            "Exact containing types can appear in multiple branches because later Packages appearances clone earlier API-groups type nodes.",
-            "If clone duplicates make broad search noisy, restrict search to the subtree root for API groups or Packages.",
-            "Property markers use getter/setter semantics: [read], [write], [read-write].",
-            "Method markers use read/write surface semantics only: [read] or [write].",
-            "Within each API group, children appear in this order when present: Properties, Methods, Constants, Nested types.",
-            "Members are ordered alphabetically inside each group.",
-            "Packages shows package structure down to exact classes, interfaces, enums, and inner types, but no member documentation.");
+        return DocletResourceLoader.readUtf8Resource(API_MAP_GUIDE_RESOURCE);
     }
 
     private ApiMapNode buildApiGroupsSection(List<DocumentationFamily> families) {

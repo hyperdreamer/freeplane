@@ -1,0 +1,12 @@
+Use API groups for the full merged documentation and Packages for the exact package/type index.
+This mind map is large. Search before reading any branch in depth so you only read relevant parts.
+Scanning API-group labels for orientation is fine before reading details.
+Search under API groups when you want the primary member documentation.
+Search under Packages when you want exact package placement or exact type names.
+Exact containing types can appear in multiple branches because later Packages appearances clone earlier API-groups type nodes.
+If clone duplicates make broad search noisy, restrict search to the subtree root for API groups or Packages.
+Property markers use getter/setter semantics: [read], [write], [read-write].
+Method markers use read/write surface semantics only: [read] or [write].
+Within each API group, children appear in this order when present: Properties, Methods, Constants, Nested types.
+Members are ordered alphabetically inside each group.
+Packages shows package structure down to exact classes, interfaces, enums, and inner types, but no member documentation.

@@ -36,10 +36,18 @@ public class FreeplaneApiMapDocletGenerationTest {
         String xml = new String(Files.readAllBytes(outputFile.toPath()), StandardCharsets.UTF_8);
         Document document = parseXml(xml);
         Element rootNode = document.getDocumentElement();
+        assertThat(xml).startsWith("<map version=\"freeplane 1.9.8\">");
+        assertThat(xml).doesNotStartWith("<?xml");
+        assertThat(xml).contains("TEXT=\"Freeplane scripting API\"");
+        assertThat(xml).contains("ID=\"ID_TEMPLATE_ROOT\"");
+        assertThat(xml).contains("LINK=\"index.html\"");
+        assertThat(xml).contains("<hook NAME=\"MapStyle\">");
+        assertThat(xml.indexOf("<hook NAME=\"MapStyle\">"))
+            .isLessThan(xml.indexOf("TEXT=\"How to use this map\""));
         assertThat(xml).contains("TEXT=\"How to use this map\"");
-        assertThat(xml).contains("TEXT=\"Packages\" ID=");
+        assertThat(xml).contains("TEXT=\"Packages\"");
         assertThat(xml).contains("POSITION=\"left\"");
-        assertThat(xml).contains("TEXT=\"API groups\" ID=");
+        assertThat(xml).contains("TEXT=\"API groups\"");
         assertThat(xml).contains("POSITION=\"right\"");
         assertThat(xml).contains("TEXT=\"text: String [read-write]\"");
         assertThat(xml).contains("TEXT=\"contains(text: String): boolean [read]\"");
@@ -52,7 +60,10 @@ public class FreeplaneApiMapDocletGenerationTest {
         assertThat(xml).contains("TEXT=\"Proxy.NodeRO [interface]\"");
         assertThat(xml).contains("TEXT=\"NodeRO [interface]\"");
         assertThat(xml).contains("TEXT=\"SampleUtility [class]\"");
-        assertThat(xml).contains("TEXT=\"Use API groups for the full merged documentation and Packages for the exact package/type index.\nThis mind map is large. Search before reading any branch in depth so you only read relevant parts.\nScanning API-group labels for orientation is fine before reading details.\nSearch under API groups when you want the primary member documentation.");
+        assertThat(xml).contains("Use API groups for the full merged documentation and Packages for the exact package/type index.");
+        assertThat(xml).contains("This mind map is large. Search before reading any branch in depth so you only read relevant parts.");
+        assertThat(xml).contains("Scanning API-group labels for orientation is fine before reading details.");
+        assertThat(xml).contains("Search under API groups when you want the primary member documentation.");
         assertThat(xml).contains("CONTENT_ID=\"");
         assertThat(xml).doesNotContain("TEXT=\"contains(text: String): boolean [read-write]\"");
         assertThat(xml).doesNotContain("TEXT=\"Concepts\"");
@@ -205,8 +216,14 @@ public class FreeplaneApiMapDocletGenerationTest {
     }
 
     private String docletClasspath() {
-        return new File(FreeplaneApiMapDoclet.class.getProtectionDomain().getCodeSource().getLocation().getPath())
-            .getAbsolutePath();
+        File classesDir = new File(FreeplaneApiMapDoclet.class.getProtectionDomain().getCodeSource().getLocation().getPath())
+            .getAbsoluteFile();
+        File buildDir = classesDir.getParentFile().getParentFile().getParentFile();
+        File resourcesDir = new File(buildDir, "resources/doclet");
+        if (resourcesDir.isDirectory()) {
+            return classesDir.getAbsolutePath() + File.pathSeparator + resourcesDir.getAbsolutePath();
+        }
+        return classesDir.getAbsolutePath();
     }
 
     private Document parseXml(String xml) throws Exception {

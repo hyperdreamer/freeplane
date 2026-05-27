@@ -7,83 +7,124 @@ import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 
-import javax.xml.stream.XMLOutputFactory;
-import javax.xml.stream.XMLStreamException;
-import javax.xml.stream.XMLStreamWriter;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.transform.OutputKeys;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
+
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.xml.sax.SAXException;
 
 final class FreeplaneMindMapWriter {
-    private static final String MAP_VERSION = "freeplane 1.9.8";
+    static final String TEMPLATE_RESOURCE = "/org/freeplane/plugin/script/doclet/freeplane-api-template.mm";
 
     public void write(ApiMapNode rootNode, File outputFile) throws IOException {
         if (outputFile.getParentFile() != null) {
             outputFile.getParentFile().mkdirs();
         }
-        try (Writer writer = new OutputStreamWriter(new FileOutputStream(outputFile), StandardCharsets.UTF_8)) {
-            XMLStreamWriter xmlWriter = XMLOutputFactory.newFactory().createXMLStreamWriter(writer);
-            writeDocument(rootNode, xmlWriter);
-            xmlWriter.flush();
-            xmlWriter.close();
+        try {
+            Document document = loadTemplateDocument();
+            Element mapElement = requireMapElement(document);
+            Element rootElement = requireSingleRootNode(mapElement);
+            assertTemplateHasNoChildContentNodes(rootElement);
+            for (ApiMapNode child : rootNode.getChildren()) {
+                appendGeneratedNode(document, rootElement, child);
+            }
+            writeDocument(document, outputFile);
         }
-        catch (XMLStreamException error) {
+        catch (ParserConfigurationException error) {
+            throw new IOException("Failed to configure Freeplane API map XML template parser.", error);
+        }
+        catch (SAXException error) {
+            throw new IOException("Failed to parse Freeplane API map template.", error);
+        }
+        catch (TransformerException error) {
             throw new IOException("Failed to write Freeplane API map XML.", error);
         }
     }
 
-    private void writeDocument(ApiMapNode rootNode, XMLStreamWriter xmlWriter) throws XMLStreamException {
-        xmlWriter.writeStartDocument(StandardCharsets.UTF_8.name(), "1.0");
-        xmlWriter.writeCharacters("\n");
-        xmlWriter.writeStartElement("map");
-        xmlWriter.writeAttribute("version", MAP_VERSION);
-        xmlWriter.writeCharacters("\n");
-        xmlWriter.writeComment("To view this file, open it in Freeplane.");
-        xmlWriter.writeCharacters("\n");
-        writeNode(xmlWriter, rootNode, 0, true);
-        xmlWriter.writeEndElement();
-        xmlWriter.writeCharacters("\n");
-        xmlWriter.writeEndDocument();
+    private Document loadTemplateDocument() throws IOException, ParserConfigurationException, SAXException {
+        DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
+        documentBuilderFactory.setNamespaceAware(false);
+        try (java.io.InputStream inputStream = DocletResourceLoader.openRequiredResource(TEMPLATE_RESOURCE)) {
+            return documentBuilderFactory.newDocumentBuilder().parse(inputStream);
+        }
     }
 
-    private void writeNode(XMLStreamWriter xmlWriter, ApiMapNode node, int depth, boolean root)
-        throws XMLStreamException {
-        indent(xmlWriter, depth);
-        xmlWriter.writeStartElement("node");
-        if (!node.isContentClone()) {
-            xmlWriter.writeAttribute("TEXT", node.getText());
+    private Element requireMapElement(Document document) {
+        Element mapElement = document.getDocumentElement();
+        if (mapElement == null || !"map".equals(mapElement.getTagName())) {
+            throw new IllegalStateException("Freeplane API map template must have a <map> root element.");
         }
-        xmlWriter.writeAttribute("ID", NodeIdFactory.createId(node.getLogicalKey()));
-        xmlWriter.writeAttribute("FOLDED", Boolean.toString(node.isFolded()));
+        return mapElement;
+    }
+
+    private Element requireSingleRootNode(Element mapElement) {
+        Element rootNode = null;
+        for (Node child = mapElement.getFirstChild(); child != null; child = child.getNextSibling()) {
+            if (!(child instanceof Element)) {
+                continue;
+            }
+            Element childElement = (Element) child;
+            if (!"node".equals(childElement.getTagName())) {
+                continue;
+            }
+            if (rootNode != null) {
+                throw new IllegalStateException("Freeplane API map template must contain exactly one root <node> element.");
+            }
+            rootNode = childElement;
+        }
+        if (rootNode == null) {
+            throw new IllegalStateException("Freeplane API map template must contain a root <node> element.");
+        }
+        return rootNode;
+    }
+
+    private void assertTemplateHasNoChildContentNodes(Element rootElement) {
+        for (Node child = rootElement.getFirstChild(); child != null; child = child.getNextSibling()) {
+            if (child instanceof Element && "node".equals(((Element) child).getTagName())) {
+                throw new IllegalStateException(
+                    "Freeplane API map template root must not contain preexisting child <node> elements.");
+            }
+        }
+    }
+
+    private void appendGeneratedNode(Document document, Element parent, ApiMapNode node) {
+        Element nodeElement = document.createElement("node");
+        if (!node.isContentClone()) {
+            nodeElement.setAttribute("TEXT", node.getText());
+        }
+        nodeElement.setAttribute("ID", NodeIdFactory.createId(node.getLogicalKey()));
+        nodeElement.setAttribute("FOLDED", Boolean.toString(node.isFolded()));
         if (node.isContentClone()) {
-            xmlWriter.writeAttribute("CONTENT_ID", NodeIdFactory.createId(node.getContentCloneOfLogicalKey()));
+            nodeElement.setAttribute("CONTENT_ID", NodeIdFactory.createId(node.getContentCloneOfLogicalKey()));
         }
         if (node.getPosition() != null && !node.getPosition().isEmpty()) {
-            xmlWriter.writeAttribute("POSITION", node.getPosition());
+            nodeElement.setAttribute("POSITION", node.getPosition());
         }
         if (node.getLink() != null && !node.getLink().isEmpty()) {
-            xmlWriter.writeAttribute("LINK", node.getLink());
+            nodeElement.setAttribute("LINK", node.getLink());
         }
-        if (root) {
-            xmlWriter.writeAttribute("STYLE", "oval");
-        }
-        if (root) {
-            xmlWriter.writeCharacters("\n");
-            indent(xmlWriter, depth + 1);
-            xmlWriter.writeEmptyElement("font");
-            xmlWriter.writeAttribute("SIZE", "18");
-        }
+        parent.appendChild(nodeElement);
         for (ApiMapNode child : node.getChildren()) {
-            xmlWriter.writeCharacters("\n");
-            writeNode(xmlWriter, child, depth + 1, false);
+            appendGeneratedNode(document, nodeElement, child);
         }
-        if (!node.getChildren().isEmpty() || root) {
-            xmlWriter.writeCharacters("\n");
-            indent(xmlWriter, depth);
-        }
-        xmlWriter.writeEndElement();
     }
 
-    private void indent(XMLStreamWriter xmlWriter, int depth) throws XMLStreamException {
-        for (int index = 0; index < depth; index += 1) {
-            xmlWriter.writeCharacters("  ");
+    private void writeDocument(Document document, File outputFile) throws IOException, TransformerException {
+        Transformer transformer = TransformerFactory.newInstance().newTransformer();
+        transformer.setOutputProperty(OutputKeys.ENCODING, StandardCharsets.UTF_8.name());
+        transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
+        transformer.setOutputProperty(OutputKeys.INDENT, "yes");
+        transformer.setOutputProperty("{http://xml.apache.org/xslt}indent-amount", "2");
+        try (Writer writer = new OutputStreamWriter(new FileOutputStream(outputFile), StandardCharsets.UTF_8)) {
+            transformer.transform(new DOMSource(document), new StreamResult(writer));
         }
     }
 }
