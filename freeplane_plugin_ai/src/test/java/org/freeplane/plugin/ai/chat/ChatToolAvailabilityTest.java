@@ -21,8 +21,10 @@ public class ChatToolAvailabilityTest {
             "readNodesWithDescendantsAsPlainText",
             "getSelectedMapAndNodeIdentifiers",
             "searchNodes",
-            "selectSingleNode");
+            "selectSingleNode",
+            "getApiDocumentation");
         assertThat(ChatToolAvailability.READING.allowsTool("selectSingleNode")).isTrue();
+        assertThat(ChatToolAvailability.READING.allowsTool("getApiDocumentation")).isTrue();
         assertThat(ChatToolAvailability.READING.allowsTool("edit")).isFalse();
         assertThat(ChatToolAvailability.READING.includesTools()).isTrue();
     }

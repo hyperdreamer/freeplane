@@ -292,12 +292,12 @@ public class AIToolSet {
         }
     }
 
-    @Tool("Locate the generated Freeplane API documentation map, load it hidden with documentation semantics if needed, and return the map identifier, root node identifier, and map-derived traversal guidance.")
-    public GetApiDocumentationResponse getApiDocumentation() {
+    @Tool("Access Freeplane scripting API documentation.")
+    public String getApiDocumentation() {
         try {
             GetApiDocumentationResponse response = getApiDocumentationTool.getApiDocumentation();
             publishToolCallSummary(getApiDocumentationTool.buildToolCallSummary(response));
-            return response;
+            return getApiDocumentationTool.formatToolResponse(response);
         } catch (RuntimeException error) {
             publishToolCallSummary(getApiDocumentationTool.buildToolCallErrorSummary(error));
             throw error;

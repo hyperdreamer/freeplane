@@ -54,7 +54,8 @@ public enum ChatToolAvailability {
             "readNodesWithDescendantsAsPlainText",
             "getSelectedMapAndNodeIdentifiers",
             "searchNodes",
-            "selectSingleNode");
+            "selectSingleNode",
+            "getApiDocumentation");
     }
 
     private static Set<String> editingToolNames() {

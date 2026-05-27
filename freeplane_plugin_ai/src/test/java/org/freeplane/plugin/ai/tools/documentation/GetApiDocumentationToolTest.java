@@ -35,21 +35,31 @@ public class GetApiDocumentationToolTest {
         AvailableMaps availableMaps = new AvailableMaps(new EmptyMapModelProvider());
         MapModel mapModel = mock(MapModel.class);
         NodeModel rootNode = mock(NodeModel.class);
+        NodeModel packagesNode = mock(NodeModel.class);
+        NodeModel apiGroupsNode = mock(NodeModel.class);
         when(mapModel.getRootNode()).thenReturn(rootNode);
         when(rootNode.getID()).thenReturn(null);
         when(rootNode.createID()).thenReturn("ID_root");
+        when(packagesNode.getID()).thenReturn("ID_packages");
+        when(apiGroupsNode.getID()).thenReturn(null);
+        when(apiGroupsNode.createID()).thenReturn("ID_api_groups");
+        File mapFile = new File("/tmp/freeplane-api.mm");
         ApiDocumentationMapLoader mapLoader = mock(ApiDocumentationMapLoader.class);
         when(mapLoader.loadInstalledApiMap()).thenReturn(
-            new ApiDocumentationMapLoader.LoadedApiDocumentationMap(new File("/tmp/freeplane-api.mm"), mapModel));
+            new ApiDocumentationMapLoader.LoadedApiDocumentationMap(mapFile, mapModel));
         ApiDocumentationStructureSummaryReader summaryReader = mock(ApiDocumentationStructureSummaryReader.class);
-        when(summaryReader.readStructureSummary(mapModel, new File("/tmp/freeplane-api.mm")))
-            .thenReturn("How to use this map\n  Use API groups.\n  Use Packages.");
+        when(summaryReader.findRequiredTopLevelSection(mapModel, mapFile, "Packages")).thenReturn(packagesNode);
+        when(summaryReader.findRequiredTopLevelSection(mapModel, mapFile, "API groups")).thenReturn(apiGroupsNode);
+        when(summaryReader.readStructureSummary(mapModel, mapFile))
+            .thenReturn("How to use this map\n  Search first.");
         GetApiDocumentationTool uut = new GetApiDocumentationTool(availableMaps, mapLoader, summaryReader);
 
         GetApiDocumentationResponse response = uut.getApiDocumentation();
 
         assertThat(response.getRootNodeIdentifier()).isEqualTo("ID_root");
-        assertThat(response.getStructureSummary()).isEqualTo("How to use this map\n  Use API groups.\n  Use Packages.");
+        assertThat(response.getPackagesRootNodeIdentifier()).isEqualTo("ID_packages");
+        assertThat(response.getApiGroupsRootNodeIdentifier()).isEqualTo("ID_api_groups");
+        assertThat(response.getStructureSummary()).isEqualTo("How to use this map\n  Search first.");
         UUID mapIdentifier = UUID.fromString(response.getMapIdentifier());
         assertThat(availableMaps.findMapModel(mapIdentifier)).isSameAs(mapModel);
     }
@@ -60,6 +70,8 @@ public class GetApiDocumentationToolTest {
         MapModel mapModel = mock(MapModel.class);
         NodeModel rootNode = mock(NodeModel.class);
         NodeModel childNode = mock(NodeModel.class);
+        NodeModel packagesNode = mock(NodeModel.class);
+        NodeModel apiGroupsNode = mock(NodeModel.class);
         when(mapModel.getRootNode()).thenReturn(rootNode);
         when(rootNode.getID()).thenReturn("ID_root");
         when(rootNode.getChildren()).thenReturn(Collections.singletonList(childNode));
@@ -67,12 +79,15 @@ public class GetApiDocumentationToolTest {
         when(childNode.getChildren()).thenReturn(Collections.emptyList());
         when(childNode.getParentNode()).thenReturn(rootNode);
         when(childNode.createID()).thenReturn("ID_child");
+        File mapFile = new File("/tmp/freeplane-api.mm");
         ApiDocumentationMapLoader mapLoader = mock(ApiDocumentationMapLoader.class);
         when(mapLoader.loadInstalledApiMap()).thenReturn(
-            new ApiDocumentationMapLoader.LoadedApiDocumentationMap(new File("/tmp/freeplane-api.mm"), mapModel));
+            new ApiDocumentationMapLoader.LoadedApiDocumentationMap(mapFile, mapModel));
         ApiDocumentationStructureSummaryReader summaryReader = mock(ApiDocumentationStructureSummaryReader.class);
-        when(summaryReader.readStructureSummary(mapModel, new File("/tmp/freeplane-api.mm")))
-            .thenReturn("How to use this map\n  Use API groups.\n  Use Packages.");
+        when(summaryReader.findRequiredTopLevelSection(mapModel, mapFile, "Packages")).thenReturn(packagesNode);
+        when(summaryReader.findRequiredTopLevelSection(mapModel, mapFile, "API groups")).thenReturn(apiGroupsNode);
+        when(summaryReader.readStructureSummary(mapModel, mapFile))
+            .thenReturn("How to use this map\n  Search first.");
         GetApiDocumentationTool documentationTool = new GetApiDocumentationTool(availableMaps, mapLoader, summaryReader);
         GetApiDocumentationResponse response = documentationTool.getApiDocumentation();
 
@@ -104,6 +119,23 @@ public class GetApiDocumentationToolTest {
     }
 
     @Test
+    public void formatToolResponse_returnsStructureSummaryAndIdentifiersJson() {
+        AvailableMaps availableMaps = new AvailableMaps(new EmptyMapModelProvider());
+        GetApiDocumentationTool uut = new GetApiDocumentationTool(
+            availableMaps,
+            mock(ApiDocumentationMapLoader.class),
+            mock(ApiDocumentationStructureSummaryReader.class));
+
+        String formatted = uut.formatToolResponse(new GetApiDocumentationResponse(
+            "map-identifier", "root-node", "packages-node", "api-groups-node", "How to use this map\n  Search first."));
+
+        assertThat(formatted).isEqualTo(
+            "How to use this map\n  Search first.\n\n"
+                + "{\"mapIdentifier\":\"map-identifier\",\"rootNodeIdentifier\":\"root-node\","
+                + "\"packagesRootNodeIdentifier\":\"packages-node\",\"apiGroupsRootNodeIdentifier\":\"api-groups-node\"}");
+    }
+
+    @Test
     public void buildToolCallSummary_reportsIdentifiers() {
         AvailableMaps availableMaps = new AvailableMaps(new EmptyMapModelProvider());
         GetApiDocumentationTool uut = new GetApiDocumentationTool(
@@ -112,8 +144,9 @@ public class GetApiDocumentationToolTest {
             mock(ApiDocumentationStructureSummaryReader.class));
 
         assertThat(uut.buildToolCallSummary(new GetApiDocumentationResponse(
-            "map-identifier", "root-node", "How to use this map" )).getSummaryText())
-            .isEqualTo("getApiDocumentation: mapIdentifier=\"map-identifier\", rootNodeIdentifier=\"root-node\"");
+            "map-identifier", "root-node", "packages-node", "api-groups-node", "How to use this map")).getSummaryText())
+            .isEqualTo("getApiDocumentation: mapIdentifier=\"map-identifier\", rootNodeIdentifier=\"root-node\", "
+                + "packagesRootNodeIdentifier=\"packages-node\", apiGroupsRootNodeIdentifier=\"api-groups-node\"");
     }
 
     private static final class EmptyMapModelProvider implements MapModelProvider {

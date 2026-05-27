@@ -31,12 +31,31 @@ public class ApiDocumentationStructureSummaryReaderTest {
         when(apiGroups.getChildren()).thenReturn(Collections.emptyList());
         when(textController.getPlainTransformedTextWithoutNodeNumber(howToUse)).thenReturn("How to use this map");
         when(textController.getPlainTransformedTextWithoutNodeNumber(guide))
-            .thenReturn("Use API groups.\nUse Packages.");
+            .thenReturn("Search first.\nRead likely branches after orientation.");
         when(textController.getPlainTransformedTextWithoutNodeNumber(apiGroups)).thenReturn("API groups");
 
         String summary = uut.readStructureSummary(mapModel, new File("/tmp/freeplane-api.mm"));
 
-        assertThat(summary).isEqualTo("How to use this map\n  Use API groups.\n  Use Packages.");
+        assertThat(summary).isEqualTo(
+            "How to use this map\n  Search first.\n  Read likely branches after orientation.");
+    }
+
+    @Test
+    public void findRequiredTopLevelSection_returnsMatchingNode() {
+        TextController textController = mock(TextController.class);
+        ApiDocumentationStructureSummaryReader uut = new ApiDocumentationStructureSummaryReader(textController);
+        MapModel mapModel = mock(MapModel.class);
+        NodeModel root = mock(NodeModel.class);
+        NodeModel howToUse = mock(NodeModel.class);
+        NodeModel packages = mock(NodeModel.class);
+        when(mapModel.getRootNode()).thenReturn(root);
+        when(root.getChildren()).thenReturn(Arrays.asList(howToUse, packages));
+        when(textController.getPlainTransformedTextWithoutNodeNumber(howToUse)).thenReturn("How to use this map");
+        when(textController.getPlainTransformedTextWithoutNodeNumber(packages)).thenReturn("Packages");
+
+        NodeModel section = uut.findRequiredTopLevelSection(mapModel, new File("/tmp/freeplane-api.mm"), "Packages");
+
+        assertThat(section).isSameAs(packages);
     }
 
     @Test

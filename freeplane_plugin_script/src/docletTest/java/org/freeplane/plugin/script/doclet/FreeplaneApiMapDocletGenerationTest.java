@@ -60,10 +60,9 @@ public class FreeplaneApiMapDocletGenerationTest {
         assertThat(xml).contains("TEXT=\"Proxy.NodeRO [interface]\"");
         assertThat(xml).contains("TEXT=\"NodeRO [interface]\"");
         assertThat(xml).contains("TEXT=\"SampleUtility [class]\"");
-        assertThat(xml).contains("Use API groups for the full merged documentation and Packages for the exact package/type index.");
-        assertThat(xml).contains("This mind map is large. Search before reading any branch in depth so you only read relevant parts.");
-        assertThat(xml).contains("Scanning API-group labels for orientation is fine before reading details.");
-        assertThat(xml).contains("Search under API groups when you want the primary member documentation.");
+        Element howToUseNode = findNodeByTextPrefix(rootNode, "How to use this map");
+        assertThat(howToUseNode).isNotNull();
+        assertThat(immediateChildTexts(howToUseNode)).containsExactly(readGuideText());
         assertThat(xml).contains("CONTENT_ID=\"");
         assertThat(xml).doesNotContain("TEXT=\"contains(text: String): boolean [read-write]\"");
         assertThat(xml).doesNotContain("TEXT=\"Concepts\"");
@@ -224,6 +223,11 @@ public class FreeplaneApiMapDocletGenerationTest {
             return classesDir.getAbsolutePath() + File.pathSeparator + resourcesDir.getAbsolutePath();
         }
         return classesDir.getAbsolutePath();
+    }
+
+    private String readGuideText() {
+        return DocletResourceLoader.readUtf8Resource(
+            "/org/freeplane/plugin/script/doclet/api-map-how-to-use.txt");
     }
 
     private Document parseXml(String xml) throws Exception {

@@ -13,6 +13,9 @@ import org.freeplane.plugin.ai.tools.utilities.ToolCallSummary;
 import org.freeplane.plugin.ai.tools.utilities.ToolCallSummaryFormatter;
 
 public class GetApiDocumentationTool {
+    private static final String PACKAGES_SECTION_LABEL = "Packages";
+    private static final String API_GROUPS_SECTION_LABEL = "API groups";
+
     private final AvailableMaps availableMaps;
     private final ApiDocumentationMapLoader mapLoader;
     private final ApiDocumentationStructureSummaryReader structureSummaryReader;
@@ -34,13 +37,42 @@ public class GetApiDocumentationTool {
         ApiDocumentationMapLoader.LoadedApiDocumentationMap loadedMap = mapLoader.loadInstalledApiMap();
         MapModel mapModel = loadedMap.getMapModel();
         UUID mapIdentifier = availableMaps.getOrCreateMapIdentifier(mapModel);
-        NodeModel rootNode = requireRootNode(mapModel, loadedMap.getMapFile());
-        String rootNodeIdentifier = rootNode.getID();
-        if (rootNodeIdentifier == null) {
-            rootNodeIdentifier = rootNode.createID();
+        File mapFile = loadedMap.getMapFile();
+        NodeModel rootNode = requireRootNode(mapModel, mapFile);
+        NodeModel packagesRootNode = structureSummaryReader.findRequiredTopLevelSection(
+            mapModel, mapFile, PACKAGES_SECTION_LABEL);
+        NodeModel apiGroupsRootNode = structureSummaryReader.findRequiredTopLevelSection(
+            mapModel, mapFile, API_GROUPS_SECTION_LABEL);
+        String structureSummary = structureSummaryReader.readStructureSummary(mapModel, mapFile);
+        return new GetApiDocumentationResponse(
+            mapIdentifier.toString(),
+            nodeIdentifier(rootNode),
+            nodeIdentifier(packagesRootNode),
+            nodeIdentifier(apiGroupsRootNode),
+            structureSummary);
+    }
+
+    public String formatToolResponse(GetApiDocumentationResponse response) {
+        if (response == null) {
+            return "";
         }
-        String structureSummary = structureSummaryReader.readStructureSummary(mapModel, loadedMap.getMapFile());
-        return new GetApiDocumentationResponse(mapIdentifier.toString(), rootNodeIdentifier, structureSummary);
+        StringBuilder result = new StringBuilder();
+        String structureSummary = response.getStructureSummary();
+        if (structureSummary != null && !structureSummary.isEmpty()) {
+            result.append(structureSummary);
+            result.append("\n\n");
+        }
+        result.append('{')
+            .append("\"mapIdentifier\":\"")
+            .append(response.getMapIdentifier())
+            .append("\",\"rootNodeIdentifier\":\"")
+            .append(response.getRootNodeIdentifier())
+            .append("\",\"packagesRootNodeIdentifier\":\"")
+            .append(response.getPackagesRootNodeIdentifier())
+            .append("\",\"apiGroupsRootNodeIdentifier\":\"")
+            .append(response.getApiGroupsRootNodeIdentifier())
+            .append("\"}");
+        return result.toString();
     }
 
     public ToolCallSummary buildToolCallSummary(GetApiDocumentationResponse response) {
@@ -51,6 +83,10 @@ public class GetApiDocumentationTool {
             + ToolCallSummaryFormatter.sanitizeValue(response.getMapIdentifier())
             + "\", rootNodeIdentifier=\""
             + ToolCallSummaryFormatter.sanitizeValue(response.getRootNodeIdentifier())
+            + "\", packagesRootNodeIdentifier=\""
+            + ToolCallSummaryFormatter.sanitizeValue(response.getPackagesRootNodeIdentifier())
+            + "\", apiGroupsRootNodeIdentifier=\""
+            + ToolCallSummaryFormatter.sanitizeValue(response.getApiGroupsRootNodeIdentifier())
             + "\"";
         return new ToolCallSummary("getApiDocumentation", summaryText, false);
     }
@@ -61,6 +97,12 @@ public class GetApiDocumentationTool {
             ? "getApiDocumentation error"
             : "getApiDocumentation error: " + errorMessage;
         return new ToolCallSummary("getApiDocumentation", summaryText, true);
+    }
+
+
+    private String nodeIdentifier(NodeModel nodeModel) {
+        String nodeIdentifier = nodeModel.getID();
+        return nodeIdentifier == null ? nodeModel.createID() : nodeIdentifier;
     }
 
     private NodeModel requireRootNode(MapModel mapModel, File mapFile) {

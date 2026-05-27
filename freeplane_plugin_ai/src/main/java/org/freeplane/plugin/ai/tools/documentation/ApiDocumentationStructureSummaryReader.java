@@ -18,19 +18,24 @@ public class ApiDocumentationStructureSummaryReader {
     }
 
     public String readStructureSummary(MapModel mapModel, File mapFile) {
-        Objects.requireNonNull(mapModel, "mapModel");
-        Objects.requireNonNull(mapFile, "mapFile");
-        NodeModel rootNode = mapModel.getRootNode();
-        NodeModel howToUseNode = findHowToUseNode(rootNode);
-        if (howToUseNode == null) {
-            throw new IllegalStateException(buildMissingHowToUseMessage(mapFile));
-        }
+        NodeModel howToUseNode = findRequiredTopLevelSection(mapModel, mapFile, HOW_TO_USE_LABEL);
         StringBuilder summary = new StringBuilder();
         appendNode(summary, howToUseNode, 0);
         return summary.toString();
     }
 
-    private NodeModel findHowToUseNode(NodeModel rootNode) {
+    public NodeModel findRequiredTopLevelSection(MapModel mapModel, File mapFile, String sectionLabel) {
+        Objects.requireNonNull(mapModel, "mapModel");
+        Objects.requireNonNull(mapFile, "mapFile");
+        Objects.requireNonNull(sectionLabel, "sectionLabel");
+        NodeModel sectionNode = findTopLevelSection(mapModel.getRootNode(), sectionLabel);
+        if (sectionNode != null) {
+            return sectionNode;
+        }
+        throw new IllegalStateException(buildMissingTopLevelSectionMessage(mapFile, sectionLabel));
+    }
+
+    private NodeModel findTopLevelSection(NodeModel rootNode, String sectionLabel) {
         if (rootNode == null) {
             return null;
         }
@@ -39,7 +44,7 @@ public class ApiDocumentationStructureSummaryReader {
             return null;
         }
         for (NodeModel child : children) {
-            if (HOW_TO_USE_LABEL.equals(nodeText(child))) {
+            if (sectionLabel.equals(nodeText(child))) {
                 return child;
             }
         }
@@ -75,8 +80,8 @@ public class ApiDocumentationStructureSummaryReader {
         return text == null ? "" : text;
     }
 
-    private String buildMissingHowToUseMessage(File mapFile) {
+    private String buildMissingTopLevelSectionMessage(File mapFile, String sectionLabel) {
         return "API documentation map is invalid at " + mapFile.getAbsolutePath()
-            + ": missing top-level 'How to use this map' section. Remedy: regenerate freeplane-api.mm from the current build.";
+            + ": missing top-level '" + sectionLabel + "' section. Remedy: regenerate freeplane-api.mm from the current build.";
     }
 }

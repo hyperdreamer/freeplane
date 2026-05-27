@@ -15,8 +15,10 @@
   - Keep the primary artifact as a generated Freeplane `.mm` map.
   - Keep the covered class set aligned with the current curated
     scripting Javadoc source set.
-  - Keep `getApiDocumentation()` narrow. It returns only
-    `mapIdentifier`, `rootNodeIdentifier`, and `structureSummary`.
+  - Keep `getApiDocumentation()` narrow. It returns only a string
+    containing the plain-text `structureSummary` plus JSON data for
+    `mapIdentifier`, `rootNodeIdentifier`,
+    `packagesRootNodeIdentifier`, and `apiGroupsRootNodeIdentifier`.
   - Keep HTML Javadoc as the human/deep-reference companion.
   - Do not commit the generated `freeplane-api.mm` file.
   - The generated map must remain present after `gradle build`.
@@ -98,9 +100,14 @@
   - Keep method capability markers to `[read]` or `[write]` only, based
     on read/write surface availability.
   - Keep property markers on getter/setter semantics.
-  - Keep the guide text explicit that the map is large, that broad
-    orientation via API-group labels is acceptable, and that search
+  - Keep the guide text explicit that the map is large, that shallow
+    orientation under `API groups` is acceptable, and that search
     should precede in-depth reading.
+  - Teach concrete search patterns in tool terms: use `searchNodes`
+    with short text queries likely to appear in the documentation text,
+    avoid full path strings and broad request phrases, and switch to
+    `readNodesWithDescendants` plus branch reading for orientation when
+    `searchNodes` is noisy.
 - **Test specification:**
   - **Automated tests:**
     - `gradle :freeplane_plugin_script:test -Djava.net.preferIPv6Addresses=true -Djava.awt.headless=true`
@@ -142,8 +149,10 @@
 - **Motivation:** Agents need a lightweight discovery entry point for
   the generated map before using broader content and search tools.
 - **Constraints:**
-  - Return only `mapIdentifier`, `rootNodeIdentifier`, and
-    `structureSummary`.
+  - Return only a string containing the plain-text
+    `structureSummary` plus JSON data for `mapIdentifier`,
+    `rootNodeIdentifier`, `packagesRootNodeIdentifier`, and
+    `apiGroupsRootNodeIdentifier`.
   - If the API map is missing or invalid, return explicit errors only.
   - Keep broader documentation-query tooling out of this increment.
 - **Briefing:** Relevant files are
@@ -167,10 +176,13 @@
     `ApiDocumentationMapLoader`, and
     `ApiDocumentationStructureSummaryReader`.
   - Resolve the generated map from the installation `doc/api`
-    directory, load/register it hidden, and return the resulting
-    identifiers.
+    directory, load/register it hidden, and return the root plus
+    top-level `Packages` and `API groups` subtree identifiers.
   - Read `structureSummary` from the `How to use this map` subtree and
     preserve each physical line of the guide leaf.
+  - Expose the tool result as a string: the plain-text
+    `structureSummary`, followed by JSON containing the returned
+    identifiers.
   - Use explicit missing-map and invalid-map errors with remedy text.
 - **Test specification:**
   - **Automated tests:**
@@ -180,8 +192,10 @@
   - **Manual tests:**
     - Run `getApiDocumentation()` in an installation containing the
       generated map.
-    - Verify it returns `mapIdentifier`, `rootNodeIdentifier`, and the
-      expected multiline `structureSummary`.
+    - Verify it returns the expected multiline `structureSummary` plus
+      JSON containing `mapIdentifier`, `rootNodeIdentifier`,
+      `packagesRootNodeIdentifier`, and
+      `apiGroupsRootNodeIdentifier`.
     - Verify the missing-map error reports the expected path and remedy.
 
 ## Subtask: Externalize guide text and use a root-template mind map

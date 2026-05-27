@@ -13,7 +13,7 @@ public class FreeplaneMindMapWriterTest {
     public void write_producesDeterministicFreeplaneXml() throws Exception {
         ApiMapNode root = new ApiMapNode("root", "IGNORED GENERATED ROOT", "ignored.html", false);
         ApiMapNode howToUse = new ApiMapNode("section:how", "How to use this map", false);
-        howToUse.addChild(new ApiMapNode("section:how:guide", "Use API groups.\nUse Packages.", false));
+        howToUse.addChild(new ApiMapNode("section:how:guide", "Guide line 1.\nGuide line 2.", false));
         ApiMapNode exactType = new ApiMapNode("exact:type:node-ro", "NodeRO [interface]", false);
         ApiMapNode exactTypeClone = ApiMapNode.contentClone("clone:type:node-ro", "exact:type:node-ro", false);
         root.addChild(howToUse);
@@ -43,8 +43,8 @@ public class FreeplaneMindMapWriterTest {
         assertThat(firstXml).doesNotContain("IGNORED GENERATED ROOT");
         assertThat(firstXml).doesNotContain("ignored.html");
         assertThat(firstXml).contains("TEXT=\"How to use this map\"");
-        assertThat(firstXml).contains("Use API groups.");
-        assertThat(firstXml).contains("Use Packages.");
+        assertThat(firstXml).contains("Guide line 1.");
+        assertThat(firstXml).contains("Guide line 2.");
         assertThat(firstXml).contains("TEXT=\"NodeRO [interface]\"");
         assertThat(firstXml).contains("CONTENT_ID=\"" + NodeIdFactory.createId("exact:type:node-ro") + "\"");
     }
