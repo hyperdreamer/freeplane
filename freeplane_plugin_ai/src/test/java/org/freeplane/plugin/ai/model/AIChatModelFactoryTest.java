@@ -7,6 +7,8 @@ import static org.mockito.Mockito.when;
 import dev.langchain4j.model.chat.ChatModel;
 import java.lang.reflect.Field;
 import java.util.Collections;
+import java.util.Map;
+import java.util.function.Supplier;
 import org.junit.Test;
 
 public class AIChatModelFactoryTest {
@@ -60,8 +62,7 @@ public class AIChatModelFactoryTest {
 
         ChatModel chatModel = AIChatModelFactory.createChatLanguageModel(configuration);
 
-        Object ollamaClient = fieldValue(chatModel, "client");
-        assertThat(fieldValue(ollamaClient, "defaultHeaders"))
+        assertThat(ollamaRequestHeaders(chatModel))
             .isEqualTo(Collections.singletonMap("Authorization", "Bearer token-123"));
     }
 
@@ -75,8 +76,15 @@ public class AIChatModelFactoryTest {
 
         ChatModel chatModel = AIChatModelFactory.createChatLanguageModel(configuration);
 
+        assertThat(ollamaRequestHeaders(chatModel)).isEqualTo(Collections.emptyMap());
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, String> ollamaRequestHeaders(ChatModel chatModel) throws Exception {
         Object ollamaClient = fieldValue(chatModel, "client");
-        assertThat(fieldValue(ollamaClient, "defaultHeaders")).isEqualTo(Collections.emptyMap());
+        Supplier<Map<String, String>> customHeadersSupplier =
+            (Supplier<Map<String, String>>) fieldValue(ollamaClient, "customHeadersSupplier");
+        return customHeadersSupplier.get();
     }
 
     private Object fieldValue(Object target, String fieldName) throws Exception {
