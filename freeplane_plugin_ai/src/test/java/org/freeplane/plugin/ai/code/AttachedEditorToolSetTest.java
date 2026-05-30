@@ -51,6 +51,23 @@ public class AttachedEditorToolSetTest {
     }
 
     @Test
+    public void formulaSystemMessageExplainsReadOnlyAndUiRestrictions() {
+        AttachedEditorProvider attachedEditorProvider = mock(AttachedEditorProvider.class);
+        when(attachedEditorProvider.hasAttachedEditor()).thenReturn(true);
+        when(attachedEditorProvider.attachedContentType()).thenReturn("text/x-freeplane-formula-groovy");
+        AttachedEditorToolSet uut = new AttachedEditorToolSet(attachedEditorProvider, null, ToolCaller.CHAT);
+
+        String message = uut.systemMessageForChat("request");
+
+        assertThat(message).contains("The attached content is a formula.");
+        assertThat(message).contains("Keep the formula read-only and value-computing.");
+        assertThat(message).contains("Avoid state-changing Freeplane API calls");
+        assertThat(message).contains("avoid obviously UI-driving calls");
+        assertThat(message).contains("Use the available Freeplane API documentation for API surface and semantics");
+        assertThat(message).contains("do not assume it explicitly marks which methods are UI-related");
+    }
+
+    @Test
     public void overwriteAttachedEditorContentUpdatesFakeEditorText() {
         SingleEditorAttachmentService service = newAttachedService();
         FakeCodeEditor editor = new FakeCodeEditor("before");

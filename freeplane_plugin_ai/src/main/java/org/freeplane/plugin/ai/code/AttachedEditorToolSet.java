@@ -127,8 +127,12 @@ public class AttachedEditorToolSet {
         if (FORMULA_CONTENT_TYPE.equals(contentType)) {
             return "An editor is attached to this chat. You may use readAttachedEditor, "
                 + "overwriteAttachedEditorContent, compileAttachedEditorContent, and "
-                + "getAttachedEditorLatestIssue. The attached content is a formula. Do not "
-                + "assume live execution while the editor stays open. Submit-failure repair "
+                + "getAttachedEditorLatestIssue. The attached content is a formula. Keep "
+                + "the formula read-only and value-computing. Avoid state-changing Freeplane "
+                + "API calls and avoid obviously UI-driving calls. Use the available "
+                + "Freeplane API documentation for API surface and semantics, but do not "
+                + "assume it explicitly marks which methods are UI-related. Do not assume "
+                + "live execution while the editor stays open. Submit-failure repair "
                 + "requests require user approval.";
         }
         if (SCRIPT_CONTENT_TYPE.equals(contentType)) {
