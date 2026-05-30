@@ -11,6 +11,7 @@ import org.freeplane.features.ai.code.AiChatAttachment;
 import org.freeplane.features.ai.code.AiChatCodeEditor;
 import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.plugin.ai.chat.AIChatPanel;
+import org.freeplane.plugin.ai.chat.ChatToolAvailability;
 import org.freeplane.plugin.ai.chat.LiveChatSessionId;
 import org.junit.Test;
 
@@ -43,23 +44,41 @@ public class SingleEditorAttachmentServiceTest {
         LiveChatSessionId newSession = LiveChatSessionId.create();
         when(settings.get()).thenReturn(AttachedEditorChatMode.NEW_CHAT);
         when(aiChatPanel.startNewChat()).thenReturn(newSession);
+        when(aiChatPanel.effectiveToolAvailability(newSession)).thenReturn(ChatToolAvailability.READING);
         SingleEditorAttachmentService uut = new SingleEditorAttachmentService(aiChatPanel, settings);
 
         uut.attachEditor(new FakeCodeEditor("text"), "text/plain");
 
         verify(aiChatPanel).startNewChat();
+        verify(aiChatPanel, never()).setSessionToolAvailabilityOverride(newSession, ChatToolAvailability.READING);
         verify(aiChatPanel).setAttachedEditorIndicatorVisible(true);
         verify(aiChatPanel).switchToSession(newSession);
         verify(aiChatPanel).showAndFocusInput();
     }
 
     @Test
-    public void attachModeReuseCurrentChatUsesCurrentSessionWhenAvailable() {
+    public void attachModeNewChatEnsuresReadingToolsWhenNewSessionWouldOtherwiseBeDisabled() {
+        AIChatPanel aiChatPanel = mock(AIChatPanel.class);
+        AttachedEditorChatModeSettings settings = mock(AttachedEditorChatModeSettings.class);
+        LiveChatSessionId newSession = LiveChatSessionId.create();
+        when(settings.get()).thenReturn(AttachedEditorChatMode.NEW_CHAT);
+        when(aiChatPanel.startNewChat()).thenReturn(newSession);
+        when(aiChatPanel.effectiveToolAvailability(newSession)).thenReturn(ChatToolAvailability.DISABLED);
+        SingleEditorAttachmentService uut = new SingleEditorAttachmentService(aiChatPanel, settings);
+
+        uut.attachEditor(new FakeCodeEditor("text"), "text/plain");
+
+        verify(aiChatPanel).setSessionToolAvailabilityOverride(newSession, ChatToolAvailability.READING);
+    }
+
+    @Test
+    public void attachModeReuseCurrentChatUsesCurrentSessionWhenAvailabilityIsReading() {
         AIChatPanel aiChatPanel = mock(AIChatPanel.class);
         AttachedEditorChatModeSettings settings = mock(AttachedEditorChatModeSettings.class);
         LiveChatSessionId currentSession = LiveChatSessionId.create();
         when(settings.get()).thenReturn(AttachedEditorChatMode.REUSE_CURRENT_CHAT);
         when(aiChatPanel.currentSessionId()).thenReturn(currentSession);
+        when(aiChatPanel.effectiveToolAvailability(currentSession)).thenReturn(ChatToolAvailability.READING);
         SingleEditorAttachmentService uut = new SingleEditorAttachmentService(aiChatPanel, settings);
 
         uut.attachEditor(new FakeCodeEditor("text"), "text/plain");
@@ -68,6 +87,42 @@ public class SingleEditorAttachmentServiceTest {
         verify(aiChatPanel).setAttachedEditorIndicatorVisible(true);
         verify(aiChatPanel).switchToSession(currentSession);
         verify(aiChatPanel).showAndFocusInput();
+    }
+
+    @Test
+    public void attachModeReuseCurrentChatUsesCurrentSessionWhenAvailabilityIsEditing() {
+        AIChatPanel aiChatPanel = mock(AIChatPanel.class);
+        AttachedEditorChatModeSettings settings = mock(AttachedEditorChatModeSettings.class);
+        LiveChatSessionId currentSession = LiveChatSessionId.create();
+        when(settings.get()).thenReturn(AttachedEditorChatMode.REUSE_CURRENT_CHAT);
+        when(aiChatPanel.currentSessionId()).thenReturn(currentSession);
+        when(aiChatPanel.effectiveToolAvailability(currentSession)).thenReturn(ChatToolAvailability.EDITING);
+        SingleEditorAttachmentService uut = new SingleEditorAttachmentService(aiChatPanel, settings);
+
+        uut.attachEditor(new FakeCodeEditor("text"), "text/plain");
+
+        verify(aiChatPanel, never()).startNewChat();
+        verify(aiChatPanel).switchToSession(currentSession);
+    }
+
+    @Test
+    public void attachModeReuseCurrentChatStartsNewChatWhenCurrentSessionAvailabilityIsDisabled() {
+        AIChatPanel aiChatPanel = mock(AIChatPanel.class);
+        AttachedEditorChatModeSettings settings = mock(AttachedEditorChatModeSettings.class);
+        LiveChatSessionId currentSession = LiveChatSessionId.create();
+        LiveChatSessionId newSession = LiveChatSessionId.create();
+        when(settings.get()).thenReturn(AttachedEditorChatMode.REUSE_CURRENT_CHAT);
+        when(aiChatPanel.currentSessionId()).thenReturn(currentSession);
+        when(aiChatPanel.effectiveToolAvailability(currentSession)).thenReturn(ChatToolAvailability.DISABLED);
+        when(aiChatPanel.startNewChat()).thenReturn(newSession);
+        when(aiChatPanel.effectiveToolAvailability(newSession)).thenReturn(ChatToolAvailability.DISABLED);
+        SingleEditorAttachmentService uut = new SingleEditorAttachmentService(aiChatPanel, settings);
+
+        uut.attachEditor(new FakeCodeEditor("text"), "text/plain");
+
+        verify(aiChatPanel).startNewChat();
+        verify(aiChatPanel).setSessionToolAvailabilityOverride(newSession, ChatToolAvailability.READING);
+        verify(aiChatPanel).switchToSession(newSession);
     }
 
     @Test
@@ -126,6 +181,8 @@ public class SingleEditorAttachmentServiceTest {
         LiveChatSessionId secondCurrentSession = LiveChatSessionId.create();
         when(settings.get()).thenReturn(AttachedEditorChatMode.REUSE_CURRENT_CHAT);
         when(aiChatPanel.currentSessionId()).thenReturn(firstCurrentSession, secondCurrentSession);
+        when(aiChatPanel.effectiveToolAvailability(firstCurrentSession)).thenReturn(ChatToolAvailability.READING);
+        when(aiChatPanel.effectiveToolAvailability(secondCurrentSession)).thenReturn(ChatToolAvailability.READING);
         SingleEditorAttachmentService uut = new SingleEditorAttachmentService(aiChatPanel, settings);
         FakeCodeEditor editor = new FakeCodeEditor("text");
 

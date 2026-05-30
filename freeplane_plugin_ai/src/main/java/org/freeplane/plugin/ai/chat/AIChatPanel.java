@@ -902,7 +902,7 @@ public class AIChatPanel extends JPanel {
     private ChatToolAvailability resolveAddToChatToolAvailability(LiveChatSessionId sessionId,
                                                                   AiToolAvailability toolAvailability) {
         ChatToolAvailability mappedAvailability = AiRequestMappings.toChatToolAvailability(toolAvailability);
-        return mappedAvailability == null ? effectiveToolAvailability(sessionId) : mappedAvailability;
+        return mappedAvailability == null ? resolveEffectiveToolAvailability(sessionId) : mappedAvailability;
     }
 
     private void applyAddToChatSessionOverrides(LiveChatSessionId sessionId,
@@ -1246,10 +1246,10 @@ public class AIChatPanel extends JPanel {
     }
 
     private ChatToolAvailability currentEffectiveToolAvailability() {
-        return effectiveToolAvailability(liveChatController.currentSessionId());
+        return resolveEffectiveToolAvailability(liveChatController.currentSessionId());
     }
 
-    private ChatToolAvailability effectiveToolAvailability(LiveChatSessionId sessionId) {
+    private ChatToolAvailability resolveEffectiveToolAvailability(LiveChatSessionId sessionId) {
         ChatToolAvailability toolAvailabilityOverride =
             liveChatController.sessionToolAvailabilityOverride(sessionId);
         return toolAvailabilityOverride == null
@@ -1324,6 +1324,15 @@ public class AIChatPanel extends JPanel {
 
     public LiveChatSessionId startNewChat() {
         return liveChatController.startNewChat();
+    }
+
+    public ChatToolAvailability effectiveToolAvailability(LiveChatSessionId sessionId) {
+        return resolveEffectiveToolAvailability(sessionId);
+    }
+
+    public void setSessionToolAvailabilityOverride(LiveChatSessionId sessionId,
+                                                   ChatToolAvailability toolAvailabilityOverride) {
+        liveChatController.setSessionToolAvailabilityOverride(sessionId, toolAvailabilityOverride);
     }
 
     public void switchToSession(LiveChatSessionId sessionId) {

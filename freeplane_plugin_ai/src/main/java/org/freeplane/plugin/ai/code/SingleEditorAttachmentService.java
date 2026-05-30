@@ -13,6 +13,7 @@ import org.freeplane.features.ai.code.AiChatCodeEditor;
 import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.ai.code.AiChatRepairRequest;
 import org.freeplane.plugin.ai.chat.AIChatPanel;
+import org.freeplane.plugin.ai.chat.ChatToolAvailability;
 import org.freeplane.plugin.ai.chat.LiveChatSessionId;
 
 public class SingleEditorAttachmentService implements AiChatAttachmentService, AttachedEditorProvider {
@@ -160,10 +161,26 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
     private LiveChatSessionId chooseOwningSession() {
         AttachedEditorChatMode chatMode = attachedEditorChatModeSettings.get();
         LiveChatSessionId currentSessionId = aiChatPanel.currentSessionId();
-        if (chatMode == AttachedEditorChatMode.REUSE_CURRENT_CHAT && currentSessionId != null) {
+        if (chatMode == AttachedEditorChatMode.REUSE_CURRENT_CHAT
+            && currentSessionId != null
+            && hasReadableTools(currentSessionId)) {
             return currentSessionId;
         }
-        return aiChatPanel.startNewChat();
+        LiveChatSessionId newSessionId = aiChatPanel.startNewChat();
+        ensureReadableTools(newSessionId);
+        return newSessionId;
+    }
+
+    private boolean hasReadableTools(LiveChatSessionId sessionId) {
+        ChatToolAvailability toolAvailability = aiChatPanel.effectiveToolAvailability(sessionId);
+        return toolAvailability != null && toolAvailability.includesTools();
+    }
+
+    private void ensureReadableTools(LiveChatSessionId sessionId) {
+        if (sessionId == null || hasReadableTools(sessionId)) {
+            return;
+        }
+        aiChatPanel.setSessionToolAvailabilityOverride(sessionId, ChatToolAvailability.READING);
     }
 
     private String normalizeContentType(String contentType) {
