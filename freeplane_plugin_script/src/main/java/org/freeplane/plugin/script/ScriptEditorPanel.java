@@ -30,6 +30,11 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Formatter;
+
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
@@ -57,6 +62,10 @@ import javax.swing.text.JTextComponent;
 
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.ui.LabelAndMnemonicSetter;
+import org.freeplane.features.ai.code.AiChatAttachment;
+import org.freeplane.features.ai.code.AiChatAttachmentService;
+import org.freeplane.features.ai.code.AiChatCodeEditor;
+import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.core.ui.UIBuilder;
 import org.freeplane.core.ui.components.EmptyIcon;
 import org.freeplane.core.ui.components.JRestrictedSizeScrollPane;
@@ -67,15 +76,33 @@ import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.text.mindmapmode.SourceTextEditorUIConfigurator;
 
 import de.sciss.syntaxpane.actions.ActionUtils;
+import org.osgi.framework.BundleContext;
+import org.osgi.framework.ServiceReference;
 
 /**
  */
-class ScriptEditorPanel extends JDialog {
+class ScriptEditorPanel extends JDialog implements AiChatCodeEditor {
 
 	static final String GROOVY_EDITOR_FONT = "groovy_editor_font";
 	static final String GROOVY_EDITOR_FONT_SIZE = "groovy_editor_font_size";
 
 	private static final String internalCharset = "UTF-16BE";
+
+	final private class AttachToAiAction extends AbstractAction {
+		private static final long serialVersionUID = 1L;
+
+		@Override
+		public void actionPerformed(final ActionEvent arg0) {
+			AiChatAttachmentService attachmentService = lookupAiChatAttachmentService();
+			if (attachmentService == null) {
+				LogUtils.severe("AI attachment service is unavailable.");
+				return;
+			}
+			aiChatAttachment = attachmentService.attachEditor(
+				ScriptEditorPanel.this,
+				((JEditorPane) mScriptTextField).getContentType());
+		}
+	}
 
 	final private class CancelAction extends AbstractAction {
 		/**
@@ -308,6 +335,7 @@ class ScriptEditorPanel extends JDialog {
 	final private JSplitPane mCentralUpperPanel;
 	private Integer mLastSelected = null;
 	final private DefaultListModel mListModel;
+	final private AbstractAction mAttachToAiAction;
 	final private AbstractAction mRunAction;
 	final private JList mScriptList;
 	final private IScriptModel mScriptModel;
@@ -315,6 +343,7 @@ class ScriptEditorPanel extends JDialog {
 	final private JTextComponent mScriptTextField;
 	final private SignAction mSignAction;
 	final private JLabel mStatus;
+	private AiChatAttachment aiChatAttachment;
 
 	public ScriptEditorPanel( final IScriptModel pScriptModel,
 	                         final boolean pHasNewScriptFunctionality) {
@@ -373,7 +402,7 @@ class ScriptEditorPanel extends JDialog {
 		UITools.setScrollbarIncrement(scriptScrollPane);
 		mCentralUpperPanel = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, mScriptList, scriptScrollPane);
 		try {
-			editorPane.setContentType("text/groovy");
+			editorPane.setContentType("text/x-freeplane-script-groovy");
 
 			final String fontName = ResourceController.getResourceController().getProperty(GROOVY_EDITOR_FONT);
 			final int fontSize = ResourceController.getResourceController().getIntProperty(GROOVY_EDITOR_FONT_SIZE);
@@ -421,6 +450,9 @@ class ScriptEditorPanel extends JDialog {
 		mRunAction = new RunAction();
 		mRunAction.setEnabled(false);
 		addButton(menuBar, mRunAction, "plugins/ScriptEditor.run");
+		mAttachToAiAction = new AttachToAiAction();
+		mAttachToAiAction.setEnabled(false);
+		addButton(menuBar, mAttachToAiAction, "plugins/ScriptEditor.ai");
 		mSignAction = new SignAction(TextUtils.getRawText("plugins/ScriptEditor.sign"));
 		mSignAction.setEnabled(false);
 		addAction(menu, mSignAction);
@@ -467,6 +499,10 @@ class ScriptEditorPanel extends JDialog {
 				return;
 			}
 		}
+		if (aiChatAttachment != null) {
+			aiChatAttachment.detach();
+			aiChatAttachment = null;
+		}
 		final ScriptEditorWindowConfigurationStorage storage = new ScriptEditorWindowConfigurationStorage();
 		storage.setLeftRatio(mCentralUpperPanel.getDividerLocation());
 		storage.setTopRatio(mCentralPanel.getDividerLocation());
@@ -494,9 +530,71 @@ class ScriptEditorPanel extends JDialog {
 		}
 	}
 
+	@Override
+	public String getText() {
+		return mScriptTextField.getText();
+	}
+
+	@Override
+	public void replaceText(String text) {
+		mScriptTextField.setText(text == null ? "" : text);
+	}
+
+	@Override
+	public AiChatCodeOperationResult compileForAi() {
+		ScriptingEngine.GroovyCompileResult compileResult = ScriptingEngine.compileGroovyScriptForDiagnostics(
+			mScriptTextField.getText(),
+			ScriptingPermissions.getPermissiveScriptingPermissions());
+		return new AiChatCodeOperationResult(
+			"COMPILE",
+			"AI",
+			compileResult.isSuccessful(),
+			compileResult.getCompilerDiagnostics(),
+			null,
+			null,
+			compileResult.isSuccessful() ? null : "compile",
+			compileResult.getErrorMessage(),
+			compileResult.getLineNumber(),
+			fingerprint(mScriptTextField.getText()));
+	}
+
+	private AiChatAttachmentService lookupAiChatAttachmentService() {
+		BundleContext bundleContext = Activator.getBundleContext();
+		if (bundleContext == null) {
+			return null;
+		}
+		ServiceReference<AiChatAttachmentService> serviceReference =
+			bundleContext.getServiceReference(AiChatAttachmentService.class);
+		if (serviceReference == null) {
+			return null;
+		}
+		return bundleContext.getService(serviceReference);
+	}
+
+	private String fingerprint(String text) {
+		try {
+			MessageDigest digest = MessageDigest.getInstance("SHA-256");
+			byte[] hash = digest.digest((text == null ? "" : text).getBytes(StandardCharsets.UTF_8));
+			Formatter formatter = new Formatter();
+			try {
+				for (byte value : hash) {
+					formatter.format("%02x", value);
+				}
+				return formatter.toString();
+			}
+			finally {
+				formatter.close();
+			}
+		}
+		catch (NoSuchAlgorithmException e) {
+			throw new IllegalStateException("SHA-256 is not available.", e);
+		}
+	}
+
 	private void select(final int pIndex) {
 		mScriptTextField.setEnabled(pIndex >= 0);
 		mRunAction.setEnabled(pIndex >= 0);
+		mAttachToAiAction.setEnabled(pIndex >= 0);
 		mSignAction.setEnabled(pIndex >= 0);
 		if (pIndex < 0) {
 			mScriptTextField.setText("");

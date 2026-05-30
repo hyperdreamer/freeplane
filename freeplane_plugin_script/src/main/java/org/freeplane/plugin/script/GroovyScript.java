@@ -90,6 +90,47 @@ public class GroovyScript implements IScript {
         return compiledScript;
     }
 
+    public void compile(PrintStream outStream, IFreeplaneScriptErrorHandler errorHandler) {
+        if (errorsInScript != null && compileTimeStrategy.canUseOldCompiledScript()) {
+            throw new ExecuteScriptException(errorsInScript.getMessage(), errorsInScript);
+        }
+        final PrintStream effectiveOutStream = outStream == null ? System.err : outStream;
+        ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
+        try {
+            final ScriptingPermissions effectivePermissions = getEffectivePermissions(effectiveOutStream);
+            AccessController.doPrivileged(new PrivilegedExceptionAction<Object>() {
+
+                @Override
+                public Object run() throws Exception {
+                    try {
+                        compileAndCache(effectivePermissions.getScriptingSecurityManager());
+                        return null;
+                    } catch (Exception e) {
+                        throw e;
+                    } catch (Throwable e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+            });
+        } catch (final PrivilegedActionException e) {
+            Throwable cause = e.getCause();
+            int lineNumber = findCompilationErrorLine(cause);
+            if (lineNumber >= 0) {
+                effectiveOutStream.print("Line number: " + lineNumber);
+                if (errorHandler != null) {
+                    errorHandler.gotoLine(lineNumber);
+                }
+            }
+            throw new ExecuteScriptException(buildCompilationErrorMessage(cause, lineNumber), cause);
+        } catch (final ExecuteScriptException e) {
+            throw e;
+        } catch (final Throwable e) {
+            throw new ExecuteScriptException(e.getMessage(), e);
+        } finally {
+            Thread.currentThread().setContextClassLoader(contextClassLoader);
+        }
+    }
+
     @Override
     public Object execute(final NodeModel node, PrintStream outStream, IFreeplaneScriptErrorHandler errorHandler, ScriptContext scriptContext) {
     	if (errorsInScript != null && compileTimeStrategy.canUseOldCompiledScript()) {
@@ -219,6 +260,25 @@ public class GroovyScript implements IScript {
         final Binding binding = new Binding();
         binding.setVariable("script", script);
         return binding;
+    }
+
+    private int findCompilationErrorLine(Throwable throwable) {
+        if (throwable instanceof GroovyRuntimeException) {
+            return findErrorLine((GroovyRuntimeException) throwable);
+        }
+        String message = throwable == null ? null : throwable.getMessage();
+        return findLineNumberInString(message, -1);
+    }
+
+    private String buildCompilationErrorMessage(Throwable throwable, int lineNumber) {
+        String message = throwable == null ? null : throwable.getMessage();
+        if (message == null) {
+            message = "Compilation failed.";
+        }
+        if (lineNumber >= 0 && !message.contains("line " + lineNumber)) {
+            return message + " at line " + lineNumber;
+        }
+        return message;
     }
 
     private int findErrorLine(final GroovyRuntimeException e) {

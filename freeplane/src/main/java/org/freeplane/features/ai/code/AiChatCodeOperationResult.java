@@ -5,6 +5,8 @@ import java.util.Collections;
 import java.util.List;
 
 public class AiChatCodeOperationResult {
+    private final String operationType;
+    private final String trigger;
     private final boolean successful;
     private final List<String> compilerDiagnostics;
     private final String standardOutput;
@@ -22,6 +24,22 @@ public class AiChatCodeOperationResult {
                                      String errorMessage,
                                      Integer lineNumber,
                                      String sourceFingerprint) {
+        this(null, null, successful, compilerDiagnostics, standardOutput, result, errorCategory, errorMessage,
+            lineNumber, sourceFingerprint);
+    }
+
+    public AiChatCodeOperationResult(String operationType,
+                                     String trigger,
+                                     boolean successful,
+                                     List<String> compilerDiagnostics,
+                                     String standardOutput,
+                                     String result,
+                                     String errorCategory,
+                                     String errorMessage,
+                                     Integer lineNumber,
+                                     String sourceFingerprint) {
+        this.operationType = operationType;
+        this.trigger = trigger;
         this.successful = successful;
         this.compilerDiagnostics = compilerDiagnostics == null
             ? Collections.<String>emptyList()
@@ -32,6 +50,14 @@ public class AiChatCodeOperationResult {
         this.errorMessage = errorMessage;
         this.lineNumber = lineNumber;
         this.sourceFingerprint = sourceFingerprint;
+    }
+
+    public String getOperationType() {
+        return operationType;
+    }
+
+    public String getTrigger() {
+        return trigger;
     }
 
     public boolean isSuccessful() {

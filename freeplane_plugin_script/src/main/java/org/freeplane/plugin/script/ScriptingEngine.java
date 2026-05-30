@@ -18,8 +18,14 @@
  */
 package org.freeplane.plugin.script;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.PrintStream;
+import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
@@ -36,6 +42,41 @@ import org.freeplane.features.map.NodeModel;
  */
 public class ScriptingEngine {
 	public static final String SCRIPT_PREFIX = "script";
+
+    public static class GroovyCompileResult {
+        private final boolean successful;
+        private final List<String> compilerDiagnostics;
+        private final String errorMessage;
+        private final Integer lineNumber;
+
+        GroovyCompileResult(boolean successful,
+                            List<String> compilerDiagnostics,
+                            String errorMessage,
+                            Integer lineNumber) {
+            this.successful = successful;
+            this.compilerDiagnostics = compilerDiagnostics == null
+                ? Collections.<String>emptyList()
+                : Collections.unmodifiableList(new ArrayList<String>(compilerDiagnostics));
+            this.errorMessage = errorMessage;
+            this.lineNumber = lineNumber;
+        }
+
+        public boolean isSuccessful() {
+            return successful;
+        }
+
+        public List<String> getCompilerDiagnostics() {
+            return compilerDiagnostics;
+        }
+
+        public String getErrorMessage() {
+            return errorMessage;
+        }
+
+        public Integer getLineNumber() {
+            return lineNumber;
+        }
+    }
 	// need a File for caching! Scripts from String have to be cached elsewhere
     private static Map<File, IScript> fileScripts = new ConcurrentHashMap<File, IScript>();
     private static ConcurrentCache<ScriptSpecification, IScript> scripts
@@ -108,6 +149,29 @@ public class ScriptingEngine {
 		return createScript(script, "groovy", permissions);
 	}
 
+    public static GroovyCompileResult compileGroovyScriptForDiagnostics(String script,
+                                                                        ScriptingPermissions permissions) {
+        ByteArrayOutputStream outputBuffer = new ByteArrayOutputStream();
+        final int[] lineNumber = new int[] { -1 };
+        try (PrintStream outStream = new PrintStream(outputBuffer, false, "UTF-8")) {
+            new GroovyScript(script, permissions).compile(outStream, new IFreeplaneScriptErrorHandler() {
+                @Override
+                public void gotoLine(int pLineNumber) {
+                    lineNumber[0] = pLineNumber;
+                }
+            });
+            return new GroovyCompileResult(true, Collections.<String>emptyList(), null, null);
+        } catch (ExecuteScriptException error) {
+            return new GroovyCompileResult(
+                false,
+                diagnostics(outputBuffer, error.getMessage()),
+                error.getMessage(),
+                lineNumber[0] >= 0 ? Integer.valueOf(lineNumber[0]) : null);
+        } catch (UnsupportedEncodingException error) {
+            throw new IllegalStateException("UTF-8 is not available.", error);
+        }
+    }
+
     public static Object executeScript(NodeModel node, File scriptFile, ScriptingPermissions permissions) {
         final IScript script = ScriptingEngine.createScript(scriptFile, permissions, false);
         return new ScriptRunner(script).execute(node);
@@ -160,6 +224,23 @@ public class ScriptingEngine {
     @Deprecated
     public static File getUserScriptDir() {
         return ScriptResources.getUserScriptDir();
+    }
+
+    private static List<String> diagnostics(ByteArrayOutputStream outputBuffer, String errorMessage) {
+        String output = new String(outputBuffer.toByteArray(), StandardCharsets.UTF_8).trim();
+        List<String> diagnostics = new ArrayList<String>();
+        if (!output.isEmpty()) {
+            for (String line : output.split("\\r?\\n")) {
+                String trimmed = line.trim();
+                if (!trimmed.isEmpty()) {
+                    diagnostics.add(trimmed);
+                }
+            }
+        }
+        if (diagnostics.isEmpty() && errorMessage != null && !errorMessage.trim().isEmpty()) {
+            diagnostics.add(errorMessage.trim());
+        }
+        return diagnostics;
     }
 
     static void showScriptExceptionErrorMessage(ExecuteScriptException ex) {

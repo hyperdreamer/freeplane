@@ -722,7 +722,7 @@
       ordering mechanism.
 
 ## Subtask: Attach Script Editor to AI chat and expose compile diagnostics
-- **Status:** backlog
+- **Status:** review
 - **Scope:** Add an explicit AI button to `ScriptEditorPanel`, adapt it
   to the shared attachment and attached-code contracts, and let AI
   compile the current script against the current Groovy compiler path.
@@ -831,9 +831,15 @@
       `getAttachedEditorLatestIssue()`.
   - Verification command:
     - `gradle -Djava.net.preferIPv6Addresses=true -Djava.awt.headless=true :freeplane_plugin_script:test :freeplane_plugin_ai:test`
+- **Implementation notes:**
+  - **Tradeoffs:**
+    - Script-editor compilation reuses `GroovyScript` by adding a
+      compile-only entry point instead of introducing a second Groovy
+      compiler path. That keeps classpath, security, and parse behavior
+      aligned with existing script execution while avoiding execution.
 
 ## Subtask: Attach Formula Editor to AI chat, preserve map reference picking, and validate formulas before commit
-- **Status:** backlog
+- **Status:** in-progress
 - **Scope:** Add an explicit AI button to `FormulaEditor`, replace the
   current whole-window blocker with a center-scoped selection overlay,
   let AI compile the current formula, change formula submit so final
