@@ -839,7 +839,7 @@
       aligned with existing script execution while avoiding execution.
 
 ## Subtask: Attach Formula Editor to AI chat, preserve map reference picking, and validate formulas before commit
-- **Status:** in-progress
+- **Status:** review
 - **Scope:** Add an explicit AI button to `FormulaEditor`, replace the
   current whole-window blocker with a center-scoped selection overlay,
   let AI compile the current formula, change formula submit so final
@@ -1131,3 +1131,14 @@
       fail with `No editor is attached.`
   - Verification command:
     - `gradle -Djava.net.preferIPv6Addresses=true -Djava.awt.headless=true :freeplane_plugin_ai:test :freeplane:test`
+- **Implementation notes:**
+  - **Tradeoffs:**
+    - The formula-selection overlay uses a scoped glass pane whose
+      hit-testing only claims the frame's `BorderLayout.CENTER`
+      component. That preserved existing `GlassPaneNodeSelector`
+      behavior without changing the older whole-window
+      `GlassPaneManager` path.
+    - Submit validation reuses `FormulaUtils` with a no-cache,
+      dependency-tracking-disabled path and accepts normal post-commit
+      reevaluation instead of trying to promote temporary validation
+      results into `FormulaCache`.

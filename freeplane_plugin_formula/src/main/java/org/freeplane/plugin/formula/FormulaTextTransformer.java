@@ -95,7 +95,7 @@ class FormulaTextTransformer extends AbstractContentTransformer implements IEdit
             return null;
         JEditorPane textEditor = new JEditorPane();
         scrollPaneSupplier.get().setViewportView(textEditor);
-        textEditor.setContentType("text/groovy");
+        textEditor.setContentType("text/x-freeplane-formula-groovy");
         textEditor.setText(text);
         SourceTextEditorUIConfigurator.configureColors(textEditor);
         final String fontName = ResourceController.getResourceController().getProperty(FormulaEditor.GROOVY_EDITOR_FONT);
