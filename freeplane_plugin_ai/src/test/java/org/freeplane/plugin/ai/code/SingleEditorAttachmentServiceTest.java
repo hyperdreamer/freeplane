@@ -48,6 +48,7 @@ public class SingleEditorAttachmentServiceTest {
         uut.attachEditor(new FakeCodeEditor("text"), "text/plain");
 
         verify(aiChatPanel).startNewChat();
+        verify(aiChatPanel).setAttachedEditorIndicatorVisible(true);
         verify(aiChatPanel).switchToSession(newSession);
         verify(aiChatPanel).showAndFocusInput();
     }
@@ -64,8 +65,78 @@ public class SingleEditorAttachmentServiceTest {
         uut.attachEditor(new FakeCodeEditor("text"), "text/plain");
 
         verify(aiChatPanel, never()).startNewChat();
+        verify(aiChatPanel).setAttachedEditorIndicatorVisible(true);
         verify(aiChatPanel).switchToSession(currentSession);
         verify(aiChatPanel).showAndFocusInput();
+    }
+
+    @Test
+    public void detachInvokesDetachHandlerOnlyOnce() {
+        AIChatPanel aiChatPanel = mock(AIChatPanel.class);
+        AttachedEditorChatModeSettings settings = mock(AttachedEditorChatModeSettings.class);
+        when(settings.get()).thenReturn(AttachedEditorChatMode.NEW_CHAT);
+        when(aiChatPanel.startNewChat()).thenReturn(LiveChatSessionId.create());
+        SingleEditorAttachmentService uut = new SingleEditorAttachmentService(aiChatPanel, settings);
+
+        AiChatAttachment attachment = uut.attachEditor(new FakeCodeEditor("text"), "text/plain");
+        final int[] detachCalls = new int[] { 0 };
+        attachment.setDetachHandler(new Runnable() {
+            @Override
+            public void run() {
+                detachCalls[0]++;
+            }
+        });
+
+        attachment.detach();
+        attachment.detach();
+
+        assertThat(detachCalls[0]).isEqualTo(1);
+        assertThat(uut.readAttachedEditor().isAttached()).isFalse();
+        verify(aiChatPanel).setAttachedEditorIndicatorVisible(false);
+    }
+
+    @Test
+    public void replacingAttachedEditorInvokesPreviousDetachHandler() {
+        AIChatPanel aiChatPanel = mock(AIChatPanel.class);
+        AttachedEditorChatModeSettings settings = mock(AttachedEditorChatModeSettings.class);
+        when(settings.get()).thenReturn(AttachedEditorChatMode.NEW_CHAT);
+        when(aiChatPanel.startNewChat()).thenReturn(LiveChatSessionId.create(), LiveChatSessionId.create());
+        SingleEditorAttachmentService uut = new SingleEditorAttachmentService(aiChatPanel, settings);
+
+        AiChatAttachment firstAttachment = uut.attachEditor(new FakeCodeEditor("first"), "text/plain");
+        final int[] detachCalls = new int[] { 0 };
+        firstAttachment.setDetachHandler(new Runnable() {
+            @Override
+            public void run() {
+                detachCalls[0]++;
+            }
+        });
+
+        uut.attachEditor(new FakeCodeEditor("second"), "text/plain");
+        firstAttachment.detach();
+
+        assertThat(detachCalls[0]).isEqualTo(1);
+    }
+
+    @Test
+    public void reattachingDetachedEditorUsesCurrentChatAtTimeOfNewAttach() {
+        AIChatPanel aiChatPanel = mock(AIChatPanel.class);
+        AttachedEditorChatModeSettings settings = mock(AttachedEditorChatModeSettings.class);
+        LiveChatSessionId firstCurrentSession = LiveChatSessionId.create();
+        LiveChatSessionId secondCurrentSession = LiveChatSessionId.create();
+        when(settings.get()).thenReturn(AttachedEditorChatMode.REUSE_CURRENT_CHAT);
+        when(aiChatPanel.currentSessionId()).thenReturn(firstCurrentSession, secondCurrentSession);
+        SingleEditorAttachmentService uut = new SingleEditorAttachmentService(aiChatPanel, settings);
+        FakeCodeEditor editor = new FakeCodeEditor("text");
+
+        AiChatAttachment firstAttachment = uut.attachEditor(editor, "text/plain");
+        firstAttachment.detach();
+        uut.attachEditor(editor, "text/plain");
+
+        verify(aiChatPanel, never()).startNewChat();
+        verify(aiChatPanel).setAttachedEditorIndicatorVisible(false);
+        verify(aiChatPanel).switchToSession(firstCurrentSession);
+        verify(aiChatPanel).switchToSession(secondCurrentSession);
     }
 
     @Test

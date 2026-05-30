@@ -1,10 +1,8 @@
 package org.freeplane.plugin.formula;
 
 import java.awt.AWTEvent;
-import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.Font;
-import java.awt.Rectangle;
 import java.awt.Window;
 import java.awt.event.ActionEvent;
 import java.awt.event.WindowAdapter;
@@ -16,18 +14,16 @@ import java.util.Collections;
 import java.util.Formatter;
 
 import javax.swing.AbstractAction;
-import javax.swing.Box;
-import javax.swing.JButton;
 import javax.swing.JDialog;
 import javax.swing.JEditorPane;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.RootPaneContainer;
+import javax.swing.JToggleButton;
 import javax.swing.SwingUtilities;
 
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.ui.textchanger.TranslatedElementFactory;
-import org.freeplane.core.ui.components.UITools;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.features.ai.code.AiChatAttachment;
 import org.freeplane.features.ai.code.AiChatAttachmentService;
@@ -53,6 +49,7 @@ class FormulaEditor extends EditNodeDialog implements INodeSelector, AiChatCodeE
 
     private static final String PASSED_WIDTH_PROPERTY = "formulaDialog.passed.width";
     private static final String PASSED_HEIGHT_PROPERTY = "formulaDialog.passed.height";
+    private static final String AI_TAB_ICON_RESOURCE = "/images/panelTabs/aiTab.svg?useAccentColor=true";
     private static final String REPAIR_PROMPT =
         "Repair the attached Freeplane formula. Keep the result as a valid formula that starts with '='. "
             + "Use the current formula text and the submit diagnostics.";
@@ -79,6 +76,7 @@ class FormulaEditor extends EditNodeDialog implements INodeSelector, AiChatCodeE
     private final FormulaSubmitValidationSupport formulaSubmitValidationSupport;
     private EvaluationStatus evaluationStatus;
     private AiChatAttachment aiChatAttachment;
+    private JToggleButton aiAttachButton;
     private CenterPaneNodeSelectionOverlay centerPaneNodeSelectionOverlay;
 
     FormulaEditor(MapExplorerController mapExplorer, NodeModel nodeModel, AWTEvent firstEvent, IEditControl editControl,
@@ -116,8 +114,11 @@ class FormulaEditor extends EditNodeDialog implements INodeSelector, AiChatCodeE
 
     @Override
     protected void addAdditionalButtons(JPanel buttonPane) {
-        JButton aiButton = TranslatedElementFactory.createButton(new AttachToAiAction(), "formula_editor_ai");
-        buttonPane.add(aiButton);
+        aiAttachButton = TranslatedElementFactory.createToggleButton("formula_editor_ai");
+        aiAttachButton.setIcon(ResourceController.getResourceController().getImageIcon(AI_TAB_ICON_RESOURCE));
+        aiAttachButton.addActionListener(new AttachToAiAction());
+        buttonPane.add(aiAttachButton);
+        updateAiAttachButtonState();
     }
 
     @Override
@@ -290,10 +291,12 @@ class FormulaEditor extends EditNodeDialog implements INodeSelector, AiChatCodeE
         AiChatAttachmentService attachmentService = lookupAiChatAttachmentService();
         if (attachmentService == null) {
             LogUtils.severe("AI attachment service is unavailable.");
+            updateAiAttachButtonState();
             return null;
         }
-        aiChatAttachment = attachmentService.attachEditor(this, textEditor.getContentType());
-        return aiChatAttachment;
+        AiChatAttachment attachment = attachmentService.attachEditor(this, FormulaTextTransformer.AI_ATTACHMENT_CONTENT_TYPE);
+        setAiChatAttachment(attachment);
+        return attachment;
     }
 
     private AiChatAttachmentService lookupAiChatAttachmentService() {
@@ -312,11 +315,30 @@ class FormulaEditor extends EditNodeDialog implements INodeSelector, AiChatCodeE
     private void cleanupAttachmentAndOverlay() {
         if (aiChatAttachment != null) {
             aiChatAttachment.detach();
-            aiChatAttachment = null;
         }
         if (centerPaneNodeSelectionOverlay != null) {
             centerPaneNodeSelectionOverlay.deactivate();
             centerPaneNodeSelectionOverlay = null;
+        }
+    }
+
+    private void setAiChatAttachment(AiChatAttachment attachment) {
+        aiChatAttachment = attachment;
+        if (aiChatAttachment != null) {
+            aiChatAttachment.setDetachHandler(new Runnable() {
+                @Override
+                public void run() {
+                    aiChatAttachment = null;
+                    updateAiAttachButtonState();
+                }
+            });
+        }
+        updateAiAttachButtonState();
+    }
+
+    private void updateAiAttachButtonState() {
+        if (aiAttachButton != null) {
+            aiAttachButton.setSelected(aiChatAttachment != null);
         }
     }
 
@@ -345,6 +367,11 @@ class FormulaEditor extends EditNodeDialog implements INodeSelector, AiChatCodeE
 
         @Override
         public void actionPerformed(ActionEvent e) {
+            if (aiChatAttachment != null) {
+                aiChatAttachment.detach();
+                updateAiAttachButtonState();
+                return;
+            }
             attachToAi();
         }
     }

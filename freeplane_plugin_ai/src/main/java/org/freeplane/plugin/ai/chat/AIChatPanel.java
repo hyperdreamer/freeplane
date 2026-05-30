@@ -59,6 +59,7 @@ import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
+import javax.swing.JTabbedPane;
 import javax.swing.KeyStroke;
 import javax.swing.ScrollPaneConstants;
 import javax.swing.SwingUtilities;
@@ -86,6 +87,8 @@ import java.util.Map;
 
 public class AIChatPanel extends JPanel {
     private static final int TOP_BAR_HORIZONTAL_GAP = 2;
+    private static final String AI_TAB_ICON_RESOURCE = "/images/panelTabs/aiTab.svg?useAccentColor=true";
+    private static final String AI_TAB_ATTACHED_ICON_RESOURCE = "/images/panelTabs/aiTabAttached.svg?useAccentColor=true";
 
     /**
 	 * Comment for <code>serialVersionUID</code>
@@ -103,6 +106,7 @@ public class AIChatPanel extends JPanel {
     private final Icon preferencesIcon;
     private final Icon assistantProfileIcon;
     private final Icon aiTabIcon;
+    private final Icon attachedAiTabIcon;
     private String sendTooltipText;
     private String cancelTooltipText;
     private String undoTooltipText;
@@ -181,8 +185,8 @@ public class AIChatPanel extends JPanel {
             .getImageIcon("/images/generic_settings.svg?useAccentColor=true");
         assistantProfileIcon = ResourceController.getResourceController()
             .getImageIcon("/images/EggheadCB.svg?useAccentColor=true");
-        aiTabIcon = ResourceController.getResourceController()
-            .getImageIcon("/images/panelTabs/aiTab.svg?useAccentColor=true");
+        aiTabIcon = ResourceController.getResourceController().getImageIcon(AI_TAB_ICON_RESOURCE);
+        attachedAiTabIcon = ResourceController.getResourceController().getImageIcon(AI_TAB_ATTACHED_ICON_RESOURCE);
         Dimension sendButtonSize = sendButton.getPreferredSize();
         Dimension sideButtonSize = new Dimension(sendButtonSize.width, Math.max(1, sendButtonSize.height / 2));
         Dimension tallSendButtonSize = new Dimension(sendButtonSize.width, sideButtonSize.height * 2);
@@ -1329,6 +1333,21 @@ public class AIChatPanel extends JPanel {
     public void showAndFocusInput() {
         showChatTab();
         SwingUtilities.invokeLater(inputArea::requestFocusInWindow);
+    }
+
+    public void setAttachedEditorIndicatorVisible(boolean visible) {
+        SwingUtilities.invokeLater(() -> updateTabIcon(visible));
+    }
+
+    private void updateTabIcon(boolean attached) {
+        JTabbedPane tabbedPane = UITools.getFreeplaneTabbedPanel();
+        if (tabbedPane == null) {
+            return;
+        }
+        int tabIndex = tabbedPane.indexOfComponent(this);
+        if (tabIndex >= 0) {
+            tabbedPane.setIconAt(tabIndex, attached ? attachedAiTabIcon : aiTabIcon);
+        }
     }
 
     public boolean submitMessageToSession(LiveChatSessionId sessionId, String userMessage) {

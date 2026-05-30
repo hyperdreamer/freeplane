@@ -49,8 +49,6 @@ public class Activator implements BundleActivator {
 			Thread.currentThread().setContextClassLoader(DefaultSyntaxKit.class.getClassLoader());
 			DefaultSyntaxKit.initKit();
 			DefaultSyntaxKit.registerContentType("text/latex", LaTeXSyntaxKit.class.getName());
-			DefaultSyntaxKit.registerContentType("text/x-freeplane-script-groovy", GroovySyntaxKit.class.getName());
-			DefaultSyntaxKit.registerContentType("text/x-freeplane-formula-groovy", GroovySyntaxKit.class.getName());
 			Configuration defaultConfig = DefaultSyntaxKit.getConfig(DefaultSyntaxKit.class);
 			defaultConfig.put(DefaultSyntaxKit.CONFIG_ENABLE_WORD_WRAP, "true");
 			if(hasDarkBackground()) {

@@ -34,6 +34,9 @@ import org.freeplane.features.text.mindmapmode.SourceTextEditorUIConfigurator;
 import org.freeplane.plugin.script.FormulaUtils;
 
 class FormulaTextTransformer extends AbstractContentTransformer implements IEditBaseCreator{
+	static final String AI_ATTACHMENT_CONTENT_TYPE = "text/x-freeplane-formula-groovy";
+	static final String EDITOR_CONTENT_TYPE = "text/groovy";
+
 	FormulaTextTransformer(int priority) {
 		super(priority);
 	}
@@ -95,7 +98,7 @@ class FormulaTextTransformer extends AbstractContentTransformer implements IEdit
             return null;
         JEditorPane textEditor = new JEditorPane();
         scrollPaneSupplier.get().setViewportView(textEditor);
-        textEditor.setContentType("text/x-freeplane-formula-groovy");
+        textEditor.setContentType(EDITOR_CONTENT_TYPE);
         textEditor.setText(text);
         SourceTextEditorUIConfigurator.configureColors(textEditor);
         final String fontName = ResourceController.getResourceController().getProperty(FormulaEditor.GROOVY_EDITOR_FONT);

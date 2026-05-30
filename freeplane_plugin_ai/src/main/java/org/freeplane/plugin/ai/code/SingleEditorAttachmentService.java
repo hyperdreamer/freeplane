@@ -38,9 +38,14 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
             activeAttachment.handle.showOwningChat();
             return activeAttachment.handle;
         }
+        AttachmentHandle previousHandle = activeAttachment == null ? null : activeAttachment.handle;
         LiveChatSessionId owningSessionId = chooseOwningSession();
         AttachmentHandle handle = new AttachmentHandle(nextAttachmentId++);
         activeAttachment = new ActiveAttachment(handle.id, editor, safeContentType, owningSessionId, handle);
+        if (previousHandle != null) {
+            previousHandle.notifyDetached();
+        }
+        aiChatPanel.setAttachedEditorIndicatorVisible(true);
         handle.showOwningChat();
         return handle;
     }
@@ -104,7 +109,10 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
         if (activeAttachment == null || activeAttachment.id != attachmentId) {
             return;
         }
+        AttachmentHandle handle = activeAttachment.handle;
         activeAttachment = null;
+        aiChatPanel.setAttachedEditorIndicatorVisible(false);
+        handle.notifyDetached();
     }
 
     private synchronized void recordIssue(long attachmentId, AiChatCodeOperationResult result) {
@@ -244,6 +252,7 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
 
     private final class AttachmentHandle implements AiChatAttachment {
         private final long id;
+        private Runnable detachHandler;
 
         private AttachmentHandle(long id) {
             this.id = id;
@@ -252,6 +261,11 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
         @Override
         public void detach() {
             SingleEditorAttachmentService.this.detach(id);
+        }
+
+        @Override
+        public void setDetachHandler(Runnable detachHandler) {
+            this.detachHandler = detachHandler;
         }
 
         @Override
@@ -272,6 +286,14 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
         @Override
         public void requestRepair(AiChatRepairRequest request) {
             SingleEditorAttachmentService.this.requestRepair(id, request);
+        }
+
+        private void notifyDetached() {
+            Runnable handler = detachHandler;
+            detachHandler = null;
+            if (handler != null) {
+                handler.run();
+            }
         }
     }
 }

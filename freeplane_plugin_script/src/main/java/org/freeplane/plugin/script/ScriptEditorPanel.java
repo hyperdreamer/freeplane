@@ -51,6 +51,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
+import javax.swing.JToggleButton;
 import javax.swing.ListSelectionModel;
 import javax.swing.WindowConstants;
 import javax.swing.SwingUtilities;
@@ -87,20 +88,27 @@ class ScriptEditorPanel extends JDialog implements AiChatCodeEditor {
 	static final String GROOVY_EDITOR_FONT_SIZE = "groovy_editor_font_size";
 
 	private static final String internalCharset = "UTF-16BE";
+	private static final String AI_TAB_ICON_RESOURCE = "/images/panelTabs/aiTab.svg?useAccentColor=true";
+	private static final String AI_ATTACHMENT_CONTENT_TYPE = "text/x-freeplane-script-groovy";
+	private static final String EDITOR_CONTENT_TYPE = "text/groovy";
 
 	final private class AttachToAiAction extends AbstractAction {
 		private static final long serialVersionUID = 1L;
 
 		@Override
 		public void actionPerformed(final ActionEvent arg0) {
+			if (aiChatAttachment != null) {
+				aiChatAttachment.detach();
+				updateAiAttachButtonState();
+				return;
+			}
 			AiChatAttachmentService attachmentService = lookupAiChatAttachmentService();
 			if (attachmentService == null) {
 				LogUtils.severe("AI attachment service is unavailable.");
+				updateAiAttachButtonState();
 				return;
 			}
-			aiChatAttachment = attachmentService.attachEditor(
-				ScriptEditorPanel.this,
-				((JEditorPane) mScriptTextField).getContentType());
+			setAiChatAttachment(attachmentService.attachEditor(ScriptEditorPanel.this, AI_ATTACHMENT_CONTENT_TYPE));
 		}
 	}
 
@@ -335,7 +343,7 @@ class ScriptEditorPanel extends JDialog implements AiChatCodeEditor {
 	final private JSplitPane mCentralUpperPanel;
 	private Integer mLastSelected = null;
 	final private DefaultListModel mListModel;
-	final private AbstractAction mAttachToAiAction;
+	final private JToggleButton mAttachToAiButton;
 	final private AbstractAction mRunAction;
 	final private JList mScriptList;
 	final private IScriptModel mScriptModel;
@@ -402,7 +410,7 @@ class ScriptEditorPanel extends JDialog implements AiChatCodeEditor {
 		UITools.setScrollbarIncrement(scriptScrollPane);
 		mCentralUpperPanel = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, mScriptList, scriptScrollPane);
 		try {
-			editorPane.setContentType("text/x-freeplane-script-groovy");
+			editorPane.setContentType(EDITOR_CONTENT_TYPE);
 
 			final String fontName = ResourceController.getResourceController().getProperty(GROOVY_EDITOR_FONT);
 			final int fontSize = ResourceController.getResourceController().getIntProperty(GROOVY_EDITOR_FONT_SIZE);
@@ -450,9 +458,11 @@ class ScriptEditorPanel extends JDialog implements AiChatCodeEditor {
 		mRunAction = new RunAction();
 		mRunAction.setEnabled(false);
 		addButton(menuBar, mRunAction, "plugins/ScriptEditor.run");
-		mAttachToAiAction = new AttachToAiAction();
-		mAttachToAiAction.setEnabled(false);
-		addButton(menuBar, mAttachToAiAction, "plugins/ScriptEditor.ai");
+		mAttachToAiButton = TranslatedElementFactory.createToggleButton("plugins/ScriptEditor.ai");
+		mAttachToAiButton.setEnabled(false);
+		mAttachToAiButton.setIcon(ResourceController.getResourceController().getImageIcon(AI_TAB_ICON_RESOURCE));
+		mAttachToAiButton.addActionListener(new AttachToAiAction());
+		menuBar.add(mAttachToAiButton);
 		mSignAction = new SignAction(TextUtils.getRawText("plugins/ScriptEditor.sign"));
 		mSignAction.setEnabled(false);
 		addAction(menu, mSignAction);
@@ -485,6 +495,24 @@ class ScriptEditorPanel extends JDialog implements AiChatCodeEditor {
 		menu.add(button);
 	}
 
+	private void setAiChatAttachment(AiChatAttachment attachment) {
+		aiChatAttachment = attachment;
+		if (aiChatAttachment != null) {
+			aiChatAttachment.setDetachHandler(new Runnable() {
+				@Override
+				public void run() {
+					aiChatAttachment = null;
+					updateAiAttachButtonState();
+				}
+			});
+		}
+		updateAiAttachButtonState();
+	}
+
+	private void updateAiAttachButtonState() {
+		mAttachToAiButton.setSelected(aiChatAttachment != null);
+	}
+
 	/**
 	 * @param pIsCanceled
 	 */
@@ -501,7 +529,6 @@ class ScriptEditorPanel extends JDialog implements AiChatCodeEditor {
 		}
 		if (aiChatAttachment != null) {
 			aiChatAttachment.detach();
-			aiChatAttachment = null;
 		}
 		final ScriptEditorWindowConfigurationStorage storage = new ScriptEditorWindowConfigurationStorage();
 		storage.setLeftRatio(mCentralUpperPanel.getDividerLocation());
@@ -594,7 +621,7 @@ class ScriptEditorPanel extends JDialog implements AiChatCodeEditor {
 	private void select(final int pIndex) {
 		mScriptTextField.setEnabled(pIndex >= 0);
 		mRunAction.setEnabled(pIndex >= 0);
-		mAttachToAiAction.setEnabled(pIndex >= 0);
+		mAttachToAiButton.setEnabled(pIndex >= 0);
 		mSignAction.setEnabled(pIndex >= 0);
 		if (pIndex < 0) {
 			mScriptTextField.setText("");
