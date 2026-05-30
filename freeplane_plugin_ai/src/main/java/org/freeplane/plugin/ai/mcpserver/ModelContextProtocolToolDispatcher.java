@@ -5,6 +5,8 @@ import dev.langchain4j.invocation.InvocationContext;
 import dev.langchain4j.service.tool.ToolExecutionResult;
 import dev.langchain4j.service.tool.ToolExecutor;
 
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
 
@@ -19,10 +21,13 @@ public class ModelContextProtocolToolDispatcher {
     private final Map<String, ToolExecutor> toolExecutorsByName;
 
     public ModelContextProtocolToolDispatcher(Object toolSet, ObjectMapper objectMapper) {
-        Objects.requireNonNull(toolSet, "toolSet");
+        this(Collections.singletonList(Objects.requireNonNull(toolSet, "toolSet")), objectMapper);
+    }
+
+    public ModelContextProtocolToolDispatcher(Collection<?> toolSets, ObjectMapper objectMapper) {
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
         ToolExecutorFactory toolExecutorFactory = new ToolExecutorFactory(false, false);
-        ToolExecutorRegistry toolExecutorRegistry = toolExecutorFactory.createRegistry(toolSet);
+        ToolExecutorRegistry toolExecutorRegistry = toolExecutorFactory.createRegistry(toolSets);
         this.toolExecutorsByName = toolExecutorRegistry.getExecutorsByName();
     }
 

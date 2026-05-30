@@ -12,11 +12,14 @@ import static org.mockito.Mockito.when;
 
 import dev.langchain4j.memory.ChatMemory;
 import dev.langchain4j.model.output.TokenUsage;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.features.text.TextController;
+import org.freeplane.plugin.ai.code.AttachedEditorProvider;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.freeplane.plugin.ai.prompt.AiPromptProgressDialogFactory;
 import org.freeplane.plugin.ai.prompt.AiPromptRequestComposer;
@@ -52,6 +55,7 @@ public class ChatPromptRunnerTest {
              MockedConstruction<AIToolSetBuilder> toolSetBuilders = promptServiceBuilderConstruction()) {
             chatServiceFactory.when(() -> AIChatServiceFactory.createService(
                 any(AIToolSet.class),
+                org.mockito.ArgumentMatchers.<Collection<?>>any(),
                 any(ChatMemory.class),
                 any(ChatTokenUsageTracker.class),
                 nullable(ToolCallSummaryHandler.class),
@@ -61,7 +65,7 @@ public class ChatPromptRunnerTest {
                 nullable(String.class)))
                 .thenAnswer(invocation -> {
                     @SuppressWarnings("unchecked")
-                    Supplier<ChatToolAvailability> toolAvailabilitySupplier = invocation.getArgument(6);
+                    Supplier<ChatToolAvailability> toolAvailabilitySupplier = invocation.getArgument(7);
                     seenServiceToolAvailability.set(toolAvailabilitySupplier.get());
                     return promptService;
                 });
@@ -98,6 +102,7 @@ public class ChatPromptRunnerTest {
              MockedConstruction<AIToolSetBuilder> toolSetBuilders = promptServiceBuilderConstruction()) {
             chatServiceFactory.when(() -> AIChatServiceFactory.createService(
                 any(AIToolSet.class),
+                org.mockito.ArgumentMatchers.<Collection<?>>any(),
                 any(ChatMemory.class),
                 any(ChatTokenUsageTracker.class),
                 nullable(ToolCallSummaryHandler.class),
@@ -136,6 +141,7 @@ public class ChatPromptRunnerTest {
             resourceControllers.when(ResourceController::getResourceController).thenReturn(resourceController);
             chatServiceFactory.when(() -> AIChatServiceFactory.createService(
                 any(AIToolSet.class),
+                org.mockito.ArgumentMatchers.<Collection<?>>any(),
                 any(ChatMemory.class),
                 any(ChatTokenUsageTracker.class),
                 nullable(ToolCallSummaryHandler.class),
@@ -186,6 +192,7 @@ public class ChatPromptRunnerTest {
             resourceControllers.when(ResourceController::getResourceController).thenReturn(resourceController);
             chatServiceFactory.when(() -> AIChatServiceFactory.createService(
                 any(AIToolSet.class),
+                org.mockito.ArgumentMatchers.<Collection<?>>any(),
                 any(ChatMemory.class),
                 any(ChatTokenUsageTracker.class),
                 nullable(ToolCallSummaryHandler.class),
@@ -231,6 +238,7 @@ public class ChatPromptRunnerTest {
             aiPromptRequestComposer,
             (sessionId, service, preparedMessage, requestFlow, requestTokenUsageTracker, requestCallbacks) ->
                 seenPreparedMessage.set(preparedMessage),
+            null,
             new HiddenPromptRequestRunnerFactory(),
             new AiPromptProgressDialogFactory(),
             promptChatMemory,
@@ -252,6 +260,7 @@ public class ChatPromptRunnerTest {
             new AiPromptRequestComposer(availableMaps, mock(TextController.class)),
             (sessionId, service, preparedMessage, requestFlow, requestTokenUsageTracker, requestCallbacks) -> {
             },
+            null,
             hiddenRunnerFactory,
             dialogFactory,
             null,
@@ -263,10 +272,13 @@ public class ChatPromptRunnerTest {
 
     private MockedConstruction<AIToolSetBuilder> promptServiceBuilderConstruction() {
         return mockConstruction(AIToolSetBuilder.class, (mock, context) -> {
+            AIToolSet toolSet = mock(AIToolSet.class);
             when(mock.toolCallSummaryHandler(nullable(ToolCallSummaryHandler.class))).thenReturn(mock);
             when(mock.availableMaps(any())).thenReturn(mock);
             when(mock.mapAccessListener(nullable(AvailableMaps.MapAccessListener.class))).thenReturn(mock);
-            when(mock.build()).thenReturn(mock(AIToolSet.class));
+            when(mock.attachedEditorProvider(nullable(AttachedEditorProvider.class))).thenReturn(mock);
+            when(mock.build()).thenReturn(toolSet);
+            when(mock.buildToolObjects()).thenReturn(Collections.<Object>singletonList(toolSet));
         });
     }
 

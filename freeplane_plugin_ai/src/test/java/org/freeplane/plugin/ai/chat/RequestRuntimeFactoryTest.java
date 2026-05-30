@@ -39,6 +39,7 @@ public class RequestRuntimeFactoryTest {
             new AiPromptRequestComposer(mock(AvailableMaps.class), mock(TextController.class)),
             (sessionId, service, preparedMessage, requestFlow, requestTokenUsageTracker, requestCallbacks) -> {
             },
+            () -> null,
             hiddenRunnerFactory,
             new AiPromptProgressDialogFactory());
 

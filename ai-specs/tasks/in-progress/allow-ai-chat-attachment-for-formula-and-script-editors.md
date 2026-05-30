@@ -333,7 +333,7 @@
       attachment.
 
 ## Subtask: Introduce shared editor-attachment service, attach-mode setting, and attached-issue tool path
-- **Status:** in-progress
+- **Status:** review
 - **Scope:** Add the cross-plugin editor-attachment contract in
   `freeplane`, wire a single-active-attachment service into the AI
   plugin, add the user setting that chooses whether explicit attach or
@@ -708,6 +708,18 @@
   - **Manual tests:** N/A
   - Verification command:
     - `gradle -Djava.net.preferIPv6Addresses=true -Djava.awt.headless=true :freeplane_plugin_ai:test :freeplane:test`
+- **Implementation notes:**
+  - **Tradeoffs:**
+    - Attached-editor tools stay registered even with no active
+      attachment, and `AIChatService` bypasses
+      `ChatToolAvailability` by always unioning those tool names into
+      chat registration. That keeps chat and MCP on one stable tool
+      surface while still letting tool behavior enforce attachment
+      state.
+    - `ToolExecutorFactory` now sorts tool methods by signature within
+      each tool object instead of depending on reflection order. That
+      gives deterministic merged registration without adding a second
+      ordering mechanism.
 
 ## Subtask: Attach Script Editor to AI chat and expose compile diagnostics
 - **Status:** backlog

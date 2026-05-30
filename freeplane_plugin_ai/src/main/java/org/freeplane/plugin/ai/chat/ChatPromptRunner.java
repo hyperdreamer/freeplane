@@ -3,6 +3,7 @@ package org.freeplane.plugin.ai.chat;
 import dev.langchain4j.memory.ChatMemory;
 import dev.langchain4j.model.output.TokenUsage;
 import java.awt.Component;
+import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import javax.swing.Icon;
@@ -10,13 +11,14 @@ import javax.swing.SwingUtilities;
 import org.freeplane.core.ui.components.UITools;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.mode.Controller;
+import org.freeplane.plugin.ai.code.AttachedEditorProvider;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
+import org.freeplane.plugin.ai.prompt.AiPromptProgressDialogFactory;
 import org.freeplane.plugin.ai.prompt.AiPromptRequestComposer;
 import org.freeplane.plugin.ai.prompt.HiddenAiRequestObserverBridge;
 import org.freeplane.plugin.ai.prompt.HiddenPromptRequestRunner;
 import org.freeplane.plugin.ai.prompt.HiddenPromptRequestRunnerFactory;
 import org.freeplane.plugin.ai.prompt.ui.AiPromptProgressDialog;
-import org.freeplane.plugin.ai.prompt.AiPromptProgressDialogFactory;
 import org.freeplane.plugin.ai.tools.AIToolSetBuilder;
 import org.freeplane.plugin.ai.tools.selection.SelectionIdentifiersResponse;
 import org.freeplane.plugin.ai.tools.utilities.ToolCallSummaryHandler;
@@ -43,6 +45,7 @@ class ChatPromptRunner {
     private final AvailableMaps availableMaps;
     private final AiPromptRequestComposer aiPromptRequestComposer;
     private final VisiblePromptChatLauncher visiblePromptChatLauncher;
+    private final AttachedEditorProvider attachedEditorProvider;
     private final HiddenPromptRequestRunner hiddenPromptRequestRunner;
     private final AiPromptProgressDialogFactory aiPromptProgressDialogFactory;
     private final ChatMemory shownPromptChatMemory;
@@ -61,6 +64,7 @@ class ChatPromptRunner {
                      AvailableMaps availableMaps,
                      AiPromptRequestComposer aiPromptRequestComposer,
                      VisiblePromptChatLauncher visiblePromptChatLauncher,
+                     AttachedEditorProvider attachedEditorProvider,
                      HiddenPromptRequestRunnerFactory hiddenPromptRequestRunnerFactory,
                      AiPromptProgressDialogFactory aiPromptProgressDialogFactory,
                      ChatMemory shownPromptChatMemory,
@@ -74,6 +78,7 @@ class ChatPromptRunner {
         this.availableMaps = availableMaps;
         this.aiPromptRequestComposer = aiPromptRequestComposer;
         this.visiblePromptChatLauncher = visiblePromptChatLauncher;
+        this.attachedEditorProvider = attachedEditorProvider;
         this.aiPromptProgressDialogFactory = aiPromptProgressDialogFactory;
         this.shownPromptChatMemory = shownPromptChatMemory;
         this.shownMapAccessListener = shownMapAccessListener;
@@ -221,11 +226,15 @@ class ChatPromptRunner {
                                                   ChatTokenUsageTracker tokenUsageTracker,
                                                   String selectedModelOverride,
                                                   ChatToolAvailability toolAvailability) {
-        return AIChatServiceFactory.createService(new AIToolSetBuilder()
-                .toolCallSummaryHandler(toolCallSummaryHandler)
-                .availableMaps(availableMaps)
-                .mapAccessListener(mapAccessListener)
-                .build(),
+        AIToolSetBuilder toolSetBuilder = new AIToolSetBuilder()
+            .toolCallSummaryHandler(toolCallSummaryHandler)
+            .availableMaps(availableMaps)
+            .mapAccessListener(mapAccessListener)
+            .attachedEditorProvider(attachedEditorProvider);
+        List<Object> toolObjects = toolSetBuilder.buildToolObjects();
+        return AIChatServiceFactory.createService(
+            (org.freeplane.plugin.ai.tools.AIToolSet) toolObjects.get(0),
+            toolObjects,
             promptChatMemory,
             tokenUsageTracker,
             toolCallSummaryHandler,

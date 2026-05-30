@@ -1,5 +1,8 @@
 package org.freeplane.plugin.ai.tools;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
 
 import org.freeplane.features.attribute.AttributeController;
@@ -9,6 +12,11 @@ import org.freeplane.features.map.mindmapmode.MMapController;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
 import org.freeplane.features.text.TextController;
+import org.freeplane.plugin.ai.code.AttachedEditorProvider;
+import org.freeplane.plugin.ai.code.AttachedEditorToolSet;
+import org.freeplane.plugin.ai.code.OverwriteAttachedEditorContentResponse;
+import org.freeplane.plugin.ai.code.ReadAttachedEditorLatestIssueResponse;
+import org.freeplane.plugin.ai.code.ReadAttachedEditorResponse;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.freeplane.plugin.ai.maps.ControllerMapModelProvider;
 import org.freeplane.plugin.ai.tools.content.AttributesContentReader;
@@ -27,6 +35,7 @@ import org.freeplane.plugin.ai.tools.text.DefaultEnglishTextProvider;
 import org.freeplane.plugin.ai.tools.text.EnglishTextProvider;
 import org.freeplane.plugin.ai.tools.utilities.ToolCallSummaryHandler;
 import org.freeplane.plugin.ai.tools.utilities.ToolCaller;
+import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 
 public class AIToolSetBuilder {
     private ToolCallSummaryHandler toolCallSummaryHandler;
@@ -36,6 +45,7 @@ public class AIToolSetBuilder {
     private AttributeController attributeController;
     private IconController iconController;
     private MMapController mapController;
+    private AttachedEditorProvider attachedEditorProvider;
     private ToolCaller toolCaller = ToolCaller.CHAT;
 
     public AIToolSetBuilder toolCallSummaryHandler(ToolCallSummaryHandler handler) {
@@ -78,7 +88,27 @@ public class AIToolSetBuilder {
         return this;
     }
 
+    public AIToolSetBuilder attachedEditorProvider(AttachedEditorProvider attachedEditorProvider) {
+        this.attachedEditorProvider = attachedEditorProvider;
+        return this;
+    }
+
     public AIToolSet build() {
+        ResolvedComponents resolvedComponents = resolveComponents();
+        return createBaseToolSet(resolvedComponents);
+    }
+
+    public List<Object> buildToolObjects() {
+        ResolvedComponents resolvedComponents = resolveComponents();
+        AIToolSet toolSet = createBaseToolSet(resolvedComponents);
+        AttachedEditorToolSet attachedEditorToolSet = new AttachedEditorToolSet(
+            effectiveAttachedEditorProvider(),
+            toolCallSummaryHandler,
+            toolCaller);
+        return Collections.<Object>unmodifiableList(Arrays.<Object>asList(toolSet, attachedEditorToolSet));
+    }
+
+    private ResolvedComponents resolveComponents() {
         AvailableMaps availableMaps = this.availableMaps != null ? this.availableMaps : createAvailableMaps();
         TextController textController = this.textController != null ? this.textController : createTextController();
         AttributeController attributeController = this.attributeController != null ? this.attributeController
@@ -89,8 +119,61 @@ public class AIToolSetBuilder {
             iconController);
         GetApiDocumentationTool getApiDocumentationTool = new GetApiDocumentationTool(
             availableMaps, mapController, textController);
-        return new AIToolSet(toolCallSummaryHandler, availableMaps, mapAccessListener, textController,
-            nodeContentFactories, mapController, getApiDocumentationTool, toolCaller);
+        return new ResolvedComponents(
+            availableMaps,
+            textController,
+            nodeContentFactories,
+            mapController,
+            getApiDocumentationTool);
+    }
+
+    private AIToolSet createBaseToolSet(ResolvedComponents resolvedComponents) {
+        return new AIToolSet(
+            toolCallSummaryHandler,
+            resolvedComponents.availableMaps,
+            mapAccessListener,
+            resolvedComponents.textController,
+            resolvedComponents.nodeContentFactories,
+            resolvedComponents.mapController,
+            resolvedComponents.getApiDocumentationTool,
+            toolCaller);
+    }
+
+    private AttachedEditorProvider effectiveAttachedEditorProvider() {
+        if (attachedEditorProvider != null) {
+            return attachedEditorProvider;
+        }
+        return new AttachedEditorProvider() {
+            @Override
+            public ReadAttachedEditorResponse readAttachedEditor() {
+                return ReadAttachedEditorResponse.detached();
+            }
+
+            @Override
+            public OverwriteAttachedEditorContentResponse overwriteAttachedEditorContent(String text) {
+                throw new IllegalStateException("No editor is attached.");
+            }
+
+            @Override
+            public AiChatCodeOperationResult compileAttachedEditorContent() {
+                throw new IllegalStateException("No editor is attached.");
+            }
+
+            @Override
+            public ReadAttachedEditorLatestIssueResponse getAttachedEditorLatestIssue() {
+                throw new IllegalStateException("No editor is attached.");
+            }
+
+            @Override
+            public boolean hasAttachedEditor() {
+                return false;
+            }
+
+            @Override
+            public String attachedContentType() {
+                return null;
+            }
+        };
     }
 
     private AvailableMaps createAvailableMaps() {
@@ -166,5 +249,25 @@ public class AIToolSetBuilder {
             textualContentReader, attributesContentReader, tagsContentReader, iconsContentReader,
             nodeStyleContentReader, editableContentReader);
         return new NodeContentItemReader(nodeContentReader);
+    }
+
+    private static final class ResolvedComponents {
+        private final AvailableMaps availableMaps;
+        private final TextController textController;
+        private final NodeContentFactories nodeContentFactories;
+        private final MMapController mapController;
+        private final GetApiDocumentationTool getApiDocumentationTool;
+
+        private ResolvedComponents(AvailableMaps availableMaps,
+                                   TextController textController,
+                                   NodeContentFactories nodeContentFactories,
+                                   MMapController mapController,
+                                   GetApiDocumentationTool getApiDocumentationTool) {
+            this.availableMaps = availableMaps;
+            this.textController = textController;
+            this.nodeContentFactories = nodeContentFactories;
+            this.mapController = mapController;
+            this.getApiDocumentationTool = getApiDocumentationTool;
+        }
     }
 }

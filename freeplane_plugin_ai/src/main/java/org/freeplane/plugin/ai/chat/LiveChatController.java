@@ -331,7 +331,7 @@ public class LiveChatController {
         return newSession.getId();
     }
 
-    private void switchToSession(LiveChatSessionId sessionId) {
+    public void switchToSession(LiveChatSessionId sessionId) {
         switchToSession(sessionId, true, false);
     }
 

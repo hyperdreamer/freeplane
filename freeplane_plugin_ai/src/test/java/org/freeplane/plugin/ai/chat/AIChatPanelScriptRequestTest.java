@@ -50,6 +50,36 @@ import org.mockito.MockedStatic;
 public class AIChatPanelScriptRequestTest {
 
     @Test
+    public void showAndFocusInputSelectsTabAndRequestsInputFocus() throws Exception {
+        PanelHarness harness = newPanelHarness(false);
+        FocusAwareTextArea inputArea = new FocusAwareTextArea();
+        setField(harness.panel, "inputArea", inputArea);
+        JTabbedPane tabs = mock(JTabbedPane.class);
+
+        try (MockedStatic<UITools> uiTools = mockStatic(UITools.class)) {
+            uiTools.when(UITools::getFreeplaneTabbedPanel).thenReturn(tabs);
+
+            harness.panel.showAndFocusInput();
+            flushEdt();
+        }
+
+        verify(tabs).setSelectedComponent(harness.panel);
+        assertThat(inputArea.focusRequested).isTrue();
+    }
+
+    @Test
+    public void switchToSessionActivatesChosenSession() throws Exception {
+        PanelHarness harness = newPanelHarness(true);
+        LiveChatSessionId originalSessionId = harness.sessionId;
+        LiveChatSessionId anotherSessionId = harness.liveChatController.startNewChat();
+
+        harness.panel.switchToSession(originalSessionId);
+
+        assertThat(harness.liveChatController.currentSessionId()).isEqualTo(originalSessionId);
+        assertThat(harness.liveChatController.currentSessionId()).isNotEqualTo(anotherSessionId);
+    }
+
+    @Test
     public void shownRequestCallbackRunsAfterAssistantMessageAppend() throws Exception {
         PanelHarness harness = newPanelHarness(true);
         ChatPromptRunner.VisiblePromptRequestCallbacks requestCallbacks =
@@ -101,10 +131,13 @@ public class AIChatPanelScriptRequestTest {
              MockedStatic<AIChatServiceFactory> chatServiceFactory = mockStatic(AIChatServiceFactory.class);
              MockedConstruction<AIToolSetBuilder> toolSetBuilders = mockConstruction(AIToolSetBuilder.class,
                  (mock, context) -> {
+                     AIToolSet toolSet = mock(AIToolSet.class);
                      when(mock.toolCallSummaryHandler(any())).thenReturn(mock);
                      when(mock.availableMaps(any())).thenReturn(mock);
                      when(mock.mapAccessListener(any())).thenReturn(mock);
-                     when(mock.build()).thenReturn(mock(AIToolSet.class));
+                     when(mock.attachedEditorProvider(org.mockito.ArgumentMatchers.nullable(org.freeplane.plugin.ai.code.AttachedEditorProvider.class))).thenReturn(mock);
+                     when(mock.build()).thenReturn(toolSet);
+                     when(mock.buildToolObjects()).thenReturn(java.util.Collections.<Object>singletonList(toolSet));
                  })) {
             ResourceController resourceController = mock(ResourceController.class);
             resourceControllers.when(ResourceController::getResourceController).thenReturn(resourceController);
@@ -113,6 +146,7 @@ public class AIChatPanelScriptRequestTest {
             uiTools.when(UITools::getFreeplaneTabbedPanel).thenReturn(tabs);
             chatServiceFactory.when(() -> AIChatServiceFactory.createService(
                 any(AIToolSet.class),
+                org.mockito.ArgumentMatchers.<java.util.Collection<?>>any(),
                 any(ChatMemory.class),
                 any(ChatTokenUsageTracker.class),
                 any(ToolCallSummaryHandler.class),
@@ -122,9 +156,9 @@ public class AIChatPanelScriptRequestTest {
                 nullable(String.class)))
                 .thenAnswer(invocation -> {
                     @SuppressWarnings("unchecked")
-                    Supplier<ChatToolAvailability> toolAvailabilitySupplier = invocation.getArgument(6);
+                    Supplier<ChatToolAvailability> toolAvailabilitySupplier = invocation.getArgument(7);
                     seenToolAvailability.set(toolAvailabilitySupplier == null ? null : toolAvailabilitySupplier.get());
-                    seenSelectedModel.set(invocation.getArgument(7));
+                    seenSelectedModel.set(invocation.getArgument(8));
                     return mock(AIChatService.class);
                 });
 
@@ -165,10 +199,13 @@ public class AIChatPanelScriptRequestTest {
              MockedStatic<AIChatServiceFactory> chatServiceFactory = mockStatic(AIChatServiceFactory.class);
              MockedConstruction<AIToolSetBuilder> toolSetBuilders = mockConstruction(AIToolSetBuilder.class,
                  (mock, context) -> {
+                     AIToolSet toolSet = mock(AIToolSet.class);
                      when(mock.toolCallSummaryHandler(any())).thenReturn(mock);
                      when(mock.availableMaps(any())).thenReturn(mock);
                      when(mock.mapAccessListener(any())).thenReturn(mock);
-                     when(mock.build()).thenReturn(mock(AIToolSet.class));
+                     when(mock.attachedEditorProvider(org.mockito.ArgumentMatchers.nullable(org.freeplane.plugin.ai.code.AttachedEditorProvider.class))).thenReturn(mock);
+                     when(mock.build()).thenReturn(toolSet);
+                     when(mock.buildToolObjects()).thenReturn(java.util.Collections.<Object>singletonList(toolSet));
                  })) {
             ResourceController resourceController = mock(ResourceController.class);
             resourceControllers.when(ResourceController::getResourceController).thenReturn(resourceController);
@@ -177,6 +214,7 @@ public class AIChatPanelScriptRequestTest {
             uiTools.when(UITools::getFreeplaneTabbedPanel).thenReturn(tabs);
             chatServiceFactory.when(() -> AIChatServiceFactory.createService(
                 any(AIToolSet.class),
+                org.mockito.ArgumentMatchers.<java.util.Collection<?>>any(),
                 any(ChatMemory.class),
                 any(ChatTokenUsageTracker.class),
                 any(ToolCallSummaryHandler.class),
@@ -220,10 +258,13 @@ public class AIChatPanelScriptRequestTest {
              MockedStatic<AIChatServiceFactory> chatServiceFactory = mockStatic(AIChatServiceFactory.class);
              MockedConstruction<AIToolSetBuilder> toolSetBuilders = mockConstruction(AIToolSetBuilder.class,
                  (mock, context) -> {
+                     AIToolSet toolSet = mock(AIToolSet.class);
                      when(mock.toolCallSummaryHandler(any())).thenReturn(mock);
                      when(mock.availableMaps(any())).thenReturn(mock);
                      when(mock.mapAccessListener(any())).thenReturn(mock);
-                     when(mock.build()).thenReturn(mock(AIToolSet.class));
+                     when(mock.attachedEditorProvider(org.mockito.ArgumentMatchers.nullable(org.freeplane.plugin.ai.code.AttachedEditorProvider.class))).thenReturn(mock);
+                     when(mock.build()).thenReturn(toolSet);
+                     when(mock.buildToolObjects()).thenReturn(java.util.Collections.<Object>singletonList(toolSet));
                  })) {
             ResourceController resourceController = mock(ResourceController.class);
             resourceControllers.when(ResourceController::getResourceController).thenReturn(resourceController);
@@ -232,6 +273,7 @@ public class AIChatPanelScriptRequestTest {
             uiTools.when(UITools::getFreeplaneTabbedPanel).thenReturn(tabs);
             chatServiceFactory.when(() -> AIChatServiceFactory.createService(
                 any(AIToolSet.class),
+                org.mockito.ArgumentMatchers.<java.util.Collection<?>>any(),
                 any(ChatMemory.class),
                 any(ChatTokenUsageTracker.class),
                 any(ToolCallSummaryHandler.class),
@@ -280,10 +322,13 @@ public class AIChatPanelScriptRequestTest {
              MockedStatic<AIChatServiceFactory> chatServiceFactory = mockStatic(AIChatServiceFactory.class);
              MockedConstruction<AIToolSetBuilder> toolSetBuilders = mockConstruction(AIToolSetBuilder.class,
                  (mock, context) -> {
+                     AIToolSet toolSet = mock(AIToolSet.class);
                      when(mock.toolCallSummaryHandler(any())).thenReturn(mock);
                      when(mock.availableMaps(any())).thenReturn(mock);
                      when(mock.mapAccessListener(any())).thenReturn(mock);
-                     when(mock.build()).thenReturn(mock(AIToolSet.class));
+                     when(mock.attachedEditorProvider(org.mockito.ArgumentMatchers.nullable(org.freeplane.plugin.ai.code.AttachedEditorProvider.class))).thenReturn(mock);
+                     when(mock.build()).thenReturn(toolSet);
+                     when(mock.buildToolObjects()).thenReturn(java.util.Collections.<Object>singletonList(toolSet));
                  })) {
             ResourceController resourceController = mock(ResourceController.class);
             resourceControllers.when(ResourceController::getResourceController).thenReturn(resourceController);
@@ -292,6 +337,7 @@ public class AIChatPanelScriptRequestTest {
             uiTools.when(UITools::getFreeplaneTabbedPanel).thenReturn(tabs);
             chatServiceFactory.when(() -> AIChatServiceFactory.createService(
                 any(AIToolSet.class),
+                org.mockito.ArgumentMatchers.<java.util.Collection<?>>any(),
                 any(ChatMemory.class),
                 any(ChatTokenUsageTracker.class),
                 any(ToolCallSummaryHandler.class),
@@ -301,9 +347,9 @@ public class AIChatPanelScriptRequestTest {
                 nullable(String.class)))
                 .thenAnswer(invocation -> {
                     @SuppressWarnings("unchecked")
-                    Supplier<ChatToolAvailability> toolAvailabilitySupplier = invocation.getArgument(6);
+                    Supplier<ChatToolAvailability> toolAvailabilitySupplier = invocation.getArgument(7);
                     seenToolAvailability.set(toolAvailabilitySupplier == null ? null : toolAvailabilitySupplier.get());
-                    seenSelectedModel.set(invocation.getArgument(7));
+                    seenSelectedModel.set(invocation.getArgument(8));
                     return mock(AIChatService.class);
                 });
 
@@ -557,6 +603,11 @@ public class AIChatPanelScriptRequestTest {
             aiRequestConfigurationResolver);
     }
 
+    private void flushEdt() throws Exception {
+        javax.swing.SwingUtilities.invokeAndWait(() -> {
+        });
+    }
+
     private void setField(Object target, String fieldName, Object value) throws Exception {
         Field field = AIChatPanel.class.getDeclaredField(fieldName);
         field.setAccessible(true);
@@ -568,6 +619,16 @@ public class AIChatPanelScriptRequestTest {
         sessionManagerField.setAccessible(true);
         LiveChatSessionManager sessionManager = (LiveChatSessionManager) sessionManagerField.get(liveChatController);
         return sessionManager.getCurrentSession();
+    }
+
+    private static class FocusAwareTextArea extends JTextArea {
+        private boolean focusRequested;
+
+        @Override
+        public boolean requestFocusInWindow() {
+            focusRequested = true;
+            return true;
+        }
     }
 
     private static class CapturingChatRequestFlowFactory extends ChatRequestFlowFactory {

@@ -19,6 +19,7 @@ import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -47,16 +48,22 @@ public class ModelContextProtocolServer implements IFreeplanePropertyListener {
     private volatile HttpServer server;
 
     public ModelContextProtocolServer(AIToolSet toolSet, ViewController viewController) {
-        this(toolSet, new ObjectMapper(), ResourceController.getResourceController(), viewController);
+        this(Collections.<Object>singletonList(toolSet), new ObjectMapper(), ResourceController.getResourceController(),
+            viewController);
+    }
+
+    public ModelContextProtocolServer(Collection<?> toolSets, ViewController viewController) {
+        this(toolSets, new ObjectMapper(), ResourceController.getResourceController(), viewController);
     }
 
     public ModelContextProtocolServer(AIToolSet toolSet, ObjectMapper objectMapper, ViewController viewController) {
-        this(toolSet, objectMapper, ResourceController.getResourceController(), viewController);
+        this(Collections.<Object>singletonList(toolSet), objectMapper, ResourceController.getResourceController(),
+            viewController);
     }
 
-    ModelContextProtocolServer(AIToolSet toolSet, ObjectMapper objectMapper, ResourceController resourceController,
+    ModelContextProtocolServer(Collection<?> toolSets, ObjectMapper objectMapper, ResourceController resourceController,
                                ViewController viewController) {
-        this(toolSet, objectMapper, resourceController, new MCPAuthenticator(
+        this(toolSets, objectMapper, resourceController, new MCPAuthenticator(
             resourceController,
             viewController,
             MCP_TOKEN_PROPERTY,
@@ -65,9 +72,14 @@ public class ModelContextProtocolServer implements IFreeplanePropertyListener {
 
     ModelContextProtocolServer(AIToolSet toolSet, ObjectMapper objectMapper, ResourceController resourceController,
                                MCPAuthenticator authenticator) {
+        this(Collections.<Object>singletonList(toolSet), objectMapper, resourceController, authenticator);
+    }
+
+    ModelContextProtocolServer(Collection<?> toolSets, ObjectMapper objectMapper, ResourceController resourceController,
+                               MCPAuthenticator authenticator) {
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
-        this.toolRegistry = new ModelContextProtocolToolRegistry(toolSet, this.objectMapper);
-        this.toolDispatcher = new ModelContextProtocolToolDispatcher(toolSet, this.objectMapper);
+        this.toolRegistry = new ModelContextProtocolToolRegistry(toolSets, this.objectMapper);
+        this.toolDispatcher = new ModelContextProtocolToolDispatcher(toolSets, this.objectMapper);
         this.resourceController = Objects.requireNonNull(resourceController, "resourceController");
         this.authenticator = Objects.requireNonNull(authenticator, "authenticator");
         this.running = new AtomicBoolean(false);

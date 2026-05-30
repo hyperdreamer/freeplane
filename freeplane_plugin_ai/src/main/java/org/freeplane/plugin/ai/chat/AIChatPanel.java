@@ -34,6 +34,7 @@ import org.freeplane.plugin.ai.prompt.AiPrompt;
 import org.freeplane.plugin.ai.prompt.AiPromptProgressDialogFactory;
 import org.freeplane.plugin.ai.prompt.AiPromptRequestComposer;
 import org.freeplane.plugin.ai.prompt.HiddenAiRequestObserverBridge;
+import org.freeplane.plugin.ai.code.AttachedEditorProvider;
 import org.freeplane.plugin.ai.prompt.HiddenAiRequestObserverFactory;
 import org.freeplane.plugin.ai.prompt.HiddenPromptRequestRunner;
 import org.freeplane.plugin.ai.prompt.HiddenPromptRequestRunnerFactory;
@@ -143,6 +144,7 @@ public class AIChatPanel extends JPanel {
     private final AssistantProfileSelectionSync assistantProfileSelectionSync;
     private final AssistantProfilePaneBuilder assistantProfilePaneBuilder;
     private boolean currentSessionUsesAssistantProfile = true;
+    private AttachedEditorProvider attachedEditorProvider;
 
     public AIChatPanel() {
         setLayout(new BorderLayout());
@@ -370,6 +372,7 @@ public class AIChatPanel extends JPanel {
             availableMaps,
             aiPromptRequestComposer,
             this::openPromptChat,
+            this::currentAttachedEditorProvider,
             hiddenPromptRequestRunnerFactory,
             aiPromptProgressDialogFactory);
         aiRequestExecutionCoordinator = new AiRequestExecutionCoordinator(
@@ -1098,11 +1101,15 @@ public class AIChatPanel extends JPanel {
         }
         ChatToolAvailability toolAvailabilityOverride =
             liveChatController.sessionToolAvailabilityOverride(sessionId);
-        return AIChatServiceFactory.createService(new AIToolSetBuilder()
-                .toolCallSummaryHandler(requestFlow::onToolCallSummary)
-                .availableMaps(availableMaps)
-                .mapAccessListener(liveChatController.mapAccessListener(sessionId))
-                .build(),
+        AIToolSetBuilder toolSetBuilder = new AIToolSetBuilder()
+            .toolCallSummaryHandler(requestFlow::onToolCallSummary)
+            .availableMaps(availableMaps)
+            .mapAccessListener(liveChatController.mapAccessListener(sessionId))
+            .attachedEditorProvider(currentAttachedEditorProvider());
+        List<Object> toolObjects = toolSetBuilder.buildToolObjects();
+        return AIChatServiceFactory.createService(
+            (org.freeplane.plugin.ai.tools.AIToolSet) toolObjects.get(0),
+            toolObjects,
             liveChatController.chatMemory(sessionId),
             requestTokenUsageTracker,
             requestFlow::onToolCallSummary,
@@ -1110,6 +1117,10 @@ public class AIChatPanel extends JPanel {
             requestFlow::onProviderUsage,
             toolAvailabilityOverride == null ? null : () -> toolAvailabilityOverride,
             selectedModelOverride);
+    }
+
+    private AttachedEditorProvider currentAttachedEditorProvider() {
+        return attachedEditorProvider;
     }
 
     private ChatTokenUsageTracker createRequestTokenUsageTracker(LiveChatSessionId sessionId) {
@@ -1297,6 +1308,44 @@ public class AIChatPanel extends JPanel {
         if (UITools.getFreeplaneTabbedPanel() != null) {
             UITools.getFreeplaneTabbedPanel().setSelectedComponent(this);
         }
+    }
+
+    public void setAttachedEditorProvider(AttachedEditorProvider attachedEditorProvider) {
+        this.attachedEditorProvider = attachedEditorProvider;
+    }
+
+    public LiveChatSessionId currentSessionId() {
+        return liveChatController.currentSessionId();
+    }
+
+    public LiveChatSessionId startNewChat() {
+        return liveChatController.startNewChat();
+    }
+
+    public void switchToSession(LiveChatSessionId sessionId) {
+        liveChatController.switchToSession(sessionId);
+    }
+
+    public void showAndFocusInput() {
+        showChatTab();
+        SwingUtilities.invokeLater(inputArea::requestFocusInWindow);
+    }
+
+    public boolean submitMessageToSession(LiveChatSessionId sessionId, String userMessage) {
+        if (sessionId == null || userMessage == null || userMessage.trim().isEmpty()) {
+            return false;
+        }
+        switchToSession(sessionId);
+        showAndFocusInput();
+        ChatTokenUsageTracker requestTokenUsageTracker = createRequestTokenUsageTracker(sessionId);
+        ChatRequestFlow requestFlow = createVisibleRequestFlow(sessionId, requestTokenUsageTracker, null);
+        AIChatService requestService = createVisibleRequestService(sessionId, requestFlow, requestTokenUsageTracker);
+        if (requestService == null) {
+            notifyVisibleConfigurationError(sessionId);
+            return false;
+        }
+        return startVisibleRequest(sessionId, userMessage, requestService, requestFlow, requestTokenUsageTracker,
+            false, false);
     }
 
     public ToolCallSummaryHandler toolCallSummaryHandler() {

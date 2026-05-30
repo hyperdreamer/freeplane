@@ -1,0 +1,48 @@
+package org.freeplane.plugin.ai.mcpserver;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.Arrays;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
+import javax.swing.SwingUtilities;
+import org.junit.Test;
+
+import dev.langchain4j.agent.tool.Tool;
+import dev.langchain4j.service.tool.ToolExecutionResult;
+
+public class ModelContextProtocolToolDispatcherTest {
+
+    @Test
+    public void registryAndDispatcherUseSameOrderedToolObjectList() {
+        List<Object> toolObjects = Arrays.<Object>asList(new FirstToolSet(), new SecondToolSet());
+        ModelContextProtocolToolRegistry registry = new ModelContextProtocolToolRegistry(toolObjects, new ObjectMapper());
+        ModelContextProtocolToolDispatcher dispatcher = new ModelContextProtocolToolDispatcher(toolObjects, new ObjectMapper());
+
+        List<ModelContextProtocolTool> tools = registry.listTools();
+        AtomicReference<ToolExecutionResult> result = new AtomicReference<ToolExecutionResult>();
+        try {
+            SwingUtilities.invokeAndWait(() -> result.set(dispatcher.dispatch("secondTool", null)));
+        } catch (Exception error) {
+            throw new AssertionError(error);
+        }
+
+        assertThat(tools).extracting(ModelContextProtocolTool::getName).containsExactly("firstTool", "secondTool");
+        assertThat(result.get().resultText()).isEqualTo("second");
+    }
+
+    private static class FirstToolSet {
+        @Tool("first")
+        public String firstTool() {
+            return "first";
+        }
+    }
+
+    private static class SecondToolSet {
+        @Tool("second")
+        public String secondTool() {
+            return "second";
+        }
+    }
+}

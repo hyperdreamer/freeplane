@@ -10,6 +10,10 @@
             <choice value="reading" text="OptionPanel.ai_chat_tool_availability.reading"/>
             <choice value="disabled" text="OptionPanel.ai_chat_tool_availability.disabled"/>
         </radiobuttons>
+        <radiobuttons name="ai_attached_editor_chat_mode">
+            <choice value="new_chat" text="OptionPanel.ai_attached_editor_chat_mode.new_chat"/>
+            <choice value="reuse_current_chat" text="OptionPanel.ai_attached_editor_chat_mode.reuse_current_chat"/>
+        </radiobuttons>
         <number name="ai_chat_font_scaling" min="25" max="400" />
         <number name="ai_chat_memory_maximum_token_count" min="2048" max="1048576" />
         <radiobuttons name="ai_chat_token_counter_mode">

@@ -2,10 +2,17 @@ package org.freeplane.plugin.ai.chat;
 
 import static dev.langchain4j.internal.Utils.isNullOrBlank;
 
+import java.util.Collection;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
+import org.freeplane.core.util.LogUtils;
+import org.freeplane.plugin.ai.code.AttachedEditorToolSet;
 import org.freeplane.plugin.ai.tools.AIToolSet;
 import org.freeplane.plugin.ai.tools.utilities.ToolCallSummary;
 import org.freeplane.plugin.ai.tools.utilities.ToolCallSummaryHandler;
@@ -24,9 +31,6 @@ import dev.langchain4j.service.AiServices;
 import dev.langchain4j.service.tool.ToolArgumentsErrorHandler;
 import dev.langchain4j.service.tool.ToolErrorHandlerResult;
 
-import org.freeplane.core.util.LogUtils;
-import java.util.function.Supplier;
-
 public class AIChatService {
     private static final int MAXIMUM_SUMMARY_TEXT_LENGTH = 160;
 
@@ -35,6 +39,7 @@ public class AIChatService {
     private final ToolArgumentsErrorHandler toolArgumentsErrorHandler;
     private final ChatModel chatLanguageModel;
     private final AIToolSet toolSet;
+    private final AttachedEditorToolSet attachedEditorToolSet;
     private final ChatMemory chatMemory;
     private final ChatTokenUsageTracker chatTokenUsageTracker;
     private final Supplier<Boolean> cancellationSupplier;
@@ -47,8 +52,8 @@ public class AIChatService {
     public AIChatService(ChatModel chatLanguageModel, AIToolSet toolSet, ChatMemory chatMemory,
                          ChatTokenUsageTracker chatTokenUsageTracker, ToolCallSummaryHandler toolCallSummaryHandler,
                          Supplier<Boolean> cancellationSupplier, Consumer<TokenUsage> tokenUsageConsumer) {
-        this(chatLanguageModel, toolSet, chatMemory, chatTokenUsageTracker, toolCallSummaryHandler,
-            cancellationSupplier, tokenUsageConsumer,
+        this(chatLanguageModel, toolSet, Collections.<Object>singletonList(toolSet), null, chatMemory,
+            chatTokenUsageTracker, toolCallSummaryHandler, cancellationSupplier, tokenUsageConsumer,
             new Supplier<ChatToolAvailability>() {
                 @Override
                 public ChatToolAvailability get() {
@@ -62,14 +67,45 @@ public class AIChatService {
             null);
     }
 
-    AIChatService(ChatModel chatLanguageModel, AIToolSet toolSet, ChatMemory chatMemory,
-                  ChatTokenUsageTracker chatTokenUsageTracker, ToolCallSummaryHandler toolCallSummaryHandler,
-                  Supplier<Boolean> cancellationSupplier, Consumer<TokenUsage> tokenUsageConsumer,
+    AIChatService(ChatModel chatLanguageModel,
+                  AIToolSet toolSet,
+                  Collection<?> toolObjects,
+                  AttachedEditorToolSet attachedEditorToolSet,
+                  ChatMemory chatMemory,
+                  ChatTokenUsageTracker chatTokenUsageTracker,
+                  ToolCallSummaryHandler toolCallSummaryHandler,
+                  Supplier<Boolean> cancellationSupplier,
+                  Consumer<TokenUsage> tokenUsageConsumer) {
+        this(chatLanguageModel, toolSet, toolObjects, attachedEditorToolSet, chatMemory, chatTokenUsageTracker,
+            toolCallSummaryHandler, cancellationSupplier, tokenUsageConsumer,
+            new Supplier<ChatToolAvailability>() {
+                @Override
+                public ChatToolAvailability get() {
+                    try {
+                        return new ChatToolAvailabilitySettings().getToolAvailability();
+                    } catch (Exception ignored) {
+                        return ChatToolAvailability.EDITING;
+                    }
+                }
+            },
+            null);
+    }
+
+    AIChatService(ChatModel chatLanguageModel,
+                  AIToolSet toolSet,
+                  Collection<?> toolObjects,
+                  AttachedEditorToolSet attachedEditorToolSet,
+                  ChatMemory chatMemory,
+                  ChatTokenUsageTracker chatTokenUsageTracker,
+                  ToolCallSummaryHandler toolCallSummaryHandler,
+                  Supplier<Boolean> cancellationSupplier,
+                  Consumer<TokenUsage> tokenUsageConsumer,
                   Supplier<ChatToolAvailability> toolAvailabilitySupplier,
                   Function<ChatToolAvailability, AIAssistant> assistantFactory) {
         Objects.requireNonNull(chatTokenUsageTracker, "chatTokenUsageTracker");
         this.chatLanguageModel = chatLanguageModel;
         this.toolSet = toolSet;
+        this.attachedEditorToolSet = attachedEditorToolSet;
         this.chatMemory = chatMemory;
         this.chatTokenUsageTracker = chatTokenUsageTracker;
         this.toolCallSummaryHandler = toolCallSummaryHandler;
@@ -77,7 +113,7 @@ public class AIChatService {
         this.cancellationSupplier = cancellationSupplier;
         this.tokenUsageConsumer = tokenUsageConsumer;
         ToolExecutorFactory toolExecutorFactory = new ToolExecutorFactory(true, true, cancellationSupplier);
-        this.toolExecutorRegistry = toolExecutorFactory.createRegistry(toolSet);
+        this.toolExecutorRegistry = toolExecutorFactory.createRegistry(toolObjects);
         this.toolAvailabilitySupplier = Objects.requireNonNull(toolAvailabilitySupplier, "toolAvailabilitySupplier");
         this.assistantFactory = assistantFactory != null
             ? assistantFactory
@@ -145,8 +181,9 @@ public class AIChatService {
                     chatTokenUsageTracker.logToolExecuted(event);
                 }
             });
-        if (toolAvailability.includesTools()) {
-            builder.tools(toolExecutorRegistry.filtered(toolAvailability.allowedToolNames())
+        Collection<String> allowedToolNames = allowedToolNames(toolAvailability);
+        if (!allowedToolNames.isEmpty()) {
+            builder.tools(toolExecutorRegistry.filtered(allowedToolNames)
                 .getExecutorsBySpecification());
         }
         if (chatMemory != null) {
@@ -169,9 +206,36 @@ public class AIChatService {
         return new Function<Object, String>() {
             @Override
             public String apply(Object input) {
-                return toolSet.systemMessageForChat(input, normalizedAvailability);
+                String baseMessage = toolSet.systemMessageForChat(input, normalizedAvailability);
+                if (attachedEditorToolSet == null) {
+                    return baseMessage;
+                }
+                return appendGuidance(baseMessage, attachedEditorToolSet.systemMessageForChat(input));
             }
         };
+    }
+
+    Collection<String> allowedToolNames(ChatToolAvailability toolAvailability) {
+        ChatToolAvailability normalizedAvailability = toolAvailability == null
+            ? ChatToolAvailability.EDITING
+            : toolAvailability;
+        Set<String> toolNames = new LinkedHashSet<String>(normalizedAvailability.allowedToolNames());
+        if (attachedEditorToolSet != null) {
+            toolNames.addAll(AttachedEditorToolSet.toolNames());
+        }
+        return toolNames;
+    }
+
+    private String appendGuidance(String baseMessage, String extraGuidance) {
+        String safeBase = baseMessage == null ? "" : baseMessage.trim();
+        String safeExtra = extraGuidance == null ? "" : extraGuidance.trim();
+        if (safeBase.isEmpty()) {
+            return safeExtra;
+        }
+        if (safeExtra.isEmpty()) {
+            return safeBase;
+        }
+        return safeBase + "\n\n" + safeExtra;
     }
 
     public interface AIAssistant {

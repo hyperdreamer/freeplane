@@ -3,14 +3,14 @@ package org.freeplane.plugin.ai.chat;
 import java.util.Objects;
 import java.util.UUID;
 
-final class LiveChatSessionId {
+public final class LiveChatSessionId {
     private final String value;
 
     private LiveChatSessionId(String value) {
         this.value = Objects.requireNonNull(value, "value");
     }
 
-    static LiveChatSessionId create() {
+    public static LiveChatSessionId create() {
         return new LiveChatSessionId(UUID.randomUUID().toString());
     }
 

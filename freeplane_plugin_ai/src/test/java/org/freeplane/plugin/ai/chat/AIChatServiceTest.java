@@ -6,10 +6,12 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
+import org.freeplane.plugin.ai.code.AttachedEditorToolSet;
 import org.freeplane.plugin.ai.tools.AIToolSet;
 import org.junit.Test;
 
@@ -34,9 +36,12 @@ public class AIChatServiceTest {
                 : editingAssistant;
         };
 
+        AIToolSet toolSet = mock(AIToolSet.class);
         AIChatService uut = new AIChatService(
             mock(ChatModel.class),
-            mock(AIToolSet.class),
+            toolSet,
+            Collections.<Object>singletonList(toolSet),
+            null,
             null,
             new ChatTokenUsageTracker(totals -> {
             }),
@@ -68,6 +73,8 @@ public class AIChatServiceTest {
         AIChatService uut = new AIChatService(
             mock(ChatModel.class),
             toolSet,
+            Collections.<Object>singletonList(toolSet),
+            null,
             null,
             new ChatTokenUsageTracker(totals -> {
             }),
@@ -81,5 +88,56 @@ public class AIChatServiceTest {
 
         assertThat(message).isEqualTo("reading-guidance");
         verify(toolSet).systemMessageForChat("request", ChatToolAvailability.READING);
+    }
+
+    @Test
+    public void allowedToolNamesAlwaysIncludeAttachedEditorTools() {
+        AIToolSet toolSet = mock(AIToolSet.class);
+        AttachedEditorToolSet attachedEditorToolSet = mock(AttachedEditorToolSet.class);
+        AIChatService uut = new AIChatService(
+            mock(ChatModel.class),
+            toolSet,
+            Collections.<Object>singletonList(toolSet),
+            attachedEditorToolSet,
+            null,
+            new ChatTokenUsageTracker(totals -> {
+            }),
+            null,
+            null,
+            null,
+            () -> ChatToolAvailability.DISABLED,
+            availability -> mock(AIChatService.AIAssistant.class));
+
+        assertThat(uut.allowedToolNames(ChatToolAvailability.DISABLED)).containsExactly(
+            "readAttachedEditor",
+            "overwriteAttachedEditorContent",
+            "compileAttachedEditorContent",
+            "getAttachedEditorLatestIssue");
+    }
+
+    @Test
+    public void systemMessageProviderAppendsAttachedEditorGuidanceWhenPresent() {
+        AIToolSet toolSet = mock(AIToolSet.class);
+        AttachedEditorToolSet attachedEditorToolSet = mock(AttachedEditorToolSet.class);
+        when(toolSet.systemMessageForChat("request", ChatToolAvailability.READING)).thenReturn("base guidance");
+        when(attachedEditorToolSet.systemMessageForChat("request")).thenReturn("attached guidance");
+
+        AIChatService uut = new AIChatService(
+            mock(ChatModel.class),
+            toolSet,
+            Collections.<Object>singletonList(toolSet),
+            attachedEditorToolSet,
+            null,
+            new ChatTokenUsageTracker(totals -> {
+            }),
+            null,
+            null,
+            null,
+            () -> ChatToolAvailability.READING,
+            availability -> mock(AIChatService.AIAssistant.class));
+
+        String message = uut.systemMessageProvider(ChatToolAvailability.READING).apply("request");
+
+        assertThat(message).isEqualTo("base guidance\n\nattached guidance");
     }
 }
