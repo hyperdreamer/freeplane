@@ -3,34 +3,39 @@
 - **Scope:** Let a user explicitly attach an open `FormulaEditor` or
   `ScriptEditorPanel` to AI chat via an editor-local AI button. While
   attached, AI chat must become visible and usable, AI must be able to
-  replace the live editor content, AI must be able to compile the
-  attached code, and AI must be able to inspect compilation and
-  execution errors. Only one editor may be attached at a
-  time. The attachment ends when the editor closes or another editor
-  attaches.
+  read and overwrite the live editor text, AI must be able to compile the
+  attached code, and AI must be able to inspect the latest attached
+  issue through attached-editor tools available to both internal chat
+  and MCP. Only one editor may be attached at a time. Script execution remains out of
+  scope for this task. Formula execution while the editor stays open is
+  also out of scope, except for a final pre-commit submit-time formula
+  validation that now applies to all `FormulaEditor` submits. On a
+  failed formula submit, Freeplane must show the diagnostics to the
+  user, ask whether AI should try to fix the formula, and if the user
+  agrees, open or reuse AI chat according to a user setting, attach the
+  editor if needed, and send a built-in repair request with the current
+  formula text and diagnostics.
 - **Motivation:** Current AI tooling edits persisted node or attribute
   state, not the live text buffer held by an open editor dialog.
   `FormulaEditor` additionally blocks normal access to the main
   Freeplane window, so the user cannot reach AI chat while the editor is
-  open. Current script and formula run paths also do not expose their
-  diagnostics back to AI.
+  open. Current formula submit flow also hides the dialog before the new
+  text is committed, which prevents a clear pre-commit validation and AI
+  repair loop.
 - **Scenario:** A user opens `FormulaEditor` or `ScriptEditorPanel` and
-  clicks a new AI button in that editor. Freeplane shows the AI chat
-  panel, associates that editor with the chat, and lets AI read and
-  replace the editor's current text while the editor stays open.
-  Attaching alone does not compile or execute the editor content. AI
-  can compile the attached code and inspect compilation errors. Script
-  runs themselves must always be started by the user through the
-  existing Run action, and the resulting diagnostics become readable to
-  AI on the next chat turn. Formula execution may be AI-triggered only
-  when a global formula-execution setting allows it. When AI replaces
-  attached formula text while that setting is `ai_allowed`, Freeplane
-  executes the updated formula automatically and makes the resulting
-  diagnostics readable to AI immediately; otherwise the user triggers
-  the editor's Execute action and the resulting diagnostics become
-  readable to AI on the next chat turn. If the user attaches a
-  different editor, the previous attachment is replaced. If the
-  attached editor closes, the attachment is cleared automatically.
+  clicks a new AI button in that editor. Freeplane shows AI chat,
+  associates that editor with a chosen chat session, and lets AI read,
+  overwrite, compile, and later inspect the editor's latest issue while the
+  editor stays open. If the user submits a formula and the
+  current text still starts with `=`, Freeplane validates the formula
+  before commit while the editor remains visible. If validation fails,
+  Freeplane shows the diagnostics in a popup that asks whether AI should
+  try to fix the formula. If the user answers Yes, Freeplane sends a
+  built-in repair request to AI. If the user answers No, the editor just
+  remains open for manual editing. If the user removes the leading `=`,
+  the content stops being a formula immediately, compile-for-AI fails
+  with a not-a-formula error, and submit commits plain text with no
+  formula validation.
 - **Constraints:**
   - Attaching an editor must be explicit. Do not auto-attach merely
     because an editor is open.
@@ -39,27 +44,48 @@
   - At most one editor may be attached to AI chat at a time.
   - Attached-editor edits must operate on the live editor text
     component, not on persisted `NodeModel` or attribute content.
-  - Closing an attached editor must clear the attachment automatically.
-  - Attaching a second editor must replace the previous attachment.
+  - Closing an attached editor must clear the active attachment
+    automatically.
+  - Attaching a second editor must replace the previous attachment,
+    except that a formula submit already in its final validation flow is
+    not interruptible.
   - `FormulaEditor` must still support formula-reference insertion from
     the map.
   - Do not route attached-editor replacement through
     `TextualContentEditor` or the existing node-content `edit(...)`
     tool.
-  - Attached-editor tools must remain chat-only. They must not appear in
-    the MCP tool registry.
-  - Compilation and execution must reuse the current
-    formula and script mechanisms and runtime environment. Do not add a
-    parallel compiler or executor path.
-  - Script runs must always be started by the user.
-  - There must be a global AI preference that controls whether AI may
-    execute attached formulas itself, or whether only the user may
-    trigger formula execution.
-  - When AI replaces attached formula text and the formula-execution
-    policy is `ai_allowed`, the updated formula must be executed
-    automatically.
-  - When script execution or formula execution is user-triggered, the
-    resulting diagnostics must still become readable to AI.
+  - Attached-editor tools must be available through both internal chat
+    and MCP.
+  - `readAttachedEditor()` must be the pull-oriented state read for
+    external callers: it returns `attached=false` when no editor is
+    attached and, when attached, includes issue-presence state so MCP
+    callers do not need a separate status tool.
+  - This task must not add AI-triggered script execution, AI-triggered
+    formula execution, or a general-purpose manual Execute button.
+  - While `FormulaEditor` is open, Freeplane must not evaluate the live
+    formula text merely because the dialog opened, the text changed, or
+    the editor was attached.
+  - The final formula submit validation is pre-commit and applies to all
+    `FormulaEditor` submits, not only attached ones.
+  - Removing the leading `=` stops formula behavior immediately.
+  - `compileAttachedEditorContent()` for formulas must compile only the Groovy
+    body after the leading `=` under formula permissions, with no
+    execution and no persistent formula cache or dependency writes.
+  - Final formula submit validation must use a temporary evaluation path
+    with no persistent `FormulaCache` or dependency writes before
+    commit.
+  - If reusing the successful pre-commit evaluation result after commit
+    is simple and low-risk, do it. If it is too complex or risky, a
+    second normal post-commit evaluation is allowed.
+  - Attached-editor tools and the AI repair flow are enabled by
+    attachment state alone. They do not follow `ChatToolAvailability`.
+  - Automatic chat traffic must not be created just because an attached
+    formula submit failed. The user sees the diagnostics first and chat
+    receives a repair request only if the user agrees.
+  - The attach-mode setting must be a user setting, not an attach-time
+    button, and its default must be `new_chat`.
+  - Future script execution features stay in
+    `ai-specs/tasks/backlog/groovy-script-execution-tool.md`.
 - **Briefing:** `FormulaEditor` lives in
   `freeplane_plugin_formula/src/main/java/org/freeplane/plugin/formula`.
   `ScriptEditorPanel` lives in
@@ -68,10 +94,10 @@
   `freeplane_plugin_ai/src/main/java/org/freeplane/plugin/ai/Activator.java`.
   Current AI edit tooling is centered around `AIToolSet` and
   `TextualContentEditor`, which target persisted map content rather than
-  open editor documents. Current script execution is centered around
-  `ScriptingEngine` and `GroovyScript`. Current formula execution is
-  centered around `FormulaUtils`, `FormulaTextTransformer`, and
-  `FormulaEditor`.
+  open editor documents. Current script compilation and execution are
+  centered around `ScriptingEngine` and `GroovyScript`. Current formula
+  evaluation is centered around `FormulaUtils`,
+  `FormulaTextTransformer`, `ScriptContext`, and `FormulaCache`.
 - **Research:**
   - Observed facts:
     - `FormulaEditor` extends `EditNodeDialog`, but
@@ -89,591 +115,627 @@
       `MapView`, `MainView`, `JTable`, and scrollbars, and translates
       those interactions into formula-reference picking behavior.
       Normal main-window UI is not part of that allowed interaction set.
-    - The AI chat UI is in the main Freeplane window tabbed pane on the
-      frame's `ViewController.RIGHT` side, while the main map and
-      auxiliary split-pane tree live in the frame's
-      `BorderLayout.CENTER` component.
-    - Because `GlassPaneManager` uses the root-pane glass pane and also
-      disables the whole window focusable state, it blocks both the
-      center map area and the right-side AI tab.
     - `ScriptEditorPanel` is a separate non-modal `JDialog`
       (`super(UITools.getCurrentFrame(), false)`) and does not install a
       `GlassPaneManager` or disable the main window focusable state.
-    - `FormulaEditor` keeps live text in its `JEditorPane` and only
-      writes the value back when the edit control is submitted.
-      Updating the node model behind the dialog is stale and can be
-      overwritten when the dialog is confirmed.
-    - `ScriptEditor` copies script attributes into a dialog-local model
-      on open. `ScriptEditorPanel.storeCurrent()` and
-      `NodeScriptModel.endDialog(...)` write that buffered value back on
-      dialog actions and close. Updating node attributes behind the
-      dialog would race with, and can be overwritten by, the dialog's
-      buffered copy.
-    - `ScriptEditorPanel.RunAction` currently calls `storeCurrent()`,
-      clears the result field, and delegates execution to
-      `IScriptModel.executeScript(...)` with a panel `PrintStream` and
-      `IFreeplaneScriptErrorHandler`.
-    - Both current `ScriptEditorPanel` models execute live editor text
-      through
-      `ScriptingEngine.executeScript(selectedNode, script, errorHandler, outStream, null, ScriptingPermissions.getPermissiveScriptingPermissions())`.
-      For the attached script editor path, the current execution
-      environment therefore always goes through `GroovyScript` with
-      permissive scripting permissions and the current selected node.
-    - `ScriptingEngine` already has the full execution overload that
-      accepts `PrintStream`, `IFreeplaneScriptErrorHandler`,
-      `ScriptContext`, and `ScriptingPermissions`. The simpler overloads
-      delegate to it or to the same `GroovyScript` path with default
-      sinks.
-    - `GroovyScript.execute(...)` compiles inside `execute(...)` through
-      its private `compileAndCache(...)` method, writes diagnostics to
-      the provided `PrintStream`, and reports line numbers through the
-      provided `IFreeplaneScriptErrorHandler`.
-    - `FormulaUtils.executeScript(node, script)` creates a `ScriptContext`
-      for the node, uses `ScriptingPermissions.getFormulaPermissions()`,
-      and delegates to `ScriptingEngine.executeScript(...)` through
-      `FormulaCache`.
-    - `FormulaTextTransformer.transformContent(...)` wraps formula
-      execution in `textController.withNodeNumbering(true, ...)`, so
-      displayed formula execution uses that node-numbering context.
-    - `FormulaEditor.addPreviewPane(...)` currently executes only once
-      during dialog setup, calls `FormulaUtils.evalIfScript(getNode(),
-      content)` without custom output or line handlers, and uses
-      `getText()` from the original dialog state rather than the live
-      current `textEditor` content.
-    - `FormulaUtils` currently does not pass custom output or custom line
-      handlers into the formula execution path, so formula stdout and
-      line-oriented diagnostics are not available to AI.
-    - `AIChatPanel` already has a private `showChatTab()` helper, but it
-      does not expose a public show-and-focus method for external UI
-      actions.
-    - `AIToolSet` is shared by normal chat and MCP. `AIChatService`
-      filters tool executors by `ChatToolAvailability`, while the MCP
-      server builds its registry directly from the `AIToolSet` object.
-    - `ToolExecutorFactory.createRegistry(...)` currently scans only
-      `toolSet.getClass().getDeclaredMethods()`. A subclass-based
-      chat-only tool set would therefore not expose inherited `AIToolSet`
-      tools unless tool discovery is expanded across the class
-      hierarchy.
+    - `EditNodeDialog.LongNodeDialog.submit()` currently calls
+      `super.submit()` before `getEditControl().ok(...)`, so the dialog
+      is hidden before the edited text is committed.
+    - `FormulaEditor.addPreviewPane(...)` currently executes once during
+      dialog setup, calls `FormulaUtils.evalIfScript(getNode(),
+      content)`, and uses the original `getText()` value rather than the
+      live current `textEditor` content.
+    - `FormulaTextTransformer.transformContent(...)` treats text as a
+      formula only when `FormulaUtils.containsFormula(text)` is true.
+      Removing the leading `=` therefore already stops formula behavior
+      in normal runtime rendering.
+    - `FormulaCache` caches both successful results and
+      `ExecuteScriptException` objects by node and script text.
+    - `ScriptContext.accessNode(...)`, `accessBranch(...)`,
+      `accessClones(...)`, `accessAll(...)`, and
+      `accessGlobalNode()` write persistent dependency state through
+      `FormulaDependencies` when tracking is enabled.
+    - `FormulaUtils.executeScript(node, script)` builds a `NodeScript`,
+      creates a `ScriptContext(nodeScript)`, uses
+      `ScriptingPermissions.getFormulaPermissions()`, and evaluates
+      through `FormulaCache`.
+    - `ScriptingEngine.executeScript(node, script, errorHandler,
+      outStream, scriptContext, permissions)` already supports custom
+      output capture, custom line capture, explicit permissions, and an
+      explicit `ScriptContext`.
+    - `GroovyScript.execute(...)` compiles inside `execute(...)`, can
+      report compile/runtime line numbers through the provided
+      `IFreeplaneScriptErrorHandler`, and uses the passed
+      `ScriptContext`.
+    - `LiveChatSession` already stores a `Set<String>` of map IDs, and
+      chat summaries also carry multiple map IDs. Reusing a current chat
+      across maps is therefore already a supported state.
+    - `AIChatPanel` already knows how to create and switch live chat
+      sessions and to focus the input area.
+    - `AIToolSet` is shared by normal chat and MCP.
+    - `ModelContextProtocolServer` starts once from the AI plugin
+      `Activator`, so attached-editor tool registration must stay
+      stable even though attachment state changes later.
+    - `ToolExecutorFactory.createRegistry(...)` currently scans a single
+      tool object through `toolSet.getClass().getDeclaredMethods()`, so
+      Freeplane needs explicit multi-object merging to expose separate
+      attached-editor tool objects consistently to both chat and MCP.
     - `freeplane_plugin_formula` and `freeplane_plugin_script` already
       depend on `freeplane`, but not on `freeplane_plugin_ai`.
-    - AI-plugin preferences already use resource-backed settings and
-      radiobutton groups for AI-specific policy choices such as
-      `ai_chat_tool_availability`.
+    - `FormulaTextTransformer` and `ScriptEditorPanel` currently set
+      their live editor panes to `text/groovy`, so the current editor
+      content type does not distinguish formulas from scripts.
+    - `freeplane_plugin_jsyntaxpane` `Activator` already registers
+      `text/latex` programmatically through
+      `DefaultSyntaxKit.registerContentType(...)`, so formula- and
+      script-specific Groovy content types can be registered there
+      without changing `GroovySyntaxKit` itself.
   - Implications:
     - The attachment contract should be exported from `freeplane`, not
       from `freeplane_api` and not from AI-plugin implementation
       packages.
     - Attached-editor editing needs a dedicated live-editor path separate
       from persisted node-content editing.
-    - Attached-editor tools must be injected only into the chat tool
-      build path, not into the plain `AIToolSet` used by MCP.
-    - The shared attachment contract now needs optional code-editor
-      capabilities for compilation and last-execution diagnostics, plus
-      an optional AI-executable formula capability.
-    - `FormulaEditor` needs a selection overlay scoped to the frame's
-      center component rather than the whole root pane.
-    - `ScriptEditorPanel` should reuse its current run path, but the core
-      execution logic needs to be factored so both the existing Run
-      button and AI attachment use the same captured result object.
-    - `FormulaEditor` needs a reusable live execution helper and an
-      explicit user-triggered Execute action because its current preview
-      is one-shot and not based on the live current editor content.
+    - Attached-editor tools should be part of the shared chat and MCP
+      tool surface, not chat-only.
+    - Because MCP has no subscriptions, `readAttachedEditor()` should be
+      the pull-oriented state read: it returns `attached=false` when no
+      editor is attached and, when attached, includes content and
+      issue-presence state.
+    - Formula submit-time validation must change the current
+      `EditNodeDialog` submit lifecycle for `FormulaEditor` so the
+      dialog stays visible until validation succeeds.
+    - Temporary formula submit validation must bypass persistent formula
+      cache and dependency writes even though it still uses the current
+      formula permissions, bindings, and runtime environment.
+    - Because multi-map chat sessions already exist, the attach-mode
+      setting can reuse the current chat literally, even when it already
+      includes another map.
 
-```plantuml
-@startuml
-actor User
-participant "FormulaEditor" as FE
-participant "GlassPaneManager" as GPM
-participant "ScriptEditorPanel" as SE
-participant "ScriptingEngine / GroovyScript" as ScriptRun
-participant "FormulaUtils" as FormulaRun
-participant "AI chat tab" as AI
-
-User -> FE: open formula editor
-FE -> GPM: attach to root-pane glass pane
-GPM -> AI: block right-side chat access
-User -> SE: press Run
-SE -> ScriptRun: execute current script
-ScriptRun --> SE: stdout / result / line diagnostics
-User -> FE: rely on current preview
-FE -> FormulaRun: one-shot eval during dialog setup only
-FormulaRun --> FE: exception or value, not AI-readable
-@enduml
-```
+  ```plantuml
+  @startuml
+  actor User
+  participant "FormulaEditor" as FE
+  participant "FormulaUtils" as FU
+  participant "EditNodeDialog" as END
+  participant "FormulaTextTransformer" as FTT
+  participant "FormulaCache / ScriptContext" as Cache
+  participant "AI chat tab" as AI
+  
+  User -> FE: open formula editor
+  FE -> FU: one-shot preview eval during dialog setup
+  FU -> Cache: persistent cached evaluation
+  FE -> END: current submit flow
+  END -> END: hide dialog first
+  END -> FE: call ok(newText)
+  FE -> FTT: later normal formula evaluation
+  FTT -> Cache: persistent cached evaluation
+  FTT --> User: rendered value or error text
+  FTT --> AI: nothing
+  @enduml
+  ```
 
 - **Design:**
   - Split the work into three functional increments:
-    1. shared attachment and attached-code tool foundation,
-    2. `ScriptEditorPanel` integration using the current script run path,
-    3. `FormulaEditor` integration using a center-scoped overlay and a
-       reusable formula execution path.
+    1. shared attachment, attach-mode setting, and attached issue
+       tool path,
+    2. `ScriptEditorPanel` integration for attach, read, overwrite,
+       compile, and latest issue state,
+    3. `FormulaEditor` integration for attach, read, overwrite,
+       compile,
+       center-scoped reference picking, pre-commit final validation,
+       and optional AI repair requests.
   - The ordering is intentional:
-    - subtask 1 creates the cross-plugin contract, formula-execution
-      policy, and chat tool path,
+    - subtask 1 creates the cross-plugin contract, chat session routing,
+      attached issue state, and the shared chat/MCP tool path,
     - subtask 2 validates the simpler script editor first,
-    - subtask 3 then solves the harder formula-specific interaction and
-      execution problem without changing the contract again.
+    - subtask 3 then solves the formula-specific submit lifecycle and
+      repair flow using the shared attachment foundation.
 
-```plantuml
-@startuml
-left to right direction
-rectangle "Subtask 1\nshared attachment,\ncode capability,\nformula execution policy" as S1
-rectangle "Subtask 2\nScriptEditorPanel\nAI attach + compile/run\ndiagnostics" as S2
-rectangle "Subtask 3\nFormulaEditor\ncenter overlay +\ncompile/execute diagnostics" as S3
+  ```plantuml
+  @startuml
+  left to right direction
+  rectangle "Subtask 1\nshared attachment,\nchat mode setting,\nissue tool path" as S1
+  rectangle "Subtask 2\nScriptEditorPanel\nAI attach + compile\nlatest issue state" as S2
+  rectangle "Subtask 3\nFormulaEditor\npre-commit validation +\nAI repair flow" as S3
+  
+  S1 --> S2
+  S1 --> S3
+  S2 --> S3 : de-risk editor tool path
+  @enduml
+  ```
 
-S1 --> S2
-S1 --> S3
-S2 --> S3 : de-risk code diagnostics path
-@enduml
-```
+  ```plantuml
+  @startuml
+  actor User
+  participant "FormulaEditor" as FE
+  participant "FormulaSubmitValidationSupport" as Validate
+  participant "Repair decision popup" as Popup
+  participant "AiChatAttachment" as Attach
+  participant "AI chat" as AI
+  
+  User -> FE: submit formula text
+  FE -> Validate: validate current text before commit
+  alt validation succeeds
+    Validate --> FE: success
+    FE -> Attach: clear stale issue
+    FE -> FE: commit text
+    FE --> User: close editor
+  else validation fails
+    Validate --> FE: diagnostics
+    FE -> Attach: record issue
+    FE -> Popup: show diagnostics + ask AI?
+    alt user chooses Yes
+      Popup --> FE: yes
+      FE -> Attach: requestRepair(prompt, text, issue)
+      Attach -> AI: open/reuse chat + send repair request
+    else user chooses No
+      Popup --> FE: no
+    end
+    FE --> User: keep editor open and attached
+  end
+  @enduml
+  ```
 
 - **Test specification:**
   - End-to-end completion requires all of the following:
     - only one editor can be attached at a time,
-    - AI can read and replace attached live editor text,
-    - AI can compile attached script or formula content and inspect
-      compilation errors,
-    - AI can never run attached scripts itself, but it can inspect the
-      latest diagnostics from the user's Run action,
-    - when formula AI execution is allowed, AI can execute the
-      attached formula and inspect standard output, result, and
-      execution errors,
-    - when formula AI execution is disallowed, the user can still
-      trigger the editor's Execute action and AI can inspect the last
-      resulting diagnostics,
-    - attached-editor tools do not appear in MCP,
+    - AI or MCP can read and overwrite attached live editor text,
+    - AI or MCP can compile attached script or formula content and
+      inspect compiler diagnostics,
+    - attached-editor tools are available through both internal chat
+      and MCP,
+    - `readAttachedEditor()` exposes pull attachment state and issue
+      presence without a separate status tool,
+    - attached-editor tools remain available when an editor is attached
+      even if normal map tools are disabled by `ChatToolAvailability`,
+    - script and formula content are not executed merely because the
+      editor is open or attached,
+    - `FormulaEditor` no longer evaluates the live formula during dialog
+      setup,
+    - final formula validation happens before commit while the editor
+      stays visible,
+    - failed formula submit does not commit the text,
+    - removing the leading `=` stops formula behavior immediately and
+      submit then commits plain text,
+    - failed formula submit shows diagnostics to the user before any AI
+      request is sent,
+    - AI repair request is sent only when the user agrees,
+    - attached editors expose at most one latest issue through an
+      attached-editor tool for later manual AI or MCP help,
+    - successful formula submit closes and detaches the editor,
     - `ScriptEditorPanel` save and cancel behavior still uses its
       existing buffered model correctly,
     - `FormulaEditor` keeps map reference insertion while AI chat stays
       reachable and usable.
   - Final manual verification after all subtasks:
-    - attach script editor, rewrite live script, compile it from AI,
-      then run it from the user Run button and verify AI can read the
-      latest execution diagnostics,
-    - attach formula editor, compile the current formula from AI, switch
-      the global formula setting to `ai_allowed`, rewrite the live
-      formula from AI, and verify the replacement auto-executes and AI
-      can read the result immediately,
-    - with the global formula setting still `ai_allowed`, explicitly
-      execute the unchanged attached formula from AI and verify AI can
-      read a fresh execution result,
-    - switch the global formula setting to `user_only`, execute from
-      the user Execute button, and verify AI can read the latest
-      execution diagnostics,
-    - attach one editor, then the other, and verify only the most
-      recent attachment changes.
+    - with no editor attached, call `readAttachedEditor()` through MCP
+      and verify it returns `attached=false`,
+    - attach script editor, rewrite live script, compile it from AI or
+      MCP, and verify compilation diagnostics include line information,
+    - attach formula editor, compile the current formula from AI or MCP,
+      and verify compilation errors are returned without execution,
+    - attach formula editor, let AI rewrite the formula, submit a
+      failing formula, verify the popup shows diagnostics before any AI
+      request, then choose Yes and verify AI chat opens and receives the
+      built-in repair request,
+    - attach formula editor, submit a failing formula, choose No, then
+      manually ask AI for help and verify the latest issue is still readable through the
+      attached-editor issue tool,
+    - remove the leading `=` from formula text, verify
+      `compileAttachedEditorContent()` fails with a not-a-formula error, then
+      submit and verify plain text is committed and the editor closes,
+    - verify the attach-mode setting uses a new chat by default and can
+      instead reuse the current chat across maps,
+    - close the attached editor, call `readAttachedEditor()` through MCP,
+      and verify it returns `attached=false`,
+    - verify successful formula submit closes the editor and clears the
+      attachment.
 
-## Subtask: Introduce shared editor-attachment service, formula-execution policy, and chat-only attached-code tool path
+## Subtask: Introduce shared editor-attachment service, attach-mode setting, and attached-issue tool path
 - **Status:** in-progress
 - **Scope:** Add the cross-plugin editor-attachment contract in
-  `freeplane`, extend it with attached-code capabilities, wire a
-  single-active-attachment service into the AI plugin, add a global
-  formula-execution policy option, and expose chat-only attached-editor
-  tools for read, replace, compile, and last-execution diagnostics,
-  plus optional AI formula execution that remains unavailable to MCP.
-  Script execution must stay user-triggered only.
+  `freeplane`, wire a single-active-attachment service into the AI
+  plugin, add the user setting that chooses whether explicit attach or
+  AI repair attach uses a new chat or the current chat, and expose
+  attached-editor tools for read, overwrite content, compile content,
+  and the latest issue through both internal chat and MCP.
 - **Motivation:** Both editors need the same attachment contract, the
-  same AI-side capability model, and the same policy gate before the
-  editor-specific UI work can stay coherent.
+  same AI-side compile surface, the same issue retrieval path,
+  and the same attach-mode setting before the editor-specific UI work
+  can stay coherent.
 - **Constraints:**
   - Declare the public service contract in `freeplane`, not in
     `freeplane_api`.
   - Keep the base attachment contract editor-text-specific. Do not
-    expose `NodeModel` or persisted content policy through it.
-  - Expose code execution capabilities only through explicit attached
-    editor capability interfaces.
-  - Keep attached-editor tool availability aligned with existing
-    `ChatToolAvailability`.
-  - MCP must continue to use a plain `AIToolSet` with no attached-editor
-    tools.
-  - Global formula-execution policy must be independent from
-    general chat tool availability.
-  - Script execution must never be AI-triggered.
-  - Formula AI execution must be gated by the global
-    formula-execution policy.
+    expose persisted node-content mutation policy through it.
+  - Attached-editor tools must be registered for both chat and MCP.
+  - `readAttachedEditor()` must be the pull-oriented status read. Do
+    not add a separate attached-editor status tool.
+  - This task must not add any AI code-execution tool.
+  - Attached-editor tool availability must be governed by attachment
+    state, not by `ChatToolAvailability`.
 - **Briefing:** This subtask is the shared foundation for both editor UI
   integrations. It intentionally does not depend on any specific editor
-  dialog implementation details beyond the live-text and attached-code
-  capability contracts.
+  dialog implementation details beyond the live-text, compile, attach,
+  diagnostics, and repair-request contracts.
 - **Research:**
-  - `AIChatPanel` already knows how to select its tab through private
-    `showChatTab()`, so exposing show and focus behavior is a small
-    local change.
-  - `AIToolSetBuilder` currently creates the shared tool surface for
-    both visible chat requests and MCP server startup.
-  - `ModelContextProtocolServer` starts from a plain `AIToolSet` built
-    in AI plugin `Activator`, so chat-only tool injection must stay off
-    that path.
-  - `ToolExecutorFactory` currently uses `getDeclaredMethods()` only, so
-    subclass-based tool sets would miss inherited `AIToolSet` methods.
-  - AI-plugin preferences already provide a good storage and UI pattern
-    for new formula-execution policy settings.
-  - `FormulaTextTransformer` and `ScriptEditorPanel` currently set their
-    live editor panes to `text/groovy`, so the current editor content
-    type does not distinguish formulas from scripts.
-  - `freeplane_plugin_jsyntaxpane` `Activator` already registers
-    `text/latex` programmatically through
-    `DefaultSyntaxKit.registerContentType(...)`, so formula- and
-    script-specific Groovy content types can be registered there without
-    changing `GroovySyntaxKit` itself.
+  - `AIChatPanel` already knows how to select its tab, create sessions,
+    switch sessions, and focus the input area.
+  - `LiveChatSession` already stores multiple map IDs.
+  - `AIToolSetBuilder` currently creates the shared base tool surface
+    for both visible chat requests and MCP server startup.
+  - `ModelContextProtocolServer` starts once from the AI plugin
+    `Activator`, so attached-editor tool registration must stay stable
+    even though attachment state changes later.
+  - `ToolExecutorFactory` currently scans only one tool object through
+    `getDeclaredMethods()`, so attached-editor tools should be merged as
+    separate tool objects instead of `AIToolSet` subclasses.
 - **Design:**
   - Export `org.freeplane.features.ai.code` from `freeplane/build.gradle`.
-  - Add global attached-formula execution preference:
-    - property key: `ai_attached_formula_execution_policy`
-    - stored values: `user_only`, `ai_allowed`
-    - default: `user_only`
-    - add defaults, preferences XML wiring, and translation keys in the
-      AI plugin resources.
-  - `sourceFingerprint` uses SHA-256 so AI can compare the current editor
-    text with the source that produced the latest compilation or
-    execution diagnostics.
   - Keep shared attachment contracts in
     `org.freeplane.features.ai.code`. Keep the AI-plugin implementation
     classes for this increment in `org.freeplane.plugin.ai.code`.
-  - `AiChatCodeOperationResult` uses `compilerDiagnostics` for compile
-    operations and `standardOutput` plus `result` for execution
-    operations.
+  - Add attach-mode setting:
+    - property key: `ai_attached_editor_chat_mode`
+    - values: `new_chat`, `reuse_current_chat`
+    - default: `new_chat`
+    - explicit attach and formula-repair auto-attach must use the same
+      setting and the same replacement semantics.
+  - `sourceFingerprint` uses SHA-256 so AI can compare current editor
+    text with the source that produced the latest issue.
+  - `AiChatCodeOperationResult` continues to use
+    `compilerDiagnostics`, `standardOutput`, `result`,
+    `errorCategory`, `errorMessage`, `lineNumber`, and
+    `sourceFingerprint`.
   - Use the live editor pane content type as the AI-visible
-    `contentType`.
+    `contentType` after the editor-specific subtasks switch those panes
+    to the new Freeplane-specific Groovy content types.
   - Register `text/x-freeplane-script-groovy` and
     `text/x-freeplane-formula-groovy` in
     `freeplane_plugin_jsyntaxpane/src/main/java/org/freeplane/plugin/jsyntaxpane/Activator.java`
     through `DefaultSyntaxKit.registerContentType(...,
     GroovySyntaxKit.class.getName())`.
-  - Change `ScriptEditorPanel` and `FormulaEditor` editor panes from
-    `text/groovy` to those registered content types so syntax-kit
-    selection and AI-visible content type stay coupled.
   - `AiChatAttachmentService.attachEditor(editor, contentType)`:
-    - stores that content type with the active attachment,
-    - shows the AI chat UI,
-    - focuses the chat input,
+    - chooses or creates the owning chat session according to
+      `ai_attached_editor_chat_mode`,
+    - stores the active attachment, its owning session, content type,
+      current source fingerprint and the latest issue,
+    - shows the chosen AI chat session and focuses the input,
     - replaces any previous attachment,
-    - returns an idempotent detach handle that clears the slot only if it
-      still owns the current attachment.
-  - `AIToolSetBuilder.build()` returns:
-    - plain `AIToolSet` when no attached editor is present,
-    - `ChatAttachedEditorToolSet` when an attached editor is present and
-      either it does not support AI execution or the global formula
-      policy is `user_only`,
-    - `ChatAiExecutableAttachedEditorToolSet` when the attached editor
-      supports AI execution and the global formula policy is
-      `ai_allowed`.
-  - Keep MCP unchanged by continuing to build a plain `AIToolSet` for
-    the `ToolCaller.MCP` path.
-  - Update `ToolExecutorFactory` tool discovery across the full class
-    hierarchy.
-    - preserve inherited `AIToolSet` tool visibility,
-    - preserve stable superclass-before-subclass ordering,
-    - let subclass overrides replace superclass entries by signature.
-  - `readAttachedEditor()`, `replaceAttachedEditor(...)`,
-    `compileAttachedEditor()`, and
-    `getAttachedEditorLastExecutionResult()` are always chat-only
-    attached-editor tools.
-  - `executeAttachedEditor()` is available only when the attached editor
-    supports AI execution and the global formula policy is `ai_allowed`.
+    - returns an idempotent attachment handle.
+  - `AiChatAttachment` must support:
+    - `detach()`,
+    - `showOwningChat()`,
+    - `recordIssue(...)`,
+    - `clearIssue()`,
+    - `requestRepair(...)`.
+  - `AiChatRepairRequest` carries:
+    - the fixed built-in repair prompt,
+    - the current editor text,
+    - the captured issue.
+  - `AIToolSetBuilder.attachedEditorProvider(...)` stores the shared
+    `AttachedEditorProvider` used to build attached-editor tools.
+  - `AIToolSetBuilder.build()` returns the plain `AIToolSet` as the
+    shared base tool object.
+  - Add `AIToolSetBuilder.buildToolObjects()` returning an ordered
+    `List<Object>` built from the same builder configuration and used by
+    both chat and MCP:
+    - the base `AIToolSet`,
+    - plus `AttachedEditorToolSet`.
+  - Update `AIChatPanel`, `ChatPromptRunner`, and AI-plugin
+    `Activator` startup so every `AIToolSetBuilder` used for visible
+    chat, prompt chat, and MCP receives the same
+    `AttachedEditorProvider`.
+  - `AIChatServiceFactory` / `AIChatService` keep using the base
+    `AIToolSet` for the primary system message, but use the ordered
+    tool-object list as the registration source for visible chat and
+    prompt chat.
+  - `ModelContextProtocolServer`,
+    `ModelContextProtocolToolRegistry`, and
+    `ModelContextProtocolToolDispatcher` all use that same ordered
+    tool-object list so `tools/list` metadata and tool execution expose
+    the same attached-editor surface.
+  - On the chat path, attached-editor tools bypass
+    `ChatToolAvailability` filtering. Normal map tools remain governed
+    by `ChatToolAvailability`.
+  - Update `ToolExecutorFactory` with
+    `createRegistry(Collection<?> toolSets)`.
+    - scan each tool object's declared `@Tool` methods,
+    - preserve the builder-supplied tool-object order,
+    - do not rely on reflection order within one tool object,
+    - reject duplicate tool names across tool objects.
+  - `AttachedEditorToolSet` is a separate tool object. Do not make it a
+    subclass of `AIToolSet`.
+  - `AttachedEditorToolSet` receives the chat
+    `ToolCallSummaryHandler` directly so it can publish normal tool
+    summaries without relying on `AIToolSet` inheritance.
+  - `readAttachedEditor()`, `overwriteAttachedEditorContent(...)`,
+    `compileAttachedEditorContent()`, and
+    `getAttachedEditorLatestIssue()` are attached-editor tools exposed
+    to both chat and MCP.
   - Tool behavior:
-    - `readAttachedEditor()` returns `contentType`, current text,
-      current text fingerprint, capability flags, manual execution
-      action name, and whether AI formula execution is allowed.
-    - `replaceAttachedEditor(...)` replaces the whole editor text and
-      returns the new text fingerprint.
-    - attaching an editor alone does not create compile or execution
-      diagnostics.
-    - when the attached editor implements
-      `AiChatAiExecutableCodeEditor` and the global formula-execution
-      policy is `ai_allowed`, `replaceAttachedEditor(...)` immediately
-      calls `executeForAi()`, stores that result as the latest execution
-      result, and includes it in the response.
-    - `compileAttachedEditor()` calls `AiChatCodeEditor.compileForAi()`
-      and returns the captured `AiChatCodeOperationResult`.
-    - `getAttachedEditorLastExecutionResult()` returns
-      `hasExecutionResult=false` when the user has not yet run the
-      attached script and neither the user nor AI has yet executed the
-      attached formula, and otherwise returns the latest captured
-      `AiChatCodeOperationResult`.
-    - `executeAttachedEditor()` calls
-      `AiChatAiExecutableCodeEditor.executeForAi()` only when the global
-      formula-execution policy is `ai_allowed`. It remains available for
-      executing the current attached formula without replacing its text,
-      including the initially attached text and re-execution after user
-      or map-side context changes.
-    - if no editor is attached, all attached-editor tools fail with
-      `No editor is attached to AI chat.`
-  - Update `ChatToolAvailability`:
-    - `READING` includes `readAttachedEditor()`,
-      `compileAttachedEditor()`, and
-      `getAttachedEditorLastExecutionResult()`
-    - `EDITING` includes the `READING` tools plus
-      `replaceAttachedEditor(...)` and `executeAttachedEditor()`
-    - `DISABLED` includes none of them
-  - Update `ChatAttachedEditorToolSet.systemMessageForChat(...)`:
-    - for attached scripts, instruct the model never to run them and to
-      ask the user to press `Run`, then call
-      `getAttachedEditorLastExecutionResult()` on a later turn,
-    - for attached formulas with AI execution enabled, instruct the
-      model that replacing formula text auto-executes it and returns
-      structured diagnostics immediately, to prefer that path after its
-      own rewrites, and to use `executeAttachedEditor()` only when it
-      needs to execute unchanged formula text or re-execute after
-      context changes,
-    - for attached formulas with AI execution disabled, instruct the
-      model to ask the user to press `Execute`, then call
-      `getAttachedEditorLastExecutionResult()` on a later turn.
+    - `readAttachedEditor()` is the pull-oriented attachment-state read:
+      - when no editor is attached, it returns `attached=false`,
+      - when an editor is attached, it returns `attached=true`,
+        `contentType`, current text, current text fingerprint,
+        capability flags, and `hasIssue`,
+    - `overwriteAttachedEditorContent(...)` replaces the whole editor
+      text and returns the new text fingerprint,
+    - attaching an editor alone does not create an issue,
+    - `compileAttachedEditorContent()` calls `AiChatCodeEditor.compileForAi()`,
+      stores the returned result as the latest issue only when it is
+      unsuccessful, clears the issue on success, and returns it,
+    - `getAttachedEditorLatestIssue()` returns `hasIssue=false` when
+      no current issue is stored, and otherwise returns the latest
+      unsuccessful `AiChatCodeOperationResult`, whose
+      `sourceFingerprint` lets AI detect stale issues,
+    - if no editor is attached, all attached-editor tools except
+      `readAttachedEditor()` fail with `No editor is attached.`
+  - `AIChatService` composes the system message from
+    `AIToolSet.systemMessageForChat(...)` plus the attachment guidance
+    returned by `AttachedEditorToolSet.systemMessageForChat(...)`
+    when an editor is attached.
+  - Update `AttachedEditorToolSet.systemMessageForChat(...)`:
+    - for attached scripts, instruct the model that the current task
+      supports read, overwrite, compile, and the latest issue only,
+    - for attached formulas, instruct the model that the current task
+      supports read, overwrite, compile, the latest issue, and optional
+      user-approved repair requests after submit failures, but not live
+      execution while the editor remains open.
 
-```plantuml
-@startuml
-set separator none
-package "freeplane" {
-  package "org.freeplane.features.ai.code" {
-    interface AiChatAttachableEditor {
-      + getText() : String
-      + replaceText(text : String)
-    }
-
-    interface AiChatCodeEditor {
-      + compileForAi() : AiChatCodeOperationResult
-      + getLastExecutionResult() : AiChatCodeOperationResult
-      + getManualExecutionActionName() : String
-    }
-
-    interface AiChatAiExecutableCodeEditor {
-      + executeForAi() : AiChatCodeOperationResult
-    }
-
-    interface AiChatAttachment {
-      + detach()
-    }
-
-    interface AiChatAttachmentService {
-      + attachEditor(editor : AiChatAttachableEditor, contentType : String) : AiChatAttachment
-    }
-
-    class AiChatCodeOperationResult {
-      + operationType : AiChatCodeOperationType
-      + trigger : AiChatCodeOperationTrigger
-      + successful : boolean
-      + sourceFingerprint : String
-      + compilerDiagnostics : String
-      + standardOutput : String
-      + result : String
-      + errorCategory : AiChatCodeErrorCategory
-      + errorMessage : String
-      + lineNumber : Integer
-    }
-
-    enum AiChatCodeOperationType {
-      COMPILE
-      EXECUTION
-    }
-
-    enum AiChatCodeOperationTrigger {
-      USER
-      AI
-    }
-
-    enum AiChatCodeErrorCategory
-  }
-}
-
-package "freeplane_plugin_ai" {
-  package "org.freeplane.plugin.ai.chat" {
-    class AIChatPanel {
-      + showAndFocusInput()
-      + setAttachedEditorProvider(provider : AttachedEditorProvider)
+  ```plantuml
+  @startuml
+  set separator none
+  package "freeplane" {
+    package "org.freeplane.features.ai.code" {
+      interface AiChatAttachableEditor {
+        + getText() : String
+        + replaceText(text : String)
+      }
+  
+      interface AiChatCodeEditor {
+        + compileForAi() : AiChatCodeOperationResult
+      }
+  
+      interface AiChatAttachment {
+        + detach()
+        + showOwningChat()
+        + recordIssue(result : AiChatCodeOperationResult)
+        + clearIssue()
+        + requestRepair(request : AiChatRepairRequest)
+      }
+  
+      interface AiChatAttachmentService {
+        + attachEditor(editor : AiChatAttachableEditor, contentType : String) : AiChatAttachment
+      }
+  
+      class AiChatRepairRequest {
+        + prompt : String
+        + sourceText : String
+        + issue : AiChatCodeOperationResult
+      }
+  
+      class AiChatCodeOperationResult {
+        + compilerDiagnostics : List<String>
+        + standardOutput : String
+        + result : String
+        + errorCategory : String
+        + errorMessage : String
+        + lineNumber : Integer
+        + sourceFingerprint : String
+      }
     }
   }
-
-  package "org.freeplane.plugin.ai.code" {
-    enum AttachedFormulaExecutionPolicy {
-      USER_ONLY
-      AI_ALLOWED
+  
+  package "freeplane_plugin_ai" {
+    package "org.freeplane.plugin.ai.chat" {
+      class AIChatPanel {
+        + showAndFocusInput()
+        + switchToSession(sessionId)
+        + setAttachedEditorProvider(provider : AttachedEditorProvider)
+      }
     }
-
-    interface AttachedEditorProvider
-    class SingleEditorAttachmentService
-  }
-}
-
-package "freeplane_plugin_jsyntaxpane" {
-  package "org.freeplane.plugin.jsyntaxpane" {
-    class Activator
-  }
-}
-
-package "de.sciss.syntaxpane.syntaxkits" {
-  class GroovySyntaxKit
-}
-
-AiChatAttachableEditor <|-- AiChatCodeEditor
-AiChatCodeEditor <|-- AiChatAiExecutableCodeEditor
-AiChatAttachmentService <|.. SingleEditorAttachmentService
-AttachedEditorProvider <|.. SingleEditorAttachmentService
-SingleEditorAttachmentService --> AIChatPanel
-Activator ..> GroovySyntaxKit : registerContentType(...)
-@enduml
-```
-
-```plantuml
-@startuml
-set separator none
-package "freeplane" {
-  package "org.freeplane.features.ai.code" {
-    class AiChatCodeOperationResult
-  }
-}
-
-package "freeplane_plugin_ai" {
-  package "org.freeplane.plugin.ai.tools" {
-    class AIToolSet {
-      # publishToolCallSummary(...)
-    }
-
-    class AIToolSetBuilder {
-      + attachedEditorProvider(attachedEditorProvider : AttachedEditorProvider)
-      + attachedFormulaExecutionPolicy(policy : AttachedFormulaExecutionPolicy)
-      + build() : AIToolSet
+  
+    package "org.freeplane.plugin.ai.code" {
+      enum AttachedEditorChatMode {
+        NEW_CHAT
+        REUSE_CURRENT_CHAT
+      }
+  
+      class AttachedEditorChatModeSettings {
+        + get() : AttachedEditorChatMode
+      }
+  
+      interface AttachedEditorProvider
+      class SingleEditorAttachmentService
+      class ReadAttachedEditorLatestIssueResponse {
+        + hasIssue : boolean
+        + issue : AiChatCodeOperationResult
+      }
     }
   }
-
-  package "org.freeplane.plugin.ai.tools.utilities" {
-    class ToolExecutorFactory
-  }
-
-  package "org.freeplane.plugin.ai.code" {
-    enum AttachedFormulaExecutionPolicy {
-      USER_ONLY
-      AI_ALLOWED
-    }
-
-    class AttachedFormulaExecutionPolicySettings
-    interface AttachedEditorProvider
-    class ReadAttachedEditorResponse {
-      + contentType : String
-      + sourceFingerprint : String
-      + supportsAiExecution : boolean
-      + manualExecutionActionName : String
-      + aiExecutionAllowed : boolean
-    }
-    class ReplaceAttachedEditorRequest
-    class ReplaceAttachedEditorResponse {
-      + sourceFingerprint : String
-      + autoExecutionTriggered : boolean
-      + autoExecutionResult : AiChatCodeOperationResult
-    }
-    class CompileAttachedEditorResponse
-    class ReadAttachedEditorLastExecutionResponse
-    class ExecuteAttachedEditorResponse
-    class ChatAttachedEditorToolSet {
-      + readAttachedEditor()
-      + replaceAttachedEditor(request : ReplaceAttachedEditorRequest)
-      + compileAttachedEditor()
-      + getAttachedEditorLastExecutionResult()
-      # systemMessageForChat(...)
-    }
-    class ChatAiExecutableAttachedEditorToolSet {
-      + executeAttachedEditor()
+  
+  package "freeplane_plugin_jsyntaxpane" {
+    package "org.freeplane.plugin.jsyntaxpane" {
+      class Activator
     }
   }
-}
+  
+  package "de.sciss.syntaxpane.syntaxkits" {
+    class GroovySyntaxKit
+  }
+  
+  AiChatAttachableEditor <|-- AiChatCodeEditor
+  AiChatAttachmentService <|.. SingleEditorAttachmentService
+  AttachedEditorProvider <|.. SingleEditorAttachmentService
+  SingleEditorAttachmentService --> AIChatPanel
+  SingleEditorAttachmentService --> AttachedEditorChatModeSettings
+  Activator ..> GroovySyntaxKit : registerContentType(...)
+  @enduml
+  ```
 
-ChatAttachedEditorToolSet --|> AIToolSet
-ChatAiExecutableAttachedEditorToolSet --|> ChatAttachedEditorToolSet
-AIToolSetBuilder --> AIToolSet
-AIToolSetBuilder --> ChatAttachedEditorToolSet
-AIToolSetBuilder --> ChatAiExecutableAttachedEditorToolSet
-AttachedFormulaExecutionPolicySettings --> AttachedFormulaExecutionPolicy
-ReplaceAttachedEditorResponse --> AiChatCodeOperationResult
-ChatAttachedEditorToolSet --> AttachedEditorProvider
-ChatAttachedEditorToolSet --> AttachedFormulaExecutionPolicySettings
-ToolExecutorFactory ..> AIToolSet
-@enduml
-```
+  ```plantuml
+  @startuml
+  set separator none
+  package "freeplane_plugin_ai" {
+    package "org.freeplane.plugin.ai.chat" {
+      class AIChatService
+      class AIChatServiceFactory
+    }
+  
+    package "org.freeplane.plugin.ai.mcpserver" {
+      class ModelContextProtocolServer
+      class ModelContextProtocolToolRegistry {
+        + listTools() : List
+      }
+      class ModelContextProtocolToolDispatcher
+    }
+  
+    package "org.freeplane.plugin.ai.tools" {
+      class AIToolSet {
+        + systemMessageForChat(...)
+      }
+  
+      class AIToolSetBuilder {
+        + attachedEditorProvider(attachedEditorProvider : AttachedEditorProvider)
+        + build() : AIToolSet
+        + buildToolObjects() : List
+      }
+    }
+  
+    package "org.freeplane.plugin.ai.tools.utilities" {
+      class ToolExecutorFactory {
+        + createRegistry(toolSets : Collection) : ToolExecutorRegistry
+      }
+      class ToolExecutorRegistry
+    }
+  
+    package "org.freeplane.plugin.ai.code" {
+      interface AttachedEditorProvider
+      class ReadAttachedEditorResponse {
+        + attached : boolean
+        + contentType : String
+        + text : String
+        + sourceFingerprint : String
+        + supportsCompilation : boolean
+        + hasIssue : boolean
+      }
+      class OverwriteAttachedEditorContentRequest {
+        + text : String
+      }
+      class OverwriteAttachedEditorContentResponse {
+        + sourceFingerprint : String
+      }
+      class ReadAttachedEditorLatestIssueResponse {
+        + hasIssue : boolean
+        + issue : AiChatCodeOperationResult
+      }
+      class AttachedEditorToolSet {
+        + readAttachedEditor() : ReadAttachedEditorResponse
+        + overwriteAttachedEditorContent(request : OverwriteAttachedEditorContentRequest) : OverwriteAttachedEditorContentResponse
+        + compileAttachedEditorContent() : AiChatCodeOperationResult
+        + getAttachedEditorLatestIssue() : ReadAttachedEditorLatestIssueResponse
+        + systemMessageForChat(...) : String
+      }
+    }
+  }
+  
+  AIToolSetBuilder --> AIToolSet
+  AIToolSetBuilder --> AttachedEditorToolSet
+  AttachedEditorToolSet --> AttachedEditorProvider
+  AIChatServiceFactory --> AIToolSetBuilder
+  AIChatService --> AIToolSet : base system message
+  AIChatService --> AttachedEditorToolSet : attachment guidance
+  AIChatService --> ToolExecutorRegistry
+  ModelContextProtocolServer --> ModelContextProtocolToolRegistry
+  ModelContextProtocolServer --> ModelContextProtocolToolDispatcher
+  ModelContextProtocolToolRegistry ..> AIToolSet
+  ModelContextProtocolToolRegistry ..> AttachedEditorToolSet
+  ModelContextProtocolToolDispatcher ..> ToolExecutorFactory
+  ToolExecutorFactory ..> AIToolSet
+  ToolExecutorFactory ..> AttachedEditorToolSet
+  ToolExecutorFactory --> ToolExecutorRegistry
+  @enduml
+  ```
 
 - **Test specification:**
   - Automated tests:
     - `SingleEditorAttachmentServiceTest`
       - attaching replaces previous attachment,
-      - stale detach handles do not clear newer attachments,
+      - attach-mode setting chooses new chat or current chat,
+      - reusing the current chat works even when that chat already has
+        another map,
+      - the latest issue is stored per active attachment and is cleared
+        on success,
       - `detach()` is idempotent.
-    - `AttachedFormulaExecutionPolicySettingsTest`
-      - `user_only` and `ai_allowed` map from the stored preference
-        values correctly.
-    - `ChatAttachedEditorToolSetTest`
-      - `readAttachedEditor()` returns `contentType`, live text, and
-        capability flags,
-      - `replaceAttachedEditor(...)` updates fake editor text,
-      - `compileAttachedEditor()` returns structured diagnostics from a
-        fake attached code editor,
-      - `getAttachedEditorLastExecutionResult()` returns
-        `hasExecutionResult=false` when nothing has run yet,
-      - attached-editor tools fail with `No editor is attached to AI
-        chat.` when no attachment exists.
-    - `ChatAiExecutableAttachedEditorToolSetTest`
-      - attaching a fake editor alone does not create compile or
-        execution diagnostics,
-      - `replaceAttachedEditor(...)` auto-executes an AI-executable fake
-        formula editor and returns the captured execution result when
-        the policy is `ai_allowed`,
-      - `executeAttachedEditor()` is present only on the AI-executable
-        tool subclass, re-executes unchanged attached formula text, and
-        returns structured diagnostics from a fake attached code editor.
+    - `AttachedEditorToolSetTest`
+      - `readAttachedEditor()` returns `attached=false` when no
+        attachment exists,
+      - when attached, `readAttachedEditor()` returns `contentType`,
+        live text, capability flags, and `hasIssue`,
+      - `overwriteAttachedEditorContent(...)` updates fake editor text,
+      - `compileAttachedEditorContent()` stores the latest issue only on
+        failure, clears it on success, and returns the compile result,
+      - `getAttachedEditorLatestIssue()` returns the latest issue when
+        one exists and `hasIssue=false` otherwise,
+      - attached-editor tools except `readAttachedEditor()` fail with
+        `No editor is attached.` when no attachment exists.
     - `ToolExecutorRegistryTest`
-      - subclass tool sets expose inherited `AIToolSet` tools plus
-        subclass-added tools in stable order.
+      - multiple tool objects expose merged tool names while keeping the
+        builder-supplied tool-object order,
+      - duplicate tool names across tool objects fail fast.
     - `AIChatPanel`-level test
-      - `showAndFocusInput()` selects the tab and schedules input focus.
-    - `AIToolSetBuilder` / chat-path test
-      - no attachment -> plain `AIToolSet`,
-      - attachment + `user_only` -> `ChatAttachedEditorToolSet`,
-      - attachment + `ai_allowed` ->
-        `ChatAiExecutableAttachedEditorToolSet`.
-    - `ChatToolAvailability` test
-      - `readAttachedEditor`, `compileAttachedEditor`, and
-        `getAttachedEditorLastExecutionResult` are present in `READING`
-        and `EDITING`,
-      - `replaceAttachedEditor` and `executeAttachedEditor` are present
-        only in `EDITING`.
+      - `showAndFocusInput()` selects the tab and schedules input focus,
+      - switching to the chosen chat session works for attach and repair.
+    - `AIToolSetBuilder` / tool-object test
+      - both chat and MCP tool-object lists contain `AIToolSet` plus
+        `AttachedEditorToolSet`,
+      - the configured `AttachedEditorProvider` reaches
+        `AttachedEditorToolSet`,
+      - attached-editor tools remain registered even when no editor is
+        attached.
+    - `AIChatService` / chat-path test
+      - merged chat tool registration uses the ordered tool-object list,
+      - attached-editor tools bypass `ChatToolAvailability` filtering,
+      - attached-editor system-message guidance is appended only when an
+        editor is attached.
+    - `ModelContextProtocolServer` / MCP-path test
+      - `tools/list` metadata and tool execution use the same ordered
+        tool-object list,
+      - MCP includes attached-editor tools without depending on chat-only
+        wiring.
+  - **Manual tests:** N/A
   - Verification command:
     - `gradle -Djava.net.preferIPv6Addresses=true -Djava.awt.headless=true :freeplane_plugin_ai:test :freeplane:test`
 
-## Subtask: Attach Script Editor to AI chat and expose current compile/run diagnostics
+## Subtask: Attach Script Editor to AI chat and expose compile diagnostics
 - **Status:** backlog
 - **Scope:** Add an explicit AI button to `ScriptEditorPanel`, adapt it
-  to the shared attachment and attached-code contracts, let AI compile
-  the current script, and let AI inspect the latest execution
-  diagnostics produced by the existing user Run button.
+  to the shared attachment and attached-code contracts, and let AI
+  compile the current script against the current Groovy compiler path.
 - **Motivation:** This is the simpler editor integration and should
-  validate the attached-code contract before the formula-specific overlay
-  work.
+  validate the attached-code contract before the formula-specific submit
+  lifecycle work.
 - **Constraints:**
   - Keep `ScriptEditorPanel` non-modal behavior unchanged.
   - Do not bypass the dialog's buffered script model.
-  - Reuse the current `IScriptModel.executeScript(...)` path for script
-    execution so selected-node semantics, permissions, stdout capture,
-    and error behavior stay aligned with current behavior.
-  - AI must never trigger script execution.
-  - The existing Run action remains the only script execution entry
-    point.
+  - Reuse the current Groovy compilation path and classpath. Do not add
+    a separate script compiler.
+  - Existing script execution behavior stays unchanged and out of scope
+    for this task.
   - Detach only on actual close after the existing close-confirmation
     flow accepts the dialog disposal.
 - **Briefing:** `ScriptEditorPanel` already has a top button row in its
   `JMenuBar`, uses `mScriptTextField` as the live text component, and
   already has script-plugin `Activator.getBundleContext()` available for
-  OSGi lookup. Its current execution path goes through
-  `IScriptModel.executeScript(...)`, which already uses `ScriptingEngine`
-  with permissive scripting permissions and the current selected node.
+  OSGi lookup.
 - **Research:**
   - `storeCurrent()` writes `mScriptTextField.getText()` into the
     dialog-local script model.
-  - `RunAction` already:
-    - stores current text,
-    - creates a fresh result buffer through `getPrintStream()`,
-    - passes a line-aware `IFreeplaneScriptErrorHandler`,
-    - catches errors after `IScriptModel.executeScript(...)`,
-    - updates `mScriptResultField`,
-    - shows a user-facing error popup on failures.
-  - Both current `IScriptModel` implementations for this panel use the
-    same selected-node and permissive-permission execution environment.
+  - `RunAction` already stores current text and delegates to
+    `IScriptModel.executeScript(...)`, but that execution path is not
+    part of this task.
   - The attached script editor is always a Groovy editor, so compile-only
     diagnostics can target the current `GroovyScript` path directly.
 - **Design:**
@@ -686,115 +748,91 @@ ToolExecutorFactory ..> AIToolSet
   - When the AI button attaches the editor, pass
     `mScriptTextField.getContentType()` to
     `AiChatAttachmentService.attachEditor(...)`.
-  - `executeCurrentScriptFromUser(...)` must:
-    - call `storeCurrent()`,
-    - determine the current selected script index,
-    - create an output capture buffer and `PrintStream`,
-    - create an `IFreeplaneScriptErrorHandler` that both keeps the
-      current caret-jump behavior and captures the failing line number,
-    - call the existing script-model execution path unchanged,
-    - build an `AiChatCodeOperationResult` with operation type
-      `EXECUTION`, trigger `USER`, source fingerprint of the executed
-      current text, captured standard output, result, error category,
-      error message, and line number,
-    - store that result as the latest execution result,
-    - update the existing result field from the captured result object,
-    - show the current popup error dialog only when
-      `showUserErrorDialog` is true.
-  - Keep the existing Run button, but make `RunAction` delegate to
-    `executeCurrentScriptFromUser(true)`.
-  - `ScriptingEngine.compileGroovyScriptForDiagnostics(...)` reuses the
-    current `GroovyScript` compilation behavior and classpath, does not
-    execute the script body, and returns enough captured information to
-    map into `AiChatCodeOperationResult`, including compile-success
-    state, compiler diagnostics, error message, and line number.
+  - `compileForAi()` must call
+    `ScriptingEngine.compileGroovyScriptForDiagnostics(...)` and map the
+    result into `AiChatCodeOperationResult` with operation type
+    `COMPILE`, trigger `AI`, source fingerprint, compiler diagnostics,
+    error message, and line number.
+  - After `compileForAi()` returns, store it as the latest issue only
+    when it is unsuccessful, clear the current issue on success, and
+    expose that state through `getAttachedEditorLatestIssue()`.
   - On confirmed dialog close in `disposeDialog(...)`:
     - detach the stored `AiChatAttachment` if present,
     - then continue existing save or cancel flow unchanged.
-  - Add translation keys for the new AI button and any new compile or
-    formula-execution-policy labels introduced in this task.
+  - Add translation keys for the new AI button and any new compile
+    labels introduced in this task.
 
-```plantuml
-@startuml
-set separator none
-package "freeplane" {
-  package "org.freeplane.features.ai.code" {
-    interface AiChatCodeEditor
-    interface AiChatAttachment
-    class AiChatCodeOperationResult
-  }
-}
-
-package "freeplane_plugin_script" {
-  package "org.freeplane.plugin.script" {
-    class ScriptEditorPanel {
-      - aiChatAttachment : AiChatAttachment
-      - lastExecutionResult : AiChatCodeOperationResult
-      + getText() : String
-      + replaceText(text : String)
-      + compileForAi() : AiChatCodeOperationResult
-      + getLastExecutionResult() : AiChatCodeOperationResult
-      + getManualExecutionActionName() : String
-      - executeCurrentScriptFromUser(showUserErrorDialog : boolean)
-      - disposeDialog()
-    }
-
-    interface IScriptModel {
-      + executeScript(index, outStream, errorHandler)
-    }
-
-    class ScriptingEngine {
-      + executeScript(node, script, errorHandler, outStream, scriptContext, permissions)
-      + compileGroovyScriptForDiagnostics(script, permissions)
+  ```plantuml
+  @startuml
+  set separator none
+  package "freeplane" {
+    package "org.freeplane.features.ai.code" {
+      interface AiChatCodeEditor
+      interface AiChatAttachment
+      class AiChatCodeOperationResult
     }
   }
-}
-
-ScriptEditorPanel ..|> AiChatCodeEditor
-ScriptEditorPanel --> IScriptModel : executeScript(...)
-ScriptEditorPanel --> ScriptingEngine : compileGroovyScriptForDiagnostics(...)
-@enduml
-```
+  
+  package "freeplane_plugin_script" {
+    package "org.freeplane.plugin.script" {
+      class ScriptEditorPanel {
+        - aiChatAttachment : AiChatAttachment
+        + getText() : String
+        + replaceText(text : String)
+        + compileForAi() : AiChatCodeOperationResult
+        - disposeDialog()
+      }
+  
+      class ScriptingEngine {
+        + compileGroovyScriptForDiagnostics(script, permissions)
+      }
+    }
+  }
+  
+  ScriptEditorPanel ..|> AiChatCodeEditor
+  ScriptEditorPanel --> ScriptingEngine : compileGroovyScriptForDiagnostics(...)
+  ScriptEditorPanel --> AiChatAttachment : recordIssue(...)
+  @enduml
+  ```
 
 - **Test specification:**
-  - Automated tests:
-    - add unit coverage for any extracted helper that maps captured
-      standard output or compiler diagnostics into
-      `AiChatCodeOperationResult`,
+  - **Automated tests:**
+    - add unit coverage for any extracted helper that maps compiler
+      diagnostics into `AiChatCodeOperationResult`,
     - add unit coverage for
       `ScriptingEngine.compileGroovyScriptForDiagnostics(...)` when the
       helper is introduced in a testable form.
-  - Manual tests:
+  - **Manual tests:**
     - open script editor, attach to AI chat, rewrite the live script,
-      compile it from AI, and verify compilation errors are returned with
-      line information,
+      compile it from AI, and verify compilation errors are returned
+      with line information,
     - verify Groovy syntax highlighting still works in the script editor
       after the content-type change,
-    - press the existing Run button manually, and verify AI can read the
-      latest execution diagnostics through
-      `getAttachedEditorLastExecutionResult()`,
     - save after an AI rewrite and verify persisted script content
       matches the AI-updated live text,
     - cancel after an AI rewrite and verify the original script remains
       unchanged,
     - attach script editor after another editor and verify the earlier
-      attachment is replaced.
+      attachment is replaced,
+    - compile from AI, then manually ask AI for help and verify the
+      latest issue is readable through
+      `getAttachedEditorLatestIssue()`.
   - Verification command:
     - `gradle -Djava.net.preferIPv6Addresses=true -Djava.awt.headless=true :freeplane_plugin_script:test :freeplane_plugin_ai:test`
 
-## Subtask: Attach Formula Editor to AI chat while preserving map reference picking and exposing compile/execute diagnostics
+## Subtask: Attach Formula Editor to AI chat, preserve map reference picking, and validate formulas before commit
 - **Status:** backlog
 - **Scope:** Add an explicit AI button to `FormulaEditor`, replace the
   current whole-window blocker with a center-scoped selection overlay,
-  let AI compile the current formula, and let AI inspect the latest
-  execution diagnostics produced either by formula AI execution when
-  the global formula setting allows it, including automatic execution
-  after AI text replacement, or by a new user Execute action.
+  let AI compile the current formula, change formula submit so final
+  validation happens before commit while the editor remains visible, and
+  optionally send a built-in AI repair request when the user approves it
+  after a failed submit.
 - **Motivation:** `FormulaEditor` is the real interaction problem. It
   already uses a non-modal dialog, but its current root-pane selection
-  overlay blocks the rest of the frame, and its current preview logic is
-  a one-shot setup-time execution that does not expose live diagnostics
-  to AI.
+  overlay blocks the rest of the frame, its current preview logic
+  evaluates formula text while the editor is still open, and its submit
+  lifecycle hides the dialog before commit.
 - **Constraints:**
   - Overlay only the frame's `BorderLayout.CENTER` component, not the
     whole root pane.
@@ -803,34 +841,34 @@ ScriptEditorPanel --> ScriptingEngine : compileGroovyScriptForDiagnostics(...)
     attribute-table interaction.
   - Keep the attached-editor text path on `FormulaEditor.textEditor`
     only.
-  - Reuse current `FormulaUtils` and `ScriptingEngine` execution
-    semantics, including formula permissions and formula `ScriptContext`.
-  - AI formula execution must be gated by the global formula-execution
-    policy.
-  - When AI replaces attached formula text and the policy is
-    `ai_allowed`, the dialog must execute the updated text
-    automatically and refresh its visible result state from that
-    outcome.
-  - Align attached formula execution with the live formula runtime
-    environment used by `FormulaTextTransformer`, including
-    `TextController.withNodeNumbering(true)`.
+  - Reuse current formula permissions, script bindings, and
+    `TextController.withNodeNumbering(true)` semantics.
+  - Do not evaluate the live formula while the editor is open except for
+    the final submit-time validation.
+  - Do not add an AI formula-execution tool or a general-purpose
+    in-editor Execute button in this task.
+  - Failed submit must not commit the edited formula.
+  - The user must see diagnostics before any AI repair request is sent.
+  - Successful submit must close and detach the editor.
 - **Briefing:** `FormulaEditor` is the only `EditNodeDialog` subclass in
-  the repository, so small dialog-button extension points can stay local
-  to this feature. `FormulaTextTransformer` is already the runtime entry
-  point for displayed formula execution.
+  the repository, so small dialog-button and submit-hook extension
+  points can stay local to this feature. `FormulaTextTransformer` is
+  still the normal runtime entry point for committed formula evaluation.
 - **Research:**
   - `FormulaEditor.show(Window)` currently installs
     `new GlassPaneManager(...)` directly.
-  - `FormulaEditor.addPreviewPane(...)` currently executes only during
+  - `FormulaEditor.addPreviewPane(...)` currently evaluates once during
     dialog configuration and uses the original `getText()` value rather
     than the live current editor text.
   - `FormulaTextTransformer.transformContent(...)` already applies
-    `textController.withNodeNumbering(true, ...)`, so formula editor
-    execution and attached-editor AI execution should align with that
-    environment instead of keeping the current preview discrepancy.
-  - The AI tab is on the frame's right side, so a center-only overlay is
-    the narrowest change that can preserve map picking without blocking
-    AI chat.
+    `textController.withNodeNumbering(true, ...)`, so committed runtime
+    evaluation already defines the node-numbering context that submit
+    validation should reuse.
+  - `EditNodeDialog.LongNodeDialog.submit()` currently hides the dialog
+    before commit.
+  - `ScriptContext` already carries the node, base URL, and permissions
+    context needed by Groovy execution; dependency writes are local to
+    the `access*` methods.
 - **Design:**
   - `CenterPaneNodeSelectionOverlay`:
     - attaches a transparent overlay only above the frame's current
@@ -840,174 +878,238 @@ ScriptEditorPanel --> ScriptingEngine : compileGroovyScriptForDiagnostics(...)
     - never disables frame focus,
     - keeps overlay bounds synchronized with the center component.
   - Leave existing `GlassPaneManager` unchanged for other code paths.
-  - `FormulaExecutionSupport.execute(NodeModel node, String text,
-    AiChatCodeOperationTrigger trigger)` must:
-    - use the live current formula text,
-    - wrap execution in
-      `TextController.getController().withNodeNumbering(true, ...)`,
-    - call `FormulaUtils` through a new overload that passes a captured
-      `PrintStream` and a line-aware `IFreeplaneScriptErrorHandler`,
-    - preserve current formula permissions and `ScriptContext`,
-    - capture standard output, result, error category, error message,
-      and line number,
-    - return a `FormulaExecutionResult` that `FormulaEditor` can map to
-      `AiChatCodeOperationResult`.
-  - Update `FormulaUtils` and `ScriptingEngine` usage for formulas:
-    - add overloads that accept `PrintStream` and
-      `IFreeplaneScriptErrorHandler`,
-    - keep existing overloads delegating to the new overloads with the
-      current default sinks,
-    - do not replace the actual execution engine.
   - Change the formula editor pane content type from `text/groovy` to
     `text/x-freeplane-formula-groovy`.
-  - `FormulaEditor` activates the overlay on show, adds `AI` and
-    `Execute` buttons through `addAdditionalButtons(...)`, and attaches a
-    live-editor adapter through
-    `AiChatAttachmentService.attachEditor(...,
+  - `FormulaEditor` activates the overlay on show, adds an `AI` button
+    through `addAdditionalButtons(...)`, and attaches a live-editor
+    adapter through `AiChatAttachmentService.attachEditor(...,
     textEditor.getContentType())` when the AI button is clicked.
-  - Replace the current one-shot preview logic with a persistent preview
-    or result component refreshed from the latest execution result.
-    - successful execution shows the executed result,
-    - failed execution shows the captured diagnostics.
-  - Detach the stored `AiChatAttachment` and deactivate the overlay on
-    actual dialog close.
+  - Replace the current one-shot preview evaluation from dialog setup.
+    Opening or attaching the formula editor must not evaluate the live
+    formula text.
+  - Change `EditNodeDialog` submit lifecycle:
+    - add protected `boolean submitEditedText(String editedText)` to
+      `EditNodeDialog`,
+    - default implementation calls `getEditControl().ok(editedText)` and
+      returns `true`,
+    - change `LongNodeDialog.submit()` to call that hook first and only
+      hide the dialog when it returns `true`.
+  - `FormulaEditor.submitEditedText(String editedText)` must:
+    - if the current text no longer starts with `=`:
+      - clear any stale issue on the active attachment,
+      - commit plain text through `getEditControl().ok(editedText)`,
+      - return `true`,
+    - otherwise run pre-commit validation while the editor remains open,
+      - on validation success:
+        - clear any stale issue on the active attachment,
+        - commit through `getEditControl().ok(editedText)`,
+        - return `true`,
+      - on validation failure:
+        - if attached, record the issue on the active attachment,
+        - show a popup containing the diagnostics and the question
+          whether AI should try to fix the formula,
+        - if the user answers Yes:
+          - if attached, send the repair request into the existing owning
+            chat session,
+          - if unattached, attach the editor using the normal attach-mode
+            setting and normal replacement behavior, then send the
+            repair request,
+          - show/focus the chosen chat session,
+        - if the user answers No, send nothing to chat,
+        - keep the editor open,
+        - return `false`.
+  - `compileForAi()` for `FormulaEditor` must:
+    - if the current text does not start with `=`:
+      - return an unsuccessful `AiChatCodeOperationResult` whose error
+        makes clear that the current content is not a formula,
+    - otherwise compile only the body after the leading `=`,
+      - use `ScriptingPermissions.getFormulaPermissions()`,
+      - do not execute,
+      - do not write persistent formula cache or dependency state,
+      - store the result as the latest issue only when it is
+        unsuccessful,
+      - clear the current issue on success.
+  - Add temporary submit validation support:
+    - add `ScriptContext.withDependencyTracking(enabled)`,
+    - when dependency tracking is disabled, `accessNode(...)`,
+      `accessBranch(...)`, `accessClones(...)`, `accessAll(...)`, and
+      `accessGlobalNode()` must not write `FormulaDependencies`,
+    - add `FormulaUtils.validateFormula(node, formulaText, outStream,
+      errorHandler)` that:
+      - preserves current cycle detection, non-null-result check,
+        formula permissions, and node bindings,
+      - bypasses `FormulaCache`,
+      - uses a `ScriptContext` with dependency tracking disabled,
+      - evaluates only for the submit-time validation and returns the
+        runtime result or throws.
+    - add `FormulaSubmitValidationSupport.validateSubmittedFormula(...)`
+      that:
+      - wraps validation in
+        `TextController.getController().withNodeNumbering(true, ...)`,
+      - captures standard output, result, error category, error
+        message, and line number,
+      - maps them into `AiChatCodeOperationResult` with operation type
+        `SUBMIT_VALIDATION`.
+  - Successful pre-commit evaluation result reuse:
+    - if promoting the successful temporary evaluation result into
+      post-commit state is simple and low-risk, do it,
+    - otherwise accept one normal post-commit re-evaluation after
+      commit.
+  - Add a fixed built-in repair prompt for formula submit failures.
+    The repair request payload must include that prompt, the current
+    editor text, and the captured issue.
   - Add static bundle-context storage to formula-plugin `Activator` so
     `FormulaEditor` can resolve `AiChatAttachmentService` without a
     direct dependency on AI-plugin implementation classes.
-  - Update `FormulaTextTransformer` to delegate to
-    `FormulaExecutionSupport` or to the same lower-level helper so the
-    editor and runtime no longer drift apart on node-numbering and
-    formula execution context.
 
-```plantuml
-@startuml
-set separator none
-package "freeplane" {
-  package "org.freeplane.features.ai.code" {
-    interface AiChatAiExecutableCodeEditor
-    interface AiChatAttachment
-    class AiChatCodeOperationResult
-    enum AiChatCodeOperationTrigger {
-      USER
-      AI
+  ```plantuml
+  @startuml
+  set separator none
+  package "freeplane" {
+    package "org.freeplane.features.ai.code" {
+      interface AiChatCodeEditor
+      interface AiChatAttachment
+      class AiChatCodeOperationResult
+      class AiChatRepairRequest
+    }
+  
+    package "org.freeplane.features.text.mindmapmode" {
+      class EditNodeDialog {
+        # addAdditionalButtons(buttonPane : JPanel)
+        # submitEditedText(editedText : String) : boolean
+      }
+    }
+  
+    package "org.freeplane.view.swing.ui.mindmapmode" {
+      class CenterPaneNodeSelectionOverlay
     }
   }
-
-  package "org.freeplane.features.text.mindmapmode" {
-    class EditNodeDialog {
-      # addAdditionalButtons(buttonPane : JPanel)
+  
+  package "freeplane_plugin_formula" {
+    package "org.freeplane.plugin.formula" {
+      class FormulaEditor {
+        - aiChatAttachment : AiChatAttachment
+        + getText() : String
+        + replaceText(text : String)
+        + compileForAi() : AiChatCodeOperationResult
+        # submitEditedText(editedText : String) : boolean
+      }
+  
+      class FormulaSubmitValidationSupport {
+        + validateSubmittedFormula(node, formulaText) : AiChatCodeOperationResult
+      }
+  
+      class Activator
     }
   }
-
-  package "org.freeplane.view.swing.ui.mindmapmode" {
-    class CenterPaneNodeSelectionOverlay
-  }
-}
-
-package "freeplane_plugin_formula" {
-  package "org.freeplane.plugin.formula" {
-    class FormulaEditor {
-      - aiChatAttachment : AiChatAttachment
-      - lastExecutionResult : AiChatCodeOperationResult
-      + getText() : String
-      + replaceText(text : String)
-      + compileForAi() : AiChatCodeOperationResult
-      + executeForAi() : AiChatCodeOperationResult
-      + getLastExecutionResult() : AiChatCodeOperationResult
-      + getManualExecutionActionName() : String
-      - executeCurrentFormula(trigger : AiChatCodeOperationTrigger, refreshUi : boolean)
+  
+  package "freeplane_plugin_script" {
+    package "org.freeplane.plugin.script" {
+      class FormulaUtils {
+        + validateFormula(node, formulaText, outStream, errorHandler) : Object
+      }
+  
+      class ScriptContext {
+        + withDependencyTracking(enabled : boolean) : ScriptContext
+      }
+  
+      class ScriptingPermissions {
+        + getFormulaPermissions() : ScriptingPermissions
+      }
     }
-
-    class FormulaExecutionSupport {
-      + execute(node, text, trigger) : FormulaExecutionResult
-    }
-
-    class FormulaExecutionResult
-    class FormulaTextTransformer
-    class Activator
   }
-}
+  
+  EditNodeDialog <|-- FormulaEditor
+  FormulaEditor ..|> AiChatCodeEditor
+  FormulaEditor --> CenterPaneNodeSelectionOverlay
+  FormulaEditor --> FormulaSubmitValidationSupport
+  FormulaEditor --> AiChatAttachment
+  FormulaEditor --> Activator : bundle context
+  FormulaSubmitValidationSupport --> FormulaUtils
+  FormulaUtils --> ScriptContext
+  FormulaUtils --> ScriptingPermissions
+  @enduml
+  ```
 
-package "freeplane_plugin_script" {
-  package "org.freeplane.plugin.script" {
-    class FormulaUtils
-  }
-}
-
-EditNodeDialog <|-- FormulaEditor
-FormulaEditor ..|> AiChatAiExecutableCodeEditor
-FormulaEditor --> CenterPaneNodeSelectionOverlay
-FormulaEditor --> FormulaExecutionSupport
-FormulaEditor --> Activator : bundle context
-FormulaExecutionSupport --> FormulaUtils
-FormulaTextTransformer --> FormulaExecutionSupport
-@enduml
-```
-
-```plantuml
-@startuml
-actor User
-participant "FormulaEditor" as FE
-participant "CenterPaneNodeSelectionOverlay" as Overlay
-participant "FormulaExecutionSupport" as Exec
-participant "AiChatAttachmentService" as Attach
-participant "AI chat tab" as AI
-
-User -> FE: open formula editor
-FE -> Overlay: activate()
-User -> FE: click AI
-FE -> Attach: attachEditor(live-editor adapter, textEditor.getContentType())
-Attach -> AI: showAndFocusInput()
-User -> AI: request compile or execute
-AI -> FE: compileForAi() / executeForAi()
-FE -> Exec: execute(current text, AI)
-Exec --> FE: result or diagnostics
-User -> FE: click Execute
-FE -> Exec: execute(current text, USER)
-Exec --> FE: result or diagnostics
-User -> Overlay: click map node
-Overlay -> FE: insert formula reference
-@enduml
-```
+  ```plantuml
+  @startuml
+  actor User
+  participant "FormulaEditor" as FE
+  participant "FormulaSubmitValidationSupport" as Validate
+  participant "AiChatAttachmentService" as AttachSvc
+  participant "AiChatAttachment" as Attach
+  participant "Repair popup" as Popup
+  participant "AI chat" as AI
+  
+  User -> FE: click AI
+  FE -> AttachSvc: attachEditor(live editor, contentType)
+  AttachSvc --> FE: Attach
+  Attach -> AI: show chosen chat session
+  User -> FE: submit formula
+  FE -> Validate: validateSubmittedFormula(current text)
+  alt success
+    Validate --> FE: success
+    FE -> Attach: clearIssue()
+    FE -> FE: commit text
+    FE --> User: close editor
+  else failure
+    Validate --> FE: diagnostics
+    FE -> Attach: recordIssue(issue)
+    FE -> Popup: show diagnostics + ask AI?
+    alt yes
+      Popup --> FE: yes
+      FE -> Attach: requestRepair(prompt, text, issue)
+      Attach -> AI: show chosen chat session + send request
+    else no
+      Popup --> FE: no
+    end
+    FE --> User: keep editor open
+  end
+  @enduml
+  ```
 
 - **Test specification:**
-  - Automated tests:
-    - add unit coverage for `FormulaExecutionSupport` if it is factored
-      into a testable helper,
-    - add unit coverage for any new `FormulaUtils` overloads that map
-      formula execution failures into captured diagnostics,
+  - **Automated tests:**
+    - add unit coverage for `FormulaSubmitValidationSupport`,
+    - add unit coverage for `ScriptContext.withDependencyTracking(...)`
+      and the disabled dependency-write path,
+    - add unit coverage for `FormulaUtils.validateFormula(...)` to
+      verify temporary validation does not populate persistent formula
+      cache or dependency state,
     - do **not** claim automated overlay-unblocking coverage unless a
       test actually verifies the right-side AI chat remains reachable.
-  - Manual tests:
+  - **Manual tests:**
     - open formula editor, click map nodes, and confirm reference
       insertion still works,
     - attach formula editor to AI chat, compile the current formula from
-      AI, and verify compilation errors return line information,
+      AI, and verify compilation errors return line information without
+      executing the formula,
     - verify Groovy syntax highlighting still works in the formula editor
       after the content-type change,
-    - switch the global formula setting to `ai_allowed` and verify the
-      existing attachment still has no execution result until AI
-      executes or replaces the formula text,
-    - replace the attached formula text from AI, and verify the
-      replacement auto-executes and AI receives standard output,
-      result, and execution errors,
-    - with the global formula setting still `ai_allowed`, request
-      explicit AI execution without changing the formula text and
-      verify AI receives a fresh execution result,
-    - with the global formula setting still `ai_allowed`, verify the
-      preview or result area refreshes automatically after that AI
-      formula rewrite,
-    - switch the global formula setting to `user_only`, click the new
-      Execute button manually, and verify AI can read the latest
-      execution diagnostics through
-      `getAttachedEditorLastExecutionResult()`,
-    - verify the preview or result area reflects the same captured
-      execution outcome that AI receives,
+    - verify opening or attaching the formula editor no longer evaluates
+      the live formula text,
+    - submit a failing formula and verify the text is not committed, the
+      editor stays open, and the popup shows diagnostics before any AI
+      request is sent,
+    - for an attached failing formula, choose Yes and verify the repair
+      request goes to the owning attached chat session,
+    - for an attached failing formula, choose No, manually ask AI for
+      help, and verify the latest issue is readable through
+      `getAttachedEditorLatestIssue()`,
+    - for an unattached failing formula, choose Yes and verify the
+      editor attaches using the same attach-mode setting and the repair
+      request goes to a new chat by default or to the current chat when
+      the setting is changed,
+    - remove the leading `=` from the text, verify
+      `compileAttachedEditorContent()` reports not-a-formula, then submit and
+      verify plain text is committed and the editor closes,
+    - verify successful formula submit closes the editor and detaches
+      it,
     - verify the chat tab remains clickable and typable while the dialog
       stays open,
     - click map nodes again after attachment and verify reference
       insertion still works,
     - close the formula editor and verify attached-editor AI requests now
-      fail with `No editor is attached to AI chat.`
+      fail with `No editor is attached.`
   - Verification command:
     - `gradle -Djava.net.preferIPv6Addresses=true -Djava.awt.headless=true :freeplane_plugin_ai:test :freeplane:test`
