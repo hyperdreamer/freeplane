@@ -135,7 +135,7 @@ public class AIChatPanelScriptRequestTest {
                      when(mock.toolCallSummaryHandler(any())).thenReturn(mock);
                      when(mock.availableMaps(any())).thenReturn(mock);
                      when(mock.mapAccessListener(any())).thenReturn(mock);
-                     when(mock.attachedEditorProvider(org.mockito.ArgumentMatchers.nullable(org.freeplane.plugin.ai.code.AttachedEditorProvider.class))).thenReturn(mock);
+                     when(mock.codeHostService(org.mockito.ArgumentMatchers.nullable(org.freeplane.features.ai.code.AiCodeHostService.class))).thenReturn(mock);
                      when(mock.build()).thenReturn(toolSet);
                      when(mock.buildToolObjects()).thenReturn(java.util.Collections.<Object>singletonList(toolSet));
                  })) {
@@ -203,7 +203,7 @@ public class AIChatPanelScriptRequestTest {
                      when(mock.toolCallSummaryHandler(any())).thenReturn(mock);
                      when(mock.availableMaps(any())).thenReturn(mock);
                      when(mock.mapAccessListener(any())).thenReturn(mock);
-                     when(mock.attachedEditorProvider(org.mockito.ArgumentMatchers.nullable(org.freeplane.plugin.ai.code.AttachedEditorProvider.class))).thenReturn(mock);
+                     when(mock.codeHostService(org.mockito.ArgumentMatchers.nullable(org.freeplane.features.ai.code.AiCodeHostService.class))).thenReturn(mock);
                      when(mock.build()).thenReturn(toolSet);
                      when(mock.buildToolObjects()).thenReturn(java.util.Collections.<Object>singletonList(toolSet));
                  })) {
@@ -262,7 +262,7 @@ public class AIChatPanelScriptRequestTest {
                      when(mock.toolCallSummaryHandler(any())).thenReturn(mock);
                      when(mock.availableMaps(any())).thenReturn(mock);
                      when(mock.mapAccessListener(any())).thenReturn(mock);
-                     when(mock.attachedEditorProvider(org.mockito.ArgumentMatchers.nullable(org.freeplane.plugin.ai.code.AttachedEditorProvider.class))).thenReturn(mock);
+                     when(mock.codeHostService(org.mockito.ArgumentMatchers.nullable(org.freeplane.features.ai.code.AiCodeHostService.class))).thenReturn(mock);
                      when(mock.build()).thenReturn(toolSet);
                      when(mock.buildToolObjects()).thenReturn(java.util.Collections.<Object>singletonList(toolSet));
                  })) {
@@ -326,7 +326,7 @@ public class AIChatPanelScriptRequestTest {
                      when(mock.toolCallSummaryHandler(any())).thenReturn(mock);
                      when(mock.availableMaps(any())).thenReturn(mock);
                      when(mock.mapAccessListener(any())).thenReturn(mock);
-                     when(mock.attachedEditorProvider(org.mockito.ArgumentMatchers.nullable(org.freeplane.plugin.ai.code.AttachedEditorProvider.class))).thenReturn(mock);
+                     when(mock.codeHostService(org.mockito.ArgumentMatchers.nullable(org.freeplane.features.ai.code.AiCodeHostService.class))).thenReturn(mock);
                      when(mock.build()).thenReturn(toolSet);
                      when(mock.buildToolObjects()).thenReturn(java.util.Collections.<Object>singletonList(toolSet));
                  })) {

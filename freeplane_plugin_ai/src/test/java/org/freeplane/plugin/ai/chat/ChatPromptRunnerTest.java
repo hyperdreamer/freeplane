@@ -19,7 +19,7 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.features.text.TextController;
-import org.freeplane.plugin.ai.code.AttachedEditorProvider;
+import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.freeplane.plugin.ai.prompt.AiPromptProgressDialogFactory;
 import org.freeplane.plugin.ai.prompt.AiPromptRequestComposer;
@@ -276,7 +276,7 @@ public class ChatPromptRunnerTest {
             when(mock.toolCallSummaryHandler(nullable(ToolCallSummaryHandler.class))).thenReturn(mock);
             when(mock.availableMaps(any())).thenReturn(mock);
             when(mock.mapAccessListener(nullable(AvailableMaps.MapAccessListener.class))).thenReturn(mock);
-            when(mock.attachedEditorProvider(nullable(AttachedEditorProvider.class))).thenReturn(mock);
+            when(mock.codeHostService(nullable(AiCodeHostService.class))).thenReturn(mock);
             when(mock.build()).thenReturn(toolSet);
             when(mock.buildToolObjects()).thenReturn(Collections.<Object>singletonList(toolSet));
         });

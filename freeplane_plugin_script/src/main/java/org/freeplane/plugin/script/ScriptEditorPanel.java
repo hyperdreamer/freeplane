@@ -65,8 +65,11 @@ import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.ui.LabelAndMnemonicSetter;
 import org.freeplane.features.ai.code.AiChatAttachment;
 import org.freeplane.features.ai.code.AiChatAttachmentService;
-import org.freeplane.features.ai.code.AiChatCodeEditor;
-import org.freeplane.features.ai.code.AiChatCodeOperationResult;
+import org.freeplane.features.ai.code.AiCodeEditor;
+import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CompileCodeRequest;
+import org.freeplane.features.ai.code.CompileCodeResponse;
+import org.freeplane.features.ai.code.ScriptHost;
 import org.freeplane.core.ui.UIBuilder;
 import org.freeplane.core.ui.components.EmptyIcon;
 import org.freeplane.core.ui.components.JRestrictedSizeScrollPane;
@@ -82,7 +85,7 @@ import org.osgi.framework.ServiceReference;
 
 /**
  */
-class ScriptEditorPanel extends JDialog implements AiChatCodeEditor {
+class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 
 	static final String GROOVY_EDITOR_FONT = "groovy_editor_font";
 	static final String GROOVY_EDITOR_FONT_SIZE = "groovy_editor_font_size";
@@ -568,21 +571,20 @@ class ScriptEditorPanel extends JDialog implements AiChatCodeEditor {
 	}
 
 	@Override
-	public AiChatCodeOperationResult compileForAi() {
+	public CompileCodeResponse compileCode(CompileCodeRequest request) {
+		String scriptText = mScriptTextField.getText();
 		ScriptingEngine.GroovyCompileResult compileResult = ScriptingEngine.compileGroovyScriptForDiagnostics(
-			mScriptTextField.getText(),
+			scriptText,
 			ScriptingPermissions.getPermissiveScriptingPermissions());
-		return new AiChatCodeOperationResult(
-			"COMPILE",
-			"AI",
-			compileResult.isSuccessful(),
+		return new CompileCodeResponse(
+			request == null ? null : request.getCodeId(),
+			ScriptHost.ATTACHED_EDITOR,
+			AI_ATTACHMENT_CONTENT_TYPE,
+			compileResult.isSuccessful() ? CodeLifecycleStatus.READY : CodeLifecycleStatus.FAILED,
+			fingerprint(scriptText),
 			compileResult.getCompilerDiagnostics(),
-			null,
-			null,
-			compileResult.isSuccessful() ? null : "compile",
 			compileResult.getErrorMessage(),
-			compileResult.getLineNumber(),
-			fingerprint(mScriptTextField.getText()));
+			compileResult.getLineNumber());
 	}
 
 	private AiChatAttachmentService lookupAiChatAttachmentService() {

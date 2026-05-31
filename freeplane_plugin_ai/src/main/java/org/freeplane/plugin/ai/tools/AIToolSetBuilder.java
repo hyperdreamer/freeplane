@@ -5,6 +5,15 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
+import org.freeplane.features.ai.code.AiCodeHostService;
+import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CompileCodeRequest;
+import org.freeplane.features.ai.code.CompileCodeResponse;
+import org.freeplane.features.ai.code.ReadCodeRequest;
+import org.freeplane.features.ai.code.ReadCodeResponse;
+import org.freeplane.features.ai.code.ScriptHost;
+import org.freeplane.features.ai.code.WriteCodeRequest;
+import org.freeplane.features.ai.code.WriteCodeResponse;
 import org.freeplane.features.attribute.AttributeController;
 import org.freeplane.features.icon.IconController;
 import org.freeplane.features.map.MapController;
@@ -12,11 +21,7 @@ import org.freeplane.features.map.mindmapmode.MMapController;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
 import org.freeplane.features.text.TextController;
-import org.freeplane.plugin.ai.code.AttachedEditorProvider;
-import org.freeplane.plugin.ai.code.AttachedEditorToolSet;
-import org.freeplane.plugin.ai.code.OverwriteAttachedEditorContentResponse;
-import org.freeplane.plugin.ai.code.ReadAttachedEditorLatestIssueResponse;
-import org.freeplane.plugin.ai.code.ReadAttachedEditorResponse;
+import org.freeplane.plugin.ai.code.AiCodeToolSet;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.freeplane.plugin.ai.maps.ControllerMapModelProvider;
 import org.freeplane.plugin.ai.tools.content.AttributesContentReader;
@@ -35,7 +40,6 @@ import org.freeplane.plugin.ai.tools.text.DefaultEnglishTextProvider;
 import org.freeplane.plugin.ai.tools.text.EnglishTextProvider;
 import org.freeplane.plugin.ai.tools.utilities.ToolCallSummaryHandler;
 import org.freeplane.plugin.ai.tools.utilities.ToolCaller;
-import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 
 public class AIToolSetBuilder {
     private ToolCallSummaryHandler toolCallSummaryHandler;
@@ -45,7 +49,7 @@ public class AIToolSetBuilder {
     private AttributeController attributeController;
     private IconController iconController;
     private MMapController mapController;
-    private AttachedEditorProvider attachedEditorProvider;
+    private AiCodeHostService codeHostService;
     private ToolCaller toolCaller = ToolCaller.CHAT;
 
     public AIToolSetBuilder toolCallSummaryHandler(ToolCallSummaryHandler handler) {
@@ -88,8 +92,8 @@ public class AIToolSetBuilder {
         return this;
     }
 
-    public AIToolSetBuilder attachedEditorProvider(AttachedEditorProvider attachedEditorProvider) {
-        this.attachedEditorProvider = attachedEditorProvider;
+    public AIToolSetBuilder codeHostService(AiCodeHostService codeHostService) {
+        this.codeHostService = codeHostService;
         return this;
     }
 
@@ -101,11 +105,11 @@ public class AIToolSetBuilder {
     public List<Object> buildToolObjects() {
         ResolvedComponents resolvedComponents = resolveComponents();
         AIToolSet toolSet = createBaseToolSet(resolvedComponents);
-        AttachedEditorToolSet attachedEditorToolSet = new AttachedEditorToolSet(
-            effectiveAttachedEditorProvider(),
+        AiCodeToolSet aiCodeToolSet = new AiCodeToolSet(
+            effectiveCodeHostService(),
             toolCallSummaryHandler,
             toolCaller);
-        return Collections.<Object>unmodifiableList(Arrays.<Object>asList(toolSet, attachedEditorToolSet));
+        return Collections.<Object>unmodifiableList(Arrays.<Object>asList(toolSet, aiCodeToolSet));
     }
 
     private ResolvedComponents resolveComponents() {
@@ -139,39 +143,44 @@ public class AIToolSetBuilder {
             toolCaller);
     }
 
-    private AttachedEditorProvider effectiveAttachedEditorProvider() {
-        if (attachedEditorProvider != null) {
-            return attachedEditorProvider;
+    private AiCodeHostService effectiveCodeHostService() {
+        if (codeHostService != null) {
+            return codeHostService;
         }
-        return new AttachedEditorProvider() {
+        return new AiCodeHostService() {
             @Override
-            public ReadAttachedEditorResponse readAttachedEditor() {
-                return ReadAttachedEditorResponse.detached();
+            public ReadCodeResponse readCode(ReadCodeRequest request) {
+                ScriptHost host = request == null ? null : request.getHost();
+                if (host == null) {
+                    throw new IllegalArgumentException("host is required when codeId is absent.");
+                }
+                if (host != ScriptHost.ATTACHED_EDITOR) {
+                    throw new IllegalStateException("AI code host is not implemented yet.");
+                }
+                return new ReadCodeResponse(
+                    null,
+                    ScriptHost.ATTACHED_EDITOR,
+                    null,
+                    CodeLifecycleStatus.NO_CODE,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null);
             }
 
             @Override
-            public OverwriteAttachedEditorContentResponse overwriteAttachedEditorContent(String text) {
+            public WriteCodeResponse writeCode(WriteCodeRequest request) {
                 throw new IllegalStateException("No editor is attached.");
             }
 
             @Override
-            public AiChatCodeOperationResult compileAttachedEditorContent() {
+            public CompileCodeResponse compileCode(CompileCodeRequest request) {
                 throw new IllegalStateException("No editor is attached.");
-            }
-
-            @Override
-            public ReadAttachedEditorLatestIssueResponse getAttachedEditorLatestIssue() {
-                throw new IllegalStateException("No editor is attached.");
-            }
-
-            @Override
-            public boolean hasAttachedEditor() {
-                return false;
-            }
-
-            @Override
-            public String attachedContentType() {
-                return null;
             }
         };
     }

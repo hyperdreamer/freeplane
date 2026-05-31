@@ -11,7 +11,7 @@ import javax.swing.SwingUtilities;
 import org.freeplane.core.ui.components.UITools;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.mode.Controller;
-import org.freeplane.plugin.ai.code.AttachedEditorProvider;
+import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.freeplane.plugin.ai.prompt.AiPromptProgressDialogFactory;
 import org.freeplane.plugin.ai.prompt.AiPromptRequestComposer;
@@ -45,7 +45,7 @@ class ChatPromptRunner {
     private final AvailableMaps availableMaps;
     private final AiPromptRequestComposer aiPromptRequestComposer;
     private final VisiblePromptChatLauncher visiblePromptChatLauncher;
-    private final AttachedEditorProvider attachedEditorProvider;
+    private final AiCodeHostService codeHostService;
     private final HiddenPromptRequestRunner hiddenPromptRequestRunner;
     private final AiPromptProgressDialogFactory aiPromptProgressDialogFactory;
     private final ChatMemory shownPromptChatMemory;
@@ -64,7 +64,7 @@ class ChatPromptRunner {
                      AvailableMaps availableMaps,
                      AiPromptRequestComposer aiPromptRequestComposer,
                      VisiblePromptChatLauncher visiblePromptChatLauncher,
-                     AttachedEditorProvider attachedEditorProvider,
+                     AiCodeHostService codeHostService,
                      HiddenPromptRequestRunnerFactory hiddenPromptRequestRunnerFactory,
                      AiPromptProgressDialogFactory aiPromptProgressDialogFactory,
                      ChatMemory shownPromptChatMemory,
@@ -78,7 +78,7 @@ class ChatPromptRunner {
         this.availableMaps = availableMaps;
         this.aiPromptRequestComposer = aiPromptRequestComposer;
         this.visiblePromptChatLauncher = visiblePromptChatLauncher;
-        this.attachedEditorProvider = attachedEditorProvider;
+        this.codeHostService = codeHostService;
         this.aiPromptProgressDialogFactory = aiPromptProgressDialogFactory;
         this.shownPromptChatMemory = shownPromptChatMemory;
         this.shownMapAccessListener = shownMapAccessListener;
@@ -230,7 +230,7 @@ class ChatPromptRunner {
             .toolCallSummaryHandler(toolCallSummaryHandler)
             .availableMaps(availableMaps)
             .mapAccessListener(mapAccessListener)
-            .attachedEditorProvider(attachedEditorProvider);
+            .codeHostService(codeHostService);
         List<Object> toolObjects = toolSetBuilder.buildToolObjects();
         return AIChatServiceFactory.createService(
             (org.freeplane.plugin.ai.tools.AIToolSet) toolObjects.get(0),

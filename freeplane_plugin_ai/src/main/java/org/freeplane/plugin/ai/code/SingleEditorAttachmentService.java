@@ -4,21 +4,34 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Formatter;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.features.ai.code.AiChatAttachableEditor;
 import org.freeplane.features.ai.code.AiChatAttachment;
 import org.freeplane.features.ai.code.AiChatAttachmentService;
-import org.freeplane.features.ai.code.AiChatCodeEditor;
-import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.ai.code.AiChatRepairRequest;
+import org.freeplane.features.ai.code.AiCodeEditor;
+import org.freeplane.features.ai.code.AiCodeHostService;
+import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CompileCodeRequest;
+import org.freeplane.features.ai.code.CompileCodeResponse;
+import org.freeplane.features.ai.code.ReadCodeRequest;
+import org.freeplane.features.ai.code.ReadCodeResponse;
+import org.freeplane.features.ai.code.ScriptHost;
+import org.freeplane.features.ai.code.WriteCodeRequest;
+import org.freeplane.features.ai.code.WriteCodeResponse;
 import org.freeplane.plugin.ai.chat.AIChatPanel;
 import org.freeplane.plugin.ai.chat.ChatToolAvailability;
 import org.freeplane.plugin.ai.chat.LiveChatSessionId;
 
-public class SingleEditorAttachmentService implements AiChatAttachmentService, AttachedEditorProvider {
+public class SingleEditorAttachmentService implements AiChatAttachmentService, AiCodeHostService {
+    private static final String ATTACHED_EDITOR_CODE_ID_PREFIX = "attached-editor-";
+
     private final AIChatPanel aiChatPanel;
     private final AttachedEditorChatModeSettings attachedEditorChatModeSettings;
+    private final Map<String, ReadCodeResponse> archivedCodeStates = new HashMap<String, ReadCodeResponse>();
     private ActiveAttachment activeAttachment;
     private long nextAttachmentId = 1L;
 
@@ -39,10 +52,21 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
             activeAttachment.handle.showOwningChat();
             return activeAttachment.handle;
         }
-        AttachmentHandle previousHandle = activeAttachment == null ? null : activeAttachment.handle;
+        ActiveAttachment previousAttachment = activeAttachment;
+        AttachmentHandle previousHandle = previousAttachment == null ? null : previousAttachment.handle;
+        long attachmentId = nextAttachmentId++;
         LiveChatSessionId owningSessionId = chooseOwningSession();
-        AttachmentHandle handle = new AttachmentHandle(nextAttachmentId++);
-        activeAttachment = new ActiveAttachment(handle.id, editor, safeContentType, owningSessionId, handle);
+        AttachmentHandle handle = new AttachmentHandle(attachmentId);
+        activeAttachment = new ActiveAttachment(
+            attachmentId,
+            codeId(attachmentId),
+            editor,
+            safeContentType,
+            owningSessionId,
+            handle);
+        if (previousAttachment != null) {
+            archivedCodeStates.put(previousAttachment.codeId, replacedState(previousAttachment, activeAttachment.codeId));
+        }
         if (previousHandle != null) {
             previousHandle.notifyDetached();
         }
@@ -52,56 +76,79 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
     }
 
     @Override
-    public synchronized ReadAttachedEditorResponse readAttachedEditor() {
-        if (activeAttachment == null) {
-            return ReadAttachedEditorResponse.detached();
+    public synchronized ReadCodeResponse readCode(ReadCodeRequest request) {
+        String codeId = normalizedCodeId(request == null ? null : request.getCodeId());
+        if (codeId != null) {
+            if (activeAttachment != null && activeAttachment.codeId.equals(codeId)) {
+                return activeReadCodeResponse(activeAttachment, request == null ? null : request.getFingerprint());
+            }
+            ReadCodeResponse archivedState = archivedCodeStates.get(codeId);
+            if (archivedState != null) {
+                return archivedState;
+            }
+            if (isAttachedEditorCodeId(codeId)) {
+                return noCodeState(codeId, null);
+            }
+            throw new IllegalArgumentException("Unknown codeId: " + codeId);
         }
-        return new ReadAttachedEditorResponse(
-            true,
-            activeAttachment.contentType,
-            activeAttachment.editor.getText(),
-            fingerprint(activeAttachment.editor.getText()),
-            activeAttachment.editor instanceof AiChatCodeEditor,
-            activeAttachment.latestIssue != null);
+        ScriptHost host = request == null ? null : request.getHost();
+        if (host == null) {
+            throw new IllegalArgumentException("host is required when codeId is absent.");
+        }
+        if (host != ScriptHost.ATTACHED_EDITOR) {
+            throw new IllegalStateException("AI code host is not implemented yet.");
+        }
+        if (activeAttachment == null) {
+            return noCodeState(null, null);
+        }
+        return activeReadCodeResponse(activeAttachment, request == null ? null : request.getFingerprint());
     }
 
     @Override
-    public synchronized OverwriteAttachedEditorContentResponse overwriteAttachedEditorContent(String text) {
-        ActiveAttachment attachment = requireActiveAttachment();
-        attachment.editor.replaceText(text == null ? "" : text);
-        return new OverwriteAttachedEditorContentResponse(fingerprint(attachment.editor.getText()));
+    public synchronized WriteCodeResponse writeCode(WriteCodeRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("request is required.");
+        }
+        if (request.getText() == null) {
+            throw new IllegalArgumentException("text is required.");
+        }
+        ActiveAttachment attachment = requireWritableAttachment(request.getCodeId(), request.getHost());
+        assertExpectedFingerprint(request.getExpectedFingerprint(), attachment);
+        attachment.editor.replaceText(request.getText());
+        attachment.latestCodeState = null;
+        return new WriteCodeResponse(
+            attachment.codeId,
+            ScriptHost.ATTACHED_EDITOR,
+            attachment.contentType,
+            CodeLifecycleStatus.READY,
+            currentFingerprint(attachment));
     }
 
     @Override
-    public synchronized AiChatCodeOperationResult compileAttachedEditorContent() {
-        ActiveAttachment attachment = requireActiveAttachment();
-        if (!(attachment.editor instanceof AiChatCodeEditor)) {
+    public synchronized CompileCodeResponse compileCode(CompileCodeRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("request is required.");
+        }
+        ActiveAttachment attachment = requireWritableAttachment(request.getCodeId(), request.getHost());
+        assertExpectedFingerprint(request.getExpectedFingerprint(), attachment);
+        if (!(attachment.editor instanceof AiCodeEditor)) {
             throw new IllegalStateException("Compilation is not supported by the attached editor.");
         }
-        AiChatCodeOperationResult result = ((AiChatCodeEditor) attachment.editor).compileForAi();
-        if (result != null && result.isSuccessful()) {
-            attachment.latestIssue = null;
+        CompileCodeResponse editorResponse = ((AiCodeEditor) attachment.editor).compileCode(request);
+        CompileCodeResponse response = normalizedCompileResponse(attachment, editorResponse);
+        if (response.getStatus() == CodeLifecycleStatus.FAILED) {
+            attachment.latestCodeState = failureStateFromCompileResponse(attachment, response);
         }
         else {
-            attachment.latestIssue = result;
+            attachment.latestCodeState = null;
         }
-        return result;
+        return response;
     }
 
-    @Override
-    public synchronized ReadAttachedEditorLatestIssueResponse getAttachedEditorLatestIssue() {
-        ActiveAttachment attachment = requireActiveAttachment();
-        return attachment.latestIssue == null
-            ? ReadAttachedEditorLatestIssueResponse.noIssue()
-            : new ReadAttachedEditorLatestIssueResponse(true, attachment.latestIssue);
-    }
-
-    @Override
     public synchronized boolean hasAttachedEditor() {
         return activeAttachment != null;
     }
 
-    @Override
     public synchronized String attachedContentType() {
         return activeAttachment == null ? null : activeAttachment.contentType;
     }
@@ -111,23 +158,24 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
             return;
         }
         AttachmentHandle handle = activeAttachment.handle;
+        archivedCodeStates.put(activeAttachment.codeId, noCodeState(activeAttachment.codeId, activeAttachment.contentType));
         activeAttachment = null;
         aiChatPanel.setAttachedEditorIndicatorVisible(false);
         handle.notifyDetached();
     }
 
-    private synchronized void recordIssue(long attachmentId, AiChatCodeOperationResult result) {
-        if (activeAttachment == null || activeAttachment.id != attachmentId) {
+    private synchronized void recordCodeState(long attachmentId, ReadCodeResponse state) {
+        if (activeAttachment == null || activeAttachment.id != attachmentId || state == null) {
             return;
         }
-        activeAttachment.latestIssue = result;
+        activeAttachment.latestCodeState = normalizedRecordedState(activeAttachment, state);
     }
 
-    private synchronized void clearIssue(long attachmentId) {
+    private synchronized void clearCodeState(long attachmentId) {
         if (activeAttachment == null || activeAttachment.id != attachmentId) {
             return;
         }
-        activeAttachment.latestIssue = null;
+        activeAttachment.latestCodeState = null;
     }
 
     private synchronized void showOwningChat(long attachmentId) {
@@ -142,20 +190,45 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
         if (activeAttachment == null || activeAttachment.id != attachmentId || request == null) {
             return;
         }
+        ReadCodeResponse normalizedCodeState = normalizedRepairState(activeAttachment, request.getCodeState());
         showOwningChat(attachmentId);
         boolean started = aiChatPanel.submitMessageToSession(
             activeAttachment.owningSessionId,
-            buildRepairMessage(request));
+            buildRepairMessage(request, normalizedCodeState));
         if (!started) {
             LogUtils.warn("Failed to submit attached-editor repair request.");
         }
     }
 
-    private ActiveAttachment requireActiveAttachment() {
+    private ActiveAttachment requireWritableAttachment(String requestedCodeId, ScriptHost requestedHost) {
+        String codeId = normalizedCodeId(requestedCodeId);
+        if (codeId != null) {
+            if (activeAttachment != null && activeAttachment.codeId.equals(codeId)) {
+                return activeAttachment;
+            }
+            throw new IllegalStateException("The requested code is not current.");
+        }
+        if (requestedHost == null) {
+            throw new IllegalArgumentException("host is required when codeId is absent.");
+        }
+        if (requestedHost != ScriptHost.ATTACHED_EDITOR) {
+            throw new IllegalStateException("AI code host is not implemented yet.");
+        }
         if (activeAttachment == null) {
             throw new IllegalStateException("No editor is attached.");
         }
         return activeAttachment;
+    }
+
+    private void assertExpectedFingerprint(String expectedFingerprint, ActiveAttachment attachment) {
+        String normalizedFingerprint = normalizeText(expectedFingerprint);
+        if (normalizedFingerprint == null) {
+            return;
+        }
+        String currentFingerprint = currentFingerprint(attachment);
+        if (!normalizedFingerprint.equals(currentFingerprint)) {
+            throw new IllegalStateException("Expected fingerprint does not match the current code.");
+        }
     }
 
     private LiveChatSessionId chooseOwningSession() {
@@ -183,10 +256,178 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
         aiChatPanel.setSessionToolAvailabilityOverride(sessionId, ChatToolAvailability.READING);
     }
 
+    private CompileCodeResponse normalizedCompileResponse(ActiveAttachment attachment, CompileCodeResponse response) {
+        if (response == null) {
+            throw new IllegalStateException("Attached editor compile returned no response.");
+        }
+        String currentFingerprint = currentFingerprint(attachment);
+        CodeLifecycleStatus status = response.getStatus();
+        if (status == null) {
+            status = response.getErrorMessage() != null || response.getLineNumber() != null
+                || (response.getCompilerDiagnostics() != null && !response.getCompilerDiagnostics().isEmpty())
+                    ? CodeLifecycleStatus.FAILED
+                    : CodeLifecycleStatus.READY;
+        }
+        return new CompileCodeResponse(
+            attachment.codeId,
+            ScriptHost.ATTACHED_EDITOR,
+            attachment.contentType,
+            status,
+            response.getFingerprint() == null ? currentFingerprint : response.getFingerprint(),
+            response.getCompilerDiagnostics(),
+            response.getErrorMessage(),
+            response.getLineNumber());
+    }
+
+    private ReadCodeResponse failureStateFromCompileResponse(ActiveAttachment attachment, CompileCodeResponse response) {
+        String currentText = currentText(attachment);
+        return new ReadCodeResponse(
+            attachment.codeId,
+            ScriptHost.ATTACHED_EDITOR,
+            attachment.contentType,
+            response.getStatus(),
+            null,
+            response.getFingerprint() == null ? fingerprint(currentText) : response.getFingerprint(),
+            currentText,
+            null,
+            response.getCompilerDiagnostics(),
+            response.getErrorMessage(),
+            response.getLineNumber(),
+            null,
+            null);
+    }
+
+    private ReadCodeResponse normalizedRecordedState(ActiveAttachment attachment, ReadCodeResponse state) {
+        String currentText = currentText(attachment);
+        String currentFingerprint = fingerprint(currentText);
+        return new ReadCodeResponse(
+            attachment.codeId,
+            ScriptHost.ATTACHED_EDITOR,
+            attachment.contentType,
+            state.getStatus() == null ? CodeLifecycleStatus.READY : state.getStatus(),
+            state.getRunInitiator(),
+            state.getFingerprint() == null ? currentFingerprint : state.getFingerprint(),
+            state.getCodeText() == null ? currentText : state.getCodeText(),
+            state.getReplacementCodeId(),
+            state.getCompilerDiagnostics(),
+            state.getErrorMessage(),
+            state.getLineNumber(),
+            state.getStdout(),
+            state.getStructuredResult());
+    }
+
+    private ReadCodeResponse normalizedRepairState(ActiveAttachment attachment, ReadCodeResponse state) {
+        if (state == null) {
+            return activeReadCodeResponse(attachment, null);
+        }
+        return normalizedRecordedState(attachment, state);
+    }
+
+    private ReadCodeResponse activeReadCodeResponse(ActiveAttachment attachment, String requestedFingerprint) {
+        String currentText = currentText(attachment);
+        String currentFingerprint = fingerprint(currentText);
+        ReadCodeResponse state = attachment.latestCodeState == null
+            ? readyState(attachment, currentText, currentFingerprint)
+            : attachment.latestCodeState;
+        String codeText = normalizeText(requestedFingerprint) != null && normalizeText(requestedFingerprint).equals(currentFingerprint)
+            ? null
+            : currentText;
+        return new ReadCodeResponse(
+            attachment.codeId,
+            ScriptHost.ATTACHED_EDITOR,
+            attachment.contentType,
+            state.getStatus(),
+            state.getRunInitiator(),
+            currentFingerprint,
+            codeText,
+            state.getReplacementCodeId(),
+            state.getCompilerDiagnostics(),
+            state.getErrorMessage(),
+            state.getLineNumber(),
+            state.getStdout(),
+            state.getStructuredResult());
+    }
+
+    private ReadCodeResponse readyState(ActiveAttachment attachment, String currentText, String currentFingerprint) {
+        return new ReadCodeResponse(
+            attachment.codeId,
+            ScriptHost.ATTACHED_EDITOR,
+            attachment.contentType,
+            CodeLifecycleStatus.READY,
+            null,
+            currentFingerprint,
+            currentText,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null);
+    }
+
+    private ReadCodeResponse replacedState(ActiveAttachment attachment, String replacementCodeId) {
+        ReadCodeResponse previousState = attachment.latestCodeState;
+        return new ReadCodeResponse(
+            attachment.codeId,
+            ScriptHost.ATTACHED_EDITOR,
+            attachment.contentType,
+            CodeLifecycleStatus.REPLACED,
+            previousState == null ? null : previousState.getRunInitiator(),
+            currentFingerprint(attachment),
+            null,
+            replacementCodeId,
+            previousState == null ? null : previousState.getCompilerDiagnostics(),
+            previousState == null ? null : previousState.getErrorMessage(),
+            previousState == null ? null : previousState.getLineNumber(),
+            previousState == null ? null : previousState.getStdout(),
+            previousState == null ? null : previousState.getStructuredResult());
+    }
+
+    private ReadCodeResponse noCodeState(String codeId, String contentType) {
+        return new ReadCodeResponse(
+            codeId,
+            ScriptHost.ATTACHED_EDITOR,
+            contentType,
+            CodeLifecycleStatus.NO_CODE,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null);
+    }
+
     private String normalizeContentType(String contentType) {
         return contentType == null || contentType.trim().isEmpty()
             ? "text/plain"
             : contentType.trim();
+    }
+
+    private String normalizedCodeId(String codeId) {
+        return normalizeText(codeId);
+    }
+
+    private String normalizeText(String value) {
+        return value == null || value.trim().isEmpty() ? null : value.trim();
+    }
+
+    private boolean isAttachedEditorCodeId(String codeId) {
+        return codeId != null && codeId.startsWith(ATTACHED_EDITOR_CODE_ID_PREFIX);
+    }
+
+    private String codeId(long attachmentId) {
+        return ATTACHED_EDITOR_CODE_ID_PREFIX + attachmentId;
+    }
+
+    private String currentText(ActiveAttachment attachment) {
+        return attachment.editor.getText() == null ? "" : attachment.editor.getText();
+    }
+
+    private String currentFingerprint(ActiveAttachment attachment) {
+        return fingerprint(currentText(attachment));
     }
 
     private String fingerprint(String text) {
@@ -207,59 +448,66 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
         }
     }
 
-    private String buildRepairMessage(AiChatRepairRequest request) {
+    private String buildRepairMessage(AiChatRepairRequest request, ReadCodeResponse codeState) {
         StringBuilder builder = new StringBuilder();
         builder.append(request.getPrompt());
-        builder.append("\n\nCurrent editor text:\n```\n");
-        builder.append(request.getSourceText() == null ? "" : request.getSourceText());
-        builder.append("\n```\n\nLatest issue:\n");
-        appendIssue(builder, request.getIssue());
+        builder.append("\n\nCurrent code state:\n");
+        appendCodeState(builder, codeState);
         return builder.toString();
     }
 
-    private void appendIssue(StringBuilder builder, AiChatCodeOperationResult issue) {
-        if (issue == null) {
-            builder.append("No issue details available.");
+    private void appendCodeState(StringBuilder builder, ReadCodeResponse codeState) {
+        if (codeState == null) {
+            builder.append("No code state details available.");
             return;
         }
-        builder.append("successful=").append(issue.isSuccessful());
-        if (!issue.getCompilerDiagnostics().isEmpty()) {
-            builder.append("\ncompilerDiagnostics:\n");
-            for (String diagnostic : issue.getCompilerDiagnostics()) {
+        builder.append("codeId=").append(codeState.getCodeId()).append('\n');
+        builder.append("host=").append(codeState.getHost()).append('\n');
+        builder.append("contentType=").append(codeState.getContentType()).append('\n');
+        builder.append("status=").append(codeState.getStatus()).append('\n');
+        if (codeState.getFingerprint() != null) {
+            builder.append("fingerprint=").append(codeState.getFingerprint()).append('\n');
+        }
+        builder.append("codeText:\n```\n");
+        builder.append(codeState.getCodeText() == null ? "" : codeState.getCodeText());
+        builder.append("\n```\n");
+        if (codeState.getCompilerDiagnostics() != null && !codeState.getCompilerDiagnostics().isEmpty()) {
+            builder.append("compilerDiagnostics:\n");
+            for (String diagnostic : codeState.getCompilerDiagnostics()) {
                 builder.append("- ").append(diagnostic).append('\n');
             }
         }
-        if (issue.getErrorCategory() != null) {
-            builder.append("errorCategory=").append(issue.getErrorCategory()).append('\n');
+        if (codeState.getErrorMessage() != null) {
+            builder.append("errorMessage=").append(codeState.getErrorMessage()).append('\n');
         }
-        if (issue.getErrorMessage() != null) {
-            builder.append("errorMessage=").append(issue.getErrorMessage()).append('\n');
+        if (codeState.getLineNumber() != null) {
+            builder.append("lineNumber=").append(codeState.getLineNumber()).append('\n');
         }
-        if (issue.getLineNumber() != null) {
-            builder.append("lineNumber=").append(issue.getLineNumber()).append('\n');
+        if (codeState.getStdout() != null) {
+            builder.append("stdout=\n").append(codeState.getStdout()).append('\n');
         }
-        if (issue.getResult() != null) {
-            builder.append("result=").append(issue.getResult()).append('\n');
-        }
-        if (issue.getStandardOutput() != null) {
-            builder.append("standardOutput=\n").append(issue.getStandardOutput()).append('\n');
+        if (codeState.getStructuredResult() != null) {
+            builder.append("structuredResult=").append(codeState.getStructuredResult()).append('\n');
         }
     }
 
     private static final class ActiveAttachment {
         private final long id;
+        private final String codeId;
         private final AiChatAttachableEditor editor;
         private final String contentType;
         private final LiveChatSessionId owningSessionId;
         private final AttachmentHandle handle;
-        private AiChatCodeOperationResult latestIssue;
+        private ReadCodeResponse latestCodeState;
 
         private ActiveAttachment(long id,
+                                 String codeId,
                                  AiChatAttachableEditor editor,
                                  String contentType,
                                  LiveChatSessionId owningSessionId,
                                  AttachmentHandle handle) {
             this.id = id;
+            this.codeId = codeId;
             this.editor = editor;
             this.contentType = contentType;
             this.owningSessionId = owningSessionId;
@@ -291,13 +539,13 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
         }
 
         @Override
-        public void recordIssue(AiChatCodeOperationResult result) {
-            SingleEditorAttachmentService.this.recordIssue(id, result);
+        public void recordCodeState(ReadCodeResponse state) {
+            SingleEditorAttachmentService.this.recordCodeState(id, state);
         }
 
         @Override
-        public void clearIssue() {
-            SingleEditorAttachmentService.this.clearIssue(id);
+        public void clearCodeState() {
+            SingleEditorAttachmentService.this.clearCodeState(id);
         }
 
         @Override

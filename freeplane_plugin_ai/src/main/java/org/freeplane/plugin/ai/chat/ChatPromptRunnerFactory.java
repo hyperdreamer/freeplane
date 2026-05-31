@@ -3,7 +3,7 @@ package org.freeplane.plugin.ai.chat;
 import dev.langchain4j.memory.ChatMemory;
 import java.util.function.Supplier;
 import javax.swing.Icon;
-import org.freeplane.plugin.ai.code.AttachedEditorProvider;
+import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.freeplane.plugin.ai.prompt.AiPromptProgressDialogFactory;
 import org.freeplane.plugin.ai.prompt.AiPromptRequestComposer;
@@ -16,7 +16,7 @@ class ChatPromptRunnerFactory {
     private final AvailableMaps availableMaps;
     private final AiPromptRequestComposer aiPromptRequestComposer;
     private final ChatPromptRunner.VisiblePromptChatLauncher visiblePromptChatLauncher;
-    private final Supplier<AttachedEditorProvider> attachedEditorProviderSupplier;
+    private final Supplier<AiCodeHostService> codeHostServiceSupplier;
     private final HiddenPromptRequestRunnerFactory hiddenPromptRequestRunnerFactory;
     private final AiPromptProgressDialogFactory aiPromptProgressDialogFactory;
 
@@ -26,7 +26,7 @@ class ChatPromptRunnerFactory {
                             AvailableMaps availableMaps,
                             AiPromptRequestComposer aiPromptRequestComposer,
                             ChatPromptRunner.VisiblePromptChatLauncher visiblePromptChatLauncher,
-                            Supplier<AttachedEditorProvider> attachedEditorProviderSupplier,
+                            Supplier<AiCodeHostService> codeHostServiceSupplier,
                             HiddenPromptRequestRunnerFactory hiddenPromptRequestRunnerFactory,
                             AiPromptProgressDialogFactory aiPromptProgressDialogFactory) {
         this.aiTabIcon = aiTabIcon;
@@ -35,7 +35,7 @@ class ChatPromptRunnerFactory {
         this.availableMaps = availableMaps;
         this.aiPromptRequestComposer = aiPromptRequestComposer;
         this.visiblePromptChatLauncher = visiblePromptChatLauncher;
-        this.attachedEditorProviderSupplier = attachedEditorProviderSupplier;
+        this.codeHostServiceSupplier = codeHostServiceSupplier;
         this.hiddenPromptRequestRunnerFactory = hiddenPromptRequestRunnerFactory;
         this.aiPromptProgressDialogFactory = aiPromptProgressDialogFactory;
     }
@@ -52,7 +52,7 @@ class ChatPromptRunnerFactory {
             availableMaps,
             aiPromptRequestComposer,
             visiblePromptChatLauncher,
-            attachedEditorProviderSupplier == null ? null : attachedEditorProviderSupplier.get(),
+            codeHostServiceSupplier == null ? null : codeHostServiceSupplier.get(),
             hiddenPromptRequestRunnerFactory,
             aiPromptProgressDialogFactory,
             promptChatMemory,
@@ -70,7 +70,7 @@ class ChatPromptRunnerFactory {
             availableMaps,
             aiPromptRequestComposer,
             visiblePromptChatLauncher,
-            attachedEditorProviderSupplier == null ? null : attachedEditorProviderSupplier.get(),
+            codeHostServiceSupplier == null ? null : codeHostServiceSupplier.get(),
             hiddenPromptRequestRunnerFactory,
             aiPromptProgressDialogFactory,
             null,

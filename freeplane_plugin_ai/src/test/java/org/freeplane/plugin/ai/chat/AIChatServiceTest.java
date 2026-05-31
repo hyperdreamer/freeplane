@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
-import org.freeplane.plugin.ai.code.AttachedEditorToolSet;
+import org.freeplane.plugin.ai.code.AiCodeToolSet;
 import org.freeplane.plugin.ai.tools.AIToolSet;
 import org.junit.Test;
 
@@ -91,14 +91,14 @@ public class AIChatServiceTest {
     }
 
     @Test
-    public void allowedToolNamesAlwaysIncludeAttachedEditorTools() {
+    public void allowedToolNamesAlwaysIncludeCodeTools() {
         AIToolSet toolSet = mock(AIToolSet.class);
-        AttachedEditorToolSet attachedEditorToolSet = mock(AttachedEditorToolSet.class);
+        AiCodeToolSet aiCodeToolSet = mock(AiCodeToolSet.class);
         AIChatService uut = new AIChatService(
             mock(ChatModel.class),
             toolSet,
             Collections.<Object>singletonList(toolSet),
-            attachedEditorToolSet,
+            aiCodeToolSet,
             null,
             new ChatTokenUsageTracker(totals -> {
             }),
@@ -109,24 +109,23 @@ public class AIChatServiceTest {
             availability -> mock(AIChatService.AIAssistant.class));
 
         assertThat(uut.allowedToolNames(ChatToolAvailability.DISABLED)).containsExactly(
-            "readAttachedEditor",
-            "overwriteAttachedEditorContent",
-            "compileAttachedEditorContent",
-            "getAttachedEditorLatestIssue");
+            "readCode",
+            "writeCode",
+            "compileCode");
     }
 
     @Test
-    public void systemMessageProviderAppendsAttachedEditorGuidanceWhenPresent() {
+    public void systemMessageProviderAppendsCodeGuidanceWhenPresent() {
         AIToolSet toolSet = mock(AIToolSet.class);
-        AttachedEditorToolSet attachedEditorToolSet = mock(AttachedEditorToolSet.class);
+        AiCodeToolSet aiCodeToolSet = mock(AiCodeToolSet.class);
         when(toolSet.systemMessageForChat("request", ChatToolAvailability.READING)).thenReturn("base guidance");
-        when(attachedEditorToolSet.systemMessageForChat("request")).thenReturn("attached guidance");
+        when(aiCodeToolSet.systemMessageForChat("request")).thenReturn("code guidance");
 
         AIChatService uut = new AIChatService(
             mock(ChatModel.class),
             toolSet,
             Collections.<Object>singletonList(toolSet),
-            attachedEditorToolSet,
+            aiCodeToolSet,
             null,
             new ChatTokenUsageTracker(totals -> {
             }),
@@ -138,6 +137,6 @@ public class AIChatServiceTest {
 
         String message = uut.systemMessageProvider(ChatToolAvailability.READING).apply("request");
 
-        assertThat(message).isEqualTo("base guidance\n\nattached guidance");
+        assertThat(message).isEqualTo("base guidance\n\ncode guidance");
     }
 }

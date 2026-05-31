@@ -6,15 +6,20 @@ import static org.mockito.Mockito.mockConstruction;
 
 import java.util.List;
 
+import org.freeplane.features.ai.code.AiCodeHostService;
+import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CompileCodeRequest;
+import org.freeplane.features.ai.code.CompileCodeResponse;
+import org.freeplane.features.ai.code.ReadCodeRequest;
+import org.freeplane.features.ai.code.ReadCodeResponse;
+import org.freeplane.features.ai.code.ScriptHost;
+import org.freeplane.features.ai.code.WriteCodeRequest;
+import org.freeplane.features.ai.code.WriteCodeResponse;
 import org.freeplane.features.attribute.AttributeController;
 import org.freeplane.features.icon.IconController;
 import org.freeplane.features.map.mindmapmode.MMapController;
 import org.freeplane.features.text.TextController;
-import org.freeplane.plugin.ai.code.AttachedEditorProvider;
-import org.freeplane.plugin.ai.code.AttachedEditorToolSet;
-import org.freeplane.plugin.ai.code.OverwriteAttachedEditorContentResponse;
-import org.freeplane.plugin.ai.code.ReadAttachedEditorLatestIssueResponse;
-import org.freeplane.plugin.ai.code.ReadAttachedEditorResponse;
+import org.freeplane.plugin.ai.code.AiCodeToolSet;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.junit.Test;
 import org.mockito.MockedConstruction;
@@ -22,36 +27,47 @@ import org.mockito.MockedConstruction;
 public class AIToolSetBuilderTest {
 
     @Test
-    public void buildToolObjectsIncludesAttachedEditorToolSetAndProvider() {
-        AttachedEditorProvider attachedEditorProvider = new AttachedEditorProvider() {
+    public void buildToolObjectsIncludesAiCodeToolSetAndCodeHostService() {
+        AiCodeHostService codeHostService = new AiCodeHostService() {
             @Override
-            public ReadAttachedEditorResponse readAttachedEditor() {
-                return new ReadAttachedEditorResponse(true, "text/plain", "hello", "fingerprint", false, false);
+            public ReadCodeResponse readCode(ReadCodeRequest request) {
+                return new ReadCodeResponse(
+                    "attached-editor-1",
+                    ScriptHost.ATTACHED_EDITOR,
+                    "text/plain",
+                    CodeLifecycleStatus.READY,
+                    null,
+                    "fingerprint",
+                    "hello",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null);
             }
 
             @Override
-            public OverwriteAttachedEditorContentResponse overwriteAttachedEditorContent(String text) {
-                return new OverwriteAttachedEditorContentResponse("fingerprint");
+            public WriteCodeResponse writeCode(WriteCodeRequest request) {
+                return new WriteCodeResponse(
+                    "attached-editor-1",
+                    ScriptHost.ATTACHED_EDITOR,
+                    "text/plain",
+                    CodeLifecycleStatus.READY,
+                    "fingerprint");
             }
 
             @Override
-            public org.freeplane.features.ai.code.AiChatCodeOperationResult compileAttachedEditorContent() {
-                throw new IllegalStateException("not needed");
-            }
-
-            @Override
-            public ReadAttachedEditorLatestIssueResponse getAttachedEditorLatestIssue() {
-                return ReadAttachedEditorLatestIssueResponse.noIssue();
-            }
-
-            @Override
-            public boolean hasAttachedEditor() {
-                return true;
-            }
-
-            @Override
-            public String attachedContentType() {
-                return "text/plain";
+            public CompileCodeResponse compileCode(CompileCodeRequest request) {
+                return new CompileCodeResponse(
+                    "attached-editor-1",
+                    ScriptHost.ATTACHED_EDITOR,
+                    "text/plain",
+                    CodeLifecycleStatus.READY,
+                    "fingerprint",
+                    null,
+                    null,
+                    null);
             }
         };
 
@@ -63,15 +79,17 @@ public class AIToolSetBuilderTest {
                 .attributeController(mock(AttributeController.class))
                 .iconController(mock(IconController.class))
                 .mapController(mock(MMapController.class))
-                .attachedEditorProvider(attachedEditorProvider)
+                .codeHostService(codeHostService)
                 .buildToolObjects();
         }
 
         assertThat(toolObjects).hasSize(2);
         assertThat(toolObjects.get(0)).isInstanceOf(AIToolSet.class);
-        assertThat(toolObjects.get(1)).isInstanceOf(AttachedEditorToolSet.class);
-        AttachedEditorToolSet attachedEditorToolSet = (AttachedEditorToolSet) toolObjects.get(1);
-        assertThat(attachedEditorToolSet.readAttachedEditor().isAttached()).isTrue();
-        assertThat(attachedEditorToolSet.readAttachedEditor().getText()).isEqualTo("hello");
+        assertThat(toolObjects.get(1)).isInstanceOf(AiCodeToolSet.class);
+        AiCodeToolSet aiCodeToolSet = (AiCodeToolSet) toolObjects.get(1);
+        assertThat(aiCodeToolSet.readCode(new ReadCodeRequest(null, ScriptHost.ATTACHED_EDITOR, null)).getStatus())
+            .isEqualTo(CodeLifecycleStatus.READY);
+        assertThat(aiCodeToolSet.readCode(new ReadCodeRequest(null, ScriptHost.ATTACHED_EDITOR, null)).getCodeText())
+            .isEqualTo("hello");
     }
 }

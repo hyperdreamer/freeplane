@@ -6,7 +6,7 @@ import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-import org.freeplane.plugin.ai.code.AttachedEditorToolSet;
+import org.freeplane.plugin.ai.code.AiCodeToolSet;
 import org.freeplane.plugin.ai.model.AIChatModelFactory;
 import org.freeplane.plugin.ai.model.AIProviderConfiguration;
 import org.freeplane.plugin.ai.tools.AIToolSet;
@@ -71,12 +71,12 @@ public class AIChatServiceFactory {
             : toolObjects;
         AIProviderConfiguration configuration = new AIProviderConfiguration(selectedModelOverride);
         ChatModel chatLanguageModel = AIChatModelFactory.createChatLanguageModel(configuration);
-        AttachedEditorToolSet attachedEditorToolSet = findAttachedEditorToolSet(effectiveToolObjects);
+        AiCodeToolSet aiCodeToolSet = findAiCodeToolSet(effectiveToolObjects);
         if (toolAvailabilitySupplier == null) {
-            return new AIChatService(chatLanguageModel, toolSet, effectiveToolObjects, attachedEditorToolSet, chatMemory,
+            return new AIChatService(chatLanguageModel, toolSet, effectiveToolObjects, aiCodeToolSet, chatMemory,
                 chatTokenUsageTracker, toolCallSummaryHandler, cancellationSupplier, tokenUsageConsumer);
         }
-        return new AIChatService(chatLanguageModel, toolSet, effectiveToolObjects, attachedEditorToolSet, chatMemory,
+        return new AIChatService(chatLanguageModel, toolSet, effectiveToolObjects, aiCodeToolSet, chatMemory,
             chatTokenUsageTracker, toolCallSummaryHandler, cancellationSupplier, tokenUsageConsumer,
             toolAvailabilitySupplier, null);
     }
@@ -93,13 +93,13 @@ public class AIChatServiceFactory {
             toolAvailabilitySupplier, selectedModelOverride);
     }
 
-    private static AttachedEditorToolSet findAttachedEditorToolSet(Collection<?> toolObjects) {
+    private static AiCodeToolSet findAiCodeToolSet(Collection<?> toolObjects) {
         if (toolObjects == null) {
             return null;
         }
         for (Object toolObject : toolObjects) {
-            if (toolObject instanceof AttachedEditorToolSet) {
-                return (AttachedEditorToolSet) toolObject;
+            if (toolObject instanceof AiCodeToolSet) {
+                return (AiCodeToolSet) toolObject;
             }
         }
         return null;

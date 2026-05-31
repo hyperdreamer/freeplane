@@ -27,9 +27,14 @@ import org.freeplane.core.ui.textchanger.TranslatedElementFactory;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.features.ai.code.AiChatAttachment;
 import org.freeplane.features.ai.code.AiChatAttachmentService;
-import org.freeplane.features.ai.code.AiChatCodeEditor;
 import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.ai.code.AiChatRepairRequest;
+import org.freeplane.features.ai.code.AiCodeEditor;
+import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CompileCodeRequest;
+import org.freeplane.features.ai.code.CompileCodeResponse;
+import org.freeplane.features.ai.code.ReadCodeResponse;
+import org.freeplane.features.ai.code.ScriptHost;
 import org.freeplane.features.explorer.MapExplorerController;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.text.mindmapmode.EditNodeDialog;
@@ -45,7 +50,7 @@ import de.sciss.syntaxpane.SyntaxDocument;
 import de.sciss.syntaxpane.Token;
 import de.sciss.syntaxpane.TokenType;
 
-class FormulaEditor extends EditNodeDialog implements INodeSelector, AiChatCodeEditor {
+class FormulaEditor extends EditNodeDialog implements INodeSelector, AiCodeEditor {
 
     private static final String PASSED_WIDTH_PROPERTY = "formulaDialog.passed.width";
     private static final String PASSED_HEIGHT_PROPERTY = "formulaDialog.passed.height";
@@ -125,7 +130,7 @@ class FormulaEditor extends EditNodeDialog implements INodeSelector, AiChatCodeE
     protected boolean submitEditedText(String editedText) {
         if (!startsWithFormulaPrefix(editedText)) {
             if (aiChatAttachment != null) {
-                aiChatAttachment.clearIssue();
+                aiChatAttachment.clearCodeState();
             }
             getEditControl().ok(editedText);
             return true;
@@ -135,14 +140,15 @@ class FormulaEditor extends EditNodeDialog implements INodeSelector, AiChatCodeE
             editedText);
         if (validationResult.isSuccessful()) {
             if (aiChatAttachment != null) {
-                aiChatAttachment.clearIssue();
+                aiChatAttachment.clearCodeState();
             }
             getEditControl().ok(editedText);
             return true;
         }
+        ReadCodeResponse validationFailureState = validationFailureState(editedText, validationResult);
         AiChatAttachment issueAttachment = aiChatAttachment;
         if (issueAttachment != null) {
-            issueAttachment.recordIssue(validationResult);
+            issueAttachment.recordCodeState(validationFailureState);
         }
         int answer = JOptionPane.showConfirmDialog(
             SwingUtilities.getWindowAncestor(textEditor),
@@ -154,11 +160,11 @@ class FormulaEditor extends EditNodeDialog implements INodeSelector, AiChatCodeE
             if (issueAttachment == null) {
                 issueAttachment = attachToAi();
                 if (issueAttachment != null) {
-                    issueAttachment.recordIssue(validationResult);
+                    issueAttachment.recordCodeState(validationFailureState);
                 }
             }
             if (issueAttachment != null) {
-                issueAttachment.requestRepair(new AiChatRepairRequest(REPAIR_PROMPT, editedText, validationResult));
+                issueAttachment.requestRepair(new AiChatRepairRequest(REPAIR_PROMPT, validationFailureState));
             }
         }
         return false;
@@ -236,39 +242,54 @@ class FormulaEditor extends EditNodeDialog implements INodeSelector, AiChatCodeE
     }
 
     @Override
-    public AiChatCodeOperationResult compileForAi() {
+    public CompileCodeResponse compileCode(CompileCodeRequest request) {
         String formulaText = textEditor.getText();
         if (!startsWithFormulaPrefix(formulaText)) {
-            return new AiChatCodeOperationResult(
-                "COMPILE",
-                "AI",
-                false,
+            return new CompileCodeResponse(
+                request == null ? null : request.getCodeId(),
+                ScriptHost.ATTACHED_EDITOR,
+                FormulaTextTransformer.AI_ATTACHMENT_CONTENT_TYPE,
+                CodeLifecycleStatus.FAILED,
+                fingerprint(formulaText),
                 Collections.singletonList("The current content is not a formula."),
-                null,
-                null,
-                "not_formula",
                 "The current content is not a formula.",
-                null,
-                fingerprint(formulaText));
+                null);
         }
         ScriptingEngine.GroovyCompileResult compileResult = ScriptingEngine.compileGroovyScriptForDiagnostics(
             FormulaUtils.scriptOf(formulaText),
             ScriptingPermissions.getFormulaPermissions());
-        return new AiChatCodeOperationResult(
-            "COMPILE",
-            "AI",
-            compileResult.isSuccessful(),
+        return new CompileCodeResponse(
+            request == null ? null : request.getCodeId(),
+            ScriptHost.ATTACHED_EDITOR,
+            FormulaTextTransformer.AI_ATTACHMENT_CONTENT_TYPE,
+            compileResult.isSuccessful() ? CodeLifecycleStatus.READY : CodeLifecycleStatus.FAILED,
+            fingerprint(formulaText),
             compileResult.getCompilerDiagnostics(),
-            null,
-            null,
-            compileResult.isSuccessful() ? null : "compile",
             compileResult.getErrorMessage(),
-            compileResult.getLineNumber(),
-            fingerprint(formulaText));
+            compileResult.getLineNumber());
     }
 
     private boolean startsWithFormulaPrefix(String text) {
         return text != null && text.startsWith("=");
+    }
+
+    private ReadCodeResponse validationFailureState(String formulaText, AiChatCodeOperationResult validationResult) {
+        return new ReadCodeResponse(
+            null,
+            ScriptHost.ATTACHED_EDITOR,
+            FormulaTextTransformer.AI_ATTACHMENT_CONTENT_TYPE,
+            CodeLifecycleStatus.FAILED,
+            null,
+            validationResult.getSourceFingerprint() == null
+                ? fingerprint(formulaText)
+                : validationResult.getSourceFingerprint(),
+            formulaText,
+            null,
+            validationResult.getCompilerDiagnostics(),
+            validationResult.getErrorMessage(),
+            validationResult.getLineNumber(),
+            validationResult.getStandardOutput(),
+            validationResult.getResult());
     }
 
     private String buildValidationFailureMessage(AiChatCodeOperationResult validationResult) {

@@ -8,8 +8,14 @@ import static org.mockito.Mockito.when;
 
 import java.util.Collections;
 import org.freeplane.features.ai.code.AiChatAttachment;
-import org.freeplane.features.ai.code.AiChatCodeEditor;
-import org.freeplane.features.ai.code.AiChatCodeOperationResult;
+import org.freeplane.features.ai.code.AiCodeEditor;
+import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CompileCodeRequest;
+import org.freeplane.features.ai.code.CompileCodeResponse;
+import org.freeplane.features.ai.code.ReadCodeRequest;
+import org.freeplane.features.ai.code.ReadCodeResponse;
+import org.freeplane.features.ai.code.ScriptHost;
+import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.plugin.ai.chat.AIChatPanel;
 import org.freeplane.plugin.ai.chat.ChatToolAvailability;
 import org.freeplane.plugin.ai.chat.LiveChatSessionId;
@@ -31,10 +37,10 @@ public class SingleEditorAttachmentServiceTest {
         uut.attachEditor(new FakeCodeEditor("second"), "text/plain");
         firstAttachment.detach();
 
-        ReadAttachedEditorResponse response = uut.readAttachedEditor();
+        ReadCodeResponse response = readCurrentState(uut);
 
-        assertThat(response.isAttached()).isTrue();
-        assertThat(response.getText()).isEqualTo("second");
+        assertThat(response.getStatus()).isEqualTo(CodeLifecycleStatus.READY);
+        assertThat(response.getCodeText()).isEqualTo("second");
     }
 
     @Test
@@ -146,7 +152,7 @@ public class SingleEditorAttachmentServiceTest {
         attachment.detach();
 
         assertThat(detachCalls[0]).isEqualTo(1);
-        assertThat(uut.readAttachedEditor().isAttached()).isFalse();
+        assertThat(readCurrentState(uut).getStatus()).isEqualTo(CodeLifecycleStatus.NO_CODE);
         verify(aiChatPanel).setAttachedEditorIndicatorVisible(false);
     }
 
@@ -197,73 +203,132 @@ public class SingleEditorAttachmentServiceTest {
     }
 
     @Test
-    public void compileStoresLatestIssueOnlyOnFailureAndClearsItOnSuccess() {
+    public void compileStoresFailureStateAndClearsItOnSuccess() {
         AIChatPanel aiChatPanel = mock(AIChatPanel.class);
         AttachedEditorChatModeSettings settings = mock(AttachedEditorChatModeSettings.class);
         when(settings.get()).thenReturn(AttachedEditorChatMode.NEW_CHAT);
         when(aiChatPanel.startNewChat()).thenReturn(LiveChatSessionId.create());
         FakeCodeEditor editor = new FakeCodeEditor("text");
-        AiChatCodeOperationResult failure = new AiChatCodeOperationResult(
-            false,
+        editor.setCompileResponse(new CompileCodeResponse(
+            null,
+            ScriptHost.ATTACHED_EDITOR,
+            "text/plain",
+            CodeLifecycleStatus.FAILED,
+            "failure-fingerprint",
             Collections.singletonList("Broken at line 2"),
-            null,
-            null,
-            "compile",
             "Broken",
-            2,
-            "failure-fingerprint");
-        AiChatCodeOperationResult success = new AiChatCodeOperationResult(
-            true,
-            Collections.emptyList(),
-            null,
-            null,
-            null,
-            null,
-            null,
-            "success-fingerprint");
-        editor.setCompileResult(failure);
+            2));
         SingleEditorAttachmentService uut = new SingleEditorAttachmentService(aiChatPanel, settings);
         uut.attachEditor(editor, "text/plain");
 
-        AiChatCodeOperationResult firstResult = uut.compileAttachedEditorContent();
-        ReadAttachedEditorLatestIssueResponse firstIssue = uut.getAttachedEditorLatestIssue();
-        editor.setCompileResult(success);
-        AiChatCodeOperationResult secondResult = uut.compileAttachedEditorContent();
-        ReadAttachedEditorLatestIssueResponse secondIssue = uut.getAttachedEditorLatestIssue();
+        CompileCodeResponse firstResult = uut.compileCode(new CompileCodeRequest(null, ScriptHost.ATTACHED_EDITOR, null));
+        ReadCodeResponse firstState = readCurrentState(uut);
+        editor.setCompileResponse(new CompileCodeResponse(
+            null,
+            ScriptHost.ATTACHED_EDITOR,
+            "text/plain",
+            CodeLifecycleStatus.READY,
+            "success-fingerprint",
+            Collections.<String>emptyList(),
+            null,
+            null));
+        CompileCodeResponse secondResult = uut.compileCode(new CompileCodeRequest(null, ScriptHost.ATTACHED_EDITOR, null));
+        ReadCodeResponse secondState = readCurrentState(uut);
 
-        assertThat(firstResult).isSameAs(failure);
-        assertThat(firstIssue.isHasIssue()).isTrue();
-        assertThat(firstIssue.getIssue()).isSameAs(failure);
-        assertThat(secondResult).isSameAs(success);
-        assertThat(secondIssue.isHasIssue()).isFalse();
+        assertThat(firstResult.getStatus()).isEqualTo(CodeLifecycleStatus.FAILED);
+        assertThat(firstState.getStatus()).isEqualTo(CodeLifecycleStatus.FAILED);
+        assertThat(firstState.getCompilerDiagnostics()).containsExactly("Broken at line 2");
+        assertThat(secondResult.getStatus()).isEqualTo(CodeLifecycleStatus.READY);
+        assertThat(secondState.getStatus()).isEqualTo(CodeLifecycleStatus.READY);
+        assertThat(secondState.getCompilerDiagnostics()).isNull();
     }
 
     @Test
-    public void detachIsIdempotent() {
+    public void readCodeUsesFingerprintToSuppressUnchangedText() {
+        AIChatPanel aiChatPanel = mock(AIChatPanel.class);
+        AttachedEditorChatModeSettings settings = mock(AttachedEditorChatModeSettings.class);
+        when(settings.get()).thenReturn(AttachedEditorChatMode.NEW_CHAT);
+        when(aiChatPanel.startNewChat()).thenReturn(LiveChatSessionId.create());
+        SingleEditorAttachmentService uut = new SingleEditorAttachmentService(aiChatPanel, settings);
+        uut.attachEditor(new FakeCodeEditor("text"), "text/plain");
+
+        ReadCodeResponse fullState = readCurrentState(uut);
+        ReadCodeResponse fingerprintState = uut.readCode(new ReadCodeRequest(
+            null,
+            ScriptHost.ATTACHED_EDITOR,
+            fullState.getFingerprint()));
+
+        assertThat(fullState.getCodeText()).isEqualTo("text");
+        assertThat(fingerprintState.getCodeText()).isNull();
+    }
+
+    @Test
+    public void writeCodeUpdatesDraftTextOnly() {
+        AIChatPanel aiChatPanel = mock(AIChatPanel.class);
+        AttachedEditorChatModeSettings settings = mock(AttachedEditorChatModeSettings.class);
+        when(settings.get()).thenReturn(AttachedEditorChatMode.NEW_CHAT);
+        when(aiChatPanel.startNewChat()).thenReturn(LiveChatSessionId.create());
+        FakeCodeEditor editor = new FakeCodeEditor("before");
+        SingleEditorAttachmentService uut = new SingleEditorAttachmentService(aiChatPanel, settings);
+        uut.attachEditor(editor, "text/x-freeplane-formula-groovy");
+
+        uut.writeCode(new WriteCodeRequest(null, ScriptHost.ATTACHED_EDITOR, "after", null));
+
+        assertThat(editor.getText()).isEqualTo("after");
+        assertThat(readCurrentState(uut).getContentType()).isEqualTo("text/x-freeplane-formula-groovy");
+    }
+
+    @Test
+    public void recordedCodeStateIsExposedThroughReadCodeAndCanBeCleared() {
         AIChatPanel aiChatPanel = mock(AIChatPanel.class);
         AttachedEditorChatModeSettings settings = mock(AttachedEditorChatModeSettings.class);
         when(settings.get()).thenReturn(AttachedEditorChatMode.NEW_CHAT);
         when(aiChatPanel.startNewChat()).thenReturn(LiveChatSessionId.create());
         SingleEditorAttachmentService uut = new SingleEditorAttachmentService(aiChatPanel, settings);
 
-        AiChatAttachment attachment = uut.attachEditor(new FakeCodeEditor("text"), "text/plain");
-        attachment.detach();
-        attachment.detach();
+        AiChatAttachment attachment = uut.attachEditor(new FakeCodeEditor("=broken"), "text/x-freeplane-formula-groovy");
+        attachment.recordCodeState(new ReadCodeResponse(
+            null,
+            null,
+            null,
+            CodeLifecycleStatus.FAILED,
+            null,
+            null,
+            "=broken",
+            null,
+            Collections.singletonList("Broken formula"),
+            "Broken formula",
+            7,
+            "stdout",
+            "result"));
 
-        assertThat(uut.readAttachedEditor().isAttached()).isFalse();
+        ReadCodeResponse failedState = readCurrentState(uut);
+        attachment.clearCodeState();
+        ReadCodeResponse readyState = readCurrentState(uut);
+
+        assertThat(failedState.getStatus()).isEqualTo(CodeLifecycleStatus.FAILED);
+        assertThat(failedState.getContentType()).isEqualTo("text/x-freeplane-formula-groovy");
+        assertThat(failedState.getCompilerDiagnostics()).containsExactly("Broken formula");
+        assertThat(failedState.getStdout()).isEqualTo("stdout");
+        assertThat(failedState.getStructuredResult()).isEqualTo("result");
+        assertThat(readyState.getStatus()).isEqualTo(CodeLifecycleStatus.READY);
     }
 
-    private static class FakeCodeEditor implements AiChatCodeEditor {
+    private ReadCodeResponse readCurrentState(SingleEditorAttachmentService uut) {
+        return uut.readCode(new ReadCodeRequest(null, ScriptHost.ATTACHED_EDITOR, null));
+    }
+
+    private static class FakeCodeEditor implements AiCodeEditor {
         private String text;
-        private AiChatCodeOperationResult compileResult = new AiChatCodeOperationResult(
-            true,
-            Collections.emptyList(),
+        private CompileCodeResponse compileResponse = new CompileCodeResponse(
             null,
+            ScriptHost.ATTACHED_EDITOR,
+            "text/plain",
+            CodeLifecycleStatus.READY,
+            "initial-fingerprint",
+            Collections.<String>emptyList(),
             null,
-            null,
-            null,
-            null,
-            "initial-fingerprint");
+            null);
 
         private FakeCodeEditor(String text) {
             this.text = text;
@@ -280,12 +345,12 @@ public class SingleEditorAttachmentServiceTest {
         }
 
         @Override
-        public AiChatCodeOperationResult compileForAi() {
-            return compileResult;
+        public CompileCodeResponse compileCode(CompileCodeRequest request) {
+            return compileResponse;
         }
 
-        private void setCompileResult(AiChatCodeOperationResult compileResult) {
-            this.compileResult = compileResult;
+        private void setCompileResponse(CompileCodeResponse compileResponse) {
+            this.compileResponse = compileResponse;
         }
     }
 }

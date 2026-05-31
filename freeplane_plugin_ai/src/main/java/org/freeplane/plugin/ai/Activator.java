@@ -76,7 +76,7 @@ public class Activator implements BundleActivator {
                     aiChatPanel = new AIChatPanel();
                     SingleEditorAttachmentService attachmentService =
                         new SingleEditorAttachmentService(aiChatPanel, new AttachedEditorChatModeSettings());
-                    aiChatPanel.setAttachedEditorProvider(attachmentService);
+                    aiChatPanel.setCodeHostService(attachmentService);
                     registerAiChatAttachmentService(context, attachmentService);
                     tabs.addTab("",
                         ResourceController.getResourceController().getIcon(
@@ -189,7 +189,7 @@ public class Activator implements BundleActivator {
                         AIToolSetBuilder toolSetBuilder = new AIToolSetBuilder()
                             .toolCallSummaryHandler(aiChatPanel.toolCallSummaryHandler())
                             .toolCaller(ToolCaller.MCP)
-                            .attachedEditorProvider(attachmentService);
+                            .codeHostService(attachmentService);
                         modelContextProtocolServer = new ModelContextProtocolServer(
                             toolSetBuilder.buildToolObjects(),
                             controller.getViewController());

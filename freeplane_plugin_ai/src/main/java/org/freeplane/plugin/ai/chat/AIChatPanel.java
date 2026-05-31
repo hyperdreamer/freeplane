@@ -34,7 +34,7 @@ import org.freeplane.plugin.ai.prompt.AiPrompt;
 import org.freeplane.plugin.ai.prompt.AiPromptProgressDialogFactory;
 import org.freeplane.plugin.ai.prompt.AiPromptRequestComposer;
 import org.freeplane.plugin.ai.prompt.HiddenAiRequestObserverBridge;
-import org.freeplane.plugin.ai.code.AttachedEditorProvider;
+import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.plugin.ai.prompt.HiddenAiRequestObserverFactory;
 import org.freeplane.plugin.ai.prompt.HiddenPromptRequestRunner;
 import org.freeplane.plugin.ai.prompt.HiddenPromptRequestRunnerFactory;
@@ -148,7 +148,7 @@ public class AIChatPanel extends JPanel {
     private final AssistantProfileSelectionSync assistantProfileSelectionSync;
     private final AssistantProfilePaneBuilder assistantProfilePaneBuilder;
     private boolean currentSessionUsesAssistantProfile = true;
-    private AttachedEditorProvider attachedEditorProvider;
+    private AiCodeHostService codeHostService;
 
     public AIChatPanel() {
         setLayout(new BorderLayout());
@@ -376,7 +376,7 @@ public class AIChatPanel extends JPanel {
             availableMaps,
             aiPromptRequestComposer,
             this::openPromptChat,
-            this::currentAttachedEditorProvider,
+            this::currentCodeHostService,
             hiddenPromptRequestRunnerFactory,
             aiPromptProgressDialogFactory);
         aiRequestExecutionCoordinator = new AiRequestExecutionCoordinator(
@@ -1109,7 +1109,7 @@ public class AIChatPanel extends JPanel {
             .toolCallSummaryHandler(requestFlow::onToolCallSummary)
             .availableMaps(availableMaps)
             .mapAccessListener(liveChatController.mapAccessListener(sessionId))
-            .attachedEditorProvider(currentAttachedEditorProvider());
+            .codeHostService(currentCodeHostService());
         List<Object> toolObjects = toolSetBuilder.buildToolObjects();
         return AIChatServiceFactory.createService(
             (org.freeplane.plugin.ai.tools.AIToolSet) toolObjects.get(0),
@@ -1123,8 +1123,8 @@ public class AIChatPanel extends JPanel {
             selectedModelOverride);
     }
 
-    private AttachedEditorProvider currentAttachedEditorProvider() {
-        return attachedEditorProvider;
+    private AiCodeHostService currentCodeHostService() {
+        return codeHostService;
     }
 
     private ChatTokenUsageTracker createRequestTokenUsageTracker(LiveChatSessionId sessionId) {
@@ -1314,8 +1314,8 @@ public class AIChatPanel extends JPanel {
         }
     }
 
-    public void setAttachedEditorProvider(AttachedEditorProvider attachedEditorProvider) {
-        this.attachedEditorProvider = attachedEditorProvider;
+    public void setCodeHostService(AiCodeHostService codeHostService) {
+        this.codeHostService = codeHostService;
     }
 
     public LiveChatSessionId currentSessionId() {

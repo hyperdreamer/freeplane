@@ -849,7 +849,7 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
 
 ## Subtask: Preparatory migration from attached-editor tools to
 generic code-host structures
-- **Status:** backlog
+- **Status:** review
 - **Scope:** Replace the current attached-editor tool family and its
   tool-facing DTOs with the generic code-host request/response
   structures for the attached-editor host first, remove the obsolete
@@ -1237,7 +1237,18 @@ AiChatRepairRequest --> ReadCodeResponse
     - verify MCP and internal AI registries expose only the generic
       code tool names after migration.
   - Manual tests: N/A.
-
+- **Implementation notes:**
+  - **Interpretations:**
+    - `ScriptEditorPanel` and `FormulaEditor` now return compile
+      diagnostics in the generic `CompileCodeResponse` shape, while
+      `SingleEditorAttachmentService` fills in the authoritative
+      attached-editor `codeId`, `host`, and `contentType` around those
+      editor-owned compile results.
+  - **Tradeoffs:**
+    - `SingleEditorAttachmentService` keeps replaced and detached
+      attached-editor `codeId` reads in memory with `REPLACED` or
+      `NO_CODE` state instead of silently dropping them, so later
+      `readCode` calls already match the later code-id-based flow.
 
 ## Subtask: Shared code authorization, content typing, and
 script-execution policies

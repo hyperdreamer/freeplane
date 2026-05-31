@@ -7,9 +7,9 @@ public interface AiChatAttachment {
 
     void showOwningChat();
 
-    void recordIssue(AiChatCodeOperationResult result);
+    void recordCodeState(ReadCodeResponse state);
 
-    void clearIssue();
+    void clearCodeState();
 
     void requestRepair(AiChatRepairRequest request);
 }
