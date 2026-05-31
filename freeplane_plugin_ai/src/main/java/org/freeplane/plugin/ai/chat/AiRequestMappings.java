@@ -15,17 +15,19 @@ class AiRequestMappings {
         return AIModelSelection.createSelectionValue(selection.getProviderName(), selection.getModelName());
     }
 
-    static ChatToolAvailability toChatToolAvailability(AiToolAvailability toolAvailability) {
+    static ToolAvailabilityLevel toToolAvailabilityLevel(AiToolAvailability toolAvailability) {
         if (toolAvailability == null) {
             return null;
         }
         switch (toolAvailability) {
             case DISABLED:
-                return ChatToolAvailability.DISABLED;
+                return ToolAvailabilityLevel.DISABLED;
             case READING:
-                return ChatToolAvailability.READING;
+                return ToolAvailabilityLevel.READING;
             case EDITING:
-                return ChatToolAvailability.EDITING;
+                return ToolAvailabilityLevel.EDITING;
+            case SCRIPT_EXECUTION:
+                return ToolAvailabilityLevel.SCRIPT_EXECUTION;
             case CURRENT:
             default:
                 return null;

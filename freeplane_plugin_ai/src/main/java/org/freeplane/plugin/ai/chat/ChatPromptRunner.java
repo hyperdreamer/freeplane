@@ -12,6 +12,7 @@ import org.freeplane.core.ui.components.UITools;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.ai.code.AiCodeHostService;
+import org.freeplane.plugin.ai.code.AiCodeOperationAuthorizer;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.freeplane.plugin.ai.prompt.AiPromptProgressDialogFactory;
 import org.freeplane.plugin.ai.prompt.AiPromptRequestComposer;
@@ -46,6 +47,8 @@ class ChatPromptRunner {
     private final AiPromptRequestComposer aiPromptRequestComposer;
     private final VisiblePromptChatLauncher visiblePromptChatLauncher;
     private final AiCodeHostService codeHostService;
+    private final Supplier<ToolAvailabilityLevel> sharedToolAvailabilitySupplier;
+    private final Supplier<ToolAvailabilityLevel> shownSessionToolAvailabilityOverrideSupplier;
     private final HiddenPromptRequestRunner hiddenPromptRequestRunner;
     private final AiPromptProgressDialogFactory aiPromptProgressDialogFactory;
     private final ChatMemory shownPromptChatMemory;
@@ -65,6 +68,8 @@ class ChatPromptRunner {
                      AiPromptRequestComposer aiPromptRequestComposer,
                      VisiblePromptChatLauncher visiblePromptChatLauncher,
                      AiCodeHostService codeHostService,
+                     Supplier<ToolAvailabilityLevel> sharedToolAvailabilitySupplier,
+                     Supplier<ToolAvailabilityLevel> shownSessionToolAvailabilityOverrideSupplier,
                      HiddenPromptRequestRunnerFactory hiddenPromptRequestRunnerFactory,
                      AiPromptProgressDialogFactory aiPromptProgressDialogFactory,
                      ChatMemory shownPromptChatMemory,
@@ -79,6 +84,8 @@ class ChatPromptRunner {
         this.aiPromptRequestComposer = aiPromptRequestComposer;
         this.visiblePromptChatLauncher = visiblePromptChatLauncher;
         this.codeHostService = codeHostService;
+        this.sharedToolAvailabilitySupplier = sharedToolAvailabilitySupplier;
+        this.shownSessionToolAvailabilityOverrideSupplier = shownSessionToolAvailabilityOverrideSupplier;
         this.aiPromptProgressDialogFactory = aiPromptProgressDialogFactory;
         this.shownPromptChatMemory = shownPromptChatMemory;
         this.shownMapAccessListener = shownMapAccessListener;
@@ -145,7 +152,7 @@ class ChatPromptRunner {
 
     boolean startShownPrompt(String promptText,
                              String selectedModelOverride,
-                             ChatToolAvailability resolvedToolAvailability,
+                             ToolAvailabilityLevel resolvedToolAvailability,
                              SelectionIdentifiersResponse selectionOverride,
                              VisiblePromptRequestCallbacks requestCallbacks) {
         if (shownPromptChatMemory == null || shownMapAccessListener == null
@@ -184,7 +191,7 @@ class ChatPromptRunner {
     boolean submitHiddenRequest(String requestName,
                                 String promptText,
                                 String selectedModelOverride,
-                                ChatToolAvailability resolvedToolAvailability,
+                                ToolAvailabilityLevel resolvedToolAvailability,
                                 SelectionIdentifiersResponse selectionOverride,
                                 Component owner,
                                 boolean showProgressDialog,
@@ -225,12 +232,17 @@ class ChatPromptRunner {
                                                   Consumer<TokenUsage> tokenUsageConsumer,
                                                   ChatTokenUsageTracker tokenUsageTracker,
                                                   String selectedModelOverride,
-                                                  ChatToolAvailability toolAvailability) {
+                                                  ToolAvailabilityLevel toolAvailability) {
         AIToolSetBuilder toolSetBuilder = new AIToolSetBuilder()
             .toolCallSummaryHandler(toolCallSummaryHandler)
             .availableMaps(availableMaps)
             .mapAccessListener(mapAccessListener)
-            .codeHostService(codeHostService);
+            .codeHostService(codeHostService)
+            .aiCodeOperationAuthorizer(new AiCodeOperationAuthorizer(
+                org.freeplane.plugin.ai.tools.utilities.ToolCaller.CHAT,
+                toolAvailability != null ? () -> toolAvailability : sharedToolAvailabilitySupplier,
+                shownSessionToolAvailabilityOverrideSupplier,
+                codeHostService));
         List<Object> toolObjects = toolSetBuilder.buildToolObjects();
         return AIChatServiceFactory.createService(
             (org.freeplane.plugin.ai.tools.AIToolSet) toolObjects.get(0),
@@ -240,9 +252,9 @@ class ChatPromptRunner {
             toolCallSummaryHandler,
             cancellationSupplier,
             tokenUsageConsumer,
-            new Supplier<ChatToolAvailability>() {
+            new Supplier<ToolAvailabilityLevel>() {
                 @Override
-                public ChatToolAvailability get() {
+                public ToolAvailabilityLevel get() {
                     return toolAvailability;
                 }
             },

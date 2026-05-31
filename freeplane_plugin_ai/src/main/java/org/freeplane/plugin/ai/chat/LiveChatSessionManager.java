@@ -16,7 +16,7 @@ final class LiveChatSessionManager {
 
     LiveChatSession createSession(ChatMemory chatMemory, String displayName,
                                   boolean assistantProfileEnabled,
-                                  ChatToolAvailability toolAvailabilityOverride) {
+                                  ToolAvailabilityLevel toolAvailabilityOverride) {
         LiveChatSessionId id = LiveChatSessionId.create();
         LiveChatSession session = new LiveChatSession(id, chatMemory, displayName,
             assistantProfileEnabled, toolAvailabilityOverride);

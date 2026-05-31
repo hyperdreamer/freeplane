@@ -45,22 +45,22 @@ public class AIChatService {
     private final Supplier<Boolean> cancellationSupplier;
     private final Consumer<TokenUsage> tokenUsageConsumer;
     private final ToolExecutorRegistry toolExecutorRegistry;
-    private final Supplier<ChatToolAvailability> toolAvailabilitySupplier;
-    private final Function<ChatToolAvailability, AIAssistant> assistantFactory;
-    private ChatToolAvailability lastToolAvailability;
+    private final Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier;
+    private final Function<ToolAvailabilityLevel, AIAssistant> assistantFactory;
+    private ToolAvailabilityLevel lastToolAvailability;
 
     public AIChatService(ChatModel chatLanguageModel, AIToolSet toolSet, ChatMemory chatMemory,
                          ChatTokenUsageTracker chatTokenUsageTracker, ToolCallSummaryHandler toolCallSummaryHandler,
                          Supplier<Boolean> cancellationSupplier, Consumer<TokenUsage> tokenUsageConsumer) {
         this(chatLanguageModel, toolSet, Collections.<Object>singletonList(toolSet), null, chatMemory,
             chatTokenUsageTracker, toolCallSummaryHandler, cancellationSupplier, tokenUsageConsumer,
-            new Supplier<ChatToolAvailability>() {
+            new Supplier<ToolAvailabilityLevel>() {
                 @Override
-                public ChatToolAvailability get() {
+                public ToolAvailabilityLevel get() {
                     try {
-                        return new ChatToolAvailabilitySettings().getToolAvailability();
+                        return new ToolAvailabilityLevelSettings().getToolAvailability();
                     } catch (Exception ignored) {
-                        return ChatToolAvailability.EDITING;
+                        return ToolAvailabilityLevel.EDITING;
                     }
                 }
             },
@@ -78,13 +78,13 @@ public class AIChatService {
                   Consumer<TokenUsage> tokenUsageConsumer) {
         this(chatLanguageModel, toolSet, toolObjects, aiCodeToolSet, chatMemory, chatTokenUsageTracker,
             toolCallSummaryHandler, cancellationSupplier, tokenUsageConsumer,
-            new Supplier<ChatToolAvailability>() {
+            new Supplier<ToolAvailabilityLevel>() {
                 @Override
-                public ChatToolAvailability get() {
+                public ToolAvailabilityLevel get() {
                     try {
-                        return new ChatToolAvailabilitySettings().getToolAvailability();
+                        return new ToolAvailabilityLevelSettings().getToolAvailability();
                     } catch (Exception ignored) {
-                        return ChatToolAvailability.EDITING;
+                        return ToolAvailabilityLevel.EDITING;
                     }
                 }
             },
@@ -100,8 +100,8 @@ public class AIChatService {
                   ToolCallSummaryHandler toolCallSummaryHandler,
                   Supplier<Boolean> cancellationSupplier,
                   Consumer<TokenUsage> tokenUsageConsumer,
-                  Supplier<ChatToolAvailability> toolAvailabilitySupplier,
-                  Function<ChatToolAvailability, AIAssistant> assistantFactory) {
+                  Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier,
+                  Function<ToolAvailabilityLevel, AIAssistant> assistantFactory) {
         Objects.requireNonNull(chatTokenUsageTracker, "chatTokenUsageTracker");
         this.chatLanguageModel = chatLanguageModel;
         this.toolSet = toolSet;
@@ -117,9 +117,9 @@ public class AIChatService {
         this.toolAvailabilitySupplier = Objects.requireNonNull(toolAvailabilitySupplier, "toolAvailabilitySupplier");
         this.assistantFactory = assistantFactory != null
             ? assistantFactory
-            : new Function<ChatToolAvailability, AIAssistant>() {
+            : new Function<ToolAvailabilityLevel, AIAssistant>() {
                 @Override
-                public AIAssistant apply(ChatToolAvailability toolAvailability) {
+                public AIAssistant apply(ToolAvailabilityLevel toolAvailability) {
                     return buildAssistant(toolAvailability);
                 }
             };
@@ -128,7 +128,7 @@ public class AIChatService {
     }
 
     public String chat(String message) {
-        ChatToolAvailability toolAvailability = currentToolAvailability();
+        ToolAvailabilityLevel toolAvailability = currentToolAvailability();
         if (toolAvailability != lastToolAvailability) {
             assistant = assistantFactory.apply(toolAvailability);
             lastToolAvailability = toolAvailability;
@@ -136,7 +136,7 @@ public class AIChatService {
         return assistant.chat(message);
     }
 
-    private AIAssistant buildAssistant(ChatToolAvailability toolAvailability) {
+    private AIAssistant buildAssistant(ToolAvailabilityLevel toolAvailability) {
         AiServices<AIAssistant> builder = AiServices.builder(AIAssistant.class)
             .toolArgumentsErrorHandler(toolArgumentsErrorHandler)
             .chatModel(chatLanguageModel)
@@ -192,16 +192,16 @@ public class AIChatService {
         return builder.build();
     }
 
-    private ChatToolAvailability currentToolAvailability() {
-        ChatToolAvailability toolAvailability = toolAvailabilitySupplier.get();
+    private ToolAvailabilityLevel currentToolAvailability() {
+        ToolAvailabilityLevel toolAvailability = toolAvailabilitySupplier.get();
         return toolAvailability == null
-            ? ChatToolAvailability.EDITING
+            ? ToolAvailabilityLevel.EDITING
             : toolAvailability;
     }
 
-    Function<Object, String> systemMessageProvider(ChatToolAvailability toolAvailability) {
-        final ChatToolAvailability normalizedAvailability = toolAvailability == null
-            ? ChatToolAvailability.EDITING
+    Function<Object, String> systemMessageProvider(ToolAvailabilityLevel toolAvailability) {
+        final ToolAvailabilityLevel normalizedAvailability = toolAvailability == null
+            ? ToolAvailabilityLevel.EDITING
             : toolAvailability;
         return new Function<Object, String>() {
             @Override
@@ -215,13 +215,13 @@ public class AIChatService {
         };
     }
 
-    Collection<String> allowedToolNames(ChatToolAvailability toolAvailability) {
-        ChatToolAvailability normalizedAvailability = toolAvailability == null
-            ? ChatToolAvailability.EDITING
+    Collection<String> allowedToolNames(ToolAvailabilityLevel toolAvailability) {
+        ToolAvailabilityLevel normalizedAvailability = toolAvailability == null
+            ? ToolAvailabilityLevel.EDITING
             : toolAvailability;
         Set<String> toolNames = new LinkedHashSet<String>(normalizedAvailability.allowedToolNames());
         if (aiCodeToolSet != null) {
-            toolNames.addAll(AiCodeToolSet.toolNames());
+            toolNames.addAll(aiCodeToolSet.authorizedToolNames());
         }
         return toolNames;
     }

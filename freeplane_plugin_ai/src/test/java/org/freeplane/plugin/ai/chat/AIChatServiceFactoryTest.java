@@ -38,7 +38,7 @@ public class AIChatServiceFactoryTest {
                 null,
                 null,
                 null,
-                () -> ChatToolAvailability.EDITING,
+                () -> ToolAvailabilityLevel.EDITING,
                 "openrouter|openai/gpt-4.1-mini"
             );
 

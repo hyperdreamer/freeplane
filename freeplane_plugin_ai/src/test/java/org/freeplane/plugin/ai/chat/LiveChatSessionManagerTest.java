@@ -17,10 +17,10 @@ public class LiveChatSessionManagerTest {
             chatMemory,
             "Prompt: Rewrite",
             false,
-            ChatToolAvailability.EDITING);
+            ToolAvailabilityLevel.EDITING);
 
         assertThat(session.isAssistantProfileEnabled()).isFalse();
-        assertThat(session.getToolAvailabilityOverride()).isEqualTo(ChatToolAvailability.EDITING);
+        assertThat(session.getToolAvailabilityOverride()).isEqualTo(ToolAvailabilityLevel.EDITING);
         assertThat(uut.getCurrentSession()).isEqualTo(session);
     }
 }

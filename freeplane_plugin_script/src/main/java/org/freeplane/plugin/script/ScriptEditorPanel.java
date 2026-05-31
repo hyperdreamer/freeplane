@@ -26,6 +26,7 @@ import java.awt.Font;
 import java.awt.event.ActionEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
@@ -69,7 +70,10 @@ import org.freeplane.features.ai.code.AiCodeEditor;
 import org.freeplane.features.ai.code.CodeLifecycleStatus;
 import org.freeplane.features.ai.code.CompileCodeRequest;
 import org.freeplane.features.ai.code.CompileCodeResponse;
+import org.freeplane.features.ai.code.RunScriptRequest;
+import org.freeplane.features.ai.code.RunScriptResponse;
 import org.freeplane.features.ai.code.ScriptHost;
+import org.freeplane.features.ai.code.ScriptRunInitiator;
 import org.freeplane.core.ui.UIBuilder;
 import org.freeplane.core.ui.components.EmptyIcon;
 import org.freeplane.core.ui.components.JRestrictedSizeScrollPane;
@@ -587,6 +591,68 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 			compileResult.getLineNumber());
 	}
 
+	@Override
+	public RunScriptResponse runScript(RunScriptRequest request) {
+		storeCurrent();
+		if (mScriptList.isSelectionEmpty()) {
+			throw new IllegalStateException("No script is selected.");
+		}
+		ByteArrayOutputStream outputBuffer = new ByteArrayOutputStream();
+		final int[] lineNumber = new int[] { -1 };
+		try (PrintStream outStream = new PrintStream(outputBuffer, false, "UTF-8")) {
+			Object result = mScriptModel.executeScript(mScriptList.getSelectedIndex(), outStream, new IFreeplaneScriptErrorHandler() {
+				@Override
+				public void gotoLine(final int pLineNumber) {
+					lineNumber[0] = pLineNumber;
+					ActionUtils.setCaretPosition(mScriptTextField, pLineNumber, 1);
+				}
+			});
+			return new RunScriptResponse(
+				request == null ? null : request.getCodeId(),
+				ScriptHost.ATTACHED_EDITOR,
+				AI_ATTACHMENT_CONTENT_TYPE,
+				CodeLifecycleStatus.SUCCEEDED,
+				ScriptRunInitiator.AI,
+				fingerprint(mScriptTextField.getText()),
+				null,
+				null,
+				null,
+				stdout(outputBuffer),
+				toJsonSafeValue(result));
+		}
+		catch (ExecuteScriptException e) {
+			return new RunScriptResponse(
+				request == null ? null : request.getCodeId(),
+				ScriptHost.ATTACHED_EDITOR,
+				AI_ATTACHMENT_CONTENT_TYPE,
+				CodeLifecycleStatus.FAILED,
+				ScriptRunInitiator.AI,
+				fingerprint(mScriptTextField.getText()),
+				null,
+				e.getMessage(),
+				lineNumber[0] >= 0 ? Integer.valueOf(lineNumber[0]) : null,
+				stdout(outputBuffer),
+				null);
+		}
+		catch (RuntimeException e) {
+			return new RunScriptResponse(
+				request == null ? null : request.getCodeId(),
+				ScriptHost.ATTACHED_EDITOR,
+				AI_ATTACHMENT_CONTENT_TYPE,
+				CodeLifecycleStatus.FAILED,
+				ScriptRunInitiator.AI,
+				fingerprint(mScriptTextField.getText()),
+				null,
+				e.getMessage(),
+				lineNumber[0] >= 0 ? Integer.valueOf(lineNumber[0]) : null,
+				stdout(outputBuffer),
+				null);
+		}
+		catch (Exception e) {
+			throw new IllegalStateException(e.getMessage(), e);
+		}
+	}
+
 	private AiChatAttachmentService lookupAiChatAttachmentService() {
 		BundleContext bundleContext = Activator.getBundleContext();
 		if (bundleContext == null) {
@@ -598,6 +664,48 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 			return null;
 		}
 		return bundleContext.getService(serviceReference);
+	}
+
+	private Object toJsonSafeValue(Object value) {
+		if (value == null || value instanceof Boolean || value instanceof Number || value instanceof String) {
+			return value;
+		}
+		if (value instanceof java.util.Map<?, ?>) {
+			java.util.Map<?, ?> source = (java.util.Map<?, ?>) value;
+			java.util.Map<String, Object> converted = new java.util.LinkedHashMap<String, Object>();
+			for (java.util.Map.Entry<?, ?> entry : source.entrySet()) {
+				if (!(entry.getKey() instanceof String)) {
+					throw unsupportedValue(value);
+				}
+				converted.put((String) entry.getKey(), toJsonSafeValue(entry.getValue()));
+			}
+			return converted;
+		}
+		if (value instanceof Iterable<?>) {
+			java.util.List<Object> converted = new java.util.ArrayList<Object>();
+			for (Object item : (Iterable<?>) value) {
+				converted.add(toJsonSafeValue(item));
+			}
+			return converted;
+		}
+		if (value.getClass().isArray()) {
+			java.util.List<Object> converted = new java.util.ArrayList<Object>();
+			int length = java.lang.reflect.Array.getLength(value);
+			for (int index = 0; index < length; index++) {
+				converted.add(toJsonSafeValue(java.lang.reflect.Array.get(value, index)));
+			}
+			return converted;
+		}
+		throw unsupportedValue(value);
+	}
+
+	private IllegalStateException unsupportedValue(Object value) {
+		return new IllegalStateException("Unsupported script result type: " + value.getClass().getName());
+	}
+
+	private String stdout(ByteArrayOutputStream outputBuffer) {
+		String stdout = new String(outputBuffer.toByteArray(), StandardCharsets.UTF_8);
+		return stdout.isEmpty() ? null : stdout;
 	}
 
 	private String fingerprint(String text) {

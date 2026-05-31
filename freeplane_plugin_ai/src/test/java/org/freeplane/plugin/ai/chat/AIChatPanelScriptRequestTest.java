@@ -111,7 +111,7 @@ public class AIChatPanelScriptRequestTest {
         when(chatRequestFlowFactory.create(any(), any())).thenReturn(requestFlow);
         setField(harness.panel, "chatRequestFlowFactory", chatRequestFlowFactory);
         AtomicReference<String> seenSelectedModel = new AtomicReference<String>();
-        AtomicReference<ChatToolAvailability> seenToolAvailability = new AtomicReference<ChatToolAvailability>();
+        AtomicReference<ToolAvailabilityLevel> seenToolAvailability = new AtomicReference<ToolAvailabilityLevel>();
         LiveChatSessionId originalSessionId = harness.sessionId;
         String explicitSelection = "openrouter|openai/gpt-4.1-mini";
         ResolvedAiRequest request = new ResolvedAiRequest(
@@ -136,6 +136,7 @@ public class AIChatPanelScriptRequestTest {
                      when(mock.availableMaps(any())).thenReturn(mock);
                      when(mock.mapAccessListener(any())).thenReturn(mock);
                      when(mock.codeHostService(org.mockito.ArgumentMatchers.nullable(org.freeplane.features.ai.code.AiCodeHostService.class))).thenReturn(mock);
+                     when(mock.aiCodeOperationAuthorizer(org.mockito.ArgumentMatchers.nullable(org.freeplane.plugin.ai.code.AiCodeOperationAuthorizer.class))).thenReturn(mock);
                      when(mock.build()).thenReturn(toolSet);
                      when(mock.buildToolObjects()).thenReturn(java.util.Collections.<Object>singletonList(toolSet));
                  })) {
@@ -152,11 +153,11 @@ public class AIChatPanelScriptRequestTest {
                 any(ToolCallSummaryHandler.class),
                 org.mockito.ArgumentMatchers.<Supplier<Boolean>>any(),
                 org.mockito.ArgumentMatchers.<Consumer<TokenUsage>>any(),
-                org.mockito.ArgumentMatchers.<Supplier<ChatToolAvailability>>any(),
+                org.mockito.ArgumentMatchers.<Supplier<ToolAvailabilityLevel>>any(),
                 nullable(String.class)))
                 .thenAnswer(invocation -> {
                     @SuppressWarnings("unchecked")
-                    Supplier<ChatToolAvailability> toolAvailabilitySupplier = invocation.getArgument(7);
+                    Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier = invocation.getArgument(7);
                     seenToolAvailability.set(toolAvailabilitySupplier == null ? null : toolAvailabilitySupplier.get());
                     seenSelectedModel.set(invocation.getArgument(8));
                     return mock(AIChatService.class);
@@ -170,9 +171,9 @@ public class AIChatPanelScriptRequestTest {
         assertThat(harness.liveChatController.currentSessionId()).isEqualTo(originalSessionId);
         assertThat(harness.liveChatController.currentSessionSelectedModelOverride()).isEqualTo(explicitSelection);
         assertThat(harness.liveChatController.currentSessionToolAvailabilityOverride())
-            .isEqualTo(ChatToolAvailability.DISABLED);
+            .isEqualTo(ToolAvailabilityLevel.DISABLED);
         assertThat(seenSelectedModel.get()).isEqualTo(explicitSelection);
-        assertThat(seenToolAvailability.get()).isEqualTo(ChatToolAvailability.DISABLED);
+        assertThat(seenToolAvailability.get()).isEqualTo(ToolAvailabilityLevel.DISABLED);
         verify(harness.chatOutputView).appendUserMessage("Prompt");
     }
 
@@ -204,6 +205,7 @@ public class AIChatPanelScriptRequestTest {
                      when(mock.availableMaps(any())).thenReturn(mock);
                      when(mock.mapAccessListener(any())).thenReturn(mock);
                      when(mock.codeHostService(org.mockito.ArgumentMatchers.nullable(org.freeplane.features.ai.code.AiCodeHostService.class))).thenReturn(mock);
+                     when(mock.aiCodeOperationAuthorizer(org.mockito.ArgumentMatchers.nullable(org.freeplane.plugin.ai.code.AiCodeOperationAuthorizer.class))).thenReturn(mock);
                      when(mock.build()).thenReturn(toolSet);
                      when(mock.buildToolObjects()).thenReturn(java.util.Collections.<Object>singletonList(toolSet));
                  })) {
@@ -220,7 +222,7 @@ public class AIChatPanelScriptRequestTest {
                 any(ToolCallSummaryHandler.class),
                 org.mockito.ArgumentMatchers.<Supplier<Boolean>>any(),
                 org.mockito.ArgumentMatchers.<Consumer<TokenUsage>>any(),
-                org.mockito.ArgumentMatchers.<Supplier<ChatToolAvailability>>any(),
+                org.mockito.ArgumentMatchers.<Supplier<ToolAvailabilityLevel>>any(),
                 nullable(String.class)))
                 .thenReturn(mock(AIChatService.class));
 
@@ -263,6 +265,7 @@ public class AIChatPanelScriptRequestTest {
                      when(mock.availableMaps(any())).thenReturn(mock);
                      when(mock.mapAccessListener(any())).thenReturn(mock);
                      when(mock.codeHostService(org.mockito.ArgumentMatchers.nullable(org.freeplane.features.ai.code.AiCodeHostService.class))).thenReturn(mock);
+                     when(mock.aiCodeOperationAuthorizer(org.mockito.ArgumentMatchers.nullable(org.freeplane.plugin.ai.code.AiCodeOperationAuthorizer.class))).thenReturn(mock);
                      when(mock.build()).thenReturn(toolSet);
                      when(mock.buildToolObjects()).thenReturn(java.util.Collections.<Object>singletonList(toolSet));
                  })) {
@@ -279,7 +282,7 @@ public class AIChatPanelScriptRequestTest {
                 any(ToolCallSummaryHandler.class),
                 org.mockito.ArgumentMatchers.<Supplier<Boolean>>any(),
                 org.mockito.ArgumentMatchers.<Consumer<TokenUsage>>any(),
-                org.mockito.ArgumentMatchers.<Supplier<ChatToolAvailability>>any(),
+                org.mockito.ArgumentMatchers.<Supplier<ToolAvailabilityLevel>>any(),
                 nullable(String.class)))
                 .thenReturn(mock(AIChatService.class));
 
@@ -299,14 +302,14 @@ public class AIChatPanelScriptRequestTest {
     public void addToChatWithCurrentSelectionsResolvesTargetSessionValuesAtDispatchStart() throws Exception {
         PanelHarness harness = newPanelHarness(true);
         harness.liveChatController.setCurrentSessionSelectedModelOverride("openrouter|openai/gpt-4.1-mini");
-        harness.liveChatController.setCurrentSessionToolAvailabilityOverride(ChatToolAvailability.READING);
-        when(harness.chatToolAvailabilitySettings.getToolAvailability()).thenReturn(ChatToolAvailability.EDITING);
+        harness.liveChatController.setCurrentSessionToolAvailabilityOverride(ToolAvailabilityLevel.READING);
+        when(harness.chatToolAvailabilitySettings.getToolAvailability()).thenReturn(ToolAvailabilityLevel.EDITING);
         ChatRequestFlow requestFlow = mock(ChatRequestFlow.class);
         ChatRequestFlowFactory chatRequestFlowFactory = mock(ChatRequestFlowFactory.class);
         when(chatRequestFlowFactory.create(any(), any())).thenReturn(requestFlow);
         setField(harness.panel, "chatRequestFlowFactory", chatRequestFlowFactory);
         AtomicReference<String> seenSelectedModel = new AtomicReference<String>();
-        AtomicReference<ChatToolAvailability> seenToolAvailability = new AtomicReference<ChatToolAvailability>();
+        AtomicReference<ToolAvailabilityLevel> seenToolAvailability = new AtomicReference<ToolAvailabilityLevel>();
         ResolvedAiRequest request = new ResolvedAiRequest(
             "Prompt",
             null,
@@ -327,6 +330,7 @@ public class AIChatPanelScriptRequestTest {
                      when(mock.availableMaps(any())).thenReturn(mock);
                      when(mock.mapAccessListener(any())).thenReturn(mock);
                      when(mock.codeHostService(org.mockito.ArgumentMatchers.nullable(org.freeplane.features.ai.code.AiCodeHostService.class))).thenReturn(mock);
+                     when(mock.aiCodeOperationAuthorizer(org.mockito.ArgumentMatchers.nullable(org.freeplane.plugin.ai.code.AiCodeOperationAuthorizer.class))).thenReturn(mock);
                      when(mock.build()).thenReturn(toolSet);
                      when(mock.buildToolObjects()).thenReturn(java.util.Collections.<Object>singletonList(toolSet));
                  })) {
@@ -343,11 +347,11 @@ public class AIChatPanelScriptRequestTest {
                 any(ToolCallSummaryHandler.class),
                 org.mockito.ArgumentMatchers.<Supplier<Boolean>>any(),
                 org.mockito.ArgumentMatchers.<Consumer<TokenUsage>>any(),
-                org.mockito.ArgumentMatchers.<Supplier<ChatToolAvailability>>any(),
+                org.mockito.ArgumentMatchers.<Supplier<ToolAvailabilityLevel>>any(),
                 nullable(String.class)))
                 .thenAnswer(invocation -> {
                     @SuppressWarnings("unchecked")
-                    Supplier<ChatToolAvailability> toolAvailabilitySupplier = invocation.getArgument(7);
+                    Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier = invocation.getArgument(7);
                     seenToolAvailability.set(toolAvailabilitySupplier == null ? null : toolAvailabilitySupplier.get());
                     seenSelectedModel.set(invocation.getArgument(8));
                     return mock(AIChatService.class);
@@ -362,7 +366,7 @@ public class AIChatPanelScriptRequestTest {
         }
 
         assertThat(seenSelectedModel.get()).isEqualTo("openrouter|openai/gpt-4.1-mini");
-        assertThat(seenToolAvailability.get()).isEqualTo(ChatToolAvailability.READING);
+        assertThat(seenToolAvailability.get()).isEqualTo(ToolAvailabilityLevel.READING);
     }
 
     @Test
@@ -412,12 +416,12 @@ public class AIChatPanelScriptRequestTest {
             "Hidden prompt",
             "Hidden body",
             null,
-            ChatToolAvailability.EDITING,
+            ToolAvailabilityLevel.EDITING,
             null,
             null,
             true,
             null)).thenReturn(true);
-        when(shownRunner.startShownPrompt("Prompt body", null, ChatToolAvailability.EDITING, null, null))
+        when(shownRunner.startShownPrompt("Prompt body", null, ToolAvailabilityLevel.EDITING, null, null))
             .thenReturn(true);
         setField(harness.panel, "chatPromptRunnerFactory", chatPromptRunnerFactory);
 
@@ -436,13 +440,13 @@ public class AIChatPanelScriptRequestTest {
             "Hidden prompt",
             "Hidden body",
             null,
-            ChatToolAvailability.EDITING,
+            ToolAvailabilityLevel.EDITING,
             null,
             null,
             true,
             null);
         verify(chatPromptRunnerFactory).createShown(any(), any(), eq(requestFlow), any(), any());
-        verify(shownRunner).startShownPrompt("Prompt body", null, ChatToolAvailability.EDITING, null, null);
+        verify(shownRunner).startShownPrompt("Prompt body", null, ToolAvailabilityLevel.EDITING, null, null);
     }
 
     @Test
@@ -459,7 +463,7 @@ public class AIChatPanelScriptRequestTest {
             "Hidden prompt",
             "Prompt body",
             null,
-            ChatToolAvailability.EDITING,
+            ToolAvailabilityLevel.EDITING,
             null,
             null,
             true,
@@ -473,7 +477,7 @@ public class AIChatPanelScriptRequestTest {
             "Hidden prompt",
             "Prompt body",
             null,
-            ChatToolAvailability.EDITING,
+            ToolAvailabilityLevel.EDITING,
             null,
             null,
             true,
@@ -493,9 +497,9 @@ public class AIChatPanelScriptRequestTest {
         ChatPromptRunner secondRunner = mock(ChatPromptRunner.class);
         when(chatPromptRunnerFactory.createShown(any(), any(), eq(firstFlow), any(), any())).thenReturn(firstRunner);
         when(chatPromptRunnerFactory.createShown(any(), any(), eq(secondFlow), any(), any())).thenReturn(secondRunner);
-        when(firstRunner.startShownPrompt("Prompt one", null, ChatToolAvailability.EDITING, null, null))
+        when(firstRunner.startShownPrompt("Prompt one", null, ToolAvailabilityLevel.EDITING, null, null))
             .thenReturn(true);
-        when(secondRunner.startShownPrompt("Prompt two", null, ChatToolAvailability.EDITING, null, null))
+        when(secondRunner.startShownPrompt("Prompt two", null, ToolAvailabilityLevel.EDITING, null, null))
             .thenReturn(true);
         setField(harness.panel, "chatPromptRunnerFactory", chatPromptRunnerFactory);
 
@@ -513,10 +517,10 @@ public class AIChatPanelScriptRequestTest {
         InOrder inOrder = inOrder(chatRequestFlowFactory, chatPromptRunnerFactory, firstRunner, secondRunner);
         inOrder.verify(chatRequestFlowFactory).create(any(), any());
         inOrder.verify(chatPromptRunnerFactory).createShown(any(), any(), eq(firstFlow), any(), any());
-        inOrder.verify(firstRunner).startShownPrompt("Prompt one", null, ChatToolAvailability.EDITING, null, null);
+        inOrder.verify(firstRunner).startShownPrompt("Prompt one", null, ToolAvailabilityLevel.EDITING, null, null);
         inOrder.verify(chatRequestFlowFactory).create(any(), any());
         inOrder.verify(chatPromptRunnerFactory).createShown(any(), any(), eq(secondFlow), any(), any());
-        inOrder.verify(secondRunner).startShownPrompt("Prompt two", null, ChatToolAvailability.EDITING, null, null);
+        inOrder.verify(secondRunner).startShownPrompt("Prompt two", null, ToolAvailabilityLevel.EDITING, null, null);
     }
 
     private ChatRequestFlow createVisibleRequestFlow(AIChatPanel panel,
@@ -557,8 +561,8 @@ public class AIChatPanelScriptRequestTest {
         ChatInputControls chatInputControls = mock(ChatInputControls.class);
         ChatDisplaySettings chatDisplaySettings = mock(ChatDisplaySettings.class);
         when(chatDisplaySettings.isToolCallHistoryVisible()).thenReturn(true);
-        ChatToolAvailabilitySettings chatToolAvailabilitySettings = mock(ChatToolAvailabilitySettings.class);
-        when(chatToolAvailabilitySettings.getToolAvailability()).thenReturn(ChatToolAvailability.EDITING);
+        ToolAvailabilityLevelSettings chatToolAvailabilitySettings = mock(ToolAvailabilityLevelSettings.class);
+        when(chatToolAvailabilitySettings.getToolAvailability()).thenReturn(ToolAvailabilityLevel.EDITING);
         ChatRequestFlowFactory chatRequestFlowFactory = new ChatRequestFlowFactory();
         AiRequestConfigurationResolver aiRequestConfigurationResolver = mock(AiRequestConfigurationResolver.class);
         when(aiRequestConfigurationResolver.resolve(any())).thenReturn(null);
@@ -577,7 +581,7 @@ public class AIChatPanelScriptRequestTest {
         setField(panel, "promptToolSelectionResolver", new PromptToolSelectionResolver(chatToolAvailabilitySettings));
         setField(panel, "chatRequestFlowFactory", chatRequestFlowFactory);
         setField(panel, "visibleAiRequestCallbacksFactory", new VisibleAiRequestCallbacksFactory());
-        setField(panel, "chatToolAvailabilityMenu", mock(ChatToolAvailabilityMenu.class));
+        setField(panel, "chatToolAvailabilityMenu", mock(ToolAvailabilityLevelMenu.class));
         setField(panel, "modelSelectionController", mock(ChatModelSelector.class));
         setField(panel, "aiRequestConfigurationResolver", aiRequestConfigurationResolver);
         setField(panel, "configuration", configuration);
@@ -647,14 +651,14 @@ public class AIChatPanelScriptRequestTest {
         private final LiveChatController liveChatController;
         private final LiveChatSessionId sessionId;
         private final ChatOutputView chatOutputView;
-        private final ChatToolAvailabilitySettings chatToolAvailabilitySettings;
+        private final ToolAvailabilityLevelSettings chatToolAvailabilitySettings;
         private final AiRequestConfigurationResolver aiRequestConfigurationResolver;
 
         private PanelHarness(AIChatPanel panel,
                              LiveChatController liveChatController,
                              LiveChatSessionId sessionId,
                              ChatOutputView chatOutputView,
-                             ChatToolAvailabilitySettings chatToolAvailabilitySettings,
+                             ToolAvailabilityLevelSettings chatToolAvailabilitySettings,
                              AiRequestConfigurationResolver aiRequestConfigurationResolver) {
             this.panel = panel;
             this.liveChatController = liveChatController;

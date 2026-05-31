@@ -6,26 +6,28 @@ import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Set;
 
-public enum ChatToolAvailability {
+public enum ToolAvailabilityLevel {
     DISABLED("disabled", Collections.<String>emptySet()),
     READING("reading", readingToolNames()),
-    EDITING("editing", editingToolNames());
+    EDITING("editing", editingToolNames()),
+    SCRIPT_EXECUTION("script_execution", editingToolNames());
 
     private final String preferenceValue;
     private final Set<String> allowedToolNames;
 
-    ChatToolAvailability(String preferenceValue, Set<String> allowedToolNames) {
+    ToolAvailabilityLevel(String preferenceValue, Set<String> allowedToolNames) {
         this.preferenceValue = preferenceValue;
         this.allowedToolNames = allowedToolNames;
     }
 
-    public static ChatToolAvailability fromPreferenceValue(String value) {
+    public static ToolAvailabilityLevel fromPreferenceValue(String value) {
         if (value == null || value.trim().isEmpty()) {
             return EDITING;
         }
         String normalized = value.trim().toLowerCase(Locale.ROOT);
-        for (ChatToolAvailability availability : values()) {
-            if (availability.preferenceValue.equals(normalized)) {
+        for (ToolAvailabilityLevel availability : values()) {
+            if (availability.preferenceValue.equals(normalized)
+                || availability.name().toLowerCase(Locale.ROOT).equals(normalized)) {
                 return availability;
             }
         }
@@ -46,6 +48,14 @@ public enum ChatToolAvailability {
 
     String getPreferenceValue() {
         return preferenceValue;
+    }
+
+    public boolean includesEditing() {
+        return this == EDITING || this == SCRIPT_EXECUTION;
+    }
+
+    public boolean includesScriptExecution() {
+        return this == SCRIPT_EXECUTION;
     }
 
     private static Set<String> readingToolNames() {

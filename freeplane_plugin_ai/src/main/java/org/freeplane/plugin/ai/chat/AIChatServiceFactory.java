@@ -50,7 +50,7 @@ public class AIChatServiceFactory {
                                               ToolCallSummaryHandler toolCallSummaryHandler,
                                               Supplier<Boolean> cancellationSupplier,
                                               Consumer<TokenUsage> tokenUsageConsumer,
-                                              Supplier<ChatToolAvailability> toolAvailabilitySupplier) {
+                                              Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier) {
         return createService(toolSet, Collections.<Object>singletonList(toolSet), chatMemory,
             chatTokenUsageTracker, toolCallSummaryHandler, cancellationSupplier, tokenUsageConsumer,
             toolAvailabilitySupplier, null);
@@ -63,7 +63,7 @@ public class AIChatServiceFactory {
                                               ToolCallSummaryHandler toolCallSummaryHandler,
                                               Supplier<Boolean> cancellationSupplier,
                                               Consumer<TokenUsage> tokenUsageConsumer,
-                                              Supplier<ChatToolAvailability> toolAvailabilitySupplier,
+                                              Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier,
                                               String selectedModelOverride) {
         Objects.requireNonNull(toolSet, "toolSet");
         Collection<?> effectiveToolObjects = toolObjects == null
@@ -86,7 +86,7 @@ public class AIChatServiceFactory {
                                               ToolCallSummaryHandler toolCallSummaryHandler,
                                               Supplier<Boolean> cancellationSupplier,
                                               Consumer<TokenUsage> tokenUsageConsumer,
-                                              Supplier<ChatToolAvailability> toolAvailabilitySupplier,
+                                              Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier,
                                               String selectedModelOverride) {
         return createService(toolSet, Collections.<Object>singletonList(toolSet), chatMemory,
             chatTokenUsageTracker, toolCallSummaryHandler, cancellationSupplier, tokenUsageConsumer,

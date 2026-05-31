@@ -90,7 +90,7 @@ import org.freeplane.plugin.ai.tools.utilities.ToolCaller;
 import org.freeplane.plugin.ai.tools.connectors.ConnectorEditRequest;
 import org.freeplane.plugin.ai.tools.connectors.ConnectorEditResponse;
 import org.freeplane.plugin.ai.tools.connectors.ConnectorEditTool;
-import org.freeplane.plugin.ai.chat.ChatToolAvailability;
+import org.freeplane.plugin.ai.chat.ToolAvailabilityLevel;
 
 import dev.langchain4j.agent.tool.Tool;
 
@@ -208,7 +208,7 @@ public class AIToolSet {
     }
 
     public String systemMessageForChat(@SuppressWarnings("unused") Object input,
-                                       ChatToolAvailability toolAvailability) {
+                                       ToolAvailabilityLevel toolAvailability) {
         return messageBuilder.buildForChat(toolAvailability);
     }
 

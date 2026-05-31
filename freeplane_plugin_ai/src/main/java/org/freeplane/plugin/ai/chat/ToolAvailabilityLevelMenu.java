@@ -12,31 +12,32 @@ import org.freeplane.core.ui.textchanger.TranslatedElement;
 import org.freeplane.core.ui.textchanger.TranslatedElementFactory;
 import org.freeplane.core.util.TextUtils;
 
-class ChatToolAvailabilityMenu {
-    private final Supplier<ChatToolAvailability> effectiveToolAvailabilitySupplier;
-    private final Consumer<ChatToolAvailability> explicitUserSelectionHandler;
-    private final EnumMap<ChatToolAvailability, JRadioButtonMenuItem> toolAvailabilityMenuItems =
-        new EnumMap<ChatToolAvailability, JRadioButtonMenuItem>(ChatToolAvailability.class);
+class ToolAvailabilityLevelMenu {
+    private final Supplier<ToolAvailabilityLevel> effectiveToolAvailabilitySupplier;
+    private final Consumer<ToolAvailabilityLevel> explicitUserSelectionHandler;
+    private final EnumMap<ToolAvailabilityLevel, JRadioButtonMenuItem> toolAvailabilityMenuItems =
+        new EnumMap<ToolAvailabilityLevel, JRadioButtonMenuItem>(ToolAvailabilityLevel.class);
 
-    ChatToolAvailabilityMenu(Supplier<ChatToolAvailability> effectiveToolAvailabilitySupplier,
-                             Consumer<ChatToolAvailability> explicitUserSelectionHandler) {
+    ToolAvailabilityLevelMenu(Supplier<ToolAvailabilityLevel> effectiveToolAvailabilitySupplier,
+                             Consumer<ToolAvailabilityLevel> explicitUserSelectionHandler) {
         this.effectiveToolAvailabilitySupplier = effectiveToolAvailabilitySupplier;
         this.explicitUserSelectionHandler = explicitUserSelectionHandler;
     }
 
     void addTo(JPopupMenu menuPopup) {
         JMenu toolAvailabilityMenu = TranslatedElementFactory.createMenu(
-            "OptionPanel." + ChatToolAvailabilitySettings.CHAT_TOOL_AVAILABILITY_PROPERTY);
+            "OptionPanel." + ToolAvailabilityLevelSettings.TOOL_AVAILABILITY_PROPERTY);
         ButtonGroup buttonGroup = new ButtonGroup();
-        addMenuItem(toolAvailabilityMenu, buttonGroup, ChatToolAvailability.EDITING);
-        addMenuItem(toolAvailabilityMenu, buttonGroup, ChatToolAvailability.READING);
-        addMenuItem(toolAvailabilityMenu, buttonGroup, ChatToolAvailability.DISABLED);
+        addMenuItem(toolAvailabilityMenu, buttonGroup, ToolAvailabilityLevel.SCRIPT_EXECUTION);
+        addMenuItem(toolAvailabilityMenu, buttonGroup, ToolAvailabilityLevel.EDITING);
+        addMenuItem(toolAvailabilityMenu, buttonGroup, ToolAvailabilityLevel.READING);
+        addMenuItem(toolAvailabilityMenu, buttonGroup, ToolAvailabilityLevel.DISABLED);
         menuPopup.add(toolAvailabilityMenu);
     }
 
     void refreshSelection() {
-        ChatToolAvailability effectiveToolAvailability = effectiveToolAvailabilitySupplier.get();
-        for (ChatToolAvailability toolAvailability : ChatToolAvailability.values()) {
+        ToolAvailabilityLevel effectiveToolAvailability = effectiveToolAvailabilitySupplier.get();
+        for (ToolAvailabilityLevel toolAvailability : ToolAvailabilityLevel.values()) {
             JRadioButtonMenuItem menuItem = toolAvailabilityMenuItems.get(toolAvailability);
             if (menuItem != null) {
                 menuItem.setSelected(toolAvailability == effectiveToolAvailability);
@@ -44,9 +45,8 @@ class ChatToolAvailabilityMenu {
         }
     }
 
-    private void addMenuItem(JMenu menu, ButtonGroup buttonGroup, ChatToolAvailability toolAvailability) {
-        String labelKey = "OptionPanel." + ChatToolAvailabilitySettings.CHAT_TOOL_AVAILABILITY_PROPERTY + "."
-            + toolAvailability.getPreferenceValue();
+    private void addMenuItem(JMenu menu, ButtonGroup buttonGroup, ToolAvailabilityLevel toolAvailability) {
+        String labelKey = "OptionPanel.ToolAvailabilityLevel." + toolAvailability.name();
         JRadioButtonMenuItem menuItem = new JRadioButtonMenuItem();
         buttonGroup.add(menuItem);
         LabelAndMnemonicSetter.setLabelAndMnemonic(menuItem, TextUtils.getRawText(labelKey));

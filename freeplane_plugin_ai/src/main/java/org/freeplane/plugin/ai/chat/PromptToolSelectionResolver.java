@@ -1,24 +1,24 @@
 package org.freeplane.plugin.ai.chat;
 
 class PromptToolSelectionResolver {
-    private final ChatToolAvailabilitySettings chatToolAvailabilitySettings;
+    private final ToolAvailabilityLevelSettings chatToolAvailabilitySettings;
 
-    PromptToolSelectionResolver(ChatToolAvailabilitySettings chatToolAvailabilitySettings) {
+    PromptToolSelectionResolver(ToolAvailabilityLevelSettings chatToolAvailabilitySettings) {
         this.chatToolAvailabilitySettings = chatToolAvailabilitySettings;
     }
 
-    ChatToolAvailability resolveEffectiveToolAvailability(String toolAvailabilitySelectionValue) {
+    ToolAvailabilityLevel resolveEffectiveToolAvailability(String toolAvailabilitySelectionValue) {
         String normalizedSelectionValue = normalizeSelectionValue(toolAvailabilitySelectionValue);
         return normalizedSelectionValue == null
             ? chatToolAvailabilitySettings.getToolAvailability()
-            : ChatToolAvailability.fromPreferenceValue(normalizedSelectionValue);
+            : ToolAvailabilityLevel.fromPreferenceValue(normalizedSelectionValue);
     }
 
-    ChatToolAvailability resolveShownChatOverride(String toolAvailabilitySelectionValue) {
+    ToolAvailabilityLevel resolveShownChatOverride(String toolAvailabilitySelectionValue) {
         String normalizedSelectionValue = normalizeSelectionValue(toolAvailabilitySelectionValue);
         return normalizedSelectionValue == null
             ? null
-            : ChatToolAvailability.fromPreferenceValue(normalizedSelectionValue);
+            : ToolAvailabilityLevel.fromPreferenceValue(normalizedSelectionValue);
     }
 
     private String normalizeSelectionValue(String selectionValue) {

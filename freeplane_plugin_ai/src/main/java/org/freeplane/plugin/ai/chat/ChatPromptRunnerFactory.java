@@ -1,6 +1,7 @@
 package org.freeplane.plugin.ai.chat;
 
 import dev.langchain4j.memory.ChatMemory;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import javax.swing.Icon;
 import org.freeplane.features.ai.code.AiCodeHostService;
@@ -17,6 +18,8 @@ class ChatPromptRunnerFactory {
     private final AiPromptRequestComposer aiPromptRequestComposer;
     private final ChatPromptRunner.VisiblePromptChatLauncher visiblePromptChatLauncher;
     private final Supplier<AiCodeHostService> codeHostServiceSupplier;
+    private final Supplier<ToolAvailabilityLevel> sharedToolAvailabilitySupplier;
+    private final Function<LiveChatSessionId, ToolAvailabilityLevel> sessionToolAvailabilityOverrideProvider;
     private final HiddenPromptRequestRunnerFactory hiddenPromptRequestRunnerFactory;
     private final AiPromptProgressDialogFactory aiPromptProgressDialogFactory;
 
@@ -27,6 +30,8 @@ class ChatPromptRunnerFactory {
                             AiPromptRequestComposer aiPromptRequestComposer,
                             ChatPromptRunner.VisiblePromptChatLauncher visiblePromptChatLauncher,
                             Supplier<AiCodeHostService> codeHostServiceSupplier,
+                            Supplier<ToolAvailabilityLevel> sharedToolAvailabilitySupplier,
+                            Function<LiveChatSessionId, ToolAvailabilityLevel> sessionToolAvailabilityOverrideProvider,
                             HiddenPromptRequestRunnerFactory hiddenPromptRequestRunnerFactory,
                             AiPromptProgressDialogFactory aiPromptProgressDialogFactory) {
         this.aiTabIcon = aiTabIcon;
@@ -36,6 +41,8 @@ class ChatPromptRunnerFactory {
         this.aiPromptRequestComposer = aiPromptRequestComposer;
         this.visiblePromptChatLauncher = visiblePromptChatLauncher;
         this.codeHostServiceSupplier = codeHostServiceSupplier;
+        this.sharedToolAvailabilitySupplier = sharedToolAvailabilitySupplier;
+        this.sessionToolAvailabilityOverrideProvider = sessionToolAvailabilityOverrideProvider;
         this.hiddenPromptRequestRunnerFactory = hiddenPromptRequestRunnerFactory;
         this.aiPromptProgressDialogFactory = aiPromptProgressDialogFactory;
     }
@@ -53,6 +60,10 @@ class ChatPromptRunnerFactory {
             aiPromptRequestComposer,
             visiblePromptChatLauncher,
             codeHostServiceSupplier == null ? null : codeHostServiceSupplier.get(),
+            sharedToolAvailabilitySupplier,
+            sessionId == null || sessionToolAvailabilityOverrideProvider == null
+                ? null
+                : () -> sessionToolAvailabilityOverrideProvider.apply(sessionId),
             hiddenPromptRequestRunnerFactory,
             aiPromptProgressDialogFactory,
             promptChatMemory,
@@ -71,6 +82,8 @@ class ChatPromptRunnerFactory {
             aiPromptRequestComposer,
             visiblePromptChatLauncher,
             codeHostServiceSupplier == null ? null : codeHostServiceSupplier.get(),
+            sharedToolAvailabilitySupplier,
+            null,
             hiddenPromptRequestRunnerFactory,
             aiPromptProgressDialogFactory,
             null,

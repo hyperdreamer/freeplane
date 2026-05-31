@@ -1252,7 +1252,7 @@ AiChatRepairRequest --> ReadCodeResponse
 
 ## Subtask: Shared code authorization, content typing, and
 script-execution policies
-- **Status:** backlog
+- **Status:** review
 - **Scope:** Define the shared/global availability semantics on top of
   the generic code-host contract from the preparatory migration,
   extend that contract from attached-editor-only behavior to shared
@@ -1305,6 +1305,14 @@ script-execution policies
     direct call error.
   - Extend the generic contract from attached-editor-only behavior to
     both the AI host and attached editor.
+  - Add `org.freeplane.plugin.ai.code.RoutingAiCodeHostService` as the
+    AI-plugin-owned `AiCodeHostService` implementation that routes by
+    `ScriptHost` and delegates `ATTACHED_EDITOR` to
+    `SingleEditorAttachmentService` and `AI` to the script-plugin-owned
+    AI host service.
+  - Add `org.freeplane.plugin.script.ai.AiOwnedScriptHostService` as the
+    script-plugin-owned `AiCodeHostService` implementation for the
+    `AI` host.
   - Keep AI-started execution and user-started execution as separate
     policy concerns.
   - Introduce `AiScriptExecutionPolicy`,
@@ -1351,6 +1359,28 @@ script-execution policies
       user-started AI-owned runs may allow them when configured; and
     - verify serialization success/failure boundaries.
   - Manual tests: N/A.
+- **Implementation notes:**
+  - **Interpretations:**
+    - `ToolAvailabilityLevel` now replaces the chat-only availability
+      enum and uses canonical property `ai_tool_availability` with
+      legacy fallback from `ai_chat_tool_availability`.
+    - `AiCodeOperationAuthorizer` keeps attached-editor
+      `readCode`/`writeCode`/`compileCode` available for internal AI
+      when a session override exists, while `runScript` still requires
+      shared/global `SCRIPT_EXECUTION` and script content.
+    - `RoutingAiCodeHostService` routes by resolved host from `codeId`
+      or explicit `host`, returns AI-host `NO_CODE` state when the
+      script-plugin service is absent, and fails write/compile/run in
+      that case.
+  - **Tradeoffs:**
+    - `AiOwnedScriptHostService` now tolerates missing current
+      `Controller`/`ResourceController` during construction so OSGi
+      registration and script-side helper lookup do not require full UI
+      bootstrap; when preferences are unavailable, AI-specific external
+      permissions stay restricted by default.
+    - Run-listener synchronization in `RoutingAiCodeHostService` is
+      deduplicated at registration time so the same listener is not
+      added twice to the AI host.
 
 
 ## Subtask: Internal AI-owned script dialog flow

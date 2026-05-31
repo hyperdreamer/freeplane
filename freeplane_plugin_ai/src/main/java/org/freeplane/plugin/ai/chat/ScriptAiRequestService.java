@@ -183,6 +183,8 @@ public class ScriptAiRequestService implements AiRequestService {
                 return AiToolAvailability.DISABLED;
             case "reading":
                 return AiToolAvailability.READING;
+            case "script_execution":
+                return AiToolAvailability.SCRIPT_EXECUTION;
             case "editing":
             default:
                 return AiToolAvailability.EDITING;

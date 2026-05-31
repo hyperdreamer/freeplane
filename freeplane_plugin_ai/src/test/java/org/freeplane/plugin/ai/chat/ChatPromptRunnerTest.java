@@ -20,6 +20,7 @@ import java.util.function.Supplier;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.features.text.TextController;
 import org.freeplane.features.ai.code.AiCodeHostService;
+import org.freeplane.plugin.ai.code.AiCodeOperationAuthorizer;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.freeplane.plugin.ai.prompt.AiPromptProgressDialogFactory;
 import org.freeplane.plugin.ai.prompt.AiPromptRequestComposer;
@@ -44,7 +45,7 @@ public class ChatPromptRunnerTest {
         ChatMemory promptChatMemory = mock(ChatMemory.class);
         AIChatService promptService = mock(AIChatService.class);
         AtomicReference<String> seenPreparedMessage = new AtomicReference<String>();
-        AtomicReference<ChatToolAvailability> seenServiceToolAvailability = new AtomicReference<ChatToolAvailability>();
+        AtomicReference<ToolAvailabilityLevel> seenServiceToolAvailability = new AtomicReference<ToolAvailabilityLevel>();
         ChatPromptRunner uut = newShownPromptRunner(
             availableMaps,
             aiPromptRequestComposer,
@@ -61,11 +62,11 @@ public class ChatPromptRunnerTest {
                 nullable(ToolCallSummaryHandler.class),
                 org.mockito.ArgumentMatchers.<Supplier<Boolean>>any(),
                 org.mockito.ArgumentMatchers.nullable(Consumer.class),
-                org.mockito.ArgumentMatchers.<Supplier<ChatToolAvailability>>any(),
+                org.mockito.ArgumentMatchers.<Supplier<ToolAvailabilityLevel>>any(),
                 nullable(String.class)))
                 .thenAnswer(invocation -> {
                     @SuppressWarnings("unchecked")
-                    Supplier<ChatToolAvailability> toolAvailabilitySupplier = invocation.getArgument(7);
+                    Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier = invocation.getArgument(7);
                     seenServiceToolAvailability.set(toolAvailabilitySupplier.get());
                     return promptService;
                 });
@@ -73,7 +74,7 @@ public class ChatPromptRunnerTest {
             boolean started = uut.startShownPrompt(
                 "Rewrite the selected nodes.",
                 null,
-                ChatToolAvailability.DISABLED,
+                ToolAvailabilityLevel.DISABLED,
                 null,
                 null);
 
@@ -81,7 +82,7 @@ public class ChatPromptRunnerTest {
         }
 
         assertThat(seenPreparedMessage.get()).isEqualTo("Rewrite the selected nodes.");
-        assertThat(seenServiceToolAvailability.get()).isEqualTo(ChatToolAvailability.DISABLED);
+        assertThat(seenServiceToolAvailability.get()).isEqualTo(ToolAvailabilityLevel.DISABLED);
     }
 
     @Test
@@ -108,14 +109,14 @@ public class ChatPromptRunnerTest {
                 nullable(ToolCallSummaryHandler.class),
                 org.mockito.ArgumentMatchers.<Supplier<Boolean>>any(),
                 org.mockito.ArgumentMatchers.nullable(Consumer.class),
-                org.mockito.ArgumentMatchers.<Supplier<ChatToolAvailability>>any(),
+                org.mockito.ArgumentMatchers.<Supplier<ToolAvailabilityLevel>>any(),
                 nullable(String.class)))
                 .thenReturn(promptService);
 
             boolean started = uut.startShownPrompt(
                 "Rewrite the selected nodes.",
                 null,
-                ChatToolAvailability.EDITING,
+                ToolAvailabilityLevel.EDITING,
                 null,
                 null);
 
@@ -147,7 +148,7 @@ public class ChatPromptRunnerTest {
                 nullable(ToolCallSummaryHandler.class),
                 org.mockito.ArgumentMatchers.<Supplier<Boolean>>any(),
                 org.mockito.ArgumentMatchers.nullable(Consumer.class),
-                org.mockito.ArgumentMatchers.<Supplier<ChatToolAvailability>>any(),
+                org.mockito.ArgumentMatchers.<Supplier<ToolAvailabilityLevel>>any(),
                 nullable(String.class)))
                 .thenReturn(mock(AIChatService.class));
 
@@ -155,7 +156,7 @@ public class ChatPromptRunnerTest {
                 "Rewrite",
                 "Rewrite the selected nodes.",
                 null,
-                ChatToolAvailability.DISABLED,
+                ToolAvailabilityLevel.DISABLED,
                 null,
                 owner,
                 false,
@@ -198,7 +199,7 @@ public class ChatPromptRunnerTest {
                 nullable(ToolCallSummaryHandler.class),
                 org.mockito.ArgumentMatchers.<Supplier<Boolean>>any(),
                 org.mockito.ArgumentMatchers.nullable(Consumer.class),
-                org.mockito.ArgumentMatchers.<Supplier<ChatToolAvailability>>any(),
+                org.mockito.ArgumentMatchers.<Supplier<ToolAvailabilityLevel>>any(),
                 nullable(String.class)))
                 .thenReturn(mock(AIChatService.class));
 
@@ -206,7 +207,7 @@ public class ChatPromptRunnerTest {
                 "Rewrite",
                 "Rewrite the selected nodes.",
                 null,
-                ChatToolAvailability.DISABLED,
+                ToolAvailabilityLevel.DISABLED,
                 null,
                 owner,
                 true,
@@ -239,6 +240,8 @@ public class ChatPromptRunnerTest {
             (sessionId, service, preparedMessage, requestFlow, requestTokenUsageTracker, requestCallbacks) ->
                 seenPreparedMessage.set(preparedMessage),
             null,
+            () -> ToolAvailabilityLevel.EDITING,
+            () -> null,
             new HiddenPromptRequestRunnerFactory(),
             new AiPromptProgressDialogFactory(),
             promptChatMemory,
@@ -261,6 +264,8 @@ public class ChatPromptRunnerTest {
             (sessionId, service, preparedMessage, requestFlow, requestTokenUsageTracker, requestCallbacks) -> {
             },
             null,
+            () -> ToolAvailabilityLevel.EDITING,
+            null,
             hiddenRunnerFactory,
             dialogFactory,
             null,
@@ -277,6 +282,7 @@ public class ChatPromptRunnerTest {
             when(mock.availableMaps(any())).thenReturn(mock);
             when(mock.mapAccessListener(nullable(AvailableMaps.MapAccessListener.class))).thenReturn(mock);
             when(mock.codeHostService(nullable(AiCodeHostService.class))).thenReturn(mock);
+            when(mock.aiCodeOperationAuthorizer(nullable(AiCodeOperationAuthorizer.class))).thenReturn(mock);
             when(mock.build()).thenReturn(toolSet);
             when(mock.buildToolObjects()).thenReturn(Collections.<Object>singletonList(toolSet));
         });

@@ -9,31 +9,31 @@ import org.junit.Test;
 public class PromptToolSelectionResolverTest {
     @Test
     public void resolveEffectiveToolAvailability_usesCurrentSetting_whenSelectionIsBlank() {
-        ChatToolAvailabilitySettings settings = mock(ChatToolAvailabilitySettings.class);
-        when(settings.getToolAvailability()).thenReturn(ChatToolAvailability.READING);
+        ToolAvailabilityLevelSettings settings = mock(ToolAvailabilityLevelSettings.class);
+        when(settings.getToolAvailability()).thenReturn(ToolAvailabilityLevel.READING);
         PromptToolSelectionResolver uut = new PromptToolSelectionResolver(settings);
 
-        assertThat(uut.resolveEffectiveToolAvailability("  ")).isEqualTo(ChatToolAvailability.READING);
+        assertThat(uut.resolveEffectiveToolAvailability("  ")).isEqualTo(ToolAvailabilityLevel.READING);
         assertThat(uut.resolveShownChatOverride("  ")).isNull();
     }
 
     @Test
     public void resolveEffectiveToolAvailability_usesPromptSelection_whenSpecified() {
-        ChatToolAvailabilitySettings settings = mock(ChatToolAvailabilitySettings.class);
-        when(settings.getToolAvailability()).thenReturn(ChatToolAvailability.READING);
+        ToolAvailabilityLevelSettings settings = mock(ToolAvailabilityLevelSettings.class);
+        when(settings.getToolAvailability()).thenReturn(ToolAvailabilityLevel.READING);
         PromptToolSelectionResolver uut = new PromptToolSelectionResolver(settings);
 
-        assertThat(uut.resolveEffectiveToolAvailability("disabled")).isEqualTo(ChatToolAvailability.DISABLED);
-        assertThat(uut.resolveShownChatOverride("disabled")).isEqualTo(ChatToolAvailability.DISABLED);
+        assertThat(uut.resolveEffectiveToolAvailability("disabled")).isEqualTo(ToolAvailabilityLevel.DISABLED);
+        assertThat(uut.resolveShownChatOverride("disabled")).isEqualTo(ToolAvailabilityLevel.DISABLED);
     }
 
     @Test
     public void resolveEffectiveToolAvailability_defaultsInvalidSelectionToEditing() {
-        ChatToolAvailabilitySettings settings = mock(ChatToolAvailabilitySettings.class);
-        when(settings.getToolAvailability()).thenReturn(ChatToolAvailability.READING);
+        ToolAvailabilityLevelSettings settings = mock(ToolAvailabilityLevelSettings.class);
+        when(settings.getToolAvailability()).thenReturn(ToolAvailabilityLevel.READING);
         PromptToolSelectionResolver uut = new PromptToolSelectionResolver(settings);
 
-        assertThat(uut.resolveEffectiveToolAvailability("unexpected")).isEqualTo(ChatToolAvailability.EDITING);
-        assertThat(uut.resolveShownChatOverride("unexpected")).isEqualTo(ChatToolAvailability.EDITING);
+        assertThat(uut.resolveEffectiveToolAvailability("unexpected")).isEqualTo(ToolAvailabilityLevel.EDITING);
+        assertThat(uut.resolveShownChatOverride("unexpected")).isEqualTo(ToolAvailabilityLevel.EDITING);
     }
 }

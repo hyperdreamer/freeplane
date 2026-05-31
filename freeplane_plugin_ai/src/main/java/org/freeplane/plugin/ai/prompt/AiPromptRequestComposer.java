@@ -9,7 +9,7 @@ import org.freeplane.features.map.MapModel;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.text.TextController;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
-import org.freeplane.plugin.ai.chat.ChatToolAvailability;
+import org.freeplane.plugin.ai.chat.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.tools.selection.SelectionIdentifiersBuilder;
 import org.freeplane.plugin.ai.tools.selection.SelectionIdentifiersResponse;
 
@@ -29,15 +29,15 @@ public class AiPromptRequestComposer {
     }
 
     public String compose(AiPrompt prompt) {
-        return compose(prompt == null ? null : prompt.getPrompt(), ChatToolAvailability.EDITING);
+        return compose(prompt == null ? null : prompt.getPrompt(), ToolAvailabilityLevel.EDITING);
     }
 
-    public String compose(AiPrompt prompt, ChatToolAvailability toolAvailability) {
+    public String compose(AiPrompt prompt, ToolAvailabilityLevel toolAvailability) {
         return compose(prompt == null ? null : prompt.getPrompt(), toolAvailability, null);
     }
 
     public String compose(String promptText,
-                          ChatToolAvailability toolAvailability,
+                          ToolAvailabilityLevel toolAvailability,
                           SelectionIdentifiersResponse selectionIdentifiersOverride) {
         SelectionIdentifiersResponse response = selectionIdentifiersOverride != null
             ? selectionIdentifiersOverride
@@ -60,7 +60,7 @@ public class AiPromptRequestComposer {
         }
     }
 
-    String compose(String promptText, ChatToolAvailability toolAvailability) {
+    String compose(String promptText, ToolAvailabilityLevel toolAvailability) {
         return compose(promptText, toolAvailability, null);
     }
 

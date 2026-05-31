@@ -5,10 +5,11 @@
         <boolean name="ai_edits_state_icon_visible"/>
         <boolean name="ai_edits_persistence_enabled"/>
         <boolean name="ai_chat_shows_tool_calls"/>
-        <radiobuttons name="ai_chat_tool_availability">
-            <choice value="editing" text="OptionPanel.ai_chat_tool_availability.editing"/>
-            <choice value="reading" text="OptionPanel.ai_chat_tool_availability.reading"/>
-            <choice value="disabled" text="OptionPanel.ai_chat_tool_availability.disabled"/>
+        <radiobuttons name="ai_tool_availability">
+            <choice value="SCRIPT_EXECUTION" text="OptionPanel.ToolAvailabilityLevel.SCRIPT_EXECUTION"/>
+            <choice value="EDITING" text="OptionPanel.ToolAvailabilityLevel.EDITING"/>
+            <choice value="READING" text="OptionPanel.ToolAvailabilityLevel.READING"/>
+            <choice value="DISABLED" text="OptionPanel.ToolAvailabilityLevel.DISABLED"/>
         </radiobuttons>
         <radiobuttons name="ai_attached_editor_chat_mode">
             <choice value="new_chat" text="OptionPanel.ai_attached_editor_chat_mode.new_chat"/>

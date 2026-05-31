@@ -40,6 +40,8 @@ public class RequestRuntimeFactoryTest {
             (sessionId, service, preparedMessage, requestFlow, requestTokenUsageTracker, requestCallbacks) -> {
             },
             () -> null,
+            () -> ToolAvailabilityLevel.EDITING,
+            sessionId -> null,
             hiddenRunnerFactory,
             new AiPromptProgressDialogFactory());
 

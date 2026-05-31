@@ -108,12 +108,12 @@ public class LiveChatController {
     public LiveChatSessionId startNewPromptChat(ChatMemory chatMemory, String displayName,
                                                 String selectedModelOverride) {
         return startNewPromptChat(chatMemory, displayName, selectedModelOverride,
-            ChatToolAvailability.EDITING);
+            ToolAvailabilityLevel.EDITING);
     }
 
     public LiveChatSessionId startNewPromptChat(ChatMemory chatMemory, String displayName,
                                                 String selectedModelOverride,
-                                                ChatToolAvailability toolAvailabilityOverride) {
+                                                ToolAvailabilityLevel toolAvailabilityOverride) {
         if (chatMemory == null) {
             return null;
         }
@@ -150,11 +150,11 @@ public class LiveChatController {
         return session == null ? null : session.getChatMemory();
     }
 
-    public ChatToolAvailability currentSessionToolAvailabilityOverride() {
+    public ToolAvailabilityLevel currentSessionToolAvailabilityOverride() {
         return sessionToolAvailabilityOverride(liveChatSessionManager.getCurrentSessionId());
     }
 
-    public ChatToolAvailability sessionToolAvailabilityOverride(LiveChatSessionId sessionId) {
+    public ToolAvailabilityLevel sessionToolAvailabilityOverride(LiveChatSessionId sessionId) {
         LiveChatSession session = liveChatSessionManager.findSession(sessionId);
         return session == null ? null : session.getToolAvailabilityOverride();
     }
@@ -188,12 +188,12 @@ public class LiveChatController {
         setSessionToolAvailabilityOverride(liveChatSessionManager.getCurrentSessionId(), null);
     }
 
-    public void setCurrentSessionToolAvailabilityOverride(ChatToolAvailability toolAvailabilityOverride) {
+    public void setCurrentSessionToolAvailabilityOverride(ToolAvailabilityLevel toolAvailabilityOverride) {
         setSessionToolAvailabilityOverride(liveChatSessionManager.getCurrentSessionId(), toolAvailabilityOverride);
     }
 
     public void setSessionToolAvailabilityOverride(LiveChatSessionId sessionId,
-                                                   ChatToolAvailability toolAvailabilityOverride) {
+                                                   ToolAvailabilityLevel toolAvailabilityOverride) {
         LiveChatSession session = liveChatSessionManager.findSession(sessionId);
         if (session == null) {
             return;
@@ -517,7 +517,7 @@ public class LiveChatController {
         boolean assistantProfileEnabled = hasSessionMetadata
             ? record.getAssistantProfileEnabled().booleanValue()
             : true;
-        ChatToolAvailability toolAvailabilityOverride = restoreToolAvailabilityOverride(
+        ToolAvailabilityLevel toolAvailabilityOverride = restoreToolAvailabilityOverride(
             record,
             hasSessionMetadata,
             assistantProfileEnabled);
@@ -580,7 +580,7 @@ public class LiveChatController {
         session.setTokenUsageState(tokenUsageStateSupplier.get());
     }
 
-    private ChatToolAvailability restoreToolAvailabilityOverride(ChatTranscriptRecord record,
+    private ToolAvailabilityLevel restoreToolAvailabilityOverride(ChatTranscriptRecord record,
                                                                  boolean hasSessionMetadata,
                                                                  boolean assistantProfileEnabled) {
         if (!hasSessionMetadata) {
@@ -589,17 +589,17 @@ public class LiveChatController {
         if (record.hasToolAvailabilityOverrideMetadata()) {
             return parseToolAvailabilityOverride(record.getToolAvailabilityOverride());
         }
-        return assistantProfileEnabled ? null : ChatToolAvailability.EDITING;
+        return assistantProfileEnabled ? null : ToolAvailabilityLevel.EDITING;
     }
 
-    private ChatToolAvailability parseToolAvailabilityOverride(String preferenceValue) {
+    private ToolAvailabilityLevel parseToolAvailabilityOverride(String preferenceValue) {
         if (preferenceValue == null || preferenceValue.trim().isEmpty()) {
             return null;
         }
-        return ChatToolAvailability.fromPreferenceValue(preferenceValue);
+        return ToolAvailabilityLevel.fromPreferenceValue(preferenceValue);
     }
 
-    private String toToolAvailabilityPreferenceValue(ChatToolAvailability toolAvailability) {
+    private String toToolAvailabilityPreferenceValue(ToolAvailabilityLevel toolAvailability) {
         return toolAvailability == null ? null : toolAvailability.getPreferenceValue();
     }
 

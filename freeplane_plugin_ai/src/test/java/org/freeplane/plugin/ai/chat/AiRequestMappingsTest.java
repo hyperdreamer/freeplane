@@ -22,12 +22,12 @@ public class AiRequestMappingsTest {
 
     @Test
     public void mapsToolAvailabilityValuesToInternalEnum() {
-        assertThat(AiRequestMappings.toChatToolAvailability(AiToolAvailability.CURRENT)).isNull();
-        assertThat(AiRequestMappings.toChatToolAvailability(AiToolAvailability.DISABLED))
-            .isEqualTo(ChatToolAvailability.DISABLED);
-        assertThat(AiRequestMappings.toChatToolAvailability(AiToolAvailability.READING))
-            .isEqualTo(ChatToolAvailability.READING);
-        assertThat(AiRequestMappings.toChatToolAvailability(AiToolAvailability.EDITING))
-            .isEqualTo(ChatToolAvailability.EDITING);
+        assertThat(AiRequestMappings.toToolAvailabilityLevel(AiToolAvailability.CURRENT)).isNull();
+        assertThat(AiRequestMappings.toToolAvailabilityLevel(AiToolAvailability.DISABLED))
+            .isEqualTo(ToolAvailabilityLevel.DISABLED);
+        assertThat(AiRequestMappings.toToolAvailabilityLevel(AiToolAvailability.READING))
+            .isEqualTo(ToolAvailabilityLevel.READING);
+        assertThat(AiRequestMappings.toToolAvailabilityLevel(AiToolAvailability.EDITING))
+            .isEqualTo(ToolAvailabilityLevel.EDITING);
     }
 }

@@ -8,12 +8,16 @@ import static org.mockito.Mockito.when;
 import java.util.Collections;
 import org.freeplane.features.ai.code.AiCodeEditor;
 import org.freeplane.features.ai.code.AiCodeHostService;
+import org.freeplane.features.ai.code.AiCodeRunListener;
 import org.freeplane.features.ai.code.CodeLifecycleStatus;
 import org.freeplane.features.ai.code.CompileCodeRequest;
 import org.freeplane.features.ai.code.CompileCodeResponse;
 import org.freeplane.features.ai.code.ReadCodeRequest;
 import org.freeplane.features.ai.code.ReadCodeResponse;
+import org.freeplane.features.ai.code.RunScriptRequest;
+import org.freeplane.features.ai.code.RunScriptResponse;
 import org.freeplane.features.ai.code.ScriptHost;
+import org.freeplane.features.ai.code.ScriptRunInitiator;
 import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeResponse;
 import org.freeplane.plugin.ai.chat.AIChatPanel;
@@ -25,7 +29,7 @@ public class AiCodeToolSetTest {
 
     @Test
     public void readCodeReturnsNoCodeStateWhenNoEditorIsAttached() {
-        AiCodeToolSet uut = new AiCodeToolSet(newDetachedCodeHostService(), null, ToolCaller.CHAT);
+        AiCodeToolSet uut = new AiCodeToolSet(newDetachedCodeHostService(), null, null, ToolCaller.CHAT);
 
         ReadCodeResponse response = uut.readCode(new ReadCodeRequest(null, ScriptHost.ATTACHED_EDITOR, null));
 
@@ -47,7 +51,7 @@ public class AiCodeToolSetTest {
             "Broken",
             1));
         service.compileCode(new CompileCodeRequest(null, ScriptHost.ATTACHED_EDITOR, null));
-        AiCodeToolSet uut = new AiCodeToolSet(service, null, ToolCaller.CHAT);
+        AiCodeToolSet uut = new AiCodeToolSet(service, null, null, ToolCaller.CHAT);
 
         ReadCodeResponse response = uut.readCode(new ReadCodeRequest(null, ScriptHost.ATTACHED_EDITOR, null));
 
@@ -87,8 +91,21 @@ public class AiCodeToolSetTest {
             public CompileCodeResponse compileCode(CompileCodeRequest request) {
                 throw new IllegalStateException("not needed");
             }
+
+            @Override
+            public RunScriptResponse runScript(RunScriptRequest request) {
+                throw new IllegalStateException("not needed");
+            }
+
+            @Override
+            public void addRunListener(AiCodeRunListener listener) {
+            }
+
+            @Override
+            public void removeRunListener(AiCodeRunListener listener) {
+            }
         };
-        AiCodeToolSet uut = new AiCodeToolSet(codeHostService, null, ToolCaller.CHAT);
+        AiCodeToolSet uut = new AiCodeToolSet(codeHostService, null, null, ToolCaller.CHAT);
 
         String message = uut.systemMessageForChat("request");
 
@@ -106,7 +123,7 @@ public class AiCodeToolSetTest {
         SingleEditorAttachmentService service = newAttachedService();
         FakeCodeEditor editor = new FakeCodeEditor("before");
         service.attachEditor(editor, "text/plain");
-        AiCodeToolSet uut = new AiCodeToolSet(service, null, ToolCaller.CHAT);
+        AiCodeToolSet uut = new AiCodeToolSet(service, null, null, ToolCaller.CHAT);
 
         WriteCodeResponse response = uut.writeCode(new WriteCodeRequest(null, ScriptHost.ATTACHED_EDITOR, "after", null));
 
@@ -128,7 +145,7 @@ public class AiCodeToolSetTest {
             "Broken",
             1));
         service.attachEditor(editor, "text/plain");
-        AiCodeToolSet uut = new AiCodeToolSet(service, null, ToolCaller.CHAT);
+        AiCodeToolSet uut = new AiCodeToolSet(service, null, null, ToolCaller.CHAT);
 
         CompileCodeResponse first = uut.compileCode(new CompileCodeRequest(null, ScriptHost.ATTACHED_EDITOR, null));
         ReadCodeResponse firstState = uut.readCode(new ReadCodeRequest(null, ScriptHost.ATTACHED_EDITOR, null));
@@ -152,7 +169,7 @@ public class AiCodeToolSetTest {
 
     @Test
     public void codeToolsExceptReadFailWhenNoEditorIsAttached() {
-        AiCodeToolSet uut = new AiCodeToolSet(newDetachedCodeHostService(), null, ToolCaller.CHAT);
+        AiCodeToolSet uut = new AiCodeToolSet(newDetachedCodeHostService(), null, null, ToolCaller.CHAT);
 
         assertThatThrownBy(() -> uut.writeCode(new WriteCodeRequest(null, ScriptHost.ATTACHED_EDITOR, "x", null)))
             .isInstanceOf(IllegalStateException.class)
@@ -199,6 +216,19 @@ public class AiCodeToolSetTest {
             public CompileCodeResponse compileCode(CompileCodeRequest request) {
                 throw new IllegalStateException("No editor is attached.");
             }
+
+            @Override
+            public RunScriptResponse runScript(RunScriptRequest request) {
+                throw new IllegalStateException("No editor is attached.");
+            }
+
+            @Override
+            public void addRunListener(AiCodeRunListener listener) {
+            }
+
+            @Override
+            public void removeRunListener(AiCodeRunListener listener) {
+            }
         };
     }
 
@@ -211,6 +241,18 @@ public class AiCodeToolSetTest {
             CodeLifecycleStatus.READY,
             "initial",
             Collections.<String>emptyList(),
+            null,
+            null);
+        private RunScriptResponse runResponse = new RunScriptResponse(
+            null,
+            ScriptHost.ATTACHED_EDITOR,
+            "text/plain",
+            CodeLifecycleStatus.SUCCEEDED,
+            ScriptRunInitiator.AI,
+            "initial",
+            null,
+            null,
+            null,
             null,
             null);
 
@@ -231,6 +273,11 @@ public class AiCodeToolSetTest {
         @Override
         public CompileCodeResponse compileCode(CompileCodeRequest request) {
             return compileResponse;
+        }
+
+        @Override
+        public RunScriptResponse runScript(RunScriptRequest request) {
+            return runResponse;
         }
 
         private void setCompileResponse(CompileCodeResponse compileResponse) {

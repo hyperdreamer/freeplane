@@ -21,17 +21,17 @@ public class AIChatServiceTest {
 
     @Test
     public void chatRebuildsAssistantWhenToolAvailabilityChangesBetweenTurns() {
-        AtomicReference<ChatToolAvailability> toolAvailability =
-            new AtomicReference<ChatToolAvailability>(ChatToolAvailability.READING);
+        AtomicReference<ToolAvailabilityLevel> toolAvailability =
+            new AtomicReference<ToolAvailabilityLevel>(ToolAvailabilityLevel.READING);
         AIChatService.AIAssistant readingAssistant = mock(AIChatService.AIAssistant.class);
         AIChatService.AIAssistant editingAssistant = mock(AIChatService.AIAssistant.class);
         when(readingAssistant.chat("first")).thenReturn("reading-response");
         when(editingAssistant.chat("second")).thenReturn("editing-response");
         when(editingAssistant.chat("third")).thenReturn("editing-response-2");
-        List<ChatToolAvailability> builtAvailabilities = new ArrayList<ChatToolAvailability>();
-        Function<ChatToolAvailability, AIChatService.AIAssistant> assistantFactory = availability -> {
+        List<ToolAvailabilityLevel> builtAvailabilities = new ArrayList<ToolAvailabilityLevel>();
+        Function<ToolAvailabilityLevel, AIChatService.AIAssistant> assistantFactory = availability -> {
             builtAvailabilities.add(availability);
-            return availability == ChatToolAvailability.READING
+            return availability == ToolAvailabilityLevel.READING
                 ? readingAssistant
                 : editingAssistant;
         };
@@ -52,13 +52,13 @@ public class AIChatServiceTest {
             assistantFactory);
 
         assertThat(uut.chat("first")).isEqualTo("reading-response");
-        toolAvailability.set(ChatToolAvailability.EDITING);
+        toolAvailability.set(ToolAvailabilityLevel.EDITING);
         assertThat(uut.chat("second")).isEqualTo("editing-response");
         assertThat(uut.chat("third")).isEqualTo("editing-response-2");
 
         assertThat(builtAvailabilities).containsExactly(
-            ChatToolAvailability.READING,
-            ChatToolAvailability.EDITING);
+            ToolAvailabilityLevel.READING,
+            ToolAvailabilityLevel.EDITING);
         verify(readingAssistant).chat("first");
         verify(editingAssistant).chat("second");
         verify(editingAssistant).chat("third");
@@ -67,7 +67,7 @@ public class AIChatServiceTest {
     @Test
     public void systemMessageProviderUsesResolvedToolAvailability() {
         AIToolSet toolSet = mock(AIToolSet.class);
-        when(toolSet.systemMessageForChat("request", ChatToolAvailability.READING))
+        when(toolSet.systemMessageForChat("request", ToolAvailabilityLevel.READING))
             .thenReturn("reading-guidance");
 
         AIChatService uut = new AIChatService(
@@ -81,19 +81,23 @@ public class AIChatServiceTest {
             null,
             null,
             null,
-            () -> ChatToolAvailability.READING,
+            () -> ToolAvailabilityLevel.READING,
             availability -> mock(AIChatService.AIAssistant.class));
 
-        String message = uut.systemMessageProvider(ChatToolAvailability.READING).apply("request");
+        String message = uut.systemMessageProvider(ToolAvailabilityLevel.READING).apply("request");
 
         assertThat(message).isEqualTo("reading-guidance");
-        verify(toolSet).systemMessageForChat("request", ChatToolAvailability.READING);
+        verify(toolSet).systemMessageForChat("request", ToolAvailabilityLevel.READING);
     }
 
     @Test
-    public void allowedToolNamesAlwaysIncludeCodeTools() {
+    public void allowedToolNamesIncludeAuthorizedCodeTools() {
         AIToolSet toolSet = mock(AIToolSet.class);
         AiCodeToolSet aiCodeToolSet = mock(AiCodeToolSet.class);
+        when(aiCodeToolSet.authorizedToolNames()).thenReturn(new java.util.LinkedHashSet<String>(java.util.Arrays.asList(
+            "readCode",
+            "writeCode",
+            "compileCode")));
         AIChatService uut = new AIChatService(
             mock(ChatModel.class),
             toolSet,
@@ -105,10 +109,10 @@ public class AIChatServiceTest {
             null,
             null,
             null,
-            () -> ChatToolAvailability.DISABLED,
+            () -> ToolAvailabilityLevel.DISABLED,
             availability -> mock(AIChatService.AIAssistant.class));
 
-        assertThat(uut.allowedToolNames(ChatToolAvailability.DISABLED)).containsExactly(
+        assertThat(uut.allowedToolNames(ToolAvailabilityLevel.DISABLED)).containsExactly(
             "readCode",
             "writeCode",
             "compileCode");
@@ -118,7 +122,7 @@ public class AIChatServiceTest {
     public void systemMessageProviderAppendsCodeGuidanceWhenPresent() {
         AIToolSet toolSet = mock(AIToolSet.class);
         AiCodeToolSet aiCodeToolSet = mock(AiCodeToolSet.class);
-        when(toolSet.systemMessageForChat("request", ChatToolAvailability.READING)).thenReturn("base guidance");
+        when(toolSet.systemMessageForChat("request", ToolAvailabilityLevel.READING)).thenReturn("base guidance");
         when(aiCodeToolSet.systemMessageForChat("request")).thenReturn("code guidance");
 
         AIChatService uut = new AIChatService(
@@ -132,10 +136,10 @@ public class AIChatServiceTest {
             null,
             null,
             null,
-            () -> ChatToolAvailability.READING,
+            () -> ToolAvailabilityLevel.READING,
             availability -> mock(AIChatService.AIAssistant.class));
 
-        String message = uut.systemMessageProvider(ChatToolAvailability.READING).apply("request");
+        String message = uut.systemMessageProvider(ToolAvailabilityLevel.READING).apply("request");
 
         assertThat(message).isEqualTo("base guidance\n\ncode guidance");
     }

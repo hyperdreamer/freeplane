@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.Arrays;
 
-import org.freeplane.plugin.ai.chat.ChatToolAvailability;
+import org.freeplane.plugin.ai.chat.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.tools.selection.SelectedNodeSummary;
 import org.freeplane.plugin.ai.tools.selection.SelectionIdentifiersResponse;
 import org.junit.Test;
@@ -28,7 +28,7 @@ public class AiPromptRequestComposerTest {
 
         String composed = uut.compose(
             new AiPrompt("Rewrite", "Rewrite the selected nodes.", false),
-            ChatToolAvailability.EDITING);
+            ToolAvailabilityLevel.EDITING);
 
         assertThat(composed).isEqualTo(
             "Selected map and node identifiers:\n"
@@ -53,7 +53,7 @@ public class AiPromptRequestComposerTest {
 
         String composed = uut.compose(
             new AiPrompt("Rewrite", "Rewrite the selected nodes.", false),
-            ChatToolAvailability.READING);
+            ToolAvailabilityLevel.READING);
 
         assertThat(composed).isEqualTo(
             "Selected map and node identifiers:\n"
@@ -83,7 +83,7 @@ public class AiPromptRequestComposerTest {
 
         String composed = uut.compose(
             "Rewrite the selected nodes.",
-            ChatToolAvailability.READING,
+            ToolAvailabilityLevel.READING,
             override);
 
         assertThat(composed).contains("\"mapIdentifier\":\"map-override\"")
@@ -105,7 +105,7 @@ public class AiPromptRequestComposerTest {
 
         String composed = uut.compose(
             new AiPrompt("Rewrite", "Rewrite the selected nodes.", false),
-            ChatToolAvailability.DISABLED);
+            ToolAvailabilityLevel.DISABLED);
 
         assertThat(composed).isEqualTo("Rewrite the selected nodes.");
     }

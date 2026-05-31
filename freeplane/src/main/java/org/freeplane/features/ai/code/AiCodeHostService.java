@@ -6,4 +6,10 @@ public interface AiCodeHostService {
     WriteCodeResponse writeCode(WriteCodeRequest request);
 
     CompileCodeResponse compileCode(CompileCodeRequest request);
+
+    RunScriptResponse runScript(RunScriptRequest request);
+
+    void addRunListener(AiCodeRunListener listener);
+
+    void removeRunListener(AiCodeRunListener listener);
 }

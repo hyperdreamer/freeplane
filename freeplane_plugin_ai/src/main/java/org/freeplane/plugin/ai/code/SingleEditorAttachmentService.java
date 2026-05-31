@@ -3,10 +3,14 @@ package org.freeplane.plugin.ai.code;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.Formatter;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.features.ai.code.AiChatAttachableEditor;
 import org.freeplane.features.ai.code.AiChatAttachment;
@@ -14,16 +18,19 @@ import org.freeplane.features.ai.code.AiChatAttachmentService;
 import org.freeplane.features.ai.code.AiChatRepairRequest;
 import org.freeplane.features.ai.code.AiCodeEditor;
 import org.freeplane.features.ai.code.AiCodeHostService;
+import org.freeplane.features.ai.code.AiCodeRunListener;
 import org.freeplane.features.ai.code.CodeLifecycleStatus;
 import org.freeplane.features.ai.code.CompileCodeRequest;
 import org.freeplane.features.ai.code.CompileCodeResponse;
 import org.freeplane.features.ai.code.ReadCodeRequest;
 import org.freeplane.features.ai.code.ReadCodeResponse;
+import org.freeplane.features.ai.code.RunScriptRequest;
+import org.freeplane.features.ai.code.RunScriptResponse;
 import org.freeplane.features.ai.code.ScriptHost;
 import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeResponse;
 import org.freeplane.plugin.ai.chat.AIChatPanel;
-import org.freeplane.plugin.ai.chat.ChatToolAvailability;
+import org.freeplane.plugin.ai.chat.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.chat.LiveChatSessionId;
 
 public class SingleEditorAttachmentService implements AiChatAttachmentService, AiCodeHostService {
@@ -32,6 +39,8 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
     private final AIChatPanel aiChatPanel;
     private final AttachedEditorChatModeSettings attachedEditorChatModeSettings;
     private final Map<String, ReadCodeResponse> archivedCodeStates = new HashMap<String, ReadCodeResponse>();
+    private final Set<AiCodeRunListener> runListeners = java.util.Collections.newSetFromMap(
+        new IdentityHashMap<AiCodeRunListener, Boolean>());
     private ActiveAttachment activeAttachment;
     private long nextAttachmentId = 1L;
 
@@ -145,6 +154,36 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
         return response;
     }
 
+    @Override
+    public synchronized RunScriptResponse runScript(RunScriptRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("request is required.");
+        }
+        ActiveAttachment attachment = requireWritableAttachment(request.getCodeId(), request.getHost());
+        assertExpectedFingerprint(request.getExpectedFingerprint(), attachment);
+        if (!(attachment.editor instanceof AiCodeEditor)) {
+            throw new IllegalStateException("Only script content is runnable.");
+        }
+        RunScriptResponse response = normalizedRunResponse(attachment, ((AiCodeEditor) attachment.editor).runScript(request));
+        attachment.latestCodeState = stateFromRunResponse(attachment, response);
+        fireRunFinished(response);
+        return response;
+    }
+
+    @Override
+    public synchronized void addRunListener(AiCodeRunListener listener) {
+        if (listener != null) {
+            runListeners.add(listener);
+        }
+    }
+
+    @Override
+    public synchronized void removeRunListener(AiCodeRunListener listener) {
+        if (listener != null) {
+            runListeners.remove(listener);
+        }
+    }
+
     public synchronized boolean hasAttachedEditor() {
         return activeAttachment != null;
     }
@@ -245,7 +284,7 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
     }
 
     private boolean hasReadableTools(LiveChatSessionId sessionId) {
-        ChatToolAvailability toolAvailability = aiChatPanel.effectiveToolAvailability(sessionId);
+        ToolAvailabilityLevel toolAvailability = aiChatPanel.effectiveToolAvailability(sessionId);
         return toolAvailability != null && toolAvailability.includesTools();
     }
 
@@ -253,7 +292,7 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
         if (sessionId == null || hasReadableTools(sessionId)) {
             return;
         }
-        aiChatPanel.setSessionToolAvailabilityOverride(sessionId, ChatToolAvailability.READING);
+        aiChatPanel.setSessionToolAvailabilityOverride(sessionId, ToolAvailabilityLevel.READING);
     }
 
     private CompileCodeResponse normalizedCompileResponse(ActiveAttachment attachment, CompileCodeResponse response) {
@@ -295,6 +334,41 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
             response.getLineNumber(),
             null,
             null);
+    }
+
+    private RunScriptResponse normalizedRunResponse(ActiveAttachment attachment, RunScriptResponse response) {
+        if (response == null) {
+            throw new IllegalStateException("Attached editor run returned no response.");
+        }
+        return new RunScriptResponse(
+            attachment.codeId,
+            ScriptHost.ATTACHED_EDITOR,
+            attachment.contentType,
+            response.getStatus(),
+            response.getRunInitiator(),
+            response.getFingerprint() == null ? currentFingerprint(attachment) : response.getFingerprint(),
+            response.getCompilerDiagnostics(),
+            response.getErrorMessage(),
+            response.getLineNumber(),
+            response.getStdout(),
+            response.getStructuredResult());
+    }
+
+    private ReadCodeResponse stateFromRunResponse(ActiveAttachment attachment, RunScriptResponse response) {
+        return new ReadCodeResponse(
+            attachment.codeId,
+            ScriptHost.ATTACHED_EDITOR,
+            attachment.contentType,
+            response.getStatus(),
+            response.getRunInitiator(),
+            response.getFingerprint() == null ? currentFingerprint(attachment) : response.getFingerprint(),
+            currentText(attachment),
+            null,
+            response.getCompilerDiagnostics(),
+            response.getErrorMessage(),
+            response.getLineNumber(),
+            response.getStdout(),
+            response.getStructuredResult());
     }
 
     private ReadCodeResponse normalizedRecordedState(ActiveAttachment attachment, ReadCodeResponse state) {
@@ -488,6 +562,16 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
         }
         if (codeState.getStructuredResult() != null) {
             builder.append("structuredResult=").append(codeState.getStructuredResult()).append('\n');
+        }
+    }
+
+    private void fireRunFinished(RunScriptResponse response) {
+        List<AiCodeRunListener> listeners;
+        synchronized (this) {
+            listeners = new ArrayList<AiCodeRunListener>(runListeners);
+        }
+        for (AiCodeRunListener listener : listeners) {
+            listener.runFinished(response);
         }
     }
 

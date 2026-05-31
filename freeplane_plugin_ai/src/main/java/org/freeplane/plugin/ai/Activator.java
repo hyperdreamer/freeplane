@@ -15,6 +15,7 @@ import org.freeplane.core.ui.components.UITools;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.ai.code.AiChatAttachmentService;
+import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.features.icon.IconController;
 import org.freeplane.features.map.MapController;
 import org.freeplane.features.map.NodeIterator;
@@ -26,7 +27,10 @@ import org.freeplane.main.application.CommandLineOptions;
 import org.freeplane.main.osgi.IModeControllerExtensionProvider;
 import org.freeplane.plugin.ai.chat.AIChatPanel;
 import org.freeplane.plugin.ai.chat.ScriptAiRequestService;
+import org.freeplane.plugin.ai.chat.ToolAvailabilityLevelSettings;
+import org.freeplane.plugin.ai.code.AiCodeOperationAuthorizer;
 import org.freeplane.plugin.ai.code.AttachedEditorChatModeSettings;
+import org.freeplane.plugin.ai.code.RoutingAiCodeHostService;
 import org.freeplane.plugin.ai.code.SingleEditorAttachmentService;
 import org.freeplane.plugin.ai.edits.AIEdits;
 import org.freeplane.plugin.ai.edits.AiEditsPersistenceBuilder;
@@ -42,6 +46,7 @@ import org.freeplane.plugin.ai.tools.MessageBuilder;
 import org.freeplane.plugin.ai.tools.utilities.ToolCaller;
 import org.osgi.framework.BundleActivator;
 import org.osgi.framework.BundleContext;
+import org.osgi.framework.ServiceReference;
 import org.osgi.framework.ServiceRegistration;
 
 public class Activator implements BundleActivator {
@@ -76,7 +81,10 @@ public class Activator implements BundleActivator {
                     aiChatPanel = new AIChatPanel();
                     SingleEditorAttachmentService attachmentService =
                         new SingleEditorAttachmentService(aiChatPanel, new AttachedEditorChatModeSettings());
-                    aiChatPanel.setCodeHostService(attachmentService);
+                    RoutingAiCodeHostService codeHostService = new RoutingAiCodeHostService(
+                        attachmentService,
+                        () -> currentAiOwnedScriptHostService(context));
+                    aiChatPanel.setCodeHostService(codeHostService);
                     registerAiChatAttachmentService(context, attachmentService);
                     tabs.addTab("",
                         ResourceController.getResourceController().getIcon(
@@ -85,7 +93,7 @@ public class Activator implements BundleActivator {
                         TextUtils.getText("ai_panel"));
                     promptActionRegistry = AiPromptMenuInstaller.install(modeController, aiChatPanel);
                     registerAiRequestService(context, promptActionRegistry);
-                    startModelContextProtocolServer(aiChatPanel, attachmentService, modeController);
+                    startModelContextProtocolServer(aiChatPanel, codeHostService, modeController);
                     addPreferencesToOptionPanel();
                 }
 
@@ -178,7 +186,7 @@ public class Activator implements BundleActivator {
                 }
 
                 private void startModelContextProtocolServer(AIChatPanel aiChatPanel,
-                                                             SingleEditorAttachmentService attachmentService,
+                                                             RoutingAiCodeHostService codeHostService,
                                                              ModeController modeController) {
                     if (modelContextProtocolServer == null) {
                         Controller controller = modeController.getController();
@@ -189,12 +197,35 @@ public class Activator implements BundleActivator {
                         AIToolSetBuilder toolSetBuilder = new AIToolSetBuilder()
                             .toolCallSummaryHandler(aiChatPanel.toolCallSummaryHandler())
                             .toolCaller(ToolCaller.MCP)
-                            .codeHostService(attachmentService);
+                            .codeHostService(codeHostService)
+                            .aiCodeOperationAuthorizer(new AiCodeOperationAuthorizer(
+                                ToolCaller.MCP,
+                                new ToolAvailabilityLevelSettings()::getToolAvailability,
+                                null,
+                                codeHostService));
                         modelContextProtocolServer = new ModelContextProtocolServer(
                             toolSetBuilder.buildToolObjects(),
                             controller.getViewController());
                         ResourceController resourceController = ResourceController.getResourceController();
                         resourceController.addPropertyChangeListener(modelContextProtocolServer);
+                    }
+                }
+
+                private AiCodeHostService currentAiOwnedScriptHostService(BundleContext context) {
+                    if (context == null) {
+                        return null;
+                    }
+                    try {
+                        java.util.Collection<ServiceReference<AiCodeHostService>> references =
+                            context.getServiceReferences(AiCodeHostService.class, "(scriptHost=AI)");
+                        if (references == null || references.isEmpty()) {
+                            return null;
+                        }
+                        ServiceReference<AiCodeHostService> reference = references.iterator().next();
+                        return context.getService(reference);
+                    } catch (Exception error) {
+                        LogUtils.warn(error);
+                        return null;
                     }
                 }
             },

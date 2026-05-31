@@ -35,10 +35,10 @@ public class LiveChatControllerTest {
                 AssistantProfileChatMemory.withMaxTokens(500),
                 "Prompt: Rewrite",
                 "openrouter|openai/gpt-4.1-mini",
-                ChatToolAvailability.READING);
+                ToolAvailabilityLevel.READING);
 
             assertThat(uut.currentSessionUsesAssistantProfile()).isFalse();
-            assertThat(uut.currentSessionToolAvailabilityOverride()).isEqualTo(ChatToolAvailability.READING);
+            assertThat(uut.currentSessionToolAvailabilityOverride()).isEqualTo(ToolAvailabilityLevel.READING);
             assertThat(uut.currentSessionSelectedModelOverride()).isEqualTo("openrouter|openai/gpt-4.1-mini");
 
             uut.clearCurrentSessionSelectedModelOverride();
@@ -64,7 +64,7 @@ public class LiveChatControllerTest {
                 promptMemory,
                 "Prompt: Rewrite",
                 "openrouter|openai/gpt-4.1-mini",
-                ChatToolAvailability.READING);
+                ToolAvailabilityLevel.READING);
             promptMemory.add(UserMessage.from("hello"));
             promptMemory.add(AiMessage.from("world"));
             uut.persistCurrentSessionIfNeeded();
@@ -104,7 +104,7 @@ public class LiveChatControllerTest {
             uut.startChatFromTranscript(transcriptId);
 
             assertThat(uut.currentSessionUsesAssistantProfile()).isFalse();
-            assertThat(uut.currentSessionToolAvailabilityOverride()).isEqualTo(ChatToolAvailability.DISABLED);
+            assertThat(uut.currentSessionToolAvailabilityOverride()).isEqualTo(ToolAvailabilityLevel.DISABLED);
             assertThat(uut.currentSessionSelectedModelOverride()).isEqualTo("openrouter|openai/gpt-4.1-mini");
         } finally {
             deleteRecursively(tempDir);
@@ -131,7 +131,7 @@ public class LiveChatControllerTest {
             uut.createChatListHandler().startChatFromTranscript(transcriptId);
 
             assertThat(uut.currentSessionUsesAssistantProfile()).isFalse();
-            assertThat(uut.currentSessionToolAvailabilityOverride()).isEqualTo(ChatToolAvailability.DISABLED);
+            assertThat(uut.currentSessionToolAvailabilityOverride()).isEqualTo(ToolAvailabilityLevel.DISABLED);
             assertThat(uut.currentSessionSelectedModelOverride()).isEqualTo("openrouter|openai/gpt-4.1-mini");
         } finally {
             deleteRecursively(tempDir);
@@ -184,7 +184,7 @@ public class LiveChatControllerTest {
             uut.startChatFromTranscript(transcriptId);
 
             assertThat(uut.currentSessionUsesAssistantProfile()).isFalse();
-            assertThat(uut.currentSessionToolAvailabilityOverride()).isEqualTo(ChatToolAvailability.EDITING);
+            assertThat(uut.currentSessionToolAvailabilityOverride()).isEqualTo(ToolAvailabilityLevel.EDITING);
             assertThat(uut.currentSessionSelectedModelOverride()).isEqualTo("openrouter|openai/gpt-4.1-mini");
         } finally {
             deleteRecursively(tempDir);

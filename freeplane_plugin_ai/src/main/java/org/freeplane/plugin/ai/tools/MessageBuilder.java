@@ -2,8 +2,8 @@ package org.freeplane.plugin.ai.tools;
 
 import dev.langchain4j.data.message.UserMessage;
 import org.freeplane.core.resources.ResourceController;
-import org.freeplane.plugin.ai.chat.ChatToolAvailability;
-import org.freeplane.plugin.ai.chat.ChatToolAvailabilitySettings;
+import org.freeplane.plugin.ai.chat.ToolAvailabilityLevel;
+import org.freeplane.plugin.ai.chat.ToolAvailabilityLevelSettings;
 
 public class MessageBuilder {
     public static final String SYSTEM_MESSAGE_PROPERTY = "ai_system_message";
@@ -45,11 +45,11 @@ public class MessageBuilder {
     }
 
     public String buildForChat() {
-        ChatToolAvailability toolAvailability = ChatToolAvailability.EDITING;
+        ToolAvailabilityLevel toolAvailability = ToolAvailabilityLevel.EDITING;
         try {
             ResourceController rc = ResourceController.getResourceController();
             if (rc != null) {
-                toolAvailability = new ChatToolAvailabilitySettings().getToolAvailability();
+                toolAvailability = new ToolAvailabilityLevelSettings().getToolAvailability();
             }
         } catch (Exception ignored) {
             // In test or non-UI environments, ResourceController may not be available
@@ -57,16 +57,16 @@ public class MessageBuilder {
         return buildForChat(toolAvailability);
     }
 
-    public String buildForChat(ChatToolAvailability toolAvailability) {
-        ChatToolAvailability normalizedAvailability = toolAvailability == null
-            ? ChatToolAvailability.EDITING
+    public String buildForChat(ToolAvailabilityLevel toolAvailability) {
+        ToolAvailabilityLevel normalizedAvailability = toolAvailability == null
+            ? ToolAvailabilityLevel.EDITING
             : toolAvailability;
         String message = messageTextProvider.getMessageText();
         String guidance;
-        if (normalizedAvailability == ChatToolAvailability.DISABLED) {
+        if (normalizedAvailability == ToolAvailabilityLevel.DISABLED) {
             guidance = NO_TOOLS_GUIDANCE + "\n\n" + PROFILE_CONTROL_GUIDANCE + "\n\n"
                 + MARKDOWN_RESPONSE_GUIDANCE;
-        } else if (normalizedAvailability == ChatToolAvailability.READING) {
+        } else if (normalizedAvailability == ToolAvailabilityLevel.READING) {
             guidance = MAP_SELECTION_GUIDANCE + "\n\n" + READ_ONLY_FREEPLANE_GUIDANCE + "\n\n"
                 + PROFILE_CONTROL_GUIDANCE + "\n\n" + MARKDOWN_RESPONSE_GUIDANCE + "\n\n"
                 + TOOL_CALL_REQUEST_WRAPPER_GUIDANCE;

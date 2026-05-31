@@ -16,7 +16,7 @@ final class LiveChatSession {
     private final Set<String> mapIds;
     private final List<MapRootShortTextCount> mapRootShortTextCounts;
     private final boolean assistantProfileEnabled;
-    private ChatToolAvailability toolAvailabilityOverride;
+    private ToolAvailabilityLevel toolAvailabilityOverride;
     private String selectedModelOverride;
     private List<ChatTranscriptEntry> transcriptEntries;
     private ChatTranscriptId transcriptId;
@@ -32,7 +32,7 @@ final class LiveChatSession {
 
     LiveChatSession(LiveChatSessionId id, ChatMemory chatMemory, String displayName,
                     boolean assistantProfileEnabled,
-                    ChatToolAvailability toolAvailabilityOverride) {
+                    ToolAvailabilityLevel toolAvailabilityOverride) {
         this.id = id;
         this.chatMemory = chatMemory;
         this.displayName = displayName;
@@ -126,11 +126,11 @@ final class LiveChatSession {
         return assistantProfileEnabled;
     }
 
-    ChatToolAvailability getToolAvailabilityOverride() {
+    ToolAvailabilityLevel getToolAvailabilityOverride() {
         return toolAvailabilityOverride;
     }
 
-    void setToolAvailabilityOverride(ChatToolAvailability toolAvailabilityOverride) {
+    void setToolAvailabilityOverride(ToolAvailabilityLevel toolAvailabilityOverride) {
         this.toolAvailabilityOverride = toolAvailabilityOverride;
     }
 

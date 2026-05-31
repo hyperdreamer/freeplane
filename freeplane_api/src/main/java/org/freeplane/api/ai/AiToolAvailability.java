@@ -6,5 +6,6 @@ public enum AiToolAvailability {
     CURRENT,
     DISABLED,
     READING,
-    EDITING
+    EDITING,
+    SCRIPT_EXECUTION
 }

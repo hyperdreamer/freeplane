@@ -21,6 +21,7 @@ import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
 import org.freeplane.features.mode.mindmapmode.MModeController;
 import org.freeplane.features.text.TextController;
+import org.freeplane.plugin.ai.code.AiCodeOperationAuthorizer;
 import org.freeplane.plugin.ai.edits.AiEditsSettings;
 import org.freeplane.plugin.ai.edits.ClearAiMarkersInMapAction;
 import org.freeplane.plugin.ai.edits.ClearAiMarkersInSelectionAction;
@@ -41,6 +42,7 @@ import org.freeplane.plugin.ai.prompt.HiddenPromptRequestRunnerFactory;
 import org.freeplane.plugin.ai.tools.AIToolSetBuilder;
 import org.freeplane.plugin.ai.tools.selection.SelectionIdentifiersResponse;
 import org.freeplane.plugin.ai.tools.utilities.ToolCallSummaryHandler;
+import org.freeplane.plugin.ai.tools.utilities.ToolCaller;
 
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.memory.ChatMemory;
@@ -115,11 +117,11 @@ public class AIChatPanel extends JPanel {
     private String noProviderConfiguredText;
     private final JPopupMenu menuPopup;
     private final AIProviderConfiguration configuration;
-    private final ChatToolAvailabilitySettings chatToolAvailabilitySettings;
+    private final ToolAvailabilityLevelSettings chatToolAvailabilitySettings;
     private final ChatDisplaySettings chatDisplaySettings;
     private final ChatModelSelector modelSelectionController;
     private final PromptToolSelectionResolver promptToolSelectionResolver;
-    private final ChatToolAvailabilityMenu chatToolAvailabilityMenu;
+    private final ToolAvailabilityLevelMenu chatToolAvailabilityMenu;
     private final ChatOutputView chatOutputView;
     private final ChatInputControls chatInputControls;
     private final AiPromptRequestComposer aiPromptRequestComposer;
@@ -199,7 +201,7 @@ public class AIChatPanel extends JPanel {
         redoButton.setPreferredSize(sideButtonSize);
         redoButton.setMinimumSize(sideButtonSize);
         redoButton.setMaximumSize(sideButtonSize);
-        chatToolAvailabilitySettings = new ChatToolAvailabilitySettings();
+        chatToolAvailabilitySettings = new ToolAvailabilityLevelSettings();
         configuration = new AIProviderConfiguration();
         aiRequestConfigurationResolver = new AiRequestConfigurationResolver(configuration);
         chatDisplaySettings = new ChatDisplaySettings();
@@ -225,7 +227,7 @@ public class AIChatPanel extends JPanel {
             chatTokenUsageTracker::snapshotState
         );
         promptToolSelectionResolver = new PromptToolSelectionResolver(chatToolAvailabilitySettings);
-        chatToolAvailabilityMenu = new ChatToolAvailabilityMenu(
+        chatToolAvailabilityMenu = new ToolAvailabilityLevelMenu(
             this::currentEffectiveToolAvailability,
             this::applyUserSelectedToolAvailability);
         chatOutputView = new ChatOutputView(messageHistory, liveChatController, tokenUsageLabel);
@@ -377,6 +379,8 @@ public class AIChatPanel extends JPanel {
             aiPromptRequestComposer,
             this::openPromptChat,
             this::currentCodeHostService,
+            chatToolAvailabilitySettings::getToolAvailability,
+            liveChatController::sessionToolAvailabilityOverride,
             hiddenPromptRequestRunnerFactory,
             aiPromptProgressDialogFactory);
         aiRequestExecutionCoordinator = new AiRequestExecutionCoordinator(
@@ -433,7 +437,7 @@ public class AIChatPanel extends JPanel {
         JMenuItem preferencesMenuItem = TranslatedElementFactory.createMenuItem(openPreferencesAction, "preferences");
         preferencesMenuItem.setIcon(preferencesIcon);
         menuPopup.add(preferencesMenuItem);
-        addChatToolAvailabilityMenu(menuPopup);
+        addToolAvailabilityLevelMenu(menuPopup);
         Action manageProfilesAction = new AbstractAction() {
             private static final long serialVersionUID = 1L;
 
@@ -470,7 +474,7 @@ public class AIChatPanel extends JPanel {
         return menuPopup;
     }
 
-    private void addChatToolAvailabilityMenu(JPopupMenu menuPopup) {
+    private void addToolAvailabilityLevelMenu(JPopupMenu menuPopup) {
         chatToolAvailabilityMenu.addTo(menuPopup);
     }
 
@@ -636,9 +640,9 @@ public class AIChatPanel extends JPanel {
             return;
         }
         String selectedModelOverride = normalizeSelectionValue(prompt.getModelSelectionValue());
-        ChatToolAvailability resolvedToolAvailability =
+        ToolAvailabilityLevel resolvedToolAvailability =
             promptToolSelectionResolver.resolveEffectiveToolAvailability(prompt.getToolAvailabilitySelectionValue());
-        ChatToolAvailability toolAvailabilityOverride =
+        ToolAvailabilityLevel toolAvailabilityOverride =
             promptToolSelectionResolver.resolveShownChatOverride(prompt.getToolAvailabilitySelectionValue());
         AiRequestConfigurationResolver.Issue configurationIssue =
             aiRequestConfigurationResolver.resolve(selectedModelOverride);
@@ -703,9 +707,9 @@ public class AIChatPanel extends JPanel {
                 configurationIssue.getDetail()));
             return;
         }
-        ChatToolAvailability resolvedToolAvailability =
+        ToolAvailabilityLevel resolvedToolAvailability =
             resolvePromptStyleToolAvailability(request.getToolAvailability());
-        ChatToolAvailability toolAvailabilityOverride =
+        ToolAvailabilityLevel toolAvailabilityOverride =
             explicitToolAvailabilityOverride(request.getToolAvailability());
         ChatMemory promptChatMemory = createChatMemory();
         LiveChatSessionId sessionId = liveChatController.startNewPromptChat(
@@ -781,7 +785,7 @@ public class AIChatPanel extends JPanel {
             return null;
         }
         applyAddToChatSessionOverrides(sessionId, request, selectedModelOverride);
-        ChatToolAvailability resolvedToolAvailability = resolveAddToChatToolAvailability(
+        ToolAvailabilityLevel resolvedToolAvailability = resolveAddToToolAvailabilityLevel(
             sessionId,
             request.getToolAvailability());
         showChatTab();
@@ -828,7 +832,7 @@ public class AIChatPanel extends JPanel {
                 configurationIssue.getDetail()));
             return;
         }
-        ChatToolAvailability resolvedToolAvailability =
+        ToolAvailabilityLevel resolvedToolAvailability =
             resolvePromptStyleToolAvailability(request.getToolAvailability());
         ChatPromptRunner chatPromptRunner = chatPromptRunnerFactory.createHidden();
         HiddenPromptRequestRunner hiddenPromptRequestRunner = chatPromptRunner.hiddenPromptRequestRunner();
@@ -888,20 +892,20 @@ public class AIChatPanel extends JPanel {
         return aiSelectionOverrideResolver.resolve(selectionOverride);
     }
 
-    private ChatToolAvailability resolvePromptStyleToolAvailability(AiToolAvailability toolAvailability) {
-        ChatToolAvailability mappedAvailability = AiRequestMappings.toChatToolAvailability(toolAvailability);
+    private ToolAvailabilityLevel resolvePromptStyleToolAvailability(AiToolAvailability toolAvailability) {
+        ToolAvailabilityLevel mappedAvailability = AiRequestMappings.toToolAvailabilityLevel(toolAvailability);
         return mappedAvailability == null ? chatToolAvailabilitySettings.getToolAvailability() : mappedAvailability;
     }
 
-    private ChatToolAvailability explicitToolAvailabilityOverride(AiToolAvailability toolAvailability) {
+    private ToolAvailabilityLevel explicitToolAvailabilityOverride(AiToolAvailability toolAvailability) {
         return toolAvailability == AiToolAvailability.CURRENT
             ? null
-            : AiRequestMappings.toChatToolAvailability(toolAvailability);
+            : AiRequestMappings.toToolAvailabilityLevel(toolAvailability);
     }
 
-    private ChatToolAvailability resolveAddToChatToolAvailability(LiveChatSessionId sessionId,
+    private ToolAvailabilityLevel resolveAddToToolAvailabilityLevel(LiveChatSessionId sessionId,
                                                                   AiToolAvailability toolAvailability) {
-        ChatToolAvailability mappedAvailability = AiRequestMappings.toChatToolAvailability(toolAvailability);
+        ToolAvailabilityLevel mappedAvailability = AiRequestMappings.toToolAvailabilityLevel(toolAvailability);
         return mappedAvailability == null ? resolveEffectiveToolAvailability(sessionId) : mappedAvailability;
     }
 
@@ -911,7 +915,7 @@ public class AIChatPanel extends JPanel {
         if (!request.getModelSelection().isCurrent()) {
             liveChatController.setSessionSelectedModelOverride(sessionId, selectedModelOverride);
         }
-        ChatToolAvailability explicitToolAvailability =
+        ToolAvailabilityLevel explicitToolAvailability =
             explicitToolAvailabilityOverride(request.getToolAvailability());
         if (explicitToolAvailability != null) {
             liveChatController.setSessionToolAvailabilityOverride(sessionId, explicitToolAvailability);
@@ -955,7 +959,7 @@ public class AIChatPanel extends JPanel {
                                         ChatTokenUsageTracker requestTokenUsageTracker,
                                         boolean injectAssistantProfile,
                                         boolean updateSessionName,
-                                        ChatToolAvailability resolvedToolAvailability,
+                                        ToolAvailabilityLevel resolvedToolAvailability,
                                         AiSelectionOverride selectionOverride) {
         if (sessionId == null || requestService == null) {
             return false;
@@ -1103,13 +1107,18 @@ public class AIChatPanel extends JPanel {
         if (configurationErrorMessage(selectedModelOverride) != null) {
             return null;
         }
-        ChatToolAvailability toolAvailabilityOverride =
+        ToolAvailabilityLevel toolAvailabilityOverride =
             liveChatController.sessionToolAvailabilityOverride(sessionId);
         AIToolSetBuilder toolSetBuilder = new AIToolSetBuilder()
             .toolCallSummaryHandler(requestFlow::onToolCallSummary)
             .availableMaps(availableMaps)
             .mapAccessListener(liveChatController.mapAccessListener(sessionId))
-            .codeHostService(currentCodeHostService());
+            .codeHostService(currentCodeHostService())
+            .aiCodeOperationAuthorizer(new AiCodeOperationAuthorizer(
+                ToolCaller.CHAT,
+                chatToolAvailabilitySettings::getToolAvailability,
+                () -> liveChatController.sessionToolAvailabilityOverride(sessionId),
+                currentCodeHostService()));
         List<Object> toolObjects = toolSetBuilder.buildToolObjects();
         return AIChatServiceFactory.createService(
             (org.freeplane.plugin.ai.tools.AIToolSet) toolObjects.get(0),
@@ -1245,25 +1254,25 @@ public class AIChatPanel extends JPanel {
         return value != null && !value.trim().isEmpty();
     }
 
-    private ChatToolAvailability currentEffectiveToolAvailability() {
+    private ToolAvailabilityLevel currentEffectiveToolAvailability() {
         return resolveEffectiveToolAvailability(liveChatController.currentSessionId());
     }
 
-    private ChatToolAvailability resolveEffectiveToolAvailability(LiveChatSessionId sessionId) {
-        ChatToolAvailability toolAvailabilityOverride =
+    private ToolAvailabilityLevel resolveEffectiveToolAvailability(LiveChatSessionId sessionId) {
+        ToolAvailabilityLevel toolAvailabilityOverride =
             liveChatController.sessionToolAvailabilityOverride(sessionId);
         return toolAvailabilityOverride == null
             ? chatToolAvailabilitySettings.getToolAvailability()
             : toolAvailabilityOverride;
     }
 
-    private void applyUserSelectedToolAvailability(ChatToolAvailability toolAvailability) {
+    private void applyUserSelectedToolAvailability(ToolAvailabilityLevel toolAvailability) {
         if (toolAvailability == null) {
             return;
         }
         ResourceController.getResourceController().setProperty(
-            ChatToolAvailabilitySettings.CHAT_TOOL_AVAILABILITY_PROPERTY,
-            toolAvailability.getPreferenceValue());
+            ToolAvailabilityLevelSettings.TOOL_AVAILABILITY_PROPERTY,
+            toolAvailability.name());
         liveChatController.clearCurrentSessionToolAvailabilityOverride();
     }
 
@@ -1326,12 +1335,12 @@ public class AIChatPanel extends JPanel {
         return liveChatController.startNewChat();
     }
 
-    public ChatToolAvailability effectiveToolAvailability(LiveChatSessionId sessionId) {
+    public ToolAvailabilityLevel effectiveToolAvailability(LiveChatSessionId sessionId) {
         return resolveEffectiveToolAvailability(sessionId);
     }
 
     public void setSessionToolAvailabilityOverride(LiveChatSessionId sessionId,
-                                                   ChatToolAvailability toolAvailabilityOverride) {
+                                                   ToolAvailabilityLevel toolAvailabilityOverride) {
         liveChatController.setSessionToolAvailabilityOverride(sessionId, toolAvailabilityOverride);
     }
 

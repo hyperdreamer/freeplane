@@ -6,11 +6,14 @@ import java.util.List;
 import java.util.Objects;
 
 import org.freeplane.features.ai.code.AiCodeHostService;
+import org.freeplane.features.ai.code.AiCodeRunListener;
 import org.freeplane.features.ai.code.CodeLifecycleStatus;
 import org.freeplane.features.ai.code.CompileCodeRequest;
 import org.freeplane.features.ai.code.CompileCodeResponse;
 import org.freeplane.features.ai.code.ReadCodeRequest;
 import org.freeplane.features.ai.code.ReadCodeResponse;
+import org.freeplane.features.ai.code.RunScriptRequest;
+import org.freeplane.features.ai.code.RunScriptResponse;
 import org.freeplane.features.ai.code.ScriptHost;
 import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeResponse;
@@ -21,6 +24,7 @@ import org.freeplane.features.map.mindmapmode.MMapController;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
 import org.freeplane.features.text.TextController;
+import org.freeplane.plugin.ai.code.AiCodeOperationAuthorizer;
 import org.freeplane.plugin.ai.code.AiCodeToolSet;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.freeplane.plugin.ai.maps.ControllerMapModelProvider;
@@ -50,6 +54,7 @@ public class AIToolSetBuilder {
     private IconController iconController;
     private MMapController mapController;
     private AiCodeHostService codeHostService;
+    private AiCodeOperationAuthorizer aiCodeOperationAuthorizer;
     private ToolCaller toolCaller = ToolCaller.CHAT;
 
     public AIToolSetBuilder toolCallSummaryHandler(ToolCallSummaryHandler handler) {
@@ -97,6 +102,11 @@ public class AIToolSetBuilder {
         return this;
     }
 
+    public AIToolSetBuilder aiCodeOperationAuthorizer(AiCodeOperationAuthorizer aiCodeOperationAuthorizer) {
+        this.aiCodeOperationAuthorizer = aiCodeOperationAuthorizer;
+        return this;
+    }
+
     public AIToolSet build() {
         ResolvedComponents resolvedComponents = resolveComponents();
         return createBaseToolSet(resolvedComponents);
@@ -107,6 +117,7 @@ public class AIToolSetBuilder {
         AIToolSet toolSet = createBaseToolSet(resolvedComponents);
         AiCodeToolSet aiCodeToolSet = new AiCodeToolSet(
             effectiveCodeHostService(),
+            aiCodeOperationAuthorizer,
             toolCallSummaryHandler,
             toolCaller);
         return Collections.<Object>unmodifiableList(Arrays.<Object>asList(toolSet, aiCodeToolSet));
@@ -181,6 +192,19 @@ public class AIToolSetBuilder {
             @Override
             public CompileCodeResponse compileCode(CompileCodeRequest request) {
                 throw new IllegalStateException("No editor is attached.");
+            }
+
+            @Override
+            public RunScriptResponse runScript(RunScriptRequest request) {
+                throw new IllegalStateException("No editor is attached.");
+            }
+
+            @Override
+            public void addRunListener(AiCodeRunListener listener) {
+            }
+
+            @Override
+            public void removeRunListener(AiCodeRunListener listener) {
             }
         };
     }

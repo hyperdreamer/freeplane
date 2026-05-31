@@ -10,9 +10,13 @@ import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.features.ai.code.CodeLifecycleStatus;
 import org.freeplane.features.ai.code.CompileCodeRequest;
 import org.freeplane.features.ai.code.CompileCodeResponse;
+import org.freeplane.features.ai.code.AiCodeRunListener;
 import org.freeplane.features.ai.code.ReadCodeRequest;
 import org.freeplane.features.ai.code.ReadCodeResponse;
+import org.freeplane.features.ai.code.RunScriptRequest;
+import org.freeplane.features.ai.code.RunScriptResponse;
 import org.freeplane.features.ai.code.ScriptHost;
+import org.freeplane.features.ai.code.ScriptRunInitiator;
 import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeResponse;
 import org.freeplane.features.attribute.AttributeController;
@@ -68,6 +72,30 @@ public class AIToolSetBuilderTest {
                     null,
                     null,
                     null);
+            }
+
+            @Override
+            public RunScriptResponse runScript(RunScriptRequest request) {
+                return new RunScriptResponse(
+                    "attached-editor-1",
+                    ScriptHost.ATTACHED_EDITOR,
+                    "text/plain",
+                    CodeLifecycleStatus.SUCCEEDED,
+                    ScriptRunInitiator.AI,
+                    "fingerprint",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null);
+            }
+
+            @Override
+            public void addRunListener(AiCodeRunListener listener) {
+            }
+
+            @Override
+            public void removeRunListener(AiCodeRunListener listener) {
             }
         };
 
