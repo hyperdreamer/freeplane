@@ -118,6 +118,9 @@ class ChatMemoryHistoryRenderer {
             }
             return new MessageHistoryEntry(aiMessage.text(), RenderCategory.ASSISTANT);
         }
+        if (message instanceof AutomaticCodeStatusMessage) {
+            return new MessageHistoryEntry(((AutomaticCodeStatusMessage) message).singleText(), RenderCategory.SYSTEM);
+        }
         if (message instanceof UserMessage) {
             String text = ((UserMessage) message).singleText();
             if (text != null && text.startsWith(MessageBuilder.CONTROL_INSTRUCTION_PREFIX)) {

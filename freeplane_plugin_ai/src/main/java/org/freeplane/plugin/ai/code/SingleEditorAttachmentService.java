@@ -394,7 +394,24 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
         if (state == null) {
             return activeReadCodeResponse(attachment, null);
         }
-        return normalizedRecordedState(attachment, state);
+        ReadCodeResponse normalizedState = normalizedRecordedState(attachment, state);
+        if (state.getCodeText() != null) {
+            return normalizedState;
+        }
+        return new ReadCodeResponse(
+            normalizedState.getCodeId(),
+            normalizedState.getHost(),
+            normalizedState.getContentType(),
+            normalizedState.getStatus(),
+            normalizedState.getRunInitiator(),
+            normalizedState.getFingerprint(),
+            null,
+            normalizedState.getReplacementCodeId(),
+            normalizedState.getCompilerDiagnostics(),
+            normalizedState.getErrorMessage(),
+            normalizedState.getLineNumber(),
+            normalizedState.getStdout(),
+            normalizedState.getStructuredResult());
     }
 
     private ReadCodeResponse activeReadCodeResponse(ActiveAttachment attachment, String requestedFingerprint) {
@@ -542,9 +559,11 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
         if (codeState.getFingerprint() != null) {
             builder.append("fingerprint=").append(codeState.getFingerprint()).append('\n');
         }
-        builder.append("codeText:\n```\n");
-        builder.append(codeState.getCodeText() == null ? "" : codeState.getCodeText());
-        builder.append("\n```\n");
+        if (codeState.getCodeText() != null) {
+            builder.append("codeText:\n```\n");
+            builder.append(codeState.getCodeText());
+            builder.append("\n```\n");
+        }
         if (codeState.getCompilerDiagnostics() != null && !codeState.getCompilerDiagnostics().isEmpty()) {
             builder.append("compilerDiagnostics:\n");
             for (String diagnostic : codeState.getCompilerDiagnostics()) {

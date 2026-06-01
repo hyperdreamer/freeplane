@@ -83,6 +83,38 @@ public class TranscriptMemoryMapperTest {
     }
 
     @Test
+    public void automaticCodeStatusMessagesPersistWithDedicatedTranscriptRole() {
+        TranscriptMemoryMapper uut = new TranscriptMemoryMapper();
+        AssistantProfileChatMemory memory = AssistantProfileChatMemory.withMaxTokens(500);
+        AutomaticCodeStatusMessage message = new AutomaticCodeStatusMessage(
+            "Automatic app-authored code-status message:\nstatus=SUCCEEDED");
+        memory.add(message);
+
+        List<ChatTranscriptEntry> entries = uut.toTranscriptEntries(memory);
+
+        assertThat(entries).hasSize(1);
+        assertThat(entries.get(0).getRole()).isEqualTo(ChatTranscriptRole.AUTOMATIC_CODE_STATUS);
+        assertThat(entries.get(0).getText()).isEqualTo(message.singleText());
+    }
+
+    @Test
+    public void automaticCodeStatusTranscriptEntriesRestoreAsDedicatedUserMessages() {
+        TranscriptMemoryMapper uut = new TranscriptMemoryMapper();
+        AssistantProfileChatMemory memory = AssistantProfileChatMemory.withMaxTokens(500);
+
+        uut.seedTranscriptWithHiddenExchange(memory, Arrays.asList(
+            new ChatTranscriptEntry(
+                ChatTranscriptRole.AUTOMATIC_CODE_STATUS,
+                "Automatic app-authored code-status message:\nstatus=FAILED")), null);
+
+        List<ChatMessage> messages = memory.messages();
+        assertThat(messages).hasSize(1);
+        assertThat(messages.get(0)).isInstanceOf(AutomaticCodeStatusMessage.class);
+        assertThat(((AutomaticCodeStatusMessage) messages.get(0)).singleText())
+            .isEqualTo("Automatic app-authored code-status message:\nstatus=FAILED");
+    }
+
+    @Test
     public void toTranscriptEntries_omitMessagesBeforeContextWindowBoundary() {
         TranscriptMemoryMapper uut = new TranscriptMemoryMapper();
         AssistantProfileChatMemory memory = AssistantProfileChatMemory.withMaxTokens(500);

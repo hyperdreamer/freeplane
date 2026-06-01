@@ -18,6 +18,7 @@ class ChatPromptRunnerFactory {
     private final AiPromptRequestComposer aiPromptRequestComposer;
     private final ChatPromptRunner.VisiblePromptChatLauncher visiblePromptChatLauncher;
     private final Supplier<AiCodeHostService> codeHostServiceSupplier;
+    private final Function<LiveChatSessionId, AiCodeHostService> sessionCodeHostServiceProvider;
     private final Supplier<ToolAvailabilityLevel> sharedToolAvailabilitySupplier;
     private final Function<LiveChatSessionId, ToolAvailabilityLevel> sessionToolAvailabilityOverrideProvider;
     private final HiddenPromptRequestRunnerFactory hiddenPromptRequestRunnerFactory;
@@ -30,6 +31,7 @@ class ChatPromptRunnerFactory {
                             AiPromptRequestComposer aiPromptRequestComposer,
                             ChatPromptRunner.VisiblePromptChatLauncher visiblePromptChatLauncher,
                             Supplier<AiCodeHostService> codeHostServiceSupplier,
+                            Function<LiveChatSessionId, AiCodeHostService> sessionCodeHostServiceProvider,
                             Supplier<ToolAvailabilityLevel> sharedToolAvailabilitySupplier,
                             Function<LiveChatSessionId, ToolAvailabilityLevel> sessionToolAvailabilityOverrideProvider,
                             HiddenPromptRequestRunnerFactory hiddenPromptRequestRunnerFactory,
@@ -41,6 +43,7 @@ class ChatPromptRunnerFactory {
         this.aiPromptRequestComposer = aiPromptRequestComposer;
         this.visiblePromptChatLauncher = visiblePromptChatLauncher;
         this.codeHostServiceSupplier = codeHostServiceSupplier;
+        this.sessionCodeHostServiceProvider = sessionCodeHostServiceProvider;
         this.sharedToolAvailabilitySupplier = sharedToolAvailabilitySupplier;
         this.sessionToolAvailabilityOverrideProvider = sessionToolAvailabilityOverrideProvider;
         this.hiddenPromptRequestRunnerFactory = hiddenPromptRequestRunnerFactory;
@@ -59,7 +62,9 @@ class ChatPromptRunnerFactory {
             availableMaps,
             aiPromptRequestComposer,
             visiblePromptChatLauncher,
-            codeHostServiceSupplier == null ? null : codeHostServiceSupplier.get(),
+            sessionId == null || sessionCodeHostServiceProvider == null
+                ? (codeHostServiceSupplier == null ? null : codeHostServiceSupplier.get())
+                : sessionCodeHostServiceProvider.apply(sessionId),
             sharedToolAvailabilitySupplier,
             sessionId == null || sessionToolAvailabilityOverrideProvider == null
                 ? null
@@ -73,7 +78,7 @@ class ChatPromptRunnerFactory {
             sessionId);
     }
 
-    ChatPromptRunner createHidden() {
+    ChatPromptRunner createHidden(LiveChatSessionId sessionId) {
         return new ChatPromptRunner(
             aiTabIcon,
             stopIcon,
@@ -81,7 +86,9 @@ class ChatPromptRunnerFactory {
             availableMaps,
             aiPromptRequestComposer,
             visiblePromptChatLauncher,
-            codeHostServiceSupplier == null ? null : codeHostServiceSupplier.get(),
+            sessionId == null || sessionCodeHostServiceProvider == null
+                ? (codeHostServiceSupplier == null ? null : codeHostServiceSupplier.get())
+                : sessionCodeHostServiceProvider.apply(sessionId),
             sharedToolAvailabilitySupplier,
             null,
             hiddenPromptRequestRunnerFactory,

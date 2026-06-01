@@ -11,6 +11,19 @@
             <choice value="READING" text="OptionPanel.ToolAvailabilityLevel.READING"/>
             <choice value="DISABLED" text="OptionPanel.ToolAvailabilityLevel.DISABLED"/>
         </radiobuttons>
+        <radiobuttons name="ai_script_execution_policy">
+            <choice value="SHOWN_USER_RUN" text="OptionPanel.AiScriptExecutionPolicy.SHOWN_USER_RUN"/>
+            <choice value="SHOWN_AI_RUN" text="OptionPanel.AiScriptExecutionPolicy.SHOWN_AI_RUN"/>
+            <choice value="HIDDEN_AI_RUN" text="OptionPanel.AiScriptExecutionPolicy.HIDDEN_AI_RUN"/>
+        </radiobuttons>
+        <radiobuttons name="ai_script_user_run_permission_mode">
+            <choice value="UNRESTRICTED" text="OptionPanel.AiScriptUserRunPermissionMode.UNRESTRICTED"/>
+            <choice value="AI_SPECIFIC_PERMISSIONS" text="OptionPanel.AiScriptUserRunPermissionMode.AI_SPECIFIC_PERMISSIONS"/>
+        </radiobuttons>
+        <boolean name="ai_script_without_file_restriction"/>
+        <boolean name="ai_script_without_write_restriction"/>
+        <boolean name="ai_script_without_network_restriction"/>
+        <boolean name="ai_script_without_exec_restriction"/>
         <radiobuttons name="ai_attached_editor_chat_mode">
             <choice value="new_chat" text="OptionPanel.ai_attached_editor_chat_mode.new_chat"/>
             <choice value="reuse_current_chat" text="OptionPanel.ai_attached_editor_chat_mode.reuse_current_chat"/>

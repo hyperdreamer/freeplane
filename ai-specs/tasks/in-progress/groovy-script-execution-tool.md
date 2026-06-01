@@ -87,16 +87,17 @@
     permissions.
   - User-started execution from the AI-owned dialog needs its own
     policy, separate from AI-started execution.
-  - User-started execution from attached `ScriptEditorPanel` keeps
-    normal script behavior and normal script permissions.
+  - User-started execution from attached `ScriptEditorPanel` keeps its
+    current script-editor behavior and current script-editor
+    permissions.
   - Attached `FormulaEditor` save/submit behavior remains owned by the
     formula editor and is not replaced by this task.
   - The dedicated AI-specific permission profile must reuse the
     existing scripting permission axes for file read, file write,
     network, and exec.
-  - In-script AI requests from this feature are allowed only for
-    user-started runs from the AI-owned dialog, not for AI-started
-    runs.
+  - In-script AI requests from AI-owned script runs are out of scope.
+    This feature does not allow recursive AI calls from inside the
+    running script.
   - AI must not copy attached code into the AI-owned script host and
     execute that copy unless the user explicitly asks for that. In
     this task that is guidance/alignment, not a separate technical
@@ -163,6 +164,8 @@
   - `execute_scripts_without_ai_request_restriction` is already the
     in-script AI-request permission and must not become the switch that
     authorizes AI to execute scripts in the first place.
+  - This feature does not enable that permission for AI-owned script
+    runs.
 
 ```plantuml
 @startuml
@@ -246,10 +249,10 @@ McpServer -> ApiTool: getApiDocumentation()
   - Internal AI uses availability filtering for advertised tools.
   - MCP may keep a stable advertised tool list, but every code/script
     tool call must re-check current availability and current policy.
-  - The AI-owned flow gets a separate configurable script system prompt
-    appended to the normal system message when that flow is active.
-  - Attached editors keep their own guidance path. They do not reuse
-    the AI-owned script system prompt.
+  - The AI-owned flow uses the normal system message and tool
+    descriptions. Do not add a separate AI-owned script system prompt
+    in this task.
+  - Attached editors keep their own guidance path.
   - Harmonize code-host request/response structure across the
     AI-owned flow and attached editors so callers can address a target
     either by existing `codeId` or, when no `codeId` is present, by
@@ -279,8 +282,14 @@ McpServer -> ApiTool: getApiDocumentation()
   - Attached editors therefore gain code identifiers and
     lifecycle/result state, not only attached/detached state.
   - The lifecycle model must distinguish at least:
-    `NO_CODE`, `READY`, `WAITING_FOR_USER_RUN`, `RUNNING`,
+    `NO_CODE`, `READY`, `WAITING_FOR_USER_RUN`,
     `SUCCEEDED`, `FAILED`, and `REPLACED`.
+  - All `runScript(...)` paths in this task are synchronous. There is
+    no per-call sync/async selector and no externally readable
+    `RUNNING` state.
+  - Because runs start on the UI thread and there is no safe general
+    way to kill arbitrary script code running there, a non-terminating
+    script may freeze Freeplane in this task.
   - AI-owned direct execution and AI-owned shown-editor execution must
     always run the current effective script text. When a visible
     AI-owned dialog exists, the current editor text is authoritative.
@@ -304,18 +313,28 @@ McpServer -> ApiTool: getApiDocumentation()
       session;
     - MCP receives an immediate waiting status plus `codeId` and then
       uses later read/status calls.
+  - All app-authored automatic code-status messages use dedicated
+    persisted type `AutomaticCodeStatusMessage` and dedicated
+    transcript role `AUTOMATIC_CODE_STATUS`.
+  - In this task those messages keep full result/status details, do
+    not inline code text, and do not require special compact UI
+    rendering.
+  - For later AI turns, those messages are included in model context as
+    user messages. They are not treated as assistant messages, system
+    messages, or fake tool calls.
+  - When mapped to user messages for model context, they must identify
+    themselves in their text as automatic app-authored code-status
+    messages so they are not mistaken for direct user instructions.
+  - In this task the dedicated transcript role does not need a
+    transcript-entry subclass.
   - For attached manual activity:
     - update shared code-host lifecycle/result state in all cases;
     - for internal AI, auto-post manual script failures, but not
       successes, to the owning chat;
     - for MCP, do not auto-post anywhere and rely on later
-      `readCode` calls instead;
+      `readCode` calls instead; and
     - keep any failure auto-post analysis-only unless the user
-      explicitly requests or confirms a rewrite; and
-    - include only compact context in the auto-post, for example
-      `codeId`, host, `contentType`, and fingerprint, while leaving
-      code text and detailed diagnostics to later tool reads when
-      needed.
+      explicitly requests or confirms a rewrite.
 
 Target shared properties and enums:
 
@@ -340,7 +359,6 @@ AiScriptExecutionPolicy
 
 AiScriptUserRunPermissionMode
   UNRESTRICTED
-  LIKE_OTHER_SCRIPTS
   AI_SPECIFIC_PERMISSIONS
 
 ScriptHost
@@ -351,7 +369,6 @@ CodeLifecycleStatus
   NO_CODE
   READY
   WAITING_FOR_USER_RUN
-  RUNNING
   SUCCEEDED
   FAILED
   REPLACED
@@ -389,10 +406,7 @@ AI-owned script policy property
 
 AI-owned user-run permission property
   ai_script_user_run_permission_mode =
-    UNRESTRICTED | LIKE_OTHER_SCRIPTS | AI_SPECIFIC_PERMISSIONS
-
-AI-owned script prompt property
-  ai_script_system_prompt = <text>
+    UNRESTRICTED | AI_SPECIFIC_PERMISSIONS
 
 AI-specific external permission properties
   ai_script_without_file_restriction = true|false
@@ -400,8 +414,6 @@ AI-specific external permission properties
   ai_script_without_network_restriction = true|false
   ai_script_without_exec_restriction = true|false
 
-AI-owned user-run in-script AI-request property
-  ai_script_user_run_without_ai_request_restriction = true|false
 ```
 
 Target internal-AI and MCP authorization rules:
@@ -572,11 +584,10 @@ Run rules
   - AI-host runs always use text/x-freeplane-script-groovy
   - runInitiator distinguishes `USER`-started runs from `AI`-started
     runs and is part of observable run state
+  - all `runScript(...)` paths in this task are synchronous
   - run outcome is carried by `status`
   - waiting for user approval returns `WAITING_FOR_USER_RUN`
-  - active execution returns `RUNNING`
-  - successful completion returns `SUCCEEDED`
-  - failed completion returns `FAILED`
+  - started execution returns final `SUCCEEDED` or `FAILED`
   - run failures keep the current code-backed shape: optional compile
     diagnostics, optional message, optional line number, captured
     stdout, and optional serialized result
@@ -672,7 +683,6 @@ package "org.freeplane.features.ai.code" {
     NO_CODE
     READY
     WAITING_FOR_USER_RUN
-    RUNNING
     SUCCEEDED
     FAILED
     REPLACED
@@ -805,7 +815,7 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
     - add tests for the internal-AI attached-editor override versus
       MCP base-gate behavior;
     - add tests for the three script-execution-policy states;
-    - add tests for the three user-started-permission-policy states in
+    - add tests for the two user-started-permission-policy states in
       the AI-owned dialog;
     - add tests for attached-editor normal-permission behavior for both
       script and formula attachments;
@@ -1100,7 +1110,6 @@ package "org.freeplane.features.ai.code" {
     NO_CODE
     READY
     WAITING_FOR_USER_RUN
-    RUNNING
     SUCCEEDED
     FAILED
     REPLACED
@@ -1319,11 +1328,16 @@ script-execution policies
     `AiScriptUserRunPermissionMode`, `ScriptHost`, and
     `CodeLifecycleStatus` exactly as specified in the main task
     Design.
+  - `UNRESTRICTED` user-started AI-owned runs match the current
+    `ScriptEditorPanel` permissive external-permission behavior, but
+    still do not allow recursive AI calls.
+  - `AI_SPECIFIC_PERMISSIONS` user-started AI-owned runs treat the
+    dialog `Run` click as the execution approval. Do not apply an
+    additional `execute_scripts_without_asking` confirmation.
   - AI-specific permissions reuse the existing scripting permission
     axes for file read, file write, network, and exec.
-  - In-script AI requests from this feature are allowed only for
-    user-started AI-owned runs, controlled by separate property
-    `ai_script_user_run_without_ai_request_restriction`.
+  - In-script AI requests from AI-owned script runs are not allowed in
+    this feature.
   - Result serialization stays narrow: JSON-safe structured values and
     text/stdout only.
 - **Test specification:**
@@ -1355,8 +1369,8 @@ script-execution policies
       error;
     - verify AI-specific permission mapping to existing scripting
       permissions;
-    - verify AI-started runs block in-script AI requests while
-      user-started AI-owned runs may allow them when configured; and
+    - verify AI-owned script runs block in-script AI requests for both
+      AI-started and user-started execution; and
     - verify serialization success/failure boundaries.
   - Manual tests: N/A.
 - **Implementation notes:**
@@ -1384,7 +1398,7 @@ script-execution policies
 
 
 ## Subtask: Internal AI-owned script dialog flow
-- **Status:** backlog
+- **Status:** review
 - **Scope:** Add the AI-owned script dialog, integrate it with internal
   AI chat, apply the three script-execution-policy states, and add the
   AI-owned follow-up message behavior for user-started execution.
@@ -1410,6 +1424,9 @@ script-execution policies
     application exit.
   - Reopening the AI-owned dialog shows the current AI-owned script
     state, not a blank editor.
+  - Add one explicit user-facing reopen action in the AI chat UI.
+  - That reopen action is enabled only when the current AI-owned code
+    state is not `NO_CODE`.
   - The AI-owned dialog must be non-modal.
   - `shown in editor, user must press Run` shows the dialog, loads the
     script, and keeps it open until the user chooses `Run` or
@@ -1430,14 +1447,34 @@ script-execution policies
     immediately.
   - User-started execution from the AI-owned dialog uses property
     `ai_script_user_run_permission_mode` with enum values
-    `UNRESTRICTED`, `LIKE_OTHER_SCRIPTS`, and
-    `AI_SPECIFIC_PERMISSIONS`.
-  - Internal AI gets the normal base system message plus configurable
-    property `ai_script_system_prompt` when the AI-owned flow is
-    active.
+    `UNRESTRICTED` and `AI_SPECIFIC_PERMISSIONS`.
+  - `UNRESTRICTED` matches the current `ScriptEditorPanel`
+    permissive external-permission behavior, but still does not allow
+    recursive AI calls.
+  - Under `AI_SPECIFIC_PERMISSIONS`, pressing `Run` in the AI-owned
+    dialog is the execution approval. Do not show a second script
+    execution confirmation.
+  - Internal AI uses the normal base system message for the AI-owned
+    flow. Do not add a separate AI-owned script system prompt in this
+    task.
   - The AI plugin registers an `AiCodeRunListener` and translates
     relevant `runFinished(...)` outcomes into owning-chat follow-up
     messages.
+  - App-authored automatic code-status messages use dedicated
+    persisted type `AutomaticCodeStatusMessage` and dedicated
+    transcript role `AUTOMATIC_CODE_STATUS` so later UI versions can
+    distinguish and restyle them.
+  - In this task those messages keep full result/status details, do
+    not inline code text, and do not require special compact UI
+    rendering.
+  - For later AI turns, those messages are included in model context as
+    user messages. They are not treated as assistant messages, system
+    messages, or fake tool calls.
+  - When mapped to user messages for model context, they must identify
+    themselves in their text as automatic app-authored code-status
+    messages so they are not mistaken for direct user instructions.
+  - In this task the dedicated transcript role does not need a
+    transcript-entry subclass.
   - Attached editors keep separate guidance and shared attached-code
     behavior and must not be confused with the AI-owned script flow.
   - If the shared/global level later drops below `SCRIPT_EXECUTION`,
@@ -1449,7 +1486,6 @@ script-execution policies
     - `ai_script_execution_policy`
     - `ai_script_user_run_permission_mode`
     - the four AI-specific external-permission booleans
-    - `ai_script_user_run_without_ai_request_restriction`
   - Use `OptionPanel.<EnumSimpleName>.<ENUM_VALUE>` translation keys
     for enum-backed preference choices.
 - **Test specification:**
@@ -1457,6 +1493,8 @@ script-execution policies
     - verify dialog opening behavior for all three policy states;
     - verify the AI-owned dialog is non-modal;
     - verify hidden mode preserves inspectable state without auto-open;
+    - verify the AI chat UI reopen action is enabled only when current
+      AI-owned code exists;
     - verify shown modes use current editor text at run time;
     - verify `SHOWN_USER_RUN` keeps the dialog open until user `Run` or
       `Cancel`, closes it on success, and keeps it open on failure;
@@ -1467,17 +1505,23 @@ script-execution policies
     - verify immediate replacement while the current AI-owned script is
       idle/open/finished/failed;
     - verify internal AI follow-up messages for user-started completion
-      and failure;
+      and failure use the dedicated automatic code-status message
+      type;
     - verify level-drop behavior keeps read/status only;
-    - verify script system prompt is appended only for the AI-owned
-      flow;
     - verify attached manual run success updates state without
       auto-posting to chat; and
     - verify attached manual run failure auto-posts analysis to the
       owning chat without rewriting content unless explicitly requested
       or confirmed; and
-    - verify attached manual run failure auto-post includes compact
-      context only and does not inline full code text; and
+    - verify attached manual run failure auto-post includes full
+      result/status details and does not inline full code text;
+    - verify automatic code-status messages preserve their dedicated
+      type and dedicated transcript role across transcript/history
+      rebuild;
+    - verify later AI turns receive those messages in model context as
+      user messages, not assistant/system messages or fake tool calls;
+    - verify those model-context user messages identify themselves as
+      automatic app-authored code-status messages;
     - verify MCP observes attached manual failures only through updated
       host state and later `readCode` calls.
   - Manual tests:
@@ -1486,6 +1530,22 @@ script-execution policies
       executes;
     - lower the shared/global level after a script exists and verify the
       tooltip text matches behavior.
+- **Implementation notes:**
+  - **Interpretations:**
+    - Hidden internal-AI requests now bind AI-owned-script ownership to
+      the current chat session so later user-started completion/failure
+      follow-up messages have a transcript target.
+    - Attached manual script-failure auto-posts omit inline code text
+      and rely on shared code-state details plus later `readCode`
+      access.
+  - **Tradeoffs:**
+    - The explicit AI-owned-script reopen path is implemented in the AI
+      chat popup menu rather than as a persistent top-bar button to keep
+      the UI change minimal while still exposing a user-only reopen
+      action.
+    - Current chat rendering shows `AutomaticCodeStatusMessage` with the
+      existing system-message styling while preserving its dedicated
+      transcript role and model-context `UserMessage` mapping.
 
 ## Subtask: MCP code-host flow and DISABLED documentation access
 - **Status:** backlog

@@ -1,5 +1,6 @@
 package org.freeplane.plugin.ai.code;
 
+import java.lang.reflect.Method;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -122,6 +123,24 @@ public class RoutingAiCodeHostService implements AiCodeHostService {
             throw new IllegalStateException("AI-owned script host is unavailable.");
         }
         return aiHostService;
+    }
+
+    public synchronized boolean showCurrentAiOwnedCode() {
+        AiCodeHostService aiHostService = currentAiCodeHostService();
+        if (aiHostService == null) {
+            return false;
+        }
+        ReadCodeResponse response = aiHostService.readCode(new ReadCodeRequest(null, ScriptHost.AI, null));
+        if (response == null || response.getStatus() == CodeLifecycleStatus.NO_CODE || response.getCodeId() == null) {
+            return false;
+        }
+        try {
+            Method method = aiHostService.getClass().getMethod("showCode", String.class);
+            method.invoke(aiHostService, response.getCodeId());
+            return true;
+        } catch (Exception error) {
+            return false;
+        }
     }
 
     private AiCodeHostService currentAiCodeHostService() {

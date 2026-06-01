@@ -83,6 +83,12 @@ class TranscriptMemoryMapper {
             }
             return MessageBuilder.buildSystemInstructionUserMessage(entry.getText());
         }
+        if (entry.getRole() == ChatTranscriptRole.AUTOMATIC_CODE_STATUS) {
+            if (entry.getText() == null) {
+                return null;
+            }
+            return new AutomaticCodeStatusMessage(entry.getText());
+        }
         if (entry.getText() == null) {
             return null;
         }
@@ -103,6 +109,13 @@ class TranscriptMemoryMapper {
         if (message instanceof RemovedForSpaceSystemMessage) {
             return new ChatTranscriptEntry(ChatTranscriptRole.REMOVED_FOR_SPACE_SYSTEM,
                 ((RemovedForSpaceSystemMessage) message).text());
+        }
+        if (message instanceof AutomaticCodeStatusMessage) {
+            String text = ((AutomaticCodeStatusMessage) message).singleText();
+            if (text == null || text.trim().isEmpty()) {
+                return null;
+            }
+            return new ChatTranscriptEntry(ChatTranscriptRole.AUTOMATIC_CODE_STATUS, text);
         }
         if (message instanceof UserMessage) {
             String text = ((UserMessage) message).singleText();

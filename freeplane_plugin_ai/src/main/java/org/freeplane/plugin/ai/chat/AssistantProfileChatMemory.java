@@ -376,6 +376,13 @@ public class AssistantProfileChatMemory implements ChatMemory {
         if (message instanceof ToolCallSummaryMessage) {
             return null;
         }
+        if (message instanceof AutomaticCodeStatusMessage) {
+            String text = ((AutomaticCodeStatusMessage) message).singleText();
+            if (text == null || text.trim().isEmpty()) {
+                return null;
+            }
+            return new ChatTranscriptEntry(ChatTranscriptRole.AUTOMATIC_CODE_STATUS, text);
+        }
         if (message instanceof UserMessage) {
             String text = ((UserMessage) message).singleText();
             if (text == null || text.trim().isEmpty() || text.startsWith(MessageBuilder.CONTROL_INSTRUCTION_PREFIX)) {

@@ -36,6 +36,17 @@ import org.freeplane.plugin.ai.prompt.AiPromptProgressDialogFactory;
 import org.freeplane.plugin.ai.prompt.AiPromptRequestComposer;
 import org.freeplane.plugin.ai.prompt.HiddenAiRequestObserverBridge;
 import org.freeplane.features.ai.code.AiCodeHostService;
+import org.freeplane.features.ai.code.AiCodeRunListener;
+import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CompileCodeRequest;
+import org.freeplane.features.ai.code.CompileCodeResponse;
+import org.freeplane.features.ai.code.ReadCodeRequest;
+import org.freeplane.features.ai.code.ReadCodeResponse;
+import org.freeplane.features.ai.code.RunScriptRequest;
+import org.freeplane.features.ai.code.RunScriptResponse;
+import org.freeplane.features.ai.code.ScriptHost;
+import org.freeplane.features.ai.code.WriteCodeRequest;
+import org.freeplane.features.ai.code.WriteCodeResponse;
 import org.freeplane.plugin.ai.prompt.HiddenAiRequestObserverFactory;
 import org.freeplane.plugin.ai.prompt.HiddenPromptRequestRunner;
 import org.freeplane.plugin.ai.prompt.HiddenPromptRequestRunnerFactory;
@@ -149,6 +160,14 @@ public class AIChatPanel extends JPanel {
         new HashMap<LiveChatSessionId, ChatTokenUsageTracker>();
     private final AssistantProfileSelectionSync assistantProfileSelectionSync;
     private final AssistantProfilePaneBuilder assistantProfilePaneBuilder;
+    private final Map<String, LiveChatSessionId> aiOwnedCodeOwningSessions =
+        new HashMap<String, LiveChatSessionId>();
+    private final AiCodeRunListener aiCodeRunListener = new AiCodeRunListener() {
+        @Override
+        public void runFinished(RunScriptResponse response) {
+            handleCodeRunFinished(response);
+        }
+    };
     private boolean currentSessionUsesAssistantProfile = true;
     private AiCodeHostService codeHostService;
 
@@ -379,6 +398,7 @@ public class AIChatPanel extends JPanel {
             aiPromptRequestComposer,
             this::openPromptChat,
             this::currentCodeHostService,
+            this::sessionAwareCodeHostService,
             chatToolAvailabilitySettings::getToolAvailability,
             liveChatController::sessionToolAvailabilityOverride,
             hiddenPromptRequestRunnerFactory,
@@ -451,6 +471,19 @@ public class AIChatPanel extends JPanel {
             AssistantProfilePaneBuilder.MANAGE_PROFILES_TEXT_KEY);
         manageProfilesMenuItem.setIcon(assistantProfileIcon);
         menuPopup.add(manageProfilesMenuItem);
+        Action reopenAiOwnedScriptAction = new AbstractAction() {
+            private static final long serialVersionUID = 1L;
+
+            @Override
+            public void actionPerformed(ActionEvent event) {
+                reopenAiOwnedCode();
+            }
+        };
+        JMenuItem reopenAiOwnedScriptMenuItem = TranslatedElementFactory.createMenuItem(
+            reopenAiOwnedScriptAction,
+            "ai_chat_reopen_ai_owned_script");
+        reopenAiOwnedScriptMenuItem.setEnabled(false);
+        menuPopup.add(reopenAiOwnedScriptMenuItem);
         Action copyMarkdownAction = new ChatMarkdownCopyAction(messageHistoryPane, messageHistory);
         JMenuItem copyMarkdownMenuItem = TranslatedElementFactory.createMenuItem(
             copyMarkdownAction,
@@ -461,6 +494,7 @@ public class AIChatPanel extends JPanel {
             @Override
             public void popupMenuWillBecomeVisible(PopupMenuEvent event) {
                 updateToolAvailabilityMenuSelection();
+                reopenAiOwnedScriptMenuItem.setEnabled(canReopenAiOwnedCode());
             }
 
             @Override
@@ -675,7 +709,8 @@ public class AIChatPanel extends JPanel {
             }
             return;
         }
-        ChatPromptRunner chatPromptRunner = chatPromptRunnerFactory.createHidden();
+        ChatPromptRunner chatPromptRunner =
+            chatPromptRunnerFactory.createHidden(liveChatController.currentSessionId());
         if (!chatPromptRunner.submitHiddenRequest(
                 prompt.getName(),
                 prompt.getPrompt(),
@@ -834,7 +869,8 @@ public class AIChatPanel extends JPanel {
         }
         ToolAvailabilityLevel resolvedToolAvailability =
             resolvePromptStyleToolAvailability(request.getToolAvailability());
-        ChatPromptRunner chatPromptRunner = chatPromptRunnerFactory.createHidden();
+        ChatPromptRunner chatPromptRunner =
+            chatPromptRunnerFactory.createHidden(liveChatController.currentSessionId());
         HiddenPromptRequestRunner hiddenPromptRequestRunner = chatPromptRunner.hiddenPromptRequestRunner();
         handle.setCancelAction(new Runnable() {
             @Override
@@ -1109,16 +1145,17 @@ public class AIChatPanel extends JPanel {
         }
         ToolAvailabilityLevel toolAvailabilityOverride =
             liveChatController.sessionToolAvailabilityOverride(sessionId);
+        AiCodeHostService sessionCodeHostService = sessionAwareCodeHostService(sessionId);
         AIToolSetBuilder toolSetBuilder = new AIToolSetBuilder()
             .toolCallSummaryHandler(requestFlow::onToolCallSummary)
             .availableMaps(availableMaps)
             .mapAccessListener(liveChatController.mapAccessListener(sessionId))
-            .codeHostService(currentCodeHostService())
+            .codeHostService(sessionCodeHostService)
             .aiCodeOperationAuthorizer(new AiCodeOperationAuthorizer(
                 ToolCaller.CHAT,
                 chatToolAvailabilitySettings::getToolAvailability,
                 () -> liveChatController.sessionToolAvailabilityOverride(sessionId),
-                currentCodeHostService()));
+                sessionCodeHostService));
         List<Object> toolObjects = toolSetBuilder.buildToolObjects();
         return AIChatServiceFactory.createService(
             (org.freeplane.plugin.ai.tools.AIToolSet) toolObjects.get(0),
@@ -1134,6 +1171,50 @@ public class AIChatPanel extends JPanel {
 
     private AiCodeHostService currentCodeHostService() {
         return codeHostService;
+    }
+
+    private AiCodeHostService sessionAwareCodeHostService(LiveChatSessionId sessionId) {
+        AiCodeHostService delegate = currentCodeHostService();
+        if (delegate == null || sessionId == null) {
+            return delegate;
+        }
+        return new AiCodeHostService() {
+            @Override
+            public ReadCodeResponse readCode(ReadCodeRequest request) {
+                return delegate.readCode(request);
+            }
+
+            @Override
+            public WriteCodeResponse writeCode(WriteCodeRequest request) {
+                WriteCodeResponse response = delegate.writeCode(request);
+                rememberAiOwnedCodeOwner(response == null ? null : response.getCodeId(),
+                    response == null ? null : response.getHost(), sessionId);
+                return response;
+            }
+
+            @Override
+            public CompileCodeResponse compileCode(CompileCodeRequest request) {
+                return delegate.compileCode(request);
+            }
+
+            @Override
+            public RunScriptResponse runScript(RunScriptRequest request) {
+                RunScriptResponse response = delegate.runScript(request);
+                rememberAiOwnedCodeOwner(response == null ? null : response.getCodeId(),
+                    response == null ? null : response.getHost(), sessionId);
+                return response;
+            }
+
+            @Override
+            public void addRunListener(AiCodeRunListener listener) {
+                delegate.addRunListener(listener);
+            }
+
+            @Override
+            public void removeRunListener(AiCodeRunListener listener) {
+                delegate.removeRunListener(listener);
+            }
+        };
     }
 
     private ChatTokenUsageTracker createRequestTokenUsageTracker(LiveChatSessionId sessionId) {
@@ -1323,8 +1404,65 @@ public class AIChatPanel extends JPanel {
         }
     }
 
+    boolean canReopenAiOwnedCode() {
+        AiCodeHostService activeCodeHostService = currentCodeHostService();
+        if (activeCodeHostService == null) {
+            return false;
+        }
+        try {
+            ReadCodeResponse response = activeCodeHostService.readCode(new ReadCodeRequest(null, ScriptHost.AI, null));
+            return response != null && response.getStatus() != CodeLifecycleStatus.NO_CODE;
+        } catch (RuntimeException error) {
+            return false;
+        }
+    }
+
+    boolean reopenAiOwnedCode() {
+        if (!canReopenAiOwnedCode()) {
+            return false;
+        }
+        AiCodeHostService activeCodeHostService = currentCodeHostService();
+        if (!(activeCodeHostService instanceof org.freeplane.plugin.ai.code.RoutingAiCodeHostService)) {
+            return false;
+        }
+        return ((org.freeplane.plugin.ai.code.RoutingAiCodeHostService) activeCodeHostService).showCurrentAiOwnedCode();
+    }
+
+    private void rememberAiOwnedCodeOwner(String codeId, ScriptHost host, LiveChatSessionId sessionId) {
+        if (host == ScriptHost.AI && codeId != null && sessionId != null) {
+            aiOwnedCodeOwningSessions.put(codeId, sessionId);
+        }
+    }
+
+    void handleCodeRunFinished(RunScriptResponse response) {
+        if (response == null || response.getHost() != ScriptHost.AI || response.getRunInitiator() != org.freeplane.features.ai.code.ScriptRunInitiator.USER) {
+            return;
+        }
+        LiveChatSessionId sessionId = aiOwnedCodeOwningSessions.get(response.getCodeId());
+        if (sessionId == null) {
+            return;
+        }
+        AutomaticCodeStatusMessage message = AutomaticCodeStatusMessage.forRunResponse(response);
+        ChatMemory sessionChatMemory = liveChatController.chatMemory(sessionId);
+        if (sessionChatMemory == null) {
+            return;
+        }
+        sessionChatMemory.add(message);
+        liveChatController.synchronizeTranscriptWithMemory(sessionId);
+        if (liveChatController.isCurrentSession(sessionId)) {
+            appendHistoryEntry(ChatMemoryRenderEntry.forMessage(message));
+            refreshTokenCounters();
+        }
+    }
+
     public void setCodeHostService(AiCodeHostService codeHostService) {
+        if (this.codeHostService != null) {
+            this.codeHostService.removeRunListener(aiCodeRunListener);
+        }
         this.codeHostService = codeHostService;
+        if (this.codeHostService != null) {
+            this.codeHostService.addRunListener(aiCodeRunListener);
+        }
     }
 
     public LiveChatSessionId currentSessionId() {

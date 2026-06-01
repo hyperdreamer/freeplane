@@ -4,7 +4,6 @@ public enum CodeLifecycleStatus {
     NO_CODE,
     READY,
     WAITING_FOR_USER_RUN,
-    RUNNING,
     SUCCEEDED,
     FAILED,
     REPLACED

@@ -2,19 +2,21 @@ package org.freeplane.plugin.script.ai;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
+import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Formatter;
 import java.util.HashMap;
-import java.util.IdentityHashMap;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Iterator;
+import java.util.concurrent.Callable;
+import javax.swing.SwingUtilities;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.features.ai.code.AiCodeRunListener;
@@ -41,30 +43,110 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
     public static final String HOST_REGISTRATION_PROPERTY = "scriptHost";
     public static final String AI_HOST_REGISTRATION_VALUE = "AI";
     public static final String AI_SCRIPT_CONTENT_TYPE = "text/x-freeplane-script-groovy";
+    public static final String AI_SCRIPT_EXECUTION_POLICY = "ai_script_execution_policy";
+    public static final String AI_SCRIPT_USER_RUN_PERMISSION_MODE = "ai_script_user_run_permission_mode";
     public static final String AI_SCRIPT_WITHOUT_FILE_RESTRICTION = "ai_script_without_file_restriction";
     public static final String AI_SCRIPT_WITHOUT_WRITE_RESTRICTION = "ai_script_without_write_restriction";
     public static final String AI_SCRIPT_WITHOUT_NETWORK_RESTRICTION = "ai_script_without_network_restriction";
     public static final String AI_SCRIPT_WITHOUT_EXEC_RESTRICTION = "ai_script_without_exec_restriction";
+    public static final String AI_TOOL_AVAILABILITY_PROPERTY = "ai_tool_availability";
 
     private static final String AI_SCRIPT_CODE_ID_PREFIX = "ai-script-";
 
+    interface DialogHandle {
+        void showCode(String codeId);
+        void showAndFocus();
+        String currentCodeText();
+        boolean showsCode(String codeId);
+        void hideDialog();
+    }
+
+    interface DialogFactory {
+        DialogHandle create(CodeStateProvider codeStateProvider, DialogCallbacks callbacks);
+    }
+
+    interface CodeStateProvider {
+        ReadCodeResponse readCurrentState(String codeId);
+    }
+
+    interface DialogCallbacks {
+        RunScriptResponse runFromDialog(String codeText);
+        void dialogCancelled();
+    }
+
     private final ResourceController resourceController;
-    private final Set<AiCodeRunListener> runListeners = Collections.newSetFromMap(
-        new IdentityHashMap<AiCodeRunListener, Boolean>());
+    private final DialogFactory dialogFactory;
+    private final Set<AiCodeRunListener> runListeners = new LinkedHashSet<AiCodeRunListener>();
     private final Map<String, ReadCodeResponse> archivedStates = new HashMap<String, ReadCodeResponse>();
     private long nextCodeId = 1L;
     private CurrentScript currentScript;
+    private DialogHandle dialog;
 
     public AiOwnedScriptHostService() {
         this(Controller.getCurrentController() == null ? null : Controller.getCurrentController().getResourceController());
     }
 
     AiOwnedScriptHostService(ResourceController resourceController) {
+        this(resourceController, (codeStateProvider, callbacks) -> new AiOwnedScriptDialog(codeStateProvider, callbacks));
+    }
+
+    AiOwnedScriptHostService(ResourceController resourceController, DialogFactory dialogFactory) {
         this.resourceController = resourceController;
+        this.dialogFactory = dialogFactory;
     }
 
     @Override
-    public synchronized ReadCodeResponse readCode(ReadCodeRequest request) {
+    public ReadCodeResponse readCode(ReadCodeRequest request) {
+        return onEdt(() -> doReadCode(request));
+    }
+
+    @Override
+    public WriteCodeResponse writeCode(WriteCodeRequest request) {
+        return onEdt(() -> doWriteCode(request));
+    }
+
+    @Override
+    public CompileCodeResponse compileCode(CompileCodeRequest request) {
+        return onEdt(() -> doCompileCode(request));
+    }
+
+    @Override
+    public RunScriptResponse runScript(RunScriptRequest request) {
+        return onEdt(() -> doRunScript(request));
+    }
+
+    @Override
+    public void addRunListener(AiCodeRunListener listener) {
+        onEdt(() -> {
+            if (listener != null) {
+                runListeners.add(listener);
+            }
+            return null;
+        });
+    }
+
+    @Override
+    public void removeRunListener(AiCodeRunListener listener) {
+        onEdt(() -> {
+            if (listener != null) {
+                runListeners.remove(listener);
+            }
+            return null;
+        });
+    }
+
+    public void showCode(String codeId) {
+        onEdt(() -> {
+            if (currentScript == null || codeId == null || !codeId.equals(currentScript.codeId)) {
+                return null;
+            }
+            dialog().showCode(codeId);
+            dialog().showAndFocus();
+            return null;
+        });
+    }
+
+    ReadCodeResponse doReadCode(ReadCodeRequest request) {
         String codeId = normalized(request == null ? null : request.getCodeId());
         if (codeId != null) {
             if (currentScript != null && currentScript.codeId.equals(codeId)) {
@@ -89,8 +171,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
         return currentReadCodeResponse(request == null ? null : request.getFingerprint());
     }
 
-    @Override
-    public synchronized WriteCodeResponse writeCode(WriteCodeRequest request) {
+    WriteCodeResponse doWriteCode(WriteCodeRequest request) {
         if (request == null) {
             throw new IllegalArgumentException("request is required.");
         }
@@ -100,12 +181,18 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
         if (request.getText() == null) {
             throw new IllegalArgumentException("text is required.");
         }
+        assertNotRunning();
         assertExpectedFingerprint(request.getExpectedFingerprint());
         String newCodeId = nextCodeId();
         if (currentScript != null) {
             archivedStates.put(currentScript.codeId, replacedState(currentScript, newCodeId));
         }
         currentScript = new CurrentScript(newCodeId, request.getText());
+        currentScript.fingerprint = fingerprint(currentScript.storedText);
+        currentScript.latestState = readyState(currentScript, currentScript.storedText, currentScript.fingerprint);
+        if (dialog != null) {
+            dialog.showCode(newCodeId);
+        }
         return new WriteCodeResponse(
             currentScript.codeId,
             ScriptHost.AI,
@@ -114,158 +201,226 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
             currentScript.fingerprint);
     }
 
-    @Override
-    public synchronized CompileCodeResponse compileCode(CompileCodeRequest request) {
+    CompileCodeResponse doCompileCode(CompileCodeRequest request) {
         requireCurrentScript(request == null ? null : request.getCodeId(), request == null ? null : request.getHost());
         assertExpectedFingerprint(request == null ? null : request.getExpectedFingerprint());
+        synchronizeCurrentTextFromDialog();
+        String codeText = currentText();
         ScriptingEngine.GroovyCompileResult compileResult = ScriptingEngine.compileGroovyScriptForDiagnostics(
-            currentScript.codeText,
-            aiStartedPermissions(false));
+            codeText,
+            aiStartedPermissions());
+        String currentFingerprint = fingerprint(codeText);
         CompileCodeResponse response = new CompileCodeResponse(
             currentScript.codeId,
             ScriptHost.AI,
             AI_SCRIPT_CONTENT_TYPE,
             compileResult.isSuccessful() ? CodeLifecycleStatus.READY : CodeLifecycleStatus.FAILED,
-            currentScript.fingerprint,
+            currentFingerprint,
             compileResult.getCompilerDiagnostics(),
             compileResult.getErrorMessage(),
             compileResult.getLineNumber());
         currentScript.latestState = compileResult.isSuccessful()
-            ? readyState(currentScript)
-            : failedState(currentScript, response.getCompilerDiagnostics(), response.getErrorMessage(),
-                response.getLineNumber(), null, null, null);
+            ? readyState(currentScript, codeText, currentFingerprint)
+            : failedState(currentScript, currentFingerprint, compileResult.getCompilerDiagnostics(),
+                compileResult.getErrorMessage(), compileResult.getLineNumber(), null, null, null);
+        if (dialog != null && dialog.showsCode(currentScript.codeId)) {
+            dialog.showCode(currentScript.codeId);
+        }
         return response;
     }
 
-    @Override
-    public synchronized RunScriptResponse runScript(RunScriptRequest request) {
+    RunScriptResponse doRunScript(RunScriptRequest request) {
         requireCurrentScript(request == null ? null : request.getCodeId(), request == null ? null : request.getHost());
         assertExpectedFingerprint(request == null ? null : request.getExpectedFingerprint());
-        ScriptingPermissions permissions = aiStartedPermissions(false);
-        ScriptingEngine.GroovyCompileResult compileResult = ScriptingEngine.compileGroovyScriptForDiagnostics(
-            currentScript.codeText,
-            permissions);
-        if (!compileResult.isSuccessful()) {
-            RunScriptResponse response = new RunScriptResponse(
-                currentScript.codeId,
-                ScriptHost.AI,
-                AI_SCRIPT_CONTENT_TYPE,
-                CodeLifecycleStatus.FAILED,
-                ScriptRunInitiator.AI,
-                currentScript.fingerprint,
-                compileResult.getCompilerDiagnostics(),
-                compileResult.getErrorMessage(),
-                compileResult.getLineNumber(),
-                null,
-                null);
-            currentScript.latestState = failedState(currentScript, response.getCompilerDiagnostics(), response.getErrorMessage(),
-                response.getLineNumber(), null, null, ScriptRunInitiator.AI);
-            fireRunFinished(response);
+        assertNotRunning();
+        synchronizeCurrentTextFromDialog();
+        AiScriptExecutionPolicy policy = executionPolicy();
+        if (policy == AiScriptExecutionPolicy.SHOWN_USER_RUN) {
+            dialog().showCode(currentScript.codeId);
+            dialog().showAndFocus();
+            RunScriptResponse response = waitingResponse(ScriptRunInitiator.AI);
+            currentScript.latestState = waitingState(currentScript, response.getFingerprint(), ScriptRunInitiator.AI);
             return response;
         }
-        NodeModel selectedNode = currentSelectedNode();
-        if (selectedNode == null) {
-            throw new IllegalStateException("No node is currently selected.");
+        if (policy == AiScriptExecutionPolicy.SHOWN_AI_RUN) {
+            dialog().showCode(currentScript.codeId);
+            dialog().showAndFocus();
         }
-        ByteArrayOutputStream outputBuffer = new ByteArrayOutputStream();
-        final int[] lineNumber = new int[] { -1 };
-        try (PrintStream outStream = new PrintStream(outputBuffer, false, "UTF-8")) {
-            Object result = ScriptingEngine.executeScript(
-                selectedNode,
-                currentScript.codeText,
-                new IFreeplaneScriptErrorHandler() {
-                    @Override
-                    public void gotoLine(int pLineNumber) {
-                        lineNumber[0] = pLineNumber;
-                    }
-                },
-                outStream,
-                null,
+        return executeCurrentScript(ScriptRunInitiator.AI, aiStartedPermissions(), policy == AiScriptExecutionPolicy.SHOWN_AI_RUN);
+    }
+
+    RunScriptResponse runFromDialog(String codeText) {
+        if (currentScript == null) {
+            throw new IllegalStateException("No AI-owned script exists.");
+        }
+        if (!isScriptExecutionAvailable()) {
+            throw new IllegalStateException("AI-owned script execution is currently disabled.");
+        }
+        currentScript.storedText = codeText == null ? "" : codeText;
+        currentScript.fingerprint = fingerprint(currentScript.storedText);
+        return executeCurrentScript(ScriptRunInitiator.USER, userStartedPermissions(), false);
+    }
+
+    void dialogCancelled() {
+        synchronizeCurrentTextFromDialog();
+    }
+
+    ScriptingPermissions aiStartedPermissions() {
+        return restrictedExecutionPermissions(
+            booleanProperty(AI_SCRIPT_WITHOUT_FILE_RESTRICTION),
+            booleanProperty(AI_SCRIPT_WITHOUT_WRITE_RESTRICTION),
+            booleanProperty(AI_SCRIPT_WITHOUT_NETWORK_RESTRICTION),
+            booleanProperty(AI_SCRIPT_WITHOUT_EXEC_RESTRICTION));
+    }
+
+    ScriptingPermissions userStartedPermissions() {
+        if (userRunPermissionMode() == AiScriptUserRunPermissionMode.UNRESTRICTED) {
+            return restrictedExecutionPermissions(true, true, true, true);
+        }
+        return restrictedExecutionPermissions(
+            booleanProperty(AI_SCRIPT_WITHOUT_FILE_RESTRICTION),
+            booleanProperty(AI_SCRIPT_WITHOUT_WRITE_RESTRICTION),
+            booleanProperty(AI_SCRIPT_WITHOUT_NETWORK_RESTRICTION),
+            booleanProperty(AI_SCRIPT_WITHOUT_EXEC_RESTRICTION));
+    }
+
+    private RunScriptResponse executeCurrentScript(ScriptRunInitiator runInitiator,
+                                                   ScriptingPermissions permissions,
+                                                   boolean closeShownAiRunDialogOnSuccess) {
+        assertNotRunning();
+        synchronizeCurrentTextFromDialog();
+        currentScript.running = true;
+        try {
+            String codeText = currentText();
+            String currentFingerprint = fingerprint(codeText);
+            ScriptingEngine.GroovyCompileResult compileResult = ScriptingEngine.compileGroovyScriptForDiagnostics(
+                codeText,
                 permissions);
-            String stdout = trimStdout(outputBuffer);
-            Object structuredResult = toJsonSafeValue(result);
-            RunScriptResponse response = new RunScriptResponse(
-                currentScript.codeId,
-                ScriptHost.AI,
-                AI_SCRIPT_CONTENT_TYPE,
-                CodeLifecycleStatus.SUCCEEDED,
-                ScriptRunInitiator.AI,
-                currentScript.fingerprint,
-                null,
-                null,
-                null,
-                stdout,
-                structuredResult);
-            currentScript.latestState = new ReadCodeResponse(
-                currentScript.codeId,
-                ScriptHost.AI,
-                AI_SCRIPT_CONTENT_TYPE,
-                CodeLifecycleStatus.SUCCEEDED,
-                ScriptRunInitiator.AI,
-                currentScript.fingerprint,
-                currentScript.codeText,
-                null,
-                null,
-                null,
-                null,
-                stdout,
-                structuredResult);
-            fireRunFinished(response);
-            return response;
-        } catch (ExecuteScriptException error) {
-            String stdout = trimStdout(outputBuffer);
-            Integer errorLine = lineNumber[0] >= 0 ? Integer.valueOf(lineNumber[0]) : null;
-            RunScriptResponse response = new RunScriptResponse(
-                currentScript.codeId,
-                ScriptHost.AI,
-                AI_SCRIPT_CONTENT_TYPE,
-                CodeLifecycleStatus.FAILED,
-                ScriptRunInitiator.AI,
-                currentScript.fingerprint,
-                null,
-                error.getMessage(),
-                errorLine,
-                stdout,
-                null);
-            currentScript.latestState = failedState(currentScript, null, error.getMessage(), errorLine, stdout, null,
-                ScriptRunInitiator.AI);
-            fireRunFinished(response);
-            return response;
-        } catch (RuntimeException error) {
-            String stdout = trimStdout(outputBuffer);
-            Integer errorLine = lineNumber[0] >= 0 ? Integer.valueOf(lineNumber[0]) : null;
-            RunScriptResponse response = new RunScriptResponse(
-                currentScript.codeId,
-                ScriptHost.AI,
-                AI_SCRIPT_CONTENT_TYPE,
-                CodeLifecycleStatus.FAILED,
-                ScriptRunInitiator.AI,
-                currentScript.fingerprint,
-                null,
-                error.getMessage(),
-                errorLine,
-                stdout,
-                null);
-            currentScript.latestState = failedState(currentScript, null, error.getMessage(), errorLine, stdout, null,
-                ScriptRunInitiator.AI);
-            fireRunFinished(response);
-            return response;
-        } catch (Exception error) {
-            throw new IllegalStateException(error.getMessage(), error);
+            if (!compileResult.isSuccessful()) {
+                RunScriptResponse response = new RunScriptResponse(
+                    currentScript.codeId,
+                    ScriptHost.AI,
+                    AI_SCRIPT_CONTENT_TYPE,
+                    CodeLifecycleStatus.FAILED,
+                    runInitiator,
+                    currentFingerprint,
+                    compileResult.getCompilerDiagnostics(),
+                    compileResult.getErrorMessage(),
+                    compileResult.getLineNumber(),
+                    null,
+                    null);
+                currentScript.latestState = failedState(currentScript, currentFingerprint,
+                    response.getCompilerDiagnostics(), response.getErrorMessage(), response.getLineNumber(), null,
+                    null, runInitiator);
+                refreshDialogAfterRun(response, closeShownAiRunDialogOnSuccess);
+                fireRunFinished(response);
+                return response;
+            }
+            NodeModel selectedNode = currentSelectedNode();
+            if (selectedNode == null) {
+                throw new IllegalStateException("No node is currently selected.");
+            }
+            ByteArrayOutputStream outputBuffer = new ByteArrayOutputStream();
+            final int[] lineNumber = new int[] { -1 };
+            try (PrintStream outStream = new PrintStream(outputBuffer, false, "UTF-8")) {
+                Object result = ScriptingEngine.executeScript(
+                    selectedNode,
+                    codeText,
+                    new IFreeplaneScriptErrorHandler() {
+                        @Override
+                        public void gotoLine(int pLineNumber) {
+                            lineNumber[0] = pLineNumber;
+                        }
+                    },
+                    outStream,
+                    null,
+                    permissions);
+                String stdout = trimStdout(outputBuffer);
+                Object structuredResult = toJsonSafeValue(result);
+                RunScriptResponse response = new RunScriptResponse(
+                    currentScript.codeId,
+                    ScriptHost.AI,
+                    AI_SCRIPT_CONTENT_TYPE,
+                    CodeLifecycleStatus.SUCCEEDED,
+                    runInitiator,
+                    currentFingerprint,
+                    null,
+                    null,
+                    null,
+                    stdout,
+                    structuredResult);
+                currentScript.latestState = new ReadCodeResponse(
+                    currentScript.codeId,
+                    ScriptHost.AI,
+                    AI_SCRIPT_CONTENT_TYPE,
+                    CodeLifecycleStatus.SUCCEEDED,
+                    runInitiator,
+                    currentFingerprint,
+                    codeText,
+                    null,
+                    null,
+                    null,
+                    null,
+                    stdout,
+                    structuredResult);
+                refreshDialogAfterRun(response, closeShownAiRunDialogOnSuccess);
+                fireRunFinished(response);
+                return response;
+            } catch (ExecuteScriptException error) {
+                String stdout = trimStdout(outputBuffer);
+                Integer errorLine = lineNumber[0] >= 0 ? Integer.valueOf(lineNumber[0]) : null;
+                RunScriptResponse response = new RunScriptResponse(
+                    currentScript.codeId,
+                    ScriptHost.AI,
+                    AI_SCRIPT_CONTENT_TYPE,
+                    CodeLifecycleStatus.FAILED,
+                    runInitiator,
+                    currentFingerprint,
+                    null,
+                    error.getMessage(),
+                    errorLine,
+                    stdout,
+                    null);
+                currentScript.latestState = failedState(currentScript, currentFingerprint, null,
+                    error.getMessage(), errorLine, stdout, null, runInitiator);
+                refreshDialogAfterRun(response, closeShownAiRunDialogOnSuccess);
+                fireRunFinished(response);
+                return response;
+            } catch (RuntimeException error) {
+                String stdout = trimStdout(outputBuffer);
+                Integer errorLine = lineNumber[0] >= 0 ? Integer.valueOf(lineNumber[0]) : null;
+                RunScriptResponse response = new RunScriptResponse(
+                    currentScript.codeId,
+                    ScriptHost.AI,
+                    AI_SCRIPT_CONTENT_TYPE,
+                    CodeLifecycleStatus.FAILED,
+                    runInitiator,
+                    currentFingerprint,
+                    null,
+                    error.getMessage(),
+                    errorLine,
+                    stdout,
+                    null);
+                currentScript.latestState = failedState(currentScript, currentFingerprint, null,
+                    error.getMessage(), errorLine, stdout, null, runInitiator);
+                refreshDialogAfterRun(response, closeShownAiRunDialogOnSuccess);
+                fireRunFinished(response);
+                return response;
+            } catch (Exception error) {
+                throw new IllegalStateException(error.getMessage(), error);
+            }
+        } finally {
+            currentScript.running = false;
         }
     }
 
-    @Override
-    public synchronized void addRunListener(AiCodeRunListener listener) {
-        if (listener != null) {
-            runListeners.add(listener);
+    private void refreshDialogAfterRun(RunScriptResponse response, boolean closeShownAiRunDialogOnSuccess) {
+        if (dialog == null || !dialog.showsCode(currentScript.codeId)) {
+            return;
         }
-    }
-
-    @Override
-    public synchronized void removeRunListener(AiCodeRunListener listener) {
-        if (listener != null) {
-            runListeners.remove(listener);
+        dialog.showCode(currentScript.codeId);
+        if (response.getStatus() == CodeLifecycleStatus.SUCCEEDED && closeShownAiRunDialogOnSuccess) {
+            dialog.hideDialog();
         }
     }
 
@@ -290,24 +445,33 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
         if (normalizedFingerprint == null || currentScript == null) {
             return;
         }
-        if (!normalizedFingerprint.equals(currentScript.fingerprint)) {
+        String currentFingerprint = fingerprint(currentText());
+        if (!normalizedFingerprint.equals(currentFingerprint)) {
             throw new IllegalStateException("Expected fingerprint does not match the current code.");
         }
     }
 
+    private void assertNotRunning() {
+        if (currentScript != null && currentScript.running) {
+            throw new IllegalStateException("The current AI-owned script is already running.");
+        }
+    }
+
     private ReadCodeResponse currentReadCodeResponse(String requestedFingerprint) {
-        String codeText = currentScript.fingerprint.equals(normalized(requestedFingerprint))
-            ? null
-            : currentScript.codeText;
-        ReadCodeResponse state = currentScript.latestState == null ? readyState(currentScript) : currentScript.latestState;
+        String codeText = currentText();
+        String currentFingerprint = fingerprint(codeText);
+        ReadCodeResponse state = currentScript.latestState == null
+            ? readyState(currentScript, codeText, currentFingerprint)
+            : currentScript.latestState;
+        String responseText = currentFingerprint.equals(normalized(requestedFingerprint)) ? null : codeText;
         return new ReadCodeResponse(
             currentScript.codeId,
             ScriptHost.AI,
             AI_SCRIPT_CONTENT_TYPE,
             state.getStatus(),
             state.getRunInitiator(),
-            currentScript.fingerprint,
-            codeText,
+            currentFingerprint,
+            responseText,
             state.getReplacementCodeId(),
             state.getCompilerDiagnostics(),
             state.getErrorMessage(),
@@ -316,15 +480,33 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
             state.getStructuredResult());
     }
 
-    private ReadCodeResponse readyState(CurrentScript script) {
+    private ReadCodeResponse readyState(CurrentScript script, String codeText, String currentFingerprint) {
         return new ReadCodeResponse(
             script.codeId,
             ScriptHost.AI,
             AI_SCRIPT_CONTENT_TYPE,
             CodeLifecycleStatus.READY,
             null,
-            script.fingerprint,
-            script.codeText,
+            currentFingerprint,
+            codeText,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null);
+    }
+
+    private ReadCodeResponse waitingState(CurrentScript script, String currentFingerprint,
+                                          ScriptRunInitiator runInitiator) {
+        return new ReadCodeResponse(
+            script.codeId,
+            ScriptHost.AI,
+            AI_SCRIPT_CONTENT_TYPE,
+            CodeLifecycleStatus.WAITING_FOR_USER_RUN,
+            runInitiator,
+            currentFingerprint,
+            currentText(),
             null,
             null,
             null,
@@ -334,6 +516,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
     }
 
     private ReadCodeResponse failedState(CurrentScript script,
+                                         String currentFingerprint,
                                          List<String> compilerDiagnostics,
                                          String errorMessage,
                                          Integer lineNumber,
@@ -346,8 +529,8 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
             AI_SCRIPT_CONTENT_TYPE,
             CodeLifecycleStatus.FAILED,
             runInitiator,
-            script.fingerprint,
-            script.codeText,
+            currentFingerprint,
+            currentText(),
             null,
             compilerDiagnostics,
             errorMessage,
@@ -374,14 +557,18 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
     }
 
     private ReadCodeResponse replacedState(CurrentScript script, String replacementCodeId) {
-        ReadCodeResponse state = script.latestState == null ? readyState(script) : script.latestState;
+        String codeText = currentText();
+        String currentFingerprint = fingerprint(codeText);
+        ReadCodeResponse state = script.latestState == null
+            ? readyState(script, codeText, currentFingerprint)
+            : script.latestState;
         return new ReadCodeResponse(
             script.codeId,
             ScriptHost.AI,
             AI_SCRIPT_CONTENT_TYPE,
             CodeLifecycleStatus.REPLACED,
             state.getRunInitiator(),
-            script.fingerprint,
+            currentFingerprint,
             null,
             replacementCodeId,
             state.getCompilerDiagnostics(),
@@ -389,6 +576,23 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
             state.getLineNumber(),
             state.getStdout(),
             state.getStructuredResult());
+    }
+
+    private RunScriptResponse waitingResponse(ScriptRunInitiator runInitiator) {
+        String codeText = currentText();
+        String currentFingerprint = fingerprint(codeText);
+        return new RunScriptResponse(
+            currentScript.codeId,
+            ScriptHost.AI,
+            AI_SCRIPT_CONTENT_TYPE,
+            CodeLifecycleStatus.WAITING_FOR_USER_RUN,
+            runInitiator,
+            currentFingerprint,
+            null,
+            null,
+            null,
+            null,
+            null);
     }
 
     private String nextCodeId() {
@@ -407,24 +611,75 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
         return modeController.getMapController().getSelectedNode();
     }
 
-    private ScriptingPermissions aiStartedPermissions(boolean allowInScriptAiRequests) {
+    private DialogHandle dialog() {
+        if (dialog == null) {
+            dialog = dialogFactory.create(this::readCurrentStateForDialog, new DialogCallbacks() {
+                @Override
+                public RunScriptResponse runFromDialog(String codeText) {
+                    return AiOwnedScriptHostService.this.runFromDialog(codeText);
+                }
+
+                @Override
+                public void dialogCancelled() {
+                    AiOwnedScriptHostService.this.dialogCancelled();
+                }
+            });
+        }
+        return dialog;
+    }
+
+    private ReadCodeResponse readCurrentStateForDialog(String codeId) {
+        return doReadCode(new ReadCodeRequest(codeId, null, null));
+    }
+
+    private void synchronizeCurrentTextFromDialog() {
+        if (currentScript == null || dialog == null || !dialog.showsCode(currentScript.codeId)) {
+            return;
+        }
+        currentScript.storedText = dialog.currentCodeText() == null ? "" : dialog.currentCodeText();
+        currentScript.fingerprint = fingerprint(currentScript.storedText);
+    }
+
+    private String currentText() {
+        if (currentScript == null) {
+            return "";
+        }
+        if (dialog != null && dialog.showsCode(currentScript.codeId)) {
+            return dialog.currentCodeText() == null ? "" : dialog.currentCodeText();
+        }
+        return currentScript.storedText == null ? "" : currentScript.storedText;
+    }
+
+    private AiScriptExecutionPolicy executionPolicy() {
+        return resourceController == null
+            ? AiScriptExecutionPolicy.SHOWN_USER_RUN
+            : resourceController.getEnumProperty(AI_SCRIPT_EXECUTION_POLICY, AiScriptExecutionPolicy.SHOWN_USER_RUN);
+    }
+
+    private AiScriptUserRunPermissionMode userRunPermissionMode() {
+        return resourceController == null
+            ? AiScriptUserRunPermissionMode.AI_SPECIFIC_PERMISSIONS
+            : resourceController.getEnumProperty(
+                AI_SCRIPT_USER_RUN_PERMISSION_MODE,
+                AiScriptUserRunPermissionMode.AI_SPECIFIC_PERMISSIONS);
+    }
+
+    private boolean isScriptExecutionAvailable() {
+        if (resourceController == null) {
+            return true;
+        }
+        String availability = resourceController.getProperty(AI_TOOL_AVAILABILITY_PROPERTY, null);
+        return availability == null || availability.trim().isEmpty() || "SCRIPT_EXECUTION".equals(availability.trim());
+    }
+
+    private ScriptingPermissions restrictedExecutionPermissions(boolean file, boolean write, boolean network, boolean exec) {
         Map<String, Boolean> permissions = new HashMap<String, Boolean>();
         permissions.put(ScriptingPermissions.RESOURCES_EXECUTE_SCRIPTS_WITHOUT_ASKING, Boolean.TRUE);
-        permissions.put(
-            ScriptingPermissions.RESOURCES_EXECUTE_SCRIPTS_WITHOUT_READ_RESTRICTION,
-            Boolean.valueOf(booleanProperty(AI_SCRIPT_WITHOUT_FILE_RESTRICTION)));
-        permissions.put(
-            ScriptingPermissions.RESOURCES_EXECUTE_SCRIPTS_WITHOUT_WRITE_RESTRICTION,
-            Boolean.valueOf(booleanProperty(AI_SCRIPT_WITHOUT_WRITE_RESTRICTION)));
-        permissions.put(
-            ScriptingPermissions.RESOURCES_EXECUTE_SCRIPTS_WITHOUT_NETWORK_RESTRICTION,
-            Boolean.valueOf(booleanProperty(AI_SCRIPT_WITHOUT_NETWORK_RESTRICTION)));
-        permissions.put(
-            ScriptingPermissions.RESOURCES_EXECUTE_SCRIPTS_WITHOUT_EXEC_RESTRICTION,
-            Boolean.valueOf(booleanProperty(AI_SCRIPT_WITHOUT_EXEC_RESTRICTION)));
-        permissions.put(
-            ScriptingPermissions.RESOURCES_EXECUTE_SCRIPTS_WITHOUT_AI_REQUEST_RESTRICTION,
-            Boolean.valueOf(allowInScriptAiRequests));
+        permissions.put(ScriptingPermissions.RESOURCES_EXECUTE_SCRIPTS_WITHOUT_READ_RESTRICTION, Boolean.valueOf(file));
+        permissions.put(ScriptingPermissions.RESOURCES_EXECUTE_SCRIPTS_WITHOUT_WRITE_RESTRICTION, Boolean.valueOf(write));
+        permissions.put(ScriptingPermissions.RESOURCES_EXECUTE_SCRIPTS_WITHOUT_NETWORK_RESTRICTION, Boolean.valueOf(network));
+        permissions.put(ScriptingPermissions.RESOURCES_EXECUTE_SCRIPTS_WITHOUT_EXEC_RESTRICTION, Boolean.valueOf(exec));
+        permissions.put(ScriptingPermissions.RESOURCES_EXECUTE_SCRIPTS_WITHOUT_AI_REQUEST_RESTRICTION, Boolean.FALSE);
         permissions.put(ScriptingPermissions.RESOURCES_SIGNED_SCRIPT_ARE_TRUSTED, Boolean.FALSE);
         return new ScriptingPermissions(permissions);
     }
@@ -484,10 +739,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
     }
 
     private void fireRunFinished(RunScriptResponse response) {
-        List<AiCodeRunListener> listeners;
-        synchronized (this) {
-            listeners = new ArrayList<AiCodeRunListener>(runListeners);
-        }
+        List<AiCodeRunListener> listeners = new ArrayList<AiCodeRunListener>(runListeners);
         for (AiCodeRunListener listener : listeners) {
             listener.runFinished(response);
         }
@@ -511,16 +763,65 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
         }
     }
 
-    private final class CurrentScript {
+    private <T> T onEdt(Callable<T> callable) {
+        if (SwingUtilities.isEventDispatchThread()) {
+            return call(callable);
+        }
+        final Object[] value = new Object[1];
+        final Throwable[] failure = new Throwable[1];
+        try {
+            SwingUtilities.invokeAndWait(() -> {
+                try {
+                    value[0] = call(callable);
+                } catch (Throwable error) {
+                    failure[0] = error;
+                }
+            });
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(error.getMessage(), error);
+        } catch (InvocationTargetException error) {
+            throw new IllegalStateException(error.getMessage(), error);
+        }
+        if (failure[0] != null) {
+            rethrow(failure[0]);
+        }
+        @SuppressWarnings("unchecked")
+        T cast = (T) value[0];
+        return cast;
+    }
+
+    private <T> T call(Callable<T> callable) {
+        try {
+            return callable.call();
+        } catch (RuntimeException error) {
+            throw error;
+        } catch (Exception error) {
+            throw new IllegalStateException(error.getMessage(), error);
+        }
+    }
+
+    private void rethrow(Throwable failure) {
+        if (failure instanceof RuntimeException) {
+            throw (RuntimeException) failure;
+        }
+        if (failure instanceof Error) {
+            throw (Error) failure;
+        }
+        throw new IllegalStateException(failure.getMessage(), failure);
+    }
+
+    private static final class CurrentScript {
         private final String codeId;
-        private final String codeText;
-        private final String fingerprint;
+        private String storedText;
+        private String fingerprint;
         private ReadCodeResponse latestState;
+        private boolean running;
 
         private CurrentScript(String codeId, String codeText) {
             this.codeId = codeId;
-            this.codeText = codeText == null ? "" : codeText;
-            this.fingerprint = fingerprint(this.codeText);
+            this.storedText = codeText == null ? "" : codeText;
+            this.fingerprint = null;
         }
     }
 }

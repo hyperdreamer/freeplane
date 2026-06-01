@@ -40,6 +40,7 @@ public class RequestRuntimeFactoryTest {
             (sessionId, service, preparedMessage, requestFlow, requestTokenUsageTracker, requestCallbacks) -> {
             },
             () -> null,
+            sessionId -> null,
             () -> ToolAvailabilityLevel.EDITING,
             sessionId -> null,
             hiddenRunnerFactory,
@@ -61,8 +62,8 @@ public class RequestRuntimeFactoryTest {
             new ChatTokenUsageTracker(totals -> {
             }),
             LiveChatSessionId.create());
-        ChatPromptRunner hiddenOne = factory.createHidden();
-        ChatPromptRunner hiddenTwo = factory.createHidden();
+        ChatPromptRunner hiddenOne = factory.createHidden(LiveChatSessionId.create());
+        ChatPromptRunner hiddenTwo = factory.createHidden(LiveChatSessionId.create());
 
         assertThat(shownOne).isNotSameAs(shownTwo);
         assertThat(hiddenOne).isNotSameAs(hiddenTwo);

@@ -34,7 +34,20 @@ import org.freeplane.api.ai.AiToolAvailability;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.ui.components.UITools;
 import org.freeplane.core.util.TextUtils;
+import org.freeplane.features.ai.code.AiCodeHostService;
+import org.freeplane.features.ai.code.AiCodeRunListener;
+import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CompileCodeRequest;
+import org.freeplane.features.ai.code.CompileCodeResponse;
+import org.freeplane.features.ai.code.ReadCodeRequest;
+import org.freeplane.features.ai.code.ReadCodeResponse;
+import org.freeplane.features.ai.code.RunScriptRequest;
+import org.freeplane.features.ai.code.RunScriptResponse;
+import org.freeplane.features.ai.code.ScriptHost;
+import org.freeplane.features.ai.code.WriteCodeRequest;
+import org.freeplane.features.ai.code.WriteCodeResponse;
 import org.freeplane.features.text.TextController;
+import org.freeplane.plugin.ai.code.RoutingAiCodeHostService;
 import org.freeplane.plugin.ai.chat.history.ChatTranscriptStore;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.freeplane.plugin.ai.prompt.AiPrompt;
@@ -410,7 +423,7 @@ public class AIChatPanelScriptRequestTest {
         ChatPromptRunnerFactory chatPromptRunnerFactory = mock(ChatPromptRunnerFactory.class);
         ChatPromptRunner hiddenRunner = mock(ChatPromptRunner.class);
         ChatPromptRunner shownRunner = mock(ChatPromptRunner.class);
-        when(chatPromptRunnerFactory.createHidden()).thenReturn(hiddenRunner);
+        when(chatPromptRunnerFactory.createHidden(any())).thenReturn(hiddenRunner);
         when(chatPromptRunnerFactory.createShown(any(), any(), any(), any(), any())).thenReturn(shownRunner);
         when(hiddenRunner.submitHiddenRequest(
             "Hidden prompt",
@@ -458,7 +471,7 @@ public class AIChatPanelScriptRequestTest {
         setField(harness.panel, "activeVisibleRequestFlows", activeVisibleRequestFlows);
         ChatPromptRunnerFactory chatPromptRunnerFactory = mock(ChatPromptRunnerFactory.class);
         ChatPromptRunner chatPromptRunner = mock(ChatPromptRunner.class);
-        when(chatPromptRunnerFactory.createHidden()).thenReturn(chatPromptRunner);
+        when(chatPromptRunnerFactory.createHidden(any())).thenReturn(chatPromptRunner);
         when(chatPromptRunner.submitHiddenRequest(
             "Hidden prompt",
             "Prompt body",
@@ -472,7 +485,7 @@ public class AIChatPanelScriptRequestTest {
 
         harness.panel.runPrompt(new AiPrompt("Hidden prompt", "Prompt body", false));
 
-        verify(chatPromptRunnerFactory).createHidden();
+        verify(chatPromptRunnerFactory).createHidden(any());
         verify(chatPromptRunner).submitHiddenRequest(
             "Hidden prompt",
             "Prompt body",
@@ -521,6 +534,66 @@ public class AIChatPanelScriptRequestTest {
         inOrder.verify(chatRequestFlowFactory).create(any(), any());
         inOrder.verify(chatPromptRunnerFactory).createShown(any(), any(), eq(secondFlow), any(), any());
         inOrder.verify(secondRunner).startShownPrompt("Prompt two", null, ToolAvailabilityLevel.EDITING, null, null);
+    }
+
+    @Test
+    public void canReopenAiOwnedCodeIsFalseWhenCurrentAiHostStateIsNoCode() throws Exception {
+        PanelHarness harness = newPanelHarness(true);
+        AiCodeHostService codeHostService = mock(AiCodeHostService.class);
+        when(codeHostService.readCode(any(ReadCodeRequest.class))).thenReturn(new ReadCodeResponse(
+            null,
+            ScriptHost.AI,
+            "text/x-freeplane-script-groovy",
+            CodeLifecycleStatus.NO_CODE,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null));
+
+        harness.panel.setCodeHostService(codeHostService);
+
+        assertThat(harness.panel.canReopenAiOwnedCode()).isFalse();
+    }
+
+    @Test
+    public void canReopenAiOwnedCodeIsTrueWhenCurrentAiHostStateExists() throws Exception {
+        PanelHarness harness = newPanelHarness(true);
+        AiCodeHostService codeHostService = mock(AiCodeHostService.class);
+        when(codeHostService.readCode(any(ReadCodeRequest.class))).thenReturn(new ReadCodeResponse(
+            "ai-script-1",
+            ScriptHost.AI,
+            "text/x-freeplane-script-groovy",
+            CodeLifecycleStatus.READY,
+            null,
+            "fingerprint",
+            "println 1",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null));
+
+        harness.panel.setCodeHostService(codeHostService);
+
+        assertThat(harness.panel.canReopenAiOwnedCode()).isTrue();
+    }
+
+    @Test
+    public void reopenAiOwnedCodeDelegatesToRoutingHost() throws Exception {
+        PanelHarness harness = newPanelHarness(true);
+        ReopenableAiHost aiHost = new ReopenableAiHost();
+        RoutingAiCodeHostService routingHost = new RoutingAiCodeHostService(mock(AiCodeHostService.class), () -> aiHost);
+
+        harness.panel.setCodeHostService(routingHost);
+
+        assertThat(harness.panel.reopenAiOwnedCode()).isTrue();
+        assertThat(aiHost.shownCodeId).isEqualTo("ai-script-1");
     }
 
     private ChatRequestFlow createVisibleRequestFlow(AIChatPanel panel,
@@ -643,6 +716,55 @@ public class AIChatPanelScriptRequestTest {
                                ChatTokenUsageTracker tokenUsageTracker) {
             this.callbacks = callbacks;
             return mock(ChatRequestFlow.class);
+        }
+    }
+
+    public static class ReopenableAiHost implements AiCodeHostService {
+        private String shownCodeId;
+
+        @Override
+        public ReadCodeResponse readCode(ReadCodeRequest request) {
+            return new ReadCodeResponse(
+                "ai-script-1",
+                ScriptHost.AI,
+                "text/x-freeplane-script-groovy",
+                CodeLifecycleStatus.READY,
+                null,
+                "fingerprint",
+                "println 1",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null);
+        }
+
+        @Override
+        public WriteCodeResponse writeCode(WriteCodeRequest request) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public CompileCodeResponse compileCode(CompileCodeRequest request) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public RunScriptResponse runScript(RunScriptRequest request) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void addRunListener(AiCodeRunListener listener) {
+        }
+
+        @Override
+        public void removeRunListener(AiCodeRunListener listener) {
+        }
+
+        public void showCode(String codeId) {
+            shownCodeId = codeId;
         }
     }
 
