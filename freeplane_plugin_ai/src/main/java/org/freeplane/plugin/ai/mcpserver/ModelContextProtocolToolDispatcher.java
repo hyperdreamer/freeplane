@@ -19,13 +19,21 @@ import org.freeplane.plugin.ai.tools.utilities.ToolExecutorRegistry;
 public class ModelContextProtocolToolDispatcher {
     private final ObjectMapper objectMapper;
     private final Map<String, ToolExecutor> toolExecutorsByName;
+    private final ModelContextProtocolToolCallAuthorizer toolCallAuthorizer;
 
     public ModelContextProtocolToolDispatcher(Object toolSet, ObjectMapper objectMapper) {
-        this(Collections.singletonList(Objects.requireNonNull(toolSet, "toolSet")), objectMapper);
+        this(Collections.singletonList(Objects.requireNonNull(toolSet, "toolSet")), objectMapper, null);
     }
 
     public ModelContextProtocolToolDispatcher(Collection<?> toolSets, ObjectMapper objectMapper) {
+        this(toolSets, objectMapper, null);
+    }
+
+    public ModelContextProtocolToolDispatcher(Collection<?> toolSets,
+                                              ObjectMapper objectMapper,
+                                              ModelContextProtocolToolCallAuthorizer toolCallAuthorizer) {
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
+        this.toolCallAuthorizer = toolCallAuthorizer;
         ToolExecutorFactory toolExecutorFactory = new ToolExecutorFactory(false, false);
         ToolExecutorRegistry toolExecutorRegistry = toolExecutorFactory.createRegistry(toolSets);
         this.toolExecutorsByName = toolExecutorRegistry.getExecutorsByName();
@@ -49,6 +57,9 @@ public class ModelContextProtocolToolDispatcher {
                 LogUtils.info(buildToolCallLog(toolName, null, "Invalid tool arguments."));
                 throw new IllegalArgumentException("Invalid tool arguments.", error);
             }
+        }
+        if (toolCallAuthorizer != null) {
+            toolCallAuthorizer.assertAuthorized(toolName, argumentsNode);
         }
         ToolExecutionRequest request = ToolExecutionRequest.builder()
             .name(toolName)

@@ -249,6 +249,19 @@ McpServer -> ApiTool: getApiDocumentation()
   - Internal AI uses availability filtering for advertised tools.
   - MCP may keep a stable advertised tool list, but every code/script
     tool call must re-check current availability and current policy.
+  - Add
+    `org.freeplane.plugin.ai.mcpserver.ModelContextProtocolToolCallAuthorizer`
+    as the MCP-only call-time authorization collaborator.
+  - `ModelContextProtocolToolDispatcher` owns MCP tool-call execution
+    order and invokes
+    `ModelContextProtocolToolCallAuthorizer.assertAuthorized(...)`
+    before it executes a tool.
+  - `ModelContextProtocolToolCallAuthorizer` reuses
+    `AiCodeOperationAuthorizer` for `readCode`, `writeCode`,
+    `compileCode`, and `runScript`, and separately owns the MCP-only
+    `DISABLED` documentation/API-map allowlist.
+  - `ModelContextProtocolServer` and
+    `ModelContextProtocolToolRegistry` remain protocol/metadata units.
   - The AI-owned flow uses the normal system message and tool
     descriptions. Do not add a separate AI-owned script system prompt
     in this task.
@@ -629,6 +642,7 @@ Blocked at DISABLED for MCP
 @startuml
 component "AIChatService" as ChatService
 component "ModelContextProtocolToolDispatcher" as McpDispatcher
+component "ModelContextProtocolToolCallAuthorizer" as McpAuthorizer
 component "AiCodeToolSet" as ToolSet
 component "AiCodeOperationAuthorizer" as Authorizer
 component "AiCodeHostService" as CodeService
@@ -638,13 +652,15 @@ component "FormulaEditor" as FormulaEditor
 component "GetApiDocumentationTool" as ApiTool
 
 ChatService --> ToolSet
+McpDispatcher --> McpAuthorizer
 McpDispatcher --> ToolSet
+McpAuthorizer --> Authorizer : code tools
+McpAuthorizer --> ApiTool : API map locator
 ToolSet --> Authorizer
 ToolSet --> CodeService
 CodeService --> AiDialog
 ScriptEditor --> CodeService : attached script contentType
 FormulaEditor --> CodeService : attached formula contentType
-McpDispatcher --> ApiTool : DISABLED allowlist
 @enduml
 ```
 
@@ -661,6 +677,19 @@ package "org.freeplane.plugin.ai.code" {
   class AiCodeOperationAuthorizer {
     +authorizedToolNames() : Set<String>
     +assertAuthorized(operation : String, codeId : String?, host : ScriptHost)
+  }
+}
+package "org.freeplane.plugin.ai.mcpserver" {
+  class ModelContextProtocolToolDispatcher {
+    +dispatch(toolName : String, argumentsNode : JsonNode) : ToolExecutionResult
+  }
+  class ModelContextProtocolToolCallAuthorizer {
+    +assertAuthorized(toolName : String, argumentsNode : JsonNode) : void
+  }
+}
+package "org.freeplane.plugin.ai.tools.documentation" {
+  class GetApiDocumentationTool {
+    +getApiDocumentation() : GetApiDocumentationResponse
   }
 }
 package "org.freeplane.features.ai.code" {
@@ -767,6 +796,9 @@ package "org.freeplane.plugin.script.ai" {
 
 AiCodeToolSet --> AiCodeOperationAuthorizer
 AiCodeToolSet --> AiCodeHostService
+ModelContextProtocolToolDispatcher --> ModelContextProtocolToolCallAuthorizer
+ModelContextProtocolToolCallAuthorizer --> AiCodeOperationAuthorizer
+ModelContextProtocolToolCallAuthorizer --> GetApiDocumentationTool
 AiCodeHostService --> AiCodeRunListener
 AiCodeHostService --> AiOwnedScriptDialog
 AiCodeToolSet ..> ReadCodeRequest
@@ -1144,7 +1176,7 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
       transcript role and model-context `UserMessage` mapping.
 
 ## Subtask: MCP code-host flow and DISABLED documentation access
-- **Status:** backlog
+- **Status:** review
 - **Scope:** Keep MCP tool metadata stable, enforce current
   authorization at call time, support later status/result reads by
   `codeId`, and keep API-documentation/API-map access available at
@@ -1162,11 +1194,21 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
     needed identifiers.
 - **Design:**
   - Keep MCP tool advertisement stable.
+  - Keep `ModelContextProtocolServer` responsible for MCP protocol
+    handling and `ModelContextProtocolToolRegistry` responsible for
+    stable tool metadata only.
+  - Add
+    `org.freeplane.plugin.ai.mcpserver.ModelContextProtocolToolCallAuthorizer`
+    as the MCP-only call-time authorization collaborator.
+  - `ModelContextProtocolToolDispatcher` invokes
+    `ModelContextProtocolToolCallAuthorizer.assertAuthorized(...)`
+    before each tool execution.
+  - `ModelContextProtocolToolCallAuthorizer` reuses
+    `AiCodeOperationAuthorizer` for `readCode`, `writeCode`,
+    `compileCode`, and `runScript`, and separately owns the MCP-only
+    `DISABLED` documentation/API-map allowlist.
   - Enforce current availability and current policy when each MCP tool
     call executes.
-  - Add one MCP-side authorizer that checks the shared/global level,
-    script-policy constraints, and target content type before
-    dispatch.
   - When MCP requests AI-owned user-run-only behavior, return an
     immediate waiting result plus `codeId`.
   - Add later read/status/result access by `codeId`.
@@ -1190,6 +1232,9 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
 - **Test specification:**
   - Automated tests:
     - verify stable MCP tool metadata across availability changes;
+    - verify
+      `ModelContextProtocolToolDispatcher` consults
+      `ModelContextProtocolToolCallAuthorizer` before tool execution;
     - verify call-time authorization for `READING`, `EDITING`, and
       `SCRIPT_EXECUTION`;
     - verify `DISABLED` blocks non-documentation code/script
@@ -1206,3 +1251,16 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
       tool metadata;
     - use MCP at `DISABLED` to discover the API map and read/search only
       within that map.
+- **Implementation notes:**
+  - **Interpretations:**
+    - `ModelContextProtocolToolCallAuthorizer` now owns MCP-only
+      call-time authorization, while `AiCodeOperationAuthorizer`
+      remains the shared code-host gate reused for MCP code tools.
+  - **Tradeoffs:**
+    - The MCP authorizer resolves the internal API map identifier by
+      calling `GetApiDocumentationTool` directly instead of duplicating
+      separate API-map lookup logic or parsing MCP tool output.
+    - `ModelContextProtocolToolDispatcher` remained the MCP execution
+      boundary and now invokes the MCP authorizer before tool
+      execution, keeping `ModelContextProtocolServer` focused on
+      JSON-RPC and HTTP protocol handling.

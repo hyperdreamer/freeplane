@@ -14,7 +14,7 @@ public class ToolAvailabilityLevelSettings {
         this(ResourceController.getResourceController());
     }
 
-    ToolAvailabilityLevelSettings(ResourceController resourceController) {
+    public ToolAvailabilityLevelSettings(ResourceController resourceController) {
         this.resourceController = Objects.requireNonNull(resourceController, "resourceController");
     }
 

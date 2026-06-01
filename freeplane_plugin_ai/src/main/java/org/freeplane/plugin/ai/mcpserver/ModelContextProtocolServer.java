@@ -12,7 +12,10 @@ import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.util.FreeplaneVersion;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.features.ui.ViewController;
+import org.freeplane.plugin.ai.chat.ToolAvailabilityLevelSettings;
+import org.freeplane.plugin.ai.code.AiCodeOperationAuthorizer;
 import org.freeplane.plugin.ai.tools.AIToolSet;
+import org.freeplane.plugin.ai.tools.documentation.GetApiDocumentationTool;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -56,6 +59,13 @@ public class ModelContextProtocolServer implements IFreeplanePropertyListener {
         this(toolSets, new ObjectMapper(), ResourceController.getResourceController(), viewController);
     }
 
+    public ModelContextProtocolServer(Collection<?> toolSets,
+                                      AiCodeOperationAuthorizer aiCodeOperationAuthorizer,
+                                      ViewController viewController) {
+        this(toolSets, new ObjectMapper(), ResourceController.getResourceController(), viewController,
+            aiCodeOperationAuthorizer);
+    }
+
     public ModelContextProtocolServer(AIToolSet toolSet, ObjectMapper objectMapper, ViewController viewController) {
         this(Collections.<Object>singletonList(toolSet), objectMapper, ResourceController.getResourceController(),
             viewController);
@@ -63,29 +73,78 @@ public class ModelContextProtocolServer implements IFreeplanePropertyListener {
 
     ModelContextProtocolServer(Collection<?> toolSets, ObjectMapper objectMapper, ResourceController resourceController,
                                ViewController viewController) {
+        this(toolSets, objectMapper, resourceController, viewController, null);
+    }
+
+    ModelContextProtocolServer(Collection<?> toolSets, ObjectMapper objectMapper, ResourceController resourceController,
+                               ViewController viewController,
+                               AiCodeOperationAuthorizer aiCodeOperationAuthorizer) {
         this(toolSets, objectMapper, resourceController, new MCPAuthenticator(
             resourceController,
             viewController,
             MCP_TOKEN_PROPERTY,
-            MCP_TOKEN_HEADER));
+            MCP_TOKEN_HEADER), aiCodeOperationAuthorizer);
     }
 
     ModelContextProtocolServer(AIToolSet toolSet, ObjectMapper objectMapper, ResourceController resourceController,
                                MCPAuthenticator authenticator) {
-        this(Collections.<Object>singletonList(toolSet), objectMapper, resourceController, authenticator);
+        this(Collections.<Object>singletonList(toolSet), objectMapper, resourceController, authenticator, null);
     }
 
     ModelContextProtocolServer(Collection<?> toolSets, ObjectMapper objectMapper, ResourceController resourceController,
                                MCPAuthenticator authenticator) {
+        this(toolSets, objectMapper, resourceController, authenticator, null);
+    }
+
+    ModelContextProtocolServer(Collection<?> toolSets, ObjectMapper objectMapper, ResourceController resourceController,
+                               MCPAuthenticator authenticator,
+                               AiCodeOperationAuthorizer aiCodeOperationAuthorizer) {
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
         this.toolRegistry = new ModelContextProtocolToolRegistry(toolSets, this.objectMapper);
-        this.toolDispatcher = new ModelContextProtocolToolDispatcher(toolSets, this.objectMapper);
+        this.toolDispatcher = new ModelContextProtocolToolDispatcher(
+            toolSets,
+            this.objectMapper,
+            createToolCallAuthorizer(toolSets, resourceController, aiCodeOperationAuthorizer));
         this.resourceController = Objects.requireNonNull(resourceController, "resourceController");
         this.authenticator = Objects.requireNonNull(authenticator, "authenticator");
         this.running = new AtomicBoolean(false);
         Runtime.getRuntime().addShutdownHook(new Thread(this::stop));
         if (this.resourceController.getBooleanProperty(MCP_SERVER_ENABLED_PROPERTY))
             start();
+    }
+
+    private ModelContextProtocolToolCallAuthorizer createToolCallAuthorizer(Collection<?> toolSets,
+                                                                             ResourceController resourceController,
+                                                                             AiCodeOperationAuthorizer aiCodeOperationAuthorizer) {
+        if (aiCodeOperationAuthorizer == null) {
+            return null;
+        }
+        AIToolSet aiToolSet = findAiToolSet(toolSets);
+        if (aiToolSet == null) {
+            throw new IllegalArgumentException("AIToolSet is required when MCP tool-call authorization is enabled.");
+        }
+        GetApiDocumentationTool getApiDocumentationTool = aiToolSet.getApiDocumentationTool();
+        if (getApiDocumentationTool == null) {
+            throw new IllegalArgumentException(
+                "GetApiDocumentationTool is required when MCP tool-call authorization is enabled.");
+        }
+        ToolAvailabilityLevelSettings toolAvailabilityLevelSettings = new ToolAvailabilityLevelSettings(resourceController);
+        return new ModelContextProtocolToolCallAuthorizer(
+            toolAvailabilityLevelSettings::getToolAvailability,
+            aiCodeOperationAuthorizer,
+            getApiDocumentationTool);
+    }
+
+    private AIToolSet findAiToolSet(Collection<?> toolSets) {
+        if (toolSets == null) {
+            return null;
+        }
+        for (Object toolSet : toolSets) {
+            if (toolSet instanceof AIToolSet) {
+                return (AIToolSet) toolSet;
+            }
+        }
+        return null;
     }
 
     public void start() {

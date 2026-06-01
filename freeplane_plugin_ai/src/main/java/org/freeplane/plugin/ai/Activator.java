@@ -194,17 +194,19 @@ public class Activator implements BundleActivator {
                             LogUtils.severe("Cannot start MCP server: view controller is not available.");
                             return;
                         }
+                        AiCodeOperationAuthorizer aiCodeOperationAuthorizer = new AiCodeOperationAuthorizer(
+                            ToolCaller.MCP,
+                            new ToolAvailabilityLevelSettings()::getToolAvailability,
+                            null,
+                            codeHostService);
                         AIToolSetBuilder toolSetBuilder = new AIToolSetBuilder()
                             .toolCallSummaryHandler(aiChatPanel.toolCallSummaryHandler())
                             .toolCaller(ToolCaller.MCP)
                             .codeHostService(codeHostService)
-                            .aiCodeOperationAuthorizer(new AiCodeOperationAuthorizer(
-                                ToolCaller.MCP,
-                                new ToolAvailabilityLevelSettings()::getToolAvailability,
-                                null,
-                                codeHostService));
+                            .aiCodeOperationAuthorizer(aiCodeOperationAuthorizer);
                         modelContextProtocolServer = new ModelContextProtocolServer(
                             toolSetBuilder.buildToolObjects(),
+                            aiCodeOperationAuthorizer,
                             controller.getViewController());
                         ResourceController resourceController = ResourceController.getResourceController();
                         resourceController.addPropertyChangeListener(modelContextProtocolServer);

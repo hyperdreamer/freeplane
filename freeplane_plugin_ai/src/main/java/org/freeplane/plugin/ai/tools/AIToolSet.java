@@ -304,6 +304,10 @@ public class AIToolSet {
         }
     }
 
+    public GetApiDocumentationTool getApiDocumentationTool() {
+        return getApiDocumentationTool;
+    }
+
     @Tool("Read the map's tag categories.")
     public TagCategoryStatePayload getTagCategories(GetTagCategoriesRequest request) {
         try {

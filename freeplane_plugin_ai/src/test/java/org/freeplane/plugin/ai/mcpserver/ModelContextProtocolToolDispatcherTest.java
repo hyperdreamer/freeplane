@@ -1,10 +1,15 @@
 package org.freeplane.plugin.ai.mcpserver;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.SwingUtilities;
 import org.junit.Test;
@@ -32,6 +37,31 @@ public class ModelContextProtocolToolDispatcherTest {
         assertThat(result.get().resultText()).isEqualTo("second");
     }
 
+    @Test
+    public void dispatcherConsultsAuthorizerBeforeExecutingTool() {
+        AtomicBoolean authorized = new AtomicBoolean(false);
+        List<Object> toolObjects = Arrays.<Object>asList(new AuthorizationAwareToolSet(authorized));
+        ModelContextProtocolToolCallAuthorizer authorizer = mock(ModelContextProtocolToolCallAuthorizer.class);
+        doAnswer(invocation -> {
+            authorized.set(true);
+            return null;
+        }).when(authorizer).assertAuthorized(eq("secondTool"), eq(null));
+        ModelContextProtocolToolDispatcher dispatcher = new ModelContextProtocolToolDispatcher(
+            toolObjects,
+            new ObjectMapper(),
+            authorizer);
+
+        AtomicReference<ToolExecutionResult> result = new AtomicReference<ToolExecutionResult>();
+        try {
+            SwingUtilities.invokeAndWait(() -> result.set(dispatcher.dispatch("secondTool", null)));
+        } catch (Exception error) {
+            throw new AssertionError(error);
+        }
+
+        verify(authorizer).assertAuthorized(eq("secondTool"), eq(null));
+        assertThat(result.get().resultText()).isEqualTo("authorized");
+    }
+
     private static class FirstToolSet {
         @Tool("first")
         public String firstTool() {
@@ -43,6 +73,19 @@ public class ModelContextProtocolToolDispatcherTest {
         @Tool("second")
         public String secondTool() {
             return "second";
+        }
+    }
+
+    private static class AuthorizationAwareToolSet {
+        private final AtomicBoolean authorized;
+
+        private AuthorizationAwareToolSet(AtomicBoolean authorized) {
+            this.authorized = authorized;
+        }
+
+        @Tool("second")
+        public String secondTool() {
+            return authorized.get() ? "authorized" : "not authorized";
         }
     }
 }
