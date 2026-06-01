@@ -94,7 +94,7 @@ public class AiRequestOptionsTest {
         assertThat(AiRequestMode.values()).extracting(Enum::name)
             .containsExactly("SHOW_IN_CHAT", "ADD_TO_CHAT", "HIDDEN_WITH_CANCEL_DIALOG", "HIDDEN");
         assertThat(AiToolAvailability.values()).extracting(Enum::name)
-            .containsExactly("CURRENT", "DISABLED", "READING", "EDITING");
+            .containsExactly("CURRENT", "DISABLED", "READING", "EDITING", "SCRIPT_EXECUTION");
         assertThat(AiRequestStatus.values()).extracting(Enum::name)
             .containsExactly(
                 "SUCCEEDED",
