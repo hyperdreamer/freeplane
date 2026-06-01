@@ -857,10 +857,9 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
       policy consequences.
 
 
-## Subtask: Preparatory migration from attached-editor tools to
-generic code-host structures
+## Subtask: Preparatory migration from attached-editor tools to generic code-host structures
 - **Status:** review
-- **Scope:** Replace the current attached-editor tool family and its
+- **Scope:** Replace the attached-editor-specific tool family and its
   tool-facing DTOs with the generic code-host request/response
   structures for the attached-editor host first, remove the obsolete
   tool names and DTOs in the same increment, and leave later subtasks
@@ -876,375 +875,65 @@ generic code-host structures
   `ScriptEditorPanel`, `FormulaEditor`, `AiChatAttachment`, and
   `AiChatRepairRequest`.
 - **Research:**
-  - `AttachedEditorToolSet` currently exposes a separate attached-editor
-    tool family: `readAttachedEditor`,
-    `overwriteAttachedEditorContent`, `compileAttachedEditorContent`,
-    and `getAttachedEditorLatestIssue`.
-  - `ReadAttachedEditorResponse`,
-    `OverwriteAttachedEditorContentResponse`, and
-    `ReadAttachedEditorLatestIssueResponse` are the current
-    attached-editor tool-facing DTOs.
-  - `SingleEditorAttachmentService` currently mixes attachment
-    lifecycle, owning-chat plumbing, and attached-editor tool data
-    access.
-  - The attachment API already captures content type at
-    `attachEditor(editor, contentType)` time.
-  - `ScriptEditorPanel` attaches with
-    `text/x-freeplane-script-groovy`, and `FormulaEditor` attaches
-    with `text/x-freeplane-formula-groovy`.
-  - `SingleEditorAttachmentService` stores that attached content type
-    and `AttachedEditorToolSet.systemMessageForChat(...)` already
-    branches on it.
-  - `compileAttachedEditorContent()` currently delegates to
-    `editor.compileForAi()` and therefore already keeps compile
-    semantics in the concrete editor implementation rather than in the
-    attachment service.
-  - `AiChatCodeOperationResult` and `AiChatRepairRequest` keep
-    attached-editor failure data in a chat-specific shape rather than
-    the planned generic code-host shape.
-
-```plantuml
-@startuml
-set separator none
-package "org.freeplane.features.ai.code" {
-  interface AiChatAttachableEditor {
-    +getText() : String
-    +replaceText(text : String) : void
-  }
-
-  interface AiChatCodeEditor {
-    +compileForAi() : AiChatCodeOperationResult
-  }
-
-  interface AiChatAttachmentService {
-    +attachEditor(editor : AiChatAttachableEditor, contentType : String) : AiChatAttachment
-  }
-
-  interface AiChatAttachment {
-    +detach() : void
-    +setDetachHandler(detachHandler : Runnable) : void
-    +showOwningChat() : void
-    +recordIssue(result : AiChatCodeOperationResult) : void
-    +clearIssue() : void
-    +requestRepair(request : AiChatRepairRequest) : void
-  }
-
-  class AiChatCodeOperationResult {
-    +successful : boolean
-    +compilerDiagnostics : List<String>
-    +standardOutput : String
-    +result : String
-    +errorCategory : String
-    +errorMessage : String
-    +lineNumber : Integer
-    +sourceFingerprint : String
-  }
-
-  class AiChatRepairRequest {
-    +prompt : String
-    +sourceText : String
-    +issue : AiChatCodeOperationResult
-  }
-}
-
-package "org.freeplane.plugin.ai.code" {
-  interface AttachedEditorProvider {
-    +readAttachedEditor() : ReadAttachedEditorResponse
-    +overwriteAttachedEditorContent(text : String) : OverwriteAttachedEditorContentResponse
-    +compileAttachedEditorContent() : AiChatCodeOperationResult
-    +getAttachedEditorLatestIssue() : ReadAttachedEditorLatestIssueResponse
-    +hasAttachedEditor() : boolean
-    +attachedContentType() : String
-  }
-
-  class AttachedEditorToolSet {
-    +readAttachedEditor() : ReadAttachedEditorResponse
-    +overwriteAttachedEditorContent(request : OverwriteAttachedEditorContentRequest) : OverwriteAttachedEditorContentResponse
-    +compileAttachedEditorContent() : AiChatCodeOperationResult
-    +getAttachedEditorLatestIssue() : ReadAttachedEditorLatestIssueResponse
-    +systemMessageForChat(input : Object) : String
-  }
-
-  class ReadAttachedEditorResponse {
-    +attached : boolean
-    +contentType : String
-    +text : String
-    +sourceFingerprint : String
-    +supportsCompilation : boolean
-    +hasIssue : boolean
-  }
-
-  class OverwriteAttachedEditorContentResponse {
-    +sourceFingerprint : String
-  }
-
-  class ReadAttachedEditorLatestIssueResponse {
-    +hasIssue : boolean
-    +issue : AiChatCodeOperationResult
-  }
-
-  class SingleEditorAttachmentService {
-    +attachEditor(editor : AiChatAttachableEditor, contentType : String) : AiChatAttachment
-    +readAttachedEditor() : ReadAttachedEditorResponse
-    +overwriteAttachedEditorContent(text : String) : OverwriteAttachedEditorContentResponse
-    +compileAttachedEditorContent() : AiChatCodeOperationResult
-    +getAttachedEditorLatestIssue() : ReadAttachedEditorLatestIssueResponse
-    +hasAttachedEditor() : boolean
-    +attachedContentType() : String
-  }
-}
-
-package "org.freeplane.plugin.script" {
-  class ScriptEditorPanel {
-    +getText() : String
-    +replaceText(text : String) : void
-    +compileForAi() : AiChatCodeOperationResult
-  }
-}
-
-package "org.freeplane.plugin.formula" {
-  class FormulaEditor {
-    +getText() : String
-    +replaceText(text : String) : void
-    +compileForAi() : AiChatCodeOperationResult
-  }
-}
-
-AiChatCodeEditor --|> AiChatAttachableEditor
-ScriptEditorPanel ..|> AiChatCodeEditor
-FormulaEditor ..|> AiChatCodeEditor
-SingleEditorAttachmentService ..|> AiChatAttachmentService
-SingleEditorAttachmentService ..|> AttachedEditorProvider
-AttachedEditorToolSet --> AttachedEditorProvider
-AiChatAttachment --> AiChatRepairRequest
-AiChatAttachment --> AiChatCodeOperationResult
-AiChatRepairRequest --> AiChatCodeOperationResult
-ReadAttachedEditorLatestIssueResponse --> AiChatCodeOperationResult
-@enduml
-```
-- **Design:**
-  - Introduce `AiCodeHostService`, `AiCodeToolSet`, and the generic
-    `ReadCode*`, `WriteCode*`, and `CompileCode*` request/response
-    types in this preparatory subtask.
-  - In this subtask, implement only the `ATTACHED_EDITOR` host path.
-    AI-owned host behavior and `runScript` remain for later subtasks.
-  - Replace `readAttachedEditor`, `overwriteAttachedEditorContent`,
-    `compileAttachedEditorContent`, and `getAttachedEditorLatestIssue`
-    with `readCode`, `writeCode`, and `compileCode`.
-  - The attached-editor host must cover both current attached script
-    editors and current attached formula editors.
-  - Capture `contentType` at `attachEditor(...)` time, store it with
-    the active attachment, and expose it in shared code responses.
-  - `readCode` becomes the only attached-editor read/status entry
-    point. It carries current text, fingerprint, content type,
-    lifecycle state, and any latest failure diagnostics.
-  - `writeCode` on `ATTACHED_EDITOR` replaces only the live draft text.
-    It does not submit, save, validate, or run attached content.
-  - `compileCode` delegates to the attached editor implementation. It
-    does not branch by content type inside the attachment service.
-  - `SingleEditorAttachmentService` becomes the direct
-    `AiCodeHostService` implementation for the attached-editor host.
-  - Remove `AttachedEditorToolSet`, `AttachedEditorProvider`,
+  - The pre-migration attached-editor API was its own tool family:
+    `readAttachedEditor`, `overwriteAttachedEditorContent`,
+    `compileAttachedEditorContent`, and
+    `getAttachedEditorLatestIssue`.
+  - The pre-migration tool-facing DTOs were
     `ReadAttachedEditorResponse`,
     `OverwriteAttachedEditorContentResponse`, and
     `ReadAttachedEditorLatestIssueResponse`.
-  - Replace `AiChatCodeEditor` with `AiCodeEditor` so both
-    `ScriptEditorPanel` and `FormulaEditor` compile through
-    `CompileCodeRequest` and `CompileCodeResponse` directly.
-  - Replace `AiChatCodeOperationResult` usage in attachment issue
-    tracking and repair payloads with the generic code-host
-    structures.
-  - Preserve formula validation failure state in shared code responses
-    and repair payloads.
-  - Keep `AiChatAttachmentService`, `attachEditor(...)`, `detach()`,
-    and `showOwningChat()` as the attachment lifecycle boundary. Do not
-    add compatibility wrappers around removed tool calls or removed
-    DTOs.
-  - Update `AIToolSetBuilder`, `AIChatService`, `ChatPromptRunner`,
-    `AIChatPanel`, and MCP tool registration to wire only the generic
-    tool set after this subtask.
-
-```plantuml
-@startuml
-set separator none
-package "org.freeplane.features.ai.code" {
-  interface AiChatAttachableEditor {
-    +getText() : String
-    +replaceText(text : String) : void
-  }
-
-  interface AiCodeEditor {
-    +compileCode(request : CompileCodeRequest) : CompileCodeResponse
-  }
-
-  interface AiChatAttachmentService {
-    +attachEditor(editor : AiChatAttachableEditor, contentType : String) : AiChatAttachment
-  }
-
-  interface AiChatAttachment {
-    +detach() : void
-    +setDetachHandler(detachHandler : Runnable) : void
-    +showOwningChat() : void
-    +recordCodeState(state : ReadCodeResponse) : void
-    +clearCodeState() : void
-    +requestRepair(request : AiChatRepairRequest) : void
-  }
-
-  class AiChatRepairRequest {
-    +prompt : String
-    +codeState : ReadCodeResponse
-  }
-
-  interface AiCodeHostService {
-    +readCode(request : ReadCodeRequest) : ReadCodeResponse
-    +writeCode(request : WriteCodeRequest) : WriteCodeResponse
-    +compileCode(request : CompileCodeRequest) : CompileCodeResponse
-  }
-
-  enum ScriptHost {
-    AI
-    ATTACHED_EDITOR
-  }
-
-  enum CodeLifecycleStatus {
-    NO_CODE
-    READY
-    WAITING_FOR_USER_RUN
-    SUCCEEDED
-    FAILED
-    REPLACED
-  }
-
-  enum ScriptRunInitiator {
-    USER
-    AI
-  }
-
-  class ReadCodeRequest {
-    +codeId : String?
-    +host : ScriptHost?
-    +fingerprint : String?
-  }
-
-  class ReadCodeResponse {
-    +codeId : String?
-    +host : ScriptHost?
-    +contentType : String?
-    +status : CodeLifecycleStatus
-    +runInitiator : ScriptRunInitiator?
-    +fingerprint : String?
-    +codeText : String?
-    +replacementCodeId : String?
-    +compilerDiagnostics : List<String>?
-    +errorMessage : String?
-    +lineNumber : Integer?
-    +stdout : String?
-    +structuredResult : JsonSafeValue?
-  }
-
-  class WriteCodeRequest {
-    +codeId : String?
-    +host : ScriptHost?
-    +text : String
-    +expectedFingerprint : String?
-  }
-
-  class WriteCodeResponse {
-    +codeId : String
-    +host : ScriptHost
-    +contentType : String
-    +status : CodeLifecycleStatus
-    +fingerprint : String
-  }
-
-  class CompileCodeRequest {
-    +codeId : String?
-    +host : ScriptHost?
-    +expectedFingerprint : String?
-  }
-
-  class CompileCodeResponse {
-    +codeId : String
-    +host : ScriptHost
-    +contentType : String
-    +status : CodeLifecycleStatus
-    +fingerprint : String?
-    +compilerDiagnostics : List<String>?
-    +errorMessage : String?
-    +lineNumber : Integer?
-  }
-}
-
-package "org.freeplane.plugin.ai.code" {
-  class AiCodeToolSet {
-    +readCode(request : ReadCodeRequest) : ReadCodeResponse
-    +writeCode(request : WriteCodeRequest) : WriteCodeResponse
-    +compileCode(request : CompileCodeRequest) : CompileCodeResponse
-    +systemMessageForChat(input : Object) : String
-  }
-
-  class SingleEditorAttachmentService {
-    +attachEditor(editor : AiChatAttachableEditor, contentType : String) : AiChatAttachment
-    +readCode(request : ReadCodeRequest) : ReadCodeResponse
-    +writeCode(request : WriteCodeRequest) : WriteCodeResponse
-    +compileCode(request : CompileCodeRequest) : CompileCodeResponse
-    +hasAttachedEditor() : boolean
-    +attachedContentType() : String
-  }
-}
-
-package "org.freeplane.plugin.script" {
-  class ScriptEditorPanel {
-    +getText() : String
-    +replaceText(text : String) : void
-    +compileCode(request : CompileCodeRequest) : CompileCodeResponse
-  }
-}
-
-package "org.freeplane.plugin.formula" {
-  class FormulaEditor {
-    +getText() : String
-    +replaceText(text : String) : void
-    +compileCode(request : CompileCodeRequest) : CompileCodeResponse
-  }
-}
-
-AiCodeEditor --|> AiChatAttachableEditor
-ScriptEditorPanel ..|> AiCodeEditor
-FormulaEditor ..|> AiCodeEditor
-SingleEditorAttachmentService ..|> AiChatAttachmentService
-SingleEditorAttachmentService ..|> AiCodeHostService
-AiCodeToolSet --> AiCodeHostService
-AiChatAttachment --> AiChatRepairRequest
-AiChatAttachment --> ReadCodeResponse
-AiChatRepairRequest --> ReadCodeResponse
-@enduml
-```
+  - `SingleEditorAttachmentService` already captured `contentType` at
+    `attachEditor(...)` time and already delegated compile to the
+    concrete editor implementation.
+  - `ScriptEditorPanel` attached script content as
+    `text/x-freeplane-script-groovy`; `FormulaEditor` attached formula
+    content as `text/x-freeplane-formula-groovy`.
+  - Failure tracking and repair payloads still used the chat-specific
+    `AiChatCodeOperationResult` shape rather than the planned generic
+    code-state shape.
+- **Design:**
+  - The main-task Design is the authoritative shared contract.
+  - This subtask applies only its attached-editor migration slice:
+    - introduce `AiCodeHostService`, `AiCodeToolSet`,
+      `AiCodeEditor`, and the generic `ReadCode*`, `WriteCode*`, and
+      `CompileCode*` request/response types;
+    - implement only the `ATTACHED_EDITOR` host path in this
+      subtask; AI-host behavior and `runScript` remain for later
+      subtasks;
+    - replace `readAttachedEditor`,
+      `overwriteAttachedEditorContent`,
+      `compileAttachedEditorContent`, and
+      `getAttachedEditorLatestIssue` with `readCode`, `writeCode`, and
+      `compileCode`;
+    - make `SingleEditorAttachmentService` the direct
+      `AiCodeHostService` implementation for the attached-editor host;
+    - preserve attached `contentType` capture and editor-owned compile
+      behavior;
+    - replace `AiChatCodeEditor` with `AiCodeEditor`;
+    - replace attachment issue tracking and repair payloads with the
+      generic code-host state structures; and
+    - remove the old attached-editor tool names, DTOs, and
+      compatibility paths in the same increment.
 - **Test specification:**
   - Automated tests:
-    - verify tool object construction exposes `AiCodeToolSet`
-      instead of `AttachedEditorToolSet`;
+    - verify `AiCodeToolSet` replaces `AttachedEditorToolSet`;
     - verify old attached-editor tool names are no longer advertised or
       callable;
     - verify `readCode`, `writeCode`, and `compileCode` work for
       `ATTACHED_EDITOR`;
-    - verify content type is captured for both attached script and
-      attached formula editors;
-    - verify `readCode` covers prior latest-issue reads without a
-      separate `getAttachedEditorLatestIssue` call;
-    - verify attached-editor compile failures populate generic
-      `ReadCodeResponse` and `CompileCodeResponse` diagnostics;
-    - verify `writeCode` on attached editors edits draft text only and
-      does not submit, save, validate, or run content;
-    - verify `compileCode` continues to use the concrete editor
-      implementation for both scripts and formulas;
-    - verify `AiChatRepairRequest` and attachment state tracking use
-      the generic code-host structures rather than
-      `AiChatCodeOperationResult`;
-    - verify formula validation failure state remains available through
-      generic code-state reads; and
-    - verify MCP and internal AI registries expose only the generic
-      code tool names after migration.
+    - verify attached script and formula editors preserve
+      `contentType`;
+    - verify `readCode` covers latest-issue reads without a separate
+      issue tool;
+    - verify attached-editor compile failures populate generic code
+      diagnostics;
+    - verify formula validation failure state remains readable through
+      generic code-state reads;
+    - verify `writeCode` edits draft text only and does not submit,
+      save, validate, or run content; and
+    - verify repair flows and registries use only the generic code-tool
+      family after migration.
   - Manual tests: N/A.
 - **Implementation notes:**
   - **Interpretations:**
@@ -1259,8 +948,7 @@ AiChatRepairRequest --> ReadCodeResponse
       `NO_CODE` state instead of silently dropping them, so later
       `readCode` calls already match the later code-id-based flow.
 
-## Subtask: Shared code authorization, content typing, and
-script-execution policies
+## Subtask: Shared code authorization, content typing, and script-execution policies
 - **Status:** review
 - **Scope:** Define the shared/global availability semantics on top of
   the generic code-host contract from the preparatory migration,
@@ -1275,103 +963,61 @@ script-execution policies
   shared resolved tool-availability handling, the generic code-host
   contract, and `ScriptingPermissions` integration points.
 - **Research:**
-  - The preparatory migration subtask introduces the generic
-    code-host contract for the attached-editor host first.
+  - The preparatory migration subtask introduced the generic code-host
+    contract for the attached-editor host first.
   - Current internal chat availability and public API availability stop
     at `EDITING`.
   - Existing scripting permissions already supply the external
     permission axes needed by this task.
 - **Design:**
-  - Add `SCRIPT_EXECUTION` to the shared/global availability model and
-    to public AI request availability.
-  - Replace chat-only resolved availability handling with one shared
-    resolved level enum `ToolAvailabilityLevel`.
-  - Use canonical property `ai_tool_availability` with legacy fallback
-    from `ai_chat_tool_availability`.
-  - Keep the shared/global level authoritative for both internal AI and
-    MCP.
-  - Internal AI authorization works by filtering tool exposure, except
-    for the preserved explicit-attachment override on the attached
-    editor.
-  - MCP authorization works by call-time checks against current level,
-    current policy, and current target content type.
-  - Build on the generic code-host contract introduced by the
-    preparatory migration subtask. Do not reintroduce removed
-    attached-editor-specific tool calls, tool-facing DTOs, or parallel
-    compatibility layers.
-  - Keep `readCode`, `writeCode`, and `compileCode` generic across the
-    AI host and attached editors.
-  - Keep `runScript` script-only.
-  - The AI host always resolves to
-    `text/x-freeplane-script-groovy`.
-  - The attached-editor host resolves its content type from the active
-    attachment metadata captured at `attachEditor(...)` time.
-  - If a request already names `codeId`, the resolved code state
-    determines host and content type.
-  - If a request has no `codeId`, the caller must provide `host`
-    explicitly.
-  - `runScript` rejects formula or other non-script content as a
-    direct call error.
-  - Extend the generic contract from attached-editor-only behavior to
-    both the AI host and attached editor.
-  - Add `org.freeplane.plugin.ai.code.RoutingAiCodeHostService` as the
-    AI-plugin-owned `AiCodeHostService` implementation that routes by
-    `ScriptHost` and delegates `ATTACHED_EDITOR` to
-    `SingleEditorAttachmentService` and `AI` to the script-plugin-owned
-    AI host service.
-  - Add `org.freeplane.plugin.script.ai.AiOwnedScriptHostService` as the
-    script-plugin-owned `AiCodeHostService` implementation for the
-    `AI` host.
-  - Keep AI-started execution and user-started execution as separate
-    policy concerns.
-  - Introduce `AiScriptExecutionPolicy`,
-    `AiScriptUserRunPermissionMode`, `ScriptHost`, and
-    `CodeLifecycleStatus` exactly as specified in the main task
-    Design.
-  - `UNRESTRICTED` user-started AI-owned runs match the current
-    `ScriptEditorPanel` permissive external-permission behavior, but
-    still do not allow recursive AI calls.
-  - `AI_SPECIFIC_PERMISSIONS` user-started AI-owned runs treat the
-    dialog `Run` click as the execution approval. Do not apply an
-    additional `execute_scripts_without_asking` confirmation.
-  - AI-specific permissions reuse the existing scripting permission
-    axes for file read, file write, network, and exec.
-  - In-script AI requests from AI-owned script runs are not allowed in
-    this feature.
-  - Result serialization stays narrow: JSON-safe structured values and
-    text/stdout only.
+  - The main-task Design is authoritative for the shared contract,
+    enums, request/response structures, and authorization matrix.
+  - This subtask adds the shared policy layer and script-only run path:
+    - add `SCRIPT_EXECUTION` to both `ToolAvailabilityLevel` and
+      `AiToolAvailability`;
+    - use canonical property `ai_tool_availability` with legacy
+      fallback from `ai_chat_tool_availability`;
+    - extend the generic code-host contract from attached-editor-only
+      behavior to both `AI` and `ATTACHED_EDITOR`, including
+      `runScript`;
+    - keep `readCode`, `writeCode`, and `compileCode` generic and keep
+      `runScript` script-only;
+    - add `org.freeplane.plugin.ai.code.RoutingAiCodeHostService` to
+      route `ATTACHED_EDITOR` to
+      `SingleEditorAttachmentService` and `AI` to the script-plugin
+      host;
+    - add `org.freeplane.plugin.script.ai.AiOwnedScriptHostService`
+      as the script-plugin-owned `AI` host implementation;
+    - preserve the internal-AI attached-editor override for
+      `readCode`/`writeCode`/`compileCode` only; `runScript` still
+      requires shared/global `SCRIPT_EXECUTION` and script content;
+    - resolve host and content type from `codeId` when present, else
+      require explicit `host`;
+    - reject formula or other non-script targets as direct call
+      errors;
+    - map AI-specific external permissions to existing scripting
+      permission axes; and
+    - keep recursive AI requests disabled for AI-owned runs.
 - **Test specification:**
   - Automated tests:
     - extend availability enum tests with `SCRIPT_EXECUTION`;
     - verify canonical property `ai_tool_availability` plus legacy
       fallback from `ai_chat_tool_availability`;
-    - verify `OptionPanel.<EnumSimpleName>.<ENUM_VALUE>` translation
-      keys are used for enum-backed preference choices;
     - verify shared/global level mapping for internal AI and MCP,
-      including the attached-editor override for internal AI only;
+      including the internal-AI attached-editor override;
     - verify `codeId` targeting and explicit-host targeting;
     - verify AI-host responses always resolve to script content type;
     - verify attached-editor responses preserve the content type
       captured at attach time;
-    - verify attached editors expose lifecycle/result state,
-      including `READY` and `REPLACED` handling;
-    - verify `readCode` always returns status, content type,
-      diagnostics on failure, and code text only when the fingerprint
-      is absent or changed;
-    - verify `writeCode` returns the resulting fingerprint and content
-      type;
+    - verify lifecycle/result handling, including `READY` and
+      `REPLACED`;
     - verify optional expected-fingerprint mismatch failures on
       `writeCode`, `compileCode`, and `runScript`;
-    - verify `runScript` uses current selection at execution time and
-      that this task does not add explicit map/node-target overrides
-      or stored context capture for `compileCode`/`runScript`;
-    - verify `runScript` rejects formula content as a direct call
+    - verify `runScript` rejects non-script content as a direct call
       error;
     - verify AI-specific permission mapping to existing scripting
-      permissions;
-    - verify AI-owned script runs block in-script AI requests for both
-      AI-started and user-started execution; and
-    - verify serialization success/failure boundaries.
+      permissions; and
+    - verify serialization success and failure boundaries.
   - Manual tests: N/A.
 - **Implementation notes:**
   - **Interpretations:**
@@ -1396,7 +1042,6 @@ script-execution policies
       deduplicated at registration time so the same listener is not
       added twice to the AI host.
 
-
 ## Subtask: Internal AI-owned script dialog flow
 - **Status:** review
 - **Scope:** Add the AI-owned script dialog, integrate it with internal
@@ -1417,77 +1062,39 @@ script-execution policies
   - Internal AI currently operates in one chat/session and can append
     extra attached-editor guidance when needed.
 - **Design:**
-  - Implement a separate AI-specific script dialog in the script plugin
-    rather than reusing `ScriptEditorPanel` directly.
-  - Keep the AI-owned dialog transient.
-  - Preserve the last AI-owned script in memory until replacement or
-    application exit.
-  - Reopening the AI-owned dialog shows the current AI-owned script
-    state, not a blank editor.
-  - Add one explicit user-facing reopen action in the AI chat UI.
-  - That reopen action is enabled only when the current AI-owned code
-    state is not `NO_CODE`.
-  - The AI-owned dialog must be non-modal.
-  - `shown in editor, user must press Run` shows the dialog, loads the
-    script, and keeps it open until the user chooses `Run` or
-    `Cancel`.
-  - After a successful user-started run from the AI-owned dialog, the
-    dialog closes. After failure, it stays open.
-  - `shown in editor, AI may run directly` shows the dialog, loads the
-    script, keeps it open while the run is active, closes it on
-    success, and keeps it open on failure.
-  - `hidden from user, AI may run directly` does not auto-open the
-    dialog, but still updates the AI-owned script state for later
-    inspection.
-  - When a visible AI-owned dialog exists, execution uses the current
-    editor text.
-  - If the current AI-owned script is running, a new AI/MCP request
-    fails as a direct call error.
-  - Otherwise a new AI/MCP request replaces the current AI-owned script
-    immediately.
-  - User-started execution from the AI-owned dialog uses property
-    `ai_script_user_run_permission_mode` with enum values
-    `UNRESTRICTED` and `AI_SPECIFIC_PERMISSIONS`.
-  - `UNRESTRICTED` matches the current `ScriptEditorPanel`
-    permissive external-permission behavior, but still does not allow
-    recursive AI calls.
-  - Under `AI_SPECIFIC_PERMISSIONS`, pressing `Run` in the AI-owned
-    dialog is the execution approval. Do not show a second script
-    execution confirmation.
-  - Internal AI uses the normal base system message for the AI-owned
-    flow. Do not add a separate AI-owned script system prompt in this
-    task.
-  - The AI plugin registers an `AiCodeRunListener` and translates
-    relevant `runFinished(...)` outcomes into owning-chat follow-up
-    messages.
-  - App-authored automatic code-status messages use dedicated
-    persisted type `AutomaticCodeStatusMessage` and dedicated
-    transcript role `AUTOMATIC_CODE_STATUS` so later UI versions can
-    distinguish and restyle them.
-  - In this task those messages keep full result/status details, do
-    not inline code text, and do not require special compact UI
-    rendering.
-  - For later AI turns, those messages are included in model context as
-    user messages. They are not treated as assistant messages, system
-    messages, or fake tool calls.
-  - When mapped to user messages for model context, they must identify
-    themselves in their text as automatic app-authored code-status
-    messages so they are not mistaken for direct user instructions.
-  - In this task the dedicated transcript role does not need a
-    transcript-entry subclass.
-  - Attached editors keep separate guidance and shared attached-code
-    behavior and must not be confused with the AI-owned script flow.
-  - If the shared/global level later drops below `SCRIPT_EXECUTION`,
-    keep read/status access to the existing AI-owned script state but
-    remove new authoring/execution authority.
-  - Explain this behavior clearly in preferences tooltips.
-  - Add preference labels/tooltips for:
-    - `ai_tool_availability`
-    - `ai_script_execution_policy`
-    - `ai_script_user_run_permission_mode`
-    - the four AI-specific external-permission booleans
-  - Use `OptionPanel.<EnumSimpleName>.<ENUM_VALUE>` translation keys
-    for enum-backed preference choices.
+  - The main-task Design remains authoritative for the shared code-host
+    contract and automatic status-message semantics.
+  - This subtask adds the AI-owned dialog and owning-chat behavior on
+    top of that contract:
+    - implement a separate transient, non-modal
+      `AiOwnedScriptDialog` rather than reusing `ScriptEditorPanel`
+      directly;
+    - preserve the latest AI-owned script in memory until replacement
+      or application exit, and let the user reopen that existing state
+      from the AI chat UI when status is not `NO_CODE`;
+    - apply the three execution-policy modes exactly as specified in
+      the main task, including the dialog-close behavior for
+      `SHOWN_USER_RUN` and `SHOWN_AI_RUN`;
+    - treat visible dialog text as authoritative for execution;
+    - reject replacement only while the current AI-owned script is busy
+      running; otherwise replace the existing AI-owned state
+      immediately;
+    - use `ai_script_user_run_permission_mode` with
+      `UNRESTRICTED` and `AI_SPECIFIC_PERMISSIONS`, and treat the
+      dialog `Run` click itself as the execution approval for
+      `AI_SPECIFIC_PERMISSIONS`;
+    - keep recursive AI requests disabled for AI-owned runs;
+    - keep the AI-owned flow on the normal base system message and tool
+      descriptions; do not add a separate AI-owned script system
+      prompt;
+    - persist app-authored completion and failure follow-up messages as
+      `AutomaticCodeStatusMessage` with transcript role
+      `AUTOMATIC_CODE_STATUS`, map them into later model context as
+      user messages, and label them explicitly as automatic
+      app-authored code-status messages; and
+    - below shared/global `SCRIPT_EXECUTION`, keep AI-owned
+      read/status access but remove new authoring and execution
+      authority.
 - **Test specification:**
   - Automated tests:
     - verify dialog opening behavior for all three policy states;
@@ -1496,38 +1103,27 @@ script-execution policies
     - verify the AI chat UI reopen action is enabled only when current
       AI-owned code exists;
     - verify shown modes use current editor text at run time;
-    - verify `SHOWN_USER_RUN` keeps the dialog open until user `Run` or
-      `Cancel`, closes it on success, and keeps it open on failure;
-    - verify `SHOWN_AI_RUN` keeps the dialog open during the run,
-      closes it on success, and keeps it open on failure;
-    - verify busy rejection while the current AI-owned script is
-      running;
-    - verify immediate replacement while the current AI-owned script is
-      idle/open/finished/failed;
-    - verify internal AI follow-up messages for user-started completion
-      and failure use the dedicated automatic code-status message
-      type;
+    - verify `SHOWN_USER_RUN` and `SHOWN_AI_RUN` keep or close the
+      dialog exactly as specified;
+    - verify busy rejection and immediate replacement rules for the
+      current AI-owned script;
+    - verify internal-AI follow-up messages for user-started results use
+      the dedicated automatic code-status message type;
     - verify level-drop behavior keeps read/status only;
     - verify attached manual run success updates state without
-      auto-posting to chat; and
-    - verify attached manual run failure auto-posts analysis to the
-      owning chat without rewriting content unless explicitly requested
-      or confirmed; and
-    - verify attached manual run failure auto-post includes full
-      result/status details and does not inline full code text;
+      auto-posting to chat;
+    - verify attached manual run failure auto-posts analysis-only
+      status details without inline full code text;
     - verify automatic code-status messages preserve their dedicated
-      type and dedicated transcript role across transcript/history
-      rebuild;
+      type and transcript role across transcript/history rebuild;
     - verify later AI turns receive those messages in model context as
-      user messages, not assistant/system messages or fake tool calls;
-    - verify those model-context user messages identify themselves as
-      automatic app-authored code-status messages;
+      user messages; and
     - verify MCP observes attached manual failures only through updated
       host state and later `readCode` calls.
   - Manual tests:
     - run internal AI in all three policy modes;
     - edit shown code before Run and verify the edited code is what
-      executes;
+      executes; and
     - lower the shared/global level after a script exists and verify the
       tooltip text matches behavior.
 - **Implementation notes:**
