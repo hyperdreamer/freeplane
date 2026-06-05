@@ -1,4 +1,4 @@
-package org.freeplane.plugin.ai.code;
+package org.freeplane.plugin.ai.tools.code;
 
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -9,7 +9,7 @@ import org.freeplane.features.ai.code.CodeLifecycleStatus;
 import org.freeplane.features.ai.code.ReadCodeRequest;
 import org.freeplane.features.ai.code.ReadCodeResponse;
 import org.freeplane.features.ai.code.ScriptHost;
-import org.freeplane.plugin.ai.chat.settings.ToolAvailabilityLevel;
+import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.tools.utilities.ToolCaller;
 
 public class AiCodeOperationAuthorizer {

@@ -1,4 +1,4 @@
-package org.freeplane.plugin.ai.chat.settings;
+package org.freeplane.plugin.ai.tools.availability;
 
 import java.util.Arrays;
 import java.util.Collections;

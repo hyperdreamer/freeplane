@@ -18,7 +18,7 @@ import org.freeplane.features.attribute.AttributeController;
 import org.freeplane.features.icon.IconController;
 import org.freeplane.features.map.mindmapmode.MMapController;
 import org.freeplane.features.text.TextController;
-import org.freeplane.plugin.ai.code.AiCodeToolSet;
+import org.freeplane.plugin.ai.tools.code.AiCodeToolSet;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.junit.Test;
 import org.mockito.MockedConstruction;

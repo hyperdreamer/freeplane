@@ -5,7 +5,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import org.freeplane.plugin.ai.chat.settings.ToolAvailabilityLevel;
+import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 
 final class LiveChatSessionManager {
     private final Map<LiveChatSessionId, LiveChatSession> sessions = new LinkedHashMap<LiveChatSessionId, LiveChatSession>();

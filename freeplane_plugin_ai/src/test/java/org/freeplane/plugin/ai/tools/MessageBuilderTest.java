@@ -1,6 +1,6 @@
 package org.freeplane.plugin.ai.tools;
 
-import org.freeplane.plugin.ai.chat.settings.ToolAvailabilityLevel;
+import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;

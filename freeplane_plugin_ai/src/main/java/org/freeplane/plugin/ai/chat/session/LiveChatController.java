@@ -18,7 +18,7 @@ import org.freeplane.plugin.ai.chat.memory.AssistantProfileChatMemory;
 import org.freeplane.plugin.ai.chat.memory.AssistantProfileSwitchMessage;
 import org.freeplane.plugin.ai.chat.memory.ChatMemorySettings;
 import org.freeplane.plugin.ai.chat.memory.ChatTokenUsageState;
-import org.freeplane.plugin.ai.chat.settings.ToolAvailabilityLevel;
+import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.chat.ui.AIChatPanel;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 

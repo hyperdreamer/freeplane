@@ -8,8 +8,8 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Supplier;
 import org.freeplane.features.ai.code.ScriptHost;
-import org.freeplane.plugin.ai.chat.settings.ToolAvailabilityLevel;
-import org.freeplane.plugin.ai.code.AiCodeOperationAuthorizer;
+import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
+import org.freeplane.plugin.ai.tools.code.AiCodeOperationAuthorizer;
 import org.freeplane.plugin.ai.tools.documentation.GetApiDocumentationResponse;
 import org.freeplane.plugin.ai.tools.documentation.GetApiDocumentationTool;
 

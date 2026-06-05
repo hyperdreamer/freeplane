@@ -20,7 +20,7 @@ import org.freeplane.features.mode.ModeController;
 import org.freeplane.features.note.mindmapmode.MNoteController;
 import org.freeplane.features.text.TextController;
 import org.freeplane.features.text.mindmapmode.MTextController;
-import org.freeplane.plugin.ai.chat.settings.ToolAvailabilityLevel;
+import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.freeplane.plugin.ai.tools.connectors.ConnectorEditRequest;
 import org.freeplane.plugin.ai.tools.connectors.ConnectorEditResponse;

@@ -2,7 +2,7 @@ package org.freeplane.plugin.ai.chat.request;
 
 import org.freeplane.api.ai.AiModelSelection;
 import org.freeplane.api.ai.AiToolAvailability;
-import org.freeplane.plugin.ai.chat.settings.ToolAvailabilityLevel;
+import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;

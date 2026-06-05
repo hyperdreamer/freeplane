@@ -1,7 +1,7 @@
 package org.freeplane.plugin.ai.chat.request;
 
-import org.freeplane.plugin.ai.chat.settings.ToolAvailabilityLevel;
-import org.freeplane.plugin.ai.chat.settings.ToolAvailabilityLevelSettings;
+import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
+import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevelSettings;
 
 public class PromptToolSelectionResolver {
     private final ToolAvailabilityLevelSettings chatToolAvailabilitySettings;

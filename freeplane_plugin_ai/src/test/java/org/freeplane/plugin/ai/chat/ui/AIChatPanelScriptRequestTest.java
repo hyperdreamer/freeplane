@@ -54,8 +54,8 @@ import org.freeplane.plugin.ai.chat.request.ResolvedAiRequest;
 import org.freeplane.plugin.ai.chat.request.VisibleAiRequestCallbacksFactory;
 import org.freeplane.plugin.ai.chat.session.LiveChatController;
 import org.freeplane.plugin.ai.chat.session.LiveChatSessionId;
-import org.freeplane.plugin.ai.chat.settings.ToolAvailabilityLevel;
-import org.freeplane.plugin.ai.chat.settings.ToolAvailabilityLevelSettings;
+import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
+import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevelSettings;
 import org.freeplane.plugin.ai.code.RoutingAiCodeHostService;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.freeplane.plugin.ai.prompt.AiPrompt;
@@ -169,7 +169,7 @@ public class AIChatPanelScriptRequestTest {
                      when(mock.availableMaps(any())).thenReturn(mock);
                      when(mock.mapAccessListener(any())).thenReturn(mock);
                      when(mock.codeHostService(org.mockito.ArgumentMatchers.nullable(org.freeplane.features.ai.code.AiCodeHostService.class))).thenReturn(mock);
-                     when(mock.aiCodeOperationAuthorizer(org.mockito.ArgumentMatchers.nullable(org.freeplane.plugin.ai.code.AiCodeOperationAuthorizer.class))).thenReturn(mock);
+                     when(mock.aiCodeOperationAuthorizer(org.mockito.ArgumentMatchers.nullable(org.freeplane.plugin.ai.tools.code.AiCodeOperationAuthorizer.class))).thenReturn(mock);
                      when(mock.build()).thenReturn(toolSet);
                      when(mock.buildToolObjects()).thenReturn(java.util.Collections.<Object>singletonList(toolSet));
                  })) {
@@ -238,7 +238,7 @@ public class AIChatPanelScriptRequestTest {
                      when(mock.availableMaps(any())).thenReturn(mock);
                      when(mock.mapAccessListener(any())).thenReturn(mock);
                      when(mock.codeHostService(org.mockito.ArgumentMatchers.nullable(org.freeplane.features.ai.code.AiCodeHostService.class))).thenReturn(mock);
-                     when(mock.aiCodeOperationAuthorizer(org.mockito.ArgumentMatchers.nullable(org.freeplane.plugin.ai.code.AiCodeOperationAuthorizer.class))).thenReturn(mock);
+                     when(mock.aiCodeOperationAuthorizer(org.mockito.ArgumentMatchers.nullable(org.freeplane.plugin.ai.tools.code.AiCodeOperationAuthorizer.class))).thenReturn(mock);
                      when(mock.build()).thenReturn(toolSet);
                      when(mock.buildToolObjects()).thenReturn(java.util.Collections.<Object>singletonList(toolSet));
                  })) {
@@ -298,7 +298,7 @@ public class AIChatPanelScriptRequestTest {
                      when(mock.availableMaps(any())).thenReturn(mock);
                      when(mock.mapAccessListener(any())).thenReturn(mock);
                      when(mock.codeHostService(org.mockito.ArgumentMatchers.nullable(org.freeplane.features.ai.code.AiCodeHostService.class))).thenReturn(mock);
-                     when(mock.aiCodeOperationAuthorizer(org.mockito.ArgumentMatchers.nullable(org.freeplane.plugin.ai.code.AiCodeOperationAuthorizer.class))).thenReturn(mock);
+                     when(mock.aiCodeOperationAuthorizer(org.mockito.ArgumentMatchers.nullable(org.freeplane.plugin.ai.tools.code.AiCodeOperationAuthorizer.class))).thenReturn(mock);
                      when(mock.build()).thenReturn(toolSet);
                      when(mock.buildToolObjects()).thenReturn(java.util.Collections.<Object>singletonList(toolSet));
                  })) {
@@ -363,7 +363,7 @@ public class AIChatPanelScriptRequestTest {
                      when(mock.availableMaps(any())).thenReturn(mock);
                      when(mock.mapAccessListener(any())).thenReturn(mock);
                      when(mock.codeHostService(org.mockito.ArgumentMatchers.nullable(org.freeplane.features.ai.code.AiCodeHostService.class))).thenReturn(mock);
-                     when(mock.aiCodeOperationAuthorizer(org.mockito.ArgumentMatchers.nullable(org.freeplane.plugin.ai.code.AiCodeOperationAuthorizer.class))).thenReturn(mock);
+                     when(mock.aiCodeOperationAuthorizer(org.mockito.ArgumentMatchers.nullable(org.freeplane.plugin.ai.tools.code.AiCodeOperationAuthorizer.class))).thenReturn(mock);
                      when(mock.build()).thenReturn(toolSet);
                      when(mock.buildToolObjects()).thenReturn(java.util.Collections.<Object>singletonList(toolSet));
                  })) {

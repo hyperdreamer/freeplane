@@ -2,7 +2,7 @@ package org.freeplane.plugin.ai.prompt;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Arrays;
-import org.freeplane.plugin.ai.chat.settings.ToolAvailabilityLevel;
+import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.tools.selection.SelectedNodeSummary;
 import org.freeplane.plugin.ai.tools.selection.SelectionIdentifiersResponse;
 import org.junit.Test;

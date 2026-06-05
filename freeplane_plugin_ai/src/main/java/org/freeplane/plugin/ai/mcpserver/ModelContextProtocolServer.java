@@ -23,8 +23,8 @@ import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.util.FreeplaneVersion;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.features.ui.ViewController;
-import org.freeplane.plugin.ai.chat.settings.ToolAvailabilityLevelSettings;
-import org.freeplane.plugin.ai.code.AiCodeOperationAuthorizer;
+import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevelSettings;
+import org.freeplane.plugin.ai.tools.code.AiCodeOperationAuthorizer;
 import org.freeplane.plugin.ai.tools.AIToolSet;
 import org.freeplane.plugin.ai.tools.documentation.GetApiDocumentationTool;
 

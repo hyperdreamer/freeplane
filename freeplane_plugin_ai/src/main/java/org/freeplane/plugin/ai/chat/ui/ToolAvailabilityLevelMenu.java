@@ -11,8 +11,8 @@ import org.freeplane.core.ui.LabelAndMnemonicSetter;
 import org.freeplane.core.ui.textchanger.TranslatedElement;
 import org.freeplane.core.ui.textchanger.TranslatedElementFactory;
 import org.freeplane.core.util.TextUtils;
-import org.freeplane.plugin.ai.chat.settings.ToolAvailabilityLevel;
-import org.freeplane.plugin.ai.chat.settings.ToolAvailabilityLevelSettings;
+import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
+import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevelSettings;
 
 class ToolAvailabilityLevelMenu {
     private final Supplier<ToolAvailabilityLevel> effectiveToolAvailabilitySupplier;

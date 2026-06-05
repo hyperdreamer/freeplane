@@ -5,7 +5,7 @@ import dev.langchain4j.model.chat.ChatModel;
 import java.util.concurrent.atomic.AtomicReference;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.plugin.ai.chat.memory.ChatTokenUsageTracker;
-import org.freeplane.plugin.ai.chat.settings.ToolAvailabilityLevel;
+import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.model.AIChatModelFactory;
 import org.freeplane.plugin.ai.model.AIProviderConfiguration;
 import org.freeplane.plugin.ai.tools.AIToolSet;

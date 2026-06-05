@@ -88,6 +88,12 @@
     boundaries around UI assembly, request runtime, live sessions,
     memory/message modeling, assistant profiles, and shared tool-
     availability settings.
+  - Review of package dependency direction after the first split showed
+    that `AiCodeToolSet` and `AiCodeOperationAuthorizer` are tool
+    adapters rather than editor-runtime classes, and that
+    `ToolAvailabilityLevel` plus `ToolAvailabilityLevelSettings` are
+    shared tool policy used by chat, prompt, MCP, code, and tools
+    rather than chat-owned settings.
 
 ```plantuml
 @startuml
@@ -150,17 +156,35 @@ ModelContextProtocolServer --> ToolAvailabilityLevelSettings
     verification is required and widening production access only for
     tests would directly conflict with the refactor goal.
 - **Design:**
-  1. Move every production type that is still in
-     `org.freeplane.plugin.ai.chat` into one of these target packages,
-     while keeping the existing `org.freeplane.plugin.ai.chat.history`
-     package for transcript/store types:
+  1. The target package structure contains these chat-owned packages:
      - `org.freeplane.plugin.ai.chat.ui`
      - `org.freeplane.plugin.ai.chat.profile`
      - `org.freeplane.plugin.ai.chat.request`
      - `org.freeplane.plugin.ai.chat.session`
      - `org.freeplane.plugin.ai.chat.memory`
-     - `org.freeplane.plugin.ai.chat.settings`
-  2. Use this package inventory:
+     - `org.freeplane.plugin.ai.chat.history`
+  2. The target package structure contains this shared tool-availability
+     policy package:
+     - `org.freeplane.plugin.ai.tools.availability`
+       - `ToolAvailabilityLevel`
+       - `ToolAvailabilityLevelSettings`
+  3. The target package structure contains this tool-adapter package for
+     code-oriented LangChain tools:
+     - `org.freeplane.plugin.ai.tools.code`
+       - `AiCodeToolSet`
+       - `AiCodeOperationAuthorizer`
+  4. The target package structure keeps editor-host and attachment
+     runtime classes in `org.freeplane.plugin.ai.code`:
+     - `SingleEditorAttachmentService`
+     - `RoutingAiCodeHostService`
+     - `AttachedEditorChatMode`
+     - `AttachedEditorChatModeSettings`
+  5. The target package structure keeps general tool assembly classes in
+     `org.freeplane.plugin.ai.tools`:
+     - `AIToolSet`
+     - `AIToolSetBuilder`
+     - `MessageBuilder`
+  6. The target chat package inventory is:
      - `chat.ui`
        - `AIChatPanel`
        - `AIChatMessageStyleSettings`
@@ -249,11 +273,8 @@ ModelContextProtocolServer --> ToolAvailabilityLevelSettings
        - `TranscriptHiddenSystemMessage`
        - `VisibleContextSelection`
        - `VisibleContextSelector`
-     - `chat.settings`
-       - `ToolAvailabilityLevel`
-       - `ToolAvailabilityLevelSettings`
-  3. Keep transcript persistence types in
-     `org.freeplane.plugin.ai.chat.history` for this increment:
+  7. The target transcript persistence inventory in
+     `org.freeplane.plugin.ai.chat.history` is:
      - `AssistantProfileTranscriptEntry`
      - `ChatTranscriptEntry`
      - `ChatTranscriptId`
@@ -263,86 +284,54 @@ ModelContextProtocolServer --> ToolAvailabilityLevelSettings
      - `ChatTranscriptStore`
      - `ChatTranscriptSummary`
      - `MapRootShortTextCount`
-  4. After the moves, narrow visibility package by package:
+  8. The target visibility rule is package-by-package narrowing:
      - start from package-private for every moved type;
      - keep `public` only for cross-package construction,
        inheritance, or shared-value exchange;
-     - prefer package-private constructors and methods when only the
-       type itself must remain public.
-  5. Keep the cross-package public boundary small and evidence-driven.
-     At minimum it will still need to cover the neighboring imports that
-     remain outside the chat package tree, especially:
-     - `chat.ui.AIChatPanel`
-     - `chat.request.ScriptAiRequestService`
-     - `chat.session.LiveChatSessionId`
-     - `chat.settings.ToolAvailabilityLevel`
-     - `chat.settings.ToolAvailabilityLevelSettings`
-     Additional `public` types are allowed only where direct
-     implementation constraints show that a narrower boundary would add
-     more risk than value.
-  6. Update imports in neighboring packages to the new package names and
-     keep behavioral contracts unchanged:
-     - `org.freeplane.plugin.ai.Activator`
-     - `org.freeplane.plugin.ai.code.*`
-     - `org.freeplane.plugin.ai.mcpserver.*`
-     - `org.freeplane.plugin.ai.prompt.*`
-     - `org.freeplane.plugin.ai.tools.*`
-  7. Move tests into matching target packages so package-private access
-     remains available without widening production visibility. When a
-     production type still needs wider visibility only for tests, that
-     is acceptable after test relocation is considered first, and such
-     cases may be marked with a plugin-local `VisibleForTesting`
-     annotation if that improves review clarity. Preserve current test
-     intent and only change test logic when package moves expose
-     missing coverage.
-  8. Execute the refactor in low-risk order:
-     - move the request-runtime `Hidden*` prompt helpers first;
-     - move shared settings and value types next;
-     - move session, memory, profile, and UI clusters;
-     - then tighten visibilities and fix any test/package fallout.
+     - prefer moving tests with their production packages before
+       widening production visibility for test access.
 
 ```plantuml
 @startuml
-package "org.freeplane.plugin.ai.chat.ui" {
-  component AIChatPanel
-  component ChatOutputView
-  component ChatInputControls
+package "org.freeplane.plugin.ai.tools" {
+  component AIToolSet
+  component AIToolSetBuilder
+  component MessageBuilder
 }
-package "org.freeplane.plugin.ai.chat.profile" {
-  component AssistantProfileSelectionSync
+package "org.freeplane.plugin.ai.tools.code" {
+  component AiCodeToolSet
+  component AiCodeOperationAuthorizer
 }
-package "org.freeplane.plugin.ai.chat.request" {
-  component ScriptAiRequestService
-  component ChatRequestFlow
-  component ChatPromptRunner
-}
-package "org.freeplane.plugin.ai.chat.session" {
-  component LiveChatController
-  component LiveChatSessionId
-}
-package "org.freeplane.plugin.ai.chat.memory" {
-  component AssistantProfileChatMemory
-  component ChatTokenUsageTracker
-  component ChatMemoryRenderEntry
-}
-package "org.freeplane.plugin.ai.chat.settings" {
+package "org.freeplane.plugin.ai.tools.availability" {
   component ToolAvailabilityLevel
   component ToolAvailabilityLevelSettings
 }
-package "org.freeplane.plugin.ai.chat.history" {
-  component ChatTranscriptStore
+package "org.freeplane.plugin.ai.code" {
+  component SingleEditorAttachmentService
+  component RoutingAiCodeHostService
+}
+package "org.freeplane.plugin.ai.chat.request" {
+  component AIChatService
+  component ChatPromptRunner
+}
+package "org.freeplane.plugin.ai.chat.ui" {
+  component AIChatPanel
+}
+package "org.freeplane.plugin.ai.chat.session" {
+  component LiveChatSessionId
 }
 
-AIChatPanel --> ChatPromptRunner
-AIChatPanel --> ChatRequestFlow
-AIChatPanel --> LiveChatController
-AIChatPanel --> AssistantProfileSelectionSync
-AIChatPanel --> AssistantProfileChatMemory
-AIChatPanel --> ChatTokenUsageTracker
-AIChatPanel --> ToolAvailabilityLevelSettings
-ChatPromptRunner --> ToolAvailabilityLevel
-LiveChatController --> ChatTranscriptStore
-LiveChatController --> AssistantProfileChatMemory
+AIToolSetBuilder --> AIToolSet
+AIToolSetBuilder --> AiCodeToolSet
+AIToolSetBuilder --> AiCodeOperationAuthorizer
+AIToolSet --> ToolAvailabilityLevel
+MessageBuilder --> ToolAvailabilityLevel
+AIChatService --> AIToolSet
+AIChatService --> AiCodeToolSet
+ChatPromptRunner --> AIToolSetBuilder
+SingleEditorAttachmentService --> AIChatPanel
+SingleEditorAttachmentService --> LiveChatSessionId
+SingleEditorAttachmentService --> ToolAvailabilityLevel
 @enduml
 ```
 - **Test specification:**
@@ -372,7 +361,12 @@ LiveChatController --> AssistantProfileChatMemory
       packages, but kept a few cross-package session and request types
       visible because `AIChatPanel` tests still need to traverse those
       package boundaries directly.
-    - The approved six-package split still leaves a large required
-      public surface. After the refactor, 37 top-level chat-package
-      types are package-private and 57 remain public because production
-      code crosses those package boundaries.
+    - Kept `MessageBuilder` in `org.freeplane.plugin.ai.tools` for this
+      increment because moving shared tool-availability policy downward
+      removed its upward dependency on chat-owned settings without
+      forcing a separate prompt-guidance package split.
+    - The current refactor still leaves a large required public surface.
+      After moving code tool adapters and tool-availability policy out
+      of the chat tree, 37 top-level chat-package types are
+      package-private and 55 remain public because production code
+      crosses those package boundaries.

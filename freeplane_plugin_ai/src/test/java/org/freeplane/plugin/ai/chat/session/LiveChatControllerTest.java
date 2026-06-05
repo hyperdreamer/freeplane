@@ -18,7 +18,7 @@ import org.freeplane.plugin.ai.chat.history.ChatTranscriptRole;
 import org.freeplane.plugin.ai.chat.history.ChatTranscriptStore;
 import org.freeplane.plugin.ai.chat.memory.AssistantProfileChatMemory;
 import org.freeplane.plugin.ai.chat.memory.ChatMemorySettings;
-import org.freeplane.plugin.ai.chat.settings.ToolAvailabilityLevel;
+import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.chat.ui.AIChatPanel;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.junit.Test;

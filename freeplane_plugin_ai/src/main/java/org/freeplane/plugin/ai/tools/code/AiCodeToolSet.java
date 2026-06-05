@@ -1,4 +1,4 @@
-package org.freeplane.plugin.ai.code;
+package org.freeplane.plugin.ai.tools.code;
 
 import dev.langchain4j.agent.tool.Tool;
 import java.util.Arrays;

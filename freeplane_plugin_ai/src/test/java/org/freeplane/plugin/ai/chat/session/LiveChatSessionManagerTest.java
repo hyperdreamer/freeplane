@@ -1,7 +1,7 @@
 package org.freeplane.plugin.ai.chat.session;
 
 import dev.langchain4j.memory.ChatMemory;
-import org.freeplane.plugin.ai.chat.settings.ToolAvailabilityLevel;
+import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.junit.Test;
 import org.mockito.Mockito;
 

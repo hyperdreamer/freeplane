@@ -2,8 +2,8 @@ package org.freeplane.plugin.ai.mcpserver;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.function.Supplier;
-import org.freeplane.plugin.ai.chat.settings.ToolAvailabilityLevel;
-import org.freeplane.plugin.ai.code.AiCodeOperationAuthorizer;
+import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
+import org.freeplane.plugin.ai.tools.code.AiCodeOperationAuthorizer;
 import org.freeplane.plugin.ai.tools.documentation.GetApiDocumentationResponse;
 import org.freeplane.plugin.ai.tools.documentation.GetApiDocumentationTool;
 import org.junit.Test;

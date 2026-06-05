@@ -9,7 +9,7 @@ import org.freeplane.plugin.ai.chat.history.ChatTranscriptEntry;
 import org.freeplane.plugin.ai.chat.history.ChatTranscriptId;
 import org.freeplane.plugin.ai.chat.history.MapRootShortTextCount;
 import org.freeplane.plugin.ai.chat.memory.ChatTokenUsageState;
-import org.freeplane.plugin.ai.chat.settings.ToolAvailabilityLevel;
+import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 
 final class LiveChatSession {
     private final LiveChatSessionId id;

@@ -1,4 +1,4 @@
-package org.freeplane.plugin.ai.code;
+package org.freeplane.plugin.ai.tools.code;
 
 import java.util.Collections;
 import java.util.EnumMap;
@@ -16,7 +16,7 @@ import org.freeplane.features.ai.code.RunScriptResponse;
 import org.freeplane.features.ai.code.ScriptHost;
 import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeResponse;
-import org.freeplane.plugin.ai.chat.settings.ToolAvailabilityLevel;
+import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.tools.utilities.ToolCaller;
 import org.junit.Test;
 

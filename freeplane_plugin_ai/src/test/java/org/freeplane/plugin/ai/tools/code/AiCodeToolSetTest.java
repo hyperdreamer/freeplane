@@ -1,4 +1,4 @@
-package org.freeplane.plugin.ai.code;
+package org.freeplane.plugin.ai.tools.code;
 
 import java.util.Collections;
 import org.freeplane.features.ai.code.AiCodeEditor;
@@ -17,6 +17,9 @@ import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeResponse;
 import org.freeplane.plugin.ai.chat.session.LiveChatSessionId;
 import org.freeplane.plugin.ai.chat.ui.AIChatPanel;
+import org.freeplane.plugin.ai.code.AttachedEditorChatMode;
+import org.freeplane.plugin.ai.code.AttachedEditorChatModeSettings;
+import org.freeplane.plugin.ai.code.SingleEditorAttachmentService;
 import org.freeplane.plugin.ai.tools.utilities.ToolCaller;
 import org.junit.Test;
 
