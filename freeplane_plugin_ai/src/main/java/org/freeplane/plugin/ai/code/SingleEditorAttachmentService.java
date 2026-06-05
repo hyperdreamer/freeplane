@@ -29,9 +29,9 @@ import org.freeplane.features.ai.code.RunScriptResponse;
 import org.freeplane.features.ai.code.ScriptHost;
 import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeResponse;
-import org.freeplane.plugin.ai.chat.AIChatPanel;
-import org.freeplane.plugin.ai.chat.ToolAvailabilityLevel;
-import org.freeplane.plugin.ai.chat.LiveChatSessionId;
+import org.freeplane.plugin.ai.chat.session.LiveChatSessionId;
+import org.freeplane.plugin.ai.chat.settings.ToolAvailabilityLevel;
+import org.freeplane.plugin.ai.chat.ui.AIChatPanel;
 
 public class SingleEditorAttachmentService implements AiChatAttachmentService, AiCodeHostService {
     private static final String ATTACHED_EDITOR_CODE_ID_PREFIX = "attached-editor-";

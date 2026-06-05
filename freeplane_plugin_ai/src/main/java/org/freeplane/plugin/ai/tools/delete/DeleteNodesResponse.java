@@ -1,13 +1,10 @@
 package org.freeplane.plugin.ai.tools.delete;
 
-import java.util.List;
-
-import org.freeplane.plugin.ai.tools.content.ModifiedNodeSummary;
-
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-
 import dev.langchain4j.model.output.structured.Description;
+import java.util.List;
+import org.freeplane.plugin.ai.tools.content.ModifiedNodeSummary;
 
 public class DeleteNodesResponse {
     @Description("Map ID.")

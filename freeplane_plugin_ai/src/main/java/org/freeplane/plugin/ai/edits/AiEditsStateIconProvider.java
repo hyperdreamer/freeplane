@@ -2,7 +2,6 @@ package org.freeplane.plugin.ai.edits;
 
 import java.util.Objects;
 import java.util.function.Supplier;
-
 import org.freeplane.features.icon.IStateIconProvider;
 import org.freeplane.features.icon.UIIcon;
 import org.freeplane.features.icon.factory.IconStoreFactory;

@@ -2,8 +2,8 @@ package org.freeplane.plugin.ai.tools;
 
 import dev.langchain4j.data.message.UserMessage;
 import org.freeplane.core.resources.ResourceController;
-import org.freeplane.plugin.ai.chat.ToolAvailabilityLevel;
-import org.freeplane.plugin.ai.chat.ToolAvailabilityLevelSettings;
+import org.freeplane.plugin.ai.chat.settings.ToolAvailabilityLevel;
+import org.freeplane.plugin.ai.chat.settings.ToolAvailabilityLevelSettings;
 
 public class MessageBuilder {
     public static final String SYSTEM_MESSAGE_PROPERTY = "ai_system_message";

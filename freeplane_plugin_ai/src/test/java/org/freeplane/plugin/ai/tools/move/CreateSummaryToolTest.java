@@ -1,17 +1,8 @@
 package org.freeplane.plugin.ai.tools.move;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.UUID;
-
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.map.mindmapmode.OperationErrorHandler;
@@ -24,6 +15,14 @@ import org.freeplane.plugin.ai.tools.create.NodeCreationHierarchyBuilder;
 import org.freeplane.plugin.ai.tools.create.NodeCreationItem;
 import org.freeplane.plugin.ai.tools.create.NodeInserter;
 import org.junit.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class CreateSummaryToolTest {
     @Test

@@ -1,20 +1,18 @@
 package org.freeplane.plugin.ai.tools.tagcategories;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Arrays;
 import java.util.Collections;
-
 import org.freeplane.features.icon.TagCategoryInstruction;
 import org.freeplane.features.icon.TagCategoryInstructionRequest;
+import org.freeplane.features.icon.TagCategoryInstructionType;
 import org.freeplane.features.icon.TagCategoryNode;
 import org.freeplane.features.icon.TagCategoryState;
-import org.freeplane.features.icon.TagCategoryInstructionType;
-import org.freeplane.features.icon.TagTargetLocation;
 import org.freeplane.features.icon.TagItem;
+import org.freeplane.features.icon.TagTargetLocation;
 import org.junit.Test;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import static org.assertj.core.api.Assertions.assertThat;
 
 public class TagCategoryPayloadJsonTest {
     @Test

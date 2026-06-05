@@ -5,7 +5,6 @@ import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.agent.tool.ToolSpecifications;
 import dev.langchain4j.service.tool.DefaultToolExecutor;
 import dev.langchain4j.service.tool.ToolExecutor;
-
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;

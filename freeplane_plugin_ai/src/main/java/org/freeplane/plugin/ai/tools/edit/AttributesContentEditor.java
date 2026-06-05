@@ -2,7 +2,6 @@ package org.freeplane.plugin.ai.tools.edit;
 
 import java.util.List;
 import java.util.Objects;
-
 import org.freeplane.features.attribute.Attribute;
 import org.freeplane.features.attribute.NodeAttributeTableModel;
 import org.freeplane.features.attribute.mindmapmode.MAttributeController;

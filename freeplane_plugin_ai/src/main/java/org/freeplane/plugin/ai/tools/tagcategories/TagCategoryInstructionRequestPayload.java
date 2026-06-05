@@ -1,16 +1,14 @@
 package org.freeplane.plugin.ai.tools.tagcategories;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-
-import org.freeplane.features.icon.TagCategoryInstruction;
-import org.freeplane.features.icon.TagCategoryInstructionRequest;
-
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import dev.langchain4j.model.output.structured.Description;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import org.freeplane.features.icon.TagCategoryInstruction;
+import org.freeplane.features.icon.TagCategoryInstructionRequest;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class TagCategoryInstructionRequestPayload {

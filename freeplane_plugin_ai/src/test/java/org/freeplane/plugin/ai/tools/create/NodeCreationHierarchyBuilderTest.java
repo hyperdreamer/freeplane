@@ -1,5 +1,13 @@
 package org.freeplane.plugin.ai.tools.create;
 
+import java.util.Arrays;
+import org.freeplane.features.map.MapModel;
+import org.freeplane.features.map.NodeModel;
+import org.freeplane.plugin.ai.tools.content.NodeContentApplier;
+import org.freeplane.plugin.ai.tools.content.NodeContentWriteRequest;
+import org.freeplane.plugin.ai.tools.edit.NodeStyleContentEditor;
+import org.junit.Test;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -7,15 +15,6 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-
-import java.util.Arrays;
-
-import org.freeplane.features.map.MapModel;
-import org.freeplane.features.map.NodeModel;
-import org.freeplane.plugin.ai.tools.content.NodeContentApplier;
-import org.freeplane.plugin.ai.tools.content.NodeContentWriteRequest;
-import org.freeplane.plugin.ai.tools.edit.NodeStyleContentEditor;
-import org.junit.Test;
 
 public class NodeCreationHierarchyBuilderTest {
     @Test

@@ -4,9 +4,7 @@ import java.net.URL;
 import java.util.Hashtable;
 import java.util.Objects;
 import java.util.Properties;
-
 import javax.swing.JTabbedPane;
-
 import org.freeplane.api.ai.AiRequestService;
 import org.freeplane.core.resources.IFreeplanePropertyListener;
 import org.freeplane.core.resources.ResourceController;
@@ -25,9 +23,9 @@ import org.freeplane.features.mode.ModeController;
 import org.freeplane.features.mode.mindmapmode.MModeController;
 import org.freeplane.main.application.CommandLineOptions;
 import org.freeplane.main.osgi.IModeControllerExtensionProvider;
-import org.freeplane.plugin.ai.chat.AIChatPanel;
-import org.freeplane.plugin.ai.chat.ScriptAiRequestService;
-import org.freeplane.plugin.ai.chat.ToolAvailabilityLevelSettings;
+import org.freeplane.plugin.ai.chat.request.ScriptAiRequestService;
+import org.freeplane.plugin.ai.chat.settings.ToolAvailabilityLevelSettings;
+import org.freeplane.plugin.ai.chat.ui.AIChatPanel;
 import org.freeplane.plugin.ai.code.AiCodeOperationAuthorizer;
 import org.freeplane.plugin.ai.code.AttachedEditorChatModeSettings;
 import org.freeplane.plugin.ai.code.RoutingAiCodeHostService;

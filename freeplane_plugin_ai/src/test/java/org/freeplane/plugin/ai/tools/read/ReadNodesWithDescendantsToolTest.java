@@ -1,12 +1,6 @@
 package org.freeplane.plugin.ai.tools.read;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URI;
 import java.util.Arrays;
 import java.util.Collection;
@@ -15,7 +9,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-
 import org.freeplane.core.util.Hyperlink;
 import org.freeplane.features.link.ConnectorModel;
 import org.freeplane.features.link.MapLinks;
@@ -41,7 +34,12 @@ import org.freeplane.plugin.ai.tools.search.OmissionReason;
 import org.freeplane.plugin.ai.tools.search.Omissions;
 import org.junit.Test;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class ReadNodesWithDescendantsToolTest {
     private static class TestNodeLinks extends NodeLinks {

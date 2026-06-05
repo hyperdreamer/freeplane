@@ -2,7 +2,7 @@ package org.freeplane.plugin.ai.prompt;
 
 import java.awt.event.ActionEvent;
 import org.freeplane.core.ui.AFreeplaneAction;
-import org.freeplane.plugin.ai.chat.AIChatPanel;
+import org.freeplane.plugin.ai.chat.ui.AIChatPanel;
 
 class RunAiPromptAction extends AFreeplaneAction {
     private static final long serialVersionUID = 1L;

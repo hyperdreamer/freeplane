@@ -13,7 +13,7 @@ import java.util.Objects;
 import java.util.Set;
 import javax.swing.SwingUtilities;
 import org.freeplane.core.util.TextUtils;
-import org.freeplane.plugin.ai.chat.AIChatPanel;
+import org.freeplane.plugin.ai.chat.ui.AIChatPanel;
 import org.freeplane.plugin.ai.prompt.ui.AiPromptManagerDialog;
 
 public class AiPromptActionRegistry {

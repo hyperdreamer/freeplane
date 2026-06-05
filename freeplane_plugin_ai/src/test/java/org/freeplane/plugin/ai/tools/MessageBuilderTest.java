@@ -1,9 +1,9 @@
 package org.freeplane.plugin.ai.tools;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
-import org.freeplane.plugin.ai.chat.ToolAvailabilityLevel;
+import org.freeplane.plugin.ai.chat.settings.ToolAvailabilityLevel;
 import org.junit.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 public class MessageBuilderTest {
     private static final String MARKDOWN_RESPONSE_GUIDANCE = "Respond in Markdown.";

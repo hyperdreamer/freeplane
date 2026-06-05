@@ -1,11 +1,10 @@
 package org.freeplane.plugin.ai.prompt;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 import java.util.Arrays;
 import java.util.List;
-
 import org.junit.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 public class AiPromptNameValidatorTest {
     private static final String DEFAULT_NEW_PROMPT_NAME = "New Prompt";

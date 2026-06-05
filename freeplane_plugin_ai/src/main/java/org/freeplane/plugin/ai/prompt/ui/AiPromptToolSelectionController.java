@@ -7,6 +7,7 @@ import javax.swing.DefaultComboBoxModel;
 import javax.swing.JComboBox;
 import org.freeplane.core.ui.components.JComboBoxFactory;
 import org.freeplane.core.util.TextUtils;
+import org.freeplane.plugin.ai.chat.settings.ToolAvailabilityLevel;
 
 public class AiPromptToolSelectionController {
     private final JComboBox<ToolSelectionOption> toolSelectionComboBox;

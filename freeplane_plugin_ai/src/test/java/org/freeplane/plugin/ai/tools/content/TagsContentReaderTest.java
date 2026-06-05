@@ -1,15 +1,14 @@
 package org.freeplane.plugin.ai.tools.content;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
 import java.util.Arrays;
-
 import org.freeplane.features.icon.IconController;
 import org.freeplane.features.icon.Tag;
 import org.freeplane.features.map.NodeModel;
 import org.junit.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class TagsContentReaderTest {
     @Test

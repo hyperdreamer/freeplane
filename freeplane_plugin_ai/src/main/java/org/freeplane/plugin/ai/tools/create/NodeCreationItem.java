@@ -1,11 +1,9 @@
 package org.freeplane.plugin.ai.tools.create;
 
-import org.freeplane.plugin.ai.tools.content.NodeContentWriteRequest;
-
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-
 import dev.langchain4j.model.output.structured.Description;
+import org.freeplane.plugin.ai.tools.content.NodeContentWriteRequest;
 
 public class NodeCreationItem {
     @Description("Item index in the nodes list.")

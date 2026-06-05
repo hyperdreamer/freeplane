@@ -1,7 +1,6 @@
 package org.freeplane.plugin.ai.tools.content;
 
 import java.util.List;
-
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.styles.StyleNameMappingHelper;
 

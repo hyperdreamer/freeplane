@@ -1,15 +1,7 @@
 package org.freeplane.plugin.ai.tools.move;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
 import java.util.Arrays;
 import java.util.UUID;
-
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.map.mindmapmode.MMapController;
@@ -19,6 +11,13 @@ import org.freeplane.plugin.ai.tools.create.AnchorPlacement;
 import org.freeplane.plugin.ai.tools.create.AnchorPlacementCalculator;
 import org.freeplane.plugin.ai.tools.create.AnchorPlacementMode;
 import org.junit.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class MoveNodesToolTest {
     @Test

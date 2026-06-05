@@ -1,19 +1,19 @@
 package org.freeplane.plugin.ai.mcpserver;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.function.Supplier;
+import org.freeplane.plugin.ai.chat.settings.ToolAvailabilityLevel;
+import org.freeplane.plugin.ai.code.AiCodeOperationAuthorizer;
+import org.freeplane.plugin.ai.tools.documentation.GetApiDocumentationResponse;
+import org.freeplane.plugin.ai.tools.documentation.GetApiDocumentationTool;
+import org.junit.Test;
+
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
-import java.util.function.Supplier;
-import org.freeplane.plugin.ai.chat.ToolAvailabilityLevel;
-import org.freeplane.plugin.ai.code.AiCodeOperationAuthorizer;
-import org.freeplane.plugin.ai.tools.documentation.GetApiDocumentationResponse;
-import org.freeplane.plugin.ai.tools.documentation.GetApiDocumentationTool;
-import org.junit.Test;
 
 public class ModelContextProtocolToolCallAuthorizerTest {
     private final ObjectMapper objectMapper = new ObjectMapper();

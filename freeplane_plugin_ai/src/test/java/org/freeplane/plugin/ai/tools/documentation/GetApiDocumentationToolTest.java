@@ -1,17 +1,9 @@
 package org.freeplane.plugin.ai.tools.documentation;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
 import java.io.File;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.UUID;
-
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.text.TextController;
@@ -28,6 +20,13 @@ import org.freeplane.plugin.ai.tools.search.SearchNodesRequest;
 import org.freeplane.plugin.ai.tools.search.SearchNodesResponse;
 import org.freeplane.plugin.ai.tools.search.SearchNodesTool;
 import org.junit.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class GetApiDocumentationToolTest {
     @Test

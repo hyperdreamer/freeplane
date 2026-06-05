@@ -1,9 +1,8 @@
 package org.freeplane.plugin.ai.tools.search;
 
-import org.freeplane.plugin.ai.tools.content.NodeContentResponse;
-
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import org.freeplane.plugin.ai.tools.content.NodeContentResponse;
 
 public class SearchResult {
     private final String nodeIdentifier;

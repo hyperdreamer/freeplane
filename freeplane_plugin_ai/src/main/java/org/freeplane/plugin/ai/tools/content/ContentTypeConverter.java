@@ -1,7 +1,6 @@
 package org.freeplane.plugin.ai.tools.content;
 
 import java.util.Locale;
-
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.features.text.TextController;
 

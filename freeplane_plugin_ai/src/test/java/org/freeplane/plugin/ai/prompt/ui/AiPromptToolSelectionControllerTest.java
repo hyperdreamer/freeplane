@@ -1,9 +1,9 @@
 package org.freeplane.plugin.ai.prompt.ui;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 import javax.swing.JComboBox;
 import org.junit.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 public class AiPromptToolSelectionControllerTest {
     @Test

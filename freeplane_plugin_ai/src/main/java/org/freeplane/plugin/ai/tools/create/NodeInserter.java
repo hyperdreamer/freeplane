@@ -3,7 +3,6 @@ package org.freeplane.plugin.ai.tools.create;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
-
 import org.freeplane.features.map.MapController;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.map.NodeModel.Side;

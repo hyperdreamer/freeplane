@@ -1,16 +1,11 @@
 package org.freeplane.plugin.ai.tools;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.mockConstruction;
-
 import java.util.List;
-
 import org.freeplane.features.ai.code.AiCodeHostService;
+import org.freeplane.features.ai.code.AiCodeRunListener;
 import org.freeplane.features.ai.code.CodeLifecycleStatus;
 import org.freeplane.features.ai.code.CompileCodeRequest;
 import org.freeplane.features.ai.code.CompileCodeResponse;
-import org.freeplane.features.ai.code.AiCodeRunListener;
 import org.freeplane.features.ai.code.ReadCodeRequest;
 import org.freeplane.features.ai.code.ReadCodeResponse;
 import org.freeplane.features.ai.code.RunScriptRequest;
@@ -27,6 +22,10 @@ import org.freeplane.plugin.ai.code.AiCodeToolSet;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.junit.Test;
 import org.mockito.MockedConstruction;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockConstruction;
 
 public class AIToolSetBuilderTest {
 

@@ -1,9 +1,9 @@
 package org.freeplane.plugin.ai.tools;
 
+import dev.langchain4j.agent.tool.Tool;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.features.attribute.mindmapmode.MAttributeController;
 import org.freeplane.features.icon.IconController;
@@ -20,7 +20,11 @@ import org.freeplane.features.mode.ModeController;
 import org.freeplane.features.note.mindmapmode.MNoteController;
 import org.freeplane.features.text.TextController;
 import org.freeplane.features.text.mindmapmode.MTextController;
+import org.freeplane.plugin.ai.chat.settings.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
+import org.freeplane.plugin.ai.tools.connectors.ConnectorEditRequest;
+import org.freeplane.plugin.ai.tools.connectors.ConnectorEditResponse;
+import org.freeplane.plugin.ai.tools.connectors.ConnectorEditTool;
 import org.freeplane.plugin.ai.tools.content.ListResponse;
 import org.freeplane.plugin.ai.tools.content.ListTool;
 import org.freeplane.plugin.ai.tools.content.ModifiedNodeSummaryBuilder;
@@ -47,9 +51,9 @@ import org.freeplane.plugin.ai.tools.edit.EditTargetStatus;
 import org.freeplane.plugin.ai.tools.edit.HyperlinkContentEditor;
 import org.freeplane.plugin.ai.tools.edit.IconsContentEditor;
 import org.freeplane.plugin.ai.tools.edit.NodeContentEditor;
+import org.freeplane.plugin.ai.tools.edit.NodeStyleContentEditor;
 import org.freeplane.plugin.ai.tools.edit.NoteContentWriteController;
 import org.freeplane.plugin.ai.tools.edit.NoteContentWriteControllerAdapter;
-import org.freeplane.plugin.ai.tools.edit.NodeStyleContentEditor;
 import org.freeplane.plugin.ai.tools.edit.TagsContentEditor;
 import org.freeplane.plugin.ai.tools.edit.TextContentWriteController;
 import org.freeplane.plugin.ai.tools.edit.TextContentWriteControllerAdapter;
@@ -87,12 +91,6 @@ import org.freeplane.plugin.ai.tools.utilities.ToolCallSummary;
 import org.freeplane.plugin.ai.tools.utilities.ToolCallSummaryFormatter;
 import org.freeplane.plugin.ai.tools.utilities.ToolCallSummaryHandler;
 import org.freeplane.plugin.ai.tools.utilities.ToolCaller;
-import org.freeplane.plugin.ai.tools.connectors.ConnectorEditRequest;
-import org.freeplane.plugin.ai.tools.connectors.ConnectorEditResponse;
-import org.freeplane.plugin.ai.tools.connectors.ConnectorEditTool;
-import org.freeplane.plugin.ai.chat.ToolAvailabilityLevel;
-
-import dev.langchain4j.agent.tool.Tool;
 
 public class AIToolSet {
     private final MessageBuilder messageBuilder;

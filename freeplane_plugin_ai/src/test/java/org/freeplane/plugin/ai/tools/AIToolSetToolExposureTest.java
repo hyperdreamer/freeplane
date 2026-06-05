@@ -1,13 +1,11 @@
 package org.freeplane.plugin.ai.tools;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
+import dev.langchain4j.agent.tool.Tool;
 import java.lang.reflect.Method;
-
 import org.freeplane.plugin.ai.tools.read.ReadNodesWithDescendantsRequest;
 import org.junit.Test;
 
-import dev.langchain4j.agent.tool.Tool;
+import static org.assertj.core.api.Assertions.assertThat;
 
 public class AIToolSetToolExposureTest {
     @Test

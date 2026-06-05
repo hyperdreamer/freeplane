@@ -1,9 +1,6 @@
 package org.freeplane.plugin.ai.chat.history;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.freeplane.core.resources.ResourceController;
-import org.freeplane.core.util.LogUtils;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -22,6 +19,8 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
+import org.freeplane.core.resources.ResourceController;
+import org.freeplane.core.util.LogUtils;
 
 public class ChatTranscriptStore {
     private static final String TRANSCRIPT_DIRECTORY = "ai-chats";

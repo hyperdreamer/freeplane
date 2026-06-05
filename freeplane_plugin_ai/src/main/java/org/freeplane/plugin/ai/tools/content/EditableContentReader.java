@@ -3,7 +3,6 @@ package org.freeplane.plugin.ai.tools.content;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.features.attribute.Attribute;
 import org.freeplane.features.attribute.NodeAttributeTableModel;

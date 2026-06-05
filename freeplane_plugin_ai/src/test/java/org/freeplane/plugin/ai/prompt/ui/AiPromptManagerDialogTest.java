@@ -1,12 +1,5 @@
 package org.freeplane.plugin.ai.prompt.ui;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
 import java.util.Arrays;
 import javax.swing.JDialog;
 import org.freeplane.core.resources.ResourceController;
@@ -14,6 +7,13 @@ import org.freeplane.core.resources.WindowConfigurationStorage;
 import org.freeplane.plugin.ai.prompt.AiPrompt;
 import org.freeplane.plugin.ai.prompt.AiPromptStore;
 import org.junit.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class AiPromptManagerDialogTest {
     private static final String DEFAULT_NEW_PROMPT_NAME = "New Prompt";

@@ -1,5 +1,6 @@
 package org.freeplane.plugin.ai.tools.search;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -11,7 +12,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
-
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.text.TextController;
@@ -23,8 +23,6 @@ import org.freeplane.plugin.ai.tools.content.NodeContentResponse;
 import org.freeplane.plugin.ai.tools.content.NodeContentValueMatcher;
 import org.freeplane.plugin.ai.tools.utilities.ToolCallSummary;
 import org.freeplane.plugin.ai.tools.utilities.ToolCallSummaryFormatter;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class SearchNodesTool {
     private static final int SUMMARY_PREVIEW_TEXT_LIMIT = 20;

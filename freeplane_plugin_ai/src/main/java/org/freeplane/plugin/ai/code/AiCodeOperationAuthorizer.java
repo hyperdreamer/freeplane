@@ -9,7 +9,7 @@ import org.freeplane.features.ai.code.CodeLifecycleStatus;
 import org.freeplane.features.ai.code.ReadCodeRequest;
 import org.freeplane.features.ai.code.ReadCodeResponse;
 import org.freeplane.features.ai.code.ScriptHost;
-import org.freeplane.plugin.ai.chat.ToolAvailabilityLevel;
+import org.freeplane.plugin.ai.chat.settings.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.tools.utilities.ToolCaller;
 
 public class AiCodeOperationAuthorizer {

@@ -1,8 +1,7 @@
 package org.freeplane.plugin.ai.tools.content;
 
-import java.util.Objects;
 import java.util.List;
-
+import java.util.Objects;
 import org.freeplane.features.map.NodeModel;
 
 public class NodeContentReader {

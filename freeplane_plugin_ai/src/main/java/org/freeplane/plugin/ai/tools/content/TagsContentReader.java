@@ -3,7 +3,6 @@ package org.freeplane.plugin.ai.tools.content;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-
 import org.freeplane.features.icon.IconController;
 import org.freeplane.features.icon.Tag;
 import org.freeplane.features.map.NodeModel;

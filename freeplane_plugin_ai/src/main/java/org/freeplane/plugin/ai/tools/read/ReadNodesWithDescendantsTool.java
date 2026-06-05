@@ -1,5 +1,6 @@
 package org.freeplane.plugin.ai.tools.read;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -10,7 +11,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
@@ -20,11 +20,11 @@ import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.freeplane.plugin.ai.tools.content.AttributeEntry;
 import org.freeplane.plugin.ai.tools.content.AttributesContent;
 import org.freeplane.plugin.ai.tools.content.AttributesContentRequest;
+import org.freeplane.plugin.ai.tools.content.CloneMetadata;
+import org.freeplane.plugin.ai.tools.content.ConnectorItem;
 import org.freeplane.plugin.ai.tools.content.EditableContentRequest;
 import org.freeplane.plugin.ai.tools.content.IconsContent;
 import org.freeplane.plugin.ai.tools.content.IconsContentRequest;
-import org.freeplane.plugin.ai.tools.content.CloneMetadata;
-import org.freeplane.plugin.ai.tools.content.ConnectorItem;
 import org.freeplane.plugin.ai.tools.content.NodeContentItem;
 import org.freeplane.plugin.ai.tools.content.NodeContentItemReader;
 import org.freeplane.plugin.ai.tools.content.NodeContentPreset;
@@ -39,8 +39,6 @@ import org.freeplane.plugin.ai.tools.search.OmissionReason;
 import org.freeplane.plugin.ai.tools.search.Omissions;
 import org.freeplane.plugin.ai.tools.utilities.ToolCallSummary;
 import org.freeplane.plugin.ai.tools.utilities.ToolCallSummaryFormatter;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class ReadNodesWithDescendantsTool {
     private static final int SUMMARY_PREVIEW_TEXT_LIMIT = 20;

@@ -1,14 +1,11 @@
 package org.freeplane.plugin.ai.tools.read;
 
-import java.util.List;
-
-import org.freeplane.plugin.ai.tools.content.NodeContentItem;
-
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
-
 import dev.langchain4j.model.output.structured.Description;
+import java.util.List;
+import org.freeplane.plugin.ai.tools.content.NodeContentItem;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class FetchNodesForEditingResponse {

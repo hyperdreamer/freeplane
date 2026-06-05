@@ -1,11 +1,5 @@
 package org.freeplane.plugin.ai.code;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
 import java.util.Collections;
 import org.freeplane.features.ai.code.AiChatAttachment;
 import org.freeplane.features.ai.code.AiCodeEditor;
@@ -19,10 +13,16 @@ import org.freeplane.features.ai.code.RunScriptResponse;
 import org.freeplane.features.ai.code.ScriptHost;
 import org.freeplane.features.ai.code.ScriptRunInitiator;
 import org.freeplane.features.ai.code.WriteCodeRequest;
-import org.freeplane.plugin.ai.chat.AIChatPanel;
-import org.freeplane.plugin.ai.chat.ToolAvailabilityLevel;
-import org.freeplane.plugin.ai.chat.LiveChatSessionId;
+import org.freeplane.plugin.ai.chat.session.LiveChatSessionId;
+import org.freeplane.plugin.ai.chat.settings.ToolAvailabilityLevel;
+import org.freeplane.plugin.ai.chat.ui.AIChatPanel;
 import org.junit.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class SingleEditorAttachmentServiceTest {
 

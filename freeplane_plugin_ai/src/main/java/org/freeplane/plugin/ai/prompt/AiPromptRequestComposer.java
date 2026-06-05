@@ -8,8 +8,8 @@ import org.freeplane.features.map.IMapSelection;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.text.TextController;
+import org.freeplane.plugin.ai.chat.settings.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
-import org.freeplane.plugin.ai.chat.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.tools.selection.SelectionIdentifiersBuilder;
 import org.freeplane.plugin.ai.tools.selection.SelectionIdentifiersResponse;
 

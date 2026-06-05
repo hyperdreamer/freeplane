@@ -1,17 +1,17 @@
 package org.freeplane.plugin.ai.bootstrap;
 
+import org.freeplane.main.osgi.IModeControllerExtensionProvider;
+import org.junit.Test;
+import org.mockito.ArgumentCaptor;
+import org.osgi.framework.BundleActivator;
+import org.osgi.framework.BundleContext;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-
-import org.freeplane.main.osgi.IModeControllerExtensionProvider;
-import org.junit.Test;
-import org.mockito.ArgumentCaptor;
-import org.osgi.framework.BundleActivator;
-import org.osgi.framework.BundleContext;
 
 public class Java8BootstrapActivatorTest {
 

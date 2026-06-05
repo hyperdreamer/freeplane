@@ -1,20 +1,11 @@
 package org.freeplane.plugin.ai.tools.tagcategories;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.UUID;
-
 import javax.swing.tree.DefaultMutableTreeNode;
-
 import org.freeplane.features.icon.IconRegistry;
+import org.freeplane.features.icon.TagCategories;
 import org.freeplane.features.icon.TagCategoryAccess;
 import org.freeplane.features.icon.TagCategoryConflictException;
 import org.freeplane.features.icon.TagCategoryInstruction;
@@ -23,7 +14,6 @@ import org.freeplane.features.icon.TagCategoryInstructionType;
 import org.freeplane.features.icon.TagCategoryNode;
 import org.freeplane.features.icon.TagCategoryState;
 import org.freeplane.features.icon.TagCategoryStateBuilder;
-import org.freeplane.features.icon.TagCategories;
 import org.freeplane.features.icon.TagTargetLocation;
 import org.freeplane.features.icon.mindmapmode.FreeplaneTagCategoryAccess;
 import org.freeplane.features.icon.mindmapmode.MIconController;
@@ -31,6 +21,14 @@ import org.freeplane.features.map.MapModel;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class EditTagCategoriesToolTest {
     @Test

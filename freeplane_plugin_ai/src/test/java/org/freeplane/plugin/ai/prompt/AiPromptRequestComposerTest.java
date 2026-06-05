@@ -1,15 +1,13 @@
 package org.freeplane.plugin.ai.prompt;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Arrays;
-
-import org.freeplane.plugin.ai.chat.ToolAvailabilityLevel;
+import org.freeplane.plugin.ai.chat.settings.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.tools.selection.SelectedNodeSummary;
 import org.freeplane.plugin.ai.tools.selection.SelectionIdentifiersResponse;
 import org.junit.Test;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import static org.assertj.core.api.Assertions.assertThat;
 
 public class AiPromptRequestComposerTest {
 

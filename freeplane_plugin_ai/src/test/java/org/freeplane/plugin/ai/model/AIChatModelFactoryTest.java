@@ -1,15 +1,15 @@
 package org.freeplane.plugin.ai.model;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
 import dev.langchain4j.model.chat.ChatModel;
 import java.lang.reflect.Field;
 import java.util.Collections;
 import java.util.Map;
 import java.util.function.Supplier;
 import org.junit.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class AIChatModelFactoryTest {
 

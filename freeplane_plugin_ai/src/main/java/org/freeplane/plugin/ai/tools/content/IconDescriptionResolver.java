@@ -1,7 +1,6 @@
 package org.freeplane.plugin.ai.tools.content;
 
 import java.util.Objects;
-
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.icon.IconDescription;
 import org.freeplane.features.icon.NamedIcon;

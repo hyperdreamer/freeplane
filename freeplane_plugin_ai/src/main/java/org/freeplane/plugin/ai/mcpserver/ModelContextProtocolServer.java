@@ -7,16 +7,6 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import dev.langchain4j.service.tool.ToolExecutionResult;
-import org.freeplane.core.resources.IFreeplanePropertyListener;
-import org.freeplane.core.resources.ResourceController;
-import org.freeplane.core.util.FreeplaneVersion;
-import org.freeplane.core.util.LogUtils;
-import org.freeplane.features.ui.ViewController;
-import org.freeplane.plugin.ai.chat.ToolAvailabilityLevelSettings;
-import org.freeplane.plugin.ai.code.AiCodeOperationAuthorizer;
-import org.freeplane.plugin.ai.tools.AIToolSet;
-import org.freeplane.plugin.ai.tools.documentation.GetApiDocumentationTool;
-
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetAddress;
@@ -28,6 +18,15 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.freeplane.core.resources.IFreeplanePropertyListener;
+import org.freeplane.core.resources.ResourceController;
+import org.freeplane.core.util.FreeplaneVersion;
+import org.freeplane.core.util.LogUtils;
+import org.freeplane.features.ui.ViewController;
+import org.freeplane.plugin.ai.chat.settings.ToolAvailabilityLevelSettings;
+import org.freeplane.plugin.ai.code.AiCodeOperationAuthorizer;
+import org.freeplane.plugin.ai.tools.AIToolSet;
+import org.freeplane.plugin.ai.tools.documentation.GetApiDocumentationTool;
 
 public class ModelContextProtocolServer implements IFreeplanePropertyListener {
     public static final String MCP_SERVER_ENABLED_PROPERTY = "ai_mcp_server_enabled";

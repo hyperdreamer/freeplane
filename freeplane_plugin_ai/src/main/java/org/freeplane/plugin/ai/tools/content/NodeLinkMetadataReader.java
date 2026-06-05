@@ -3,7 +3,6 @@ package org.freeplane.plugin.ai.tools.content;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-
 import org.freeplane.features.link.ConnectorModel;
 import org.freeplane.features.link.MapLinks;
 import org.freeplane.features.link.NodeLinkModel;
