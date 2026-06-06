@@ -49,6 +49,7 @@ public class EditableContentReaderTest {
         assertThat(editableText.getTransformed()).contains("Transformed");
         assertThat(editableText.getPlain()).isEqualTo("Transformed");
         assertThat(editableText.getContentType()).isEqualTo(ContentType.HTML);
+        assertThat(editableText.getIsFormula()).isFalse();
         assertThat(editableText.getIsEditable()).isTrue();
     }
 
@@ -97,8 +98,72 @@ public class EditableContentReaderTest {
         assertThat(attribute.getRawValue()).contains("value");
         assertThat(attribute.getTransformedValue()).contains("Transformed");
         assertThat(attribute.getPlainValue()).isEqualTo("Transformed");
+        assertThat(attribute.getIsFormula()).isFalse();
         assertThat(attribute.getIsEditable()).isTrue();
         assertThat(attribute.getIndex()).isEqualTo(0);
+    }
+
+    @Test
+    public void readEditableContent_reportsFormulaStateAndAvailabilityForFormulaBackedAttributes() {
+        MapModel mapModel = new MapModel((source, targetMap, withChildren) -> null, null, null);
+        NodeModel nodeModel = new NodeModel("node", mapModel);
+        NodeAttributeTableModel attributeTableModel = NodeAttributeTableModel.getModel(nodeModel);
+        attributeTableModel.silentlyAddRowNoUndo(nodeModel, new Attribute("key", "=1+1"));
+        TextController textController = mock(TextController.class);
+        when(textController.getTransformedObjectNoFormattingNoThrow(eq(nodeModel), any(NodeAttributeTableModel.class), any()))
+            .thenReturn("2");
+        when(textController.isFormula(any())).thenReturn(true);
+        EditableContentRequest request = new EditableContentRequest(
+            Collections.singletonList(EditableContentField.ATTRIBUTES));
+
+        EditableContent editingContent = new EditableContentReader(
+            textController,
+            new IconDescriptionResolver(key -> null),
+            new ContentTypeConverter(),
+            () -> org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel.EDITING)
+            .readEditableContent(nodeModel, request);
+        EditableContent scriptExecutionContent = new EditableContentReader(
+            textController,
+            new IconDescriptionResolver(key -> null),
+            new ContentTypeConverter(),
+            () -> org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel.SCRIPT_EXECUTION)
+            .readEditableContent(nodeModel, request);
+
+        assertThat(editingContent.getEditableAttributes().get(0).getIsFormula()).isTrue();
+        assertThat(editingContent.getEditableAttributes().get(0).getIsEditable()).isFalse();
+        assertThat(scriptExecutionContent.getEditableAttributes().get(0).getIsFormula()).isTrue();
+        assertThat(scriptExecutionContent.getEditableAttributes().get(0).getIsEditable()).isTrue();
+    }
+
+    @Test
+    public void readEditableContent_reportsFormulaStateAndAvailabilityForFormulaBackedText() {
+        MapModel mapModel = new MapModel((source, targetMap, withChildren) -> null, null, null);
+        NodeModel nodeModel = new NodeModel("node", mapModel);
+        nodeModel.setUserObject("=1+1");
+        TextController textController = mock(TextController.class);
+        when(textController.getNodeFormat(nodeModel)).thenReturn(null);
+        when(textController.isFormula(any())).thenReturn(true);
+        EditableContentRequest request = new EditableContentRequest(
+            Collections.singletonList(EditableContentField.TEXT));
+
+        EditableContent editingContent = new EditableContentReader(
+            textController,
+            new IconDescriptionResolver(key -> null),
+            new ContentTypeConverter(),
+            () -> org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel.EDITING)
+            .readEditableContent(nodeModel, request);
+        EditableContent scriptExecutionContent = new EditableContentReader(
+            textController,
+            new IconDescriptionResolver(key -> null),
+            new ContentTypeConverter(),
+            () -> org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel.SCRIPT_EXECUTION)
+            .readEditableContent(nodeModel, request);
+
+        assertThat(editingContent.getEditableText().getIsFormula()).isTrue();
+        assertThat(editingContent.getEditableText().getIsEditable()).isFalse();
+        assertThat(scriptExecutionContent.getEditableText().getIsFormula()).isTrue();
+        assertThat(scriptExecutionContent.getEditableText().getIsEditable()).isTrue();
+        assertThat(scriptExecutionContent.getEditableText().getContentType()).isEqualTo(ContentType.PLAIN_TEXT);
     }
 
     @Test

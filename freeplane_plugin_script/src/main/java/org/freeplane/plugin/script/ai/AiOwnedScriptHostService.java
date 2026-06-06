@@ -18,11 +18,13 @@ import java.util.Iterator;
 import java.util.concurrent.Callable;
 import javax.swing.SwingUtilities;
 import org.freeplane.core.resources.ResourceController;
+import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.features.ai.code.AiCodeRunListener;
 import org.freeplane.features.ai.code.CodeLifecycleStatus;
 import org.freeplane.features.ai.code.CompileCodeRequest;
 import org.freeplane.features.ai.code.CompileCodeResponse;
+import org.freeplane.features.ai.code.EvaluateFormulaRequest;
 import org.freeplane.features.ai.code.ReadCodeRequest;
 import org.freeplane.features.ai.code.ReadCodeResponse;
 import org.freeplane.features.ai.code.RunScriptRequest;
@@ -35,6 +37,7 @@ import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
 import org.freeplane.plugin.script.ExecuteScriptException;
+import org.freeplane.plugin.script.FormulaValidationSupport;
 import org.freeplane.plugin.script.IFreeplaneScriptErrorHandler;
 import org.freeplane.plugin.script.ScriptingEngine;
 import org.freeplane.plugin.script.ScriptingPermissions;
@@ -76,6 +79,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
 
     private final ResourceController resourceController;
     private final DialogFactory dialogFactory;
+    private FormulaValidationSupport formulaValidationSupport;
     private final Set<AiCodeRunListener> runListeners = new LinkedHashSet<AiCodeRunListener>();
     private final Map<String, ReadCodeResponse> archivedStates = new HashMap<String, ReadCodeResponse>();
     private long nextCodeId = 1L;
@@ -87,12 +91,21 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
     }
 
     AiOwnedScriptHostService(ResourceController resourceController) {
-        this(resourceController, (codeStateProvider, callbacks) -> new AiOwnedScriptDialog(codeStateProvider, callbacks));
+        this(resourceController,
+            (codeStateProvider, callbacks) -> new AiOwnedScriptDialog(codeStateProvider, callbacks),
+            null);
     }
 
     AiOwnedScriptHostService(ResourceController resourceController, DialogFactory dialogFactory) {
+        this(resourceController, dialogFactory, null);
+    }
+
+    AiOwnedScriptHostService(ResourceController resourceController,
+                             DialogFactory dialogFactory,
+                             FormulaValidationSupport formulaValidationSupport) {
         this.resourceController = resourceController;
         this.dialogFactory = dialogFactory;
+        this.formulaValidationSupport = formulaValidationSupport;
     }
 
     @Override
@@ -113,6 +126,11 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
     @Override
     public RunScriptResponse runScript(RunScriptRequest request) {
         return onEdt(() -> doRunScript(request));
+    }
+
+    @Override
+    public AiChatCodeOperationResult evaluateFormula(EvaluateFormulaRequest request) {
+        return onEdt(() -> doEvaluateFormula(request));
     }
 
     @Override
@@ -144,6 +162,31 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
             dialog().showAndFocus();
             return null;
         });
+    }
+
+    AiChatCodeOperationResult doEvaluateFormula(EvaluateFormulaRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("request is required.");
+        }
+        NodeModel targetNode = request.getTargetNode();
+        if (targetNode == null) {
+            throw new IllegalArgumentException("targetNode is required.");
+        }
+        String formulaText = request.getFormulaText();
+        if (formulaText == null || formulaText.trim().isEmpty()) {
+            throw new IllegalArgumentException("formulaText is required.");
+        }
+        if (!formulaText.startsWith("=")) {
+            throw new IllegalArgumentException("formulaText must start with '='.");
+        }
+        return formulaValidationSupport().validateFormula(targetNode, formulaText);
+    }
+
+    private FormulaValidationSupport formulaValidationSupport() {
+        if (formulaValidationSupport == null) {
+            formulaValidationSupport = new FormulaValidationSupport();
+        }
+        return formulaValidationSupport;
     }
 
     ReadCodeResponse doReadCode(ReadCodeRequest request) {

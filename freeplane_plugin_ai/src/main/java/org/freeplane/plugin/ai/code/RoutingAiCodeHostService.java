@@ -4,11 +4,13 @@ import java.lang.reflect.Method;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.function.Supplier;
+import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.features.ai.code.AiCodeRunListener;
 import org.freeplane.features.ai.code.CodeLifecycleStatus;
 import org.freeplane.features.ai.code.CompileCodeRequest;
 import org.freeplane.features.ai.code.CompileCodeResponse;
+import org.freeplane.features.ai.code.EvaluateFormulaRequest;
 import org.freeplane.features.ai.code.ReadCodeRequest;
 import org.freeplane.features.ai.code.ReadCodeResponse;
 import org.freeplane.features.ai.code.RunScriptRequest;
@@ -82,6 +84,11 @@ public class RoutingAiCodeHostService implements AiCodeHostService {
             return attachedEditorCodeHostService.runScript(request);
         }
         return requireAiCodeHostService().runScript(request);
+    }
+
+    @Override
+    public synchronized AiChatCodeOperationResult evaluateFormula(EvaluateFormulaRequest request) {
+        return requireAiCodeHostService().evaluateFormula(request);
     }
 
     @Override

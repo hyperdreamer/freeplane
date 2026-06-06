@@ -7,8 +7,11 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.util.Collections;
 import org.freeplane.core.resources.ResourceController;
+import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.EvaluateFormulaRequest;
 import org.freeplane.features.ai.code.ReadCodeRequest;
 import org.freeplane.features.ai.code.ReadCodeResponse;
 import org.freeplane.features.ai.code.RunScriptRequest;
@@ -16,6 +19,9 @@ import org.freeplane.features.ai.code.RunScriptResponse;
 import org.freeplane.features.ai.code.ScriptHost;
 import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeResponse;
+import org.freeplane.features.map.MapModel;
+import org.freeplane.features.map.NodeModel;
+import org.freeplane.plugin.script.FormulaValidationSupport;
 import org.freeplane.plugin.script.ScriptingPermissions;
 import org.junit.Test;
 
@@ -29,10 +35,10 @@ public class AiOwnedScriptHostServiceTest {
     public void writeCodeReplacesPreviousScriptAndArchivesReplacedState() {
         AiOwnedScriptHostService uut = new AiOwnedScriptHostService(null);
 
-        WriteCodeResponse first = uut.writeCode(new WriteCodeRequest(null, ScriptHost.AI, "println 1", null));
-        WriteCodeResponse second = uut.writeCode(new WriteCodeRequest(null, ScriptHost.AI, "println 2", null));
-        ReadCodeResponse current = uut.readCode(new ReadCodeRequest(null, ScriptHost.AI, null));
-        ReadCodeResponse replaced = uut.readCode(new ReadCodeRequest(first.getCodeId(), null, null));
+        WriteCodeResponse first = uut.doWriteCode(new WriteCodeRequest(null, ScriptHost.AI, "println 1", null));
+        WriteCodeResponse second = uut.doWriteCode(new WriteCodeRequest(null, ScriptHost.AI, "println 2", null));
+        ReadCodeResponse current = uut.doReadCode(new ReadCodeRequest(null, ScriptHost.AI, null));
+        ReadCodeResponse replaced = uut.doReadCode(new ReadCodeRequest(first.getCodeId(), null, null));
 
         assertThat(first.getCodeId()).isEqualTo("ai-script-1");
         assertThat(second.getCodeId()).isEqualTo("ai-script-2");
@@ -47,9 +53,9 @@ public class AiOwnedScriptHostServiceTest {
     @Test
     public void writeCodeRejectsMismatchedExpectedFingerprint() {
         AiOwnedScriptHostService uut = new AiOwnedScriptHostService(null);
-        WriteCodeResponse written = uut.writeCode(new WriteCodeRequest(null, ScriptHost.AI, "println 1", null));
+        WriteCodeResponse written = uut.doWriteCode(new WriteCodeRequest(null, ScriptHost.AI, "println 1", null));
 
-        assertThatThrownBy(() -> uut.writeCode(new WriteCodeRequest(
+        assertThatThrownBy(() -> uut.doWriteCode(new WriteCodeRequest(
             written.getCodeId(),
             ScriptHost.AI,
             "println 2",
@@ -66,15 +72,36 @@ public class AiOwnedScriptHostServiceTest {
             eq(AiScriptExecutionPolicy.SHOWN_USER_RUN))).thenReturn(AiScriptExecutionPolicy.SHOWN_USER_RUN);
         RecordingDialogFactory dialogFactory = new RecordingDialogFactory();
         AiOwnedScriptHostService uut = new AiOwnedScriptHostService(resourceController, dialogFactory);
-        WriteCodeResponse written = uut.writeCode(new WriteCodeRequest(null, ScriptHost.AI, "println 1", null));
+        WriteCodeResponse written = uut.doWriteCode(new WriteCodeRequest(null, ScriptHost.AI, "println 1", null));
 
-        RunScriptResponse response = uut.runScript(new RunScriptRequest(written.getCodeId(), null, null));
-        ReadCodeResponse state = uut.readCode(new ReadCodeRequest(written.getCodeId(), null, null));
+        RunScriptResponse response = uut.doRunScript(new RunScriptRequest(written.getCodeId(), null, null));
+        ReadCodeResponse state = uut.doReadCode(new ReadCodeRequest(written.getCodeId(), null, null));
 
         assertThat(response.getStatus()).isEqualTo(CodeLifecycleStatus.WAITING_FOR_USER_RUN);
         assertThat(state.getStatus()).isEqualTo(CodeLifecycleStatus.WAITING_FOR_USER_RUN);
         assertThat(dialogFactory.dialog.shownCodeId).isEqualTo(written.getCodeId());
         assertThat(dialogFactory.dialog.showAndFocusCalls).isEqualTo(1);
+    }
+
+    @Test
+    public void evaluateFormulaDelegatesToFormulaValidationSupport() {
+        FormulaValidationSupport validationSupport = mock(FormulaValidationSupport.class);
+        AiOwnedScriptHostService uut = new AiOwnedScriptHostService(null, new RecordingDialogFactory(), validationSupport);
+        NodeModel nodeModel = new NodeModel("=1", new MapModel((source, targetMap, withChildren) -> null, null, null));
+        AiChatCodeOperationResult expectedResult = new AiChatCodeOperationResult(
+            true,
+            Collections.<String>emptyList(),
+            null,
+            "2",
+            null,
+            null,
+            null,
+            null);
+        when(validationSupport.validateFormula(nodeModel, "=1+1")).thenReturn(expectedResult);
+
+        AiChatCodeOperationResult result = uut.doEvaluateFormula(new EvaluateFormulaRequest(nodeModel, "=1+1"));
+
+        assertThat(result).isSameAs(expectedResult);
     }
 
     @Test

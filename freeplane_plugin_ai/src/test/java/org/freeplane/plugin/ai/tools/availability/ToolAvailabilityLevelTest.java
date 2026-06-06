@@ -35,6 +35,14 @@ public class ToolAvailabilityLevelTest {
             ToolAvailabilityLevel.READING.allowedToolNames());
         assertThat(ToolAvailabilityLevel.EDITING.allowsTool("fetchNodesForEditing")).isTrue();
         assertThat(ToolAvailabilityLevel.EDITING.allowsTool("edit")).isTrue();
+        assertThat(ToolAvailabilityLevel.EDITING.allowsTool("previewFormulaUpdates")).isFalse();
         assertThat(ToolAvailabilityLevel.DISABLED.includesTools()).isFalse();
+    }
+
+    @Test
+    public void scriptExecutionAddsFormulaPreviewAndApplyTools() {
+        assertThat(ToolAvailabilityLevel.SCRIPT_EXECUTION.allowedToolNames()).contains(
+            "previewFormulaUpdates",
+            "applyFormulaUpdates");
     }
 }

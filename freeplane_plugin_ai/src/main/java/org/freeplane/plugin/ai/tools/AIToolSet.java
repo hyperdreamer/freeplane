@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.features.attribute.mindmapmode.MAttributeController;
 import org.freeplane.features.icon.IconController;
 import org.freeplane.features.icon.NamedIcon;
@@ -58,6 +59,12 @@ import org.freeplane.plugin.ai.tools.edit.TagsContentEditor;
 import org.freeplane.plugin.ai.tools.edit.TextContentWriteController;
 import org.freeplane.plugin.ai.tools.edit.TextContentWriteControllerAdapter;
 import org.freeplane.plugin.ai.tools.edit.TextualContentEditor;
+import org.freeplane.plugin.ai.tools.formula.FormulaUpdateApplyRequest;
+import org.freeplane.plugin.ai.tools.formula.FormulaUpdateApplyResponse;
+import org.freeplane.plugin.ai.tools.formula.FormulaUpdatePreviewRequest;
+import org.freeplane.plugin.ai.tools.formula.FormulaUpdatePreviewResponse;
+import org.freeplane.plugin.ai.tools.formula.FormulaUpdatePreviewStore;
+import org.freeplane.plugin.ai.tools.formula.FormulaUpdateTool;
 import org.freeplane.plugin.ai.tools.move.CreateSummaryRequest;
 import org.freeplane.plugin.ai.tools.move.CreateSummaryResponse;
 import org.freeplane.plugin.ai.tools.move.CreateSummaryTool;
@@ -106,6 +113,7 @@ public class AIToolSet {
     private final ListTool listTool;
     private final ConnectorEditTool connectorEditTool;
     private final BatchEditTool batchEditTool;
+    private final FormulaUpdateTool formulaUpdateTool;
     private final GetApiDocumentationTool getApiDocumentationTool;
     private final GetTagCategoriesTool getTagCategoriesTool;
     private final EditTagCategoriesTool editTagCategoriesTool;
@@ -115,7 +123,10 @@ public class AIToolSet {
     AIToolSet(ToolCallSummaryHandler toolCallSummaryHandler, AvailableMaps availableMaps,
               AvailableMaps.MapAccessListener mapAccessListener, TextController textController,
               NodeContentFactories nodeContentFactories, MMapController mapController,
-              GetApiDocumentationTool getApiDocumentationTool, ToolCaller toolCaller) {
+              AiCodeHostService codeHostService,
+              GetApiDocumentationTool getApiDocumentationTool,
+              java.util.function.Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier,
+              ToolCaller toolCaller) {
         Objects.requireNonNull(mapController, "mapController");
         Objects.requireNonNull(availableMaps, "availableMaps");
         NodeModelCreator nodeModelCreator = new NodeModelCreator();
@@ -131,8 +142,8 @@ public class AIToolSet {
         MIconController iconController = (MIconController) IconController.getController();
         MLinkController linkController = requireLinkController();
         TextualContentEditor textualContentEditor = new TextualContentEditor(
-            textContentWriteController, noteContentWriteController);
-        AttributesContentEditor attributesContentEditor = new AttributesContentEditor(attributeController);
+            textContentWriteController, noteContentWriteController, textController);
+        AttributesContentEditor attributesContentEditor = new AttributesContentEditor(attributeController, textController);
         TagsContentEditor tagsContentEditor = new TagsContentEditor(iconController);
         TagCategoryAccess tagCategoryAccess = new FreeplaneTagCategoryAccess(iconController);
         List<NamedIcon> iconCandidates = new ArrayList<>(IconStoreFactory.ICON_STORE.getMindIcons());
@@ -149,6 +160,15 @@ public class AIToolSet {
             textualContentEditor, attributesContentEditor, tagsContentEditor, iconsContentEditor,
             nodeStyleContentEditor, hyperlinkContentEditor);
         BatchEditTool batchEditTool = new BatchEditTool(availableMaps, mapAccessListener, nodeContentEditor);
+        FormulaUpdateTool formulaUpdateTool = new FormulaUpdateTool(
+            availableMaps,
+            mapAccessListener,
+            nodeContentFactories.nodeContentItemReader,
+            textualContentEditor,
+            attributesContentEditor,
+            Objects.requireNonNull(codeHostService, "codeHostService"),
+            FormulaUpdatePreviewStore.shared(),
+            toolAvailabilitySupplier);
         MessageBuilder messageBuilder = new MessageBuilder();
         ReadNodesWithDescendantsTool readNodesWithDescendantsTool = new ReadNodesWithDescendantsTool(
             availableMaps, mapAccessListener, nodeContentFactories.nodeContentItemReader, textController);
@@ -192,6 +212,7 @@ public class AIToolSet {
         this.listTool = Objects.requireNonNull(listTool, "listTool");
         this.connectorEditTool = Objects.requireNonNull(connectorEditTool, "connectorEditTool");
         this.batchEditTool = Objects.requireNonNull(batchEditTool, "batchEditTool");
+        this.formulaUpdateTool = Objects.requireNonNull(formulaUpdateTool, "formulaUpdateTool");
         this.getApiDocumentationTool = Objects.requireNonNull(getApiDocumentationTool, "getApiDocumentationTool");
         this.getTagCategoriesTool = Objects.requireNonNull(getTagCategoriesTool, "getTagCategoriesTool");
         this.editTagCategoriesTool = Objects.requireNonNull(editTagCategoriesTool, "editTagCategoriesTool");
@@ -238,8 +259,10 @@ public class AIToolSet {
     }
 
     @Tool("Fetch nodes for editing. editableContentFields (required): TEXT, DETAILS, NOTE, ATTRIBUTES, TAGS, ICONS. "
-        + "Returns editable text/details/note/attributes/tags/icons; text/details/note include contentType for "
-        + "edit.originalContentType. Style is in content.mainStyle. Read hyperlinks via readNodesWithDescendants "
+        + "Returns editable text/details/note/attributes/tags/icons. Text, details, and note include base contentType "
+        + "plus isFormula. Attributes include isFormula. Use contentType for edit.originalContentType on non-formula "
+        + "TEXT/DETAILS/NOTE edits. Formula state changes are not done through edit(...); use previewFormulaUpdates "
+        + "and applyFormulaUpdates instead. Style is in content.mainStyle. Read hyperlinks via readNodesWithDescendants "
         + "with ContextSection.HYPERLINK.")
     public FetchNodesForEditingResponse fetchNodesForEditing(FetchNodesForEditingRequest request) {
         try {
@@ -248,6 +271,57 @@ public class AIToolSet {
             return response;
         } catch (RuntimeException error) {
             publishToolCallSummary(readNodesWithDescendantsTool.buildFetchToolCallErrorSummary(request, error));
+            throw error;
+        }
+    }
+
+    @Tool("Preview ordered formula updates without persisting them. "
+        + "Use this only at script execution availability. "
+        + "Supported editedElement values: TEXT, DETAILS, NOTE, ATTRIBUTES. "
+        + "TEXT, DETAILS, and NOTE support REPLACE only. ATTRIBUTES support ADD and REPLACE only. "
+        + "For TEXT, DETAILS, and NOTE, pass originalContentType and originalIsFormula from fetchNodesForEditing. "
+        + "For ATTRIBUTES REPLACE, originalIsFormula may be provided for preview-time current-state validation. "
+        + "targetIsFormula is required for every item. "
+        + "The tool expands nodeIdentifiers in request order, validates sequentially in that same order, and lets later "
+        + "preview items see earlier validated candidate values from the same request. "
+        + "Formula targets compile and evaluate before persistence. "
+        + "If one target fails validation, later targets are returned as BLOCKED_BY_PREVIOUS_FAILURE and no previewId is returned. "
+        + "When every target is VALIDATED, review candidateValue and evaluationResult for plausibility before calling applyFormulaUpdates.")
+    public FormulaUpdatePreviewResponse previewFormulaUpdates(FormulaUpdatePreviewRequest request) {
+        try {
+            FormulaUpdatePreviewResponse response = formulaUpdateTool.previewFormulaUpdates(request);
+            publishToolCallSummary(new ToolCallSummary(
+                "previewFormulaUpdates",
+                "previewFormulaUpdates: items=" + (response.getItems() == null ? 0 : response.getItems().size())
+                    + ", previewId=" + (response.getPreviewId() == null ? "none" : response.getPreviewId()),
+                false));
+            return response;
+        } catch (RuntimeException error) {
+            publishToolCallSummary(new ToolCallSummary(
+                "previewFormulaUpdates",
+                "previewFormulaUpdates error: " + ToolCallSummaryFormatter.sanitizeValue(error.getMessage()),
+                true));
+            throw error;
+        }
+    }
+
+    @Tool("Apply a previously validated previewFormulaUpdates result by previewId. "
+        + "Use this only after plausibility review. "
+        + "Candidate values are persisted in the same order used during preview. "
+        + "If a target node no longer exists or an attribute REPLACE target can no longer be resolved, the tool returns FAILED instead of crashing.")
+    public FormulaUpdateApplyResponse applyFormulaUpdates(FormulaUpdateApplyRequest request) {
+        try {
+            FormulaUpdateApplyResponse response = formulaUpdateTool.applyFormulaUpdates(request);
+            publishToolCallSummary(new ToolCallSummary(
+                "applyFormulaUpdates",
+                "applyFormulaUpdates: items=" + (response.getItems() == null ? 0 : response.getItems().size()),
+                false));
+            return response;
+        } catch (RuntimeException error) {
+            publishToolCallSummary(new ToolCallSummary(
+                "applyFormulaUpdates",
+                "applyFormulaUpdates error: " + ToolCallSummaryFormatter.sanitizeValue(error.getMessage()),
+                true));
             throw error;
         }
     }
@@ -397,6 +471,8 @@ public class AIToolSet {
         + "ATTRIBUTES ADD: targetKey is attribute name; value is attribute value.\n"
         + "TAGS ADD: value is tag text; optional index inserts at position.\n"
         + "ICONS ADD: value is icon description from listAvailableIcons (or emoji); icons append, so index/targetKey ignored.\n"
+        + "Formula-backed fields and formula-targeting changes are not supported by edit(...). Use previewFormulaUpdates "
+        + "and applyFormulaUpdates for formula authoring and formula/non-formula conversion.\n"
         + "compatibilityPolicy applies to the whole request: SKIP_INCOMPATIBLE_FIELDS (default) or "
         + "REJECT_ON_ANY_INCOMPATIBLE.\n"
         + "SKIP_INCOMPATIBLE_FIELDS returns per-target APPLIED/SKIPPED/FAILED results.\n"
@@ -490,6 +566,8 @@ public class AIToolSet {
         + "other values are treated as plain text.\n"
         + "textContentType/detailsContentType/noteContentType control conversion/validation only; HTML input still "
         + "requires the <html> prefix.\n"
+        + "Formula values are rejected for text, details, note, and attributes in createNodes. Create the nodes first, "
+        + "then use previewFormulaUpdates and applyFormulaUpdates for formulas.\n"
         + "Omit optional textual fields such as details and note when they are empty instead of sending empty strings "
         + "so the tool leaves those values untouched.")
     public CreateNodesResponse createNodes(CreateNodesRequest request) {
@@ -518,6 +596,8 @@ public class AIToolSet {
     @Tool("Create summary content and a summary bracket for a summarized range. "
         + "Optional fields override defaults. Omit them to keep defaults. "
         + "Summary anchor nodes must share the same parent node. Textual field rules are the same as createNodes. "
+        + "Formula values are rejected for text, details, note, and attributes in createSummary; create the summary "
+        + "content first, then use previewFormulaUpdates and applyFormulaUpdates for formulas. "
         + "Omit optional textual fields such as details and note when they are empty instead of sending empty strings "
         + "so the tool leaves those values untouched. Tip: to create a summary of summaries, choose summary anchor "
         + "nodes that already exist at the same summary level under the same parent node, regardless of how those "

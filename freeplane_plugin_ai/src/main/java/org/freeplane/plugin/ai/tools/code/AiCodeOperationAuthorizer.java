@@ -16,6 +16,7 @@ public class AiCodeOperationAuthorizer {
     private static final String ATTACHED_EDITOR_CODE_ID_PREFIX = "attached-editor-";
     private static final String AI_SCRIPT_CODE_ID_PREFIX = "ai-script-";
     private static final String SCRIPT_CONTENT_TYPE = "text/x-freeplane-script-groovy";
+    private static final String FORMULA_CONTENT_TYPE = "text/x-freeplane-formula-groovy";
 
     private final ToolCaller toolCaller;
     private final Supplier<ToolAvailabilityLevel> globalAvailabilitySupplier;
@@ -40,11 +41,14 @@ public class AiCodeOperationAuthorizer {
         if (canReadAttachedEditor() || canReadAiHost()) {
             toolNames.add("readCode");
         }
-        if (canWriteOrCompileAttachedEditor() || globalAvailability().includesScriptExecution()) {
+        boolean attachedWriteAuthorized = canWriteAttachedEditor();
+        boolean aiWriteAuthorized = globalAvailability().includesScriptExecution();
+        if (attachedWriteAuthorized || aiWriteAuthorized) {
             toolNames.add("writeCode");
-            if (hasCurrentCode(ScriptHost.ATTACHED_EDITOR) || hasCurrentCode(ScriptHost.AI)) {
-                toolNames.add("compileCode");
-            }
+        }
+        if ((attachedWriteAuthorized && hasCurrentCode(ScriptHost.ATTACHED_EDITOR))
+            || (aiWriteAuthorized && hasCurrentCode(ScriptHost.AI))) {
+            toolNames.add("compileCode");
         }
         if (canRunCurrentScript()) {
             toolNames.add("runScript");
@@ -64,7 +68,7 @@ public class AiCodeOperationAuthorizer {
             throw new IllegalStateException("The requested code host is not readable at the current availability level.");
         }
         if ("writeCode".equals(operation) || "compileCode".equals(operation)) {
-            if (resolvedHost == ScriptHost.ATTACHED_EDITOR && canWriteOrCompileAttachedEditor()) {
+            if (resolvedHost == ScriptHost.ATTACHED_EDITOR && canWriteAttachedEditor()) {
                 return;
             }
             if (resolvedHost == ScriptHost.AI && globalAvailability().includesScriptExecution()) {
@@ -104,9 +108,18 @@ public class AiCodeOperationAuthorizer {
         return hasSessionOverride() || globalAvailability().includesTools();
     }
 
-    private boolean canWriteOrCompileAttachedEditor() {
-        if (!hasCurrentCode(ScriptHost.ATTACHED_EDITOR)) {
+    public ToolAvailabilityLevel currentToolAvailability() {
+        ToolAvailabilityLevel sessionOverride = sessionOverrideSupplier == null ? null : sessionOverrideSupplier.get();
+        return sessionOverride == null ? globalAvailability() : sessionOverride;
+    }
+
+    private boolean canWriteAttachedEditor() {
+        ReadCodeResponse state = currentState(ScriptHost.ATTACHED_EDITOR);
+        if (state == null || state.getStatus() == CodeLifecycleStatus.NO_CODE) {
             return false;
+        }
+        if (FORMULA_CONTENT_TYPE.equals(state.getContentType())) {
+            return currentToolAvailability().includesScriptExecution();
         }
         return hasSessionOverride() || globalAvailability().includesEditing();
     }

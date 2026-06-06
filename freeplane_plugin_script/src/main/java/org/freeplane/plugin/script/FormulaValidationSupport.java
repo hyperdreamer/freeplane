@@ -1,4 +1,4 @@
-package org.freeplane.plugin.formula;
+package org.freeplane.plugin.script;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
@@ -11,27 +11,25 @@ import java.util.function.Supplier;
 import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.text.TextController;
-import org.freeplane.plugin.script.FormulaUtils;
-import org.freeplane.plugin.script.IFreeplaneScriptErrorHandler;
 
-class FormulaSubmitValidationSupport {
-    interface FormulaValidator {
+public class FormulaValidationSupport {
+    public interface FormulaValidator {
         Object validate(NodeModel node, String formulaText, PrintStream outStream, IFreeplaneScriptErrorHandler errorHandler);
     }
 
     private final TextController textController;
     private final FormulaValidator formulaValidator;
 
-    FormulaSubmitValidationSupport() {
+    public FormulaValidationSupport() {
         this(TextController.getController(), FormulaUtils::validateFormula);
     }
 
-    FormulaSubmitValidationSupport(TextController textController, FormulaValidator formulaValidator) {
+    public FormulaValidationSupport(TextController textController, FormulaValidator formulaValidator) {
         this.textController = textController;
         this.formulaValidator = formulaValidator;
     }
 
-    public AiChatCodeOperationResult validateSubmittedFormula(NodeModel node, String formulaText) {
+    public AiChatCodeOperationResult validateFormula(NodeModel node, String formulaText) {
         final int[] lineNumber = new int[] { -1 };
         ByteArrayOutputStream outputBuffer = new ByteArrayOutputStream();
         try (PrintStream outStream = new PrintStream(outputBuffer, false, "UTF-8")) {

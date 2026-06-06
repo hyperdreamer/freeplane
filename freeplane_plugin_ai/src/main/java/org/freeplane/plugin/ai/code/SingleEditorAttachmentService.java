@@ -15,6 +15,7 @@ import org.freeplane.core.util.LogUtils;
 import org.freeplane.features.ai.code.AiChatAttachableEditor;
 import org.freeplane.features.ai.code.AiChatAttachment;
 import org.freeplane.features.ai.code.AiChatAttachmentService;
+import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.ai.code.AiChatRepairRequest;
 import org.freeplane.features.ai.code.AiCodeEditor;
 import org.freeplane.features.ai.code.AiCodeHostService;
@@ -22,6 +23,7 @@ import org.freeplane.features.ai.code.AiCodeRunListener;
 import org.freeplane.features.ai.code.CodeLifecycleStatus;
 import org.freeplane.features.ai.code.CompileCodeRequest;
 import org.freeplane.features.ai.code.CompileCodeResponse;
+import org.freeplane.features.ai.code.EvaluateFormulaRequest;
 import org.freeplane.features.ai.code.ReadCodeRequest;
 import org.freeplane.features.ai.code.ReadCodeResponse;
 import org.freeplane.features.ai.code.RunScriptRequest;
@@ -168,6 +170,11 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
         attachment.latestCodeState = stateFromRunResponse(attachment, response);
         fireRunFinished(response);
         return response;
+    }
+
+    @Override
+    public AiChatCodeOperationResult evaluateFormula(EvaluateFormulaRequest request) {
+        throw new IllegalStateException("Formula evaluation is not supported for attached editors.");
     }
 
     @Override

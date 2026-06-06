@@ -4,11 +4,13 @@ import java.util.Collections;
 import java.util.EnumMap;
 import java.util.Map;
 import java.util.Set;
+import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.features.ai.code.AiCodeRunListener;
 import org.freeplane.features.ai.code.CodeLifecycleStatus;
 import org.freeplane.features.ai.code.CompileCodeRequest;
 import org.freeplane.features.ai.code.CompileCodeResponse;
+import org.freeplane.features.ai.code.EvaluateFormulaRequest;
 import org.freeplane.features.ai.code.ReadCodeRequest;
 import org.freeplane.features.ai.code.ReadCodeResponse;
 import org.freeplane.features.ai.code.RunScriptRequest;
@@ -28,7 +30,7 @@ public class AiCodeOperationAuthorizerTest {
     private static final String FORMULA_CONTENT_TYPE = "text/x-freeplane-formula-groovy";
 
     @Test
-    public void attachedEditorOverrideKeepsReadWriteAndCompileAuthorizedAtReading() {
+    public void attachedScriptEditorOverrideKeepsReadWriteAndCompileAuthorizedAtReading() {
         FakeCodeHostService codeHostService = new FakeCodeHostService()
             .withState(ScriptHost.ATTACHED_EDITOR, SCRIPT_CONTENT_TYPE, CodeLifecycleStatus.READY);
         AiCodeOperationAuthorizer uut = new AiCodeOperationAuthorizer(
@@ -46,6 +48,25 @@ public class AiCodeOperationAuthorizerTest {
     }
 
     @Test
+    public void attachedFormulaWriteAndCompileRequireScriptExecution() {
+        FakeCodeHostService codeHostService = new FakeCodeHostService()
+            .withState(ScriptHost.ATTACHED_EDITOR, FORMULA_CONTENT_TYPE, CodeLifecycleStatus.READY);
+        AiCodeOperationAuthorizer uut = new AiCodeOperationAuthorizer(
+            ToolCaller.CHAT,
+            () -> ToolAvailabilityLevel.EDITING,
+            () -> null,
+            codeHostService);
+
+        assertThat(uut.authorizedToolNames()).containsExactly("readCode");
+        assertThatThrownBy(() -> uut.assertAuthorized("writeCode", null, ScriptHost.ATTACHED_EDITOR))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("The requested code host is not writable at the current availability level.");
+        assertThatThrownBy(() -> uut.assertAuthorized("compileCode", null, ScriptHost.ATTACHED_EDITOR))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("The requested code host is not writable at the current availability level.");
+    }
+
+    @Test
     public void scriptExecutionAvailabilityAddsRunScriptForScriptContent() {
         FakeCodeHostService codeHostService = new FakeCodeHostService()
             .withState(ScriptHost.ATTACHED_EDITOR, SCRIPT_CONTENT_TYPE, CodeLifecycleStatus.READY);
@@ -57,6 +78,21 @@ public class AiCodeOperationAuthorizerTest {
 
         assertThat(uut.authorizedToolNames()).contains("runScript");
         uut.assertAuthorized("runScript", null, ScriptHost.ATTACHED_EDITOR);
+    }
+
+    @Test
+    public void scriptExecutionAvailabilityAllowsAttachedFormulaWriteAndCompile() {
+        FakeCodeHostService codeHostService = new FakeCodeHostService()
+            .withState(ScriptHost.ATTACHED_EDITOR, FORMULA_CONTENT_TYPE, CodeLifecycleStatus.READY);
+        AiCodeOperationAuthorizer uut = new AiCodeOperationAuthorizer(
+            ToolCaller.CHAT,
+            () -> ToolAvailabilityLevel.SCRIPT_EXECUTION,
+            () -> null,
+            codeHostService);
+
+        assertThat(uut.authorizedToolNames()).contains("readCode", "writeCode", "compileCode");
+        uut.assertAuthorized("writeCode", null, ScriptHost.ATTACHED_EDITOR);
+        uut.assertAuthorized("compileCode", null, ScriptHost.ATTACHED_EDITOR);
     }
 
     @Test
@@ -148,6 +184,11 @@ public class AiCodeOperationAuthorizerTest {
 
         @Override
         public RunScriptResponse runScript(RunScriptRequest request) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public AiChatCodeOperationResult evaluateFormula(EvaluateFormulaRequest request) {
             throw new UnsupportedOperationException();
         }
 

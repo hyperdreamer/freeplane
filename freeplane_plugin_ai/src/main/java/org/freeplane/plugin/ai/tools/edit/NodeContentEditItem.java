@@ -14,16 +14,16 @@ public class NodeContentEditItem {
     @Description("Edited element: TEXT, DETAILS, NOTE, ATTRIBUTES, TAGS, ICONS, STYLE, or HYPERLINK.")
     private final EditedElement editedElement;
     @JsonProperty(value = "originalContentType", required = false)
-    @Description("From fetchNodesForEditing. Required for TEXT/DETAILS/NOTE; ignored for other elements.")
+    @Description("From fetchNodesForEditing. Required for non-formula TEXT/DETAILS/NOTE edits; ignored for other elements. Formula state changes use previewFormulaUpdates/applyFormulaUpdates instead of edit(...).")
     private final ContentType originalContentType;
     @JsonProperty(required = false)
-    @Description("New value. For PLAIN_TEXT formatting, use HTML; Markdown is literal unless originalContentType is MARKDOWN.")
+    @Description("New value. For PLAIN_TEXT formatting, use HTML; Markdown is literal unless originalContentType is MARKDOWN. Formula values are not supported here; use previewFormulaUpdates/applyFormulaUpdates for formula changes.")
     private final String value;
     @JsonProperty(required = false)
     @Description("List index for ATTRIBUTES/TAGS/ICONS. For ATTRIBUTES/TAGS ADD, inserts at this index when provided. For REPLACE/DELETE, index is preferred over targetKey. Ignored for TEXT/DETAILS/NOTE/STYLE/HYPERLINK and ICONS ADD.")
     private final Integer index;
     @JsonProperty(required = false)
-    @Description("Optional operation (default REPLACE). Allowed values: TEXT=REPLACE only; DETAILS/NOTE=REPLACE or DELETE; ATTRIBUTES/TAGS/ICONS=ADD/REPLACE/DELETE; STYLE/HYPERLINK=REPLACE/DELETE.")
+    @Description("Optional operation (default REPLACE). Allowed values: TEXT=REPLACE only; DETAILS/NOTE=REPLACE or DELETE; ATTRIBUTES/TAGS/ICONS=ADD/REPLACE/DELETE; STYLE/HYPERLINK=REPLACE/DELETE. Formula state changes are handled separately by previewFormulaUpdates/applyFormulaUpdates.")
     private final EditOperation operation;
     @JsonProperty(required = false)
     @Description("Fallback selector for ATTRIBUTES/TAGS/ICONS when index is absent. ATTRIBUTES: attribute name (required for ADD). TAGS: existing tag text for REPLACE/DELETE. ICONS: existing icon description for REPLACE/DELETE. Ignored for TAGS/ICONS ADD and for TEXT/DETAILS/NOTE/STYLE/HYPERLINK.")

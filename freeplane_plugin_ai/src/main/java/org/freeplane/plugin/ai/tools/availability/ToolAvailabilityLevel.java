@@ -10,7 +10,7 @@ public enum ToolAvailabilityLevel {
     DISABLED("disabled", Collections.<String>emptySet()),
     READING("reading", readingToolNames()),
     EDITING("editing", editingToolNames()),
-    SCRIPT_EXECUTION("script_execution", editingToolNames());
+    SCRIPT_EXECUTION("script_execution", scriptExecutionToolNames());
 
     private final String preferenceValue;
     private final Set<String> allowedToolNames;
@@ -83,6 +83,14 @@ public enum ToolAvailabilityLevel {
             "moveNodes",
             "createSummary",
             "moveNodesIntoSummary"));
+        return Collections.unmodifiableSet(toolNames);
+    }
+
+    private static Set<String> scriptExecutionToolNames() {
+        LinkedHashSet<String> toolNames = new LinkedHashSet<String>(editingToolNames());
+        toolNames.addAll(Arrays.asList(
+            "previewFormulaUpdates",
+            "applyFormulaUpdates"));
         return Collections.unmodifiableSet(toolNames);
     }
 

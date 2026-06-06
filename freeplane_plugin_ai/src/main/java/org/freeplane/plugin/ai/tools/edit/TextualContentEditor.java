@@ -14,14 +14,22 @@ import org.freeplane.plugin.ai.tools.content.NodeContentWriteRequest;
 public class TextualContentEditor {
     private final TextContentWriteController textContentWriteController;
     private final NoteContentWriteController noteContentWriteController;
+    private final TextController textController;
     private final ContentTypeConverter contentTypeConverter;
 
     public TextualContentEditor(TextContentWriteController textContentWriteController,
                                 NoteContentWriteController noteContentWriteController) {
+        this(textContentWriteController, noteContentWriteController, safeTextController());
+    }
+
+    public TextualContentEditor(TextContentWriteController textContentWriteController,
+                                NoteContentWriteController noteContentWriteController,
+                                TextController textController) {
         this.textContentWriteController = Objects.requireNonNull(
             textContentWriteController, "textContentWriteController");
         this.noteContentWriteController = Objects.requireNonNull(
             noteContentWriteController, "noteContentWriteController");
+        this.textController = textController;
         this.contentTypeConverter = new ContentTypeConverter();
     }
 
@@ -34,15 +42,121 @@ public class TextualContentEditor {
         applyInitialNote(nodeModel, content.getNote(), content.getNoteContentType());
     }
 
+    public String prepareFormulaCandidate(NodeModel nodeModel, EditedElement editedElement,
+                                          ContentType originalContentType, Boolean originalIsFormula,
+                                          boolean targetIsFormula, String value) {
+        if (nodeModel == null) {
+            throw new IllegalArgumentException("Missing node model.");
+        }
+        if (editedElement == null) {
+            throw new IllegalArgumentException("Missing edited element.");
+        }
+        if (originalContentType == null) {
+            throw new IllegalArgumentException("Missing originalContentType for textual formula update.");
+        }
+        if (originalIsFormula == null) {
+            throw new IllegalArgumentException("Missing originalIsFormula for textual formula update.");
+        }
+        switch (editedElement) {
+            case TEXT:
+                Object currentTextValue = nodeModel.getUserObject();
+                validateFormulaState(currentTextValue, originalIsFormula.booleanValue());
+                NodeTextContentType nodeTextContentType = resolveNodeTextContentType(nodeModel, currentTextValue);
+                validateContentType(nodeTextContentType.contentType, originalContentType, true);
+                String updatedTextValue = prepareTextValue(nodeTextContentType, value);
+                validateTargetFormulaState(updatedTextValue, targetIsFormula);
+                return updatedTextValue;
+            case DETAILS:
+                String currentDetails = DetailModel.getDetailText(nodeModel);
+                validateFormulaState(currentDetails, originalIsFormula.booleanValue());
+                ContentType currentDetailsContentType = resolveContentType(
+                    currentDetails, DetailModel.getDetailContentType(nodeModel));
+                validateContentType(currentDetailsContentType, originalContentType, false);
+                String updatedDetailsValue = prepareRichTextValue(currentDetailsContentType, value);
+                validateTargetFormulaState(updatedDetailsValue, targetIsFormula);
+                return updatedDetailsValue;
+            case NOTE:
+                String currentNote = NoteModel.getNoteText(nodeModel);
+                validateFormulaState(currentNote, originalIsFormula.booleanValue());
+                ContentType currentNoteContentType = resolveContentType(
+                    currentNote, NoteModel.getNoteContentType(nodeModel));
+                validateContentType(currentNoteContentType, originalContentType, false);
+                String updatedNoteValue = prepareRichTextValue(currentNoteContentType, value);
+                validateTargetFormulaState(updatedNoteValue, targetIsFormula);
+                return updatedNoteValue;
+            default:
+                throw new IllegalArgumentException("Unsupported edited element for textual formula update: "
+                    + editedElement);
+        }
+    }
+
+    public void applyFormulaValue(NodeModel nodeModel, EditedElement editedElement, String candidateValue) {
+        if (nodeModel == null) {
+            throw new IllegalArgumentException("Missing node model.");
+        }
+        if (editedElement == null) {
+            throw new IllegalArgumentException("Missing edited element.");
+        }
+        switch (editedElement) {
+            case TEXT:
+                textContentWriteController.setNodeText(nodeModel, candidateValue);
+                return;
+            case DETAILS:
+                textContentWriteController.setDetails(nodeModel, candidateValue);
+                return;
+            case NOTE:
+                noteContentWriteController.setNoteText(nodeModel, candidateValue);
+                return;
+            default:
+                throw new IllegalArgumentException("Unsupported edited element for textual formula update: "
+                    + editedElement);
+        }
+    }
+
+    public String currentRawValue(NodeModel nodeModel, EditedElement editedElement) {
+        if (nodeModel == null || editedElement == null) {
+            return null;
+        }
+        switch (editedElement) {
+            case TEXT:
+                Object currentTextValue = nodeModel.getUserObject();
+                return currentTextValue == null ? null : String.valueOf(currentTextValue);
+            case DETAILS:
+                return DetailModel.getDetailText(nodeModel);
+            case NOTE:
+                return NoteModel.getNoteText(nodeModel);
+            default:
+                throw new IllegalArgumentException("Unsupported edited element for textual content: " + editedElement);
+        }
+    }
+
+    public ContentType currentBaseContentType(NodeModel nodeModel, EditedElement editedElement) {
+        if (nodeModel == null || editedElement == null) {
+            return null;
+        }
+        switch (editedElement) {
+            case TEXT:
+                return resolveNodeTextContentType(nodeModel, nodeModel.getUserObject()).contentType;
+            case DETAILS:
+                return resolveContentType(DetailModel.getDetailText(nodeModel), DetailModel.getDetailContentType(nodeModel));
+            case NOTE:
+                return resolveContentType(NoteModel.getNoteText(nodeModel), NoteModel.getNoteContentType(nodeModel));
+            default:
+                throw new IllegalArgumentException("Unsupported edited element for textual content: " + editedElement);
+        }
+    }
+
+    public boolean currentIsFormula(NodeModel nodeModel, EditedElement editedElement) {
+        return isFormula(currentRawValue(nodeModel, editedElement));
+    }
+
     private void applyInitialText(NodeModel nodeModel, String text, ContentType contentType) {
         if (text == null) {
             return;
         }
-        ensureNotFormula(contentType);
         String updatedText = prepareInitialTextValue(contentType, text);
-        if (updatedText != null) {
-            nodeModel.setText(updatedText);
-        }
+        ensureCreatePathValueIsNotFormula(updatedText);
+        nodeModel.setText(updatedText);
         String nodeFormat = toNodeFormat(contentType);
         if (nodeFormat != null) {
             NodeStyleModel.setNodeFormat(nodeModel, nodeFormat);
@@ -53,9 +167,9 @@ public class TextualContentEditor {
         if (details == null || details.isEmpty()) {
             return;
         }
-        ensureNotFormula(contentType);
         DetailModel detailModel = DetailModel.createDetailText(nodeModel);
         String updatedDetails = prepareInitialRichTextValue(contentType, details);
+        ensureCreatePathValueIsNotFormula(updatedDetails);
         detailModel.setText(updatedDetails);
         String freeplaneContentType = toFreeplaneContentType(contentType);
         if (freeplaneContentType != null) {
@@ -67,9 +181,9 @@ public class TextualContentEditor {
         if (note == null || note.isEmpty()) {
             return;
         }
-        ensureNotFormula(contentType);
         NoteModel noteModel = NoteModel.createNote(nodeModel);
         String updatedNote = prepareInitialRichTextValue(contentType, note);
+        ensureCreatePathValueIsNotFormula(updatedNote);
         noteModel.setText(updatedNote);
         String freeplaneContentType = toFreeplaneContentType(contentType);
         if (freeplaneContentType != null) {
@@ -77,9 +191,10 @@ public class TextualContentEditor {
         }
     }
 
-    private void ensureNotFormula(ContentType contentType) {
-        if (contentType == ContentType.FORMULA) {
-            throw new IllegalArgumentException("Formula content is not allowed.");
+    private void ensureCreatePathValueIsNotFormula(String value) {
+        if (isFormula(value)) {
+            throw new IllegalArgumentException(
+                "Formula values are not allowed in createNodes or createSummary; create the node first, then use previewFormulaUpdates and applyFormulaUpdates.");
         }
     }
 
@@ -177,9 +292,9 @@ public class TextualContentEditor {
         switch (editedElement) {
             case TEXT:
                 Object currentTextValue = nodeModel.getUserObject();
-                ensureFormulaIsNotUsed(currentTextValue, value, originalContentType, textController);
-                NodeTextContentType nodeTextContentType = resolveNodeTextContentType(
-                    nodeModel, currentTextValue, textController);
+                ensureFormulaIsNotUsed(currentTextValue, value, textController);
+                NodeTextContentType nodeTextContentType = resolveNodeTextContentType(nodeModel, currentTextValue,
+                    textController);
                 validateContentType(nodeTextContentType.contentType, originalContentType, true);
                 String updatedTextValue = prepareTextValue(nodeTextContentType, value);
                 if (!dryRun) {
@@ -189,7 +304,7 @@ public class TextualContentEditor {
             case DETAILS:
                 DetailModel detailModel = DetailModel.getDetail(nodeModel);
                 String currentDetails = detailModel == null ? null : detailModel.getText();
-                ensureFormulaIsNotUsed(currentDetails, value, originalContentType, textController);
+                ensureFormulaIsNotUsed(currentDetails, value, textController);
                 ContentType currentDetailsContentType = resolveContentType(
                     currentDetails, DetailModel.getDetailContentType(nodeModel), textController);
                 validateContentType(currentDetailsContentType, originalContentType, false);
@@ -201,7 +316,7 @@ public class TextualContentEditor {
             case NOTE:
                 NoteModel noteModel = NoteModel.getNote(nodeModel);
                 String currentNote = noteModel == null ? null : noteModel.getText();
-                ensureFormulaIsNotUsed(currentNote, value, originalContentType, textController);
+                ensureFormulaIsNotUsed(currentNote, value, textController);
                 ContentType currentNoteContentType = resolveContentType(
                     currentNote, NoteModel.getNoteContentType(nodeModel), textController);
                 validateContentType(currentNoteContentType, originalContentType, false);
@@ -215,16 +330,28 @@ public class TextualContentEditor {
         }
     }
 
-    private void ensureFormulaIsNotUsed(Object currentValue, String newValue, ContentType originalContentType,
-                                        TextController textController) {
-        if (originalContentType == ContentType.FORMULA) {
-            throw new IllegalArgumentException("Formula content edits are not allowed.");
+    private void validateFormulaState(Object currentValue, boolean originalIsFormula) {
+        boolean currentIsFormula = isFormula(currentValue);
+        if (currentIsFormula != originalIsFormula) {
+            throw new IllegalArgumentException("Formula state has changed; read editable content again.");
         }
-        if (textController.isFormula(currentValue)) {
-            throw new IllegalArgumentException("Cannot edit formula content.");
+    }
+
+    private void validateTargetFormulaState(String candidateValue, boolean targetIsFormula) {
+        boolean candidateIsFormula = isFormula(candidateValue);
+        if (candidateIsFormula != targetIsFormula) {
+            throw new IllegalArgumentException(targetIsFormula
+                ? "targetIsFormula=true requires a formula value."
+                : "targetIsFormula=false requires a non-formula value.");
         }
-        if (textController.isFormula(newValue)) {
-            throw new IllegalArgumentException("Formula content edits are not allowed.");
+    }
+
+    private void ensureFormulaIsNotUsed(Object currentValue, String newValue, TextController textController) {
+        if (isFormula(currentValue)) {
+            throw new IllegalArgumentException("Cannot edit formula content with edit(...); use previewFormulaUpdates and applyFormulaUpdates.");
+        }
+        if (isFormula(newValue)) {
+            throw new IllegalArgumentException("Formula content edits are not allowed in edit(...); use previewFormulaUpdates and applyFormulaUpdates.");
         }
     }
 
@@ -250,19 +377,27 @@ public class TextualContentEditor {
         return contentType == ContentType.PLAIN_TEXT || contentType == ContentType.HTML;
     }
 
+    private ContentType resolveContentType(Object currentValue, String freeplaneContentType) {
+        return resolveContentType(currentValue, freeplaneContentType, textController);
+    }
+
     private ContentType resolveContentType(Object currentValue, String freeplaneContentType,
                                            TextController textController) {
-        boolean isFormula = textController.isFormula(currentValue);
         return contentTypeConverter.toContentType(
-            freeplaneContentType, isFormula, currentValue == null ? null : String.valueOf(currentValue));
+            freeplaneContentType, currentValue == null ? null : String.valueOf(currentValue));
+    }
+
+    private NodeTextContentType resolveNodeTextContentType(NodeModel nodeModel, Object currentValue) {
+        return resolveNodeTextContentType(nodeModel, currentValue, textController);
     }
 
     private NodeTextContentType resolveNodeTextContentType(NodeModel nodeModel, Object currentValue,
-                                                          TextController textController) {
+                                                           TextController textController) {
         String rawValue = currentValue == null ? null : String.valueOf(currentValue);
         String latexPrefix = contentTypeConverter.findLatexPrefix(rawValue);
+        String nodeFormat = textController == null ? null : textController.getNodeFormat(nodeModel);
         ContentType contentType = latexPrefix == null
-            ? contentTypeConverter.toTextContentTypeForNode(textController.getNodeFormat(nodeModel), rawValue)
+            ? contentTypeConverter.toTextContentTypeForNode(nodeFormat, rawValue)
             : ContentType.LATEX;
         return new NodeTextContentType(contentType, latexPrefix);
     }
@@ -303,6 +438,18 @@ public class TextualContentEditor {
             return strippedValue;
         }
         return latexPrefix + " " + strippedValue;
+    }
+
+    private static TextController safeTextController() {
+        try {
+            return TextController.getController();
+        } catch (RuntimeException ignored) {
+            return null;
+        }
+    }
+
+    private boolean isFormula(Object value) {
+        return textController != null && textController.isFormula(value);
     }
 
     private void rejectHtml(String value, String message) {

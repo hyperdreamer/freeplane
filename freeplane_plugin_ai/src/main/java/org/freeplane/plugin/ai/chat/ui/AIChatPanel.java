@@ -59,11 +59,13 @@ import org.freeplane.core.ui.textchanger.TranslatedElement;
 import org.freeplane.core.ui.textchanger.TranslatedElementFactory;
 import org.freeplane.core.util.MenuUtils;
 import org.freeplane.core.util.TextUtils;
+import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.features.ai.code.AiCodeRunListener;
 import org.freeplane.features.ai.code.CodeLifecycleStatus;
 import org.freeplane.features.ai.code.CompileCodeRequest;
 import org.freeplane.features.ai.code.CompileCodeResponse;
+import org.freeplane.features.ai.code.EvaluateFormulaRequest;
 import org.freeplane.features.ai.code.ReadCodeRequest;
 import org.freeplane.features.ai.code.ReadCodeResponse;
 import org.freeplane.features.ai.code.RunScriptRequest;
@@ -1235,6 +1237,11 @@ public class AIChatPanel extends JPanel {
                 rememberAiOwnedCodeOwner(response == null ? null : response.getCodeId(),
                     response == null ? null : response.getHost(), sessionId);
                 return response;
+            }
+
+            @Override
+            public AiChatCodeOperationResult evaluateFormula(EvaluateFormulaRequest request) {
+                return delegate.evaluateFormula(request);
             }
 
             @Override

@@ -22,11 +22,13 @@ import org.freeplane.api.ai.AiToolAvailability;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.ui.components.UITools;
 import org.freeplane.core.util.TextUtils;
+import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.features.ai.code.AiCodeRunListener;
 import org.freeplane.features.ai.code.CodeLifecycleStatus;
 import org.freeplane.features.ai.code.CompileCodeRequest;
 import org.freeplane.features.ai.code.CompileCodeResponse;
+import org.freeplane.features.ai.code.EvaluateFormulaRequest;
 import org.freeplane.features.ai.code.ReadCodeRequest;
 import org.freeplane.features.ai.code.ReadCodeResponse;
 import org.freeplane.features.ai.code.RunScriptRequest;
@@ -788,6 +790,11 @@ public class AIChatPanelScriptRequestTest {
 
         @Override
         public RunScriptResponse runScript(RunScriptRequest request) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public AiChatCodeOperationResult evaluateFormula(EvaluateFormulaRequest request) {
             throw new UnsupportedOperationException();
         }
 

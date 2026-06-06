@@ -1,11 +1,13 @@
 package org.freeplane.plugin.ai.tools;
 
 import java.util.List;
+import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.features.ai.code.AiCodeRunListener;
 import org.freeplane.features.ai.code.CodeLifecycleStatus;
 import org.freeplane.features.ai.code.CompileCodeRequest;
 import org.freeplane.features.ai.code.CompileCodeResponse;
+import org.freeplane.features.ai.code.EvaluateFormulaRequest;
 import org.freeplane.features.ai.code.ReadCodeRequest;
 import org.freeplane.features.ai.code.ReadCodeResponse;
 import org.freeplane.features.ai.code.RunScriptRequest;
@@ -87,6 +89,11 @@ public class AIToolSetBuilderTest {
                     null,
                     null,
                     null);
+            }
+
+            @Override
+            public AiChatCodeOperationResult evaluateFormula(EvaluateFormulaRequest request) {
+                throw new UnsupportedOperationException();
             }
 
             @Override

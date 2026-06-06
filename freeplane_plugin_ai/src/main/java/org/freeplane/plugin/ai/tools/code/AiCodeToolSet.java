@@ -71,7 +71,7 @@ public class AiCodeToolSet {
         }
     }
 
-    @Tool("Replace the full current code text for the requested host or codeId. For the attached editor this updates only the draft text.")
+    @Tool("Replace the full current code text for the requested host or codeId. For the attached editor this updates only the draft text. Attached formula editing is available only when the current tool availability exposes writeCode and compileCode.")
     public WriteCodeResponse writeCode(WriteCodeRequest request) {
         try {
             assertAuthorized("writeCode", request == null ? null : request.getCodeId(), request == null ? null : request.getHost());
@@ -92,7 +92,7 @@ public class AiCodeToolSet {
         }
     }
 
-    @Tool("Compile the current code for the requested host or codeId without executing it.")
+    @Tool("Compile the current code for the requested host or codeId without executing it. Attached formula compilation is available only when the current tool availability exposes writeCode and compileCode.")
     public CompileCodeResponse compileCode(CompileCodeRequest request) {
         try {
             assertAuthorized("compileCode", request == null ? null : request.getCodeId(), request == null ? null : request.getHost());
@@ -152,12 +152,17 @@ public class AiCodeToolSet {
             return null;
         }
         if (FORMULA_CONTENT_TYPE.equals(response.getContentType())) {
-            return "An editor is attached to this chat. Use readCode, writeCode, and compileCode. "
+            boolean writeAuthorized = authorizedToolNames().contains("writeCode");
+            boolean compileAuthorized = authorizedToolNames().contains("compileCode");
+            String toolGuidance = writeAuthorized && compileAuthorized
+                ? "Use readCode, writeCode, and compileCode. "
+                : "Use readCode. Formula authoring is available only when the current tool availability exposes writeCode and compileCode. ";
+            return "An editor is attached to this chat. " + toolGuidance
                 + "When you do not know codeId yet, target host ATTACHED_EDITOR. The attached content is a formula. "
-                + "Keep the formula read-only and value-computing. Avoid state-changing Freeplane API calls and avoid "
-                + "obviously UI-driving calls. Use the available Freeplane API documentation for API surface and semantics, "
-                + "but do not assume it explicitly marks which methods are UI-related. writeCode changes only the draft text. "
-                + "Do not assume submit or execution while the editor stays open. Submit-failure repair requests require user approval.";
+                + "Keep it value-computing. Avoid state-changing Freeplane API calls and avoid obviously UI-driving calls. "
+                + "Use the available Freeplane API documentation for API surface and semantics, but do not assume it explicitly marks which methods are UI-related. "
+                + "When writeCode is available, it changes only the draft text. Do not assume submit or execution while the editor stays open. "
+                + "Submit-failure repair requests require user approval.";
         }
         boolean runAuthorized = authorizedToolNames().contains("runScript");
         if (SCRIPT_CONTENT_TYPE.equals(response.getContentType())) {

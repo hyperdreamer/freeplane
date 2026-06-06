@@ -41,6 +41,7 @@ import org.freeplane.features.explorer.MapExplorerController;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.text.mindmapmode.EditNodeDialog;
 import org.freeplane.plugin.script.FormulaUtils;
+import org.freeplane.plugin.script.FormulaValidationSupport;
 import org.freeplane.plugin.script.ScriptingEngine;
 import org.freeplane.plugin.script.ScriptingPermissions;
 import org.freeplane.view.swing.ui.mindmapmode.CenterPaneNodeSelectionOverlay;
@@ -80,7 +81,7 @@ class FormulaEditor extends EditNodeDialog implements INodeSelector, AiCodeEdito
 
     private final JEditorPane textEditor;
     private final MapExplorerController mapExplorer;
-    private final FormulaSubmitValidationSupport formulaSubmitValidationSupport;
+    private final FormulaValidationSupport formulaValidationSupport;
     private EvaluationStatus evaluationStatus;
     private AiChatAttachment aiChatAttachment;
     private JToggleButton aiAttachButton;
@@ -91,7 +92,7 @@ class FormulaEditor extends EditNodeDialog implements INodeSelector, AiCodeEdito
         super(nodeModel, firstEvent, true, editControl, enableSplit, textEditor);
         this.mapExplorer = mapExplorer;
         this.textEditor = textEditor;
-        this.formulaSubmitValidationSupport = new FormulaSubmitValidationSupport();
+        this.formulaValidationSupport = new FormulaValidationSupport();
         this.evaluationStatus = EvaluationStatus.PASSED;
     }
 
@@ -137,7 +138,7 @@ class FormulaEditor extends EditNodeDialog implements INodeSelector, AiCodeEdito
             getEditControl().ok(editedText);
             return true;
         }
-        AiChatCodeOperationResult validationResult = formulaSubmitValidationSupport.validateSubmittedFormula(
+        AiChatCodeOperationResult validationResult = formulaValidationSupport.validateFormula(
             getNode(),
             editedText);
         if (validationResult.isSuccessful()) {

@@ -1,12 +1,14 @@
 package org.freeplane.plugin.ai.tools.code;
 
 import java.util.Collections;
+import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.ai.code.AiCodeEditor;
 import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.features.ai.code.AiCodeRunListener;
 import org.freeplane.features.ai.code.CodeLifecycleStatus;
 import org.freeplane.features.ai.code.CompileCodeRequest;
 import org.freeplane.features.ai.code.CompileCodeResponse;
+import org.freeplane.features.ai.code.EvaluateFormulaRequest;
 import org.freeplane.features.ai.code.ReadCodeRequest;
 import org.freeplane.features.ai.code.ReadCodeResponse;
 import org.freeplane.features.ai.code.RunScriptRequest;
@@ -65,7 +67,7 @@ public class AiCodeToolSetTest {
     }
 
     @Test
-    public void formulaSystemMessageExplainsReadOnlyAndUiRestrictions() {
+    public void formulaSystemMessageExplainsAvailabilityAndUiRestrictions() {
         AiCodeHostService codeHostService = new AiCodeHostService() {
             @Override
             public ReadCodeResponse readCode(ReadCodeRequest request) {
@@ -101,6 +103,11 @@ public class AiCodeToolSetTest {
             }
 
             @Override
+            public AiChatCodeOperationResult evaluateFormula(EvaluateFormulaRequest request) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
             public void addRunListener(AiCodeRunListener listener) {
             }
 
@@ -114,7 +121,8 @@ public class AiCodeToolSetTest {
 
         assertThat(message).contains("Use readCode, writeCode, and compileCode.");
         assertThat(message).contains("The attached content is a formula.");
-        assertThat(message).contains("Keep the formula read-only and value-computing.");
+        assertThat(message).doesNotContain("read-only");
+        assertThat(message).contains("Keep it value-computing.");
         assertThat(message).contains("Avoid state-changing Freeplane API calls");
         assertThat(message).contains("avoid obviously UI-driving calls");
         assertThat(message).contains("Use the available Freeplane API documentation for API surface and semantics");
@@ -223,6 +231,11 @@ public class AiCodeToolSetTest {
             @Override
             public RunScriptResponse runScript(RunScriptRequest request) {
                 throw new IllegalStateException("No editor is attached.");
+            }
+
+            @Override
+            public AiChatCodeOperationResult evaluateFormula(EvaluateFormulaRequest request) {
+                throw new UnsupportedOperationException();
             }
 
             @Override

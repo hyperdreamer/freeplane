@@ -133,7 +133,7 @@ public class ChatPromptRunnerTest {
             new RecordingHiddenPromptRequestRunnerFactory();
         AiPromptProgressDialogFactory dialogFactory = mock(AiPromptProgressDialogFactory.class);
         ChatPromptRunner uut = newHiddenPromptRunner(hiddenRunnerFactory, dialogFactory);
-        java.awt.Component owner = mock(java.awt.Component.class);
+        java.awt.Component owner = new javax.swing.JPanel();
 
         try (MockedStatic<ResourceController> resourceControllers = mockStatic(ResourceController.class);
              MockedStatic<AIChatServiceFactory> chatServiceFactory = mockStatic(AIChatServiceFactory.class);
@@ -175,7 +175,7 @@ public class ChatPromptRunnerTest {
             new RecordingHiddenPromptRequestRunnerFactory();
         AiPromptProgressDialogFactory dialogFactory = mock(AiPromptProgressDialogFactory.class);
         AiPromptProgressDialog dialog = mock(AiPromptProgressDialog.class);
-        java.awt.Component owner = mock(java.awt.Component.class);
+        java.awt.Component owner = new javax.swing.JPanel();
         when(dialogFactory.create(
             org.mockito.ArgumentMatchers.same(owner),
             org.mockito.ArgumentMatchers.isNull(),

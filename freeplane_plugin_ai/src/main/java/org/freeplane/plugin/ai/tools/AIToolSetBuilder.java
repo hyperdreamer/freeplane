@@ -7,8 +7,10 @@ import java.util.Objects;
 import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.features.ai.code.AiCodeRunListener;
 import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.ai.code.CompileCodeRequest;
 import org.freeplane.features.ai.code.CompileCodeResponse;
+import org.freeplane.features.ai.code.EvaluateFormulaRequest;
 import org.freeplane.features.ai.code.ReadCodeRequest;
 import org.freeplane.features.ai.code.ReadCodeResponse;
 import org.freeplane.features.ai.code.RunScriptRequest;
@@ -54,6 +56,7 @@ public class AIToolSetBuilder {
     private MMapController mapController;
     private AiCodeHostService codeHostService;
     private AiCodeOperationAuthorizer aiCodeOperationAuthorizer;
+    private java.util.function.Supplier<org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel> toolAvailabilitySupplier;
     private ToolCaller toolCaller = ToolCaller.CHAT;
 
     public AIToolSetBuilder toolCallSummaryHandler(ToolCallSummaryHandler handler) {
@@ -106,16 +109,23 @@ public class AIToolSetBuilder {
         return this;
     }
 
+    public AIToolSetBuilder toolAvailabilitySupplier(
+        java.util.function.Supplier<org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel> toolAvailabilitySupplier) {
+        this.toolAvailabilitySupplier = toolAvailabilitySupplier;
+        return this;
+    }
+
     public AIToolSet build() {
         ResolvedComponents resolvedComponents = resolveComponents();
-        return createBaseToolSet(resolvedComponents);
+        return createBaseToolSet(resolvedComponents, effectiveCodeHostService());
     }
 
     public List<Object> buildToolObjects() {
         ResolvedComponents resolvedComponents = resolveComponents();
-        AIToolSet toolSet = createBaseToolSet(resolvedComponents);
+        AiCodeHostService effectiveCodeHostService = effectiveCodeHostService();
+        AIToolSet toolSet = createBaseToolSet(resolvedComponents, effectiveCodeHostService);
         AiCodeToolSet aiCodeToolSet = new AiCodeToolSet(
-            effectiveCodeHostService(),
+            effectiveCodeHostService,
             aiCodeOperationAuthorizer,
             toolCallSummaryHandler,
             toolCaller);
@@ -130,7 +140,7 @@ public class AIToolSetBuilder {
         IconController iconController = this.iconController != null ? this.iconController : createIconController();
         MMapController mapController = this.mapController != null ? this.mapController : createMapController();
         NodeContentFactories nodeContentFactories = createNodeContentFactories(textController, attributeController,
-            iconController);
+            iconController, effectiveToolAvailabilitySupplier());
         GetApiDocumentationTool getApiDocumentationTool = new GetApiDocumentationTool(
             availableMaps, mapController, textController);
         return new ResolvedComponents(
@@ -141,7 +151,8 @@ public class AIToolSetBuilder {
             getApiDocumentationTool);
     }
 
-    private AIToolSet createBaseToolSet(ResolvedComponents resolvedComponents) {
+    private AIToolSet createBaseToolSet(ResolvedComponents resolvedComponents,
+                                         AiCodeHostService effectiveCodeHostService) {
         return new AIToolSet(
             toolCallSummaryHandler,
             resolvedComponents.availableMaps,
@@ -149,7 +160,9 @@ public class AIToolSetBuilder {
             resolvedComponents.textController,
             resolvedComponents.nodeContentFactories,
             resolvedComponents.mapController,
+            effectiveCodeHostService,
             resolvedComponents.getApiDocumentationTool,
+            effectiveToolAvailabilitySupplier(),
             toolCaller);
     }
 
@@ -196,6 +209,11 @@ public class AIToolSetBuilder {
             @Override
             public RunScriptResponse runScript(RunScriptRequest request) {
                 throw new IllegalStateException("No editor is attached.");
+            }
+
+            @Override
+            public AiChatCodeOperationResult evaluateFormula(EvaluateFormulaRequest request) {
+                throw new IllegalStateException("AI script host is unavailable.");
             }
 
             @Override
@@ -256,26 +274,44 @@ public class AIToolSetBuilder {
         return modeController;
     }
 
+    private java.util.function.Supplier<org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel> effectiveToolAvailabilitySupplier() {
+        if (toolAvailabilitySupplier != null) {
+            return toolAvailabilitySupplier;
+        }
+        if (aiCodeOperationAuthorizer != null) {
+            return aiCodeOperationAuthorizer::currentToolAvailability;
+        }
+        return () -> {
+            try {
+                return new org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevelSettings().getToolAvailability();
+            } catch (Exception ignored) {
+                return org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel.EDITING;
+            }
+        };
+    }
+
     private NodeContentFactories createNodeContentFactories(TextController textController,
                                                             AttributeController attributeController,
-                                                            IconController iconController) {
+                                                            IconController iconController,
+                                                            java.util.function.Supplier<org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel> toolAvailabilitySupplier) {
         EnglishTextProvider englishTextProvider = new DefaultEnglishTextProvider();
         IconDescriptionResolver iconDescriptionResolver = new IconDescriptionResolver(englishTextProvider);
         NodeContentItemReader nodeContentItemReader = createNodeContentItemReader(
-            textController, attributeController, iconController, iconDescriptionResolver);
+            textController, attributeController, iconController, iconDescriptionResolver, toolAvailabilitySupplier);
         return new NodeContentFactories(nodeContentItemReader, iconDescriptionResolver);
     }
 
     private NodeContentItemReader createNodeContentItemReader(TextController textController,
                                                               AttributeController attributeController,
                                                               IconController iconController,
-                                                              IconDescriptionResolver iconDescriptionResolver) {
+                                                              IconDescriptionResolver iconDescriptionResolver,
+                                                              java.util.function.Supplier<org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel> toolAvailabilitySupplier) {
         TextualContentReader textualContentReader = new TextualContentReader(textController);
         AttributesContentReader attributesContentReader = new AttributesContentReader(attributeController, textController);
         TagsContentReader tagsContentReader = new TagsContentReader(iconController);
         IconsContentReader iconsContentReader = new IconsContentReader(iconDescriptionResolver, iconController);
         EditableContentReader editableContentReader = new EditableContentReader(
-            textController, iconDescriptionResolver, new ContentTypeConverter());
+            textController, iconDescriptionResolver, new ContentTypeConverter(), toolAvailabilitySupplier);
         NodeStyleContentReader nodeStyleContentReader = new NodeStyleContentReader();
         NodeContentReader nodeContentReader = new NodeContentReader(
             textualContentReader, attributesContentReader, tagsContentReader, iconsContentReader,

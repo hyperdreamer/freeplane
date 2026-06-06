@@ -1,4 +1,4 @@
-package org.freeplane.plugin.formula;
+package org.freeplane.plugin.script;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -8,18 +8,18 @@ import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.text.TextController;
 import org.junit.Test;
 
-public class FormulaSubmitValidationSupportTest {
+public class FormulaValidationSupportTest {
 
     @Test
-    public void validateSubmittedFormulaMapsSuccessfulValidationResult() {
+    public void validateFormulaMapsSuccessfulValidationResult() {
         TextController textController = mock(TextController.class);
         when(textController.withNodeNumbering(org.mockito.ArgumentMatchers.eq(true), org.mockito.ArgumentMatchers.any()))
             .thenAnswer(invocation -> ((java.util.function.Supplier<?>) invocation.getArgument(1)).get());
-        FormulaSubmitValidationSupport uut = new FormulaSubmitValidationSupport(
+        FormulaValidationSupport uut = new FormulaValidationSupport(
             textController,
             (node, formulaText, outStream, errorHandler) -> 42);
 
-        org.freeplane.features.ai.code.AiChatCodeOperationResult result = uut.validateSubmittedFormula(
+        org.freeplane.features.ai.code.AiChatCodeOperationResult result = uut.validateFormula(
             mock(NodeModel.class),
             "=21*2");
 
@@ -30,18 +30,18 @@ public class FormulaSubmitValidationSupportTest {
     }
 
     @Test
-    public void validateSubmittedFormulaMapsFailureAndCapturedLineNumber() {
+    public void validateFormulaMapsFailureAndCapturedLineNumber() {
         TextController textController = mock(TextController.class);
         when(textController.withNodeNumbering(org.mockito.ArgumentMatchers.eq(true), org.mockito.ArgumentMatchers.any()))
             .thenAnswer(invocation -> ((java.util.function.Supplier<?>) invocation.getArgument(1)).get());
-        FormulaSubmitValidationSupport uut = new FormulaSubmitValidationSupport(
+        FormulaValidationSupport uut = new FormulaValidationSupport(
             textController,
             (node, formulaText, outStream, errorHandler) -> {
                 errorHandler.gotoLine(7);
                 throw new RuntimeException("Broken formula");
             });
 
-        org.freeplane.features.ai.code.AiChatCodeOperationResult result = uut.validateSubmittedFormula(
+        org.freeplane.features.ai.code.AiChatCodeOperationResult result = uut.validateFormula(
             mock(NodeModel.class),
             "=broken"
         );
