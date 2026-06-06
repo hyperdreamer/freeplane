@@ -33,10 +33,10 @@ public class AiCodeOperationAuthorizerTest {
     public void attachedScriptEditorOverrideKeepsReadWriteAndCompileAuthorizedAtReading() {
         FakeCodeHostService codeHostService = new FakeCodeHostService()
             .withState(ScriptHost.ATTACHED_EDITOR, SCRIPT_CONTENT_TYPE, CodeLifecycleStatus.READY);
-        AiCodeOperationAuthorizer uut = new AiCodeOperationAuthorizer(
-            ToolCaller.CHAT,
+        AiCodeOperationAuthorizer uut = authorizer(
             () -> ToolAvailabilityLevel.READING,
             () -> ToolAvailabilityLevel.READING,
+            false,
             codeHostService);
 
         Set<String> authorizedToolNames = uut.authorizedToolNames();
@@ -48,13 +48,13 @@ public class AiCodeOperationAuthorizerTest {
     }
 
     @Test
-    public void attachedFormulaWriteAndCompileRequireScriptExecution() {
+    public void attachedFormulaWriteAndCompileRequireFormulaEditingPermission() {
         FakeCodeHostService codeHostService = new FakeCodeHostService()
             .withState(ScriptHost.ATTACHED_EDITOR, FORMULA_CONTENT_TYPE, CodeLifecycleStatus.READY);
-        AiCodeOperationAuthorizer uut = new AiCodeOperationAuthorizer(
-            ToolCaller.CHAT,
+        AiCodeOperationAuthorizer uut = authorizer(
             () -> ToolAvailabilityLevel.EDITING,
             () -> null,
+            false,
             codeHostService);
 
         assertThat(uut.authorizedToolNames()).containsExactly("readCode");
@@ -70,10 +70,10 @@ public class AiCodeOperationAuthorizerTest {
     public void scriptExecutionAvailabilityAddsRunScriptForScriptContent() {
         FakeCodeHostService codeHostService = new FakeCodeHostService()
             .withState(ScriptHost.ATTACHED_EDITOR, SCRIPT_CONTENT_TYPE, CodeLifecycleStatus.READY);
-        AiCodeOperationAuthorizer uut = new AiCodeOperationAuthorizer(
-            ToolCaller.CHAT,
+        AiCodeOperationAuthorizer uut = authorizer(
             () -> ToolAvailabilityLevel.SCRIPT_EXECUTION,
             () -> null,
+            false,
             codeHostService);
 
         assertThat(uut.authorizedToolNames()).contains("runScript");
@@ -81,13 +81,13 @@ public class AiCodeOperationAuthorizerTest {
     }
 
     @Test
-    public void scriptExecutionAvailabilityAllowsAttachedFormulaWriteAndCompile() {
+    public void editingAvailabilityAllowsAttachedFormulaWriteAndCompileWhenFormulaEditingIsEnabled() {
         FakeCodeHostService codeHostService = new FakeCodeHostService()
             .withState(ScriptHost.ATTACHED_EDITOR, FORMULA_CONTENT_TYPE, CodeLifecycleStatus.READY);
-        AiCodeOperationAuthorizer uut = new AiCodeOperationAuthorizer(
-            ToolCaller.CHAT,
-            () -> ToolAvailabilityLevel.SCRIPT_EXECUTION,
+        AiCodeOperationAuthorizer uut = authorizer(
+            () -> ToolAvailabilityLevel.EDITING,
             () -> null,
+            true,
             codeHostService);
 
         assertThat(uut.authorizedToolNames()).contains("readCode", "writeCode", "compileCode");
@@ -99,10 +99,10 @@ public class AiCodeOperationAuthorizerTest {
     public void runScriptRejectsNonScriptContent() {
         FakeCodeHostService codeHostService = new FakeCodeHostService()
             .withState(ScriptHost.ATTACHED_EDITOR, FORMULA_CONTENT_TYPE, CodeLifecycleStatus.READY);
-        AiCodeOperationAuthorizer uut = new AiCodeOperationAuthorizer(
-            ToolCaller.CHAT,
+        AiCodeOperationAuthorizer uut = authorizer(
             () -> ToolAvailabilityLevel.SCRIPT_EXECUTION,
             () -> null,
+            false,
             codeHostService);
 
         assertThatThrownBy(() -> uut.assertAuthorized("runScript", null, ScriptHost.ATTACHED_EDITOR))
@@ -114,16 +114,28 @@ public class AiCodeOperationAuthorizerTest {
     public void disabledAvailabilityWithoutOverrideRejectsAttachedEditorRead() {
         FakeCodeHostService codeHostService = new FakeCodeHostService()
             .withState(ScriptHost.ATTACHED_EDITOR, SCRIPT_CONTENT_TYPE, CodeLifecycleStatus.READY);
-        AiCodeOperationAuthorizer uut = new AiCodeOperationAuthorizer(
-            ToolCaller.CHAT,
+        AiCodeOperationAuthorizer uut = authorizer(
             () -> ToolAvailabilityLevel.DISABLED,
             () -> null,
+            false,
             codeHostService);
 
         assertThat(uut.authorizedToolNames()).isEmpty();
         assertThatThrownBy(() -> uut.assertAuthorized("readCode", null, ScriptHost.ATTACHED_EDITOR))
             .isInstanceOf(IllegalStateException.class)
             .hasMessage("The requested code host is not readable at the current availability level.");
+    }
+
+    private AiCodeOperationAuthorizer authorizer(java.util.function.Supplier<ToolAvailabilityLevel> globalAvailability,
+                                                 java.util.function.Supplier<ToolAvailabilityLevel> sessionOverride,
+                                                 boolean formulaEditingEnabled,
+                                                 FakeCodeHostService codeHostService) {
+        return new AiCodeOperationAuthorizer(
+            ToolCaller.CHAT,
+            globalAvailability,
+            sessionOverride,
+            () -> Boolean.valueOf(formulaEditingEnabled),
+            codeHostService);
     }
 
     private static class FakeCodeHostService implements AiCodeHostService {

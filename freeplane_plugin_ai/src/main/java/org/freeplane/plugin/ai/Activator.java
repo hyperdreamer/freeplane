@@ -27,6 +27,7 @@ import org.freeplane.plugin.ai.chat.request.ScriptAiRequestService;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevelSettings;
 import org.freeplane.plugin.ai.chat.ui.AIChatPanel;
 import org.freeplane.plugin.ai.tools.code.AiCodeOperationAuthorizer;
+import org.freeplane.plugin.ai.tools.formula.FormulaEditingSettings;
 import org.freeplane.plugin.ai.code.AttachedEditorChatModeSettings;
 import org.freeplane.plugin.ai.code.RoutingAiCodeHostService;
 import org.freeplane.plugin.ai.code.SingleEditorAttachmentService;
@@ -196,6 +197,7 @@ public class Activator implements BundleActivator {
                             ToolCaller.MCP,
                             new ToolAvailabilityLevelSettings()::getToolAvailability,
                             null,
+                            () -> Boolean.valueOf(new FormulaEditingSettings().isEnabled()),
                             codeHostService);
                         AIToolSetBuilder toolSetBuilder = new AIToolSetBuilder()
                             .toolCallSummaryHandler(aiChatPanel.toolCallSummaryHandler())

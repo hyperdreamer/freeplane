@@ -22,6 +22,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Supplier;
+import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
+import org.freeplane.plugin.ai.tools.formula.FormulaEditingAccess;
 import org.freeplane.plugin.ai.tools.utilities.ToolExecutorFactory;
 import org.freeplane.plugin.ai.tools.utilities.ToolExecutorRegistry;
 
@@ -30,14 +33,25 @@ public class ModelContextProtocolToolRegistry {
 
     private final Collection<?> toolSets;
     private final ObjectMapper objectMapper;
+    private final Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier;
+    private final Supplier<Boolean> formulaEditingEnabledSupplier;
 
     public ModelContextProtocolToolRegistry(Object toolSet, ObjectMapper objectMapper) {
-        this(Collections.singletonList(Objects.requireNonNull(toolSet, "toolSet")), objectMapper);
+        this(Collections.singletonList(Objects.requireNonNull(toolSet, "toolSet")), objectMapper, null, null);
     }
 
     public ModelContextProtocolToolRegistry(Collection<?> toolSets, ObjectMapper objectMapper) {
+        this(toolSets, objectMapper, null, null);
+    }
+
+    public ModelContextProtocolToolRegistry(Collection<?> toolSets,
+                                            ObjectMapper objectMapper,
+                                            Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier,
+                                            Supplier<Boolean> formulaEditingEnabledSupplier) {
         this.toolSets = Objects.requireNonNull(toolSets, "toolSets");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
+        this.toolAvailabilitySupplier = toolAvailabilitySupplier;
+        this.formulaEditingEnabledSupplier = formulaEditingEnabledSupplier;
     }
 
     public List<ModelContextProtocolTool> listTools() {
@@ -52,11 +66,48 @@ public class ModelContextProtocolToolRegistry {
             }
             tools.add(new ModelContextProtocolTool(
                 specification.name(),
-                specification.description(),
+                decorateDescription(specification.name(), specification.description()),
                 inputSchema
             ));
         }
         return tools;
+    }
+
+    private String decorateDescription(String toolName, String description) {
+        if (toolAvailabilitySupplier == null || formulaEditingEnabledSupplier == null) {
+            return description;
+        }
+        ToolAvailabilityLevel toolAvailability = toolAvailabilitySupplier.get();
+        boolean formulaEditingAllowed = FormulaEditingAccess.isFormulaEditingAllowed(
+            toolAvailability == null ? ToolAvailabilityLevel.EDITING : toolAvailability,
+            formulaEditingEnabledSupplier.get().booleanValue());
+        if (FormulaEditingAccess.isFormulaTool(toolName)) {
+            return appendCapabilityNote(
+                description,
+                formulaEditingAllowed
+                    ? "Current formula authoring capability: enabled."
+                    : "Current formula authoring capability: disabled. Enable editing availability and AI may edit formulas to use this tool.");
+        }
+        if ("writeCode".equals(toolName) || "compileCode".equals(toolName)) {
+            return appendCapabilityNote(
+                description,
+                formulaEditingAllowed
+                    ? "Current attached formula editing capability: enabled when the attached editor content is a formula."
+                    : "Current attached formula editing capability: disabled. Enable AI may edit formulas to edit attached formulas.");
+        }
+        return description;
+    }
+
+    private String appendCapabilityNote(String description, String note) {
+        String safeDescription = description == null ? "" : description.trim();
+        String safeNote = note == null ? "" : note.trim();
+        if (safeDescription.isEmpty()) {
+            return safeNote;
+        }
+        if (safeNote.isEmpty()) {
+            return safeDescription;
+        }
+        return safeDescription + " " + safeNote;
     }
 
     private Map<String, Object> jsonSchemaElementToMap(JsonSchemaElement schemaElement) {

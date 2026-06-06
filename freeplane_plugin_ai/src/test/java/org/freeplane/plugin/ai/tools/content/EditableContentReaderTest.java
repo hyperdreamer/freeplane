@@ -116,23 +116,25 @@ public class EditableContentReaderTest {
         EditableContentRequest request = new EditableContentRequest(
             Collections.singletonList(EditableContentField.ATTRIBUTES));
 
-        EditableContent editingContent = new EditableContentReader(
+        EditableContent editingWithoutFormulaPermission = new EditableContentReader(
             textController,
             new IconDescriptionResolver(key -> null),
             new ContentTypeConverter(),
-            () -> org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel.EDITING)
+            () -> org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel.EDITING,
+            () -> Boolean.FALSE)
             .readEditableContent(nodeModel, request);
-        EditableContent scriptExecutionContent = new EditableContentReader(
+        EditableContent editingWithFormulaPermission = new EditableContentReader(
             textController,
             new IconDescriptionResolver(key -> null),
             new ContentTypeConverter(),
-            () -> org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel.SCRIPT_EXECUTION)
+            () -> org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel.EDITING,
+            () -> Boolean.TRUE)
             .readEditableContent(nodeModel, request);
 
-        assertThat(editingContent.getEditableAttributes().get(0).getIsFormula()).isTrue();
-        assertThat(editingContent.getEditableAttributes().get(0).getIsEditable()).isFalse();
-        assertThat(scriptExecutionContent.getEditableAttributes().get(0).getIsFormula()).isTrue();
-        assertThat(scriptExecutionContent.getEditableAttributes().get(0).getIsEditable()).isTrue();
+        assertThat(editingWithoutFormulaPermission.getEditableAttributes().get(0).getIsFormula()).isTrue();
+        assertThat(editingWithoutFormulaPermission.getEditableAttributes().get(0).getIsEditable()).isFalse();
+        assertThat(editingWithFormulaPermission.getEditableAttributes().get(0).getIsFormula()).isTrue();
+        assertThat(editingWithFormulaPermission.getEditableAttributes().get(0).getIsEditable()).isTrue();
     }
 
     @Test
@@ -146,24 +148,26 @@ public class EditableContentReaderTest {
         EditableContentRequest request = new EditableContentRequest(
             Collections.singletonList(EditableContentField.TEXT));
 
-        EditableContent editingContent = new EditableContentReader(
+        EditableContent editingWithoutFormulaPermission = new EditableContentReader(
             textController,
             new IconDescriptionResolver(key -> null),
             new ContentTypeConverter(),
-            () -> org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel.EDITING)
+            () -> org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel.EDITING,
+            () -> Boolean.FALSE)
             .readEditableContent(nodeModel, request);
-        EditableContent scriptExecutionContent = new EditableContentReader(
+        EditableContent editingWithFormulaPermission = new EditableContentReader(
             textController,
             new IconDescriptionResolver(key -> null),
             new ContentTypeConverter(),
-            () -> org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel.SCRIPT_EXECUTION)
+            () -> org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel.EDITING,
+            () -> Boolean.TRUE)
             .readEditableContent(nodeModel, request);
 
-        assertThat(editingContent.getEditableText().getIsFormula()).isTrue();
-        assertThat(editingContent.getEditableText().getIsEditable()).isFalse();
-        assertThat(scriptExecutionContent.getEditableText().getIsFormula()).isTrue();
-        assertThat(scriptExecutionContent.getEditableText().getIsEditable()).isTrue();
-        assertThat(scriptExecutionContent.getEditableText().getContentType()).isEqualTo(ContentType.PLAIN_TEXT);
+        assertThat(editingWithoutFormulaPermission.getEditableText().getIsFormula()).isTrue();
+        assertThat(editingWithoutFormulaPermission.getEditableText().getIsEditable()).isFalse();
+        assertThat(editingWithFormulaPermission.getEditableText().getIsFormula()).isTrue();
+        assertThat(editingWithFormulaPermission.getEditableText().getIsEditable()).isTrue();
+        assertThat(editingWithFormulaPermission.getEditableText().getContentType()).isEqualTo(ContentType.PLAIN_TEXT);
     }
 
     @Test

@@ -25,6 +25,7 @@ import org.freeplane.core.util.LogUtils;
 import org.freeplane.features.ui.ViewController;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevelSettings;
 import org.freeplane.plugin.ai.tools.code.AiCodeOperationAuthorizer;
+import org.freeplane.plugin.ai.tools.formula.FormulaEditingSettings;
 import org.freeplane.plugin.ai.tools.AIToolSet;
 import org.freeplane.plugin.ai.tools.documentation.GetApiDocumentationTool;
 
@@ -99,7 +100,13 @@ public class ModelContextProtocolServer implements IFreeplanePropertyListener {
                                MCPAuthenticator authenticator,
                                AiCodeOperationAuthorizer aiCodeOperationAuthorizer) {
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
-        this.toolRegistry = new ModelContextProtocolToolRegistry(toolSets, this.objectMapper);
+        ToolAvailabilityLevelSettings toolAvailabilityLevelSettings = new ToolAvailabilityLevelSettings(resourceController);
+        FormulaEditingSettings formulaEditingSettings = new FormulaEditingSettings(resourceController);
+        this.toolRegistry = new ModelContextProtocolToolRegistry(
+            toolSets,
+            this.objectMapper,
+            toolAvailabilityLevelSettings::getToolAvailability,
+            () -> Boolean.valueOf(formulaEditingSettings.isEnabled()));
         this.toolDispatcher = new ModelContextProtocolToolDispatcher(
             toolSets,
             this.objectMapper,
@@ -128,8 +135,10 @@ public class ModelContextProtocolServer implements IFreeplanePropertyListener {
                 "GetApiDocumentationTool is required when MCP tool-call authorization is enabled.");
         }
         ToolAvailabilityLevelSettings toolAvailabilityLevelSettings = new ToolAvailabilityLevelSettings(resourceController);
+        FormulaEditingSettings formulaEditingSettings = new FormulaEditingSettings(resourceController);
         return new ModelContextProtocolToolCallAuthorizer(
             toolAvailabilityLevelSettings::getToolAvailability,
+            () -> Boolean.valueOf(formulaEditingSettings.isEnabled()),
             aiCodeOperationAuthorizer,
             getApiDocumentationTool);
     }

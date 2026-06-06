@@ -41,6 +41,7 @@ import org.freeplane.plugin.ai.tools.content.NodeStyleContentReader;
 import org.freeplane.plugin.ai.tools.content.TagsContentReader;
 import org.freeplane.plugin.ai.tools.content.TextualContentReader;
 import org.freeplane.plugin.ai.tools.documentation.GetApiDocumentationTool;
+import org.freeplane.plugin.ai.tools.formula.FormulaEditingSettings;
 import org.freeplane.plugin.ai.tools.text.DefaultEnglishTextProvider;
 import org.freeplane.plugin.ai.tools.text.EnglishTextProvider;
 import org.freeplane.plugin.ai.tools.utilities.ToolCallSummaryHandler;
@@ -57,6 +58,7 @@ public class AIToolSetBuilder {
     private AiCodeHostService codeHostService;
     private AiCodeOperationAuthorizer aiCodeOperationAuthorizer;
     private java.util.function.Supplier<org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel> toolAvailabilitySupplier;
+    private java.util.function.Supplier<Boolean> formulaEditingEnabledSupplier;
     private ToolCaller toolCaller = ToolCaller.CHAT;
 
     public AIToolSetBuilder toolCallSummaryHandler(ToolCallSummaryHandler handler) {
@@ -115,6 +117,11 @@ public class AIToolSetBuilder {
         return this;
     }
 
+    public AIToolSetBuilder formulaEditingEnabledSupplier(java.util.function.Supplier<Boolean> formulaEditingEnabledSupplier) {
+        this.formulaEditingEnabledSupplier = formulaEditingEnabledSupplier;
+        return this;
+    }
+
     public AIToolSet build() {
         ResolvedComponents resolvedComponents = resolveComponents();
         return createBaseToolSet(resolvedComponents, effectiveCodeHostService());
@@ -140,7 +147,7 @@ public class AIToolSetBuilder {
         IconController iconController = this.iconController != null ? this.iconController : createIconController();
         MMapController mapController = this.mapController != null ? this.mapController : createMapController();
         NodeContentFactories nodeContentFactories = createNodeContentFactories(textController, attributeController,
-            iconController, effectiveToolAvailabilitySupplier());
+            iconController, effectiveToolAvailabilitySupplier(), effectiveFormulaEditingEnabledSupplier());
         GetApiDocumentationTool getApiDocumentationTool = new GetApiDocumentationTool(
             availableMaps, mapController, textController);
         return new ResolvedComponents(
@@ -163,6 +170,7 @@ public class AIToolSetBuilder {
             effectiveCodeHostService,
             resolvedComponents.getApiDocumentationTool,
             effectiveToolAvailabilitySupplier(),
+            effectiveFormulaEditingEnabledSupplier(),
             toolCaller);
     }
 
@@ -274,6 +282,13 @@ public class AIToolSetBuilder {
         return modeController;
     }
 
+    private java.util.function.Supplier<Boolean> effectiveFormulaEditingEnabledSupplier() {
+        if (formulaEditingEnabledSupplier != null) {
+            return formulaEditingEnabledSupplier;
+        }
+        return () -> Boolean.valueOf(new FormulaEditingSettings().isEnabled());
+    }
+
     private java.util.function.Supplier<org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel> effectiveToolAvailabilitySupplier() {
         if (toolAvailabilitySupplier != null) {
             return toolAvailabilitySupplier;
@@ -293,11 +308,17 @@ public class AIToolSetBuilder {
     private NodeContentFactories createNodeContentFactories(TextController textController,
                                                             AttributeController attributeController,
                                                             IconController iconController,
-                                                            java.util.function.Supplier<org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel> toolAvailabilitySupplier) {
+                                                            java.util.function.Supplier<org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel> toolAvailabilitySupplier,
+                                                            java.util.function.Supplier<Boolean> formulaEditingEnabledSupplier) {
         EnglishTextProvider englishTextProvider = new DefaultEnglishTextProvider();
         IconDescriptionResolver iconDescriptionResolver = new IconDescriptionResolver(englishTextProvider);
         NodeContentItemReader nodeContentItemReader = createNodeContentItemReader(
-            textController, attributeController, iconController, iconDescriptionResolver, toolAvailabilitySupplier);
+            textController,
+            attributeController,
+            iconController,
+            iconDescriptionResolver,
+            toolAvailabilitySupplier,
+            formulaEditingEnabledSupplier);
         return new NodeContentFactories(nodeContentItemReader, iconDescriptionResolver);
     }
 
@@ -305,13 +326,18 @@ public class AIToolSetBuilder {
                                                               AttributeController attributeController,
                                                               IconController iconController,
                                                               IconDescriptionResolver iconDescriptionResolver,
-                                                              java.util.function.Supplier<org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel> toolAvailabilitySupplier) {
+                                                              java.util.function.Supplier<org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel> toolAvailabilitySupplier,
+                                                              java.util.function.Supplier<Boolean> formulaEditingEnabledSupplier) {
         TextualContentReader textualContentReader = new TextualContentReader(textController);
         AttributesContentReader attributesContentReader = new AttributesContentReader(attributeController, textController);
         TagsContentReader tagsContentReader = new TagsContentReader(iconController);
         IconsContentReader iconsContentReader = new IconsContentReader(iconDescriptionResolver, iconController);
         EditableContentReader editableContentReader = new EditableContentReader(
-            textController, iconDescriptionResolver, new ContentTypeConverter(), toolAvailabilitySupplier);
+            textController,
+            iconDescriptionResolver,
+            new ContentTypeConverter(),
+            toolAvailabilitySupplier,
+            formulaEditingEnabledSupplier);
         NodeStyleContentReader nodeStyleContentReader = new NodeStyleContentReader();
         NodeContentReader nodeContentReader = new NodeContentReader(
             textualContentReader, attributesContentReader, tagsContentReader, iconsContentReader,

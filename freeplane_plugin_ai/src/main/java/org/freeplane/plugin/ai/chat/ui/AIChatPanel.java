@@ -115,6 +115,7 @@ import org.freeplane.plugin.ai.chat.session.LiveChatSessionId;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevelSettings;
 import org.freeplane.plugin.ai.tools.code.AiCodeOperationAuthorizer;
+import org.freeplane.plugin.ai.tools.formula.FormulaEditingSettings;
 import org.freeplane.plugin.ai.edits.AiEditsSettings;
 import org.freeplane.plugin.ai.edits.ClearAiMarkersInMapAction;
 import org.freeplane.plugin.ai.edits.ClearAiMarkersInSelectionAction;
@@ -1189,6 +1190,7 @@ public class AIChatPanel extends JPanel {
                 ToolCaller.CHAT,
                 chatToolAvailabilitySettings::getToolAvailability,
                 () -> liveChatController.sessionToolAvailabilityOverride(sessionId),
+                () -> Boolean.valueOf(new FormulaEditingSettings().isEnabled()),
                 sessionCodeHostService));
         List<Object> toolObjects = toolSetBuilder.buildToolObjects();
         return AIChatServiceFactory.createService(

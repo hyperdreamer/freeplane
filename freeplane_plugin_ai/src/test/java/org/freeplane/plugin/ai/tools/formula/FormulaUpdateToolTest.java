@@ -43,6 +43,32 @@ import static org.mockito.Mockito.when;
 
 public class FormulaUpdateToolTest {
     @Test
+    public void previewRejectsRequestsWhenFormulaEditingPermissionIsDisabled() {
+        MapModel mapModel = mock(MapModel.class);
+        AvailableMaps availableMaps = mock(AvailableMaps.class);
+        String mapIdentifier = UUID.randomUUID().toString();
+        when(availableMaps.findMapModel(eq(UUID.fromString(mapIdentifier)), any())).thenReturn(mapModel);
+        TextController textController = mock(TextController.class);
+        FormulaUpdateTool uut = new FormulaUpdateTool(
+            availableMaps,
+            null,
+            mock(NodeContentItemReader.class),
+            new TextualContentEditor(new TestTextContentWriteController(), new TestNoteContentWriteController(), textController),
+            new AttributesContentEditor(mock(MAttributeController.class), textController),
+            successfulFormulaEvaluationCodeHostService("2"),
+            FormulaUpdatePreviewStore.shared(),
+            () -> ToolAvailabilityLevel.EDITING,
+            () -> Boolean.FALSE);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> uut.previewFormulaUpdates(new FormulaUpdatePreviewRequest(
+            mapIdentifier,
+            "preview formula",
+            Collections.<FormulaUpdateItem>emptyList())))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("Formula authoring requires editing availability and AI formula editing permission.");
+    }
+
+    @Test
     public void previewAndApplyFormulaTextUpdate() {
         MapModel backingMap = new MapModel((source, targetMap, withChildren) -> null, null, null);
         NodeModel nodeModel = new NodeModel("before", backingMap);
@@ -82,7 +108,8 @@ public class FormulaUpdateToolTest {
             attributesContentEditor,
             successfulFormulaEvaluationCodeHostService("2"),
             FormulaUpdatePreviewStore.shared(),
-            () -> ToolAvailabilityLevel.SCRIPT_EXECUTION);
+            () -> ToolAvailabilityLevel.SCRIPT_EXECUTION,
+            () -> Boolean.TRUE);
 
         FormulaUpdatePreviewResponse previewResponse = uut.previewFormulaUpdates(new FormulaUpdatePreviewRequest(
             mapIdentifier,
@@ -137,7 +164,8 @@ public class FormulaUpdateToolTest {
             new AttributesContentEditor(mock(MAttributeController.class), textController),
             successfulFormulaEvaluationCodeHostService("2"),
             FormulaUpdatePreviewStore.shared(),
-            () -> ToolAvailabilityLevel.SCRIPT_EXECUTION);
+            () -> ToolAvailabilityLevel.SCRIPT_EXECUTION,
+            () -> Boolean.TRUE);
 
         FormulaUpdatePreviewResponse previewResponse = uut.previewFormulaUpdates(new FormulaUpdatePreviewRequest(
             mapIdentifier,
@@ -188,7 +216,8 @@ public class FormulaUpdateToolTest {
             new AttributesContentEditor(mock(MAttributeController.class), textController),
             successfulFormulaEvaluationCodeHostService("2"),
             FormulaUpdatePreviewStore.shared(),
-            () -> ToolAvailabilityLevel.SCRIPT_EXECUTION);
+            () -> ToolAvailabilityLevel.SCRIPT_EXECUTION,
+            () -> Boolean.TRUE);
 
         FormulaUpdatePreviewResponse previewResponse = uut.previewFormulaUpdates(new FormulaUpdatePreviewRequest(
             mapIdentifier,
@@ -240,7 +269,8 @@ public class FormulaUpdateToolTest {
             new AttributesContentEditor(mock(MAttributeController.class), textController),
             successfulFormulaEvaluationCodeHostService("2"),
             FormulaUpdatePreviewStore.shared(),
-            () -> ToolAvailabilityLevel.SCRIPT_EXECUTION);
+            () -> ToolAvailabilityLevel.SCRIPT_EXECUTION,
+            () -> Boolean.TRUE);
 
         FormulaUpdatePreviewResponse previewResponse = uut.previewFormulaUpdates(new FormulaUpdatePreviewRequest(
             mapIdentifier,

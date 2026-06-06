@@ -10,6 +10,7 @@ import java.util.function.Supplier;
 import org.freeplane.features.ai.code.ScriptHost;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.tools.code.AiCodeOperationAuthorizer;
+import org.freeplane.plugin.ai.tools.formula.FormulaEditingAccess;
 import org.freeplane.plugin.ai.tools.documentation.GetApiDocumentationResponse;
 import org.freeplane.plugin.ai.tools.documentation.GetApiDocumentationTool;
 
@@ -26,13 +27,18 @@ public class ModelContextProtocolToolCallAuthorizer {
             "searchNodes")));
 
     private final Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier;
+    private final Supplier<Boolean> formulaEditingEnabledSupplier;
     private final AiCodeOperationAuthorizer aiCodeOperationAuthorizer;
     private final GetApiDocumentationTool getApiDocumentationTool;
 
     public ModelContextProtocolToolCallAuthorizer(Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier,
+                                                  Supplier<Boolean> formulaEditingEnabledSupplier,
                                                   AiCodeOperationAuthorizer aiCodeOperationAuthorizer,
                                                   GetApiDocumentationTool getApiDocumentationTool) {
         this.toolAvailabilitySupplier = Objects.requireNonNull(toolAvailabilitySupplier, "toolAvailabilitySupplier");
+        this.formulaEditingEnabledSupplier = Objects.requireNonNull(
+            formulaEditingEnabledSupplier,
+            "formulaEditingEnabledSupplier");
         this.aiCodeOperationAuthorizer = Objects.requireNonNull(aiCodeOperationAuthorizer,
             "aiCodeOperationAuthorizer");
         this.getApiDocumentationTool = Objects.requireNonNull(getApiDocumentationTool, "getApiDocumentationTool");
@@ -50,6 +56,14 @@ public class ModelContextProtocolToolCallAuthorizer {
         ToolAvailabilityLevel toolAvailability = currentToolAvailability();
         if (toolAvailability == ToolAvailabilityLevel.DISABLED) {
             assertDisabledAuthorized(normalizedToolName, argumentsNode);
+            return;
+        }
+        if (FormulaEditingAccess.isFormulaTool(normalizedToolName)) {
+            if (!FormulaEditingAccess.isFormulaEditingAllowed(
+                toolAvailability,
+                formulaEditingEnabledSupplier.get().booleanValue())) {
+                throw new IllegalStateException("Formula authoring is not available at the current availability level or formula-editing permission.");
+            }
             return;
         }
         if (!toolAvailability.allowsTool(normalizedToolName)) {

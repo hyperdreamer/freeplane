@@ -49,6 +49,7 @@ public class AIChatServiceTest {
             null,
             null,
             toolAvailability::get,
+            () -> Boolean.FALSE,
             assistantFactory);
 
         assertThat(uut.chat("first")).isEqualTo("reading-response");
@@ -82,6 +83,7 @@ public class AIChatServiceTest {
             null,
             null,
             () -> ToolAvailabilityLevel.READING,
+            () -> Boolean.FALSE,
             availability -> mock(AIChatService.AIAssistant.class));
 
         String message = uut.systemMessageProvider(ToolAvailabilityLevel.READING).apply("request");
@@ -110,12 +112,53 @@ public class AIChatServiceTest {
             null,
             null,
             () -> ToolAvailabilityLevel.DISABLED,
+            () -> Boolean.FALSE,
             availability -> mock(AIChatService.AIAssistant.class));
 
         assertThat(uut.allowedToolNames(ToolAvailabilityLevel.DISABLED)).containsExactly(
             "readCode",
             "writeCode",
             "compileCode");
+    }
+
+    @Test
+    public void allowedToolNamesExposeFormulaToolsOnlyWhenFormulaEditingIsEnabled() {
+        AIToolSet toolSet = mock(AIToolSet.class);
+        AIChatService disabled = new AIChatService(
+            mock(ChatModel.class),
+            toolSet,
+            Collections.<Object>singletonList(toolSet),
+            null,
+            null,
+            new ChatTokenUsageTracker(totals -> {
+            }),
+            null,
+            null,
+            null,
+            () -> ToolAvailabilityLevel.EDITING,
+            () -> Boolean.FALSE,
+            availability -> mock(AIChatService.AIAssistant.class));
+        AIChatService enabled = new AIChatService(
+            mock(ChatModel.class),
+            toolSet,
+            Collections.<Object>singletonList(toolSet),
+            null,
+            null,
+            new ChatTokenUsageTracker(totals -> {
+            }),
+            null,
+            null,
+            null,
+            () -> ToolAvailabilityLevel.EDITING,
+            () -> Boolean.TRUE,
+            availability -> mock(AIChatService.AIAssistant.class));
+
+        assertThat(disabled.allowedToolNames(ToolAvailabilityLevel.EDITING)).doesNotContain(
+            "previewFormulaUpdates",
+            "applyFormulaUpdates");
+        assertThat(enabled.allowedToolNames(ToolAvailabilityLevel.EDITING)).contains(
+            "previewFormulaUpdates",
+            "applyFormulaUpdates");
     }
 
     @Test
@@ -137,6 +180,7 @@ public class AIChatServiceTest {
             null,
             null,
             () -> ToolAvailabilityLevel.READING,
+            () -> Boolean.FALSE,
             availability -> mock(AIChatService.AIAssistant.class));
 
         String message = uut.systemMessageProvider(ToolAvailabilityLevel.READING).apply("request");

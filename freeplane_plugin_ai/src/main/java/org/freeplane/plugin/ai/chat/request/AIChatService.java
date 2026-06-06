@@ -23,6 +23,8 @@ import org.freeplane.plugin.ai.chat.memory.ChatTokenUsageTracker;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevelSettings;
 import org.freeplane.plugin.ai.tools.code.AiCodeToolSet;
+import org.freeplane.plugin.ai.tools.formula.FormulaEditingAccess;
+import org.freeplane.plugin.ai.tools.formula.FormulaEditingSettings;
 import org.freeplane.plugin.ai.tools.AIToolSet;
 import org.freeplane.plugin.ai.tools.utilities.ToolCallSummary;
 import org.freeplane.plugin.ai.tools.utilities.ToolCallSummaryHandler;
@@ -47,6 +49,7 @@ public class AIChatService {
     private final Consumer<TokenUsage> tokenUsageConsumer;
     private final ToolExecutorRegistry toolExecutorRegistry;
     private final Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier;
+    private final Supplier<Boolean> formulaEditingEnabledSupplier;
     private final Function<ToolAvailabilityLevel, AIAssistant> assistantFactory;
     private ToolAvailabilityLevel lastToolAvailability;
 
@@ -63,6 +66,12 @@ public class AIChatService {
                     } catch (Exception ignored) {
                         return ToolAvailabilityLevel.EDITING;
                     }
+                }
+            },
+            new Supplier<Boolean>() {
+                @Override
+                public Boolean get() {
+                    return Boolean.valueOf(new FormulaEditingSettings().isEnabled());
                 }
             },
             null);
@@ -89,6 +98,12 @@ public class AIChatService {
                     }
                 }
             },
+            new Supplier<Boolean>() {
+                @Override
+                public Boolean get() {
+                    return Boolean.valueOf(new FormulaEditingSettings().isEnabled());
+                }
+            },
             null);
     }
 
@@ -102,6 +117,7 @@ public class AIChatService {
                   Supplier<Boolean> cancellationSupplier,
                   Consumer<TokenUsage> tokenUsageConsumer,
                   Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier,
+                  Supplier<Boolean> formulaEditingEnabledSupplier,
                   Function<ToolAvailabilityLevel, AIAssistant> assistantFactory) {
         Objects.requireNonNull(chatTokenUsageTracker, "chatTokenUsageTracker");
         this.chatLanguageModel = chatLanguageModel;
@@ -116,6 +132,9 @@ public class AIChatService {
         ToolExecutorFactory toolExecutorFactory = new ToolExecutorFactory(true, true, cancellationSupplier);
         this.toolExecutorRegistry = toolExecutorFactory.createRegistry(toolObjects);
         this.toolAvailabilitySupplier = Objects.requireNonNull(toolAvailabilitySupplier, "toolAvailabilitySupplier");
+        this.formulaEditingEnabledSupplier = Objects.requireNonNull(
+            formulaEditingEnabledSupplier,
+            "formulaEditingEnabledSupplier");
         this.assistantFactory = assistantFactory != null
             ? assistantFactory
             : new Function<ToolAvailabilityLevel, AIAssistant>() {
@@ -221,6 +240,14 @@ public class AIChatService {
             ? ToolAvailabilityLevel.EDITING
             : toolAvailability;
         Set<String> toolNames = new LinkedHashSet<String>(normalizedAvailability.allowedToolNames());
+        boolean formulaEditingAllowed = FormulaEditingAccess.isFormulaEditingAllowed(
+            normalizedAvailability,
+            formulaEditingEnabledSupplier.get().booleanValue());
+        if (formulaEditingAllowed) {
+            toolNames.addAll(FormulaEditingAccess.FORMULA_TOOL_NAMES);
+        } else {
+            toolNames.removeAll(FormulaEditingAccess.FORMULA_TOOL_NAMES);
+        }
         if (aiCodeToolSet != null) {
             toolNames.addAll(aiCodeToolSet.authorizedToolNames());
         }

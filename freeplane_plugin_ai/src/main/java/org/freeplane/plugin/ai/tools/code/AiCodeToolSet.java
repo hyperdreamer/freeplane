@@ -71,7 +71,7 @@ public class AiCodeToolSet {
         }
     }
 
-    @Tool("Replace the full current code text for the requested host or codeId. For the attached editor this updates only the draft text. Attached formula editing is available only when the current tool availability exposes writeCode and compileCode.")
+    @Tool("Replace the full current code text for the requested host or codeId. For the attached editor this updates only the draft text. Attached formula editing is available only when the current tool availability exposes writeCode and compileCode and AI formula editing is enabled.")
     public WriteCodeResponse writeCode(WriteCodeRequest request) {
         try {
             assertAuthorized("writeCode", request == null ? null : request.getCodeId(), request == null ? null : request.getHost());
@@ -92,7 +92,7 @@ public class AiCodeToolSet {
         }
     }
 
-    @Tool("Compile the current code for the requested host or codeId without executing it. Attached formula compilation is available only when the current tool availability exposes writeCode and compileCode.")
+    @Tool("Compile the current code for the requested host or codeId without executing it. Attached formula compilation is available only when the current tool availability exposes writeCode and compileCode and AI formula editing is enabled.")
     public CompileCodeResponse compileCode(CompileCodeRequest request) {
         try {
             assertAuthorized("compileCode", request == null ? null : request.getCodeId(), request == null ? null : request.getHost());
@@ -156,7 +156,7 @@ public class AiCodeToolSet {
             boolean compileAuthorized = authorizedToolNames().contains("compileCode");
             String toolGuidance = writeAuthorized && compileAuthorized
                 ? "Use readCode, writeCode, and compileCode. "
-                : "Use readCode. Formula authoring is available only when the current tool availability exposes writeCode and compileCode. ";
+                : "Use readCode. Formula authoring is available only when the current tool availability exposes writeCode and compileCode and AI formula editing is enabled. ";
             return "An editor is attached to this chat. " + toolGuidance
                 + "When you do not know codeId yet, target host ATTACHED_EDITOR. The attached content is a formula. "
                 + "Keep it value-computing. Avoid state-changing Freeplane API calls and avoid obviously UI-driving calls. "

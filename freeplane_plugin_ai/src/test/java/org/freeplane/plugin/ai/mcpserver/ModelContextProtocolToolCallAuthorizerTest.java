@@ -22,8 +22,9 @@ public class ModelContextProtocolToolCallAuthorizerTest {
     public void codeToolsDelegateToAiCodeOperationAuthorizer() throws Exception {
         AiCodeOperationAuthorizer aiCodeOperationAuthorizer = mock(AiCodeOperationAuthorizer.class);
         GetApiDocumentationTool getApiDocumentationTool = mock(GetApiDocumentationTool.class);
-        ModelContextProtocolToolCallAuthorizer uut = new ModelContextProtocolToolCallAuthorizer(
-            availability(ToolAvailabilityLevel.SCRIPT_EXECUTION),
+        ModelContextProtocolToolCallAuthorizer uut = authorizer(
+            ToolAvailabilityLevel.SCRIPT_EXECUTION,
+            false,
             aiCodeOperationAuthorizer,
             getApiDocumentationTool);
 
@@ -34,8 +35,9 @@ public class ModelContextProtocolToolCallAuthorizerTest {
 
     @Test
     public void disabledAllowsApiDocumentation() {
-        ModelContextProtocolToolCallAuthorizer uut = new ModelContextProtocolToolCallAuthorizer(
-            availability(ToolAvailabilityLevel.DISABLED),
+        ModelContextProtocolToolCallAuthorizer uut = authorizer(
+            ToolAvailabilityLevel.DISABLED,
+            false,
             mock(AiCodeOperationAuthorizer.class),
             mock(GetApiDocumentationTool.class));
 
@@ -52,8 +54,9 @@ public class ModelContextProtocolToolCallAuthorizerTest {
             "packages",
             "groups",
             null));
-        ModelContextProtocolToolCallAuthorizer uut = new ModelContextProtocolToolCallAuthorizer(
-            availability(ToolAvailabilityLevel.DISABLED),
+        ModelContextProtocolToolCallAuthorizer uut = authorizer(
+            ToolAvailabilityLevel.DISABLED,
+            false,
             mock(AiCodeOperationAuthorizer.class),
             getApiDocumentationTool);
 
@@ -71,8 +74,9 @@ public class ModelContextProtocolToolCallAuthorizerTest {
 
     @Test
     public void readingAllowsReadingToolsWithoutApiMapRestriction() throws Exception {
-        ModelContextProtocolToolCallAuthorizer uut = new ModelContextProtocolToolCallAuthorizer(
-            availability(ToolAvailabilityLevel.READING),
+        ModelContextProtocolToolCallAuthorizer uut = authorizer(
+            ToolAvailabilityLevel.READING,
+            false,
             mock(AiCodeOperationAuthorizer.class),
             mock(GetApiDocumentationTool.class));
 
@@ -84,14 +88,51 @@ public class ModelContextProtocolToolCallAuthorizerTest {
 
     @Test
     public void disabledRejectsEditingTool() {
-        ModelContextProtocolToolCallAuthorizer uut = new ModelContextProtocolToolCallAuthorizer(
-            availability(ToolAvailabilityLevel.DISABLED),
+        ModelContextProtocolToolCallAuthorizer uut = authorizer(
+            ToolAvailabilityLevel.DISABLED,
+            false,
             mock(AiCodeOperationAuthorizer.class),
             mock(GetApiDocumentationTool.class));
 
         assertThatThrownBy(() -> uut.assertAuthorized("createNodes", null))
             .isInstanceOf(IllegalStateException.class)
             .hasMessage("The requested tool is not available at the current availability level.");
+    }
+
+    @Test
+    public void formulaToolsRequireFormulaEditingPermission() {
+        ModelContextProtocolToolCallAuthorizer uut = authorizer(
+            ToolAvailabilityLevel.EDITING,
+            false,
+            mock(AiCodeOperationAuthorizer.class),
+            mock(GetApiDocumentationTool.class));
+
+        assertThatThrownBy(() -> uut.assertAuthorized("previewFormulaUpdates", objectMapper.createObjectNode()))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("Formula authoring is not available at the current availability level or formula-editing permission.");
+    }
+
+    @Test
+    public void formulaToolsAreAllowedAtEditingWhenFormulaEditingIsEnabled() {
+        ModelContextProtocolToolCallAuthorizer uut = authorizer(
+            ToolAvailabilityLevel.EDITING,
+            true,
+            mock(AiCodeOperationAuthorizer.class),
+            mock(GetApiDocumentationTool.class));
+
+        assertThatCode(() -> uut.assertAuthorized("previewFormulaUpdates", objectMapper.createObjectNode()))
+            .doesNotThrowAnyException();
+    }
+
+    private ModelContextProtocolToolCallAuthorizer authorizer(ToolAvailabilityLevel toolAvailability,
+                                                              boolean formulaEditingEnabled,
+                                                              AiCodeOperationAuthorizer aiCodeOperationAuthorizer,
+                                                              GetApiDocumentationTool getApiDocumentationTool) {
+        return new ModelContextProtocolToolCallAuthorizer(
+            availability(toolAvailability),
+            () -> Boolean.valueOf(formulaEditingEnabled),
+            aiCodeOperationAuthorizer,
+            getApiDocumentationTool);
     }
 
     private Supplier<ToolAvailabilityLevel> availability(ToolAvailabilityLevel toolAvailability) {

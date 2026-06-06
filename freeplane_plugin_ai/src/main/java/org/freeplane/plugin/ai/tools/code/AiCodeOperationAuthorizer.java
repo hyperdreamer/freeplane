@@ -10,6 +10,7 @@ import org.freeplane.features.ai.code.ReadCodeRequest;
 import org.freeplane.features.ai.code.ReadCodeResponse;
 import org.freeplane.features.ai.code.ScriptHost;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
+import org.freeplane.plugin.ai.tools.formula.FormulaEditingAccess;
 import org.freeplane.plugin.ai.tools.utilities.ToolCaller;
 
 public class AiCodeOperationAuthorizer {
@@ -21,15 +22,18 @@ public class AiCodeOperationAuthorizer {
     private final ToolCaller toolCaller;
     private final Supplier<ToolAvailabilityLevel> globalAvailabilitySupplier;
     private final Supplier<ToolAvailabilityLevel> sessionOverrideSupplier;
+    private final Supplier<Boolean> formulaEditingEnabledSupplier;
     private final AiCodeHostService codeHostService;
 
     public AiCodeOperationAuthorizer(ToolCaller toolCaller,
                                      Supplier<ToolAvailabilityLevel> globalAvailabilitySupplier,
                                      Supplier<ToolAvailabilityLevel> sessionOverrideSupplier,
+                                     Supplier<Boolean> formulaEditingEnabledSupplier,
                                      AiCodeHostService codeHostService) {
         this.toolCaller = toolCaller == null ? ToolCaller.CHAT : toolCaller;
         this.globalAvailabilitySupplier = globalAvailabilitySupplier;
         this.sessionOverrideSupplier = sessionOverrideSupplier;
+        this.formulaEditingEnabledSupplier = formulaEditingEnabledSupplier;
         this.codeHostService = codeHostService;
     }
 
@@ -119,7 +123,9 @@ public class AiCodeOperationAuthorizer {
             return false;
         }
         if (FORMULA_CONTENT_TYPE.equals(state.getContentType())) {
-            return currentToolAvailability().includesScriptExecution();
+            return FormulaEditingAccess.isFormulaEditingAllowed(
+                currentToolAvailability(),
+                formulaEditingEnabledSupplier != null && formulaEditingEnabledSupplier.get().booleanValue());
         }
         return hasSessionOverride() || globalAvailability().includesEditing();
     }

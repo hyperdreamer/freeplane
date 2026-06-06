@@ -38,6 +38,7 @@ public class FormulaUpdateTool {
     private final AiCodeHostService codeHostService;
     private final FormulaUpdatePreviewStore previewStore;
     private final Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier;
+    private final Supplier<Boolean> formulaEditingEnabledSupplier;
     private final AiEditsMarker aiEditsMarker;
 
     public FormulaUpdateTool(AvailableMaps availableMaps,
@@ -47,7 +48,8 @@ public class FormulaUpdateTool {
                              AttributesContentEditor attributesContentEditor,
                              AiCodeHostService codeHostService,
                              FormulaUpdatePreviewStore previewStore,
-                             Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier) {
+                             Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier,
+                             Supplier<Boolean> formulaEditingEnabledSupplier) {
         this.availableMaps = Objects.requireNonNull(availableMaps, "availableMaps");
         this.mapAccessListener = mapAccessListener;
         this.nodeContentItemReader = Objects.requireNonNull(nodeContentItemReader, "nodeContentItemReader");
@@ -58,11 +60,14 @@ public class FormulaUpdateTool {
         this.toolAvailabilitySupplier = toolAvailabilitySupplier == null
             ? () -> ToolAvailabilityLevel.EDITING
             : toolAvailabilitySupplier;
+        this.formulaEditingEnabledSupplier = formulaEditingEnabledSupplier == null
+            ? () -> Boolean.FALSE
+            : formulaEditingEnabledSupplier;
         this.aiEditsMarker = new AiEditsMarker();
     }
 
     public FormulaUpdatePreviewResponse previewFormulaUpdates(FormulaUpdatePreviewRequest request) {
-        assertScriptExecutionAvailable();
+        assertFormulaEditingAvailable();
         if (request == null) {
             throw new IllegalArgumentException("Missing request");
         }
@@ -128,7 +133,7 @@ public class FormulaUpdateTool {
     }
 
     public FormulaUpdateApplyResponse applyFormulaUpdates(FormulaUpdateApplyRequest request) {
-        assertScriptExecutionAvailable();
+        assertFormulaEditingAvailable();
         if (request == null) {
             throw new IllegalArgumentException("Missing request");
         }
@@ -377,9 +382,9 @@ public class FormulaUpdateTool {
         }
     }
 
-    private void assertScriptExecutionAvailable() {
-        if (!currentToolAvailability().includesScriptExecution()) {
-            throw new IllegalStateException("Formula authoring requires script execution availability.");
+    private void assertFormulaEditingAvailable() {
+        if (!currentToolAvailability().includesEditing() || !formulaEditingEnabledSupplier.get().booleanValue()) {
+            throw new IllegalStateException("Formula authoring requires editing availability and AI formula editing permission.");
         }
     }
 

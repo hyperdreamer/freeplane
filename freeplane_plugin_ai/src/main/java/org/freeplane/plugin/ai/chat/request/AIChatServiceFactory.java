@@ -11,6 +11,7 @@ import java.util.function.Supplier;
 import org.freeplane.plugin.ai.chat.memory.ChatTokenUsageTracker;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.tools.code.AiCodeToolSet;
+import org.freeplane.plugin.ai.tools.formula.FormulaEditingSettings;
 import org.freeplane.plugin.ai.model.AIChatModelFactory;
 import org.freeplane.plugin.ai.model.AIProviderConfiguration;
 import org.freeplane.plugin.ai.tools.AIToolSet;
@@ -78,7 +79,7 @@ public class AIChatServiceFactory {
         }
         return new AIChatService(chatLanguageModel, toolSet, effectiveToolObjects, aiCodeToolSet, chatMemory,
             chatTokenUsageTracker, toolCallSummaryHandler, cancellationSupplier, tokenUsageConsumer,
-            toolAvailabilitySupplier, null);
+            toolAvailabilitySupplier, () -> Boolean.valueOf(new FormulaEditingSettings().isEnabled()), null);
     }
 
     public static AIChatService createService(AIToolSet toolSet, ChatMemory chatMemory,

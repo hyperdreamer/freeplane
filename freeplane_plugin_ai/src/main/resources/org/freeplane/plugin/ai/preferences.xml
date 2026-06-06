@@ -11,6 +11,7 @@
             <choice value="READING" text="OptionPanel.ToolAvailabilityLevel.READING"/>
             <choice value="DISABLED" text="OptionPanel.ToolAvailabilityLevel.DISABLED"/>
         </radiobuttons>
+        <boolean name="ai_formula_editing_enabled"/>
         <radiobuttons name="ai_script_execution_policy">
             <choice value="SHOWN_USER_RUN" text="OptionPanel.AiScriptExecutionPolicy.SHOWN_USER_RUN"/>
             <choice value="SHOWN_AI_RUN" text="OptionPanel.AiScriptExecutionPolicy.SHOWN_AI_RUN"/>

@@ -1,94 +1,107 @@
 # Task: Allow formula authoring behind explicit AI formula-edit permission
 - **Task Identifier:** 2026-06-05-formula-authoring
-- **Scope:** Let AI update existing formulas, convert supported
-  existing fields between formula and non-formula states, and create
-  formulas on newly created nodes only through a dedicated
-  preview-then-apply update flow after those nodes exist in the map
-  when effective tool availability includes editing and explicit
-  formula-edit permission is enabled through
-  `ai_formula_editing_enabled`. Align attached-editor
-  formula-authoring guidance and authorization with the same policy,
-  and update the affected tool descriptions, parameter descriptions,
-  preferences, and enforcement logic so the contract is explicit and
-  consistent.
-- **Motivation:** Current formula handling is inconsistent. Some
-  editing paths reject formula content outright, some expose formula
-  state as non-editable, and some attribute-edit paths already allow
-  formula writes without any script-execution gate. The tool contract
-  therefore does not match a clear policy.
-- **Scenario:** An AI session operates with effective tool
-  availability that includes editing and with
-  `ai_formula_editing_enabled=true`. In that state, AI may author
-  formula content on existing nodes through the supported map-editing
-  tools, including converting supported existing fields from
-  non-formula to formula and back from formula to non-formula when the
-  edit contract targets that change explicitly. When AI needs formulas
-  on new nodes, it first creates the nodes without formulas, then uses
-  `previewFormulaUpdates(...)` followed by `applyFormulaUpdates(...)`
-  after those nodes exist in the map. Because formula dependencies can
-  refer to newly created or earlier updated nodes, formula updates are
-  previewed and applied in caller-specified order. Formula-targeting
-  previews compile and evaluate before the node is updated. If
-  validation fails, the preview is rejected, the original node content
-  stays unchanged, and diagnostics are returned so AI can repair and
-  retry instead of stopping after the first failure. The
-  AI-visible schema exposes formula state separately from base content
-  type, so callers can express changes to formula state without
-  pretending that formula is just another base content type. When
-  editing availability is absent or `ai_formula_editing_enabled=false`,
-  the same authoring attempts are rejected or exposed as non-editable
-  according to the tool contract.
+- **Scope:** Track formula authoring across two increments: a
+  baseline preview/apply architecture gated at
+  `SCRIPT_EXECUTION`, then a follow-up that replaces that
+  gate with explicit `ai_formula_editing_enabled` permission
+  layered on editing availability. Across both increments,
+  AI updates existing formulas, converts supported existing
+  fields between formula and non-formula states, and creates
+  formulas on newly created nodes only through dedicated
+  preview/apply after those nodes exist in the map. Align
+  attached-editor guidance, authorization, tool
+  descriptions, preferences, and enforcement with the
+  governing formula-authoring policy of each increment.
+- **Motivation:** Current formula handling is inconsistent.
+  Some editing paths reject formula content outright, some
+  expose formula state as non-editable, and some
+  attribute-edit paths already allow formula writes without
+  a clear governing policy. This task aligns those surfaces
+  under one explicit formula-authoring contract and its
+  follow-up permission split.
+- **Scenario:** Across both subtasks, AI authors formulas on
+  existing nodes only through ordered
+  `previewFormulaUpdates(...)` / `applyFormulaUpdates(...)`
+  after the nodes exist in the map; create-path formulas are
+  rejected. Preview compiles and evaluates before
+  persistence, failures keep original content unchanged and
+  return diagnostics, and the AI-visible schema models
+  formula state separately from base content type. Subtask 1
+  establishes the baseline script-execution-gated path and
+  code-host boundary. Subtask 2 replaces that gate with
+  explicit formula-edit permission layered on editing
+  availability and aligns chat, MCP, and attached-editor
+  exposure.
 - **Constraints:**
-  - Formula authoring in the surfaces covered by this task must remain
-    unavailable unless effective tool availability includes editing and
-    `ai_formula_editing_enabled=true`.
-  - `ai_script_execution_policy` must continue to govern only
-    AI-owned script execution flow, not formula authoring.
-  - The dedicated formula-update flow must support formula <->
-    non-formula conversion in both directions for the supported
-    textual and attribute fields.
-  - The affected AI tool contracts must stop modeling formula as a
-    standalone base content type.
-  - Direct formula creation is not allowed in `createNodes(...)` or
-    `createSummary(...)` under this task.
-  - To create a formula on a new node, AI must first create the node,
-    then apply the formula through the update flow after the node
-    exists in the map.
-  - Formula-targeting updates must preserve caller-specified order
-    because dependency order can change evaluation results.
-  - Formula-targeting previews must compile and evaluate before map
-    content is updated.
-  - If formula validation fails, the preview must be rejected and the
-    original content must remain unchanged.
-  - Formula validation failures must return diagnostics that support AI
-    repair and retry.
-  - Separate per-formula test creation is not required in this task.
-  - Plausibility review is required after successful temporary formula
-    evaluation and before persistence.
-  - This task must not add formula execution through the map-editing
-    tools as a persisted side effect of failed validation.
-  - Tool and schema changes must stay consistent across chat and MCP
-    exposure for the affected tool surface.
-  - Remove inconsistent loopholes instead of preserving parallel old
-    and new behavior.
-- **Briefing:** Relevant code is concentrated in
-  `freeplane_plugin_ai`. Current map-editing entry points are
-  `AIToolSet.edit(...)`, `AIToolSet.createNodes(...)`,
+  - Shared constraints across both subtasks:
+    - The dedicated formula-update flow must support formula
+      <-> non-formula conversion in both directions for the
+      supported textual and attribute fields.
+    - The affected AI tool contracts must stop modeling
+      formula as a standalone base content type.
+    - Direct formula creation is not allowed in
+      `createNodes(...)` or `createSummary(...)`.
+    - To create a formula on a new node, AI must first
+      create the node, then apply the formula through the
+      update flow after the node exists in the map.
+    - Formula-targeting updates must preserve caller-
+      specified order because dependency order can change
+      evaluation results.
+    - Formula-targeting previews must compile and evaluate
+      before map content is updated.
+    - If formula validation fails, the preview must be
+      rejected and the original content must remain
+      unchanged.
+    - Formula validation failures must return diagnostics
+      that support AI repair and retry.
+    - Separate per-formula test creation is not required in
+      this task.
+    - Plausibility review is required after successful
+      temporary formula evaluation and before persistence.
+    - This task must not add formula execution through the
+      map-editing tools as a persisted side effect of failed
+      validation.
+    - Tool and schema changes must stay consistent across
+      chat and MCP exposure for the affected tool surface.
+    - Remove inconsistent loopholes instead of preserving
+      parallel old and new behavior.
+  - Gate-specific constraints stay with the relevant
+    subtask.
+- **Briefing:** Shared code is concentrated in
+  `freeplane_plugin_ai`, with baseline formula evaluation
+  crossing into `freeplane_plugin_script` through
+  `AiCodeHostService`. Common map-editing entry points
+  remain `AIToolSet.edit(...)`, `AIToolSet.createNodes(...)`,
   `AIToolSet.createSummary(...)`, and
-  `AIToolSet.fetchNodesForEditing(...)`. Formula editability metadata
-  comes from `EditableContentReader`. Textual writes go through
-  `NodeContentEditor`, `TextualContentEditor`, and
-  `NodeContentApplier`. `NodeCreationHierarchyBuilder` and
-  `NodeContentApplier` currently apply create-path content before the
-  new nodes are fully available in final map context, which conflicts
-  with the new requirement that formula writes compile, evaluate, and
-  pass plausibility review on an existing node before persistence. The
-  current AI schema also exposes `ContentType.FORMULA`, which now
-  conflicts with core Freeplane semantics and must be redesigned as
-  part of this task. Availability is controlled through
-  `ToolAvailabilityLevel`, `AIChatService`,
-  `AiCodeOperationAuthorizer`, and the new
-  `ai_formula_editing_enabled` preference.
+  `AIToolSet.fetchNodesForEditing(...)`. Gate-specific
+  current-state findings and design deltas live in the
+  subtasks.
+
+## Subtask: Baseline formula preview/apply flow and code-host boundary at script-execution level
+- **Status:** review
+- **Scope:** Implement the baseline increment of the
+  task-level formula-authoring contract using
+  `SCRIPT_EXECUTION` as the formula-authoring gate for map
+  formula preview/apply and attached-editor formula
+  `writeCode` / `compileCode` authorization.
+- **Motivation:** Establish the preview/apply architecture,
+  formula DTOs and tooling, code-host evaluation boundary,
+  and baseline attached-editor alignment before the explicit
+  formula-edit-permission follow-up in Subtask 2.
+- **Scenario:** Within the task-level workflow, this
+  increment allows formula authoring only at
+  `SCRIPT_EXECUTION`; lower availability states expose
+  formula-backed fields as non-editable or reject
+  formula-targeting requests.
+- **Constraints:**
+  - All task-level shared constraints apply.
+  - Formula authoring in this increment remains unavailable
+    below effective `SCRIPT_EXECUTION`.
+- **Briefing:** This increment owns the initial
+  `FormulaUpdateTool` flow,
+  `AiCodeHostService.evaluateFormula(...)`, OSGi boundary
+  reuse for formula preview, and the baseline attached-
+  editor guidance and authorization changes.
 - **Research:**
   - `fetchNodesForEditing` exposes formula text as
     `ContentType.FORMULA`, but `EditableContentReader` currently marks
@@ -126,11 +139,6 @@
   - `AiCodeOperationAuthorizer` currently authorizes attached-editor
     `writeCode` and `compileCode` at the editing level regardless of
     whether the attached content is a formula.
-  - Existing AI preferences already separate `ai_tool_availability`
-    from `ai_script_execution_policy`. The current
-    `ai_script_execution_policy` label and tooltip describe only how
-    AI-owned scripts are shown and whether AI may run them directly,
-    while the default tool availability is `EDITING`.
   - `AiCodeToolSet.systemMessageForChat(...)` currently tells the model
     to keep attached formulas read-only, which conflicts with the new
     formula-authoring policy.
@@ -228,18 +236,7 @@
   - Attached-editor code tools should keep their existing host-kind
     content-type strings because those identify editor host type, not
     map base content, but their formula write/compile authorization and
-    guidance must follow the same explicit formula-edit permission.
-  - Formula authoring and formula preview evaluation should be governed
-    by one explicit boolean preference because editing a formula and
-    preview-evaluating it both exercise the same formula-permission
-    boundary.
-  - `ai_script_execution_policy` should not govern formula authoring
-    because its current UI wording is about AI-owned script display and
-    direct script execution, not formula editing.
-  - Formula authoring should require ordinary editing availability plus
-    explicit formula-edit permission, not `SCRIPT_EXECUTION`, because
-    formula authoring is an editing capability with a separate
-    permission boundary from AI-owned script execution.
+    guidance must follow the same script-execution policy.
   - Formula preview for map updates should reuse the existing
     `AiCodeHostService` OSGi service boundary instead of adding a
     direct `freeplane_plugin_ai` -> `freeplane_plugin_script`
@@ -254,10 +251,8 @@
     the script-plugin service already resolved through OSGi.
 - **Design:**
   - Add one explicit formula-authoring policy for the current
-    map-editing tool surface based on effective editing availability
-    plus explicit `ai_formula_editing_enabled` permission.
-  - Add boolean AI preference `ai_formula_editing_enabled` labeled
-    `AI may edit formulas`, default `false`.
+    map-editing tool surface based on effective
+    `ToolAvailabilityLevel.SCRIPT_EXECUTION`.
   - Replace formula-targeting use of `edit(...)` with a dedicated
     two-tool flow:
     - `previewFormulaUpdates(FormulaUpdatePreviewRequest request)`
@@ -290,9 +285,9 @@
     `freeplane_plugin_script`; do not add a direct implementation
     dependency between those plugins for formula validation.
   - Extend the same policy to attached-editor formulas by requiring
-    editing availability plus `ai_formula_editing_enabled=true` for
-    attached-editor formula `writeCode` and `compileCode`, while
-    leaving attached script authorization rules unchanged.
+    `SCRIPT_EXECUTION` for attached-editor formula `writeCode` and
+    `compileCode`, while leaving attached script authorization rules
+    unchanged.
   - Update tool descriptions and parameter descriptions so the
     supported formula behavior, ordering, preview/apply flow, and
     gating are stated directly instead of being implicit in code.
@@ -347,15 +342,11 @@
       crashing when a target node no longer exists or an attribute
       `REPLACE` target can no longer be resolved at apply time.
   - Validation and write rules:
-    - when editing availability is absent or
-      `ai_formula_editing_enabled=false`, formula-backed editable text
-      and formula-backed editable attributes report
-      `isEditable=false`, and formula-targeting preview or apply
-      requests fail validation.
-    - when editing availability is present and
-      `ai_formula_editing_enabled=true`, formula-backed editable text
-      and formula-backed editable attributes report
-      `isEditable=true`.
+    - below `SCRIPT_EXECUTION`, formula-backed editable text and
+      formula-backed editable attributes report `isEditable=false`, and
+      formula-targeting preview or apply requests fail validation.
+    - at `SCRIPT_EXECUTION`, formula-backed editable text and
+      formula-backed editable attributes report `isEditable=true`.
     - when `targetIsFormula=true`, the written raw value must satisfy
       `TextController.isFormula(...)`.
     - when `targetIsFormula=false`, the written raw value must not
@@ -394,19 +385,14 @@
     - `AiCodeOperationAuthorizer` becomes content-type-aware for the
       attached editor host. When the attached editor content type is
       `text/x-freeplane-formula-groovy`, `writeCode` and `compileCode`
-      require editing availability plus
-      `ai_formula_editing_enabled=true`.
+      require `SCRIPT_EXECUTION`.
     - `AiCodeToolSet.systemMessageForChat(...)` for attached formulas
       no longer says the formula is read-only. It instead states that
       attached formula authoring is available only when the current tool
-      availability exposes `writeCode` and `compileCode` and formula
-      editing permission is enabled, while keeping the existing
-      value-computing and no-obvious-UI-driving guidance.
-    - `preferences.xml`, `defaults.properties`, and
-      `Resources_en.properties` must expose the new
-      `ai_formula_editing_enabled` option clearly and must keep
-      `ai_script_execution_policy` described as AI-owned script
-      execution only.
+      availability exposes `writeCode` and `compileCode`, while keeping
+      the existing value-computing and no-obvious-UI-driving guidance.
+    - `Resources_en.properties` tool-availability tooltips must mention
+      formula authoring as part of script-execution-level capability.
 
   ```plantuml
   @startuml
@@ -661,9 +647,9 @@
   end
 
   LLM -> CodeAuth: attached formula writeCode / compileCode
-  alt editing unavailable or ai_formula_editing_enabled=false
+  alt attached formula and below SCRIPT_EXECUTION
     CodeAuth --> LLM: reject
-  else editing available and ai_formula_editing_enabled=true
+  else attached formula at SCRIPT_EXECUTION
     CodeAuth --> LLM: allow
   end
   @enduml
@@ -679,10 +665,8 @@
         `isFormula`,
       - verify editable attributes report `isFormula`,
       - verify formula-backed text and attributes report
-        `isEditable=false` when editing availability is absent or
-        `ai_formula_editing_enabled=false`, and `true` only when
-        editing availability is present and
-        `ai_formula_editing_enabled=true`.
+        `isEditable=false` below `SCRIPT_EXECUTION` and `true` at
+        `SCRIPT_EXECUTION`.
     - formula evaluation service tests
       - verify `AiCodeHostService.evaluateFormula(...)` accepts explicit
         `mapIdentifier`, `nodeIdentifier`, and `formulaText` and
@@ -692,16 +676,14 @@
       - verify `FormulaUpdateTool.previewFormulaUpdates(...)` uses the
         code-host `evaluateFormula(...)` path,
       - verify `TextualContentEditor` formula helpers reject
-        formula-targeting requests when editing availability is absent
-        or `ai_formula_editing_enabled=false`,
+        formula-targeting requests below `SCRIPT_EXECUTION`,
       - verify non-formula -> formula and formula -> non-formula helper
         validation follows `targetIsFormula`,
       - verify existing base-content compatibility rules still govern
         non-formula content migration,
       - verify attribute formula helpers follow the same gate.
     - `previewFormulaUpdates` tests
-      - verify preview rejects requests when editing availability is
-        absent or `ai_formula_editing_enabled=false`,
+      - verify preview rejects requests below `SCRIPT_EXECUTION`,
       - verify preview expands targets in request order and validates
         them sequentially,
       - verify later preview items can depend on earlier validated
@@ -734,26 +716,21 @@
         after node creation.
     - code-tool authorization tests
       - verify attached formula `writeCode` and `compileCode` are
-        rejected when editing availability is absent or
-        `ai_formula_editing_enabled=false`,
+        rejected below `SCRIPT_EXECUTION`,
       - verify attached formula `readCode` remains readable at the
         lower availability levels that already permit attached-editor
         reading,
-      - verify attached script authorization stays unchanged,
-      - verify `ai_script_execution_policy` changes do not alter
-        formula authoring gates.
+      - verify attached script authorization stays unchanged.
     - schema and description tests
       - verify `ContentType.FORMULA` is removed from the map-editing AI
         schema,
       - verify `previewFormulaUpdates(...)` and `applyFormulaUpdates(...)`
         expose the exact request and response fields from Design,
       - verify tool and parameter descriptions expose base content,
-        formula state, ordered preview/apply semantics, create-path
-        rejection, and the separate formula-edit permission clearly,
+        formula state, ordered preview/apply semantics, and create-path
+        rejection clearly,
       - verify attached-formula system guidance no longer says formulas
-        are read-only,
-      - verify preferences/defaults/labels expose `AI may edit
-        formulas` separately from AI-owned script execution policy.
+        are read-only.
   - Manual tests: N/A
 - **Implementation notes:**
   - **Tradeoffs:**
@@ -767,3 +744,176 @@
       test seams added during that investigation were removed again after
       retest on `21.0.8-zulu`; the only retained test-side mitigation was
       using a real `JPanel` owner instead of mocking `java.awt.Component`.
+
+## Subtask: Explicit AI formula-edit permission and capability exposure
+- **Status:** review
+- **Scope:** Replace the script-execution-only formula-authoring gate
+  from Subtask 1 with explicit `ai_formula_editing_enabled`
+  permission layered on ordinary editing availability, and align
+  attached-editor guidance, authorization, preferences, and related
+  verification with that policy.
+- **Motivation:** The baseline increment in Subtask 1 conflates
+  formula authoring with script-execution-level availability. This
+  follow-up separates formula editing from AI-owned script execution
+  policy without changing the preview/apply architecture or OSGi
+  service boundary.
+- **Scenario:** Within the task-level workflow, this
+  follow-up replaces the baseline `SCRIPT_EXECUTION`
+  formula-authoring gate with editing availability plus
+  `ai_formula_editing_enabled=true`, while leaving
+  `ai_script_execution_policy` scoped to AI-owned script
+  execution.
+- **Constraints:**
+  - All task-level shared constraints apply.
+  - Formula authoring in the surfaces covered by this subtask must
+    remain unavailable unless effective tool availability includes
+    editing and `ai_formula_editing_enabled=true`.
+  - `ai_script_execution_policy` must continue to govern only
+    AI-owned script execution flow, not formula authoring.
+- **Briefing:** This subtask preserves the preview/apply flow,
+  code-host boundary, and formula-permission evaluation model from
+  Subtask 1. Availability changes are controlled through
+  `ToolAvailabilityLevel`, `AIChatService`,
+  `AiCodeOperationAuthorizer`, and the new
+  `ai_formula_editing_enabled` preference.
+- **Research:**
+  - `AiCodeOperationAuthorizer` currently authorizes attached-editor
+    `writeCode` and `compileCode` at the editing level regardless of
+    whether the attached content is a formula.
+  - Existing AI preferences already separate `ai_tool_availability`
+    from `ai_script_execution_policy`. The current
+    `ai_script_execution_policy` label and tooltip describe only how
+    AI-owned scripts are shown and whether AI may run them directly,
+    while the default tool availability is `EDITING`.
+  - MCP `tools/list` and MCP tool-metadata resource responses currently
+    expose the static full tool registry, while
+    `ModelContextProtocolToolCallAuthorizer` enforces availability only
+    at MCP `tools/call` time.
+- **Analysis:**
+  - Attached-editor code tools should keep their existing host-kind
+    content-type strings because those identify editor host type, not
+    map base content, but their formula write/compile authorization and
+    guidance must follow the same explicit formula-edit permission.
+  - Formula authoring and formula preview evaluation should be governed
+    by one explicit boolean preference because editing a formula and
+    preview-evaluating it both exercise the same formula-permission
+    boundary.
+  - `ai_script_execution_policy` should not govern formula authoring
+    because its current UI wording is about AI-owned script display and
+    direct script execution, not formula editing.
+  - Formula authoring should require ordinary editing availability plus
+    explicit formula-edit permission, not `SCRIPT_EXECUTION`, because
+    formula authoring is an editing capability with a separate
+    permission boundary from AI-owned script execution.
+  - MCP clients should not need to infer formula-edit permission only
+    from MCP call-time rejection, because chat clients already learn
+    effective capability from exposed tools, editability metadata, and
+    guidance.
+- **Design:**
+  - Add one explicit formula-authoring policy for the current
+    map-editing tool surface based on effective editing availability
+    plus explicit `ai_formula_editing_enabled` permission.
+  - Add boolean AI preference `ai_formula_editing_enabled` labeled
+    `AI may edit formulas`, default `false`.
+  - Extend the same policy to attached-editor formulas by requiring
+    editing availability plus `ai_formula_editing_enabled=true` for
+    attached-editor formula `writeCode` and `compileCode`, while
+    leaving attached script authorization rules unchanged.
+  - For MCP clients, keep MCP call-time authorization as enforcement
+    but add explicit runtime capability signaling for formula
+    authoring. MCP clients should learn formula-edit permission from an
+    MCP-visible capability query plus normal editability metadata,
+    rather than from static `tools/list` output plus failed tool calls
+    alone.
+  - Validation and write rules:
+    - when editing availability is absent or
+      `ai_formula_editing_enabled=false`, formula-backed editable text
+      and formula-backed editable attributes report
+      `isEditable=false`, and formula-targeting preview or apply
+      requests fail validation.
+    - when editing availability is present and
+      `ai_formula_editing_enabled=true`, formula-backed editable text
+      and formula-backed editable attributes report
+      `isEditable=true`.
+  - Attached-editor alignment:
+    - `AiCodeOperationAuthorizer` becomes content-type-aware for the
+      attached editor host. When the attached editor content type is
+      `text/x-freeplane-formula-groovy`, `writeCode` and `compileCode`
+      require editing availability plus
+      `ai_formula_editing_enabled=true`.
+    - `AiCodeToolSet.systemMessageForChat(...)` for attached formulas
+      no longer says the formula is read-only. It instead states that
+      attached formula authoring is available only when the current tool
+      availability exposes `writeCode` and `compileCode` and formula
+      editing permission is enabled, while keeping the existing
+      value-computing and no-obvious-UI-driving guidance.
+    - `preferences.xml`, `defaults.properties`, and
+      `Resources_en.properties` must expose the new
+      `ai_formula_editing_enabled` option clearly and must keep
+      `ai_script_execution_policy` described as AI-owned script
+      execution only.
+
+  ```plantuml
+  @startuml
+  actor "LLM" as LLM
+  participant "AiCodeOperationAuthorizer" as CodeAuth
+
+  LLM -> CodeAuth: attached formula writeCode / compileCode
+  alt editing unavailable or ai_formula_editing_enabled=false
+    CodeAuth --> LLM: reject
+  else editing available and ai_formula_editing_enabled=true
+    CodeAuth --> LLM: allow
+  end
+  @enduml
+  ```
+- **Test specification:**
+  - Automated tests:
+    - `EditableContentReaderTest`
+      - verify formula-backed text and attributes report
+        `isEditable=false` when editing availability is absent or
+        `ai_formula_editing_enabled=false`, and `true` only when
+        editing availability is present and
+        `ai_formula_editing_enabled=true`.
+    - formula evaluation service tests
+      - verify `TextualContentEditor` formula helpers reject
+        formula-targeting requests when editing availability is absent
+        or `ai_formula_editing_enabled=false`,
+      - verify attribute formula helpers follow the same gate.
+    - `previewFormulaUpdates` tests
+      - verify preview rejects requests when editing availability is
+        absent or `ai_formula_editing_enabled=false`,
+    - code-tool authorization tests
+      - verify attached formula `writeCode` and `compileCode` are
+        rejected when editing availability is absent or
+        `ai_formula_editing_enabled=false`,
+      - verify attached formula `readCode` remains readable at the
+        lower availability levels that already permit attached-editor
+        reading,
+      - verify attached script authorization stays unchanged,
+      - verify `ai_script_execution_policy` changes do not alter
+        formula authoring gates.
+    - MCP exposure tests
+      - verify MCP capability signaling reports formula authoring
+        disabled when editing availability is absent or
+        `ai_formula_editing_enabled=false`, and enabled only when
+        editing availability is present and
+        `ai_formula_editing_enabled=true`,
+      - verify MCP call-time authorization still rejects
+        formula-authoring tool calls when formula authoring is
+        disabled.
+    - schema and description tests
+      - verify tool and parameter descriptions expose base content,
+        formula state, ordered preview/apply semantics, create-path
+        rejection, and the separate formula-edit permission clearly,
+      - verify attached-formula system guidance no longer says formulas
+        are read-only,
+      - verify preferences/defaults/labels expose `AI may edit
+        formulas` separately from AI-owned script execution policy.
+  - Manual tests: N/A
+- **Implementation notes:**
+  - **Tradeoffs:**
+    - MCP runtime capability signaling is exposed through dynamic
+      `tools/list` and `mcp://tools` descriptions instead of a new MCP
+      tool or resource identifier so Subtask 2 stays within the
+      approved capability-signaling direction without introducing a new
+      externally meaningful query name during implementation.

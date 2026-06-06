@@ -82,16 +82,14 @@ public enum ToolAvailabilityLevel {
             "createNodes",
             "moveNodes",
             "createSummary",
-            "moveNodesIntoSummary"));
+            "moveNodesIntoSummary",
+            "previewFormulaUpdates",
+            "applyFormulaUpdates"));
         return Collections.unmodifiableSet(toolNames);
     }
 
     private static Set<String> scriptExecutionToolNames() {
-        LinkedHashSet<String> toolNames = new LinkedHashSet<String>(editingToolNames());
-        toolNames.addAll(Arrays.asList(
-            "previewFormulaUpdates",
-            "applyFormulaUpdates"));
-        return Collections.unmodifiableSet(toolNames);
+        return editingToolNames();
     }
 
     private static Set<String> unmodifiableLinkedHashSet(String... values) {

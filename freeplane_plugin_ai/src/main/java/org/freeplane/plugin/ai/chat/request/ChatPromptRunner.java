@@ -19,6 +19,7 @@ import org.freeplane.plugin.ai.chat.memory.ChatUsageTotals;
 import org.freeplane.plugin.ai.chat.session.LiveChatSessionId;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.tools.code.AiCodeOperationAuthorizer;
+import org.freeplane.plugin.ai.tools.formula.FormulaEditingSettings;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.freeplane.plugin.ai.prompt.AiPromptProgressDialogFactory;
 import org.freeplane.plugin.ai.prompt.AiPromptRequestComposer;
@@ -245,6 +246,7 @@ public class ChatPromptRunner {
                 org.freeplane.plugin.ai.tools.utilities.ToolCaller.CHAT,
                 toolAvailability != null ? () -> toolAvailability : sharedToolAvailabilitySupplier,
                 shownSessionToolAvailabilityOverrideSupplier,
+                () -> Boolean.valueOf(new FormulaEditingSettings().isEnabled()),
                 codeHostService));
         List<Object> toolObjects = toolSetBuilder.buildToolObjects();
         return AIChatServiceFactory.createService(

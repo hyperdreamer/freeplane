@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Supplier;
+import org.freeplane.plugin.ai.tools.formula.FormulaEditingSettings;
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.features.attribute.Attribute;
 import org.freeplane.features.attribute.NodeAttributeTableModel;
@@ -21,22 +22,38 @@ public class EditableContentReader {
     private final IconDescriptionResolver iconDescriptionResolver;
     private final ContentTypeConverter contentTypeConverter;
     private final Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier;
+    private final Supplier<Boolean> formulaEditingEnabledSupplier;
 
     public EditableContentReader(TextController textController, IconDescriptionResolver iconDescriptionResolver,
                                  ContentTypeConverter contentTypeConverter) {
         this(textController, iconDescriptionResolver, contentTypeConverter,
-            () -> ToolAvailabilityLevel.EDITING);
+            () -> ToolAvailabilityLevel.EDITING,
+            () -> Boolean.valueOf(new FormulaEditingSettings().isEnabled()));
     }
 
     public EditableContentReader(TextController textController, IconDescriptionResolver iconDescriptionResolver,
                                  ContentTypeConverter contentTypeConverter,
                                  Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier) {
+        this(textController,
+            iconDescriptionResolver,
+            contentTypeConverter,
+            toolAvailabilitySupplier,
+            () -> Boolean.valueOf(new FormulaEditingSettings().isEnabled()));
+    }
+
+    public EditableContentReader(TextController textController, IconDescriptionResolver iconDescriptionResolver,
+                                 ContentTypeConverter contentTypeConverter,
+                                 Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier,
+                                 Supplier<Boolean> formulaEditingEnabledSupplier) {
         this.textController = Objects.requireNonNull(textController, "textController");
         this.iconDescriptionResolver = Objects.requireNonNull(iconDescriptionResolver, "iconDescriptionResolver");
         this.contentTypeConverter = Objects.requireNonNull(contentTypeConverter, "contentTypeConverter");
         this.toolAvailabilitySupplier = toolAvailabilitySupplier == null
             ? () -> ToolAvailabilityLevel.EDITING
             : toolAvailabilitySupplier;
+        this.formulaEditingEnabledSupplier = formulaEditingEnabledSupplier == null
+            ? () -> Boolean.FALSE
+            : formulaEditingEnabledSupplier;
     }
 
     public EditableContent readEditableContent(NodeModel nodeModel, EditableContentRequest request) {
@@ -151,7 +168,11 @@ public class EditableContentReader {
     }
 
     private boolean isEditable(boolean formulaDetected) {
-        return !formulaDetected || currentToolAvailability().includesScriptExecution();
+        return !formulaDetected || (currentToolAvailability().includesEditing() && isFormulaEditingEnabled());
+    }
+
+    private boolean isFormulaEditingEnabled() {
+        return formulaEditingEnabledSupplier.get().booleanValue();
     }
 
     private ToolAvailabilityLevel currentToolAvailability() {

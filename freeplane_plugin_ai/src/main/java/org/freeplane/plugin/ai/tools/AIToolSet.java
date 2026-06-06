@@ -126,6 +126,7 @@ public class AIToolSet {
               AiCodeHostService codeHostService,
               GetApiDocumentationTool getApiDocumentationTool,
               java.util.function.Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier,
+              java.util.function.Supplier<Boolean> formulaEditingEnabledSupplier,
               ToolCaller toolCaller) {
         Objects.requireNonNull(mapController, "mapController");
         Objects.requireNonNull(availableMaps, "availableMaps");
@@ -168,7 +169,8 @@ public class AIToolSet {
             attributesContentEditor,
             Objects.requireNonNull(codeHostService, "codeHostService"),
             FormulaUpdatePreviewStore.shared(),
-            toolAvailabilitySupplier);
+            toolAvailabilitySupplier,
+            formulaEditingEnabledSupplier);
         MessageBuilder messageBuilder = new MessageBuilder();
         ReadNodesWithDescendantsTool readNodesWithDescendantsTool = new ReadNodesWithDescendantsTool(
             availableMaps, mapAccessListener, nodeContentFactories.nodeContentItemReader, textController);
@@ -276,7 +278,7 @@ public class AIToolSet {
     }
 
     @Tool("Preview ordered formula updates without persisting them. "
-        + "Use this only at script execution availability. "
+        + "Use this only when general AI tool availability includes editing and AI formula editing is enabled. "
         + "Supported editedElement values: TEXT, DETAILS, NOTE, ATTRIBUTES. "
         + "TEXT, DETAILS, and NOTE support REPLACE only. ATTRIBUTES support ADD and REPLACE only. "
         + "For TEXT, DETAILS, and NOTE, pass originalContentType and originalIsFormula from fetchNodesForEditing. "
@@ -306,7 +308,7 @@ public class AIToolSet {
     }
 
     @Tool("Apply a previously validated previewFormulaUpdates result by previewId. "
-        + "Use this only after plausibility review. "
+        + "Use this only when general AI tool availability includes editing, AI formula editing is enabled, and plausibility review is complete. "
         + "Candidate values are persisted in the same order used during preview. "
         + "If a target node no longer exists or an attribute REPLACE target can no longer be resolved, the tool returns FAILED instead of crashing.")
     public FormulaUpdateApplyResponse applyFormulaUpdates(FormulaUpdateApplyRequest request) {
