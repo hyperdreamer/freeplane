@@ -1374,7 +1374,7 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
   - Manual tests: N/A.
 
 ## Subtask: Show MCP tool calls in AI chat and open a chat when needed
-- **Status:** backlog
+- **Status:** review
 - **Scope:** Make MCP-originated tool-call summaries visible in AI chat
   when the `AI chat shows tool calls` option is enabled. If no chat is
   currently running to receive the summary, open a chat session and add

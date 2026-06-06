@@ -64,7 +64,9 @@ import org.freeplane.plugin.ai.prompt.AiPrompt;
 import org.freeplane.plugin.ai.prompt.AiPromptRequestComposer;
 import org.freeplane.plugin.ai.tools.AIToolSet;
 import org.freeplane.plugin.ai.tools.AIToolSetBuilder;
+import org.freeplane.plugin.ai.tools.utilities.ToolCallSummary;
 import org.freeplane.plugin.ai.tools.utilities.ToolCallSummaryHandler;
+import org.freeplane.plugin.ai.tools.utilities.ToolCaller;
 import org.junit.Test;
 import org.mockito.InOrder;
 import org.mockito.MockedConstruction;
@@ -100,6 +102,48 @@ public class AIChatPanelScriptRequestTest {
 
         verify(tabs).setSelectedComponent(harness.panel);
         assertThat(inputArea.focusRequested).isTrue();
+    }
+
+    @Test
+    public void mcpToolSummaryUsesCurrentVisibleRequestFlowWhenPresent() throws Exception {
+        PanelHarness harness = newPanelHarness(true);
+        ChatRequestFlow requestFlow = mock(ChatRequestFlow.class);
+        HashMap<LiveChatSessionId, ChatRequestFlow> activeVisibleRequestFlows = new HashMap<LiveChatSessionId, ChatRequestFlow>();
+        activeVisibleRequestFlows.put(harness.sessionId, requestFlow);
+        setField(harness.panel, "activeVisibleRequestFlows", activeVisibleRequestFlows);
+        ToolCallSummary summary = new ToolCallSummary("searchNodes", "mcp summary", false, ToolCaller.MCP);
+
+        harness.panel.toolCallSummaryHandler().handleToolCallSummary(summary);
+        flushEdt();
+
+        verify(requestFlow).onToolCallSummary(summary);
+        assertThat(harness.liveChatController.currentSessionId()).isEqualTo(harness.sessionId);
+    }
+
+    @Test
+    public void mcpToolSummaryOpensNewChatAndAppendsSummaryWhenNoChatRequestIsRunning() throws Exception {
+        PanelHarness harness = newPanelHarness(false);
+        LiveChatSessionId originalSessionId = harness.sessionId;
+        ToolCallSummary summary = new ToolCallSummary("searchNodes", "mcp summary", false, ToolCaller.MCP);
+
+        harness.panel.toolCallSummaryHandler().handleToolCallSummary(summary);
+        flushEdt();
+
+        LiveChatSessionId currentSessionId = harness.liveChatController.currentSessionId();
+        assertThat(currentSessionId).isNotEqualTo(originalSessionId);
+    }
+
+    @Test
+    public void mcpToolSummaryDoesNotOpenChatWhenToolCallHistoryIsHidden() throws Exception {
+        PanelHarness harness = newPanelHarness(false);
+        when(harness.chatDisplaySettings.isToolCallHistoryVisible()).thenReturn(false);
+        LiveChatSessionId originalSessionId = harness.sessionId;
+
+        harness.panel.toolCallSummaryHandler().handleToolCallSummary(
+            new ToolCallSummary("searchNodes", "hidden summary", false, ToolCaller.MCP));
+        flushEdt();
+
+        assertThat(harness.liveChatController.currentSessionId()).isEqualTo(originalSessionId);
     }
 
     @Test
@@ -698,6 +742,7 @@ public class AIChatPanelScriptRequestTest {
             liveChatController,
             sessionId,
             chatOutputView,
+            chatDisplaySettings,
             chatToolAvailabilitySettings,
             aiRequestConfigurationResolver);
     }
@@ -727,6 +772,27 @@ public class AIChatPanelScriptRequestTest {
         java.lang.reflect.Method getDisplayName = session.getClass().getDeclaredMethod("getDisplayName");
         getDisplayName.setAccessible(true);
         return (String) getDisplayName.invoke(session);
+    }
+
+    private java.util.List<String> sessionToolSummaryTexts(LiveChatController liveChatController,
+                                                           LiveChatSessionId sessionId) throws Exception {
+        ChatMemory chatMemory = liveChatController.chatMemory(sessionId);
+        if (!(chatMemory instanceof AssistantProfileChatMemory)) {
+            return java.util.Collections.emptyList();
+        }
+        Field conversationMessagesField = AssistantProfileChatMemory.class.getDeclaredField("conversationMessages");
+        conversationMessagesField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        java.util.List<dev.langchain4j.data.message.ChatMessage> conversationMessages =
+            (java.util.List<dev.langchain4j.data.message.ChatMessage>) conversationMessagesField.get(chatMemory);
+        java.util.List<String> summaries = new java.util.ArrayList<String>();
+        for (dev.langchain4j.data.message.ChatMessage message : conversationMessages) {
+            if (message == null || !message.getClass().getSimpleName().equals("ToolCallSummaryMessage")) {
+                continue;
+            }
+            summaries.add(((dev.langchain4j.data.message.SystemMessage) message).text());
+        }
+        return summaries;
     }
 
     private boolean currentSessionNameEdited(LiveChatController liveChatController) throws Exception {
@@ -816,6 +882,7 @@ public class AIChatPanelScriptRequestTest {
         private final LiveChatController liveChatController;
         private final LiveChatSessionId sessionId;
         private final ChatOutputView chatOutputView;
+        private final ChatDisplaySettings chatDisplaySettings;
         private final ToolAvailabilityLevelSettings chatToolAvailabilitySettings;
         private final AiRequestConfigurationResolver aiRequestConfigurationResolver;
 
@@ -823,12 +890,14 @@ public class AIChatPanelScriptRequestTest {
                              LiveChatController liveChatController,
                              LiveChatSessionId sessionId,
                              ChatOutputView chatOutputView,
+                             ChatDisplaySettings chatDisplaySettings,
                              ToolAvailabilityLevelSettings chatToolAvailabilitySettings,
                              AiRequestConfigurationResolver aiRequestConfigurationResolver) {
             this.panel = panel;
             this.liveChatController = liveChatController;
             this.sessionId = sessionId;
             this.chatOutputView = chatOutputView;
+            this.chatDisplaySettings = chatDisplaySettings;
             this.chatToolAvailabilitySettings = chatToolAvailabilitySettings;
             this.aiRequestConfigurationResolver = aiRequestConfigurationResolver;
         }

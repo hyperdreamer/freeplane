@@ -130,6 +130,7 @@ import org.freeplane.plugin.ai.prompt.AiPromptProgressDialogFactory;
 import org.freeplane.plugin.ai.prompt.AiPromptRequestComposer;
 import org.freeplane.plugin.ai.tools.AIToolSetBuilder;
 import org.freeplane.plugin.ai.tools.selection.SelectionIdentifiersResponse;
+import org.freeplane.plugin.ai.tools.utilities.ToolCallSummary;
 import org.freeplane.plugin.ai.tools.utilities.ToolCallSummaryHandler;
 import org.freeplane.plugin.ai.tools.utilities.ToolCaller;
 
@@ -197,6 +198,7 @@ public class AIChatPanel extends JPanel {
     private final AssistantProfilePaneBuilder assistantProfilePaneBuilder;
     private final Map<String, LiveChatSessionId> aiOwnedCodeOwningSessions =
         new HashMap<String, LiveChatSessionId>();
+    private LiveChatSessionId mcpSummarySessionId;
     private final AiCodeRunListener aiCodeRunListener = new AiCodeRunListener() {
         @Override
         public void runFinished(RunCodeResponse response) {
@@ -1046,6 +1048,7 @@ public class AIChatPanel extends JPanel {
                 return false;
             }
         }
+        mcpSummarySessionId = null;
         registerVisibleRequest(sessionId, requestFlow, requestTokenUsageTracker);
         requestFlow.updateChatMemory(liveChatController.chatMemory(sessionId));
         requestFlow.beginRequest(preparedMessage);
@@ -1566,11 +1569,63 @@ public class AIChatPanel extends JPanel {
 
     public ToolCallSummaryHandler toolCallSummaryHandler() {
         return summary -> {
-            ChatRequestFlow currentRequestFlow = currentVisibleRequestFlow();
-            if (currentRequestFlow != null) {
-                currentRequestFlow.onToolCallSummary(summary);
+            if (SwingUtilities.isEventDispatchThread()) {
+                appendExternalToolSummary(summary);
+            }
+            else {
+                SwingUtilities.invokeLater(() -> appendExternalToolSummary(summary));
             }
         };
+    }
+
+    private void appendExternalToolSummary(ToolCallSummary summary) {
+        if (summary == null || summary.getSummaryText() == null || summary.getSummaryText().trim().isEmpty()) {
+            return;
+        }
+        if (!chatDisplaySettings.isToolCallHistoryVisible()) {
+            return;
+        }
+        ChatRequestFlow currentRequestFlow = currentVisibleRequestFlow();
+        if (currentRequestFlow != null) {
+            mcpSummarySessionId = null;
+            currentRequestFlow.onToolCallSummary(summary);
+            return;
+        }
+        LiveChatSessionId sessionId = ensureMcpSummarySession();
+        if (sessionId == null) {
+            return;
+        }
+        appendToolSummaryToSession(sessionId, summary);
+    }
+
+    private LiveChatSessionId ensureMcpSummarySession() {
+        LiveChatSessionId sessionId = mcpSummarySessionId;
+        if (sessionId != null && liveChatController.chatMemory(sessionId) != null) {
+            liveChatController.switchToSession(sessionId);
+            showAndFocusInput();
+            return sessionId;
+        }
+        sessionId = liveChatController.startNewChat();
+        if (sessionId == null) {
+            return null;
+        }
+        mcpSummarySessionId = sessionId;
+        showAndFocusInput();
+        return sessionId;
+    }
+
+    private void appendToolSummaryToSession(LiveChatSessionId sessionId, ToolCallSummary summary) {
+        ChatMemory sessionChatMemory = liveChatController.chatMemory(sessionId);
+        if (!(sessionChatMemory instanceof AssistantProfileChatMemory)) {
+            return;
+        }
+        AssistantProfileChatMemory assistantProfileChatMemory = (AssistantProfileChatMemory) sessionChatMemory;
+        assistantProfileChatMemory.addToolCallSummary(summary.getSummaryText(), summary.getToolCaller());
+        liveChatController.synchronizeTranscriptWithMemory(sessionId);
+        if (liveChatController.isCurrentSession(sessionId)) {
+            appendHistoryEntry(ChatMemoryRenderEntry.forToolSummary(summary.getSummaryText(), summary.getToolCaller()));
+            refreshTokenCounters();
+        }
     }
 
     public void persistCurrentChatIfNeeded() {
