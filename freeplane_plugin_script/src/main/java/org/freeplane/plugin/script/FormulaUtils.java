@@ -14,13 +14,16 @@ import org.freeplane.features.attribute.NodeAttributeTableModel;
 import org.freeplane.features.link.LinkController;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
+import org.freeplane.core.resources.ResourceController;
 import org.freeplane.features.mode.Controller;
+import org.freeplane.features.mode.ModeController;
 import org.freeplane.features.mode.mindmapmode.MModeController;
 import org.freeplane.plugin.script.dependencies.RelatedElements;
 
 import groovy.lang.GString;
 
 public class FormulaUtils {
+    public static final String FORMULA_BLOCK_MODE_CONTROLLER_EXECUTE = "formula_block_mode_controller_execute";
 
     /** evaluate text as a script if it starts with '='.
      * @return the evaluation result for script and the original text otherwise
@@ -88,14 +91,14 @@ public class FormulaUtils {
         final ScriptContext scriptContext = new ScriptContext(nodeScript);
         final ScriptingPermissions restrictedPermissions = ScriptingPermissions.getFormulaPermissions();
 
-        return FormulaCache.getOrThrowCachedResult(scriptContext, () -> {
+        return callWithExecuteBlockedIfEnabled(() -> FormulaCache.getOrThrowCachedResult(scriptContext, () -> {
             Object result = evaluateLoggingExceptions(
                 scriptContext,
                 restrictedPermissions,
                 System.out,
                 ScriptResources.IGNORING_SCRIPT_ERROR_HANDLER);
             return result;
-        });
+        }));
     }
 
     public static Object validateFormula(final NodeModel nodeModel,
@@ -105,11 +108,24 @@ public class FormulaUtils {
         final NodeScript nodeScript = new NodeScript(nodeModel, scriptOf(formulaText));
         final ScriptContext scriptContext = new ScriptContext(nodeScript).withDependencyTracking(false);
         final ScriptingPermissions restrictedPermissions = ScriptingPermissions.getFormulaPermissions();
-        return evaluateLoggingExceptions(
+        return callWithExecuteBlockedIfEnabled(() -> evaluateLoggingExceptions(
             scriptContext,
             restrictedPermissions,
             outStream == null ? System.out : outStream,
-            errorHandler == null ? ScriptResources.IGNORING_SCRIPT_ERROR_HANDLER : errorHandler);
+            errorHandler == null ? ScriptResources.IGNORING_SCRIPT_ERROR_HANDLER : errorHandler));
+    }
+
+    static <T> T callWithExecuteBlockedIfEnabled(Supplier<T> supplier) {
+        final Controller controller = Controller.getCurrentController();
+        if (controller == null) {
+            return supplier.get();
+        }
+        final ResourceController resourceController = controller.getResourceController();
+        if (resourceController == null || !resourceController.getBooleanProperty(FORMULA_BLOCK_MODE_CONTROLLER_EXECUTE, true)) {
+            return supplier.get();
+        }
+        final ModeController modeController = controller.getModeController();
+        return modeController instanceof MModeController ? ((MModeController) modeController).callWithExecuteBlocked(supplier) : supplier.get();
     }
 
     private static Object evaluateLoggingExceptions(final ScriptContext scriptContext,

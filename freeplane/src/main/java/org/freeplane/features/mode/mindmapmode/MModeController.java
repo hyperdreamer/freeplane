@@ -22,6 +22,7 @@ package org.freeplane.features.mode.mindmapmode;
 import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 import java.util.Vector;
+import java.util.function.Supplier;
 
 import javax.swing.UIManager;
 import javax.swing.UIManager.LookAndFeelInfo;
@@ -70,6 +71,7 @@ public class MModeController extends ModeController {
 	}
 
 	private OptionPanelBuilder optionPanelBuilder;
+	private final ThreadLocal<Integer> executeBlockedDepth = new ThreadLocal<Integer>();
 
 	public MModeController(final Controller controller) {
 		super(controller);
@@ -108,7 +110,7 @@ public class MModeController extends ModeController {
 			undoHandler.delayedRollback();
 	}
 
-	private void createActions() {
+	void createActions() {
 		undo = new UndoAction();
 		redo = new RedoAction();
 		undo.setRedo(redo);
@@ -185,8 +187,25 @@ public class MModeController extends ModeController {
         }
     }
 
+	public <T> T callWithExecuteBlocked(Supplier<T> supplier) {
+		Integer currentDepth = executeBlockedDepth.get();
+		int nextDepth = currentDepth == null ? 1 : currentDepth.intValue() + 1;
+		executeBlockedDepth.set(Integer.valueOf(nextDepth));
+		try {
+			return supplier.get();
+		}
+		finally {
+			if(nextDepth == 1)
+				executeBlockedDepth.remove();
+			else
+				executeBlockedDepth.set(Integer.valueOf(nextDepth - 1));
+		}
+	}
+
 	@Override
 	public void execute(final IActor actor, final MapModel map) {
+		if(isExecuteBlocked())
+			throw new IllegalStateException("Mode-controller execute calls are blocked during formula evaluation.");
 		if(actor.isReadonly() || canEdit(map)) {
 			try {
 				Controller.getCurrentController().getViewController().invokeAndWait(() -> {
@@ -197,6 +216,11 @@ public class MModeController extends ModeController {
 				throw new RuntimeException(e);
 			}
 		}
+	}
+
+	private boolean isExecuteBlocked() {
+		Integer currentDepth = executeBlockedDepth.get();
+		return currentDepth != null && currentDepth.intValue() > 0;
 	}
 
 	@Override
