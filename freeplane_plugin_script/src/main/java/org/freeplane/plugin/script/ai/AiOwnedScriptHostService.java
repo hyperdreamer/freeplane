@@ -286,11 +286,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
             currentScript.latestState = waitingState(currentScript, response.getFingerprint(), ScriptRunInitiator.AI);
             return response;
         }
-        if (policy == AiScriptExecutionPolicy.SHOWN_AI_RUN) {
-            showCodeInDialog(currentScript.codeId);
-            dialog().showAndFocus();
-        }
-        return executeCurrentScript(ScriptRunInitiator.AI, aiStartedPermissions(), policy == AiScriptExecutionPolicy.SHOWN_AI_RUN);
+        return executeCurrentScript(ScriptRunInitiator.AI, aiStartedPermissions());
     }
 
     RunScriptResponse runFromDialog(String codeText) {
@@ -302,7 +298,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
         }
         currentScript.storedText = codeText == null ? "" : codeText;
         currentScript.fingerprint = fingerprint(currentScript.storedText);
-        return executeCurrentScript(ScriptRunInitiator.USER, userStartedPermissions(), false);
+        return executeCurrentScript(ScriptRunInitiator.USER, userStartedPermissions());
     }
 
     void dialogCancelled() {
@@ -329,8 +325,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
     }
 
     private RunScriptResponse executeCurrentScript(ScriptRunInitiator runInitiator,
-                                                   ScriptingPermissions permissions,
-                                                   boolean closeShownAiRunDialogOnSuccess) {
+                                                   ScriptingPermissions permissions) {
         assertNotRunning();
         synchronizeCurrentTextFromDialog();
         currentScript.running = true;
@@ -356,7 +351,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
                 currentScript.latestState = failedState(currentScript, currentFingerprint,
                     response.getCompilerDiagnostics(), response.getErrorMessage(), response.getLineNumber(), null,
                     null, runInitiator);
-                refreshDialogAfterRun(response, closeShownAiRunDialogOnSuccess);
+                refreshDialogAfterRun(response);
                 fireRunFinished(response);
                 return response;
             }
@@ -407,7 +402,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
                     null,
                     stdout,
                     structuredResult);
-                refreshDialogAfterRun(response, closeShownAiRunDialogOnSuccess);
+                refreshDialogAfterRun(response);
                 fireRunFinished(response);
                 return response;
             } catch (ExecuteScriptException error) {
@@ -427,7 +422,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
                     null);
                 currentScript.latestState = failedState(currentScript, currentFingerprint, null,
                     error.getMessage(), errorLine, stdout, null, runInitiator);
-                refreshDialogAfterRun(response, closeShownAiRunDialogOnSuccess);
+                refreshDialogAfterRun(response);
                 fireRunFinished(response);
                 return response;
             } catch (RuntimeException error) {
@@ -447,7 +442,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
                     null);
                 currentScript.latestState = failedState(currentScript, currentFingerprint, null,
                     error.getMessage(), errorLine, stdout, null, runInitiator);
-                refreshDialogAfterRun(response, closeShownAiRunDialogOnSuccess);
+                refreshDialogAfterRun(response);
                 fireRunFinished(response);
                 return response;
             } catch (Exception error) {
@@ -458,12 +453,12 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
         }
     }
 
-    private void refreshDialogAfterRun(RunScriptResponse response, boolean closeShownAiRunDialogOnSuccess) {
+    private void refreshDialogAfterRun(RunScriptResponse response) {
         if (dialog == null || !dialog.showsCode(currentScript.codeId)) {
             return;
         }
         showCodeInDialog(currentScript.codeId);
-        if (response.getStatus() == CodeLifecycleStatus.SUCCEEDED && closeShownAiRunDialogOnSuccess) {
+        if (response.getStatus() == CodeLifecycleStatus.SUCCEEDED) {
             dialog.hideDialog();
         }
     }

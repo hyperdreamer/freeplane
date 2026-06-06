@@ -81,6 +81,18 @@ public class AiCodeOperationAuthorizerTest {
     }
 
     @Test
+    public void scriptExecutionAvailabilityExposesAllCodeToolsWithoutCurrentCode() {
+        FakeCodeHostService codeHostService = new FakeCodeHostService();
+        AiCodeOperationAuthorizer uut = authorizer(
+            () -> ToolAvailabilityLevel.SCRIPT_EXECUTION,
+            () -> null,
+            false,
+            codeHostService);
+
+        assertThat(uut.authorizedToolNames()).containsExactly("readCode", "writeCode", "compileCode", "runScript");
+    }
+
+    @Test
     public void editingAvailabilityAllowsAttachedFormulaWriteAndCompileWhenFormulaEditingIsEnabled() {
         FakeCodeHostService codeHostService = new FakeCodeHostService()
             .withState(ScriptHost.ATTACHED_EDITOR, FORMULA_CONTENT_TYPE, CodeLifecycleStatus.READY);

@@ -42,19 +42,16 @@ public class AiCodeOperationAuthorizer {
             return Collections.emptySet();
         }
         LinkedHashSet<String> toolNames = new LinkedHashSet<String>();
-        if (canReadAttachedEditor() || canReadAiHost()) {
+        boolean scriptExecutionAvailable = globalAvailability().includesScriptExecution();
+        if (canReadAttachedEditor() || canReadAiHost() || scriptExecutionAvailable) {
             toolNames.add("readCode");
         }
         boolean attachedWriteAuthorized = canWriteAttachedEditor();
-        boolean aiWriteAuthorized = globalAvailability().includesScriptExecution();
-        if (attachedWriteAuthorized || aiWriteAuthorized) {
+        if (attachedWriteAuthorized || scriptExecutionAvailable) {
             toolNames.add("writeCode");
-        }
-        if ((attachedWriteAuthorized && hasCurrentCode(ScriptHost.ATTACHED_EDITOR))
-            || (aiWriteAuthorized && hasCurrentCode(ScriptHost.AI))) {
             toolNames.add("compileCode");
         }
-        if (canRunCurrentScript()) {
+        if (scriptExecutionAvailable) {
             toolNames.add("runScript");
         }
         return Collections.unmodifiableSet(toolNames);
@@ -132,22 +129,6 @@ public class AiCodeOperationAuthorizer {
 
     private boolean canReadAiHost() {
         return hasCurrentCode(ScriptHost.AI);
-    }
-
-    private boolean canRunCurrentScript() {
-        if (!globalAvailability().includesScriptExecution()) {
-            return false;
-        }
-        ReadCodeResponse attachedState = currentState(ScriptHost.ATTACHED_EDITOR);
-        if (attachedState != null
-            && attachedState.getStatus() != CodeLifecycleStatus.NO_CODE
-            && SCRIPT_CONTENT_TYPE.equals(attachedState.getContentType())) {
-            return true;
-        }
-        ReadCodeResponse aiState = currentState(ScriptHost.AI);
-        return aiState != null
-            && aiState.getStatus() != CodeLifecycleStatus.NO_CODE
-            && SCRIPT_CONTENT_TYPE.equals(aiState.getContentType());
     }
 
     private boolean hasCurrentCode(ScriptHost host) {
