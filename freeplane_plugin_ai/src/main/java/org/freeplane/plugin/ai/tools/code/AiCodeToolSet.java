@@ -51,10 +51,12 @@ public class AiCodeToolSet {
     }
 
     @Tool("Read the current code state for the requested host or codeId. When no codeId is known for the attached editor, specify host ATTACHED_EDITOR.")
-    public ReadCodeResponse readCode(ReadCodeRequest request) {
+    public ReadCodeResponse readCode(ReadCodeToolRequest request) {
         try {
-            assertAuthorized("readCode", request == null ? null : request.getCodeId(), request == null ? null : request.getHost());
-            ReadCodeResponse response = codeHostService.readCode(request);
+            ReadCodeRequest codeRequest = toReadCodeRequest(request);
+            assertAuthorized("readCode", codeRequest == null ? null : codeRequest.getCodeId(),
+                codeRequest == null ? null : codeRequest.getHost());
+            ReadCodeResponse response = codeHostService.readCode(codeRequest);
             publishSummary(new ToolCallSummary(
                 "readCode",
                 "readCode: status=" + response.getStatus() + ", host=" + response.getHost(),
@@ -72,10 +74,12 @@ public class AiCodeToolSet {
     }
 
     @Tool("Replace the full current code text for the requested host or codeId. For the attached editor this updates only the draft text. Attached formula editing is available only when the current tool availability exposes writeCode and compileCode and AI formula editing is enabled.")
-    public WriteCodeResponse writeCode(WriteCodeRequest request) {
+    public WriteCodeResponse writeCode(WriteCodeToolRequest request) {
         try {
-            assertAuthorized("writeCode", request == null ? null : request.getCodeId(), request == null ? null : request.getHost());
-            WriteCodeResponse response = codeHostService.writeCode(request);
+            WriteCodeRequest codeRequest = toWriteCodeRequest(request);
+            assertAuthorized("writeCode", codeRequest == null ? null : codeRequest.getCodeId(),
+                codeRequest == null ? null : codeRequest.getHost());
+            WriteCodeResponse response = codeHostService.writeCode(codeRequest);
             publishSummary(new ToolCallSummary(
                 "writeCode",
                 "writeCode: status=" + response.getStatus() + ", host=" + response.getHost(),
@@ -93,10 +97,12 @@ public class AiCodeToolSet {
     }
 
     @Tool("Compile the current code for the requested host or codeId without executing it. Attached formula compilation is available only when the current tool availability exposes writeCode and compileCode and AI formula editing is enabled.")
-    public CompileCodeResponse compileCode(CompileCodeRequest request) {
+    public CompileCodeResponse compileCode(CompileCodeToolRequest request) {
         try {
-            assertAuthorized("compileCode", request == null ? null : request.getCodeId(), request == null ? null : request.getHost());
-            CompileCodeResponse response = codeHostService.compileCode(request);
+            CompileCodeRequest codeRequest = toCompileCodeRequest(request);
+            assertAuthorized("compileCode", codeRequest == null ? null : codeRequest.getCodeId(),
+                codeRequest == null ? null : codeRequest.getHost());
+            CompileCodeResponse response = codeHostService.compileCode(codeRequest);
             publishSummary(new ToolCallSummary(
                 "compileCode",
                 "compileCode: status=" + response.getStatus() + ", host=" + response.getHost(),
@@ -114,10 +120,12 @@ public class AiCodeToolSet {
     }
 
     @Tool("Run the current script for the requested host or codeId using the current Freeplane selection.")
-    public RunScriptResponse runScript(RunScriptRequest request) {
+    public RunScriptResponse runScript(RunScriptToolRequest request) {
         try {
-            assertAuthorized("runScript", request == null ? null : request.getCodeId(), request == null ? null : request.getHost());
-            RunScriptResponse response = codeHostService.runScript(request);
+            RunScriptRequest codeRequest = toRunScriptRequest(request);
+            assertAuthorized("runScript", codeRequest == null ? null : codeRequest.getCodeId(),
+                codeRequest == null ? null : codeRequest.getHost());
+            RunScriptResponse response = codeHostService.runScript(codeRequest);
             publishSummary(new ToolCallSummary(
                 "runScript",
                 "runScript: status=" + response.getStatus() + ", host=" + response.getHost(),
@@ -185,6 +193,35 @@ public class AiCodeToolSet {
         if (aiCodeOperationAuthorizer != null) {
             aiCodeOperationAuthorizer.assertAuthorized(operation, codeId, host);
         }
+    }
+
+    private ReadCodeRequest toReadCodeRequest(ReadCodeToolRequest request) {
+        if (request == null) {
+            return null;
+        }
+        return new ReadCodeRequest(request.getCodeId(), request.getHost(), request.getFingerprint());
+    }
+
+    private WriteCodeRequest toWriteCodeRequest(WriteCodeToolRequest request) {
+        if (request == null) {
+            return null;
+        }
+        return new WriteCodeRequest(request.getCodeId(), request.getHost(), request.getText(),
+            request.getExpectedFingerprint());
+    }
+
+    private CompileCodeRequest toCompileCodeRequest(CompileCodeToolRequest request) {
+        if (request == null) {
+            return null;
+        }
+        return new CompileCodeRequest(request.getCodeId(), request.getHost(), request.getExpectedFingerprint());
+    }
+
+    private RunScriptRequest toRunScriptRequest(RunScriptToolRequest request) {
+        if (request == null) {
+            return null;
+        }
+        return new RunScriptRequest(request.getCodeId(), request.getHost(), request.getExpectedFingerprint());
     }
 
     private void publishSummary(ToolCallSummary summary) {

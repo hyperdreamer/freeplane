@@ -28,7 +28,7 @@ public class ModelContextProtocolToolCallAuthorizerTest {
             aiCodeOperationAuthorizer,
             getApiDocumentationTool);
 
-        uut.assertAuthorized("runScript", objectMapper.readTree("{\"codeId\":\"ai-script-1\"}"));
+        uut.assertAuthorized("runScript", objectMapper.readTree("{\"request\":{\"codeId\":\"ai-script-1\"}}"));
 
         verify(aiCodeOperationAuthorizer).assertAuthorized(eq("runScript"), eq("ai-script-1"), eq(null));
     }
@@ -62,12 +62,12 @@ public class ModelContextProtocolToolCallAuthorizerTest {
 
         assertThatCode(() -> uut.assertAuthorized(
             "readNodesWithDescendants",
-            objectMapper.readTree("{\"mapIdentifier\":\"api-map\"}")))
+            objectMapper.readTree("{\"request\":{\"mapIdentifier\":\"api-map\"}}")))
             .doesNotThrowAnyException();
 
         assertThatThrownBy(() -> uut.assertAuthorized(
             "searchNodes",
-            objectMapper.readTree("{\"mapIdentifier\":\"other-map\"}")))
+            objectMapper.readTree("{\"request\":{\"mapIdentifier\":\"other-map\"}}")))
             .isInstanceOf(IllegalStateException.class)
             .hasMessage("The requested tool is not available at the current availability level.");
     }
@@ -82,7 +82,7 @@ public class ModelContextProtocolToolCallAuthorizerTest {
 
         assertThatCode(() -> uut.assertAuthorized(
             "searchNodes",
-            objectMapper.readTree("{\"mapIdentifier\":\"any-map\"}")))
+            objectMapper.readTree("{\"request\":{\"mapIdentifier\":\"any-map\"}}")))
             .doesNotThrowAnyException();
     }
 
@@ -97,6 +97,20 @@ public class ModelContextProtocolToolCallAuthorizerTest {
         assertThatThrownBy(() -> uut.assertAuthorized("createNodes", null))
             .isInstanceOf(IllegalStateException.class)
             .hasMessage("The requested tool is not available at the current availability level.");
+    }
+
+    @Test
+    public void codeToolsReadNestedHostValue() throws Exception {
+        AiCodeOperationAuthorizer aiCodeOperationAuthorizer = mock(AiCodeOperationAuthorizer.class);
+        ModelContextProtocolToolCallAuthorizer uut = authorizer(
+            ToolAvailabilityLevel.SCRIPT_EXECUTION,
+            false,
+            aiCodeOperationAuthorizer,
+            mock(GetApiDocumentationTool.class));
+
+        uut.assertAuthorized("writeCode", objectMapper.readTree("{\"request\":{\"host\":\"AI\"}}"));
+
+        verify(aiCodeOperationAuthorizer).assertAuthorized(eq("writeCode"), eq(null), eq(org.freeplane.features.ai.code.ScriptHost.AI));
     }
 
     @Test

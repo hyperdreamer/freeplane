@@ -115,10 +115,11 @@ public class ModelContextProtocolToolCallAuthorizer {
     }
 
     private String textValue(JsonNode argumentsNode, String fieldName) {
-        if (argumentsNode == null || argumentsNode.isNull()) {
+        JsonNode effectiveArgumentsNode = effectiveArgumentsNode(argumentsNode);
+        if (effectiveArgumentsNode == null || effectiveArgumentsNode.isNull()) {
             return null;
         }
-        JsonNode valueNode = argumentsNode.get(fieldName);
+        JsonNode valueNode = effectiveArgumentsNode.get(fieldName);
         if (valueNode == null || valueNode.isNull()) {
             return null;
         }
@@ -128,6 +129,17 @@ public class ModelContextProtocolToolCallAuthorizer {
         }
         String trimmedValue = value.trim();
         return trimmedValue.isEmpty() ? null : trimmedValue;
+    }
+
+    private JsonNode effectiveArgumentsNode(JsonNode argumentsNode) {
+        if (argumentsNode == null || argumentsNode.isNull()) {
+            return argumentsNode;
+        }
+        JsonNode requestNode = argumentsNode.get("request");
+        if (requestNode != null && requestNode.isObject()) {
+            return requestNode;
+        }
+        return argumentsNode;
     }
 
     private String normalizeToolName(String toolName) {

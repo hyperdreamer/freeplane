@@ -36,7 +36,7 @@ public class AiCodeToolSetTest {
     public void readCodeReturnsNoCodeStateWhenNoEditorIsAttached() {
         AiCodeToolSet uut = new AiCodeToolSet(newDetachedCodeHostService(), null, null, ToolCaller.CHAT);
 
-        ReadCodeResponse response = uut.readCode(new ReadCodeRequest(null, ScriptHost.ATTACHED_EDITOR, null));
+        ReadCodeResponse response = uut.readCode(new ReadCodeToolRequest(null, ScriptHost.ATTACHED_EDITOR, null));
 
         assertThat(response.getStatus()).isEqualTo(CodeLifecycleStatus.NO_CODE);
     }
@@ -58,7 +58,7 @@ public class AiCodeToolSetTest {
         service.compileCode(new CompileCodeRequest(null, ScriptHost.ATTACHED_EDITOR, null));
         AiCodeToolSet uut = new AiCodeToolSet(service, null, null, ToolCaller.CHAT);
 
-        ReadCodeResponse response = uut.readCode(new ReadCodeRequest(null, ScriptHost.ATTACHED_EDITOR, null));
+        ReadCodeResponse response = uut.readCode(new ReadCodeToolRequest(null, ScriptHost.ATTACHED_EDITOR, null));
 
         assertThat(response.getStatus()).isEqualTo(CodeLifecycleStatus.FAILED);
         assertThat(response.getContentType()).isEqualTo("text/x-freeplane-script-groovy");
@@ -136,7 +136,7 @@ public class AiCodeToolSetTest {
         service.attachEditor(editor, "text/plain");
         AiCodeToolSet uut = new AiCodeToolSet(service, null, null, ToolCaller.CHAT);
 
-        WriteCodeResponse response = uut.writeCode(new WriteCodeRequest(null, ScriptHost.ATTACHED_EDITOR, "after", null));
+        WriteCodeResponse response = uut.writeCode(new WriteCodeToolRequest(null, ScriptHost.ATTACHED_EDITOR, "after", null));
 
         assertThat(editor.getText()).isEqualTo("after");
         assertThat(response.getFingerprint()).isNotBlank();
@@ -158,8 +158,8 @@ public class AiCodeToolSetTest {
         service.attachEditor(editor, "text/plain");
         AiCodeToolSet uut = new AiCodeToolSet(service, null, null, ToolCaller.CHAT);
 
-        CompileCodeResponse first = uut.compileCode(new CompileCodeRequest(null, ScriptHost.ATTACHED_EDITOR, null));
-        ReadCodeResponse firstState = uut.readCode(new ReadCodeRequest(null, ScriptHost.ATTACHED_EDITOR, null));
+        CompileCodeResponse first = uut.compileCode(new CompileCodeToolRequest(null, ScriptHost.ATTACHED_EDITOR, null));
+        ReadCodeResponse firstState = uut.readCode(new ReadCodeToolRequest(null, ScriptHost.ATTACHED_EDITOR, null));
         editor.setCompileResponse(new CompileCodeResponse(
             null,
             ScriptHost.ATTACHED_EDITOR,
@@ -169,8 +169,8 @@ public class AiCodeToolSetTest {
             Collections.<String>emptyList(),
             null,
             null));
-        CompileCodeResponse second = uut.compileCode(new CompileCodeRequest(null, ScriptHost.ATTACHED_EDITOR, null));
-        ReadCodeResponse secondState = uut.readCode(new ReadCodeRequest(null, ScriptHost.ATTACHED_EDITOR, null));
+        CompileCodeResponse second = uut.compileCode(new CompileCodeToolRequest(null, ScriptHost.ATTACHED_EDITOR, null));
+        ReadCodeResponse secondState = uut.readCode(new ReadCodeToolRequest(null, ScriptHost.ATTACHED_EDITOR, null));
 
         assertThat(first.getStatus()).isEqualTo(CodeLifecycleStatus.FAILED);
         assertThat(firstState.getStatus()).isEqualTo(CodeLifecycleStatus.FAILED);
@@ -182,10 +182,10 @@ public class AiCodeToolSetTest {
     public void codeToolsExceptReadFailWhenNoEditorIsAttached() {
         AiCodeToolSet uut = new AiCodeToolSet(newDetachedCodeHostService(), null, null, ToolCaller.CHAT);
 
-        assertThatThrownBy(() -> uut.writeCode(new WriteCodeRequest(null, ScriptHost.ATTACHED_EDITOR, "x", null)))
+        assertThatThrownBy(() -> uut.writeCode(new WriteCodeToolRequest(null, ScriptHost.ATTACHED_EDITOR, "x", null)))
             .isInstanceOf(IllegalStateException.class)
             .hasMessage("No editor is attached.");
-        assertThatThrownBy(() -> uut.compileCode(new CompileCodeRequest(null, ScriptHost.ATTACHED_EDITOR, null)))
+        assertThatThrownBy(() -> uut.compileCode(new CompileCodeToolRequest(null, ScriptHost.ATTACHED_EDITOR, null)))
             .isInstanceOf(IllegalStateException.class)
             .hasMessage("No editor is attached.");
     }

@@ -121,9 +121,15 @@ public class AIToolSetBuilderTest {
         assertThat(toolObjects.get(0)).isInstanceOf(AIToolSet.class);
         assertThat(toolObjects.get(1)).isInstanceOf(AiCodeToolSet.class);
         AiCodeToolSet aiCodeToolSet = (AiCodeToolSet) toolObjects.get(1);
-        assertThat(aiCodeToolSet.readCode(new ReadCodeRequest(null, ScriptHost.ATTACHED_EDITOR, null)).getStatus())
+        assertThat(aiCodeToolSet.readCode(new org.freeplane.plugin.ai.tools.code.ReadCodeToolRequest(
+            null,
+            ScriptHost.ATTACHED_EDITOR,
+            null)).getStatus())
             .isEqualTo(CodeLifecycleStatus.READY);
-        assertThat(aiCodeToolSet.readCode(new ReadCodeRequest(null, ScriptHost.ATTACHED_EDITOR, null)).getCodeText())
+        assertThat(aiCodeToolSet.readCode(new org.freeplane.plugin.ai.tools.code.ReadCodeToolRequest(
+            null,
+            ScriptHost.ATTACHED_EDITOR,
+            null)).getCodeText())
             .isEqualTo("hello");
     }
 }
