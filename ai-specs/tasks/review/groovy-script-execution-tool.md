@@ -196,7 +196,7 @@ McpServer -> ApiTool: getApiDocumentation()
     shared AI/MCP code-host model:
     - `readCode`, `writeCode`, and `compileCode` are generic across
       both hosts; and
-    - `runScript` is a script-only execution path layered on top of
+    - `runCode` is the script-only execution path layered on top of
       that shared contract.
   - Keep two `ScriptHost` values:
     - `AI`
@@ -258,7 +258,7 @@ McpServer -> ApiTool: getApiDocumentation()
     before it executes a tool.
   - `ModelContextProtocolToolCallAuthorizer` reuses
     `AiCodeOperationAuthorizer` for `readCode`, `writeCode`,
-    `compileCode`, and `runScript`, and separately owns the MCP-only
+    `compileCode`, and `runCode`, and separately owns the MCP-only
     `DISABLED` documentation/API-map allowlist.
   - `ModelContextProtocolServer` and
     `ModelContextProtocolToolRegistry` remain protocol/metadata units.
@@ -271,10 +271,10 @@ McpServer -> ApiTool: getApiDocumentation()
     either by existing `codeId` or, when no `codeId` is present, by
     explicit `host` selection.
   - Use one generic code-host tool family for both hosts:
-    `readCode`, `writeCode`, `compileCode`, and `runScript`.
+    `readCode`, `writeCode`, `compileCode`, and `runCode`.
   - `readCode`, `writeCode`, and `compileCode` apply to both hosts.
-  - `runScript` applies only to script content. Formula content and
-    any other non-script target fail as direct call errors.
+  - `runCode` applies only to script content. Formula content and any
+    other non-script target fail as direct call errors.
   - `readCode` is the primary read/status tool.
   - `readCode` always returns current status.
   - `readCode` returns diagnostics whenever the current state contains
@@ -284,7 +284,7 @@ McpServer -> ApiTool: getApiDocumentation()
     fingerprint differs from the current code-text fingerprint.
   - `writeCode` replaces the full current code text for the targeted
     host and returns the resulting fingerprint.
-  - `writeCode`, `compileCode`, and `runScript` may accept an optional
+  - `writeCode`, `compileCode`, and `runCode` may accept an optional
     expected fingerprint and must fail on mismatch.
   - For the AI host, `writeCode` establishes the singleton AI-owned
     script state if none exists yet and otherwise replaces the current
@@ -297,22 +297,22 @@ McpServer -> ApiTool: getApiDocumentation()
   - The lifecycle model must distinguish at least:
     `NO_CODE`, `READY`, `WAITING_FOR_USER_RUN`,
     `SUCCEEDED`, `FAILED`, and `REPLACED`.
-  - All `runScript(...)` paths in this task are synchronous. There is
-    no per-call sync/async selector and no externally readable
-    `RUNNING` state.
+  - All `runCode(...)` paths in this task are synchronous. There is no
+    per-call sync/async selector and no externally readable `RUNNING`
+    state.
   - Because runs start on the UI thread and there is no safe general
     way to kill arbitrary script code running there, a non-terminating
     script may freeze Freeplane in this task.
   - AI-owned direct execution and AI-owned shown-editor execution must
     always run the current effective script text. When a visible
     AI-owned dialog exists, the current editor text is authoritative.
-  - `runScript` uses the current map/node selection at execution time.
+  - `runCode` uses the current map/node selection at execution time.
   - `compileCode` should not depend on stored or explicit map/node
     targeting in this task.
   - Do not capture selection into code state and do not add explicit
     per-request `mapIdentifier` or `nodeIdentifier` overrides in this
     task.
-  - Whether `runScript` reuses prior compile results or recompiles
+  - Whether `runCode` reuses prior compile results or recompiles
     internally is intentionally left unspecified in this task.
   - AI-started execution must re-check the current shared/global
     availability level, current script-execution policy, and current
@@ -438,7 +438,7 @@ Base shared/global gates
       existing state: readCode only
       no state: no AI-owned code operation available
     SCRIPT_EXECUTION
-      readCode | writeCode | compileCode | runScript
+      readCode | writeCode | compileCode | runCode
 
   ATTACHED_EDITOR without chat override
     DISABLED
@@ -449,10 +449,10 @@ Base shared/global gates
       readCode | writeCode | compileCode
     SCRIPT_EXECUTION
       readCode | writeCode | compileCode
-      runScript only when current contentType is
+      runCode only when current contentType is
       text/x-freeplane-script-groovy
 
-RunScript content gate
+RunCode content gate
   any host
     non-script content fails as a direct call error
 
@@ -461,13 +461,13 @@ Internal AI attached-editor override
     readCode | writeCode | compileCode on ATTACHED_EDITOR stay
     advertised and callable even when shared/global level is DISABLED
     or READING
-    runScript on ATTACHED_EDITOR still requires SCRIPT_EXECUTION and
+    runCode on ATTACHED_EDITOR still requires SCRIPT_EXECUTION and
     script content
 
 Internal AI advertisement rule
   advertise a code tool when at least one currently reachable target
   authorizes that operation
-  advertise runScript only when at least one currently reachable
+  advertise runCode only when at least one currently reachable
   script-typed target exists
   re-check host-specific authorization at tool-call time
 
@@ -484,12 +484,12 @@ AiCodeHostService
   readCode(ReadCodeRequest) : ReadCodeResponse
   writeCode(WriteCodeRequest) : WriteCodeResponse
   compileCode(CompileCodeRequest) : CompileCodeResponse
-  runScript(RunScriptRequest) : RunScriptResponse
+  runCode(RunCodeRequest) : RunCodeResponse
   addRunListener(AiCodeRunListener)
   removeRunListener(AiCodeRunListener)
 
 AiCodeRunListener
-  runFinished(RunScriptResponse)
+  runFinished(RunCodeResponse)
 ```
 
 Target code-tool request/response structures:
@@ -574,12 +574,12 @@ Compile rules
   - compile diagnostics keep the current code-backed shape:
     diagnostics lines, optional message, and optional line number
 
-RunScriptRequest
+RunCodeRequest
   codeId : String?
   host : ScriptHost?
   expectedFingerprint : String?
 
-RunScriptResponse
+RunCodeResponse
   codeId : String
   host : ScriptHost
   contentType : String
@@ -597,7 +597,7 @@ Run rules
   - AI-host runs always use text/x-freeplane-script-groovy
   - runInitiator distinguishes `USER`-started runs from `AI`-started
     runs and is part of observable run state
-  - all `runScript(...)` paths in this task are synchronous
+  - all `runCode(...)` paths in this task are synchronous
   - run outcome is carried by `status`
   - waiting for user approval returns `WAITING_FOR_USER_RUN`
   - started execution returns final `SUCCEEDED` or `FAILED`
@@ -608,7 +608,7 @@ Run rules
 Operation failure rules
   - `readCode` uses readable lifecycle state for `NO_CODE` and
     `REPLACED`
-  - `writeCode`, `compileCode`, and `runScript` use direct call errors
+  - `writeCode`, `compileCode`, and `runCode` use direct call errors
     for authorization denial, busy targets, expected fingerprint
     mismatch, missing writable/runnable targets, and non-script
     targets
@@ -616,7 +616,7 @@ Operation failure rules
 Targeting rules
   - if codeId is present, it determines the host implicitly
   - if codeId is absent, host is required
-  - writeCode/compileCode/runScript fail on expected fingerprint
+  - writeCode/compileCode/runCode fail on expected fingerprint
     mismatch
 ```
 
@@ -633,7 +633,7 @@ Allowed at DISABLED for MCP only
     map
 
 Blocked at DISABLED for MCP
-  readCode | writeCode | compileCode | runScript
+  readCode | writeCode | compileCode | runCode
   all non-documentation editing tools
   all read/search calls outside the internal API map
 ```
@@ -672,7 +672,7 @@ package "org.freeplane.plugin.ai.code" {
     +readCode(request : ReadCodeRequest) : ReadCodeResponse
     +writeCode(request : WriteCodeRequest) : WriteCodeResponse
     +compileCode(request : CompileCodeRequest) : CompileCodeResponse
-    +runScript(request : RunScriptRequest) : RunScriptResponse
+    +runCode(request : RunCodeRequest) : RunCodeResponse
   }
   class AiCodeOperationAuthorizer {
     +authorizedToolNames() : Set<String>
@@ -697,12 +697,12 @@ package "org.freeplane.features.ai.code" {
     +readCode(request : ReadCodeRequest) : ReadCodeResponse
     +writeCode(request : WriteCodeRequest) : WriteCodeResponse
     +compileCode(request : CompileCodeRequest) : CompileCodeResponse
-    +runScript(request : RunScriptRequest) : RunScriptResponse
+    +runCode(request : RunCodeRequest) : RunCodeResponse
     +addRunListener(listener : AiCodeRunListener)
     +removeRunListener(listener : AiCodeRunListener)
   }
   interface AiCodeRunListener {
-    +runFinished(response : RunScriptResponse)
+    +runFinished(response : RunCodeResponse)
   }
   enum ScriptHost {
     AI
@@ -768,12 +768,12 @@ package "org.freeplane.features.ai.code" {
     +errorMessage : String?
     +lineNumber : Integer?
   }
-  class RunScriptRequest {
+  class RunCodeRequest {
     +codeId : String?
     +host : ScriptHost?
     +expectedFingerprint : String?
   }
-  class RunScriptResponse {
+  class RunCodeResponse {
     +codeId : String
     +host : ScriptHost
     +contentType : String
@@ -804,7 +804,7 @@ AiCodeHostService --> AiOwnedScriptDialog
 AiCodeToolSet ..> ReadCodeRequest
 AiCodeToolSet ..> WriteCodeRequest
 AiCodeToolSet ..> CompileCodeRequest
-AiCodeToolSet ..> RunScriptRequest
+AiCodeToolSet ..> RunCodeRequest
 @enduml
 ```
 
@@ -862,15 +862,15 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
     - add tests for `writeCode` returning the resulting fingerprint and
       content type;
     - add tests for optional expected-fingerprint mismatch failures on
-      `writeCode`, `compileCode`, and `runScript`;
+      `writeCode`, `compileCode`, and `runCode`;
     - add tests that `writeCode` on attached editors edits draft text
       only and does not submit, save, or run content;
-    - add tests that `runScript` uses current selection at execution
+    - add tests that `runCode` uses current selection at execution
       time and that this task does not add explicit map/node-target
       overrides or stored context capture for `compileCode`/
-      `runScript`;
-    - add tests that `runScript` rejects formula content as a direct
-      call error;
+      `runCode`;
+    - add tests that `runCode` rejects formula content as a direct call
+      error;
     - add tests for attached formula validation failures remaining
       readable through shared code state;
     - add tests for `DISABLED` MCP API-documentation/API-map
@@ -1264,3 +1264,224 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
       boundary and now invokes the MCP authorizer before tool
       execution, keeping `ModelContextProtocolServer` focused on
       JSON-RPC and HTTP protocol handling.
+
+## Subtask: Rename code-host tools and make the code-state contract explicit
+- **Status:** review
+- **Scope:** Replace the externally visible AI/MCP code-host tool
+  names, the directly coupled code-host API and DTO names, and the
+  lifecycle guidance so the exposed contract clearly communicates that
+  read, write, compile, and run operate on current host-side code
+  state rather than on source text quoted in chat.
+- **Motivation:** The broadened `SCRIPT_EXECUTION` tool exposure now
+  lets the model see the full code-host family even when no current AI
+  script exists, but the current mixed `readCode` / `writeCode` /
+  `compileCode` / `runScript` naming and descriptions still invite the
+  wrong workflow. A recent chat turn showed the model calling
+  `runScript` for formula text it had only discussed, without first
+  creating current AI-host code state through `writeCode`.
+- **Constraints:**
+  - Replace obsolete exposed tool names in the same increment instead of
+  keeping aliases or parallel names.
+  - Keep chat and MCP on one consistent externally visible contract.
+  - Preserve the existing host model, authorization gates, and
+    code-state semantics unless a coupled clarity fix is explicitly
+    planned in this subtask.
+- **Briefing:** This follow-up primarily touches
+  `AiCodeToolSet`, `AiCodeOperationAuthorizer`, `AIChatService`,
+  `ModelContextProtocolToolRegistry`, MCP tool dispatch/authorization,
+  `AiCodeHostService`, core code-host request/response DTOs,
+  tool-layer code request DTOs, code-host guidance text, and the tests
+  that assert exposed tool names and descriptions.
+- **Research:**
+  - `AiCodeOperationAuthorizer.authorizedToolNames()` now exposes the
+    full code-host family at `SCRIPT_EXECUTION` even when no current
+    AI-owned code exists, so contract clarity can no longer rely on
+    the absence of `compileCode` or `runScript`.
+  - `AiCodeToolSet` currently exposes the mixed tool family
+    `readCode`, `writeCode`, `compileCode`, and `runScript`.
+  - The current `runScript` tool description says only `Run the current
+    script for the requested host or codeId using the current Freeplane
+    selection.` It does not say that the tool runs current host-side
+    code state and does not accept script text directly.
+  - The current `writeCode` and `compileCode` descriptions also do not
+    state the normal AI-host lifecycle for new code explicitly.
+  - The current descriptions do not clearly say that compile and run
+    operate on the current code state of the targeted host rather than
+    on source text quoted in chat.
+  - `AiCodeToolSet.systemMessageForChat(...)` currently adds guidance
+    only for attached editors. It does not add an equally explicit
+    generic AI-host workflow such as write, optional compile, then run.
+  - `ModelContextProtocolToolRegistry` reuses the same base tool
+    descriptions for MCP metadata, so the naming/description ambiguity
+    currently affects both chat and MCP.
+- **Analysis:**
+  - Replace the exposed code-host tool names rather than add aliases
+    because the main task already forbids backward-compatible parallel
+    tool contracts and the user explicitly asked to fix the names.
+  - Propagate the rename through the directly coupled code-host API and
+    DTO names because one end-to-end vocabulary is clearer than keeping
+    different external and internal names for the same contract.
+  - Use one compact `...Code` naming family without repeating
+    `current` or `stored` because that duplication adds noise without
+    adding a meaningful boundary.
+  - Keep the script-only run restriction in descriptions and runtime
+    validation rather than in the noun choice because the user prefers
+    one consistent code vocabulary end-to-end.
+  - Update chat guidance and MCP metadata in the same subtask because
+    both surfaces currently expose the same misleading contract.
+- **Design:**
+  - Keep `readCode`, `writeCode`, and `compileCode`, and rename the
+    script-execution operation end-to-end from `runScript` to
+    `runCode`.
+  - Rename the directly coupled code-host API and DTO names in the same
+    pattern, including `RunCodeRequest`, `RunCodeResponse`, and the
+    aligned tool-layer request types.
+  - Rename the code-host API methods, aligned tool registration,
+    authorization allowlists, MCP metadata, tool summaries, and tests
+    to match that naming scheme.
+  - Update tool descriptions and chat system guidance so the normal
+    AI-host flow explicitly requires creating or replacing current
+    host-side code state before compile or run, and explicitly states
+    that compile/run do not accept source text directly.
+  - Make the `compileCode` and `runCode` descriptions themselves say
+    that they operate on the current code state of the targeted host,
+    and that for new AI-host code the usual first step is `writeCode`.
+  - Keep `runCode` script-only by content-type checks and description,
+    while preserving attached-editor constraints such as draft-only
+    writes and formula non-runnability.
+  - Revise the main-task code-host diagrams and request/response
+    inventories to use the final selected external names while keeping
+    AI-owned script product terminology for the dialog and policy
+    surface.
+- **Test specification:**
+  - Automated tests:
+    - verify the renamed tool family is what chat exposes and MCP
+      advertises;
+    - verify obsolete exposed tool names are no longer registered or
+      callable;
+    - verify tool descriptions and chat system guidance explicitly teach
+      the host-side code-state lifecycle for new AI-host code;
+    - verify the `compileCode` and `runCode` descriptions themselves
+      state that they act on current target-host code state rather than
+      inline chat text, and point new AI-host authoring toward
+      `writeCode` first;
+    - verify attached-editor guidance stays aligned with the renamed
+      contract;
+    - verify MCP tool metadata reflects the same renamed contract and
+      lifecycle wording; and
+    - update existing code-tool authorization and dispatcher tests to
+      assert the renamed tool names.
+  - Manual tests: N/A.
+
+## Subtask: Show MCP tool calls in AI chat and open a chat when needed
+- **Status:** backlog
+- **Scope:** Make MCP-originated tool-call summaries visible in AI chat
+  when the `AI chat shows tool calls` option is enabled. If no chat is
+  currently running to receive the summary, open a chat session and add
+  the MCP tool-call entry there instead of dropping it.
+- **Motivation:** MCP tool calls currently execute through the shared
+  tool sets and summary path, but they are not reflected in chat even
+  when the user enabled tool-call visibility.
+- **Briefing:** This follow-up primarily touches
+  `Activator.startModelContextProtocolServer(...)`,
+  `AIChatPanel.toolCallSummaryHandler()`, `LiveChatController`,
+  `ChatRequestFlow`, and chat memory/rendering paths for
+  `ToolCaller.MCP` summaries.
+- **Research:**
+  - The MCP server is currently created with
+    `toolCallSummaryHandler(aiChatPanel.toolCallSummaryHandler())` and
+    `toolCaller(ToolCaller.MCP)`.
+  - `AIChatPanel.toolCallSummaryHandler()` currently forwards summaries
+    only when `currentVisibleRequestFlow()` is non-null.
+  - `AIChatPanel` and `LiveChatController` already support creating and
+    switching chat sessions through `startNewChat()`.
+  - `ChatRequestFlow.onToolCallSummary(...)` already supports
+    `ToolCaller.MCP` and appends MCP summaries to memory/render output
+    when tool-call history is visible.
+  - Existing tests already cover MCP-tagged tool summaries at the
+    `ChatRequestFlow` level.
+- **Analysis:**
+  - Treat MCP tool summaries as part of the same user-visible tool-call
+    history feature because the setting is phrased generically and the
+    user explicitly expects MCP tool calls to appear there too.
+  - When no chat is currently running, opening a chat is preferable to
+    silently dropping the MCP summary because the requested behavior is
+    visibility, not best-effort background persistence.
+- **Design:**
+  - Preserve `ToolCaller.MCP` labeling and existing hide/show behavior.
+  - Route MCP summaries through an `AIChatPanel` path that does not
+    depend on an active visible request flow.
+  - If a visible chat request is currently running, append the summary
+    to that chat through the existing request-flow path.
+  - If no chat is currently running, start a new chat session, show the
+    chat, and append the MCP summary directly to that session's chat
+    memory and rendered history.
+  - If tool-call visibility is disabled, do not append MCP summaries
+    and do not open a new chat.
+- **Test specification:**
+  - Automated tests:
+    - add regression coverage that MCP tool summaries are appended to
+      the current visible chat when tool-call visibility is enabled and
+      a chat request flow exists;
+    - add regression coverage that when no chat is currently running,
+      an MCP tool summary opens a new chat session and appears there;
+    - verify disabled tool-call visibility still suppresses MCP tool
+      summaries and does not open a new chat; and
+    - verify rendered/history entries preserve `ToolCaller.MCP`.
+  - Manual tests: N/A.
+
+## Subtask: Disable LangChain4j parallel tool calls for OpenRouter chat
+- **Status:** backlog
+- **Scope:** Make the effective LangChain4j OpenRouter chat-model
+  configuration set `parallel_tool_calls` to false while preserving the
+  existing sequential Freeplane tool-execution path.
+- **Motivation:** The current LangChain4j OpenRouter setup leaves
+  `parallel_tool_calls` enabled. The user wants it disabled.
+- **Briefing:** This follow-up primarily touches
+  `AIChatModelFactory` and its tests. `AIChatService` and
+  `ToolExecutorFactory` matter only as checked context for where the
+  current behavior does and does not come from.
+- **Research:**
+  - `AIChatService.buildAssistant()` currently creates the assistant via
+    `AiServices.builder(...)` and registers tools with
+    `builder.tools(toolExecutorRegistry.filtered(allowedToolNames)
+    .getExecutorsBySpecification())`.
+  - LangChain4j 1.15.1 executes multiple tools concurrently only when
+    `AiServices.executeToolsConcurrently(...)` is called.
+  - The current Freeplane chat code does not call
+    `AiServices.executeToolsConcurrently(...)`, so Java-side tool
+    execution already stays sequential by default.
+  - The OpenRouter provider path in `AIChatModelFactory` currently uses
+    `OpenAiChatModel.builder()` with the OpenRouter base URL.
+  - LangChain4j 1.15.1 `OpenAiChatModelBuilder` exposes
+    `parallelToolCalls(Boolean)`.
+  - LangChain4j 1.15.1 carries that setting into
+    `OpenAiChatRequestParameters` and emits `parallel_tool_calls` in the
+    OpenAI-compatible request payload when the value is non-null.
+  - No equivalent `parallelToolCalls(...)` setting was found in the
+    Gemini or Ollama builders currently used here.
+- **Analysis:**
+  - Disable `parallel_tool_calls` in the OpenRouter/OpenAI-compatible
+    model builder because that is the setting that governs the emitted
+    provider request.
+  - Do not change `ToolExecutorFactory` or `ToolExecutorRegistry` for
+    this behavior because they do not enable LangChain4j concurrent tool
+    execution in the current code path.
+- **Design:**
+  - Set `parallelToolCalls(false)` on the OpenRouter
+    `OpenAiChatModel.builder()` path in `AIChatModelFactory`.
+  - Keep the current `AIChatService` tool registration path unchanged,
+    since it already leaves LangChain4j Java-side tool execution
+    sequential by default.
+  - Add regression tests that verify the OpenRouter model's default
+    request parameters carry `parallelToolCalls = false`.
+- **Test specification:**
+  - Automated tests:
+    - add coverage for the OpenRouter model-construction path that
+      proves `parallelToolCalls` is false in the built
+      `OpenAiChatModel` request parameters;
+    - verify the OpenRouter path still keeps the existing max-retries
+      and other current builder behavior intact; and
+    - keep or add regression coverage showing no project-side
+      `executeToolsConcurrently(...)` call is introduced in chat setup.
+  - Manual tests: N/A.

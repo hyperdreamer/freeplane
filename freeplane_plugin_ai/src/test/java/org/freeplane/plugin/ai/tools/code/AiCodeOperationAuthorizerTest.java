@@ -13,8 +13,8 @@ import org.freeplane.features.ai.code.CompileCodeResponse;
 import org.freeplane.features.ai.code.EvaluateFormulaRequest;
 import org.freeplane.features.ai.code.ReadCodeRequest;
 import org.freeplane.features.ai.code.ReadCodeResponse;
-import org.freeplane.features.ai.code.RunScriptRequest;
-import org.freeplane.features.ai.code.RunScriptResponse;
+import org.freeplane.features.ai.code.RunCodeRequest;
+import org.freeplane.features.ai.code.RunCodeResponse;
 import org.freeplane.features.ai.code.ScriptHost;
 import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeResponse;
@@ -67,7 +67,7 @@ public class AiCodeOperationAuthorizerTest {
     }
 
     @Test
-    public void scriptExecutionAvailabilityAddsRunScriptForScriptContent() {
+    public void scriptExecutionAvailabilityAddsRunCodeForScriptContent() {
         FakeCodeHostService codeHostService = new FakeCodeHostService()
             .withState(ScriptHost.ATTACHED_EDITOR, SCRIPT_CONTENT_TYPE, CodeLifecycleStatus.READY);
         AiCodeOperationAuthorizer uut = authorizer(
@@ -76,8 +76,8 @@ public class AiCodeOperationAuthorizerTest {
             false,
             codeHostService);
 
-        assertThat(uut.authorizedToolNames()).contains("runScript");
-        uut.assertAuthorized("runScript", null, ScriptHost.ATTACHED_EDITOR);
+        assertThat(uut.authorizedToolNames()).contains("runCode");
+        uut.assertAuthorized("runCode", null, ScriptHost.ATTACHED_EDITOR);
     }
 
     @Test
@@ -89,7 +89,7 @@ public class AiCodeOperationAuthorizerTest {
             false,
             codeHostService);
 
-        assertThat(uut.authorizedToolNames()).containsExactly("readCode", "writeCode", "compileCode", "runScript");
+        assertThat(uut.authorizedToolNames()).containsExactly("readCode", "writeCode", "compileCode", "runCode");
     }
 
     @Test
@@ -108,7 +108,7 @@ public class AiCodeOperationAuthorizerTest {
     }
 
     @Test
-    public void runScriptRejectsNonScriptContent() {
+    public void runCodeRejectsNonScriptContent() {
         FakeCodeHostService codeHostService = new FakeCodeHostService()
             .withState(ScriptHost.ATTACHED_EDITOR, FORMULA_CONTENT_TYPE, CodeLifecycleStatus.READY);
         AiCodeOperationAuthorizer uut = authorizer(
@@ -117,7 +117,7 @@ public class AiCodeOperationAuthorizerTest {
             false,
             codeHostService);
 
-        assertThatThrownBy(() -> uut.assertAuthorized("runScript", null, ScriptHost.ATTACHED_EDITOR))
+        assertThatThrownBy(() -> uut.assertAuthorized("runCode", null, ScriptHost.ATTACHED_EDITOR))
             .isInstanceOf(IllegalStateException.class)
             .hasMessage("Only script content is runnable.");
     }
@@ -207,7 +207,7 @@ public class AiCodeOperationAuthorizerTest {
         }
 
         @Override
-        public RunScriptResponse runScript(RunScriptRequest request) {
+        public RunCodeResponse runCode(RunCodeRequest request) {
             throw new UnsupportedOperationException();
         }
 

@@ -19,7 +19,7 @@ public class ModelContextProtocolToolCallAuthorizer {
         "readCode",
         "writeCode",
         "compileCode",
-        "runScript")));
+        "runCode")));
     private static final Set<String> DISABLED_API_MAP_READ_TOOL_NAMES = Collections.unmodifiableSet(
         new LinkedHashSet<String>(Arrays.asList(
             "readNodesWithDescendants",

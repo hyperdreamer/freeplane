@@ -17,8 +17,8 @@ import org.freeplane.features.ai.code.CompileCodeResponse;
 import org.freeplane.features.ai.code.EvaluateFormulaRequest;
 import org.freeplane.features.ai.code.ReadCodeRequest;
 import org.freeplane.features.ai.code.ReadCodeResponse;
-import org.freeplane.features.ai.code.RunScriptRequest;
-import org.freeplane.features.ai.code.RunScriptResponse;
+import org.freeplane.features.ai.code.RunCodeRequest;
+import org.freeplane.features.ai.code.RunCodeResponse;
 import org.freeplane.features.ai.code.ScriptHost;
 import org.freeplane.features.ai.code.ScriptRunInitiator;
 import org.freeplane.features.ai.code.WriteCodeRequest;
@@ -94,7 +94,7 @@ public class ModelContextProtocolToolDispatcherTest {
     }
 
     @Test
-    public void dispatchBindsRunScriptRequestFieldsForAiCodeTools() throws Exception {
+    public void dispatchBindsRunCodeRequestFieldsForAiCodeTools() throws Exception {
         ObjectMapper objectMapper = new ObjectMapper();
         RecordingCodeHostService codeHostService = new RecordingCodeHostService();
         AiCodeToolSet toolSet = new AiCodeToolSet(codeHostService, null, null, null);
@@ -105,7 +105,7 @@ public class ModelContextProtocolToolDispatcherTest {
         AtomicReference<ToolExecutionResult> result = new AtomicReference<ToolExecutionResult>();
         final com.fasterxml.jackson.databind.JsonNode argumentsNode = objectMapper.readTree(
             "{\"request\":{\"host\":\"AI\",\"expectedFingerprint\":\"fp\"}}");
-        SwingUtilities.invokeAndWait(() -> result.set(dispatcher.dispatch("runScript", argumentsNode)));
+        SwingUtilities.invokeAndWait(() -> result.set(dispatcher.dispatch("runCode", argumentsNode)));
 
         assertThat(codeHostService.lastRunRequest).isNotNull();
         assertThat(codeHostService.lastRunRequest.getHost()).isEqualTo(ScriptHost.AI);
@@ -162,7 +162,7 @@ public class ModelContextProtocolToolDispatcherTest {
         private ReadCodeRequest lastReadRequest;
         private WriteCodeRequest lastWriteRequest;
         private CompileCodeRequest lastCompileRequest;
-        private RunScriptRequest lastRunRequest;
+        private RunCodeRequest lastRunRequest;
 
         @Override
         public ReadCodeResponse readCode(ReadCodeRequest request) {
@@ -209,9 +209,9 @@ public class ModelContextProtocolToolDispatcherTest {
         }
 
         @Override
-        public RunScriptResponse runScript(RunScriptRequest request) {
+        public RunCodeResponse runCode(RunCodeRequest request) {
             lastRunRequest = request;
-            return new RunScriptResponse(
+            return new RunCodeResponse(
                 "ai-script-1",
                 ScriptHost.AI,
                 "text/x-freeplane-script-groovy",

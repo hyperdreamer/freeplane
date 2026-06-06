@@ -52,7 +52,7 @@ public class AiCodeOperationAuthorizer {
             toolNames.add("compileCode");
         }
         if (scriptExecutionAvailable) {
-            toolNames.add("runScript");
+            toolNames.add("runCode");
         }
         return Collections.unmodifiableSet(toolNames);
     }
@@ -77,7 +77,7 @@ public class AiCodeOperationAuthorizer {
             }
             throw new IllegalStateException("The requested code host is not writable at the current availability level.");
         }
-        if ("runScript".equals(operation)) {
+        if ("runCode".equals(operation)) {
             if (!globalAvailability().includesScriptExecution()) {
                 throw new IllegalStateException("Script execution is not available at the current availability level.");
             }

@@ -13,8 +13,8 @@ import org.freeplane.features.ai.code.CompileCodeRequest;
 import org.freeplane.features.ai.code.CompileCodeResponse;
 import org.freeplane.features.ai.code.ReadCodeRequest;
 import org.freeplane.features.ai.code.ReadCodeResponse;
-import org.freeplane.features.ai.code.RunScriptRequest;
-import org.freeplane.features.ai.code.RunScriptResponse;
+import org.freeplane.features.ai.code.RunCodeRequest;
+import org.freeplane.features.ai.code.RunCodeResponse;
 import org.freeplane.features.ai.code.ScriptHost;
 import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeResponse;
@@ -27,7 +27,7 @@ public class AiCodeToolSet {
         "readCode",
         "writeCode",
         "compileCode",
-        "runScript")));
+        "runCode")));
     private static final String SCRIPT_CONTENT_TYPE = "text/x-freeplane-script-groovy";
     private static final String FORMULA_CONTENT_TYPE = "text/x-freeplane-formula-groovy";
 
@@ -50,7 +50,7 @@ public class AiCodeToolSet {
         return TOOL_NAMES;
     }
 
-    @Tool("Read the current code state for the requested host or codeId. When no codeId is known for the attached editor, specify host ATTACHED_EDITOR.")
+    @Tool("Read the current code state stored in the requested host or codeId. When no codeId is known for the attached editor, specify host ATTACHED_EDITOR.")
     public ReadCodeResponse readCode(ReadCodeToolRequest request) {
         try {
             ReadCodeRequest codeRequest = toReadCodeRequest(request);
@@ -73,7 +73,7 @@ public class AiCodeToolSet {
         }
     }
 
-    @Tool("Replace the full current code text for the requested host or codeId. For the attached editor this updates only the draft text. Attached formula editing is available only when the current tool availability exposes writeCode and compileCode and AI formula editing is enabled.")
+    @Tool("Create or replace the current code state for the requested host or codeId by storing the provided text there. For new AI-owned code, use host AI and call this before compileCode or runCode. For the attached editor this updates only the current draft text. Attached formula editing is available only when the current tool availability exposes writeCode and compileCode and AI formula editing is enabled.")
     public WriteCodeResponse writeCode(WriteCodeToolRequest request) {
         try {
             WriteCodeRequest codeRequest = toWriteCodeRequest(request);
@@ -96,7 +96,7 @@ public class AiCodeToolSet {
         }
     }
 
-    @Tool("Compile the current code for the requested host or codeId without executing it. Attached formula compilation is available only when the current tool availability exposes writeCode and compileCode and AI formula editing is enabled.")
+    @Tool("Compile the current code state for the requested host or codeId without executing it. This compiles code already present in the target host; it does not accept source text directly. For new AI-owned code, call writeCode first. Attached formula compilation is available only when the current tool availability exposes writeCode and compileCode and AI formula editing is enabled.")
     public CompileCodeResponse compileCode(CompileCodeToolRequest request) {
         try {
             CompileCodeRequest codeRequest = toCompileCodeRequest(request);
@@ -119,23 +119,23 @@ public class AiCodeToolSet {
         }
     }
 
-    @Tool("Run the current script for the requested host or codeId using the current Freeplane selection.")
-    public RunScriptResponse runScript(RunScriptToolRequest request) {
+    @Tool("Run the current code state for the requested host or codeId using the current Freeplane selection. This runs code already present in the target host; it does not accept source text directly. For new AI-owned code, call writeCode first. Only script content is runnable.")
+    public RunCodeResponse runCode(RunCodeToolRequest request) {
         try {
-            RunScriptRequest codeRequest = toRunScriptRequest(request);
-            assertAuthorized("runScript", codeRequest == null ? null : codeRequest.getCodeId(),
+            RunCodeRequest codeRequest = toRunCodeRequest(request);
+            assertAuthorized("runCode", codeRequest == null ? null : codeRequest.getCodeId(),
                 codeRequest == null ? null : codeRequest.getHost());
-            RunScriptResponse response = codeHostService.runScript(codeRequest);
+            RunCodeResponse response = codeHostService.runCode(codeRequest);
             publishSummary(new ToolCallSummary(
-                "runScript",
-                "runScript: status=" + response.getStatus() + ", host=" + response.getHost(),
+                "runCode",
+                "runCode: status=" + response.getStatus() + ", host=" + response.getHost(),
                 response.getStatus() == CodeLifecycleStatus.FAILED,
                 toolCaller));
             return response;
         } catch (RuntimeException error) {
             publishSummary(new ToolCallSummary(
-                "runScript",
-                "runScript error: " + safeMessage(error),
+                "runCode",
+                "runCode error: " + safeMessage(error),
                 true,
                 toolCaller));
             throw error;
@@ -150,18 +150,19 @@ public class AiCodeToolSet {
     }
 
     public String systemMessageForChat(@SuppressWarnings("unused") Object input) {
+        boolean writeAuthorized = authorizedToolNames().contains("writeCode");
+        boolean compileAuthorized = authorizedToolNames().contains("compileCode");
+        boolean runAuthorized = authorizedToolNames().contains("runCode");
         ReadCodeResponse response;
         try {
             response = codeHostService.readCode(new ReadCodeRequest(null, ScriptHost.ATTACHED_EDITOR, null));
         } catch (RuntimeException error) {
-            return null;
+            response = null;
         }
         if (response == null || response.getStatus() == CodeLifecycleStatus.NO_CODE) {
-            return null;
+            return genericAiHostGuidance(writeAuthorized, compileAuthorized, runAuthorized);
         }
         if (FORMULA_CONTENT_TYPE.equals(response.getContentType())) {
-            boolean writeAuthorized = authorizedToolNames().contains("writeCode");
-            boolean compileAuthorized = authorizedToolNames().contains("compileCode");
             String toolGuidance = writeAuthorized && compileAuthorized
                 ? "Use readCode, writeCode, and compileCode. "
                 : "Use readCode. Formula authoring is available only when the current tool availability exposes writeCode and compileCode and AI formula editing is enabled. ";
@@ -169,24 +170,34 @@ public class AiCodeToolSet {
                 + "When you do not know codeId yet, target host ATTACHED_EDITOR. The attached content is a formula. "
                 + "Keep it value-computing. Avoid state-changing Freeplane API calls and avoid obviously UI-driving calls. "
                 + "Use the available Freeplane API documentation for API surface and semantics, but do not assume it explicitly marks which methods are UI-related. "
-                + "When writeCode is available, it changes only the draft text. Do not assume submit or execution while the editor stays open. "
-                + "Submit-failure repair requests require user approval.";
+                + "writeCode changes only the current draft text. compileCode acts on the attached editor's current code state and does not accept source text directly. "
+                + "Do not assume submit or execution while the editor stays open. Submit-failure repair requests require user approval.";
         }
-        boolean runAuthorized = authorizedToolNames().contains("runScript");
         if (SCRIPT_CONTENT_TYPE.equals(response.getContentType())) {
             return runAuthorized
-                ? "An editor is attached to this chat. Use readCode, writeCode, compileCode, and runScript. "
+                ? "An editor is attached to this chat. Use readCode, writeCode, compileCode, and runCode. "
                     + "When you do not know codeId yet, target host ATTACHED_EDITOR. The attached content is a script. "
-                    + "writeCode changes only the draft text. Do not copy attached code into the AI-owned script host and run it there unless the user explicitly asks."
+                    + "writeCode changes only the current draft text. compileCode and runCode act on the attached editor's current code state and do not accept source text directly. "
+                    + "Do not copy attached code into the AI-owned script host and run it there unless the user explicitly asks."
                 : "An editor is attached to this chat. Use readCode, writeCode, and compileCode. "
                     + "When you do not know codeId yet, target host ATTACHED_EDITOR. The attached content is a script. "
-                    + "writeCode changes only the draft text. Do not assume execution support.";
+                    + "writeCode changes only the current draft text. compileCode acts on the attached editor's current code state and does not accept source text directly. Do not assume execution support.";
         }
         return runAuthorized
-            ? "An editor is attached to this chat. Use readCode, writeCode, compileCode, and runScript. "
-                + "When you do not know codeId yet, target host ATTACHED_EDITOR."
+            ? "An editor is attached to this chat. Use readCode, writeCode, compileCode, and runCode. "
+                + "When you do not know codeId yet, target host ATTACHED_EDITOR. compileCode and runCode act on the attached editor's current code state and do not accept source text directly."
             : "An editor is attached to this chat. Use readCode, writeCode, and compileCode. "
-                + "When you do not know codeId yet, target host ATTACHED_EDITOR.";
+                + "When you do not know codeId yet, target host ATTACHED_EDITOR. compileCode acts on the attached editor's current code state and does not accept source text directly.";
+    }
+
+    private String genericAiHostGuidance(boolean writeAuthorized, boolean compileAuthorized, boolean runAuthorized) {
+        if (!writeAuthorized || !compileAuthorized || !runAuthorized) {
+            return null;
+        }
+        return "AI-owned code tools are available in this chat. Use readCode, writeCode, compileCode, and runCode. "
+            + "These tools act on the current code state of the targeted host, not on source text quoted in chat. "
+            + "For new AI-owned code, first call writeCode with host AI and text to create or replace that code state, then optionally call compileCode, then runCode. "
+            + "compileCode and runCode do not accept source text directly.";
     }
 
     private void assertAuthorized(String operation, String codeId, ScriptHost host) {
@@ -217,11 +228,11 @@ public class AiCodeToolSet {
         return new CompileCodeRequest(request.getCodeId(), request.getHost(), request.getExpectedFingerprint());
     }
 
-    private RunScriptRequest toRunScriptRequest(RunScriptToolRequest request) {
+    private RunCodeRequest toRunCodeRequest(RunCodeToolRequest request) {
         if (request == null) {
             return null;
         }
-        return new RunScriptRequest(request.getCodeId(), request.getHost(), request.getExpectedFingerprint());
+        return new RunCodeRequest(request.getCodeId(), request.getHost(), request.getExpectedFingerprint());
     }
 
     private void publishSummary(ToolCallSummary summary) {

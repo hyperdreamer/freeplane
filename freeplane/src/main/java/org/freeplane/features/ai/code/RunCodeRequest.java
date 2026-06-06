@@ -1,14 +1,14 @@
 package org.freeplane.features.ai.code;
 
-public class RunScriptRequest {
+public class RunCodeRequest {
     private String codeId;
     private ScriptHost host;
     private String expectedFingerprint;
 
-    public RunScriptRequest() {
+    public RunCodeRequest() {
     }
 
-    public RunScriptRequest(String codeId, ScriptHost host, String expectedFingerprint) {
+    public RunCodeRequest(String codeId, ScriptHost host, String expectedFingerprint) {
         this.codeId = codeId;
         this.host = host;
         this.expectedFingerprint = expectedFingerprint;

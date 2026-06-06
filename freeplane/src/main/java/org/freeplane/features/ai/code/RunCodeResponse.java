@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-public class RunScriptResponse {
+public class RunCodeResponse {
     private final String codeId;
     private final ScriptHost host;
     private final String contentType;
@@ -17,7 +17,7 @@ public class RunScriptResponse {
     private final String stdout;
     private final Object structuredResult;
 
-    public RunScriptResponse(String codeId,
+    public RunCodeResponse(String codeId,
                              ScriptHost host,
                              String contentType,
                              CodeLifecycleStatus status,

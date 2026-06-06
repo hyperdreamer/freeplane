@@ -26,8 +26,8 @@ import org.freeplane.features.ai.code.CompileCodeResponse;
 import org.freeplane.features.ai.code.EvaluateFormulaRequest;
 import org.freeplane.features.ai.code.ReadCodeRequest;
 import org.freeplane.features.ai.code.ReadCodeResponse;
-import org.freeplane.features.ai.code.RunScriptRequest;
-import org.freeplane.features.ai.code.RunScriptResponse;
+import org.freeplane.features.ai.code.RunCodeRequest;
+import org.freeplane.features.ai.code.RunCodeResponse;
 import org.freeplane.features.ai.code.ScriptHost;
 import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeResponse;
@@ -157,7 +157,7 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
     }
 
     @Override
-    public synchronized RunScriptResponse runScript(RunScriptRequest request) {
+    public synchronized RunCodeResponse runCode(RunCodeRequest request) {
         if (request == null) {
             throw new IllegalArgumentException("request is required.");
         }
@@ -166,7 +166,7 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
         if (!(attachment.editor instanceof AiCodeEditor)) {
             throw new IllegalStateException("Only script content is runnable.");
         }
-        RunScriptResponse response = normalizedRunResponse(attachment, ((AiCodeEditor) attachment.editor).runScript(request));
+        RunCodeResponse response = normalizedRunResponse(attachment, ((AiCodeEditor) attachment.editor).runCode(request));
         attachment.latestCodeState = stateFromRunResponse(attachment, response);
         fireRunFinished(response);
         return response;
@@ -343,11 +343,11 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
             null);
     }
 
-    private RunScriptResponse normalizedRunResponse(ActiveAttachment attachment, RunScriptResponse response) {
+    private RunCodeResponse normalizedRunResponse(ActiveAttachment attachment, RunCodeResponse response) {
         if (response == null) {
             throw new IllegalStateException("Attached editor run returned no response.");
         }
-        return new RunScriptResponse(
+        return new RunCodeResponse(
             attachment.codeId,
             ScriptHost.ATTACHED_EDITOR,
             attachment.contentType,
@@ -361,7 +361,7 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
             response.getStructuredResult());
     }
 
-    private ReadCodeResponse stateFromRunResponse(ActiveAttachment attachment, RunScriptResponse response) {
+    private ReadCodeResponse stateFromRunResponse(ActiveAttachment attachment, RunCodeResponse response) {
         return new ReadCodeResponse(
             attachment.codeId,
             ScriptHost.ATTACHED_EDITOR,
@@ -591,7 +591,7 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
         }
     }
 
-    private void fireRunFinished(RunScriptResponse response) {
+    private void fireRunFinished(RunCodeResponse response) {
         List<AiCodeRunListener> listeners;
         synchronized (this) {
             listeners = new ArrayList<AiCodeRunListener>(runListeners);

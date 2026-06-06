@@ -13,8 +13,8 @@ import org.freeplane.features.ai.code.CompileCodeResponse;
 import org.freeplane.features.ai.code.EvaluateFormulaRequest;
 import org.freeplane.features.ai.code.ReadCodeRequest;
 import org.freeplane.features.ai.code.ReadCodeResponse;
-import org.freeplane.features.ai.code.RunScriptRequest;
-import org.freeplane.features.ai.code.RunScriptResponse;
+import org.freeplane.features.ai.code.RunCodeRequest;
+import org.freeplane.features.ai.code.RunCodeResponse;
 import org.freeplane.features.ai.code.ScriptHost;
 import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeResponse;
@@ -78,12 +78,12 @@ public class RoutingAiCodeHostService implements AiCodeHostService {
     }
 
     @Override
-    public synchronized RunScriptResponse runScript(RunScriptRequest request) {
+    public synchronized RunCodeResponse runCode(RunCodeRequest request) {
         ScriptHost host = resolveHost(request == null ? null : request.getCodeId(), request == null ? null : request.getHost());
         if (host == ScriptHost.ATTACHED_EDITOR) {
-            return attachedEditorCodeHostService.runScript(request);
+            return attachedEditorCodeHostService.runCode(request);
         }
-        return requireAiCodeHostService().runScript(request);
+        return requireAiCodeHostService().runCode(request);
     }
 
     @Override

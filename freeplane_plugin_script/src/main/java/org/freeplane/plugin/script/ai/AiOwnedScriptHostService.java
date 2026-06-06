@@ -27,8 +27,8 @@ import org.freeplane.features.ai.code.CompileCodeResponse;
 import org.freeplane.features.ai.code.EvaluateFormulaRequest;
 import org.freeplane.features.ai.code.ReadCodeRequest;
 import org.freeplane.features.ai.code.ReadCodeResponse;
-import org.freeplane.features.ai.code.RunScriptRequest;
-import org.freeplane.features.ai.code.RunScriptResponse;
+import org.freeplane.features.ai.code.RunCodeRequest;
+import org.freeplane.features.ai.code.RunCodeResponse;
 import org.freeplane.features.ai.code.ScriptHost;
 import org.freeplane.features.ai.code.ScriptRunInitiator;
 import org.freeplane.features.ai.code.WriteCodeRequest;
@@ -73,7 +73,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
     }
 
     interface DialogCallbacks {
-        RunScriptResponse runFromDialog(String codeText);
+        RunCodeResponse runFromDialog(String codeText);
         void dialogCancelled();
     }
 
@@ -125,8 +125,8 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
     }
 
     @Override
-    public RunScriptResponse runScript(RunScriptRequest request) {
-        return onEdt(() -> doRunScript(request));
+    public RunCodeResponse runCode(RunCodeRequest request) {
+        return onEdt(() -> doRunCode(request));
     }
 
     @Override
@@ -273,7 +273,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
         return response;
     }
 
-    RunScriptResponse doRunScript(RunScriptRequest request) {
+    RunCodeResponse doRunCode(RunCodeRequest request) {
         requireCurrentScript(request == null ? null : request.getCodeId(), request == null ? null : request.getHost());
         assertExpectedFingerprint(request == null ? null : request.getExpectedFingerprint());
         assertNotRunning();
@@ -282,14 +282,14 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
         if (policy == AiScriptExecutionPolicy.SHOWN_USER_RUN) {
             showCodeInDialog(currentScript.codeId);
             dialog().showAndFocus();
-            RunScriptResponse response = waitingResponse(ScriptRunInitiator.AI);
+            RunCodeResponse response = waitingResponse(ScriptRunInitiator.AI);
             currentScript.latestState = waitingState(currentScript, response.getFingerprint(), ScriptRunInitiator.AI);
             return response;
         }
         return executeCurrentScript(ScriptRunInitiator.AI, aiStartedPermissions());
     }
 
-    RunScriptResponse runFromDialog(String codeText) {
+    RunCodeResponse runFromDialog(String codeText) {
         if (currentScript == null) {
             throw new IllegalStateException("No AI-owned script exists.");
         }
@@ -324,7 +324,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
             booleanProperty(AI_SCRIPT_WITHOUT_EXEC_RESTRICTION));
     }
 
-    private RunScriptResponse executeCurrentScript(ScriptRunInitiator runInitiator,
+    private RunCodeResponse executeCurrentScript(ScriptRunInitiator runInitiator,
                                                    ScriptingPermissions permissions) {
         assertNotRunning();
         synchronizeCurrentTextFromDialog();
@@ -336,7 +336,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
                 codeText,
                 permissions);
             if (!compileResult.isSuccessful()) {
-                RunScriptResponse response = new RunScriptResponse(
+                RunCodeResponse response = new RunCodeResponse(
                     currentScript.codeId,
                     ScriptHost.AI,
                     AI_SCRIPT_CONTENT_TYPE,
@@ -376,7 +376,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
                     permissions);
                 String stdout = trimStdout(outputBuffer);
                 Object structuredResult = toJsonSafeValue(result);
-                RunScriptResponse response = new RunScriptResponse(
+                RunCodeResponse response = new RunCodeResponse(
                     currentScript.codeId,
                     ScriptHost.AI,
                     AI_SCRIPT_CONTENT_TYPE,
@@ -408,7 +408,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
             } catch (ExecuteScriptException error) {
                 String stdout = trimStdout(outputBuffer);
                 Integer errorLine = lineNumber[0] >= 0 ? Integer.valueOf(lineNumber[0]) : null;
-                RunScriptResponse response = new RunScriptResponse(
+                RunCodeResponse response = new RunCodeResponse(
                     currentScript.codeId,
                     ScriptHost.AI,
                     AI_SCRIPT_CONTENT_TYPE,
@@ -428,7 +428,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
             } catch (RuntimeException error) {
                 String stdout = trimStdout(outputBuffer);
                 Integer errorLine = lineNumber[0] >= 0 ? Integer.valueOf(lineNumber[0]) : null;
-                RunScriptResponse response = new RunScriptResponse(
+                RunCodeResponse response = new RunCodeResponse(
                     currentScript.codeId,
                     ScriptHost.AI,
                     AI_SCRIPT_CONTENT_TYPE,
@@ -453,7 +453,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
         }
     }
 
-    private void refreshDialogAfterRun(RunScriptResponse response) {
+    private void refreshDialogAfterRun(RunCodeResponse response) {
         if (dialog == null || !dialog.showsCode(currentScript.codeId)) {
             return;
         }
@@ -617,10 +617,10 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
             state.getStructuredResult());
     }
 
-    private RunScriptResponse waitingResponse(ScriptRunInitiator runInitiator) {
+    private RunCodeResponse waitingResponse(ScriptRunInitiator runInitiator) {
         String codeText = currentText();
         String currentFingerprint = fingerprint(codeText);
-        return new RunScriptResponse(
+        return new RunCodeResponse(
             currentScript.codeId,
             ScriptHost.AI,
             AI_SCRIPT_CONTENT_TYPE,
@@ -654,7 +654,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
         if (dialog == null) {
             dialog = dialogFactory.create(this::readCurrentStateForDialog, new DialogCallbacks() {
                 @Override
-                public RunScriptResponse runFromDialog(String codeText) {
+                public RunCodeResponse runFromDialog(String codeText) {
                     return AiOwnedScriptHostService.this.runFromDialog(codeText);
                 }
 
@@ -792,7 +792,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
         return stdout.isEmpty() ? null : stdout;
     }
 
-    private void fireRunFinished(RunScriptResponse response) {
+    private void fireRunFinished(RunCodeResponse response) {
         List<AiCodeRunListener> listeners = new ArrayList<AiCodeRunListener>(runListeners);
         for (AiCodeRunListener listener : listeners) {
             listener.runFinished(response);

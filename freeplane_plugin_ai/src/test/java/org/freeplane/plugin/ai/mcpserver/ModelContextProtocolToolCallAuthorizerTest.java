@@ -28,9 +28,9 @@ public class ModelContextProtocolToolCallAuthorizerTest {
             aiCodeOperationAuthorizer,
             getApiDocumentationTool);
 
-        uut.assertAuthorized("runScript", objectMapper.readTree("{\"request\":{\"codeId\":\"ai-script-1\"}}"));
+        uut.assertAuthorized("runCode", objectMapper.readTree("{\"request\":{\"codeId\":\"ai-script-1\"}}"));
 
-        verify(aiCodeOperationAuthorizer).assertAuthorized(eq("runScript"), eq("ai-script-1"), eq(null));
+        verify(aiCodeOperationAuthorizer).assertAuthorized(eq("runCode"), eq("ai-script-1"), eq(null));
     }
 
     @Test

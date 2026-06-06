@@ -72,8 +72,8 @@ import org.freeplane.features.ai.code.CodeLifecycleStatus;
 import org.freeplane.features.ai.code.CompileCodeRequest;
 import org.freeplane.features.ai.code.CompileCodeResponse;
 import org.freeplane.features.ai.code.ReadCodeResponse;
-import org.freeplane.features.ai.code.RunScriptRequest;
-import org.freeplane.features.ai.code.RunScriptResponse;
+import org.freeplane.features.ai.code.RunCodeRequest;
+import org.freeplane.features.ai.code.RunCodeResponse;
 import org.freeplane.features.ai.code.ScriptHost;
 import org.freeplane.features.ai.code.ScriptRunInitiator;
 import org.freeplane.core.ui.UIBuilder;
@@ -260,8 +260,8 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 				return;
 			}
 			try {
-				RunScriptResponse response = runScript(
-					new RunScriptRequest(null, ScriptHost.ATTACHED_EDITOR, null),
+				RunCodeResponse response = runCode(
+					new RunCodeRequest(null, ScriptHost.ATTACHED_EDITOR, null),
 					ScriptRunInitiator.USER);
 				renderManualRunResult(response);
 				updateAiAttachmentAfterManualRun(response);
@@ -599,11 +599,11 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 	}
 
 	@Override
-	public RunScriptResponse runScript(RunScriptRequest request) {
-		return runScript(request, ScriptRunInitiator.AI);
+	public RunCodeResponse runCode(RunCodeRequest request) {
+		return runCode(request, ScriptRunInitiator.AI);
 	}
 
-	private RunScriptResponse runScript(RunScriptRequest request, ScriptRunInitiator runInitiator) {
+	private RunCodeResponse runCode(RunCodeRequest request, ScriptRunInitiator runInitiator) {
 		storeCurrent();
 		if (mScriptList.isSelectionEmpty()) {
 			throw new IllegalStateException("No script is selected.");
@@ -618,7 +618,7 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 					ActionUtils.setCaretPosition(mScriptTextField, pLineNumber, 1);
 				}
 			});
-			return new RunScriptResponse(
+			return new RunCodeResponse(
 				request == null ? null : request.getCodeId(),
 				ScriptHost.ATTACHED_EDITOR,
 				AI_ATTACHMENT_CONTENT_TYPE,
@@ -632,7 +632,7 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 				toJsonSafeValue(result));
 		}
 		catch (ExecuteScriptException e) {
-			return new RunScriptResponse(
+			return new RunCodeResponse(
 				request == null ? null : request.getCodeId(),
 				ScriptHost.ATTACHED_EDITOR,
 				AI_ATTACHMENT_CONTENT_TYPE,
@@ -646,7 +646,7 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 				null);
 		}
 		catch (RuntimeException e) {
-			return new RunScriptResponse(
+			return new RunCodeResponse(
 				request == null ? null : request.getCodeId(),
 				ScriptHost.ATTACHED_EDITOR,
 				AI_ATTACHMENT_CONTENT_TYPE,
@@ -664,7 +664,7 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 		}
 	}
 
-	private void renderManualRunResult(RunScriptResponse response) {
+	private void renderManualRunResult(RunCodeResponse response) {
 		mScriptResultField.setText("");
 		if (response != null && response.getStdout() != null) {
 			mScriptResultField.append(response.getStdout());
@@ -681,7 +681,7 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 		}
 	}
 
-	private void updateAiAttachmentAfterManualRun(RunScriptResponse response) {
+	private void updateAiAttachmentAfterManualRun(RunCodeResponse response) {
 		if (aiChatAttachment == null || response == null) {
 			return;
 		}

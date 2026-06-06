@@ -7,7 +7,7 @@ public interface AiCodeHostService {
 
     CompileCodeResponse compileCode(CompileCodeRequest request);
 
-    RunScriptResponse runScript(RunScriptRequest request);
+    RunCodeResponse runCode(RunCodeRequest request);
 
     AiChatCodeOperationResult evaluateFormula(EvaluateFormulaRequest request);
 

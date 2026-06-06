@@ -2,7 +2,7 @@ package org.freeplane.plugin.ai.chat.memory;
 
 import dev.langchain4j.data.message.UserMessage;
 import java.util.List;
-import org.freeplane.features.ai.code.RunScriptResponse;
+import org.freeplane.features.ai.code.RunCodeResponse;
 
 public class AutomaticCodeStatusMessage extends UserMessage {
     private static final String PREFIX = "Automatic app-authored code-status message:";
@@ -11,11 +11,11 @@ public class AutomaticCodeStatusMessage extends UserMessage {
         super(text == null ? PREFIX : text);
     }
 
-    public static AutomaticCodeStatusMessage forRunResponse(RunScriptResponse response) {
+    public static AutomaticCodeStatusMessage forRunResponse(RunCodeResponse response) {
         return new AutomaticCodeStatusMessage(formatRunResponse(response));
     }
 
-    static String formatRunResponse(RunScriptResponse response) {
+    static String formatRunResponse(RunCodeResponse response) {
         StringBuilder builder = new StringBuilder();
         builder.append(PREFIX);
         if (response == null) {

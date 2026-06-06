@@ -68,8 +68,8 @@ import org.freeplane.features.ai.code.CompileCodeResponse;
 import org.freeplane.features.ai.code.EvaluateFormulaRequest;
 import org.freeplane.features.ai.code.ReadCodeRequest;
 import org.freeplane.features.ai.code.ReadCodeResponse;
-import org.freeplane.features.ai.code.RunScriptRequest;
-import org.freeplane.features.ai.code.RunScriptResponse;
+import org.freeplane.features.ai.code.RunCodeRequest;
+import org.freeplane.features.ai.code.RunCodeResponse;
 import org.freeplane.features.ai.code.ScriptHost;
 import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeResponse;
@@ -199,7 +199,7 @@ public class AIChatPanel extends JPanel {
         new HashMap<String, LiveChatSessionId>();
     private final AiCodeRunListener aiCodeRunListener = new AiCodeRunListener() {
         @Override
-        public void runFinished(RunScriptResponse response) {
+        public void runFinished(RunCodeResponse response) {
             handleCodeRunFinished(response);
         }
     };
@@ -1234,8 +1234,8 @@ public class AIChatPanel extends JPanel {
             }
 
             @Override
-            public RunScriptResponse runScript(RunScriptRequest request) {
-                RunScriptResponse response = delegate.runScript(request);
+            public RunCodeResponse runCode(RunCodeRequest request) {
+                RunCodeResponse response = delegate.runCode(request);
                 rememberAiOwnedCodeOwner(response == null ? null : response.getCodeId(),
                     response == null ? null : response.getHost(), sessionId);
                 return response;
@@ -1475,7 +1475,7 @@ public class AIChatPanel extends JPanel {
         }
     }
 
-    void handleCodeRunFinished(RunScriptResponse response) {
+    void handleCodeRunFinished(RunCodeResponse response) {
         if (response == null || response.getHost() != ScriptHost.AI || response.getRunInitiator() != org.freeplane.features.ai.code.ScriptRunInitiator.USER) {
             return;
         }

@@ -11,8 +11,8 @@ import org.freeplane.features.ai.code.CompileCodeResponse;
 import org.freeplane.features.ai.code.EvaluateFormulaRequest;
 import org.freeplane.features.ai.code.ReadCodeRequest;
 import org.freeplane.features.ai.code.ReadCodeResponse;
-import org.freeplane.features.ai.code.RunScriptRequest;
-import org.freeplane.features.ai.code.RunScriptResponse;
+import org.freeplane.features.ai.code.RunCodeRequest;
+import org.freeplane.features.ai.code.RunCodeResponse;
 import org.freeplane.features.ai.code.ScriptHost;
 import org.freeplane.features.ai.code.ScriptRunInitiator;
 import org.freeplane.features.ai.code.WriteCodeRequest;
@@ -98,7 +98,7 @@ public class AiCodeToolSetTest {
             }
 
             @Override
-            public RunScriptResponse runScript(RunScriptRequest request) {
+            public RunCodeResponse runCode(RunCodeRequest request) {
                 throw new IllegalStateException("not needed");
             }
 
@@ -229,7 +229,7 @@ public class AiCodeToolSetTest {
             }
 
             @Override
-            public RunScriptResponse runScript(RunScriptRequest request) {
+            public RunCodeResponse runCode(RunCodeRequest request) {
                 throw new IllegalStateException("No editor is attached.");
             }
 
@@ -259,7 +259,7 @@ public class AiCodeToolSetTest {
             Collections.<String>emptyList(),
             null,
             null);
-        private RunScriptResponse runResponse = new RunScriptResponse(
+        private RunCodeResponse runResponse = new RunCodeResponse(
             null,
             ScriptHost.ATTACHED_EDITOR,
             "text/plain",
@@ -292,7 +292,7 @@ public class AiCodeToolSetTest {
         }
 
         @Override
-        public RunScriptResponse runScript(RunScriptRequest request) {
+        public RunCodeResponse runCode(RunCodeRequest request) {
             return runResponse;
         }
 

@@ -8,8 +8,8 @@ import org.freeplane.features.ai.code.CompileCodeRequest;
 import org.freeplane.features.ai.code.CompileCodeResponse;
 import org.freeplane.features.ai.code.ReadCodeRequest;
 import org.freeplane.features.ai.code.ReadCodeResponse;
-import org.freeplane.features.ai.code.RunScriptRequest;
-import org.freeplane.features.ai.code.RunScriptResponse;
+import org.freeplane.features.ai.code.RunCodeRequest;
+import org.freeplane.features.ai.code.RunCodeResponse;
 import org.freeplane.features.ai.code.ScriptHost;
 import org.freeplane.features.ai.code.ScriptRunInitiator;
 import org.freeplane.features.ai.code.WriteCodeRequest;
@@ -353,8 +353,8 @@ public class SingleEditorAttachmentServiceTest {
         }
 
         @Override
-        public RunScriptResponse runScript(RunScriptRequest request) {
-            return new RunScriptResponse(
+        public RunCodeResponse runCode(RunCodeRequest request) {
+            return new RunCodeResponse(
                 null,
                 ScriptHost.ATTACHED_EDITOR,
                 "text/plain",

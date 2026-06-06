@@ -17,7 +17,7 @@ import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.ai.code.CodeLifecycleStatus;
 import org.freeplane.features.ai.code.ReadCodeResponse;
-import org.freeplane.features.ai.code.RunScriptResponse;
+import org.freeplane.features.ai.code.RunCodeResponse;
 
 public class AiOwnedScriptDialog extends JDialog implements AiOwnedScriptHostService.DialogHandle {
     private static final long serialVersionUID = 1L;
@@ -103,7 +103,7 @@ public class AiOwnedScriptDialog extends JDialog implements AiOwnedScriptHostSer
 
     private void configureActions() {
         runButton.addActionListener(event -> {
-            RunScriptResponse response = callbacks == null ? null : callbacks.runFromDialog(codeTextArea.getText());
+            RunCodeResponse response = callbacks == null ? null : callbacks.runFromDialog(codeTextArea.getText());
             if (displayedCodeId != null) {
                 showCode(displayedCodeId);
             }
