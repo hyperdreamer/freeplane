@@ -1,6 +1,7 @@
 package org.freeplane.plugin.ai.model;
 
 import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.openai.OpenAiChatRequestParameters;
 import java.lang.reflect.Field;
 import java.util.Collections;
 import java.util.Map;
@@ -24,6 +25,7 @@ public class AIChatModelFactoryTest {
         ChatModel chatModel = AIChatModelFactory.createChatLanguageModel(configuration);
 
         assertThat(fieldValue(chatModel, "maxRetries")).isEqualTo(AIChatModelFactory.CHAT_MODEL_MAX_RETRIES);
+        assertThat(openAiRequestParameters(chatModel).parallelToolCalls()).isFalse();
     }
 
     @Test
@@ -77,6 +79,10 @@ public class AIChatModelFactoryTest {
         ChatModel chatModel = AIChatModelFactory.createChatLanguageModel(configuration);
 
         assertThat(ollamaRequestHeaders(chatModel)).isEqualTo(Collections.emptyMap());
+    }
+
+    private OpenAiChatRequestParameters openAiRequestParameters(ChatModel chatModel) throws Exception {
+        return (OpenAiChatRequestParameters) fieldValue(chatModel, "defaultRequestParameters");
     }
 
     @SuppressWarnings("unchecked")

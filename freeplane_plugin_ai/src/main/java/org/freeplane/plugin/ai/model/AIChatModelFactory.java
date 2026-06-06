@@ -31,6 +31,7 @@ public class AIChatModelFactory {
                 .apiKey(configuration.getOpenRouterKey())
                 .modelName(modelName)
                 .maxRetries(CHAT_MODEL_MAX_RETRIES)
+                .parallelToolCalls(false)
                 .build();
         }
         if (PROVIDER_NAME_GEMINI.equalsIgnoreCase(providerName)) {

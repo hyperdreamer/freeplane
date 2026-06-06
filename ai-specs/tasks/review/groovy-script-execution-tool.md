@@ -1431,7 +1431,7 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
   - Manual tests: N/A.
 
 ## Subtask: Disable LangChain4j parallel tool calls for OpenRouter chat
-- **Status:** backlog
+- **Status:** review
 - **Scope:** Make the effective LangChain4j OpenRouter chat-model
   configuration set `parallel_tool_calls` to false while preserving the
   existing sequential Freeplane tool-execution path.
