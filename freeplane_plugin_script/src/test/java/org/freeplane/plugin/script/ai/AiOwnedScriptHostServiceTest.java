@@ -84,6 +84,26 @@ public class AiOwnedScriptHostServiceTest {
     }
 
     @Test
+    public void shownUserRunPolicyPreservesWrittenScriptWhenDialogLoadsCurrentState() {
+        ResourceController resourceController = mock(ResourceController.class);
+        when(resourceController.getEnumProperty(
+            eq(AiOwnedScriptHostService.AI_SCRIPT_EXECUTION_POLICY),
+            eq(AiScriptExecutionPolicy.SHOWN_USER_RUN))).thenReturn(AiScriptExecutionPolicy.SHOWN_USER_RUN);
+        LoadingDialogFactory dialogFactory = new LoadingDialogFactory();
+        AiOwnedScriptHostService uut = new AiOwnedScriptHostService(resourceController, dialogFactory);
+        WriteCodeResponse written = uut.doWriteCode(new WriteCodeRequest(null, ScriptHost.AI, "println 1", null));
+
+        RunScriptResponse response = uut.doRunScript(new RunScriptRequest(written.getCodeId(), null, null));
+        ReadCodeResponse state = uut.doReadCode(new ReadCodeRequest(written.getCodeId(), null, null));
+
+        assertThat(response.getStatus()).isEqualTo(CodeLifecycleStatus.WAITING_FOR_USER_RUN);
+        assertThat(response.getFingerprint()).isEqualTo(written.getFingerprint());
+        assertThat(state.getCodeText()).isEqualTo("println 1");
+        assertThat(state.getFingerprint()).isEqualTo(written.getFingerprint());
+        assertThat(dialogFactory.dialog.currentText).isEqualTo("println 1");
+    }
+
+    @Test
     public void evaluateFormulaDelegatesToFormulaValidationSupport() {
         FormulaValidationSupport validationSupport = mock(FormulaValidationSupport.class);
         AiOwnedScriptHostService uut = new AiOwnedScriptHostService(null, new RecordingDialogFactory(), validationSupport);
@@ -158,6 +178,17 @@ public class AiOwnedScriptHostServiceTest {
         }
     }
 
+    private static class LoadingDialogFactory implements AiOwnedScriptHostService.DialogFactory {
+        private LoadingDialog dialog;
+
+        @Override
+        public AiOwnedScriptHostService.DialogHandle create(AiOwnedScriptHostService.CodeStateProvider codeStateProvider,
+                                                            AiOwnedScriptHostService.DialogCallbacks callbacks) {
+            dialog = new LoadingDialog(codeStateProvider);
+            return dialog;
+        }
+    }
+
     private static class RecordingDialog implements AiOwnedScriptHostService.DialogHandle {
         private String shownCodeId;
         private int showAndFocusCalls;
@@ -175,6 +206,41 @@ public class AiOwnedScriptHostServiceTest {
         @Override
         public String currentCodeText() {
             return "println 1";
+        }
+
+        @Override
+        public boolean showsCode(String codeId) {
+            return shownCodeId != null && shownCodeId.equals(codeId);
+        }
+
+        @Override
+        public void hideDialog() {
+        }
+    }
+
+    private static class LoadingDialog implements AiOwnedScriptHostService.DialogHandle {
+        private final AiOwnedScriptHostService.CodeStateProvider codeStateProvider;
+        private String shownCodeId;
+        private String currentText = "";
+
+        private LoadingDialog(AiOwnedScriptHostService.CodeStateProvider codeStateProvider) {
+            this.codeStateProvider = codeStateProvider;
+        }
+
+        @Override
+        public void showCode(String codeId) {
+            shownCodeId = codeId;
+            ReadCodeResponse state = codeStateProvider.readCurrentState(codeId);
+            currentText = state == null || state.getCodeText() == null ? "" : state.getCodeText();
+        }
+
+        @Override
+        public void showAndFocus() {
+        }
+
+        @Override
+        public String currentCodeText() {
+            return currentText;
         }
 
         @Override

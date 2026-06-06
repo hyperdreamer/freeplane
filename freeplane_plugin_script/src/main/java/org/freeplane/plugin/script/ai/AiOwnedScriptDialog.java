@@ -10,7 +10,6 @@ import javax.swing.JButton;
 import javax.swing.JDialog;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
-import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
 import org.freeplane.core.resources.IFreeplanePropertyListener;
@@ -26,7 +25,6 @@ public class AiOwnedScriptDialog extends JDialog implements AiOwnedScriptHostSer
     private final AiOwnedScriptHostService.CodeStateProvider codeStateProvider;
     private final AiOwnedScriptHostService.DialogCallbacks callbacks;
     private final JTextArea codeTextArea;
-    private final JTextArea resultArea;
     private final JButton runButton;
     private final JButton cancelButton;
     private String displayedCodeId;
@@ -37,7 +35,6 @@ public class AiOwnedScriptDialog extends JDialog implements AiOwnedScriptHostSer
         this.codeStateProvider = codeStateProvider;
         this.callbacks = callbacks;
         this.codeTextArea = new JTextArea();
-        this.resultArea = new JTextArea();
         this.runButton = new JButton(TextUtils.getText("plugins/ScriptEditor.run"));
         this.cancelButton = new JButton(TextUtils.getText("cancel"));
         setTitle(TextUtils.getText("ai_owned_script_dialog_title"));
@@ -57,16 +54,11 @@ public class AiOwnedScriptDialog extends JDialog implements AiOwnedScriptHostSer
         ReadCodeResponse state = codeStateProvider == null ? null : codeStateProvider.readCurrentState(codeId);
         if (state == null) {
             codeTextArea.setText("");
-            resultArea.setText("");
             refreshExecutionAuthority();
             return;
         }
-        if (state.getCodeText() != null) {
-            codeTextArea.setText(state.getCodeText());
-            codeTextArea.setCaretPosition(0);
-        }
-        resultArea.setText(formatState(state));
-        resultArea.setCaretPosition(0);
+        codeTextArea.setText(state.getCodeText() == null ? "" : state.getCodeText());
+        codeTextArea.setCaretPosition(0);
         refreshExecutionAuthority();
     }
 
@@ -96,23 +88,16 @@ public class AiOwnedScriptDialog extends JDialog implements AiOwnedScriptHostSer
 
     private void configureTextAreas() {
         codeTextArea.setLineWrap(false);
-        resultArea.setEditable(false);
-        resultArea.setLineWrap(true);
-        resultArea.setWrapStyleWord(true);
     }
 
     private void configureLayout() {
         JScrollPane codeScrollPane = new JScrollPane(codeTextArea);
         codeScrollPane.setBorder(BorderFactory.createTitledBorder(TextUtils.getText("ai_owned_script_dialog_code")));
-        JScrollPane resultScrollPane = new JScrollPane(resultArea);
-        resultScrollPane.setBorder(BorderFactory.createTitledBorder(TextUtils.getText("plugins/ScriptEditor/window.Result")));
-        JSplitPane splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, codeScrollPane, resultScrollPane);
-        splitPane.setResizeWeight(0.75d);
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         buttonPanel.add(runButton);
         buttonPanel.add(cancelButton);
         getContentPane().setLayout(new BorderLayout());
-        getContentPane().add(splitPane, BorderLayout.CENTER);
+        getContentPane().add(codeScrollPane, BorderLayout.CENTER);
         getContentPane().add(buttonPanel, BorderLayout.SOUTH);
     }
 
@@ -172,45 +157,4 @@ public class AiOwnedScriptDialog extends JDialog implements AiOwnedScriptHostSer
         runButton.setEnabled(executionAvailable && displayedCodeId != null && !displayedCodeId.trim().isEmpty());
     }
 
-    private String formatState(ReadCodeResponse state) {
-        StringBuilder builder = new StringBuilder();
-        append(builder, "codeId", state.getCodeId());
-        append(builder, "host", state.getHost());
-        append(builder, "contentType", state.getContentType());
-        append(builder, "status", state.getStatus());
-        append(builder, "runInitiator", state.getRunInitiator());
-        append(builder, "fingerprint", state.getFingerprint());
-        append(builder, "replacementCodeId", state.getReplacementCodeId());
-        appendList(builder, "compilerDiagnostics", state.getCompilerDiagnostics());
-        append(builder, "errorMessage", state.getErrorMessage());
-        append(builder, "lineNumber", state.getLineNumber());
-        appendBlock(builder, "stdout", state.getStdout());
-        append(builder, "structuredResult", state.getStructuredResult());
-        return builder.toString();
-    }
-
-    private void append(StringBuilder builder, String key, Object value) {
-        if (value == null) {
-            return;
-        }
-        builder.append(key).append('=').append(value).append('\n');
-    }
-
-    private void appendList(StringBuilder builder, String key, java.util.List<String> values) {
-        if (values == null || values.isEmpty()) {
-            return;
-        }
-        builder.append(key).append(':').append('\n');
-        for (String value : values) {
-            builder.append("- ").append(value).append('\n');
-        }
-    }
-
-    private void appendBlock(StringBuilder builder, String key, String value) {
-        if (value == null || value.isEmpty()) {
-            return;
-        }
-        builder.append(key).append('=').append('\n');
-        builder.append(value).append('\n');
-    }
 }

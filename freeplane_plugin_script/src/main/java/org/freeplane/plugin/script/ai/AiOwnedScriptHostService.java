@@ -85,6 +85,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
     private long nextCodeId = 1L;
     private CurrentScript currentScript;
     private DialogHandle dialog;
+    private boolean loadingDialogCode;
 
     public AiOwnedScriptHostService() {
         this(Controller.getCurrentController() == null ? null : Controller.getCurrentController().getResourceController());
@@ -158,7 +159,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
             if (currentScript == null || codeId == null || !codeId.equals(currentScript.codeId)) {
                 return null;
             }
-            dialog().showCode(codeId);
+            showCodeInDialog(codeId);
             dialog().showAndFocus();
             return null;
         });
@@ -234,7 +235,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
         currentScript.fingerprint = fingerprint(currentScript.storedText);
         currentScript.latestState = readyState(currentScript, currentScript.storedText, currentScript.fingerprint);
         if (dialog != null) {
-            dialog.showCode(newCodeId);
+            showCodeInDialog(newCodeId);
         }
         return new WriteCodeResponse(
             currentScript.codeId,
@@ -267,7 +268,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
             : failedState(currentScript, currentFingerprint, compileResult.getCompilerDiagnostics(),
                 compileResult.getErrorMessage(), compileResult.getLineNumber(), null, null, null);
         if (dialog != null && dialog.showsCode(currentScript.codeId)) {
-            dialog.showCode(currentScript.codeId);
+            showCodeInDialog(currentScript.codeId);
         }
         return response;
     }
@@ -279,14 +280,14 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
         synchronizeCurrentTextFromDialog();
         AiScriptExecutionPolicy policy = executionPolicy();
         if (policy == AiScriptExecutionPolicy.SHOWN_USER_RUN) {
-            dialog().showCode(currentScript.codeId);
+            showCodeInDialog(currentScript.codeId);
             dialog().showAndFocus();
             RunScriptResponse response = waitingResponse(ScriptRunInitiator.AI);
             currentScript.latestState = waitingState(currentScript, response.getFingerprint(), ScriptRunInitiator.AI);
             return response;
         }
         if (policy == AiScriptExecutionPolicy.SHOWN_AI_RUN) {
-            dialog().showCode(currentScript.codeId);
+            showCodeInDialog(currentScript.codeId);
             dialog().showAndFocus();
         }
         return executeCurrentScript(ScriptRunInitiator.AI, aiStartedPermissions(), policy == AiScriptExecutionPolicy.SHOWN_AI_RUN);
@@ -461,7 +462,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
         if (dialog == null || !dialog.showsCode(currentScript.codeId)) {
             return;
         }
-        dialog.showCode(currentScript.codeId);
+        showCodeInDialog(currentScript.codeId);
         if (response.getStatus() == CodeLifecycleStatus.SUCCEEDED && closeShownAiRunDialogOnSuccess) {
             dialog.hideDialog();
         }
@@ -675,6 +676,18 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
         return doReadCode(new ReadCodeRequest(codeId, null, null));
     }
 
+    private void showCodeInDialog(String codeId) {
+        if (codeId == null) {
+            return;
+        }
+        loadingDialogCode = true;
+        try {
+            dialog().showCode(codeId);
+        } finally {
+            loadingDialogCode = false;
+        }
+    }
+
     private void synchronizeCurrentTextFromDialog() {
         if (currentScript == null || dialog == null || !dialog.showsCode(currentScript.codeId)) {
             return;
@@ -686,6 +699,9 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
     private String currentText() {
         if (currentScript == null) {
             return "";
+        }
+        if (loadingDialogCode) {
+            return currentScript.storedText == null ? "" : currentScript.storedText;
         }
         if (dialog != null && dialog.showsCode(currentScript.codeId)) {
             return dialog.currentCodeText() == null ? "" : dialog.currentCodeText();
