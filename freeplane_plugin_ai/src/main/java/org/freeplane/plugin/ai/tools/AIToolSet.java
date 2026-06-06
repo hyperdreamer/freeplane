@@ -278,17 +278,14 @@ public class AIToolSet {
     }
 
     @Tool("Preview ordered formula updates without persisting them. "
-        + "Use this only when general AI tool availability includes editing and AI formula editing is enabled. "
-        + "Supported editedElement values: TEXT, DETAILS, NOTE, ATTRIBUTES. "
-        + "TEXT, DETAILS, and NOTE support REPLACE only. ATTRIBUTES support ADD and REPLACE only. "
-        + "For TEXT, DETAILS, and NOTE, pass originalContentType and originalIsFormula from fetchNodesForEditing. "
-        + "For ATTRIBUTES REPLACE, originalIsFormula may be provided for preview-time current-state validation. "
-        + "targetIsFormula is required for every item. "
-        + "The tool expands nodeIdentifiers in request order, validates sequentially in that same order, and lets later "
-        + "preview items see earlier validated candidate values from the same request. "
-        + "Formula targets compile and evaluate before persistence. "
-        + "If one target fails validation, later targets are returned as BLOCKED_BY_PREVIOUS_FAILURE and no previewId is returned. "
-        + "When every target is VALIDATED, review candidateValue and evaluationResult for plausibility before calling applyFormulaUpdates.")
+        + "Requires editing availability and AI formula editing enabled. "
+        + "editedElement: TEXT, DETAILS, NOTE, ATTRIBUTES. "
+        + "TEXT/DETAILS/NOTE support REPLACE only; ATTRIBUTES support ADD or REPLACE. "
+        + "For TEXT/DETAILS/NOTE, pass originalContentType and originalIsFormula from fetchNodesForEditing; for ATTRIBUTES REPLACE, originalIsFormula is optional. "
+        + "targetIsFormula is required. nodeIdentifiers expand in request order; validation runs in that order, and later items can see earlier candidate values. "
+        + "Formula targets compile and evaluate before persistence. Candidate formulas must stay value-computing and must not use UI-related or state-changing Freeplane API calls. "
+        + "If one target fails, later targets are BLOCKED_BY_PREVIOUS_FAILURE and no previewId is returned. "
+        + "Review candidateValue and evaluationResult for plausibility before applyFormulaUpdates.")
     public FormulaUpdatePreviewResponse previewFormulaUpdates(FormulaUpdatePreviewRequest request) {
         try {
             FormulaUpdatePreviewResponse response = formulaUpdateTool.previewFormulaUpdates(request);
@@ -309,7 +306,7 @@ public class AIToolSet {
 
     @Tool("Apply a previously validated previewFormulaUpdates result by previewId. "
         + "Use this only when general AI tool availability includes editing, AI formula editing is enabled, and plausibility review is complete. "
-        + "Candidate values are persisted in the same order used during preview. "
+        + "Candidate values are persisted in the same order used during preview. Candidate formulas must stay value-computing and must not use UI-related or state-changing Freeplane API calls. "
         + "If a target node no longer exists or an attribute REPLACE target can no longer be resolved, the tool returns FAILED instead of crashing.")
     public FormulaUpdateApplyResponse applyFormulaUpdates(FormulaUpdateApplyRequest request) {
         try {
@@ -462,25 +459,14 @@ public class AIToolSet {
         }
     }
 
-    @Tool("Edit node content through undo-aware controllers.\n"
-        + "Each edit item targets nodeIdentifiers (non-empty array).\n"
-        + "Before TEXT/DETAILS/NOTE edits, call fetchNodesForEditing and pass originalContentType from that response.\n"
-        + "For TEXT/DETAILS/NOTE, values starting with <html> are HTML; all others are plain text.\n"
-        + "TEXT supports REPLACE only; to clear TEXT, use REPLACE with an empty value.\n"
-        + "STYLE: REPLACE with a style from listMapStyles (same map), or DELETE.\n"
-        + "HYPERLINK: REPLACE uses value as URL; DELETE clears it.\n"
-        + "ATTRIBUTES/TAGS/ICONS REPLACE/DELETE: use index first, then targetKey.\n"
-        + "ATTRIBUTES ADD: targetKey is attribute name; value is attribute value.\n"
-        + "TAGS ADD: value is tag text; optional index inserts at position.\n"
-        + "ICONS ADD: value is icon description from listAvailableIcons (or emoji); icons append, so index/targetKey ignored.\n"
-        + "Formula-backed fields and formula-targeting changes are not supported by edit(...). Use previewFormulaUpdates "
-        + "and applyFormulaUpdates for formula authoring and formula/non-formula conversion.\n"
-        + "compatibilityPolicy applies to the whole request: SKIP_INCOMPATIBLE_FIELDS (default) or "
-        + "REJECT_ON_ANY_INCOMPATIBLE.\n"
-        + "SKIP_INCOMPATIBLE_FIELDS returns per-target APPLIED/SKIPPED/FAILED results.\n"
-        + "REJECT_ON_ANY_INCOMPATIBLE performs full dry-run validation first; if any target is incompatible, no writes "
-        + "occur and only incompatible targets are returned as REJECTED with reasons. If validation passes, writes run "
-        + "and write-time failures are reported as FAILED per target.")
+    @Tool("Edit node content through undo-aware controllers. "
+        + "Each item targets nodeIdentifiers. Before TEXT/DETAILS/NOTE edits, call fetchNodesForEditing and pass originalContentType. "
+        + "TEXT/DETAILS/NOTE treat values starting with <html> as HTML; otherwise plain text. "
+        + "TEXT supports REPLACE only; clear it with an empty value. DETAILS/NOTE support REPLACE or DELETE. STYLE/HYPERLINK support REPLACE or DELETE. "
+        + "ATTRIBUTES/TAGS/ICONS REPLACE/DELETE prefer index, then targetKey. ATTRIBUTES ADD uses targetKey=name and value=value. TAGS ADD uses value and optional index. ICONS ADD uses an icon from listAvailableIcons or an emoji. "
+        + "Formula-backed or formula-targeting changes are not supported here; use previewFormulaUpdates/applyFormulaUpdates. "
+        + "compatibilityPolicy: SKIP_INCOMPATIBLE_FIELDS (default) applies compatible edits and reports APPLIED/SKIPPED/FAILED. "
+        + "REJECT_ON_ANY_INCOMPATIBLE dry-runs the request and either returns REJECTED without writes or proceeds and may still report write-time FAILED results.")
     public List<EditResultItem> edit(EditRequest request) {
         try {
             List<EditResultItem> response = editNodes(request);
@@ -560,18 +546,12 @@ public class AIToolSet {
         return (MLinkController) linkController;
     }
 
-    @Tool("Create nodes and subtrees relative to an anchor node.\n"
-        + "Optional fields override defaults. Omit them to keep defaults.\n"
-        + "Each optional field is an intentional override. Include it only when the specific value is justified; "
-        + "otherwise omit it. Never send empty strings, empty arrays, or null.\n"
-        + "For content.text/content.details/content.note, only values starting with <html> are treated as HTML; all "
-        + "other values are treated as plain text.\n"
-        + "textContentType/detailsContentType/noteContentType control conversion/validation only; HTML input still "
-        + "requires the <html> prefix.\n"
-        + "Formula values are rejected for text, details, note, and attributes in createNodes. Create the nodes first, "
-        + "then use previewFormulaUpdates and applyFormulaUpdates for formulas.\n"
-        + "Omit optional textual fields such as details and note when they are empty instead of sending empty strings "
-        + "so the tool leaves those values untouched.")
+    @Tool("Create nodes and subtrees relative to an anchor node. "
+        + "Optional fields override defaults; omit them otherwise. Do not send empty strings, empty arrays, or null. "
+        + "For content.text/details/note, only values starting with <html> are treated as HTML; all others are plain text. "
+        + "textContentType/detailsContentType/noteContentType affect conversion and validation only; HTML still requires the <html> prefix. "
+        + "Formula values are rejected for text, details, note, and attributes in createNodes. Create the nodes first, then use previewFormulaUpdates and applyFormulaUpdates for formulas. "
+        + "Omit empty optional text fields such as details and note.")
     public CreateNodesResponse createNodes(CreateNodesRequest request) {
         try {
             CreateNodesResponse response = createNodesTool.createNodes(request);
@@ -596,14 +576,10 @@ public class AIToolSet {
     }
 
     @Tool("Create summary content and a summary bracket for a summarized range. "
-        + "Optional fields override defaults. Omit them to keep defaults. "
-        + "Summary anchor nodes must share the same parent node. Textual field rules are the same as createNodes. "
-        + "Formula values are rejected for text, details, note, and attributes in createSummary; create the summary "
-        + "content first, then use previewFormulaUpdates and applyFormulaUpdates for formulas. "
-        + "Omit optional textual fields such as details and note when they are empty instead of sending empty strings "
-        + "so the tool leaves those values untouched. Tip: to create a summary of summaries, choose summary anchor "
-        + "nodes that already exist at the same summary level under the same parent node, regardless of how those "
-        + "summary nodes were created.")
+        + "Optional fields override defaults; omit them otherwise. Summary anchor nodes must share the same parent. "
+        + "Text rules match createNodes. Formula values are rejected for text, details, note, and attributes in createSummary; "
+        + "create the summary content first, then use previewFormulaUpdates and applyFormulaUpdates for formulas. "
+        + "Omit empty optional text fields such as details and note. To create a summary of summaries, choose summary anchor nodes already at the same summary level under the same parent.")
     public CreateSummaryResponse createSummary(CreateSummaryRequest request) {
         try {
             CreateSummaryResponse response = createSummaryTool.createSummary(request);

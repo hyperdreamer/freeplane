@@ -119,7 +119,7 @@ public class AiCodeToolSet {
         }
     }
 
-    @Tool("Run the current code state for the requested host or codeId using the current Freeplane selection. This runs code already present in the target host; it does not accept source text directly. For new AI-owned code, call writeCode first. Only script content is runnable.")
+    @Tool("Run the current code state for the requested host or codeId using the current Freeplane selection. This runs code already present in the target host; it does not accept source text directly. For new AI-owned code, call writeCode first. Only script content is runnable. Running code may trigger UI side effects. Avoid scripts that show dialogs, notifications, or alter visible UI state unless explicitly requested by the user. Prefer return values or stdout over UI output.")
     public RunCodeResponse runCode(RunCodeToolRequest request) {
         try {
             RunCodeRequest codeRequest = toRunCodeRequest(request);
