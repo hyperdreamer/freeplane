@@ -34,8 +34,8 @@ import org.freeplane.features.ai.code.CodeLifecycleStatus;
 import org.freeplane.features.ai.code.CompileCodeRequest;
 import org.freeplane.features.ai.code.CompileCodeResponse;
 import org.freeplane.features.ai.code.ReadCodeResponse;
-import org.freeplane.features.ai.code.RunScriptRequest;
-import org.freeplane.features.ai.code.RunScriptResponse;
+import org.freeplane.features.ai.code.RunCodeRequest;
+import org.freeplane.features.ai.code.RunCodeResponse;
 import org.freeplane.features.ai.code.ScriptHost;
 import org.freeplane.features.explorer.MapExplorerController;
 import org.freeplane.features.map.NodeModel;
@@ -273,7 +273,7 @@ class FormulaEditor extends EditNodeDialog implements INodeSelector, AiCodeEdito
     }
 
     @Override
-    public RunScriptResponse runScript(RunScriptRequest request) {
+    public RunCodeResponse runCode(RunCodeRequest request) {
         throw new IllegalStateException("Only script content is runnable.");
     }
 
