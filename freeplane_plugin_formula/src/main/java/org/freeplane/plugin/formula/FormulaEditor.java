@@ -18,10 +18,14 @@ import javax.swing.JDialog;
 import javax.swing.JEditorPane;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JScrollPane;
 import javax.swing.RootPaneContainer;
+import javax.swing.JTextArea;
 import javax.swing.JToggleButton;
 import javax.swing.SwingUtilities;
 
+import org.freeplane.api.LengthUnit;
+import org.freeplane.api.Quantity;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.ui.textchanger.TranslatedElementFactory;
 import org.freeplane.core.util.LogUtils;
@@ -58,6 +62,8 @@ class FormulaEditor extends EditNodeDialog implements INodeSelector, AiCodeEdito
     private static final String PASSED_WIDTH_PROPERTY = "formulaDialog.passed.width";
     private static final String PASSED_HEIGHT_PROPERTY = "formulaDialog.passed.height";
     private static final String AI_TAB_ICON_RESOURCE = "/images/panelTabs/aiTab.svg?useAccentColor=true";
+    private static final Quantity<LengthUnit> EXECUTION_FAILURE_DIALOG_WIDTH = new Quantity<LengthUnit>(170, LengthUnit.mm);
+    private static final Quantity<LengthUnit> EXECUTION_FAILURE_DIALOG_HEIGHT = new Quantity<LengthUnit>(85, LengthUnit.mm);
     private static final String REPAIR_PROMPT =
         "Repair the attached Freeplane formula. Keep the result as a valid formula that starts with '='. "
             + "Use the current formula text and the submit diagnostics.";
@@ -155,8 +161,8 @@ class FormulaEditor extends EditNodeDialog implements INodeSelector, AiCodeEdito
         }
         int answer = JOptionPane.showConfirmDialog(
             SwingUtilities.getWindowAncestor(textEditor),
-            buildValidationFailureMessage(validationResult),
-            "Formula validation failed",
+            buildValidationFailureDialogMessage(validationResult),
+            FormulaPluginUtils.getFormulaText("execution_failed.title"),
             JOptionPane.YES_NO_OPTION,
             JOptionPane.ERROR_MESSAGE);
         if (answer == JOptionPane.YES_OPTION) {
@@ -296,19 +302,35 @@ class FormulaEditor extends EditNodeDialog implements INodeSelector, AiCodeEdito
             validationResult.getResult());
     }
 
+    private Object buildValidationFailureDialogMessage(AiChatCodeOperationResult validationResult) {
+        JTextArea messageArea = new JTextArea(buildValidationFailureMessage(validationResult));
+        messageArea.setEditable(false);
+        messageArea.setLineWrap(false);
+        messageArea.setWrapStyleWord(false);
+        messageArea.setFont(textEditor.getFont());
+        messageArea.setCaretPosition(0);
+        JScrollPane scrollPane = new JScrollPane(
+            messageArea,
+            JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
+            JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        scrollPane.setPreferredSize(new Dimension(
+            EXECUTION_FAILURE_DIALOG_WIDTH.in(LengthUnit.px).toBaseUnitsRounded(),
+            EXECUTION_FAILURE_DIALOG_HEIGHT.in(LengthUnit.px).toBaseUnitsRounded()));
+        return new Object[] { scrollPane, FormulaPluginUtils.getFormulaText("execution_failed.ask_for_ai_repair") };
+    }
+
     private String buildValidationFailureMessage(AiChatCodeOperationResult validationResult) {
         StringBuilder builder = new StringBuilder();
-        builder.append("Formula validation failed.");
+        builder.append(FormulaPluginUtils.getFormulaText("execution_failed.message"));
         if (validationResult.getErrorMessage() != null && !validationResult.getErrorMessage().trim().isEmpty()) {
             builder.append("\n\n").append(validationResult.getErrorMessage().trim());
         }
         if (!validationResult.getCompilerDiagnostics().isEmpty()) {
-            builder.append("\n\nDiagnostics:");
+            builder.append("\n\n").append(FormulaPluginUtils.getFormulaText("execution_failed.diagnostics"));
             for (String diagnostic : validationResult.getCompilerDiagnostics()) {
                 builder.append("\n- ").append(diagnostic);
             }
         }
-        builder.append("\n\nAsk AI to try to fix the formula?");
         return builder.toString();
     }
 
