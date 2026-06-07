@@ -22,7 +22,6 @@ public class AutomaticCodeStatusMessage extends UserMessage {
             return builder.toString();
         }
         builder.append('\n');
-        append(builder, "codeId", response.getCodeId());
         append(builder, "host", response.getHost());
         append(builder, "contentType", response.getContentType());
         append(builder, "status", response.getStatus());

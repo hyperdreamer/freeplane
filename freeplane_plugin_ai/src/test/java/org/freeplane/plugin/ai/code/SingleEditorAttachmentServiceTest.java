@@ -213,7 +213,6 @@ public class SingleEditorAttachmentServiceTest {
         when(aiChatPanel.startNewChat()).thenReturn(LiveChatSessionId.create());
         FakeCodeEditor editor = new FakeCodeEditor("text");
         editor.setCompileResponse(new CompileCodeResponse(
-            null,
             ScriptHost.ATTACHED_EDITOR,
             "text/plain",
             CodeLifecycleStatus.FAILED,
@@ -224,10 +223,12 @@ public class SingleEditorAttachmentServiceTest {
         SingleEditorAttachmentService uut = new SingleEditorAttachmentService(aiChatPanel, settings);
         uut.attachEditor(editor, "text/plain");
 
-        CompileCodeResponse firstResult = uut.compileCode(new CompileCodeRequest(null, ScriptHost.ATTACHED_EDITOR, null));
+        ReadCodeResponse initialState = readCurrentState(uut);
+        CompileCodeResponse firstResult = uut.compileCode(new CompileCodeRequest(
+            ScriptHost.ATTACHED_EDITOR,
+            initialState.getFingerprint()));
         ReadCodeResponse firstState = readCurrentState(uut);
         editor.setCompileResponse(new CompileCodeResponse(
-            null,
             ScriptHost.ATTACHED_EDITOR,
             "text/plain",
             CodeLifecycleStatus.READY,
@@ -235,7 +236,9 @@ public class SingleEditorAttachmentServiceTest {
             Collections.<String>emptyList(),
             null,
             null));
-        CompileCodeResponse secondResult = uut.compileCode(new CompileCodeRequest(null, ScriptHost.ATTACHED_EDITOR, null));
+        CompileCodeResponse secondResult = uut.compileCode(new CompileCodeRequest(
+            ScriptHost.ATTACHED_EDITOR,
+            firstState.getFingerprint()));
         ReadCodeResponse secondState = readCurrentState(uut);
 
         assertThat(firstResult.getStatus()).isEqualTo(CodeLifecycleStatus.FAILED);
@@ -257,7 +260,6 @@ public class SingleEditorAttachmentServiceTest {
 
         ReadCodeResponse fullState = readCurrentState(uut);
         ReadCodeResponse fingerprintState = uut.readCode(new ReadCodeRequest(
-            null,
             ScriptHost.ATTACHED_EDITOR,
             fullState.getFingerprint()));
 
@@ -275,7 +277,10 @@ public class SingleEditorAttachmentServiceTest {
         SingleEditorAttachmentService uut = new SingleEditorAttachmentService(aiChatPanel, settings);
         uut.attachEditor(editor, "text/x-freeplane-formula-groovy");
 
-        uut.writeCode(new WriteCodeRequest(null, ScriptHost.ATTACHED_EDITOR, "after", null));
+        uut.writeCode(new WriteCodeRequest(
+            ScriptHost.ATTACHED_EDITOR,
+            "after",
+            readCurrentState(uut).getFingerprint()));
 
         assertThat(editor.getText()).isEqualTo("after");
         assertThat(readCurrentState(uut).getContentType()).isEqualTo("text/x-freeplane-formula-groovy");
@@ -293,12 +298,10 @@ public class SingleEditorAttachmentServiceTest {
         attachment.recordCodeState(new ReadCodeResponse(
             null,
             null,
-            null,
             CodeLifecycleStatus.FAILED,
             null,
             null,
             "=broken",
-            null,
             Collections.singletonList("Broken formula"),
             "Broken formula",
             7,
@@ -318,13 +321,12 @@ public class SingleEditorAttachmentServiceTest {
     }
 
     private ReadCodeResponse readCurrentState(SingleEditorAttachmentService uut) {
-        return uut.readCode(new ReadCodeRequest(null, ScriptHost.ATTACHED_EDITOR, null));
+        return uut.readCode(new ReadCodeRequest(ScriptHost.ATTACHED_EDITOR, null));
     }
 
     private static class FakeCodeEditor implements AiCodeEditor {
         private String text;
         private CompileCodeResponse compileResponse = new CompileCodeResponse(
-            null,
             ScriptHost.ATTACHED_EDITOR,
             "text/plain",
             CodeLifecycleStatus.READY,
@@ -355,7 +357,6 @@ public class SingleEditorAttachmentServiceTest {
         @Override
         public RunCodeResponse runCode(RunCodeRequest request) {
             return new RunCodeResponse(
-                null,
                 ScriptHost.ATTACHED_EDITOR,
                 "text/plain",
                 CodeLifecycleStatus.SUCCEEDED,

@@ -607,11 +607,9 @@ public class AIChatPanelScriptRequestTest {
         PanelHarness harness = newPanelHarness(true);
         AiCodeHostService codeHostService = mock(AiCodeHostService.class);
         when(codeHostService.readCode(any(ReadCodeRequest.class))).thenReturn(new ReadCodeResponse(
-            null,
             ScriptHost.AI,
             "text/x-freeplane-script-groovy",
             CodeLifecycleStatus.NO_CODE,
-            null,
             null,
             null,
             null,
@@ -631,14 +629,12 @@ public class AIChatPanelScriptRequestTest {
         PanelHarness harness = newPanelHarness(true);
         AiCodeHostService codeHostService = mock(AiCodeHostService.class);
         when(codeHostService.readCode(any(ReadCodeRequest.class))).thenReturn(new ReadCodeResponse(
-            "ai-script-1",
             ScriptHost.AI,
             "text/x-freeplane-script-groovy",
             CodeLifecycleStatus.READY,
             null,
             "fingerprint",
             "println 1",
-            null,
             null,
             null,
             null,
@@ -659,7 +655,7 @@ public class AIChatPanelScriptRequestTest {
         harness.panel.setCodeHostService(routingHost);
 
         assertThat(harness.panel.reopenAiOwnedCode()).isTrue();
-        assertThat(aiHost.shownCodeId).isEqualTo("ai-script-1");
+        assertThat(aiHost.shownCode).isEqualTo("current");
     }
 
     private ChatRequestFlow createVisibleRequestFlow(AIChatPanel panel,
@@ -824,19 +820,17 @@ public class AIChatPanelScriptRequestTest {
     }
 
     public static class ReopenableAiHost implements AiCodeHostService {
-        private String shownCodeId;
+        private String shownCode;
 
         @Override
         public ReadCodeResponse readCode(ReadCodeRequest request) {
             return new ReadCodeResponse(
-                "ai-script-1",
                 ScriptHost.AI,
                 "text/x-freeplane-script-groovy",
                 CodeLifecycleStatus.READY,
                 null,
                 "fingerprint",
                 "println 1",
-                null,
                 null,
                 null,
                 null,
@@ -872,8 +866,8 @@ public class AIChatPanelScriptRequestTest {
         public void removeRunListener(AiCodeRunListener listener) {
         }
 
-        public void showCode(String codeId) {
-            shownCodeId = codeId;
+        public void showCurrentCode() {
+            shownCode = "current";
         }
     }
 

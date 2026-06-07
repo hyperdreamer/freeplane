@@ -5,7 +5,6 @@ import java.util.Collections;
 import java.util.List;
 
 public class CompileCodeResponse {
-    private final String codeId;
     private final ScriptHost host;
     private final String contentType;
     private final CodeLifecycleStatus status;
@@ -14,15 +13,13 @@ public class CompileCodeResponse {
     private final String errorMessage;
     private final Integer lineNumber;
 
-    public CompileCodeResponse(String codeId,
-                               ScriptHost host,
+    public CompileCodeResponse(ScriptHost host,
                                String contentType,
                                CodeLifecycleStatus status,
                                String fingerprint,
                                List<String> compilerDiagnostics,
                                String errorMessage,
                                Integer lineNumber) {
-        this.codeId = codeId;
         this.host = host;
         this.contentType = contentType;
         this.status = status;
@@ -32,10 +29,6 @@ public class CompileCodeResponse {
             : Collections.unmodifiableList(new ArrayList<String>(compilerDiagnostics));
         this.errorMessage = errorMessage;
         this.lineNumber = lineNumber;
-    }
-
-    public String getCodeId() {
-        return codeId;
     }
 
     public ScriptHost getHost() {

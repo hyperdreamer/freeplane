@@ -249,7 +249,6 @@ class FormulaEditor extends EditNodeDialog implements INodeSelector, AiCodeEdito
         String formulaText = textEditor.getText();
         if (!startsWithFormulaPrefix(formulaText)) {
             return new CompileCodeResponse(
-                request == null ? null : request.getCodeId(),
                 ScriptHost.ATTACHED_EDITOR,
                 FormulaTextTransformer.AI_ATTACHMENT_CONTENT_TYPE,
                 CodeLifecycleStatus.FAILED,
@@ -262,7 +261,6 @@ class FormulaEditor extends EditNodeDialog implements INodeSelector, AiCodeEdito
             FormulaUtils.scriptOf(formulaText),
             ScriptingPermissions.getFormulaPermissions());
         return new CompileCodeResponse(
-            request == null ? null : request.getCodeId(),
             ScriptHost.ATTACHED_EDITOR,
             FormulaTextTransformer.AI_ATTACHMENT_CONTENT_TYPE,
             compileResult.isSuccessful() ? CodeLifecycleStatus.READY : CodeLifecycleStatus.FAILED,
@@ -283,7 +281,6 @@ class FormulaEditor extends EditNodeDialog implements INodeSelector, AiCodeEdito
 
     private ReadCodeResponse validationFailureState(String formulaText, AiChatCodeOperationResult validationResult) {
         return new ReadCodeResponse(
-            null,
             ScriptHost.ATTACHED_EDITOR,
             FormulaTextTransformer.AI_ATTACHMENT_CONTENT_TYPE,
             CodeLifecycleStatus.FAILED,
@@ -292,7 +289,6 @@ class FormulaEditor extends EditNodeDialog implements INodeSelector, AiCodeEdito
                 ? fingerprint(formulaText)
                 : validationResult.getSourceFingerprint(),
             formulaText,
-            null,
             validationResult.getCompilerDiagnostics(),
             validationResult.getErrorMessage(),
             validationResult.getLineNumber(),

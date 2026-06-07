@@ -5,7 +5,6 @@ import java.util.Collections;
 import java.util.List;
 
 public class RunCodeResponse {
-    private final String codeId;
     private final ScriptHost host;
     private final String contentType;
     private final CodeLifecycleStatus status;
@@ -17,18 +16,16 @@ public class RunCodeResponse {
     private final String stdout;
     private final Object structuredResult;
 
-    public RunCodeResponse(String codeId,
-                             ScriptHost host,
-                             String contentType,
-                             CodeLifecycleStatus status,
-                             ScriptRunInitiator runInitiator,
-                             String fingerprint,
-                             List<String> compilerDiagnostics,
-                             String errorMessage,
-                             Integer lineNumber,
-                             String stdout,
-                             Object structuredResult) {
-        this.codeId = codeId;
+    public RunCodeResponse(ScriptHost host,
+                           String contentType,
+                           CodeLifecycleStatus status,
+                           ScriptRunInitiator runInitiator,
+                           String fingerprint,
+                           List<String> compilerDiagnostics,
+                           String errorMessage,
+                           Integer lineNumber,
+                           String stdout,
+                           Object structuredResult) {
         this.host = host;
         this.contentType = contentType;
         this.status = status;
@@ -41,10 +38,6 @@ public class RunCodeResponse {
         this.lineNumber = lineNumber;
         this.stdout = stdout;
         this.structuredResult = structuredResult;
-    }
-
-    public String getCodeId() {
-        return codeId;
     }
 
     public ScriptHost getHost() {

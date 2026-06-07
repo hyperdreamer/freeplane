@@ -42,9 +42,9 @@ public class AiCodeOperationAuthorizerTest {
         Set<String> authorizedToolNames = uut.authorizedToolNames();
 
         assertThat(authorizedToolNames).containsExactly("readCode", "writeCode", "compileCode");
-        uut.assertAuthorized("readCode", null, ScriptHost.ATTACHED_EDITOR);
-        uut.assertAuthorized("writeCode", null, ScriptHost.ATTACHED_EDITOR);
-        uut.assertAuthorized("compileCode", null, ScriptHost.ATTACHED_EDITOR);
+        uut.assertAuthorized("readCode", ScriptHost.ATTACHED_EDITOR);
+        uut.assertAuthorized("writeCode", ScriptHost.ATTACHED_EDITOR);
+        uut.assertAuthorized("compileCode", ScriptHost.ATTACHED_EDITOR);
     }
 
     @Test
@@ -58,10 +58,10 @@ public class AiCodeOperationAuthorizerTest {
             codeHostService);
 
         assertThat(uut.authorizedToolNames()).containsExactly("readCode");
-        assertThatThrownBy(() -> uut.assertAuthorized("writeCode", null, ScriptHost.ATTACHED_EDITOR))
+        assertThatThrownBy(() -> uut.assertAuthorized("writeCode", ScriptHost.ATTACHED_EDITOR))
             .isInstanceOf(IllegalStateException.class)
             .hasMessage("The requested code host is not writable at the current availability level.");
-        assertThatThrownBy(() -> uut.assertAuthorized("compileCode", null, ScriptHost.ATTACHED_EDITOR))
+        assertThatThrownBy(() -> uut.assertAuthorized("compileCode", ScriptHost.ATTACHED_EDITOR))
             .isInstanceOf(IllegalStateException.class)
             .hasMessage("The requested code host is not writable at the current availability level.");
     }
@@ -77,7 +77,7 @@ public class AiCodeOperationAuthorizerTest {
             codeHostService);
 
         assertThat(uut.authorizedToolNames()).contains("runCode");
-        uut.assertAuthorized("runCode", null, ScriptHost.ATTACHED_EDITOR);
+        uut.assertAuthorized("runCode", ScriptHost.ATTACHED_EDITOR);
     }
 
     @Test
@@ -103,8 +103,8 @@ public class AiCodeOperationAuthorizerTest {
             codeHostService);
 
         assertThat(uut.authorizedToolNames()).contains("readCode", "writeCode", "compileCode");
-        uut.assertAuthorized("writeCode", null, ScriptHost.ATTACHED_EDITOR);
-        uut.assertAuthorized("compileCode", null, ScriptHost.ATTACHED_EDITOR);
+        uut.assertAuthorized("writeCode", ScriptHost.ATTACHED_EDITOR);
+        uut.assertAuthorized("compileCode", ScriptHost.ATTACHED_EDITOR);
     }
 
     @Test
@@ -117,7 +117,7 @@ public class AiCodeOperationAuthorizerTest {
             false,
             codeHostService);
 
-        assertThatThrownBy(() -> uut.assertAuthorized("runCode", null, ScriptHost.ATTACHED_EDITOR))
+        assertThatThrownBy(() -> uut.assertAuthorized("runCode", ScriptHost.ATTACHED_EDITOR))
             .isInstanceOf(IllegalStateException.class)
             .hasMessage("Only script content is runnable.");
     }
@@ -133,7 +133,7 @@ public class AiCodeOperationAuthorizerTest {
             codeHostService);
 
         assertThat(uut.authorizedToolNames()).isEmpty();
-        assertThatThrownBy(() -> uut.assertAuthorized("readCode", null, ScriptHost.ATTACHED_EDITOR))
+        assertThatThrownBy(() -> uut.assertAuthorized("readCode", ScriptHost.ATTACHED_EDITOR))
             .isInstanceOf(IllegalStateException.class)
             .hasMessage("The requested code host is not readable at the current availability level.");
     }
@@ -155,14 +155,12 @@ public class AiCodeOperationAuthorizerTest {
 
         private FakeCodeHostService withState(ScriptHost host, String contentType, CodeLifecycleStatus status) {
             states.put(host, new ReadCodeResponse(
-                host == ScriptHost.AI ? "ai-script-1" : "attached-editor-1",
                 host,
                 contentType,
                 status,
                 null,
                 "fingerprint",
                 "code",
-                null,
                 null,
                 null,
                 null,
@@ -174,18 +172,13 @@ public class AiCodeOperationAuthorizerTest {
         @Override
         public ReadCodeResponse readCode(ReadCodeRequest request) {
             ScriptHost host = request == null ? null : request.getHost();
-            if (host == null && request != null && request.getCodeId() != null) {
-                host = request.getCodeId().startsWith("ai-script-") ? ScriptHost.AI : ScriptHost.ATTACHED_EDITOR;
-            }
             ReadCodeResponse state = states.get(host);
             return state != null
                 ? state
                 : new ReadCodeResponse(
-                    null,
                     host,
                     null,
                     CodeLifecycleStatus.NO_CODE,
-                    null,
                     null,
                     null,
                     null,

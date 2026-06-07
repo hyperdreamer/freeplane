@@ -20,7 +20,6 @@ import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeResponse;
 
 public class RoutingAiCodeHostService implements AiCodeHostService {
-    private static final String AI_SCRIPT_CODE_ID_PREFIX = "ai-script-";
     private static final String AI_SCRIPT_CONTENT_TYPE = "text/x-freeplane-script-groovy";
 
     private final AiCodeHostService attachedEditorCodeHostService;
@@ -35,18 +34,16 @@ public class RoutingAiCodeHostService implements AiCodeHostService {
 
     @Override
     public synchronized ReadCodeResponse readCode(ReadCodeRequest request) {
-        ScriptHost host = resolveHost(request == null ? null : request.getCodeId(), request == null ? null : request.getHost());
+        ScriptHost host = requireHost(request == null ? null : request.getHost());
         if (host == ScriptHost.ATTACHED_EDITOR) {
             return attachedEditorCodeHostService.readCode(request);
         }
         AiCodeHostService aiHostService = currentAiCodeHostService();
         if (aiHostService == null) {
             return new ReadCodeResponse(
-                request == null ? null : request.getCodeId(),
                 ScriptHost.AI,
                 AI_SCRIPT_CONTENT_TYPE,
                 CodeLifecycleStatus.NO_CODE,
-                null,
                 null,
                 null,
                 null,
@@ -61,7 +58,7 @@ public class RoutingAiCodeHostService implements AiCodeHostService {
 
     @Override
     public synchronized WriteCodeResponse writeCode(WriteCodeRequest request) {
-        ScriptHost host = resolveHost(request == null ? null : request.getCodeId(), request == null ? null : request.getHost());
+        ScriptHost host = requireHost(request == null ? null : request.getHost());
         if (host == ScriptHost.ATTACHED_EDITOR) {
             return attachedEditorCodeHostService.writeCode(request);
         }
@@ -70,7 +67,7 @@ public class RoutingAiCodeHostService implements AiCodeHostService {
 
     @Override
     public synchronized CompileCodeResponse compileCode(CompileCodeRequest request) {
-        ScriptHost host = resolveHost(request == null ? null : request.getCodeId(), request == null ? null : request.getHost());
+        ScriptHost host = requireHost(request == null ? null : request.getHost());
         if (host == ScriptHost.ATTACHED_EDITOR) {
             return attachedEditorCodeHostService.compileCode(request);
         }
@@ -79,7 +76,7 @@ public class RoutingAiCodeHostService implements AiCodeHostService {
 
     @Override
     public synchronized RunCodeResponse runCode(RunCodeRequest request) {
-        ScriptHost host = resolveHost(request == null ? null : request.getCodeId(), request == null ? null : request.getHost());
+        ScriptHost host = requireHost(request == null ? null : request.getHost());
         if (host == ScriptHost.ATTACHED_EDITOR) {
             return attachedEditorCodeHostService.runCode(request);
         }
@@ -112,14 +109,9 @@ public class RoutingAiCodeHostService implements AiCodeHostService {
         }
     }
 
-    private ScriptHost resolveHost(String codeId, ScriptHost host) {
-        if (codeId != null && !codeId.trim().isEmpty()) {
-            return codeId.trim().startsWith(AI_SCRIPT_CODE_ID_PREFIX)
-                ? ScriptHost.AI
-                : ScriptHost.ATTACHED_EDITOR;
-        }
+    private ScriptHost requireHost(ScriptHost host) {
         if (host == null) {
-            throw new IllegalArgumentException("host is required when codeId is absent.");
+            throw new IllegalArgumentException("host is required.");
         }
         return host;
     }
@@ -127,27 +119,9 @@ public class RoutingAiCodeHostService implements AiCodeHostService {
     private AiCodeHostService requireAiCodeHostService() {
         AiCodeHostService aiHostService = currentAiCodeHostService();
         if (aiHostService == null) {
-            throw new IllegalStateException("AI-owned script host is unavailable.");
+            throw new IllegalStateException("AI code host is not available.");
         }
         return aiHostService;
-    }
-
-    public synchronized boolean showCurrentAiOwnedCode() {
-        AiCodeHostService aiHostService = currentAiCodeHostService();
-        if (aiHostService == null) {
-            return false;
-        }
-        ReadCodeResponse response = aiHostService.readCode(new ReadCodeRequest(null, ScriptHost.AI, null));
-        if (response == null || response.getStatus() == CodeLifecycleStatus.NO_CODE || response.getCodeId() == null) {
-            return false;
-        }
-        try {
-            Method method = aiHostService.getClass().getMethod("showCode", String.class);
-            method.invoke(aiHostService, response.getCodeId());
-            return true;
-        } catch (Exception error) {
-            return false;
-        }
     }
 
     private AiCodeHostService currentAiCodeHostService() {
@@ -155,9 +129,34 @@ public class RoutingAiCodeHostService implements AiCodeHostService {
         if (aiHostService == null) {
             return null;
         }
+        syncRunListeners(aiHostService);
+        return aiHostService;
+    }
+
+    private void syncRunListeners(AiCodeHostService aiHostService) {
+        if (aiHostService == null) {
+            return;
+        }
         for (AiCodeRunListener listener : runListeners) {
             aiHostService.addRunListener(listener);
         }
-        return aiHostService;
+    }
+
+    public synchronized boolean showCurrentAiOwnedCode() {
+        AiCodeHostService aiHostService = currentAiCodeHostService();
+        if (aiHostService == null) {
+            return false;
+        }
+        ReadCodeResponse response = aiHostService.readCode(new ReadCodeRequest(ScriptHost.AI, null));
+        if (response == null || response.getStatus() == CodeLifecycleStatus.NO_CODE) {
+            return false;
+        }
+        try {
+            Method method = aiHostService.getClass().getMethod("showCurrentCode");
+            method.invoke(aiHostService);
+            return true;
+        } catch (Exception error) {
+            return false;
+        }
     }
 }

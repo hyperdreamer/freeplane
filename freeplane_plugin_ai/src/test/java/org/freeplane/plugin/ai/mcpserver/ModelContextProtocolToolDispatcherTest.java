@@ -168,14 +168,12 @@ public class ModelContextProtocolToolDispatcherTest {
         public ReadCodeResponse readCode(ReadCodeRequest request) {
             lastReadRequest = request;
             return new ReadCodeResponse(
-                "attached-editor-1",
                 ScriptHost.ATTACHED_EDITOR,
                 "text/plain",
                 CodeLifecycleStatus.READY,
                 null,
                 request == null ? null : request.getFingerprint(),
                 "code",
-                null,
                 null,
                 null,
                 null,
@@ -187,7 +185,6 @@ public class ModelContextProtocolToolDispatcherTest {
         public WriteCodeResponse writeCode(WriteCodeRequest request) {
             lastWriteRequest = request;
             return new WriteCodeResponse(
-                "ai-script-1",
                 ScriptHost.AI,
                 "text/x-freeplane-script-groovy",
                 CodeLifecycleStatus.READY,
@@ -198,7 +195,6 @@ public class ModelContextProtocolToolDispatcherTest {
         public CompileCodeResponse compileCode(CompileCodeRequest request) {
             lastCompileRequest = request;
             return new CompileCodeResponse(
-                "ai-script-1",
                 ScriptHost.AI,
                 "text/x-freeplane-script-groovy",
                 CodeLifecycleStatus.READY,
@@ -212,7 +208,6 @@ public class ModelContextProtocolToolDispatcherTest {
         public RunCodeResponse runCode(RunCodeRequest request) {
             lastRunRequest = request;
             return new RunCodeResponse(
-                "ai-script-1",
                 ScriptHost.AI,
                 "text/x-freeplane-script-groovy",
                 CodeLifecycleStatus.SUCCEEDED,

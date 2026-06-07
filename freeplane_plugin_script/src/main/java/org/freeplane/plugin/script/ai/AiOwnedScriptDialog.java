@@ -27,7 +27,7 @@ public class AiOwnedScriptDialog extends JDialog implements AiOwnedScriptHostSer
     private final JTextArea codeTextArea;
     private final JButton runButton;
     private final JButton cancelButton;
-    private String displayedCodeId;
+    private boolean hasCode;
 
     public AiOwnedScriptDialog(AiOwnedScriptHostService.CodeStateProvider codeStateProvider,
                                AiOwnedScriptHostService.DialogCallbacks callbacks) {
@@ -49,10 +49,10 @@ public class AiOwnedScriptDialog extends JDialog implements AiOwnedScriptHostSer
     }
 
     @Override
-    public void showCode(String codeId) {
-        displayedCodeId = codeId;
-        ReadCodeResponse state = codeStateProvider == null ? null : codeStateProvider.readCurrentState(codeId);
-        if (state == null) {
+    public void showCode() {
+        ReadCodeResponse state = codeStateProvider == null ? null : codeStateProvider.readCodeState();
+        hasCode = state != null && state.getStatus() != CodeLifecycleStatus.NO_CODE;
+        if (!hasCode) {
             codeTextArea.setText("");
             refreshExecutionAuthority();
             return;
@@ -77,8 +77,8 @@ public class AiOwnedScriptDialog extends JDialog implements AiOwnedScriptHostSer
     }
 
     @Override
-    public boolean showsCode(String codeId) {
-        return displayedCodeId != null && displayedCodeId.equals(codeId);
+    public boolean hasCode() {
+        return hasCode;
     }
 
     @Override
@@ -104,8 +104,8 @@ public class AiOwnedScriptDialog extends JDialog implements AiOwnedScriptHostSer
     private void configureActions() {
         runButton.addActionListener(event -> {
             RunCodeResponse response = callbacks == null ? null : callbacks.runFromDialog(codeTextArea.getText());
-            if (displayedCodeId != null) {
-                showCode(displayedCodeId);
+            if (hasCode) {
+                showCode();
             }
             if (response != null && response.getStatus() == CodeLifecycleStatus.SUCCEEDED) {
                 hideDialog();
@@ -154,7 +154,7 @@ public class AiOwnedScriptDialog extends JDialog implements AiOwnedScriptHostSer
                 || "SCRIPT_EXECUTION".equals(availability.trim());
         }
         codeTextArea.setEditable(executionAvailable);
-        runButton.setEnabled(executionAvailable && displayedCodeId != null && !displayedCodeId.trim().isEmpty());
+        runButton.setEnabled(executionAvailable && hasCode);
     }
 
 }

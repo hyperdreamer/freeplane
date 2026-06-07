@@ -37,7 +37,6 @@ public class AIToolSetBuilderTest {
             @Override
             public ReadCodeResponse readCode(ReadCodeRequest request) {
                 return new ReadCodeResponse(
-                    "attached-editor-1",
                     ScriptHost.ATTACHED_EDITOR,
                     "text/plain",
                     CodeLifecycleStatus.READY,
@@ -48,14 +47,12 @@ public class AIToolSetBuilderTest {
                     null,
                     null,
                     null,
-                    null,
                     null);
             }
 
             @Override
             public WriteCodeResponse writeCode(WriteCodeRequest request) {
                 return new WriteCodeResponse(
-                    "attached-editor-1",
                     ScriptHost.ATTACHED_EDITOR,
                     "text/plain",
                     CodeLifecycleStatus.READY,
@@ -65,7 +62,6 @@ public class AIToolSetBuilderTest {
             @Override
             public CompileCodeResponse compileCode(CompileCodeRequest request) {
                 return new CompileCodeResponse(
-                    "attached-editor-1",
                     ScriptHost.ATTACHED_EDITOR,
                     "text/plain",
                     CodeLifecycleStatus.READY,
@@ -78,7 +74,6 @@ public class AIToolSetBuilderTest {
             @Override
             public RunCodeResponse runCode(RunCodeRequest request) {
                 return new RunCodeResponse(
-                    "attached-editor-1",
                     ScriptHost.ATTACHED_EDITOR,
                     "text/plain",
                     CodeLifecycleStatus.SUCCEEDED,
@@ -122,12 +117,10 @@ public class AIToolSetBuilderTest {
         assertThat(toolObjects.get(1)).isInstanceOf(AiCodeToolSet.class);
         AiCodeToolSet aiCodeToolSet = (AiCodeToolSet) toolObjects.get(1);
         assertThat(aiCodeToolSet.readCode(new org.freeplane.plugin.ai.tools.code.ReadCodeToolRequest(
-            null,
             ScriptHost.ATTACHED_EDITOR,
             null)).getStatus())
             .isEqualTo(CodeLifecycleStatus.READY);
         assertThat(aiCodeToolSet.readCode(new org.freeplane.plugin.ai.tools.code.ReadCodeToolRequest(
-            null,
             ScriptHost.ATTACHED_EDITOR,
             null)).getCodeText())
             .isEqualTo("hello");

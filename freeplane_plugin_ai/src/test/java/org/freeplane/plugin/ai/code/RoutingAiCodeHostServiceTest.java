@@ -25,7 +25,7 @@ public class RoutingAiCodeHostServiceTest {
         AiCodeHostService attachedEditorHost = mock(AiCodeHostService.class);
         RoutingAiCodeHostService uut = new RoutingAiCodeHostService(attachedEditorHost, () -> null);
 
-        ReadCodeResponse response = uut.readCode(new ReadCodeRequest(null, ScriptHost.AI, null));
+        ReadCodeResponse response = uut.readCode(new ReadCodeRequest(ScriptHost.AI, null));
 
         assertThat(response.getHost()).isEqualTo(ScriptHost.AI);
         assertThat(response.getContentType()).isEqualTo("text/x-freeplane-script-groovy");
@@ -37,7 +37,6 @@ public class RoutingAiCodeHostServiceTest {
         AiCodeHostService attachedEditorHost = mock(AiCodeHostService.class);
         AiCodeHostService aiHost = mock(AiCodeHostService.class);
         WriteCodeResponse expectedResponse = new WriteCodeResponse(
-            "ai-script-1",
             ScriptHost.AI,
             "text/x-freeplane-script-groovy",
             CodeLifecycleStatus.READY,
@@ -45,7 +44,7 @@ public class RoutingAiCodeHostServiceTest {
         when(aiHost.writeCode(org.mockito.ArgumentMatchers.any(WriteCodeRequest.class))).thenReturn(expectedResponse);
         RoutingAiCodeHostService uut = new RoutingAiCodeHostService(attachedEditorHost, () -> aiHost);
 
-        WriteCodeResponse response = uut.writeCode(new WriteCodeRequest(null, ScriptHost.AI, "println 1", null));
+        WriteCodeResponse response = uut.writeCode(new WriteCodeRequest(ScriptHost.AI, "println 1", null));
 
         assertThat(response).isSameAs(expectedResponse);
         verify(aiHost).writeCode(org.mockito.ArgumentMatchers.any(WriteCodeRequest.class));
@@ -56,9 +55,9 @@ public class RoutingAiCodeHostServiceTest {
         AiCodeHostService attachedEditorHost = mock(AiCodeHostService.class);
         RoutingAiCodeHostService uut = new RoutingAiCodeHostService(attachedEditorHost, () -> null);
 
-        assertThatThrownBy(() -> uut.writeCode(new WriteCodeRequest(null, ScriptHost.AI, "println 1", null)))
+        assertThatThrownBy(() -> uut.writeCode(new WriteCodeRequest(ScriptHost.AI, "println 1", null)))
             .isInstanceOf(IllegalStateException.class)
-            .hasMessage("AI-owned script host is unavailable.");
+            .hasMessage("AI code host is not available.");
     }
 
     @Test

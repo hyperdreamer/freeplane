@@ -32,31 +32,26 @@ public class AiOwnedScriptHostServiceTest {
     }
 
     @Test
-    public void writeCodeReplacesPreviousScriptAndArchivesReplacedState() {
+    public void writeCodeCreatesCurrentScriptAndUpdatesItInPlace() {
         AiOwnedScriptHostService uut = new AiOwnedScriptHostService(null);
 
-        WriteCodeResponse first = uut.doWriteCode(new WriteCodeRequest(null, ScriptHost.AI, "println 1", null));
-        WriteCodeResponse second = uut.doWriteCode(new WriteCodeRequest(null, ScriptHost.AI, "println 2", null));
-        ReadCodeResponse current = uut.doReadCode(new ReadCodeRequest(null, ScriptHost.AI, null));
-        ReadCodeResponse replaced = uut.doReadCode(new ReadCodeRequest(first.getCodeId(), null, null));
+        WriteCodeResponse first = uut.doWriteCode(new WriteCodeRequest(ScriptHost.AI, "println 1", null));
+        WriteCodeResponse second = uut.doWriteCode(new WriteCodeRequest(ScriptHost.AI, "println 2", first.getFingerprint()));
+        ReadCodeResponse current = uut.doReadCode(new ReadCodeRequest(ScriptHost.AI, null));
 
-        assertThat(first.getCodeId()).isEqualTo("ai-script-1");
-        assertThat(second.getCodeId()).isEqualTo("ai-script-2");
-        assertThat(current.getCodeId()).isEqualTo(second.getCodeId());
+        assertThat(first.getHost()).isEqualTo(ScriptHost.AI);
+        assertThat(second.getHost()).isEqualTo(ScriptHost.AI);
         assertThat(current.getStatus()).isEqualTo(CodeLifecycleStatus.READY);
         assertThat(current.getCodeText()).isEqualTo("println 2");
-        assertThat(replaced.getStatus()).isEqualTo(CodeLifecycleStatus.REPLACED);
-        assertThat(replaced.getReplacementCodeId()).isEqualTo(second.getCodeId());
-        assertThat(replaced.getCodeText()).isNull();
+        assertThat(current.getFingerprint()).isEqualTo(second.getFingerprint());
     }
 
     @Test
     public void writeCodeRejectsMismatchedExpectedFingerprint() {
         AiOwnedScriptHostService uut = new AiOwnedScriptHostService(null);
-        WriteCodeResponse written = uut.doWriteCode(new WriteCodeRequest(null, ScriptHost.AI, "println 1", null));
+        WriteCodeResponse written = uut.doWriteCode(new WriteCodeRequest(ScriptHost.AI, "println 1", null));
 
         assertThatThrownBy(() -> uut.doWriteCode(new WriteCodeRequest(
-            written.getCodeId(),
             ScriptHost.AI,
             "println 2",
             "wrong")))
@@ -72,14 +67,14 @@ public class AiOwnedScriptHostServiceTest {
             eq(AiScriptExecutionPolicy.SHOWN_USER_RUN))).thenReturn(AiScriptExecutionPolicy.SHOWN_USER_RUN);
         RecordingDialogFactory dialogFactory = new RecordingDialogFactory();
         AiOwnedScriptHostService uut = new AiOwnedScriptHostService(resourceController, dialogFactory);
-        WriteCodeResponse written = uut.doWriteCode(new WriteCodeRequest(null, ScriptHost.AI, "println 1", null));
+        WriteCodeResponse written = uut.doWriteCode(new WriteCodeRequest(ScriptHost.AI, "println 1", null));
 
-        RunCodeResponse response = uut.doRunCode(new RunCodeRequest(written.getCodeId(), null, null));
-        ReadCodeResponse state = uut.doReadCode(new ReadCodeRequest(written.getCodeId(), null, null));
+        RunCodeResponse response = uut.doRunCode(new RunCodeRequest(ScriptHost.AI, written.getFingerprint()));
+        ReadCodeResponse state = uut.doReadCode(new ReadCodeRequest(ScriptHost.AI, null));
 
         assertThat(response.getStatus()).isEqualTo(CodeLifecycleStatus.WAITING_FOR_USER_RUN);
         assertThat(state.getStatus()).isEqualTo(CodeLifecycleStatus.WAITING_FOR_USER_RUN);
-        assertThat(dialogFactory.dialog.shownCodeId).isEqualTo(written.getCodeId());
+        assertThat(dialogFactory.dialog.codeShown).isTrue();
         assertThat(dialogFactory.dialog.showAndFocusCalls).isEqualTo(1);
     }
 
@@ -91,10 +86,10 @@ public class AiOwnedScriptHostServiceTest {
             eq(AiScriptExecutionPolicy.SHOWN_USER_RUN))).thenReturn(AiScriptExecutionPolicy.SHOWN_USER_RUN);
         LoadingDialogFactory dialogFactory = new LoadingDialogFactory();
         AiOwnedScriptHostService uut = new AiOwnedScriptHostService(resourceController, dialogFactory);
-        WriteCodeResponse written = uut.doWriteCode(new WriteCodeRequest(null, ScriptHost.AI, "println 1", null));
+        WriteCodeResponse written = uut.doWriteCode(new WriteCodeRequest(ScriptHost.AI, "println 1", null));
 
-        RunCodeResponse response = uut.doRunCode(new RunCodeRequest(written.getCodeId(), null, null));
-        ReadCodeResponse state = uut.doReadCode(new ReadCodeRequest(written.getCodeId(), null, null));
+        RunCodeResponse response = uut.doRunCode(new RunCodeRequest(ScriptHost.AI, written.getFingerprint()));
+        ReadCodeResponse state = uut.doReadCode(new ReadCodeRequest(ScriptHost.AI, null));
 
         assertThat(response.getStatus()).isEqualTo(CodeLifecycleStatus.WAITING_FOR_USER_RUN);
         assertThat(response.getFingerprint()).isEqualTo(written.getFingerprint());
@@ -190,12 +185,12 @@ public class AiOwnedScriptHostServiceTest {
     }
 
     private static class RecordingDialog implements AiOwnedScriptHostService.DialogHandle {
-        private String shownCodeId;
+        private boolean codeShown;
         private int showAndFocusCalls;
 
         @Override
-        public void showCode(String codeId) {
-            shownCodeId = codeId;
+        public void showCode() {
+            codeShown = true;
         }
 
         @Override
@@ -209,8 +204,8 @@ public class AiOwnedScriptHostServiceTest {
         }
 
         @Override
-        public boolean showsCode(String codeId) {
-            return shownCodeId != null && shownCodeId.equals(codeId);
+        public boolean hasCode() {
+            return codeShown;
         }
 
         @Override
@@ -220,7 +215,7 @@ public class AiOwnedScriptHostServiceTest {
 
     private static class LoadingDialog implements AiOwnedScriptHostService.DialogHandle {
         private final AiOwnedScriptHostService.CodeStateProvider codeStateProvider;
-        private String shownCodeId;
+        private boolean codeShown;
         private String currentText = "";
 
         private LoadingDialog(AiOwnedScriptHostService.CodeStateProvider codeStateProvider) {
@@ -228,9 +223,9 @@ public class AiOwnedScriptHostServiceTest {
         }
 
         @Override
-        public void showCode(String codeId) {
-            shownCodeId = codeId;
-            ReadCodeResponse state = codeStateProvider.readCurrentState(codeId);
+        public void showCode() {
+            codeShown = true;
+            ReadCodeResponse state = codeStateProvider.readCodeState();
             currentText = state == null || state.getCodeText() == null ? "" : state.getCodeText();
         }
 
@@ -244,8 +239,8 @@ public class AiOwnedScriptHostServiceTest {
         }
 
         @Override
-        public boolean showsCode(String codeId) {
-            return shownCodeId != null && shownCodeId.equals(codeId);
+        public boolean hasCode() {
+            return codeShown;
         }
 
         @Override

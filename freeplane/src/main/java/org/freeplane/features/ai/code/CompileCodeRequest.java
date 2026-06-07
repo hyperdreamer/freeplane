@@ -1,25 +1,15 @@
 package org.freeplane.features.ai.code;
 
 public class CompileCodeRequest {
-    private String codeId;
     private ScriptHost host;
     private String expectedFingerprint;
 
     public CompileCodeRequest() {
     }
 
-    public CompileCodeRequest(String codeId, ScriptHost host, String expectedFingerprint) {
-        this.codeId = codeId;
+    public CompileCodeRequest(ScriptHost host, String expectedFingerprint) {
         this.host = host;
         this.expectedFingerprint = expectedFingerprint;
-    }
-
-    public String getCodeId() {
-        return codeId;
-    }
-
-    public void setCodeId(String codeId) {
-        this.codeId = codeId;
     }
 
     public ScriptHost getHost() {

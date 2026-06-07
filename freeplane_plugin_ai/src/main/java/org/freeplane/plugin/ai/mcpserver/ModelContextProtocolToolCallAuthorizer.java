@@ -49,7 +49,6 @@ public class ModelContextProtocolToolCallAuthorizer {
         if (CODE_TOOL_NAMES.contains(normalizedToolName)) {
             aiCodeOperationAuthorizer.assertAuthorized(
                 normalizedToolName,
-                textValue(argumentsNode, "codeId"),
                 hostValue(argumentsNode));
             return;
         }

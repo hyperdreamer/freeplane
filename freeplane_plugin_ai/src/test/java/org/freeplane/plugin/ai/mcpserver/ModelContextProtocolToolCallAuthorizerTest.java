@@ -28,9 +28,9 @@ public class ModelContextProtocolToolCallAuthorizerTest {
             aiCodeOperationAuthorizer,
             getApiDocumentationTool);
 
-        uut.assertAuthorized("runCode", objectMapper.readTree("{\"request\":{\"codeId\":\"ai-script-1\"}}"));
+        uut.assertAuthorized("runCode", objectMapper.readTree("{\"request\":{\"host\":\"AI\"}}"));
 
-        verify(aiCodeOperationAuthorizer).assertAuthorized(eq("runCode"), eq("ai-script-1"), eq(null));
+        verify(aiCodeOperationAuthorizer).assertAuthorized(eq("runCode"), eq(org.freeplane.features.ai.code.ScriptHost.AI));
     }
 
     @Test
@@ -110,7 +110,7 @@ public class ModelContextProtocolToolCallAuthorizerTest {
 
         uut.assertAuthorized("writeCode", objectMapper.readTree("{\"request\":{\"host\":\"AI\"}}"));
 
-        verify(aiCodeOperationAuthorizer).assertAuthorized(eq("writeCode"), eq(null), eq(org.freeplane.features.ai.code.ScriptHost.AI));
+        verify(aiCodeOperationAuthorizer).assertAuthorized(eq("writeCode"), eq(org.freeplane.features.ai.code.ScriptHost.AI));
     }
 
     @Test

@@ -1485,3 +1485,189 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
     - keep or add regression coverage showing no project-side
       `executeToolsConcurrently(...)` call is introduced in chat setup.
   - Manual tests: N/A.
+
+## Subtask: Remove external codeId contract and use current-host fingerprints
+- **Status:** review
+- **Scope:** Simplify the external AI/MCP code-host contract so normal
+  current-state operations use `host` only. Remove `codeId` from the
+  public code-tool request and response shapes, stop exposing replaced
+  historical code states through the normal tools, and make
+  fingerprints the required stale-state guard for current-host compile,
+  run, and overwrite flows.
+- **Motivation:** The current external contract makes AI reason about
+  server-assigned code identifiers that do not matter to the normal
+  user workflow. That causes avoidable failures such as invented
+  `codeId` values on `writeCode(...)`. For current usage scenarios, the
+  meaningful target is the current code in a host, not a caller-chosen
+  or caller-remembered id.
+- **Scenario:** A user asks AI to run a new AI-owned script. AI writes
+  it to host `AI`, receives the current fingerprint, and later compiles
+  or runs it by sending host `AI` plus that fingerprint. If the script
+  text changes before compile or run, the request fails with a
+  fingerprint mismatch, so AI must first read the current code again
+  and reason about the change.
+
+  Another user attaches `ScriptEditorPanel` to AI chat. AI reads the
+  current attached-editor code through host `ATTACHED_EDITOR`, edits it,
+  and later compiles it using the returned fingerprint. If the user has
+  changed the editor text in the meantime, compile fails until AI reads
+  the new current text.
+- **Constraints:**
+  - No normal chat or MCP code-tool request may require or accept a
+    caller-supplied `codeId`.
+  - No normal chat or MCP code-tool response may expose `codeId` or
+    `replacementCodeId`.
+  - `host` must be the explicit external target selector for
+    `readCode(...)`, `writeCode(...)`, `compileCode(...)`, and
+    `runCode(...)`.
+  - `compileCode(...)` and `runCode(...)` must require
+    `expectedFingerprint` for all hosts.
+  - `writeCode(...)` must require `expectedFingerprint` whenever a
+    current code state already exists for the requested host.
+  - `writeCode(...)` may omit `expectedFingerprint` only when creating a
+    fresh AI-owned current state and no current AI-owned code exists.
+  - On fingerprint mismatch, the operation must fail before mutation,
+    compilation, or execution, so the caller is forced to re-read the
+    current code.
+  - Keep current-host semantics for attached editors; do not add a new
+    history-lookup tool in this increment.
+  - If internal attachment/script ids remain useful for implementation,
+    keep them private rather than re-exposing them in the public tool
+    contract.
+- **Briefing:** The public code DTOs live under
+  `freeplane/src/main/java/org/freeplane/features/ai/code/`. Tool-layer
+  request DTOs and descriptions live in
+  `freeplane_plugin_ai/src/main/java/org/freeplane/plugin/ai/tools/code/`.
+  Current-host routing lives in `RoutingAiCodeHostService`, AI-owned
+  script state lives in `AiOwnedScriptHostService`, and attached-editor
+  state lives in `SingleEditorAttachmentService`. `AIChatPanel` also
+  tracks AI-owned script ownership for automatic status messages and for
+  showing the current AI-owned script dialog.
+- **Research:**
+  - Current public request DTOs `ReadCodeRequest`, `WriteCodeRequest`,
+    `CompileCodeRequest`, and `RunCodeRequest` all expose both
+    `codeId` and `host`.
+  - Current public response DTOs `ReadCodeResponse`,
+    `WriteCodeResponse`, `CompileCodeResponse`, and
+    `RunCodeResponse` all expose `codeId`; `ReadCodeResponse` also
+    exposes `replacementCodeId`.
+  - `AiOwnedScriptHostService.doWriteCode(...)` currently ignores any
+    caller-chosen identity and always assigns the next internal
+    `ai-script-N` id to the new current AI-owned script state.
+  - Both `AiOwnedScriptHostService` and
+    `SingleEditorAttachmentService` already support host-only
+    current-state access when `codeId` is absent.
+  - `compileCode(...)` and `runCode(...)` currently check the expected
+    fingerprint only when it is supplied; they do not require it.
+  - `AiCodeOperationAuthorizer.resolveHost(...)` and
+    `RoutingAiCodeHostService.resolveHost(...)` currently infer host
+    from `codeId` prefixes when a non-empty id is present.
+  - `AIChatPanel` currently remembers AI-owned script ownership by
+    returned `codeId`, uses `response.getCodeId()` in
+    `handleCodeRunFinished(...)`, and `showCurrentAiOwnedCode()` calls a
+    reflective `showCode(String codeId)` method.
+  - `AutomaticCodeStatusMessage` currently includes `codeId` in the
+    automatic chat message text for user-started AI-owned script runs.
+  - `CodeLifecycleStatus` currently includes `REPLACED`, and both host
+    services currently keep archived replaced states keyed by the old
+    ids for readback.
+- **Analysis:**
+  - Drop the external `codeId` contract because normal current-host
+    usage does not need it and invented ids create avoidable AI
+    failures.
+  - Do not rename the external field to `editor id` because the AI host
+    is not an editor; the correct simplification is to stop exposing
+    state ids publicly.
+  - Make fingerprints the mandatory stale-state guard for overwrite,
+    compile, and run because once `codeId` is removed there must still
+    be an exact caller-visible check that the code text is the one AI
+    reasoned about.
+  - Keep `readCode(...)` as the resynchronization step after stale-state
+    failures because it returns the current text and fingerprint the AI
+    must inspect before retrying.
+  - Remove external replaced-state exposure because historical state
+    lineage is not part of the current user workflow and should not
+    complicate the normal contract.
+- **Design:**
+  - Remove `codeId` from the public request DTOs:
+    - `ReadCodeRequest`
+    - `WriteCodeRequest`
+    - `CompileCodeRequest`
+    - `RunCodeRequest`
+  - Remove `codeId` from the public response DTOs:
+    - `ReadCodeResponse`
+    - `WriteCodeResponse`
+    - `CompileCodeResponse`
+    - `RunCodeResponse`
+  - Remove `replacementCodeId` from `ReadCodeResponse`.
+  - Make `host` mandatory in all external code-tool requests.
+  - `readCode(host, fingerprint?)` reads only the current code state for
+    the requested host and returns `NO_CODE` when none exists.
+  - `writeCode(host, text, expectedFingerprint)` behavior:
+    - for host `AI`, create a fresh current AI-owned code state when no
+      current AI-owned code exists;
+    - otherwise require `expectedFingerprint` and fail on mismatch
+      before changing the current code text;
+    - for host `ATTACHED_EDITOR`, require an attached editor and
+      require `expectedFingerprint` before replacing the current text.
+  - `compileCode(host, expectedFingerprint)` and
+    `runCode(host, expectedFingerprint)` must reject missing
+    `expectedFingerprint` and reject mismatches before compiling or
+    running.
+  - Keep any internal script/attachment ids private if still needed for
+    dialog management, but stop routing public requests by id and stop
+    surfacing replaced archived states externally.
+  - Refactor `AiCodeOperationAuthorizer`, `RoutingAiCodeHostService`,
+    tool-layer request DTOs, and tool descriptions to use host-only
+    external targeting.
+  - Refactor `AIChatPanel` automatic AI-owned-script status plumbing so
+    it no longer depends on response `codeId` values. Use host-based
+    current-state access and private internal hooks instead.
+  - Remove `codeId` from automatic code-status messages and other
+    externally surfaced summaries while preserving host, fingerprint,
+    status, diagnostics, stdout, and structured result.
+- **Test specification:**
+  - Automated tests:
+    - update code-tool DTO and dispatcher tests to the host-only public
+      contract;
+    - verify `writeCode(host=AI, text, expectedFingerprint omitted)`
+      creates a fresh current AI-owned script only when no current AI
+      script exists;
+    - verify `writeCode(...)` rejects missing or stale fingerprints when
+      overwriting an existing current AI-owned script or attached
+      editor;
+    - verify `compileCode(...)` rejects missing fingerprints and stale
+      fingerprints before compilation for both hosts;
+    - verify `runCode(...)` rejects missing fingerprints and stale
+      fingerprints before execution for both hosts;
+    - verify `readCode(host, ...)` returns only current-host state and
+      no longer exposes replaced historical states;
+    - verify automatic AI-owned script status messages and user-run
+      dialog flows still work after removing public `codeId` values; and
+    - remove or replace tests that depend on externally reading old
+      replaced states by id.
+  - Manual tests: N/A.
+- **Implementation notes:**
+  - Public code-host DTOs now expose only `host`, text, fingerprint,
+    status, diagnostics, stdout, and structured result; external
+    `codeId` and `replacementCodeId` were removed from both requests
+    and responses.
+  - `AiCodeOperationAuthorizer`, `AiCodeToolSet`,
+    `ModelContextProtocolToolCallAuthorizer`, and MCP/tool-layer DTOs
+    now authorize and route code-host operations by explicit `host`
+    only.
+  - `AiOwnedScriptHostService` now treats AI-owned code as one current
+    host state: fresh `writeCode(host=AI, text, null)` creates it only
+    when absent, later writes require `expectedFingerprint`, and
+    `readCode(host=AI, ...)` exposes only the current state.
+  - `SingleEditorAttachmentService` now exposes only the current
+    attached-editor state externally and requires
+    `expectedFingerprint` for overwrite/compile/run.
+  - Follow-up cleanup removed the remaining internal attached-editor and
+    AI-owned-script `codeId` plumbing as dead code from normal current
+    state handling; the dialog paths now operate on the single current
+    code state directly instead of tracking synthetic ids.
+  - `RoutingAiCodeHostService`, `AIChatPanel`, and
+    `AutomaticCodeStatusMessage` were updated so reopening and automatic
+    user-run status handling no longer depends on externally surfaced
+    `codeId` values.

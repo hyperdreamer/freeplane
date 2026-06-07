@@ -54,13 +54,11 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
     public static final String AI_SCRIPT_WITHOUT_EXEC_RESTRICTION = "ai_script_without_exec_restriction";
     public static final String AI_TOOL_AVAILABILITY_PROPERTY = "ai_tool_availability";
 
-    private static final String AI_SCRIPT_CODE_ID_PREFIX = "ai-script-";
-
     interface DialogHandle {
-        void showCode(String codeId);
+        void showCode();
         void showAndFocus();
         String currentCodeText();
-        boolean showsCode(String codeId);
+        boolean hasCode();
         void hideDialog();
     }
 
@@ -69,7 +67,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
     }
 
     interface CodeStateProvider {
-        ReadCodeResponse readCurrentState(String codeId);
+        ReadCodeResponse readCodeState();
     }
 
     interface DialogCallbacks {
@@ -81,8 +79,6 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
     private final DialogFactory dialogFactory;
     private FormulaValidationSupport formulaValidationSupport;
     private final Set<AiCodeRunListener> runListeners = new LinkedHashSet<AiCodeRunListener>();
-    private final Map<String, ReadCodeResponse> archivedStates = new HashMap<String, ReadCodeResponse>();
-    private long nextCodeId = 1L;
     private CurrentScript currentScript;
     private DialogHandle dialog;
     private boolean loadingDialogCode;
@@ -154,12 +150,12 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
         });
     }
 
-    public void showCode(String codeId) {
+    public void showCurrentCode() {
         onEdt(() -> {
-            if (currentScript == null || codeId == null || !codeId.equals(currentScript.codeId)) {
+            if (currentScript == null) {
                 return null;
             }
-            showCodeInDialog(codeId);
+            showCodeInDialog();
             dialog().showAndFocus();
             return null;
         });
@@ -191,26 +187,12 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
     }
 
     ReadCodeResponse doReadCode(ReadCodeRequest request) {
-        String codeId = normalized(request == null ? null : request.getCodeId());
-        if (codeId != null) {
-            if (currentScript != null && currentScript.codeId.equals(codeId)) {
-                return currentReadCodeResponse(request == null ? null : request.getFingerprint());
-            }
-            ReadCodeResponse archivedState = archivedStates.get(codeId);
-            if (archivedState != null) {
-                return archivedState;
-            }
-            if (codeId.startsWith(AI_SCRIPT_CODE_ID_PREFIX)) {
-                return noCodeState(codeId);
-            }
-            throw new IllegalArgumentException("Unknown codeId: " + codeId);
-        }
         ScriptHost host = request == null ? null : request.getHost();
         if (host != ScriptHost.AI) {
-            throw new IllegalArgumentException("host AI is required when codeId is absent.");
+            throw new IllegalArgumentException("host AI is required.");
         }
         if (currentScript == null) {
-            return noCodeState(null);
+            return noCodeState();
         }
         return currentReadCodeResponse(request == null ? null : request.getFingerprint());
     }
@@ -219,26 +201,26 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
         if (request == null) {
             throw new IllegalArgumentException("request is required.");
         }
-        if (request.getHost() != null && request.getHost() != ScriptHost.AI) {
+        if (request.getHost() != ScriptHost.AI) {
             throw new IllegalArgumentException("host AI is required for AI-owned scripts.");
         }
         if (request.getText() == null) {
             throw new IllegalArgumentException("text is required.");
         }
         assertNotRunning();
-        assertExpectedFingerprint(request.getExpectedFingerprint());
-        String newCodeId = nextCodeId();
-        if (currentScript != null) {
-            archivedStates.put(currentScript.codeId, replacedState(currentScript, newCodeId));
+        if (currentScript == null) {
+            currentScript = new CurrentScript(request.getText());
         }
-        currentScript = new CurrentScript(newCodeId, request.getText());
+        else {
+            requireExpectedFingerprint(request.getExpectedFingerprint());
+            currentScript.storedText = request.getText();
+        }
         currentScript.fingerprint = fingerprint(currentScript.storedText);
         currentScript.latestState = readyState(currentScript, currentScript.storedText, currentScript.fingerprint);
         if (dialog != null) {
-            showCodeInDialog(newCodeId);
+            showCodeInDialog();
         }
         return new WriteCodeResponse(
-            currentScript.codeId,
             ScriptHost.AI,
             AI_SCRIPT_CONTENT_TYPE,
             CodeLifecycleStatus.READY,
@@ -246,8 +228,8 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
     }
 
     CompileCodeResponse doCompileCode(CompileCodeRequest request) {
-        requireCurrentScript(request == null ? null : request.getCodeId(), request == null ? null : request.getHost());
-        assertExpectedFingerprint(request == null ? null : request.getExpectedFingerprint());
+        requireCurrentScript(request == null ? null : request.getHost());
+        requireExpectedFingerprint(request == null ? null : request.getExpectedFingerprint());
         synchronizeCurrentTextFromDialog();
         String codeText = currentText();
         ScriptingEngine.GroovyCompileResult compileResult = ScriptingEngine.compileGroovyScriptForDiagnostics(
@@ -255,7 +237,6 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
             aiStartedPermissions());
         String currentFingerprint = fingerprint(codeText);
         CompileCodeResponse response = new CompileCodeResponse(
-            currentScript.codeId,
             ScriptHost.AI,
             AI_SCRIPT_CONTENT_TYPE,
             compileResult.isSuccessful() ? CodeLifecycleStatus.READY : CodeLifecycleStatus.FAILED,
@@ -267,20 +248,20 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
             ? readyState(currentScript, codeText, currentFingerprint)
             : failedState(currentScript, currentFingerprint, compileResult.getCompilerDiagnostics(),
                 compileResult.getErrorMessage(), compileResult.getLineNumber(), null, null, null);
-        if (dialog != null && dialog.showsCode(currentScript.codeId)) {
-            showCodeInDialog(currentScript.codeId);
+        if (dialog != null && dialog.hasCode()) {
+            showCodeInDialog();
         }
         return response;
     }
 
     RunCodeResponse doRunCode(RunCodeRequest request) {
-        requireCurrentScript(request == null ? null : request.getCodeId(), request == null ? null : request.getHost());
-        assertExpectedFingerprint(request == null ? null : request.getExpectedFingerprint());
+        requireCurrentScript(request == null ? null : request.getHost());
+        requireExpectedFingerprint(request == null ? null : request.getExpectedFingerprint());
         assertNotRunning();
         synchronizeCurrentTextFromDialog();
         AiScriptExecutionPolicy policy = executionPolicy();
         if (policy == AiScriptExecutionPolicy.SHOWN_USER_RUN) {
-            showCodeInDialog(currentScript.codeId);
+            showCodeInDialog();
             dialog().showAndFocus();
             RunCodeResponse response = waitingResponse(ScriptRunInitiator.AI);
             currentScript.latestState = waitingState(currentScript, response.getFingerprint(), ScriptRunInitiator.AI);
@@ -337,7 +318,6 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
                 permissions);
             if (!compileResult.isSuccessful()) {
                 RunCodeResponse response = new RunCodeResponse(
-                    currentScript.codeId,
                     ScriptHost.AI,
                     AI_SCRIPT_CONTENT_TYPE,
                     CodeLifecycleStatus.FAILED,
@@ -377,7 +357,6 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
                 String stdout = trimStdout(outputBuffer);
                 Object structuredResult = toJsonSafeValue(result);
                 RunCodeResponse response = new RunCodeResponse(
-                    currentScript.codeId,
                     ScriptHost.AI,
                     AI_SCRIPT_CONTENT_TYPE,
                     CodeLifecycleStatus.SUCCEEDED,
@@ -389,14 +368,12 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
                     stdout,
                     structuredResult);
                 currentScript.latestState = new ReadCodeResponse(
-                    currentScript.codeId,
                     ScriptHost.AI,
                     AI_SCRIPT_CONTENT_TYPE,
                     CodeLifecycleStatus.SUCCEEDED,
                     runInitiator,
                     currentFingerprint,
                     codeText,
-                    null,
                     null,
                     null,
                     null,
@@ -409,7 +386,6 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
                 String stdout = trimStdout(outputBuffer);
                 Integer errorLine = lineNumber[0] >= 0 ? Integer.valueOf(lineNumber[0]) : null;
                 RunCodeResponse response = new RunCodeResponse(
-                    currentScript.codeId,
                     ScriptHost.AI,
                     AI_SCRIPT_CONTENT_TYPE,
                     CodeLifecycleStatus.FAILED,
@@ -429,7 +405,6 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
                 String stdout = trimStdout(outputBuffer);
                 Integer errorLine = lineNumber[0] >= 0 ? Integer.valueOf(lineNumber[0]) : null;
                 RunCodeResponse response = new RunCodeResponse(
-                    currentScript.codeId,
                     ScriptHost.AI,
                     AI_SCRIPT_CONTENT_TYPE,
                     CodeLifecycleStatus.FAILED,
@@ -454,35 +429,31 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
     }
 
     private void refreshDialogAfterRun(RunCodeResponse response) {
-        if (dialog == null || !dialog.showsCode(currentScript.codeId)) {
+        if (dialog == null || !dialog.hasCode()) {
             return;
         }
-        showCodeInDialog(currentScript.codeId);
+        showCodeInDialog();
         if (response.getStatus() == CodeLifecycleStatus.SUCCEEDED) {
             dialog.hideDialog();
         }
     }
 
-    private void requireCurrentScript(String codeId, ScriptHost host) {
-        String normalizedCodeId = normalized(codeId);
-        if (normalizedCodeId != null) {
-            if (currentScript == null || !currentScript.codeId.equals(normalizedCodeId)) {
-                throw new IllegalStateException("The requested code is not current.");
-            }
-            return;
-        }
+    private void requireCurrentScript(ScriptHost host) {
         if (host != ScriptHost.AI) {
-            throw new IllegalArgumentException("host AI is required when codeId is absent.");
+            throw new IllegalArgumentException("host AI is required.");
         }
         if (currentScript == null) {
             throw new IllegalStateException("No AI-owned script exists.");
         }
     }
 
-    private void assertExpectedFingerprint(String expectedFingerprint) {
+    private void requireExpectedFingerprint(String expectedFingerprint) {
         String normalizedFingerprint = normalized(expectedFingerprint);
-        if (normalizedFingerprint == null || currentScript == null) {
-            return;
+        if (normalizedFingerprint == null) {
+            throw new IllegalArgumentException("expectedFingerprint is required.");
+        }
+        if (currentScript == null) {
+            throw new IllegalStateException("No AI-owned script exists.");
         }
         String currentFingerprint = fingerprint(currentText());
         if (!normalizedFingerprint.equals(currentFingerprint)) {
@@ -504,14 +475,12 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
             : currentScript.latestState;
         String responseText = currentFingerprint.equals(normalized(requestedFingerprint)) ? null : codeText;
         return new ReadCodeResponse(
-            currentScript.codeId,
             ScriptHost.AI,
             AI_SCRIPT_CONTENT_TYPE,
             state.getStatus(),
             state.getRunInitiator(),
             currentFingerprint,
             responseText,
-            state.getReplacementCodeId(),
             state.getCompilerDiagnostics(),
             state.getErrorMessage(),
             state.getLineNumber(),
@@ -521,7 +490,6 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
 
     private ReadCodeResponse readyState(CurrentScript script, String codeText, String currentFingerprint) {
         return new ReadCodeResponse(
-            script.codeId,
             ScriptHost.AI,
             AI_SCRIPT_CONTENT_TYPE,
             CodeLifecycleStatus.READY,
@@ -532,21 +500,18 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
             null,
             null,
             null,
-            null,
             null);
     }
 
     private ReadCodeResponse waitingState(CurrentScript script, String currentFingerprint,
                                           ScriptRunInitiator runInitiator) {
         return new ReadCodeResponse(
-            script.codeId,
             ScriptHost.AI,
             AI_SCRIPT_CONTENT_TYPE,
             CodeLifecycleStatus.WAITING_FOR_USER_RUN,
             runInitiator,
             currentFingerprint,
             currentText(),
-            null,
             null,
             null,
             null,
@@ -563,14 +528,12 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
                                          Object structuredResult,
                                          ScriptRunInitiator runInitiator) {
         return new ReadCodeResponse(
-            script.codeId,
             ScriptHost.AI,
             AI_SCRIPT_CONTENT_TYPE,
             CodeLifecycleStatus.FAILED,
             runInitiator,
             currentFingerprint,
             currentText(),
-            null,
             compilerDiagnostics,
             errorMessage,
             lineNumber,
@@ -578,9 +541,8 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
             structuredResult);
     }
 
-    private ReadCodeResponse noCodeState(String codeId) {
+    private ReadCodeResponse noCodeState() {
         return new ReadCodeResponse(
-            codeId,
             ScriptHost.AI,
             AI_SCRIPT_CONTENT_TYPE,
             CodeLifecycleStatus.NO_CODE,
@@ -591,37 +553,13 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
             null,
             null,
             null,
-            null,
             null);
-    }
-
-    private ReadCodeResponse replacedState(CurrentScript script, String replacementCodeId) {
-        String codeText = currentText();
-        String currentFingerprint = fingerprint(codeText);
-        ReadCodeResponse state = script.latestState == null
-            ? readyState(script, codeText, currentFingerprint)
-            : script.latestState;
-        return new ReadCodeResponse(
-            script.codeId,
-            ScriptHost.AI,
-            AI_SCRIPT_CONTENT_TYPE,
-            CodeLifecycleStatus.REPLACED,
-            state.getRunInitiator(),
-            currentFingerprint,
-            null,
-            replacementCodeId,
-            state.getCompilerDiagnostics(),
-            state.getErrorMessage(),
-            state.getLineNumber(),
-            state.getStdout(),
-            state.getStructuredResult());
     }
 
     private RunCodeResponse waitingResponse(ScriptRunInitiator runInitiator) {
         String codeText = currentText();
         String currentFingerprint = fingerprint(codeText);
         return new RunCodeResponse(
-            currentScript.codeId,
             ScriptHost.AI,
             AI_SCRIPT_CONTENT_TYPE,
             CodeLifecycleStatus.WAITING_FOR_USER_RUN,
@@ -632,10 +570,6 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
             null,
             null,
             null);
-    }
-
-    private String nextCodeId() {
-        return AI_SCRIPT_CODE_ID_PREFIX + nextCodeId++;
     }
 
     private String normalized(String value) {
@@ -652,7 +586,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
 
     private DialogHandle dialog() {
         if (dialog == null) {
-            dialog = dialogFactory.create(this::readCurrentStateForDialog, new DialogCallbacks() {
+            dialog = dialogFactory.create(this::readCodeStateForDialog, new DialogCallbacks() {
                 @Override
                 public RunCodeResponse runFromDialog(String codeText) {
                     return AiOwnedScriptHostService.this.runFromDialog(codeText);
@@ -667,24 +601,27 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
         return dialog;
     }
 
-    private ReadCodeResponse readCurrentStateForDialog(String codeId) {
-        return doReadCode(new ReadCodeRequest(codeId, null, null));
+    private ReadCodeResponse readCodeStateForDialog() {
+        if (currentScript == null) {
+            return noCodeState();
+        }
+        return currentReadCodeResponse(null);
     }
 
-    private void showCodeInDialog(String codeId) {
-        if (codeId == null) {
+    private void showCodeInDialog() {
+        if (currentScript == null) {
             return;
         }
         loadingDialogCode = true;
         try {
-            dialog().showCode(codeId);
+            dialog().showCode();
         } finally {
             loadingDialogCode = false;
         }
     }
 
     private void synchronizeCurrentTextFromDialog() {
-        if (currentScript == null || dialog == null || !dialog.showsCode(currentScript.codeId)) {
+        if (currentScript == null || dialog == null || !dialog.hasCode()) {
             return;
         }
         currentScript.storedText = dialog.currentCodeText() == null ? "" : dialog.currentCodeText();
@@ -698,7 +635,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
         if (loadingDialogCode) {
             return currentScript.storedText == null ? "" : currentScript.storedText;
         }
-        if (dialog != null && dialog.showsCode(currentScript.codeId)) {
+        if (dialog != null && dialog.hasCode()) {
             return dialog.currentCodeText() == null ? "" : dialog.currentCodeText();
         }
         return currentScript.storedText == null ? "" : currentScript.storedText;
@@ -866,14 +803,12 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
     }
 
     private static final class CurrentScript {
-        private final String codeId;
         private String storedText;
         private String fingerprint;
         private ReadCodeResponse latestState;
         private boolean running;
 
-        private CurrentScript(String codeId, String codeText) {
-            this.codeId = codeId;
+        private CurrentScript(String codeText) {
             this.storedText = codeText == null ? "" : codeText;
             this.fingerprint = null;
         }

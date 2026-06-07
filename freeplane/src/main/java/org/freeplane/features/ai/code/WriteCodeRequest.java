@@ -1,7 +1,6 @@
 package org.freeplane.features.ai.code;
 
 public class WriteCodeRequest {
-    private String codeId;
     private ScriptHost host;
     private String text;
     private String expectedFingerprint;
@@ -9,19 +8,10 @@ public class WriteCodeRequest {
     public WriteCodeRequest() {
     }
 
-    public WriteCodeRequest(String codeId, ScriptHost host, String text, String expectedFingerprint) {
-        this.codeId = codeId;
+    public WriteCodeRequest(ScriptHost host, String text, String expectedFingerprint) {
         this.host = host;
         this.text = text;
         this.expectedFingerprint = expectedFingerprint;
-    }
-
-    public String getCodeId() {
-        return codeId;
-    }
-
-    public void setCodeId(String codeId) {
-        this.codeId = codeId;
     }
 
     public ScriptHost getHost() {

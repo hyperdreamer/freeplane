@@ -183,17 +183,15 @@ public class AIToolSetBuilder {
             public ReadCodeResponse readCode(ReadCodeRequest request) {
                 ScriptHost host = request == null ? null : request.getHost();
                 if (host == null) {
-                    throw new IllegalArgumentException("host is required when codeId is absent.");
+                    throw new IllegalArgumentException("host is required.");
                 }
                 if (host != ScriptHost.ATTACHED_EDITOR) {
                     throw new IllegalStateException("AI code host is not implemented yet.");
                 }
                 return new ReadCodeResponse(
-                    null,
                     ScriptHost.ATTACHED_EDITOR,
                     null,
                     CodeLifecycleStatus.NO_CODE,
-                    null,
                     null,
                     null,
                     null,

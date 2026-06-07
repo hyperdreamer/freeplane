@@ -261,7 +261,7 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 			}
 			try {
 				RunCodeResponse response = runCode(
-					new RunCodeRequest(null, ScriptHost.ATTACHED_EDITOR, null),
+					new RunCodeRequest(ScriptHost.ATTACHED_EDITOR, null),
 					ScriptRunInitiator.USER);
 				renderManualRunResult(response);
 				updateAiAttachmentAfterManualRun(response);
@@ -588,7 +588,6 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 			scriptText,
 			ScriptingPermissions.getPermissiveScriptingPermissions());
 		return new CompileCodeResponse(
-			request == null ? null : request.getCodeId(),
 			ScriptHost.ATTACHED_EDITOR,
 			AI_ATTACHMENT_CONTENT_TYPE,
 			compileResult.isSuccessful() ? CodeLifecycleStatus.READY : CodeLifecycleStatus.FAILED,
@@ -619,7 +618,6 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 				}
 			});
 			return new RunCodeResponse(
-				request == null ? null : request.getCodeId(),
 				ScriptHost.ATTACHED_EDITOR,
 				AI_ATTACHMENT_CONTENT_TYPE,
 				CodeLifecycleStatus.SUCCEEDED,
@@ -633,7 +631,6 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 		}
 		catch (ExecuteScriptException e) {
 			return new RunCodeResponse(
-				request == null ? null : request.getCodeId(),
 				ScriptHost.ATTACHED_EDITOR,
 				AI_ATTACHMENT_CONTENT_TYPE,
 				CodeLifecycleStatus.FAILED,
@@ -647,7 +644,6 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 		}
 		catch (RuntimeException e) {
 			return new RunCodeResponse(
-				request == null ? null : request.getCodeId(),
 				ScriptHost.ATTACHED_EDITOR,
 				AI_ATTACHMENT_CONTENT_TYPE,
 				CodeLifecycleStatus.FAILED,
@@ -686,13 +682,11 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 			return;
 		}
 		ReadCodeResponse codeState = new ReadCodeResponse(
-			response.getCodeId(),
 			response.getHost(),
 			response.getContentType(),
 			response.getStatus(),
 			response.getRunInitiator(),
 			response.getFingerprint(),
-			null,
 			null,
 			response.getCompilerDiagnostics(),
 			response.getErrorMessage(),

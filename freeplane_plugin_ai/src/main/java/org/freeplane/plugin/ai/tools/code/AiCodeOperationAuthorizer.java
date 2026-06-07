@@ -14,11 +14,10 @@ import org.freeplane.plugin.ai.tools.formula.FormulaEditingAccess;
 import org.freeplane.plugin.ai.tools.utilities.ToolCaller;
 
 public class AiCodeOperationAuthorizer {
-    private static final String ATTACHED_EDITOR_CODE_ID_PREFIX = "attached-editor-";
-    private static final String AI_SCRIPT_CODE_ID_PREFIX = "ai-script-";
     private static final String SCRIPT_CONTENT_TYPE = "text/x-freeplane-script-groovy";
     private static final String FORMULA_CONTENT_TYPE = "text/x-freeplane-formula-groovy";
 
+    @SuppressWarnings("unused")
     private final ToolCaller toolCaller;
     private final Supplier<ToolAvailabilityLevel> globalAvailabilitySupplier;
     private final Supplier<ToolAvailabilityLevel> sessionOverrideSupplier;
@@ -57,8 +56,8 @@ public class AiCodeOperationAuthorizer {
         return Collections.unmodifiableSet(toolNames);
     }
 
-    public void assertAuthorized(String operation, String codeId, ScriptHost host) {
-        ScriptHost resolvedHost = resolveHost(codeId, host);
+    public void assertAuthorized(String operation, ScriptHost host) {
+        ScriptHost resolvedHost = requireHost(host);
         if ("readCode".equals(operation)) {
             if (resolvedHost == ScriptHost.ATTACHED_EDITOR && canReadAttachedEditor()) {
                 return;
@@ -138,25 +137,15 @@ public class AiCodeOperationAuthorizer {
 
     private ReadCodeResponse currentState(ScriptHost host) {
         try {
-            return codeHostService.readCode(new ReadCodeRequest(null, host, null));
+            return codeHostService.readCode(new ReadCodeRequest(host, null));
         } catch (RuntimeException error) {
             return null;
         }
     }
 
-    private ScriptHost resolveHost(String codeId, ScriptHost host) {
-        if (codeId != null && !codeId.trim().isEmpty()) {
-            String normalizedCodeId = codeId.trim();
-            if (normalizedCodeId.startsWith(ATTACHED_EDITOR_CODE_ID_PREFIX)) {
-                return ScriptHost.ATTACHED_EDITOR;
-            }
-            if (normalizedCodeId.startsWith(AI_SCRIPT_CODE_ID_PREFIX)) {
-                return ScriptHost.AI;
-            }
-            throw new IllegalArgumentException("Unknown codeId: " + normalizedCodeId);
-        }
+    private ScriptHost requireHost(ScriptHost host) {
         if (host == null) {
-            throw new IllegalArgumentException("host is required when codeId is absent.");
+            throw new IllegalArgumentException("host is required.");
         }
         return host;
     }

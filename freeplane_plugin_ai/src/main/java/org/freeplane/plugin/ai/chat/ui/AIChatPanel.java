@@ -196,8 +196,7 @@ public class AIChatPanel extends JPanel {
         new HashMap<LiveChatSessionId, ChatTokenUsageTracker>();
     private final AssistantProfileSelectionSync assistantProfileSelectionSync;
     private final AssistantProfilePaneBuilder assistantProfilePaneBuilder;
-    private final Map<String, LiveChatSessionId> aiOwnedCodeOwningSessions =
-        new HashMap<String, LiveChatSessionId>();
+    private LiveChatSessionId aiOwnedCodeOwningSessionId;
     private LiveChatSessionId mcpSummarySessionId;
     private final AiCodeRunListener aiCodeRunListener = new AiCodeRunListener() {
         @Override
@@ -1226,8 +1225,7 @@ public class AIChatPanel extends JPanel {
             @Override
             public WriteCodeResponse writeCode(WriteCodeRequest request) {
                 WriteCodeResponse response = delegate.writeCode(request);
-                rememberAiOwnedCodeOwner(response == null ? null : response.getCodeId(),
-                    response == null ? null : response.getHost(), sessionId);
+                rememberAiOwnedCodeOwner(response == null ? null : response.getHost(), sessionId);
                 return response;
             }
 
@@ -1239,8 +1237,7 @@ public class AIChatPanel extends JPanel {
             @Override
             public RunCodeResponse runCode(RunCodeRequest request) {
                 RunCodeResponse response = delegate.runCode(request);
-                rememberAiOwnedCodeOwner(response == null ? null : response.getCodeId(),
-                    response == null ? null : response.getHost(), sessionId);
+                rememberAiOwnedCodeOwner(response == null ? null : response.getHost(), sessionId);
                 return response;
             }
 
@@ -1454,7 +1451,7 @@ public class AIChatPanel extends JPanel {
             return false;
         }
         try {
-            ReadCodeResponse response = activeCodeHostService.readCode(new ReadCodeRequest(null, ScriptHost.AI, null));
+            ReadCodeResponse response = activeCodeHostService.readCode(new ReadCodeRequest(ScriptHost.AI, null));
             return response != null && response.getStatus() != CodeLifecycleStatus.NO_CODE;
         } catch (RuntimeException error) {
             return false;
@@ -1472,9 +1469,9 @@ public class AIChatPanel extends JPanel {
         return ((org.freeplane.plugin.ai.code.RoutingAiCodeHostService) activeCodeHostService).showCurrentAiOwnedCode();
     }
 
-    private void rememberAiOwnedCodeOwner(String codeId, ScriptHost host, LiveChatSessionId sessionId) {
-        if (host == ScriptHost.AI && codeId != null && sessionId != null) {
-            aiOwnedCodeOwningSessions.put(codeId, sessionId);
+    private void rememberAiOwnedCodeOwner(ScriptHost host, LiveChatSessionId sessionId) {
+        if (host == ScriptHost.AI && sessionId != null) {
+            aiOwnedCodeOwningSessionId = sessionId;
         }
     }
 
@@ -1482,7 +1479,7 @@ public class AIChatPanel extends JPanel {
         if (response == null || response.getHost() != ScriptHost.AI || response.getRunInitiator() != org.freeplane.features.ai.code.ScriptRunInitiator.USER) {
             return;
         }
-        LiveChatSessionId sessionId = aiOwnedCodeOwningSessions.get(response.getCodeId());
+        LiveChatSessionId sessionId = aiOwnedCodeOwningSessionId;
         if (sessionId == null) {
             return;
         }
