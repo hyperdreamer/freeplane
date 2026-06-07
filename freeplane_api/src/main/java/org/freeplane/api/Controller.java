@@ -163,4 +163,13 @@ public interface Controller extends ControllerRO, HeadlessMapCreator {
 	 */
 	ExecutorService getMainThreadExecutorService();
 
+	/**
+	 * @since 1.13.3
+	 * Moves a group of nodes together. <br>
+	 * Useful, e.g., when moving a summary-node group (FirstGroupNode .. SummaryNode).
+	 * @param nodes the nodes to move
+	 * @param parent the new parent node
+	 * @param position the new position within the parent
+	 */
+	void moveNodes(List<Node> nodes, Node parent, int position);
 }

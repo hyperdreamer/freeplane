@@ -36,6 +36,7 @@ import org.freeplane.features.icon.factory.IconStoreFactory;
 import org.freeplane.features.map.IMapSelection;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
+import org.freeplane.features.map.mindmapmode.MMapController;
 import org.freeplane.features.map.mindmapmode.MMapModel;
 import org.freeplane.features.mapio.mindmapmode.MMapIO;
 import org.freeplane.features.mode.Controller;
@@ -391,4 +392,11 @@ class ControllerProxy implements Proxy.Controller {
 		return Controller.getCurrentController().getMainThreadExecutorService();
 	}
 
+	@Override
+	public void moveNodes(List<Node> nodes, Node parent, int position) {
+		List<NodeModel> nodeModels = nodes.stream().map(n -> ((NodeProxy) n).getDelegate()).collect(Collectors.toList());
+		NodeModel parentModel = ((NodeProxy) parent).getDelegate();
+		MMapController mapController = (MMapController) Controller.getCurrentController().getModeController().getMapController();
+		mapController.moveNodes(nodeModels, parentModel, position);
+	}
 }
