@@ -1,9 +1,8 @@
 package org.freeplane.plugin.ai.tools.create;
 
-import java.util.List;
-
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.List;
 
 public class CreateNodesRequest {
     private final String mapIdentifier;

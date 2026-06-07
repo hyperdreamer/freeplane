@@ -2,7 +2,6 @@ package org.freeplane.plugin.ai.tools.tagcategories;
 
 import java.util.Objects;
 import java.util.UUID;
-
 import org.freeplane.features.icon.TagCategoryAccess;
 import org.freeplane.features.icon.TagCategoryInstructionRequest;
 import org.freeplane.features.icon.TagCategoryState;

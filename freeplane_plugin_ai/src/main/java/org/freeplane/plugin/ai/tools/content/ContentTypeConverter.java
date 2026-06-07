@@ -1,7 +1,6 @@
 package org.freeplane.plugin.ai.tools.content;
 
 import java.util.Locale;
-
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.features.text.TextController;
 
@@ -9,10 +8,7 @@ public class ContentTypeConverter {
     private static final String LATEX_PREFIX = "\\latex";
     private static final String UNPARSED_LATEX_PREFIX = "\\unparsedlatex";
 
-    public ContentType toContentType(String freeplaneContentType, boolean isFormula, String rawValue) {
-        if (isFormula) {
-            return ContentType.FORMULA;
-        }
+    public ContentType toContentType(String freeplaneContentType, String rawValue) {
         if (freeplaneContentType == null) {
             if (rawValue != null && HtmlUtils.isHtml(rawValue)) {
                 return ContentType.HTML;

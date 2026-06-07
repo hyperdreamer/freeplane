@@ -4,5 +4,6 @@ public enum ChatTranscriptRole {
     USER,
     ASSISTANT,
     ASSISTANT_PROFILE_SYSTEM,
+    AUTOMATIC_CODE_STATUS,
     REMOVED_FOR_SPACE_SYSTEM
 }

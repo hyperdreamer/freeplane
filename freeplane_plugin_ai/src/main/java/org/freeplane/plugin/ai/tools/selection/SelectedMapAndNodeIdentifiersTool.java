@@ -2,7 +2,6 @@ package org.freeplane.plugin.ai.tools.selection;
 
 import java.util.Objects;
 import java.util.UUID;
-
 import org.freeplane.features.map.IMapSelection;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.mode.Controller;

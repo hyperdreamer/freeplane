@@ -7,6 +7,7 @@ import javax.swing.DefaultComboBoxModel;
 import javax.swing.JComboBox;
 import org.freeplane.core.ui.components.JComboBoxFactory;
 import org.freeplane.core.util.TextUtils;
+import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 
 public class AiPromptToolSelectionController {
     private final JComboBox<ToolSelectionOption> toolSelectionComboBox;
@@ -17,17 +18,20 @@ public class AiPromptToolSelectionController {
     public AiPromptToolSelectionController() {
         this(
             TextUtils.getText("ai_prompt_use_current_tools"),
-            TextUtils.getText("OptionPanel.ai_chat_tool_availability.editing"),
-            TextUtils.getText("OptionPanel.ai_chat_tool_availability.reading"),
-            TextUtils.getText("OptionPanel.ai_chat_tool_availability.disabled"));
+            TextUtils.getText("OptionPanel.ToolAvailabilityLevel.SCRIPT_EXECUTION"),
+            TextUtils.getText("OptionPanel.ToolAvailabilityLevel.EDITING"),
+            TextUtils.getText("OptionPanel.ToolAvailabilityLevel.READING"),
+            TextUtils.getText("OptionPanel.ToolAvailabilityLevel.DISABLED"));
     }
 
     AiPromptToolSelectionController(String useCurrentToolsLabel,
+                                    String scriptExecutionLabel,
                                     String editingLabel,
                                     String readingLabel,
                                     String disabledLabel) {
         options = Arrays.asList(
             new ToolSelectionOption("", useCurrentToolsLabel),
+            new ToolSelectionOption("script_execution", scriptExecutionLabel),
             new ToolSelectionOption("editing", editingLabel),
             new ToolSelectionOption("reading", readingLabel),
             new ToolSelectionOption("disabled", disabledLabel));

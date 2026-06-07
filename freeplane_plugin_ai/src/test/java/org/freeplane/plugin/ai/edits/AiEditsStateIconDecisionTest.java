@@ -1,8 +1,8 @@
 package org.freeplane.plugin.ai.edits;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 import org.junit.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 public class AiEditsStateIconDecisionTest {
     @Test

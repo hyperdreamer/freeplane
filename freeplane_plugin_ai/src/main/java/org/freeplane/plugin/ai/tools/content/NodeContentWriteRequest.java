@@ -1,32 +1,31 @@
 package org.freeplane.plugin.ai.tools.content;
 
-import java.util.List;
-
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import dev.langchain4j.model.output.structured.Description;
+import java.util.List;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class NodeContentWriteRequest {
     private final String text;
     @JsonProperty(required = false)
-    @Description("Optional text content type.")
+    @Description("Optional text content type. Formula values are rejected in createNodes/createSummary; create the node first, then use previewFormulaUpdates/applyFormulaUpdates.")
     private final ContentType textContentType;
     @JsonProperty(required = false)
     @Description("Optional details.")
     private final String details;
     @JsonProperty(required = false)
-    @Description("Optional details content type.")
+    @Description("Optional details content type. Formula values are rejected in createNodes/createSummary; create the node first, then use previewFormulaUpdates/applyFormulaUpdates.")
     private final ContentType detailsContentType;
     @JsonProperty(required = false)
     @Description("Optional note.")
     private final String note;
     @JsonProperty(required = false)
-    @Description("Optional note content type.")
+    @Description("Optional note content type. Formula values are rejected in createNodes/createSummary; create the node first, then use previewFormulaUpdates/applyFormulaUpdates.")
     private final ContentType noteContentType;
     @JsonProperty(required = false)
-    @Description("Optional attributes.")
+    @Description("Optional attributes. Formula values are rejected in createNodes/createSummary; create the node first, then use previewFormulaUpdates/applyFormulaUpdates.")
     private final List<AttributeEntry> attributes;
     @JsonProperty(required = false)
     @Description("Optional tags.")

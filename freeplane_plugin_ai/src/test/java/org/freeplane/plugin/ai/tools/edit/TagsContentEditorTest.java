@@ -1,16 +1,9 @@
 package org.freeplane.plugin.ai.tools.edit;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-
 import javax.swing.tree.DefaultMutableTreeNode;
-
 import org.freeplane.features.icon.IconRegistry;
 import org.freeplane.features.icon.Tag;
 import org.freeplane.features.icon.TagCategories;
@@ -22,6 +15,11 @@ import org.freeplane.features.map.NodeModel;
 import org.freeplane.plugin.ai.tools.content.TagsContent;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 public class TagsContentEditorTest {
     @Test

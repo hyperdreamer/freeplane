@@ -25,7 +25,6 @@ import javax.swing.JPanel;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
-
 import org.freeplane.core.ui.components.UITools;
 import org.freeplane.core.util.TextUtils;
 

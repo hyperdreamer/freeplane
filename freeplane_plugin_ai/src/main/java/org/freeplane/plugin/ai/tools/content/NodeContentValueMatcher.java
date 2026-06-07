@@ -3,7 +3,6 @@ package org.freeplane.plugin.ai.tools.content;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.regex.Pattern;
-
 import org.freeplane.plugin.ai.tools.search.SearchCaseSensitivity;
 import org.freeplane.plugin.ai.tools.search.SearchMatchingMode;
 

@@ -1,10 +1,11 @@
 package org.freeplane.plugin.ai.tools;
 
+import dev.langchain4j.agent.tool.Tool;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.features.attribute.mindmapmode.MAttributeController;
 import org.freeplane.features.icon.IconController;
 import org.freeplane.features.icon.NamedIcon;
@@ -20,7 +21,11 @@ import org.freeplane.features.mode.ModeController;
 import org.freeplane.features.note.mindmapmode.MNoteController;
 import org.freeplane.features.text.TextController;
 import org.freeplane.features.text.mindmapmode.MTextController;
+import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
+import org.freeplane.plugin.ai.tools.connectors.ConnectorEditRequest;
+import org.freeplane.plugin.ai.tools.connectors.ConnectorEditResponse;
+import org.freeplane.plugin.ai.tools.connectors.ConnectorEditTool;
 import org.freeplane.plugin.ai.tools.content.ListResponse;
 import org.freeplane.plugin.ai.tools.content.ListTool;
 import org.freeplane.plugin.ai.tools.content.ModifiedNodeSummaryBuilder;
@@ -37,6 +42,8 @@ import org.freeplane.plugin.ai.tools.create.NodeModelCreator;
 import org.freeplane.plugin.ai.tools.delete.DeleteNodesRequest;
 import org.freeplane.plugin.ai.tools.delete.DeleteNodesResponse;
 import org.freeplane.plugin.ai.tools.delete.DeleteNodesTool;
+import org.freeplane.plugin.ai.tools.documentation.GetApiDocumentationResponse;
+import org.freeplane.plugin.ai.tools.documentation.GetApiDocumentationTool;
 import org.freeplane.plugin.ai.tools.edit.AttributesContentEditor;
 import org.freeplane.plugin.ai.tools.edit.BatchEditTool;
 import org.freeplane.plugin.ai.tools.edit.EditRequest;
@@ -45,13 +52,19 @@ import org.freeplane.plugin.ai.tools.edit.EditTargetStatus;
 import org.freeplane.plugin.ai.tools.edit.HyperlinkContentEditor;
 import org.freeplane.plugin.ai.tools.edit.IconsContentEditor;
 import org.freeplane.plugin.ai.tools.edit.NodeContentEditor;
+import org.freeplane.plugin.ai.tools.edit.NodeStyleContentEditor;
 import org.freeplane.plugin.ai.tools.edit.NoteContentWriteController;
 import org.freeplane.plugin.ai.tools.edit.NoteContentWriteControllerAdapter;
-import org.freeplane.plugin.ai.tools.edit.NodeStyleContentEditor;
 import org.freeplane.plugin.ai.tools.edit.TagsContentEditor;
 import org.freeplane.plugin.ai.tools.edit.TextContentWriteController;
 import org.freeplane.plugin.ai.tools.edit.TextContentWriteControllerAdapter;
 import org.freeplane.plugin.ai.tools.edit.TextualContentEditor;
+import org.freeplane.plugin.ai.tools.formula.FormulaUpdateApplyRequest;
+import org.freeplane.plugin.ai.tools.formula.FormulaUpdateApplyResponse;
+import org.freeplane.plugin.ai.tools.formula.FormulaUpdatePreviewRequest;
+import org.freeplane.plugin.ai.tools.formula.FormulaUpdatePreviewResponse;
+import org.freeplane.plugin.ai.tools.formula.FormulaUpdatePreviewStore;
+import org.freeplane.plugin.ai.tools.formula.FormulaUpdateTool;
 import org.freeplane.plugin.ai.tools.move.CreateSummaryRequest;
 import org.freeplane.plugin.ai.tools.move.CreateSummaryResponse;
 import org.freeplane.plugin.ai.tools.move.CreateSummaryTool;
@@ -85,12 +98,6 @@ import org.freeplane.plugin.ai.tools.utilities.ToolCallSummary;
 import org.freeplane.plugin.ai.tools.utilities.ToolCallSummaryFormatter;
 import org.freeplane.plugin.ai.tools.utilities.ToolCallSummaryHandler;
 import org.freeplane.plugin.ai.tools.utilities.ToolCaller;
-import org.freeplane.plugin.ai.tools.connectors.ConnectorEditRequest;
-import org.freeplane.plugin.ai.tools.connectors.ConnectorEditResponse;
-import org.freeplane.plugin.ai.tools.connectors.ConnectorEditTool;
-import org.freeplane.plugin.ai.chat.ChatToolAvailability;
-
-import dev.langchain4j.agent.tool.Tool;
 
 public class AIToolSet {
     private final MessageBuilder messageBuilder;
@@ -106,6 +113,8 @@ public class AIToolSet {
     private final ListTool listTool;
     private final ConnectorEditTool connectorEditTool;
     private final BatchEditTool batchEditTool;
+    private final FormulaUpdateTool formulaUpdateTool;
+    private final GetApiDocumentationTool getApiDocumentationTool;
     private final GetTagCategoriesTool getTagCategoriesTool;
     private final EditTagCategoriesTool editTagCategoriesTool;
     private final ToolCallSummaryHandler toolCallSummaryHandler;
@@ -114,6 +123,10 @@ public class AIToolSet {
     AIToolSet(ToolCallSummaryHandler toolCallSummaryHandler, AvailableMaps availableMaps,
               AvailableMaps.MapAccessListener mapAccessListener, TextController textController,
               NodeContentFactories nodeContentFactories, MMapController mapController,
+              AiCodeHostService codeHostService,
+              GetApiDocumentationTool getApiDocumentationTool,
+              java.util.function.Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier,
+              java.util.function.Supplier<Boolean> formulaEditingEnabledSupplier,
               ToolCaller toolCaller) {
         Objects.requireNonNull(mapController, "mapController");
         Objects.requireNonNull(availableMaps, "availableMaps");
@@ -130,8 +143,8 @@ public class AIToolSet {
         MIconController iconController = (MIconController) IconController.getController();
         MLinkController linkController = requireLinkController();
         TextualContentEditor textualContentEditor = new TextualContentEditor(
-            textContentWriteController, noteContentWriteController);
-        AttributesContentEditor attributesContentEditor = new AttributesContentEditor(attributeController);
+            textContentWriteController, noteContentWriteController, textController);
+        AttributesContentEditor attributesContentEditor = new AttributesContentEditor(attributeController, textController);
         TagsContentEditor tagsContentEditor = new TagsContentEditor(iconController);
         TagCategoryAccess tagCategoryAccess = new FreeplaneTagCategoryAccess(iconController);
         List<NamedIcon> iconCandidates = new ArrayList<>(IconStoreFactory.ICON_STORE.getMindIcons());
@@ -148,6 +161,16 @@ public class AIToolSet {
             textualContentEditor, attributesContentEditor, tagsContentEditor, iconsContentEditor,
             nodeStyleContentEditor, hyperlinkContentEditor);
         BatchEditTool batchEditTool = new BatchEditTool(availableMaps, mapAccessListener, nodeContentEditor);
+        FormulaUpdateTool formulaUpdateTool = new FormulaUpdateTool(
+            availableMaps,
+            mapAccessListener,
+            nodeContentFactories.nodeContentItemReader,
+            textualContentEditor,
+            attributesContentEditor,
+            Objects.requireNonNull(codeHostService, "codeHostService"),
+            FormulaUpdatePreviewStore.shared(),
+            toolAvailabilitySupplier,
+            formulaEditingEnabledSupplier);
         MessageBuilder messageBuilder = new MessageBuilder();
         ReadNodesWithDescendantsTool readNodesWithDescendantsTool = new ReadNodesWithDescendantsTool(
             availableMaps, mapAccessListener, nodeContentFactories.nodeContentItemReader, textController);
@@ -191,6 +214,8 @@ public class AIToolSet {
         this.listTool = Objects.requireNonNull(listTool, "listTool");
         this.connectorEditTool = Objects.requireNonNull(connectorEditTool, "connectorEditTool");
         this.batchEditTool = Objects.requireNonNull(batchEditTool, "batchEditTool");
+        this.formulaUpdateTool = Objects.requireNonNull(formulaUpdateTool, "formulaUpdateTool");
+        this.getApiDocumentationTool = Objects.requireNonNull(getApiDocumentationTool, "getApiDocumentationTool");
         this.getTagCategoriesTool = Objects.requireNonNull(getTagCategoriesTool, "getTagCategoriesTool");
         this.editTagCategoriesTool = Objects.requireNonNull(editTagCategoriesTool, "editTagCategoriesTool");
         this.toolCallSummaryHandler = toolCallSummaryHandler;
@@ -204,7 +229,7 @@ public class AIToolSet {
     }
 
     public String systemMessageForChat(@SuppressWarnings("unused") Object input,
-                                       ChatToolAvailability toolAvailability) {
+                                       ToolAvailabilityLevel toolAvailability) {
         return messageBuilder.buildForChat(toolAvailability);
     }
 
@@ -236,8 +261,10 @@ public class AIToolSet {
     }
 
     @Tool("Fetch nodes for editing. editableContentFields (required): TEXT, DETAILS, NOTE, ATTRIBUTES, TAGS, ICONS. "
-        + "Returns editable text/details/note/attributes/tags/icons; text/details/note include contentType for "
-        + "edit.originalContentType. Style is in content.mainStyle. Read hyperlinks via readNodesWithDescendants "
+        + "Returns editable text/details/note/attributes/tags/icons. Text, details, and note include base contentType "
+        + "plus isFormula. Attributes include isFormula. Use contentType for edit.originalContentType on non-formula "
+        + "TEXT/DETAILS/NOTE edits. Formula state changes are not done through edit(...); use previewFormulaUpdates "
+        + "and applyFormulaUpdates instead. Style is in content.mainStyle. Read hyperlinks via readNodesWithDescendants "
         + "with ContextSection.HYPERLINK.")
     public FetchNodesForEditingResponse fetchNodesForEditing(FetchNodesForEditingRequest request) {
         try {
@@ -246,6 +273,54 @@ public class AIToolSet {
             return response;
         } catch (RuntimeException error) {
             publishToolCallSummary(readNodesWithDescendantsTool.buildFetchToolCallErrorSummary(request, error));
+            throw error;
+        }
+    }
+
+    @Tool("Preview ordered formula updates without persisting them. "
+        + "Requires editing availability and AI formula editing enabled. "
+        + "editedElement: TEXT, DETAILS, NOTE, ATTRIBUTES. "
+        + "TEXT/DETAILS/NOTE support REPLACE only; ATTRIBUTES support ADD or REPLACE. "
+        + "For TEXT/DETAILS/NOTE, pass originalContentType and originalIsFormula from fetchNodesForEditing; for ATTRIBUTES REPLACE, originalIsFormula is optional. "
+        + "targetIsFormula is required. nodeIdentifiers expand in request order; validation runs in that order, and later items can see earlier candidate values. "
+        + "Formula targets compile and evaluate before persistence. Candidate formulas must stay value-computing and must not use UI-related or state-changing Freeplane API calls. "
+        + "If one target fails, later targets are BLOCKED_BY_PREVIOUS_FAILURE and no previewId is returned. "
+        + "Review candidateValue and evaluationResult for plausibility before applyFormulaUpdates.")
+    public FormulaUpdatePreviewResponse previewFormulaUpdates(FormulaUpdatePreviewRequest request) {
+        try {
+            FormulaUpdatePreviewResponse response = formulaUpdateTool.previewFormulaUpdates(request);
+            publishToolCallSummary(new ToolCallSummary(
+                "previewFormulaUpdates",
+                "previewFormulaUpdates: items=" + (response.getItems() == null ? 0 : response.getItems().size())
+                    + ", previewId=" + (response.getPreviewId() == null ? "none" : response.getPreviewId()),
+                false));
+            return response;
+        } catch (RuntimeException error) {
+            publishToolCallSummary(new ToolCallSummary(
+                "previewFormulaUpdates",
+                "previewFormulaUpdates error: " + ToolCallSummaryFormatter.sanitizeValue(error.getMessage()),
+                true));
+            throw error;
+        }
+    }
+
+    @Tool("Apply a previously validated previewFormulaUpdates result by previewId. "
+        + "Use this only when general AI tool availability includes editing, AI formula editing is enabled, and plausibility review is complete. "
+        + "Candidate values are persisted in the same order used during preview. Candidate formulas must stay value-computing and must not use UI-related or state-changing Freeplane API calls. "
+        + "If a target node no longer exists or an attribute REPLACE target can no longer be resolved, the tool returns FAILED instead of crashing.")
+    public FormulaUpdateApplyResponse applyFormulaUpdates(FormulaUpdateApplyRequest request) {
+        try {
+            FormulaUpdateApplyResponse response = formulaUpdateTool.applyFormulaUpdates(request);
+            publishToolCallSummary(new ToolCallSummary(
+                "applyFormulaUpdates",
+                "applyFormulaUpdates: items=" + (response.getItems() == null ? 0 : response.getItems().size()),
+                false));
+            return response;
+        } catch (RuntimeException error) {
+            publishToolCallSummary(new ToolCallSummary(
+                "applyFormulaUpdates",
+                "applyFormulaUpdates error: " + ToolCallSummaryFormatter.sanitizeValue(error.getMessage()),
+                true));
             throw error;
         }
     }
@@ -286,6 +361,22 @@ public class AIToolSet {
             publishToolCallSummary(searchNodesTool.buildToolCallErrorSummary(request, error));
             throw error;
         }
+    }
+
+    @Tool("Access Freeplane scripting API documentation.")
+    public String getApiDocumentation() {
+        try {
+            GetApiDocumentationResponse response = getApiDocumentationTool.getApiDocumentation();
+            publishToolCallSummary(getApiDocumentationTool.buildToolCallSummary(response));
+            return getApiDocumentationTool.formatToolResponse(response);
+        } catch (RuntimeException error) {
+            publishToolCallSummary(getApiDocumentationTool.buildToolCallErrorSummary(error));
+            throw error;
+        }
+    }
+
+    public GetApiDocumentationTool getApiDocumentationTool() {
+        return getApiDocumentationTool;
     }
 
     @Tool("Read the map's tag categories.")
@@ -368,23 +459,14 @@ public class AIToolSet {
         }
     }
 
-    @Tool("Edit node content through undo-aware controllers.\n"
-        + "Each edit item targets nodeIdentifiers (non-empty array).\n"
-        + "Before TEXT/DETAILS/NOTE edits, call fetchNodesForEditing and pass originalContentType from that response.\n"
-        + "For TEXT/DETAILS/NOTE, values starting with <html> are HTML; all others are plain text.\n"
-        + "TEXT supports REPLACE only; to clear TEXT, use REPLACE with an empty value.\n"
-        + "STYLE: REPLACE with a style from listMapStyles (same map), or DELETE.\n"
-        + "HYPERLINK: REPLACE uses value as URL; DELETE clears it.\n"
-        + "ATTRIBUTES/TAGS/ICONS REPLACE/DELETE: use index first, then targetKey.\n"
-        + "ATTRIBUTES ADD: targetKey is attribute name; value is attribute value.\n"
-        + "TAGS ADD: value is tag text; optional index inserts at position.\n"
-        + "ICONS ADD: value is icon description from listAvailableIcons (or emoji); icons append, so index/targetKey ignored.\n"
-        + "compatibilityPolicy applies to the whole request: SKIP_INCOMPATIBLE_FIELDS (default) or "
-        + "REJECT_ON_ANY_INCOMPATIBLE.\n"
-        + "SKIP_INCOMPATIBLE_FIELDS returns per-target APPLIED/SKIPPED/FAILED results.\n"
-        + "REJECT_ON_ANY_INCOMPATIBLE performs full dry-run validation first; if any target is incompatible, no writes "
-        + "occur and only incompatible targets are returned as REJECTED with reasons. If validation passes, writes run "
-        + "and write-time failures are reported as FAILED per target.")
+    @Tool("Edit node content through undo-aware controllers. "
+        + "Each item targets nodeIdentifiers. Before TEXT/DETAILS/NOTE edits, call fetchNodesForEditing and pass originalContentType. "
+        + "TEXT/DETAILS/NOTE treat values starting with <html> as HTML; otherwise plain text. "
+        + "TEXT supports REPLACE only; clear it with an empty value. DETAILS/NOTE support REPLACE or DELETE. STYLE/HYPERLINK support REPLACE or DELETE. "
+        + "ATTRIBUTES/TAGS/ICONS REPLACE/DELETE prefer index, then targetKey. ATTRIBUTES ADD uses targetKey=name and value=value. TAGS ADD uses value and optional index. ICONS ADD uses an icon from listAvailableIcons or an emoji. "
+        + "Formula-backed or formula-targeting changes are not supported here; use previewFormulaUpdates/applyFormulaUpdates. "
+        + "compatibilityPolicy: SKIP_INCOMPATIBLE_FIELDS (default) applies compatible edits and reports APPLIED/SKIPPED/FAILED. "
+        + "REJECT_ON_ANY_INCOMPATIBLE dry-runs the request and either returns REJECTED without writes or proceeds and may still report write-time FAILED results.")
     public List<EditResultItem> edit(EditRequest request) {
         try {
             List<EditResultItem> response = editNodes(request);
@@ -464,16 +546,12 @@ public class AIToolSet {
         return (MLinkController) linkController;
     }
 
-    @Tool("Create nodes and subtrees relative to an anchor node.\n"
-        + "Optional fields override defaults. Omit them to keep defaults.\n"
-        + "Each optional field is an intentional override. Include it only when the specific value is justified; "
-        + "otherwise omit it. Never send empty strings, empty arrays, or null.\n"
-        + "For content.text/content.details/content.note, only values starting with <html> are treated as HTML; all "
-        + "other values are treated as plain text.\n"
-        + "textContentType/detailsContentType/noteContentType control conversion/validation only; HTML input still "
-        + "requires the <html> prefix.\n"
-        + "Omit optional textual fields such as details and note when they are empty instead of sending empty strings "
-        + "so the tool leaves those values untouched.")
+    @Tool("Create nodes and subtrees relative to an anchor node. "
+        + "Optional fields override defaults; omit them otherwise. Do not send empty strings, empty arrays, or null. "
+        + "For content.text/details/note, only values starting with <html> are treated as HTML; all others are plain text. "
+        + "textContentType/detailsContentType/noteContentType affect conversion and validation only; HTML still requires the <html> prefix. "
+        + "Formula values are rejected for text, details, note, and attributes in createNodes. Create the nodes first, then use previewFormulaUpdates and applyFormulaUpdates for formulas. "
+        + "Omit empty optional text fields such as details and note.")
     public CreateNodesResponse createNodes(CreateNodesRequest request) {
         try {
             CreateNodesResponse response = createNodesTool.createNodes(request);
@@ -498,12 +576,10 @@ public class AIToolSet {
     }
 
     @Tool("Create summary content and a summary bracket for a summarized range. "
-        + "Optional fields override defaults. Omit them to keep defaults. "
-        + "Summary anchor nodes must share the same parent node. Textual field rules are the same as createNodes. "
-        + "Omit optional textual fields such as details and note when they are empty instead of sending empty strings "
-        + "so the tool leaves those values untouched. Tip: to create a summary of summaries, choose summary anchor "
-        + "nodes that already exist at the same summary level under the same parent node, regardless of how those "
-        + "summary nodes were created.")
+        + "Optional fields override defaults; omit them otherwise. Summary anchor nodes must share the same parent. "
+        + "Text rules match createNodes. Formula values are rejected for text, details, note, and attributes in createSummary; "
+        + "create the summary content first, then use previewFormulaUpdates and applyFormulaUpdates for formulas. "
+        + "Omit empty optional text fields such as details and note. To create a summary of summaries, choose summary anchor nodes already at the same summary level under the same parent.")
     public CreateSummaryResponse createSummary(CreateSummaryRequest request) {
         try {
             CreateSummaryResponse response = createSummaryTool.createSummary(request);

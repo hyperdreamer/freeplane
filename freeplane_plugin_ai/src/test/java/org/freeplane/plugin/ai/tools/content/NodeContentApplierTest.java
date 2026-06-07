@@ -1,13 +1,7 @@
 package org.freeplane.plugin.ai.tools.content;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-
 import java.util.Collections;
-
 import javax.swing.tree.DefaultMutableTreeNode;
-
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.features.attribute.NodeAttributeTableModel;
 import org.freeplane.features.attribute.mindmapmode.MAttributeController;
@@ -32,6 +26,10 @@ import org.freeplane.plugin.ai.tools.edit.TextContentWriteController;
 import org.freeplane.plugin.ai.tools.edit.TextualContentEditor;
 import org.freeplane.plugin.ai.tools.text.DefaultEnglishTextProvider;
 import org.junit.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 public class NodeContentApplierTest {
     @Test

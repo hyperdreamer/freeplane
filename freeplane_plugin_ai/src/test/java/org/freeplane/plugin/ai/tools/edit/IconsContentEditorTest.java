@@ -1,14 +1,7 @@
 package org.freeplane.plugin.ai.tools.edit;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-
 import java.util.Collections;
-
 import javax.swing.tree.DefaultMutableTreeNode;
-
 import org.freeplane.features.icon.IconRegistry;
 import org.freeplane.features.icon.MindIcon;
 import org.freeplane.features.icon.NamedIcon;
@@ -20,6 +13,11 @@ import org.freeplane.plugin.ai.tools.content.IconDescriptionResolver;
 import org.freeplane.plugin.ai.tools.content.IconsContent;
 import org.freeplane.plugin.ai.tools.text.DefaultEnglishTextProvider;
 import org.junit.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 public class IconsContentEditorTest {
     @Test

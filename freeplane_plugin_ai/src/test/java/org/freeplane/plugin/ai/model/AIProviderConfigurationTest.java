@@ -1,12 +1,12 @@
 package org.freeplane.plugin.ai.model;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
 import java.util.Map;
 import org.freeplane.core.resources.ResourceController;
 import org.junit.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class AIProviderConfigurationTest {
 

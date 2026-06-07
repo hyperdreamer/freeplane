@@ -2,12 +2,16 @@ package org.freeplane.api;
 
 import java.io.File;
 import java.net.URL;
+import java.time.Duration;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 
 import javax.swing.Icon;
 
+import org.freeplane.api.ai.AiRequestCallback;
+import org.freeplane.api.ai.AiRequestHandle;
+import org.freeplane.api.ai.AiRequestOptions;
 
 
 /** Access to global state: in scripts, this is available as global variable <code>c</code> - read-write. */
@@ -172,4 +176,31 @@ public interface Controller extends ControllerRO, HeadlessMapCreator {
 	 * @param position the new position within the parent
 	 */
 	void moveNodes(List<Node> nodes, Node parent, int position);
+
+	/**
+	 * Starts an asynchronous AI request for raw prompt text and delivers
+	 * the terminal result through the callback.
+	 * May throw {@link org.freeplane.api.ai.AiRequestRejectedException}
+	 * for same-thread pre-acceptance rejection.
+	 * In Groovy scripts, implementations may also support the natural
+	 * trailing-closure form, for example
+	 * <code>c.askAi("Prompt", AiRequestOptions.builder().timeout(Duration.ofSeconds(30)).mode(org.freeplane.api.ai.AiRequestMode.HIDDEN).build()) { result -&gt; println(result.status) }</code>.
+	 * @since 1.13.3
+	 */
+	AiRequestHandle askAi(String prompt, AiRequestOptions options, AiRequestCallback callback);
+
+	/**
+	 * Starts an asynchronous AI request from a saved AI prompt name using
+	 * the supplied timeout and the saved prompt's stored execution
+	 * defaults.
+	 * @since 1.13.3
+	 */
+	AiRequestHandle runAiPrompt(String promptName, Duration timeout, AiRequestCallback callback);
+
+	/**
+	 * Starts an asynchronous AI request from a saved AI prompt name using
+	 * the supplied options to override saved-prompt execution defaults.
+	 * @since 1.13.3
+	 */
+	AiRequestHandle runAiPrompt(String promptName, AiRequestOptions options, AiRequestCallback callback);
 }

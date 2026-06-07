@@ -1,13 +1,10 @@
 package org.freeplane.plugin.ai.tools.read;
 
-import java.util.List;
-
-import org.freeplane.plugin.ai.tools.content.EditableContentField;
-
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-
 import dev.langchain4j.model.output.structured.Description;
+import java.util.List;
+import org.freeplane.plugin.ai.tools.content.EditableContentField;
 
 public class FetchNodesForEditingRequest {
     @Description("Target map ID (from getSelectedMapAndNodeIdentifiers).")

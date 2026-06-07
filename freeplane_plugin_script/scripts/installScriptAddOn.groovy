@@ -324,7 +324,7 @@ void createKeyboardShortcut(ScriptAddOnProperties.Script script) {
 
 ScriptingPermissions parsePermissions(Proxy.Node propertyNode, String scriptName) {
 	def permissionNames = ScriptingPermissions.permissionNames.findAll { it.startsWith('execute_') }
-	def missingPermissions = permissionNames.findAll{ !propertyNode[it] }
+	def missingPermissions = ScriptingPermissions.requiredExecutionPermissionNames.findAll{ !propertyNode[it] }
 	mapStructureAssert( ! missingPermissions, textUtils.format('addons.installer.missing.permission.attribute', scriptName, missingPermissions))
 	def permissions = propertyNode.attributes.map.findAll { k,v -> permissionNames.contains(k) }
 	return new ScriptingPermissions(permissions as Properties)

@@ -16,9 +16,19 @@ public class ScriptContext implements AccessedNodes{
 
 	private final RelatedElements relatedElements;
 
+	private final ScriptingPermissions effectivePermissions;
+	private final boolean dependencyTrackingEnabled;
+
 	public ScriptContext(NodeScript nodeScript) {
+		this(nodeScript, nodeScript != null ? new RelatedElements(nodeScript.node) : null, null, true);
+	}
+
+	private ScriptContext(NodeScript nodeScript, RelatedElements relatedElements,
+			ScriptingPermissions effectivePermissions, boolean dependencyTrackingEnabled) {
 		this.nodeScript = nodeScript;
-		this.relatedElements = nodeScript != null ? new RelatedElements(nodeScript.node) : null;
+		this.relatedElements = relatedElements;
+		this.effectivePermissions = effectivePermissions;
+		this.dependencyTrackingEnabled = dependencyTrackingEnabled;
 	}
 
 	public NodeScript getNodeScript() {
@@ -27,6 +37,22 @@ public class ScriptContext implements AccessedNodes{
 
 	public URL getBaseUrl() {
 		return nodeScript != null ? nodeScript.getBaseUrl() : null;
+	}
+
+	public ScriptingPermissions getEffectivePermissions() {
+		return effectivePermissions;
+	}
+
+	public ScriptContext withEffectivePermissions(ScriptingPermissions effectivePermissions) {
+		if (this.effectivePermissions == effectivePermissions)
+			return this;
+		return new ScriptContext(nodeScript, relatedElements, effectivePermissions, dependencyTrackingEnabled);
+	}
+
+	public ScriptContext withDependencyTracking(boolean dependencyTrackingEnabled) {
+		if (this.dependencyTrackingEnabled == dependencyTrackingEnabled)
+			return this;
+		return new ScriptContext(nodeScript, relatedElements, effectivePermissions, dependencyTrackingEnabled);
 	}
 
 	public File toAbsoluteFile(File file) {
@@ -80,31 +106,32 @@ public class ScriptContext implements AccessedNodes{
 	@Override
 	public void accessNode(final NodeModel accessedNode) {
 		if(nodeScript != null) {
-			FormulaDependencies.accessNode(nodeScript.node, accessedNode);
+            if (dependencyTrackingEnabled)
+			    FormulaDependencies.accessNode(nodeScript.node, accessedNode);
 			relatedElements.relateMap(accessedNode.getMap());
 		}
 	}
 
     @Override
     public void accessBranch(final NodeModel accessedNode) {
-        if(nodeScript != null)
+        if(nodeScript != null && dependencyTrackingEnabled)
             FormulaDependencies.accessBranch(nodeScript.node, accessedNode);
     }
 
     @Override
     public void accessClones(final NodeModel accessedNode) {
-        if(nodeScript != null)
+        if(nodeScript != null && dependencyTrackingEnabled)
             FormulaDependencies.accessClones(nodeScript.node, accessedNode);
     }
 
 	@Override
 	public void accessAll() {
-		if(nodeScript != null)
+		if(nodeScript != null && dependencyTrackingEnabled)
 			FormulaDependencies.accessAll(nodeScript.node);
 	}
 	@Override
 	public void accessGlobalNode() {
-		if(nodeScript != null)
+		if(nodeScript != null && dependencyTrackingEnabled)
 			FormulaDependencies.accessGlobalNode(nodeScript.node);
 	}
 
@@ -117,7 +144,7 @@ public class ScriptContext implements AccessedNodes{
 
 	@Override
 	public String toString() {
-		return nodeScript.toString();
+		return String.valueOf(nodeScript);
 	}
 
 }

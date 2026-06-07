@@ -1,0 +1,16 @@
+Use API groups for the full merged documentation and Packages for the exact package/type index.
+This mind map is large. Search before reading any branch in depth so you only read relevant parts.
+A shallow read under API groups is fine for orientation before reading details.
+Search under API groups when you want the primary member documentation.
+Search under Packages when you want exact package placement or exact type names.
+When you already suspect a type or package name, use Packages to confirm the exact current name and placement.
+Use searchNodes with short text queries likely to appear in the documentation text, such as children:, find(, ancestor, descendant, or subtree.
+Do not use searchNodes with full path strings such as API "groups/Node/Properties/children" or with broad request phrases such as "count nodes in subtree".
+If searchNodes is noisy, use readNodesWithDescendants for a shallow read under API groups for orientation, then read likely branches top-down.
+Exact containing types can appear in multiple branches because later Packages appearances clone earlier API-groups type nodes.
+If clone duplicates make broad search noisy, restrict search to the returned API groups or Packages subtree root identifiers, or to those section roots when navigating manually.
+Property markers use getter/setter semantics: [read], [write], [read-write].
+Method markers use read/write surface semantics only: [read] or [write].
+Within each API group, children appear in this order when present: Properties, Methods, Constants, Nested types.
+Members are ordered alphabetically inside each group.
+Packages shows package structure down to exact classes, interfaces, enums, and inner types, but no member documentation.

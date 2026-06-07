@@ -7,12 +7,16 @@ import java.awt.GraphicsEnvironment;
 import java.io.File;
 import java.io.InputStream;
 import java.net.URL;
+import java.security.AccessController;
+import java.security.PrivilegedAction;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
 
@@ -24,6 +28,12 @@ import org.freeplane.api.MindMap;
 import org.freeplane.api.Node;
 import org.freeplane.api.NodeCondition;
 import org.freeplane.api.Script;
+import org.freeplane.api.ai.AiRequestCallback;
+import org.freeplane.api.ai.AiRequestHandle;
+import org.freeplane.api.ai.AiRequestOptions;
+import org.freeplane.api.ai.AiRequestRejectedException;
+import org.freeplane.api.ai.AiRequestService;
+import org.freeplane.api.ai.AiRequestStatus;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.ui.IEditHandler.FirstAction;
 import org.freeplane.core.undo.IUndoHandler;
@@ -45,16 +55,28 @@ import org.freeplane.features.text.TextController;
 import org.freeplane.features.text.mindmapmode.MTextController;
 import org.freeplane.features.ui.IMapViewManager;
 import org.freeplane.features.ui.ViewController;
+import org.freeplane.plugin.script.Activator;
+import org.freeplane.plugin.script.ExecutingScriptContextStack;
 import org.freeplane.plugin.script.ScriptContext;
+import org.freeplane.plugin.script.ScriptingPermissions;
 
 import groovy.lang.Closure;
+import org.osgi.framework.BundleContext;
+import org.osgi.framework.ServiceReference;
 
 class ControllerProxy implements Proxy.Controller {
 	private final ScriptContext scriptContext;
+    private final AiRequestServiceResolver aiRequestServiceResolver;
 
 	public ControllerProxy(final ScriptContext scriptContext) {
-		this.scriptContext = scriptContext;
+		this(scriptContext, ControllerProxy::lookupAiRequestService);
 	}
+
+    ControllerProxy(final ScriptContext scriptContext,
+                    AiRequestServiceResolver aiRequestServiceResolver) {
+        this.scriptContext = scriptContext;
+        this.aiRequestServiceResolver = aiRequestServiceResolver;
+    }
 
 	@Override
 	public void centerOnNode(final Node center) {
@@ -399,4 +421,124 @@ class ControllerProxy implements Proxy.Controller {
 		MMapController mapController = (MMapController) Controller.getCurrentController().getModeController().getMapController();
 		mapController.moveNodes(nodeModels, parentModel, position);
 	}
+
+    @Override
+    public AiRequestHandle askAi(String prompt, AiRequestOptions options, AiRequestCallback callback) {
+        Objects.requireNonNull(prompt, "prompt");
+        Objects.requireNonNull(options, "options");
+        Objects.requireNonNull(callback, "callback");
+        assertAskAiModeProvided(options);
+        return executeAiServiceCall(callback, (aiRequestService, wrappedCallback) ->
+            aiRequestService.askAi(prompt, options, wrappedCallback));
+    }
+
+    @Override
+    public AiRequestHandle runAiPrompt(String promptName, Duration timeout, AiRequestCallback callback) {
+        assertPromptNameProvided(promptName);
+        Objects.requireNonNull(timeout, "timeout");
+        Objects.requireNonNull(callback, "callback");
+        return executeAiServiceCall(callback, (aiRequestService, wrappedCallback) ->
+            aiRequestService.runAiPrompt(promptName, timeout, wrappedCallback));
+    }
+
+    @Override
+    public AiRequestHandle runAiPrompt(String promptName, AiRequestOptions options, AiRequestCallback callback) {
+        assertPromptNameProvided(promptName);
+        Objects.requireNonNull(options, "options");
+        Objects.requireNonNull(callback, "callback");
+        return executeAiServiceCall(callback, (aiRequestService, wrappedCallback) ->
+            aiRequestService.runAiPrompt(promptName, options, wrappedCallback));
+    }
+
+    public AiRequestHandle askAi(String prompt, AiRequestOptions options, Closure<?> callback) {
+        Objects.requireNonNull(callback, "callback");
+        return askAi(prompt, options, result -> callback.call(result));
+    }
+
+    public AiRequestHandle runAiPrompt(String promptName, Duration timeout, Closure<?> callback) {
+        Objects.requireNonNull(callback, "callback");
+        return runAiPrompt(promptName, timeout, result -> callback.call(result));
+    }
+
+    public AiRequestHandle runAiPrompt(String promptName, AiRequestOptions options, Closure<?> callback) {
+        Objects.requireNonNull(callback, "callback");
+        return runAiPrompt(promptName, options, result -> callback.call(result));
+    }
+
+    private AiRequestHandle executeAiServiceCall(AiRequestCallback callback,
+                                                 AiServiceCall aiServiceCall) {
+        final ScriptContext originatingScriptContext = resolveOriginatingScriptContext();
+        assertAiRequestPermissionGranted(originatingScriptContext);
+        final AiRequestCallback wrappedCallback = result -> ExecutingScriptContextStack.INSTANCE
+            .withContext(originatingScriptContext, () -> callback.accept(result));
+        return AccessController.doPrivileged(new PrivilegedAction<AiRequestHandle>() {
+            @Override
+            public AiRequestHandle run() {
+                AiRequestService aiRequestService = aiRequestServiceResolver.resolve();
+                if (aiRequestService == null) {
+                    throw new AiRequestRejectedException(
+                        AiRequestStatus.AI_UNAVAILABLE,
+                        "AI request service is unavailable.");
+                }
+                return aiServiceCall.call(aiRequestService, wrappedCallback);
+            }
+        });
+    }
+
+    private static AiRequestService lookupAiRequestService() {
+        BundleContext bundleContext = Activator.getBundleContext();
+        if (bundleContext == null) {
+            return null;
+        }
+        ServiceReference<AiRequestService> serviceReference = bundleContext.getServiceReference(AiRequestService.class);
+        if (serviceReference == null) {
+            return null;
+        }
+        return bundleContext.getService(serviceReference);
+    }
+
+    private void assertAskAiModeProvided(AiRequestOptions options) {
+        if (options.getMode() == null) {
+            throw new IllegalArgumentException("options.mode must not be null for askAi");
+        }
+    }
+
+    private void assertPromptNameProvided(String promptName) {
+        if (promptName == null || promptName.trim().isEmpty()) {
+            throw new IllegalArgumentException("promptName must not be null or blank");
+        }
+    }
+
+    private ScriptContext resolveOriginatingScriptContext() {
+        if (hasEffectivePermissions(scriptContext)) {
+            return scriptContext;
+        }
+        final ScriptContext currentContext = ExecutingScriptContextStack.INSTANCE.getCurrentContext();
+        if (hasEffectivePermissions(currentContext)) {
+            return currentContext;
+        }
+        return null;
+    }
+
+    private boolean hasEffectivePermissions(ScriptContext scriptContext) {
+        return scriptContext != null && scriptContext.getEffectivePermissions() != null;
+    }
+
+    private void assertAiRequestPermissionGranted(ScriptContext scriptContext) {
+        final ScriptingPermissions permissions = scriptContext != null ? scriptContext.getEffectivePermissions() : null;
+        if (permissions == null || !permissions.get(ScriptingPermissions.RESOURCES_EXECUTE_SCRIPTS_WITHOUT_AI_REQUEST_RESTRICTION)) {
+            throw new AiRequestRejectedException(
+                AiRequestStatus.PERMISSION_DENIED,
+                "AI request permission denied.");
+        }
+    }
+
+    interface AiRequestServiceResolver {
+        AiRequestService resolve();
+    }
+
+    interface AiServiceCall {
+        AiRequestHandle call(AiRequestService aiRequestService, AiRequestCallback callback);
+    }
+
 }

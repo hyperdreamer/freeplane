@@ -1,17 +1,8 @@
 package org.freeplane.plugin.ai.tools.content;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.tuple;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
 import java.util.Arrays;
 import java.util.Collections;
-
 import javax.swing.tree.DefaultMutableTreeNode;
-
 import org.freeplane.features.attribute.Attribute;
 import org.freeplane.features.attribute.NodeAttributeTableModel;
 import org.freeplane.features.icon.IconRegistry;
@@ -25,6 +16,13 @@ import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.text.TextController;
 import org.junit.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class EditableContentReaderTest {
     @Test
@@ -51,6 +49,7 @@ public class EditableContentReaderTest {
         assertThat(editableText.getTransformed()).contains("Transformed");
         assertThat(editableText.getPlain()).isEqualTo("Transformed");
         assertThat(editableText.getContentType()).isEqualTo(ContentType.HTML);
+        assertThat(editableText.getIsFormula()).isFalse();
         assertThat(editableText.getIsEditable()).isTrue();
     }
 
@@ -99,8 +98,76 @@ public class EditableContentReaderTest {
         assertThat(attribute.getRawValue()).contains("value");
         assertThat(attribute.getTransformedValue()).contains("Transformed");
         assertThat(attribute.getPlainValue()).isEqualTo("Transformed");
+        assertThat(attribute.getIsFormula()).isFalse();
         assertThat(attribute.getIsEditable()).isTrue();
         assertThat(attribute.getIndex()).isEqualTo(0);
+    }
+
+    @Test
+    public void readEditableContent_reportsFormulaStateAndAvailabilityForFormulaBackedAttributes() {
+        MapModel mapModel = new MapModel((source, targetMap, withChildren) -> null, null, null);
+        NodeModel nodeModel = new NodeModel("node", mapModel);
+        NodeAttributeTableModel attributeTableModel = NodeAttributeTableModel.getModel(nodeModel);
+        attributeTableModel.silentlyAddRowNoUndo(nodeModel, new Attribute("key", "=1+1"));
+        TextController textController = mock(TextController.class);
+        when(textController.getTransformedObjectNoFormattingNoThrow(eq(nodeModel), any(NodeAttributeTableModel.class), any()))
+            .thenReturn("2");
+        when(textController.isFormula(any())).thenReturn(true);
+        EditableContentRequest request = new EditableContentRequest(
+            Collections.singletonList(EditableContentField.ATTRIBUTES));
+
+        EditableContent editingWithoutFormulaPermission = new EditableContentReader(
+            textController,
+            new IconDescriptionResolver(key -> null),
+            new ContentTypeConverter(),
+            () -> org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel.EDITING,
+            () -> Boolean.FALSE)
+            .readEditableContent(nodeModel, request);
+        EditableContent editingWithFormulaPermission = new EditableContentReader(
+            textController,
+            new IconDescriptionResolver(key -> null),
+            new ContentTypeConverter(),
+            () -> org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel.EDITING,
+            () -> Boolean.TRUE)
+            .readEditableContent(nodeModel, request);
+
+        assertThat(editingWithoutFormulaPermission.getEditableAttributes().get(0).getIsFormula()).isTrue();
+        assertThat(editingWithoutFormulaPermission.getEditableAttributes().get(0).getIsEditable()).isFalse();
+        assertThat(editingWithFormulaPermission.getEditableAttributes().get(0).getIsFormula()).isTrue();
+        assertThat(editingWithFormulaPermission.getEditableAttributes().get(0).getIsEditable()).isTrue();
+    }
+
+    @Test
+    public void readEditableContent_reportsFormulaStateAndAvailabilityForFormulaBackedText() {
+        MapModel mapModel = new MapModel((source, targetMap, withChildren) -> null, null, null);
+        NodeModel nodeModel = new NodeModel("node", mapModel);
+        nodeModel.setUserObject("=1+1");
+        TextController textController = mock(TextController.class);
+        when(textController.getNodeFormat(nodeModel)).thenReturn(null);
+        when(textController.isFormula(any())).thenReturn(true);
+        EditableContentRequest request = new EditableContentRequest(
+            Collections.singletonList(EditableContentField.TEXT));
+
+        EditableContent editingWithoutFormulaPermission = new EditableContentReader(
+            textController,
+            new IconDescriptionResolver(key -> null),
+            new ContentTypeConverter(),
+            () -> org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel.EDITING,
+            () -> Boolean.FALSE)
+            .readEditableContent(nodeModel, request);
+        EditableContent editingWithFormulaPermission = new EditableContentReader(
+            textController,
+            new IconDescriptionResolver(key -> null),
+            new ContentTypeConverter(),
+            () -> org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel.EDITING,
+            () -> Boolean.TRUE)
+            .readEditableContent(nodeModel, request);
+
+        assertThat(editingWithoutFormulaPermission.getEditableText().getIsFormula()).isTrue();
+        assertThat(editingWithoutFormulaPermission.getEditableText().getIsEditable()).isFalse();
+        assertThat(editingWithFormulaPermission.getEditableText().getIsFormula()).isTrue();
+        assertThat(editingWithFormulaPermission.getEditableText().getIsEditable()).isTrue();
+        assertThat(editingWithFormulaPermission.getEditableText().getContentType()).isEqualTo(ContentType.PLAIN_TEXT);
     }
 
     @Test

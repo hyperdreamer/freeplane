@@ -189,6 +189,7 @@ public class EditNodeDialog extends EditNodeBase {
 			buttonPane.add(cancelButton);
 			if (enableSplit)
 				buttonPane.add(splitButton);
+            addAdditionalButtons(buttonPane);
 			buttonPane.setMaximumSize(new Dimension(1000, 20));
 			final Container contentPane = getDialog().getContentPane();
 			contentPane.add(editorScrollPane, BorderLayout.CENTER);
@@ -242,8 +243,9 @@ public class EditNodeDialog extends EditNodeBase {
 		 */
 		@Override
 		protected void submit() {
-			super.submit();
-			getEditControl().ok(textComponent.getText());
+            if (submitEditedText(textComponent.getText())) {
+			    super.submit();
+            }
 		}
 	}
 
@@ -306,6 +308,14 @@ public class EditNodeDialog extends EditNodeBase {
 
 	protected void configureDialog(JDialog dialog) {
 	}
+
+    protected void addAdditionalButtons(JPanel buttonPane) {
+    }
+
+    protected boolean submitEditedText(String editedText) {
+        getEditControl().ok(editedText);
+        return true;
+    }
 
 	public void setTitle(String title) {
 		this.title = title;

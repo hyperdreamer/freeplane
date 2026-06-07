@@ -1,9 +1,9 @@
 package org.freeplane.plugin.ai.tools;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
-import org.freeplane.plugin.ai.chat.ChatToolAvailability;
+import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.junit.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 public class MessageBuilderTest {
     private static final String MARKDOWN_RESPONSE_GUIDANCE = "Respond in Markdown.";
@@ -26,7 +26,7 @@ public class MessageBuilderTest {
         MessageBuilder.MessageTextProvider textProvider = () -> configuredMessage;
         MessageBuilder uut = new MessageBuilder(textProvider);
 
-        String message = uut.buildForChat(ChatToolAvailability.EDITING);
+        String message = uut.buildForChat(ToolAvailabilityLevel.EDITING);
 
         assertThat(message).contains(configuredMessage);
         assertThat(message).contains(MARKDOWN_RESPONSE_GUIDANCE);
@@ -42,7 +42,7 @@ public class MessageBuilderTest {
         MessageBuilder.MessageTextProvider textProvider = () -> "  ";
         MessageBuilder uut = new MessageBuilder(textProvider);
 
-        String message = uut.buildForChat(ChatToolAvailability.EDITING);
+        String message = uut.buildForChat(ToolAvailabilityLevel.EDITING);
 
         assertThat(message).contains(MARKDOWN_RESPONSE_GUIDANCE);
         assertThat(message).contains(TOOL_CALL_GUIDANCE_TEXT);
@@ -55,7 +55,7 @@ public class MessageBuilderTest {
         MessageBuilder.MessageTextProvider textProvider = () -> null;
         MessageBuilder uut = new MessageBuilder(textProvider);
 
-        String message = uut.buildForChat(ChatToolAvailability.EDITING);
+        String message = uut.buildForChat(ToolAvailabilityLevel.EDITING);
 
         assertThat(message).contains(MARKDOWN_RESPONSE_GUIDANCE);
         assertThat(message).contains(TOOL_CALL_GUIDANCE_TEXT);
@@ -68,7 +68,7 @@ public class MessageBuilderTest {
         MessageBuilder.MessageTextProvider textProvider = () -> "Use tools when needed.";
         MessageBuilder uut = new MessageBuilder(textProvider);
 
-        String message = uut.buildForChat(ChatToolAvailability.DISABLED);
+        String message = uut.buildForChat(ToolAvailabilityLevel.DISABLED);
 
         assertThat(message).contains(MARKDOWN_RESPONSE_GUIDANCE);
         assertThat(message).contains(CONTROL_INSTRUCTION_GUIDANCE_PREFIX);
@@ -84,7 +84,7 @@ public class MessageBuilderTest {
         MessageBuilder.MessageTextProvider textProvider = () -> "Use tools when needed.";
         MessageBuilder uut = new MessageBuilder(textProvider);
 
-        String message = uut.buildForChat(ChatToolAvailability.READING);
+        String message = uut.buildForChat(ToolAvailabilityLevel.READING);
 
         assertThat(message).contains(MARKDOWN_RESPONSE_GUIDANCE);
         assertThat(message).contains(CONTROL_INSTRUCTION_GUIDANCE_PREFIX);

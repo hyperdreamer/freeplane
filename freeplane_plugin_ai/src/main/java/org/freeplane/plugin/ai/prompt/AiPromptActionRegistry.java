@@ -2,16 +2,18 @@ package org.freeplane.plugin.ai.prompt;
 
 import java.awt.Component;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import javax.swing.SwingUtilities;
 import org.freeplane.core.util.TextUtils;
-import org.freeplane.plugin.ai.chat.AIChatPanel;
+import org.freeplane.plugin.ai.chat.ui.AIChatPanel;
 import org.freeplane.plugin.ai.prompt.ui.AiPromptManagerDialog;
 
 public class AiPromptActionRegistry {
@@ -22,6 +24,7 @@ public class AiPromptActionRegistry {
     private final Runnable menusRebuilder;
     private final Map<String, RunAiPromptAction> actionsByKey = new LinkedHashMap<String, RunAiPromptAction>();
     private final AiPromptManagerDialog.EditorState dialogState = new AiPromptManagerDialog.EditorState();
+    private volatile Map<String, AiPrompt> savedPromptSnapshotByNormalizedName = Collections.emptyMap();
     private AiPromptStore.PersistedState lastPersistedState;
 
     AiPromptActionRegistry(AiPromptStore store, AIChatPanel aiChatPanel, Runnable menusRebuilder) {
@@ -76,6 +79,7 @@ public class AiPromptActionRegistry {
         }
         store.saveState(currentState);
         lastPersistedState = copyState(currentState);
+        savedPromptSnapshotByNormalizedName = createSavedPromptSnapshot(currentState.getSavedPrompts());
     }
 
     public void runPrompt(AiPrompt prompt) {
@@ -86,6 +90,11 @@ public class AiPromptActionRegistry {
         if (prompt != null) {
             aiChatPanel.runPrompt(prompt.copy(), owner);
         }
+    }
+
+    public AiPrompt findSavedPromptByName(String promptName) {
+        AiPrompt prompt = savedPromptSnapshotByNormalizedName.get(normalizedPromptKey(promptName));
+        return prompt == null ? null : prompt.copy();
     }
 
     static String actionKey(String promptName) {
@@ -99,6 +108,7 @@ public class AiPromptActionRegistry {
             persistedState.getDialogState(),
             defaultNewPromptName());
         lastPersistedState = createPersistedState();
+        savedPromptSnapshotByNormalizedName = createSavedPromptSnapshot(lastPersistedState.getSavedPrompts());
     }
 
     private AiPromptStore.PersistedState createPersistedState() {
@@ -168,6 +178,23 @@ public class AiPromptActionRegistry {
 
     private static String safe(String value) {
         return value == null ? "" : value;
+    }
+
+    private Map<String, AiPrompt> createSavedPromptSnapshot(List<AiPrompt> savedPrompts) {
+        Map<String, AiPrompt> snapshot = new LinkedHashMap<String, AiPrompt>();
+        if (savedPrompts != null) {
+            for (AiPrompt prompt : savedPrompts) {
+                if (prompt == null) {
+                    continue;
+                }
+                snapshot.put(normalizedPromptKey(prompt.getName()), prompt.copy());
+            }
+        }
+        return Collections.unmodifiableMap(snapshot);
+    }
+
+    private String normalizedPromptKey(String promptName) {
+        return AiPromptNameValidator.normalizeName(promptName).toLowerCase(Locale.ROOT);
     }
 
     private void removeStaleActions(Set<String> validKeys) {

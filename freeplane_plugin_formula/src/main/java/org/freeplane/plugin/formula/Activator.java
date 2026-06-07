@@ -18,6 +18,7 @@ import org.osgi.framework.BundleActivator;
 import org.osgi.framework.BundleContext;
 
 public class Activator implements BundleActivator {
+	private static volatile BundleContext bundleContext;
 	private static final String FORMULA_DISABLE_PLUGIN = "formula_disable_plugin";
 	private static final String FORMULA_DISABLE_CACHING = "formula_disable_caching";
 	private static final String MENU_BAR_PARENT_LOCATION = "/menu_bar/extras/first";
@@ -83,8 +84,13 @@ public class Activator implements BundleActivator {
 	 * (non-Javadoc)
 	 * @see org.osgi.framework.BundleActivator#start(org.osgi.framework.BundleContext)
 	 */
+    public static BundleContext getBundleContext() {
+        return bundleContext;
+    }
+
 	@Override
 	public void start(final BundleContext context) throws Exception {
+        bundleContext = context;
 		final Hashtable<String, String[]> props = new Hashtable<String, String[]>();
 		props.put("mode", new String[] { MModeController.MODENAME /*TODO: browse mode too?*/});
 		context.registerService(IModeControllerExtensionProvider.class.getName(), new FormulaPluginRegistration(),
@@ -97,5 +103,8 @@ public class Activator implements BundleActivator {
 	 */
 	@Override
 	public void stop(final BundleContext context) throws Exception {
+        if (bundleContext == context) {
+            bundleContext = null;
+        }
 	}
 }

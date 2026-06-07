@@ -1,9 +1,5 @@
 package org.freeplane.plugin.ai.mcpserver;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.ByteArrayOutputStream;
@@ -20,6 +16,10 @@ import org.freeplane.plugin.ai.tools.AIToolSet;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class ModelContextProtocolServerIntegrationTest {
     private static final String TEST_API_KEY = "integration-test-api-key";

@@ -2,7 +2,6 @@ package org.freeplane.plugin.ai.edits;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
-
 import org.freeplane.core.undo.IActor;
 import org.freeplane.features.map.MapController;
 import org.freeplane.features.map.NodeIterator;

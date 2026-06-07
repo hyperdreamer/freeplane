@@ -1,15 +1,15 @@
 package org.freeplane.plugin.ai.tools.content;
 
+import org.freeplane.features.map.FirstGroupNodeFlag;
+import org.freeplane.features.map.NodeModel;
+import org.freeplane.features.map.SummaryNodeFlag;
+import org.junit.Test;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-
-import org.freeplane.features.map.FirstGroupNodeFlag;
-import org.freeplane.features.map.NodeModel;
-import org.freeplane.features.map.SummaryNodeFlag;
-import org.junit.Test;
 
 public class NodeContentItemReaderTest {
     @Test

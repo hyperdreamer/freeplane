@@ -20,6 +20,7 @@
  */
 package org.freeplane.plugin.script;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -43,6 +44,7 @@ public class ScriptingPermissions {
 	public static final String RESOURCES_EXECUTE_SCRIPTS_WITHOUT_WRITE_RESTRICTION = "execute_scripts_without_write_restriction";
 	public static final String RESOURCES_EXECUTE_SCRIPTS_WITHOUT_EXEC_RESTRICTION = "execute_scripts_without_exec_restriction";
 	public static final String RESOURCES_EXECUTE_SCRIPTS_WITHOUT_NETWORK_RESTRICTION = "execute_scripts_without_network_restriction";
+	public static final String RESOURCES_EXECUTE_SCRIPTS_WITHOUT_AI_REQUEST_RESTRICTION = "execute_scripts_without_ai_request_restriction";
 	public static final String RESOURCES_SIGNED_SCRIPT_ARE_TRUSTED = "signed_script_are_trusted";
 	public static final String RESOURCES_SCRIPT_USER_KEY_NAME_FOR_SIGNING = "script_user_key_name_for_signing";
 	public static final String[] PERMISSION_NAMES = { //
@@ -51,6 +53,7 @@ public class ScriptingPermissions {
         , RESOURCES_EXECUTE_SCRIPTS_WITHOUT_WRITE_RESTRICTION //
         , RESOURCES_EXECUTE_SCRIPTS_WITHOUT_EXEC_RESTRICTION //
         , RESOURCES_EXECUTE_SCRIPTS_WITHOUT_NETWORK_RESTRICTION //
+        , RESOURCES_EXECUTE_SCRIPTS_WITHOUT_AI_REQUEST_RESTRICTION //
         , RESOURCES_SIGNED_SCRIPT_ARE_TRUSTED //
 	};
 	private static ScriptingPermissions formulaPermissions;
@@ -139,6 +142,7 @@ public class ScriptingPermissions {
 			permissiveScriptingPermissions.set(RESOURCES_EXECUTE_SCRIPTS_WITHOUT_READ_RESTRICTION, true);
 			permissiveScriptingPermissions.set(RESOURCES_EXECUTE_SCRIPTS_WITHOUT_WRITE_RESTRICTION, true);
 			permissiveScriptingPermissions.set(RESOURCES_EXECUTE_SCRIPTS_WITHOUT_NETWORK_RESTRICTION, true);
+			permissiveScriptingPermissions.set(RESOURCES_EXECUTE_SCRIPTS_WITHOUT_AI_REQUEST_RESTRICTION, true);
 			permissiveScriptingPermissions.set(RESOURCES_EXECUTE_SCRIPTS_WITHOUT_EXEC_RESTRICTION, true);
 		}
 		return permissiveScriptingPermissions;
@@ -154,6 +158,17 @@ public class ScriptingPermissions {
 
 	public static List<String> getPermissionNames() {
 		return Arrays.asList(PERMISSION_NAMES);
+    }
+
+	public static List<String> getRequiredExecutionPermissionNames() {
+		final ArrayList<String> requiredPermissionNames = new ArrayList<String>();
+		for (String permissionName : PERMISSION_NAMES) {
+			if (permissionName.startsWith("execute_")
+					&& !RESOURCES_EXECUTE_SCRIPTS_WITHOUT_AI_REQUEST_RESTRICTION.equals(permissionName)) {
+				requiredPermissionNames.add(permissionName);
+			}
+		}
+		return requiredPermissionNames;
     }
 
 	public void assertScriptExecutionAllowed() {

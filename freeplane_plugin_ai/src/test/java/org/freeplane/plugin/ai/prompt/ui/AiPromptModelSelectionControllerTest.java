@@ -1,9 +1,5 @@
 package org.freeplane.plugin.ai.prompt.ui;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.mockStatic;
-
 import java.util.Collections;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.plugin.ai.model.AIModelCatalog;
@@ -11,6 +7,10 @@ import org.freeplane.plugin.ai.model.AIModelDescriptor;
 import org.freeplane.plugin.ai.model.AIProviderConfiguration;
 import org.junit.Test;
 import org.mockito.MockedStatic;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
 
 public class AiPromptModelSelectionControllerTest {
 

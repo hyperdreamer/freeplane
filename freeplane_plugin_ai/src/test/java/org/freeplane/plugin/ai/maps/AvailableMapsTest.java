@@ -1,16 +1,15 @@
 package org.freeplane.plugin.ai.maps;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
-
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
 import org.junit.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 public class AvailableMapsTest {
     @Test

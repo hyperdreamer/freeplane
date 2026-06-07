@@ -8,8 +8,8 @@ import org.freeplane.features.map.IMapSelection;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.text.TextController;
+import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
-import org.freeplane.plugin.ai.chat.ChatToolAvailability;
 import org.freeplane.plugin.ai.tools.selection.SelectionIdentifiersBuilder;
 import org.freeplane.plugin.ai.tools.selection.SelectionIdentifiersResponse;
 
@@ -29,15 +29,19 @@ public class AiPromptRequestComposer {
     }
 
     public String compose(AiPrompt prompt) {
-        return compose(prompt == null ? null : prompt.getPrompt(), ChatToolAvailability.EDITING);
+        return compose(prompt == null ? null : prompt.getPrompt(), ToolAvailabilityLevel.EDITING);
     }
 
-    public String compose(AiPrompt prompt, ChatToolAvailability toolAvailability) {
-        return compose(prompt == null ? null : prompt.getPrompt(), toolAvailability);
+    public String compose(AiPrompt prompt, ToolAvailabilityLevel toolAvailability) {
+        return compose(prompt == null ? null : prompt.getPrompt(), toolAvailability, null);
     }
 
-    String compose(String promptText, ChatToolAvailability toolAvailability) {
-        SelectionIdentifiersResponse response = selectionIdentifiersSupplier.get();
+    public String compose(String promptText,
+                          ToolAvailabilityLevel toolAvailability,
+                          SelectionIdentifiersResponse selectionIdentifiersOverride) {
+        SelectionIdentifiersResponse response = selectionIdentifiersOverride != null
+            ? selectionIdentifiersOverride
+            : selectionIdentifiersSupplier.get();
         SelectionIdentifiersResponse safeResponse = response == null
             ? new SelectionIdentifiersResponse(null, null, null, Collections.emptyList(), 0, 0)
             : response;
@@ -54,6 +58,10 @@ public class AiPromptRequestComposer {
         } catch (Exception error) {
             throw new IllegalStateException("Failed to compose AI prompt request.", error);
         }
+    }
+
+    String compose(String promptText, ToolAvailabilityLevel toolAvailability) {
+        return compose(promptText, toolAvailability, null);
     }
 
     private static Supplier<SelectionIdentifiersResponse> createSelectionIdentifiersSupplier(

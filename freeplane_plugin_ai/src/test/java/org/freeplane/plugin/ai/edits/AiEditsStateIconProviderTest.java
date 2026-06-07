@@ -1,14 +1,14 @@
 package org.freeplane.plugin.ai.edits;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.features.icon.UIIcon;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
 import org.junit.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class AiEditsStateIconProviderTest {
     @Test

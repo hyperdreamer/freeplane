@@ -1,7 +1,6 @@
 package org.freeplane.plugin.ai.tools.edit;
 
 import java.util.Objects;
-
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.note.mindmapmode.MNoteController;
 

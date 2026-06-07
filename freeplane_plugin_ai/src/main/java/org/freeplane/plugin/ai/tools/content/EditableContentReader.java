@@ -3,7 +3,8 @@ package org.freeplane.plugin.ai.tools.content;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-
+import java.util.function.Supplier;
+import org.freeplane.plugin.ai.tools.formula.FormulaEditingSettings;
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.features.attribute.Attribute;
 import org.freeplane.features.attribute.NodeAttributeTableModel;
@@ -14,17 +15,45 @@ import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.note.NoteModel;
 import org.freeplane.features.text.DetailModel;
 import org.freeplane.features.text.TextController;
+import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 
 public class EditableContentReader {
     private final TextController textController;
     private final IconDescriptionResolver iconDescriptionResolver;
     private final ContentTypeConverter contentTypeConverter;
+    private final Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier;
+    private final Supplier<Boolean> formulaEditingEnabledSupplier;
 
     public EditableContentReader(TextController textController, IconDescriptionResolver iconDescriptionResolver,
                                  ContentTypeConverter contentTypeConverter) {
+        this(textController, iconDescriptionResolver, contentTypeConverter,
+            () -> ToolAvailabilityLevel.EDITING,
+            () -> Boolean.valueOf(new FormulaEditingSettings().isEnabled()));
+    }
+
+    public EditableContentReader(TextController textController, IconDescriptionResolver iconDescriptionResolver,
+                                 ContentTypeConverter contentTypeConverter,
+                                 Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier) {
+        this(textController,
+            iconDescriptionResolver,
+            contentTypeConverter,
+            toolAvailabilitySupplier,
+            () -> Boolean.valueOf(new FormulaEditingSettings().isEnabled()));
+    }
+
+    public EditableContentReader(TextController textController, IconDescriptionResolver iconDescriptionResolver,
+                                 ContentTypeConverter contentTypeConverter,
+                                 Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier,
+                                 Supplier<Boolean> formulaEditingEnabledSupplier) {
         this.textController = Objects.requireNonNull(textController, "textController");
         this.iconDescriptionResolver = Objects.requireNonNull(iconDescriptionResolver, "iconDescriptionResolver");
         this.contentTypeConverter = Objects.requireNonNull(contentTypeConverter, "contentTypeConverter");
+        this.toolAvailabilitySupplier = toolAvailabilitySupplier == null
+            ? () -> ToolAvailabilityLevel.EDITING
+            : toolAvailabilitySupplier;
+        this.formulaEditingEnabledSupplier = formulaEditingEnabledSupplier == null
+            ? () -> Boolean.FALSE
+            : formulaEditingEnabledSupplier;
     }
 
     public EditableContent readEditableContent(NodeModel nodeModel, EditableContentRequest request) {
@@ -74,11 +103,10 @@ public class EditableContentReader {
         boolean formulaDetected = rawObject != null && textController.isFormula(rawObject);
         ContentType contentType = rawObject == null
             ? null
-            : (formulaDetected
-                ? ContentType.FORMULA
-                : contentTypeConverter.toTextContentTypeForNode(textController.getNodeFormat(nodeModel), rawValue));
-        Boolean isEditable = rawObject == null ? null : !formulaDetected;
-        return new EditableText(rawValue, transformedValue, plainValue, contentType, isEditable);
+            : contentTypeConverter.toTextContentTypeForNode(textController.getNodeFormat(nodeModel), rawValue);
+        Boolean isFormula = rawObject == null ? null : Boolean.valueOf(formulaDetected);
+        Boolean isEditable = rawObject == null ? null : Boolean.valueOf(isEditable(formulaDetected));
+        return new EditableText(rawValue, transformedValue, plainValue, contentType, isFormula, isEditable);
     }
 
     private EditableText buildEditableText(Object rawObject, String freeplaneContentType, NodeModel nodeModel,
@@ -96,9 +124,10 @@ public class EditableContentReader {
         boolean formulaDetected = rawObject != null && textController.isFormula(rawObject);
         ContentType contentType = rawObject == null
             ? null
-            : contentTypeConverter.toContentType(freeplaneContentType, formulaDetected, rawValue);
-        Boolean isEditable = rawObject == null ? null : !formulaDetected;
-        return new EditableText(rawValue, transformedValue, plainValue, contentType, isEditable);
+            : contentTypeConverter.toContentType(freeplaneContentType, rawValue);
+        Boolean isFormula = rawObject == null ? null : Boolean.valueOf(formulaDetected);
+        Boolean isEditable = rawObject == null ? null : Boolean.valueOf(isEditable(formulaDetected));
+        return new EditableText(rawValue, transformedValue, plainValue, contentType, isFormula, isEditable);
     }
 
     private List<EditableAttribute> buildEditableAttributes(NodeModel nodeModel) {
@@ -125,15 +154,30 @@ public class EditableContentReader {
                 plainValue = HtmlUtils.htmlToPlain(transformedValue);
             }
             boolean formulaDetected = rawValue != null && textController.isFormula(rawValue);
-            Boolean isEditable = rawValue == null ? null : !formulaDetected;
+            Boolean isFormula = rawValue == null ? null : Boolean.valueOf(formulaDetected);
+            Boolean isEditable = rawValue == null ? null : Boolean.valueOf(isEditable(formulaDetected));
             attributes.add(new EditableAttribute(attribute.getName(),
                 rawValue,
                 transformedValue,
                 plainValue,
+                isFormula,
                 isEditable,
                 row));
         }
         return attributes.isEmpty() ? null : attributes;
+    }
+
+    private boolean isEditable(boolean formulaDetected) {
+        return !formulaDetected || (currentToolAvailability().includesEditing() && isFormulaEditingEnabled());
+    }
+
+    private boolean isFormulaEditingEnabled() {
+        return formulaEditingEnabledSupplier.get().booleanValue();
+    }
+
+    private ToolAvailabilityLevel currentToolAvailability() {
+        ToolAvailabilityLevel toolAvailability = toolAvailabilitySupplier.get();
+        return toolAvailability == null ? ToolAvailabilityLevel.EDITING : toolAvailability;
     }
 
     private List<EditableTag> buildEditableTags(NodeModel nodeModel) {

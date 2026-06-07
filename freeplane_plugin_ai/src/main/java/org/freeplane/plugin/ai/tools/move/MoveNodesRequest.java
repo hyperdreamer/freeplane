@@ -1,11 +1,9 @@
 package org.freeplane.plugin.ai.tools.move;
 
-import java.util.List;
-
-import org.freeplane.plugin.ai.tools.create.AnchorPlacement;
-
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.List;
+import org.freeplane.plugin.ai.tools.create.AnchorPlacement;
 
 public class MoveNodesRequest {
     private final String mapIdentifier;

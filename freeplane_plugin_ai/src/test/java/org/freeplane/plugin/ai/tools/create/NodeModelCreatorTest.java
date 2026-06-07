@@ -1,11 +1,11 @@
 package org.freeplane.plugin.ai.tools.create;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
 import org.junit.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class NodeModelCreatorTest {
     @Test

@@ -1,84 +1,68 @@
 package org.freeplane.plugin.ai.tools.edit;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-
 import java.util.Collections;
-
 import org.freeplane.features.attribute.Attribute;
 import org.freeplane.features.attribute.NodeAttributeTableModel;
 import org.freeplane.features.attribute.mindmapmode.MAttributeController;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
+import org.freeplane.features.text.TextController;
 import org.freeplane.plugin.ai.tools.content.AttributeEntry;
 import org.freeplane.plugin.ai.tools.content.AttributesContent;
 import org.junit.Test;
-import org.mockito.ArgumentCaptor;
+
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class AttributesContentEditorTest {
     @Test
-    public void setInitialContent_addsAttributes() {
+    public void setInitialContent_rejectsFormulaValue() {
         MapModel mapModel = new MapModel((source, targetMap, withChildren) -> null, null, null);
         NodeModel nodeModel = new NodeModel("node", mapModel);
-        AttributesContent attributesContent = new AttributesContent(
-            Collections.singletonList(new AttributeEntry("key", "value")));
-        AttributesContentEditor uut = new AttributesContentEditor(mock(MAttributeController.class));
+        TextController textController = mock(TextController.class);
+        when(textController.isFormula(any())).thenReturn(true);
+        AttributesContentEditor uut = new AttributesContentEditor(mock(MAttributeController.class), textController);
 
-        uut.setInitialContent(nodeModel, attributesContent);
-
-        NodeAttributeTableModel attributeTableModel = NodeAttributeTableModel.getModel(nodeModel);
-        assertThat(attributeTableModel.getRowCount()).isEqualTo(1);
-        assertThat(attributeTableModel.getName(0)).isEqualTo("key");
-        assertThat(attributeTableModel.getValue(0)).isEqualTo("value");
+        assertThatThrownBy(() -> uut.setInitialContent(nodeModel,
+            new AttributesContent(Collections.singletonList(new AttributeEntry("key", "=1+1")))))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Formula values are not allowed in createNodes or createSummary");
     }
 
     @Test
-    public void editExistingAttributesContent_addsAttributesThroughController() {
+    public void editExistingAttributesContent_rejectsFormulaValue() {
         MapModel mapModel = new MapModel((source, targetMap, withChildren) -> null, null, null);
         NodeModel nodeModel = new NodeModel("node", mapModel);
-        MAttributeController attributeController = mock(MAttributeController.class);
-        AttributesContentEditor uut = new AttributesContentEditor(attributeController);
+        TextController textController = mock(TextController.class);
+        when(textController.isFormula(any())).thenAnswer(invocation -> {
+            Object value = invocation.getArgument(0);
+            return "=1+1".equals(value);
+        });
+        AttributesContentEditor uut = new AttributesContentEditor(mock(MAttributeController.class), textController);
 
-        uut.editExistingAttributesContent(nodeModel, EditOperation.ADD, "key", null, "value");
-
-        ArgumentCaptor<Attribute> attributeCaptor = ArgumentCaptor.forClass(Attribute.class);
-        verify(attributeController).addAttribute(eq(nodeModel), attributeCaptor.capture());
-        Attribute addedAttribute = attributeCaptor.getValue();
-        assertThat(addedAttribute.getName()).isEqualTo("key");
-        assertThat(addedAttribute.getValue()).isEqualTo("value");
+        assertThatThrownBy(() -> uut.validateExistingAttributesContent(
+            nodeModel, EditOperation.ADD, "key", null, "=1+1"))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("previewFormulaUpdates and applyFormulaUpdates");
     }
 
     @Test
-    public void editExistingAttributesContent_replacesAttributesByKey() {
+    public void editExistingAttributesContent_rejectsFormulaBackedAttribute() {
         MapModel mapModel = new MapModel((source, targetMap, withChildren) -> null, null, null);
         NodeModel nodeModel = new NodeModel("node", mapModel);
-        NodeAttributeTableModel attributeTableModel = NodeAttributeTableModel.getModel(nodeModel);
-        attributeTableModel.silentlyAddRowNoUndo(nodeModel, new Attribute("key", "value"));
-        MAttributeController attributeController = mock(MAttributeController.class);
-        AttributesContentEditor uut = new AttributesContentEditor(attributeController);
+        NodeAttributeTableModel.getModel(nodeModel).silentlyAddRowNoUndo(nodeModel, new Attribute("key", "=1+1"));
+        TextController textController = mock(TextController.class);
+        when(textController.isFormula(any())).thenAnswer(invocation -> {
+            Object value = invocation.getArgument(0);
+            return "=1+1".equals(value);
+        });
+        AttributesContentEditor uut = new AttributesContentEditor(mock(MAttributeController.class), textController);
 
-        uut.editExistingAttributesContent(nodeModel, EditOperation.REPLACE, "key", null, "updated");
-
-        ArgumentCaptor<Attribute> attributeCaptor = ArgumentCaptor.forClass(Attribute.class);
-        verify(attributeController).setAttribute(eq(nodeModel), eq(0), attributeCaptor.capture());
-        Attribute updatedAttribute = attributeCaptor.getValue();
-        assertThat(updatedAttribute.getName()).isEqualTo("key");
-        assertThat(updatedAttribute.getValue()).isEqualTo("updated");
-    }
-
-    @Test
-    public void editExistingAttributesContent_deletesAttributesByIndex() {
-        MapModel mapModel = new MapModel((source, targetMap, withChildren) -> null, null, null);
-        NodeModel nodeModel = new NodeModel("node", mapModel);
-        NodeAttributeTableModel attributeTableModel = NodeAttributeTableModel.getModel(nodeModel);
-        attributeTableModel.silentlyAddRowNoUndo(nodeModel, new Attribute("key", "value"));
-        MAttributeController attributeController = mock(MAttributeController.class);
-        AttributesContentEditor uut = new AttributesContentEditor(attributeController);
-
-        uut.editExistingAttributesContent(nodeModel, EditOperation.DELETE, null, 0, null);
-
-        verify(attributeController).performRemoveAttribute(nodeModel, 0);
+        assertThatThrownBy(() -> uut.validateExistingAttributesContent(
+            nodeModel, EditOperation.REPLACE, "key", null, "plain"))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("formula-backed attributes");
     }
 }

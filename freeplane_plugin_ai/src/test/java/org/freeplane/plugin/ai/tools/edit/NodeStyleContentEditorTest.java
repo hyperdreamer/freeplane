@@ -1,10 +1,10 @@
 package org.freeplane.plugin.ai.tools.edit;
 
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
 import org.junit.Test;
+
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class NodeStyleContentEditorTest {
     @Test

@@ -1,7 +1,6 @@
 package org.freeplane.plugin.ai.tools.create;
 
 import java.util.Objects;
-
 import org.freeplane.core.resources.ResourceController;
 
 public class CreateNodesPreferences {

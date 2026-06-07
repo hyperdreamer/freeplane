@@ -27,6 +27,12 @@ public interface Script {
 	Script readingFiles();
 
 	/**
+	 * With permission to send AI requests.
+	 * @since 1.13.0
+	 */
+	Script accessingAi();
+
+	/**
 	 * With permission to write files.
 	 * @since 1.7.1
 	 */

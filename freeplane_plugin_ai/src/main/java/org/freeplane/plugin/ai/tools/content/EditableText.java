@@ -10,6 +10,7 @@ public class EditableText {
     private final String transformed;
     private final String plain;
     private final ContentType contentType;
+    private final Boolean isFormula;
     private final Boolean isEditable;
 
     @JsonCreator
@@ -17,11 +18,13 @@ public class EditableText {
                         @JsonProperty("transformed") String transformed,
                         @JsonProperty("plain") String plain,
                         @JsonProperty("contentType") ContentType contentType,
+                        @JsonProperty("isFormula") Boolean isFormula,
                         @JsonProperty("isEditable") Boolean isEditable) {
         this.raw = raw;
         this.transformed = transformed;
         this.plain = plain;
         this.contentType = contentType;
+        this.isFormula = isFormula;
         this.isEditable = isEditable;
     }
 
@@ -39,6 +42,10 @@ public class EditableText {
 
     public ContentType getContentType() {
         return contentType;
+    }
+
+    public Boolean getIsFormula() {
+        return isFormula;
     }
 
     public Boolean getIsEditable() {

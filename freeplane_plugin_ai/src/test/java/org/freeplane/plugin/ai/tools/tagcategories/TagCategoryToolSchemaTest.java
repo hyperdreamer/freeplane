@@ -1,17 +1,14 @@
 package org.freeplane.plugin.ai.tools.tagcategories;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
+import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.langchain4j.agent.tool.Tool;
 import java.util.List;
 import java.util.Map;
-
 import org.freeplane.plugin.ai.mcpserver.ModelContextProtocolTool;
 import org.freeplane.plugin.ai.mcpserver.ModelContextProtocolToolRegistry;
 import org.junit.Test;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-
-import dev.langchain4j.agent.tool.Tool;
+import static org.assertj.core.api.Assertions.assertThat;
 
 public class TagCategoryToolSchemaTest {
     @Test

@@ -9,7 +9,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.WeakHashMap;
-
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
 

@@ -1,13 +1,12 @@
 package org.freeplane.plugin.ai.tools.utilities;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
-
 import org.freeplane.plugin.ai.tools.read.ContextSection;
 import org.junit.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 public class ToolCallSummaryFormatterTest {
     @Test

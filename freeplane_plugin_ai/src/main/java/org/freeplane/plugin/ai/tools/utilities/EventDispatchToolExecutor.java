@@ -4,13 +4,12 @@ import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.invocation.InvocationContext;
 import dev.langchain4j.service.tool.ToolExecutionResult;
 import dev.langchain4j.service.tool.ToolExecutor;
-import org.freeplane.features.mode.Controller;
-import org.freeplane.features.ui.ViewController;
-
-import javax.swing.SwingUtilities;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
+import javax.swing.SwingUtilities;
+import org.freeplane.features.mode.Controller;
+import org.freeplane.features.ui.ViewController;
 
 public class EventDispatchToolExecutor implements ToolExecutor {
     private final ToolExecutor delegate;

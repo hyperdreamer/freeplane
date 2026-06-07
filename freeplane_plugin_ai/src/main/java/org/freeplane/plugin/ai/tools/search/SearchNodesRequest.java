@@ -1,16 +1,13 @@
 package org.freeplane.plugin.ai.tools.search;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import dev.langchain4j.model.output.structured.Description;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-
 import org.freeplane.plugin.ai.tools.content.NodeContentRequest;
 import org.freeplane.plugin.ai.tools.content.TextualContentRequest;
-
-import com.fasterxml.jackson.annotation.JsonCreator;
-import com.fasterxml.jackson.annotation.JsonProperty;
-
-import dev.langchain4j.model.output.structured.Description;
 
 public class SearchNodesRequest {
     private static final int DEFAULT_LIMIT = 200;

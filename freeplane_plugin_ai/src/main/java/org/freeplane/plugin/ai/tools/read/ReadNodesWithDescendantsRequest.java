@@ -1,12 +1,11 @@
 package org.freeplane.plugin.ai.tools.read;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import dev.langchain4j.model.output.structured.Description;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 public class ReadNodesWithDescendantsRequest {
     private static final int DEFAULT_FULL_CONTENT_DEPTH = 0;

@@ -1,10 +1,9 @@
 package org.freeplane.plugin.ai.tools.selection;
 
-import java.util.List;
-
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import dev.langchain4j.model.output.structured.Description;
+import java.util.List;
 
 public class SelectionIdentifiersResponse {
     @Description("Selected map ID.")

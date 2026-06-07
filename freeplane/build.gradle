@@ -95,6 +95,7 @@ bundleDeps.add(0, "lib/freeplaneviewer.jar")
 ext.bundleExports = """\
                     com.inet.jortho,
                     org.freeplane.api,
+                    org.freeplane.api.ai,
                     org.freeplane.core.extension,
                     org.freeplane.core.io,
                     org.freeplane.core.io.xml,
@@ -116,6 +117,7 @@ ext.bundleExports = """\
                     org.freeplane.core.util,
                     org.freeplane.core.util.collection,
                     org.freeplane.core.util.logging,
+                    org.freeplane.features.ai.code,
                     org.freeplane.features.attribute,
                     org.freeplane.features.attribute.mindmapmode,
                     org.freeplane.features.clipboard,

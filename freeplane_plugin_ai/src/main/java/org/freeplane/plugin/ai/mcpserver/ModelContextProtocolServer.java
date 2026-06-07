@@ -7,23 +7,27 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import dev.langchain4j.service.tool.ToolExecutionResult;
-import org.freeplane.core.resources.IFreeplanePropertyListener;
-import org.freeplane.core.resources.ResourceController;
-import org.freeplane.core.util.FreeplaneVersion;
-import org.freeplane.core.util.LogUtils;
-import org.freeplane.features.ui.ViewController;
-import org.freeplane.plugin.ai.tools.AIToolSet;
-
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.freeplane.core.resources.IFreeplanePropertyListener;
+import org.freeplane.core.resources.ResourceController;
+import org.freeplane.core.util.FreeplaneVersion;
+import org.freeplane.core.util.LogUtils;
+import org.freeplane.features.ui.ViewController;
+import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevelSettings;
+import org.freeplane.plugin.ai.tools.code.AiCodeOperationAuthorizer;
+import org.freeplane.plugin.ai.tools.formula.FormulaEditingSettings;
+import org.freeplane.plugin.ai.tools.AIToolSet;
+import org.freeplane.plugin.ai.tools.documentation.GetApiDocumentationTool;
 
 public class ModelContextProtocolServer implements IFreeplanePropertyListener {
     public static final String MCP_SERVER_ENABLED_PROPERTY = "ai_mcp_server_enabled";
@@ -47,33 +51,108 @@ public class ModelContextProtocolServer implements IFreeplanePropertyListener {
     private volatile HttpServer server;
 
     public ModelContextProtocolServer(AIToolSet toolSet, ViewController viewController) {
-        this(toolSet, new ObjectMapper(), ResourceController.getResourceController(), viewController);
+        this(Collections.<Object>singletonList(toolSet), new ObjectMapper(), ResourceController.getResourceController(),
+            viewController);
+    }
+
+    public ModelContextProtocolServer(Collection<?> toolSets, ViewController viewController) {
+        this(toolSets, new ObjectMapper(), ResourceController.getResourceController(), viewController);
+    }
+
+    public ModelContextProtocolServer(Collection<?> toolSets,
+                                      AiCodeOperationAuthorizer aiCodeOperationAuthorizer,
+                                      ViewController viewController) {
+        this(toolSets, new ObjectMapper(), ResourceController.getResourceController(), viewController,
+            aiCodeOperationAuthorizer);
     }
 
     public ModelContextProtocolServer(AIToolSet toolSet, ObjectMapper objectMapper, ViewController viewController) {
-        this(toolSet, objectMapper, ResourceController.getResourceController(), viewController);
+        this(Collections.<Object>singletonList(toolSet), objectMapper, ResourceController.getResourceController(),
+            viewController);
     }
 
-    ModelContextProtocolServer(AIToolSet toolSet, ObjectMapper objectMapper, ResourceController resourceController,
+    ModelContextProtocolServer(Collection<?> toolSets, ObjectMapper objectMapper, ResourceController resourceController,
                                ViewController viewController) {
-        this(toolSet, objectMapper, resourceController, new MCPAuthenticator(
+        this(toolSets, objectMapper, resourceController, viewController, null);
+    }
+
+    ModelContextProtocolServer(Collection<?> toolSets, ObjectMapper objectMapper, ResourceController resourceController,
+                               ViewController viewController,
+                               AiCodeOperationAuthorizer aiCodeOperationAuthorizer) {
+        this(toolSets, objectMapper, resourceController, new MCPAuthenticator(
             resourceController,
             viewController,
             MCP_TOKEN_PROPERTY,
-            MCP_TOKEN_HEADER));
+            MCP_TOKEN_HEADER), aiCodeOperationAuthorizer);
     }
 
     ModelContextProtocolServer(AIToolSet toolSet, ObjectMapper objectMapper, ResourceController resourceController,
                                MCPAuthenticator authenticator) {
+        this(Collections.<Object>singletonList(toolSet), objectMapper, resourceController, authenticator, null);
+    }
+
+    ModelContextProtocolServer(Collection<?> toolSets, ObjectMapper objectMapper, ResourceController resourceController,
+                               MCPAuthenticator authenticator) {
+        this(toolSets, objectMapper, resourceController, authenticator, null);
+    }
+
+    ModelContextProtocolServer(Collection<?> toolSets, ObjectMapper objectMapper, ResourceController resourceController,
+                               MCPAuthenticator authenticator,
+                               AiCodeOperationAuthorizer aiCodeOperationAuthorizer) {
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
-        this.toolRegistry = new ModelContextProtocolToolRegistry(toolSet, this.objectMapper);
-        this.toolDispatcher = new ModelContextProtocolToolDispatcher(toolSet, this.objectMapper);
+        ToolAvailabilityLevelSettings toolAvailabilityLevelSettings = new ToolAvailabilityLevelSettings(resourceController);
+        FormulaEditingSettings formulaEditingSettings = new FormulaEditingSettings(resourceController);
+        this.toolRegistry = new ModelContextProtocolToolRegistry(
+            toolSets,
+            this.objectMapper,
+            toolAvailabilityLevelSettings::getToolAvailability,
+            () -> Boolean.valueOf(formulaEditingSettings.isEnabled()));
+        this.toolDispatcher = new ModelContextProtocolToolDispatcher(
+            toolSets,
+            this.objectMapper,
+            createToolCallAuthorizer(toolSets, resourceController, aiCodeOperationAuthorizer));
         this.resourceController = Objects.requireNonNull(resourceController, "resourceController");
         this.authenticator = Objects.requireNonNull(authenticator, "authenticator");
         this.running = new AtomicBoolean(false);
         Runtime.getRuntime().addShutdownHook(new Thread(this::stop));
         if (this.resourceController.getBooleanProperty(MCP_SERVER_ENABLED_PROPERTY))
             start();
+    }
+
+    private ModelContextProtocolToolCallAuthorizer createToolCallAuthorizer(Collection<?> toolSets,
+                                                                             ResourceController resourceController,
+                                                                             AiCodeOperationAuthorizer aiCodeOperationAuthorizer) {
+        if (aiCodeOperationAuthorizer == null) {
+            return null;
+        }
+        AIToolSet aiToolSet = findAiToolSet(toolSets);
+        if (aiToolSet == null) {
+            throw new IllegalArgumentException("AIToolSet is required when MCP tool-call authorization is enabled.");
+        }
+        GetApiDocumentationTool getApiDocumentationTool = aiToolSet.getApiDocumentationTool();
+        if (getApiDocumentationTool == null) {
+            throw new IllegalArgumentException(
+                "GetApiDocumentationTool is required when MCP tool-call authorization is enabled.");
+        }
+        ToolAvailabilityLevelSettings toolAvailabilityLevelSettings = new ToolAvailabilityLevelSettings(resourceController);
+        FormulaEditingSettings formulaEditingSettings = new FormulaEditingSettings(resourceController);
+        return new ModelContextProtocolToolCallAuthorizer(
+            toolAvailabilityLevelSettings::getToolAvailability,
+            () -> Boolean.valueOf(formulaEditingSettings.isEnabled()),
+            aiCodeOperationAuthorizer,
+            getApiDocumentationTool);
+    }
+
+    private AIToolSet findAiToolSet(Collection<?> toolSets) {
+        if (toolSets == null) {
+            return null;
+        }
+        for (Object toolSet : toolSets) {
+            if (toolSet instanceof AIToolSet) {
+                return (AIToolSet) toolSet;
+            }
+        }
+        return null;
     }
 
     public void start() {

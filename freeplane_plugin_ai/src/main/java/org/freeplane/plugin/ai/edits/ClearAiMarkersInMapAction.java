@@ -2,7 +2,6 @@ package org.freeplane.plugin.ai.edits;
 
 import java.awt.event.ActionEvent;
 import java.util.Map;
-
 import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.core.undo.IActor;
 import org.freeplane.features.map.MapController;

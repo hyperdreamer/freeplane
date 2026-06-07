@@ -3,7 +3,6 @@ package org.freeplane.plugin.ai.tools.create;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-
 import org.freeplane.features.map.NodeModel;
 
 public class NodeCreationHierarchy {

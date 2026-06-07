@@ -26,10 +26,16 @@ import java.awt.Font;
 import java.awt.event.ActionEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Formatter;
+
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
@@ -46,6 +52,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
+import javax.swing.JToggleButton;
 import javax.swing.ListSelectionModel;
 import javax.swing.WindowConstants;
 import javax.swing.SwingUtilities;
@@ -57,6 +64,18 @@ import javax.swing.text.JTextComponent;
 
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.ui.LabelAndMnemonicSetter;
+import org.freeplane.features.ai.code.AiChatAttachment;
+import org.freeplane.features.ai.code.AiChatAttachmentService;
+import org.freeplane.features.ai.code.AiChatRepairRequest;
+import org.freeplane.features.ai.code.AiCodeEditor;
+import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CompileCodeRequest;
+import org.freeplane.features.ai.code.CompileCodeResponse;
+import org.freeplane.features.ai.code.ReadCodeResponse;
+import org.freeplane.features.ai.code.RunCodeRequest;
+import org.freeplane.features.ai.code.RunCodeResponse;
+import org.freeplane.features.ai.code.ScriptHost;
+import org.freeplane.features.ai.code.ScriptRunInitiator;
 import org.freeplane.core.ui.UIBuilder;
 import org.freeplane.core.ui.components.EmptyIcon;
 import org.freeplane.core.ui.components.JRestrictedSizeScrollPane;
@@ -67,15 +86,43 @@ import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.text.mindmapmode.SourceTextEditorUIConfigurator;
 
 import de.sciss.syntaxpane.actions.ActionUtils;
+import org.osgi.framework.BundleContext;
+import org.osgi.framework.ServiceReference;
 
 /**
  */
-class ScriptEditorPanel extends JDialog {
+class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 
 	static final String GROOVY_EDITOR_FONT = "groovy_editor_font";
 	static final String GROOVY_EDITOR_FONT_SIZE = "groovy_editor_font_size";
 
 	private static final String internalCharset = "UTF-16BE";
+	private static final String AI_TAB_ICON_RESOURCE = "/images/panelTabs/aiTab.svg?useAccentColor=true";
+	private static final String AI_ATTACHMENT_CONTENT_TYPE = "text/x-freeplane-script-groovy";
+	private static final String EDITOR_CONTENT_TYPE = "text/groovy";
+	private static final String ATTACHED_SCRIPT_FAILURE_PROMPT =
+		"The attached Freeplane script was run manually and failed. Analyze the failure using the current code state below. "
+			+ "Do not rewrite the script unless the user explicitly asks or confirms.";
+
+	final private class AttachToAiAction extends AbstractAction {
+		private static final long serialVersionUID = 1L;
+
+		@Override
+		public void actionPerformed(final ActionEvent arg0) {
+			if (aiChatAttachment != null) {
+				aiChatAttachment.detach();
+				updateAiAttachButtonState();
+				return;
+			}
+			AiChatAttachmentService attachmentService = lookupAiChatAttachmentService();
+			if (attachmentService == null) {
+				LogUtils.severe("AI attachment service is unavailable.");
+				updateAiAttachButtonState();
+				return;
+			}
+			setAiChatAttachment(attachmentService.attachEditor(ScriptEditorPanel.this, AI_ATTACHMENT_CONTENT_TYPE));
+		}
+	}
 
 	final private class CancelAction extends AbstractAction {
 		/**
@@ -209,27 +256,29 @@ class ScriptEditorPanel extends JDialog {
 
 		@Override
 		public void actionPerformed(final ActionEvent arg0) {
-			storeCurrent();
-			if (!mScriptList.isSelectionEmpty()) {
-				mScriptResultField.setText("");
-				Object result = null;
-				try {
-					result = mScriptModel.executeScript(mScriptList.getSelectedIndex(), getPrintStream(),
-						getErrorHandler());
-                }
-                catch (Throwable e) {
-				// make sure the complete stack trace is logged!
+			if (mScriptList.isSelectionEmpty()) {
+				return;
+			}
+			try {
+				RunCodeResponse response = runCode(
+					new RunCodeRequest(ScriptHost.ATTACHED_EDITOR, null),
+					ScriptRunInitiator.USER);
+				renderManualRunResult(response);
+				updateAiAttachmentAfterManualRun(response);
+				if (response.getStatus() == CodeLifecycleStatus.FAILED && response.getErrorMessage() != null) {
+					UITools.errorMessage(response.getErrorMessage());
+				}
+			}
+			catch (Throwable e) {
 				LogUtils.warn(e);
-        			Throwable cause = e.getCause();
-					String causeMessage = "";
-					if(cause != null && cause.getMessage()!= null)
-						causeMessage = cause.getMessage();
-        			final String message = e.getMessage() != null ? e.getMessage() : "";
-        			UITools.errorMessage(e.getClass().getName() + ": " + causeMessage
-        			        + ((causeMessage.length() != 0 && message.length() != 0) ? ", " : "") + message);
-        			result = message;
-                }
-				getPrintStream().print(TextUtils.getText("plugins/ScriptEditor/window.Result") + result);
+				Throwable cause = e.getCause();
+				String causeMessage = "";
+				if (cause != null && cause.getMessage() != null) {
+					causeMessage = cause.getMessage();
+				}
+				final String message = e.getMessage() != null ? e.getMessage() : "";
+				UITools.errorMessage(e.getClass().getName() + ": " + causeMessage
+					+ ((causeMessage.length() != 0 && message.length() != 0) ? ", " : "") + message);
 			}
 		}
 	}
@@ -308,6 +357,7 @@ class ScriptEditorPanel extends JDialog {
 	final private JSplitPane mCentralUpperPanel;
 	private Integer mLastSelected = null;
 	final private DefaultListModel mListModel;
+	final private JToggleButton mAttachToAiButton;
 	final private AbstractAction mRunAction;
 	final private JList mScriptList;
 	final private IScriptModel mScriptModel;
@@ -315,6 +365,7 @@ class ScriptEditorPanel extends JDialog {
 	final private JTextComponent mScriptTextField;
 	final private SignAction mSignAction;
 	final private JLabel mStatus;
+	private AiChatAttachment aiChatAttachment;
 
 	public ScriptEditorPanel( final IScriptModel pScriptModel,
 	                         final boolean pHasNewScriptFunctionality) {
@@ -373,7 +424,7 @@ class ScriptEditorPanel extends JDialog {
 		UITools.setScrollbarIncrement(scriptScrollPane);
 		mCentralUpperPanel = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, mScriptList, scriptScrollPane);
 		try {
-			editorPane.setContentType("text/groovy");
+			editorPane.setContentType(EDITOR_CONTENT_TYPE);
 
 			final String fontName = ResourceController.getResourceController().getProperty(GROOVY_EDITOR_FONT);
 			final int fontSize = ResourceController.getResourceController().getIntProperty(GROOVY_EDITOR_FONT_SIZE);
@@ -421,6 +472,11 @@ class ScriptEditorPanel extends JDialog {
 		mRunAction = new RunAction();
 		mRunAction.setEnabled(false);
 		addButton(menuBar, mRunAction, "plugins/ScriptEditor.run");
+		mAttachToAiButton = TranslatedElementFactory.createToggleButton("plugins/ScriptEditor.ai");
+		mAttachToAiButton.setEnabled(false);
+		mAttachToAiButton.setIcon(ResourceController.getResourceController().getImageIcon(AI_TAB_ICON_RESOURCE));
+		mAttachToAiButton.addActionListener(new AttachToAiAction());
+		menuBar.add(mAttachToAiButton);
 		mSignAction = new SignAction(TextUtils.getRawText("plugins/ScriptEditor.sign"));
 		mSignAction.setEnabled(false);
 		addAction(menu, mSignAction);
@@ -453,6 +509,24 @@ class ScriptEditorPanel extends JDialog {
 		menu.add(button);
 	}
 
+	private void setAiChatAttachment(AiChatAttachment attachment) {
+		aiChatAttachment = attachment;
+		if (aiChatAttachment != null) {
+			aiChatAttachment.setDetachHandler(new Runnable() {
+				@Override
+				public void run() {
+					aiChatAttachment = null;
+					updateAiAttachButtonState();
+				}
+			});
+		}
+		updateAiAttachButtonState();
+	}
+
+	private void updateAiAttachButtonState() {
+		mAttachToAiButton.setSelected(aiChatAttachment != null);
+	}
+
 	/**
 	 * @param pIsCanceled
 	 */
@@ -466,6 +540,9 @@ class ScriptEditorPanel extends JDialog {
 			if (action == JOptionPane.CANCEL_OPTION || action == JOptionPane.CLOSED_OPTION) {
 				return;
 			}
+		}
+		if (aiChatAttachment != null) {
+			aiChatAttachment.detach();
 		}
 		final ScriptEditorWindowConfigurationStorage storage = new ScriptEditorWindowConfigurationStorage();
 		storage.setLeftRatio(mCentralUpperPanel.getDividerLocation());
@@ -494,9 +571,213 @@ class ScriptEditorPanel extends JDialog {
 		}
 	}
 
+	@Override
+	public String getText() {
+		return mScriptTextField.getText();
+	}
+
+	@Override
+	public void replaceText(String text) {
+		mScriptTextField.setText(text == null ? "" : text);
+	}
+
+	@Override
+	public CompileCodeResponse compileCode(CompileCodeRequest request) {
+		String scriptText = mScriptTextField.getText();
+		ScriptingEngine.GroovyCompileResult compileResult = ScriptingEngine.compileGroovyScriptForDiagnostics(
+			scriptText,
+			ScriptingPermissions.getPermissiveScriptingPermissions());
+		return new CompileCodeResponse(
+			ScriptHost.ATTACHED_EDITOR,
+			AI_ATTACHMENT_CONTENT_TYPE,
+			compileResult.isSuccessful() ? CodeLifecycleStatus.READY : CodeLifecycleStatus.FAILED,
+			fingerprint(scriptText),
+			compileResult.getCompilerDiagnostics(),
+			compileResult.getErrorMessage(),
+			compileResult.getLineNumber());
+	}
+
+	@Override
+	public RunCodeResponse runCode(RunCodeRequest request) {
+		return runCode(request, ScriptRunInitiator.AI);
+	}
+
+	private RunCodeResponse runCode(RunCodeRequest request, ScriptRunInitiator runInitiator) {
+		storeCurrent();
+		if (mScriptList.isSelectionEmpty()) {
+			throw new IllegalStateException("No script is selected.");
+		}
+		ByteArrayOutputStream outputBuffer = new ByteArrayOutputStream();
+		final int[] lineNumber = new int[] { -1 };
+		try (PrintStream outStream = new PrintStream(outputBuffer, false, "UTF-8")) {
+			Object result = mScriptModel.executeScript(mScriptList.getSelectedIndex(), outStream, new IFreeplaneScriptErrorHandler() {
+				@Override
+				public void gotoLine(final int pLineNumber) {
+					lineNumber[0] = pLineNumber;
+					ActionUtils.setCaretPosition(mScriptTextField, pLineNumber, 1);
+				}
+			});
+			return new RunCodeResponse(
+				ScriptHost.ATTACHED_EDITOR,
+				AI_ATTACHMENT_CONTENT_TYPE,
+				CodeLifecycleStatus.SUCCEEDED,
+				runInitiator,
+				fingerprint(mScriptTextField.getText()),
+				null,
+				null,
+				null,
+				stdout(outputBuffer),
+				toJsonSafeValue(result));
+		}
+		catch (ExecuteScriptException e) {
+			return new RunCodeResponse(
+				ScriptHost.ATTACHED_EDITOR,
+				AI_ATTACHMENT_CONTENT_TYPE,
+				CodeLifecycleStatus.FAILED,
+				runInitiator,
+				fingerprint(mScriptTextField.getText()),
+				null,
+				e.getMessage(),
+				lineNumber[0] >= 0 ? Integer.valueOf(lineNumber[0]) : null,
+				stdout(outputBuffer),
+				null);
+		}
+		catch (RuntimeException e) {
+			return new RunCodeResponse(
+				ScriptHost.ATTACHED_EDITOR,
+				AI_ATTACHMENT_CONTENT_TYPE,
+				CodeLifecycleStatus.FAILED,
+				runInitiator,
+				fingerprint(mScriptTextField.getText()),
+				null,
+				e.getMessage(),
+				lineNumber[0] >= 0 ? Integer.valueOf(lineNumber[0]) : null,
+				stdout(outputBuffer),
+				null);
+		}
+		catch (Exception e) {
+			throw new IllegalStateException(e.getMessage(), e);
+		}
+	}
+
+	private void renderManualRunResult(RunCodeResponse response) {
+		mScriptResultField.setText("");
+		if (response != null && response.getStdout() != null) {
+			mScriptResultField.append(response.getStdout());
+		}
+		mScriptResultField.append(TextUtils.getText("plugins/ScriptEditor/window.Result"));
+		if (response == null) {
+			return;
+		}
+		if (response.getStatus() == CodeLifecycleStatus.SUCCEEDED) {
+			mScriptResultField.append(String.valueOf(response.getStructuredResult()));
+		}
+		else if (response.getErrorMessage() != null) {
+			mScriptResultField.append(response.getErrorMessage());
+		}
+	}
+
+	private void updateAiAttachmentAfterManualRun(RunCodeResponse response) {
+		if (aiChatAttachment == null || response == null) {
+			return;
+		}
+		ReadCodeResponse codeState = new ReadCodeResponse(
+			response.getHost(),
+			response.getContentType(),
+			response.getStatus(),
+			response.getRunInitiator(),
+			response.getFingerprint(),
+			null,
+			response.getCompilerDiagnostics(),
+			response.getErrorMessage(),
+			response.getLineNumber(),
+			response.getStdout(),
+			response.getStructuredResult());
+		aiChatAttachment.recordCodeState(codeState);
+		if (response.getStatus() == CodeLifecycleStatus.FAILED) {
+			aiChatAttachment.requestRepair(new AiChatRepairRequest(ATTACHED_SCRIPT_FAILURE_PROMPT, codeState));
+		}
+	}
+
+	private AiChatAttachmentService lookupAiChatAttachmentService() {
+		BundleContext bundleContext = Activator.getBundleContext();
+		if (bundleContext == null) {
+			return null;
+		}
+		ServiceReference<AiChatAttachmentService> serviceReference =
+			bundleContext.getServiceReference(AiChatAttachmentService.class);
+		if (serviceReference == null) {
+			return null;
+		}
+		return bundleContext.getService(serviceReference);
+	}
+
+	private Object toJsonSafeValue(Object value) {
+		if (value == null || value instanceof Boolean || value instanceof Number || value instanceof String) {
+			return value;
+		}
+		if (value instanceof java.util.Map<?, ?>) {
+			java.util.Map<?, ?> source = (java.util.Map<?, ?>) value;
+			java.util.Map<String, Object> converted = new java.util.LinkedHashMap<String, Object>();
+			for (java.util.Map.Entry<?, ?> entry : source.entrySet()) {
+				if (!(entry.getKey() instanceof String)) {
+					throw unsupportedValue(value);
+				}
+				converted.put((String) entry.getKey(), toJsonSafeValue(entry.getValue()));
+			}
+			return converted;
+		}
+		if (value instanceof Iterable<?>) {
+			java.util.List<Object> converted = new java.util.ArrayList<Object>();
+			for (Object item : (Iterable<?>) value) {
+				converted.add(toJsonSafeValue(item));
+			}
+			return converted;
+		}
+		if (value.getClass().isArray()) {
+			java.util.List<Object> converted = new java.util.ArrayList<Object>();
+			int length = java.lang.reflect.Array.getLength(value);
+			for (int index = 0; index < length; index++) {
+				converted.add(toJsonSafeValue(java.lang.reflect.Array.get(value, index)));
+			}
+			return converted;
+		}
+		throw unsupportedValue(value);
+	}
+
+	private IllegalStateException unsupportedValue(Object value) {
+		return new IllegalStateException("Unsupported script result type: " + value.getClass().getName());
+	}
+
+	private String stdout(ByteArrayOutputStream outputBuffer) {
+		String stdout = new String(outputBuffer.toByteArray(), StandardCharsets.UTF_8);
+		return stdout.isEmpty() ? null : stdout;
+	}
+
+	private String fingerprint(String text) {
+		try {
+			MessageDigest digest = MessageDigest.getInstance("SHA-256");
+			byte[] hash = digest.digest((text == null ? "" : text).getBytes(StandardCharsets.UTF_8));
+			Formatter formatter = new Formatter();
+			try {
+				for (byte value : hash) {
+					formatter.format("%02x", value);
+				}
+				return formatter.toString();
+			}
+			finally {
+				formatter.close();
+			}
+		}
+		catch (NoSuchAlgorithmException e) {
+			throw new IllegalStateException("SHA-256 is not available.", e);
+		}
+	}
+
 	private void select(final int pIndex) {
 		mScriptTextField.setEnabled(pIndex >= 0);
 		mRunAction.setEnabled(pIndex >= 0);
+		mAttachToAiButton.setEnabled(pIndex >= 0);
 		mSignAction.setEnabled(pIndex >= 0);
 		if (pIndex < 0) {
 			mScriptTextField.setText("");

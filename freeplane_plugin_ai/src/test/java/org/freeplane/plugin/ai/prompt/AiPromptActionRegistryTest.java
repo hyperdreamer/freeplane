@@ -1,12 +1,5 @@
 package org.freeplane.plugin.ai.prompt;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.ArgumentMatchers.isNull;
-import static org.mockito.ArgumentMatchers.same;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.nio.file.FileVisitResult;
@@ -16,9 +9,16 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Arrays;
 import javax.swing.JPanel;
-import org.freeplane.plugin.ai.chat.AIChatPanel;
+import org.freeplane.plugin.ai.chat.ui.AIChatPanel;
 import org.freeplane.plugin.ai.prompt.ui.AiPromptManagerDialog;
 import org.junit.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 public class AiPromptActionRegistryTest {
 
@@ -135,6 +135,55 @@ public class AiPromptActionRegistryTest {
                     && copiedPrompt.getPrompt().equals("Prompt")
                     && !copiedPrompt.isShowInChat()),
                 same(owner));
+        }
+        finally {
+            deleteRecursively(tempDir);
+        }
+    }
+
+    @Test
+    public void findSavedPromptByName_trimsAndCaseNormalizesAndReturnsDefensiveCopy() throws IOException {
+        Path tempDir = Files.createTempDirectory("ai-prompts");
+        try {
+            AIChatPanel aiChatPanel = mock(AIChatPanel.class);
+            Path path = tempDir.resolve(AiPromptStore.PROMPTS_FILE_NAME);
+            AiPromptActionRegistry registry = new AiPromptActionRegistry(
+                new AiPromptStore(new ObjectMapper(), path),
+                aiChatPanel,
+                () -> {
+                });
+            registry.getDialogState().loadSavedPrompts(Arrays.asList(new AiPrompt("Rewrite", "Prompt", false)));
+            registry.persistStateIfChanged();
+
+            AiPrompt found = registry.findSavedPromptByName("  rewrite  ");
+            found.setPrompt("Changed");
+
+            assertThat(found.getPrompt()).isEqualTo("Changed");
+            assertThat(registry.findSavedPromptByName("Rewrite").getPrompt()).isEqualTo("Prompt");
+        }
+        finally {
+            deleteRecursively(tempDir);
+        }
+    }
+
+    @Test
+    public void findSavedPromptByName_ignoresUnsavedDraftState() throws IOException {
+        Path tempDir = Files.createTempDirectory("ai-prompts");
+        try {
+            AIChatPanel aiChatPanel = mock(AIChatPanel.class);
+            Path path = tempDir.resolve(AiPromptStore.PROMPTS_FILE_NAME);
+            AiPromptActionRegistry registry = new AiPromptActionRegistry(
+                new AiPromptStore(new ObjectMapper(), path),
+                aiChatPanel,
+                () -> {
+                });
+            registry.getDialogState().loadSavedPrompts(Arrays.asList(new AiPrompt("Rewrite", "Prompt", false)));
+            registry.persistStateIfChanged();
+            registry.getDialogState().beginNewDraft();
+            registry.getDialogState().updateDraft("Draft only", "Draft prompt", true, "", "reading");
+
+            assertThat(registry.findSavedPromptByName("Draft only")).isNull();
+            assertThat(registry.findSavedPromptByName("Rewrite")).isNotNull();
         }
         finally {
             deleteRecursively(tempDir);

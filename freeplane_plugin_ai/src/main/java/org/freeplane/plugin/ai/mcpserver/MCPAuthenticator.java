@@ -1,19 +1,16 @@
 package org.freeplane.plugin.ai.mcpserver;
 
+import com.sun.net.httpserver.Headers;
 import java.lang.reflect.InvocationTargetException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
-
 import javax.swing.JOptionPane;
-
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.ui.components.UITools;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.ui.ViewController;
-
-import com.sun.net.httpserver.Headers;
 
 class MCPAuthenticator {
     private static final int UNAUTHORIZED_ERROR_CODE = -32001;

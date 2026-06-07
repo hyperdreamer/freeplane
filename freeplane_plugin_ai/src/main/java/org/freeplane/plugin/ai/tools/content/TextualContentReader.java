@@ -1,7 +1,6 @@
 package org.freeplane.plugin.ai.tools.content;
 
 import java.util.Objects;
-
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.note.NoteModel;

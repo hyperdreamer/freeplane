@@ -1,13 +1,11 @@
 package org.freeplane.plugin.ai.tools.tagcategories;
 
-import java.util.List;
-import java.util.Objects;
-
-import org.freeplane.features.icon.TagItem;
-
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.List;
+import java.util.Objects;
+import org.freeplane.features.icon.TagItem;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class TagItemPayload {
