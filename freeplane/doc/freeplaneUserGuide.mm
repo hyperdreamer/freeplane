@@ -1,11 +1,11 @@
-<map version="freeplane 1.12.1">
+<map version="freeplane 1.12.15">
 <!--To view this file, download free mind mapping software Freeplane from https://www.freeplane.org -->
-<bookmarks/>
-<bookmark nodeId="ID_1723255651" name="Root" opensAsRoot="true"/>
 <attribute_registry>
     <attribute_name VISIBLE="true" NAME="See also"/>
     <attribute_name VISIBLE="true" NAME="a2"/>
 </attribute_registry>
+<bookmarks/>
+<bookmark nodeId="ID_1723255651" name="Root" opensAsRoot="true"/>
 <node LOCALIZED_STYLE_REF="default" FOLDED="false" ID="ID_1723255651" BACKGROUND_COLOR="#00ff66">
 <icon BUILTIN="bee"/>
 <richcontent TYPE="NODE">
@@ -310,12 +310,12 @@
 <edge STYLE="hide_edge"/>
 </node>
 <node TEXT="Filter bar" ID="ID_1939718780" HGAP_QUANTITY="-711 px">
-<arrowlink SHAPE="LINE" COLOR="#000000" WIDTH="2" TRANSPARENCY="80" FONT_SIZE="12" FONT_FAMILY="SansSerif" DESTINATION="ID_1939718780" STARTINCLINATION="31.38461 pt;-3.69231 pt;" ENDINCLINATION="31.38461 pt;-3.69231 pt;" STARTARROW="NONE" ENDARROW="DEFAULT"/>
+<arrowlink SHAPE="LINE" COLOR="#000000" WIDTH="2" TRANSPARENCY="80" FONT_SIZE="12" FONT_FAMILY="SansSerif" DESTINATION="ID_1939718780" STARTINCLINATION="31.38461 pt;-2.76923 pt;" ENDINCLINATION="31.38461 pt;-2.76923 pt;" STARTARROW="NONE" ENDARROW="DEFAULT"/>
 <font NAME="SansSerif" BOLD="true" ITALIC="true"/>
 <edge STYLE="hide_edge"/>
 </node>
 <node TEXT="F-bar" ID="ID_1406478692" HGAP_QUANTITY="-688 px">
-<arrowlink SHAPE="LINE" COLOR="#000000" WIDTH="2" TRANSPARENCY="80" FONT_SIZE="12" FONT_FAMILY="SansSerif" DESTINATION="ID_1406478692" STARTINCLINATION="34.15384 pt;-12 pt;" ENDINCLINATION="34.15384 pt;-12 pt;" STARTARROW="NONE" ENDARROW="DEFAULT"/>
+<arrowlink SHAPE="LINE" COLOR="#000000" WIDTH="2" TRANSPARENCY="80" FONT_SIZE="12" FONT_FAMILY="SansSerif" DESTINATION="ID_1406478692" STARTINCLINATION="34.15384 pt;-11.07692 pt;" ENDINCLINATION="34.15384 pt;-11.07692 pt;" STARTARROW="NONE" ENDARROW="DEFAULT"/>
 <font NAME="SansSerif" BOLD="true" ITALIC="true"/>
 <edge STYLE="hide_edge"/>
 </node>
@@ -325,7 +325,7 @@
 <edge STYLE="hide_edge"/>
 </node>
 <node TEXT="Properties Panel" ID="ID_303482588" HGAP_QUANTITY="-146 px" VSHIFT_QUANTITY="30 px">
-<arrowlink SHAPE="LINE" COLOR="#000000" WIDTH="2" TRANSPARENCY="80" FONT_SIZE="12" FONT_FAMILY="SansSerif" DESTINATION="ID_303482588" STARTINCLINATION="14.76923 pt;-14.76923 pt;" ENDINCLINATION="14.76923 pt;-14.76923 pt;" STARTARROW="NONE" ENDARROW="DEFAULT"/>
+<arrowlink SHAPE="LINE" COLOR="#000000" WIDTH="2" TRANSPARENCY="80" FONT_SIZE="12" FONT_FAMILY="SansSerif" DESTINATION="ID_303482588" STARTINCLINATION="14.76923 pt;-13.84615 pt;" ENDINCLINATION="14.76923 pt;-13.84615 pt;" STARTARROW="NONE" ENDARROW="DEFAULT"/>
 <font NAME="SansSerif" BOLD="true" ITALIC="true"/>
 <edge STYLE="hide_edge"/>
 </node>
@@ -347,7 +347,7 @@
 <font BOLD="true" ITALIC="true"/>
 <hook URI="Images/doc/BackgroundContextMenu.png" SIZE="1.0" NAME="ExternalObject"/>
 <node TEXT="Open/close&#xa;Tool panel" ID="ID_724121688" HGAP_QUANTITY="56 px">
-<arrowlink SHAPE="LINE" COLOR="#000000" WIDTH="2" TRANSPARENCY="80" FONT_SIZE="12" FONT_FAMILY="SansSerif" DESTINATION="ID_724121688" STARTINCLINATION="71.07692 pt;-132.92307 pt;" ENDINCLINATION="71.07692 pt;-132.92307 pt;" STARTARROW="DEFAULT" ENDARROW="NONE"/>
+<arrowlink SHAPE="LINE" COLOR="#000000" WIDTH="2" TRANSPARENCY="80" FONT_SIZE="12" FONT_FAMILY="SansSerif" DESTINATION="ID_724121688" STARTINCLINATION="71.07692 pt;-132 pt;" ENDINCLINATION="71.07692 pt;-132 pt;" STARTARROW="DEFAULT" ENDARROW="NONE"/>
 <edge STYLE="hide_edge"/>
 <font BOLD="true" ITALIC="true"/>
 </node>
@@ -442,7 +442,7 @@
     <conditional_style ACTIVE="true" STYLE_REF="TitlesContent" LAST="false"/>
 </hook>
 <node TEXT="(relative) parent" STYLE_REF="ConsumerTopic" FOLDED="true" ID="ID_687495618" VSHIFT_QUANTITY="20 px">
-<arrowlink SHAPE="CUBIC_CURVE" COLOR="#000000" WIDTH="2" TRANSPARENCY="80" FONT_SIZE="12" FONT_FAMILY="SansSerif" DESTINATION="ID_1105307139" MIDDLE_LABEL="descendancy" STARTINCLINATION="18.46154 pt;-26.76923 pt;" ENDINCLINATION="-20.30769 pt;-26.76923 pt;" STARTARROW="NONE" ENDARROW="DEFAULT"/>
+<arrowlink SHAPE="CUBIC_CURVE" COLOR="#000000" WIDTH="2" TRANSPARENCY="80" FONT_SIZE="12" FONT_FAMILY="SansSerif" DESTINATION="ID_1105307139" MIDDLE_LABEL="descendancy" STARTINCLINATION="18.46154 pt;-25.84615 pt;" ENDINCLINATION="-19.38461 pt;-25.84615 pt;" STARTARROW="NONE" ENDARROW="DEFAULT"/>
 <node TEXT="child" STYLE_REF="ConsumerTopic" ID="ID_1105307139">
 <edge STYLE="bezier"/>
 </node>
@@ -3721,7 +3721,7 @@
     <conditional_style ACTIVE="true" STYLE_REF="BeginnerTopic" LAST="false"/>
 </hook>
 <node TEXT="a" FOLDED="true" ID="ID_1328399304" HGAP_QUANTITY="25 px" STYLE="as_parent">
-<arrowlink SHAPE="CUBIC_CURVE" COLOR="#000000" WIDTH="2" TRANSPARENCY="80" FONT_SIZE="12" FONT_FAMILY="SansSerif" DESTINATION="ID_581303769" MIDDLE_LABEL="label" STARTINCLINATION="6.46154 pt;-11.07692 pt;" ENDINCLINATION="-14.76923 pt;-60 pt;" STARTARROW="NONE" ENDARROW="DEFAULT"/>
+<arrowlink SHAPE="CUBIC_CURVE" COLOR="#000000" WIDTH="2" TRANSPARENCY="80" FONT_SIZE="12" FONT_FAMILY="SansSerif" DESTINATION="ID_581303769" MIDDLE_LABEL="label" STARTINCLINATION="6.46154 pt;-10.15385 pt;" ENDINCLINATION="-13.84615 pt;-59.07692 pt;" STARTARROW="NONE" ENDARROW="DEFAULT"/>
 <edge STYLE="hide_edge"/>
 <node TEXT="b" FOLDED="true" ID="ID_273400211">
 <arrowlink SHAPE="LINE" COLOR="#000000" WIDTH="2" TRANSPARENCY="80" FONT_SIZE="12" FONT_FAMILY="SansSerif" DESTINATION="ID_273400211" MIDDLE_LABEL="connector&#xa;without&#xa;begin" STARTINCLINATION="13.84615 pt;63.69231 pt;" ENDINCLINATION="13.84615 pt;63.69231 pt;" STARTARROW="NONE" ENDARROW="NONE"/>
@@ -7786,7 +7786,7 @@ node alias can not be a number</pre>
 </node>
 </node>
 <node TEXT="Calculations" STYLE_REF="Professional" FOLDED="true" POSITION="bottom_or_right" ID="ID_1500606594" NUMBERED="true">
-<node TEXT="Using and writing formulas" STYLE_REF="Professional" FOLDED="true" ID="ID_1694530970">
+<node TEXT="Using and writing formulas" STYLE_REF="Professional" ID="ID_1694530970">
 <node TEXT="Node and attribute values can contain formulas written in Groovy which are automatically evaluated" ID="ID_327360465"/>
 <node TEXT="Freeplane can show dependencies between formulas and other node values and attributes" FOLDED="true" ID="ID_493991213">
 <node TEXT="Trace Precendents action shows all values ad attributes referenced by currently selected formula" ID="ID_149789652"/>
@@ -7796,14 +7796,18 @@ node alias can not be a number</pre>
 <node TEXT="When dependency tracing is active, all other connectors are hidden." ID="ID_286584949"/>
 </node>
 <node TEXT="More information about using formulas is available in Freeplane Wiki" ID="ID_1130453106" LINK="https://www.freeplane.org/wiki/index.php/Formulas"/>
+<node TEXT="AI can also help author and repair formulas. See AI formulas and script editing." ID="ID_1158870920" LINK="#ID_1029851274"/>
 </node>
-<node TEXT="Using and writing scripts" STYLE_REF="Professional" FOLDED="true" ID="ID_519455593" STYLE="combined">
+<node TEXT="Using and writing scripts" STYLE_REF="Professional" ID="ID_519455593" STYLE="combined">
 <hook NAME="NodeConditionalStyles">
     <conditional_style ACTIVE="true" STYLE_REF="MenuTitle" LAST="false"/>
 </hook>
 <node TEXT="Freeplane has a very powerful scripting possibility based on Groovy. In this way you can provide for specialised functions.&#xa;&#xa;There is a base of predefined scrips which are published on the Freeplane wiki. In this way you need not be a programmer to use scripts." ID="ID_1965879157"/>
 <node TEXT="More information about using scripts is available in Freeplane Wiki" ID="ID_164241738" LINK="https://www.freeplane.org/wiki/index.php/Scripting"/>
 <node TEXT="Scripts and required resources like icons or libraries can be packaged and distributed as freeplane add-ons. Read more in the Freeplane documentation,  visit the wiki on add-ons and the wiki add-on scrips ." ID="ID_903826867"/>
+<node TEXT="AI can also help draft or review scripts. See AI formulas and script editing." ID="ID_1405966" LINK="#ID_1029851274"/>
+<node TEXT="AI-owned script execution is documented in AI integration." ID="ID_283608292" LINK="#ID_493361786"/>
+<node TEXT="Freeplane scripts can also ask AI asynchronously in Freeplane 1.13.3 and later." ID="ID_363312835"/>
 </node>
 </node>
 <node TEXT="Date &amp; time actions" STYLE_REF="Professional" FOLDED="true" POSITION="bottom_or_right" ID="ID_1959496513" NUMBERED="true">
@@ -8561,6 +8565,159 @@ node alias can not be a number</pre>
 </html>
 </richcontent>
 </node>
+</node>
+</node>
+<node TEXT="AI integration" STYLE_REF="Professional" FOLDED="true" POSITION="bottom_or_right" ID="ID_1846512605" NUMBERED="true">
+<node STYLE_REF="TitlesContent" ID="ID_1458970196"><richcontent TYPE="NODE">
+
+<html>
+  <head>
+    
+  </head>
+  <body>
+    <p>
+      AI can inspect, summarize, rewrite, and help edit map content. Basic chat is available from Freeplane 1.13.1. Prompts, editor attachment, AI-owned script review, formula editing, and the current MCP behavior require Freeplane 1.13.3 or later.
+    </p>
+  </body>
+</html>
+</richcontent>
+</node>
+<node TEXT="AI integration: getting started" STYLE_REF="Professional" FOLDED="true" ID="ID_1648984986">
+<node STYLE_REF="TitlesContent" ID="ID_1020130062"><richcontent TYPE="NODE">
+
+<html>
+  <head>
+    
+  </head>
+  <body>
+    <p>
+      Set up a provider first, then choose how much access AI should have to your maps. Start with ordinary chat before enabling stronger editing or script features.
+    </p>
+  </body>
+</html>
+</richcontent>
+</node>
+<node TEXT="Configure AI in Preferences for OpenRouter, Gemini, or Ollama." ID="ID_1465664050"/>
+<node TEXT="AI tool availability controls whether AI can only read, can edit, or can also execute scripts." ID="ID_84202638"/>
+<node TEXT="Open the AI panel, send a first request, and use New chat, Chats, or Manage profiles as needed." ID="ID_1831090603"/>
+</node>
+<node TEXT="AI chat workflows" STYLE_REF="Professional" FOLDED="true" ID="ID_905982129">
+<node STYLE_REF="TitlesContent" ID="ID_997284744"><richcontent TYPE="NODE">
+
+<html>
+  <head>
+    
+  </head>
+  <body>
+    <p>
+      Profiles and prompts help you repeat useful workflows instead of re-explaining the same task every time. Keep AI suggestions reviewable, especially when they change map content.
+    </p>
+  </body>
+</html>
+</richcontent>
+</node>
+<node TEXT="Profiles keep normal chat behavior consistent across many requests." ID="ID_537808641"/>
+<node TEXT="Prompts save repeatable actions such as branch summarization, branch spelling review, or decision drafting." ID="ID_58891207"/>
+<node TEXT="If AI chat shows tool calls is enabled, chat can show what the AI inspected or changed." ID="ID_1465206260"/>
+</node>
+<node TEXT="AI prompts and profiles" STYLE_REF="Professional" FOLDED="true" ID="ID_314207093">
+<node STYLE_REF="TitlesContent" ID="ID_1287649482"><richcontent TYPE="NODE">
+
+<html>
+  <head>
+    
+  </head>
+  <body>
+    <p>
+      Profiles are reusable instructions for ordinary AI chat. Prompts are saved actions that can run from menus with their own visibility, model, and tool settings.
+    </p>
+  </body>
+</html>
+</richcontent>
+</node>
+<node TEXT="Profiles affect normal chat; prompts are launched directly from AI menus." ID="ID_1947000693"/>
+<node TEXT="Prompts can open a visible chat or run hidden without replacing the current chat." ID="ID_140704021"/>
+<node TEXT="Prompts and profiles are stored in the Freeplane user directory as ai-prompts.json and ai-assistant-profiles.json." ID="ID_1484741674"/>
+</node>
+<node TEXT="AI formulas and script editing" STYLE_REF="Professional" FOLDED="true" ID="ID_1029851274">
+<node STYLE_REF="TitlesContent" ID="ID_1152954335"><richcontent TYPE="NODE">
+
+<html>
+  <head>
+    
+  </head>
+  <body>
+    <p>
+      AI can help with formulas and scripts, but those workflows are riskier than ordinary text chat. Review generated formulas and code carefully before using them.
+    </p>
+  </body>
+</html>
+</richcontent>
+</node>
+<node TEXT="Formula authoring needs AI tool availability with Editing or Script execution and also AI may edit formulas enabled." ID="ID_442892896"/>
+<node TEXT="Formula Editor and Edit script can attach to AI and use the live text currently open in the editor." ID="ID_1976683473"/>
+<node TEXT="Prefer value-computing formulas and review generated formulas or code before using them." ID="ID_220696355"/>
+<node TEXT="Block formula map edits is enabled by default and can stop formulas that try to change the map during evaluation." ID="ID_1082806023"/>
+<node TEXT="See also: Using and writing formulas" ID="ID_1809934281" LINK="#ID_1694530970"/>
+<node TEXT="See also: Using and writing scripts" ID="ID_426270681" LINK="#ID_519455593"/>
+</node>
+<node TEXT="AI-owned script execution" STYLE_REF="Professional" FOLDED="true" ID="ID_493361786">
+<node STYLE_REF="TitlesContent" ID="ID_198155792"><richcontent TYPE="NODE">
+
+<html>
+  <head>
+    
+  </head>
+  <body>
+    <p>
+      AI-owned scripts are one of the highest-risk AI features. Keep the manual review step unless you deliberately accept direct execution risk.
+    </p>
+  </body>
+</html>
+</richcontent>
+</node>
+<node TEXT="Shown, user must press Run keeps a manual review step." ID="ID_219592719"/>
+<node TEXT="Hidden, AI may run directly removes that review step and increases risk." ID="ID_30171978"/>
+<node TEXT="External-permission settings control file, write, network, and process access for AI-owned scripts." ID="ID_107340715"/>
+</node>
+<node TEXT="Model Context Protocol server" STYLE_REF="Professional" FOLDED="true" ID="ID_1652258140">
+<node STYLE_REF="TitlesContent" ID="ID_1003042181"><richcontent TYPE="NODE">
+
+<html>
+  <head>
+    
+  </head>
+  <body>
+    <p>
+      MCP lets another local AI app work with Freeplane while Freeplane remains the place where map actions happen. Enable it only when you need it.
+    </p>
+  </body>
+</html>
+</richcontent>
+</node>
+<node TEXT="Enable AI MCP server, choose the port, and set or regenerate the MCP token in AI Preferences." ID="ID_1292851782"/>
+<node TEXT="Freeplane listens on 127.0.0.1 only unless separate forwarding exposes the local port." ID="ID_1906504008"/>
+<node TEXT="Some MCP-assisted editing features still depend on AI settings such as AI tool availability and AI may edit formulas." ID="ID_1200191544"/>
+</node>
+<node TEXT="AI integration troubleshooting" STYLE_REF="Professional" FOLDED="true" ID="ID_1266482388">
+<node STYLE_REF="TitlesContent" ID="ID_1413211719"><richcontent TYPE="NODE">
+
+<html>
+  <head>
+    
+  </head>
+  <body>
+    <p>
+      Most AI failures are configuration or permission problems. Check provider settings, model selection, and AI tool availability before assuming the feature is broken.
+    </p>
+  </body>
+</html>
+</richcontent>
+</node>
+<node TEXT="First check provider settings, model selection, and AI tool availability in AI Preferences." ID="ID_381927285"/>
+<node TEXT="Missing formula editing usually means AI tool availability or AI may edit formulas is not enabled." ID="ID_1842933773"/>
+<node TEXT="MCP failures usually come from a disabled server, wrong port or token, or an empty token on the first request." ID="ID_1631349923"/>
+<node TEXT="Saved prompts and profiles live in the user directory; hidden prompts do not stay as visible chats." ID="ID_742557914"/>
 </node>
 </node>
 <node TEXT="Best practices" STYLE_REF="Introduction" FOLDED="true" POSITION="bottom_or_right" ID="ID_722085722" NUMBERED="true">
