@@ -11,6 +11,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.freeplane.plugin.ai.chat.history.AssistantProfileTranscriptEntry;
+import org.freeplane.plugin.ai.chat.history.ChatTranscriptEntry;
 import org.freeplane.plugin.ai.tools.MessageBuilder;
 import org.freeplane.plugin.ai.tools.utilities.ToolCaller;
 import org.junit.Test;
@@ -29,21 +30,49 @@ public class AssistantProfileChatMemoryTest {
         uut.add(new GeneralSystemMessage("general"));
 
         List<ChatMessage> messages = uut.messages();
-        assertThat(messages).hasSize(6);
+        assertThat(messages).hasSize(4);
         assertThat(messages.get(0)).isInstanceOf(GeneralSystemMessage.class);
         assertThat(messages.get(1)).isInstanceOf(UserMessage.class);
         assertThat(((UserMessage) messages.get(1)).singleText())
-            .isEqualTo("hello");
+            .isEqualTo(MessageBuilder.CONTROL_INSTRUCTION_PREFIX
+                + TranscriptHiddenSystemMessage.DEFAULT_TEXT);
         assertThat(messages.get(2)).isInstanceOf(UserMessage.class);
         assertThat(((UserMessage) messages.get(2)).singleText())
-            .isEqualTo(MessageBuilder.CONTROL_INSTRUCTION_PREFIX + "hidden");
-        assertThat(messages.get(3)).isInstanceOf(InstructionAckMessage.class);
-        assertThat(((AiMessage) messages.get(3)).text()).isEqualTo("ok");
-        assertThat(messages.get(4)).isInstanceOf(UserMessage.class);
-        assertThat(((UserMessage) messages.get(4)).singleText())
+            .isEqualTo("hello");
+        assertThat(messages.get(3)).isInstanceOf(UserMessage.class);
+        assertThat(((UserMessage) messages.get(3)).singleText())
             .isEqualTo(MessageBuilder.CONTROL_INSTRUCTION_PREFIX + "Now you have the profile profile.");
-        assertThat(messages.get(5)).isInstanceOf(InstructionAckMessage.class);
-        assertThat(((AiMessage) messages.get(5)).text()).isEqualTo("ok");
+    }
+
+    @Test
+    public void storedGeneralSystemMessageIsProjectorInputNotSelectedChatContent() {
+        AssistantProfileChatMemory uut = createMemory(500);
+
+        uut.add(new GeneralSystemMessage("general"));
+        uut.add(UserMessage.from("u1"));
+        uut.add(AiMessage.from("a1"));
+
+        assertThat(uut.activeConversationRenderEntries())
+            .extracting(entry -> entry.chatMessage() instanceof GeneralSystemMessage
+                ? ((GeneralSystemMessage) entry.chatMessage()).text()
+                : entry.chatMessage() instanceof UserMessage
+                    ? ((UserMessage) entry.chatMessage()).singleText()
+                    : entry.chatMessage() instanceof AiMessage
+                        ? ((AiMessage) entry.chatMessage()).text()
+                        : null)
+            .containsExactly("general", "u1", "a1");
+        assertThat(uut.messages())
+            .extracting(message -> message instanceof GeneralSystemMessage
+                ? ((GeneralSystemMessage) message).text()
+                : message instanceof UserMessage
+                    ? ((UserMessage) message).singleText()
+                    : message instanceof AiMessage
+                        ? ((AiMessage) message).text()
+                        : null)
+            .containsExactly("general", "u1", "a1");
+        assertThat(uut.transcriptEntriesForPersistence())
+            .extracting(ChatTranscriptEntry::getText)
+            .containsExactly("u1", "a1");
     }
 
     @Test
@@ -199,6 +228,21 @@ public class AssistantProfileChatMemoryTest {
     }
 
     @Test
+    public void summaryOnlyMcpSequenceRemainsVisibleInPanelAndExcludedFromModelAndTranscript() {
+        AssistantProfileChatMemory uut = createMemory(500);
+        uut.addToolCallSummary("MCP1", ToolCaller.MCP);
+        uut.addToolCallSummary("MCP2", ToolCaller.MCP);
+        uut.addToolCallSummary("MCP3", ToolCaller.MCP);
+
+        assertThat(uut.activeConversationRenderEntries())
+            .filteredOn(ChatMemoryRenderEntry::isToolSummary)
+            .extracting(ChatMemoryRenderEntry::toolSummaryText)
+            .containsExactly("MCP1", "MCP2", "MCP3");
+        assertThat(uut.messages()).isEmpty();
+        assertThat(uut.transcriptEntriesForPersistence()).isEmpty();
+    }
+
+    @Test
     public void messagesIncludeOnlyLatestProfileSwitchInstruction() {
         AssistantProfileChatMemory uut = createMemory(500);
         uut.add(new AssistantProfileSwitchMessage("alpha", "Alpha"));
@@ -236,6 +280,63 @@ public class AssistantProfileChatMemoryTest {
         assertThat(userTexts).doesNotContain(MessageBuilder.CONTROL_INSTRUCTION_PREFIX + "Now you have the profile A.");
         assertThat(Collections.frequency(userTexts, latestDefaultMarker)).isEqualTo(1);
         assertThat(userTexts.indexOf(latestDefaultMarker)).isLessThan(userTexts.indexOf("u3"));
+    }
+
+    @Test
+    public void modelProjectionPrependsLatestProfileInstructionWhenLatestProfileSwitchFallsBeforeWindow() {
+        AssistantProfileChatMemory uut = createMemory(500);
+        uut.add(new AssistantProfileSwitchMessage("p1", "Profile"));
+        uut.add(UserMessage.from("u1"));
+        uut.add(AiMessage.from("a1"));
+        uut.add(UserMessage.from("u2"));
+        uut.add(AiMessage.from("a2"));
+
+        assertThat(uut.evictOldestTurn()).isTrue();
+
+        List<ChatMessage> messages = uut.messages();
+        assertThat(messages)
+            .extracting(message -> message instanceof UserMessage
+                ? ((UserMessage) message).singleText()
+                : message instanceof AiMessage
+                    ? ((AiMessage) message).text()
+                    : null)
+            .containsExactly(
+                MessageBuilder.CONTROL_INSTRUCTION_PREFIX + "Now you have the profile Profile.",
+                MessageBuilder.CONTROL_INSTRUCTION_PREFIX + RemovedForSpaceSystemMessage.DEFAULT_TEXT,
+                "u2",
+                "a2");
+    }
+
+    @Test
+    public void modelProjectionReplacesSelectedProfileSwitchWithDerivedLatestProfileInstruction() {
+        AssistantProfileChatMemory uut = createMemory(500);
+        uut.add(new AssistantProfileSwitchMessage("p1", "Profile"));
+        uut.add(UserMessage.from("u1"));
+        uut.add(AiMessage.from("a1"));
+
+        assertThat(uut.activeConversationRenderEntries())
+            .extracting(entry -> entry.chatMessage() instanceof UserMessage
+                ? ((UserMessage) entry.chatMessage()).singleText()
+                : entry.chatMessage() instanceof AiMessage
+                    ? ((AiMessage) entry.chatMessage()).text()
+                    : null)
+            .containsExactly(MessageBuilder.buildAssistantProfileMarker("Profile"), "u1", "a1");
+        assertThat(uut.messages())
+            .extracting(message -> message instanceof UserMessage
+                ? ((UserMessage) message).singleText()
+                : message instanceof AiMessage
+                    ? ((AiMessage) message).text()
+                    : null)
+            .containsExactly(
+                MessageBuilder.CONTROL_INSTRUCTION_PREFIX + "Now you have the profile Profile.",
+                "u1",
+                "a1");
+        assertThat(uut.transcriptEntriesForPersistence()).hasSize(3);
+        assertThat(uut.transcriptEntriesForPersistence().get(0))
+            .isInstanceOf(AssistantProfileTranscriptEntry.class);
+        assertThat(uut.transcriptEntriesForPersistence())
+            .extracting(ChatTranscriptEntry::getText)
+            .contains(null, "u1", "a1");
     }
 
     @Test
@@ -295,6 +396,44 @@ public class AssistantProfileChatMemoryTest {
             .extracting(message -> message instanceof UserMessage ? ((UserMessage) message).singleText() : null)
             .contains("u2")
             .doesNotContain("u1");
+    }
+
+    @Test
+    public void mcpSummaryRemainsVisibleWhenHistoricalChatToolActivityGroupIsHidden() {
+        ToolExecutionRequest historicalRequest = toolRequest("tool-1");
+        String largeToolResult = repeatedWords("history", 600);
+        int visibleDialogTokens = estimateTokens(
+            UserMessage.from("u1"),
+            AiMessage.from("a1"),
+            UserMessage.from("u2"),
+            AiMessage.from("a2"));
+        int maxTokens = visibleDialogTokens * 4;
+        AssistantProfileChatMemory uut = createMemory(maxTokens);
+
+        uut.add(UserMessage.from("u1"));
+        uut.addToolCallSummary("MCP1", ToolCaller.MCP);
+        uut.add(AiMessage.from(List.of(historicalRequest)));
+        uut.add(ToolExecutionResultMessage.from("tool-1", "searchNodes", largeToolResult));
+        uut.addToolCallSummary("summary-1", ToolCaller.CHAT);
+        uut.add(AiMessage.from("a1"));
+        uut.add(UserMessage.from("u2"));
+        uut.add(AiMessage.from("a2"));
+
+        uut.onResponseTokenUsage(new TokenUsage(1, 1));
+
+        assertThat(uut.activeConversationRenderEntries())
+            .filteredOn(ChatMemoryRenderEntry::isToolSummary)
+            .extracting(ChatMemoryRenderEntry::toolSummaryText)
+            .contains("MCP1")
+            .doesNotContain("summary-1");
+        assertThat(uut.messages())
+            .extracting(message -> message instanceof UserMessage ? ((UserMessage) message).singleText() : null)
+            .contains("u1", "u2")
+            .doesNotContain("MCP1");
+        assertThat(uut.transcriptEntriesForPersistence())
+            .extracting(ChatTranscriptEntry::getText)
+            .contains("u1", "a1", "u2", "a2")
+            .doesNotContain("MCP1", "summary-1");
     }
 
     @Test

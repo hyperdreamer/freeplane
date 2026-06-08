@@ -13,9 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
 import java.util.function.Supplier;
-import org.freeplane.plugin.ai.chat.history.AssistantProfileTranscriptEntry;
 import org.freeplane.plugin.ai.chat.history.ChatTranscriptEntry;
-import org.freeplane.plugin.ai.chat.history.ChatTranscriptRole;
 import org.freeplane.plugin.ai.tools.MessageBuilder;
 import org.freeplane.plugin.ai.tools.utilities.ToolCaller;
 
@@ -29,12 +27,17 @@ public class AssistantProfileChatMemory implements ChatMemory {
     private final ChatTokenEstimator tokenEstimator;
     private final ChatMemoryViewState viewState;
     private final ChatTurnTracker turnTracker;
-    private final VisibleContextSelector contextSelector;
-    private final ChatMemoryProjectionBuilder projectionBuilder;
+    private final ToolWindowSelector toolWindowSelector;
+    private final ChatMessageFilter chatMessageFilter;
+    private final PanelProjector panelProjector;
+    private final ModelProjector modelProjector;
+    private final TranscriptProjector transcriptProjector;
     private ProfileInstructionFactory profileInstructionFactory;
     private GeneralSystemMessage generalSystemMessage;
     private final List<ChatMessage> conversationMessages = new ArrayList<>();
     private final List<Integer> turnEndIndexes = new ArrayList<>();
+    private ChatMessageFilter.FilteringComputation cachedFilteringComputation;
+    private boolean derivedFilteringDirty = true;
 
     private AssistantProfileChatMemory(Builder builder) {
         this.id = ensureNotNull(builder.id, "id");
@@ -42,13 +45,11 @@ public class AssistantProfileChatMemory implements ChatMemory {
         this.tokenEstimator = new ChatTokenEstimator(builder.tokenEstimatorModelNameProvider);
         this.viewState = new ChatMemoryViewState();
         this.turnTracker = new ChatTurnTracker();
-        this.contextSelector = new VisibleContextSelector(
-            turnTracker,
-            ensureGreaterThanZero(builder.protectedRecentTurnCount, "protectedRecentTurnCount"),
-            validateHistoricalToolTokenShare(builder.historicalToolTokenShare),
-            this::isRemovableMessage,
-            this::estimateTokenCount);
-        this.projectionBuilder = new ChatMemoryProjectionBuilder();
+        this.toolWindowSelector = new ToolWindowSelector();
+        this.chatMessageFilter = new ChatMessageFilter(turnTracker, toolWindowSelector, this::estimateTokenCount);
+        this.panelProjector = new PanelProjector();
+        this.modelProjector = new ModelProjector();
+        this.transcriptProjector = new TranscriptProjector();
         this.profileInstructionFactory = resolveProfileInstructionFactory(builder.profileInstructionFactory);
         ensureGreaterThanZero(this.maxTokensProvider.apply(this.id), "maxTokens");
     }
@@ -65,11 +66,8 @@ public class AssistantProfileChatMemory implements ChatMemory {
         }
         discardRedoBranchIfNeeded();
         if (message instanceof TranscriptHiddenSystemMessage) {
-            if (!containsInstructionOfType(TranscriptHiddenSystemMessage.class)) {
-                addConversationMessage(message);
-                addConversationMessage(new InstructionAckMessage());
-                rebuildTurnBoundaries();
-            }
+            viewState.restoredTranscriptSession(true);
+            invalidateDerivedFiltering();
             return;
         }
         if (message instanceof RemovedForSpaceSystemMessage) {
@@ -80,6 +78,7 @@ public class AssistantProfileChatMemory implements ChatMemory {
             addConversationMessage(message);
             addConversationMessage(new InstructionAckMessage());
             rebuildTurnBoundaries();
+            invalidateDerivedFiltering();
             return;
         }
         if (message instanceof InstructionAckMessage) {
@@ -87,16 +86,20 @@ public class AssistantProfileChatMemory implements ChatMemory {
         }
         if (message instanceof SystemMessage) {
             setGeneralSystemMessage(toGeneralSystemMessage((SystemMessage) message));
-            rebuildTurnBoundaries();
+            invalidateDerivedFiltering();
             return;
         }
         addConversationMessage(message);
         rebuildTurnBoundaries();
+        invalidateDerivedFiltering();
     }
 
     @Override
     public List<ChatMessage> messages() {
-        return buildMessages(activeConversationEndIndex());
+        return modelProjector.buildMessages(
+            generalSystemMessage,
+            filteredChatMessages(),
+            buildLatestProfileInstruction(activeConversationEndIndex()));
     }
 
     @Override
@@ -105,10 +108,12 @@ public class AssistantProfileChatMemory implements ChatMemory {
         conversationMessages.clear();
         viewState.clear();
         turnEndIndexes.clear();
+        cachedFilteringComputation = null;
+        derivedFilteringDirty = true;
     }
 
     public boolean canUndo() {
-        return viewState.currentTurnCount() > firstActiveTurnIndex();
+        return viewState.activeConversationTurnCount() > firstActiveTurnIndex();
     }
 
     public int conversationMessageCount() {
@@ -120,9 +125,9 @@ public class AssistantProfileChatMemory implements ChatMemory {
         while (conversationMessages.size() > targetSize) {
             removeConversationMessage(conversationMessages.size() - 1);
         }
-        viewState.clearHiddenHistoricalToolCycles();
-        viewState.activeStartIndex(Math.min(viewState.activeStartIndex(), targetSize));
+        viewState.chatWindowStartIndex(Math.min(viewState.chatWindowStartIndex(), targetSize));
         rebuildTurnBoundaries();
+        invalidateDerivedFiltering();
     }
 
     public boolean canRedo() {
@@ -133,12 +138,13 @@ public class AssistantProfileChatMemory implements ChatMemory {
         if (!canUndo()) {
             return "";
         }
-        int turnIndex = viewState.currentTurnCount() - 1;
+        int turnIndex = viewState.activeConversationTurnCount() - 1;
         int from = turnIndex == 0 ? 0 : turnEndIndexes.get(turnIndex - 1);
-        from = Math.max(from, viewState.activeStartIndex());
+        from = Math.max(from, viewState.chatWindowStartIndex());
         int to = turnEndIndexes.get(turnIndex);
-        viewState.currentTurnCount(turnIndex);
+        viewState.activeConversationTurnCount(turnIndex);
         rebalanceActiveWindowForCurrentTurnRange();
+        invalidateDerivedFiltering();
         return findUserMessageInRange(from, to);
     }
 
@@ -146,12 +152,14 @@ public class AssistantProfileChatMemory implements ChatMemory {
         if (!canRedo()) {
             return;
         }
-        viewState.currentTurnCount(viewState.currentTurnCount() + 1);
+        viewState.activeConversationTurnCount(viewState.activeConversationTurnCount() + 1);
         rebalanceActiveWindowForCurrentTurnRange();
+        invalidateDerivedFiltering();
     }
 
     public void initializeUndoRedoFromMessages() {
         rebuildTurnBoundaries();
+        invalidateDerivedFiltering();
     }
 
     public void expandWindowAfterTranscriptRestoreIfUnderutilized() {
@@ -162,7 +170,7 @@ public class AssistantProfileChatMemory implements ChatMemory {
         }
         int maxTokens = maxTokensProvider.apply(id);
         ensureGreaterThanZero(maxTokens, "maxTokens");
-        int startIndex = Math.min(viewState.activeStartIndex(), endIndex);
+        int startIndex = Math.min(viewState.chatWindowStartIndex(), endIndex);
         long activeTokens = estimateTotalTokensForRange(startIndex, endIndex);
         if (activeTokens >= maxTokens) {
             return;
@@ -182,8 +190,8 @@ public class AssistantProfileChatMemory implements ChatMemory {
                 break;
             }
         }
-        viewState.clearHiddenHistoricalToolCycles();
-        viewState.activeStartIndex(selectedStart);
+        viewState.chatWindowStartIndex(selectedStart);
+        invalidateDerivedFiltering();
     }
 
     public boolean evictOldestTurn() {
@@ -191,17 +199,15 @@ public class AssistantProfileChatMemory implements ChatMemory {
         if (!canAdvanceWindowByTurnWithMinimumRetention(1)) {
             return false;
         }
-        return advanceWindowByOneTurn();
+        if (!advanceWindowByOneTurn()) {
+            return false;
+        }
+        invalidateDerivedFiltering();
+        return true;
     }
 
     public List<ChatTranscriptEntry> transcriptEntriesForPersistence() {
-        int endIndex = activeConversationEndIndex();
-        VisibleContextSelection selection = currentVisibleContextSelection(endIndex);
-        return projectionBuilder.buildTranscriptEntries(conversationMessages, selection, this::toTranscriptEntry);
-    }
-
-    public List<ChatMessage> activeConversationMessagesForRendering() {
-        return buildRawMessages(activeConversationEndIndex());
+        return transcriptProjector.buildTranscriptEntries(filteredChatMessages());
     }
 
     public List<ChatMemoryRenderEntry> activeConversationRenderEntries() {
@@ -212,15 +218,13 @@ public class AssistantProfileChatMemory implements ChatMemory {
         return buildRenderEntries();
     }
 
-    private List<ChatMemoryRenderEntry> buildRenderEntries() {
-        int endIndex = activeConversationEndIndex();
-        VisibleContextSelection selection = currentVisibleContextSelection(endIndex);
-        return projectionBuilder.buildRenderEntries(conversationMessages, generalSystemMessage, selection);
+    FilteredChatMessages filteredChatMessages() {
+        return filteringComputation().filteredMessages();
     }
 
     public void markContextWindowStart() {
-        viewState.clearHiddenHistoricalToolCycles();
-        viewState.activeStartIndex(Math.max(viewState.activeStartIndex(), conversationMessages.size()));
+        viewState.chatWindowStartIndex(Math.max(viewState.chatWindowStartIndex(), conversationMessages.size()));
+        invalidateDerivedFiltering();
     }
 
     public void addToolCallSummary(String summaryText, ToolCaller toolCaller) {
@@ -229,11 +233,11 @@ public class AssistantProfileChatMemory implements ChatMemory {
         }
         conversationMessages.add(new ToolCallSummaryMessage(summaryText, toolCaller));
         rebuildTurnBoundaries();
+        invalidateDerivedFiltering();
     }
 
     ChatUsageTotals estimateTokenUsageForActiveWindow() {
-        int endIndex = activeConversationEndIndex();
-        return estimateTokenUsageForSelection(currentVisibleContextSelection(endIndex));
+        return estimateTokenUsageForFilteredMessages(filteredChatMessages());
     }
 
     ChatUsageTotals estimateTokenUsageForFullConversation() {
@@ -248,19 +252,26 @@ public class AssistantProfileChatMemory implements ChatMemory {
         this.profileInstructionFactory = resolveProfileInstructionFactory(profileInstructionFactory);
     }
 
+    private List<ChatMemoryRenderEntry> buildRenderEntries() {
+        return panelProjector.buildRenderEntries(generalSystemMessage, filteredChatMessages());
+    }
+
     private boolean evictIfNeededAfterResponse() {
+        rebuildTurnBoundaries();
         int maxTokens = maxTokensProvider.apply(id);
         ensureGreaterThanZero(maxTokens, "maxTokens");
-        long estimatedTokens = estimateTotalTokensForActiveWindow();
-        if (estimatedTokens < maxTokens) {
+        ChatMessageFilter.FilteringComputation previousFiltering = cachedFilteringComputation;
+        ChatMessageFilter.FilteringComputation currentFiltering = filteringComputation();
+        if (currentFiltering.currentWindowTokenCount() < maxTokens) {
             return false;
         }
         int resetTargetTokens = maxTokens / 4;
         int minimumTurnBlocksToKeep = minimumTurnBlocksToKeep(maxTokens);
-        int endIndex = activeConversationEndIndex();
-        VisibleContextSelection selection = selectVisibleContext(endIndex, resetTargetTokens);
-        boolean changed = viewState.replaceHiddenHistoricalToolCycles(selection.hiddenHistoricalToolCycles());
-        while (selection.visibleTokenCount() > resetTargetTokens) {
+        int previousStart = viewState.chatWindowStartIndex();
+        boolean changed = previousFiltering == null
+            ? !currentFiltering.hiddenGroups().isEmpty()
+            : !previousFiltering.hiddenGroups().equals(currentFiltering.hiddenGroups());
+        while (currentFiltering.filteredTokenCount() > resetTargetTokens) {
             if (!canAdvanceWindowByTurnWithMinimumRetention(minimumTurnBlocksToKeep)) {
                 break;
             }
@@ -268,26 +279,9 @@ public class AssistantProfileChatMemory implements ChatMemory {
                 break;
             }
             changed = true;
-            endIndex = activeConversationEndIndex();
-            selection = selectVisibleContext(endIndex, resetTargetTokens);
-            viewState.replaceHiddenHistoricalToolCycles(selection.hiddenHistoricalToolCycles());
+            currentFiltering = filteringComputation();
         }
-        return changed;
-    }
-
-    private List<ChatMessage> buildMessages(int conversationEndIndex) {
-        int endIndex = Math.max(0, Math.min(conversationEndIndex, conversationMessages.size()));
-        VisibleContextSelection selection = currentVisibleContextSelection(endIndex);
-        int latestProfileSwitchIndex = findLatestProfileSwitchIndex(endIndex);
-        UserMessage latestProfileInstruction = buildProfileInstructionForIndex(latestProfileSwitchIndex);
-        return projectionBuilder.buildMessages(conversationMessages, generalSystemMessage, selection,
-            latestProfileSwitchIndex, latestProfileInstruction);
-    }
-
-    private List<ChatMessage> buildRawMessages(int conversationEndIndex) {
-        int endIndex = Math.max(0, Math.min(conversationEndIndex, conversationMessages.size()));
-        VisibleContextSelection selection = currentVisibleContextSelection(endIndex);
-        return projectionBuilder.buildRawMessages(conversationMessages, generalSystemMessage, selection);
+        return changed || previousStart != viewState.chatWindowStartIndex();
     }
 
     private int activeConversationEndIndex() {
@@ -296,15 +290,6 @@ public class AssistantProfileChatMemory implements ChatMemory {
 
     private int conversationEndIndexForCurrentTurnRange() {
         return turnTracker.conversationEndIndexForCurrentTurnRange(turnEndIndexes, viewState, conversationMessages.size());
-    }
-
-    private boolean containsInstructionOfType(Class<? extends SystemMessage> messageClass) {
-        for (ChatMessage message : conversationMessages) {
-            if (messageClass.isInstance(message)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private GeneralSystemMessage toGeneralSystemMessage(SystemMessage message) {
@@ -317,10 +302,10 @@ public class AssistantProfileChatMemory implements ChatMemory {
     private void rebuildTurnBoundaries() {
         turnEndIndexes.clear();
         turnEndIndexes.addAll(turnTracker.rebuildTurnEndIndexes(conversationMessages));
-        viewState.currentTurnCount(turnEndIndexes.size());
+        viewState.activeConversationTurnCount(turnEndIndexes.size());
         int endIndex = activeConversationEndIndex();
-        if (viewState.activeStartIndex() > endIndex) {
-            viewState.activeStartIndex(endIndex);
+        if (viewState.chatWindowStartIndex() > endIndex) {
+            viewState.chatWindowStartIndex(endIndex);
         }
     }
 
@@ -328,19 +313,24 @@ public class AssistantProfileChatMemory implements ChatMemory {
         if (!canRedo()) {
             return;
         }
-        viewState.clearHiddenHistoricalToolCycles();
-        int keepSize = viewState.currentTurnCount() == 0 ? 0 : turnEndIndexes.get(viewState.currentTurnCount() - 1);
+        int keepSize = viewState.activeConversationTurnCount() == 0
+            ? 0
+            : turnEndIndexes.get(viewState.activeConversationTurnCount() - 1);
         while (conversationMessages.size() > keepSize) {
             removeConversationMessage(conversationMessages.size() - 1);
         }
-        while (turnEndIndexes.size() > viewState.currentTurnCount()) {
+        while (turnEndIndexes.size() > viewState.activeConversationTurnCount()) {
             turnEndIndexes.remove(turnEndIndexes.size() - 1);
         }
-        viewState.activeStartIndex(Math.min(viewState.activeStartIndex(), keepSize));
+        viewState.chatWindowStartIndex(Math.min(viewState.chatWindowStartIndex(), keepSize));
+        invalidateDerivedFiltering();
     }
 
     private int firstActiveTurnIndex() {
-        return turnTracker.firstActiveTurnIndex(turnEndIndexes, viewState.activeStartIndex(), conversationMessages.size());
+        return turnTracker.firstActiveTurnIndex(
+            turnEndIndexes,
+            viewState.chatWindowStartIndex(),
+            conversationMessages.size());
     }
 
     private String findUserMessageInRange(int from, int to) {
@@ -358,48 +348,6 @@ public class AssistantProfileChatMemory implements ChatMemory {
         return "";
     }
 
-    private ChatTranscriptEntry toTranscriptEntry(ChatMessage message) {
-        if (message == null) {
-            return null;
-        }
-        if (message instanceof AssistantProfileSwitchMessage) {
-            AssistantProfileSwitchMessage profileMessage = (AssistantProfileSwitchMessage) message;
-            return new AssistantProfileTranscriptEntry(
-                profileMessage.getProfileId(),
-                profileMessage.getProfileName(),
-                false);
-        }
-        if (message instanceof RemovedForSpaceSystemMessage) {
-            return new ChatTranscriptEntry(ChatTranscriptRole.REMOVED_FOR_SPACE_SYSTEM,
-                ((RemovedForSpaceSystemMessage) message).text());
-        }
-        if (message instanceof ToolCallSummaryMessage) {
-            return null;
-        }
-        if (message instanceof AutomaticCodeStatusMessage) {
-            String text = ((AutomaticCodeStatusMessage) message).singleText();
-            if (text == null || text.trim().isEmpty()) {
-                return null;
-            }
-            return new ChatTranscriptEntry(ChatTranscriptRole.AUTOMATIC_CODE_STATUS, text);
-        }
-        if (message instanceof UserMessage) {
-            String text = ((UserMessage) message).singleText();
-            if (text == null || text.trim().isEmpty() || text.startsWith(MessageBuilder.CONTROL_INSTRUCTION_PREFIX)) {
-                return null;
-            }
-            return new ChatTranscriptEntry(ChatTranscriptRole.USER, text);
-        }
-        if (message instanceof AiMessage && !(message instanceof InstructionAckMessage)) {
-            String text = ((AiMessage) message).text();
-            if (text == null || text.trim().isEmpty()) {
-                return null;
-            }
-            return new ChatTranscriptEntry(ChatTranscriptRole.ASSISTANT, text);
-        }
-        return null;
-    }
-
     private void setGeneralSystemMessage(GeneralSystemMessage message) {
         generalSystemMessage = message;
     }
@@ -415,14 +363,13 @@ public class AssistantProfileChatMemory implements ChatMemory {
     private boolean advanceWindowByOneTurn() {
         rebuildTurnBoundaries();
         int endIndex = activeConversationEndIndex();
-        int startIndex = Math.min(viewState.activeStartIndex(), endIndex);
+        int startIndex = Math.min(viewState.chatWindowStartIndex(), endIndex);
         int nextTurnEnd = turnTracker.findNextTurnEndAfter(turnEndIndexes, startIndex);
         if (nextTurnEnd <= startIndex) {
             return false;
         }
-        viewState.clearHiddenHistoricalToolCycles();
-        viewState.activeStartIndex(nextTurnEnd);
-        rebuildTurnBoundaries();
+        viewState.chatWindowStartIndex(nextTurnEnd);
+        invalidateDerivedFiltering();
         return true;
     }
 
@@ -430,12 +377,12 @@ public class AssistantProfileChatMemory implements ChatMemory {
         int maxTokens = maxTokensProvider.apply(id);
         ensureGreaterThanZero(maxTokens, "maxTokens");
         int endIndex = conversationEndIndexForCurrentTurnRange();
-        if (endIndex <= 0 || viewState.currentTurnCount() <= 0) {
-            viewState.activeStartIndex(0);
+        if (endIndex <= 0 || viewState.activeConversationTurnCount() <= 0) {
+            viewState.chatWindowStartIndex(0);
             return;
         }
-        int selectedStart = turnTracker.turnStartIndex(turnEndIndexes, viewState.currentTurnCount() - 1);
-        for (int turnIndex = viewState.currentTurnCount() - 2; turnIndex >= 0; turnIndex--) {
+        int selectedStart = turnTracker.turnStartIndex(turnEndIndexes, viewState.activeConversationTurnCount() - 1);
+        for (int turnIndex = viewState.activeConversationTurnCount() - 2; turnIndex >= 0; turnIndex--) {
             int candidateStart = turnTracker.turnStartIndex(turnEndIndexes, turnIndex);
             if (estimateTotalTokensForRange(candidateStart, endIndex) <= maxTokens) {
                 selectedStart = candidateStart;
@@ -443,16 +390,19 @@ public class AssistantProfileChatMemory implements ChatMemory {
             }
             break;
         }
-        viewState.clearHiddenHistoricalToolCycles();
-        viewState.activeStartIndex(selectedStart);
+        viewState.chatWindowStartIndex(selectedStart);
     }
 
     private boolean canAdvanceWindowByTurnWithMinimumRetention(int minimumTurnBlocksToKeep) {
         return activeTurnRanges().size() > minimumTurnBlocksToKeep;
     }
 
+    private UserMessage buildLatestProfileInstruction(int endIndex) {
+        return buildProfileInstructionForIndex(findLatestProfileSwitchIndex(endIndex));
+    }
+
     private int findLatestProfileSwitchIndex(int endIndex) {
-        for (int index = endIndex - 1; index >= 0; index--) {
+        for (int index = Math.min(endIndex, conversationMessages.size()) - 1; index >= 0; index--) {
             if (conversationMessages.get(index) instanceof AssistantProfileSwitchMessage) {
                 return index;
             }
@@ -559,38 +509,35 @@ public class AssistantProfileChatMemory implements ChatMemory {
         int safeEnd = Math.min(endIndex, conversationMessages.size());
         for (int index = safeStart; index < safeEnd; index++) {
             ChatMessage message = conversationMessages.get(index);
-            if (!isRemovableMessage(message)) {
+            if (!isCompactionCountedMessage(message)) {
                 continue;
             }
             int tokenCount = tokenEstimator.estimateTokenCountInMessage(message);
             if (message instanceof AiMessage) {
                 outputTokens += tokenCount;
-            } else {
+            }
+            else {
                 inputTokens += tokenCount;
             }
         }
         return ChatUsageTotals.estimated(inputTokens, outputTokens);
     }
 
-    private ChatUsageTotals estimateTokenUsageForSelection(VisibleContextSelection selection) {
-        if (selection == null) {
+    private ChatUsageTotals estimateTokenUsageForFilteredMessages(FilteredChatMessages filteredMessages) {
+        if (filteredMessages == null) {
             return ChatUsageTotals.estimated(0L, 0L);
         }
         long inputTokens = 0L;
         long outputTokens = 0L;
-        int endIndex = Math.min(selection.inclusionMask().length, conversationMessages.size());
-        for (int index = selection.firstVisibleHistoryIndex(); index < endIndex; index++) {
-            if (!selection.includes(index)) {
-                continue;
-            }
-            ChatMessage message = conversationMessages.get(index);
-            if (!isRemovableMessage(message)) {
+        for (ChatMessage message : filteredMessages.messages()) {
+            if (!isCompactionCountedMessage(message)) {
                 continue;
             }
             int tokenCount = tokenEstimator.estimateTokenCountInMessage(message);
             if (message instanceof AiMessage) {
                 outputTokens += tokenCount;
-            } else {
+            }
+            else {
                 inputTokens += tokenCount;
             }
         }
@@ -599,11 +546,6 @@ public class AssistantProfileChatMemory implements ChatMemory {
 
     private int estimateTokenCount(ChatMessage message) {
         return tokenEstimator.estimateTokenCountInMessage(message);
-    }
-
-    private long estimateTotalTokensForActiveWindow() {
-        ChatUsageTotals totals = estimateTokenUsageForActiveWindow();
-        return totals.getInputTokenCount() + totals.getOutputTokenCount();
     }
 
     private long estimateTotalTokensForRange(int startIndex, int endIndex) {
@@ -618,16 +560,16 @@ public class AssistantProfileChatMemory implements ChatMemory {
         }
         ActiveTurnRange secondLast = ranges.get(ranges.size() - 2);
         ActiveTurnRange last = ranges.get(ranges.size() - 1);
-        long twoTurnTokenCount = estimateTotalTokensForRange(secondLast.startIndex(), last.endIndex());
+        long twoTurnTokenCount = estimateTotalTokensForRange(secondLast.startIndex(), last.endExclusive());
         return twoTurnTokenCount <= maxTokens ? 2 : 1;
     }
 
     private List<ActiveTurnRange> activeTurnRanges() {
         int endIndex = activeConversationEndIndex();
-        return turnTracker.activeTurnRanges(turnEndIndexes, viewState.activeStartIndex(), endIndex);
+        return turnTracker.activeTurnRanges(turnEndIndexes, viewState, endIndex);
     }
 
-    private boolean isRemovableMessage(ChatMessage message) {
+    private boolean isCompactionCountedMessage(ChatMessage message) {
         if (message == null) {
             return false;
         }
@@ -642,26 +584,28 @@ public class AssistantProfileChatMemory implements ChatMemory {
         if (message instanceof SystemMessage) {
             return false;
         }
-        return message instanceof UserMessage
-            || message instanceof AiMessage
-            || message instanceof ToolExecutionResultMessage;
-    }
-
-    private VisibleContextSelection currentVisibleContextSelection(int conversationEndIndex) {
-        return contextSelector.currentSelection(conversationMessages, viewState.activeStartIndex(), conversationEndIndex,
-            viewState.hiddenHistoricalToolCycles());
-    }
-
-    private VisibleContextSelection selectVisibleContext(int conversationEndIndex, int targetTokens) {
-        return contextSelector.selectVisibleContext(conversationMessages, turnEndIndexes, viewState.activeStartIndex(),
-            conversationEndIndex, targetTokens);
-    }
-
-    private double validateHistoricalToolTokenShare(double share) {
-        if (share < 0.0d || share > 1.0d) {
-            throw new IllegalArgumentException("historicalToolTokenShare must be between 0.0 and 1.0");
+        if (message instanceof UserMessage) {
+            String text = ((UserMessage) message).singleText();
+            return text == null || !text.startsWith(MessageBuilder.CONTROL_INSTRUCTION_PREFIX);
         }
-        return share;
+        return message instanceof AiMessage || message instanceof ToolExecutionResultMessage;
+    }
+
+    private ChatMessageFilter.FilteringComputation filteringComputation() {
+        if (!derivedFilteringDirty && cachedFilteringComputation != null) {
+            return cachedFilteringComputation;
+        }
+        cachedFilteringComputation = chatMessageFilter.computeFiltering(
+            conversationMessages,
+            viewState,
+            turnEndIndexes,
+            maxTokensProvider.apply(id));
+        derivedFilteringDirty = false;
+        return cachedFilteringComputation;
+    }
+
+    private void invalidateDerivedFiltering() {
+        derivedFilteringDirty = true;
     }
 
     private static class ChatTokenEstimator {
@@ -679,7 +623,8 @@ public class AssistantProfileChatMemory implements ChatMemory {
             OpenAiTokenCountEstimator activeEstimator = estimator();
             try {
                 return activeEstimator.estimateTokenCountInMessage(message);
-            } catch (RuntimeException error) {
+            }
+            catch (RuntimeException error) {
                 return 0;
             }
         }
@@ -696,7 +641,8 @@ public class AssistantProfileChatMemory implements ChatMemory {
         private OpenAiTokenCountEstimator buildEstimator(String modelName) {
             try {
                 return new OpenAiTokenCountEstimator(modelName);
-            } catch (IllegalArgumentException error) {
+            }
+            catch (IllegalArgumentException error) {
                 return new OpenAiTokenCountEstimator(FALLBACK_MODEL_NAME);
             }
         }

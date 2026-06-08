@@ -3,18 +3,18 @@ package org.freeplane.plugin.ai.chat.memory;
 class ActiveTurnRange {
 
     private final int startIndex;
-    private final int endIndex;
+    private final int endExclusive;
 
-    ActiveTurnRange(int startIndex, int endIndex) {
+    ActiveTurnRange(int startIndex, int endExclusive) {
         this.startIndex = startIndex;
-        this.endIndex = endIndex;
+        this.endExclusive = endExclusive;
     }
 
     int startIndex() {
         return startIndex;
     }
 
-    int endIndex() {
-        return endIndex;
+    int endExclusive() {
+        return endExclusive;
     }
 }

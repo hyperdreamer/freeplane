@@ -1,53 +1,38 @@
 package org.freeplane.plugin.ai.chat.memory;
 
-import java.util.ArrayList;
-import java.util.List;
-
 class ChatMemoryViewState {
 
-    private int activeStartIndex;
-    private int currentTurnCount;
-    private final List<HistoricalToolCycle> hiddenHistoricalToolCycles = new ArrayList<>();
+    private int chatWindowStartIndex;
+    private int activeConversationTurnCount;
+    private boolean restoredTranscriptSession;
 
     void clear() {
-        activeStartIndex = 0;
-        currentTurnCount = 0;
-        hiddenHistoricalToolCycles.clear();
+        chatWindowStartIndex = 0;
+        activeConversationTurnCount = 0;
+        restoredTranscriptSession = false;
     }
 
-    int activeStartIndex() {
-        return activeStartIndex;
+    int chatWindowStartIndex() {
+        return chatWindowStartIndex;
     }
 
-    void activeStartIndex(int activeStartIndex) {
-        this.activeStartIndex = activeStartIndex;
+    void chatWindowStartIndex(int chatWindowStartIndex) {
+        this.chatWindowStartIndex = chatWindowStartIndex;
     }
 
-    int currentTurnCount() {
-        return currentTurnCount;
+    int activeConversationTurnCount() {
+        return activeConversationTurnCount;
     }
 
-    void currentTurnCount(int currentTurnCount) {
-        this.currentTurnCount = currentTurnCount;
+    void activeConversationTurnCount(int activeConversationTurnCount) {
+        this.activeConversationTurnCount = activeConversationTurnCount;
     }
 
-    List<HistoricalToolCycle> hiddenHistoricalToolCycles() {
-        return hiddenHistoricalToolCycles;
+    boolean isRestoredTranscriptSession() {
+        return restoredTranscriptSession;
     }
 
-    void clearHiddenHistoricalToolCycles() {
-        hiddenHistoricalToolCycles.clear();
-    }
-
-    boolean replaceHiddenHistoricalToolCycles(List<HistoricalToolCycle> hiddenHistoricalToolCycles) {
-        List<HistoricalToolCycle> replacement = hiddenHistoricalToolCycles == null
-            ? new ArrayList<>()
-            : new ArrayList<>(hiddenHistoricalToolCycles);
-        if (this.hiddenHistoricalToolCycles.equals(replacement)) {
-            return false;
-        }
-        this.hiddenHistoricalToolCycles.clear();
-        this.hiddenHistoricalToolCycles.addAll(replacement);
-        return true;
+    void restoredTranscriptSession(boolean restoredTranscriptSession) {
+        this.restoredTranscriptSession = restoredTranscriptSession;
     }
 }

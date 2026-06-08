@@ -19,11 +19,11 @@ class ChatTurnTracker {
 
     int activeConversationEndIndex(List<Integer> turnEndIndexes, ChatMemoryViewState viewState, int conversationSize) {
         if (canRedo(turnEndIndexes, viewState)) {
-            int firstActive = firstActiveTurnIndex(turnEndIndexes, viewState.activeStartIndex(), conversationSize);
-            if (viewState.currentTurnCount() <= firstActive) {
-                return viewState.activeStartIndex();
+            int firstActive = firstActiveTurnIndex(turnEndIndexes, viewState.chatWindowStartIndex(), conversationSize);
+            if (viewState.activeConversationTurnCount() <= firstActive) {
+                return viewState.chatWindowStartIndex();
             }
-            return turnEndIndexes.get(viewState.currentTurnCount() - 1);
+            return turnEndIndexes.get(viewState.activeConversationTurnCount() - 1);
         }
         return conversationSize;
     }
@@ -32,10 +32,10 @@ class ChatTurnTracker {
                                                 ChatMemoryViewState viewState,
                                                 int conversationSize) {
         if (canRedo(turnEndIndexes, viewState)) {
-            if (viewState.currentTurnCount() <= 0) {
+            if (viewState.activeConversationTurnCount() <= 0) {
                 return 0;
             }
-            return turnEndIndexes.get(viewState.currentTurnCount() - 1);
+            return turnEndIndexes.get(viewState.activeConversationTurnCount() - 1);
         }
         return conversationSize;
     }
@@ -85,9 +85,11 @@ class ChatTurnTracker {
         return -1;
     }
 
-    List<ActiveTurnRange> activeTurnRanges(List<Integer> turnEndIndexes, int activeStartIndex, int endIndex) {
+    List<ActiveTurnRange> activeTurnRanges(List<Integer> turnEndIndexes,
+                                           ChatMemoryViewState viewState,
+                                           int endIndex) {
         List<ActiveTurnRange> ranges = new ArrayList<>();
-        int startIndex = Math.min(activeStartIndex, endIndex);
+        int startIndex = Math.min(viewState.chatWindowStartIndex(), endIndex);
         int previousEnd = 0;
         for (int index = 0; index < turnEndIndexes.size(); index++) {
             int turnEnd = turnEndIndexes.get(index);
@@ -106,7 +108,7 @@ class ChatTurnTracker {
     }
 
     boolean canRedo(List<Integer> turnEndIndexes, ChatMemoryViewState viewState) {
-        return viewState.currentTurnCount() < turnEndIndexes.size();
+        return viewState.activeConversationTurnCount() < turnEndIndexes.size();
     }
 
     private boolean isCompletedAssistantMessage(ChatMessage message) {

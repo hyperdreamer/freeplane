@@ -32,17 +32,16 @@ public class TranscriptMemoryMapperTest {
         uut.seedTranscriptWithHiddenExchange(memory, entries, "hidden user");
 
         List<ChatMessage> messages = memory.messages();
-        assertThat(messages).hasSize(4);
+        assertThat(messages).hasSize(3);
         assertThat(messages.get(0)).isInstanceOf(UserMessage.class);
         assertThat(((UserMessage) messages.get(0)).singleText())
+            .isEqualTo(MessageBuilder.CONTROL_INSTRUCTION_PREFIX
+                + TranscriptHiddenSystemMessage.DEFAULT_TEXT);
+        assertThat(messages.get(1)).isInstanceOf(UserMessage.class);
+        assertThat(((UserMessage) messages.get(1)).singleText())
             .isEqualTo("first user");
-        assertThat(messages.get(1)).isInstanceOf(AiMessage.class);
-        assertThat(((AiMessage) messages.get(1)).text()).isEqualTo("first assistant");
-        assertThat(messages.get(2)).isInstanceOf(UserMessage.class);
-        assertThat(((UserMessage) messages.get(2)).singleText())
-            .isEqualTo(MessageBuilder.CONTROL_INSTRUCTION_PREFIX + "hidden user");
-        assertThat(messages.get(3)).isInstanceOf(InstructionAckMessage.class);
-        assertThat(((AiMessage) messages.get(3)).text()).isEqualTo("ok");
+        assertThat(messages.get(2)).isInstanceOf(AiMessage.class);
+        assertThat(((AiMessage) messages.get(2)).text()).isEqualTo("first assistant");
     }
 
     @Test
@@ -56,17 +55,16 @@ public class TranscriptMemoryMapperTest {
         uut.seedTranscriptWithHiddenExchange(memory, entries, "hidden user");
 
         List<ChatMessage> messages = memory.messages();
-        assertThat(messages).hasSize(5);
+        assertThat(messages).hasSize(3);
         assertThat(messages.get(0)).isInstanceOf(UserMessage.class);
         assertThat(((UserMessage) messages.get(0)).singleText())
+            .isEqualTo(MessageBuilder.CONTROL_INSTRUCTION_PREFIX
+                + TranscriptHiddenSystemMessage.DEFAULT_TEXT);
+        assertThat(messages.get(1)).isInstanceOf(UserMessage.class);
+        assertThat(((UserMessage) messages.get(1)).singleText())
             .isEqualTo(MessageBuilder.CONTROL_INSTRUCTION_PREFIX + "Now you have the profile A sayer.");
-        assertThat(messages.get(1)).isInstanceOf(InstructionAckMessage.class);
         assertThat(messages.get(2)).isInstanceOf(UserMessage.class);
         assertThat(((UserMessage) messages.get(2)).singleText()).isEqualTo("hello");
-        assertThat(messages.get(3)).isInstanceOf(UserMessage.class);
-        assertThat(((UserMessage) messages.get(3)).singleText())
-            .isEqualTo(MessageBuilder.CONTROL_INSTRUCTION_PREFIX + "hidden user");
-        assertThat(messages.get(4)).isInstanceOf(InstructionAckMessage.class);
     }
 
     @Test

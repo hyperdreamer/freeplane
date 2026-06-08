@@ -17,6 +17,7 @@ import org.freeplane.plugin.ai.chat.history.MapRootShortTextCount;
 import org.freeplane.plugin.ai.chat.memory.AssistantProfileChatMemory;
 import org.freeplane.plugin.ai.chat.memory.AssistantProfileSwitchMessage;
 import org.freeplane.plugin.ai.chat.memory.ChatMemorySettings;
+import org.freeplane.plugin.ai.chat.memory.TranscriptHiddenSystemMessage;
 import org.freeplane.plugin.ai.chat.memory.ChatTokenUsageState;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.chat.ui.AIChatPanel;
@@ -39,10 +40,7 @@ public class LiveChatController {
     private final MapRootShortTextCountsMerger mapRootShortTextCountsMerger;
     private final Supplier<ChatTokenUsageState> tokenUsageStateSupplier;
     private static final String TRANSCRIPT_HIDDEN_SYSTEM_MESSAGE =
-        "System message: The messages in this session include a restored transcript of a prior chat. "
-            + "Treat those messages as the earlier conversation context, not as hallucinations. "
-            + "The currently opened map may differ from the maps discussed in that transcript. "
-            + "Confirm the map context with the user when needed. The real conversation begins after this message. ";
+        TranscriptHiddenSystemMessage.DEFAULT_TEXT;
 
     public LiveChatController(AIChatPanel parent,
                               AvailableMaps availableMaps,
