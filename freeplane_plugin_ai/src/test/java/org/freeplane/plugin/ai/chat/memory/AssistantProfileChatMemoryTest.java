@@ -243,6 +243,67 @@ public class AssistantProfileChatMemoryTest {
     }
 
     @Test
+    public void panelProjectionHidesOnlySummarizedChatOwnedToolBlock() {
+        AssistantProfileChatMemory uut = createMemory(500);
+        uut.add(UserMessage.from("u1"));
+        uut.add(AiMessage.from(List.of(toolRequest("tool-1", "searchHistorical"))));
+        uut.add(ToolExecutionResultMessage.from("tool-1", "searchHistorical", "history result"));
+        uut.addToolCallSummary("summary-1", ToolCaller.CHAT);
+        uut.add(AiMessage.from("a1"));
+        uut.add(UserMessage.from("u2"));
+        uut.add(AiMessage.from(List.of(toolRequest("tool-2", "searchCurrent"))));
+        uut.add(ToolExecutionResultMessage.from("tool-2", "searchCurrent", "fresh result"));
+        uut.add(AiMessage.from("a2"));
+
+        List<ChatMemoryRenderEntry> entries = uut.panelConversationRenderEntries();
+
+        assertThat(entries)
+            .filteredOn(ChatMemoryRenderEntry::isToolSummary)
+            .extracting(ChatMemoryRenderEntry::toolSummaryText)
+            .contains("summary-1");
+        assertThat(entries)
+            .noneMatch(entry -> entry.chatMessage() instanceof ToolExecutionResultMessage
+                && "searchHistorical".equals(((ToolExecutionResultMessage) entry.chatMessage()).toolName()));
+        assertThat(entries)
+            .noneMatch(entry -> entry.chatMessage() instanceof AiMessage
+                && ((AiMessage) entry.chatMessage()).hasToolExecutionRequests()
+                && "searchHistorical".equals(((AiMessage) entry.chatMessage()).toolExecutionRequests().get(0).name()));
+        assertThat(entries)
+            .anyMatch(entry -> entry.chatMessage() instanceof ToolExecutionResultMessage
+                && "searchCurrent".equals(((ToolExecutionResultMessage) entry.chatMessage()).toolName())
+                && "fresh result".equals(((ToolExecutionResultMessage) entry.chatMessage()).text()));
+        assertThat(entries)
+            .anyMatch(entry -> entry.chatMessage() instanceof AiMessage
+                && ((AiMessage) entry.chatMessage()).hasToolExecutionRequests()
+                && "searchCurrent".equals(((AiMessage) entry.chatMessage()).toolExecutionRequests().get(0).name()));
+    }
+
+    @Test
+    public void panelProjectionKeepsRawChatOwnedToolDetailWhenOnlyMcpSummaryExists() {
+        AssistantProfileChatMemory uut = createMemory(500);
+        uut.addToolCallSummary("MCP1", ToolCaller.MCP);
+        uut.add(UserMessage.from("u1"));
+        uut.add(AiMessage.from(List.of(toolRequest("tool-1", "searchNodes"))));
+        uut.add(ToolExecutionResultMessage.from("tool-1", "searchNodes", "Root"));
+        uut.add(AiMessage.from("a1"));
+
+        List<ChatMemoryRenderEntry> entries = uut.panelConversationRenderEntries();
+
+        assertThat(entries)
+            .filteredOn(ChatMemoryRenderEntry::isToolSummary)
+            .extracting(ChatMemoryRenderEntry::toolSummaryText)
+            .contains("MCP1");
+        assertThat(entries)
+            .anyMatch(entry -> entry.chatMessage() instanceof ToolExecutionResultMessage
+                && "searchNodes".equals(((ToolExecutionResultMessage) entry.chatMessage()).toolName())
+                && "Root".equals(((ToolExecutionResultMessage) entry.chatMessage()).text()));
+        assertThat(entries)
+            .anyMatch(entry -> entry.chatMessage() instanceof AiMessage
+                && ((AiMessage) entry.chatMessage()).hasToolExecutionRequests()
+                && "searchNodes".equals(((AiMessage) entry.chatMessage()).toolExecutionRequests().get(0).name()));
+    }
+
+    @Test
     public void messagesIncludeOnlyLatestProfileSwitchInstruction() {
         AssistantProfileChatMemory uut = createMemory(500);
         uut.add(new AssistantProfileSwitchMessage("alpha", "Alpha"));
@@ -1111,9 +1172,13 @@ public class AssistantProfileChatMemoryTest {
     }
 
     private ToolExecutionRequest toolRequest(String id) {
+        return toolRequest(id, "searchNodes");
+    }
+
+    private ToolExecutionRequest toolRequest(String id, String name) {
         return ToolExecutionRequest.builder()
             .id(id)
-            .name("searchNodes")
+            .name(name)
             .arguments("{\"request\":{\"query\":\"root\"}}")
             .build();
     }

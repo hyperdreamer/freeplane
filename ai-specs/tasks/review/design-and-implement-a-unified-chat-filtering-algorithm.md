@@ -1257,81 +1257,153 @@
 
 ## Subtask: Integrate unified filtering replacement
 - **Status:** review
-- **Scope:** Finish the remaining consumer-path cleanup around the
-  unified filtering core, remove leftover obsolete integration
-  artifacts, and tighten integration-level verification only where
-  current consumer behavior still depends on those artifacts.
-- **Motivation:** Most consumer routing already goes through
-  `AssistantProfileChatMemory` and its panel/model/transcript
-  projectors. The remaining work is to remove stale pre-unified
-  remnants and verify the surviving request/UI/transcript integration
-  points against the approved contracts.
+- **Scope:** Correct the remaining visible-history consumer
+  divergence, remove stale filtering-surface API, and align the task
+  record with the implementation architecture that this task now keeps.
+- **Motivation:** The branch already has the right filtering
+  architecture in `ChatMessageFilter` plus the 3 projectors. The
+  remaining defects are focused: renderer-side post-projection hiding,
+  live summary updates bypassing the projector-backed history path,
+  stale builder knobs, and stale tests that still encode the old
+  global summary-hiding rule.
 - **Constraints:**
   - Use the task-level constraints and the approved design from
     `Implement unified filtering core and projectors`.
+  - Keep `ChatMessageFilter`, `PanelProjector`, `ModelProjector`,
+    `TranscriptProjector`, and `AssistantProfileChatMemory` as the
+    implementation base. Do not replace them with a clean-room
+    rewrite.
   - Do not re-open filtering semantics or introduce a second
     filtering/projector path.
   - Remove remaining dead integration artifacts instead of retaining
     compatibility layers.
   - Do not broaden this subtask into UI-behavior redesign unless
     executable evidence shows a real contract mismatch.
-- **Briefing:** Current fit-check evidence shows that
-  `AssistantProfileChatMemory`, `AIChatPanel`, `ChatRequestFlow`, and
-  `TranscriptMemoryMapper` already consume the unified
-  filtering/projector path for the main panel/model/transcript
-  outputs. The remaining likely touch points are stale or thin
-  integration edges such as `LiveTranscriptAdapter`, unused helper
-  methods in `AssistantProfileChatMemory`, and tests that still rely
-  on pre-unified assumptions.
+- **Briefing:** The focused touch points for this follow-up are
+  `ChatMemoryHistoryRenderer`, `AIChatPanel.appendToolSummaryToSession`,
+  `ChatRequestFlow.onToolCallSummary`, and the stale builder surface in
+  `AssistantProfileChatMemory.Builder`, plus the corresponding tests in
+  `ChatMemoryHistoryRendererTest`, `ChatRequestFlowTest`, and
+  `AIChatPanelScriptRequestTest`.
 - **Research:**
-  - Current code already routes:
-    - model output through `AssistantProfileChatMemory.messages()`;
-    - panel history through
-      `AssistantProfileChatMemory.panelConversationRenderEntries()` and
-      `AIChatPanel.historyMessages()`;
-    - transcript persistence through
-      `AssistantProfileChatMemory.transcriptEntriesForPersistence()`
-      and `TranscriptMemoryMapper.toTranscriptEntries()`; and
-    - post-response compaction through `ChatRequestFlow` to
-      `AssistantProfileChatMemory.onResponseTokenUsage(...)`.
-  - `ChatMemoryProjectionBuilder` is already removed.
-  - `LiveTranscriptAdapter` currently has no production references.
-  - `AssistantProfileChatMemory.activeConversationMessagesForRendering()`
-    currently has no external callers.
+  - See the task-level Research and `Implement unified filtering core
+    and projectors` Design.
+- **Analysis:**
+  - Keep the current filtering architecture because review found
+    focused consumer-divergence bugs, not a need for replacement.
+  - Make `ChatMemoryHistoryRenderer` formatting-only because
+    visibility decisions belong to `PanelProjector`, not to the
+    renderer after projection.
+  - Keep MCP summary updates incremental because they do not
+    substitute raw tool detail from a chat-owned tool block.
+  - Use one shared visible-history rebuild counter for the single
+    visible chat-history surface, even when the user switches between
+    chats.
+  - Keep chat-owned summary updates incremental only while that shared
+    visible-history rebuild counter remains unchanged since the current
+    visible request started; otherwise rebuild visible history from the
+    same projector-backed path used by normal history rebuilds because
+    the panel contract must not depend on whether content arrived
+    through a live append or a full rebuild.
+  - Remove stale builder knobs because the approved contract no longer
+    exposes configurable protected-turn or historical-tool-share
+    semantics and the current code does not use those knobs.
+  - Narrow the task narrative to one shared filtered-chat result,
+    local summary substitution, and rebuild/live-update equivalence
+    because the broader earlier wording now hides the real remaining
+    contract.
 - **Design:**
   - Keep `AssistantProfileChatMemory` as the sole owner of
     filtered-chat derivation plus panel/model/transcript projection
     decisions.
-  - Remove obsolete integration remnants that no longer contribute
-    behavior. At the time of this fit check, that set includes
-    `LiveTranscriptAdapter`; re-check
-    `AssistantProfileChatMemory.activeConversationMessagesForRendering()`
-    at implementation time and remove it too if it is still unused.
-  - Keep current consumers delegating to the unified projector-backed
-    APIs rather than reconstructing filtered history or transcript
-    content independently.
-  - Treat live UI append behavior as in scope only for fit
-    verification. If targeted tests show it already matches the
-    approved contracts, keep it. If implementation reveals that
-    achieving the approved contracts requires a different UI/update
-    model, stop and return to PLAN before broadening this subtask.
-  - Remove or update stale tests that assert pre-unified behavior.
+  - `ChatMemoryHistoryRenderer` must be formatting-only. It may render
+    the `ChatMemoryRenderEntry` sequence it receives, but it must not
+    hide raw tool request/result detail because some summary appears
+    elsewhere in the same history.
+  - Local summary substitution belongs only to `PanelProjector`:
+    - a chat-owned tool summary hides raw tool request/result detail
+      only for the same retained chat-owned tool activity block;
+    - a different retained tool block without a summary still renders
+      its raw tool request/result detail; and
+    - an MCP summary never hides unrelated raw tool detail.
+  - MCP summaries may update visible history incrementally because
+    they do not substitute raw tool detail from a chat-owned tool
+    block.
+  - `AIChatPanel` must maintain one shared visible-history rebuild
+    counter for the single visible chat-history surface. Switching
+    between chats affects that same counter because it rebuilds that
+    same visible surface.
+  - Each visible request must compare its request-start value of that
+    shared visible-history rebuild counter with the current value when
+    a chat-owned tool summary arrives.
+  - Chat-owned tool summaries may update visible history incrementally
+    only when that shared visible-history rebuild counter is unchanged
+    since the current visible request started.
+  - Under that unchanged-counter condition, the UI may append exactly
+    one rendered summary history entry through the incremental path
+    instead of rebuilding the whole visible history.
+  - If that counter changed, `AIChatPanel` or one helper on its behalf
+    must rebuild current visible history from
+    `AssistantProfileChatMemory.panelConversationRenderEntries()` or
+    from one helper that is guaranteed to produce exactly the same
+    output.
+  - `ChatRequestFlow` must gate chat-owned summary append-vs-rebuild
+    behavior using that shared visible-history rebuild counter plus a
+    request-start baseline value. The task does not require a specific
+    field name or callback shape.
+  - Do not keep a separate unconditional summary-append visibility
+    path that bypasses projector-backed history derivation.
+  - Remove `protectedRecentTurnCount` and
+    `historicalToolTokenShare` from
+    `AssistantProfileChatMemory.Builder` unless they are reintroduced
+    as real behavior. For this increment, remove them.
+  - Align the task record with the implementation form kept on this
+    branch:
+    - keep the shared filtered-chat-result contract;
+    - do not require a retained explicit SHOW/DROP/SKIP structure if
+      the implementation keeps filtered messages plus the needed
+      metadata instead; and
+    - trim glossary and design detail that is not needed to understand
+      or verify the remaining contract.
 - **Test specification:**
   - **Automated tests:**
-    - Keep or add only the remaining integration-focused tests not
-      already fully covered by `Implement unified filtering core and
-      projectors`.
-    - Verify that panel history rebuild still uses
-      `panelConversationRenderEntries()`, transcript synchronization
-      still uses `transcriptEntriesForPersistence()`, and
-      post-response compaction still rebuilds visible history from the
-      unified filtering result.
-    - Verify that MCP summary append behavior, restored-transcript
-      behavior, boundary persistence, and assistant-profile switch
-      persistence remain consistent at the consumer level after
-      removing stale integration remnants.
-    - Verify that removing dead integration artifacts does not change
-      approved panel/model/transcript behavior.
+    - `ChatMemoryHistoryRendererTest`:
+      - remove or rewrite tests that encode the old global
+        summary-hides-all rule, especially
+        `rebuildFromMessages_hidesRawToolMessagesWhenAnySummaryExistsIncludingMcp`;
+      - add a test where one summarized tool block hides only its own
+        raw tool request/result detail;
+      - add a test where a different unsummarized tool block still
+        renders its raw request/result detail; and
+      - add a test where an MCP-only summary remains visible and does
+        not hide unrelated raw tool detail.
+    - `ChatRequestFlowTest`:
+      - replace unconditional direct-summary-append expectations with
+        conditional expectations:
+        - chat-owned summary appends incrementally when the shared
+          visible-history rebuild counter is unchanged relative to the
+          request-start baseline;
+        - chat-owned summary requests a visible-history rebuild when
+          that shared counter changed after request start; and
+        - MCP summary still appends incrementally;
+      - keep coverage that the stored summary remains present in the
+        memory-backed panel projection.
+    - `AIChatPanelScriptRequestTest`:
+      - add append-vs-rebuild equivalence coverage for summary updates;
+      - verify that visible history immediately after an unchanged-
+        counter incremental summary update equals visible history after
+        a full rebuild of the same session;
+      - cover the visible-request-flow path for both unchanged-shared-
+        counter incremental append and changed-shared-counter rebuild
+        fallback; and
+      - cover the dedicated MCP-summary-session path as applicable.
+    - `AssistantProfileChatMemoryTest` or projector-focused tests:
+      - keep or add coverage proving local summary substitution still
+        happens in the panel projection after renderer-side global
+        hiding is removed.
+    - Keep the existing integration coverage around transcript
+      persistence, restored-transcript behavior, boundary behavior,
+      profile-switch behavior, and compaction.
   - **Manual tests:** N/A
   - **Implementation notes:**
     - **Interpretations:**
@@ -1341,8 +1413,11 @@
         as sufficient evidence that both were obsolete integration
         remnants within this subtask's approved cleanup scope.
     - **Tradeoffs:**
-      - Kept the live UI append/update model unchanged because the
-        approved subtask narrowed that area to fit verification unless
-        executable evidence showed a real contract mismatch, and the
-        current integration tests passed without requiring broader UI
-        rewiring.
+      - Kept ordinary user/assistant visible updates on the existing
+        incremental append path and narrowed the new append-vs-rebuild
+        gate to chat-owned tool summaries only.
+      - Used one shared visible-history rebuild counter plus a
+        request-start baseline instead of finer per-tool-block
+        tracking because the guarded object is the single visible
+        history surface and the coarser rule was sufficient for the
+        approved contract.

@@ -1,5 +1,7 @@
 package org.freeplane.plugin.ai.chat.ui;
 
+import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.memory.ChatMemory;
 import dev.langchain4j.model.output.TokenUsage;
 import java.lang.reflect.Field;
@@ -13,8 +15,11 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import javax.swing.JButton;
+import javax.swing.JEditorPane;
+import javax.swing.JLabel;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
+import javax.swing.text.html.HTMLEditorKit;
 import org.freeplane.api.ai.AiModelSelection;
 import org.freeplane.api.ai.AiRequestMode;
 import org.freeplane.api.ai.AiRequestStatus;
@@ -39,6 +44,7 @@ import org.freeplane.features.ai.code.WriteCodeResponse;
 import org.freeplane.features.text.TextController;
 import org.freeplane.plugin.ai.chat.history.ChatTranscriptStore;
 import org.freeplane.plugin.ai.chat.memory.AssistantProfileChatMemory;
+import org.freeplane.plugin.ai.chat.memory.ChatMemoryRenderEntry;
 import org.freeplane.plugin.ai.chat.memory.ChatMemorySettings;
 import org.freeplane.plugin.ai.chat.memory.ChatTokenUsageTracker;
 import org.freeplane.plugin.ai.chat.profile.AssistantProfileSelectionSync;
@@ -121,7 +127,7 @@ public class AIChatPanelScriptRequestTest {
     }
 
     @Test
-    public void mcpToolSummaryOpensNewChatAndAppendsSummaryWhenNoChatRequestIsRunning() throws Exception {
+    public void mcpToolSummaryOpensNewChatWhenNoChatRequestIsRunning() throws Exception {
         PanelHarness harness = newPanelHarness(false);
         LiveChatSessionId originalSessionId = harness.sessionId;
         ToolCallSummary summary = new ToolCallSummary("searchNodes", "mcp summary", false, ToolCaller.MCP);
@@ -131,6 +137,101 @@ public class AIChatPanelScriptRequestTest {
 
         LiveChatSessionId currentSessionId = harness.liveChatController.currentSessionId();
         assertThat(currentSessionId).isNotEqualTo(originalSessionId);
+    }
+
+    @Test
+    public void appendToolSummaryToCurrentSessionAppendsMcpSummaryIncrementally() throws Exception {
+        PanelHarness harness = newPanelHarness(true);
+        setField(harness.panel, "chatMemory", harness.liveChatController.chatMemory(harness.sessionId));
+
+        try (MockedStatic<TextUtils> textUtils = mockStatic(TextUtils.class)) {
+            textUtils.when(() -> TextUtils.getOptionalText("ai_chat_token_counter.input")).thenReturn("input");
+            textUtils.when(() -> TextUtils.getOptionalText("ai_chat_token_counter.output")).thenReturn("output");
+
+            appendToolSummaryToSession(
+                harness.panel,
+                harness.sessionId,
+                new ToolCallSummary("searchNodes", "mcp summary", false, ToolCaller.MCP));
+        }
+
+        assertThat(sessionToolSummaryTexts(harness.liveChatController, harness.sessionId)).contains("mcp summary");
+        verify(harness.chatOutputView).appendHistoryEntry(any(ChatMemoryRenderEntry.class));
+        verify(harness.chatOutputView, org.mockito.Mockito.never()).rebuildHistory(any());
+    }
+
+    @Test
+    public void chatOwnedToolSummaryAppendsIncrementallyWhenSharedRebuildCounterIsUnchanged() throws Exception {
+        PanelHarness harness = newPanelHarness(true);
+        setField(harness.panel, "chatMemory", harness.liveChatController.chatMemory(harness.sessionId));
+        ChatTokenUsageTracker requestTracker = new ChatTokenUsageTracker(totals -> {
+        });
+        ChatRequestFlow requestFlow = createVisibleRequestFlow(harness.panel, harness.sessionId, requestTracker, null);
+
+        requestFlow.updateChatMemory(harness.liveChatController.chatMemory(harness.sessionId));
+        requestFlow.beginRequest("Prompt");
+        requestFlow.onToolCallSummary(new ToolCallSummary("searchNodes", "chat summary", false, ToolCaller.CHAT));
+        flushEdt();
+
+        assertThat(sessionToolSummaryTexts(harness.liveChatController, harness.sessionId)).contains("chat summary");
+        verify(harness.chatOutputView).appendHistoryEntry(any(ChatMemoryRenderEntry.class));
+        verify(harness.chatOutputView, org.mockito.Mockito.never()).rebuildHistory(any());
+    }
+
+    @Test
+    public void chatOwnedIncrementalSummaryUpdateMatchesLaterFullRebuildOfSameSession() throws Exception {
+        PanelHarness harness = newPanelHarness(true);
+        AssistantProfileChatMemory memory = (AssistantProfileChatMemory) harness.liveChatController.chatMemory(harness.sessionId);
+        memory.add(UserMessage.from("u1"));
+        memory.add(AiMessage.from("a1"));
+        setField(harness.panel, "chatMemory", memory);
+
+        JEditorPane messagePane = new JEditorPane();
+        messagePane.setContentType("text/html");
+        HTMLEditorKit editorKit = (HTMLEditorKit) messagePane.getEditorKit();
+        ChatMessageHistory messageHistory = new ChatMessageHistory(messagePane, editorKit);
+        ChatOutputView realChatOutputView = new ChatOutputView(messageHistory, harness.liveChatController, new JLabel());
+        setField(harness.panel, "chatOutputView", realChatOutputView);
+
+        rebuildHistoryFromMemory(harness.panel);
+
+        ChatTokenUsageTracker requestTracker = new ChatTokenUsageTracker(totals -> {
+        });
+        ChatRequestFlow requestFlow = createVisibleRequestFlow(harness.panel, harness.sessionId, requestTracker, null);
+        requestFlow.updateChatMemory(memory);
+        requestFlow.beginRequest("Prompt");
+        requestFlow.onToolCallSummary(new ToolCallSummary("searchNodes", "chat summary", false, ToolCaller.CHAT));
+        flushEdt();
+
+        String incrementalHtml = messagePane.getText();
+
+        rebuildHistoryFromMemory(harness.panel);
+        String rebuiltHtml = messagePane.getText();
+
+        assertThat(incrementalHtml).contains("u1");
+        assertThat(incrementalHtml).contains("a1");
+        assertThat(incrementalHtml).contains("chat summary");
+        assertThat(incrementalHtml).isEqualTo(rebuiltHtml);
+    }
+
+    @Test
+    public void chatOwnedToolSummaryRebuildsVisibleHistoryWhenSharedRebuildCounterChanges() throws Exception {
+        PanelHarness harness = newPanelHarness(true);
+        setField(harness.panel, "chatMemory", harness.liveChatController.chatMemory(harness.sessionId));
+        ChatTokenUsageTracker requestTracker = new ChatTokenUsageTracker(totals -> {
+        });
+        ChatRequestFlow requestFlow = createVisibleRequestFlow(harness.panel, harness.sessionId, requestTracker, null);
+
+        requestFlow.updateChatMemory(harness.liveChatController.chatMemory(harness.sessionId));
+        requestFlow.beginRequest("Prompt");
+        rebuildHistoryFromMemory(harness.panel);
+        org.mockito.Mockito.clearInvocations(harness.chatOutputView);
+
+        requestFlow.onToolCallSummary(new ToolCallSummary("searchNodes", "chat summary", false, ToolCaller.CHAT));
+        flushEdt();
+
+        assertThat(sessionToolSummaryTexts(harness.liveChatController, harness.sessionId)).contains("chat summary");
+        verify(harness.chatOutputView).rebuildHistory(any());
+        verify(harness.chatOutputView, org.mockito.Mockito.never()).appendHistoryEntry(any(ChatMemoryRenderEntry.class));
     }
 
     @Test
@@ -670,6 +771,23 @@ public class AIChatPanelScriptRequestTest {
             ChatPromptRunner.VisiblePromptRequestCallbacks.class);
         method.setAccessible(true);
         return (ChatRequestFlow) method.invoke(panel, sessionId, requestTracker, requestCallbacks);
+    }
+
+    private void rebuildHistoryFromMemory(AIChatPanel panel) throws Exception {
+        Method method = AIChatPanel.class.getDeclaredMethod("rebuildHistoryFromMemory");
+        method.setAccessible(true);
+        method.invoke(panel);
+    }
+
+    private void appendToolSummaryToSession(AIChatPanel panel,
+                                            LiveChatSessionId sessionId,
+                                            ToolCallSummary summary) throws Exception {
+        Method method = AIChatPanel.class.getDeclaredMethod(
+            "appendToolSummaryToSession",
+            LiveChatSessionId.class,
+            ToolCallSummary.class);
+        method.setAccessible(true);
+        method.invoke(panel, sessionId, summary);
     }
 
     private PanelHarness newPanelHarness(boolean panelSelected) throws Exception {

@@ -104,7 +104,7 @@ public class ChatMemoryHistoryRendererTest {
     }
 
     @Test
-    public void rebuildFromMessages_suppressesRawToolEntriesWhenSummaryExists() {
+    public void rebuildFromMessages_keepsRawToolEntriesWhenChatSummaryExistsElsewhere() {
         RenderFixture fixture = new RenderFixture();
         ToolExecutionRequest toolRequest = ToolExecutionRequest.builder()
             .id("tool-1")
@@ -120,8 +120,8 @@ public class ChatMemoryHistoryRendererTest {
 
         String html = fixture.html();
         assertThat(html).contains("searchNodes: query=&quot;test&quot;, results=1");
-        assertThat(html).doesNotContain("Tool result [search]: done");
-        assertThat(html).doesNotContain("Tool call [search]");
+        assertThat(html).contains("Tool result [search]: done");
+        assertThat(html).contains("Tool call [search]");
     }
 
     @Test
@@ -220,7 +220,7 @@ public class ChatMemoryHistoryRendererTest {
     }
 
     @Test
-    public void rebuildFromMessages_hidesRawToolMessagesWhenAnySummaryExistsIncludingMcp() {
+    public void rebuildFromMessages_keepsRawToolMessagesWhenMcpSummaryExists() {
         RenderFixture fixture = new RenderFixture();
         ToolExecutionRequest toolRequest = ToolExecutionRequest.builder()
             .id("tool-1")
@@ -236,8 +236,8 @@ public class ChatMemoryHistoryRendererTest {
 
         String html = fixture.html();
         assertThat(html).contains("mcp summary");
-        assertThat(html).doesNotContain("Tool result [search]: done");
-        assertThat(html).doesNotContain("Tool call [search]");
+        assertThat(html).contains("Tool result [search]: done");
+        assertThat(html).contains("Tool call [search]");
     }
 
     @Test
@@ -262,7 +262,7 @@ public class ChatMemoryHistoryRendererTest {
     }
 
     @Test
-    public void rebuildFromMessages_keepsContextBoundaryWhenRawToolMessagesSuppressedBySummary() {
+    public void rebuildFromMessages_keepsContextBoundaryWhenRawToolMessagesAppearAlongsideSummary() {
         RenderFixture fixture = new RenderFixture();
         ToolExecutionRequest toolRequest = ToolExecutionRequest.builder()
             .id("tool-1")
@@ -282,8 +282,8 @@ public class ChatMemoryHistoryRendererTest {
         assertThat(html).contains("message-context-boundary");
         assertThat(html).contains("tool summary");
         assertThat(html).contains("after boundary");
-        assertThat(html).doesNotContain("Tool result [search]: done");
-        assertThat(html).doesNotContain("Tool call [search]");
+        assertThat(html).contains("Tool result [search]: done");
+        assertThat(html).contains("Tool call [search]");
     }
 
     private static class RenderFixture {

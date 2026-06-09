@@ -45,7 +45,6 @@ class ChatMemoryHistoryRenderer {
         if (entries == null || entries.isEmpty()) {
             return;
         }
-        boolean hasToolSummaries = containsToolSummaryMessages(entries);
         for (int index = 0; index < entries.size(); index++) {
             ChatMemoryRenderEntry entry = entries.get(index);
             if (entry == null) {
@@ -54,7 +53,7 @@ class ChatMemoryHistoryRenderer {
             if (isHiddenAcknowledgementMessage(entries, index)) {
                 continue;
             }
-            appendMessage(entry, hasToolSummaries);
+            appendMessage(entry);
         }
     }
 
@@ -62,11 +61,11 @@ class ChatMemoryHistoryRenderer {
         if (entry == null) {
             return;
         }
-        appendMessage(entry, entry.isToolSummary());
+        appendMessage(entry);
     }
 
-    private void appendMessage(ChatMemoryRenderEntry entry, boolean hasToolSummaries) {
-        MessageHistoryEntry historyEntry = toMessageHistoryEntry(entry, hasToolSummaries);
+    private void appendMessage(ChatMemoryRenderEntry entry) {
+        MessageHistoryEntry historyEntry = toMessageHistoryEntry(entry);
         if (historyEntry == null || historyEntry.sourceText == null) {
             return;
         }
@@ -79,7 +78,7 @@ class ChatMemoryHistoryRenderer {
             historyEntry.category.getStyleClassName());
     }
 
-    private MessageHistoryEntry toMessageHistoryEntry(ChatMemoryRenderEntry entry, boolean hasToolSummaries) {
+    private MessageHistoryEntry toMessageHistoryEntry(ChatMemoryRenderEntry entry) {
         if (entry.isToolSummary()) {
             RenderCategory category = entry.toolCaller() == ToolCaller.MCP
                 ? RenderCategory.MCP_CALL
@@ -108,9 +107,6 @@ class ChatMemoryHistoryRenderer {
                 RenderCategory.CONTEXT_BOUNDARY);
         }
         if (message instanceof ToolExecutionResultMessage) {
-            if (hasToolSummaries) {
-                return null;
-            }
             ToolExecutionResultMessage toolResult = (ToolExecutionResultMessage) message;
             String text = "Tool result [" + toolResult.toolName() + "]: " + toolResult.text();
             return new MessageHistoryEntry(text, RenderCategory.TOOL_CALL);
@@ -118,9 +114,6 @@ class ChatMemoryHistoryRenderer {
         if (message instanceof AiMessage) {
             AiMessage aiMessage = (AiMessage) message;
             if (aiMessage.hasToolExecutionRequests()) {
-                if (hasToolSummaries) {
-                    return null;
-                }
                 return new MessageHistoryEntry(formatToolRequestSummary(aiMessage), RenderCategory.TOOL_CALL);
             }
             return new MessageHistoryEntry(aiMessage.text(), RenderCategory.ASSISTANT);
@@ -188,16 +181,6 @@ class ChatMemoryHistoryRenderer {
 
     private String buildProfilePaneMessage(String profileName) {
         return profileMessageFormatter.formatProfileMessage(profileName);
-    }
-
-    private boolean containsToolSummaryMessages(List<ChatMemoryRenderEntry> entries) {
-        for (int index = 0; index < entries.size(); index++) {
-            ChatMemoryRenderEntry entry = entries.get(index);
-            if (entry != null && entry.isToolSummary()) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private enum RenderCategory {

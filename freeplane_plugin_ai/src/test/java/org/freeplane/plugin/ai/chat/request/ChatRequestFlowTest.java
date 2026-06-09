@@ -179,7 +179,7 @@ public class ChatRequestFlowTest {
     }
 
     @Test
-    public void onToolCallSummaryStoresSummaryAndAppendsRenderEntry() {
+    public void onToolCallSummaryStoresSummaryAndAppendsMcpRenderEntry() {
         RecordingCallbacks callbacks = new RecordingCallbacks();
         ChatRequestFlow uut = new ChatRequestFlow(callbacks, new ChatTokenUsageTracker(totals -> {}));
         AssistantProfileChatMemory memory = AssistantProfileChatMemory.withMaxTokens(500);
@@ -188,10 +188,67 @@ public class ChatRequestFlowTest {
         uut.onToolCallSummary(new ToolCallSummary("searchNodes", "mcp summary", false, ToolCaller.MCP));
 
         assertThat(callbacks.toolSummaryAppendCount).isEqualTo(1);
+        assertThat(callbacks.rebuildHistoryCount).isZero();
         assertThat(callbacks.lastSummaryEntry).isNotNull();
         assertThat(callbacks.lastSummaryEntry.isToolSummary()).isTrue();
         assertThat(callbacks.lastSummaryEntry.toolSummaryText()).isEqualTo("mcp summary");
         assertThat(callbacks.lastSummaryEntry.toolCaller()).isEqualTo(ToolCaller.MCP);
+        assertThat(memory.activeConversationRenderEntries())
+            .filteredOn(ChatMemoryRenderEntry::isToolSummary)
+            .extracting(ChatMemoryRenderEntry::toolSummaryText)
+            .contains("mcp summary");
+    }
+
+    @Test
+    public void chatOwnedToolSummaryAppendsIncrementallyWhenVisibleHistoryRebuildCounterIsUnchanged() {
+        RecordingCallbacks callbacks = new RecordingCallbacks();
+        ChatRequestFlow uut = new ChatRequestFlow(callbacks, new ChatTokenUsageTracker(totals -> {}));
+        AssistantProfileChatMemory memory = AssistantProfileChatMemory.withMaxTokens(500);
+
+        uut.updateChatMemory(memory);
+        uut.beginRequest("question");
+        uut.onToolCallSummary(new ToolCallSummary("searchNodes", "chat summary", false, ToolCaller.CHAT));
+
+        assertThat(callbacks.toolSummaryAppendCount).isEqualTo(1);
+        assertThat(callbacks.rebuildHistoryCount).isZero();
+        assertThat(memory.activeConversationRenderEntries())
+            .filteredOn(ChatMemoryRenderEntry::isToolSummary)
+            .extracting(ChatMemoryRenderEntry::toolSummaryText)
+            .contains("chat summary");
+    }
+
+    @Test
+    public void chatOwnedToolSummaryRequestsVisibleHistoryRebuildWhenCounterChangesAfterRequestStart() {
+        RecordingCallbacks callbacks = new RecordingCallbacks();
+        ChatRequestFlow uut = new ChatRequestFlow(callbacks, new ChatTokenUsageTracker(totals -> {}));
+        AssistantProfileChatMemory memory = AssistantProfileChatMemory.withMaxTokens(500);
+
+        uut.updateChatMemory(memory);
+        uut.beginRequest("question");
+        callbacks.visibleHistoryRebuildCounter = 1L;
+        uut.onToolCallSummary(new ToolCallSummary("searchNodes", "chat summary", false, ToolCaller.CHAT));
+
+        assertThat(callbacks.toolSummaryAppendCount).isZero();
+        assertThat(callbacks.rebuildHistoryCount).isEqualTo(1);
+        assertThat(memory.activeConversationRenderEntries())
+            .filteredOn(ChatMemoryRenderEntry::isToolSummary)
+            .extracting(ChatMemoryRenderEntry::toolSummaryText)
+            .contains("chat summary");
+    }
+
+    @Test
+    public void mcpToolSummaryStillAppendsIncrementallyWhenCounterChangesAfterRequestStart() {
+        RecordingCallbacks callbacks = new RecordingCallbacks();
+        ChatRequestFlow uut = new ChatRequestFlow(callbacks, new ChatTokenUsageTracker(totals -> {}));
+        AssistantProfileChatMemory memory = AssistantProfileChatMemory.withMaxTokens(500);
+
+        uut.updateChatMemory(memory);
+        uut.beginRequest("question");
+        callbacks.visibleHistoryRebuildCounter = 1L;
+        uut.onToolCallSummary(new ToolCallSummary("searchNodes", "mcp summary", false, ToolCaller.MCP));
+
+        assertThat(callbacks.toolSummaryAppendCount).isEqualTo(1);
+        assertThat(callbacks.rebuildHistoryCount).isZero();
         assertThat(memory.activeConversationRenderEntries())
             .filteredOn(ChatMemoryRenderEntry::isToolSummary)
             .extracting(ChatMemoryRenderEntry::toolSummaryText)
@@ -229,6 +286,7 @@ public class ChatRequestFlowTest {
         private int postResponseEvictionCount;
         private int refreshTokenCountersCount;
         private boolean toolCallHistoryVisible = true;
+        private long visibleHistoryRebuildCounter;
         private int toolSummaryAppendCount;
         private ChatMemoryRenderEntry lastSummaryEntry;
 
@@ -274,7 +332,7 @@ public class ChatRequestFlowTest {
         }
 
         @Override
-        public void rebuildHistoryFromTranscript() {
+        public void rebuildVisibleHistoryFromMemory() {
             rebuildHistoryCount++;
         }
 
@@ -291,6 +349,11 @@ public class ChatRequestFlowTest {
         @Override
         public boolean isToolCallHistoryVisible() {
             return toolCallHistoryVisible;
+        }
+
+        @Override
+        public long currentVisibleHistoryRebuildCounter() {
+            return visibleHistoryRebuildCounter;
         }
 
         @Override

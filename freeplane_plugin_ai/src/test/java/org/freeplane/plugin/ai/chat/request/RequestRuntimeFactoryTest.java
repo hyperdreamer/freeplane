@@ -130,10 +130,11 @@ public class RequestRuntimeFactoryTest {
         @Override public void onAssistantResponse(String text) {}
         @Override public void onAssistantError(String text) {}
         @Override public void synchronizeTranscriptWithMemory() {}
-        @Override public void rebuildHistoryFromTranscript() {}
+        @Override public void rebuildVisibleHistoryFromMemory() {}
         @Override public void onPostResponseEviction() {}
         @Override public void refreshTokenCounters() {}
         @Override public boolean isToolCallHistoryVisible() { return true; }
+        @Override public long currentVisibleHistoryRebuildCounter() { return 0L; }
         @Override public void onToolSummaryAppended(ChatMemoryRenderEntry entry) {}
     }
 }

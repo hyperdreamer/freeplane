@@ -440,8 +440,6 @@ public class AssistantProfileChatMemory implements ChatMemory {
         private Function<Object, Integer> maxTokensProvider;
         private Supplier<String> tokenEstimatorModelNameProvider = () -> null;
         private ProfileInstructionFactory profileInstructionFactory;
-        private int protectedRecentTurnCount = 1;
-        private double historicalToolTokenShare = 0.5d;
 
         public Builder id(Object id) {
             this.id = id;
@@ -465,16 +463,6 @@ public class AssistantProfileChatMemory implements ChatMemory {
 
         public Builder profileInstructionFactory(ProfileInstructionFactory profileInstructionFactory) {
             this.profileInstructionFactory = profileInstructionFactory;
-            return this;
-        }
-
-        public Builder protectedRecentTurnCount(int protectedRecentTurnCount) {
-            this.protectedRecentTurnCount = protectedRecentTurnCount;
-            return this;
-        }
-
-        public Builder historicalToolTokenShare(double historicalToolTokenShare) {
-            this.historicalToolTokenShare = historicalToolTokenShare;
             return this;
         }
 

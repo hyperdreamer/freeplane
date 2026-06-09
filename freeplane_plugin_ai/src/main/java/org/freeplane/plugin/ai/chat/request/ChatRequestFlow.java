@@ -9,6 +9,7 @@ import org.freeplane.plugin.ai.chat.memory.ChatTokenUsageTracker;
 import org.freeplane.plugin.ai.chat.memory.SingleTurnChatMemory;
 import org.freeplane.plugin.ai.chat.memory.SingleTurnChatMemoryFactory;
 import org.freeplane.plugin.ai.tools.utilities.ToolCallSummary;
+import org.freeplane.plugin.ai.tools.utilities.ToolCaller;
 
 public class ChatRequestFlow {
 
@@ -21,10 +22,11 @@ public class ChatRequestFlow {
         void onAssistantResponse(String text);
         void onAssistantError(String text);
         void synchronizeTranscriptWithMemory();
-        void rebuildHistoryFromTranscript();
+        void rebuildVisibleHistoryFromMemory();
         void onPostResponseEviction();
         void refreshTokenCounters();
         boolean isToolCallHistoryVisible();
+        long currentVisibleHistoryRebuildCounter();
         void onToolSummaryAppended(ChatMemoryRenderEntry entry);
     }
 
@@ -40,6 +42,7 @@ public class ChatRequestFlow {
     private String snapshotUserText;
     private TokenUsage responseUsage;
     private String requestFailureMessage;
+    private long requestStartVisibleHistoryRebuildCounter;
 
     public ChatRequestFlow(RequestCallbacks callbacks, ChatTokenUsageTracker tokenUsageTracker) {
         this.callbacks = callbacks;
@@ -73,6 +76,11 @@ public class ChatRequestFlow {
         if (assistantProfileChatMemory != null) {
             assistantProfileChatMemory.addToolCallSummary(summary.getSummaryText(), summary.getToolCaller());
         }
+        if (summary.getToolCaller() == ToolCaller.CHAT
+            && callbacks.currentVisibleHistoryRebuildCounter() != requestStartVisibleHistoryRebuildCounter) {
+            callbacks.rebuildVisibleHistoryFromMemory();
+            return;
+        }
         callbacks.onToolSummaryAppended(
             ChatMemoryRenderEntry.forToolSummary(summary.getSummaryText(), summary.getToolCaller()));
     }
@@ -90,6 +98,7 @@ public class ChatRequestFlow {
         snapshotUserText = userMessage;
         snapshotChatSize = singleTurnChatMemory.snapshotSize();
         requestFailureMessage = null;
+        requestStartVisibleHistoryRebuildCounter = callbacks.currentVisibleHistoryRebuildCounter();
         requestInProgress = true;
         callbacks.onRequestStarted();
     }
@@ -118,7 +127,7 @@ public class ChatRequestFlow {
     void restoreChatSnapshot() {
         singleTurnChatMemory.truncateTo(snapshotChatSize);
         callbacks.synchronizeTranscriptWithMemory();
-        callbacks.rebuildHistoryFromTranscript();
+        callbacks.rebuildVisibleHistoryFromMemory();
         activeWorker = null;
         requestInProgress = false;
         callbacks.onUserTextRestored(snapshotUserText);
@@ -192,6 +201,7 @@ public class ChatRequestFlow {
         snapshotUserText = null;
         responseUsage = null;
         requestFailureMessage = null;
+        requestStartVisibleHistoryRebuildCounter = 0L;
     }
 
     private void applyPostResponseCompaction() {

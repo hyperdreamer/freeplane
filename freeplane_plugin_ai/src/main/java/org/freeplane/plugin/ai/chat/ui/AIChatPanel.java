@@ -198,6 +198,7 @@ public class AIChatPanel extends JPanel {
     private final AssistantProfilePaneBuilder assistantProfilePaneBuilder;
     private LiveChatSessionId aiOwnedCodeOwningSessionId;
     private LiveChatSessionId mcpSummarySessionId;
+    private long visibleHistoryRebuildCounter;
     private final AiCodeRunListener aiCodeRunListener = new AiCodeRunListener() {
         @Override
         public void runFinished(RunCodeResponse response) {
@@ -1139,7 +1140,7 @@ public class AIChatPanel extends JPanel {
             }
 
             @Override
-            public void rebuildHistoryFromTranscript() {
+            public void rebuildVisibleHistoryFromMemory() {
                 if (liveChatController.isCurrentSession(sessionId)) {
                     AIChatPanel.this.rebuildHistoryFromMemory();
                 }
@@ -1162,6 +1163,11 @@ public class AIChatPanel extends JPanel {
             @Override
             public boolean isToolCallHistoryVisible() {
                 return chatDisplaySettings.isToolCallHistoryVisible();
+            }
+
+            @Override
+            public long currentVisibleHistoryRebuildCounter() {
+                return AIChatPanel.this.currentVisibleHistoryRebuildCounter();
             }
 
             @Override
@@ -1620,7 +1626,12 @@ public class AIChatPanel extends JPanel {
         assistantProfileChatMemory.addToolCallSummary(summary.getSummaryText(), summary.getToolCaller());
         liveChatController.synchronizeTranscriptWithMemory(sessionId);
         if (liveChatController.isCurrentSession(sessionId)) {
-            appendHistoryEntry(ChatMemoryRenderEntry.forToolSummary(summary.getSummaryText(), summary.getToolCaller()));
+            if (summary.getToolCaller() == ToolCaller.CHAT) {
+                rebuildHistoryFromMemory();
+            }
+            else {
+                appendHistoryEntry(ChatMemoryRenderEntry.forToolSummary(summary.getSummaryText(), summary.getToolCaller()));
+            }
             refreshTokenCounters();
         }
     }
@@ -1707,8 +1718,13 @@ public class AIChatPanel extends JPanel {
         updateInputState();
     }
 
+    private long currentVisibleHistoryRebuildCounter() {
+        return visibleHistoryRebuildCounter;
+    }
+
     private void rebuildHistoryFromMemory() {
         chatOutputView.rebuildHistory(historyMessages());
+        visibleHistoryRebuildCounter++;
     }
 
     private void appendHistoryEntry(ChatMemoryRenderEntry entry) {
