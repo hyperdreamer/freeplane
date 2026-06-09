@@ -2,6 +2,7 @@ package org.freeplane.plugin.ai.chat.memory;
 
 import dev.langchain4j.data.message.UserMessage;
 import java.util.List;
+import org.freeplane.features.ai.code.CodeStateDiagnostic;
 import org.freeplane.features.ai.code.RunCodeResponse;
 
 public class AutomaticCodeStatusMessage extends UserMessage {
@@ -26,10 +27,9 @@ public class AutomaticCodeStatusMessage extends UserMessage {
         append(builder, "contentType", response.getContentType());
         append(builder, "status", response.getStatus());
         append(builder, "runInitiator", response.getRunInitiator());
-        append(builder, "fingerprint", response.getFingerprint());
-        appendList(builder, "compilerDiagnostics", response.getCompilerDiagnostics());
+        append(builder, "stateFingerprint", response.getStateToken() == null ? null : response.getStateToken().getStateFingerprint());
+        appendDiagnostics(builder, response.getDiagnostics());
         append(builder, "errorMessage", response.getErrorMessage());
-        append(builder, "lineNumber", response.getLineNumber());
         appendBlock(builder, "stdout", response.getStdout());
         append(builder, "structuredResult", response.getStructuredResult());
         return builder.toString();
@@ -42,13 +42,21 @@ public class AutomaticCodeStatusMessage extends UserMessage {
         builder.append(key).append('=').append(value).append('\n');
     }
 
-    private static void appendList(StringBuilder builder, String key, List<String> values) {
-        if (values == null || values.isEmpty()) {
+    private static void appendDiagnostics(StringBuilder builder, List<CodeStateDiagnostic> diagnostics) {
+        if (diagnostics == null || diagnostics.isEmpty()) {
             return;
         }
-        builder.append(key).append(':').append('\n');
-        for (String value : values) {
-            builder.append("- ").append(value).append('\n');
+        builder.append("diagnostics:").append('\n');
+        for (CodeStateDiagnostic diagnostic : diagnostics) {
+            builder.append("- ").append(diagnostic.getField()).append(": ").append(diagnostic.getMessage());
+            if (diagnostic.getLine() != null) {
+                builder.append(" (line ").append(diagnostic.getLine());
+                if (diagnostic.getColumn() != null) {
+                    builder.append(", column ").append(diagnostic.getColumn());
+                }
+                builder.append(')');
+            }
+            builder.append('\n');
         }
     }
 

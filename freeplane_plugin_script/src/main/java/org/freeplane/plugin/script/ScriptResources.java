@@ -7,6 +7,7 @@ import java.util.List;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.util.FileUtils;
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.features.mode.Controller;
 
 public class ScriptResources {
     static final IFreeplaneScriptErrorHandler IGNORING_SCRIPT_ERROR_HANDLER = new IFreeplaneScriptErrorHandler() {
@@ -17,8 +18,7 @@ public class ScriptResources {
     private static final String RESOURCES_SCRIPT_COMPILATION_DISABLED_EXTENSIONS = "script_compilation_disabled_extensions";
     static final String RESOURCES_SCRIPT_DIRECTORIES = "script_directories";
     static final String RESOURCES_SCRIPT_CLASSPATH = "script_classpath";
-    static final String[] SCRIPT_COMPILATION_DISABLED_EXTENSIONS = ResourceController.getResourceController()
-        .getProperty(RESOURCES_SCRIPT_COMPILATION_DISABLED_EXTENSIONS, "").split("\\W+");
+    static final String[] SCRIPT_COMPILATION_DISABLED_EXTENSIONS = compilationDisabledExtensions();
 
 	private static final String USER_SCRIPTS_DIR_PROPERTY = "org.freeplane.scripts.user.dir";
 	private static final String USER_SCRIPTS_DIR = System.getProperty(USER_SCRIPTS_DIR_PROPERTY,"scripts");
@@ -73,11 +73,30 @@ public class ScriptResources {
     }
 
     private static File buildBuiltinScriptsDir() {
-		return FileUtils.getAbsoluteFile(ResourceController.getResourceController().getInstallationBaseDir(), BUILTIN_SCRIPTS_DIR);
+        ResourceController resourceController = resourceController();
+        return resourceController == null
+            ? new File(BUILTIN_SCRIPTS_DIR).getAbsoluteFile()
+            : FileUtils.getAbsoluteFile(resourceController.getInstallationBaseDir(), BUILTIN_SCRIPTS_DIR);
     }
 
 	private static File buildUserScriptsDir(String userDir) {
-        return FileUtils.getAbsoluteFile(ResourceController.getResourceController().getFreeplaneUserDirectory(), userDir);
+        ResourceController resourceController = resourceController();
+        return resourceController == null
+            ? new File(userDir).getAbsoluteFile()
+            : FileUtils.getAbsoluteFile(resourceController.getFreeplaneUserDirectory(), userDir);
+    }
+
+    private static String[] compilationDisabledExtensions() {
+        ResourceController resourceController = resourceController();
+        String property = resourceController == null
+            ? ""
+            : resourceController.getProperty(RESOURCES_SCRIPT_COMPILATION_DISABLED_EXTENSIONS, "");
+        return property.split("\\W+");
+    }
+
+    private static ResourceController resourceController() {
+        Controller controller = Controller.getCurrentController();
+        return controller == null ? null : controller.getResourceController();
     }
 
     static File getPrecompiledScriptsDir() {

@@ -4,16 +4,16 @@ public class WriteCodeResponse {
     private final ScriptHost host;
     private final String contentType;
     private final CodeLifecycleStatus status;
-    private final String fingerprint;
+    private final CodeStateToken stateToken;
 
     public WriteCodeResponse(ScriptHost host,
                              String contentType,
                              CodeLifecycleStatus status,
-                             String fingerprint) {
+                             CodeStateToken stateToken) {
         this.host = host;
         this.contentType = contentType;
         this.status = status;
-        this.fingerprint = fingerprint;
+        this.stateToken = stateToken;
     }
 
     public ScriptHost getHost() {
@@ -28,7 +28,7 @@ public class WriteCodeResponse {
         return status;
     }
 
-    public String getFingerprint() {
-        return fingerprint;
+    public CodeStateToken getStateToken() {
+        return stateToken;
     }
 }

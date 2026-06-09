@@ -6,20 +6,20 @@ import org.freeplane.features.ai.code.ScriptHost;
 
 public class ReadCodeToolRequest {
     private final ScriptHost host;
-    private final String fingerprint;
+    private final String knownStateFingerprint;
 
     @JsonCreator
     public ReadCodeToolRequest(@JsonProperty("host") ScriptHost host,
-                               @JsonProperty("fingerprint") String fingerprint) {
+                               @JsonProperty("knownStateFingerprint") String knownStateFingerprint) {
         this.host = host;
-        this.fingerprint = fingerprint;
+        this.knownStateFingerprint = knownStateFingerprint;
     }
 
     public ScriptHost getHost() {
         return host;
     }
 
-    public String getFingerprint() {
-        return fingerprint;
+    public String getKnownStateFingerprint() {
+        return knownStateFingerprint;
     }
 }

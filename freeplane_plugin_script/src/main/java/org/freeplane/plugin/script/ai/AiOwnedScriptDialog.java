@@ -3,6 +3,7 @@ package org.freeplane.plugin.script.ai;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.Font;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import javax.swing.BorderFactory;
@@ -10,12 +11,14 @@ import javax.swing.JButton;
 import javax.swing.JDialog;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
 import org.freeplane.core.resources.IFreeplanePropertyListener;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CodeStateContent;
 import org.freeplane.features.ai.code.ReadCodeResponse;
 import org.freeplane.features.ai.code.RunCodeResponse;
 
@@ -25,6 +28,7 @@ public class AiOwnedScriptDialog extends JDialog implements AiOwnedScriptHostSer
     private final AiOwnedScriptHostService.CodeStateProvider codeStateProvider;
     private final AiOwnedScriptHostService.DialogCallbacks callbacks;
     private final JTextArea codeTextArea;
+    private final JTextArea inputTextArea;
     private final JButton runButton;
     private final JButton cancelButton;
     private boolean hasCode;
@@ -35,6 +39,7 @@ public class AiOwnedScriptDialog extends JDialog implements AiOwnedScriptHostSer
         this.codeStateProvider = codeStateProvider;
         this.callbacks = callbacks;
         this.codeTextArea = new JTextArea();
+        this.inputTextArea = new JTextArea();
         this.runButton = new JButton(TextUtils.getText("plugins/ScriptEditor.run"));
         this.cancelButton = new JButton(TextUtils.getText("cancel"));
         setTitle(TextUtils.getText("ai_owned_script_dialog_title"));
@@ -54,11 +59,15 @@ public class AiOwnedScriptDialog extends JDialog implements AiOwnedScriptHostSer
         hasCode = state != null && state.getStatus() != CodeLifecycleStatus.NO_CODE;
         if (!hasCode) {
             codeTextArea.setText("");
+            inputTextArea.setText("");
             refreshExecutionAuthority();
             return;
         }
-        codeTextArea.setText(state.getCodeText() == null ? "" : state.getCodeText());
+        CodeStateContent content = state.getContent();
+        codeTextArea.setText(content == null || content.getSourceText() == null ? "" : content.getSourceText());
+        inputTextArea.setText(content == null || content.getInputText() == null ? "" : content.getInputText());
         codeTextArea.setCaretPosition(0);
+        inputTextArea.setCaretPosition(0);
         refreshExecutionAuthority();
     }
 
@@ -72,8 +81,8 @@ public class AiOwnedScriptDialog extends JDialog implements AiOwnedScriptHostSer
     }
 
     @Override
-    public String currentCodeText() {
-        return codeTextArea.getText();
+    public CodeStateContent currentContent() {
+        return new CodeStateContent(codeTextArea.getText(), inputTextArea.getText());
     }
 
     @Override
@@ -88,22 +97,36 @@ public class AiOwnedScriptDialog extends JDialog implements AiOwnedScriptHostSer
 
     private void configureTextAreas() {
         codeTextArea.setLineWrap(false);
+        inputTextArea.setLineWrap(false);
+        ResourceController resourceController = ResourceController.getResourceController();
+        if (resourceController != null) {
+            String fontName = resourceController.getProperty("groovy_editor_font", Font.MONOSPACED);
+            int fontSize = resourceController.getIntProperty("groovy_editor_font_size", 12);
+            Font font = new Font(fontName, Font.PLAIN, fontSize);
+            codeTextArea.setFont(font);
+            inputTextArea.setFont(font);
+        }
     }
 
     private void configureLayout() {
         JScrollPane codeScrollPane = new JScrollPane(codeTextArea);
         codeScrollPane.setBorder(BorderFactory.createTitledBorder(TextUtils.getText("ai_owned_script_dialog_code")));
+        JScrollPane inputScrollPane = new JScrollPane(inputTextArea);
+        inputScrollPane.setBorder(BorderFactory.createTitledBorder(TextUtils.getText("ai_owned_script_dialog_input_json")));
+        JSplitPane editorSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, codeScrollPane, inputScrollPane);
+        editorSplitPane.setResizeWeight(0.75d);
+        editorSplitPane.setContinuousLayout(true);
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         buttonPanel.add(runButton);
         buttonPanel.add(cancelButton);
         getContentPane().setLayout(new BorderLayout());
-        getContentPane().add(codeScrollPane, BorderLayout.CENTER);
+        getContentPane().add(editorSplitPane, BorderLayout.CENTER);
         getContentPane().add(buttonPanel, BorderLayout.SOUTH);
     }
 
     private void configureActions() {
         runButton.addActionListener(event -> {
-            RunCodeResponse response = callbacks == null ? null : callbacks.runFromDialog(codeTextArea.getText());
+            RunCodeResponse response = callbacks == null ? null : callbacks.runFromDialog(currentContent());
             if (hasCode) {
                 showCode();
             }
@@ -154,7 +177,7 @@ public class AiOwnedScriptDialog extends JDialog implements AiOwnedScriptHostSer
                 || "SCRIPT_EXECUTION".equals(availability.trim());
         }
         codeTextArea.setEditable(executionAvailable);
+        inputTextArea.setEditable(executionAvailable);
         runButton.setEnabled(executionAvailable && hasCode);
     }
-
 }

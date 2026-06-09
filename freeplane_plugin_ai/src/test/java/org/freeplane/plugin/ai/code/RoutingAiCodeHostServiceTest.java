@@ -4,6 +4,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.features.ai.code.AiCodeRunListener;
 import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CodeStateContent;
+import org.freeplane.features.ai.code.CodeStateToken;
 import org.freeplane.features.ai.code.CompileCodeRequest;
 import org.freeplane.features.ai.code.ReadCodeRequest;
 import org.freeplane.features.ai.code.ReadCodeResponse;
@@ -40,11 +42,14 @@ public class RoutingAiCodeHostServiceTest {
             ScriptHost.AI,
             "text/x-freeplane-script-groovy",
             CodeLifecycleStatus.READY,
-            "fingerprint");
+            token("fingerprint"));
         when(aiHost.writeCode(org.mockito.ArgumentMatchers.any(WriteCodeRequest.class))).thenReturn(expectedResponse);
         RoutingAiCodeHostService uut = new RoutingAiCodeHostService(attachedEditorHost, () -> aiHost);
 
-        WriteCodeResponse response = uut.writeCode(new WriteCodeRequest(ScriptHost.AI, "println 1", null));
+        WriteCodeResponse response = uut.writeCode(new WriteCodeRequest(
+            ScriptHost.AI,
+            new CodeStateContent("println 1", null),
+            null));
 
         assertThat(response).isSameAs(expectedResponse);
         verify(aiHost).writeCode(org.mockito.ArgumentMatchers.any(WriteCodeRequest.class));
@@ -55,7 +60,10 @@ public class RoutingAiCodeHostServiceTest {
         AiCodeHostService attachedEditorHost = mock(AiCodeHostService.class);
         RoutingAiCodeHostService uut = new RoutingAiCodeHostService(attachedEditorHost, () -> null);
 
-        assertThatThrownBy(() -> uut.writeCode(new WriteCodeRequest(ScriptHost.AI, "println 1", null)))
+        assertThatThrownBy(() -> uut.writeCode(new WriteCodeRequest(
+            ScriptHost.AI,
+            new CodeStateContent("println 1", null),
+            null)))
             .isInstanceOf(IllegalStateException.class)
             .hasMessage("AI code host is not available.");
     }
@@ -72,5 +80,9 @@ public class RoutingAiCodeHostServiceTest {
 
         verify(attachedEditorHost).addRunListener(listener);
         verify(aiHost).addRunListener(listener);
+    }
+
+    private static CodeStateToken token(String stateFingerprint) {
+        return new CodeStateToken("code", "input", stateFingerprint);
     }
 }

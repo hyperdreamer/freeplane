@@ -259,6 +259,7 @@ public class GroovyScript implements IScript {
     private Binding createBindingForCompilation() {
         final Binding binding = new Binding();
         binding.setVariable("script", script);
+        binding.setVariable(ScriptInputJsonSupport.ARGUMENTS_VARIABLE_NAME, null);
         return binding;
     }
 

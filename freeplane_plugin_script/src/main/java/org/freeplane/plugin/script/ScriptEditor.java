@@ -23,6 +23,11 @@ package org.freeplane.plugin.script;
 import java.awt.event.ActionEvent;
 import java.io.PrintStream;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.ui.AFreeplaneAction;
@@ -41,144 +46,234 @@ import org.freeplane.plugin.script.ScriptEditorPanel.ScriptHolder;
  * @author foltin
  */
 class ScriptEditor extends AFreeplaneAction {
-	final private class AttributeHolder {
-		Attribute mAttribute;
-		int mPosition;
+    final private class AttributeHolder {
+        Attribute mScriptAttribute;
+        int mScriptPosition;
+        Attribute mInputAttribute;
+        Integer mInputPosition;
 
-		public AttributeHolder(final Attribute pAttribute, final int pPosition) {
-			super();
-			mAttribute = pAttribute;
-			mPosition = pPosition;
-		}
-	}
+        private AttributeHolder(Attribute scriptAttribute, int scriptPosition) {
+            mScriptAttribute = scriptAttribute;
+            mScriptPosition = scriptPosition;
+        }
 
-	final private class NodeScriptModel implements IScriptModel {
-		private boolean isDirty = false;
-// 		final private MModeController mMindMapController;
-		final private NodeModel mNode;
-		/**
-		 * Of AttributeHolder
-		 */
-		final private ArrayList<AttributeHolder> mScripts;
+        private String scriptName() {
+            return mScriptAttribute.getName();
+        }
 
-		private NodeScriptModel(final ArrayList<AttributeHolder> pScripts, final NodeModel node) {
-			mScripts = pScripts;
-			mNode = node;
-		}
+        private String inputText() {
+            return mInputAttribute == null ? null : String.valueOf(mInputAttribute.getValue());
+        }
+    }
 
-		public int addNewScript() {
-			final int index = mScripts.size();
-			/**
-			 * is in general different from index, as not all attributes need to
-			 * be scripts.
-			 */
-			final int attributeIndex = NodeAttributeTableModel.getModel(mNode).getAttributeTableLength();
-			final String scriptName = ScriptingEngine.SCRIPT_PREFIX;
-			int scriptNameSuffix = 1;
-			boolean found;
-			do {
-				found = false;
-				for (final AttributeHolder holder : mScripts) {
-					if ((scriptName + scriptNameSuffix).equals(holder.mAttribute.getName())) {
-						found = true;
-						scriptNameSuffix++;
-						break;
-					}
-				}
-			} while (found);
-			mScripts.add(new AttributeHolder(new Attribute(scriptName + scriptNameSuffix, ""), attributeIndex));
-			isDirty = true;
-			return index;
-		}
+    final private class NodeScriptModel implements IScriptModel {
+        private boolean isDirty = false;
+        final private NodeModel mNode;
+        final private ArrayList<AttributeHolder> mScripts;
+        final private ArrayList<Integer> mOrphanInputPositions;
 
-		public ScriptEditorWindowConfigurationStorage decorateDialog(final ScriptEditorPanel pPanel,
-		                                                             final String pWindow_preference_storage_property) {
-			final String marshalled = ResourceController.getResourceController().getProperty(
-			    pWindow_preference_storage_property);
-			return ScriptEditorWindowConfigurationStorage.decorateDialog(marshalled, pPanel);
-		}
+        private NodeScriptModel(final ArrayList<AttributeHolder> pScripts,
+                                final ArrayList<Integer> orphanInputPositions,
+                                final NodeModel node) {
+            mScripts = pScripts;
+            mOrphanInputPositions = orphanInputPositions;
+            mNode = node;
+        }
 
-		public void endDialog(final boolean pIsCanceled) {
-			if (!pIsCanceled) {
-				final int attributeTableLength = NodeAttributeTableModel.getModel(mNode).getAttributeTableLength();
-				for (final AttributeHolder holder : mScripts) {
-					final Attribute attribute = holder.mAttribute;
-					final int position = holder.mPosition;
-					final MAttributeController attributeController = (MAttributeController) AttributeController
-					    .getController();
-					if (attributeTableLength <= position) {
-						attributeController.addAttribute(mNode, attribute);
-					}
-					else if (NodeAttributeTableModel.getModel(mNode).getAttribute(position).getValue() != attribute
-					    .getValue()) {
-						attributeController.setAttribute(mNode, position, attribute);
-					}
-				}
-			}
-		}
+        public int addNewScript() {
+            final int index = mScripts.size();
+            final int attributeIndex = NodeAttributeTableModel.getModel(mNode).getAttributeTableLength();
+            final String scriptName = ScriptingEngine.SCRIPT_PREFIX;
+            int scriptNameSuffix = 1;
+            boolean found;
+            do {
+                found = false;
+                for (final AttributeHolder holder : mScripts) {
+                    if ((scriptName + scriptNameSuffix).equals(holder.mScriptAttribute.getName())) {
+                        found = true;
+                        scriptNameSuffix++;
+                        break;
+                    }
+                }
+            } while (found);
+            mScripts.add(new AttributeHolder(new Attribute(scriptName + scriptNameSuffix, ""), attributeIndex));
+            isDirty = true;
+            return index;
+        }
 
-		public Object executeScript(final int pIndex, final PrintStream pOutStream, final IFreeplaneScriptErrorHandler pErrorHandler) {
-			final String script = getScript(pIndex).getScript();
-			ModeController mMindMapController = Controller.getCurrentModeController();
-			return ScriptingEngine.executeScript(mMindMapController.getMapController().getSelectedNode(), script,
-			    pErrorHandler, pOutStream, null, ScriptingPermissions.getPermissiveScriptingPermissions());
-		}
+        public ScriptEditorWindowConfigurationStorage decorateDialog(final ScriptEditorPanel pPanel,
+                                                                     final String pWindow_preference_storage_property) {
+            final String marshalled = ResourceController.getResourceController().getProperty(
+                pWindow_preference_storage_property);
+            return ScriptEditorWindowConfigurationStorage.decorateDialog(marshalled, pPanel);
+        }
 
-		public int getAmountOfScripts() {
-			return mScripts.size();
-		}
+        public void endDialog(final boolean pIsCanceled) {
+            if (pIsCanceled) {
+                return;
+            }
+            final MAttributeController attributeController = (MAttributeController) AttributeController.getController();
+            final int attributeTableLength = NodeAttributeTableModel.getModel(mNode).getAttributeTableLength();
+            for (final AttributeHolder holder : mScripts) {
+                final Attribute attribute = holder.mScriptAttribute;
+                final int position = holder.mScriptPosition;
+                if (attributeTableLength <= position) {
+                    attributeController.addAttribute(mNode, attribute);
+                }
+                else if (NodeAttributeTableModel.getModel(mNode).getAttribute(position).getValue() != attribute.getValue()) {
+                    attributeController.setAttribute(mNode, position, attribute);
+                }
+                if (holder.mInputAttribute != null && holder.mInputPosition != null) {
+                    attributeController.setAttribute(mNode, holder.mInputPosition.intValue(), holder.mInputAttribute);
+                }
+            }
+            removeObsoleteInputAttributes(attributeController);
+            addMissingInputAttributes(attributeController);
+        }
 
-		public ScriptHolder getScript(final int pIndex) {
-			final Attribute attribute = mScripts.get(pIndex).mAttribute;
-			return new ScriptHolder(attribute.getName(), attribute.getValue().toString());
-		}
+        public Object executeScript(final int pIndex,
+                                    final PrintStream pOutStream,
+                                    final IFreeplaneScriptErrorHandler pErrorHandler) {
+            final ScriptHolder scriptHolder = getScript(pIndex);
+            ModeController mMindMapController = Controller.getCurrentModeController();
+            ScriptInputJsonSupport.ParseResult parseResult = ScriptInputJsonSupport.parseInputText(scriptHolder.getInputText());
+            if (!parseResult.isSuccessful()) {
+                throw ScriptInputJsonSupport.toExecuteScriptException(parseResult.getDiagnostic());
+            }
+            ScriptContext scriptContext = new ScriptContext(null)
+                .withBoundVariables(ScriptInputJsonSupport.boundVariables(parseResult.getArgsValue()));
+            return ScriptingEngine.executeScript(
+                mMindMapController.getMapController().getSelectedNode(),
+                scriptHolder.getScript(),
+                pErrorHandler,
+                pOutStream,
+                scriptContext,
+                ScriptingPermissions.getPermissiveScriptingPermissions());
+        }
 
-		public boolean isDirty() {
-			return isDirty;
-		}
+        public int getAmountOfScripts() {
+            return mScripts.size();
+        }
 
-		public void setScript(final int pIndex, final ScriptHolder pScript) {
-			final AttributeHolder oldHolder = mScripts.get(pIndex);
-			if (!pScript.mScriptName.equals(oldHolder.mAttribute.getName())) {
-				isDirty = true;
-			}
-			if (!pScript.mScript.equals(oldHolder.mAttribute.getValue())) {
-				isDirty = true;
-			}
-			oldHolder.mAttribute.setName(pScript.mScriptName);
-			oldHolder.mAttribute.setValue(pScript.mScript);
-		}
+        public ScriptHolder getScript(final int pIndex) {
+            final AttributeHolder attributeHolder = mScripts.get(pIndex);
+            final Attribute attribute = attributeHolder.mScriptAttribute;
+            return new ScriptHolder(
+                attribute.getName(),
+                attribute.getValue().toString(),
+                attributeHolder.inputText());
+        }
 
-		public void storeDialogPositions(final ScriptEditorPanel pPanel,
-		                                 final ScriptEditorWindowConfigurationStorage pStorage,
-		                                 final String pWindow_preference_storage_property) {
-			pStorage.storeDialogPositions(pPanel, pWindow_preference_storage_property);
-		}
+        public boolean isDirty() {
+            return isDirty;
+        }
 
-		@Override
-		public String getTitle() {
-			return Controller.getCurrentModeController().getExtension(TextController.class).getShortPlainText(mNode);
-		}
-	}
+        public void setScript(final int pIndex, final ScriptHolder pScript) {
+            final AttributeHolder oldHolder = mScripts.get(pIndex);
+            if (!pScript.mScriptName.equals(oldHolder.mScriptAttribute.getName())) {
+                isDirty = true;
+            }
+            if (!pScript.mScript.equals(oldHolder.mScriptAttribute.getValue())) {
+                isDirty = true;
+            }
+            if (!equalsNullable(pScript.getInputText(), oldHolder.inputText())) {
+                isDirty = true;
+            }
+            oldHolder.mScriptAttribute.setName(pScript.mScriptName);
+            oldHolder.mScriptAttribute.setValue(pScript.mScript);
+            if (ScriptInputJsonSupport.isBlankInput(pScript.getInputText())) {
+                oldHolder.mInputAttribute = null;
+            }
+            else {
+                oldHolder.mInputAttribute = new Attribute(
+                    ScriptInputJsonSupport.companionAttributeName(pScript.mScriptName),
+                    pScript.getInputText());
+            }
+        }
 
-	private static final long serialVersionUID = 1L;
+        public void storeDialogPositions(final ScriptEditorPanel pPanel,
+                                         final ScriptEditorWindowConfigurationStorage pStorage,
+                                         final String pWindow_preference_storage_property) {
+            pStorage.storeDialogPositions(pPanel, pWindow_preference_storage_property);
+        }
 
-	public ScriptEditor() {
-		super("ScriptEditor");
-	}
+        @Override
+        public String getTitle() {
+            return Controller.getCurrentModeController().getExtension(TextController.class).getShortPlainText(mNode);
+        }
 
-	public void actionPerformed(final ActionEvent e) {
-		final ModeController modeController = Controller.getCurrentModeController();
-		final NodeModel node = modeController.getMapController().getSelectedNode();
-		final ArrayList<AttributeHolder> scripts = new ArrayList<AttributeHolder>();
-		for (int position = 0; position < NodeAttributeTableModel.getModel(node).getAttributeTableLength(); position++) {
-			final Attribute attribute = NodeAttributeTableModel.getModel(node).getAttribute(position);
-			if (attribute.getName().startsWith(ScriptingEngine.SCRIPT_PREFIX)) {
-				scripts.add(new AttributeHolder(new Attribute(attribute), position));
-			}
-		}
-		final NodeScriptModel nodeScriptModel = new NodeScriptModel(scripts, node);
-		final ScriptEditorPanel scriptEditorPanel = new ScriptEditorPanel(nodeScriptModel, true);
-		scriptEditorPanel.setVisible(true);
-	}
+        private void removeObsoleteInputAttributes(MAttributeController attributeController) {
+            List<Integer> removalPositions = new ArrayList<Integer>(mOrphanInputPositions);
+            for (AttributeHolder holder : mScripts) {
+                if (holder.mInputPosition != null && holder.mInputAttribute == null) {
+                    removalPositions.add(holder.mInputPosition.intValue());
+                }
+            }
+            Collections.sort(removalPositions, Comparator.reverseOrder());
+            for (Integer position : removalPositions) {
+                if (position == null) {
+                    continue;
+                }
+                if (position.intValue() < NodeAttributeTableModel.getModel(mNode).getAttributeTableLength()) {
+                    attributeController.performRemoveAttribute(mNode, position.intValue());
+                }
+            }
+        }
+
+        private void addMissingInputAttributes(MAttributeController attributeController) {
+            for (AttributeHolder holder : mScripts) {
+                if (holder.mInputAttribute == null) {
+                    continue;
+                }
+                if (holder.mInputPosition != null) {
+                    continue;
+                }
+                holder.mInputPosition = Integer.valueOf(attributeController.addAttribute(mNode, holder.mInputAttribute));
+            }
+        }
+
+        private boolean equalsNullable(String left, String right) {
+            return left == null ? right == null : left.equals(right);
+        }
+    }
+
+    private static final long serialVersionUID = 1L;
+
+    public ScriptEditor() {
+        super("ScriptEditor");
+    }
+
+    public void actionPerformed(final ActionEvent e) {
+        final ModeController modeController = Controller.getCurrentModeController();
+        final NodeModel node = modeController.getMapController().getSelectedNode();
+        final ArrayList<AttributeHolder> scripts = new ArrayList<AttributeHolder>();
+        final Map<String, AttributeHolder> scriptByName = new HashMap<String, AttributeHolder>();
+        final ArrayList<Integer> orphanInputPositions = new ArrayList<Integer>();
+        for (int position = 0; position < NodeAttributeTableModel.getModel(node).getAttributeTableLength(); position++) {
+            final Attribute attribute = NodeAttributeTableModel.getModel(node).getAttribute(position);
+            if (attribute.getName().startsWith(ScriptingEngine.SCRIPT_PREFIX)) {
+                AttributeHolder holder = new AttributeHolder(new Attribute(attribute), position);
+                scripts.add(holder);
+                scriptByName.put(holder.scriptName(), holder);
+            }
+        }
+        for (int position = 0; position < NodeAttributeTableModel.getModel(node).getAttributeTableLength(); position++) {
+            final Attribute attribute = NodeAttributeTableModel.getModel(node).getAttribute(position);
+            if (!ScriptInputJsonSupport.isCompanionAttributeName(attribute.getName())) {
+                continue;
+            }
+            String scriptName = attribute.getName().substring(ScriptInputJsonSupport.SAVED_SCRIPT_INPUT_PREFIX.length());
+            AttributeHolder holder = scriptByName.get(scriptName);
+            if (holder == null) {
+                orphanInputPositions.add(Integer.valueOf(position));
+            }
+            else {
+                holder.mInputAttribute = new Attribute(attribute);
+                holder.mInputPosition = Integer.valueOf(position);
+            }
+        }
+        final NodeScriptModel nodeScriptModel = new NodeScriptModel(scripts, orphanInputPositions, node);
+        final ScriptEditorPanel scriptEditorPanel = new ScriptEditorPanel(nodeScriptModel, true);
+        scriptEditorPanel.setVisible(true);
+    }
 }

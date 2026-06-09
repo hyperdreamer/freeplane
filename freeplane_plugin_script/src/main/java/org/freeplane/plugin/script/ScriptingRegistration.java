@@ -72,10 +72,12 @@ class ScriptingRegistration {
 	final private class ScriptModel implements IScriptModel {
 		final private String mOriginalScript;
 		private String mScript;
+        private String mInputText;
 
 		public ScriptModel(final String pScript) {
 			mScript = pScript;
 			mOriginalScript = pScript;
+            mInputText = null;
 		}
 
 		@Override
@@ -101,10 +103,15 @@ class ScriptingRegistration {
 		@Override
         public Object executeScript(final int pIndex, final PrintStream pOutStream, final IFreeplaneScriptErrorHandler pErrorHandler) {
 			final ModeController modeController = Controller.getCurrentModeController();
-			// the script is completely in the hand of the user -> no security issues.
 			final ScriptingPermissions restrictedPermissions = ScriptingPermissions.getPermissiveScriptingPermissions();
+            ScriptInputJsonSupport.ParseResult parseResult = ScriptInputJsonSupport.parseInputText(mInputText);
+            if (!parseResult.isSuccessful()) {
+                throw ScriptInputJsonSupport.toExecuteScriptException(parseResult.getDiagnostic());
+            }
+            ScriptContext scriptContext = new ScriptContext(null)
+                .withBoundVariables(ScriptInputJsonSupport.boundVariables(parseResult.getArgsValue()));
 			return ScriptingEngine.executeScript(modeController.getMapController().getSelectedNode(), mScript,
-			    pErrorHandler, pOutStream, null, restrictedPermissions);
+			    pErrorHandler, pOutStream, scriptContext, restrictedPermissions);
 		}
 
 		@Override
@@ -118,17 +125,18 @@ class ScriptingRegistration {
 
 		@Override
         public ScriptHolder getScript(final int pIndex) {
-			return new ScriptHolder("Script", mScript);
+			return new ScriptHolder("Script", mScript, mInputText);
 		}
 
 		@Override
         public boolean isDirty() {
-			return !StringUtils.equals(mScript, mOriginalScript);
+			return !StringUtils.equals(mScript, mOriginalScript) || !StringUtils.equals(mInputText, null);
 		}
 
 		@Override
         public void setScript(final int pIndex, final ScriptHolder pScript) {
 			mScript = pScript.getScript();
+            mInputText = pScript.getInputText();
 		}
 
 		@Override

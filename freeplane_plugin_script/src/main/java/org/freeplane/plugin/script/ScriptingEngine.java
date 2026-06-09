@@ -82,7 +82,9 @@ public class ScriptingEngine {
     private static ConcurrentCache<ScriptSpecification, IScript> scripts
     	= new ConcurrentCache(ScriptingEngine::getCompiledScriptCacheSize);
     private static int getCompiledScriptCacheSize() {
-		return ResourceController.getResourceController().getIntProperty("compiled_script_cache_size");
+        org.freeplane.features.mode.Controller controller = org.freeplane.features.mode.Controller.getCurrentController();
+        ResourceController resourceController = controller == null ? null : controller.getResourceController();
+        return resourceController == null ? 200 : resourceController.getIntProperty("compiled_script_cache_size", 200);
 	}
 	/**
 	 * @param permissions if null use default scripting permissions.
@@ -154,7 +156,8 @@ public class ScriptingEngine {
         ByteArrayOutputStream outputBuffer = new ByteArrayOutputStream();
         final int[] lineNumber = new int[] { -1 };
         try (PrintStream outStream = new PrintStream(outputBuffer, false, "UTF-8")) {
-            new GroovyScript(script, permissions).compile(outStream, new IFreeplaneScriptErrorHandler() {
+            GroovyScript groovyScript = (GroovyScript) createGroovyScript(script, permissions);
+            groovyScript.compile(outStream, new IFreeplaneScriptErrorHandler() {
                 @Override
                 public void gotoLine(int pLineNumber) {
                     lineNumber[0] = pLineNumber;
@@ -207,14 +210,27 @@ public class ScriptingEngine {
 		if (attributes == null) {
 			return;
 		}
+        final Map<String, String> savedInputTexts = new ConcurrentHashMap<String, String>();
+        for (int row = 0; row < attributes.getRowCount(); ++row) {
+            final String attrKey = (String) attributes.getName(row);
+            final Object value = attributes.getValue(row);
+            if (value instanceof String && ScriptInputJsonSupport.isCompanionAttributeName(attrKey)) {
+                savedInputTexts.put(attrKey, (String) value);
+            }
+        }
 		for (int row = 0; row < attributes.getRowCount(); ++row) {
 			final String attrKey = (String) attributes.getName(row);
 			final Object value = attributes.getValue(row);
-			if(value instanceof String){
+			if(value instanceof String && attrKey.startsWith(ScriptingEngine.SCRIPT_PREFIX)){
 				final String script = (String) value;
-				if (attrKey.startsWith(ScriptingEngine.SCRIPT_PREFIX)) {
-					executeScript(node, script);
-				}
+                ScriptInputJsonSupport.ParseResult parseResult = ScriptInputJsonSupport.parseInputText(
+                    savedInputTexts.get(ScriptInputJsonSupport.companionAttributeName(attrKey)));
+                if (!parseResult.isSuccessful()) {
+                    throw ScriptInputJsonSupport.toExecuteScriptException(parseResult.getDiagnostic());
+                }
+                ScriptContext scriptContext = new ScriptContext(null)
+                    .withBoundVariables(ScriptInputJsonSupport.boundVariables(parseResult.getArgsValue()));
+				executeScript(node, script, scriptContext, null);
 			}
 		}
 		return;

@@ -4,6 +4,11 @@ import java.util.Collections;
 import org.freeplane.features.ai.code.AiChatAttachment;
 import org.freeplane.features.ai.code.AiCodeEditor;
 import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CodeStateContent;
+import org.freeplane.features.ai.code.CodeStateDiagnostic;
+import org.freeplane.features.ai.code.CodeStateDiagnostics;
+import org.freeplane.features.ai.code.CodeStateField;
+import org.freeplane.features.ai.code.CodeStateToken;
 import org.freeplane.features.ai.code.CompileCodeRequest;
 import org.freeplane.features.ai.code.CompileCodeResponse;
 import org.freeplane.features.ai.code.ReadCodeRequest;
@@ -14,8 +19,8 @@ import org.freeplane.features.ai.code.ScriptHost;
 import org.freeplane.features.ai.code.ScriptRunInitiator;
 import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.plugin.ai.chat.session.LiveChatSessionId;
-import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.chat.ui.AIChatPanel;
+import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -43,7 +48,7 @@ public class SingleEditorAttachmentServiceTest {
         ReadCodeResponse response = readCurrentState(uut);
 
         assertThat(response.getStatus()).isEqualTo(CodeLifecycleStatus.READY);
-        assertThat(response.getCodeText()).isEqualTo("second");
+        assertThat(response.getContent().getSourceText()).isEqualTo("second");
     }
 
     @Test
@@ -216,37 +221,35 @@ public class SingleEditorAttachmentServiceTest {
             ScriptHost.ATTACHED_EDITOR,
             "text/plain",
             CodeLifecycleStatus.FAILED,
-            "failure-fingerprint",
-            Collections.singletonList("Broken at line 2"),
-            "Broken",
-            2));
+            token("failure-fingerprint"),
+            CodeStateDiagnostics.sourceDiagnostics(Collections.singletonList("Broken at line 2"), 2),
+            "Broken"));
         SingleEditorAttachmentService uut = new SingleEditorAttachmentService(aiChatPanel, settings);
         uut.attachEditor(editor, "text/plain");
 
         ReadCodeResponse initialState = readCurrentState(uut);
         CompileCodeResponse firstResult = uut.compileCode(new CompileCodeRequest(
             ScriptHost.ATTACHED_EDITOR,
-            initialState.getFingerprint()));
+            initialState.getStateToken()));
         ReadCodeResponse firstState = readCurrentState(uut);
         editor.setCompileResponse(new CompileCodeResponse(
             ScriptHost.ATTACHED_EDITOR,
             "text/plain",
             CodeLifecycleStatus.READY,
-            "success-fingerprint",
-            Collections.<String>emptyList(),
-            null,
+            token("success-fingerprint"),
+            Collections.<CodeStateDiagnostic>emptyList(),
             null));
         CompileCodeResponse secondResult = uut.compileCode(new CompileCodeRequest(
             ScriptHost.ATTACHED_EDITOR,
-            firstState.getFingerprint()));
+            firstState.getStateToken()));
         ReadCodeResponse secondState = readCurrentState(uut);
 
         assertThat(firstResult.getStatus()).isEqualTo(CodeLifecycleStatus.FAILED);
         assertThat(firstState.getStatus()).isEqualTo(CodeLifecycleStatus.FAILED);
-        assertThat(firstState.getCompilerDiagnostics()).containsExactly("Broken at line 2");
+        assertThat(firstState.getDiagnostics()).extracting(CodeStateDiagnostic::getMessage).containsExactly("Broken at line 2");
         assertThat(secondResult.getStatus()).isEqualTo(CodeLifecycleStatus.READY);
         assertThat(secondState.getStatus()).isEqualTo(CodeLifecycleStatus.READY);
-        assertThat(secondState.getCompilerDiagnostics()).isNull();
+        assertThat(secondState.getDiagnostics()).isNull();
     }
 
     @Test
@@ -261,10 +264,10 @@ public class SingleEditorAttachmentServiceTest {
         ReadCodeResponse fullState = readCurrentState(uut);
         ReadCodeResponse fingerprintState = uut.readCode(new ReadCodeRequest(
             ScriptHost.ATTACHED_EDITOR,
-            fullState.getFingerprint()));
+            fullState.getStateToken().getStateFingerprint()));
 
-        assertThat(fullState.getCodeText()).isEqualTo("text");
-        assertThat(fingerprintState.getCodeText()).isNull();
+        assertThat(fullState.getContent().getSourceText()).isEqualTo("text");
+        assertThat(fingerprintState.getContent()).isNull();
     }
 
     @Test
@@ -279,10 +282,10 @@ public class SingleEditorAttachmentServiceTest {
 
         uut.writeCode(new WriteCodeRequest(
             ScriptHost.ATTACHED_EDITOR,
-            "after",
-            readCurrentState(uut).getFingerprint()));
+            new CodeStateContent("after", null),
+            readCurrentState(uut).getStateToken()));
 
-        assertThat(editor.getText()).isEqualTo("after");
+        assertThat(editor.getCodeStateContent().getSourceText()).isEqualTo("after");
         assertThat(readCurrentState(uut).getContentType()).isEqualTo("text/x-freeplane-formula-groovy");
     }
 
@@ -301,10 +304,9 @@ public class SingleEditorAttachmentServiceTest {
             CodeLifecycleStatus.FAILED,
             null,
             null,
-            "=broken",
-            Collections.singletonList("Broken formula"),
+            new CodeStateContent("=broken", null),
+            CodeStateDiagnostics.sourceDiagnostics(Collections.singletonList("Broken formula"), 7),
             "Broken formula",
-            7,
             "stdout",
             "result"));
 
@@ -314,7 +316,7 @@ public class SingleEditorAttachmentServiceTest {
 
         assertThat(failedState.getStatus()).isEqualTo(CodeLifecycleStatus.FAILED);
         assertThat(failedState.getContentType()).isEqualTo("text/x-freeplane-formula-groovy");
-        assertThat(failedState.getCompilerDiagnostics()).containsExactly("Broken formula");
+        assertThat(failedState.getDiagnostics()).extracting(CodeStateDiagnostic::getMessage).containsExactly("Broken formula");
         assertThat(failedState.getStdout()).isEqualTo("stdout");
         assertThat(failedState.getStructuredResult()).isEqualTo("result");
         assertThat(readyState.getStatus()).isEqualTo(CodeLifecycleStatus.READY);
@@ -324,29 +326,32 @@ public class SingleEditorAttachmentServiceTest {
         return uut.readCode(new ReadCodeRequest(ScriptHost.ATTACHED_EDITOR, null));
     }
 
+    private static CodeStateToken token(String stateFingerprint) {
+        return new CodeStateToken("code", "input", stateFingerprint);
+    }
+
     private static class FakeCodeEditor implements AiCodeEditor {
-        private String text;
+        private CodeStateContent content;
         private CompileCodeResponse compileResponse = new CompileCodeResponse(
             ScriptHost.ATTACHED_EDITOR,
             "text/plain",
             CodeLifecycleStatus.READY,
-            "initial-fingerprint",
-            Collections.<String>emptyList(),
-            null,
+            token("initial-fingerprint"),
+            Collections.<CodeStateDiagnostic>emptyList(),
             null);
 
         private FakeCodeEditor(String text) {
-            this.text = text;
+            this.content = new CodeStateContent(text, null);
         }
 
         @Override
-        public String getText() {
-            return text;
+        public CodeStateContent getCodeStateContent() {
+            return content;
         }
 
         @Override
-        public void replaceText(String text) {
-            this.text = text == null ? "" : text;
+        public void replaceCodeStateContent(CodeStateContent content) {
+            this.content = content == null ? new CodeStateContent("", null) : content;
         }
 
         @Override
@@ -361,8 +366,7 @@ public class SingleEditorAttachmentServiceTest {
                 "text/plain",
                 CodeLifecycleStatus.SUCCEEDED,
                 ScriptRunInitiator.AI,
-                "run-fingerprint",
-                null,
+                token("run-fingerprint"),
                 null,
                 null,
                 null,

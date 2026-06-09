@@ -31,6 +31,8 @@ import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.features.ai.code.AiCodeRunListener;
 import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CodeStateContent;
+import org.freeplane.features.ai.code.CodeStateToken;
 import org.freeplane.features.ai.code.CompileCodeRequest;
 import org.freeplane.features.ai.code.CompileCodeResponse;
 import org.freeplane.features.ai.code.EvaluateFormulaRequest;
@@ -717,7 +719,6 @@ public class AIChatPanelScriptRequestTest {
             null,
             null,
             null,
-            null,
             null));
 
         harness.panel.setCodeHostService(codeHostService);
@@ -734,9 +735,8 @@ public class AIChatPanelScriptRequestTest {
             "text/x-freeplane-script-groovy",
             CodeLifecycleStatus.READY,
             null,
-            "fingerprint",
-            "println 1",
-            null,
+            new CodeStateToken("code", "input", "fingerprint"),
+            new CodeStateContent("println 1", null),
             null,
             null,
             null,
@@ -947,9 +947,8 @@ public class AIChatPanelScriptRequestTest {
                 "text/x-freeplane-script-groovy",
                 CodeLifecycleStatus.READY,
                 null,
-                "fingerprint",
-                "println 1",
-                null,
+                new CodeStateToken("code", "input", "fingerprint"),
+                new CodeStateContent("println 1", null),
                 null,
                 null,
                 null,

@@ -1,7 +1,7 @@
 package org.freeplane.features.ai.code;
 
 public interface AiChatAttachableEditor {
-    String getText();
+    CodeStateContent getCodeStateContent();
 
-    void replaceText(String text);
+    void replaceCodeStateContent(CodeStateContent content);
 }

@@ -9,10 +9,9 @@ public class RunCodeResponse {
     private final String contentType;
     private final CodeLifecycleStatus status;
     private final ScriptRunInitiator runInitiator;
-    private final String fingerprint;
-    private final List<String> compilerDiagnostics;
+    private final CodeStateToken stateToken;
+    private final List<CodeStateDiagnostic> diagnostics;
     private final String errorMessage;
-    private final Integer lineNumber;
     private final String stdout;
     private final Object structuredResult;
 
@@ -20,22 +19,20 @@ public class RunCodeResponse {
                            String contentType,
                            CodeLifecycleStatus status,
                            ScriptRunInitiator runInitiator,
-                           String fingerprint,
-                           List<String> compilerDiagnostics,
+                           CodeStateToken stateToken,
+                           List<CodeStateDiagnostic> diagnostics,
                            String errorMessage,
-                           Integer lineNumber,
                            String stdout,
                            Object structuredResult) {
         this.host = host;
         this.contentType = contentType;
         this.status = status;
         this.runInitiator = runInitiator;
-        this.fingerprint = fingerprint;
-        this.compilerDiagnostics = compilerDiagnostics == null
+        this.stateToken = stateToken;
+        this.diagnostics = diagnostics == null
             ? null
-            : Collections.unmodifiableList(new ArrayList<String>(compilerDiagnostics));
+            : Collections.unmodifiableList(new ArrayList<CodeStateDiagnostic>(diagnostics));
         this.errorMessage = errorMessage;
-        this.lineNumber = lineNumber;
         this.stdout = stdout;
         this.structuredResult = structuredResult;
     }
@@ -56,20 +53,16 @@ public class RunCodeResponse {
         return runInitiator;
     }
 
-    public String getFingerprint() {
-        return fingerprint;
+    public CodeStateToken getStateToken() {
+        return stateToken;
     }
 
-    public List<String> getCompilerDiagnostics() {
-        return compilerDiagnostics;
+    public List<CodeStateDiagnostic> getDiagnostics() {
+        return diagnostics;
     }
 
     public String getErrorMessage() {
         return errorMessage;
-    }
-
-    public Integer getLineNumber() {
-        return lineNumber;
     }
 
     public String getStdout() {

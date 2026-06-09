@@ -2,31 +2,33 @@ package org.freeplane.plugin.ai.tools.code;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import org.freeplane.features.ai.code.CodeStateContent;
+import org.freeplane.features.ai.code.CodeStateToken;
 import org.freeplane.features.ai.code.ScriptHost;
 
 public class WriteCodeToolRequest {
     private final ScriptHost host;
-    private final String text;
-    private final String expectedFingerprint;
+    private final CodeStateContent content;
+    private final CodeStateToken expectedStateToken;
 
     @JsonCreator
     public WriteCodeToolRequest(@JsonProperty("host") ScriptHost host,
-                                @JsonProperty("text") String text,
-                                @JsonProperty("expectedFingerprint") String expectedFingerprint) {
+                                @JsonProperty("content") CodeStateContent content,
+                                @JsonProperty("expectedStateToken") CodeStateToken expectedStateToken) {
         this.host = host;
-        this.text = text;
-        this.expectedFingerprint = expectedFingerprint;
+        this.content = content;
+        this.expectedStateToken = expectedStateToken;
     }
 
     public ScriptHost getHost() {
         return host;
     }
 
-    public String getText() {
-        return text;
+    public CodeStateContent getContent() {
+        return content;
     }
 
-    public String getExpectedFingerprint() {
-        return expectedFingerprint;
+    public CodeStateToken getExpectedStateToken() {
+        return expectedStateToken;
     }
 }

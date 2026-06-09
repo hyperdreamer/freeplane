@@ -2,14 +2,14 @@ package org.freeplane.features.ai.code;
 
 public class CompileCodeRequest {
     private ScriptHost host;
-    private String expectedFingerprint;
+    private CodeStateToken expectedStateToken;
 
     public CompileCodeRequest() {
     }
 
-    public CompileCodeRequest(ScriptHost host, String expectedFingerprint) {
+    public CompileCodeRequest(ScriptHost host, CodeStateToken expectedStateToken) {
         this.host = host;
-        this.expectedFingerprint = expectedFingerprint;
+        this.expectedStateToken = expectedStateToken;
     }
 
     public ScriptHost getHost() {
@@ -20,11 +20,11 @@ public class CompileCodeRequest {
         this.host = host;
     }
 
-    public String getExpectedFingerprint() {
-        return expectedFingerprint;
+    public CodeStateToken getExpectedStateToken() {
+        return expectedStateToken;
     }
 
-    public void setExpectedFingerprint(String expectedFingerprint) {
-        this.expectedFingerprint = expectedFingerprint;
+    public void setExpectedStateToken(CodeStateToken expectedStateToken) {
+        this.expectedStateToken = expectedStateToken;
     }
 }

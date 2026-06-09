@@ -6,6 +6,10 @@ import org.freeplane.features.ai.code.AiCodeEditor;
 import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.features.ai.code.AiCodeRunListener;
 import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CodeStateContent;
+import org.freeplane.features.ai.code.CodeStateDiagnostic;
+import org.freeplane.features.ai.code.CodeStateDiagnostics;
+import org.freeplane.features.ai.code.CodeStateToken;
 import org.freeplane.features.ai.code.CompileCodeRequest;
 import org.freeplane.features.ai.code.CompileCodeResponse;
 import org.freeplane.features.ai.code.EvaluateFormulaRequest;
@@ -50,21 +54,20 @@ public class AiCodeToolSetTest {
             ScriptHost.ATTACHED_EDITOR,
             "text/x-freeplane-script-groovy",
             CodeLifecycleStatus.FAILED,
-            "failure",
-            Collections.singletonList("Broken"),
-            "Broken",
-            1));
+            token("failure"),
+            CodeStateDiagnostics.sourceDiagnostics(Collections.singletonList("Broken"), 1),
+            "Broken"));
         service.compileCode(new CompileCodeRequest(
             ScriptHost.ATTACHED_EDITOR,
-            service.readCode(new ReadCodeRequest(ScriptHost.ATTACHED_EDITOR, null)).getFingerprint()));
+            service.readCode(new ReadCodeRequest(ScriptHost.ATTACHED_EDITOR, null)).getStateToken()));
         AiCodeToolSet uut = new AiCodeToolSet(service, null, null, ToolCaller.CHAT);
 
         ReadCodeResponse response = uut.readCode(new ReadCodeToolRequest(ScriptHost.ATTACHED_EDITOR, null));
 
         assertThat(response.getStatus()).isEqualTo(CodeLifecycleStatus.FAILED);
         assertThat(response.getContentType()).isEqualTo("text/x-freeplane-script-groovy");
-        assertThat(response.getCodeText()).isEqualTo("script");
-        assertThat(response.getCompilerDiagnostics()).containsExactly("Broken");
+        assertThat(response.getContent().getSourceText()).isEqualTo("script");
+        assertThat(response.getDiagnostics()).extracting(CodeStateDiagnostic::getMessage).containsExactly("Broken");
     }
 
     @Test
@@ -77,9 +80,8 @@ public class AiCodeToolSetTest {
                     "text/x-freeplane-formula-groovy",
                     CodeLifecycleStatus.READY,
                     null,
-                    "fingerprint",
-                    "=1+1",
-                    null,
+                    token("fingerprint"),
+                    new CodeStateContent("=1+1", null),
                     null,
                     null,
                     null,
@@ -120,12 +122,8 @@ public class AiCodeToolSetTest {
 
         assertThat(message).contains("Use readCode, writeCode, and compileCode.");
         assertThat(message).contains("The attached content is a formula.");
-        assertThat(message).doesNotContain("read-only");
+        assertThat(message).contains("inputText stays blank or null for formulas");
         assertThat(message).contains("Keep it value-computing.");
-        assertThat(message).contains("Avoid state-changing Freeplane API calls");
-        assertThat(message).contains("avoid obviously UI-driving calls");
-        assertThat(message).contains("Use the available Freeplane API documentation for API surface and semantics");
-        assertThat(message).contains("do not assume it explicitly marks which methods are UI-related");
     }
 
     @Test
@@ -137,11 +135,11 @@ public class AiCodeToolSetTest {
 
         WriteCodeResponse response = uut.writeCode(new WriteCodeToolRequest(
             ScriptHost.ATTACHED_EDITOR,
-            "after",
-            uut.readCode(new ReadCodeToolRequest(ScriptHost.ATTACHED_EDITOR, null)).getFingerprint()));
+            new CodeStateContent("after", null),
+            uut.readCode(new ReadCodeToolRequest(ScriptHost.ATTACHED_EDITOR, null)).getStateToken()));
 
-        assertThat(editor.getText()).isEqualTo("after");
-        assertThat(response.getFingerprint()).isNotBlank();
+        assertThat(editor.getCodeStateContent().getSourceText()).isEqualTo("after");
+        assertThat(response.getStateToken().getStateFingerprint()).isNotBlank();
     }
 
     @Test
@@ -152,29 +150,27 @@ public class AiCodeToolSetTest {
             ScriptHost.ATTACHED_EDITOR,
             "text/plain",
             CodeLifecycleStatus.FAILED,
-            "failure",
-            Collections.singletonList("Broken"),
-            "Broken",
-            1));
+            token("failure"),
+            CodeStateDiagnostics.sourceDiagnostics(Collections.singletonList("Broken"), 1),
+            "Broken"));
         service.attachEditor(editor, "text/plain");
         AiCodeToolSet uut = new AiCodeToolSet(service, null, null, ToolCaller.CHAT);
 
         ReadCodeResponse initialState = uut.readCode(new ReadCodeToolRequest(ScriptHost.ATTACHED_EDITOR, null));
         CompileCodeResponse first = uut.compileCode(new CompileCodeToolRequest(
             ScriptHost.ATTACHED_EDITOR,
-            initialState.getFingerprint()));
+            initialState.getStateToken()));
         ReadCodeResponse firstState = uut.readCode(new ReadCodeToolRequest(ScriptHost.ATTACHED_EDITOR, null));
         editor.setCompileResponse(new CompileCodeResponse(
             ScriptHost.ATTACHED_EDITOR,
             "text/plain",
             CodeLifecycleStatus.READY,
-            "success",
-            Collections.<String>emptyList(),
-            null,
+            token("success"),
+            Collections.<CodeStateDiagnostic>emptyList(),
             null));
         CompileCodeResponse second = uut.compileCode(new CompileCodeToolRequest(
             ScriptHost.ATTACHED_EDITOR,
-            firstState.getFingerprint()));
+            firstState.getStateToken()));
         ReadCodeResponse secondState = uut.readCode(new ReadCodeToolRequest(ScriptHost.ATTACHED_EDITOR, null));
 
         assertThat(first.getStatus()).isEqualTo(CodeLifecycleStatus.FAILED);
@@ -187,7 +183,10 @@ public class AiCodeToolSetTest {
     public void codeToolsExceptReadFailWhenNoEditorIsAttached() {
         AiCodeToolSet uut = new AiCodeToolSet(newDetachedCodeHostService(), null, null, ToolCaller.CHAT);
 
-        assertThatThrownBy(() -> uut.writeCode(new WriteCodeToolRequest(ScriptHost.ATTACHED_EDITOR, "x", null)))
+        assertThatThrownBy(() -> uut.writeCode(new WriteCodeToolRequest(
+            ScriptHost.ATTACHED_EDITOR,
+            new CodeStateContent("x", null),
+            null)))
             .isInstanceOf(IllegalStateException.class)
             .hasMessage("No editor is attached.");
         assertThatThrownBy(() -> uut.compileCode(new CompileCodeToolRequest(ScriptHost.ATTACHED_EDITOR, null)))
@@ -211,7 +210,6 @@ public class AiCodeToolSetTest {
                     ScriptHost.ATTACHED_EDITOR,
                     null,
                     CodeLifecycleStatus.NO_CODE,
-                    null,
                     null,
                     null,
                     null,
@@ -251,40 +249,42 @@ public class AiCodeToolSetTest {
         };
     }
 
+    private static CodeStateToken token(String stateFingerprint) {
+        return new CodeStateToken("code", "input", stateFingerprint);
+    }
+
     private static class FakeCodeEditor implements AiCodeEditor {
-        private String text;
+        private CodeStateContent content;
         private CompileCodeResponse compileResponse = new CompileCodeResponse(
             ScriptHost.ATTACHED_EDITOR,
             "text/plain",
             CodeLifecycleStatus.READY,
-            "initial",
-            Collections.<String>emptyList(),
-            null,
+            token("initial"),
+            Collections.<CodeStateDiagnostic>emptyList(),
             null);
         private RunCodeResponse runResponse = new RunCodeResponse(
             ScriptHost.ATTACHED_EDITOR,
             "text/plain",
             CodeLifecycleStatus.SUCCEEDED,
             ScriptRunInitiator.AI,
-            "initial",
-            null,
+            token("initial"),
             null,
             null,
             null,
             null);
 
         private FakeCodeEditor(String text) {
-            this.text = text;
+            this.content = new CodeStateContent(text, null);
         }
 
         @Override
-        public String getText() {
-            return text;
+        public CodeStateContent getCodeStateContent() {
+            return content;
         }
 
         @Override
-        public void replaceText(String text) {
-            this.text = text == null ? "" : text;
+        public void replaceCodeStateContent(CodeStateContent content) {
+            this.content = content == null ? new CodeStateContent("", null) : content;
         }
 
         @Override

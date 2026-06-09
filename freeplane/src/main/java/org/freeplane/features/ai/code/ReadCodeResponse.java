@@ -9,11 +9,10 @@ public class ReadCodeResponse {
     private final String contentType;
     private final CodeLifecycleStatus status;
     private final ScriptRunInitiator runInitiator;
-    private final String fingerprint;
-    private final String codeText;
-    private final List<String> compilerDiagnostics;
+    private final CodeStateToken stateToken;
+    private final CodeStateContent content;
+    private final List<CodeStateDiagnostic> diagnostics;
     private final String errorMessage;
-    private final Integer lineNumber;
     private final String stdout;
     private final Object structuredResult;
 
@@ -21,24 +20,22 @@ public class ReadCodeResponse {
                             String contentType,
                             CodeLifecycleStatus status,
                             ScriptRunInitiator runInitiator,
-                            String fingerprint,
-                            String codeText,
-                            List<String> compilerDiagnostics,
+                            CodeStateToken stateToken,
+                            CodeStateContent content,
+                            List<CodeStateDiagnostic> diagnostics,
                             String errorMessage,
-                            Integer lineNumber,
                             String stdout,
                             Object structuredResult) {
         this.host = host;
         this.contentType = contentType;
         this.status = status;
         this.runInitiator = runInitiator;
-        this.fingerprint = fingerprint;
-        this.codeText = codeText;
-        this.compilerDiagnostics = compilerDiagnostics == null
+        this.stateToken = stateToken;
+        this.content = content;
+        this.diagnostics = diagnostics == null
             ? null
-            : Collections.unmodifiableList(new ArrayList<String>(compilerDiagnostics));
+            : Collections.unmodifiableList(new ArrayList<CodeStateDiagnostic>(diagnostics));
         this.errorMessage = errorMessage;
-        this.lineNumber = lineNumber;
         this.stdout = stdout;
         this.structuredResult = structuredResult;
     }
@@ -59,24 +56,20 @@ public class ReadCodeResponse {
         return runInitiator;
     }
 
-    public String getFingerprint() {
-        return fingerprint;
+    public CodeStateToken getStateToken() {
+        return stateToken;
     }
 
-    public String getCodeText() {
-        return codeText;
+    public CodeStateContent getContent() {
+        return content;
     }
 
-    public List<String> getCompilerDiagnostics() {
-        return compilerDiagnostics;
+    public List<CodeStateDiagnostic> getDiagnostics() {
+        return diagnostics;
     }
 
     public String getErrorMessage() {
         return errorMessage;
-    }
-
-    public Integer getLineNumber() {
-        return lineNumber;
     }
 
     public String getStdout() {

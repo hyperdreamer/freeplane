@@ -11,6 +11,10 @@ import java.util.Collections;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CodeStateContent;
+import org.freeplane.features.ai.code.CodeStateField;
+import org.freeplane.features.ai.code.CodeStateToken;
+import org.freeplane.features.ai.code.CompileCodeResponse;
 import org.freeplane.features.ai.code.EvaluateFormulaRequest;
 import org.freeplane.features.ai.code.ReadCodeRequest;
 import org.freeplane.features.ai.code.ReadCodeResponse;
@@ -35,28 +39,28 @@ public class AiOwnedScriptHostServiceTest {
     public void writeCodeCreatesCurrentScriptAndUpdatesItInPlace() {
         AiOwnedScriptHostService uut = new AiOwnedScriptHostService(null);
 
-        WriteCodeResponse first = uut.doWriteCode(new WriteCodeRequest(ScriptHost.AI, "println 1", null));
-        WriteCodeResponse second = uut.doWriteCode(new WriteCodeRequest(ScriptHost.AI, "println 2", first.getFingerprint()));
+        WriteCodeResponse first = uut.doWriteCode(writeRequest("println 1", null, null));
+        WriteCodeResponse second = uut.doWriteCode(writeRequest("println 2", null, first.getStateToken()));
         ReadCodeResponse current = uut.doReadCode(new ReadCodeRequest(ScriptHost.AI, null));
 
         assertThat(first.getHost()).isEqualTo(ScriptHost.AI);
         assertThat(second.getHost()).isEqualTo(ScriptHost.AI);
         assertThat(current.getStatus()).isEqualTo(CodeLifecycleStatus.READY);
-        assertThat(current.getCodeText()).isEqualTo("println 2");
-        assertThat(current.getFingerprint()).isEqualTo(second.getFingerprint());
+        assertThat(current.getContent().getSourceText()).isEqualTo("println 2");
+        assertThat(current.getStateToken()).isEqualTo(second.getStateToken());
     }
 
     @Test
     public void writeCodeRejectsMismatchedExpectedFingerprint() {
         AiOwnedScriptHostService uut = new AiOwnedScriptHostService(null);
-        WriteCodeResponse written = uut.doWriteCode(new WriteCodeRequest(ScriptHost.AI, "println 1", null));
+        uut.doWriteCode(writeRequest("println 1", null, null));
 
         assertThatThrownBy(() -> uut.doWriteCode(new WriteCodeRequest(
             ScriptHost.AI,
-            "println 2",
-            "wrong")))
+            new CodeStateContent("println 2", null),
+            new CodeStateToken(null, null, "wrong"))))
             .isInstanceOf(IllegalStateException.class)
-            .hasMessage("Expected fingerprint does not match the current code.");
+            .hasMessage("Expected state token does not match the current code state.");
     }
 
     @Test
@@ -67,9 +71,9 @@ public class AiOwnedScriptHostServiceTest {
             eq(AiScriptExecutionPolicy.SHOWN_USER_RUN))).thenReturn(AiScriptExecutionPolicy.SHOWN_USER_RUN);
         RecordingDialogFactory dialogFactory = new RecordingDialogFactory();
         AiOwnedScriptHostService uut = new AiOwnedScriptHostService(resourceController, dialogFactory);
-        WriteCodeResponse written = uut.doWriteCode(new WriteCodeRequest(ScriptHost.AI, "println 1", null));
+        WriteCodeResponse written = uut.doWriteCode(writeRequest("println 1", null, null));
 
-        RunCodeResponse response = uut.doRunCode(new RunCodeRequest(ScriptHost.AI, written.getFingerprint()));
+        RunCodeResponse response = uut.doRunCode(new RunCodeRequest(ScriptHost.AI, written.getStateToken()));
         ReadCodeResponse state = uut.doReadCode(new ReadCodeRequest(ScriptHost.AI, null));
 
         assertThat(response.getStatus()).isEqualTo(CodeLifecycleStatus.WAITING_FOR_USER_RUN);
@@ -86,16 +90,30 @@ public class AiOwnedScriptHostServiceTest {
             eq(AiScriptExecutionPolicy.SHOWN_USER_RUN))).thenReturn(AiScriptExecutionPolicy.SHOWN_USER_RUN);
         LoadingDialogFactory dialogFactory = new LoadingDialogFactory();
         AiOwnedScriptHostService uut = new AiOwnedScriptHostService(resourceController, dialogFactory);
-        WriteCodeResponse written = uut.doWriteCode(new WriteCodeRequest(ScriptHost.AI, "println 1", null));
+        WriteCodeResponse written = uut.doWriteCode(writeRequest("println 1", null, null));
 
-        RunCodeResponse response = uut.doRunCode(new RunCodeRequest(ScriptHost.AI, written.getFingerprint()));
+        RunCodeResponse response = uut.doRunCode(new RunCodeRequest(ScriptHost.AI, written.getStateToken()));
         ReadCodeResponse state = uut.doReadCode(new ReadCodeRequest(ScriptHost.AI, null));
 
         assertThat(response.getStatus()).isEqualTo(CodeLifecycleStatus.WAITING_FOR_USER_RUN);
-        assertThat(response.getFingerprint()).isEqualTo(written.getFingerprint());
-        assertThat(state.getCodeText()).isEqualTo("println 1");
-        assertThat(state.getFingerprint()).isEqualTo(written.getFingerprint());
-        assertThat(dialogFactory.dialog.currentText).isEqualTo("println 1");
+        assertThat(response.getStateToken()).isEqualTo(written.getStateToken());
+        assertThat(state.getContent().getSourceText()).isEqualTo("println 1");
+        assertThat(state.getStateToken()).isEqualTo(written.getStateToken());
+        assertThat(dialogFactory.dialog.currentContent.getSourceText()).isEqualTo("println 1");
+    }
+
+    @Test
+    public void compileFailsForInvalidInputJsonButWriteAllowsIt() {
+        AiOwnedScriptHostService uut = new AiOwnedScriptHostService(null);
+
+        WriteCodeResponse written = uut.doWriteCode(writeRequest("return args", "{", null));
+        CompileCodeResponse compileResponse = uut.doCompileCode(new org.freeplane.features.ai.code.CompileCodeRequest(
+            ScriptHost.AI,
+            written.getStateToken()));
+
+        assertThat(compileResponse.getStatus()).isEqualTo(CodeLifecycleStatus.FAILED);
+        assertThat(compileResponse.getDiagnostics()).hasSize(1);
+        assertThat(compileResponse.getDiagnostics().get(0).getField()).isEqualTo(CodeStateField.INPUT_JSON);
     }
 
     @Test
@@ -163,6 +181,10 @@ public class AiOwnedScriptHostServiceTest {
         assertThat(permissions.get(ScriptingPermissions.RESOURCES_EXECUTE_SCRIPTS_WITHOUT_AI_REQUEST_RESTRICTION)).isFalse();
     }
 
+    private WriteCodeRequest writeRequest(String sourceText, String inputText, CodeStateToken expectedStateToken) {
+        return new WriteCodeRequest(ScriptHost.AI, new CodeStateContent(sourceText, inputText), expectedStateToken);
+    }
+
     private static class RecordingDialogFactory implements AiOwnedScriptHostService.DialogFactory {
         private final RecordingDialog dialog = new RecordingDialog();
 
@@ -199,8 +221,8 @@ public class AiOwnedScriptHostServiceTest {
         }
 
         @Override
-        public String currentCodeText() {
-            return "println 1";
+        public CodeStateContent currentContent() {
+            return new CodeStateContent("println 1", null);
         }
 
         @Override
@@ -216,7 +238,7 @@ public class AiOwnedScriptHostServiceTest {
     private static class LoadingDialog implements AiOwnedScriptHostService.DialogHandle {
         private final AiOwnedScriptHostService.CodeStateProvider codeStateProvider;
         private boolean codeShown;
-        private String currentText = "";
+        private CodeStateContent currentContent = new CodeStateContent("", null);
 
         private LoadingDialog(AiOwnedScriptHostService.CodeStateProvider codeStateProvider) {
             this.codeStateProvider = codeStateProvider;
@@ -226,7 +248,7 @@ public class AiOwnedScriptHostServiceTest {
         public void showCode() {
             codeShown = true;
             ReadCodeResponse state = codeStateProvider.readCodeState();
-            currentText = state == null || state.getCodeText() == null ? "" : state.getCodeText();
+            currentContent = state == null || state.getContent() == null ? new CodeStateContent("", null) : state.getContent();
         }
 
         @Override
@@ -234,8 +256,8 @@ public class AiOwnedScriptHostServiceTest {
         }
 
         @Override
-        public String currentCodeText() {
-            return currentText;
+        public CodeStateContent currentContent() {
+            return currentContent;
         }
 
         @Override

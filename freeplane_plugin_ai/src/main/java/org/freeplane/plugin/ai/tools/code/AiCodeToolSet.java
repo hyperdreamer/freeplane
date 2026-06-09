@@ -50,7 +50,7 @@ public class AiCodeToolSet {
         return TOOL_NAMES;
     }
 
-    @Tool("Read the current code state stored in the requested host. Pass host AI for AI-owned code or ATTACHED_EDITOR for an attached editor. When fingerprint matches the current text, codeText may be omitted in the response.")
+    @Tool("Read the current code state stored in the requested host. Pass host AI for AI-owned code or ATTACHED_EDITOR for an attached editor. When knownStateFingerprint matches the current full state, content may be omitted in the response.")
     public ReadCodeResponse readCode(ReadCodeToolRequest request) {
         try {
             ReadCodeRequest codeRequest = toReadCodeRequest(request);
@@ -72,7 +72,7 @@ public class AiCodeToolSet {
         }
     }
 
-    @Tool("Create or replace the current code state in the requested host by storing the provided text there. Use host AI for AI-owned code or ATTACHED_EDITOR for an attached editor. For new AI-owned code, call this first without expectedFingerprint only when no current AI-owned code exists. Otherwise expectedFingerprint must match the current text. For the attached editor this updates only the current draft text. Attached formula editing is available only when the current tool availability exposes writeCode and compileCode and AI formula editing is enabled.")
+    @Tool("Create or replace the current code state in the requested host by storing the provided content there. Use host AI for AI-owned code or ATTACHED_EDITOR for an attached editor. content contains sourceText and inputText. For new AI-owned code, call this first without expectedStateToken only when no current AI-owned code exists. Otherwise expectedStateToken must match the current full state. For the attached editor this updates only the current draft content. Attached formula editing is available only when the current tool availability exposes writeCode and compileCode and AI formula editing is enabled. Current attached formula editing capability: enabled when the attached editor content is a formula.")
     public WriteCodeResponse writeCode(WriteCodeToolRequest request) {
         try {
             WriteCodeRequest codeRequest = toWriteCodeRequest(request);
@@ -94,7 +94,7 @@ public class AiCodeToolSet {
         }
     }
 
-    @Tool("Compile the current code state for the requested host without executing it. This compiles code already present in the target host; it does not accept source text directly. expectedFingerprint is required and must match the current text, so readCode first when needed. For new AI-owned code, call writeCode first. Attached formula compilation is available only when the current tool availability exposes writeCode and compileCode and AI formula editing is enabled.")
+    @Tool("Compile the current code state for the requested host without executing it. This compiles code already present in the target host; it does not accept source text directly. expectedStateToken is required and must match the current full state, so readCode first when needed. For new AI-owned code, call writeCode first. Attached formula compilation is available only when the current tool availability exposes writeCode and compileCode and AI formula editing is enabled. Current attached formula editing capability: enabled when the attached editor content is a formula.")
     public CompileCodeResponse compileCode(CompileCodeToolRequest request) {
         try {
             CompileCodeRequest codeRequest = toCompileCodeRequest(request);
@@ -116,7 +116,7 @@ public class AiCodeToolSet {
         }
     }
 
-    @Tool("Run the current code state for the requested host using the current Freeplane selection. This runs code already present in the target host; it does not accept source text directly. expectedFingerprint is required and must match the current text, so readCode first when needed. For new AI-owned code, call writeCode first. Only script content is runnable. Running code may trigger UI side effects. Avoid scripts that show dialogs, notifications, or alter visible UI state unless explicitly requested by the user. Prefer return values or stdout over UI output.")
+    @Tool("Run the current code state for the requested host using the current Freeplane selection. This runs code already present in the target host; it does not accept source text directly. expectedStateToken is required and must match the current full state, so readCode first when needed. For new AI-owned code, call writeCode first. Only script content is runnable. Running code may trigger UI side effects. Avoid scripts that show dialogs, notifications, or alter visible UI state unless explicitly requested by the user. Prefer return values or stdout over UI output.")
     public RunCodeResponse runCode(RunCodeToolRequest request) {
         try {
             RunCodeRequest codeRequest = toRunCodeRequest(request);
@@ -166,24 +166,24 @@ public class AiCodeToolSet {
                 + "Target host ATTACHED_EDITOR. The attached content is a formula. "
                 + "Keep it value-computing. Avoid state-changing Freeplane API calls and avoid obviously UI-driving calls. "
                 + "Use the available Freeplane API documentation for API surface and semantics, but do not assume it explicitly marks which methods are UI-related. "
-                + "writeCode changes only the current draft text. compileCode acts on the attached editor's current code state and requires the current fingerprint from readCode. "
+                + "writeCode changes only the current draft content. compileCode acts on the attached editor's current code state and requires the current stateToken from readCode. inputText stays blank or null for formulas. "
                 + "Do not assume submit or execution while the editor stays open. Submit-failure repair requests require user approval.";
         }
         if (SCRIPT_CONTENT_TYPE.equals(response.getContentType())) {
             return runAuthorized
                 ? "An editor is attached to this chat. Use readCode, writeCode, compileCode, and runCode. "
                     + "Target host ATTACHED_EDITOR. The attached content is a script. "
-                    + "writeCode changes only the current draft text. compileCode and runCode act on the attached editor's current code state, do not accept source text directly, and require the current fingerprint from readCode. "
+                    + "writeCode changes only the current draft content. content contains sourceText and inputText. compileCode and runCode act on the attached editor's current code state, do not accept source text directly, and require the current stateToken from readCode. "
                     + "Do not copy attached code into the AI-owned script host and run it there unless the user explicitly asks."
                 : "An editor is attached to this chat. Use readCode, writeCode, and compileCode. "
                     + "Target host ATTACHED_EDITOR. The attached content is a script. "
-                    + "writeCode changes only the current draft text. compileCode acts on the attached editor's current code state and requires the current fingerprint from readCode. Do not assume execution support.";
+                    + "writeCode changes only the current draft content. content contains sourceText and inputText. compileCode acts on the attached editor's current code state and requires the current stateToken from readCode. Do not assume execution support.";
         }
         return runAuthorized
             ? "An editor is attached to this chat. Use readCode, writeCode, compileCode, and runCode. "
-                + "Target host ATTACHED_EDITOR. compileCode and runCode act on the attached editor's current code state, do not accept source text directly, and require the current fingerprint from readCode."
+                + "Target host ATTACHED_EDITOR. compileCode and runCode act on the attached editor's current code state, do not accept source text directly, and require the current stateToken from readCode."
             : "An editor is attached to this chat. Use readCode, writeCode, and compileCode. "
-                + "Target host ATTACHED_EDITOR. compileCode acts on the attached editor's current code state and requires the current fingerprint from readCode.";
+                + "Target host ATTACHED_EDITOR. compileCode acts on the attached editor's current code state and requires the current stateToken from readCode.";
     }
 
     private String genericAiHostGuidance(boolean writeAuthorized, boolean compileAuthorized, boolean runAuthorized) {
@@ -192,7 +192,7 @@ public class AiCodeToolSet {
         }
         return "AI-owned code tools are available in this chat. Use readCode, writeCode, compileCode, and runCode. "
             + "These tools act on the current code state of the targeted host, not on source text quoted in chat. "
-            + "For new AI-owned code, first call writeCode with host AI and text. If current AI-owned code already exists, writeCode, compileCode, and runCode require the current fingerprint from readCode. "
+            + "For new AI-owned code, first call writeCode with host AI and content. content contains sourceText and inputText. If current AI-owned code already exists, writeCode, compileCode, and runCode require the current stateToken from readCode. "
             + "compileCode and runCode do not accept source text directly.";
     }
 
@@ -206,28 +206,28 @@ public class AiCodeToolSet {
         if (request == null) {
             return null;
         }
-        return new ReadCodeRequest(request.getHost(), request.getFingerprint());
+        return new ReadCodeRequest(request.getHost(), request.getKnownStateFingerprint());
     }
 
     private WriteCodeRequest toWriteCodeRequest(WriteCodeToolRequest request) {
         if (request == null) {
             return null;
         }
-        return new WriteCodeRequest(request.getHost(), request.getText(), request.getExpectedFingerprint());
+        return new WriteCodeRequest(request.getHost(), request.getContent(), request.getExpectedStateToken());
     }
 
     private CompileCodeRequest toCompileCodeRequest(CompileCodeToolRequest request) {
         if (request == null) {
             return null;
         }
-        return new CompileCodeRequest(request.getHost(), request.getExpectedFingerprint());
+        return new CompileCodeRequest(request.getHost(), request.getExpectedStateToken());
     }
 
     private RunCodeRequest toRunCodeRequest(RunCodeToolRequest request) {
         if (request == null) {
             return null;
         }
-        return new RunCodeRequest(request.getHost(), request.getExpectedFingerprint());
+        return new RunCodeRequest(request.getHost(), request.getExpectedStateToken());
     }
 
     private void publishSummary(ToolCallSummary summary) {

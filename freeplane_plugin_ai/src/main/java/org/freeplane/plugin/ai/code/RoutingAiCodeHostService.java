@@ -50,7 +50,6 @@ public class RoutingAiCodeHostService implements AiCodeHostService {
                 null,
                 null,
                 null,
-                null,
                 null);
         }
         return aiHostService.readCode(request);

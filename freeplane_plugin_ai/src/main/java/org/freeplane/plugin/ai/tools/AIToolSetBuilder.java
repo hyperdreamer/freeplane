@@ -198,7 +198,6 @@ public class AIToolSetBuilder {
                     null,
                     null,
                     null,
-                    null,
                     null);
             }
 

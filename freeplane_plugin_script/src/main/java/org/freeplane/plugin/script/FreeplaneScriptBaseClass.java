@@ -297,7 +297,7 @@ public abstract class FreeplaneScriptBaseClass extends Script {
         	instance.script = script;
             ControllerRO controllerProxy = ProxyFactory.createController(scriptContext);
             NodeRO nodeProxy = ProxyFactory.createNode(node, scriptContext);
-        	Binding binding = createBinding(nodeProxy, controllerProxy);
+        	Binding binding = createBinding(nodeProxy, controllerProxy, scriptContext);
         	instance.setBinding(binding);
         	return instance;
         }
@@ -306,8 +306,13 @@ public abstract class FreeplaneScriptBaseClass extends Script {
         }
 	}
 
-    protected Binding createBinding(NodeRO nodeProxy, ControllerRO controllerProxy) {
+    protected Binding createBinding(NodeRO nodeProxy, ControllerRO controllerProxy, ScriptContext scriptContext) {
         Binding binding = new Binding(new LinkedHashMap(getBinding().getVariables()));
+        if (scriptContext != null && !scriptContext.getBoundVariables().isEmpty()) {
+            for (Map.Entry<String, Object> entry : scriptContext.getBoundVariables().entrySet()) {
+                binding.setVariable(entry.getKey(), entry.getValue());
+            }
+        }
 		binding.setVariable("c", controllerProxy);
 		binding.setVariable("node", nodeProxy);
         return binding;

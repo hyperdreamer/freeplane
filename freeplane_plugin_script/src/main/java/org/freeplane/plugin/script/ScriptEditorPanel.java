@@ -32,10 +32,8 @@ import java.io.OutputStream;
 import java.io.PrintStream;
 import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.Formatter;
-
+import java.util.Collections;
+import java.util.List;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
@@ -69,6 +67,11 @@ import org.freeplane.features.ai.code.AiChatAttachmentService;
 import org.freeplane.features.ai.code.AiChatRepairRequest;
 import org.freeplane.features.ai.code.AiCodeEditor;
 import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CodeStateContent;
+import org.freeplane.features.ai.code.CodeStateDiagnostic;
+import org.freeplane.features.ai.code.CodeStateDiagnostics;
+import org.freeplane.features.ai.code.CodeStateField;
+import org.freeplane.features.ai.code.CodeStateToken;
 import org.freeplane.features.ai.code.CompileCodeRequest;
 import org.freeplane.features.ai.code.CompileCodeResponse;
 import org.freeplane.features.ai.code.ReadCodeResponse;
@@ -79,6 +82,7 @@ import org.freeplane.features.ai.code.ScriptRunInitiator;
 import org.freeplane.core.ui.UIBuilder;
 import org.freeplane.core.ui.components.EmptyIcon;
 import org.freeplane.core.ui.components.JRestrictedSizeScrollPane;
+import org.freeplane.core.ui.components.OptionalDontShowMeAgainDialog;
 import org.freeplane.core.ui.components.UITools;
 import org.freeplane.core.ui.textchanger.TranslatedElementFactory;
 import org.freeplane.core.util.LogUtils;
@@ -103,6 +107,7 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 	private static final String ATTACHED_SCRIPT_FAILURE_PROMPT =
 		"The attached Freeplane script was run manually and failed. Analyze the failure using the current code state below. "
 			+ "Do not rewrite the script unless the user explicitly asks or confirms.";
+    private static final String INVALID_JSON_SAVE_EXIT_PROPERTY = "script_editor_save_invalid_json";
 
 	final private class AttachToAiAction extends AbstractAction {
 		private static final long serialVersionUID = 1L;
@@ -286,6 +291,7 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 	public static class ScriptHolder {
 		String mScript;
 		String mScriptName;
+        String mInputText;
 
 		/**
 		 * @param pScriptName
@@ -294,10 +300,11 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 		 * @param pScript
 		 *            script content
 		 */
-		public ScriptHolder(final String pScriptName, final String pScript) {
+		public ScriptHolder(final String pScriptName, final String pScript, final String pInputText) {
 			super();
 			mScript = pScript;
 			mScriptName = pScriptName;
+            mInputText = pInputText;
 		}
 
 		public String getScript() {
@@ -308,6 +315,10 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 			return mScriptName;
 		}
 
+        public String getInputText() {
+            return mInputText;
+        }
+
 		public ScriptHolder setScript(final String pScript) {
 			mScript = pScript;
 			return this;
@@ -317,6 +328,11 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 			mScriptName = pScriptName;
 			return this;
 		}
+
+        public ScriptHolder setInputText(String pInputText) {
+            mInputText = pInputText;
+            return this;
+        }
 	}
 
 	final private class SignAction extends AbstractAction {
@@ -362,15 +378,18 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 	final private JList mScriptList;
 	final private IScriptModel mScriptModel;
 	final private JTextArea mScriptResultField;
+	final private JTextArea mScriptInputField;
 	final private JTextComponent mScriptTextField;
 	final private SignAction mSignAction;
 	final private JLabel mStatus;
+    private final boolean mSavedNodeScriptEditor;
 	private AiChatAttachment aiChatAttachment;
 
 	public ScriptEditorPanel( final IScriptModel pScriptModel,
 	                         final boolean pHasNewScriptFunctionality) {
 		super(UITools.getCurrentFrame(), false /* non modal */);
 		mScriptModel = pScriptModel;
+        mSavedNodeScriptEditor = pHasNewScriptFunctionality;
 		String scriptTitle = pScriptModel.getTitle();
 		this.setTitle(TextUtils.getText("plugins/ScriptEditor/window.title") +
 				(scriptTitle.isEmpty() ? "" : " [" + scriptTitle + "]"));
@@ -419,10 +438,19 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 		final JEditorPane editorPane = new JEditorPane();
 		SourceTextEditorUIConfigurator.configureColors(editorPane);
 		mScriptTextField = editorPane;
+        mScriptInputField = new JTextArea();
 		mScriptTextField.setEnabled(false);
+        mScriptInputField.setEnabled(false);
 		JScrollPane scriptScrollPane = new JRestrictedSizeScrollPane(mScriptTextField);
+        scriptScrollPane.setBorder(javax.swing.BorderFactory.createTitledBorder(TextUtils.getText("ai_owned_script_dialog_code")));
 		UITools.setScrollbarIncrement(scriptScrollPane);
-		mCentralUpperPanel = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, mScriptList, scriptScrollPane);
+        JScrollPane inputScrollPane = new JRestrictedSizeScrollPane(mScriptInputField);
+        inputScrollPane.setBorder(javax.swing.BorderFactory.createTitledBorder(TextUtils.getText("ai_owned_script_dialog_input_json")));
+        UITools.setScrollbarIncrement(inputScrollPane);
+        JSplitPane editorFieldsPanel = new JSplitPane(JSplitPane.VERTICAL_SPLIT, scriptScrollPane, inputScrollPane);
+        editorFieldsPanel.setResizeWeight(0.75d);
+        editorFieldsPanel.setContinuousLayout(true);
+		mCentralUpperPanel = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, mScriptList, editorFieldsPanel);
 		try {
 			editorPane.setContentType(EDITOR_CONTENT_TYPE);
 
@@ -430,6 +458,7 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 			final int fontSize = ResourceController.getResourceController().getIntProperty(GROOVY_EDITOR_FONT_SIZE);
 			final Font font = UITools.scaleUI(new Font(fontName, Font.PLAIN, fontSize));
 			editorPane.setFont(font);
+            mScriptInputField.setFont(font);
 
 		} catch (Exception e) {
 			LogUtils.severe(e);
@@ -541,6 +570,19 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 				return;
 			}
 		}
+        if (!pIsCanceled && mSavedNodeScriptEditor) {
+            ScriptInputJsonSupport.ParseResult parseResult = ScriptInputJsonSupport.parseInputText(mScriptInputField.getText());
+            if (!parseResult.isSuccessful()) {
+                int action = OptionalDontShowMeAgainDialog.showWithExplanation(
+                    "ScriptEditorPanel.save_invalid_json",
+                    "ScriptEditorPanel.save_invalid_json.explanation",
+                    INVALID_JSON_SAVE_EXIT_PROPERTY,
+                    OptionalDontShowMeAgainDialog.MessageType.ONLY_OK_SELECTION_IS_STORED);
+                if (action != JOptionPane.OK_OPTION) {
+                    return;
+                }
+            }
+        }
 		if (aiChatAttachment != null) {
 			aiChatAttachment.detach();
 		}
@@ -572,29 +614,43 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 	}
 
 	@Override
-	public String getText() {
-		return mScriptTextField.getText();
+	public CodeStateContent getCodeStateContent() {
+		return new CodeStateContent(mScriptTextField.getText(), mScriptInputField.getText());
 	}
 
 	@Override
-	public void replaceText(String text) {
-		mScriptTextField.setText(text == null ? "" : text);
+	public void replaceCodeStateContent(CodeStateContent content) {
+		mScriptTextField.setText(content == null || content.getSourceText() == null ? "" : content.getSourceText());
+        mScriptInputField.setText(content == null || content.getInputText() == null ? "" : content.getInputText());
 	}
 
 	@Override
 	public CompileCodeResponse compileCode(CompileCodeRequest request) {
-		String scriptText = mScriptTextField.getText();
+        CodeStateContent content = getCodeStateContent();
+        CodeStateToken stateToken = CodeStateToken.fromContent(content);
+        ScriptInputJsonSupport.ParseResult parseResult = ScriptInputJsonSupport.parseInputText(
+            content.getInputText(),
+            stateToken.getInputFingerprint());
+        if (!parseResult.isSuccessful()) {
+            List<CodeStateDiagnostic> diagnostics = Collections.singletonList(parseResult.getDiagnostic());
+            return new CompileCodeResponse(
+                ScriptHost.ATTACHED_EDITOR,
+                AI_ATTACHMENT_CONTENT_TYPE,
+                CodeLifecycleStatus.FAILED,
+                stateToken,
+                diagnostics,
+                ScriptInputJsonSupport.primaryMessage(parseResult.getDiagnostic()));
+        }
 		ScriptingEngine.GroovyCompileResult compileResult = ScriptingEngine.compileGroovyScriptForDiagnostics(
-			scriptText,
+			content.getSourceText(),
 			ScriptingPermissions.getPermissiveScriptingPermissions());
 		return new CompileCodeResponse(
 			ScriptHost.ATTACHED_EDITOR,
 			AI_ATTACHMENT_CONTENT_TYPE,
 			compileResult.isSuccessful() ? CodeLifecycleStatus.READY : CodeLifecycleStatus.FAILED,
-			fingerprint(scriptText),
-			compileResult.getCompilerDiagnostics(),
-			compileResult.getErrorMessage(),
-			compileResult.getLineNumber());
+			stateToken,
+			CodeStateDiagnostics.sourceDiagnostics(compileResult.getCompilerDiagnostics(), compileResult.getLineNumber()),
+			compileResult.getErrorMessage());
 	}
 
 	@Override
@@ -607,6 +663,24 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 		if (mScriptList.isSelectionEmpty()) {
 			throw new IllegalStateException("No script is selected.");
 		}
+        CodeStateContent content = getCodeStateContent();
+        CodeStateToken stateToken = CodeStateToken.fromContent(content);
+        ScriptInputJsonSupport.ParseResult parseResult = ScriptInputJsonSupport.parseInputText(
+            content.getInputText(),
+            stateToken.getInputFingerprint());
+        if (!parseResult.isSuccessful()) {
+            List<CodeStateDiagnostic> diagnostics = Collections.singletonList(parseResult.getDiagnostic());
+            return new RunCodeResponse(
+                ScriptHost.ATTACHED_EDITOR,
+                AI_ATTACHMENT_CONTENT_TYPE,
+                CodeLifecycleStatus.FAILED,
+                runInitiator,
+                stateToken,
+                diagnostics,
+                ScriptInputJsonSupport.primaryMessage(parseResult.getDiagnostic()),
+                null,
+                null);
+        }
 		ByteArrayOutputStream outputBuffer = new ByteArrayOutputStream();
 		final int[] lineNumber = new int[] { -1 };
 		try (PrintStream outStream = new PrintStream(outputBuffer, false, "UTF-8")) {
@@ -622,36 +696,43 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 				AI_ATTACHMENT_CONTENT_TYPE,
 				CodeLifecycleStatus.SUCCEEDED,
 				runInitiator,
-				fingerprint(mScriptTextField.getText()),
-				null,
+				stateToken,
 				null,
 				null,
 				stdout(outputBuffer),
 				toJsonSafeValue(result));
 		}
 		catch (ExecuteScriptException e) {
+            List<CodeStateDiagnostic> diagnostics = CodeStateDiagnostics.singleton(
+                CodeStateField.SOURCE_TEXT,
+                e.getMessage(),
+                lineNumber[0] >= 0 ? Integer.valueOf(lineNumber[0]) : null,
+                null);
 			return new RunCodeResponse(
 				ScriptHost.ATTACHED_EDITOR,
 				AI_ATTACHMENT_CONTENT_TYPE,
 				CodeLifecycleStatus.FAILED,
 				runInitiator,
-				fingerprint(mScriptTextField.getText()),
-				null,
+				stateToken,
+				diagnostics,
 				e.getMessage(),
-				lineNumber[0] >= 0 ? Integer.valueOf(lineNumber[0]) : null,
 				stdout(outputBuffer),
 				null);
 		}
 		catch (RuntimeException e) {
+            List<CodeStateDiagnostic> diagnostics = CodeStateDiagnostics.singleton(
+                CodeStateField.SOURCE_TEXT,
+                e.getMessage(),
+                lineNumber[0] >= 0 ? Integer.valueOf(lineNumber[0]) : null,
+                null);
 			return new RunCodeResponse(
 				ScriptHost.ATTACHED_EDITOR,
 				AI_ATTACHMENT_CONTENT_TYPE,
 				CodeLifecycleStatus.FAILED,
 				runInitiator,
-				fingerprint(mScriptTextField.getText()),
-				null,
+				stateToken,
+				diagnostics,
 				e.getMessage(),
-				lineNumber[0] >= 0 ? Integer.valueOf(lineNumber[0]) : null,
 				stdout(outputBuffer),
 				null);
 		}
@@ -686,11 +767,10 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 			response.getContentType(),
 			response.getStatus(),
 			response.getRunInitiator(),
-			response.getFingerprint(),
+			response.getStateToken(),
 			null,
-			response.getCompilerDiagnostics(),
+			response.getDiagnostics(),
 			response.getErrorMessage(),
-			response.getLineNumber(),
 			response.getStdout(),
 			response.getStructuredResult());
 		aiChatAttachment.recordCodeState(codeState);
@@ -755,36 +835,24 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 	}
 
 	private String fingerprint(String text) {
-		try {
-			MessageDigest digest = MessageDigest.getInstance("SHA-256");
-			byte[] hash = digest.digest((text == null ? "" : text).getBytes(StandardCharsets.UTF_8));
-			Formatter formatter = new Formatter();
-			try {
-				for (byte value : hash) {
-					formatter.format("%02x", value);
-				}
-				return formatter.toString();
-			}
-			finally {
-				formatter.close();
-			}
-		}
-		catch (NoSuchAlgorithmException e) {
-			throw new IllegalStateException("SHA-256 is not available.", e);
-		}
+        return CodeStateToken.fingerprint(text);
 	}
 
 	private void select(final int pIndex) {
 		mScriptTextField.setEnabled(pIndex >= 0);
+        mScriptInputField.setEnabled(pIndex >= 0);
 		mRunAction.setEnabled(pIndex >= 0);
 		mAttachToAiButton.setEnabled(pIndex >= 0);
 		mSignAction.setEnabled(pIndex >= 0);
 		if (pIndex < 0) {
 			mScriptTextField.setText("");
+            mScriptInputField.setText("");
 			return;
 		}
 		storeCurrent();
-		mScriptTextField.setText(mScriptModel.getScript(pIndex).getScript());
+        ScriptHolder scriptHolder = mScriptModel.getScript(pIndex);
+		mScriptTextField.setText(scriptHolder.getScript());
+        mScriptInputField.setText(scriptHolder.getInputText() == null ? "" : scriptHolder.getInputText());
 		mLastSelected = pIndex;
 		if (pIndex >= 0 && mScriptList.getSelectedIndex() != pIndex) {
 			mScriptList.setSelectedIndex(pIndex);
@@ -795,7 +863,10 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 	private void storeCurrent() {
 		if (mLastSelected != null) {
 			final int oldIndex = mLastSelected;
-			mScriptModel.setScript(oldIndex, mScriptModel.getScript(oldIndex).setScript(mScriptTextField.getText()));
+            ScriptHolder currentScript = mScriptModel.getScript(oldIndex)
+                .setScript(mScriptTextField.getText())
+                .setInputText(mScriptInputField.getText());
+			mScriptModel.setScript(oldIndex, currentScript);
 		}
 	}
 

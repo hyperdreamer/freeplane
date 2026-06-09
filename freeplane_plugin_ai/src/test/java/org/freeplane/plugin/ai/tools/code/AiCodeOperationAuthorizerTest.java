@@ -8,6 +8,8 @@ import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.features.ai.code.AiCodeRunListener;
 import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CodeStateContent;
+import org.freeplane.features.ai.code.CodeStateToken;
 import org.freeplane.features.ai.code.CompileCodeRequest;
 import org.freeplane.features.ai.code.CompileCodeResponse;
 import org.freeplane.features.ai.code.EvaluateFormulaRequest;
@@ -159,9 +161,8 @@ public class AiCodeOperationAuthorizerTest {
                 contentType,
                 status,
                 null,
-                "fingerprint",
-                "code",
-                null,
+                new CodeStateToken("code", "input", "fingerprint"),
+                new CodeStateContent("code", null),
                 null,
                 null,
                 null,
@@ -179,7 +180,6 @@ public class AiCodeOperationAuthorizerTest {
                     host,
                     null,
                     CodeLifecycleStatus.NO_CODE,
-                    null,
                     null,
                     null,
                     null,

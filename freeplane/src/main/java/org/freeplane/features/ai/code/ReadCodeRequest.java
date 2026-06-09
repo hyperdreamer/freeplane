@@ -2,14 +2,14 @@ package org.freeplane.features.ai.code;
 
 public class ReadCodeRequest {
     private ScriptHost host;
-    private String fingerprint;
+    private String knownStateFingerprint;
 
     public ReadCodeRequest() {
     }
 
-    public ReadCodeRequest(ScriptHost host, String fingerprint) {
+    public ReadCodeRequest(ScriptHost host, String knownStateFingerprint) {
         this.host = host;
-        this.fingerprint = fingerprint;
+        this.knownStateFingerprint = knownStateFingerprint;
     }
 
     public ScriptHost getHost() {
@@ -20,11 +20,11 @@ public class ReadCodeRequest {
         this.host = host;
     }
 
-    public String getFingerprint() {
-        return fingerprint;
+    public String getKnownStateFingerprint() {
+        return knownStateFingerprint;
     }
 
-    public void setFingerprint(String fingerprint) {
-        this.fingerprint = fingerprint;
+    public void setKnownStateFingerprint(String knownStateFingerprint) {
+        this.knownStateFingerprint = knownStateFingerprint;
     }
 }

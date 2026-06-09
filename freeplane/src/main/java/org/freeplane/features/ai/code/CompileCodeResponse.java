@@ -8,27 +8,24 @@ public class CompileCodeResponse {
     private final ScriptHost host;
     private final String contentType;
     private final CodeLifecycleStatus status;
-    private final String fingerprint;
-    private final List<String> compilerDiagnostics;
+    private final CodeStateToken stateToken;
+    private final List<CodeStateDiagnostic> diagnostics;
     private final String errorMessage;
-    private final Integer lineNumber;
 
     public CompileCodeResponse(ScriptHost host,
                                String contentType,
                                CodeLifecycleStatus status,
-                               String fingerprint,
-                               List<String> compilerDiagnostics,
-                               String errorMessage,
-                               Integer lineNumber) {
+                               CodeStateToken stateToken,
+                               List<CodeStateDiagnostic> diagnostics,
+                               String errorMessage) {
         this.host = host;
         this.contentType = contentType;
         this.status = status;
-        this.fingerprint = fingerprint;
-        this.compilerDiagnostics = compilerDiagnostics == null
+        this.stateToken = stateToken;
+        this.diagnostics = diagnostics == null
             ? null
-            : Collections.unmodifiableList(new ArrayList<String>(compilerDiagnostics));
+            : Collections.unmodifiableList(new ArrayList<CodeStateDiagnostic>(diagnostics));
         this.errorMessage = errorMessage;
-        this.lineNumber = lineNumber;
     }
 
     public ScriptHost getHost() {
@@ -43,19 +40,15 @@ public class CompileCodeResponse {
         return status;
     }
 
-    public String getFingerprint() {
-        return fingerprint;
+    public CodeStateToken getStateToken() {
+        return stateToken;
     }
 
-    public List<String> getCompilerDiagnostics() {
-        return compilerDiagnostics;
+    public List<CodeStateDiagnostic> getDiagnostics() {
+        return diagnostics;
     }
 
     public String getErrorMessage() {
         return errorMessage;
-    }
-
-    public Integer getLineNumber() {
-        return lineNumber;
     }
 }

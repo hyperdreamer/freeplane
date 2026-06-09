@@ -12,6 +12,8 @@ import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.features.ai.code.AiCodeRunListener;
 import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CodeStateContent;
+import org.freeplane.features.ai.code.CodeStateToken;
 import org.freeplane.features.ai.code.CompileCodeRequest;
 import org.freeplane.features.ai.code.CompileCodeResponse;
 import org.freeplane.features.ai.code.EvaluateFormulaRequest;
@@ -63,13 +65,13 @@ public class ModelContextProtocolToolDispatcherTest {
 
         AtomicReference<ToolExecutionResult> result = new AtomicReference<ToolExecutionResult>();
         final com.fasterxml.jackson.databind.JsonNode argumentsNode = objectMapper.readTree(
-            "{\"request\":{\"host\":\"AI\",\"text\":\"println 1\",\"expectedFingerprint\":\"fp\"}}");
+            "{\"request\":{\"host\":\"AI\",\"content\":{\"sourceText\":\"println 1\",\"inputText\":\"{}\"},\"expectedStateToken\":{\"stateFingerprint\":\"fp\"}}}");
         SwingUtilities.invokeAndWait(() -> result.set(dispatcher.dispatch("writeCode", argumentsNode)));
 
         assertThat(codeHostService.lastWriteRequest).isNotNull();
         assertThat(codeHostService.lastWriteRequest.getHost()).isEqualTo(ScriptHost.AI);
-        assertThat(codeHostService.lastWriteRequest.getText()).isEqualTo("println 1");
-        assertThat(codeHostService.lastWriteRequest.getExpectedFingerprint()).isEqualTo("fp");
+        assertThat(codeHostService.lastWriteRequest.getContent().getSourceText()).isEqualTo("println 1");
+        assertThat(codeHostService.lastWriteRequest.getExpectedStateToken().getStateFingerprint()).isEqualTo("fp");
         assertThat(result.get().resultText()).contains("READY");
     }
 
@@ -84,12 +86,12 @@ public class ModelContextProtocolToolDispatcherTest {
 
         AtomicReference<ToolExecutionResult> result = new AtomicReference<ToolExecutionResult>();
         final com.fasterxml.jackson.databind.JsonNode argumentsNode = objectMapper.readTree(
-            "{\"request\":{\"host\":\"AI\",\"expectedFingerprint\":\"fp\"}}");
+            "{\"request\":{\"host\":\"AI\",\"expectedStateToken\":{\"stateFingerprint\":\"fp\"}}}");
         SwingUtilities.invokeAndWait(() -> result.set(dispatcher.dispatch("compileCode", argumentsNode)));
 
         assertThat(codeHostService.lastCompileRequest).isNotNull();
         assertThat(codeHostService.lastCompileRequest.getHost()).isEqualTo(ScriptHost.AI);
-        assertThat(codeHostService.lastCompileRequest.getExpectedFingerprint()).isEqualTo("fp");
+        assertThat(codeHostService.lastCompileRequest.getExpectedStateToken().getStateFingerprint()).isEqualTo("fp");
         assertThat(result.get().resultText()).contains("READY");
     }
 
@@ -104,12 +106,12 @@ public class ModelContextProtocolToolDispatcherTest {
 
         AtomicReference<ToolExecutionResult> result = new AtomicReference<ToolExecutionResult>();
         final com.fasterxml.jackson.databind.JsonNode argumentsNode = objectMapper.readTree(
-            "{\"request\":{\"host\":\"AI\",\"expectedFingerprint\":\"fp\"}}");
+            "{\"request\":{\"host\":\"AI\",\"expectedStateToken\":{\"stateFingerprint\":\"fp\"}}}");
         SwingUtilities.invokeAndWait(() -> result.set(dispatcher.dispatch("runCode", argumentsNode)));
 
         assertThat(codeHostService.lastRunRequest).isNotNull();
         assertThat(codeHostService.lastRunRequest.getHost()).isEqualTo(ScriptHost.AI);
-        assertThat(codeHostService.lastRunRequest.getExpectedFingerprint()).isEqualTo("fp");
+        assertThat(codeHostService.lastRunRequest.getExpectedStateToken().getStateFingerprint()).isEqualTo("fp");
         assertThat(result.get().resultText()).contains("SUCCEEDED");
     }
 
@@ -124,12 +126,12 @@ public class ModelContextProtocolToolDispatcherTest {
 
         AtomicReference<ToolExecutionResult> result = new AtomicReference<ToolExecutionResult>();
         final com.fasterxml.jackson.databind.JsonNode argumentsNode = objectMapper.readTree(
-            "{\"request\":{\"host\":\"ATTACHED_EDITOR\",\"fingerprint\":\"fp\"}}");
+            "{\"request\":{\"host\":\"ATTACHED_EDITOR\",\"knownStateFingerprint\":\"fp\"}}");
         SwingUtilities.invokeAndWait(() -> result.set(dispatcher.dispatch("readCode", argumentsNode)));
 
         assertThat(codeHostService.lastReadRequest).isNotNull();
         assertThat(codeHostService.lastReadRequest.getHost()).isEqualTo(ScriptHost.ATTACHED_EDITOR);
-        assertThat(codeHostService.lastReadRequest.getFingerprint()).isEqualTo("fp");
+        assertThat(codeHostService.lastReadRequest.getKnownStateFingerprint()).isEqualTo("fp");
         assertThat(result.get().resultText()).contains("READY");
     }
 
@@ -172,9 +174,8 @@ public class ModelContextProtocolToolDispatcherTest {
                 "text/plain",
                 CodeLifecycleStatus.READY,
                 null,
-                request == null ? null : request.getFingerprint(),
-                "code",
-                null,
+                request == null ? null : token(request.getKnownStateFingerprint()),
+                new CodeStateContent("code", null),
                 null,
                 null,
                 null,
@@ -188,7 +189,7 @@ public class ModelContextProtocolToolDispatcherTest {
                 ScriptHost.AI,
                 "text/x-freeplane-script-groovy",
                 CodeLifecycleStatus.READY,
-                "fp");
+                token("fp"));
         }
 
         @Override
@@ -198,8 +199,7 @@ public class ModelContextProtocolToolDispatcherTest {
                 ScriptHost.AI,
                 "text/x-freeplane-script-groovy",
                 CodeLifecycleStatus.READY,
-                "fp",
-                null,
+                token("fp"),
                 null,
                 null);
         }
@@ -212,8 +212,7 @@ public class ModelContextProtocolToolDispatcherTest {
                 "text/x-freeplane-script-groovy",
                 CodeLifecycleStatus.SUCCEEDED,
                 ScriptRunInitiator.AI,
-                "fp",
-                null,
+                token("fp"),
                 null,
                 null,
                 null,
@@ -232,6 +231,10 @@ public class ModelContextProtocolToolDispatcherTest {
         @Override
         public void removeRunListener(AiCodeRunListener listener) {
         }
+    }
+
+    private static CodeStateToken token(String stateFingerprint) {
+        return stateFingerprint == null ? null : new CodeStateToken("code", "input", stateFingerprint);
     }
 
     private static class FirstToolSet {

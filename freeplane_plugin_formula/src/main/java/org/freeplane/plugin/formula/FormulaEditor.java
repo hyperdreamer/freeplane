@@ -35,6 +35,9 @@ import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.ai.code.AiChatRepairRequest;
 import org.freeplane.features.ai.code.AiCodeEditor;
 import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CodeStateContent;
+import org.freeplane.features.ai.code.CodeStateDiagnostics;
+import org.freeplane.features.ai.code.CodeStateToken;
 import org.freeplane.features.ai.code.CompileCodeRequest;
 import org.freeplane.features.ai.code.CompileCodeResponse;
 import org.freeplane.features.ai.code.ReadCodeResponse;
@@ -241,27 +244,36 @@ class FormulaEditor extends EditNodeDialog implements INodeSelector, AiCodeEdito
     }
 
     @Override
-    public String getText() {
-        return textEditor.getText();
+    public CodeStateContent getCodeStateContent() {
+        return new CodeStateContent(textEditor.getText(), null);
     }
 
     @Override
-    public void replaceText(String text) {
-        textEditor.setText(text == null ? "" : text);
+    public void replaceCodeStateContent(CodeStateContent content) {
+        String inputText = content == null ? null : content.getInputText();
+        if (inputText != null && !inputText.trim().isEmpty()) {
+            throw new IllegalArgumentException("Formula editors do not accept inputText.");
+        }
+        textEditor.setText(content == null || content.getSourceText() == null ? "" : content.getSourceText());
     }
 
     @Override
     public CompileCodeResponse compileCode(CompileCodeRequest request) {
-        String formulaText = textEditor.getText();
+        CodeStateContent content = getCodeStateContent();
+        String formulaText = content.getSourceText();
+        CodeStateToken stateToken = CodeStateToken.fromContent(content);
         if (!startsWithFormulaPrefix(formulaText)) {
             return new CompileCodeResponse(
                 ScriptHost.ATTACHED_EDITOR,
                 FormulaTextTransformer.AI_ATTACHMENT_CONTENT_TYPE,
                 CodeLifecycleStatus.FAILED,
-                fingerprint(formulaText),
-                Collections.singletonList("The current content is not a formula."),
-                "The current content is not a formula.",
-                null);
+                stateToken,
+                CodeStateDiagnostics.singleton(
+                    org.freeplane.features.ai.code.CodeStateField.SOURCE_TEXT,
+                    "The current content is not a formula.",
+                    null,
+                    null),
+                "The current content is not a formula.");
         }
         ScriptingEngine.GroovyCompileResult compileResult = ScriptingEngine.compileGroovyScriptForDiagnostics(
             FormulaUtils.scriptOf(formulaText),
@@ -270,10 +282,9 @@ class FormulaEditor extends EditNodeDialog implements INodeSelector, AiCodeEdito
             ScriptHost.ATTACHED_EDITOR,
             FormulaTextTransformer.AI_ATTACHMENT_CONTENT_TYPE,
             compileResult.isSuccessful() ? CodeLifecycleStatus.READY : CodeLifecycleStatus.FAILED,
-            fingerprint(formulaText),
-            compileResult.getCompilerDiagnostics(),
-            compileResult.getErrorMessage(),
-            compileResult.getLineNumber());
+            stateToken,
+            CodeStateDiagnostics.sourceDiagnostics(compileResult.getCompilerDiagnostics(), compileResult.getLineNumber()),
+            compileResult.getErrorMessage());
     }
 
     @Override
@@ -286,18 +297,22 @@ class FormulaEditor extends EditNodeDialog implements INodeSelector, AiCodeEdito
     }
 
     private ReadCodeResponse validationFailureState(String formulaText, AiChatCodeOperationResult validationResult) {
+        CodeStateContent content = new CodeStateContent(formulaText, null);
+        CodeStateToken stateToken = CodeStateToken.fromContent(content);
+        if (validationResult.getSourceFingerprint() != null) {
+            stateToken.setCodeFingerprint(validationResult.getSourceFingerprint());
+            stateToken.setStateFingerprint(CodeStateToken.fingerprint(
+                stateToken.getCodeFingerprint() + "\n" + stateToken.getInputFingerprint()));
+        }
         return new ReadCodeResponse(
             ScriptHost.ATTACHED_EDITOR,
             FormulaTextTransformer.AI_ATTACHMENT_CONTENT_TYPE,
             CodeLifecycleStatus.FAILED,
             null,
-            validationResult.getSourceFingerprint() == null
-                ? fingerprint(formulaText)
-                : validationResult.getSourceFingerprint(),
-            formulaText,
-            validationResult.getCompilerDiagnostics(),
+            stateToken,
+            content,
+            CodeStateDiagnostics.sourceDiagnostics(validationResult.getCompilerDiagnostics(), validationResult.getLineNumber()),
             validationResult.getErrorMessage(),
-            validationResult.getLineNumber(),
             validationResult.getStandardOutput(),
             validationResult.getResult());
     }
@@ -390,23 +405,7 @@ class FormulaEditor extends EditNodeDialog implements INodeSelector, AiCodeEdito
     }
 
     private String fingerprint(String text) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest((text == null ? "" : text).getBytes(StandardCharsets.UTF_8));
-            Formatter formatter = new Formatter();
-            try {
-                for (byte value : hash) {
-                    formatter.format("%02x", value);
-                }
-                return formatter.toString();
-            }
-            finally {
-                formatter.close();
-            }
-        }
-        catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 is not available.", e);
-        }
+        return CodeStateToken.fingerprint(text);
     }
 
     private final class AttachToAiAction extends AbstractAction {
