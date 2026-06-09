@@ -55,7 +55,7 @@ public class TranscriptMemoryMapperTest {
         uut.seedTranscriptWithHiddenExchange(memory, entries, "hidden user");
 
         List<ChatMessage> messages = memory.messages();
-        assertThat(messages).hasSize(3);
+        assertThat(messages).hasSize(4);
         assertThat(messages.get(0)).isInstanceOf(UserMessage.class);
         assertThat(((UserMessage) messages.get(0)).singleText())
             .isEqualTo(MessageBuilder.CONTROL_INSTRUCTION_PREFIX
@@ -63,8 +63,10 @@ public class TranscriptMemoryMapperTest {
         assertThat(messages.get(1)).isInstanceOf(UserMessage.class);
         assertThat(((UserMessage) messages.get(1)).singleText())
             .isEqualTo(MessageBuilder.CONTROL_INSTRUCTION_PREFIX + "Now you have the profile A sayer.");
-        assertThat(messages.get(2)).isInstanceOf(UserMessage.class);
-        assertThat(((UserMessage) messages.get(2)).singleText()).isEqualTo("hello");
+        assertThat(messages.get(2)).isInstanceOf(InstructionAckMessage.class);
+        assertThat(((AiMessage) messages.get(2)).text()).isEqualTo("ok");
+        assertThat(messages.get(3)).isInstanceOf(UserMessage.class);
+        assertThat(((UserMessage) messages.get(3)).singleText()).isEqualTo("hello");
     }
 
     @Test

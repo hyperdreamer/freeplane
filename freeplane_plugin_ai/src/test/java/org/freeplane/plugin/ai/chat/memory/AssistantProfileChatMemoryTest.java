@@ -30,7 +30,7 @@ public class AssistantProfileChatMemoryTest {
         uut.add(new GeneralSystemMessage("general"));
 
         List<ChatMessage> messages = uut.messages();
-        assertThat(messages).hasSize(4);
+        assertThat(messages).hasSize(5);
         assertThat(messages.get(0)).isInstanceOf(GeneralSystemMessage.class);
         assertThat(messages.get(1)).isInstanceOf(UserMessage.class);
         assertThat(((UserMessage) messages.get(1)).singleText())
@@ -42,6 +42,8 @@ public class AssistantProfileChatMemoryTest {
         assertThat(messages.get(3)).isInstanceOf(UserMessage.class);
         assertThat(((UserMessage) messages.get(3)).singleText())
             .isEqualTo(MessageBuilder.CONTROL_INSTRUCTION_PREFIX + "Now you have the profile profile.");
+        assertThat(messages.get(4)).isInstanceOf(InstructionAckMessage.class);
+        assertThat(((AiMessage) messages.get(4)).text()).isEqualTo("ok");
     }
 
     @Test
@@ -304,7 +306,7 @@ public class AssistantProfileChatMemoryTest {
     }
 
     @Test
-    public void messagesIncludeOnlyLatestProfileSwitchInstruction() {
+    public void messagesIncludeOnlyLatestProfileSwitchControlMessagePair() {
         AssistantProfileChatMemory uut = createMemory(500);
         uut.add(new AssistantProfileSwitchMessage("alpha", "Alpha"));
         uut.add(new AssistantProfileSwitchMessage("beta", "Beta"));
@@ -313,13 +315,19 @@ public class AssistantProfileChatMemoryTest {
         List<ChatMessage> messages = uut.messages();
 
         assertThat(messages)
-            .extracting(message -> message instanceof UserMessage ? ((UserMessage) message).singleText() : null)
-            .contains(MessageBuilder.CONTROL_INSTRUCTION_PREFIX + "Now you have the profile Beta.", "hello")
-            .doesNotContain(MessageBuilder.CONTROL_INSTRUCTION_PREFIX + "Now you have the profile Alpha.");
+            .extracting(message -> message instanceof UserMessage
+                ? ((UserMessage) message).singleText()
+                : message instanceof AiMessage
+                    ? ((AiMessage) message).text()
+                    : null)
+            .containsExactly(
+                MessageBuilder.CONTROL_INSTRUCTION_PREFIX + "Now you have the profile Beta.",
+                "ok",
+                "hello");
     }
 
     @Test
-    public void profileSwitchInstructionPreservesConversationOrderForLatestMarker() {
+    public void profileSwitchControlMessagePairPreservesConversationOrderForLatestMarker() {
         AssistantProfileChatMemory uut = createMemory(500);
         uut.add(new AssistantProfileSwitchMessage("default", "Default"));
         uut.add(UserMessage.from("u1"));
@@ -328,23 +336,22 @@ public class AssistantProfileChatMemoryTest {
         uut.add(new AssistantProfileSwitchMessage("default", "Default"));
         uut.add(UserMessage.from("u3"));
 
-        List<ChatMessage> messages = uut.messages();
-
-        List<String> userTexts = messages.stream()
-            .filter(UserMessage.class::isInstance)
-            .map(UserMessage.class::cast)
-            .map(UserMessage::singleText)
+        List<String> projectedTexts = uut.messages().stream()
+            .map(message -> message instanceof UserMessage
+                ? ((UserMessage) message).singleText()
+                : message instanceof AiMessage
+                    ? ((AiMessage) message).text()
+                    : null)
             .collect(Collectors.toList());
         String latestDefaultMarker = MessageBuilder.CONTROL_INSTRUCTION_PREFIX
             + "Now you have the profile Default.";
-        assertThat(userTexts).contains("u1", "u2", "u3", latestDefaultMarker);
-        assertThat(userTexts).doesNotContain(MessageBuilder.CONTROL_INSTRUCTION_PREFIX + "Now you have the profile A.");
-        assertThat(Collections.frequency(userTexts, latestDefaultMarker)).isEqualTo(1);
-        assertThat(userTexts.indexOf(latestDefaultMarker)).isLessThan(userTexts.indexOf("u3"));
+        assertThat(projectedTexts).containsExactly("u1", "u2", latestDefaultMarker, "ok", "u3");
+        assertThat(Collections.frequency(projectedTexts, latestDefaultMarker)).isEqualTo(1);
+        assertThat(projectedTexts).doesNotContain(MessageBuilder.CONTROL_INSTRUCTION_PREFIX + "Now you have the profile A.");
     }
 
     @Test
-    public void modelProjectionPrependsLatestProfileInstructionWhenLatestProfileSwitchFallsBeforeWindow() {
+    public void modelProjectionPrependsLatestProfileControlMessagePairWhenLatestProfileSwitchFallsBeforeWindow() {
         AssistantProfileChatMemory uut = createMemory(500);
         uut.add(new AssistantProfileSwitchMessage("p1", "Profile"));
         uut.add(UserMessage.from("u1"));
@@ -363,13 +370,14 @@ public class AssistantProfileChatMemoryTest {
                     : null)
             .containsExactly(
                 MessageBuilder.CONTROL_INSTRUCTION_PREFIX + "Now you have the profile Profile.",
+                "ok",
                 MessageBuilder.CONTROL_INSTRUCTION_PREFIX + RemovedForSpaceSystemMessage.DEFAULT_TEXT,
                 "u2",
                 "a2");
     }
 
     @Test
-    public void modelProjectionReplacesSelectedProfileSwitchWithDerivedLatestProfileInstruction() {
+    public void modelProjectionReplacesSelectedProfileSwitchWithDerivedLatestProfileControlMessagePair() {
         AssistantProfileChatMemory uut = createMemory(500);
         uut.add(new AssistantProfileSwitchMessage("p1", "Profile"));
         uut.add(UserMessage.from("u1"));
@@ -390,6 +398,7 @@ public class AssistantProfileChatMemoryTest {
                     : null)
             .containsExactly(
                 MessageBuilder.CONTROL_INSTRUCTION_PREFIX + "Now you have the profile Profile.",
+                "ok",
                 "u1",
                 "a1");
         assertThat(uut.transcriptEntriesForPersistence()).hasSize(3);
@@ -398,6 +407,24 @@ public class AssistantProfileChatMemoryTest {
         assertThat(uut.transcriptEntriesForPersistence())
             .extracting(ChatTranscriptEntry::getText)
             .contains(null, "u1", "a1");
+    }
+
+    @Test
+    public void modelProjectionPlacesSyntheticAckBeforeSubsequentRealUserMessage() {
+        AssistantProfileChatMemory uut = createMemory(500);
+        uut.add(new AssistantProfileSwitchMessage("p1", "Profile"));
+        uut.add(UserMessage.from("which node is currently selected?"));
+
+        assertThat(uut.messages())
+            .extracting(message -> message instanceof UserMessage
+                ? ((UserMessage) message).singleText()
+                : message instanceof AiMessage
+                    ? ((AiMessage) message).text()
+                    : null)
+            .containsExactly(
+                MessageBuilder.CONTROL_INSTRUCTION_PREFIX + "Now you have the profile Profile.",
+                "ok",
+                "which node is currently selected?");
     }
 
     @Test

@@ -721,17 +721,26 @@
         session and that current map state may differ.
       - The model projection never emits raw assistant-profile switch
         state.
-      - Derive at most one latest profile instruction from the latest
-        assistant-profile switch state at or before the active chat
-        end.
+      - Derive exactly one latest assistant-profile control-message
+        pair from the latest assistant-profile switch state at or
+        before the active chat end when such a switch exists:
+        - one derived latest profile instruction as a control user
+          message; and
+        - one synthetic assistant acknowledgement message with text
+          `ok` immediately after that derived instruction.
       - If that latest assistant-profile switch state survives
         filtering, replace that selected switch entry with the derived
-        latest profile instruction in the same relative position.
+        control-message pair in the same relative position.
       - If that latest assistant-profile switch state falls before the
-        first selected chat entry, prepend the derived latest profile
-        instruction before the boundary instruction and before the
-        selected chat content.
+        first selected chat entry, prepend the derived control-message
+        pair before the boundary instruction and before the selected
+        chat content.
       - Omit any other selected assistant-profile switch state.
+      - The model projection must always emit that derived latest
+        assistant-profile control-message pair for the latest relevant
+        assistant-profile switch state. It must not depend on a raw
+        stored `InstructionAckMessage` remaining inside the filtered
+        chat.
       - If `hasOmittedEarlierChat` is true, include one model boundary
         instruction explaining that earlier chat was removed for space.
       - Include selected user text, assistant text, and automatic code
@@ -1193,31 +1202,36 @@
       - Model output: `GENERAL_SYSTEM`, `USER1`, `ASSISTANT1`.
       - Transcript output: `USER1`, `ASSISTANT1`.
     - **T16. Model projection replaces a selected assistant-profile
-      switch state with the derived latest profile instruction**
+      switch state with the derived latest assistant-profile control-
+      message pair**
       - Chat: `PROFILE_SWITCH1`, `USER1`, `ASSISTANT1`.
       - `PROFILE_INSTRUCTION1` means the derived latest profile
         instruction from `PROFILE_SWITCH1`.
+      - `PROFILE_ACK1` means the synthetic assistant acknowledgement
+        `ok` paired with `PROFILE_INSTRUCTION1`.
       - Chat window: full chat.
       - Selection decisions: every entry = `SHOW`.
       - Panel output: `PROFILE_SWITCH1`, `USER1`, `ASSISTANT1`.
-      - Model output: `PROFILE_INSTRUCTION1`, `USER1`,
-        `ASSISTANT1`.
+      - Model output: `PROFILE_INSTRUCTION1`, `PROFILE_ACK1`,
+        `USER1`, `ASSISTANT1`.
       - Transcript output: `PROFILE_SWITCH1`, `USER1`, `ASSISTANT1`.
-    - **T17. Model projection prepends the derived latest profile
-      instruction when the latest assistant-profile switch state falls
-      before the chat window**
+    - **T17. Model projection prepends the derived latest assistant-
+      profile control-message pair when the latest assistant-profile
+      switch state falls before the chat window**
       - Chat: `PROFILE_SWITCH1`, `USER1`, `ASSISTANT1`, `USER2`,
         `ASSISTANT2`.
       - `PROFILE_INSTRUCTION1` means the derived latest profile
         instruction from `PROFILE_SWITCH1`.
+      - `PROFILE_ACK1` means the synthetic assistant acknowledgement
+        `ok` paired with `PROFILE_INSTRUCTION1`.
       - Chat window starts at `USER2` after whole-turn movement.
       - Selection decisions:
         - `PROFILE_SWITCH1`, `USER1`, `ASSISTANT1`
           = `DROP_BY_CHAT_WINDOW`;
         - `USER2`, `ASSISTANT2` = `SHOW`.
       - Panel output: boundary marker, `USER2`, `ASSISTANT2`.
-      - Model output: `PROFILE_INSTRUCTION1`, boundary instruction,
-        `USER2`, `ASSISTANT2`.
+      - Model output: `PROFILE_INSTRUCTION1`, `PROFILE_ACK1`,
+        boundary instruction, `USER2`, `ASSISTANT2`.
       - Transcript output: boundary state, `USER2`, `ASSISTANT2`.
   - **Automated tests:**
     - During the design stage: N/A.
@@ -1421,3 +1435,124 @@
         tracking because the guarded object is the single visible
         history surface and the coarser rule was sufficient for the
         approved contract.
+
+## Subtask: Restore assistant-profile control-message pair injection
+- **Status:** review
+- **Scope:** Repair assistant-profile switch handling so model
+  projection and compaction reinsert the hidden control-message pair at
+  the correct position while panel and transcript behavior remain
+  aligned with the approved visible-summary contract.
+- **Motivation:** The current branch injects only the derived profile
+  control user message and omits the paired synthetic assistant `ok`.
+  That breaks the intended assistant-profile control-message semantics
+  and can cause the next real user message to be answered as if the
+  synthetic acknowledgement were still pending.
+- **Constraints:**
+  - Use the task-level constraints and the approved design from
+    `Implement unified filtering core and projectors`, including the
+    updated model-projection rules for derived assistant-profile
+    control-message pairs.
+  - Keep `ChatMessageFilter`, `PanelProjector`, `ModelProjector`,
+    `TranscriptProjector`, and `AssistantProfileChatMemory` as the
+    implementation base.
+  - Keep panel behavior as a visible assistant-profile summary rather
+    than exposing the raw hidden control-message pair.
+  - Keep transcript persistence on assistant-profile switch state; do
+    not persist the synthetic assistant acknowledgement as transcript
+    content.
+  - Do not broaden this subtask into unrelated filtering or visible-
+    history routing changes.
+- **Briefing:** The likely touch points are
+  `ModelProjector`, `AssistantProfileChatMemory`, and the profile-
+  switch tests in `AssistantProfileChatMemoryTest`, with possible
+  projector-focused tests if that yields clearer coverage.
+- **Research:**
+  - Current code stores `AssistantProfileSwitchMessage` plus
+    `InstructionAckMessage` in `conversationMessages`, suppresses the
+    raw acknowledgement from panel and transcript rendering, and uses
+    `AssistantProfileSwitchMessage` transcript state for persistence.
+  - Current model projection derives only the latest profile control
+    user message and drops the paired synthetic assistant `ok`, which
+    no longer matches the approved assistant-profile control-message
+    behavior.
+  - The correct behavior is to always emit the derived control-message
+    pair for the latest relevant assistant-profile switch state in
+    model projection, regardless of whether the raw stored
+    `InstructionAckMessage` remains inside the filtered chat.
+- **Analysis:**
+  - The approved assistant-profile behavior is a hidden control-
+    message pair, not a lone derived user instruction.
+  - Compaction and chat-window movement must preserve the semantic
+    position of that pair even when the raw switch state falls before
+    the current chat window.
+  - Model projection must derive and place that pair from the latest
+    relevant assistant-profile switch state instead of depending on a
+    raw stored `InstructionAckMessage` surviving inside the filtered
+    chat.
+- **Design:**
+  - Derive exactly one latest assistant-profile control-message pair
+    from the latest assistant-profile switch state at or before the
+    active chat end when such a switch exists:
+    - one control user instruction; and
+    - one synthetic assistant acknowledgement `ok` immediately after
+      that control instruction.
+  - If the latest assistant-profile switch state survives filtering,
+    replace that selected switch entry with the derived control-
+    message pair in the same relative position.
+  - If the latest assistant-profile switch state falls before the
+    first selected chat entry, prepend the derived control-message
+    pair before the boundary instruction and before the selected chat
+    content.
+  - Always emit that derived control-message pair for the latest
+    relevant assistant-profile switch state in model projection.
+  - Omit any other assistant-profile switch state from model output.
+  - Keep panel output driven by assistant-profile switch summary
+    rendering rather than the hidden derived pair.
+  - Keep transcript output driven by assistant-profile switch state
+    rather than the hidden derived pair.
+
+  ```plantuml
+  @startuml
+  participant "AssistantProfileChatMemory" as memory
+  participant "ChatMessageFilter" as filter
+  participant "ModelProjector" as model
+  participant "PanelProjector" as panel
+  participant "TranscriptProjector" as transcript
+
+  memory -> filter : filterMessages(conversationMessages,...)
+  filter --> memory : FilteredChatMessages
+  memory -> model : buildMessages(filteredChatMessages, latest profile switch state)
+  model -> model : derive PROFILE_INSTRUCTION + synthetic ok
+  model -> model : replace selected switch or prepend pair
+  model --> memory : model output
+  memory -> panel : buildRenderEntries(filteredChatMessages)
+  panel -> panel : render visible profile summary only
+  panel --> memory : panel output
+  memory -> transcript : buildTranscriptEntries(filteredChatMessages)
+  transcript -> transcript : persist switch state only
+  transcript --> memory : transcript output
+  @enduml
+  ```
+- **Test specification:**
+  - **Automated tests:**
+    - Update the executable tests derived from T16 and T17 so model
+      projection expects both `PROFILE_INSTRUCTION1` and
+      `PROFILE_ACK1` in the correct order.
+    - Add a regression test where a latest assistant-profile switch is
+      followed by a real user message and model projection emits the
+      derived control-message pair before that real user message.
+    - Keep or add coverage proving panel output still hides the raw
+      synthetic acknowledgement and transcript output still omits it.
+    - Keep or add coverage proving compaction or chat-window movement
+      still reinserts the derived control-message pair at the correct
+      model position when the latest assistant-profile switch state
+      falls before the visible chat window.
+  - **Manual tests:** N/A
+  - **Implementation notes:**
+    - **Tradeoffs:**
+      - Kept raw stored `InstructionAckMessage` in canonical chat
+        state for compatibility with existing turn tracking and hidden
+        panel/transcript behavior, but made model projection derive
+        the synthetic assistant `ok` from the latest relevant
+        assistant-profile switch state instead of relying on raw ack
+        survival inside the filtered chat.

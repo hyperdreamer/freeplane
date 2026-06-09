@@ -23,7 +23,7 @@ class ModelProjector {
         }
         int latestProfileSwitchIndex = latestProfileSwitchIndex(filteredChatMessages.messages());
         if (latestProfileInstruction != null && latestProfileSwitchIndex < 0) {
-            messages.add(latestProfileInstruction);
+            appendDerivedLatestProfilePair(messages, latestProfileInstruction);
         }
         List<ChatMessage> bodyMessages = buildBodyMessages(
             filteredChatMessages.messages(),
@@ -45,16 +45,25 @@ class ModelProjector {
             ChatMessage message = filteredMessageList.get(index);
             if (message instanceof AssistantProfileSwitchMessage) {
                 if (index == latestProfileSwitchIndex && latestProfileInstruction != null) {
-                    bodyMessages.add(latestProfileInstruction);
+                    appendDerivedLatestProfilePair(bodyMessages, latestProfileInstruction);
                 }
                 continue;
             }
-            if (message instanceof ToolCallSummaryMessage) {
+            if (message instanceof ToolCallSummaryMessage || message instanceof InstructionAckMessage) {
                 continue;
             }
             bodyMessages.add(message);
         }
         return bodyMessages;
+    }
+
+    private void appendDerivedLatestProfilePair(List<ChatMessage> messages,
+                                                UserMessage latestProfileInstruction) {
+        if (messages == null || latestProfileInstruction == null) {
+            return;
+        }
+        messages.add(latestProfileInstruction);
+        messages.add(new InstructionAckMessage());
     }
 
     private int latestProfileSwitchIndex(List<ChatMessage> filteredMessageList) {
