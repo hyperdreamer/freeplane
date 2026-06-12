@@ -7,7 +7,7 @@ import java.util.function.Supplier;
 import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.features.ai.code.AiCodeRunListener;
-import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CodeState;
 import org.freeplane.features.ai.code.CompileCodeRequest;
 import org.freeplane.features.ai.code.CompileCodeResponse;
 import org.freeplane.features.ai.code.EvaluateFormulaRequest;
@@ -43,7 +43,7 @@ public class RoutingAiCodeHostService implements AiCodeHostService {
             return new ReadCodeResponse(
                 ScriptHost.AI,
                 AI_SCRIPT_CONTENT_TYPE,
-                CodeLifecycleStatus.NO_CODE,
+                CodeState.NO_CODE,
                 null,
                 null,
                 null,
@@ -146,8 +146,8 @@ public class RoutingAiCodeHostService implements AiCodeHostService {
         if (aiHostService == null) {
             return false;
         }
-        ReadCodeResponse response = aiHostService.readCode(new ReadCodeRequest(ScriptHost.AI, null));
-        if (response == null || response.getStatus() == CodeLifecycleStatus.NO_CODE) {
+        ReadCodeResponse response = aiHostService.readCode(new ReadCodeRequest(ScriptHost.AI));
+        if (response == null || response.getCodeState() == CodeState.NO_CODE) {
             return false;
         }
         try {

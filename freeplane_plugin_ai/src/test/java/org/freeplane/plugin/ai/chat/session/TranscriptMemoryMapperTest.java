@@ -94,7 +94,7 @@ public class TranscriptMemoryMapperTest {
         TranscriptMemoryMapper uut = new TranscriptMemoryMapper();
         AssistantProfileChatMemory memory = AssistantProfileChatMemory.withMaxTokens(500);
         AutomaticCodeStatusMessage message = new AutomaticCodeStatusMessage(
-            "Automatic app-authored code-status message:\nstatus=SUCCEEDED");
+            "Automatic app-authored code-status message:\ncodeState=RUN_SUCCEEDED");
         memory.add(message);
 
         List<ChatTranscriptEntry> entries = uut.toTranscriptEntries(memory);
@@ -112,13 +112,13 @@ public class TranscriptMemoryMapperTest {
         uut.seedTranscriptWithHiddenExchange(memory, Arrays.asList(
             new ChatTranscriptEntry(
                 ChatTranscriptRole.AUTOMATIC_CODE_STATUS,
-                "Automatic app-authored code-status message:\nstatus=FAILED")), null);
+                "Automatic app-authored code-status message:\ncodeState=RUN_FAILED")), null);
 
         List<ChatMessage> messages = memory.messages();
         assertThat(messages).hasSize(1);
         assertThat(messages.get(0)).isInstanceOf(AutomaticCodeStatusMessage.class);
         assertThat(((AutomaticCodeStatusMessage) messages.get(0)).singleText())
-            .isEqualTo("Automatic app-authored code-status message:\nstatus=FAILED");
+            .isEqualTo("Automatic app-authored code-status message:\ncodeState=RUN_FAILED");
     }
 
     @Test

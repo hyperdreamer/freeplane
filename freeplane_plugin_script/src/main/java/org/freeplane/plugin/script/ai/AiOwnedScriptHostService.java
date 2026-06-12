@@ -19,7 +19,7 @@ import org.freeplane.core.resources.ResourceController;
 import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.features.ai.code.AiCodeRunListener;
-import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CodeState;
 import org.freeplane.features.ai.code.CodeStateContent;
 import org.freeplane.features.ai.code.CodeStateDiagnostic;
 import org.freeplane.features.ai.code.CodeStateDiagnostics;
@@ -81,18 +81,23 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
     }
 
     private static final class ValidationOutcome {
+        private final CodeState codeState;
         private final List<CodeStateDiagnostic> diagnostics;
         private final String errorMessage;
         private final Object argsValue;
 
-        private ValidationOutcome(List<CodeStateDiagnostic> diagnostics, String errorMessage, Object argsValue) {
+        private ValidationOutcome(CodeState codeState,
+                                  List<CodeStateDiagnostic> diagnostics,
+                                  String errorMessage,
+                                  Object argsValue) {
+            this.codeState = codeState;
             this.diagnostics = diagnostics;
             this.errorMessage = errorMessage;
             this.argsValue = argsValue;
         }
 
         private boolean isSuccessful() {
-            return diagnostics == null || diagnostics.isEmpty();
+            return codeState == null;
         }
     }
 
@@ -215,7 +220,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
         if (currentScript == null) {
             return noCodeState();
         }
-        return currentReadCodeResponse(request == null ? null : request.getKnownStateFingerprint());
+        return currentReadCodeResponse();
     }
 
     WriteCodeResponse doWriteCode(WriteCodeRequest request) {
@@ -237,14 +242,14 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
             currentScript.storedContent = sanitizeContent(request.getContent());
         }
         CodeStateToken stateToken = currentStateToken();
-        currentScript.latestState = readyState(stateToken, currentScript.storedContent);
+        currentScript.latestState = editedState(stateToken, currentScript.storedContent);
         if (dialog != null) {
             showCodeInDialog();
         }
         return new WriteCodeResponse(
             ScriptHost.AI,
             AI_SCRIPT_CONTENT_TYPE,
-            CodeLifecycleStatus.READY,
+            CodeState.EDITED,
             stateToken);
     }
 
@@ -258,13 +263,13 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
         CompileCodeResponse response = new CompileCodeResponse(
             ScriptHost.AI,
             AI_SCRIPT_CONTENT_TYPE,
-            validation.isSuccessful() ? CodeLifecycleStatus.READY : CodeLifecycleStatus.FAILED,
+            validation.isSuccessful() ? CodeState.RUNNABLE : validation.codeState,
             stateToken,
             validation.diagnostics,
             validation.errorMessage);
         currentScript.latestState = validation.isSuccessful()
-            ? readyState(stateToken, content)
-            : failedState(content, stateToken, validation.diagnostics, validation.errorMessage, null, null, null);
+            ? runnableState(stateToken, content)
+            : stateOf(content, stateToken, validation.codeState, validation.diagnostics, validation.errorMessage, null, null, null);
         if (dialog != null && dialog.hasCode()) {
             showCodeInDialog();
         }
@@ -278,23 +283,24 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
         synchronizeCurrentContentFromDialog();
         CodeStateContent content = currentContent();
         CodeStateToken stateToken = CodeStateToken.fromContent(content);
-        ValidationOutcome inputValidation = validateInput(content, stateToken);
-        if (!inputValidation.isSuccessful()) {
+        ValidationOutcome argumentsValidation = validateArguments(content, stateToken);
+        if (!argumentsValidation.isSuccessful()) {
             RunCodeResponse response = new RunCodeResponse(
                 ScriptHost.AI,
                 AI_SCRIPT_CONTENT_TYPE,
-                CodeLifecycleStatus.FAILED,
+                argumentsValidation.codeState,
                 ScriptRunInitiator.AI,
                 stateToken,
-                inputValidation.diagnostics,
-                inputValidation.errorMessage,
+                argumentsValidation.diagnostics,
+                argumentsValidation.errorMessage,
                 null,
                 null);
-            currentScript.latestState = failedState(
+            currentScript.latestState = stateOf(
                 content,
                 stateToken,
-                inputValidation.diagnostics,
-                inputValidation.errorMessage,
+                argumentsValidation.codeState,
+                argumentsValidation.diagnostics,
+                argumentsValidation.errorMessage,
                 null,
                 null,
                 ScriptRunInitiator.AI);
@@ -310,7 +316,32 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
             currentScript.latestState = waitingState(content, stateToken, ScriptRunInitiator.AI);
             return response;
         }
-        return executeCurrentScript(content, stateToken, ScriptRunInitiator.AI, aiStartedPermissions(), inputValidation.argsValue);
+        ValidationOutcome validation = validate(content, stateToken, aiStartedPermissions());
+        if (!validation.isSuccessful()) {
+            RunCodeResponse response = new RunCodeResponse(
+                ScriptHost.AI,
+                AI_SCRIPT_CONTENT_TYPE,
+                validation.codeState,
+                ScriptRunInitiator.AI,
+                stateToken,
+                validation.diagnostics,
+                validation.errorMessage,
+                null,
+                null);
+            currentScript.latestState = stateOf(
+                content,
+                stateToken,
+                validation.codeState,
+                validation.diagnostics,
+                validation.errorMessage,
+                null,
+                null,
+                ScriptRunInitiator.AI);
+            refreshDialogAfterRun(response);
+            fireRunFinished(response);
+            return response;
+        }
+        return executeCurrentScript(content, stateToken, ScriptRunInitiator.AI, aiStartedPermissions(), validation.argsValue);
     }
 
     RunCodeResponse runFromDialog(CodeStateContent content) {
@@ -324,23 +355,24 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
         currentScript.storedContent = sanitizeContent(content);
         CodeStateContent currentContent = currentContent();
         CodeStateToken stateToken = CodeStateToken.fromContent(currentContent);
-        ValidationOutcome inputValidation = validateInput(currentContent, stateToken);
-        if (!inputValidation.isSuccessful()) {
+        ValidationOutcome validation = validate(currentContent, stateToken, userStartedPermissions());
+        if (!validation.isSuccessful()) {
             RunCodeResponse response = new RunCodeResponse(
                 ScriptHost.AI,
                 AI_SCRIPT_CONTENT_TYPE,
-                CodeLifecycleStatus.FAILED,
+                validation.codeState,
                 ScriptRunInitiator.USER,
                 stateToken,
-                inputValidation.diagnostics,
-                inputValidation.errorMessage,
+                validation.diagnostics,
+                validation.errorMessage,
                 null,
                 null);
-            currentScript.latestState = failedState(
+            currentScript.latestState = stateOf(
                 currentContent,
                 stateToken,
-                inputValidation.diagnostics,
-                inputValidation.errorMessage,
+                validation.codeState,
+                validation.diagnostics,
+                validation.errorMessage,
                 null,
                 null,
                 ScriptRunInitiator.USER);
@@ -348,7 +380,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
             fireRunFinished(response);
             return response;
         }
-        return executeCurrentScript(currentContent, stateToken, ScriptRunInitiator.USER, userStartedPermissions(), inputValidation.argsValue);
+        return executeCurrentScript(currentContent, stateToken, ScriptRunInitiator.USER, userStartedPermissions(), validation.argsValue);
     }
 
     void dialogCancelled() {
@@ -409,24 +441,22 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
                 RunCodeResponse response = new RunCodeResponse(
                     ScriptHost.AI,
                     AI_SCRIPT_CONTENT_TYPE,
-                    CodeLifecycleStatus.SUCCEEDED,
+                    CodeState.RUN_SUCCEEDED,
                     runInitiator,
                     stateToken,
                     null,
                     null,
                     stdout,
                     structuredResult);
-                currentScript.latestState = new ReadCodeResponse(
-                    ScriptHost.AI,
-                    AI_SCRIPT_CONTENT_TYPE,
-                    CodeLifecycleStatus.SUCCEEDED,
-                    runInitiator,
-                    stateToken,
+                currentScript.latestState = stateOf(
                     content,
+                    stateToken,
+                    CodeState.RUN_SUCCEEDED,
                     null,
                     null,
                     stdout,
-                    structuredResult);
+                    structuredResult,
+                    runInitiator);
                 refreshDialogAfterRun(response);
                 fireRunFinished(response);
                 return response;
@@ -440,14 +470,14 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
                 RunCodeResponse response = new RunCodeResponse(
                     ScriptHost.AI,
                     AI_SCRIPT_CONTENT_TYPE,
-                    CodeLifecycleStatus.FAILED,
+                    CodeState.RUN_FAILED,
                     runInitiator,
                     stateToken,
                     diagnostics,
                     error.getMessage(),
                     stdout,
                     null);
-                currentScript.latestState = failedState(content, stateToken, diagnostics,
+                currentScript.latestState = stateOf(content, stateToken, CodeState.RUN_FAILED, diagnostics,
                     error.getMessage(), stdout, null, runInitiator);
                 refreshDialogAfterRun(response);
                 fireRunFinished(response);
@@ -462,14 +492,14 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
                 RunCodeResponse response = new RunCodeResponse(
                     ScriptHost.AI,
                     AI_SCRIPT_CONTENT_TYPE,
-                    CodeLifecycleStatus.FAILED,
+                    CodeState.RUN_FAILED,
                     runInitiator,
                     stateToken,
                     diagnostics,
                     error.getMessage(),
                     stdout,
                     null);
-                currentScript.latestState = failedState(content, stateToken, diagnostics,
+                currentScript.latestState = stateOf(content, stateToken, CodeState.RUN_FAILED, diagnostics,
                     error.getMessage(), stdout, null, runInitiator);
                 refreshDialogAfterRun(response);
                 fireRunFinished(response);
@@ -485,9 +515,9 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
     private ValidationOutcome validate(CodeStateContent content,
                                        CodeStateToken stateToken,
                                        ScriptingPermissions permissions) {
-        ValidationOutcome inputValidation = validateInput(content, stateToken);
-        if (!inputValidation.isSuccessful()) {
-            return inputValidation;
+        ValidationOutcome argumentsValidation = validateArguments(content, stateToken);
+        if (!argumentsValidation.isSuccessful()) {
+            return argumentsValidation;
         }
         ScriptingEngine.GroovyCompileResult compileResult = ScriptingEngine.compileGroovyScriptForDiagnostics(
             content.getSourceText(),
@@ -496,20 +526,24 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
             List<CodeStateDiagnostic> diagnostics = CodeStateDiagnostics.sourceDiagnostics(
                 compileResult.getCompilerDiagnostics(),
                 compileResult.getLineNumber());
-            return new ValidationOutcome(diagnostics, compileResult.getErrorMessage(), null);
+            return new ValidationOutcome(CodeState.INVALID_SCRIPT, diagnostics, compileResult.getErrorMessage(), null);
         }
-        return inputValidation;
+        return new ValidationOutcome(null, null, null, argumentsValidation.argsValue);
     }
 
-    private ValidationOutcome validateInput(CodeStateContent content, CodeStateToken stateToken) {
+    private ValidationOutcome validateArguments(CodeStateContent content, CodeStateToken stateToken) {
         ScriptInputJsonSupport.ParseResult parseResult = ScriptInputJsonSupport.parseInputText(
-            content.getInputText(),
-            stateToken.getInputFingerprint());
+            content.getArgumentsJsonText(),
+            stateToken.getArgumentsFingerprint());
         if (!parseResult.isSuccessful()) {
             List<CodeStateDiagnostic> diagnostics = Collections.singletonList(parseResult.getDiagnostic());
-            return new ValidationOutcome(diagnostics, ScriptInputJsonSupport.primaryMessage(parseResult.getDiagnostic()), null);
+            return new ValidationOutcome(
+                CodeState.INVALID_ARGUMENTS_JSON,
+                diagnostics,
+                ScriptInputJsonSupport.primaryMessage(parseResult.getDiagnostic()),
+                null);
         }
-        return new ValidationOutcome(null, null, parseResult.getArgsValue());
+        return new ValidationOutcome(null, null, null, parseResult.getArgsValue());
     }
 
     private void refreshDialogAfterRun(RunCodeResponse response) {
@@ -517,7 +551,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
             return;
         }
         showCodeInDialog();
-        if (response.getStatus() == CodeLifecycleStatus.SUCCEEDED) {
+        if (response.getCodeState() == CodeState.RUN_SUCCEEDED) {
             dialog.hideDialog();
         }
     }
@@ -532,16 +566,14 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
     }
 
     private void requireExpectedStateToken(CodeStateToken expectedStateToken) {
-        String expectedStateFingerprint = CodeStateToken.normalizeFingerprint(
-            expectedStateToken == null ? null : expectedStateToken.getStateFingerprint());
-        if (expectedStateFingerprint == null) {
+        if (expectedStateToken == null) {
             throw new IllegalArgumentException("expectedStateToken is required.");
         }
         if (currentScript == null) {
             throw new IllegalStateException("No AI-owned script exists.");
         }
-        String currentStateFingerprint = currentStateToken().getStateFingerprint();
-        if (!expectedStateFingerprint.equals(currentStateFingerprint)) {
+        CodeStateToken currentStateToken = currentStateToken();
+        if (!currentStateToken.matches(expectedStateToken)) {
             throw new IllegalStateException("Expected state token does not match the current code state.");
         }
     }
@@ -552,69 +584,52 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
         }
     }
 
-    private ReadCodeResponse currentReadCodeResponse(String knownStateFingerprint) {
+    private ReadCodeResponse currentReadCodeResponse() {
         CodeStateContent content = currentContent();
         CodeStateToken stateToken = CodeStateToken.fromContent(content);
-        ReadCodeResponse state = currentScript.latestState == null
-            ? readyState(stateToken, content)
-            : currentScript.latestState;
-        CodeStateContent responseContent = stateToken.getStateFingerprint().equals(CodeStateToken.normalizeFingerprint(knownStateFingerprint))
-            ? null
-            : content;
+        ReadCodeResponse state = currentScript.latestState;
+        if (state == null || state.getStateToken() == null || !stateToken.matches(state.getStateToken())) {
+            state = editedState(stateToken, content);
+        }
         return new ReadCodeResponse(
             ScriptHost.AI,
             AI_SCRIPT_CONTENT_TYPE,
-            state.getStatus(),
+            state.getCodeState(),
             state.getRunInitiator(),
             stateToken,
-            responseContent,
+            content,
             state.getDiagnostics(),
             state.getErrorMessage(),
             state.getStdout(),
             state.getStructuredResult());
     }
 
-    private ReadCodeResponse readyState(CodeStateToken stateToken, CodeStateContent content) {
-        return new ReadCodeResponse(
-            ScriptHost.AI,
-            AI_SCRIPT_CONTENT_TYPE,
-            CodeLifecycleStatus.READY,
-            null,
-            stateToken,
-            content,
-            null,
-            null,
-            null,
-            null);
+    private ReadCodeResponse editedState(CodeStateToken stateToken, CodeStateContent content) {
+        return stateOf(content, stateToken, CodeState.EDITED, null, null, null, null, null);
+    }
+
+    private ReadCodeResponse runnableState(CodeStateToken stateToken, CodeStateContent content) {
+        return stateOf(content, stateToken, CodeState.RUNNABLE, null, null, null, null, null);
     }
 
     private ReadCodeResponse waitingState(CodeStateContent content,
                                           CodeStateToken stateToken,
                                           ScriptRunInitiator runInitiator) {
-        return new ReadCodeResponse(
-            ScriptHost.AI,
-            AI_SCRIPT_CONTENT_TYPE,
-            CodeLifecycleStatus.WAITING_FOR_USER_RUN,
-            runInitiator,
-            stateToken,
-            content,
-            null,
-            null,
-            null,
-            null);
+        return stateOf(content, stateToken, CodeState.WAITING_FOR_USER_RUN, null, null, null, null, runInitiator);
     }
 
-    private ReadCodeResponse failedState(CodeStateContent content,
-                                         CodeStateToken stateToken,
-                                         List<CodeStateDiagnostic> diagnostics,
-                                         String errorMessage,
-                                         String stdout,
-                                         Object structuredResult,
-                                         ScriptRunInitiator runInitiator) {
+    private ReadCodeResponse stateOf(CodeStateContent content,
+                                     CodeStateToken stateToken,
+                                     CodeState codeState,
+                                     List<CodeStateDiagnostic> diagnostics,
+                                     String errorMessage,
+                                     String stdout,
+                                     Object structuredResult,
+                                     ScriptRunInitiator runInitiator) {
         return new ReadCodeResponse(
             ScriptHost.AI,
             AI_SCRIPT_CONTENT_TYPE,
-            CodeLifecycleStatus.FAILED,
+            codeState,
             runInitiator,
             stateToken,
             content,
@@ -628,7 +643,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
         return new ReadCodeResponse(
             ScriptHost.AI,
             AI_SCRIPT_CONTENT_TYPE,
-            CodeLifecycleStatus.NO_CODE,
+            CodeState.NO_CODE,
             null,
             null,
             null,
@@ -642,7 +657,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
         return new RunCodeResponse(
             ScriptHost.AI,
             AI_SCRIPT_CONTENT_TYPE,
-            CodeLifecycleStatus.WAITING_FOR_USER_RUN,
+            CodeState.WAITING_FOR_USER_RUN,
             runInitiator,
             stateToken,
             null,
@@ -680,7 +695,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
         if (currentScript == null) {
             return noCodeState();
         }
-        return currentReadCodeResponse(null);
+        return currentReadCodeResponse();
     }
 
     private void showCodeInDialog() {
@@ -723,7 +738,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
         if (content == null) {
             throw new IllegalArgumentException("content is required.");
         }
-        return new CodeStateContent(content.getSourceText() == null ? "" : content.getSourceText(), content.getInputText());
+        return new CodeStateContent(content.getSourceText() == null ? "" : content.getSourceText(), content.getArgumentsJsonText());
     }
 
     private AiScriptExecutionPolicy executionPolicy() {

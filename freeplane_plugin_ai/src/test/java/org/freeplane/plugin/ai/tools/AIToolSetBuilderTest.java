@@ -4,7 +4,7 @@ import java.util.List;
 import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.features.ai.code.AiCodeRunListener;
-import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CodeState;
 import org.freeplane.features.ai.code.CodeStateContent;
 import org.freeplane.features.ai.code.CodeStateToken;
 import org.freeplane.features.ai.code.CompileCodeRequest;
@@ -41,9 +41,9 @@ public class AIToolSetBuilderTest {
                 return new ReadCodeResponse(
                     ScriptHost.ATTACHED_EDITOR,
                     "text/plain",
-                    CodeLifecycleStatus.READY,
+                    CodeState.RUNNABLE,
                     null,
-                    new CodeStateToken("code", "input", "fingerprint"),
+                    new CodeStateToken("code", "fingerprint"),
                     new CodeStateContent("hello", null),
                     null,
                     null,
@@ -56,8 +56,8 @@ public class AIToolSetBuilderTest {
                 return new WriteCodeResponse(
                     ScriptHost.ATTACHED_EDITOR,
                     "text/plain",
-                    CodeLifecycleStatus.READY,
-                    new CodeStateToken("code", "input", "fingerprint"));
+                    CodeState.EDITED,
+                    new CodeStateToken("code", "fingerprint"));
             }
 
             @Override
@@ -65,8 +65,8 @@ public class AIToolSetBuilderTest {
                 return new CompileCodeResponse(
                     ScriptHost.ATTACHED_EDITOR,
                     "text/plain",
-                    CodeLifecycleStatus.READY,
-                    new CodeStateToken("code", "input", "fingerprint"),
+                    CodeState.RUNNABLE,
+                    new CodeStateToken("code", "fingerprint"),
                     null,
                     null);
             }
@@ -76,9 +76,9 @@ public class AIToolSetBuilderTest {
                 return new RunCodeResponse(
                     ScriptHost.ATTACHED_EDITOR,
                     "text/plain",
-                    CodeLifecycleStatus.SUCCEEDED,
+                    CodeState.RUN_SUCCEEDED,
                     ScriptRunInitiator.AI,
-                    new CodeStateToken("code", "input", "fingerprint"),
+                    new CodeStateToken("code", "fingerprint"),
                     null,
                     null,
                     null,
@@ -116,12 +116,10 @@ public class AIToolSetBuilderTest {
         assertThat(toolObjects.get(1)).isInstanceOf(AiCodeToolSet.class);
         AiCodeToolSet aiCodeToolSet = (AiCodeToolSet) toolObjects.get(1);
         assertThat(aiCodeToolSet.readCode(new org.freeplane.plugin.ai.tools.code.ReadCodeToolRequest(
-            ScriptHost.ATTACHED_EDITOR,
-            null)).getStatus())
-            .isEqualTo(CodeLifecycleStatus.READY);
+            ScriptHost.ATTACHED_EDITOR)).getCodeState())
+            .isEqualTo(CodeState.RUNNABLE);
         assertThat(aiCodeToolSet.readCode(new org.freeplane.plugin.ai.tools.code.ReadCodeToolRequest(
-            ScriptHost.ATTACHED_EDITOR,
-            null)).getContent().getSourceText())
+            ScriptHost.ATTACHED_EDITOR)).getContent().getSourceText())
             .isEqualTo("hello");
     }
 }

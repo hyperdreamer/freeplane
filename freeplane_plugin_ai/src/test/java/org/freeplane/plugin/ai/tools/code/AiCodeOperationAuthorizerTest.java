@@ -7,7 +7,7 @@ import java.util.Set;
 import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.features.ai.code.AiCodeRunListener;
-import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CodeState;
 import org.freeplane.features.ai.code.CodeStateContent;
 import org.freeplane.features.ai.code.CodeStateToken;
 import org.freeplane.features.ai.code.CompileCodeRequest;
@@ -34,7 +34,7 @@ public class AiCodeOperationAuthorizerTest {
     @Test
     public void attachedScriptEditorOverrideKeepsReadWriteAndCompileAuthorizedAtReading() {
         FakeCodeHostService codeHostService = new FakeCodeHostService()
-            .withState(ScriptHost.ATTACHED_EDITOR, SCRIPT_CONTENT_TYPE, CodeLifecycleStatus.READY);
+            .withState(ScriptHost.ATTACHED_EDITOR, SCRIPT_CONTENT_TYPE, CodeState.EDITED);
         AiCodeOperationAuthorizer uut = authorizer(
             () -> ToolAvailabilityLevel.READING,
             () -> ToolAvailabilityLevel.READING,
@@ -52,7 +52,7 @@ public class AiCodeOperationAuthorizerTest {
     @Test
     public void attachedFormulaWriteAndCompileRequireFormulaEditingPermission() {
         FakeCodeHostService codeHostService = new FakeCodeHostService()
-            .withState(ScriptHost.ATTACHED_EDITOR, FORMULA_CONTENT_TYPE, CodeLifecycleStatus.READY);
+            .withState(ScriptHost.ATTACHED_EDITOR, FORMULA_CONTENT_TYPE, CodeState.EDITED);
         AiCodeOperationAuthorizer uut = authorizer(
             () -> ToolAvailabilityLevel.EDITING,
             () -> null,
@@ -71,7 +71,7 @@ public class AiCodeOperationAuthorizerTest {
     @Test
     public void scriptExecutionAvailabilityAddsRunCodeForScriptContent() {
         FakeCodeHostService codeHostService = new FakeCodeHostService()
-            .withState(ScriptHost.ATTACHED_EDITOR, SCRIPT_CONTENT_TYPE, CodeLifecycleStatus.READY);
+            .withState(ScriptHost.ATTACHED_EDITOR, SCRIPT_CONTENT_TYPE, CodeState.EDITED);
         AiCodeOperationAuthorizer uut = authorizer(
             () -> ToolAvailabilityLevel.SCRIPT_EXECUTION,
             () -> null,
@@ -97,7 +97,7 @@ public class AiCodeOperationAuthorizerTest {
     @Test
     public void editingAvailabilityAllowsAttachedFormulaWriteAndCompileWhenFormulaEditingIsEnabled() {
         FakeCodeHostService codeHostService = new FakeCodeHostService()
-            .withState(ScriptHost.ATTACHED_EDITOR, FORMULA_CONTENT_TYPE, CodeLifecycleStatus.READY);
+            .withState(ScriptHost.ATTACHED_EDITOR, FORMULA_CONTENT_TYPE, CodeState.EDITED);
         AiCodeOperationAuthorizer uut = authorizer(
             () -> ToolAvailabilityLevel.EDITING,
             () -> null,
@@ -112,7 +112,7 @@ public class AiCodeOperationAuthorizerTest {
     @Test
     public void runCodeRejectsNonScriptContent() {
         FakeCodeHostService codeHostService = new FakeCodeHostService()
-            .withState(ScriptHost.ATTACHED_EDITOR, FORMULA_CONTENT_TYPE, CodeLifecycleStatus.READY);
+            .withState(ScriptHost.ATTACHED_EDITOR, FORMULA_CONTENT_TYPE, CodeState.EDITED);
         AiCodeOperationAuthorizer uut = authorizer(
             () -> ToolAvailabilityLevel.SCRIPT_EXECUTION,
             () -> null,
@@ -127,7 +127,7 @@ public class AiCodeOperationAuthorizerTest {
     @Test
     public void disabledAvailabilityWithoutOverrideRejectsAttachedEditorRead() {
         FakeCodeHostService codeHostService = new FakeCodeHostService()
-            .withState(ScriptHost.ATTACHED_EDITOR, SCRIPT_CONTENT_TYPE, CodeLifecycleStatus.READY);
+            .withState(ScriptHost.ATTACHED_EDITOR, SCRIPT_CONTENT_TYPE, CodeState.EDITED);
         AiCodeOperationAuthorizer uut = authorizer(
             () -> ToolAvailabilityLevel.DISABLED,
             () -> null,
@@ -155,13 +155,13 @@ public class AiCodeOperationAuthorizerTest {
     private static class FakeCodeHostService implements AiCodeHostService {
         private final Map<ScriptHost, ReadCodeResponse> states = new EnumMap<ScriptHost, ReadCodeResponse>(ScriptHost.class);
 
-        private FakeCodeHostService withState(ScriptHost host, String contentType, CodeLifecycleStatus status) {
+        private FakeCodeHostService withState(ScriptHost host, String contentType, CodeState status) {
             states.put(host, new ReadCodeResponse(
                 host,
                 contentType,
                 status,
                 null,
-                new CodeStateToken("code", "input", "fingerprint"),
+                new CodeStateToken("code", "fingerprint"),
                 new CodeStateContent("code", null),
                 null,
                 null,
@@ -179,7 +179,7 @@ public class AiCodeOperationAuthorizerTest {
                 : new ReadCodeResponse(
                     host,
                     null,
-                    CodeLifecycleStatus.NO_CODE,
+                    CodeState.NO_CODE,
                     null,
                     null,
                     null,

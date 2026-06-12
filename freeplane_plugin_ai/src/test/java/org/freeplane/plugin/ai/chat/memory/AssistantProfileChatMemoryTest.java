@@ -9,6 +9,7 @@ import dev.langchain4j.model.openai.OpenAiTokenCountEstimator;
 import dev.langchain4j.model.output.TokenUsage;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import org.freeplane.plugin.ai.chat.history.AssistantProfileTranscriptEntry;
 import org.freeplane.plugin.ai.chat.history.ChatTranscriptEntry;
@@ -1148,6 +1149,51 @@ public class AssistantProfileChatMemoryTest {
             .extracting(message -> message instanceof UserMessage ? ((UserMessage) message).singleText() : null)
             .contains("u3")
             .doesNotContain("u1", "u2");
+    }
+
+    @Test
+    public void refreshCompactionForCurrentMaxTokensRebalancesVisibleTurns() {
+        String firstQuestion = repeatedWords("first", 24);
+        String firstAnswer = repeatedWords("answer1", 24);
+        String secondQuestion = repeatedWords("second", 24);
+        String secondAnswer = repeatedWords("answer2", 24);
+        String thirdQuestion = repeatedWords("third", 24);
+        String thirdAnswer = repeatedWords("answer3", 24);
+        int allTurnTokens = estimateTokens(
+            UserMessage.from(firstQuestion),
+            AiMessage.from(firstAnswer),
+            UserMessage.from(secondQuestion),
+            AiMessage.from(secondAnswer),
+            UserMessage.from(thirdQuestion),
+            AiMessage.from(thirdAnswer));
+        int visibleAfterReductionTokens = estimateTokens(
+            UserMessage.from(secondQuestion),
+            AiMessage.from(secondAnswer),
+            UserMessage.from(thirdQuestion),
+            AiMessage.from(thirdAnswer));
+        AtomicInteger maxTokens = new AtomicInteger(allTurnTokens);
+        AssistantProfileChatMemory uut = AssistantProfileChatMemory.builder()
+            .dynamicMaxTokens(ignored -> maxTokens.get())
+            .tokenEstimatorModelNameProvider(() -> "gpt-4o-mini")
+            .build();
+        uut.add(UserMessage.from(firstQuestion));
+        uut.add(AiMessage.from(firstAnswer));
+        uut.add(UserMessage.from(secondQuestion));
+        uut.add(AiMessage.from(secondAnswer));
+        uut.add(UserMessage.from(thirdQuestion));
+        uut.add(AiMessage.from(thirdAnswer));
+
+        maxTokens.set(visibleAfterReductionTokens);
+        uut.refreshCompactionForCurrentMaxTokens();
+
+        assertThat(uut.messages())
+            .extracting(message -> message instanceof UserMessage ? ((UserMessage) message).singleText() : null)
+            .contains(secondQuestion, thirdQuestion)
+            .doesNotContain(firstQuestion);
+        assertThat(uut.messages())
+            .extracting(message -> message instanceof AiMessage ? ((AiMessage) message).text() : null)
+            .contains(secondAnswer, thirdAnswer)
+            .doesNotContain(firstAnswer);
     }
 
     @Test

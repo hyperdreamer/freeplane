@@ -30,7 +30,16 @@ public class ScriptInputJsonSupportTest {
         ScriptInputJsonSupport.ParseResult result = ScriptInputJsonSupport.parseInputText("{");
 
         assertThat(result.isSuccessful()).isFalse();
-        assertThat(result.getDiagnostic().getField()).isEqualTo(CodeStateField.INPUT_JSON);
+        assertThat(result.getDiagnostic().getField()).isEqualTo(CodeStateField.ARGUMENTS_JSON);
         assertThat(result.getDiagnostic().getMessage()).isNotBlank();
+    }
+
+    @Test
+    public void invalidInputPrimaryMessageNamesArgumentsJson() {
+        ScriptInputJsonSupport.ParseResult result = ScriptInputJsonSupport.parseInputText("{");
+
+        assertThat(ScriptInputJsonSupport.primaryMessage(result.getDiagnostic()))
+            .contains("Arguments JSON")
+            .contains("invalid");
     }
 }

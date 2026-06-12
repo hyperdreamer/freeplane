@@ -136,7 +136,7 @@ class ScriptingRegistration {
 		@Override
         public void setScript(final int pIndex, final ScriptHolder pScript) {
 			mScript = pScript.getScript();
-            mInputText = pScript.getInputText();
+            mInputText = pScript.getArgumentsJsonText();
 		}
 
 		@Override

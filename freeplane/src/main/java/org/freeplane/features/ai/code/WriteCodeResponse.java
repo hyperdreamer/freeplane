@@ -3,16 +3,16 @@ package org.freeplane.features.ai.code;
 public class WriteCodeResponse {
     private final ScriptHost host;
     private final String contentType;
-    private final CodeLifecycleStatus status;
+    private final CodeState codeState;
     private final CodeStateToken stateToken;
 
     public WriteCodeResponse(ScriptHost host,
                              String contentType,
-                             CodeLifecycleStatus status,
+                             CodeState codeState,
                              CodeStateToken stateToken) {
         this.host = host;
         this.contentType = contentType;
-        this.status = status;
+        this.codeState = codeState;
         this.stateToken = stateToken;
     }
 
@@ -24,8 +24,8 @@ public class WriteCodeResponse {
         return contentType;
     }
 
-    public CodeLifecycleStatus getStatus() {
-        return status;
+    public CodeState getCodeState() {
+        return codeState;
     }
 
     public CodeStateToken getStateToken() {

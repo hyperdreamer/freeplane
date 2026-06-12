@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Objects;
 import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.features.ai.code.AiCodeRunListener;
-import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CodeState;
 import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.ai.code.CompileCodeRequest;
 import org.freeplane.features.ai.code.CompileCodeResponse;
@@ -191,7 +191,7 @@ public class AIToolSetBuilder {
                 return new ReadCodeResponse(
                     ScriptHost.ATTACHED_EDITOR,
                     null,
-                    CodeLifecycleStatus.NO_CODE,
+                    CodeState.NO_CODE,
                     null,
                     null,
                     null,

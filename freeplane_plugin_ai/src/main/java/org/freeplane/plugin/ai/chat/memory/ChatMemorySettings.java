@@ -3,7 +3,7 @@ package org.freeplane.plugin.ai.chat.memory;
 import org.freeplane.core.resources.ResourceController;
 
 public class ChatMemorySettings {
-    private static final String CHAT_MEMORY_MAXIMUM_TOKEN_COUNT_PROPERTY = "ai_chat_memory_maximum_token_count";
+    public static final String CHAT_MEMORY_MAXIMUM_TOKEN_COUNT_PROPERTY = "ai_chat_memory_maximum_token_count";
     private static final int DEFAULT_MAXIMUM_TOKEN_COUNT = 65536;
 
     private final ResourceController resourceController;

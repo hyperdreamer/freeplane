@@ -8,16 +8,14 @@ import java.util.Objects;
 
 public class CodeStateToken {
     private String codeFingerprint;
-    private String inputFingerprint;
-    private String stateFingerprint;
+    private String argumentsFingerprint;
 
     public CodeStateToken() {
     }
 
-    public CodeStateToken(String codeFingerprint, String inputFingerprint, String stateFingerprint) {
+    public CodeStateToken(String codeFingerprint, String argumentsFingerprint) {
         this.codeFingerprint = codeFingerprint;
-        this.inputFingerprint = inputFingerprint;
-        this.stateFingerprint = stateFingerprint;
+        this.argumentsFingerprint = argumentsFingerprint;
     }
 
     public String getCodeFingerprint() {
@@ -28,32 +26,32 @@ public class CodeStateToken {
         this.codeFingerprint = codeFingerprint;
     }
 
-    public String getInputFingerprint() {
-        return inputFingerprint;
+    public String getArgumentsFingerprint() {
+        return argumentsFingerprint;
     }
 
-    public void setInputFingerprint(String inputFingerprint) {
-        this.inputFingerprint = inputFingerprint;
-    }
-
-    public String getStateFingerprint() {
-        return stateFingerprint;
-    }
-
-    public void setStateFingerprint(String stateFingerprint) {
-        this.stateFingerprint = stateFingerprint;
+    public void setArgumentsFingerprint(String argumentsFingerprint) {
+        this.argumentsFingerprint = argumentsFingerprint;
     }
 
     public static CodeStateToken fromContent(CodeStateContent content) {
         String sourceText = content == null ? null : content.getSourceText();
-        String inputText = content == null ? null : content.getInputText();
+        String argumentsJsonText = content == null ? null : content.getArgumentsJsonText();
         String codeFingerprint = fingerprint(sourceText);
-        String inputFingerprint = fingerprint(inputText);
-        return new CodeStateToken(codeFingerprint, inputFingerprint, fingerprint(codeFingerprint + "\n" + inputFingerprint));
+        String argumentsFingerprint = fingerprint(argumentsJsonText);
+        return new CodeStateToken(codeFingerprint, argumentsFingerprint);
     }
 
     public static String normalizeFingerprint(String fingerprint) {
         return fingerprint == null || fingerprint.trim().isEmpty() ? null : fingerprint.trim();
+    }
+
+    public boolean matches(CodeStateToken other) {
+        if (other == null) {
+            return false;
+        }
+        return Objects.equals(normalizeFingerprint(codeFingerprint), normalizeFingerprint(other.codeFingerprint))
+            && Objects.equals(normalizeFingerprint(argumentsFingerprint), normalizeFingerprint(other.argumentsFingerprint));
     }
 
     public static String fingerprint(String text) {
@@ -95,21 +93,19 @@ public class CodeStateToken {
         }
         CodeStateToken that = (CodeStateToken) other;
         return Objects.equals(codeFingerprint, that.codeFingerprint)
-            && Objects.equals(inputFingerprint, that.inputFingerprint)
-            && Objects.equals(stateFingerprint, that.stateFingerprint);
+            && Objects.equals(argumentsFingerprint, that.argumentsFingerprint);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(codeFingerprint, inputFingerprint, stateFingerprint);
+        return Objects.hash(codeFingerprint, argumentsFingerprint);
     }
 
     @Override
     public String toString() {
-        return "CodeStateToken{"
+        return "CodeStateToken{" 
             + "codeFingerprint='" + codeFingerprint + '\''
-            + ", inputFingerprint='" + inputFingerprint + '\''
-            + ", stateFingerprint='" + stateFingerprint + '\''
+            + ", argumentsFingerprint='" + argumentsFingerprint + '\''
             + '}';
     }
 }

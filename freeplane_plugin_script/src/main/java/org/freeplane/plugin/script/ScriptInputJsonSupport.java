@@ -7,10 +7,11 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.freeplane.core.resources.ResourceController;
+import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.ai.code.CodeStateDiagnostic;
-import org.freeplane.features.mode.Controller;
 import org.freeplane.features.ai.code.CodeStateField;
 import org.freeplane.features.ai.code.CodeStateToken;
+import org.freeplane.features.mode.Controller;
 
 public class ScriptInputJsonSupport {
     public static final String ARGUMENTS_VARIABLE_NAME = "args";
@@ -43,19 +44,19 @@ public class ScriptInputJsonSupport {
     private static final ConcurrentCache<String, ParseResult> parsedInputs = new ConcurrentCache<String, ParseResult>(
         ScriptInputJsonSupport::cacheSize);
 
-    public static ParseResult parseInputText(String inputText) {
-        return parseInputText(inputText, CodeStateToken.fingerprint(inputText));
+    public static ParseResult parseInputText(String argumentsJsonText) {
+        return parseInputText(argumentsJsonText, CodeStateToken.fingerprint(argumentsJsonText));
     }
 
-    public static ParseResult parseInputText(String inputText, String inputFingerprint) {
-        if (isBlankInput(inputText)) {
+    public static ParseResult parseInputText(String argumentsJsonText, String argumentsFingerprint) {
+        if (isBlankInput(argumentsJsonText)) {
             return new ParseResult(null, null);
         }
-        return parsedInputs.computeIfAbsent(inputFingerprint, () -> parseNonBlank(inputText));
+        return parsedInputs.computeIfAbsent(argumentsFingerprint, () -> parseNonBlank(argumentsJsonText));
     }
 
-    public static boolean isBlankInput(String inputText) {
-        return inputText == null || inputText.trim().isEmpty();
+    public static boolean isBlankInput(String argumentsJsonText) {
+        return argumentsJsonText == null || argumentsJsonText.trim().isEmpty();
     }
 
     public static String companionAttributeName(String scriptAttributeName) {
@@ -75,34 +76,64 @@ public class ScriptInputJsonSupport {
     }
 
     public static String primaryMessage(CodeStateDiagnostic diagnostic) {
-        if (diagnostic == null || diagnostic.getMessage() == null || diagnostic.getMessage().trim().isEmpty()) {
-            return "Invalid input JSON.";
+        if (diagnostic == null) {
+            return "Invalid Arguments JSON.";
         }
+        String diagnosticMessage = diagnostic.getMessage() == null ? "" : diagnostic.getMessage().trim();
         StringBuilder builder = new StringBuilder();
-        builder.append(diagnostic.getMessage().trim());
+        String fieldPrefix = fieldPrefix(diagnostic.getField());
+        if (fieldPrefix != null) {
+            builder.append(fieldPrefix);
+        }
+        if (!diagnosticMessage.isEmpty()) {
+            if (builder.length() > 0) {
+                builder.append("\n\n");
+            }
+            builder.append(diagnosticMessage);
+        }
         if (diagnostic.getLine() != null) {
             builder.append(" at line ").append(diagnostic.getLine());
             if (diagnostic.getColumn() != null) {
                 builder.append(", column ").append(diagnostic.getColumn());
             }
         }
-        return builder.toString();
+        return builder.length() == 0 ? "Invalid Arguments JSON." : builder.toString();
     }
 
-    private static ParseResult parseNonBlank(String inputText) {
+    private static String fieldPrefix(CodeStateField field) {
+        if (field == CodeStateField.ARGUMENTS_JSON) {
+            return fieldDisplayName(field) + " is invalid.";
+        }
+        return null;
+    }
+
+    private static String fieldDisplayName(CodeStateField field) {
+        Controller controller = Controller.getCurrentController();
+        if (field == CodeStateField.ARGUMENTS_JSON) {
+            return controller == null
+                ? "Arguments JSON"
+                : TextUtils.getText("ai_owned_script_dialog_input_json", "Arguments JSON");
+        }
+        if (field == CodeStateField.SOURCE_TEXT) {
+            return controller == null ? "Code" : TextUtils.getText("ai_owned_script_dialog_code", "Code");
+        }
+        return "Input";
+    }
+
+    private static ParseResult parseNonBlank(String argumentsJsonText) {
         try {
-            return new ParseResult(new JsonSlurper().parseText(inputText), null);
+            return new ParseResult(new JsonSlurper().parseText(argumentsJsonText), null);
         } catch (JsonException error) {
             return new ParseResult(null, diagnostic(error));
         } catch (RuntimeException error) {
-            return new ParseResult(null, new CodeStateDiagnostic(CodeStateField.INPUT_JSON, error.getMessage(), null, null));
+            return new ParseResult(null, new CodeStateDiagnostic(CodeStateField.ARGUMENTS_JSON, error.getMessage(), null, null));
         }
     }
 
     private static CodeStateDiagnostic diagnostic(JsonException error) {
         String message = error.getMessage();
         return new CodeStateDiagnostic(
-            CodeStateField.INPUT_JSON,
+            CodeStateField.ARGUMENTS_JSON,
             message,
             extractNumber(LINE_NUMBER_PATTERN, message),
             extractNumber(COLUMN_NUMBER_PATTERN, message));

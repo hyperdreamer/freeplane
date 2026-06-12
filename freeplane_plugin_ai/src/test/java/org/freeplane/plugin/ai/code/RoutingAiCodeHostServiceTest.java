@@ -3,7 +3,7 @@ package org.freeplane.plugin.ai.code;
 import java.util.concurrent.atomic.AtomicReference;
 import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.features.ai.code.AiCodeRunListener;
-import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CodeState;
 import org.freeplane.features.ai.code.CodeStateContent;
 import org.freeplane.features.ai.code.CodeStateToken;
 import org.freeplane.features.ai.code.CompileCodeRequest;
@@ -27,11 +27,11 @@ public class RoutingAiCodeHostServiceTest {
         AiCodeHostService attachedEditorHost = mock(AiCodeHostService.class);
         RoutingAiCodeHostService uut = new RoutingAiCodeHostService(attachedEditorHost, () -> null);
 
-        ReadCodeResponse response = uut.readCode(new ReadCodeRequest(ScriptHost.AI, null));
+        ReadCodeResponse response = uut.readCode(new ReadCodeRequest(ScriptHost.AI));
 
         assertThat(response.getHost()).isEqualTo(ScriptHost.AI);
         assertThat(response.getContentType()).isEqualTo("text/x-freeplane-script-groovy");
-        assertThat(response.getStatus()).isEqualTo(CodeLifecycleStatus.NO_CODE);
+        assertThat(response.getCodeState()).isEqualTo(CodeState.NO_CODE);
     }
 
     @Test
@@ -41,7 +41,7 @@ public class RoutingAiCodeHostServiceTest {
         WriteCodeResponse expectedResponse = new WriteCodeResponse(
             ScriptHost.AI,
             "text/x-freeplane-script-groovy",
-            CodeLifecycleStatus.READY,
+            CodeState.EDITED,
             token("fingerprint"));
         when(aiHost.writeCode(org.mockito.ArgumentMatchers.any(WriteCodeRequest.class))).thenReturn(expectedResponse);
         RoutingAiCodeHostService uut = new RoutingAiCodeHostService(attachedEditorHost, () -> aiHost);
@@ -82,7 +82,7 @@ public class RoutingAiCodeHostServiceTest {
         verify(aiHost).addRunListener(listener);
     }
 
-    private static CodeStateToken token(String stateFingerprint) {
-        return new CodeStateToken("code", "input", stateFingerprint);
+    private static CodeStateToken token(String argumentsFingerprint) {
+        return new CodeStateToken("code", argumentsFingerprint);
     }
 }

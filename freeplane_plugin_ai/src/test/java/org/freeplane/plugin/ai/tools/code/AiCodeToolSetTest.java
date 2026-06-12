@@ -5,7 +5,7 @@ import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.ai.code.AiCodeEditor;
 import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.features.ai.code.AiCodeRunListener;
-import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CodeState;
 import org.freeplane.features.ai.code.CodeStateContent;
 import org.freeplane.features.ai.code.CodeStateDiagnostic;
 import org.freeplane.features.ai.code.CodeStateDiagnostics;
@@ -40,9 +40,9 @@ public class AiCodeToolSetTest {
     public void readCodeReturnsNoCodeStateWhenNoEditorIsAttached() {
         AiCodeToolSet uut = new AiCodeToolSet(newDetachedCodeHostService(), null, null, ToolCaller.CHAT);
 
-        ReadCodeResponse response = uut.readCode(new ReadCodeToolRequest(ScriptHost.ATTACHED_EDITOR, null));
+        ReadCodeResponse response = uut.readCode(new ReadCodeToolRequest(ScriptHost.ATTACHED_EDITOR));
 
-        assertThat(response.getStatus()).isEqualTo(CodeLifecycleStatus.NO_CODE);
+        assertThat(response.getCodeState()).isEqualTo(CodeState.NO_CODE);
     }
 
     @Test
@@ -53,18 +53,18 @@ public class AiCodeToolSetTest {
         editor.setCompileResponse(new CompileCodeResponse(
             ScriptHost.ATTACHED_EDITOR,
             "text/x-freeplane-script-groovy",
-            CodeLifecycleStatus.FAILED,
-            token("failure"),
+            CodeState.INVALID_SCRIPT,
+            null,
             CodeStateDiagnostics.sourceDiagnostics(Collections.singletonList("Broken"), 1),
             "Broken"));
         service.compileCode(new CompileCodeRequest(
             ScriptHost.ATTACHED_EDITOR,
-            service.readCode(new ReadCodeRequest(ScriptHost.ATTACHED_EDITOR, null)).getStateToken()));
+            service.readCode(new ReadCodeRequest(ScriptHost.ATTACHED_EDITOR)).getStateToken()));
         AiCodeToolSet uut = new AiCodeToolSet(service, null, null, ToolCaller.CHAT);
 
-        ReadCodeResponse response = uut.readCode(new ReadCodeToolRequest(ScriptHost.ATTACHED_EDITOR, null));
+        ReadCodeResponse response = uut.readCode(new ReadCodeToolRequest(ScriptHost.ATTACHED_EDITOR));
 
-        assertThat(response.getStatus()).isEqualTo(CodeLifecycleStatus.FAILED);
+        assertThat(response.getCodeState()).isEqualTo(CodeState.INVALID_SCRIPT);
         assertThat(response.getContentType()).isEqualTo("text/x-freeplane-script-groovy");
         assertThat(response.getContent().getSourceText()).isEqualTo("script");
         assertThat(response.getDiagnostics()).extracting(CodeStateDiagnostic::getMessage).containsExactly("Broken");
@@ -78,7 +78,7 @@ public class AiCodeToolSetTest {
                 return new ReadCodeResponse(
                     ScriptHost.ATTACHED_EDITOR,
                     "text/x-freeplane-formula-groovy",
-                    CodeLifecycleStatus.READY,
+                    CodeState.RUNNABLE,
                     null,
                     token("fingerprint"),
                     new CodeStateContent("=1+1", null),
@@ -122,7 +122,7 @@ public class AiCodeToolSetTest {
 
         assertThat(message).contains("Use readCode, writeCode, and compileCode.");
         assertThat(message).contains("The attached content is a formula.");
-        assertThat(message).contains("inputText stays blank or null for formulas");
+        assertThat(message).contains("argumentsJsonText stays blank or null for formulas");
         assertThat(message).contains("Keep it value-computing.");
     }
 
@@ -136,10 +136,11 @@ public class AiCodeToolSetTest {
         WriteCodeResponse response = uut.writeCode(new WriteCodeToolRequest(
             ScriptHost.ATTACHED_EDITOR,
             new CodeStateContent("after", null),
-            uut.readCode(new ReadCodeToolRequest(ScriptHost.ATTACHED_EDITOR, null)).getStateToken()));
+            uut.readCode(new ReadCodeToolRequest(ScriptHost.ATTACHED_EDITOR)).getStateToken()));
 
         assertThat(editor.getCodeStateContent().getSourceText()).isEqualTo("after");
-        assertThat(response.getStateToken().getStateFingerprint()).isNotBlank();
+        assertThat(response.getStateToken().getCodeFingerprint()).isNotBlank();
+        assertThat(response.getStateToken().getArgumentsFingerprint()).isNotBlank();
     }
 
     @Test
@@ -149,34 +150,34 @@ public class AiCodeToolSetTest {
         editor.setCompileResponse(new CompileCodeResponse(
             ScriptHost.ATTACHED_EDITOR,
             "text/plain",
-            CodeLifecycleStatus.FAILED,
-            token("failure"),
+            CodeState.INVALID_SCRIPT,
+            null,
             CodeStateDiagnostics.sourceDiagnostics(Collections.singletonList("Broken"), 1),
             "Broken"));
         service.attachEditor(editor, "text/plain");
         AiCodeToolSet uut = new AiCodeToolSet(service, null, null, ToolCaller.CHAT);
 
-        ReadCodeResponse initialState = uut.readCode(new ReadCodeToolRequest(ScriptHost.ATTACHED_EDITOR, null));
+        ReadCodeResponse initialState = uut.readCode(new ReadCodeToolRequest(ScriptHost.ATTACHED_EDITOR));
         CompileCodeResponse first = uut.compileCode(new CompileCodeToolRequest(
             ScriptHost.ATTACHED_EDITOR,
             initialState.getStateToken()));
-        ReadCodeResponse firstState = uut.readCode(new ReadCodeToolRequest(ScriptHost.ATTACHED_EDITOR, null));
+        ReadCodeResponse firstState = uut.readCode(new ReadCodeToolRequest(ScriptHost.ATTACHED_EDITOR));
         editor.setCompileResponse(new CompileCodeResponse(
             ScriptHost.ATTACHED_EDITOR,
             "text/plain",
-            CodeLifecycleStatus.READY,
-            token("success"),
+            CodeState.RUNNABLE,
+            null,
             Collections.<CodeStateDiagnostic>emptyList(),
             null));
         CompileCodeResponse second = uut.compileCode(new CompileCodeToolRequest(
             ScriptHost.ATTACHED_EDITOR,
             firstState.getStateToken()));
-        ReadCodeResponse secondState = uut.readCode(new ReadCodeToolRequest(ScriptHost.ATTACHED_EDITOR, null));
+        ReadCodeResponse secondState = uut.readCode(new ReadCodeToolRequest(ScriptHost.ATTACHED_EDITOR));
 
-        assertThat(first.getStatus()).isEqualTo(CodeLifecycleStatus.FAILED);
-        assertThat(firstState.getStatus()).isEqualTo(CodeLifecycleStatus.FAILED);
-        assertThat(second.getStatus()).isEqualTo(CodeLifecycleStatus.READY);
-        assertThat(secondState.getStatus()).isEqualTo(CodeLifecycleStatus.READY);
+        assertThat(first.getCodeState()).isEqualTo(CodeState.INVALID_SCRIPT);
+        assertThat(firstState.getCodeState()).isEqualTo(CodeState.INVALID_SCRIPT);
+        assertThat(second.getCodeState()).isEqualTo(CodeState.RUNNABLE);
+        assertThat(secondState.getCodeState()).isEqualTo(CodeState.RUNNABLE);
     }
 
     @Test
@@ -209,7 +210,7 @@ public class AiCodeToolSetTest {
                 return new ReadCodeResponse(
                     ScriptHost.ATTACHED_EDITOR,
                     null,
-                    CodeLifecycleStatus.NO_CODE,
+                    CodeState.NO_CODE,
                     null,
                     null,
                     null,
@@ -250,7 +251,7 @@ public class AiCodeToolSetTest {
     }
 
     private static CodeStateToken token(String stateFingerprint) {
-        return new CodeStateToken("code", "input", stateFingerprint);
+        return new CodeStateToken("code", stateFingerprint);
     }
 
     private static class FakeCodeEditor implements AiCodeEditor {
@@ -258,14 +259,14 @@ public class AiCodeToolSetTest {
         private CompileCodeResponse compileResponse = new CompileCodeResponse(
             ScriptHost.ATTACHED_EDITOR,
             "text/plain",
-            CodeLifecycleStatus.READY,
+            CodeState.RUNNABLE,
             token("initial"),
             Collections.<CodeStateDiagnostic>emptyList(),
             null);
         private RunCodeResponse runResponse = new RunCodeResponse(
             ScriptHost.ATTACHED_EDITOR,
             "text/plain",
-            CodeLifecycleStatus.SUCCEEDED,
+            CodeState.RUN_SUCCEEDED,
             ScriptRunInitiator.AI,
             token("initial"),
             null,

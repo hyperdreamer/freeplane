@@ -34,7 +34,7 @@ import org.freeplane.features.ai.code.AiChatAttachmentService;
 import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.ai.code.AiChatRepairRequest;
 import org.freeplane.features.ai.code.AiCodeEditor;
-import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CodeState;
 import org.freeplane.features.ai.code.CodeStateContent;
 import org.freeplane.features.ai.code.CodeStateDiagnostics;
 import org.freeplane.features.ai.code.CodeStateToken;
@@ -250,9 +250,9 @@ class FormulaEditor extends EditNodeDialog implements INodeSelector, AiCodeEdito
 
     @Override
     public void replaceCodeStateContent(CodeStateContent content) {
-        String inputText = content == null ? null : content.getInputText();
-        if (inputText != null && !inputText.trim().isEmpty()) {
-            throw new IllegalArgumentException("Formula editors do not accept inputText.");
+        String argumentsJsonText = content == null ? null : content.getArgumentsJsonText();
+        if (argumentsJsonText != null && !argumentsJsonText.trim().isEmpty()) {
+            throw new IllegalArgumentException("Formula editors do not accept argumentsJsonText.");
         }
         textEditor.setText(content == null || content.getSourceText() == null ? "" : content.getSourceText());
     }
@@ -266,7 +266,7 @@ class FormulaEditor extends EditNodeDialog implements INodeSelector, AiCodeEdito
             return new CompileCodeResponse(
                 ScriptHost.ATTACHED_EDITOR,
                 FormulaTextTransformer.AI_ATTACHMENT_CONTENT_TYPE,
-                CodeLifecycleStatus.FAILED,
+                CodeState.INVALID_SCRIPT,
                 stateToken,
                 CodeStateDiagnostics.singleton(
                     org.freeplane.features.ai.code.CodeStateField.SOURCE_TEXT,
@@ -281,7 +281,7 @@ class FormulaEditor extends EditNodeDialog implements INodeSelector, AiCodeEdito
         return new CompileCodeResponse(
             ScriptHost.ATTACHED_EDITOR,
             FormulaTextTransformer.AI_ATTACHMENT_CONTENT_TYPE,
-            compileResult.isSuccessful() ? CodeLifecycleStatus.READY : CodeLifecycleStatus.FAILED,
+            compileResult.isSuccessful() ? CodeState.RUNNABLE : CodeState.INVALID_SCRIPT,
             stateToken,
             CodeStateDiagnostics.sourceDiagnostics(compileResult.getCompilerDiagnostics(), compileResult.getLineNumber()),
             compileResult.getErrorMessage());
@@ -301,13 +301,11 @@ class FormulaEditor extends EditNodeDialog implements INodeSelector, AiCodeEdito
         CodeStateToken stateToken = CodeStateToken.fromContent(content);
         if (validationResult.getSourceFingerprint() != null) {
             stateToken.setCodeFingerprint(validationResult.getSourceFingerprint());
-            stateToken.setStateFingerprint(CodeStateToken.fingerprint(
-                stateToken.getCodeFingerprint() + "\n" + stateToken.getInputFingerprint()));
         }
         return new ReadCodeResponse(
             ScriptHost.ATTACHED_EDITOR,
             FormulaTextTransformer.AI_ATTACHMENT_CONTENT_TYPE,
-            CodeLifecycleStatus.FAILED,
+            CodeState.INVALID_SCRIPT,
             null,
             stateToken,
             content,

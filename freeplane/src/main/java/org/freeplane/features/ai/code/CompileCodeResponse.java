@@ -7,20 +7,20 @@ import java.util.List;
 public class CompileCodeResponse {
     private final ScriptHost host;
     private final String contentType;
-    private final CodeLifecycleStatus status;
+    private final CodeState codeState;
     private final CodeStateToken stateToken;
     private final List<CodeStateDiagnostic> diagnostics;
     private final String errorMessage;
 
     public CompileCodeResponse(ScriptHost host,
                                String contentType,
-                               CodeLifecycleStatus status,
+                               CodeState codeState,
                                CodeStateToken stateToken,
                                List<CodeStateDiagnostic> diagnostics,
                                String errorMessage) {
         this.host = host;
         this.contentType = contentType;
-        this.status = status;
+        this.codeState = codeState;
         this.stateToken = stateToken;
         this.diagnostics = diagnostics == null
             ? null
@@ -36,8 +36,8 @@ public class CompileCodeResponse {
         return contentType;
     }
 
-    public CodeLifecycleStatus getStatus() {
-        return status;
+    public CodeState getCodeState() {
+        return codeState;
     }
 
     public CodeStateToken getStateToken() {

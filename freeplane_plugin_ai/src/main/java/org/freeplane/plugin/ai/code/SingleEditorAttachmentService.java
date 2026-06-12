@@ -14,7 +14,7 @@ import org.freeplane.features.ai.code.AiChatRepairRequest;
 import org.freeplane.features.ai.code.AiCodeEditor;
 import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.features.ai.code.AiCodeRunListener;
-import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CodeState;
 import org.freeplane.features.ai.code.CodeStateContent;
 import org.freeplane.features.ai.code.CodeStateDiagnostic;
 import org.freeplane.features.ai.code.CodeStateToken;
@@ -86,7 +86,7 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
         if (activeAttachment == null) {
             return noCodeState(null);
         }
-        return activeReadCodeResponse(activeAttachment, request == null ? null : request.getKnownStateFingerprint());
+        return activeReadCodeResponse(activeAttachment);
     }
 
     @Override
@@ -100,11 +100,11 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
         ActiveAttachment attachment = requireWritableAttachment(request.getHost());
         requireExpectedStateToken(request.getExpectedStateToken(), attachment);
         attachment.editor.replaceCodeStateContent(request.getContent());
-        attachment.latestCodeState = null;
+        attachment.latestCodeState = editedState(attachment, currentContent(attachment), currentStateToken(attachment));
         return new WriteCodeResponse(
             ScriptHost.ATTACHED_EDITOR,
             attachment.contentType,
-            CodeLifecycleStatus.READY,
+            CodeState.EDITED,
             currentStateToken(attachment));
     }
 
@@ -120,12 +120,7 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
         }
         CompileCodeResponse editorResponse = ((AiCodeEditor) attachment.editor).compileCode(request);
         CompileCodeResponse response = normalizedCompileResponse(attachment, editorResponse);
-        if (response.getStatus() == CodeLifecycleStatus.FAILED) {
-            attachment.latestCodeState = failureStateFromCompileResponse(attachment, response);
-        }
-        else {
-            attachment.latestCodeState = null;
-        }
+        attachment.latestCodeState = stateFromCompileResponse(attachment, response);
         return response;
     }
 
@@ -229,13 +224,10 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
     }
 
     private void requireExpectedStateToken(CodeStateToken expectedStateToken, ActiveAttachment attachment) {
-        String expectedStateFingerprint = CodeStateToken.normalizeFingerprint(
-            expectedStateToken == null ? null : expectedStateToken.getStateFingerprint());
-        if (expectedStateFingerprint == null) {
+        if (expectedStateToken == null) {
             throw new IllegalArgumentException("expectedStateToken is required.");
         }
-        String currentStateFingerprint = currentStateToken(attachment).getStateFingerprint();
-        if (!expectedStateFingerprint.equals(currentStateFingerprint)) {
+        if (!currentStateToken(attachment).matches(expectedStateToken)) {
             throw new IllegalStateException("Expected state token does not match the current code state.");
         }
     }
@@ -270,28 +262,28 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
             throw new IllegalStateException("Attached editor compile returned no response.");
         }
         CodeStateToken currentStateToken = currentStateToken(attachment);
-        CodeLifecycleStatus status = response.getStatus();
-        if (status == null) {
-            status = response.getErrorMessage() != null
+        CodeState codeState = response.getCodeState();
+        if (codeState == null) {
+            codeState = response.getErrorMessage() != null
                 || (response.getDiagnostics() != null && !response.getDiagnostics().isEmpty())
-                    ? CodeLifecycleStatus.FAILED
-                    : CodeLifecycleStatus.READY;
+                    ? CodeState.INVALID_SCRIPT
+                    : CodeState.RUNNABLE;
         }
         return new CompileCodeResponse(
             ScriptHost.ATTACHED_EDITOR,
             attachment.contentType,
-            status,
+            codeState,
             response.getStateToken() == null ? currentStateToken : response.getStateToken(),
             response.getDiagnostics(),
             response.getErrorMessage());
     }
 
-    private ReadCodeResponse failureStateFromCompileResponse(ActiveAttachment attachment, CompileCodeResponse response) {
+    private ReadCodeResponse stateFromCompileResponse(ActiveAttachment attachment, CompileCodeResponse response) {
         CodeStateContent currentContent = currentContent(attachment);
         return new ReadCodeResponse(
             ScriptHost.ATTACHED_EDITOR,
             attachment.contentType,
-            response.getStatus(),
+            response.getCodeState(),
             null,
             response.getStateToken() == null ? currentStateToken(attachment) : response.getStateToken(),
             currentContent,
@@ -308,7 +300,7 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
         return new RunCodeResponse(
             ScriptHost.ATTACHED_EDITOR,
             attachment.contentType,
-            response.getStatus(),
+            response.getCodeState(),
             response.getRunInitiator(),
             response.getStateToken() == null ? currentStateToken(attachment) : response.getStateToken(),
             response.getDiagnostics(),
@@ -321,7 +313,7 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
         return new ReadCodeResponse(
             ScriptHost.ATTACHED_EDITOR,
             attachment.contentType,
-            response.getStatus(),
+            response.getCodeState(),
             response.getRunInitiator(),
             response.getStateToken() == null ? currentStateToken(attachment) : response.getStateToken(),
             currentContent(attachment),
@@ -337,7 +329,7 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
         return new ReadCodeResponse(
             ScriptHost.ATTACHED_EDITOR,
             attachment.contentType,
-            state.getStatus() == null ? CodeLifecycleStatus.READY : state.getStatus(),
+            state.getCodeState() == null ? CodeState.EDITED : state.getCodeState(),
             state.getRunInitiator(),
             state.getStateToken() == null ? currentStateToken : state.getStateToken(),
             state.getContent() == null ? currentContent : state.getContent(),
@@ -349,55 +341,38 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
 
     private ReadCodeResponse normalizedRepairState(ActiveAttachment attachment, ReadCodeResponse state) {
         if (state == null) {
-            return activeReadCodeResponse(attachment, null);
+            return activeReadCodeResponse(attachment);
         }
-        ReadCodeResponse normalizedState = normalizedRecordedState(attachment, state);
-        if (state.getContent() != null) {
-            return normalizedState;
-        }
-        return new ReadCodeResponse(
-            normalizedState.getHost(),
-            normalizedState.getContentType(),
-            normalizedState.getStatus(),
-            normalizedState.getRunInitiator(),
-            normalizedState.getStateToken(),
-            null,
-            normalizedState.getDiagnostics(),
-            normalizedState.getErrorMessage(),
-            normalizedState.getStdout(),
-            normalizedState.getStructuredResult());
+        return normalizedRecordedState(attachment, state);
     }
 
-    private ReadCodeResponse activeReadCodeResponse(ActiveAttachment attachment, String knownStateFingerprint) {
+    private ReadCodeResponse activeReadCodeResponse(ActiveAttachment attachment) {
         CodeStateContent currentContent = currentContent(attachment);
         CodeStateToken currentStateToken = currentStateToken(attachment);
-        ReadCodeResponse state = attachment.latestCodeState == null
-            ? readyState(attachment, currentContent, currentStateToken)
-            : attachment.latestCodeState;
-        CodeStateContent responseContent = CodeStateToken.normalizeFingerprint(knownStateFingerprint) != null
-            && CodeStateToken.normalizeFingerprint(knownStateFingerprint).equals(currentStateToken.getStateFingerprint())
-                ? null
-                : currentContent;
+        ReadCodeResponse state = attachment.latestCodeState;
+        if (state == null || state.getStateToken() == null || !currentStateToken.matches(state.getStateToken())) {
+            state = editedState(attachment, currentContent, currentStateToken);
+        }
         return new ReadCodeResponse(
             ScriptHost.ATTACHED_EDITOR,
             attachment.contentType,
-            state.getStatus(),
+            state.getCodeState(),
             state.getRunInitiator(),
             currentStateToken,
-            responseContent,
+            currentContent,
             state.getDiagnostics(),
             state.getErrorMessage(),
             state.getStdout(),
             state.getStructuredResult());
     }
 
-    private ReadCodeResponse readyState(ActiveAttachment attachment,
-                                        CodeStateContent currentContent,
-                                        CodeStateToken currentStateToken) {
+    private ReadCodeResponse editedState(ActiveAttachment attachment,
+                                         CodeStateContent currentContent,
+                                         CodeStateToken currentStateToken) {
         return new ReadCodeResponse(
             ScriptHost.ATTACHED_EDITOR,
             attachment.contentType,
-            CodeLifecycleStatus.READY,
+            CodeState.EDITED,
             null,
             currentStateToken,
             currentContent,
@@ -411,7 +386,7 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
         return new ReadCodeResponse(
             ScriptHost.ATTACHED_EDITOR,
             contentType,
-            CodeLifecycleStatus.NO_CODE,
+            CodeState.NO_CODE,
             null,
             null,
             null,
@@ -451,9 +426,10 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
         }
         builder.append("host=").append(codeState.getHost()).append('\n');
         builder.append("contentType=").append(codeState.getContentType()).append('\n');
-        builder.append("status=").append(codeState.getStatus()).append('\n');
+        builder.append("codeState=").append(codeState.getCodeState()).append('\n');
         if (codeState.getStateToken() != null) {
-            builder.append("stateFingerprint=").append(codeState.getStateToken().getStateFingerprint()).append('\n');
+            builder.append("codeFingerprint=").append(codeState.getStateToken().getCodeFingerprint()).append('\n');
+            builder.append("argumentsFingerprint=").append(codeState.getStateToken().getArgumentsFingerprint()).append('\n');
         }
         if (codeState.getContent() != null) {
             if (codeState.getContent().getSourceText() != null) {
@@ -461,9 +437,9 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
                 builder.append(codeState.getContent().getSourceText());
                 builder.append("\n```\n");
             }
-            if (codeState.getContent().getInputText() != null) {
-                builder.append("inputText:\n```\n");
-                builder.append(codeState.getContent().getInputText());
+            if (codeState.getContent().getArgumentsJsonText() != null) {
+                builder.append("argumentsJsonText:\n```\n");
+                builder.append(codeState.getContent().getArgumentsJsonText());
                 builder.append("\n```\n");
             }
         }

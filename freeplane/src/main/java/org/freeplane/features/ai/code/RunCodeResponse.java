@@ -7,7 +7,7 @@ import java.util.List;
 public class RunCodeResponse {
     private final ScriptHost host;
     private final String contentType;
-    private final CodeLifecycleStatus status;
+    private final CodeState codeState;
     private final ScriptRunInitiator runInitiator;
     private final CodeStateToken stateToken;
     private final List<CodeStateDiagnostic> diagnostics;
@@ -17,7 +17,7 @@ public class RunCodeResponse {
 
     public RunCodeResponse(ScriptHost host,
                            String contentType,
-                           CodeLifecycleStatus status,
+                           CodeState codeState,
                            ScriptRunInitiator runInitiator,
                            CodeStateToken stateToken,
                            List<CodeStateDiagnostic> diagnostics,
@@ -26,7 +26,7 @@ public class RunCodeResponse {
                            Object structuredResult) {
         this.host = host;
         this.contentType = contentType;
-        this.status = status;
+        this.codeState = codeState;
         this.runInitiator = runInitiator;
         this.stateToken = stateToken;
         this.diagnostics = diagnostics == null
@@ -45,8 +45,8 @@ public class RunCodeResponse {
         return contentType;
     }
 
-    public CodeLifecycleStatus getStatus() {
-        return status;
+    public CodeState getCodeState() {
+        return codeState;
     }
 
     public ScriptRunInitiator getRunInitiator() {

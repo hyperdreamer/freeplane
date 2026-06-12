@@ -574,7 +574,9 @@ public class LiveChatController {
     }
 
     private ChatMemory createChatMemory() {
-        return AssistantProfileChatMemory.withMaxTokens(chatMemorySettings.getMaximumTokenCount());
+        return AssistantProfileChatMemory.builder()
+            .dynamicMaxTokens(ignored -> chatMemorySettings.getMaximumTokenCount())
+            .build();
     }
 
     private void storeTokenUsageState(LiveChatSession session) {

@@ -194,6 +194,12 @@ public class AssistantProfileChatMemory implements ChatMemory {
         invalidateDerivedFiltering();
     }
 
+    public void refreshCompactionForCurrentMaxTokens() {
+        rebuildTurnBoundaries();
+        rebalanceActiveWindowForCurrentTurnRange();
+        invalidateDerivedFiltering();
+    }
+
     public boolean evictOldestTurn() {
         rebuildTurnBoundaries();
         if (!canAdvanceWindowByTurnWithMinimumRetention(1)) {

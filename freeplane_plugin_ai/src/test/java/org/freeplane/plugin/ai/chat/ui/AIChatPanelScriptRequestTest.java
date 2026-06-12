@@ -1,8 +1,10 @@
 package org.freeplane.plugin.ai.chat.ui;
 
 import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.memory.ChatMemory;
+import dev.langchain4j.model.openai.OpenAiTokenCountEstimator;
 import dev.langchain4j.model.output.TokenUsage;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -11,6 +13,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -30,7 +33,7 @@ import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.features.ai.code.AiCodeRunListener;
-import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CodeState;
 import org.freeplane.features.ai.code.CodeStateContent;
 import org.freeplane.features.ai.code.CodeStateToken;
 import org.freeplane.features.ai.code.CompileCodeRequest;
@@ -129,7 +132,7 @@ public class AIChatPanelScriptRequestTest {
     }
 
     @Test
-    public void mcpToolSummaryOpensNewChatWhenNoChatRequestIsRunning() throws Exception {
+    public void mcpToolSummaryUsesCurrentSessionWhenCurrentSessionExists() throws Exception {
         PanelHarness harness = newPanelHarness(false);
         LiveChatSessionId originalSessionId = harness.sessionId;
         ToolCallSummary summary = new ToolCallSummary("searchNodes", "mcp summary", false, ToolCaller.MCP);
@@ -137,8 +140,29 @@ public class AIChatPanelScriptRequestTest {
         harness.panel.toolCallSummaryHandler().handleToolCallSummary(summary);
         flushEdt();
 
-        LiveChatSessionId currentSessionId = harness.liveChatController.currentSessionId();
-        assertThat(currentSessionId).isNotEqualTo(originalSessionId);
+        assertThat(harness.liveChatController.currentSessionId()).isEqualTo(originalSessionId);
+        assertThat(sessionToolSummaryTexts(harness.liveChatController, originalSessionId)).contains("mcp summary");
+    }
+
+    @Test
+    public void mcpToolSummaryStartsNewChatWhenCurrentSessionDoesNotExist() throws Exception {
+        PanelHarness harness = newPanelHarness(false);
+        LiveChatSessionId newSessionId = LiveChatSessionId.create();
+        AssistantProfileChatMemory newSessionMemory = AssistantProfileChatMemory.withMaxTokens(500);
+        LiveChatController liveChatController = mock(LiveChatController.class);
+        when(liveChatController.currentSessionId()).thenReturn(null);
+        when(liveChatController.startNewChat()).thenReturn(newSessionId);
+        when(liveChatController.chatMemory(newSessionId)).thenReturn(newSessionMemory);
+        when(liveChatController.isCurrentSession(newSessionId)).thenReturn(true);
+        org.mockito.Mockito.doNothing().when(harness.panel).showAndFocusInput();
+        setField(harness.panel, "liveChatController", liveChatController);
+
+        harness.panel.toolCallSummaryHandler().handleToolCallSummary(
+            new ToolCallSummary("searchNodes", "mcp summary", false, ToolCaller.MCP));
+        flushEdt();
+
+        verify(liveChatController).startNewChat();
+        assertThat(toolSummaryTexts(newSessionMemory)).contains("mcp summary");
     }
 
     @Test
@@ -247,6 +271,55 @@ public class AIChatPanelScriptRequestTest {
         flushEdt();
 
         assertThat(harness.liveChatController.currentSessionId()).isEqualTo(originalSessionId);
+    }
+
+    @Test
+    public void refreshChatMemoryMaximumTokenCountRebuildsVisibleHistoryFromCurrentMemory() throws Exception {
+        PanelHarness harness = newPanelHarness(true);
+        String firstQuestion = repeatedWords("first", 24);
+        String firstAnswer = repeatedWords("answer1", 24);
+        String secondQuestion = repeatedWords("second", 24);
+        String secondAnswer = repeatedWords("answer2", 24);
+        String thirdQuestion = repeatedWords("third", 24);
+        String thirdAnswer = repeatedWords("answer3", 24);
+        int allTurnTokens = estimateTokens(
+            UserMessage.from(firstQuestion),
+            AiMessage.from(firstAnswer),
+            UserMessage.from(secondQuestion),
+            AiMessage.from(secondAnswer),
+            UserMessage.from(thirdQuestion),
+            AiMessage.from(thirdAnswer));
+        int visibleAfterReductionTokens = estimateTokens(
+            UserMessage.from(secondQuestion),
+            AiMessage.from(secondAnswer),
+            UserMessage.from(thirdQuestion),
+            AiMessage.from(thirdAnswer));
+        AtomicInteger maxTokens = new AtomicInteger(allTurnTokens);
+        AssistantProfileChatMemory memory = AssistantProfileChatMemory.builder()
+            .dynamicMaxTokens(ignored -> maxTokens.get())
+            .tokenEstimatorModelNameProvider(() -> "gpt-4o-mini")
+            .build();
+        memory.add(UserMessage.from(firstQuestion));
+        memory.add(AiMessage.from(firstAnswer));
+        memory.add(UserMessage.from(secondQuestion));
+        memory.add(AiMessage.from(secondAnswer));
+        memory.add(UserMessage.from(thirdQuestion));
+        memory.add(AiMessage.from(thirdAnswer));
+        setField(harness.panel, "chatMemory", memory);
+
+        maxTokens.set(visibleAfterReductionTokens);
+        try (MockedStatic<TextUtils> textUtils = mockStatic(TextUtils.class)) {
+            textUtils.when(() -> TextUtils.getOptionalText("ai_chat_token_counter.input")).thenReturn("input");
+            textUtils.when(() -> TextUtils.getOptionalText("ai_chat_token_counter.output")).thenReturn("output");
+
+            refreshChatMemoryMaximumTokenCount(harness.panel);
+        }
+
+        assertThat(memory.messages())
+            .extracting(message -> message instanceof UserMessage ? ((UserMessage) message).singleText() : null)
+            .contains(secondQuestion, thirdQuestion)
+            .doesNotContain(firstQuestion);
+        verify(harness.chatOutputView).rebuildHistory(any());
     }
 
     @Test
@@ -712,7 +785,7 @@ public class AIChatPanelScriptRequestTest {
         when(codeHostService.readCode(any(ReadCodeRequest.class))).thenReturn(new ReadCodeResponse(
             ScriptHost.AI,
             "text/x-freeplane-script-groovy",
-            CodeLifecycleStatus.NO_CODE,
+            CodeState.NO_CODE,
             null,
             null,
             null,
@@ -733,9 +806,9 @@ public class AIChatPanelScriptRequestTest {
         when(codeHostService.readCode(any(ReadCodeRequest.class))).thenReturn(new ReadCodeResponse(
             ScriptHost.AI,
             "text/x-freeplane-script-groovy",
-            CodeLifecycleStatus.READY,
+            CodeState.EDITED,
             null,
-            new CodeStateToken("code", "input", "fingerprint"),
+            new CodeStateToken("code", "fingerprint"),
             new CodeStateContent("println 1", null),
             null,
             null,
@@ -775,6 +848,12 @@ public class AIChatPanelScriptRequestTest {
 
     private void rebuildHistoryFromMemory(AIChatPanel panel) throws Exception {
         Method method = AIChatPanel.class.getDeclaredMethod("rebuildHistoryFromMemory");
+        method.setAccessible(true);
+        method.invoke(panel);
+    }
+
+    private void refreshChatMemoryMaximumTokenCount(AIChatPanel panel) throws Exception {
+        Method method = AIChatPanel.class.getDeclaredMethod("refreshChatMemoryMaximumTokenCount");
         method.setAccessible(true);
         method.invoke(panel);
     }
@@ -873,12 +952,16 @@ public class AIChatPanelScriptRequestTest {
     }
 
     private Object currentSession(LiveChatController liveChatController) throws Exception {
-        Field sessionManagerField = LiveChatController.class.getDeclaredField("liveChatSessionManager");
-        sessionManagerField.setAccessible(true);
-        Object sessionManager = sessionManagerField.get(liveChatController);
+        Object sessionManager = sessionManager(liveChatController);
         java.lang.reflect.Method getCurrentSession = sessionManager.getClass().getDeclaredMethod("getCurrentSession");
         getCurrentSession.setAccessible(true);
         return getCurrentSession.invoke(sessionManager);
+    }
+
+    private Object sessionManager(LiveChatController liveChatController) throws Exception {
+        Field sessionManagerField = LiveChatController.class.getDeclaredField("liveChatSessionManager");
+        sessionManagerField.setAccessible(true);
+        return sessionManagerField.get(liveChatController);
     }
 
     private String currentSessionDisplayName(LiveChatController liveChatController) throws Exception {
@@ -890,7 +973,10 @@ public class AIChatPanelScriptRequestTest {
 
     private java.util.List<String> sessionToolSummaryTexts(LiveChatController liveChatController,
                                                            LiveChatSessionId sessionId) throws Exception {
-        ChatMemory chatMemory = liveChatController.chatMemory(sessionId);
+        return toolSummaryTexts(liveChatController.chatMemory(sessionId));
+    }
+
+    private java.util.List<String> toolSummaryTexts(ChatMemory chatMemory) throws Exception {
         if (!(chatMemory instanceof AssistantProfileChatMemory)) {
             return java.util.Collections.emptyList();
         }
@@ -907,6 +993,26 @@ public class AIChatPanelScriptRequestTest {
             summaries.add(((dev.langchain4j.data.message.SystemMessage) message).text());
         }
         return summaries;
+    }
+
+    private int estimateTokens(ChatMessage... messages) {
+        OpenAiTokenCountEstimator estimator = new OpenAiTokenCountEstimator("gpt-4o-mini");
+        int total = 0;
+        for (ChatMessage message : messages) {
+            total += estimator.estimateTokenCountInMessage(message);
+        }
+        return total;
+    }
+
+    private String repeatedWords(String word, int count) {
+        StringBuilder builder = new StringBuilder();
+        for (int index = 0; index < count; index++) {
+            if (index > 0) {
+                builder.append(' ');
+            }
+            builder.append(word);
+        }
+        return builder.toString();
     }
 
     private boolean currentSessionNameEdited(LiveChatController liveChatController) throws Exception {
@@ -945,9 +1051,9 @@ public class AIChatPanelScriptRequestTest {
             return new ReadCodeResponse(
                 ScriptHost.AI,
                 "text/x-freeplane-script-groovy",
-                CodeLifecycleStatus.READY,
+                CodeState.EDITED,
                 null,
-                new CodeStateToken("code", "input", "fingerprint"),
+                new CodeStateToken("code", "fingerprint"),
                 new CodeStateContent("println 1", null),
                 null,
                 null,

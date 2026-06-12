@@ -62,7 +62,7 @@ import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.features.ai.code.AiCodeRunListener;
-import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CodeState;
 import org.freeplane.features.ai.code.CompileCodeRequest;
 import org.freeplane.features.ai.code.CompileCodeResponse;
 import org.freeplane.features.ai.code.EvaluateFormulaRequest;
@@ -197,7 +197,6 @@ public class AIChatPanel extends JPanel {
     private final AssistantProfileSelectionSync assistantProfileSelectionSync;
     private final AssistantProfilePaneBuilder assistantProfilePaneBuilder;
     private LiveChatSessionId aiOwnedCodeOwningSessionId;
-    private LiveChatSessionId mcpSummarySessionId;
     private long visibleHistoryRebuildCounter;
     private final AiCodeRunListener aiCodeRunListener = new AiCodeRunListener() {
         @Override
@@ -450,6 +449,7 @@ public class AIChatPanel extends JPanel {
         registerProviderConfigurationListener();
         registerModelSelectionRefreshListener();
         registerTokenCounterModeListener();
+        registerChatMemoryMaximumTokenCountListener();
         registerChatFontScalingListener();
         refreshTokenCounterMode();
         updateInputState();
@@ -628,6 +628,19 @@ public class AIChatPanel extends JPanel {
                         return;
                     }
                     SwingUtilities.invokeLater(() -> refreshTokenCounterMode());
+                }
+            });
+    }
+
+    private void registerChatMemoryMaximumTokenCountListener() {
+        ResourceController.getResourceController().addPropertyChangeListener(
+            new IFreeplanePropertyListener() {
+                @Override
+                public void propertyChanged(String propertyName, String newValue, String oldValue) {
+                    if (!ChatMemorySettings.CHAT_MEMORY_MAXIMUM_TOKEN_COUNT_PROPERTY.equals(propertyName)) {
+                        return;
+                    }
+                    SwingUtilities.invokeLater(() -> refreshChatMemoryMaximumTokenCount());
                 }
             });
     }
@@ -1048,7 +1061,6 @@ public class AIChatPanel extends JPanel {
                 return false;
             }
         }
-        mcpSummarySessionId = null;
         registerVisibleRequest(sessionId, requestFlow, requestTokenUsageTracker);
         requestFlow.updateChatMemory(liveChatController.chatMemory(sessionId));
         requestFlow.beginRequest(preparedMessage);
@@ -1457,8 +1469,8 @@ public class AIChatPanel extends JPanel {
             return false;
         }
         try {
-            ReadCodeResponse response = activeCodeHostService.readCode(new ReadCodeRequest(ScriptHost.AI, null));
-            return response != null && response.getStatus() != CodeLifecycleStatus.NO_CODE;
+            ReadCodeResponse response = activeCodeHostService.readCode(new ReadCodeRequest(ScriptHost.AI));
+            return response != null && response.getCodeState() != CodeState.NO_CODE;
         } catch (RuntimeException error) {
             return false;
         }
@@ -1590,30 +1602,25 @@ public class AIChatPanel extends JPanel {
         }
         ChatRequestFlow currentRequestFlow = currentVisibleRequestFlow();
         if (currentRequestFlow != null) {
-            mcpSummarySessionId = null;
             currentRequestFlow.onToolCallSummary(summary);
             return;
         }
-        LiveChatSessionId sessionId = ensureMcpSummarySession();
+        LiveChatSessionId sessionId = currentSessionOrNewChat();
         if (sessionId == null) {
             return;
         }
         appendToolSummaryToSession(sessionId, summary);
     }
 
-    private LiveChatSessionId ensureMcpSummarySession() {
-        LiveChatSessionId sessionId = mcpSummarySessionId;
+    private LiveChatSessionId currentSessionOrNewChat() {
+        LiveChatSessionId sessionId = liveChatController.currentSessionId();
         if (sessionId != null && liveChatController.chatMemory(sessionId) != null) {
-            liveChatController.switchToSession(sessionId);
-            showAndFocusInput();
             return sessionId;
         }
         sessionId = liveChatController.startNewChat();
-        if (sessionId == null) {
-            return null;
+        if (sessionId != null) {
+            showAndFocusInput();
         }
-        mcpSummarySessionId = sessionId;
-        showAndFocusInput();
         return sessionId;
     }
 
@@ -1651,6 +1658,7 @@ public class AIChatPanel extends JPanel {
 
     private void syncUiToActivatedSession(ChatMemory sessionChatMemory, boolean fromTranscriptRestore) {
         chatMemory = sessionChatMemory;
+        refreshActiveChatMemoryMaximumTokenCount();
         currentSessionUsesAssistantProfile = liveChatController.currentSessionUsesAssistantProfile();
         modelSelectionController.setDisplayedSelectionValueOverride(
             liveChatController.currentSessionSelectedModelOverride());
@@ -1775,6 +1783,20 @@ public class AIChatPanel extends JPanel {
         chatTokenUsageTracker.refreshTotals(activeAssistantProfileChatMemory(),
             TextUtils.getOptionalText("ai_chat_token_counter.input"),
             TextUtils.getOptionalText("ai_chat_token_counter.output"));
+    }
+
+    private void refreshChatMemoryMaximumTokenCount() {
+        refreshActiveChatMemoryMaximumTokenCount();
+        liveChatController.synchronizeTranscriptWithMemory();
+        rebuildHistoryFromMemory();
+        refreshTokenCounters();
+    }
+
+    private void refreshActiveChatMemoryMaximumTokenCount() {
+        AssistantProfileChatMemory memory = activeAssistantProfileChatMemory();
+        if (memory != null) {
+            memory.refreshCompactionForCurrentMaxTokens();
+        }
     }
 
     private void applyTokenCounterMode(ChatTokenUsageTracker tokenUsageTracker) {

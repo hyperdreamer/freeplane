@@ -4,14 +4,14 @@ import java.util.Objects;
 
 public class CodeStateContent {
     private String sourceText;
-    private String inputText;
+    private String argumentsJsonText;
 
     public CodeStateContent() {
     }
 
-    public CodeStateContent(String sourceText, String inputText) {
+    public CodeStateContent(String sourceText, String argumentsJsonText) {
         this.sourceText = sourceText;
-        this.inputText = inputText;
+        this.argumentsJsonText = argumentsJsonText;
     }
 
     public String getSourceText() {
@@ -22,12 +22,12 @@ public class CodeStateContent {
         this.sourceText = sourceText;
     }
 
-    public String getInputText() {
-        return inputText;
+    public String getArgumentsJsonText() {
+        return argumentsJsonText;
     }
 
-    public void setInputText(String inputText) {
-        this.inputText = inputText;
+    public void setArgumentsJsonText(String argumentsJsonText) {
+        this.argumentsJsonText = argumentsJsonText;
     }
 
     @Override
@@ -40,19 +40,19 @@ public class CodeStateContent {
         }
         CodeStateContent that = (CodeStateContent) other;
         return Objects.equals(sourceText, that.sourceText)
-            && Objects.equals(inputText, that.inputText);
+            && Objects.equals(argumentsJsonText, that.argumentsJsonText);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(sourceText, inputText);
+        return Objects.hash(sourceText, argumentsJsonText);
     }
 
     @Override
     public String toString() {
-        return "CodeStateContent{"
+        return "CodeStateContent{" 
             + "sourceText='" + sourceText + '\''
-            + ", inputText='" + inputText + '\''
+            + ", argumentsJsonText='" + argumentsJsonText + '\''
             + '}';
     }
 }

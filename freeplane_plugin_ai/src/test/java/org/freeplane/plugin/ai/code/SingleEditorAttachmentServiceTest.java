@@ -3,7 +3,7 @@ package org.freeplane.plugin.ai.code;
 import java.util.Collections;
 import org.freeplane.features.ai.code.AiChatAttachment;
 import org.freeplane.features.ai.code.AiCodeEditor;
-import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CodeState;
 import org.freeplane.features.ai.code.CodeStateContent;
 import org.freeplane.features.ai.code.CodeStateDiagnostic;
 import org.freeplane.features.ai.code.CodeStateDiagnostics;
@@ -47,7 +47,7 @@ public class SingleEditorAttachmentServiceTest {
 
         ReadCodeResponse response = readCurrentState(uut);
 
-        assertThat(response.getStatus()).isEqualTo(CodeLifecycleStatus.READY);
+        assertThat(response.getCodeState()).isEqualTo(CodeState.EDITED);
         assertThat(response.getContent().getSourceText()).isEqualTo("second");
     }
 
@@ -160,7 +160,7 @@ public class SingleEditorAttachmentServiceTest {
         attachment.detach();
 
         assertThat(detachCalls[0]).isEqualTo(1);
-        assertThat(readCurrentState(uut).getStatus()).isEqualTo(CodeLifecycleStatus.NO_CODE);
+        assertThat(readCurrentState(uut).getCodeState()).isEqualTo(CodeState.NO_CODE);
         verify(aiChatPanel).setAttachedEditorIndicatorVisible(false);
     }
 
@@ -220,8 +220,8 @@ public class SingleEditorAttachmentServiceTest {
         editor.setCompileResponse(new CompileCodeResponse(
             ScriptHost.ATTACHED_EDITOR,
             "text/plain",
-            CodeLifecycleStatus.FAILED,
-            token("failure-fingerprint"),
+            CodeState.INVALID_SCRIPT,
+            null,
             CodeStateDiagnostics.sourceDiagnostics(Collections.singletonList("Broken at line 2"), 2),
             "Broken"));
         SingleEditorAttachmentService uut = new SingleEditorAttachmentService(aiChatPanel, settings);
@@ -235,8 +235,8 @@ public class SingleEditorAttachmentServiceTest {
         editor.setCompileResponse(new CompileCodeResponse(
             ScriptHost.ATTACHED_EDITOR,
             "text/plain",
-            CodeLifecycleStatus.READY,
-            token("success-fingerprint"),
+            CodeState.RUNNABLE,
+            null,
             Collections.<CodeStateDiagnostic>emptyList(),
             null));
         CompileCodeResponse secondResult = uut.compileCode(new CompileCodeRequest(
@@ -244,16 +244,16 @@ public class SingleEditorAttachmentServiceTest {
             firstState.getStateToken()));
         ReadCodeResponse secondState = readCurrentState(uut);
 
-        assertThat(firstResult.getStatus()).isEqualTo(CodeLifecycleStatus.FAILED);
-        assertThat(firstState.getStatus()).isEqualTo(CodeLifecycleStatus.FAILED);
+        assertThat(firstResult.getCodeState()).isEqualTo(CodeState.INVALID_SCRIPT);
+        assertThat(firstState.getCodeState()).isEqualTo(CodeState.INVALID_SCRIPT);
         assertThat(firstState.getDiagnostics()).extracting(CodeStateDiagnostic::getMessage).containsExactly("Broken at line 2");
-        assertThat(secondResult.getStatus()).isEqualTo(CodeLifecycleStatus.READY);
-        assertThat(secondState.getStatus()).isEqualTo(CodeLifecycleStatus.READY);
-        assertThat(secondState.getDiagnostics()).isNull();
+        assertThat(secondResult.getCodeState()).isEqualTo(CodeState.RUNNABLE);
+        assertThat(secondState.getCodeState()).isEqualTo(CodeState.RUNNABLE);
+        assertThat(secondState.getDiagnostics()).isEmpty();
     }
 
     @Test
-    public void readCodeUsesFingerprintToSuppressUnchangedText() {
+    public void readCodeAlwaysReturnsCurrentContent() {
         AIChatPanel aiChatPanel = mock(AIChatPanel.class);
         AttachedEditorChatModeSettings settings = mock(AttachedEditorChatModeSettings.class);
         when(settings.get()).thenReturn(AttachedEditorChatMode.NEW_CHAT);
@@ -261,13 +261,10 @@ public class SingleEditorAttachmentServiceTest {
         SingleEditorAttachmentService uut = new SingleEditorAttachmentService(aiChatPanel, settings);
         uut.attachEditor(new FakeCodeEditor("text"), "text/plain");
 
-        ReadCodeResponse fullState = readCurrentState(uut);
-        ReadCodeResponse fingerprintState = uut.readCode(new ReadCodeRequest(
-            ScriptHost.ATTACHED_EDITOR,
-            fullState.getStateToken().getStateFingerprint()));
+        ReadCodeResponse currentState = readCurrentState(uut);
 
-        assertThat(fullState.getContent().getSourceText()).isEqualTo("text");
-        assertThat(fingerprintState.getContent()).isNull();
+        assertThat(currentState.getContent().getSourceText()).isEqualTo("text");
+        assertThat(currentState.getContent()).isNotNull();
     }
 
     @Test
@@ -301,7 +298,7 @@ public class SingleEditorAttachmentServiceTest {
         attachment.recordCodeState(new ReadCodeResponse(
             null,
             null,
-            CodeLifecycleStatus.FAILED,
+            CodeState.INVALID_SCRIPT,
             null,
             null,
             new CodeStateContent("=broken", null),
@@ -314,20 +311,20 @@ public class SingleEditorAttachmentServiceTest {
         attachment.clearCodeState();
         ReadCodeResponse readyState = readCurrentState(uut);
 
-        assertThat(failedState.getStatus()).isEqualTo(CodeLifecycleStatus.FAILED);
+        assertThat(failedState.getCodeState()).isEqualTo(CodeState.INVALID_SCRIPT);
         assertThat(failedState.getContentType()).isEqualTo("text/x-freeplane-formula-groovy");
         assertThat(failedState.getDiagnostics()).extracting(CodeStateDiagnostic::getMessage).containsExactly("Broken formula");
         assertThat(failedState.getStdout()).isEqualTo("stdout");
         assertThat(failedState.getStructuredResult()).isEqualTo("result");
-        assertThat(readyState.getStatus()).isEqualTo(CodeLifecycleStatus.READY);
+        assertThat(readyState.getCodeState()).isEqualTo(CodeState.EDITED);
     }
 
     private ReadCodeResponse readCurrentState(SingleEditorAttachmentService uut) {
-        return uut.readCode(new ReadCodeRequest(ScriptHost.ATTACHED_EDITOR, null));
+        return uut.readCode(new ReadCodeRequest(ScriptHost.ATTACHED_EDITOR));
     }
 
-    private static CodeStateToken token(String stateFingerprint) {
-        return new CodeStateToken("code", "input", stateFingerprint);
+    private static CodeStateToken token(String argumentsFingerprint) {
+        return new CodeStateToken("code", argumentsFingerprint);
     }
 
     private static class FakeCodeEditor implements AiCodeEditor {
@@ -335,7 +332,7 @@ public class SingleEditorAttachmentServiceTest {
         private CompileCodeResponse compileResponse = new CompileCodeResponse(
             ScriptHost.ATTACHED_EDITOR,
             "text/plain",
-            CodeLifecycleStatus.READY,
+            CodeState.RUNNABLE,
             token("initial-fingerprint"),
             Collections.<CodeStateDiagnostic>emptyList(),
             null);
@@ -364,7 +361,7 @@ public class SingleEditorAttachmentServiceTest {
             return new RunCodeResponse(
                 ScriptHost.ATTACHED_EDITOR,
                 "text/plain",
-                CodeLifecycleStatus.SUCCEEDED,
+                CodeState.RUN_SUCCEEDED,
                 ScriptRunInitiator.AI,
                 token("run-fingerprint"),
                 null,

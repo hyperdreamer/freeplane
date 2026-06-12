@@ -7,7 +7,7 @@ import java.util.List;
 public class ReadCodeResponse {
     private final ScriptHost host;
     private final String contentType;
-    private final CodeLifecycleStatus status;
+    private final CodeState codeState;
     private final ScriptRunInitiator runInitiator;
     private final CodeStateToken stateToken;
     private final CodeStateContent content;
@@ -18,7 +18,7 @@ public class ReadCodeResponse {
 
     public ReadCodeResponse(ScriptHost host,
                             String contentType,
-                            CodeLifecycleStatus status,
+                            CodeState codeState,
                             ScriptRunInitiator runInitiator,
                             CodeStateToken stateToken,
                             CodeStateContent content,
@@ -28,7 +28,7 @@ public class ReadCodeResponse {
                             Object structuredResult) {
         this.host = host;
         this.contentType = contentType;
-        this.status = status;
+        this.codeState = codeState;
         this.runInitiator = runInitiator;
         this.stateToken = stateToken;
         this.content = content;
@@ -48,8 +48,8 @@ public class ReadCodeResponse {
         return contentType;
     }
 
-    public CodeLifecycleStatus getStatus() {
-        return status;
+    public CodeState getCodeState() {
+        return codeState;
     }
 
     public ScriptRunInitiator getRunInitiator() {

@@ -8,7 +8,7 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.features.ai.code.AiCodeHostService;
-import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CodeState;
 import org.freeplane.features.ai.code.CompileCodeRequest;
 import org.freeplane.features.ai.code.CompileCodeResponse;
 import org.freeplane.features.ai.code.ReadCodeRequest;
@@ -50,7 +50,7 @@ public class AiCodeToolSet {
         return TOOL_NAMES;
     }
 
-    @Tool("Read the current code state stored in the requested host. Pass host AI for AI-owned code or ATTACHED_EDITOR for an attached editor. When knownStateFingerprint matches the current full state, content may be omitted in the response.")
+    @Tool("Read the current code state stored in the requested host. Pass host AI for AI-owned code or ATTACHED_EDITOR for an attached editor. The response always includes the current content.")
     public ReadCodeResponse readCode(ReadCodeToolRequest request) {
         try {
             ReadCodeRequest codeRequest = toReadCodeRequest(request);
@@ -58,8 +58,8 @@ public class AiCodeToolSet {
             ReadCodeResponse response = codeHostService.readCode(codeRequest);
             publishSummary(new ToolCallSummary(
                 "readCode",
-                "readCode: status=" + response.getStatus() + ", host=" + response.getHost(),
-                response.getStatus() == CodeLifecycleStatus.FAILED,
+                "readCode: codeState=" + response.getCodeState() + ", host=" + response.getHost(),
+                isFailureState(response.getCodeState()),
                 toolCaller));
             return response;
         } catch (RuntimeException error) {
@@ -72,7 +72,7 @@ public class AiCodeToolSet {
         }
     }
 
-    @Tool("Create or replace the current code state in the requested host by storing the provided content there. Use host AI for AI-owned code or ATTACHED_EDITOR for an attached editor. content contains sourceText and inputText. For new AI-owned code, call this first without expectedStateToken only when no current AI-owned code exists. Otherwise expectedStateToken must match the current full state. For the attached editor this updates only the current draft content. Attached formula editing is available only when the current tool availability exposes writeCode and compileCode and AI formula editing is enabled. Current attached formula editing capability: enabled when the attached editor content is a formula.")
+    @Tool("Create or replace the current code state in the requested host by storing the provided content there. Use host AI for AI-owned code or ATTACHED_EDITOR for an attached editor. content contains sourceText and argumentsJsonText. For new AI-owned code, call this first without expectedStateToken only when no current AI-owned code exists. Otherwise expectedStateToken must match the current full state. For the attached editor this updates only the current draft content. Attached formula editing is available only when the current tool availability exposes writeCode and compileCode and AI formula editing is enabled. Current attached formula editing capability: enabled when the attached editor content is a formula.")
     public WriteCodeResponse writeCode(WriteCodeToolRequest request) {
         try {
             WriteCodeRequest codeRequest = toWriteCodeRequest(request);
@@ -80,7 +80,7 @@ public class AiCodeToolSet {
             WriteCodeResponse response = codeHostService.writeCode(codeRequest);
             publishSummary(new ToolCallSummary(
                 "writeCode",
-                "writeCode: status=" + response.getStatus() + ", host=" + response.getHost(),
+                "writeCode: codeState=" + response.getCodeState() + ", host=" + response.getHost(),
                 false,
                 toolCaller));
             return response;
@@ -102,8 +102,8 @@ public class AiCodeToolSet {
             CompileCodeResponse response = codeHostService.compileCode(codeRequest);
             publishSummary(new ToolCallSummary(
                 "compileCode",
-                "compileCode: status=" + response.getStatus() + ", host=" + response.getHost(),
-                response.getStatus() == CodeLifecycleStatus.FAILED,
+                "compileCode: codeState=" + response.getCodeState() + ", host=" + response.getHost(),
+                isFailureState(response.getCodeState()),
                 toolCaller));
             return response;
         } catch (RuntimeException error) {
@@ -124,8 +124,8 @@ public class AiCodeToolSet {
             RunCodeResponse response = codeHostService.runCode(codeRequest);
             publishSummary(new ToolCallSummary(
                 "runCode",
-                "runCode: status=" + response.getStatus() + ", host=" + response.getHost(),
-                response.getStatus() == CodeLifecycleStatus.FAILED,
+                "runCode: codeState=" + response.getCodeState() + ", host=" + response.getHost(),
+                isFailureState(response.getCodeState()),
                 toolCaller));
             return response;
         } catch (RuntimeException error) {
@@ -151,11 +151,11 @@ public class AiCodeToolSet {
         boolean runAuthorized = authorizedToolNames().contains("runCode");
         ReadCodeResponse response;
         try {
-            response = codeHostService.readCode(new ReadCodeRequest(ScriptHost.ATTACHED_EDITOR, null));
+            response = codeHostService.readCode(new ReadCodeRequest(ScriptHost.ATTACHED_EDITOR));
         } catch (RuntimeException error) {
             response = null;
         }
-        if (response == null || response.getStatus() == CodeLifecycleStatus.NO_CODE) {
+        if (response == null || response.getCodeState() == CodeState.NO_CODE) {
             return genericAiHostGuidance(writeAuthorized, compileAuthorized, runAuthorized);
         }
         if (FORMULA_CONTENT_TYPE.equals(response.getContentType())) {
@@ -166,18 +166,18 @@ public class AiCodeToolSet {
                 + "Target host ATTACHED_EDITOR. The attached content is a formula. "
                 + "Keep it value-computing. Avoid state-changing Freeplane API calls and avoid obviously UI-driving calls. "
                 + "Use the available Freeplane API documentation for API surface and semantics, but do not assume it explicitly marks which methods are UI-related. "
-                + "writeCode changes only the current draft content. compileCode acts on the attached editor's current code state and requires the current stateToken from readCode. inputText stays blank or null for formulas. "
+                + "writeCode changes only the current draft content. compileCode acts on the attached editor's current code state and requires the current stateToken from readCode. argumentsJsonText stays blank or null for formulas. "
                 + "Do not assume submit or execution while the editor stays open. Submit-failure repair requests require user approval.";
         }
         if (SCRIPT_CONTENT_TYPE.equals(response.getContentType())) {
             return runAuthorized
                 ? "An editor is attached to this chat. Use readCode, writeCode, compileCode, and runCode. "
                     + "Target host ATTACHED_EDITOR. The attached content is a script. "
-                    + "writeCode changes only the current draft content. content contains sourceText and inputText. compileCode and runCode act on the attached editor's current code state, do not accept source text directly, and require the current stateToken from readCode. "
+                    + "writeCode changes only the current draft content. content contains sourceText and argumentsJsonText. compileCode and runCode act on the attached editor's current code state, do not accept source text directly, and require the current stateToken from readCode. "
                     + "Do not copy attached code into the AI-owned script host and run it there unless the user explicitly asks."
                 : "An editor is attached to this chat. Use readCode, writeCode, and compileCode. "
                     + "Target host ATTACHED_EDITOR. The attached content is a script. "
-                    + "writeCode changes only the current draft content. content contains sourceText and inputText. compileCode acts on the attached editor's current code state and requires the current stateToken from readCode. Do not assume execution support.";
+                    + "writeCode changes only the current draft content. content contains sourceText and argumentsJsonText. compileCode acts on the attached editor's current code state and requires the current stateToken from readCode. Do not assume execution support.";
         }
         return runAuthorized
             ? "An editor is attached to this chat. Use readCode, writeCode, compileCode, and runCode. "
@@ -192,7 +192,7 @@ public class AiCodeToolSet {
         }
         return "AI-owned code tools are available in this chat. Use readCode, writeCode, compileCode, and runCode. "
             + "These tools act on the current code state of the targeted host, not on source text quoted in chat. "
-            + "For new AI-owned code, first call writeCode with host AI and content. content contains sourceText and inputText. If current AI-owned code already exists, writeCode, compileCode, and runCode require the current stateToken from readCode. "
+            + "For new AI-owned code, first call writeCode with host AI and content. content contains sourceText and argumentsJsonText. If current AI-owned code already exists, writeCode, compileCode, and runCode require the current stateToken from readCode. "
             + "compileCode and runCode do not accept source text directly.";
     }
 
@@ -206,7 +206,7 @@ public class AiCodeToolSet {
         if (request == null) {
             return null;
         }
-        return new ReadCodeRequest(request.getHost(), request.getKnownStateFingerprint());
+        return new ReadCodeRequest(request.getHost());
     }
 
     private WriteCodeRequest toWriteCodeRequest(WriteCodeToolRequest request) {
@@ -228,6 +228,12 @@ public class AiCodeToolSet {
             return null;
         }
         return new RunCodeRequest(request.getHost(), request.getExpectedStateToken());
+    }
+
+    private boolean isFailureState(CodeState codeState) {
+        return codeState == CodeState.INVALID_SCRIPT
+            || codeState == CodeState.INVALID_ARGUMENTS_JSON
+            || codeState == CodeState.RUN_FAILED;
     }
 
     private void publishSummary(ToolCallSummary summary) {

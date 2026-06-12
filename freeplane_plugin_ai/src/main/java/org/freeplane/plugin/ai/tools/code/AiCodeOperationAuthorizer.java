@@ -5,7 +5,7 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.function.Supplier;
 import org.freeplane.features.ai.code.AiCodeHostService;
-import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CodeState;
 import org.freeplane.features.ai.code.ReadCodeRequest;
 import org.freeplane.features.ai.code.ReadCodeResponse;
 import org.freeplane.features.ai.code.ScriptHost;
@@ -81,7 +81,7 @@ public class AiCodeOperationAuthorizer {
                 throw new IllegalStateException("Script execution is not available at the current availability level.");
             }
             ReadCodeResponse state = currentState(resolvedHost);
-            if (state == null || state.getStatus() == CodeLifecycleStatus.NO_CODE) {
+            if (state == null || state.getCodeState() == CodeState.NO_CODE) {
                 throw new IllegalStateException("No runnable code is available for the requested host.");
             }
             if (!SCRIPT_CONTENT_TYPE.equals(state.getContentType())) {
@@ -115,7 +115,7 @@ public class AiCodeOperationAuthorizer {
 
     private boolean canWriteAttachedEditor() {
         ReadCodeResponse state = currentState(ScriptHost.ATTACHED_EDITOR);
-        if (state == null || state.getStatus() == CodeLifecycleStatus.NO_CODE) {
+        if (state == null || state.getCodeState() == CodeState.NO_CODE) {
             return false;
         }
         if (FORMULA_CONTENT_TYPE.equals(state.getContentType())) {
@@ -132,12 +132,12 @@ public class AiCodeOperationAuthorizer {
 
     private boolean hasCurrentCode(ScriptHost host) {
         ReadCodeResponse state = currentState(host);
-        return state != null && state.getStatus() != CodeLifecycleStatus.NO_CODE;
+        return state != null && state.getCodeState() != CodeState.NO_CODE;
     }
 
     private ReadCodeResponse currentState(ScriptHost host) {
         try {
-            return codeHostService.readCode(new ReadCodeRequest(host, null));
+            return codeHostService.readCode(new ReadCodeRequest(host));
         } catch (RuntimeException error) {
             return null;
         }

@@ -10,7 +10,7 @@ import static org.mockito.Mockito.when;
 import java.util.Collections;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.features.ai.code.AiChatCodeOperationResult;
-import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CodeState;
 import org.freeplane.features.ai.code.CodeStateContent;
 import org.freeplane.features.ai.code.CodeStateField;
 import org.freeplane.features.ai.code.CodeStateToken;
@@ -41,11 +41,11 @@ public class AiOwnedScriptHostServiceTest {
 
         WriteCodeResponse first = uut.doWriteCode(writeRequest("println 1", null, null));
         WriteCodeResponse second = uut.doWriteCode(writeRequest("println 2", null, first.getStateToken()));
-        ReadCodeResponse current = uut.doReadCode(new ReadCodeRequest(ScriptHost.AI, null));
+        ReadCodeResponse current = uut.doReadCode(new ReadCodeRequest(ScriptHost.AI));
 
         assertThat(first.getHost()).isEqualTo(ScriptHost.AI);
         assertThat(second.getHost()).isEqualTo(ScriptHost.AI);
-        assertThat(current.getStatus()).isEqualTo(CodeLifecycleStatus.READY);
+        assertThat(current.getCodeState()).isEqualTo(CodeState.EDITED);
         assertThat(current.getContent().getSourceText()).isEqualTo("println 2");
         assertThat(current.getStateToken()).isEqualTo(second.getStateToken());
     }
@@ -58,7 +58,7 @@ public class AiOwnedScriptHostServiceTest {
         assertThatThrownBy(() -> uut.doWriteCode(new WriteCodeRequest(
             ScriptHost.AI,
             new CodeStateContent("println 2", null),
-            new CodeStateToken(null, null, "wrong"))))
+            new CodeStateToken(null, "wrong"))))
             .isInstanceOf(IllegalStateException.class)
             .hasMessage("Expected state token does not match the current code state.");
     }
@@ -74,10 +74,10 @@ public class AiOwnedScriptHostServiceTest {
         WriteCodeResponse written = uut.doWriteCode(writeRequest("println 1", null, null));
 
         RunCodeResponse response = uut.doRunCode(new RunCodeRequest(ScriptHost.AI, written.getStateToken()));
-        ReadCodeResponse state = uut.doReadCode(new ReadCodeRequest(ScriptHost.AI, null));
+        ReadCodeResponse state = uut.doReadCode(new ReadCodeRequest(ScriptHost.AI));
 
-        assertThat(response.getStatus()).isEqualTo(CodeLifecycleStatus.WAITING_FOR_USER_RUN);
-        assertThat(state.getStatus()).isEqualTo(CodeLifecycleStatus.WAITING_FOR_USER_RUN);
+        assertThat(response.getCodeState()).isEqualTo(CodeState.WAITING_FOR_USER_RUN);
+        assertThat(state.getCodeState()).isEqualTo(CodeState.WAITING_FOR_USER_RUN);
         assertThat(dialogFactory.dialog.codeShown).isTrue();
         assertThat(dialogFactory.dialog.showAndFocusCalls).isEqualTo(1);
     }
@@ -93,9 +93,9 @@ public class AiOwnedScriptHostServiceTest {
         WriteCodeResponse written = uut.doWriteCode(writeRequest("println 1", null, null));
 
         RunCodeResponse response = uut.doRunCode(new RunCodeRequest(ScriptHost.AI, written.getStateToken()));
-        ReadCodeResponse state = uut.doReadCode(new ReadCodeRequest(ScriptHost.AI, null));
+        ReadCodeResponse state = uut.doReadCode(new ReadCodeRequest(ScriptHost.AI));
 
-        assertThat(response.getStatus()).isEqualTo(CodeLifecycleStatus.WAITING_FOR_USER_RUN);
+        assertThat(response.getCodeState()).isEqualTo(CodeState.WAITING_FOR_USER_RUN);
         assertThat(response.getStateToken()).isEqualTo(written.getStateToken());
         assertThat(state.getContent().getSourceText()).isEqualTo("println 1");
         assertThat(state.getStateToken()).isEqualTo(written.getStateToken());
@@ -111,9 +111,9 @@ public class AiOwnedScriptHostServiceTest {
             ScriptHost.AI,
             written.getStateToken()));
 
-        assertThat(compileResponse.getStatus()).isEqualTo(CodeLifecycleStatus.FAILED);
+        assertThat(compileResponse.getCodeState()).isEqualTo(CodeState.INVALID_ARGUMENTS_JSON);
         assertThat(compileResponse.getDiagnostics()).hasSize(1);
-        assertThat(compileResponse.getDiagnostics().get(0).getField()).isEqualTo(CodeStateField.INPUT_JSON);
+        assertThat(compileResponse.getDiagnostics().get(0).getField()).isEqualTo(CodeStateField.ARGUMENTS_JSON);
     }
 
     @Test
@@ -181,8 +181,8 @@ public class AiOwnedScriptHostServiceTest {
         assertThat(permissions.get(ScriptingPermissions.RESOURCES_EXECUTE_SCRIPTS_WITHOUT_AI_REQUEST_RESTRICTION)).isFalse();
     }
 
-    private WriteCodeRequest writeRequest(String sourceText, String inputText, CodeStateToken expectedStateToken) {
-        return new WriteCodeRequest(ScriptHost.AI, new CodeStateContent(sourceText, inputText), expectedStateToken);
+    private WriteCodeRequest writeRequest(String sourceText, String argumentsJsonText, CodeStateToken expectedStateToken) {
+        return new WriteCodeRequest(ScriptHost.AI, new CodeStateContent(sourceText, argumentsJsonText), expectedStateToken);
     }
 
     private static class RecordingDialogFactory implements AiOwnedScriptHostService.DialogFactory {

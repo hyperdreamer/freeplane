@@ -25,9 +25,10 @@ public class AutomaticCodeStatusMessage extends UserMessage {
         builder.append('\n');
         append(builder, "host", response.getHost());
         append(builder, "contentType", response.getContentType());
-        append(builder, "status", response.getStatus());
+        append(builder, "codeState", response.getCodeState());
         append(builder, "runInitiator", response.getRunInitiator());
-        append(builder, "stateFingerprint", response.getStateToken() == null ? null : response.getStateToken().getStateFingerprint());
+        append(builder, "codeFingerprint", response.getStateToken() == null ? null : response.getStateToken().getCodeFingerprint());
+        append(builder, "argumentsFingerprint", response.getStateToken() == null ? null : response.getStateToken().getArgumentsFingerprint());
         appendDiagnostics(builder, response.getDiagnostics());
         append(builder, "errorMessage", response.getErrorMessage());
         appendBlock(builder, "stdout", response.getStdout());

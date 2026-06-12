@@ -221,9 +221,9 @@ AiOwnedScriptHostService --> ScriptingEngine
         structuredResult? }`
 
   - **Diagnostics**
-    - Add `CodeStateField { SOURCE_TEXT, INPUT_JSON }` and
+    - Add `CodeStateField { SOURCE_TEXT, ARGUMENTS_JSON }` and
       `CodeStateDiagnostic { field, message, line, column }`.
-    - Invalid JSON diagnostics target `INPUT_JSON`; Groovy compile or
+    - Invalid JSON diagnostics target `ARGUMENTS_JSON`; Groovy compile or
       runtime diagnostics target `SOURCE_TEXT`.
     - Keep summary `errorMessage`, but derive it from the primary
       structured diagnostic.
@@ -314,7 +314,7 @@ package "org.freeplane.features.ai.code" {
   }
   enum CodeStateField {
     SOURCE_TEXT
-    INPUT_JSON
+    ARGUMENTS_JSON
   }
   class CodeStateDiagnostic {
     +field : CodeStateField
@@ -389,7 +389,7 @@ Host -> Host : invalidate parsed-args cache
 Caller -> Host : compileCode(expected CodeStateToken)
 Host -> Host : validate whole current state token
 Host -> Json : parse inputText or blank -> null
-Json --> Host : args value or INPUT_JSON diagnostic
+Json --> Host : args value or ARGUMENTS_JSON diagnostic
 Host -> Engine : compile or reuse source compilation
 Engine --> Host : success or SOURCE_TEXT diagnostic
 
@@ -413,7 +413,7 @@ Engine --> Host : stdout + structuredResult or SOURCE_TEXT failure
     - host-service tests: extend `AiOwnedScriptHostServiceTest` and
       `SingleEditorAttachmentServiceTest` for full-state read/write,
       structured-token whole-state staleness, invalid draft accepted by
-      write, invalid JSON causing `INPUT_JSON` compile failure and run
+      write, invalid JSON causing `ARGUMENTS_JSON` compile failure and run
       blocking, source failures still targeting `SOURCE_TEXT`, and
       `inputText` changes updating the whole-state token without
       forcing recompilation when source text and permissions are
@@ -448,55 +448,122 @@ Engine --> Host : stdout + structuredResult or SOURCE_TEXT failure
       verify `Yes` saves invalid draft state, `No` keeps the editor
       open, and `don't ask again` persists only the `Yes` choice.
 
-## Subtask: Fix attached script-editor failure feedback and AI escalation
-- **Status:** in-progress
-- **Scope:** Fix the attached / node script editor manual-run failure
-  UX so invalid JSON failures are identified as Arguments JSON errors
-  and attached failures no longer auto-submit to AI chat.
-- **Motivation:** The current manual-run failure flow hides which field
-  failed and can unexpectedly trigger an LLM request merely because the
-  editor is attached.
+## Subtask: Refine script-host code-state contract and attached-editor repair flow
+- **Status:** review
+- **Scope:** Simplify the script-host state contract and fix the
+  attached / node script editor repair flow so state reads always carry
+  current content, invalid Arguments JSON is identified locally, and AI
+  repair stays explicit.
+- **Motivation:** The current contract mixes redundant fingerprints,
+  content-elision guesses about AI knowledge, and misleading `status`
+  values. That confusion already prevented the attached repair flow from
+  giving AI the current draft text to fix.
 - **Briefing:**
   Relevant code spans:
 
-  - `freeplane_plugin_script/.../ScriptEditorPanel.java`
-  - `freeplane_plugin_script/.../ai/AiOwnedScriptDialog.java`
+  - `freeplane/src/main/java/org/freeplane/features/ai/code/*`
   - `freeplane_plugin_ai/.../code/SingleEditorAttachmentService.java`
+  - `freeplane_plugin_ai/.../tools/code/*`
+  - `freeplane_plugin_ai/.../mcpserver/ModelContextProtocolToolDispatcherTest.java`
+  - `freeplane_plugin_script/.../ScriptEditorPanel.java`
+  - `freeplane_plugin_script/.../ScriptInputJsonSupport.java`
+  - `freeplane_plugin_script/.../ai/AiOwnedScriptHostService.java`
   - `freeplane_plugin_formula/.../FormulaEditor.java`
   - `freeplane/src/viewer/resources/translations/Resources_en.properties`
 - **Research:**
+  - `CodeStateToken` currently carries `codeFingerprint`,
+    `inputFingerprint`, and a derived `stateFingerprint` even though the
+    derived value adds no independent state information.
+  - `ReadCodeRequest` currently carries `knownStateFingerprint`, and
+    `readCode` omits `content` when that fingerprint matches the current
+    state.
+  - In the observed Ask-AI repair flow, the AI called `readCode`
+    successfully and got `status=FAILED` plus `content=null` because the
+    request supplied the current `knownStateFingerprint`.
+  - `ScriptEditorPanel.manualRunCodeState(...)` currently builds the
+    repair state with `content=null`, so the explicit Ask-AI flow can
+    send diagnostics without the draft source or arguments even before a
+    later `readCode` call.
+  - The current `status=FAILED` wording is misleading in `readCode`
+    responses because the read operation itself succeeded; only the
+    current attached-editor content state was failed.
+  - The current single `FAILED` value conflates at least three distinct
+    situations: invalid script source, invalid Arguments JSON, and
+    runtime execution failure after successful validation.
+  - The user wants `ReadCodeRequest` to have no `known*` fields at all,
+    wants `stateFingerprint` removed, and prefers `codeState` as the
+    single response state field because it stays aligned with
+    `readCode` / `writeCode`.
+  - The user wants the outer API to keep `readCode` / `writeCode`, but
+    still wants the arguments payload to stay visibly distinct from the
+    Groovy source inside content and fingerprint fields.
   - On attached script-editor Run with invalid JSON, the local failure
-    UI shows only the raw parser message and does not tell the user that
-    the failure belongs to the JSON / arguments field.
-  - The structured diagnostic already distinguishes
-    `CodeStateField.INPUT_JSON`, and attached-editor repair forwarding
-    preserves that field information even though the local UI does not.
-  - `ScriptEditorPanel.updateAiAttachmentAfterManualRun(...)`
-    currently requests AI repair automatically after every failed manual
-    run when the editor is attached.
-  - `SingleEditorAttachmentService.requestRepair(...)` immediately
-    switches to the owning chat and submits a repair message, which can
-    start an LLM response without an explicit user request at failure
-    time.
-  - `FormulaEditor` already has a different precedent: it records the
-    failure state locally, then asks whether to request AI repair before
-    sending anything.
-  - The current visible field title is `Input JSON`, but the user
-    prefers `Arguments JSON`.
+    UI still needs to tell the user that the failing field is Arguments
+    JSON.
+  - Attached manual run failure must not auto-submit to AI chat merely
+    because the editor is attached.
 - **Analysis:**
-  - Local failure feedback should preserve field-aware diagnostics for
-    the user instead of collapsing `INPUT_JSON` failures into an
-    unlabeled parser message.
-  - An attached editor being connected to a chat is not sufficient
-    consent to auto-submit failure details to the LLM. Manual run
-    failure should remain local until the user explicitly chooses AI
-    escalation.
-  - The visible field label and local failure wording should use the
-    same `Arguments JSON` term.
+  - Remove `stateFingerprint` because it is derived from the other two
+    fingerprints and only duplicates state.
+  - Remove `knownStateFingerprint` because AI-facing reads must not rely
+    on guesses about what the model still has cached.
+  - Keep one neutral outer state field named `codeState` because it is
+    coherent with `readCode` / `writeCode`, but keep the inner content
+    and fingerprint fields explicit so Arguments JSON is not blurred
+    into Groovy source.
+  - Replace vague `READY` and `FAILED` values with one single-state
+    model that distinguishes edited, runnable, invalid-script,
+    invalid-arguments, waiting-for-user-run, run-succeeded, and
+    run-failed states.
+  - The Ask-AI repair path must include the current draft content in the
+    recorded failure state instead of relying on a later content-eliding
+    `readCode` call.
+  - Attached manual run failure should stay local until the user
+    explicitly chooses AI escalation.
 - **Design:**
-  - Rename the visible script-editor / AI-owned-dialog field label and
-    related local wording from `Input JSON` to `Arguments JSON`.
-  - Local manual-run failure UI for invalid JSON should explicitly
+  - Change `CodeStateToken` to hold only `codeFingerprint` and
+    `argumentsFingerprint`.
+  - Change `CodeStateContent` to use `sourceText` and
+    `argumentsJsonText`.
+  - Change `ReadCodeRequest` and `ReadCodeToolRequest` to `host` only;
+    remove all `known*` fields.
+  - Change `readCode` to always return current content for attached and
+    AI-owned script hosts.
+  - Use one response field named `codeState` instead of `status` on the
+    code-host read / write / compile / run responses.
+  - Replace `CodeLifecycleStatus` with one single-state enum using:
+    `NO_CODE`, `EDITED`, `RUNNABLE`, `INVALID_SCRIPT`,
+    `INVALID_ARGUMENTS_JSON`, `WAITING_FOR_USER_RUN`,
+    `RUN_SUCCEEDED`, and `RUN_FAILED`.
+  - State transitions:
+    - after `writeCode`, current content becomes `EDITED`;
+    - after successful `compileCode`, current content becomes
+      `RUNNABLE`;
+    - invalid Groovy source becomes `INVALID_SCRIPT`;
+    - invalid Arguments JSON becomes `INVALID_ARGUMENTS_JSON`;
+    - AI-owned or attached-editor flows that require an explicit user
+      execution keep `WAITING_FOR_USER_RUN`;
+    - successful run of current content becomes `RUN_SUCCEEDED`;
+    - runtime failure after successful validation becomes `RUN_FAILED`;
+    - any later content change resets `RUNNABLE`, `RUN_SUCCEEDED`, or
+      `RUN_FAILED` back to `EDITED`.
+  - Whole-state stale checks for `writeCode`, `compileCode`, and
+    `runCode` must compare both fingerprints from the expected token.
+  - Exact request/response shapes:
+    - `ReadCodeRequest { host }`
+    - `ReadCodeResponse { host, contentType, codeState, runInitiator,
+      stateToken, content, diagnostics?, errorMessage?, stdout?,
+      structuredResult? }`
+    - `WriteCodeRequest { host, content, expectedStateToken? }`
+    - `WriteCodeResponse { host, contentType, codeState, stateToken }`
+    - `CompileCodeRequest { host, expectedStateToken }`
+    - `CompileCodeResponse { host, contentType, codeState, stateToken,
+      diagnostics?, errorMessage? }`
+    - `RunCodeRequest { host, expectedStateToken }`
+    - `RunCodeResponse { host, contentType, codeState, runInitiator,
+      stateToken, diagnostics?, errorMessage?, stdout?,
+      structuredResult? }`
+  - Attached manual-run failure UI for invalid JSON should explicitly
     identify the Arguments JSON field as the failing field instead of
     showing only the raw parser text.
   - The attached script-editor manual-run failure path should stop
@@ -505,18 +572,35 @@ Engine --> Host : stdout + structuredResult or SOURCE_TEXT failure
     local and offer an explicit user-controlled `Ask AI` choice before
     any repair request is submitted, following the FormulaEditor
     precedent rather than silent auto-forwarding.
-  - Keep recording the failure code state locally so an explicit Ask AI
-    action can submit the same failure context without rerunning.
-  - Do not change JSON binding semantics, MCP/tool contracts, or the
-    non-manual host-service run flow in this follow-up.
+  - Record manual-run failure state with the current content included so
+    explicit Ask-AI repair requests carry the draft source and
+    Arguments JSON without requiring a second read.
+  - Update MCP / tool descriptions, DTOs, host services, and tests to
+    the new two-fingerprint / always-return-content contract.
 - **Test specification:**
+  - Automated tests should cover removal of `stateFingerprint` and
+    `knownStateFingerprint`, `readCode` always returning
+    `sourceText` plus `argumentsJsonText`, and whole-state stale checks
+    comparing the two remaining fingerprints.
+  - Automated tests should cover the single `codeState` model,
+    including distinct `INVALID_SCRIPT`, `INVALID_ARGUMENTS_JSON`, and
+    `RUN_FAILED` outcomes.
   - Automated tests should cover the manual attached-editor failure path
-    no longer auto-submitting repair requests and should verify any new
-    explicit repair trigger where a practical seam exists.
+    no longer auto-submitting repair requests and should verify that
+    explicit Ask-AI repair requests carry the current content.
   - Manual verification should cover invalid Arguments JSON feedback
     that names the failing field locally, no AI chat request until the
     user explicitly chooses Ask AI, and successful submission to the
-    owning chat only after that explicit action.
+    owning chat with current source plus arguments only after that
+    explicit action.
+- **Implementation notes:**
+  - **Interpretations:**
+    - Kept AI-owned `WAITING_FOR_USER_RUN` as the immediate result of an
+      AI-initiated run request under the shown-user-run policy after
+      Arguments JSON validation, while deferring script-source
+      validation to explicit compile or actual user run, because eager
+      source validation changed the existing user-run gate behavior and
+      broke the current dialog-flow expectations.
 
 ## Subtask: Fix script-editor JSON pane geometry and persistence
 - **Status:** backlog

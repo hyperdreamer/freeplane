@@ -2,7 +2,9 @@ package org.freeplane.plugin.ai.chat.session;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.model.openai.OpenAiTokenCountEstimator;
 import java.io.IOException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
@@ -10,6 +12,7 @@ import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.format.DateTimeFormatter;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.freeplane.features.text.TextController;
 import org.freeplane.plugin.ai.chat.history.ChatTranscriptEntry;
 import org.freeplane.plugin.ai.chat.history.ChatTranscriptId;
@@ -196,6 +199,50 @@ public class LiveChatControllerTest {
     }
 
     @Test
+    public void startNewChatCreatesMemoryThatUsesUpdatedMaximumTokenCount() throws IOException {
+        Path tempDir = Files.createTempDirectory("live-chat-controller");
+        try {
+            ChatTranscriptStore store = newTestStore(tempDir);
+            ChatMemorySettings chatMemorySettings = mock(ChatMemorySettings.class);
+            AtomicInteger maxTokens = new AtomicInteger(5000);
+            org.mockito.Mockito.when(chatMemorySettings.getMaximumTokenCount()).thenAnswer(invocation -> maxTokens.get());
+            LiveChatController uut = newController(store, chatMemorySettings);
+            uut.initialize(AssistantProfileChatMemory.withMaxTokens(500));
+
+            LiveChatSessionId sessionId = uut.startNewChat();
+            AssistantProfileChatMemory memory = (AssistantProfileChatMemory) uut.chatMemory(sessionId);
+            String firstQuestion = "first first first first first first first first first first first first first first first first";
+            String firstAnswer = "answer one answer one answer one answer one answer one answer one answer one answer one";
+            String secondQuestion = "second second second second second second second second second second second second second second second second";
+            String secondAnswer = "answer two answer two answer two answer two answer two answer two answer two answer two";
+            String thirdQuestion = "third third third third third third third third third third third third third third third third";
+            String thirdAnswer = "answer three answer three answer three answer three answer three answer three answer three";
+            memory.add(UserMessage.from(firstQuestion));
+            memory.add(AiMessage.from(firstAnswer));
+            memory.add(UserMessage.from(secondQuestion));
+            memory.add(AiMessage.from(secondAnswer));
+            memory.add(UserMessage.from(thirdQuestion));
+            memory.add(AiMessage.from(thirdAnswer));
+
+            int visibleAfterReductionTokens = estimateTokens(
+                UserMessage.from(secondQuestion),
+                AiMessage.from(secondAnswer),
+                UserMessage.from(thirdQuestion),
+                AiMessage.from(thirdAnswer));
+            maxTokens.set(visibleAfterReductionTokens);
+            memory.refreshCompactionForCurrentMaxTokens();
+
+
+            assertThat(memory.messages())
+                .extracting(message -> message instanceof UserMessage ? ((UserMessage) message).singleText() : null)
+                .contains(secondQuestion, thirdQuestion)
+                .doesNotContain(firstQuestion);
+        } finally {
+            deleteRecursively(tempDir);
+        }
+    }
+
+    @Test
     public void startChatFromTranscript_defaultsMissingMetadataToRegularChatSemantics() throws IOException {
         Path tempDir = Files.createTempDirectory("live-chat-controller");
         try {
@@ -234,6 +281,10 @@ public class LiveChatControllerTest {
     private LiveChatController newController(ChatTranscriptStore store) {
         ChatMemorySettings chatMemorySettings = mock(ChatMemorySettings.class);
         org.mockito.Mockito.when(chatMemorySettings.getMaximumTokenCount()).thenReturn(500);
+        return newController(store, chatMemorySettings);
+    }
+
+    private LiveChatController newController(ChatTranscriptStore store, ChatMemorySettings chatMemorySettings) {
         return new LiveChatController(
             mock(AIChatPanel.class),
             mock(AvailableMaps.class),
@@ -244,6 +295,15 @@ public class LiveChatControllerTest {
             () -> null,
             store,
             chatMemorySettings);
+    }
+
+    private int estimateTokens(ChatMessage... messages) {
+        OpenAiTokenCountEstimator estimator = new OpenAiTokenCountEstimator("gpt-4o-mini");
+        int total = 0;
+        for (ChatMessage message : messages) {
+            total += estimator.estimateTokenCountInMessage(message);
+        }
+        return total;
     }
 
     private static void deleteRecursively(Path root) throws IOException {

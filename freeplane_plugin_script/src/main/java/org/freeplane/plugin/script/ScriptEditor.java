@@ -61,7 +61,7 @@ class ScriptEditor extends AFreeplaneAction {
             return mScriptAttribute.getName();
         }
 
-        private String inputText() {
+        private String argumentsJsonText() {
             return mInputAttribute == null ? null : String.valueOf(mInputAttribute.getValue());
         }
     }
@@ -136,7 +136,7 @@ class ScriptEditor extends AFreeplaneAction {
                                     final IFreeplaneScriptErrorHandler pErrorHandler) {
             final ScriptHolder scriptHolder = getScript(pIndex);
             ModeController mMindMapController = Controller.getCurrentModeController();
-            ScriptInputJsonSupport.ParseResult parseResult = ScriptInputJsonSupport.parseInputText(scriptHolder.getInputText());
+            ScriptInputJsonSupport.ParseResult parseResult = ScriptInputJsonSupport.parseInputText(scriptHolder.getArgumentsJsonText());
             if (!parseResult.isSuccessful()) {
                 throw ScriptInputJsonSupport.toExecuteScriptException(parseResult.getDiagnostic());
             }
@@ -161,7 +161,7 @@ class ScriptEditor extends AFreeplaneAction {
             return new ScriptHolder(
                 attribute.getName(),
                 attribute.getValue().toString(),
-                attributeHolder.inputText());
+                attributeHolder.argumentsJsonText());
         }
 
         public boolean isDirty() {
@@ -176,18 +176,18 @@ class ScriptEditor extends AFreeplaneAction {
             if (!pScript.mScript.equals(oldHolder.mScriptAttribute.getValue())) {
                 isDirty = true;
             }
-            if (!equalsNullable(pScript.getInputText(), oldHolder.inputText())) {
+            if (!equalsNullable(pScript.getArgumentsJsonText(), oldHolder.argumentsJsonText())) {
                 isDirty = true;
             }
             oldHolder.mScriptAttribute.setName(pScript.mScriptName);
             oldHolder.mScriptAttribute.setValue(pScript.mScript);
-            if (ScriptInputJsonSupport.isBlankInput(pScript.getInputText())) {
+            if (ScriptInputJsonSupport.isBlankInput(pScript.getArgumentsJsonText())) {
                 oldHolder.mInputAttribute = null;
             }
             else {
                 oldHolder.mInputAttribute = new Attribute(
                     ScriptInputJsonSupport.companionAttributeName(pScript.mScriptName),
-                    pScript.getInputText());
+                    pScript.getArgumentsJsonText());
             }
         }
 

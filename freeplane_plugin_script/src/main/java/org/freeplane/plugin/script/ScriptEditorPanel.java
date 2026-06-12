@@ -66,7 +66,7 @@ import org.freeplane.features.ai.code.AiChatAttachment;
 import org.freeplane.features.ai.code.AiChatAttachmentService;
 import org.freeplane.features.ai.code.AiChatRepairRequest;
 import org.freeplane.features.ai.code.AiCodeEditor;
-import org.freeplane.features.ai.code.CodeLifecycleStatus;
+import org.freeplane.features.ai.code.CodeState;
 import org.freeplane.features.ai.code.CodeStateContent;
 import org.freeplane.features.ai.code.CodeStateDiagnostic;
 import org.freeplane.features.ai.code.CodeStateDiagnostics;
@@ -105,8 +105,7 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 	private static final String AI_ATTACHMENT_CONTENT_TYPE = "text/x-freeplane-script-groovy";
 	private static final String EDITOR_CONTENT_TYPE = "text/groovy";
 	private static final String ATTACHED_SCRIPT_FAILURE_PROMPT =
-		"The attached Freeplane script was run manually and failed. Analyze the failure using the current code state below. "
-			+ "Do not rewrite the script unless the user explicitly asks or confirms.";
+		"The attached Freeplane script was run manually and failed. Very briefly describe the failure to the user and ask whether they want you to fix it.";
     private static final String INVALID_JSON_SAVE_EXIT_PROPERTY = "script_editor_save_invalid_json";
 
 	final private class AttachToAiAction extends AbstractAction {
@@ -269,10 +268,8 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 					new RunCodeRequest(ScriptHost.ATTACHED_EDITOR, null),
 					ScriptRunInitiator.USER);
 				renderManualRunResult(response);
-				updateAiAttachmentAfterManualRun(response);
-				if (response.getStatus() == CodeLifecycleStatus.FAILED && response.getErrorMessage() != null) {
-					UITools.errorMessage(response.getErrorMessage());
-				}
+				ReadCodeResponse codeState = recordAiAttachmentAfterManualRun(response);
+				showManualRunFailure(response, codeState);
 			}
 			catch (Throwable e) {
 				LogUtils.warn(e);
@@ -315,7 +312,7 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 			return mScriptName;
 		}
 
-        public String getInputText() {
+        public String getArgumentsJsonText() {
             return mInputText;
         }
 
@@ -329,7 +326,7 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 			return this;
 		}
 
-        public ScriptHolder setInputText(String pInputText) {
+        public ScriptHolder setArgumentsJsonText(String pInputText) {
             mInputText = pInputText;
             return this;
         }
@@ -621,7 +618,7 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 	@Override
 	public void replaceCodeStateContent(CodeStateContent content) {
 		mScriptTextField.setText(content == null || content.getSourceText() == null ? "" : content.getSourceText());
-        mScriptInputField.setText(content == null || content.getInputText() == null ? "" : content.getInputText());
+        mScriptInputField.setText(content == null || content.getArgumentsJsonText() == null ? "" : content.getArgumentsJsonText());
 	}
 
 	@Override
@@ -629,14 +626,14 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
         CodeStateContent content = getCodeStateContent();
         CodeStateToken stateToken = CodeStateToken.fromContent(content);
         ScriptInputJsonSupport.ParseResult parseResult = ScriptInputJsonSupport.parseInputText(
-            content.getInputText(),
-            stateToken.getInputFingerprint());
+            content.getArgumentsJsonText(),
+            stateToken.getArgumentsFingerprint());
         if (!parseResult.isSuccessful()) {
             List<CodeStateDiagnostic> diagnostics = Collections.singletonList(parseResult.getDiagnostic());
             return new CompileCodeResponse(
                 ScriptHost.ATTACHED_EDITOR,
                 AI_ATTACHMENT_CONTENT_TYPE,
-                CodeLifecycleStatus.FAILED,
+                CodeState.INVALID_ARGUMENTS_JSON,
                 stateToken,
                 diagnostics,
                 ScriptInputJsonSupport.primaryMessage(parseResult.getDiagnostic()));
@@ -647,7 +644,7 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 		return new CompileCodeResponse(
 			ScriptHost.ATTACHED_EDITOR,
 			AI_ATTACHMENT_CONTENT_TYPE,
-			compileResult.isSuccessful() ? CodeLifecycleStatus.READY : CodeLifecycleStatus.FAILED,
+			compileResult.isSuccessful() ? CodeState.RUNNABLE : CodeState.INVALID_SCRIPT,
 			stateToken,
 			CodeStateDiagnostics.sourceDiagnostics(compileResult.getCompilerDiagnostics(), compileResult.getLineNumber()),
 			compileResult.getErrorMessage());
@@ -666,14 +663,14 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
         CodeStateContent content = getCodeStateContent();
         CodeStateToken stateToken = CodeStateToken.fromContent(content);
         ScriptInputJsonSupport.ParseResult parseResult = ScriptInputJsonSupport.parseInputText(
-            content.getInputText(),
-            stateToken.getInputFingerprint());
+            content.getArgumentsJsonText(),
+            stateToken.getArgumentsFingerprint());
         if (!parseResult.isSuccessful()) {
             List<CodeStateDiagnostic> diagnostics = Collections.singletonList(parseResult.getDiagnostic());
             return new RunCodeResponse(
                 ScriptHost.ATTACHED_EDITOR,
                 AI_ATTACHMENT_CONTENT_TYPE,
-                CodeLifecycleStatus.FAILED,
+                CodeState.INVALID_ARGUMENTS_JSON,
                 runInitiator,
                 stateToken,
                 diagnostics,
@@ -681,6 +678,21 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
                 null,
                 null);
         }
+		ScriptingEngine.GroovyCompileResult compileResult = ScriptingEngine.compileGroovyScriptForDiagnostics(
+			content.getSourceText(),
+			ScriptingPermissions.getPermissiveScriptingPermissions());
+		if (!compileResult.isSuccessful()) {
+			return new RunCodeResponse(
+				ScriptHost.ATTACHED_EDITOR,
+				AI_ATTACHMENT_CONTENT_TYPE,
+				CodeState.INVALID_SCRIPT,
+				runInitiator,
+				stateToken,
+				CodeStateDiagnostics.sourceDiagnostics(compileResult.getCompilerDiagnostics(), compileResult.getLineNumber()),
+				compileResult.getErrorMessage(),
+				null,
+				null);
+		}
 		ByteArrayOutputStream outputBuffer = new ByteArrayOutputStream();
 		final int[] lineNumber = new int[] { -1 };
 		try (PrintStream outStream = new PrintStream(outputBuffer, false, "UTF-8")) {
@@ -694,7 +706,7 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 			return new RunCodeResponse(
 				ScriptHost.ATTACHED_EDITOR,
 				AI_ATTACHMENT_CONTENT_TYPE,
-				CodeLifecycleStatus.SUCCEEDED,
+				CodeState.RUN_SUCCEEDED,
 				runInitiator,
 				stateToken,
 				null,
@@ -711,7 +723,7 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 			return new RunCodeResponse(
 				ScriptHost.ATTACHED_EDITOR,
 				AI_ATTACHMENT_CONTENT_TYPE,
-				CodeLifecycleStatus.FAILED,
+				CodeState.RUN_FAILED,
 				runInitiator,
 				stateToken,
 				diagnostics,
@@ -728,7 +740,7 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 			return new RunCodeResponse(
 				ScriptHost.ATTACHED_EDITOR,
 				AI_ATTACHMENT_CONTENT_TYPE,
-				CodeLifecycleStatus.FAILED,
+				CodeState.RUN_FAILED,
 				runInitiator,
 				stateToken,
 				diagnostics,
@@ -750,7 +762,7 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 		if (response == null) {
 			return;
 		}
-		if (response.getStatus() == CodeLifecycleStatus.SUCCEEDED) {
+		if (response.getCodeState() == CodeState.RUN_SUCCEEDED) {
 			mScriptResultField.append(String.valueOf(response.getStructuredResult()));
 		}
 		else if (response.getErrorMessage() != null) {
@@ -758,25 +770,76 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 		}
 	}
 
-	private void updateAiAttachmentAfterManualRun(RunCodeResponse response) {
-		if (aiChatAttachment == null || response == null) {
-			return;
+	static ReadCodeResponse manualRunCodeState(RunCodeResponse response, CodeStateContent content) {
+		if (response == null) {
+			return null;
 		}
-		ReadCodeResponse codeState = new ReadCodeResponse(
+		return new ReadCodeResponse(
 			response.getHost(),
 			response.getContentType(),
-			response.getStatus(),
+			response.getCodeState(),
 			response.getRunInitiator(),
 			response.getStateToken(),
-			null,
+			content,
 			response.getDiagnostics(),
 			response.getErrorMessage(),
 			response.getStdout(),
 			response.getStructuredResult());
-		aiChatAttachment.recordCodeState(codeState);
-		if (response.getStatus() == CodeLifecycleStatus.FAILED) {
-			aiChatAttachment.requestRepair(new AiChatRepairRequest(ATTACHED_SCRIPT_FAILURE_PROMPT, codeState));
+	}
+
+	static ReadCodeResponse recordAttachedManualRunState(AiChatAttachment attachment, RunCodeResponse response, CodeStateContent content) {
+		ReadCodeResponse codeState = manualRunCodeState(response, content);
+		if (attachment != null && codeState != null) {
+			attachment.recordCodeState(codeState);
 		}
+		return codeState;
+	}
+
+	static void requestAttachedManualRepair(AiChatAttachment attachment, ReadCodeResponse codeState) {
+		if (attachment == null || codeState == null) {
+			return;
+		}
+		attachment.requestRepair(new AiChatRepairRequest(ATTACHED_SCRIPT_FAILURE_PROMPT, codeState));
+	}
+
+	private ReadCodeResponse recordAiAttachmentAfterManualRun(RunCodeResponse response) {
+		return recordAttachedManualRunState(aiChatAttachment, response, getCodeStateContent());
+	}
+
+	private void showManualRunFailure(RunCodeResponse response, ReadCodeResponse codeState) {
+		if (response == null || response.getCodeState() == CodeState.RUN_SUCCEEDED || response.getErrorMessage() == null) {
+			return;
+		}
+		if (aiChatAttachment == null || codeState == null) {
+			UITools.errorMessage(response.getErrorMessage());
+			return;
+		}
+		int answer = JOptionPane.showOptionDialog(
+			this,
+			buildManualRunFailureDialogMessage(response),
+			TextUtils.getText("error"),
+			JOptionPane.DEFAULT_OPTION,
+			JOptionPane.ERROR_MESSAGE,
+			null,
+			new Object[] { TextUtils.getText("ScriptEditorPanel.ask_ai"), TextUtils.getText("close") },
+			TextUtils.getText("close"));
+		if (answer == 0) {
+			requestAttachedManualRepair(aiChatAttachment, codeState);
+		}
+	}
+
+	private Object buildManualRunFailureDialogMessage(RunCodeResponse response) {
+		JTextArea messageArea = new JTextArea(response.getErrorMessage());
+		messageArea.setEditable(false);
+		messageArea.setLineWrap(false);
+		messageArea.setWrapStyleWord(false);
+		messageArea.setFont(mScriptTextField.getFont());
+		messageArea.setCaretPosition(0);
+		JScrollPane scrollPane = new JScrollPane(
+			messageArea,
+			JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
+			JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+		return new Object[] { scrollPane, TextUtils.getText("ScriptEditorPanel.ask_for_ai_repair") };
 	}
 
 	private AiChatAttachmentService lookupAiChatAttachmentService() {
@@ -852,7 +915,7 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 		storeCurrent();
         ScriptHolder scriptHolder = mScriptModel.getScript(pIndex);
 		mScriptTextField.setText(scriptHolder.getScript());
-        mScriptInputField.setText(scriptHolder.getInputText() == null ? "" : scriptHolder.getInputText());
+        mScriptInputField.setText(scriptHolder.getArgumentsJsonText() == null ? "" : scriptHolder.getArgumentsJsonText());
 		mLastSelected = pIndex;
 		if (pIndex >= 0 && mScriptList.getSelectedIndex() != pIndex) {
 			mScriptList.setSelectedIndex(pIndex);
@@ -865,7 +928,7 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 			final int oldIndex = mLastSelected;
             ScriptHolder currentScript = mScriptModel.getScript(oldIndex)
                 .setScript(mScriptTextField.getText())
-                .setInputText(mScriptInputField.getText());
+                .setArgumentsJsonText(mScriptInputField.getText());
 			mScriptModel.setScript(oldIndex, currentScript);
 		}
 	}
