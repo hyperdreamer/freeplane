@@ -1,6 +1,6 @@
 <map version="freeplane 1.9.8">
   <!--To view this file, open it in Freeplane.-->
-  <node TEXT="Freeplane scripting API" ID="ID_TEMPLATE_ROOT" FOLDED="false" LINK="index.html" STYLE="oval">
+  <node TEXT="Freeplane scripting API" ID="ID_1" FOLDED="false" LINK="index.html" STYLE="oval">
 <hook NAME="MapStyle">
     <properties auto_compact_layout="true" edgeColorConfiguration="#808080ff,#ff0000ff,#0000ffff,#00ff00ff,#ff00ffff,#00ffffff,#7c0000ff,#00007cff,#007c00ff,#7c007cff,#007c7cff,#7c7c00ff" fit_to_viewport="false"/>
 

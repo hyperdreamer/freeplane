@@ -33,7 +33,7 @@ public class FreeplaneMindMapWriterTest {
         assertThat(firstXml).startsWith("<map version=\"freeplane 1.9.8\">");
         assertThat(firstXml).doesNotStartWith("<?xml");
         assertThat(firstXml).contains("TEXT=\"Freeplane scripting API\"");
-        assertThat(firstXml).contains("ID=\"ID_TEMPLATE_ROOT\"");
+        assertThat(firstXml).contains("ID=\"ID_1\"");
         assertThat(firstXml).contains("LINK=\"index.html\"");
         assertThat(firstXml).contains("STYLE=\"oval\"");
         assertThat(firstXml).contains("<font SIZE=\"18\"/>");

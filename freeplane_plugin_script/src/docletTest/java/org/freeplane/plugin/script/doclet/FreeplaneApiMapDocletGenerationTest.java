@@ -39,7 +39,7 @@ public class FreeplaneApiMapDocletGenerationTest {
         assertThat(xml).startsWith("<map version=\"freeplane 1.9.8\">");
         assertThat(xml).doesNotStartWith("<?xml");
         assertThat(xml).contains("TEXT=\"Freeplane scripting API\"");
-        assertThat(xml).contains("ID=\"ID_TEMPLATE_ROOT\"");
+        assertThat(xml).contains("ID=\"ID_1\"");
         assertThat(xml).contains("LINK=\"index.html\"");
         assertThat(xml).contains("<hook NAME=\"MapStyle\">");
         assertThat(xml.indexOf("<hook NAME=\"MapStyle\">"))
