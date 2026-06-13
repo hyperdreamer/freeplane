@@ -14,8 +14,7 @@ public class MessageBuilder {
             + "Example: tool({ \"request\": { ... } })";
     private static final String MARKDOWN_RESPONSE_GUIDANCE = "Respond in Markdown.";
     private static final String NO_TOOLS_GUIDANCE =
-        "No application tools are available in this chat. Do not call or invent tools. "
-            + "Answer as a general-purpose assistant.";
+        "No application tools are available in this chat. Do not call or invent tools.";
     private static final String MAP_SELECTION_GUIDANCE =
         "Map selection can change between messages. If a request seems misaligned with prior map references, "
             + "confirm the current map before proceeding.";

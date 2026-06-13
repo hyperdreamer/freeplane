@@ -19,6 +19,7 @@ public class MessageBuilderTest {
     private static final String READ_ONLY_FREEPLANE_GUIDANCE_PREFIX =
         "Available Freeplane tools are limited to reading, searching, and node selection.";
     private static final String DO_NOT_CHANGE_MAP_GUIDANCE = "Do not change the map.";
+    private static final String GENERAL_PURPOSE_ASSISTANT_TEXT = "Answer as a general-purpose assistant.";
 
     @Test
     public void buildForChat_returnsConfiguredMessage() {
@@ -77,6 +78,7 @@ public class MessageBuilderTest {
         assertThat(message).doesNotContain(TOOL_CALL_EXAMPLE_TEXT);
         assertThat(message).doesNotContain(MAP_SELECTION_GUIDANCE_PREFIX);
         assertThat(message).doesNotContain("Freeplane");
+        assertThat(message).doesNotContain(GENERAL_PURPOSE_ASSISTANT_TEXT);
     }
 
     @Test
