@@ -11,13 +11,23 @@ import java.util.UUID;
 import java.util.WeakHashMap;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
+import org.freeplane.plugin.ai.tools.documentation.ApiDocumentationMapLoader;
 
 public class AvailableMaps {
+    public static final UUID INTERNAL_API_DOCUMENTATION_MAP_IDENTIFIER = new UUID(0L, 1L);
+
     private final MapModelProvider mapModelProvider;
+    private final ApiDocumentationMapLoader apiDocumentationMapLoader;
     private final Map<MapModel, UUID> mapIdentifiersByMapModel = new WeakHashMap<>();
     private final Map<UUID, WeakReference<MapModel>> mapReferencesByIdentifier = new HashMap<>();
+
     public AvailableMaps(MapModelProvider mapModelProvider) {
+        this(mapModelProvider, null);
+    }
+
+    public AvailableMaps(MapModelProvider mapModelProvider, ApiDocumentationMapLoader apiDocumentationMapLoader) {
         this.mapModelProvider = Objects.requireNonNull(mapModelProvider, "mapModelProvider");
+        this.apiDocumentationMapLoader = apiDocumentationMapLoader;
     }
 
     public UUID getCurrentMapIdentifier() {
@@ -61,13 +71,9 @@ public class AvailableMaps {
         if (mapIdentifier == null) {
             return null;
         }
-        WeakReference<MapModel> mapReference = mapReferencesByIdentifier.get(mapIdentifier);
-        if (mapReference == null) {
-            return null;
-        }
-        MapModel mapModel = mapReference.get();
-        if (mapModel == null) {
-            mapReferencesByIdentifier.remove(mapIdentifier);
+        MapModel mapModel = registeredMapModel(mapIdentifier);
+        if (mapModel == null && INTERNAL_API_DOCUMENTATION_MAP_IDENTIFIER.equals(mapIdentifier)) {
+            mapModel = loadInternalApiDocumentationMap();
         }
         if (mapModel != null && mapAccessListener != null) {
             mapAccessListener.onMapAccessed(mapIdentifier, mapModel);
@@ -80,16 +86,49 @@ public class AvailableMaps {
         UUID mapIdentifier = mapIdentifiersByMapModel.get(mapModel);
         if (mapIdentifier == null) {
             mapIdentifier = UUID.randomUUID();
-            mapIdentifiersByMapModel.put(mapModel, mapIdentifier);
         }
-        WeakReference<MapModel> mapReference = mapReferencesByIdentifier.get(mapIdentifier);
-        MapModel referencedMapModel = mapReference == null ? null : mapReference.get();
-        if (referencedMapModel != mapModel) {
-            mapReferencesByIdentifier.put(mapIdentifier, new WeakReference<>(mapModel));
+        return registerMapIdentifier(mapModel, mapIdentifier);
+    }
+
+    public UUID registerMapIdentifier(MapModel mapModel, UUID mapIdentifier) {
+        Objects.requireNonNull(mapModel, "mapModel");
+        Objects.requireNonNull(mapIdentifier, "mapIdentifier");
+        UUID previousIdentifier = mapIdentifiersByMapModel.put(mapModel, mapIdentifier);
+        if (previousIdentifier != null && !previousIdentifier.equals(mapIdentifier)) {
+            mapReferencesByIdentifier.remove(previousIdentifier);
+        }
+        WeakReference<MapModel> previousReference = mapReferencesByIdentifier.put(mapIdentifier,
+            new WeakReference<>(mapModel));
+        MapModel previousMapModel = previousReference == null ? null : previousReference.get();
+        if (previousMapModel != null && previousMapModel != mapModel) {
+            UUID previousMapIdentifier = mapIdentifiersByMapModel.get(previousMapModel);
+            if (mapIdentifier.equals(previousMapIdentifier)) {
+                mapIdentifiersByMapModel.remove(previousMapModel);
+            }
         }
         return mapIdentifier;
     }
 
+    private MapModel registeredMapModel(UUID mapIdentifier) {
+        WeakReference<MapModel> mapReference = mapReferencesByIdentifier.get(mapIdentifier);
+        if (mapReference == null) {
+            return null;
+        }
+        MapModel mapModel = mapReference.get();
+        if (mapModel == null) {
+            mapReferencesByIdentifier.remove(mapIdentifier);
+        }
+        return mapModel;
+    }
+
+    private MapModel loadInternalApiDocumentationMap() {
+        if (apiDocumentationMapLoader == null) {
+            throw new IllegalStateException("Internal API documentation map loading is not configured.");
+        }
+        MapModel mapModel = apiDocumentationMapLoader.loadInstalledApiMapModel();
+        registerMapIdentifier(mapModel, INTERNAL_API_DOCUMENTATION_MAP_IDENTIFIER);
+        return mapModel;
+    }
 
     private void removeClearedReferences() {
         Iterator<Map.Entry<UUID, WeakReference<MapModel>>> iterator = mapReferencesByIdentifier.entrySet().iterator();

@@ -38,6 +38,10 @@ public class ApiDocumentationMapLoader {
         return new LoadedApiDocumentationMap(mapFile, mapModel);
     }
 
+    public MapModel loadInstalledApiMapModel() {
+        return loadInstalledApiMap().getMapModel();
+    }
+
     private String buildMissingMapMessage(File mapFile) {
         return "API documentation map is not installed/generated. Expected file: "
             + mapFile.getAbsolutePath()

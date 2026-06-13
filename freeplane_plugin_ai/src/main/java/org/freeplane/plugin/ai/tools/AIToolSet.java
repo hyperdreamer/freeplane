@@ -117,6 +117,7 @@ public class AIToolSet {
     private final GetApiDocumentationTool getApiDocumentationTool;
     private final GetTagCategoriesTool getTagCategoriesTool;
     private final EditTagCategoriesTool editTagCategoriesTool;
+    private final MapTargetToolCallAuthorizer mapTargetToolCallAuthorizer;
     private final ToolCallSummaryHandler toolCallSummaryHandler;
     private final ToolCaller toolCaller;
 
@@ -125,6 +126,7 @@ public class AIToolSet {
               NodeContentFactories nodeContentFactories, MMapController mapController,
               AiCodeHostService codeHostService,
               GetApiDocumentationTool getApiDocumentationTool,
+              MapTargetToolCallAuthorizer mapTargetToolCallAuthorizer,
               java.util.function.Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier,
               java.util.function.Supplier<Boolean> formulaEditingEnabledSupplier,
               ToolCaller toolCaller) {
@@ -218,10 +220,40 @@ public class AIToolSet {
         this.getApiDocumentationTool = Objects.requireNonNull(getApiDocumentationTool, "getApiDocumentationTool");
         this.getTagCategoriesTool = Objects.requireNonNull(getTagCategoriesTool, "getTagCategoriesTool");
         this.editTagCategoriesTool = Objects.requireNonNull(editTagCategoriesTool, "editTagCategoriesTool");
+        this.mapTargetToolCallAuthorizer = Objects.requireNonNull(
+            mapTargetToolCallAuthorizer,
+            "mapTargetToolCallAuthorizer");
         this.toolCallSummaryHandler = toolCallSummaryHandler;
         this.toolCaller = toolCaller == null
             ? ToolCaller.CHAT
             : toolCaller;
+    }
+
+    AIToolSet(MapTargetToolCallAuthorizer mapTargetToolCallAuthorizer,
+              CreateNodesTool createNodesTool,
+              FormulaUpdateTool formulaUpdateTool) {
+        this.messageBuilder = new MessageBuilder();
+        this.readNodesWithDescendantsTool = null;
+        this.selectedMapAndNodeIdentifiersTool = null;
+        this.selectSingleNodeTool = null;
+        this.searchNodesTool = null;
+        this.createNodesTool = Objects.requireNonNull(createNodesTool, "createNodesTool");
+        this.moveNodesTool = null;
+        this.deleteNodesTool = null;
+        this.createSummaryTool = null;
+        this.moveNodesIntoSummaryTool = null;
+        this.listTool = null;
+        this.connectorEditTool = null;
+        this.batchEditTool = null;
+        this.formulaUpdateTool = Objects.requireNonNull(formulaUpdateTool, "formulaUpdateTool");
+        this.getApiDocumentationTool = null;
+        this.getTagCategoriesTool = null;
+        this.editTagCategoriesTool = null;
+        this.mapTargetToolCallAuthorizer = Objects.requireNonNull(
+            mapTargetToolCallAuthorizer,
+            "mapTargetToolCallAuthorizer");
+        this.toolCallSummaryHandler = null;
+        this.toolCaller = ToolCaller.CHAT;
     }
 
     public String systemMessageForChat(@SuppressWarnings("unused") Object input) {
@@ -288,6 +320,7 @@ public class AIToolSet {
         + "Review candidateValue and evaluationResult for plausibility before applyFormulaUpdates.")
     public FormulaUpdatePreviewResponse previewFormulaUpdates(FormulaUpdatePreviewRequest request) {
         try {
+            assertMapTargetToolAuthorized("previewFormulaUpdates", request == null ? null : request.getMapIdentifier());
             FormulaUpdatePreviewResponse response = formulaUpdateTool.previewFormulaUpdates(request);
             publishToolCallSummary(new ToolCallSummary(
                 "previewFormulaUpdates",
@@ -310,6 +343,7 @@ public class AIToolSet {
         + "If a target node no longer exists or an attribute REPLACE target can no longer be resolved, the tool returns FAILED instead of crashing.")
     public FormulaUpdateApplyResponse applyFormulaUpdates(FormulaUpdateApplyRequest request) {
         try {
+            assertMapTargetToolAuthorized("applyFormulaUpdates", request == null ? null : request.getMapIdentifier());
             FormulaUpdateApplyResponse response = formulaUpdateTool.applyFormulaUpdates(request);
             publishToolCallSummary(new ToolCallSummary(
                 "applyFormulaUpdates",
@@ -397,6 +431,7 @@ public class AIToolSet {
         + "parent categorized tags are created automatically. For UNCATEGORIZED MOVE_TAG, omit newParentPath.")
     public TagCategoryStatePayload editTagCategories(TagCategoryInstructionRequestPayload request) {
         try {
+            assertMapTargetToolAuthorized("editTagCategories", request == null ? null : request.getMapIdentifier());
             TagCategoryStatePayload response = editTagCategoriesTool.editTagCategories(request);
             publishToolCallSummary(editTagCategoriesTool.buildToolCallSummary(request, response));
             return response;
@@ -409,6 +444,7 @@ public class AIToolSet {
     @Tool("Delete nodes by identifier.")
     public DeleteNodesResponse deleteNodes(DeleteNodesRequest request) {
         try {
+            assertMapTargetToolAuthorized("deleteNodes", request == null ? null : request.getMapIdentifier());
             DeleteNodesResponse response = deleteNodesTool.deleteNodes(request);
             publishToolCallSummary(deleteNodesTool.buildToolCallSummary(request, response));
             return response;
@@ -450,6 +486,7 @@ public class AIToolSet {
         + "In match* fields, null is wildcard and empty string matches an empty label.")
     public ConnectorEditResponse editConnectors(ConnectorEditRequest request) {
         try {
+            assertMapTargetToolAuthorized("editConnectors", request == null ? null : request.getMapIdentifier());
             ConnectorEditResponse response = connectorEditTool.editConnectors(request);
             publishToolCallSummary(connectorEditTool.buildToolCallSummary(request, response));
             return response;
@@ -469,6 +506,7 @@ public class AIToolSet {
         + "REJECT_ON_ANY_INCOMPATIBLE dry-runs the request and either returns REJECTED without writes or proceeds and may still report write-time FAILED results.")
     public List<EditResultItem> edit(EditRequest request) {
         try {
+            assertMapTargetToolAuthorized("edit", request == null ? null : request.getMapIdentifier());
             List<EditResultItem> response = editNodes(request);
             publishToolCallSummary(buildEditToolSummary(request, response, false, null));
             return response;
@@ -476,6 +514,10 @@ public class AIToolSet {
             publishToolCallSummary(buildEditToolSummary(request, null, true, error.getMessage()));
             throw error;
         }
+    }
+
+    private void assertMapTargetToolAuthorized(String toolName, String mapIdentifier) {
+        mapTargetToolCallAuthorizer.assertAuthorized(toolName, mapIdentifier);
     }
 
     private void publishToolCallSummary(ToolCallSummary summary) {
@@ -554,6 +596,7 @@ public class AIToolSet {
         + "Omit empty optional text fields such as details and note.")
     public CreateNodesResponse createNodes(CreateNodesRequest request) {
         try {
+            assertMapTargetToolAuthorized("createNodes", request == null ? null : request.getMapIdentifier());
             CreateNodesResponse response = createNodesTool.createNodes(request);
             publishToolCallSummary(createNodesTool.buildToolCallSummary(request, response));
             return response;
@@ -566,6 +609,7 @@ public class AIToolSet {
     @Tool("Move nodes relative to an anchor node.")
     public MoveNodesResponse moveNodes(MoveNodesRequest request) {
         try {
+            assertMapTargetToolAuthorized("moveNodes", request == null ? null : request.getMapIdentifier());
             MoveNodesResponse response = moveNodesTool.moveNodes(request);
             publishToolCallSummary(moveNodesTool.buildToolCallSummary(request, response));
             return response;
@@ -582,6 +626,7 @@ public class AIToolSet {
         + "Omit empty optional text fields such as details and note. To create a summary of summaries, choose summary anchor nodes already at the same summary level under the same parent.")
     public CreateSummaryResponse createSummary(CreateSummaryRequest request) {
         try {
+            assertMapTargetToolAuthorized("createSummary", request == null ? null : request.getMapIdentifier());
             CreateSummaryResponse response = createSummaryTool.createSummary(request);
             publishToolCallSummary(createSummaryTool.buildToolCallSummary(request, response));
             return response;
@@ -594,6 +639,7 @@ public class AIToolSet {
     @Tool("Move existing nodes to become summary content for a summarized range.")
     public MoveNodesIntoSummaryResponse moveNodesIntoSummary(MoveNodesIntoSummaryRequest request) {
         try {
+            assertMapTargetToolAuthorized("moveNodesIntoSummary", request == null ? null : request.getMapIdentifier());
             MoveNodesIntoSummaryResponse response = moveNodesIntoSummaryTool.moveNodesIntoSummary(request);
             publishToolCallSummary(moveNodesIntoSummaryTool.buildToolCallSummary(request, response));
             return response;

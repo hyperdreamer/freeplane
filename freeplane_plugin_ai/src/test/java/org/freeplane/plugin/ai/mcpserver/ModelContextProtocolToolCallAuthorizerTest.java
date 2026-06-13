@@ -2,10 +2,10 @@ package org.freeplane.plugin.ai.mcpserver;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.function.Supplier;
+import org.freeplane.plugin.ai.maps.AvailableMaps;
+import org.freeplane.plugin.ai.tools.MapTargetToolCallAuthorizer;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.tools.code.AiCodeOperationAuthorizer;
-import org.freeplane.plugin.ai.tools.documentation.GetApiDocumentationResponse;
-import org.freeplane.plugin.ai.tools.documentation.GetApiDocumentationTool;
 import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -13,7 +13,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 public class ModelContextProtocolToolCallAuthorizerTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -21,16 +20,31 @@ public class ModelContextProtocolToolCallAuthorizerTest {
     @Test
     public void codeToolsDelegateToAiCodeOperationAuthorizer() throws Exception {
         AiCodeOperationAuthorizer aiCodeOperationAuthorizer = mock(AiCodeOperationAuthorizer.class);
-        GetApiDocumentationTool getApiDocumentationTool = mock(GetApiDocumentationTool.class);
         ModelContextProtocolToolCallAuthorizer uut = authorizer(
             ToolAvailabilityLevel.SCRIPT_EXECUTION,
             false,
             aiCodeOperationAuthorizer,
-            getApiDocumentationTool);
+            mock(MapTargetToolCallAuthorizer.class));
 
         uut.assertAuthorized("runCode", objectMapper.readTree("{\"request\":{\"host\":\"AI\"}}"));
 
         verify(aiCodeOperationAuthorizer).assertAuthorized(eq("runCode"), eq(org.freeplane.features.ai.code.ScriptHost.AI));
+    }
+
+    @Test
+    public void delegatesDocumentationMapTargetRestrictionToMapTargetToolCallAuthorizer() throws Exception {
+        MapTargetToolCallAuthorizer mapTargetToolCallAuthorizer = mock(MapTargetToolCallAuthorizer.class);
+        ModelContextProtocolToolCallAuthorizer uut = authorizer(
+            ToolAvailabilityLevel.EDITING,
+            true,
+            mock(AiCodeOperationAuthorizer.class),
+            mapTargetToolCallAuthorizer);
+
+        uut.assertAuthorized(
+            "createNodes",
+            objectMapper.readTree("{\"request\":{\"mapIdentifier\":\"map-id\"}}"));
+
+        verify(mapTargetToolCallAuthorizer).assertAuthorized("createNodes", "map-id");
     }
 
     @Test
@@ -39,30 +53,59 @@ public class ModelContextProtocolToolCallAuthorizerTest {
             ToolAvailabilityLevel.DISABLED,
             false,
             mock(AiCodeOperationAuthorizer.class),
-            mock(GetApiDocumentationTool.class));
+            mock(MapTargetToolCallAuthorizer.class));
 
         assertThatCode(() -> uut.assertAuthorized("getApiDocumentation", null))
             .doesNotThrowAnyException();
     }
 
     @Test
+    public void editingToolRejectsDocumentationMapTarget() throws Exception {
+        ModelContextProtocolToolCallAuthorizer uut = authorizer(
+            ToolAvailabilityLevel.EDITING,
+            true,
+            mock(AiCodeOperationAuthorizer.class),
+            new MapTargetToolCallAuthorizer());
+
+        assertThatThrownBy(() -> uut.assertAuthorized(
+            "createNodes",
+            objectMapper.readTree("{\"request\":{\"mapIdentifier\":\""
+                + AvailableMaps.INTERNAL_API_DOCUMENTATION_MAP_IDENTIFIER
+                + "\"}}")))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("The internal API documentation map cannot be edited.");
+    }
+
+    @Test
+    public void formulaToolRejectsDocumentationMapTarget() throws Exception {
+        ModelContextProtocolToolCallAuthorizer uut = authorizer(
+            ToolAvailabilityLevel.EDITING,
+            true,
+            mock(AiCodeOperationAuthorizer.class),
+            new MapTargetToolCallAuthorizer());
+
+        assertThatThrownBy(() -> uut.assertAuthorized(
+            "previewFormulaUpdates",
+            objectMapper.readTree("{\"request\":{\"mapIdentifier\":\""
+                + AvailableMaps.INTERNAL_API_DOCUMENTATION_MAP_IDENTIFIER
+                + "\"}}")))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("The internal API documentation map cannot be used as a scripting or formula target.");
+    }
+
+    @Test
     public void disabledAllowsApiMapScopedReadOnlyForInternalApiMap() throws Exception {
-        GetApiDocumentationTool getApiDocumentationTool = mock(GetApiDocumentationTool.class);
-        when(getApiDocumentationTool.getApiDocumentation()).thenReturn(new GetApiDocumentationResponse(
-            "api-map",
-            "root",
-            "packages",
-            "groups",
-            null));
         ModelContextProtocolToolCallAuthorizer uut = authorizer(
             ToolAvailabilityLevel.DISABLED,
             false,
             mock(AiCodeOperationAuthorizer.class),
-            getApiDocumentationTool);
+            mock(MapTargetToolCallAuthorizer.class));
 
         assertThatCode(() -> uut.assertAuthorized(
             "readNodesWithDescendants",
-            objectMapper.readTree("{\"request\":{\"mapIdentifier\":\"api-map\"}}")))
+            objectMapper.readTree("{\"request\":{\"mapIdentifier\":\""
+                + AvailableMaps.INTERNAL_API_DOCUMENTATION_MAP_IDENTIFIER
+                + "\"}}")))
             .doesNotThrowAnyException();
 
         assertThatThrownBy(() -> uut.assertAuthorized(
@@ -78,7 +121,7 @@ public class ModelContextProtocolToolCallAuthorizerTest {
             ToolAvailabilityLevel.READING,
             false,
             mock(AiCodeOperationAuthorizer.class),
-            mock(GetApiDocumentationTool.class));
+            mock(MapTargetToolCallAuthorizer.class));
 
         assertThatCode(() -> uut.assertAuthorized(
             "searchNodes",
@@ -92,7 +135,7 @@ public class ModelContextProtocolToolCallAuthorizerTest {
             ToolAvailabilityLevel.DISABLED,
             false,
             mock(AiCodeOperationAuthorizer.class),
-            mock(GetApiDocumentationTool.class));
+            mock(MapTargetToolCallAuthorizer.class));
 
         assertThatThrownBy(() -> uut.assertAuthorized("createNodes", null))
             .isInstanceOf(IllegalStateException.class)
@@ -106,7 +149,7 @@ public class ModelContextProtocolToolCallAuthorizerTest {
             ToolAvailabilityLevel.SCRIPT_EXECUTION,
             false,
             aiCodeOperationAuthorizer,
-            mock(GetApiDocumentationTool.class));
+            mock(MapTargetToolCallAuthorizer.class));
 
         uut.assertAuthorized("writeCode", objectMapper.readTree("{\"request\":{\"host\":\"AI\"}}"));
 
@@ -119,7 +162,7 @@ public class ModelContextProtocolToolCallAuthorizerTest {
             ToolAvailabilityLevel.EDITING,
             false,
             mock(AiCodeOperationAuthorizer.class),
-            mock(GetApiDocumentationTool.class));
+            mock(MapTargetToolCallAuthorizer.class));
 
         assertThatThrownBy(() -> uut.assertAuthorized("previewFormulaUpdates", objectMapper.createObjectNode()))
             .isInstanceOf(IllegalStateException.class)
@@ -132,7 +175,7 @@ public class ModelContextProtocolToolCallAuthorizerTest {
             ToolAvailabilityLevel.EDITING,
             true,
             mock(AiCodeOperationAuthorizer.class),
-            mock(GetApiDocumentationTool.class));
+            mock(MapTargetToolCallAuthorizer.class));
 
         assertThatCode(() -> uut.assertAuthorized("previewFormulaUpdates", objectMapper.createObjectNode()))
             .doesNotThrowAnyException();
@@ -141,12 +184,12 @@ public class ModelContextProtocolToolCallAuthorizerTest {
     private ModelContextProtocolToolCallAuthorizer authorizer(ToolAvailabilityLevel toolAvailability,
                                                               boolean formulaEditingEnabled,
                                                               AiCodeOperationAuthorizer aiCodeOperationAuthorizer,
-                                                              GetApiDocumentationTool getApiDocumentationTool) {
+                                                              MapTargetToolCallAuthorizer mapTargetToolCallAuthorizer) {
         return new ModelContextProtocolToolCallAuthorizer(
             availability(toolAvailability),
             () -> Boolean.valueOf(formulaEditingEnabled),
             aiCodeOperationAuthorizer,
-            getApiDocumentationTool);
+            mapTargetToolCallAuthorizer);
     }
 
     private Supplier<ToolAvailabilityLevel> availability(ToolAvailabilityLevel toolAvailability) {

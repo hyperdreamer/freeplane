@@ -27,7 +27,7 @@ import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevelSettings;
 import org.freeplane.plugin.ai.tools.code.AiCodeOperationAuthorizer;
 import org.freeplane.plugin.ai.tools.formula.FormulaEditingSettings;
 import org.freeplane.plugin.ai.tools.AIToolSet;
-import org.freeplane.plugin.ai.tools.documentation.GetApiDocumentationTool;
+import org.freeplane.plugin.ai.tools.MapTargetToolCallAuthorizer;
 
 public class ModelContextProtocolServer implements IFreeplanePropertyListener {
     public static final String MCP_SERVER_ENABLED_PROPERTY = "ai_mcp_server_enabled";
@@ -110,7 +110,7 @@ public class ModelContextProtocolServer implements IFreeplanePropertyListener {
         this.toolDispatcher = new ModelContextProtocolToolDispatcher(
             toolSets,
             this.objectMapper,
-            createToolCallAuthorizer(toolSets, resourceController, aiCodeOperationAuthorizer));
+            createToolCallAuthorizer(resourceController, aiCodeOperationAuthorizer));
         this.resourceController = Objects.requireNonNull(resourceController, "resourceController");
         this.authenticator = Objects.requireNonNull(authenticator, "authenticator");
         this.running = new AtomicBoolean(false);
@@ -119,20 +119,11 @@ public class ModelContextProtocolServer implements IFreeplanePropertyListener {
             start();
     }
 
-    private ModelContextProtocolToolCallAuthorizer createToolCallAuthorizer(Collection<?> toolSets,
-                                                                             ResourceController resourceController,
-                                                                             AiCodeOperationAuthorizer aiCodeOperationAuthorizer) {
+    private ModelContextProtocolToolCallAuthorizer createToolCallAuthorizer(
+        ResourceController resourceController,
+        AiCodeOperationAuthorizer aiCodeOperationAuthorizer) {
         if (aiCodeOperationAuthorizer == null) {
             return null;
-        }
-        AIToolSet aiToolSet = findAiToolSet(toolSets);
-        if (aiToolSet == null) {
-            throw new IllegalArgumentException("AIToolSet is required when MCP tool-call authorization is enabled.");
-        }
-        GetApiDocumentationTool getApiDocumentationTool = aiToolSet.getApiDocumentationTool();
-        if (getApiDocumentationTool == null) {
-            throw new IllegalArgumentException(
-                "GetApiDocumentationTool is required when MCP tool-call authorization is enabled.");
         }
         ToolAvailabilityLevelSettings toolAvailabilityLevelSettings = new ToolAvailabilityLevelSettings(resourceController);
         FormulaEditingSettings formulaEditingSettings = new FormulaEditingSettings(resourceController);
@@ -140,19 +131,7 @@ public class ModelContextProtocolServer implements IFreeplanePropertyListener {
             toolAvailabilityLevelSettings::getToolAvailability,
             () -> Boolean.valueOf(formulaEditingSettings.isEnabled()),
             aiCodeOperationAuthorizer,
-            getApiDocumentationTool);
-    }
-
-    private AIToolSet findAiToolSet(Collection<?> toolSets) {
-        if (toolSets == null) {
-            return null;
-        }
-        for (Object toolSet : toolSets) {
-            if (toolSet instanceof AIToolSet) {
-                return (AIToolSet) toolSet;
-            }
-        }
-        return null;
+            new MapTargetToolCallAuthorizer());
     }
 
     public void start() {

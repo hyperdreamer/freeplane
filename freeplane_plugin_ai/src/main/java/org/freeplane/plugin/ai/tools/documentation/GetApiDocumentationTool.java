@@ -35,7 +35,9 @@ public class GetApiDocumentationTool {
     public GetApiDocumentationResponse getApiDocumentation() {
         ApiDocumentationMapLoader.LoadedApiDocumentationMap loadedMap = mapLoader.loadInstalledApiMap();
         MapModel mapModel = loadedMap.getMapModel();
-        UUID mapIdentifier = availableMaps.getOrCreateMapIdentifier(mapModel);
+        UUID mapIdentifier = availableMaps.registerMapIdentifier(
+            mapModel,
+            AvailableMaps.INTERNAL_API_DOCUMENTATION_MAP_IDENTIFIER);
         File mapFile = loadedMap.getMapFile();
         NodeModel rootNode = requireRootNode(mapModel, mapFile);
         NodeModel packagesRootNode = structureSummaryReader.findRequiredTopLevelSection(

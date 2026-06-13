@@ -8,11 +8,11 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Supplier;
 import org.freeplane.features.ai.code.ScriptHost;
+import org.freeplane.plugin.ai.maps.AvailableMaps;
+import org.freeplane.plugin.ai.tools.MapTargetToolCallAuthorizer;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.tools.code.AiCodeOperationAuthorizer;
 import org.freeplane.plugin.ai.tools.formula.FormulaEditingAccess;
-import org.freeplane.plugin.ai.tools.documentation.GetApiDocumentationResponse;
-import org.freeplane.plugin.ai.tools.documentation.GetApiDocumentationTool;
 
 public class ModelContextProtocolToolCallAuthorizer {
     private static final Set<String> CODE_TOOL_NAMES = Collections.unmodifiableSet(new LinkedHashSet<String>(Arrays.asList(
@@ -29,19 +29,21 @@ public class ModelContextProtocolToolCallAuthorizer {
     private final Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier;
     private final Supplier<Boolean> formulaEditingEnabledSupplier;
     private final AiCodeOperationAuthorizer aiCodeOperationAuthorizer;
-    private final GetApiDocumentationTool getApiDocumentationTool;
+    private final MapTargetToolCallAuthorizer mapTargetToolCallAuthorizer;
 
     public ModelContextProtocolToolCallAuthorizer(Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier,
                                                   Supplier<Boolean> formulaEditingEnabledSupplier,
                                                   AiCodeOperationAuthorizer aiCodeOperationAuthorizer,
-                                                  GetApiDocumentationTool getApiDocumentationTool) {
+                                                  MapTargetToolCallAuthorizer mapTargetToolCallAuthorizer) {
         this.toolAvailabilitySupplier = Objects.requireNonNull(toolAvailabilitySupplier, "toolAvailabilitySupplier");
         this.formulaEditingEnabledSupplier = Objects.requireNonNull(
             formulaEditingEnabledSupplier,
             "formulaEditingEnabledSupplier");
         this.aiCodeOperationAuthorizer = Objects.requireNonNull(aiCodeOperationAuthorizer,
             "aiCodeOperationAuthorizer");
-        this.getApiDocumentationTool = Objects.requireNonNull(getApiDocumentationTool, "getApiDocumentationTool");
+        this.mapTargetToolCallAuthorizer = Objects.requireNonNull(
+            mapTargetToolCallAuthorizer,
+            "mapTargetToolCallAuthorizer");
     }
 
     public void assertAuthorized(String toolName, JsonNode argumentsNode) {
@@ -52,6 +54,9 @@ public class ModelContextProtocolToolCallAuthorizer {
                 hostValue(argumentsNode));
             return;
         }
+        mapTargetToolCallAuthorizer.assertAuthorized(
+            normalizedToolName,
+            textValue(argumentsNode, "mapIdentifier"));
         ToolAvailabilityLevel toolAvailability = currentToolAvailability();
         if (toolAvailability == ToolAvailabilityLevel.DISABLED) {
             assertDisabledAuthorized(normalizedToolName, argumentsNode);
@@ -90,15 +95,7 @@ public class ModelContextProtocolToolCallAuthorizer {
         if (requestMapIdentifier == null) {
             return false;
         }
-        return requestMapIdentifier.equals(internalApiMapIdentifier());
-    }
-
-    private String internalApiMapIdentifier() {
-        GetApiDocumentationResponse response = getApiDocumentationTool.getApiDocumentation();
-        if (response == null || response.getMapIdentifier() == null || response.getMapIdentifier().trim().isEmpty()) {
-            throw new IllegalStateException("The internal API map identifier is not available.");
-        }
-        return response.getMapIdentifier().trim();
+        return AvailableMaps.INTERNAL_API_DOCUMENTATION_MAP_IDENTIFIER.toString().equals(requestMapIdentifier);
     }
 
     private ScriptHost hostValue(JsonNode argumentsNode) {

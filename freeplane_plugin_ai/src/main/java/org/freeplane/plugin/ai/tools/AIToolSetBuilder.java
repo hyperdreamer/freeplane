@@ -40,6 +40,7 @@ import org.freeplane.plugin.ai.tools.content.NodeContentReader;
 import org.freeplane.plugin.ai.tools.content.NodeStyleContentReader;
 import org.freeplane.plugin.ai.tools.content.TagsContentReader;
 import org.freeplane.plugin.ai.tools.content.TextualContentReader;
+import org.freeplane.plugin.ai.tools.documentation.ApiDocumentationMapLoader;
 import org.freeplane.plugin.ai.tools.documentation.GetApiDocumentationTool;
 import org.freeplane.plugin.ai.tools.formula.FormulaEditingSettings;
 import org.freeplane.plugin.ai.tools.text.DefaultEnglishTextProvider;
@@ -140,12 +141,12 @@ public class AIToolSetBuilder {
     }
 
     private ResolvedComponents resolveComponents() {
-        AvailableMaps availableMaps = this.availableMaps != null ? this.availableMaps : createAvailableMaps();
+        MMapController mapController = this.mapController != null ? this.mapController : createMapController();
+        AvailableMaps availableMaps = this.availableMaps != null ? this.availableMaps : createAvailableMaps(mapController);
         TextController textController = this.textController != null ? this.textController : createTextController();
         AttributeController attributeController = this.attributeController != null ? this.attributeController
             : createAttributeController();
         IconController iconController = this.iconController != null ? this.iconController : createIconController();
-        MMapController mapController = this.mapController != null ? this.mapController : createMapController();
         NodeContentFactories nodeContentFactories = createNodeContentFactories(textController, attributeController,
             iconController, effectiveToolAvailabilitySupplier(), effectiveFormulaEditingEnabledSupplier());
         GetApiDocumentationTool getApiDocumentationTool = new GetApiDocumentationTool(
@@ -169,6 +170,7 @@ public class AIToolSetBuilder {
             resolvedComponents.mapController,
             effectiveCodeHostService,
             resolvedComponents.getApiDocumentationTool,
+            new MapTargetToolCallAuthorizer(),
             effectiveToolAvailabilitySupplier(),
             effectiveFormulaEditingEnabledSupplier(),
             toolCaller);
@@ -231,8 +233,8 @@ public class AIToolSetBuilder {
         };
     }
 
-    private AvailableMaps createAvailableMaps() {
-        return new AvailableMaps(new ControllerMapModelProvider());
+    private AvailableMaps createAvailableMaps(MMapController mapController) {
+        return new AvailableMaps(new ControllerMapModelProvider(), new ApiDocumentationMapLoader(mapController));
     }
 
     private TextController createTextController() {

@@ -26,6 +26,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class GetApiDocumentationToolTest {
@@ -59,18 +60,17 @@ public class GetApiDocumentationToolTest {
         assertThat(response.getPackagesRootNodeIdentifier()).isEqualTo("ID_packages");
         assertThat(response.getApiGroupsRootNodeIdentifier()).isEqualTo("ID_api_groups");
         assertThat(response.getStructureSummary()).isEqualTo("How to use this map\n  Search first.");
+        assertThat(response.getMapIdentifier())
+            .isEqualTo(AvailableMaps.INTERNAL_API_DOCUMENTATION_MAP_IDENTIFIER.toString());
         UUID mapIdentifier = UUID.fromString(response.getMapIdentifier());
         assertThat(availableMaps.findMapModel(mapIdentifier)).isSameAs(mapModel);
     }
 
     @Test
-    public void returnedMapIdentifier_isUsableBySearchNodesTool() throws Exception {
-        AvailableMaps availableMaps = new AvailableMaps(new EmptyMapModelProvider());
+    public void reservedMapIdentifier_isUsableBySearchNodesToolWithoutPriorDiscovery() throws Exception {
         MapModel mapModel = mock(MapModel.class);
         NodeModel rootNode = mock(NodeModel.class);
         NodeModel childNode = mock(NodeModel.class);
-        NodeModel packagesNode = mock(NodeModel.class);
-        NodeModel apiGroupsNode = mock(NodeModel.class);
         when(mapModel.getRootNode()).thenReturn(rootNode);
         when(rootNode.getID()).thenReturn("ID_root");
         when(rootNode.getChildren()).thenReturn(Collections.singletonList(childNode));
@@ -78,17 +78,9 @@ public class GetApiDocumentationToolTest {
         when(childNode.getChildren()).thenReturn(Collections.emptyList());
         when(childNode.getParentNode()).thenReturn(rootNode);
         when(childNode.createID()).thenReturn("ID_child");
-        File mapFile = new File("/tmp/freeplane-api.mm");
         ApiDocumentationMapLoader mapLoader = mock(ApiDocumentationMapLoader.class);
-        when(mapLoader.loadInstalledApiMap()).thenReturn(
-            new ApiDocumentationMapLoader.LoadedApiDocumentationMap(mapFile, mapModel));
-        ApiDocumentationStructureSummaryReader summaryReader = mock(ApiDocumentationStructureSummaryReader.class);
-        when(summaryReader.findRequiredTopLevelSection(mapModel, mapFile, "Packages")).thenReturn(packagesNode);
-        when(summaryReader.findRequiredTopLevelSection(mapModel, mapFile, "API groups")).thenReturn(apiGroupsNode);
-        when(summaryReader.readStructureSummary(mapModel, mapFile))
-            .thenReturn("How to use this map\n  Search first.");
-        GetApiDocumentationTool documentationTool = new GetApiDocumentationTool(availableMaps, mapLoader, summaryReader);
-        GetApiDocumentationResponse response = documentationTool.getApiDocumentation();
+        when(mapLoader.loadInstalledApiMapModel()).thenReturn(mapModel);
+        AvailableMaps availableMaps = new AvailableMaps(new EmptyMapModelProvider(), mapLoader);
 
         NodeContentItemReader nodeContentItemReader = mock(NodeContentItemReader.class);
         when(nodeContentItemReader.matchesNodeContent(eq(childNode), any(NodeContentRequest.class),
@@ -101,7 +93,7 @@ public class GetApiDocumentationToolTest {
         SearchNodesTool searchNodesTool = new SearchNodesTool(availableMaps, null, nodeContentItemReader, textController);
 
         SearchNodesResponse searchResponse = searchNodesTool.searchNodes(new SearchNodesRequest(
-            response.getMapIdentifier(),
+            AvailableMaps.INTERNAL_API_DOCUMENTATION_MAP_IDENTIFIER.toString(),
             "Purpose",
             null,
             null,
@@ -115,6 +107,7 @@ public class GetApiDocumentationToolTest {
         assertThat(searchResponse.getResults()).hasSize(1);
         assertThat(searchResponse.getResults().get(0).getNodeIdentifier()).isNotNull();
         assertThat(searchResponse.getResults().get(0).getBriefText()).isEqualTo("Purpose");
+        verify(mapLoader).loadInstalledApiMapModel();
     }
 
     @Test
