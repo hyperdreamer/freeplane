@@ -316,6 +316,10 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
             currentScript.latestState = waitingState(content, stateToken, ScriptRunInitiator.AI);
             return response;
         }
+        if (policy == AiScriptExecutionPolicy.SHOWN_AI_RUN) {
+            showCodeInDialog();
+            dialog().showAndFocus();
+        }
         ValidationOutcome validation = validate(content, stateToken, aiStartedPermissions());
         if (!validation.isSuccessful()) {
             RunCodeResponse response = new RunCodeResponse(
@@ -385,6 +389,32 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
 
     void dialogCancelled() {
         synchronizeCurrentContentFromDialog();
+        if (currentScript == null || currentScript.latestState == null
+            || currentScript.latestState.getCodeState() != CodeState.WAITING_FOR_USER_RUN) {
+            return;
+        }
+        CodeStateContent content = currentContent();
+        CodeStateToken stateToken = CodeStateToken.fromContent(content);
+        RunCodeResponse response = new RunCodeResponse(
+            ScriptHost.AI,
+            AI_SCRIPT_CONTENT_TYPE,
+            CodeState.USER_RUN_CANCELLED,
+            ScriptRunInitiator.USER,
+            stateToken,
+            null,
+            null,
+            null,
+            null);
+        currentScript.latestState = stateOf(
+            content,
+            stateToken,
+            CodeState.USER_RUN_CANCELLED,
+            null,
+            null,
+            null,
+            null,
+            ScriptRunInitiator.USER);
+        fireRunFinished(response);
     }
 
     ScriptingPermissions aiStartedPermissions() {

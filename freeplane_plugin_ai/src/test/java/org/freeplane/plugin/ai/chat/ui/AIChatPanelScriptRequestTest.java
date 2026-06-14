@@ -87,6 +87,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockConstruction;
@@ -832,6 +833,39 @@ public class AIChatPanelScriptRequestTest {
         assertThat(aiHost.shownCode).isEqualTo("current");
     }
 
+    @Test
+    public void handleCodeRunFinishedSubmitsAutomaticCodeStatusTextToPendingSession() throws Exception {
+        PanelHarness harness = newPanelHarness(true);
+        doReturn(true).when(harness.panel).submitMessageToSession(eq(harness.sessionId), any());
+        rememberPendingAiOwnedUserRunFollowup(
+            harness.panel,
+            new RunCodeResponse(
+                ScriptHost.AI,
+                "text/x-freeplane-script-groovy",
+                CodeState.WAITING_FOR_USER_RUN,
+                org.freeplane.features.ai.code.ScriptRunInitiator.AI,
+                new CodeStateToken("code", "args"),
+                null,
+                null,
+                null,
+                null),
+            harness.sessionId);
+
+        harness.panel.handleCodeRunFinished(new RunCodeResponse(
+            ScriptHost.AI,
+            "text/x-freeplane-script-groovy",
+            CodeState.RUN_SUCCEEDED,
+            org.freeplane.features.ai.code.ScriptRunInitiator.USER,
+            new CodeStateToken("code", "args"),
+            null,
+            null,
+            null,
+            null));
+
+        verify(harness.panel).submitMessageToSession(eq(harness.sessionId), any());
+        assertThat(getField(harness.panel, "pendingAiOwnedUserRunFollowupSessionId")).isNull();
+    }
+
     private ChatRequestFlow createVisibleRequestFlow(AIChatPanel panel,
                                                      LiveChatSessionId sessionId,
                                                      ChatTokenUsageTracker requestTracker,
@@ -949,6 +983,23 @@ public class AIChatPanelScriptRequestTest {
         Field field = AIChatPanel.class.getDeclaredField(fieldName);
         field.setAccessible(true);
         field.set(target, value);
+    }
+
+    private Object getField(Object target, String fieldName) throws Exception {
+        Field field = AIChatPanel.class.getDeclaredField(fieldName);
+        field.setAccessible(true);
+        return field.get(target);
+    }
+
+    private void rememberPendingAiOwnedUserRunFollowup(AIChatPanel panel,
+                                                       RunCodeResponse response,
+                                                       LiveChatSessionId sessionId) throws Exception {
+        Method method = AIChatPanel.class.getDeclaredMethod(
+            "rememberAiOwnedUserRunFollowup",
+            RunCodeResponse.class,
+            LiveChatSessionId.class);
+        method.setAccessible(true);
+        method.invoke(panel, response, sessionId);
     }
 
     private Object currentSession(LiveChatController liveChatController) throws Exception {

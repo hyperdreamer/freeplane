@@ -43,6 +43,7 @@ public class ChatRequestFlow {
     private TokenUsage responseUsage;
     private String requestFailureMessage;
     private long requestStartVisibleHistoryRebuildCounter;
+    private boolean rebuildVisibleHistoryAfterResponse;
 
     public ChatRequestFlow(RequestCallbacks callbacks, ChatTokenUsageTracker tokenUsageTracker) {
         this.callbacks = callbacks;
@@ -99,6 +100,8 @@ public class ChatRequestFlow {
         snapshotChatSize = singleTurnChatMemory.snapshotSize();
         requestFailureMessage = null;
         requestStartVisibleHistoryRebuildCounter = callbacks.currentVisibleHistoryRebuildCounter();
+        rebuildVisibleHistoryAfterResponse = org.freeplane.plugin.ai.chat.memory.AutomaticCodeStatusMessage
+            .isAutomaticCodeStatusText(userMessage);
         requestInProgress = true;
         callbacks.onRequestStarted();
     }
@@ -160,6 +163,9 @@ public class ChatRequestFlow {
                 }
                 try {
                     callbacks.onAssistantResponse(get());
+                    if (rebuildVisibleHistoryAfterResponse) {
+                        callbacks.rebuildVisibleHistoryFromMemory();
+                    }
                     finishRequest();
                 } catch (Exception error) {
                     requestFailureMessage = normalizeErrorMessage(error);
@@ -202,6 +208,7 @@ public class ChatRequestFlow {
         responseUsage = null;
         requestFailureMessage = null;
         requestStartVisibleHistoryRebuildCounter = 0L;
+        rebuildVisibleHistoryAfterResponse = false;
     }
 
     private void applyPostResponseCompaction() {

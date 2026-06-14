@@ -134,6 +134,14 @@
     `DISABLED`, `READING`, and `EDITING`.
   - `AIChatService` currently filters tool exposure for chat turns and
     appends attached-editor guidance when an attached editor exists.
+  - `AssistantProfileChatMemory` already persists special chat-message
+    types such as `AssistantProfileSwitchMessage` and injects hidden
+    `InstructionAckMessage` so profile control can affect model context
+    and transcript/history projection without panel-side message
+    replacement.
+  - `ModelProjector`, `TranscriptProjector`, `PanelProjector`, and
+    `ChatMemoryHistoryRenderer` already apply message-type-specific
+    model, transcript, and visible-history treatment.
   - Current attached-editor behavior is explicit and separate from the
     normal chat tool-availability filter. `SingleEditorAttachmentService`
     ensures at least readable tool access for the owning session.
@@ -296,7 +304,7 @@ McpServer -> ApiTool: getApiDocumentation()
     lifecycle/result state, not only attached/detached state.
   - The lifecycle model must distinguish at least:
     `NO_CODE`, `READY`, `WAITING_FOR_USER_RUN`,
-    `SUCCEEDED`, `FAILED`, and `REPLACED`.
+    `USER_RUN_CANCELLED`, `SUCCEEDED`, `FAILED`, and `REPLACED`.
   - All `runCode(...)` paths in this task are synchronous. There is no
     per-call sync/async selector and no externally readable `RUNNING`
     state.
@@ -321,23 +329,42 @@ McpServer -> ApiTool: getApiDocumentation()
     existing AI-owned script state remains readable by status/read
     tools, but new AI authoring/execution authority is removed.
   - For user-run-only AI-owned scripts:
-    - internal AI receives an immediate waiting status and later gets
-      an automatic completion/failure message in the owning chat
-      session;
-    - MCP receives an immediate waiting status plus `codeId` and then
-      uses later read/status calls.
+    - internal AI receives an immediate waiting status and, after the
+      user presses Run, gets an automatic completion/failure message in
+      the owning chat session as a user-side turn that immediately
+      triggers a real assistant response shown in chat;
+    - if the user cancels instead of running, internal AI gets an
+      automatic cancellation message in the owning chat session as a
+      user-side turn that immediately triggers a real assistant
+      response shown in chat;
+    - MCP may block for up to a globally configured user-controlled
+      wait timeout; if the user presses Run or Cancel within that
+      timeout, MCP receives the final result, otherwise MCP receives
+      `WAITING_FOR_USER_RUN` and later uses read/status calls.
   - All app-authored automatic code-status messages use dedicated
     persisted type `AutomaticCodeStatusMessage` and dedicated
     transcript role `AUTOMATIC_CODE_STATUS`.
+  - Keep that dedicated runtime message type. Do not collapse those
+    turns into plain `UserMessage`, because distinct visible rendering
+    and transcript-role preservation depend on message type, even
+    though later model projection still treats them as user-side
+    messages.
+  - Reuse the existing special-message path for those messages. Do not
+    add panel-side submission APIs or post-hoc replacement of plain
+    user messages. If a synthetic follow-up turn is required, create it
+    at the chat-memory/request boundary as an
+    `AutomaticCodeStatusMessage`.
   - In this task those messages keep full result/status details, do
-    not inline code text, and do not require special compact UI
-    rendering.
-  - For later AI turns, those messages are included in model context as
-    user messages. They are not treated as assistant messages, system
-    messages, or fake tool calls.
+    not inline code text, and may use distinct UI styling because they
+    are a dedicated message type.
+  - For later AI turns, those messages remain included in model
+    context as user messages. They are not treated as assistant
+    messages, system messages, or fake tool calls.
   - When mapped to user messages for model context, they must identify
     themselves in their text as automatic app-authored code-status
-    messages so they are not mistaken for direct user instructions.
+    messages so they are not mistaken for direct user instructions, and
+    the immediately generated assistant reply must persist as the next
+    assistant turn.
   - In this task the dedicated transcript role does not need a
     transcript-entry subclass.
   - For attached manual activity:
@@ -382,6 +409,7 @@ CodeLifecycleStatus
   NO_CODE
   READY
   WAITING_FOR_USER_RUN
+  USER_RUN_CANCELLED
   SUCCEEDED
   FAILED
   REPLACED
@@ -600,6 +628,10 @@ Run rules
   - all `runCode(...)` paths in this task are synchronous
   - run outcome is carried by `status`
   - waiting for user approval returns `WAITING_FOR_USER_RUN`
+  - for MCP user-run-only AI-owned runs, a globally configured
+    user-controlled wait timeout may return `WAITING_FOR_USER_RUN`
+    after bounded blocking without auto-run or auto-cancel
+  - user cancellation before execution returns `USER_RUN_CANCELLED`
   - started execution returns final `SUCCEEDED` or `FAILED`
   - run failures keep the current code-backed shape: optional compile
     diagnostics, optional message, optional line number, captured
@@ -712,6 +744,7 @@ package "org.freeplane.features.ai.code" {
     NO_CODE
     READY
     WAITING_FOR_USER_RUN
+    USER_RUN_CANCELLED
     SUCCEEDED
     FAILED
     REPLACED
@@ -1002,6 +1035,72 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
   - Existing scripting permissions already supply the external
     permission axes needed by this task.
 - **Design:**
+  ```plantuml
+  @startuml
+  component "Internal AI" as Chat
+  component "MCP" as Mcp
+  component "AiCodeOperationAuthorizer" as Authorizer
+  component "RoutingAiCodeHostService" as Routing
+  component "AiOwnedScriptHostService" as AiHost
+  component "SingleEditorAttachmentService" as AttachedHost
+
+  Chat --> Authorizer : advertise + call authorize
+  Mcp --> Authorizer : call authorize
+  Authorizer --> Routing : readCode/writeCode/\ncompileCode/runCode
+  Routing --> AiHost : host AI
+  Routing --> AttachedHost : host ATTACHED_EDITOR
+  AttachedHost --> Authorizer : attached-editor override\nfor read/write/compile
+  AiHost --> Authorizer : script content only
+  @enduml
+  ```
+
+  ```plantuml
+  @startuml
+  set separator none
+  package "org.freeplane.plugin.ai.tools.code" {
+    class AiCodeOperationAuthorizer {
+      +authorizedToolNames() : Set<String>
+      +assertAuthorized(operation : String, codeId : String?, host : ScriptHost) : void
+    }
+  }
+  package "org.freeplane.plugin.ai.code" {
+    interface AiCodeHostService {
+      +readCode(request : ReadCodeRequest) : ReadCodeResponse
+      +writeCode(request : WriteCodeRequest) : WriteCodeResponse
+      +compileCode(request : CompileCodeRequest) : CompileCodeResponse
+      +runCode(request : RunCodeRequest) : RunCodeResponse
+    }
+    class RoutingAiCodeHostService {
+      +readCode(request : ReadCodeRequest) : ReadCodeResponse
+      +writeCode(request : WriteCodeRequest) : WriteCodeResponse
+      +compileCode(request : CompileCodeRequest) : CompileCodeResponse
+      +runCode(request : RunCodeRequest) : RunCodeResponse
+    }
+    class SingleEditorAttachmentService {
+      +readCode(request : ReadCodeRequest) : ReadCodeResponse
+      +writeCode(request : WriteCodeRequest) : WriteCodeResponse
+      +compileCode(request : CompileCodeRequest) : CompileCodeResponse
+      +runCode(request : RunCodeRequest) : RunCodeResponse
+    }
+  }
+  package "org.freeplane.plugin.script.ai" {
+    class AiOwnedScriptHostService {
+      +readCode(request : ReadCodeRequest) : ReadCodeResponse
+      +writeCode(request : WriteCodeRequest) : WriteCodeResponse
+      +compileCode(request : CompileCodeRequest) : CompileCodeResponse
+      +runCode(request : RunCodeRequest) : RunCodeResponse
+    }
+  }
+
+  RoutingAiCodeHostService ..|> AiCodeHostService
+  SingleEditorAttachmentService ..|> AiCodeHostService
+  AiOwnedScriptHostService ..|> AiCodeHostService
+  RoutingAiCodeHostService --> SingleEditorAttachmentService : ATTACHED_EDITOR
+  RoutingAiCodeHostService --> AiOwnedScriptHostService : AI
+  AiCodeOperationAuthorizer ..> ScriptHost
+  @enduml
+  ```
+
   - The main-task Design is authoritative for the shared contract,
     enums, request/response structures, and authorization matrix.
   - This subtask adds the shared policy layer and script-only run path:
@@ -1011,18 +1110,19 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
       fallback from `ai_chat_tool_availability`;
     - extend the generic code-host contract from attached-editor-only
       behavior to both `AI` and `ATTACHED_EDITOR`, including
-      `runScript`;
-    - keep `readCode`, `writeCode`, and `compileCode` generic and keep
-      `runScript` script-only;
-    - add `org.freeplane.plugin.ai.code.RoutingAiCodeHostService` to
-      route `ATTACHED_EDITOR` to
-      `SingleEditorAttachmentService` and `AI` to the script-plugin
-      host;
-    - add `org.freeplane.plugin.script.ai.AiOwnedScriptHostService`
-      as the script-plugin-owned `AI` host implementation;
+      `runCode`;
+    - keep `readCode`, `writeCode`, and `compileCode` generic while
+      keeping `runCode` script-only;
+    - route `ATTACHED_EDITOR` to
+      `SingleEditorAttachmentService` and `AI` to
+      `AiOwnedScriptHostService` through
+      `RoutingAiCodeHostService`;
     - preserve the internal-AI attached-editor override for
-      `readCode`/`writeCode`/`compileCode` only; `runScript` still
+      `readCode`/`writeCode`/`compileCode` only; `runCode` still
       requires shared/global `SCRIPT_EXECUTION` and script content;
+    - keep shared lifecycle/result semantics aligned across internal AI
+      and MCP, including `WAITING_FOR_USER_RUN` and
+      `USER_RUN_CANCELLED` for AI-owned user-run-only flows;
     - resolve host and content type from `codeId` when present, else
       require explicit `host`;
     - reject formula or other non-script targets as direct call
@@ -1041,11 +1141,11 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
     - verify AI-host responses always resolve to script content type;
     - verify attached-editor responses preserve the content type
       captured at attach time;
-    - verify lifecycle/result handling, including `READY` and
-      `REPLACED`;
+    - verify lifecycle/result handling, including `READY`,
+      `WAITING_FOR_USER_RUN`, `USER_RUN_CANCELLED`, and `REPLACED`;
     - verify optional expected-fingerprint mismatch failures on
-      `writeCode`, `compileCode`, and `runScript`;
-    - verify `runScript` rejects non-script content as a direct call
+      `writeCode`, `compileCode`, and `runCode`;
+    - verify `runCode` rejects non-script content as a direct call
       error;
     - verify AI-specific permission mapping to existing scripting
       permissions; and
@@ -1058,12 +1158,11 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
       legacy fallback from `ai_chat_tool_availability`.
     - `AiCodeOperationAuthorizer` keeps attached-editor
       `readCode`/`writeCode`/`compileCode` available for internal AI
-      when a session override exists, while `runScript` still requires
+      when a session override exists, while `runCode` still requires
       shared/global `SCRIPT_EXECUTION` and script content.
-    - `RoutingAiCodeHostService` routes by resolved host from `codeId`
-      or explicit `host`, returns AI-host `NO_CODE` state when the
-      script-plugin service is absent, and fails write/compile/run in
-      that case.
+    - `RoutingAiCodeHostService` routes by explicit `host`, returns
+      AI-host `NO_CODE` state when the script-plugin service is absent,
+      and fails write/compile/run in that case.
   - **Tradeoffs:**
     - `AiOwnedScriptHostService` now tolerates missing current
       `Controller`/`ResourceController` during construction so OSGi
@@ -1073,6 +1172,9 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
     - Run-listener synchronization in `RoutingAiCodeHostService` is
       deduplicated at registration time so the same listener is not
       added twice to the AI host.
+    - MCP-specific bounded waiting and pending-follow-up reset stay in a
+      dedicated MCP-side `AiCodeHostService` wrapper so shared chat and
+      host services do not need MCP-only branching.
 
 ## Subtask: Internal AI-owned script dialog flow
 - **Status:** review
@@ -1093,7 +1195,94 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
     transient flow.
   - Internal AI currently operates in one chat/session and can append
     extra attached-editor guidance when needed.
+  - The existing special-message path already handles assistant-profile
+    switching without panel-side message replacement: special messages
+    are stored in `AssistantProfileChatMemory`, projected differently by
+    the model/transcript/panel projectors, and hidden `ok`
+    acknowledgements are injected there as `InstructionAckMessage`.
+  - The current visible internal-AI request entry starts from plain
+    text through `ChatRequestFlow` and `AIChatService.chat(String)`, so
+    any automatic follow-up that must persist as a dedicated message
+    type has to be introduced below the panel or by extending that
+    lower request boundary.
 - **Design:**
+  ```plantuml
+  @startuml
+  actor User
+  participant "AiOwnedScriptDialog" as Dialog
+  participant "AiOwnedScriptHostService" as Host
+  participant "Internal AI follow-up runtime" as Followup
+  participant "AssistantProfileChatMemory" as Memory
+
+  alt User presses Run
+    User -> Dialog : Run
+    Dialog -> Host : runFromDialog(currentContent)
+    Host -> Followup : runFinished(RUN_SUCCEEDED or RUN_FAILED)
+  else User presses Cancel
+    User -> Dialog : Cancel
+    Dialog -> Host : dialogCancelled()
+    Host -> Followup : runFinished(USER_RUN_CANCELLED)
+  end
+  Followup -> Memory : add AutomaticCodeStatusMessage
+  Followup -> Memory : append assistant reply
+  @enduml
+  ```
+
+  ```plantuml
+  @startuml
+  set separator none
+  package "org.freeplane.plugin.script.ai" {
+    interface DialogCallbacks {
+      +runFromDialog(content : CodeStateContent) : RunCodeResponse
+      +dialogCancelled() : void
+    }
+    class AiOwnedScriptDialog {
+      +showCode(content : CodeStateContent) : void
+      +hideDialog() : void
+    }
+    class AiOwnedScriptHostService {
+      +runCode(request : RunCodeRequest) : RunCodeResponse
+      +runFromDialog(content : CodeStateContent) : RunCodeResponse
+      +dialogCancelled() : void
+    }
+    AiOwnedScriptHostService ..|> DialogCallbacks
+    AiOwnedScriptDialog --> DialogCallbacks
+  }
+  package "org.freeplane.plugin.ai.chat.memory" {
+    class AssistantProfileChatMemory {
+      +add(message : ChatMessage) : void
+    }
+    class UserMessage
+    class AutomaticCodeStatusMessage {
+      +forRunResponse(response : RunCodeResponse) : AutomaticCodeStatusMessage
+    }
+    class InstructionAckMessage
+    class ModelProjector
+    class TranscriptProjector
+    class PanelProjector
+  }
+  package "org.freeplane.plugin.ai.chat.ui" {
+    class ChatMemoryHistoryRenderer
+  }
+  package "org.freeplane.features.ai.code" {
+    interface AiCodeRunListener {
+      +runFinished(response : RunCodeResponse)
+    }
+  }
+
+  AiOwnedScriptHostService --> AiCodeRunListener : runFinished(response)
+  AutomaticCodeStatusMessage ..|> UserMessage
+  AssistantProfileChatMemory --> AutomaticCodeStatusMessage
+  AssistantProfileChatMemory --> InstructionAckMessage
+  AssistantProfileChatMemory ..> ModelProjector
+  AssistantProfileChatMemory ..> TranscriptProjector
+  AssistantProfileChatMemory ..> PanelProjector
+  TranscriptProjector ..> AutomaticCodeStatusMessage
+  PanelProjector ..> AutomaticCodeStatusMessage
+  ChatMemoryHistoryRenderer ..> AutomaticCodeStatusMessage
+  @enduml
+  ```
+
   - The main-task Design remains authoritative for the shared code-host
     contract and automatic status-message semantics.
   - This subtask adds the AI-owned dialog and owning-chat behavior on
@@ -1108,6 +1297,9 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
       the main task, including the dialog-close behavior for
       `SHOWN_USER_RUN` and `SHOWN_AI_RUN`;
     - treat visible dialog text as authoritative for execution;
+    - when the user cancels a pending `SHOWN_USER_RUN` request before
+      execution starts, update the current AI-owned code state to
+      `USER_RUN_CANCELLED`;
     - reject replacement only while the current AI-owned script is busy
       running; otherwise replace the existing AI-owned state
       immediately;
@@ -1119,11 +1311,22 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
     - keep the AI-owned flow on the normal base system message and tool
       descriptions; do not add a separate AI-owned script system
       prompt;
-    - persist app-authored completion and failure follow-up messages as
-      `AutomaticCodeStatusMessage` with transcript role
-      `AUTOMATIC_CODE_STATUS`, map them into later model context as
-      user messages, and label them explicitly as automatic
-      app-authored code-status messages; and
+    - persist app-authored completion, cancellation, and failure
+      follow-up messages as `AutomaticCodeStatusMessage` with
+      transcript role `AUTOMATIC_CODE_STATUS`;
+    - keep that dedicated message type because distinct rendering and
+      transcript-role preservation depend on it, even though later
+      model projection still treats it as user-side;
+    - reuse the existing special-message treatment path in chat memory
+      and projectors, and send those turns through the normal
+      internal-AI conversation flow so they immediately trigger visible
+      assistant replies;
+    - keep this orchestration below `AIChatPanel`; do not add
+      panel-specific automatic-status submission APIs or panel-side
+      replacement of plain user messages;
+    - map those messages into later model context as user messages and
+      label them explicitly as automatic app-authored code-status
+      messages; and
     - below shared/global `SCRIPT_EXECUTION`, keep AI-owned
       read/status access but remove new authoring and execution
       authority.
@@ -1139,21 +1342,35 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
       dialog exactly as specified;
     - verify busy rejection and immediate replacement rules for the
       current AI-owned script;
-    - verify internal-AI follow-up messages for user-started results use
-      the dedicated automatic code-status message type;
+    - verify internal-AI follow-up for user-started completion,
+      cancellation, and failure posts the dedicated automatic
+      code-status message type and immediately generates a visible
+      assistant response;
+    - verify dialog cancellation before execution updates the current
+      AI-owned code state to `USER_RUN_CANCELLED`;
     - verify level-drop behavior keeps read/status only;
     - verify attached manual run success updates state without
       auto-posting to chat;
     - verify attached manual run failure auto-posts analysis-only
       status details without inline full code text;
     - verify automatic code-status messages preserve their dedicated
-      type and transcript role across transcript/history rebuild;
+      type and transcript role across transcript/history rebuild, with
+      the resulting assistant reply preserved in the following
+      assistant turn;
     - verify later AI turns receive those messages in model context as
-      user messages; and
+      user messages in their original turn order with the generated
+      assistant reply following them; and
     - verify MCP observes attached manual failures only through updated
       host state and later `readCode` calls.
   - Manual tests:
     - run internal AI in all three policy modes;
+    - in `SHOWN_USER_RUN`, press Run and verify the chat shows the
+      automatic code-status message followed immediately by a real
+      assistant response based on that result;
+    - in `SHOWN_USER_RUN`, press Cancel and verify the chat shows the
+      automatic cancellation message followed immediately by a real
+      assistant response based on that cancellation, and that the
+      current AI-owned code state becomes `USER_RUN_CANCELLED`;
     - edit shown code before Run and verify the edited code is what
       executes; and
     - lower the shared/global level after a script exists and verify the
@@ -1161,8 +1378,12 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
 - **Implementation notes:**
   - **Interpretations:**
     - Hidden internal-AI requests now bind AI-owned-script ownership to
-      the current chat session so later user-started completion/failure
-      follow-up messages have a transcript target.
+      the current chat session so later user-started completion,
+      cancellation, and failure follow-up messages have a transcript
+      target.
+    - `SHOWN_AI_RUN` reuses the same dialog content source as
+      `SHOWN_USER_RUN`, but keeps AI-started execution synchronous after
+      showing the current script text.
     - Attached manual script-failure auto-posts omit inline code text
       and rely on shared code-state details plus later `readCode`
       access.
@@ -1171,6 +1392,14 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
       chat popup menu rather than as a persistent top-bar button to keep
       the UI change minimal while still exposing a user-only reopen
       action.
+    - Automatic code-status follow-up requests reuse the normal visible
+      internal-AI request flow through the existing text entry path, but
+      `AssistantProfileChatMemory` converts the reserved automatic
+      code-status text into `AutomaticCodeStatusMessage` at add-time and
+      `ChatRequestFlow` rebuilds visible history after the assistant
+      reply so special rendering/transcript behavior comes from the
+      existing memory/projector path rather than from panel-side message
+      replacement.
     - Current chat rendering shows `AutomaticCodeStatusMessage` with the
       existing system-message styling while preserving its dedicated
       transcript role and model-context `UserMessage` mapping.
@@ -1178,9 +1407,9 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
 ## Subtask: MCP code-host flow and DISABLED documentation access
 - **Status:** review
 - **Scope:** Keep MCP tool metadata stable, enforce current
-  authorization at call time, support later status/result reads by
-  `codeId`, and keep API-documentation/API-map access available at
-  `DISABLED`.
+  authorization at call time, support bounded waiting plus later
+  status/result reads by `codeId` for AI-owned user-run-only behavior,
+  and keep API-documentation/API-map access available at `DISABLED`.
 - **Motivation:** MCP has different client behavior and cannot rely on
   internal chat filtering or local UI affordances. The authorization and
   later-read model therefore need explicit MCP handling.
@@ -1193,6 +1422,33 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
   - `GetApiDocumentationTool` already loads the API map and returns the
     needed identifiers.
 - **Design:**
+  ```plantuml
+  @startuml
+  actor "MCP client" as Client
+  actor User
+  participant "ModelContextProtocolToolDispatcher" as Dispatcher
+  participant "ModelContextProtocolToolCallAuthorizer" as Authorizer
+  participant "AiOwnedScriptHostService" as Host
+
+  Client -> Dispatcher : runCode(host=AI,...)
+  Dispatcher -> Authorizer : assertAuthorized(...)
+  Dispatcher -> Host : runCode(...)
+  alt User presses Run or Cancel within timeout
+    User -> Host : Run or Cancel
+    Host --> Dispatcher : RUN_SUCCEEDED / RUN_FAILED / USER_RUN_CANCELLED
+    Dispatcher --> Client : final RunCodeResponse
+  else Timeout expires first
+    Host --> Dispatcher : WAITING_FOR_USER_RUN + codeId
+    Dispatcher --> Client : waiting RunCodeResponse
+    Client -> Dispatcher : readCode(codeId)
+    Dispatcher -> Authorizer : assertAuthorized(...)
+    Dispatcher -> Host : readCode(codeId)
+    Host --> Dispatcher : final state
+    Dispatcher --> Client : ReadCodeResponse
+  end
+  @enduml
+  ```
+
   - Keep MCP tool advertisement stable.
   - Keep `ModelContextProtocolServer` responsible for MCP protocol
     handling and `ModelContextProtocolToolRegistry` responsible for
@@ -1205,13 +1461,21 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
     before each tool execution.
   - `ModelContextProtocolToolCallAuthorizer` reuses
     `AiCodeOperationAuthorizer` for `readCode`, `writeCode`,
-    `compileCode`, and `runScript`, and separately owns the MCP-only
+    `compileCode`, and `runCode`, and separately owns the MCP-only
     `DISABLED` documentation/API-map allowlist.
   - Enforce current availability and current policy when each MCP tool
     call executes.
-  - When MCP requests AI-owned user-run-only behavior, return an
-    immediate waiting result plus `codeId`.
-  - Add later read/status/result access by `codeId`.
+  - When MCP requests AI-owned user-run-only behavior, block for up to
+    a globally configured user-controlled wait timeout.
+  - If the user presses Run or Cancel within that timeout, return the
+    final result directly.
+  - If the timeout expires first, return `WAITING_FOR_USER_RUN` plus
+    `codeId` without auto-run or auto-cancel.
+  - MCP does not receive automatic completion, cancellation, or
+    failure chat messages.
+  - Add later read/status/result access by `codeId`, including the
+    eventual transition to `RUN_SUCCEEDED`, `RUN_FAILED`, or
+    `USER_RUN_CANCELLED` after the user acts.
   - If a later read uses a replaced `codeId`, return explicit
     replaced-state information instead of silently disappearing.
   - If no current code exists for a readable host, return explicit
@@ -1226,7 +1490,7 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
     `searchNodes(...)` only when the request targets the internal API
     map identified by that tool.
   - Reuse `getApiDocumentation()` as the MCP-side API-map locator.
-  - Deny `readCode`, `writeCode`, `compileCode`, `runScript`, and all
+  - Deny `readCode`, `writeCode`, `compileCode`, `runCode`, and all
     other non-documentation tool calls at `DISABLED` with explicit
     authorization errors.
 - **Test specification:**
@@ -1243,7 +1507,16 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
       API-map-scoped `readNodesWithDescendants(...)`,
       `readNodesWithDescendantsAsPlainText(...)`, and
       `searchNodes(...)`;
-    - verify waiting-result plus later reads by `codeId`;
+    - verify MCP returns the final result directly when the user
+      presses Run within the configured wait timeout;
+    - verify MCP returns `USER_RUN_CANCELLED` directly when the user
+      presses Cancel within the configured wait timeout;
+    - verify timeout expiry returns `WAITING_FOR_USER_RUN` plus
+      `codeId` without auto-run or auto-cancel, and later reads by
+      `codeId` expose the eventual final state;
+    - verify MCP-triggered runs do not append automatic completion,
+      cancellation, or failure chat messages while still updating code
+      state correctly;
     - verify replaced-state and no-code-state responses.
   - Manual tests:
     - connect an MCP client, change local availability, and verify that
@@ -1256,10 +1529,18 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
     - `ModelContextProtocolToolCallAuthorizer` now owns MCP-only
       call-time authorization, while `AiCodeOperationAuthorizer`
       remains the shared code-host gate reused for MCP code tools.
+    - MCP uses a dedicated code-host wrapper to clear any pending
+      internal-AI follow-up ownership before AI-host writes/runs and to
+      wait off the EDT for a later terminal user-run result up to the
+      configured timeout.
   - **Tradeoffs:**
     - The MCP authorizer resolves the internal API map identifier by
       calling `GetApiDocumentationTool` directly instead of duplicating
       separate API-map lookup logic or parsing MCP tool output.
+    - MCP bounded waiting is implemented in the MCP-only code-host
+      wrapper instead of the shared host services so chat-side flows
+      keep immediate waiting responses and MCP alone owns the blocking
+      timeout behavior.
     - `ModelContextProtocolToolDispatcher` remained the MCP execution
       boundary and now invokes the MCP authorizer before tool
       execution, keeping `ModelContextProtocolServer` focused on

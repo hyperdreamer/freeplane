@@ -3,6 +3,7 @@ package org.freeplane.plugin.ai.chat.memory;
 import dev.langchain4j.data.message.UserMessage;
 import java.util.List;
 import org.freeplane.features.ai.code.CodeStateDiagnostic;
+import org.freeplane.features.ai.code.ReadCodeResponse;
 import org.freeplane.features.ai.code.RunCodeResponse;
 
 public class AutomaticCodeStatusMessage extends UserMessage {
@@ -16,6 +17,14 @@ public class AutomaticCodeStatusMessage extends UserMessage {
         return new AutomaticCodeStatusMessage(formatRunResponse(response));
     }
 
+    public static AutomaticCodeStatusMessage forCodeState(ReadCodeResponse response) {
+        return new AutomaticCodeStatusMessage(formatCodeState(response));
+    }
+
+    public static boolean isAutomaticCodeStatusText(String text) {
+        return text != null && text.startsWith(PREFIX);
+    }
+
     static String formatRunResponse(RunCodeResponse response) {
         StringBuilder builder = new StringBuilder();
         builder.append(PREFIX);
@@ -23,17 +32,62 @@ public class AutomaticCodeStatusMessage extends UserMessage {
             return builder.toString();
         }
         builder.append('\n');
-        append(builder, "host", response.getHost());
-        append(builder, "contentType", response.getContentType());
-        append(builder, "codeState", response.getCodeState());
-        append(builder, "runInitiator", response.getRunInitiator());
-        append(builder, "codeFingerprint", response.getStateToken() == null ? null : response.getStateToken().getCodeFingerprint());
-        append(builder, "argumentsFingerprint", response.getStateToken() == null ? null : response.getStateToken().getArgumentsFingerprint());
-        appendDiagnostics(builder, response.getDiagnostics());
-        append(builder, "errorMessage", response.getErrorMessage());
-        appendBlock(builder, "stdout", response.getStdout());
-        append(builder, "structuredResult", response.getStructuredResult());
+        appendCommonFields(builder,
+            response.getHost(),
+            response.getContentType(),
+            response.getCodeState(),
+            response.getRunInitiator(),
+            response.getStateToken() == null ? null : response.getStateToken().getCodeFingerprint(),
+            response.getStateToken() == null ? null : response.getStateToken().getArgumentsFingerprint(),
+            response.getDiagnostics(),
+            response.getErrorMessage(),
+            response.getStdout(),
+            response.getStructuredResult());
         return builder.toString();
+    }
+
+    static String formatCodeState(ReadCodeResponse response) {
+        StringBuilder builder = new StringBuilder();
+        builder.append(PREFIX);
+        if (response == null) {
+            return builder.toString();
+        }
+        builder.append('\n');
+        appendCommonFields(builder,
+            response.getHost(),
+            response.getContentType(),
+            response.getCodeState(),
+            response.getRunInitiator(),
+            response.getStateToken() == null ? null : response.getStateToken().getCodeFingerprint(),
+            response.getStateToken() == null ? null : response.getStateToken().getArgumentsFingerprint(),
+            response.getDiagnostics(),
+            response.getErrorMessage(),
+            response.getStdout(),
+            response.getStructuredResult());
+        return builder.toString();
+    }
+
+    private static void appendCommonFields(StringBuilder builder,
+                                           Object host,
+                                           Object contentType,
+                                           Object codeState,
+                                           Object runInitiator,
+                                           Object codeFingerprint,
+                                           Object argumentsFingerprint,
+                                           List<CodeStateDiagnostic> diagnostics,
+                                           String errorMessage,
+                                           String stdout,
+                                           Object structuredResult) {
+        append(builder, "host", host);
+        append(builder, "contentType", contentType);
+        append(builder, "codeState", codeState);
+        append(builder, "runInitiator", runInitiator);
+        append(builder, "codeFingerprint", codeFingerprint);
+        append(builder, "argumentsFingerprint", argumentsFingerprint);
+        appendDiagnostics(builder, diagnostics);
+        append(builder, "errorMessage", errorMessage);
+        appendBlock(builder, "stdout", stdout);
+        append(builder, "structuredResult", structuredResult);
     }
 
     private static void append(StringBuilder builder, String key, Object value) {

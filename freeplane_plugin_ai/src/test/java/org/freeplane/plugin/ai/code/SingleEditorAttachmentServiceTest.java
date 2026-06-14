@@ -24,6 +24,8 @@ import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -185,6 +187,32 @@ public class SingleEditorAttachmentServiceTest {
         firstAttachment.detach();
 
         assertThat(detachCalls[0]).isEqualTo(1);
+    }
+
+    @Test
+    public void manualFailureRecordedOnAttachmentAutoPostsAutomaticCodeStatus() {
+        AIChatPanel aiChatPanel = mock(AIChatPanel.class);
+        AttachedEditorChatModeSettings settings = mock(AttachedEditorChatModeSettings.class);
+        LiveChatSessionId sessionId = LiveChatSessionId.create();
+        when(settings.get()).thenReturn(AttachedEditorChatMode.NEW_CHAT);
+        when(aiChatPanel.startNewChat()).thenReturn(sessionId);
+        when(aiChatPanel.effectiveToolAvailability(sessionId)).thenReturn(ToolAvailabilityLevel.READING);
+        SingleEditorAttachmentService uut = new SingleEditorAttachmentService(aiChatPanel, settings);
+
+        AiChatAttachment attachment = uut.attachEditor(new FakeCodeEditor("println 1"), "text/x-freeplane-script-groovy");
+        attachment.recordCodeState(new ReadCodeResponse(
+            ScriptHost.ATTACHED_EDITOR,
+            "text/x-freeplane-script-groovy",
+            CodeState.RUN_FAILED,
+            ScriptRunInitiator.USER,
+            new CodeStateToken("code", "args"),
+            new CodeStateContent("println 1", null),
+            Collections.singletonList(new CodeStateDiagnostic(CodeStateField.SOURCE_TEXT, "broken", 1, 1)),
+            "broken",
+            null,
+            null));
+
+        verify(aiChatPanel).submitMessageToSession(eq(sessionId), any());
     }
 
     @Test

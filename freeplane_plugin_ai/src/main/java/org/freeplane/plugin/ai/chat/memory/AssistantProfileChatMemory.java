@@ -89,6 +89,11 @@ public class AssistantProfileChatMemory implements ChatMemory {
             invalidateDerivedFiltering();
             return;
         }
+        if (message instanceof UserMessage
+            && !(message instanceof AutomaticCodeStatusMessage)
+            && AutomaticCodeStatusMessage.isAutomaticCodeStatusText(((UserMessage) message).singleText())) {
+            message = new AutomaticCodeStatusMessage(((UserMessage) message).singleText());
+        }
         addConversationMessage(message);
         rebuildTurnBoundaries();
         invalidateDerivedFiltering();

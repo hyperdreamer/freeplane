@@ -196,7 +196,7 @@ public class AIChatPanel extends JPanel {
         new HashMap<LiveChatSessionId, ChatTokenUsageTracker>();
     private final AssistantProfileSelectionSync assistantProfileSelectionSync;
     private final AssistantProfilePaneBuilder assistantProfilePaneBuilder;
-    private LiveChatSessionId aiOwnedCodeOwningSessionId;
+    private LiveChatSessionId pendingAiOwnedUserRunFollowupSessionId;
     private long visibleHistoryRebuildCounter;
     private final AiCodeRunListener aiCodeRunListener = new AiCodeRunListener() {
         @Override
@@ -1243,7 +1243,7 @@ public class AIChatPanel extends JPanel {
             @Override
             public WriteCodeResponse writeCode(WriteCodeRequest request) {
                 WriteCodeResponse response = delegate.writeCode(request);
-                rememberAiOwnedCodeOwner(response == null ? null : response.getHost(), sessionId);
+                clearPendingAiOwnedUserRunFollowup(response == null ? null : response.getHost());
                 return response;
             }
 
@@ -1255,7 +1255,7 @@ public class AIChatPanel extends JPanel {
             @Override
             public RunCodeResponse runCode(RunCodeRequest request) {
                 RunCodeResponse response = delegate.runCode(request);
-                rememberAiOwnedCodeOwner(response == null ? null : response.getHost(), sessionId);
+                rememberAiOwnedUserRunFollowup(response, sessionId);
                 return response;
             }
 
@@ -1487,31 +1487,35 @@ public class AIChatPanel extends JPanel {
         return ((org.freeplane.plugin.ai.code.RoutingAiCodeHostService) activeCodeHostService).showCurrentAiOwnedCode();
     }
 
-    private void rememberAiOwnedCodeOwner(ScriptHost host, LiveChatSessionId sessionId) {
-        if (host == ScriptHost.AI && sessionId != null) {
-            aiOwnedCodeOwningSessionId = sessionId;
+    private void clearPendingAiOwnedUserRunFollowup(ScriptHost host) {
+        if (host == ScriptHost.AI) {
+            pendingAiOwnedUserRunFollowupSessionId = null;
         }
+    }
+
+    private void rememberAiOwnedUserRunFollowup(RunCodeResponse response, LiveChatSessionId sessionId) {
+        if (response == null || response.getHost() != ScriptHost.AI) {
+            return;
+        }
+        if (response.getCodeState() == CodeState.WAITING_FOR_USER_RUN && sessionId != null) {
+            pendingAiOwnedUserRunFollowupSessionId = sessionId;
+            return;
+        }
+        pendingAiOwnedUserRunFollowupSessionId = null;
     }
 
     void handleCodeRunFinished(RunCodeResponse response) {
         if (response == null || response.getHost() != ScriptHost.AI || response.getRunInitiator() != org.freeplane.features.ai.code.ScriptRunInitiator.USER) {
             return;
         }
-        LiveChatSessionId sessionId = aiOwnedCodeOwningSessionId;
-        if (sessionId == null) {
+        LiveChatSessionId pendingSessionId = pendingAiOwnedUserRunFollowupSessionId;
+        pendingAiOwnedUserRunFollowupSessionId = null;
+        if (pendingSessionId == null) {
             return;
         }
-        AutomaticCodeStatusMessage message = AutomaticCodeStatusMessage.forRunResponse(response);
-        ChatMemory sessionChatMemory = liveChatController.chatMemory(sessionId);
-        if (sessionChatMemory == null) {
-            return;
-        }
-        sessionChatMemory.add(message);
-        liveChatController.synchronizeTranscriptWithMemory(sessionId);
-        if (liveChatController.isCurrentSession(sessionId)) {
-            appendHistoryEntry(ChatMemoryRenderEntry.forMessage(message));
-            refreshTokenCounters();
-        }
+        submitMessageToSession(
+            pendingSessionId,
+            AutomaticCodeStatusMessage.forRunResponse(response).singleText());
     }
 
     public void setCodeHostService(AiCodeHostService codeHostService) {
@@ -1580,6 +1584,10 @@ public class AIChatPanel extends JPanel {
         }
         return startVisibleRequest(sessionId, userMessage, requestService, requestFlow, requestTokenUsageTracker,
             false, false);
+    }
+
+    public void clearPendingAiOwnedUserRunFollowup() {
+        pendingAiOwnedUserRunFollowupSessionId = null;
     }
 
     public ToolCallSummaryHandler toolCallSummaryHandler() {

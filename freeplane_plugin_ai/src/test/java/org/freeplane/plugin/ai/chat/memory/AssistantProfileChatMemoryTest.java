@@ -48,6 +48,21 @@ public class AssistantProfileChatMemoryTest {
     }
 
     @Test
+    public void plainUserMessageWithAutomaticCodeStatusPrefixIsStoredAsDedicatedMessageType() {
+        AssistantProfileChatMemory uut = createMemory(500);
+
+        uut.add(UserMessage.from("Automatic app-authored code-status message:\ncodeState=RUN_FAILED"));
+
+        assertThat(uut.activeConversationRenderEntries())
+            .extracting(ChatMemoryRenderEntry::chatMessage)
+            .first()
+            .isInstanceOf(AutomaticCodeStatusMessage.class);
+        assertThat(uut.transcriptEntriesForPersistence())
+            .extracting(ChatTranscriptEntry::getRole)
+            .containsExactly(org.freeplane.plugin.ai.chat.history.ChatTranscriptRole.AUTOMATIC_CODE_STATUS);
+    }
+
+    @Test
     public void storedGeneralSystemMessageIsProjectorInputNotSelectedChatContent() {
         AssistantProfileChatMemory uut = createMemory(500);
 

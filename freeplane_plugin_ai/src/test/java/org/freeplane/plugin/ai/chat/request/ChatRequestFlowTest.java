@@ -104,6 +104,22 @@ public class ChatRequestFlowTest {
     }
 
     @Test
+    public void automaticCodeStatusRequestRebuildsVisibleHistoryAfterAssistantResponse() throws Exception {
+        RecordingCallbacks callbacks = new RecordingCallbacks();
+        ChatRequestFlow uut = new ChatRequestFlow(callbacks, new ChatTokenUsageTracker(totals -> {}));
+        AIChatService chatService = mock(AIChatService.class);
+        when(chatService.chat("Automatic app-authored code-status message:\ncodeState=RUN_FAILED"))
+            .thenReturn("analysis");
+
+        uut.beginRequest("Automatic app-authored code-status message:\ncodeState=RUN_FAILED");
+        uut.submitRequest(chatService);
+
+        assertThat(callbacks.awaitFinished()).isTrue();
+        assertThat(callbacks.assistantResponseCount).isEqualTo(1);
+        assertThat(callbacks.rebuildHistoryCount).isEqualTo(1);
+    }
+
+    @Test
     public void onProviderUsageRecordsUsageAndRefreshesCounters() {
         RecordingCallbacks callbacks = new RecordingCallbacks();
         ChatTokenUsageTracker tokenUsageTracker = spy(new ChatTokenUsageTracker(totals -> {}));

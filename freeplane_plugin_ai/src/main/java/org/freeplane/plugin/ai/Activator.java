@@ -37,6 +37,7 @@ import org.freeplane.plugin.ai.edits.AiEditsSettings;
 import org.freeplane.plugin.ai.edits.AiEditsStateIconProvider;
 import org.freeplane.plugin.ai.edits.ClearAiMarkersInMapAction;
 import org.freeplane.plugin.ai.edits.ClearAiMarkersInSelectionAction;
+import org.freeplane.plugin.ai.mcpserver.ModelContextProtocolAiCodeHostService;
 import org.freeplane.plugin.ai.mcpserver.ModelContextProtocolServer;
 import org.freeplane.plugin.ai.prompt.AiPromptActionRegistry;
 import org.freeplane.plugin.ai.prompt.AiPromptMenuInstaller;
@@ -193,16 +194,19 @@ public class Activator implements BundleActivator {
                             LogUtils.severe("Cannot start MCP server: view controller is not available.");
                             return;
                         }
+                        AiCodeHostService mcpCodeHostService = new ModelContextProtocolAiCodeHostService(
+                            codeHostService,
+                            aiChatPanel::clearPendingAiOwnedUserRunFollowup);
                         AiCodeOperationAuthorizer aiCodeOperationAuthorizer = new AiCodeOperationAuthorizer(
                             ToolCaller.MCP,
                             new ToolAvailabilityLevelSettings()::getToolAvailability,
                             null,
                             () -> Boolean.valueOf(new FormulaEditingSettings().isEnabled()),
-                            codeHostService);
+                            mcpCodeHostService);
                         AIToolSetBuilder toolSetBuilder = new AIToolSetBuilder()
                             .toolCallSummaryHandler(aiChatPanel.toolCallSummaryHandler())
                             .toolCaller(ToolCaller.MCP)
-                            .codeHostService(codeHostService)
+                            .codeHostService(mcpCodeHostService)
                             .aiCodeOperationAuthorizer(aiCodeOperationAuthorizer);
                         modelContextProtocolServer = new ModelContextProtocolServer(
                             toolSetBuilder.buildToolObjects(),

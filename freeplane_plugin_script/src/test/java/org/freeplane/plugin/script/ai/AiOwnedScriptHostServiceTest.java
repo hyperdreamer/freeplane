@@ -103,6 +103,41 @@ public class AiOwnedScriptHostServiceTest {
     }
 
     @Test
+    public void dialogCancelAfterWaitingUpdatesStateToUserRunCancelled() {
+        ResourceController resourceController = mock(ResourceController.class);
+        when(resourceController.getEnumProperty(
+            eq(AiOwnedScriptHostService.AI_SCRIPT_EXECUTION_POLICY),
+            eq(AiScriptExecutionPolicy.SHOWN_USER_RUN))).thenReturn(AiScriptExecutionPolicy.SHOWN_USER_RUN);
+        RecordingDialogFactory dialogFactory = new RecordingDialogFactory();
+        AiOwnedScriptHostService uut = new AiOwnedScriptHostService(resourceController, dialogFactory);
+        WriteCodeResponse written = uut.doWriteCode(writeRequest("println 1", null, null));
+
+        RunCodeResponse waiting = uut.doRunCode(new RunCodeRequest(ScriptHost.AI, written.getStateToken()));
+        uut.dialogCancelled();
+        ReadCodeResponse state = uut.doReadCode(new ReadCodeRequest(ScriptHost.AI));
+
+        assertThat(waiting.getCodeState()).isEqualTo(CodeState.WAITING_FOR_USER_RUN);
+        assertThat(state.getCodeState()).isEqualTo(CodeState.USER_RUN_CANCELLED);
+    }
+
+    @Test
+    public void shownAiRunPolicyShowsDialogBeforeAttemptingExecution() {
+        ResourceController resourceController = mock(ResourceController.class);
+        when(resourceController.getEnumProperty(
+            eq(AiOwnedScriptHostService.AI_SCRIPT_EXECUTION_POLICY),
+            eq(AiScriptExecutionPolicy.SHOWN_USER_RUN))).thenReturn(AiScriptExecutionPolicy.SHOWN_AI_RUN);
+        LoadingDialogFactory dialogFactory = new LoadingDialogFactory();
+        AiOwnedScriptHostService uut = new AiOwnedScriptHostService(resourceController, dialogFactory);
+        WriteCodeResponse written = uut.doWriteCode(writeRequest("if (", null, null));
+
+        RunCodeResponse response = uut.doRunCode(new RunCodeRequest(ScriptHost.AI, written.getStateToken()));
+
+        assertThat(response.getCodeState()).isEqualTo(CodeState.INVALID_SCRIPT);
+        assertThat(dialogFactory.dialog.codeShown).isTrue();
+        assertThat(dialogFactory.dialog.showAndFocusCalls).isEqualTo(1);
+    }
+
+    @Test
     public void compileFailsForInvalidInputJsonButWriteAllowsIt() {
         AiOwnedScriptHostService uut = new AiOwnedScriptHostService(null);
 
@@ -238,6 +273,7 @@ public class AiOwnedScriptHostServiceTest {
     private static class LoadingDialog implements AiOwnedScriptHostService.DialogHandle {
         private final AiOwnedScriptHostService.CodeStateProvider codeStateProvider;
         private boolean codeShown;
+        private int showAndFocusCalls;
         private CodeStateContent currentContent = new CodeStateContent("", null);
 
         private LoadingDialog(AiOwnedScriptHostService.CodeStateProvider codeStateProvider) {
@@ -253,6 +289,7 @@ public class AiOwnedScriptHostServiceTest {
 
         @Override
         public void showAndFocus() {
+            showAndFocusCalls++;
         }
 
         @Override

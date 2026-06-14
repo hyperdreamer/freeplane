@@ -810,22 +810,10 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 		if (response == null || response.getCodeState() == CodeState.RUN_SUCCEEDED || response.getErrorMessage() == null) {
 			return;
 		}
-		if (aiChatAttachment == null || codeState == null) {
-			UITools.errorMessage(response.getErrorMessage());
+		if (aiChatAttachment != null && codeState != null) {
 			return;
 		}
-		int answer = JOptionPane.showOptionDialog(
-			this,
-			buildManualRunFailureDialogMessage(response),
-			TextUtils.getText("error"),
-			JOptionPane.DEFAULT_OPTION,
-			JOptionPane.ERROR_MESSAGE,
-			null,
-			new Object[] { TextUtils.getText("ScriptEditorPanel.ask_ai"), TextUtils.getText("close") },
-			TextUtils.getText("close"));
-		if (answer == 0) {
-			requestAttachedManualRepair(aiChatAttachment, codeState);
-		}
+		UITools.errorMessage(response.getErrorMessage());
 	}
 
 	private Object buildManualRunFailureDialogMessage(RunCodeResponse response) {
