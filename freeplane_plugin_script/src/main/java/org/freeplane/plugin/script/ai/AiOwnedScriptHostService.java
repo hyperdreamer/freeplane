@@ -316,10 +316,6 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
             currentScript.latestState = waitingState(content, stateToken, ScriptRunInitiator.AI);
             return response;
         }
-        if (policy == AiScriptExecutionPolicy.SHOWN_AI_RUN) {
-            showCodeInDialog();
-            dialog().showAndFocus();
-        }
         ValidationOutcome validation = validate(content, stateToken, aiStartedPermissions());
         if (!validation.isSuccessful()) {
             RunCodeResponse response = new RunCodeResponse(

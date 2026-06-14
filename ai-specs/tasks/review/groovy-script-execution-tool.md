@@ -394,7 +394,6 @@ AiToolAvailability
 
 AiScriptExecutionPolicy
   SHOWN_USER_RUN
-  SHOWN_AI_RUN
   HIDDEN_AI_RUN
 
 AiScriptUserRunPermissionMode
@@ -443,7 +442,7 @@ Shared/global property
 
 AI-owned script policy property
   ai_script_execution_policy =
-    SHOWN_USER_RUN | SHOWN_AI_RUN | HIDDEN_AI_RUN
+    SHOWN_USER_RUN | HIDDEN_AI_RUN
 
 AI-owned user-run permission property
   ai_script_user_run_permission_mode =
@@ -879,7 +878,7 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
       call-time enforcement;
     - add tests for the internal-AI attached-editor override versus
       MCP base-gate behavior;
-    - add tests for the three script-execution-policy states;
+    - add tests for the two script-execution-policy states;
     - add tests for the two user-started-permission-policy states in
       the AI-owned dialog;
     - add tests for attached-editor normal-permission behavior for both
@@ -911,7 +910,7 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
     - add tests for JSON-safe result serialization and explicit
       failure on unsupported return types.
   - Manual tests:
-    - verify all three AI-owned policy modes from internal AI;
+    - verify both AI-owned policy modes from internal AI;
     - verify attached script and formula behavior under `READING`,
       `EDITING`, and `SCRIPT_EXECUTION`;
     - verify formula attachments expose the correct content type and
@@ -1179,7 +1178,7 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
 ## Subtask: Internal AI-owned script dialog flow
 - **Status:** review
 - **Scope:** Add the AI-owned script dialog, integrate it with internal
-  AI chat, apply the three script-execution-policy states, and add the
+  AI chat, apply the two script-execution-policy states, and add the
   AI-owned follow-up message behavior for user-started execution.
 - **Motivation:** The main user-facing change is an AI-owned script
   host that can be shown, edited, run by the user, or run directly by
@@ -1293,9 +1292,10 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
     - preserve the latest AI-owned script in memory until replacement
       or application exit, and let the user reopen that existing state
       from the AI chat UI when status is not `NO_CODE`;
-    - apply the three execution-policy modes exactly as specified in
-      the main task, including the dialog-close behavior for
-      `SHOWN_USER_RUN` and `SHOWN_AI_RUN`;
+    - apply the two execution-policy modes exactly as specified in the
+      main task: `SHOWN_USER_RUN` must show the dialog and wait for the
+      user to press `Run`, while `HIDDEN_AI_RUN` must keep AI-started
+      execution hidden;
     - treat visible dialog text as authoritative for execution;
     - when the user cancels a pending `SHOWN_USER_RUN` request before
       execution starts, update the current AI-owned code state to
@@ -1332,14 +1332,15 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
       authority.
 - **Test specification:**
   - Automated tests:
-    - verify dialog opening behavior for all three policy states;
+    - verify dialog opening behavior for both policy states;
     - verify the AI-owned dialog is non-modal;
     - verify hidden mode preserves inspectable state without auto-open;
     - verify the AI chat UI reopen action is enabled only when current
       AI-owned code exists;
     - verify shown modes use current editor text at run time;
-    - verify `SHOWN_USER_RUN` and `SHOWN_AI_RUN` keep or close the
-      dialog exactly as specified;
+    - verify `SHOWN_USER_RUN` waits for explicit user execution and
+      `HIDDEN_AI_RUN` does not open the dialog for AI-started
+      execution;
     - verify busy rejection and immediate replacement rules for the
       current AI-owned script;
     - verify internal-AI follow-up for user-started completion,
@@ -1363,7 +1364,7 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
     - verify MCP observes attached manual failures only through updated
       host state and later `readCode` calls.
   - Manual tests:
-    - run internal AI in all three policy modes;
+    - run internal AI in both policy modes;
     - in `SHOWN_USER_RUN`, press Run and verify the chat shows the
       automatic code-status message followed immediately by a real
       assistant response based on that result;
@@ -1381,9 +1382,8 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
       the current chat session so later user-started completion,
       cancellation, and failure follow-up messages have a transcript
       target.
-    - `SHOWN_AI_RUN` reuses the same dialog content source as
-      `SHOWN_USER_RUN`, but keeps AI-started execution synchronous after
-      showing the current script text.
+    - AI-started execution now has only the hidden direct-run path; the
+      shown path always waits for an explicit user `Run`.
     - Attached manual script-failure auto-posts omit inline code text
       and rely on shared code-state details plus later `readCode`
       access.

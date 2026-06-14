@@ -121,11 +121,11 @@ public class AiOwnedScriptHostServiceTest {
     }
 
     @Test
-    public void shownAiRunPolicyShowsDialogBeforeAttemptingExecution() {
+    public void hiddenAiRunPolicyDoesNotShowDialogBeforeAttemptingExecution() {
         ResourceController resourceController = mock(ResourceController.class);
         when(resourceController.getEnumProperty(
             eq(AiOwnedScriptHostService.AI_SCRIPT_EXECUTION_POLICY),
-            eq(AiScriptExecutionPolicy.SHOWN_USER_RUN))).thenReturn(AiScriptExecutionPolicy.SHOWN_AI_RUN);
+            eq(AiScriptExecutionPolicy.SHOWN_USER_RUN))).thenReturn(AiScriptExecutionPolicy.HIDDEN_AI_RUN);
         LoadingDialogFactory dialogFactory = new LoadingDialogFactory();
         AiOwnedScriptHostService uut = new AiOwnedScriptHostService(resourceController, dialogFactory);
         WriteCodeResponse written = uut.doWriteCode(writeRequest("if (", null, null));
@@ -133,8 +133,7 @@ public class AiOwnedScriptHostServiceTest {
         RunCodeResponse response = uut.doRunCode(new RunCodeRequest(ScriptHost.AI, written.getStateToken()));
 
         assertThat(response.getCodeState()).isEqualTo(CodeState.INVALID_SCRIPT);
-        assertThat(dialogFactory.dialog.codeShown).isTrue();
-        assertThat(dialogFactory.dialog.showAndFocusCalls).isEqualTo(1);
+        assertThat(dialogFactory.dialog).isNull();
     }
 
     @Test
