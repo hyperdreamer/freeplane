@@ -333,7 +333,7 @@
       attachment.
 
 ## Subtask: Introduce shared editor-attachment service, attach-mode setting, and attached-issue tool path
-- **Status:** review
+- **Status:** done
 - **Scope:** Add the cross-plugin editor-attachment contract in
   `freeplane`, wire a single-active-attachment service into the AI
   plugin, add the user setting that chooses whether explicit attach or
@@ -722,7 +722,7 @@
       ordering mechanism.
 
 ## Subtask: Attach Script Editor to AI chat and expose compile diagnostics
-- **Status:** review
+- **Status:** done
 - **Scope:** Add an explicit AI button to `ScriptEditorPanel`, adapt it
   to the shared attachment and attached-code contracts, and let AI
   compile the current script against the current Groovy compiler path.
@@ -839,7 +839,7 @@
       aligned with existing script execution while avoiding execution.
 
 ## Subtask: Attach Formula Editor to AI chat, preserve map reference picking, and validate formulas before commit
-- **Status:** review
+- **Status:** done
 - **Scope:** Add an explicit AI button to `FormulaEditor`, replace the
   current whole-window blocker with a center-scoped selection overlay,
   let AI compile the current formula, change formula submit so final

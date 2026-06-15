@@ -78,7 +78,7 @@
   subtasks.
 
 ## Subtask: Baseline formula preview/apply flow and code-host boundary at script-execution level
-- **Status:** review
+- **Status:** done
 - **Scope:** Implement the baseline increment of the
   task-level formula-authoring contract using
   `SCRIPT_EXECUTION` as the formula-authoring gate for map
@@ -746,7 +746,7 @@
       using a real `JPanel` owner instead of mocking `java.awt.Component`.
 
 ## Subtask: Explicit AI formula-edit permission and capability exposure
-- **Status:** review
+- **Status:** done
 - **Scope:** Replace the script-execution-only formula-authoring gate
   from Subtask 1 with explicit `ai_formula_editing_enabled`
   permission layered on ordinary editing availability, and align

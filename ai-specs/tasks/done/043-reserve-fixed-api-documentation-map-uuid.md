@@ -47,7 +47,7 @@
     the MCP `DISABLED` documentation-only allowlist.
 
 ## Subtask: Reserve a fixed UUID and resolve it through AvailableMaps
-- **Status:** review
+- **Status:** done
 - **Scope:** Make `getApiDocumentation()` return reserved UUID
   `new UUID(0L, 1L)`, and make `AvailableMaps.findMapModel(...)`
   automatically load and register the documentation map when that UUID
@@ -238,7 +238,7 @@
   - **Manual tests:** N/A
 
 ## Subtask: Reject editing and scripting targets for the documentation map
-- **Status:** review
+- **Status:** done
 - **Scope:** Reject documentation-map targets immediately for
   map-targeting editing tools and map-targeting scripting/formula
   tools after the shared reserved-UUID resolution path exists.

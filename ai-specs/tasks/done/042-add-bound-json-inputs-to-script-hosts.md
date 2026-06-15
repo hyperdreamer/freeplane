@@ -52,7 +52,7 @@
   established the current host split but not a separate data channel.
 
 ## Subtask: Add bound JSON inputs to script hosts
-- **Status:** review
+- **Status:** done
 
 - **Research:**
   - `WriteCodeRequest` and `WriteCodeToolRequest` currently carry only
@@ -449,7 +449,7 @@ Engine --> Host : stdout + structuredResult or SOURCE_TEXT failure
       open, and `don't ask again` persists only the `Yes` choice.
 
 ## Subtask: Refine script-host code-state contract and attached-editor repair flow
-- **Status:** review
+- **Status:** done
 - **Scope:** Simplify the script-host state contract and fix the
   attached / node script editor repair flow so state reads always carry
   current content, invalid Arguments JSON is identified locally, and AI
@@ -603,7 +603,7 @@ Engine --> Host : stdout + structuredResult or SOURCE_TEXT failure
       broke the current dialog-flow expectations.
 
 ## Subtask: Fix script-editor JSON pane geometry and persistence
-- **Status:** backlog
+- **Status:** done
 - **Scope:** Fix the remaining post-review geometry and resize issues in
   the script-editor code / arguments / output layout, including stored
   divider state.

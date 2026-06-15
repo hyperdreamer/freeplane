@@ -489,7 +489,7 @@
     those subtasks.
 
 ## Subtask: Implement unified filtering core and projectors
-- **Status:** review
+- **Status:** done
 - **Scope:** Implement the normalized filtering model, the unified
   filtering path, and the explicit panel/model/transcript projectors,
   while finalizing the class-level design details needed for that
@@ -1270,7 +1270,7 @@
         remaining consumers without a second filtering algorithm.
 
 ## Subtask: Integrate unified filtering replacement
-- **Status:** review
+- **Status:** done
 - **Scope:** Correct the remaining visible-history consumer
   divergence, remove stale filtering-surface API, and align the task
   record with the implementation architecture that this task now keeps.
@@ -1437,7 +1437,7 @@
         approved contract.
 
 ## Subtask: Restore assistant-profile control-message pair injection
-- **Status:** review
+- **Status:** done
 - **Scope:** Repair assistant-profile switch handling so model
   projection and compaction reinsert the hidden control-message pair at
   the correct position while panel and transcript behavior remain

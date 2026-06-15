@@ -922,7 +922,7 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
 
 
 ## Subtask: Preparatory migration from attached-editor tools to generic code-host structures
-- **Status:** review
+- **Status:** done
 - **Scope:** Replace the attached-editor-specific tool family and its
   tool-facing DTOs with the generic code-host request/response
   structures for the attached-editor host first, remove the obsolete
@@ -1013,7 +1013,7 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
       `readCode` calls already match the later code-id-based flow.
 
 ## Subtask: Shared code authorization, content typing, and script-execution policies
-- **Status:** review
+- **Status:** done
 - **Scope:** Define the shared/global availability semantics on top of
   the generic code-host contract from the preparatory migration,
   extend that contract from attached-editor-only behavior to shared
@@ -1176,7 +1176,7 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
       host services do not need MCP-only branching.
 
 ## Subtask: Internal AI-owned script dialog flow
-- **Status:** review
+- **Status:** done
 - **Scope:** Add the AI-owned script dialog, integrate it with internal
   AI chat, apply the two script-execution-policy states, and add the
   AI-owned follow-up message behavior for user-started execution.
@@ -1405,7 +1405,7 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
       transcript role and model-context `UserMessage` mapping.
 
 ## Subtask: MCP code-host flow and DISABLED documentation access
-- **Status:** review
+- **Status:** done
 - **Scope:** Keep MCP tool metadata stable, enforce current
   authorization at call time, support bounded waiting plus later
   status/result reads by `codeId` for AI-owned user-run-only behavior,
@@ -1547,7 +1547,7 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
       JSON-RPC and HTTP protocol handling.
 
 ## Subtask: Rename code-host tools and make the code-state contract explicit
-- **Status:** review
+- **Status:** done
 - **Scope:** Replace the externally visible AI/MCP code-host tool
   names, the directly coupled code-host API and DTO names, and the
   lifecycle guidance so the exposed contract clearly communicates that
@@ -1655,7 +1655,7 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
   - Manual tests: N/A.
 
 ## Subtask: Show MCP tool calls in AI chat and open a chat when needed
-- **Status:** review
+- **Status:** done
 - **Scope:** Make MCP-originated tool-call summaries visible in AI chat
   when the `AI chat shows tool calls` option is enabled. If no chat is
   currently running to receive the summary, open a chat session and add
@@ -1712,7 +1712,7 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
   - Manual tests: N/A.
 
 ## Subtask: Disable LangChain4j parallel tool calls for OpenRouter chat
-- **Status:** review
+- **Status:** done
 - **Scope:** Make the effective LangChain4j OpenRouter chat-model
   configuration set `parallel_tool_calls` to false while preserving the
   existing sequential Freeplane tool-execution path.
@@ -1768,7 +1768,7 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
   - Manual tests: N/A.
 
 ## Subtask: Remove external codeId contract and use current-host fingerprints
-- **Status:** review
+- **Status:** done
 - **Scope:** Simplify the external AI/MCP code-host contract so normal
   current-state operations use `host` only. Remove `codeId` from the
   public code-tool request and response shapes, stop exposing replaced
@@ -1954,7 +1954,7 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
     `codeId` values.
 
 ## Subtask: MCP tool completion synchronization on EDT
-- **Status:** in-progress
+- **Status:** done
 - **Scope:** Replace the current MCP bounded-wait implementation with
   MCP-only response-completion synchronization that keeps all Freeplane
   tool method bodies on EDT, keeps chat tool behavior unchanged, and
@@ -2154,7 +2154,7 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
       code-host wrapper.
 
 ## Subtask: MCP code-run summaries after delayed completion
-- **Status:** in-progress
+- **Status:** done
 - **Scope:** Make MCP-visible chat summaries for AI-host `runCode` use the final delayed MCP result instead of the initial `WAITING_FOR_USER_RUN` response.
 - **Design:** Suppress the early MCP AI-host waiting summary in `AiCodeToolSet`, then let the MCP dispatcher publish one summary after terminal-or-timeout completion.
 - **Test specification:** Verify terminal delayed MCP `runCode` summaries show the terminal state and timeout summaries show `WAITING_FOR_USER_RUN` without duplicates.
@@ -2168,7 +2168,7 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
       only MCP AI-host waiting summaries in `AiCodeToolSet`.
 
 ## Subtask: Tee captured script output to application streams
-- **Status:** in-progress
+- **Status:** done
 - **Scope:** Preserve captured code-run output for AI/MCP responses while also writing user-visible script output to the normal application stdout/stderr streams during user-started and AI-started script execution.
 - **Motivation:** Current AI-owned and attached-editor code-tool runs pass a capture-only `PrintStream` into the scripting engine. `GroovyScript.execute(...)` temporarily assigns that stream to `System.out`, so `println` is captured in `RunCodeResponse.stdout` but no longer reaches the application console/log stream. User-started Run from an AI-owned dialog should have the same visible console effect as normal script execution.
 - **Research:**

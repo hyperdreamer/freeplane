@@ -622,7 +622,7 @@ ChatPromptRunner --> HiddenPromptRequestRunner : hidden path + response callback
     `ScriptAiRequestService`.
 
 ## Subtask: Fully design factory-created AI request runtime and serialized `ADD_TO_CHAT` dispatch
-- **Status:** review
+- **Status:** done
 - **Scope:**
   Replace every singleton-like request object currently created and held
   by `AIChatPanel` with an explicit factory/product pair, and fully
@@ -948,7 +948,7 @@ end
       request cleanup to the correct visible session.
 
 ## Subtask: Refactor AI request routing for scenario-testability
-- **Status:** review
+- **Status:** done
 - **Scope:**
   Add the smallest structural seams needed to implement and cover the
   authoritative factory-created AI request runtime target from the
@@ -1134,7 +1134,7 @@ end
       specific mode-level rule applies.
 
 ## Subtask: Support Groovy closure callbacks for scripts
-- **Status:** review
+- **Status:** done
 - **Scope:**
   Add a Groovy-friendly `askAi(...)` calling form for scripts without
   importing Groovy types into the public Java API.
@@ -1585,7 +1585,7 @@ end
       permission list.
 
 ## Subtask: Replace public `AiRequest` input with shared `AiRequestOptions` and add named-prompt script execution
-- **Status:** review
+- **Status:** done
 - **Scope:**
   Replace the script-facing public AI request input contract so raw
   prompt execution uses `askAi(String prompt, AiRequestOptions options,
