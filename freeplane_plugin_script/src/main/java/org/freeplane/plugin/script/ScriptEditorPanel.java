@@ -26,12 +26,10 @@ import java.awt.Font;
 import java.awt.event.ActionEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.io.UnsupportedEncodingException;
-import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 
@@ -85,6 +83,7 @@ import org.freeplane.core.ui.components.JRestrictedSizeScrollPane;
 import org.freeplane.core.ui.components.OptionalDontShowMeAgainDialog;
 import org.freeplane.core.ui.components.UITools;
 import org.freeplane.core.ui.textchanger.TranslatedElementFactory;
+import org.freeplane.core.util.CapturedPrintStream;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.text.mindmapmode.SourceTextEditorUIConfigurator;
@@ -693,10 +692,10 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 				null,
 				null);
 		}
-		ByteArrayOutputStream outputBuffer = new ByteArrayOutputStream();
 		final int[] lineNumber = new int[] { -1 };
-		try (PrintStream outStream = new PrintStream(outputBuffer, false, "UTF-8")) {
-			Object result = mScriptModel.executeScript(mScriptList.getSelectedIndex(), outStream, new IFreeplaneScriptErrorHandler() {
+		CapturedPrintStream outputCapture = CapturedPrintStream.tee(System.out);
+		try {
+			Object result = mScriptModel.executeScript(mScriptList.getSelectedIndex(), outputCapture.printStream(), new IFreeplaneScriptErrorHandler() {
 				@Override
 				public void gotoLine(final int pLineNumber) {
 					lineNumber[0] = pLineNumber;
@@ -711,7 +710,7 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 				stateToken,
 				null,
 				null,
-				stdout(outputBuffer),
+				outputCapture.text(),
 				toJsonSafeValue(result));
 		}
 		catch (ExecuteScriptException e) {
@@ -728,7 +727,7 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 				stateToken,
 				diagnostics,
 				e.getMessage(),
-				stdout(outputBuffer),
+				outputCapture.text(),
 				null);
 		}
 		catch (RuntimeException e) {
@@ -745,11 +744,14 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 				stateToken,
 				diagnostics,
 				e.getMessage(),
-				stdout(outputBuffer),
+				outputCapture.text(),
 				null);
 		}
 		catch (Exception e) {
 			throw new IllegalStateException(e.getMessage(), e);
+		}
+		finally {
+			outputCapture.close();
 		}
 	}
 
@@ -880,10 +882,6 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 		return new IllegalStateException("Unsupported script result type: " + value.getClass().getName());
 	}
 
-	private String stdout(ByteArrayOutputStream outputBuffer) {
-		String stdout = new String(outputBuffer.toByteArray(), StandardCharsets.UTF_8);
-		return stdout.isEmpty() ? null : stdout;
-	}
 
 	private String fingerprint(String text) {
         return CodeStateToken.fingerprint(text);

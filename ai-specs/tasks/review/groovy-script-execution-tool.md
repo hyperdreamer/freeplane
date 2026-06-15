@@ -2159,4 +2159,74 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
 - **Design:** Suppress the early MCP AI-host waiting summary in `AiCodeToolSet`, then let the MCP dispatcher publish one summary after terminal-or-timeout completion.
 - **Test specification:** Verify terminal delayed MCP `runCode` summaries show the terminal state and timeout summaries show `WAITING_FOR_USER_RUN` without duplicates.
 - **Implementation notes:**
-  - Empty until implementation.
+  - **Interpretations:**
+    - Treated MCP summary correctness as a presentation concern, not a
+      second tool-result channel: the dispatcher publishes exactly one
+      delayed summary only for AI-host waiting `runCode` responses.
+  - **Tradeoffs:**
+    - Kept normal chat `runCode` summaries unchanged by suppressing
+      only MCP AI-host waiting summaries in `AiCodeToolSet`.
+
+## Subtask: Tee captured script output to application streams
+- **Status:** in-progress
+- **Scope:** Preserve captured code-run output for AI/MCP responses while also writing user-visible script output to the normal application stdout/stderr streams during user-started and AI-started script execution.
+- **Motivation:** Current AI-owned and attached-editor code-tool runs pass a capture-only `PrintStream` into the scripting engine. `GroovyScript.execute(...)` temporarily assigns that stream to `System.out`, so `println` is captured in `RunCodeResponse.stdout` but no longer reaches the application console/log stream. User-started Run from an AI-owned dialog should have the same visible console effect as normal script execution.
+- **Research:**
+  - `GroovyScript.execute(...)` stores the current `System.out`, sets `System.out` to the provided stream while the script runs, then restores the old stream.
+  - `GenericScript.execute(...)` also sets `System.out` to the provided stream and gives the same stream to the script context writer and error writer.
+  - `AiOwnedScriptHostService.executeCurrentScript(...)` and `ScriptEditorPanel.runCode(...)` currently pass a `PrintStream` backed only by `ByteArrayOutputStream`.
+  - `RunCodeResponse` currently has one `stdout` field and no separate `stderr` field.
+- **Design:**
+  ```plantuml
+  @startuml
+  participant "Code-host run" as Run
+  participant "CapturedPrintStream" as Capture
+  participant "Commons IO TeeOutputStream" as Tee
+  participant "ByteArrayOutputStream" as Buffer
+  participant "original System.out" as Stdout
+  participant "ScriptingEngine" as Engine
+  participant "GroovyScript" as Groovy
+
+  Run -> Capture : create from current System.out/System.err
+  Capture -> Tee : stdout stream = buffer + original stdout
+  Run -> Engine : executeScript(..., Capture.stdoutPrintStream())
+  Engine -> Groovy : execute(..., outStream)
+  Groovy -> Groovy : oldOut = System.out
+  Groovy -> Groovy : System.setOut(outStream)
+  Groovy -> Tee : script println bytes
+  Tee -> Buffer : capture for RunCodeResponse.stdout
+  Tee -> Stdout : preserve console/log output
+  Groovy -> Groovy : restore oldOut
+  Run -> Capture : stdoutText()
+  @enduml
+  ```
+
+  - Add a reusable utility in `freeplane`, `org.freeplane.core.util.CapturedPrintStream`, backed by Apache Commons IO `TeeOutputStream` and a close-shielded live stream.
+  - The Commons IO tee writes each byte range to the capture buffer and to the original live stream captured at construction time.
+  - Closing the tee stream must not close the original application stream. `close()` should flush the live stream and close or flush only owned capture resources.
+  - Capture remains the response source: `RunCodeResponse.stdout` is still produced from the capture buffer.
+  - Live stream delivery is additive: script `println` output still reaches the application stdout/log stream when `GroovyScript` routes `System.out` to the provided stream.
+  - Keep the public response contract unchanged in this subtask: do not add a separate `stderr` response field unless a later task explicitly changes the code-state API.
+  - Do not collapse real `System.err` into stdout. Groovy scripts that write directly to `System.err` continue to use the application stderr stream; engine paths that already route an error writer through the single provided stream will tee that existing stream rather than silently capture it.
+  - Use the tee utility in both `AiOwnedScriptHostService.executeCurrentScript(...)` and `ScriptEditorPanel.runCode(...)` so AI-owned runs and attached-editor code-tool runs behave consistently.
+- **Test specification:**
+  - Verify AI-owned script execution captures stdout in `RunCodeResponse.stdout` and also writes the same text to a supplied live stdout stream.
+  - Verify attached-editor code-tool execution captures stdout and also writes it to the live stdout stream.
+  - Verify closing the capture stream does not close the live application stream.
+  - Verify script failure responses still include captured stdout produced before the failure.
+  - Verify existing normal script execution without a capture stream is unchanged.
+- **Implementation notes:**
+  - **Interpretations:**
+    - Implemented teeing at the code-host capture boundary rather than
+      changing `GroovyScript` or `GenericScript`, because normal script
+      execution already writes to the application stream when no custom
+      capture stream is supplied.
+    - Kept the public code-run response contract unchanged: captured
+      stdout still populates `RunCodeResponse.stdout`; no stderr field
+      was added.
+  - **Tradeoffs:**
+    - Added a reusable `CapturedPrintStream` utility in
+      `org.freeplane.core.util` instead of keeping a script-plugin
+      helper. It uses Apache Commons IO `TeeOutputStream` and
+      close-shielding so the capture stream can be closed without
+      closing the application stream.

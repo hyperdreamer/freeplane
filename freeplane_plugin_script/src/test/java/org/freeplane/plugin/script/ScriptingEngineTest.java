@@ -3,8 +3,14 @@ package org.freeplane.plugin.script;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mockStatic;
 
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.util.Collections;
 import java.util.Properties;
 import org.freeplane.core.resources.ResourceController;
+import org.freeplane.core.util.CapturedPrintStream;
+import org.freeplane.features.map.MapModel;
+import org.freeplane.features.map.NodeModel;
 import org.junit.Test;
 import org.mockito.MockedStatic;
 
@@ -20,6 +26,33 @@ public class ScriptingEngineTest {
 
             if (result.getErrorMessage() != null) {
                 assertThat(result.getErrorMessage()).doesNotContain("boom");
+            }
+        }
+    }
+
+    @Test
+    public void executedGroovyScriptOutputCanBeCapturedAndWrittenToLiveStdout() throws Exception {
+        try (MockedStatic<ResourceController> resourceController = mockStatic(ResourceController.class)) {
+            resourceController.when(ResourceController::getResourceController).thenReturn(new TestResourceController());
+            if (ScriptResources.getClasspath() == null) {
+                ScriptResources.setClasspath(Collections.<String>emptyList());
+            }
+            ByteArrayOutputStream liveBuffer = new ByteArrayOutputStream();
+            try (CapturedPrintStream capture = CapturedPrintStream.tee(new PrintStream(liveBuffer, false, "UTF-8"))) {
+                NodeModel node = new NodeModel("node", new MapModel((source, targetMap, withChildren) -> null, null, null));
+
+                Object result = ScriptingEngine.executeScript(
+                    node,
+                    "println 'hello from script'\nreturn 7",
+                    line -> {
+                    },
+                    capture.printStream(),
+                    new ScriptContext(null),
+                    ScriptingPermissions.getPermissiveScriptingPermissions());
+
+                assertThat(result).isEqualTo(7);
+                assertThat(capture.text()).isEqualTo("hello from script\n");
+                assertThat(liveBuffer.toString("UTF-8")).isEqualTo("hello from script\n");
             }
         }
     }

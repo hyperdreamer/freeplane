@@ -1,9 +1,6 @@
 package org.freeplane.plugin.script.ai;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
 import java.lang.reflect.InvocationTargetException;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -16,6 +13,7 @@ import java.util.Set;
 import java.util.concurrent.Callable;
 import javax.swing.SwingUtilities;
 import org.freeplane.core.resources.ResourceController;
+import org.freeplane.core.util.CapturedPrintStream;
 import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.features.ai.code.AiCodeRunListener;
@@ -445,9 +443,9 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
             if (selectedNode == null) {
                 throw new IllegalStateException("No node is currently selected.");
             }
-            ByteArrayOutputStream outputBuffer = new ByteArrayOutputStream();
             final int[] lineNumber = new int[] { -1 };
-            try (PrintStream outStream = new PrintStream(outputBuffer, false, "UTF-8")) {
+            CapturedPrintStream outputCapture = CapturedPrintStream.tee(System.out);
+            try {
                 ScriptContext scriptContext = new ScriptContext(null)
                     .withBoundVariables(ScriptInputJsonSupport.boundVariables(argsValue));
                 Object result = ScriptingEngine.executeScript(
@@ -459,10 +457,10 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
                             lineNumber[0] = pLineNumber;
                         }
                     },
-                    outStream,
+                    outputCapture.printStream(),
                     scriptContext,
                     permissions);
-                String stdout = trimStdout(outputBuffer);
+                String stdout = outputCapture.text();
                 Object structuredResult = toJsonSafeValue(result);
                 RunCodeResponse response = new RunCodeResponse(
                     ScriptHost.AI,
@@ -487,7 +485,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
                 fireRunFinished(response);
                 return response;
             } catch (ExecuteScriptException error) {
-                String stdout = trimStdout(outputBuffer);
+                String stdout = outputCapture.text();
                 List<CodeStateDiagnostic> diagnostics = CodeStateDiagnostics.singleton(
                     CodeStateField.SOURCE_TEXT,
                     error.getMessage(),
@@ -509,7 +507,7 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
                 fireRunFinished(response);
                 return response;
             } catch (RuntimeException error) {
-                String stdout = trimStdout(outputBuffer);
+                String stdout = outputCapture.text();
                 List<CodeStateDiagnostic> diagnostics = CodeStateDiagnostics.singleton(
                     CodeStateField.SOURCE_TEXT,
                     error.getMessage(),
@@ -532,6 +530,8 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
                 return response;
             } catch (Exception error) {
                 throw new IllegalStateException(error.getMessage(), error);
+            } finally {
+                outputCapture.close();
             }
         } finally {
             currentScript.running = false;
@@ -850,10 +850,6 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
         return new IllegalStateException("Unsupported script result type: " + value.getClass().getName());
     }
 
-    private String trimStdout(ByteArrayOutputStream outputBuffer) {
-        String stdout = new String(outputBuffer.toByteArray(), StandardCharsets.UTF_8);
-        return stdout.isEmpty() ? null : stdout;
-    }
 
     private void fireRunFinished(RunCodeResponse response) {
         List<AiCodeRunListener> listeners = new ArrayList<AiCodeRunListener>(runListeners);
