@@ -15,6 +15,10 @@ import org.freeplane.core.util.LogUtils;
 import org.freeplane.features.ai.code.CodeState;
 import org.freeplane.features.ai.code.RunCodeResponse;
 import org.freeplane.features.ai.code.ScriptHost;
+import org.freeplane.plugin.ai.tools.code.AiCodeToolSet;
+import org.freeplane.plugin.ai.tools.utilities.ToolCallSummary;
+import org.freeplane.plugin.ai.tools.utilities.ToolCallSummaryHandler;
+import org.freeplane.plugin.ai.tools.utilities.ToolCaller;
 import org.freeplane.plugin.ai.tools.utilities.ToolExecutorFactory;
 import org.freeplane.plugin.ai.tools.utilities.ToolExecutorRegistry;
 
@@ -23,6 +27,7 @@ public class ModelContextProtocolToolDispatcher {
     private final Map<String, ToolExecutor> toolExecutorsByName;
     private final ModelContextProtocolToolCallAuthorizer toolCallAuthorizer;
     private final ModelContextProtocolAiCodeHostService aiCodeHostService;
+    private final ToolCallSummaryHandler toolCallSummaryHandler;
 
     public ModelContextProtocolToolDispatcher(Object toolSet, ObjectMapper objectMapper) {
         this(Collections.singletonList(Objects.requireNonNull(toolSet, "toolSet")), objectMapper, null);
@@ -35,16 +40,25 @@ public class ModelContextProtocolToolDispatcher {
     public ModelContextProtocolToolDispatcher(Collection<?> toolSets,
                                               ObjectMapper objectMapper,
                                               ModelContextProtocolToolCallAuthorizer toolCallAuthorizer) {
-        this(toolSets, objectMapper, toolCallAuthorizer, null);
+        this(toolSets, objectMapper, toolCallAuthorizer, null, null);
     }
 
     ModelContextProtocolToolDispatcher(Collection<?> toolSets,
                                        ObjectMapper objectMapper,
                                        ModelContextProtocolToolCallAuthorizer toolCallAuthorizer,
                                        ModelContextProtocolAiCodeHostService aiCodeHostService) {
+        this(toolSets, objectMapper, toolCallAuthorizer, aiCodeHostService, null);
+    }
+
+    ModelContextProtocolToolDispatcher(Collection<?> toolSets,
+                                       ObjectMapper objectMapper,
+                                       ModelContextProtocolToolCallAuthorizer toolCallAuthorizer,
+                                       ModelContextProtocolAiCodeHostService aiCodeHostService,
+                                       ToolCallSummaryHandler toolCallSummaryHandler) {
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
         this.toolCallAuthorizer = toolCallAuthorizer;
         this.aiCodeHostService = aiCodeHostService;
+        this.toolCallSummaryHandler = toolCallSummaryHandler;
         ToolExecutorFactory toolExecutorFactory = new ToolExecutorFactory(false, false);
         ToolExecutorRegistry toolExecutorRegistry = toolExecutorFactory.createRegistry(toolSets);
         this.toolExecutorsByName = toolExecutorRegistry.getExecutorsByName();
@@ -97,6 +111,7 @@ public class ModelContextProtocolToolDispatcher {
             return result;
         }
         RunCodeResponse finalResponse = aiCodeHostService.awaitFinalRunResponse(runCodeResponse);
+        publishDelayedRunCodeSummary(finalResponse);
         if (finalResponse == runCodeResponse || isWaitingAiRunResponse(finalResponse)) {
             return result;
         }
@@ -107,6 +122,23 @@ public class ModelContextProtocolToolDispatcher {
         return response != null
             && response.getHost() == ScriptHost.AI
             && response.getCodeState() == CodeState.WAITING_FOR_USER_RUN;
+    }
+
+    private void publishDelayedRunCodeSummary(RunCodeResponse response) {
+        if (toolCallSummaryHandler == null || response == null) {
+            return;
+        }
+        toolCallSummaryHandler.handleToolCallSummary(new ToolCallSummary(
+            "runCode",
+            AiCodeToolSet.runCodeSummaryText(response),
+            isFailureState(response.getCodeState()),
+            ToolCaller.MCP));
+    }
+
+    private boolean isFailureState(CodeState codeState) {
+        return codeState == CodeState.INVALID_SCRIPT
+            || codeState == CodeState.INVALID_ARGUMENTS_JSON
+            || codeState == CodeState.RUN_FAILED;
     }
 
     private ToolExecutionResult toolExecutionResult(Object result) {

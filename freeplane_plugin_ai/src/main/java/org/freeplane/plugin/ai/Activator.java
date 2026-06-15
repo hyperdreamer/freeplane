@@ -212,7 +212,8 @@ public class Activator implements BundleActivator {
                             toolSetBuilder.buildToolObjects(),
                             aiCodeOperationAuthorizer,
                             controller.getViewController(),
-                            mcpCodeHostService);
+                            mcpCodeHostService,
+                            aiChatPanel.toolCallSummaryHandler());
                         ResourceController resourceController = ResourceController.getResourceController();
                         resourceController.addPropertyChangeListener(modelContextProtocolServer);
                     }

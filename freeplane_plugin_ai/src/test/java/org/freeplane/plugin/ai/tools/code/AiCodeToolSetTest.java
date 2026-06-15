@@ -1,6 +1,8 @@
 package org.freeplane.plugin.ai.tools.code;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.ai.code.AiCodeEditor;
 import org.freeplane.features.ai.code.AiCodeHostService;
@@ -26,6 +28,7 @@ import org.freeplane.plugin.ai.chat.ui.AIChatPanel;
 import org.freeplane.plugin.ai.code.AttachedEditorChatMode;
 import org.freeplane.plugin.ai.code.AttachedEditorChatModeSettings;
 import org.freeplane.plugin.ai.code.SingleEditorAttachmentService;
+import org.freeplane.plugin.ai.tools.utilities.ToolCallSummary;
 import org.freeplane.plugin.ai.tools.utilities.ToolCaller;
 import org.junit.Test;
 
@@ -181,6 +184,37 @@ public class AiCodeToolSetTest {
     }
 
     @Test
+    public void runCodeSuppressesMcpWaitingAiSummaryForDelayedDispatcherCompletion() {
+        List<ToolCallSummary> summaries = new ArrayList<ToolCallSummary>();
+        AiCodeToolSet uut = new AiCodeToolSet(
+            newRunCodeHostService(CodeState.WAITING_FOR_USER_RUN, ScriptHost.AI),
+            null,
+            summaries::add,
+            ToolCaller.MCP);
+
+        RunCodeResponse response = uut.runCode(new RunCodeToolRequest(ScriptHost.AI, token("args")));
+
+        assertThat(response.getCodeState()).isEqualTo(CodeState.WAITING_FOR_USER_RUN);
+        assertThat(summaries).isEmpty();
+    }
+
+    @Test
+    public void runCodePublishesChatWaitingAiSummaryImmediately() {
+        List<ToolCallSummary> summaries = new ArrayList<ToolCallSummary>();
+        AiCodeToolSet uut = new AiCodeToolSet(
+            newRunCodeHostService(CodeState.WAITING_FOR_USER_RUN, ScriptHost.AI),
+            null,
+            summaries::add,
+            ToolCaller.CHAT);
+
+        RunCodeResponse response = uut.runCode(new RunCodeToolRequest(ScriptHost.AI, token("args")));
+
+        assertThat(response.getCodeState()).isEqualTo(CodeState.WAITING_FOR_USER_RUN);
+        assertThat(summaries).extracting(ToolCallSummary::getSummaryText)
+            .containsExactly("runCode: codeState=WAITING_FOR_USER_RUN, host=AI");
+    }
+
+    @Test
     public void codeToolsExceptReadFailWhenNoEditorIsAttached() {
         AiCodeToolSet uut = new AiCodeToolSet(newDetachedCodeHostService(), null, null, ToolCaller.CHAT);
 
@@ -201,6 +235,52 @@ public class AiCodeToolSetTest {
         when(settings.get()).thenReturn(AttachedEditorChatMode.NEW_CHAT);
         when(aiChatPanel.startNewChat()).thenReturn(LiveChatSessionId.create());
         return new SingleEditorAttachmentService(aiChatPanel, settings);
+    }
+
+    private AiCodeHostService newRunCodeHostService(CodeState codeState, ScriptHost host) {
+        return new AiCodeHostService() {
+            @Override
+            public ReadCodeResponse readCode(ReadCodeRequest request) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public WriteCodeResponse writeCode(WriteCodeRequest request) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public CompileCodeResponse compileCode(CompileCodeRequest request) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public RunCodeResponse runCode(RunCodeRequest request) {
+                return new RunCodeResponse(
+                    host,
+                    "text/x-freeplane-script-groovy",
+                    codeState,
+                    ScriptRunInitiator.AI,
+                    token("args"),
+                    null,
+                    null,
+                    null,
+                    null);
+            }
+
+            @Override
+            public AiChatCodeOperationResult evaluateFormula(EvaluateFormulaRequest request) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public void addRunListener(AiCodeRunListener listener) {
+            }
+
+            @Override
+            public void removeRunListener(AiCodeRunListener listener) {
+            }
+        };
     }
 
     private AiCodeHostService newDetachedCodeHostService() {

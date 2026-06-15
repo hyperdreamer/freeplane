@@ -122,11 +122,13 @@ public class AiCodeToolSet {
             RunCodeRequest codeRequest = toRunCodeRequest(request);
             assertAuthorized("runCode", codeRequest == null ? null : codeRequest.getHost());
             RunCodeResponse response = codeHostService.runCode(codeRequest);
-            publishSummary(new ToolCallSummary(
-                "runCode",
-                "runCode: codeState=" + response.getCodeState() + ", host=" + response.getHost(),
-                isFailureState(response.getCodeState()),
-                toolCaller));
+            if (!isDeferredMcpRunSummary(response)) {
+                publishSummary(new ToolCallSummary(
+                    "runCode",
+                    runCodeSummaryText(response),
+                    isFailureState(response.getCodeState()),
+                    toolCaller));
+            }
             return response;
         } catch (RuntimeException error) {
             publishSummary(new ToolCallSummary(
@@ -136,6 +138,17 @@ public class AiCodeToolSet {
                 toolCaller));
             throw error;
         }
+    }
+
+    public static String runCodeSummaryText(RunCodeResponse response) {
+        return "runCode: codeState=" + response.getCodeState() + ", host=" + response.getHost();
+    }
+
+    private boolean isDeferredMcpRunSummary(RunCodeResponse response) {
+        return toolCaller == ToolCaller.MCP
+            && response != null
+            && response.getHost() == ScriptHost.AI
+            && response.getCodeState() == CodeState.WAITING_FOR_USER_RUN;
     }
 
     public Set<String> authorizedToolNames() {

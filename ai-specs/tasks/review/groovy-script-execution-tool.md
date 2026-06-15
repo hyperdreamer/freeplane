@@ -2152,3 +2152,11 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
       public synchronization service. This keeps the change narrow but
       leaves package-level coupling between the dispatcher and the MCP
       code-host wrapper.
+
+## Subtask: MCP code-run summaries after delayed completion
+- **Status:** in-progress
+- **Scope:** Make MCP-visible chat summaries for AI-host `runCode` use the final delayed MCP result instead of the initial `WAITING_FOR_USER_RUN` response.
+- **Design:** Suppress the early MCP AI-host waiting summary in `AiCodeToolSet`, then let the MCP dispatcher publish one summary after terminal-or-timeout completion.
+- **Test specification:** Verify terminal delayed MCP `runCode` summaries show the terminal state and timeout summaries show `WAITING_FOR_USER_RUN` without duplicates.
+- **Implementation notes:**
+  - Empty until implementation.

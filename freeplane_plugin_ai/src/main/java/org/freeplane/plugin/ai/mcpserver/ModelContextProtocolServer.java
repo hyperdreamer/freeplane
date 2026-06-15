@@ -26,6 +26,7 @@ import org.freeplane.features.ui.ViewController;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevelSettings;
 import org.freeplane.plugin.ai.tools.code.AiCodeOperationAuthorizer;
 import org.freeplane.plugin.ai.tools.formula.FormulaEditingSettings;
+import org.freeplane.plugin.ai.tools.utilities.ToolCallSummaryHandler;
 import org.freeplane.plugin.ai.tools.AIToolSet;
 import org.freeplane.plugin.ai.tools.MapTargetToolCallAuthorizer;
 
@@ -71,7 +72,16 @@ public class ModelContextProtocolServer implements IFreeplanePropertyListener {
                                       ViewController viewController,
                                       ModelContextProtocolAiCodeHostService aiCodeHostService) {
         this(toolSets, new ObjectMapper(), ResourceController.getResourceController(), viewController,
-            aiCodeOperationAuthorizer, aiCodeHostService);
+            aiCodeOperationAuthorizer, aiCodeHostService, null);
+    }
+
+    public ModelContextProtocolServer(Collection<?> toolSets,
+                                      AiCodeOperationAuthorizer aiCodeOperationAuthorizer,
+                                      ViewController viewController,
+                                      ModelContextProtocolAiCodeHostService aiCodeHostService,
+                                      ToolCallSummaryHandler toolCallSummaryHandler) {
+        this(toolSets, new ObjectMapper(), ResourceController.getResourceController(), viewController,
+            aiCodeOperationAuthorizer, aiCodeHostService, toolCallSummaryHandler);
     }
 
     public ModelContextProtocolServer(AIToolSet toolSet, ObjectMapper objectMapper, ViewController viewController) {
@@ -94,11 +104,20 @@ public class ModelContextProtocolServer implements IFreeplanePropertyListener {
                                ViewController viewController,
                                AiCodeOperationAuthorizer aiCodeOperationAuthorizer,
                                ModelContextProtocolAiCodeHostService aiCodeHostService) {
+        this(toolSets, objectMapper, resourceController, viewController, aiCodeOperationAuthorizer, aiCodeHostService,
+            null);
+    }
+
+    ModelContextProtocolServer(Collection<?> toolSets, ObjectMapper objectMapper, ResourceController resourceController,
+                               ViewController viewController,
+                               AiCodeOperationAuthorizer aiCodeOperationAuthorizer,
+                               ModelContextProtocolAiCodeHostService aiCodeHostService,
+                               ToolCallSummaryHandler toolCallSummaryHandler) {
         this(toolSets, objectMapper, resourceController, new MCPAuthenticator(
             resourceController,
             viewController,
             MCP_TOKEN_PROPERTY,
-            MCP_TOKEN_HEADER), aiCodeOperationAuthorizer, aiCodeHostService);
+            MCP_TOKEN_HEADER), aiCodeOperationAuthorizer, aiCodeHostService, toolCallSummaryHandler);
     }
 
     ModelContextProtocolServer(AIToolSet toolSet, ObjectMapper objectMapper, ResourceController resourceController,
@@ -121,6 +140,15 @@ public class ModelContextProtocolServer implements IFreeplanePropertyListener {
                                MCPAuthenticator authenticator,
                                AiCodeOperationAuthorizer aiCodeOperationAuthorizer,
                                ModelContextProtocolAiCodeHostService aiCodeHostService) {
+        this(toolSets, objectMapper, resourceController, authenticator, aiCodeOperationAuthorizer, aiCodeHostService,
+            null);
+    }
+
+    ModelContextProtocolServer(Collection<?> toolSets, ObjectMapper objectMapper, ResourceController resourceController,
+                               MCPAuthenticator authenticator,
+                               AiCodeOperationAuthorizer aiCodeOperationAuthorizer,
+                               ModelContextProtocolAiCodeHostService aiCodeHostService,
+                               ToolCallSummaryHandler toolCallSummaryHandler) {
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
         ToolAvailabilityLevelSettings toolAvailabilityLevelSettings = new ToolAvailabilityLevelSettings(resourceController);
         FormulaEditingSettings formulaEditingSettings = new FormulaEditingSettings(resourceController);
@@ -133,7 +161,8 @@ public class ModelContextProtocolServer implements IFreeplanePropertyListener {
             toolSets,
             this.objectMapper,
             createToolCallAuthorizer(resourceController, aiCodeOperationAuthorizer),
-            aiCodeHostService);
+            aiCodeHostService,
+            toolCallSummaryHandler);
         this.resourceController = Objects.requireNonNull(resourceController, "resourceController");
         this.authenticator = Objects.requireNonNull(authenticator, "authenticator");
         this.running = new AtomicBoolean(false);

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.service.tool.ToolExecutionResult;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -27,6 +28,7 @@ import org.freeplane.features.ai.code.ScriptRunInitiator;
 import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeResponse;
 import org.freeplane.plugin.ai.tools.code.AiCodeToolSet;
+import org.freeplane.plugin.ai.tools.utilities.ToolCallSummary;
 import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -121,12 +123,14 @@ public class ModelContextProtocolToolDispatcherTest {
         ObjectMapper objectMapper = new ObjectMapper();
         WaitingAiCodeHostService delegate = new WaitingAiCodeHostService();
         CompletingAiCodeHostService codeHostService = new CompletingAiCodeHostService(delegate);
+        List<ToolCallSummary> summaries = new ArrayList<ToolCallSummary>();
         AiCodeToolSet toolSet = new AiCodeToolSet(codeHostService, null, null, null);
         ModelContextProtocolToolDispatcher dispatcher = new ModelContextProtocolToolDispatcher(
             Arrays.<Object>asList(toolSet),
             objectMapper,
             null,
-            codeHostService);
+            codeHostService,
+            summaries::add);
 
         AtomicReference<ToolExecutionResult> result = new AtomicReference<ToolExecutionResult>();
         final JsonNode argumentsNode = objectMapper.readTree(
@@ -139,6 +143,8 @@ public class ModelContextProtocolToolDispatcherTest {
         RunCodeResponse response = (RunCodeResponse) result.get().result();
         assertThat(response.getCodeState()).isEqualTo(CodeState.USER_RUN_CANCELLED);
         assertThat(result.get().resultText()).contains("USER_RUN_CANCELLED");
+        assertThat(summaries).extracting(ToolCallSummary::getSummaryText)
+            .containsExactly("runCode: codeState=USER_RUN_CANCELLED, host=AI");
     }
 
     @Test
