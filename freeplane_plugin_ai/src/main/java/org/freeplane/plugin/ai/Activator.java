@@ -194,7 +194,7 @@ public class Activator implements BundleActivator {
                             LogUtils.severe("Cannot start MCP server: view controller is not available.");
                             return;
                         }
-                        AiCodeHostService mcpCodeHostService = new ModelContextProtocolAiCodeHostService(
+                        ModelContextProtocolAiCodeHostService mcpCodeHostService = new ModelContextProtocolAiCodeHostService(
                             codeHostService,
                             aiChatPanel::clearPendingAiOwnedUserRunFollowup);
                         AiCodeOperationAuthorizer aiCodeOperationAuthorizer = new AiCodeOperationAuthorizer(
@@ -211,7 +211,8 @@ public class Activator implements BundleActivator {
                         modelContextProtocolServer = new ModelContextProtocolServer(
                             toolSetBuilder.buildToolObjects(),
                             aiCodeOperationAuthorizer,
-                            controller.getViewController());
+                            controller.getViewController(),
+                            mcpCodeHostService);
                         ResourceController resourceController = ResourceController.getResourceController();
                         resourceController.addPropertyChangeListener(modelContextProtocolServer);
                     }

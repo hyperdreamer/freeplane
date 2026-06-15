@@ -1,5 +1,6 @@
 package org.freeplane.plugin.ai.mcpserver;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.service.tool.ToolExecutionResult;
@@ -64,7 +65,7 @@ public class ModelContextProtocolToolDispatcherTest {
             objectMapper);
 
         AtomicReference<ToolExecutionResult> result = new AtomicReference<ToolExecutionResult>();
-        final com.fasterxml.jackson.databind.JsonNode argumentsNode = objectMapper.readTree(
+        final JsonNode argumentsNode = objectMapper.readTree(
             "{\"request\":{\"host\":\"AI\",\"content\":{\"sourceText\":\"println 1\",\"argumentsJsonText\":\"{}\"},\"expectedStateToken\":{\"codeFingerprint\":\"code-fp\",\"argumentsFingerprint\":\"args-fp\"}}}");
         SwingUtilities.invokeAndWait(() -> result.set(dispatcher.dispatch("writeCode", argumentsNode)));
 
@@ -85,7 +86,7 @@ public class ModelContextProtocolToolDispatcherTest {
             objectMapper);
 
         AtomicReference<ToolExecutionResult> result = new AtomicReference<ToolExecutionResult>();
-        final com.fasterxml.jackson.databind.JsonNode argumentsNode = objectMapper.readTree(
+        final JsonNode argumentsNode = objectMapper.readTree(
             "{\"request\":{\"host\":\"AI\",\"expectedStateToken\":{\"codeFingerprint\":\"code-fp\",\"argumentsFingerprint\":\"args-fp\"}}}");
         SwingUtilities.invokeAndWait(() -> result.set(dispatcher.dispatch("compileCode", argumentsNode)));
 
@@ -105,7 +106,7 @@ public class ModelContextProtocolToolDispatcherTest {
             objectMapper);
 
         AtomicReference<ToolExecutionResult> result = new AtomicReference<ToolExecutionResult>();
-        final com.fasterxml.jackson.databind.JsonNode argumentsNode = objectMapper.readTree(
+        final JsonNode argumentsNode = objectMapper.readTree(
             "{\"request\":{\"host\":\"AI\",\"expectedStateToken\":{\"codeFingerprint\":\"code-fp\",\"argumentsFingerprint\":\"args-fp\"}}}");
         SwingUtilities.invokeAndWait(() -> result.set(dispatcher.dispatch("runCode", argumentsNode)));
 
@@ -113,6 +114,31 @@ public class ModelContextProtocolToolDispatcherTest {
         assertThat(codeHostService.lastRunRequest.getHost()).isEqualTo(ScriptHost.AI);
         assertThat(codeHostService.lastRunRequest.getExpectedStateToken().getArgumentsFingerprint()).isEqualTo("args-fp");
         assertThat(result.get().resultText()).contains("RUN_SUCCEEDED");
+    }
+
+    @Test
+    public void dispatchCompletesWaitingAiRunCodeWithTerminalResponse() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        WaitingAiCodeHostService delegate = new WaitingAiCodeHostService();
+        CompletingAiCodeHostService codeHostService = new CompletingAiCodeHostService(delegate);
+        AiCodeToolSet toolSet = new AiCodeToolSet(codeHostService, null, null, null);
+        ModelContextProtocolToolDispatcher dispatcher = new ModelContextProtocolToolDispatcher(
+            Arrays.<Object>asList(toolSet),
+            objectMapper,
+            null,
+            codeHostService);
+
+        AtomicReference<ToolExecutionResult> result = new AtomicReference<ToolExecutionResult>();
+        final JsonNode argumentsNode = objectMapper.readTree(
+            "{\"request\":{\"host\":\"AI\",\"expectedStateToken\":{\"codeFingerprint\":\"code-fp\",\"argumentsFingerprint\":\"args-fp\"}}}");
+        SwingUtilities.invokeAndWait(() -> result.set(dispatcher.dispatch("runCode", argumentsNode)));
+
+        assertThat(delegate.lastRunRequest).isNotNull();
+        assertThat(codeHostService.awaited).isTrue();
+        assertThat(result.get().result()).isInstanceOf(RunCodeResponse.class);
+        RunCodeResponse response = (RunCodeResponse) result.get().result();
+        assertThat(response.getCodeState()).isEqualTo(CodeState.USER_RUN_CANCELLED);
+        assertThat(result.get().resultText()).contains("USER_RUN_CANCELLED");
     }
 
     @Test
@@ -125,7 +151,7 @@ public class ModelContextProtocolToolDispatcherTest {
             objectMapper);
 
         AtomicReference<ToolExecutionResult> result = new AtomicReference<ToolExecutionResult>();
-        final com.fasterxml.jackson.databind.JsonNode argumentsNode = objectMapper.readTree(
+        final JsonNode argumentsNode = objectMapper.readTree(
             "{\"request\":{\"host\":\"ATTACHED_EDITOR\"}}");
         SwingUtilities.invokeAndWait(() -> result.set(dispatcher.dispatch("readCode", argumentsNode)));
 
@@ -157,6 +183,76 @@ public class ModelContextProtocolToolDispatcherTest {
 
         verify(authorizer).assertAuthorized(eq("secondTool"), eq(null));
         assertThat(result.get().resultText()).isEqualTo("authorized");
+    }
+
+    private static class CompletingAiCodeHostService extends ModelContextProtocolAiCodeHostService {
+        private boolean awaited;
+
+        private CompletingAiCodeHostService(AiCodeHostService delegate) {
+            super(delegate, () -> {}, () -> Long.valueOf(1000L));
+        }
+
+        @Override
+        RunCodeResponse awaitFinalRunResponse(RunCodeResponse waitingResponse) {
+            awaited = true;
+            return new RunCodeResponse(
+                ScriptHost.AI,
+                "text/x-freeplane-script-groovy",
+                CodeState.USER_RUN_CANCELLED,
+                ScriptRunInitiator.USER,
+                waitingResponse.getStateToken(),
+                null,
+                null,
+                null,
+                null);
+        }
+    }
+
+    private static class WaitingAiCodeHostService implements AiCodeHostService {
+        private RunCodeRequest lastRunRequest;
+
+        @Override
+        public ReadCodeResponse readCode(ReadCodeRequest request) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public WriteCodeResponse writeCode(WriteCodeRequest request) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public CompileCodeResponse compileCode(CompileCodeRequest request) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public RunCodeResponse runCode(RunCodeRequest request) {
+            lastRunRequest = request;
+            return new RunCodeResponse(
+                ScriptHost.AI,
+                "text/x-freeplane-script-groovy",
+                CodeState.WAITING_FOR_USER_RUN,
+                ScriptRunInitiator.AI,
+                token("args-fp"),
+                null,
+                null,
+                null,
+                null);
+        }
+
+        @Override
+        public AiChatCodeOperationResult evaluateFormula(EvaluateFormulaRequest request) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void addRunListener(AiCodeRunListener listener) {
+        }
+
+        @Override
+        public void removeRunListener(AiCodeRunListener listener) {
+        }
     }
 
     private static class RecordingCodeHostService implements AiCodeHostService {

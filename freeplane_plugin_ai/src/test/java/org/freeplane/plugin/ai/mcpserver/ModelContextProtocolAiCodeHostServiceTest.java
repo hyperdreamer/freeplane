@@ -23,11 +23,12 @@ import org.freeplane.features.ai.code.WriteCodeResponse;
 import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class ModelContextProtocolAiCodeHostServiceTest {
 
     @Test
-    public void runCodeWaitsForFinalUserRunResponseWithinTimeout() {
+    public void runCodeReturnsWaitingAndAwaitReturnsFinalUserRunResponseWithinTimeout() {
         WaitingCodeHostService delegate = new WaitingCodeHostService();
         AtomicBoolean cleared = new AtomicBoolean(false);
         ModelContextProtocolAiCodeHostService uut = new ModelContextProtocolAiCodeHostService(
@@ -39,44 +40,104 @@ public class ModelContextProtocolAiCodeHostServiceTest {
             "text/x-freeplane-script-groovy",
             CodeState.RUN_SUCCEEDED,
             ScriptRunInitiator.USER,
-            new CodeStateToken("code", "args"),
+            token(),
             null,
             null,
             "done",
             null),
             50L);
 
-        RunCodeResponse response = uut.runCode(new RunCodeRequest(ScriptHost.AI, new CodeStateToken("code", "args")));
+        RunCodeResponse waitingResponse = uut.runCode(new RunCodeRequest(ScriptHost.AI, token()));
+        RunCodeResponse finalResponse = uut.awaitFinalRunResponse(waitingResponse);
 
         assertThat(cleared.get()).isTrue();
-        assertThat(response.getCodeState()).isEqualTo(CodeState.RUN_SUCCEEDED);
-        assertThat(response.getStdout()).isEqualTo("done");
+        assertThat(delegate.listenerCountWhenRunCodeStarted).isEqualTo(1);
+        assertThat(waitingResponse.getCodeState()).isEqualTo(CodeState.WAITING_FOR_USER_RUN);
+        assertThat(finalResponse.getCodeState()).isEqualTo(CodeState.RUN_SUCCEEDED);
+        assertThat(finalResponse.getStdout()).isEqualTo("done");
+        assertThat(delegate.listenerCount()).isEqualTo(0);
     }
 
     @Test
-    public void runCodeReturnsWaitingWhenTimeoutExpiresFirst() {
+    public void awaitFinalRunResponseReturnsWaitingWhenTimeoutExpiresFirst() {
         WaitingCodeHostService delegate = new WaitingCodeHostService();
         AtomicBoolean cleared = new AtomicBoolean(false);
         ModelContextProtocolAiCodeHostService uut = new ModelContextProtocolAiCodeHostService(
             delegate,
             () -> cleared.set(true),
             () -> Long.valueOf(25L));
-        delegate.setFinalResponse(new RunCodeResponse(
-            ScriptHost.AI,
-            "text/x-freeplane-script-groovy",
-            CodeState.USER_RUN_CANCELLED,
-            ScriptRunInitiator.USER,
-            new CodeStateToken("code", "args"),
-            null,
-            null,
-            null,
-            null),
-            200L);
 
-        RunCodeResponse response = uut.runCode(new RunCodeRequest(ScriptHost.AI, new CodeStateToken("code", "args")));
+        RunCodeResponse waitingResponse = uut.runCode(new RunCodeRequest(ScriptHost.AI, token()));
+        RunCodeResponse finalResponse = uut.awaitFinalRunResponse(waitingResponse);
 
         assertThat(cleared.get()).isTrue();
-        assertThat(response.getCodeState()).isEqualTo(CodeState.WAITING_FOR_USER_RUN);
+        assertThat(waitingResponse.getCodeState()).isEqualTo(CodeState.WAITING_FOR_USER_RUN);
+        assertThat(finalResponse).isSameAs(waitingResponse);
+        assertThat(delegate.listenerCount()).isEqualTo(0);
+    }
+
+    @Test
+    public void runCodeCleansUpWhenImmediateResponseIsNotWaiting() {
+        WaitingCodeHostService delegate = new WaitingCodeHostService();
+        delegate.setInitialResponse(new RunCodeResponse(
+            ScriptHost.AI,
+            "text/x-freeplane-script-groovy",
+            CodeState.RUN_SUCCEEDED,
+            ScriptRunInitiator.AI,
+            token(),
+            null,
+            null,
+            "done",
+            null));
+        ModelContextProtocolAiCodeHostService uut = new ModelContextProtocolAiCodeHostService(
+            delegate,
+            () -> {},
+            () -> Long.valueOf(1000L));
+
+        RunCodeResponse response = uut.runCode(new RunCodeRequest(ScriptHost.AI, token()));
+
+        assertThat(response.getCodeState()).isEqualTo(CodeState.RUN_SUCCEEDED);
+        assertThat(delegate.listenerCountWhenRunCodeStarted).isEqualTo(1);
+        assertThat(delegate.listenerCount()).isEqualTo(0);
+    }
+
+    @Test
+    public void runCodeCleansUpWhenDelegateFails() {
+        WaitingCodeHostService delegate = new WaitingCodeHostService();
+        delegate.failWith(new IllegalStateException("failed"));
+        ModelContextProtocolAiCodeHostService uut = new ModelContextProtocolAiCodeHostService(
+            delegate,
+            () -> {},
+            () -> Long.valueOf(1000L));
+
+        assertThatThrownBy(() -> uut.runCode(new RunCodeRequest(ScriptHost.AI, token())))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("failed");
+        assertThat(delegate.listenerCountWhenRunCodeStarted).isEqualTo(1);
+        assertThat(delegate.listenerCount()).isEqualTo(0);
+    }
+
+    @Test
+    public void awaitFinalRunResponseReturnsWaitingWhenNoMatchingPendingRunExists() {
+        WaitingCodeHostService delegate = new WaitingCodeHostService();
+        ModelContextProtocolAiCodeHostService uut = new ModelContextProtocolAiCodeHostService(
+            delegate,
+            () -> {},
+            () -> Long.valueOf(1000L));
+        RunCodeResponse waitingResponse = new RunCodeResponse(
+            ScriptHost.AI,
+            "text/x-freeplane-script-groovy",
+            CodeState.WAITING_FOR_USER_RUN,
+            ScriptRunInitiator.AI,
+            token(),
+            null,
+            null,
+            null,
+            null);
+
+        RunCodeResponse finalResponse = uut.awaitFinalRunResponse(waitingResponse);
+
+        assertThat(finalResponse).isSameAs(waitingResponse);
     }
 
     @Test
@@ -93,14 +154,33 @@ public class ModelContextProtocolAiCodeHostServiceTest {
         assertThat(cleared.get()).isTrue();
     }
 
+    private static CodeStateToken token() {
+        return new CodeStateToken("code", "args");
+    }
+
     private static class WaitingCodeHostService implements AiCodeHostService {
         private final Set<AiCodeRunListener> listeners = new CopyOnWriteArraySet<AiCodeRunListener>();
+        private volatile RunCodeResponse initialResponse;
         private volatile RunCodeResponse finalResponse;
         private volatile long finalResponseDelayMillis;
+        private volatile int listenerCountWhenRunCodeStarted;
+        private volatile RuntimeException runCodeFailure;
+
+        private void setInitialResponse(RunCodeResponse initialResponse) {
+            this.initialResponse = initialResponse;
+        }
 
         private void setFinalResponse(RunCodeResponse finalResponse, long finalResponseDelayMillis) {
             this.finalResponse = finalResponse;
             this.finalResponseDelayMillis = finalResponseDelayMillis;
+        }
+
+        private void failWith(RuntimeException runCodeFailure) {
+            this.runCodeFailure = runCodeFailure;
+        }
+
+        private int listenerCount() {
+            return listeners.size();
         }
 
         @Override
@@ -124,17 +204,21 @@ public class ModelContextProtocolAiCodeHostServiceTest {
 
         @Override
         public RunCodeResponse runCode(RunCodeRequest request) {
-            RunCodeResponse response = new RunCodeResponse(
+            listenerCountWhenRunCodeStarted = listeners.size();
+            if (runCodeFailure != null) {
+                throw runCodeFailure;
+            }
+            RunCodeResponse response = initialResponse != null ? initialResponse : new RunCodeResponse(
                 ScriptHost.AI,
                 "text/x-freeplane-script-groovy",
                 CodeState.WAITING_FOR_USER_RUN,
                 ScriptRunInitiator.AI,
-                new CodeStateToken("code", "args"),
+                token(),
                 null,
                 null,
                 null,
                 null);
-            if (finalResponse != null) {
+            if (response.getCodeState() == CodeState.WAITING_FOR_USER_RUN && finalResponse != null) {
                 new Thread(() -> {
                     try {
                         Thread.sleep(finalResponseDelayMillis);

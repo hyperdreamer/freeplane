@@ -1,4 +1,4 @@
-# Task: Replace direct Groovy execution tool with AI-owned script flows
+# Task: Introduce shared AI code-host workflows for scripts, formulas, and MCP
 - **Task Identifier:** 2026-04-09-script-tool
 - **Scope:** Rewrite this backlog item around an AI-owned script flow
   plus a shared attached-code contract instead of a direct
@@ -1952,3 +1952,203 @@ McpChannel -> ApiTool: allowed even at DISABLED for API info flow
     `AutomaticCodeStatusMessage` were updated so reopening and automatic
     user-run status handling no longer depends on externally surfaced
     `codeId` values.
+
+## Subtask: MCP tool completion synchronization on EDT
+- **Status:** in-progress
+- **Scope:** Replace the current MCP bounded-wait implementation with
+  MCP-only response-completion synchronization that keeps all Freeplane
+  tool method bodies on EDT, keeps chat tool behavior unchanged, and
+  returns a terminal AI-owned `runCode` response when the user presses
+  Run or Cancel inside the configured timeout.
+- **Motivation:** MCP `runCode(host=AI)` must return `RUN_SUCCEEDED`,
+  `RUN_FAILED`, or `USER_RUN_CANCELLED` when the user acts inside the
+  timeout. The current local waiting approach either returns the
+  original `WAITING_FOR_USER_RUN` or needs a nested Swing event loop.
+  The better design is to let the initial tool call return from EDT,
+  then let the MCP server thread wait for MCP-only terminal completion
+  while EDT remains free to process Run, Cancel, and timer events.
+- **Briefing:** This follow-up primarily touches
+  `ModelContextProtocolToolDispatcher` and
+  `ModelContextProtocolAiCodeHostService`. It should not change
+  `EventDispatchToolExecutor` or the chat/LLM tool execution path.
+  It reuses `ToolExecutionResult.result()` for typed inspection before
+  MCP JSON serialization, `AiCodeRunListener` for terminal AI-run
+  states, and `ai_mcp_user_run_wait_timeout_seconds` for the timeout.
+- **Research:**
+  - `ModelContextProtocolToolDispatcher` builds MCP tool executors
+    through `ToolExecutorFactory`.
+  - `ToolExecutorFactory` wraps reflected tool methods with
+    `EventDispatchToolExecutor`.
+  - `EventDispatchToolExecutor` currently uses `invokeAndWait`, so the
+    MCP HTTP/server thread waits while the whole tool method executes
+    on EDT.
+  - Freeplane map, script, and UI access require tool method bodies to
+    execute on EDT.
+  - After `invokeAndWait` returns, the MCP HTTP/server thread is free
+    to wait without blocking EDT.
+  - `DefaultToolExecutor` stores the raw Java return value in
+    `ToolExecutionResult.result()` and only converts it to text through
+    `resultTextSupplier` when `resultText()` or `resultContents()` is
+    requested.
+  - `ModelContextProtocolServer.handleToolCall(...)` serializes the
+    final MCP response after dispatcher return by calling
+    `ToolExecutionResult.resultText()` and wrapping it as MCP text
+    content.
+  - `AiOwnedScriptHostService.dialogCancelled()` and user-started Run
+    paths publish terminal AI-host run states through
+    `AiCodeRunListener`.
+  - A blocking wait inside an EDT tool method freezes the UI and
+    prevents the dialog Run/Cancel event and Swing timer event from
+    being processed.
+  - `SecondaryLoop` can keep EDT event processing alive, but it is a
+    more complex workaround than waiting on the MCP server thread after
+    the initial EDT tool call returns.
+- **Analysis:**
+  - Keep all Freeplane tool method bodies on EDT because map, script,
+    and UI operations are EDT-bound.
+  - Keep `EventDispatchToolExecutor` unchanged because changing shared
+    tool execution would affect chat tools even though the problem is
+    MCP-specific response completion.
+  - Implement delayed behavior after the initial EDT tool result in
+    `ModelContextProtocolToolDispatcher` because that is where the MCP
+    server thread is available to wait without blocking EDT.
+  - Treat delayed MCP `runCode` as response-completion behavior rather
+    than tool-execution threading because the tool still executes on
+    EDT and only the MCP response is delayed.
+  - Keep internal chat behavior separate from MCP delayed completion
+    because internal AI-owned user-run completion is handled by the
+    automatic chat follow-up path, not by holding the model tool call.
+  - Use `ToolExecutionResult.result()` for typed `RunCodeResponse`
+    inspection because it preserves the raw tool return value before
+    MCP text serialization.
+  - Build delayed terminal `ToolExecutionResult` values with the same
+    object-to-text conversion used by LangChain4j's
+    `DefaultToolExecutor` because immediate and delayed MCP responses
+    must have the same external JSON shape.
+- **Design:**
+  ```plantuml
+  @startuml
+  participant "MCP HTTP/server thread" as McpThread
+  participant "ModelContextProtocolToolDispatcher" as Dispatcher
+  participant "EventDispatchToolExecutor" as Executor
+  participant "EDT" as Edt
+  participant "AiCodeToolSet" as CodeTool
+  participant "ModelContextProtocolAiCodeHostService" as McpCodeHost
+  participant "AiOwnedScriptHostService" as AiHost
+  participant "AI-owned script dialog" as Dialog
+
+  McpThread -> Dispatcher : dispatch(runCode)
+  Dispatcher -> Executor : executeWithContext(...)
+  Executor -> Edt : invokeAndWait(tool invocation)
+  Edt -> CodeTool : runCode(...)
+  CodeTool -> McpCodeHost : runCode(...)
+  McpCodeHost -> AiHost : runCode(...)
+  AiHost -> Dialog : show and wait for user action
+  AiHost --> McpCodeHost : WAITING_FOR_USER_RUN
+  McpCodeHost --> CodeTool : WAITING_FOR_USER_RUN
+  CodeTool --> Executor : ToolExecutionResult(result=RunCodeResponse)
+  Executor --> Dispatcher : initial ToolExecutionResult
+  alt initial result is not AI WAITING_FOR_USER_RUN
+    Dispatcher --> McpThread : initial ToolExecutionResult
+  else initial result is AI WAITING_FOR_USER_RUN
+    Dispatcher -> McpCodeHost : await terminal-or-timeout completion
+    alt user acts before timeout
+      Dialog -> AiHost : Run or Cancel
+      AiHost -> McpCodeHost : AiCodeRunListener terminal response
+      McpCodeHost --> Dispatcher : terminal RunCodeResponse
+      Dispatcher --> McpThread : ToolExecutionResult(terminal response)
+    else timeout expires first
+      McpCodeHost --> Dispatcher : original WAITING_FOR_USER_RUN
+      Dispatcher --> McpThread : initial ToolExecutionResult
+    end
+  end
+  @enduml
+  ```
+
+  - Leave `EventDispatchToolExecutor` and `ToolExecutorFactory`
+    behavior unchanged.
+  - Add MCP-only delayed completion in
+    `ModelContextProtocolToolDispatcher` after the initial
+    `ToolExecutionResult` is returned by the executor.
+  - `ModelContextProtocolToolDispatcher` inspects
+    `ToolExecutionResult.result()` and delays only when the result is a
+    `RunCodeResponse` with `host=AI` and
+    `codeState=WAITING_FOR_USER_RUN`.
+  - `ModelContextProtocolAiCodeHostService.runCode(...)` registers the
+    terminal AI-run listener and starts the Swing timeout timer before
+    delegating to `AiOwnedScriptHostService.runCode(...)`, but it does
+    not block the EDT.
+  - If the immediate `runCode` response is not `WAITING_FOR_USER_RUN`,
+    `ModelContextProtocolAiCodeHostService` stops the timer, removes
+    the listener, and returns normally.
+  - If the immediate response is `WAITING_FOR_USER_RUN`,
+    `ModelContextProtocolAiCodeHostService` keeps a pending completion
+    for the MCP dispatcher and returns the initial waiting response.
+  - The MCP dispatcher waits on the MCP HTTP/server thread for the
+    first of terminal `AiCodeRunListener` response or timeout.
+  - Terminal user completion returns a terminal `RunCodeResponse` to
+    the dispatcher and stops the timer on EDT.
+  - Timeout completion returns the original waiting response and
+    removes the terminal listener on EDT.
+  - Completion is first-wins so a timeout/result race cannot publish
+    two MCP responses.
+  - Delayed terminal responses are converted to `ToolExecutionResult`
+    with the same JSON conversion semantics as LangChain4j normal tool
+    returns. Use a narrow adapter rather than MCP-server protocol
+    serialization so `ModelContextProtocolServer` can keep calling
+    `resultText()` uniformly.
+  - The final implementation must not use `SecondaryLoop` and must not
+    run any Freeplane tool method body off EDT.
+- **Test specification:**
+  - Automated tests:
+    - verify the shared `EventDispatchToolExecutor` behavior remains
+      unchanged for normal chat/tool calls;
+    - verify `ModelContextProtocolToolDispatcher` inspects the raw
+      `ToolExecutionResult.result()` before MCP serialization;
+    - verify non-`runCode`, attached-editor `runCode`, and immediate
+      non-waiting AI `runCode` results return without delayed
+      completion;
+    - verify MCP `runCode(host=AI)` starts its terminal listener and
+      timer before delegating to the AI-owned host;
+    - verify MCP `runCode(host=AI)` returns the terminal
+      `RUN_SUCCEEDED` or `RUN_FAILED` response when user Run completes
+      inside the timeout;
+    - verify MCP `runCode(host=AI)` returns `USER_RUN_CANCELLED` when
+      Cancel happens inside the timeout;
+    - verify timeout returns the original `WAITING_FOR_USER_RUN`
+      response without auto-run or auto-cancel;
+    - verify completion is first-wins when timeout and terminal
+      response race;
+    - verify listener and timer cleanup on terminal result, timeout,
+      immediate non-waiting result, and exception paths;
+    - verify delayed terminal `RunCodeResponse` text matches the normal
+      `DefaultToolExecutor` object-return JSON shape; and
+    - verify internal chat `runCode` behavior still returns the
+      immediate waiting response and relies on the automatic follow-up
+      path rather than MCP delayed completion.
+  - Manual tests:
+    - call MCP `writeCode`, `compileCode`, and `runCode(host=AI)` for a
+      script requiring user Run; press Cancel inside the timeout and
+      verify the `runCode` tool response is `USER_RUN_CANCELLED`;
+    - repeat and press Run inside the timeout, verifying the `runCode`
+      response contains the terminal state, stdout, and structured
+      result; and
+    - repeat without acting until timeout and verify the response stays
+      `WAITING_FOR_USER_RUN`, with later `readCode(host=AI)` exposing
+      the eventual state.
+- **Implementation notes:**
+  - **Interpretations:**
+    - Treated MCP-only delayed completion as dispatcher-side response
+      completion after the EDT tool invocation returns, with existing
+      dispatcher/server constructors retaining null delayed-completion
+      state unless the MCP activator supplies the MCP code-host wrapper.
+    - Treated the same-JSON-shape requirement as rebuilding delayed
+      terminal responses with LangChain4j object-return JSON conversion
+      while leaving `ModelContextProtocolServer` on its existing
+      `resultText()` serialization path.
+  - **Tradeoffs:**
+    - Kept pending terminal-or-timeout state inside
+      `ModelContextProtocolAiCodeHostService` instead of adding a new
+      public synchronization service. This keeps the change narrow but
+      leaves package-level coupling between the dispatcher and the MCP
+      code-host wrapper.
