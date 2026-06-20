@@ -1,6 +1,6 @@
 package org.freeplane.plugin.ai.chat.ui;
 
-enum InstructionMessageRenderingMode {
+enum InstructionHistoryRenderingMode {
     BRIEF,
     FULL
 }

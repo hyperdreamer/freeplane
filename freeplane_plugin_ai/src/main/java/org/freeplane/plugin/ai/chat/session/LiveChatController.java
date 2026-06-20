@@ -195,6 +195,24 @@ public class LiveChatController {
         return memory == null || memory.capturedSystemMessage() == null ? "" : memory.capturedSystemMessage().trim();
     }
 
+    public void updateSessionSystemMessage(LiveChatSessionId sessionId, String baseText, String composedText) {
+        AssistantProfileChatMemory memory = activeAssistantProfileChatMemory(liveChatSessionManager.findSession(sessionId));
+        if (memory == null) {
+            return;
+        }
+        memory.updateSystemMessage(baseText, composedText);
+    }
+
+    public boolean sessionHasProfileInstruction(LiveChatSessionId sessionId) {
+        AssistantProfileChatMemory memory = activeAssistantProfileChatMemory(liveChatSessionManager.findSession(sessionId));
+        return memory != null && memory.hasProfileInstruction();
+    }
+
+    public AssistantProfileSwitchMessage sessionLatestProfileSwitchMessage(LiveChatSessionId sessionId) {
+        AssistantProfileChatMemory memory = activeAssistantProfileChatMemory(liveChatSessionManager.findSession(sessionId));
+        return memory == null ? null : memory.latestProfileSwitchMessage();
+    }
+
     public void clearCurrentSessionSelectedModelOverride() {
         setSessionSelectedModelOverride(liveChatSessionManager.getCurrentSessionId(), null);
     }

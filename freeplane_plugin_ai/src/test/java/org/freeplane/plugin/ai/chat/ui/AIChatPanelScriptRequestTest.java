@@ -15,6 +15,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import org.mockito.ArgumentCaptor;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import javax.swing.JButton;
@@ -49,6 +50,7 @@ import org.freeplane.features.ai.code.WriteCodeResponse;
 import org.freeplane.features.text.TextController;
 import org.freeplane.plugin.ai.chat.history.ChatTranscriptStore;
 import org.freeplane.plugin.ai.chat.memory.AssistantProfileChatMemory;
+import org.freeplane.plugin.ai.chat.memory.AssistantProfileSwitchMessage;
 import org.freeplane.plugin.ai.chat.memory.ChatMemoryRenderEntry;
 import org.freeplane.plugin.ai.chat.memory.ChatMemorySettings;
 import org.freeplane.plugin.ai.chat.memory.ChatTokenUsageTracker;
@@ -65,6 +67,7 @@ import org.freeplane.plugin.ai.chat.request.ChatRequestFlow;
 import org.freeplane.plugin.ai.chat.request.ChatRequestFlowFactory;
 import org.freeplane.plugin.ai.chat.request.PromptToolSelectionResolver;
 import org.freeplane.plugin.ai.chat.request.ResolvedAiRequest;
+import org.freeplane.plugin.ai.chat.request.SystemInstructionComposer;
 import org.freeplane.plugin.ai.chat.request.VisibleAiRequestCallbacksFactory;
 import org.freeplane.plugin.ai.chat.session.LiveChatController;
 import org.freeplane.plugin.ai.chat.session.LiveChatSessionId;
@@ -358,6 +361,125 @@ public class AIChatPanelScriptRequestTest {
         InOrder inOrder = inOrder(harness.chatOutputView, requestCallbacks);
         inOrder.verify(harness.chatOutputView).appendAssistantMessage("Answer");
         inOrder.verify(requestCallbacks).onResponseAppended("Answer");
+    }
+
+    @Test
+    public void emptyChatWithPreviewEnabledSuppressesInitialHistorySystemMessage() throws Exception {
+        PanelHarness harness = newPanelHarness(true);
+        setField(harness.panel, "chatMemory", harness.liveChatController.chatMemory(harness.sessionId));
+        setField(harness.panel, "showInstructionMessages", true);
+        setField(harness.panel, "showNextRequestInstructionPreview", true);
+        setField(harness.panel, "currentSessionUsesAssistantProfile", true);
+
+        rebuildHistoryFromMemory(harness.panel);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<java.util.List<ChatMemoryRenderEntry>> entriesCaptor =
+            ArgumentCaptor.forClass((Class) java.util.List.class);
+        verify(harness.chatOutputView).rebuildHistory(entriesCaptor.capture());
+        assertThat(entriesCaptor.getValue()).isEmpty();
+    }
+
+    @Test
+    public void emptyChatWithFullInstructionsAndPreviewDisabledSuppressesInitialHistorySystemMessage() throws Exception {
+        PanelHarness harness = newPanelHarness(true);
+        setField(harness.panel, "chatMemory", harness.liveChatController.chatMemory(harness.sessionId));
+        setField(harness.panel, "showInstructionMessages", true);
+        setField(harness.panel, "showNextRequestInstructionPreview", false);
+
+        rebuildHistoryFromMemory(harness.panel);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<java.util.List<ChatMemoryRenderEntry>> entriesCaptor =
+            ArgumentCaptor.forClass((Class) java.util.List.class);
+        verify(harness.chatOutputView).rebuildHistory(entriesCaptor.capture());
+        assertThat(entriesCaptor.getValue()).isEmpty();
+    }
+
+    @Test
+    public void historyWithOnlyInitialSystemAndMcpToolSummariesSuppressesSystemMessage() throws Exception {
+        PanelHarness harness = newPanelHarness(true);
+        AssistantProfileChatMemory memory = (AssistantProfileChatMemory) harness.liveChatController.chatMemory(harness.sessionId);
+        memory.addToolCallSummary("mcp summary", ToolCaller.MCP);
+        setField(harness.panel, "chatMemory", memory);
+        setField(harness.panel, "showInstructionMessages", true);
+
+        rebuildHistoryFromMemory(harness.panel);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<java.util.List<ChatMemoryRenderEntry>> entriesCaptor =
+            ArgumentCaptor.forClass((Class) java.util.List.class);
+        verify(harness.chatOutputView).rebuildHistory(entriesCaptor.capture());
+        java.util.List<ChatMemoryRenderEntry> entries = entriesCaptor.getValue();
+        assertThat(entries).hasSize(1);
+        assertThat(entries.get(0).isToolSummary()).isTrue();
+        assertThat(entries.get(0).toolCaller()).isEqualTo(ToolCaller.MCP);
+        assertThat(entries.get(0).toolSummaryText()).isEqualTo("mcp summary");
+    }
+
+    @Test
+    public void instructionPreviewStartsWithSystemTextComposedWithPendingProfile() throws Exception {
+        PanelHarness harness = newPanelHarness(true);
+        NextRequestInstructionPreviewView previewView = mock(NextRequestInstructionPreviewView.class);
+        AssistantProfileSelectionSync selectionSync = mock(AssistantProfileSelectionSync.class);
+        when(selectionSync.pendingProfileMessageIfDifferent()).thenReturn(
+            new AssistantProfileSwitchMessage("profile", "Reviewer", "profile instructions"));
+        setField(harness.panel, "nextRequestInstructionPreviewView", previewView);
+        setField(harness.panel, "assistantProfileSelectionSync", selectionSync);
+        setField(harness.panel, "showNextRequestInstructionPreview", true);
+        setField(harness.panel, "currentSessionUsesAssistantProfile", true);
+
+        invokeRefreshInstructionPreview(harness.panel);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<java.util.List<PreviewInstructionBlock>> blocksCaptor =
+            ArgumentCaptor.forClass((Class) java.util.List.class);
+        verify(previewView).showPreview(blocksCaptor.capture());
+        java.util.List<PreviewInstructionBlock> blocks = blocksCaptor.getValue();
+        assertThat(blocks).hasSize(2);
+        assertThat(blocks.get(0).getKind()).isEqualTo(PreviewInstructionKind.SYSTEM);
+        assertThat(blocks.get(0).getText()).contains("Profile changes are communicated");
+        assertThat(blocks.get(1).getKind()).isEqualTo(PreviewInstructionKind.PROFILE);
+        assertThat(blocks.get(1).getText()).isEqualTo("profile instructions");
+    }
+
+    @Test
+    public void instructionPreviewRepeatsLatestCommittedProfileWhenThereIsNoPendingProfileChange() throws Exception {
+        PanelHarness harness = newPanelHarness(true);
+        NextRequestInstructionPreviewView previewView = mock(NextRequestInstructionPreviewView.class);
+        AssistantProfileSelectionSync selectionSync = mock(AssistantProfileSelectionSync.class);
+        harness.liveChatController.chatMemory(harness.sessionId).add(
+            new AssistantProfileSwitchMessage("profile", "Reviewer", "profile instructions"));
+        setField(harness.panel, "nextRequestInstructionPreviewView", previewView);
+        setField(harness.panel, "assistantProfileSelectionSync", selectionSync);
+        setField(harness.panel, "showNextRequestInstructionPreview", true);
+        setField(harness.panel, "currentSessionUsesAssistantProfile", true);
+
+        invokeRefreshInstructionPreview(harness.panel);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<java.util.List<PreviewInstructionBlock>> blocksCaptor =
+            ArgumentCaptor.forClass((Class) java.util.List.class);
+        verify(previewView).showPreview(blocksCaptor.capture());
+        java.util.List<PreviewInstructionBlock> blocks = blocksCaptor.getValue();
+        assertThat(blocks).hasSize(2);
+        assertThat(blocks.get(0).getKind()).isEqualTo(PreviewInstructionKind.SYSTEM);
+        assertThat(blocks.get(0).getText()).contains("Profile changes are communicated");
+        assertThat(blocks.get(1).getKind()).isEqualTo(PreviewInstructionKind.PROFILE);
+        assertThat(blocks.get(1).getLabel()).isEqualTo("Profile message: Reviewer");
+        assertThat(blocks.get(1).getText()).isEqualTo("profile instructions");
+    }
+
+    @Test
+    public void instructionPreviewRefreshesWhenSessionToolAvailabilityChanges() throws Exception {
+        PanelHarness harness = newPanelHarness(true);
+        NextRequestInstructionPreviewView previewView = mock(NextRequestInstructionPreviewView.class);
+        setField(harness.panel, "nextRequestInstructionPreviewView", previewView);
+        setField(harness.panel, "showNextRequestInstructionPreview", true);
+
+        harness.panel.setSessionToolAvailabilityOverride(harness.sessionId, ToolAvailabilityLevel.READING);
+
+        verify(previewView).showPreview(any());
     }
 
     @Test
@@ -1041,6 +1163,12 @@ public class AIChatPanelScriptRequestTest {
         method.invoke(panel);
     }
 
+    private void invokeRefreshInstructionPreview(AIChatPanel panel) throws Exception {
+        Method method = AIChatPanel.class.getDeclaredMethod("refreshInstructionPreview");
+        method.setAccessible(true);
+        method.invoke(panel);
+    }
+
     private void appendToolSummaryToSession(AIChatPanel panel,
                                             LiveChatSessionId sessionId,
                                             ToolCallSummary summary) throws Exception {
@@ -1104,6 +1232,8 @@ public class AIChatPanelScriptRequestTest {
         setField(panel, "aiSelectionOverrideResolver", mock(AiSelectionOverrideResolver.class));
         setField(panel, "availableMaps", availableMaps);
         setField(panel, "assistantProfileSelectionSync", mock(AssistantProfileSelectionSync.class));
+        setField(panel, "systemInstructionComposer", new SystemInstructionComposer());
+        setField(panel, "nextRequestInstructionPreviewView", mock(NextRequestInstructionPreviewView.class));
         setField(panel, "inputArea", new JTextArea());
         setField(panel, "undoButton", mock(JButton.class));
         setField(panel, "redoButton", mock(JButton.class));

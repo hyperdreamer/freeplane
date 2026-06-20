@@ -222,7 +222,20 @@ public class AssistantProfileChatMemory implements ChatMemory {
     }
 
     public String capturedSystemMessage() {
-        return generalSystemMessage == null ? null : generalSystemMessage.text();
+        return generalSystemMessage == null ? null : generalSystemMessage.baseText();
+    }
+
+    public String composedSystemMessage() {
+        return generalSystemMessage == null ? null : generalSystemMessage.composedText();
+    }
+
+    public void updateSystemMessage(String baseText, String composedText) {
+        setGeneralSystemMessage(new GeneralSystemMessage(baseText, composedText));
+        invalidateDerivedFiltering();
+    }
+
+    public boolean hasProfileInstruction() {
+        return findLatestProfileSwitchIndex(activeConversationEndIndex()) >= 0;
     }
 
     public AssistantProfileSwitchMessage latestProfileSwitchMessage() {
@@ -322,7 +335,11 @@ public class AssistantProfileChatMemory implements ChatMemory {
         if (message instanceof GeneralSystemMessage) {
             return (GeneralSystemMessage) message;
         }
-        return new GeneralSystemMessage(message.text());
+        String text = message.text();
+        if (generalSystemMessage != null) {
+            return new GeneralSystemMessage(generalSystemMessage.baseText(), text);
+        }
+        return new GeneralSystemMessage(text);
     }
 
     private void rebuildTurnBoundaries() {

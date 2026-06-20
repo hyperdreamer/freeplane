@@ -7,9 +7,10 @@
   the script AI request API so `askAi(...)` and
   `runAiPrompt(..., AiRequestOptions, ...)` can supply request-scoped
   system and profile messages. Rename visible request mode
-  `SHOW_IN_CHAT` to `SHOW_IN_NEW_CHAT`. Hidden requests may use an
-  exact request system message that bypasses Freeplane-added system
-  guidance for that one request.
+  `SHOW_IN_CHAT` to `SHOW_IN_NEW_CHAT`. Request-scoped system text is
+  base instruction text only; dynamic Freeplane guidance remains
+  composed per request. Add an independent next-request instruction
+  preview for visible chats.
 - **Motivation:**
   Current visible chats do not persist the effective system message and
   do not snapshot effective profile message text. Restored chats can
@@ -37,39 +38,59 @@
 
   A script calls `c.askAi(...)` with `AiRequestMode.HIDDEN` or
   `AiRequestMode.HIDDEN_WITH_CANCEL_DIALOG` and a request system
-  message. Freeplane sends that trimmed text as the exact provider
-  system content for the one hidden request and skips Freeplane-added
-  system guidance for that request. Tool authorization still follows
-  `AiToolAvailability`.
+  message. Freeplane trims that text, uses it as base system text,
+  composes applicable dynamic Freeplane guidance for the hidden
+  request, omits Markdown response guidance, and keeps tool
+  authorization governed by `AiToolAvailability`.
+
+  A user enables next-request instruction preview. Freeplane renders
+  the chat using the current historical instruction rendering setting
+  and shows a clearly labelled, non-persistent preview component for
+  the next visible request. The preview appears after the profile
+  selector and before the message input, uses current tool availability
+  and pending profile injection state, includes Freeplane-composed
+  dynamic system guidance, excludes LangChain4j-generated tool
+  descriptions, and does not change the transcript.
 - **Glossary:**
   ```mermaid
   flowchart LR
-    A["global ai_system_message"] -- default for new chat --> B["captured chat system message"]
+    A["global ai_system_message"] -- default for new chat --> B["captured chat base system message"]
     C["AiRequestOptions.systemMessage"] -- request override for new/request chat --> B
-    B -- immutable for visible chat --> D["provider system base"]
-    E["Freeplane provider guidance"] -- appended where applicable --> D
+    B -- immutable base text --> D["Freeplane-composed system text"]
+    E["Freeplane provider guidance"] -- dynamic guidance --> D
+    L["visible vs hidden request"] -- controls Markdown guidance --> E
+    J["AiToolAvailability"] -- controls tool guidance --> E
     F["AiRequestOptions.profile(name)"] -- resolves configured profile --> G["profile message event"]
     H["AiRequestOptions.profile(name, message)"] -- explicit local event --> G
+    G -- enables profile-control guidance --> E
     G -- applies from event onward --> I["following turns"]
-    J["AiToolAvailability"] -- authorizes --> K["tool exposure"]
+    J -- authorizes --> K["tool exposure"]
     C -- does not authorize --> K
     G -- does not authorize --> K
+    D -- sent to provider --> M["provider system text"]
+    D -- rendered when committed --> N["full instruction history"]
+    O["pending profile event"] -- preview-only input --> P["next request instruction preview"]
+    B --> P
+    E --> P
+    P -- not persisted --> Q["chat rendering surface"]
   ```
 
   - `captured chat system message`
-    - Trimmed user/request system instruction stored with a visible
-      chat at chat creation. It is immutable for that chat, rendered as
-      the start-chat instruction block, persisted, and restored.
+    - Trimmed user/request base system instruction stored with a
+      visible chat at chat creation. It is immutable for that chat,
+      persisted, restored, and combined with dynamic Freeplane guidance
+      before provider submission or full instruction rendering.
   - `profile message event`
     - Trimmed profile instruction snapshot inserted at a specific point
       in the conversation. It affects subsequent calls, not earlier
       turns. It is rendered as a profile block and persisted with its
       effective text.
   - `request system message`
-    - Optional trimmed system text supplied through `AiRequestOptions`.
-      In hidden modes, it is exact provider system content. In visible
-      modes, it determines a new chat's captured system message and
-      determines whether `ADD_TO_CHAT` may append to the selected chat.
+    - Optional trimmed base system text supplied through
+      `AiRequestOptions`. It never suppresses dynamic Freeplane
+      guidance. In visible modes, it determines a new chat's captured
+      base system message and determines whether `ADD_TO_CHAT` may
+      append to the selected chat.
   - `request profile message`
     - Optional profile instruction supplied through
       `AiRequestOptions.profile(String name)` or
@@ -81,8 +102,20 @@
   - `Freeplane provider guidance`
     - Generated system guidance needed for Freeplane tool, selection,
       code-host, profile-control, Markdown, or protocol behavior. It is
-      distinct from captured chat instruction state and remains
-      subordinate to `AiToolAvailability`.
+      distinct from captured base system text and remains subordinate
+      to `AiToolAvailability`. Profile-control guidance is included
+      only when profile messages are present or about to be injected.
+      Markdown response guidance is included only for visible chat
+      requests.
+  - `next request instruction preview`
+    - Non-persistent rendering of the Freeplane-composed instruction
+      blocks that would be sent by the next visible request. It is
+      shown in a separate preview component after the profile selector
+      and before the message input, uses rendering close to committed
+      instruction messages, and is clearly labelled as preview. Because
+      user-message submission enforces pending profile changes, preview
+      applies any pending profile event before composing the previewed
+      system text. It excludes LangChain4j-generated tool descriptions.
 - **Constraints:**
   - Keep `AiToolAvailability` / `ToolAvailabilityLevel` as the real
     authorization boundary. System/profile text must not grant or
@@ -91,8 +124,10 @@
     before storage, comparison, rendering, or provider submission.
   - Treat an explicit empty system message as an empty system message,
     not as "use the global default".
-  - Do not mutate a visible chat's captured system message after chat
-    creation.
+  - Captured and request system messages are base user text only. They
+    must not override or bypass dynamic Freeplane guidance.
+  - Do not mutate a visible chat's captured base system message after
+    chat creation.
   - `SHOW_IN_NEW_CHAT` always creates a new visible chat.
   - `ADD_TO_CHAT` is the only script mode that may append to an
     existing visible chat.
@@ -104,8 +139,18 @@
     available. Do not compare with the current global
     `ai_system_message` in this case.
   - Do not add a separate "remove no-tools hint" option in this task.
-    Hidden exact request system messages already bypass Freeplane-added
-    system guidance for that one hidden request.
+  - Profile-control guidance must not be added to requests whose chat
+    memory has no profile message and whose request will not inject a
+    profile message.
+  - Markdown response guidance must not be added to hidden requests.
+  - Full instruction rendering must include Freeplane-composed dynamic
+    system guidance, but not automatically generated LangChain4j tool
+    descriptions or schemas.
+  - Next-request instruction preview must be rendered in a separate
+    component after the profile selector and before the message input.
+    It must be non-persistent and must not affect transcript
+    save/restore, undo/redo, token accounting, committed chat-history
+    selection/copy, or provider request history.
   - Keep the public scripting surface on `AiRequestOptions`; do not add
     positional `askAi(...)` overloads for system/profile messages.
 - **Briefing:**
@@ -136,6 +181,7 @@
   3. Render the system-message chat-start block.
   4. Add brief/full rendering for instruction blocks.
   5. Add script API and routing changes.
+  6. Compose dynamic instruction text and preview next request.
 
 ## Subtask: Persist captured chat system message
 - **Status:** review
@@ -959,3 +1005,296 @@
       provider request uses exactly that system content and no
       Freeplane-added system guidance while tool availability remains
       enforced.
+
+
+## Subtask: Compose dynamic instruction text and preview next request
+- **Status:** review
+
+- **Research:**
+  ```plantuml
+  @startuml
+  set separator none
+  package "freeplane_plugin_ai.chat.request" {
+    class AIChatService {
+      - systemMessage : String
+      - exactSystemMessage : boolean
+      + systemMessageProvider(ToolAvailabilityLevel) : Function
+    }
+    class ChatPromptRunner {
+      + submitHiddenRequest(..., systemMessage, exactSystemMessage, requestedProfileMessage) : boolean
+      + startShownPrompt(..., requestedProfileMessage) : boolean
+    }
+  }
+  package "freeplane_plugin_ai.tools" {
+    class MessageBuilder {
+      + buildForChat(String, ToolAvailabilityLevel) : String
+    }
+  }
+  package "freeplane_plugin_ai.chat.memory" {
+    class GeneralSystemMessage {
+      + text() : String
+    }
+    class AssistantProfileChatMemory {
+      + capturedSystemMessage() : String
+      + latestProfileSwitchMessage() : AssistantProfileSwitchMessage
+    }
+  }
+  package "freeplane_plugin_ai.chat.ui" {
+    enum InstructionMessageRenderingMode {
+      BRIEF
+      FULL
+    }
+    class ChatMemoryHistoryRenderer
+  }
+  AIChatService ..> MessageBuilder : dynamic provider text
+  AIChatService ..> GeneralSystemMessage : separate stored text
+  ChatPromptRunner ..> AIChatService : exact hidden override exists
+  ChatMemoryHistoryRenderer ..> GeneralSystemMessage : renders stored text
+  @enduml
+  ```
+
+  - Current implementation stores a `GeneralSystemMessage` in chat
+    memory but composes dynamic provider system text separately in
+    `AIChatService.systemMessageProvider(...)`.
+  - Hidden script requests can currently set `exactSystemMessage` and
+    bypass `AIToolSet.systemMessageForChat(...)` and
+    `AiCodeToolSet.systemMessageForChat(...)` guidance assembly.
+  - `MessageBuilder.buildForChat(...)` currently includes
+    profile-control guidance for all composed chat system messages and
+    includes Markdown response guidance whenever it is used, including
+    hidden dynamic requests.
+  - `InstructionMessageRenderingMode` currently supports only `BRIEF`
+    and `FULL`, so there is no non-persistent preview of the next
+    visible request's instruction state.
+  - LangChain4j supplies generated tool descriptions/schemas outside
+    Freeplane's `systemMessageProvider(...)` string. Those generated
+    descriptions are effective provider context but are not directly
+    part of the Freeplane-composed system text.
+
+- **Analysis:**
+  - Captured/request system text is base user text. Treating it as an
+    exact provider system message hides required dynamic Freeplane
+    guidance and can omit tool/protocol constraints.
+  - Rendering only stored base text is incomplete because the provider
+    receives dynamic Freeplane guidance in addition to the base text.
+  - Rendering future dynamic guidance as committed chat history is also
+    wrong when a pending profile event has not yet been injected.
+  - A separate next-request preview toggle can show what the next
+    visible request would send without persisting unsent profile or
+    system instruction blocks.
+  - Rendering preview in a separate component is simpler and safer than
+    treating preview blocks as a transient suffix of chat history,
+    because committed-history append, selection, and copy behavior stay
+    unchanged.
+
+- **Design:**
+  ```plantuml
+  @startuml
+  set separator none
+  package "freeplane_plugin_ai.chat.request" {
+    class SystemInstructionComposer {
+      + compose(SystemInstructionContext) : String
+    }
+    class SystemInstructionContext {
+      - baseSystemMessage : String
+      - toolAvailability : ToolAvailabilityLevel
+      - visibility : RequestVisibility
+      - hasProfileInstruction : boolean
+    }
+    enum RequestVisibility {
+      VISIBLE
+      HIDDEN
+    }
+    class AIChatService
+  }
+  package "freeplane_plugin_ai.chat.memory" {
+    class GeneralSystemMessage {
+      + baseText() : String
+      + composedText() : String
+    }
+    class AssistantProfileChatMemory {
+      + capturedSystemMessage() : String
+      + hasProfileInstruction() : boolean
+    }
+  }
+  package "freeplane_plugin_ai.chat.ui" {
+    enum InstructionHistoryRenderingMode {
+      BRIEF
+      FULL
+    }
+    class ChatMemoryHistoryRenderer {
+      - historyMode : InstructionHistoryRenderingMode
+      + rebuildFromMessages(...) : void
+    }
+    class NextRequestInstructionPreviewView {
+      + showPreview(List<PreviewInstructionBlock>) : void
+      + hidePreview() : void
+    }
+    class PreviewInstructionBlock {
+      - label : String
+      - text : String
+      - kind : PreviewInstructionKind
+    }
+    enum PreviewInstructionKind {
+      SYSTEM
+      PROFILE
+    }
+    class AIChatPanel
+  }
+  SystemInstructionComposer --> SystemInstructionContext
+  AIChatService ..> SystemInstructionComposer : provider text
+  AIChatPanel ..> SystemInstructionComposer : preview text
+  AIChatPanel --> NextRequestInstructionPreviewView
+  GeneralSystemMessage ..> SystemInstructionComposer : committed composed text
+  @enduml
+  ```
+
+  - Replace exact hidden system-message handling with composed system
+    instruction handling. A request system message is always trimmed
+    base text and must not bypass dynamic Freeplane guidance.
+  - Introduce a single Freeplane system-instruction composer used for
+    provider calls, committed full rendering, and next-request preview
+    rendering. Its output excludes LangChain4j-generated tool
+    descriptions/schemas.
+  - Composer inputs must include at least:
+    - trimmed base system text;
+    - effective `ToolAvailabilityLevel`;
+    - visible vs hidden request visibility;
+    - whether a profile message is already present or will be injected;
+    - code-host guidance source, when available.
+  - Composer output rules:
+    - include base system text when non-empty;
+    - include tool-availability, map-selection, read-only/no-tools,
+      tool-call-wrapper, and code-host guidance as applicable;
+    - include profile-control guidance only if a committed or pending
+      profile message applies to the request;
+    - include Markdown response guidance only for visible chat
+      requests;
+    - exclude automatically generated LangChain4j tool descriptions and
+      schemas from rendered instruction text.
+  - Keep captured visible-chat system text as base text for
+    `ADD_TO_CHAT` compatibility checks. Compare request base text to
+    selected-chat captured base text, not to composed dynamic text.
+  - Before a visible provider request starts, resolve any requested or
+    pending profile event, compose the actual Freeplane system text for
+    that request, update the committed rendered system instruction
+    state, then append the profile event and user message.
+  - Hidden requests compose provider system text from the same composer
+    with hidden visibility. Hidden requests do not persist or render the
+    composed text, and they omit Markdown response guidance.
+  - Replace the single instruction rendering checkbox with two
+    independent controls:
+    - historical instruction rendering: brief vs full committed
+      instruction history;
+    - next-request instruction preview: off vs on.
+  - Valid UI states are dense history without preview, full committed
+    history without preview, dense history with preview, and full
+    committed history with preview.
+  - Use checkbox-style controls, not radio buttons, because previewing
+    the next request is independent from rendering historical
+    instruction blocks in full.
+  - Suggested UI labels:
+    - `Show instruction history` for committed historical full
+      rendering;
+    - `Preview next request instructions` for the non-persistent
+      preview.
+  - Committed full system and profile instruction blocks should share
+    the same instruction-message color/style because both are controlled
+    by historical instruction rendering and both are instruction
+    messages at the user-visible level.
+  - Preview must use a separate component placed after the profile
+    selector and before the message input. The profile selector is an
+    input to the preview, so placing the preview after it makes the
+    preview read as the effect of the selected profile and other current
+    request controls. The component should reuse the chat message
+    renderer/style scheme, use its own preview style/color close to the
+    instruction-message style, and rely on separate placement plus block
+    labels so preview content cannot be mistaken for sent transcript
+    content. Use dedicated translation keys for preview system/profile
+    block labels. Do not render a preview title inside the component.
+  - Preview must resolve instruction state as if the next visible user
+    message were being submitted: apply any pending profile event first,
+    include the effective profile block in the preview, using the
+    pending profile message when present and otherwise repeating the
+    latest committed profile message, and set the composer
+    profile-instruction input from the post-injection preview state.
+    Render the preview system block before any profile block, with a
+    horizontal separator between the system and profile blocks. If the
+    chat has no committed conversation entries, or only MCP tool-call
+    summaries, hide the initial history system block; when preview is
+    enabled, show the preview component as the only instruction
+    rendering. Preview blocks must not be added to chat memory,
+    transcript persistence, undo/redo history, token accounting,
+    provider request history, or the upper chat-history panel.
+  - When preview is enabled, refresh preview rendering whenever any
+    preview input changes, including current/selected chat, captured or
+    default base system text, effective tool availability, code-host
+    guidance state, formula-editing availability, committed profile
+    messages, pending selected/requested profile name, or pending
+    selected/requested profile message text.
+  - Preview-component blocks must not be appended to
+    `ChatMessageHistory` and must not participate in committed
+    chat-history selection/copy. When a user message, assistant
+    response, tool summary, profile event, or other committed entry is
+    appended while preview is visible, append it normally to committed
+    history and refresh or hide the separate preview component
+    independently.
+
+- **Test specification:**
+  - Automated tests:
+    - Add composer tests for visible vs hidden output, empty/base
+      system text, tool-availability guidance, profile-control guidance
+      present only when profile messages exist or are pending, Markdown
+      guidance omitted for hidden requests, and code-host guidance
+      inclusion.
+    - Extend `AIChatServiceTest` and hidden request tests to verify a
+      request system message is base text plus dynamic guidance, not an
+      exact bypass.
+    - Extend visible request tests to verify committed full rendering
+      uses the same Freeplane-composed text sent through
+      `systemMessageProvider(...)`, excluding LangChain4j-generated
+      tool schemas.
+    - Extend `AIChatPanelScriptRequestTest` to verify `ADD_TO_CHAT`
+      compatibility compares captured base system text, not composed
+      dynamic text.
+    - Extend `ChatMemoryHistoryRendererTest` or panel rendering tests
+      for brief/full historical rendering independent from preview
+      on/off, including shared committed instruction styling for full
+      system and profile blocks.
+    - Add preview component/panel tests covering placement after the
+      profile selector and before the message input, distinct preview
+      styling close to instruction-message styling, translated preview
+      labels, empty-chat suppression of the initial base-only history
+      system block, suppression of the initial history system block when the
+      only other entries are MCP tool-call summaries, no preview
+      rendering in the upper chat-history panel, exclusion from
+      transcript persistence, and exclusion from committed chat-history
+      selection/copy.
+    - Add tests proving preview applies pending profile injection before
+      composing the previewed system text, includes the effective
+      profile block, repeats the latest committed profile message when
+      no pending profile change exists, enables profile-control guidance
+      from that post-injection preview state, and does not mutate chat
+      memory.
+    - Add tests proving enabled preview refreshes when preview inputs
+      change, including tool availability, base system text, code-host
+      guidance state, pending profile name, and pending profile message
+      text.
+    - Add tests proving committed entries appended while preview is
+      visible are appended only to committed history and do not require
+      suffix reordering; the separate preview component is refreshed or
+      hidden independently.
+  - Manual tests:
+    - Create a visible chat with a request system message and verify
+      full rendering immediately shows Freeplane-composed guidance, not
+      only the base user text.
+    - Change tool availability and verify preview changes while
+      committed history remains unchanged until a request starts.
+    - Enable preview and verify it appears after the profile selector
+      and before the message input, not as a committed chat-history
+      entry.
+    - Run a hidden request with a request system message and verify
+      provider system text includes dynamic Freeplane guidance but no
+      Markdown response guidance.
+    - Use a chat with no profile messages and verify profile-control
+      guidance is absent; then inject a profile and verify it appears.

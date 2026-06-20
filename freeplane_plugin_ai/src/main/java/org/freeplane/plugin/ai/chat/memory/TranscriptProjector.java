@@ -16,7 +16,10 @@ class TranscriptProjector {
                                                       FilteredChatMessages filteredChatMessages) {
         List<ChatTranscriptEntry> entries = new ArrayList<>();
         if (generalSystemMessage != null) {
-            entries.add(new ChatTranscriptEntry(ChatTranscriptRole.SYSTEM, generalSystemMessage.text()));
+            entries.add(new ChatTranscriptEntry(
+                ChatTranscriptRole.SYSTEM,
+                generalSystemMessage.text(),
+                generalSystemMessage.baseText()));
         }
         if (filteredChatMessages == null) {
             return entries;

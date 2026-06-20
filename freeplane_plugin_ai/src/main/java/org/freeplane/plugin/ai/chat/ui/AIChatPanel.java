@@ -112,12 +112,16 @@ import org.freeplane.plugin.ai.chat.request.HiddenPromptRequestRunner;
 import org.freeplane.plugin.ai.chat.request.HiddenPromptRequestRunnerFactory;
 import org.freeplane.plugin.ai.chat.request.PromptToolSelectionResolver;
 import org.freeplane.plugin.ai.chat.request.ResolvedAiRequest;
+import org.freeplane.plugin.ai.chat.request.RequestVisibility;
+import org.freeplane.plugin.ai.chat.request.SystemInstructionComposer;
+import org.freeplane.plugin.ai.chat.request.SystemInstructionContext;
 import org.freeplane.plugin.ai.chat.request.VisibleAiRequestCallbacksFactory;
 import org.freeplane.plugin.ai.chat.session.LiveChatController;
 import org.freeplane.plugin.ai.chat.session.LiveChatSessionId;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevelSettings;
 import org.freeplane.plugin.ai.tools.code.AiCodeOperationAuthorizer;
+import org.freeplane.plugin.ai.tools.code.AiCodeToolSet;
 import org.freeplane.plugin.ai.tools.formula.FormulaEditingSettings;
 import org.freeplane.plugin.ai.edits.AiEditsSettings;
 import org.freeplane.plugin.ai.edits.ClearAiMarkersInMapAction;
@@ -210,6 +214,9 @@ public class AIChatPanel extends JPanel {
     };
     private boolean currentSessionUsesAssistantProfile = true;
     private boolean showInstructionMessages;
+    private boolean showNextRequestInstructionPreview;
+    private final SystemInstructionComposer systemInstructionComposer = new SystemInstructionComposer();
+    private NextRequestInstructionPreviewView nextRequestInstructionPreviewView;
     private AiCodeHostService codeHostService;
 
     public AIChatPanel() {
@@ -224,6 +231,7 @@ public class AIChatPanel extends JPanel {
         inputArea = new JTextArea(3, 20);
         inputArea.setLineWrap(true);
         inputArea.setWrapStyleWord(true);
+        nextRequestInstructionPreviewView = new NextRequestInstructionPreviewView(new ChatMessageRenderer());
         applyChatMessageStyles();
         resetMessageHistory();
         messageHistory = new ChatMessageHistory(messageHistoryPane, messageHistoryEditorKit);
@@ -298,6 +306,7 @@ public class AIChatPanel extends JPanel {
             liveChatController);
         assistantProfileSelectionSync.setChatMemory(chatMemory);
         assistantProfileSelectionSync.setProfileMessageConsumer(this::appendProfileMessage);
+        assistantProfileSelectionSync.setPreviewRefreshListener(this::refreshInstructionPreview);
         assistantProfilePaneBuilder = new AssistantProfilePaneBuilder(
             assistantProfileSelectionModel,
             assistantProfileSelectionSync,
@@ -316,7 +325,10 @@ public class AIChatPanel extends JPanel {
         inputPanel.add(actionButtonsPanel, BorderLayout.EAST);
         JPanel inputContainer = new JPanel(new BorderLayout());
         inputContainer.add(assistantProfilePaneBuilder.buildPanel(), BorderLayout.NORTH);
-        inputContainer.add(inputPanel, BorderLayout.CENTER);
+        JPanel inputAndPreviewPanel = new JPanel(new BorderLayout());
+        inputAndPreviewPanel.add(nextRequestInstructionPreviewView, BorderLayout.NORTH);
+        inputAndPreviewPanel.add(inputPanel, BorderLayout.CENTER);
+        inputContainer.add(inputAndPreviewPanel, BorderLayout.CENTER);
         JPanel tokenUsagePanel = new JPanel(new BorderLayout());
         tokenUsagePanel.add(tokenUsageLabel, BorderLayout.EAST);
         inputContainer.add(tokenUsagePanel, BorderLayout.SOUTH);
@@ -456,6 +468,7 @@ public class AIChatPanel extends JPanel {
         registerTokenCounterModeListener();
         registerChatMemoryMaximumTokenCountListener();
         registerChatFontScalingListener();
+        registerInstructionPreviewInputListener();
         refreshTokenCounterMode();
         updateInputState();
     }
@@ -531,22 +544,30 @@ public class AIChatPanel extends JPanel {
             copyMarkdownAction,
             "ai_chat_copy_markdown");
         menuPopup.add(copyMarkdownMenuItem);
-        JCheckBoxMenuItem showInstructionMessagesItem = new JCheckBoxMenuItem("Show instruction messages");
-        showInstructionMessagesItem.setToolTipText("Show full system and profile messages in the chat");
+        JCheckBoxMenuItem showInstructionMessagesItem = new JCheckBoxMenuItem("Show instruction history");
+        showInstructionMessagesItem.setToolTipText("Show full committed system and profile messages in the chat");
         showInstructionMessagesItem.addActionListener(event -> {
             showInstructionMessages = showInstructionMessagesItem.isSelected();
-            chatOutputView.setInstructionMessageRenderingMode(showInstructionMessages
-                ? InstructionMessageRenderingMode.FULL
-                : InstructionMessageRenderingMode.BRIEF);
+            chatOutputView.setInstructionHistoryRenderingMode(showInstructionMessages
+                ? InstructionHistoryRenderingMode.FULL
+                : InstructionHistoryRenderingMode.BRIEF);
             rebuildHistoryFromMemory();
         });
         menuPopup.add(showInstructionMessagesItem);
+        JCheckBoxMenuItem previewInstructionMessagesItem = new JCheckBoxMenuItem("Preview next request instructions");
+        previewInstructionMessagesItem.setToolTipText("Show the system and profile messages for the next chat request");
+        previewInstructionMessagesItem.addActionListener(event -> {
+            showNextRequestInstructionPreview = previewInstructionMessagesItem.isSelected();
+            refreshInstructionPreview();
+        });
+        menuPopup.add(previewInstructionMessagesItem);
         addAiEditsMenuItems(menuPopup);
         menuPopup.addPopupMenuListener(new PopupMenuListener() {
             @Override
             public void popupMenuWillBecomeVisible(PopupMenuEvent event) {
                 updateToolAvailabilityMenuSelection();
                 showInstructionMessagesItem.setSelected(showInstructionMessages);
+                previewInstructionMessagesItem.setSelected(showNextRequestInstructionPreview);
                 reopenAiOwnedScriptMenuItem.setEnabled(canReopenAiOwnedCode());
             }
 
@@ -674,6 +695,20 @@ public class AIChatPanel extends JPanel {
             });
     }
 
+    private void registerInstructionPreviewInputListener() {
+        ResourceController.getResourceController().addPropertyChangeListener(
+            new IFreeplanePropertyListener() {
+                @Override
+                public void propertyChanged(String propertyName, String newValue, String oldValue) {
+                    if (!MessageBuilder.SYSTEM_MESSAGE_PROPERTY.equals(propertyName)
+                        && !ToolAvailabilityLevelSettings.TOOL_AVAILABILITY_PROPERTY.equals(propertyName)) {
+                        return;
+                    }
+                    SwingUtilities.invokeLater(() -> refreshInstructionPreview());
+                }
+            });
+    }
+
     private void refreshChatMessageStyles() {
         applyChatMessageStyles();
         rebuildHistoryFromMemory();
@@ -688,6 +723,11 @@ public class AIChatPanel extends JPanel {
             messageHistoryEditorKit,
             baseFontSize,
             aiChatMessageStyleSettings.getChatFontScaling());
+        if (nextRequestInstructionPreviewView != null) {
+            nextRequestInstructionPreviewView.applyStyles(
+                baseFontSize,
+                aiChatMessageStyleSettings.getChatFontScaling());
+        }
     }
 
     private boolean isModelSelectionRefreshProperty(String propertyName) {
@@ -981,7 +1021,7 @@ public class AIChatPanel extends JPanel {
             showProgressDialog,
             hiddenRequestObserver,
             request.getSystemMessage(),
-            request.getSystemMessage() != null,
+            true,
             profileResolution.getMessage());
         if (!started) {
             handle.complete(configurationErrorOrFailedResult(selectedModelOverride, null));
@@ -1025,6 +1065,52 @@ public class AIChatPanel extends JPanel {
             return request.getSystemMessage();
         }
         return MessageBuilder.configuredSystemMessage();
+    }
+
+    private String composeSystemInstruction(LiveChatSessionId sessionId,
+                                            String baseSystemMessage,
+                                            ToolAvailabilityLevel toolAvailability,
+                                            RequestVisibility visibility,
+                                            boolean hasProfileInstruction) {
+        return systemInstructionComposer.compose(new SystemInstructionContext(
+            baseSystemMessage,
+            toolAvailability,
+            visibility,
+            hasProfileInstruction,
+            codeHostGuidanceForSession(sessionId)));
+    }
+
+    private String codeHostGuidanceForSession(LiveChatSessionId sessionId) {
+        AiCodeHostService sessionCodeHostService = sessionAwareCodeHostService(sessionId);
+        if (sessionCodeHostService == null) {
+            return null;
+        }
+        AiCodeToolSet codeToolSet = new AiCodeToolSet(
+            sessionCodeHostService,
+            new AiCodeOperationAuthorizer(
+                ToolCaller.CHAT,
+                chatToolAvailabilitySettings::getToolAvailability,
+                () -> liveChatController.sessionToolAvailabilityOverride(sessionId),
+                () -> Boolean.valueOf(new FormulaEditingSettings().isEnabled()),
+                sessionCodeHostService),
+            null,
+            ToolCaller.CHAT);
+        return codeToolSet.systemMessageForChat(null);
+    }
+
+    private void updateCommittedSystemInstruction(LiveChatSessionId sessionId,
+                                                  ToolAvailabilityLevel toolAvailability,
+                                                  AssistantProfileSwitchMessage pendingProfileMessage) {
+        String baseSystemMessage = liveChatController.sessionCapturedSystemMessage(sessionId);
+        boolean hasProfileInstruction = liveChatController.sessionHasProfileInstruction(sessionId)
+            || pendingProfileMessage != null;
+        String composedSystemMessage = composeSystemInstruction(
+            sessionId,
+            baseSystemMessage,
+            toolAvailability,
+            RequestVisibility.VISIBLE,
+            hasProfileInstruction);
+        liveChatController.updateSessionSystemMessage(sessionId, baseSystemMessage, composedSystemMessage);
     }
 
     private SelectionIdentifiersResponse resolveSelectionOverride(AiSelectionOverride selectionOverride) {
@@ -1134,6 +1220,15 @@ public class AIChatPanel extends JPanel {
         }
         registerVisibleRequest(sessionId, requestFlow, requestTokenUsageTracker);
         requestFlow.updateChatMemory(liveChatController.chatMemory(sessionId));
+        AssistantProfileSwitchMessage pendingProfileMessage = requestedProfileMessage;
+        if (pendingProfileMessage == null && injectAssistantProfile && currentSessionUsesAssistantProfile
+            && liveChatController.isCurrentSession(sessionId)) {
+            pendingProfileMessage = assistantProfileSelectionSync.pendingProfileMessageIfDifferent();
+        }
+        ToolAvailabilityLevel effectiveToolAvailability = resolvedToolAvailability == null
+            ? resolveEffectiveToolAvailability(sessionId)
+            : resolvedToolAvailability;
+        updateCommittedSystemInstruction(sessionId, effectiveToolAvailability, pendingProfileMessage);
         requestFlow.beginRequest(preparedMessage);
         boolean profileMessageChanged = false;
         if (requestedProfileMessage != null && liveChatController.isCurrentSession(sessionId)) {
@@ -1142,9 +1237,9 @@ public class AIChatPanel extends JPanel {
         else if (injectAssistantProfile && currentSessionUsesAssistantProfile
             && liveChatController.isCurrentSession(sessionId)) {
             assistantProfileSelectionSync.maybeInjectBeforeUserMessage();
-            profileMessageChanged = true;
+            profileMessageChanged = pendingProfileMessage != null;
         }
-        if (profileMessageChanged && liveChatController.isCurrentSession(sessionId)) {
+        if ((profileMessageChanged || showInstructionMessages) && liveChatController.isCurrentSession(sessionId)) {
             rebuildHistoryFromMemory();
         }
         requestFlow.captureChatSnapshot();
@@ -1170,6 +1265,7 @@ public class AIChatPanel extends JPanel {
                     inputArea.setEditable(false);
                     chatInputControls.setRequestActiveState();
                     updateUndoRedoButtonState();
+                    refreshInstructionPreview();
                 }
             }
 
@@ -1181,6 +1277,7 @@ public class AIChatPanel extends JPanel {
                 if (liveChatController.isCurrentSession(sessionId)) {
                     refreshTokenCounters();
                     updateInputState();
+                    refreshInstructionPreview();
                 }
             }
 
@@ -1496,6 +1593,7 @@ public class AIChatPanel extends JPanel {
             ToolAvailabilityLevelSettings.TOOL_AVAILABILITY_PROPERTY,
             toolAvailability.name());
         liveChatController.clearCurrentSessionToolAvailabilityOverride();
+        refreshInstructionPreview();
     }
 
     private void updateToolAvailabilityMenuSelection() {
@@ -1572,6 +1670,7 @@ public class AIChatPanel extends JPanel {
     private void clearPendingAiOwnedUserRunFollowup(ScriptHost host) {
         if (host == ScriptHost.AI) {
             pendingAiOwnedUserRunFollowupSessionId = null;
+            refreshInstructionPreview();
         }
     }
 
@@ -1581,9 +1680,11 @@ public class AIChatPanel extends JPanel {
         }
         if (response.getCodeState() == CodeState.WAITING_FOR_USER_RUN && sessionId != null) {
             pendingAiOwnedUserRunFollowupSessionId = sessionId;
+            refreshInstructionPreview();
             return;
         }
         pendingAiOwnedUserRunFollowupSessionId = null;
+        refreshInstructionPreview();
     }
 
     void handleCodeRunFinished(RunCodeResponse response) {
@@ -1608,6 +1709,7 @@ public class AIChatPanel extends JPanel {
         if (this.codeHostService != null) {
             this.codeHostService.addRunListener(aiCodeRunListener);
         }
+        refreshInstructionPreview();
     }
 
     public LiveChatSessionId currentSessionId() {
@@ -1625,6 +1727,7 @@ public class AIChatPanel extends JPanel {
     public void setSessionToolAvailabilityOverride(LiveChatSessionId sessionId,
                                                    ToolAvailabilityLevel toolAvailabilityOverride) {
         liveChatController.setSessionToolAvailabilityOverride(sessionId, toolAvailabilityOverride);
+        refreshInstructionPreview();
     }
 
     public void switchToSession(LiveChatSessionId sessionId) {
@@ -1670,6 +1773,7 @@ public class AIChatPanel extends JPanel {
 
     public void clearPendingAiOwnedUserRunFollowup() {
         pendingAiOwnedUserRunFollowupSessionId = null;
+        refreshInstructionPreview();
     }
 
     public ToolCallSummaryHandler toolCallSummaryHandler() {
@@ -1823,26 +1927,140 @@ public class AIChatPanel extends JPanel {
     private void rebuildHistoryFromMemory() {
         chatOutputView.rebuildHistory(historyMessages());
         visibleHistoryRebuildCounter++;
+        refreshInstructionPreview();
     }
 
     private void appendHistoryEntry(ChatMemoryRenderEntry entry) {
         chatOutputView.appendHistoryEntry(entry);
+        refreshInstructionPreview();
+    }
+
+    private void refreshInstructionPreview() {
+        if (nextRequestInstructionPreviewView == null) {
+            return;
+        }
+        if (!showNextRequestInstructionPreview || isChatAiRequestActive()) {
+            nextRequestInstructionPreviewView.hidePreview();
+            return;
+        }
+        List<PreviewInstructionBlock> previewBlocks = buildInstructionPreviewBlocks();
+        if (previewBlocks.isEmpty()) {
+            nextRequestInstructionPreviewView.hidePreview();
+            return;
+        }
+        nextRequestInstructionPreviewView.showPreview(previewBlocks);
+    }
+
+    private List<PreviewInstructionBlock> buildInstructionPreviewBlocks() {
+        LiveChatSessionId sessionId = liveChatController.currentSessionId();
+        if (sessionId == null) {
+            return Collections.emptyList();
+        }
+        String baseSystemMessage = liveChatController.sessionCapturedSystemMessage(sessionId);
+        AssistantProfileSwitchMessage pendingProfileMessage = currentSessionUsesAssistantProfile
+            ? assistantProfileSelectionSync.pendingProfileMessageIfDifferent()
+            : null;
+        AssistantProfileSwitchMessage previewProfileMessage = pendingProfileMessage != null
+            ? pendingProfileMessage
+            : liveChatController.sessionLatestProfileSwitchMessage(sessionId);
+        boolean hasProfileInstruction = liveChatController.sessionHasProfileInstruction(sessionId)
+            || pendingProfileMessage != null;
+        String systemText = composeSystemInstruction(
+            sessionId,
+            baseSystemMessage,
+            resolveEffectiveToolAvailability(sessionId),
+            RequestVisibility.VISIBLE,
+            hasProfileInstruction);
+        List<PreviewInstructionBlock> blocks = new ArrayList<PreviewInstructionBlock>();
+        if (systemText != null && !systemText.trim().isEmpty()) {
+            blocks.add(new PreviewInstructionBlock(
+                previewLabel("ai_chat_instruction_preview_system_message", "System message"),
+                systemText,
+                PreviewInstructionKind.SYSTEM));
+        }
+        if (previewProfileMessage != null) {
+            blocks.add(new PreviewInstructionBlock(
+                profilePreviewLabel(previewProfileMessage),
+                previewProfileMessage.getProfileMessage(),
+                PreviewInstructionKind.PROFILE));
+        }
+        return blocks;
+    }
+
+    private String profilePreviewLabel(AssistantProfileSwitchMessage profileMessage) {
+        String profileName = profileMessage == null ? "" : profileMessage.getProfileName();
+        if (profileName == null || profileName.trim().isEmpty()) {
+            return previewLabel("ai_chat_instruction_preview_profile_message", "Profile message");
+        }
+        return formattedPreviewLabel(
+            "ai_chat_instruction_preview_profile_message_named",
+            "Profile message: {0}",
+            profileName.trim());
+    }
+
+    private String previewLabel(String key, String fallback) {
+        try {
+            String text = TextUtils.getText(key, fallback);
+            return text == null ? fallback : text;
+        } catch (Exception ignored) {
+            return fallback;
+        }
+    }
+
+    private String formattedPreviewLabel(String key, String fallback, String argument) {
+        try {
+            String text = TextUtils.format(key, argument);
+            if (text != null) {
+                return text;
+            }
+        } catch (Exception ignored) {
+        }
+        return java.text.MessageFormat.format(fallback, argument);
     }
 
     private List<ChatMemoryRenderEntry> historyMessages() {
         AssistantProfileChatMemory memory = activeAssistantProfileChatMemory();
         if (memory != null) {
-            return memory.panelConversationRenderEntries();
+            return adjustedInitialHistoryMessages(memory.panelConversationRenderEntries());
         }
         if (chatMemory == null) {
-            return Collections.emptyList();
+            return adjustedInitialHistoryMessages(Collections.<ChatMemoryRenderEntry>emptyList());
         }
         List<ChatMessage> messages = chatMemory.messages();
         List<ChatMemoryRenderEntry> entries = new ArrayList<>();
         for (int index = 0; index < messages.size(); index++) {
             entries.add(ChatMemoryRenderEntry.forMessage(messages.get(index)));
         }
-        return entries;
+        return adjustedInitialHistoryMessages(entries);
+    }
+
+    private List<ChatMemoryRenderEntry> adjustedInitialHistoryMessages(List<ChatMemoryRenderEntry> entries) {
+        if (entries == null || entries.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<ChatMemoryRenderEntry> mcpToolSummaryEntries = new ArrayList<ChatMemoryRenderEntry>();
+        for (ChatMemoryRenderEntry entry : entries) {
+            if (entry == null) {
+                continue;
+            }
+            if (isGeneralSystemEntry(entry)) {
+                continue;
+            }
+            if (isMcpToolSummaryEntry(entry)) {
+                mcpToolSummaryEntries.add(entry);
+                continue;
+            }
+            return entries;
+        }
+        return mcpToolSummaryEntries;
+    }
+
+    private boolean isGeneralSystemEntry(ChatMemoryRenderEntry entry) {
+        return entry != null && !entry.isToolSummary() && entry.chatMessage() instanceof GeneralSystemMessage;
+    }
+
+    private boolean isMcpToolSummaryEntry(ChatMemoryRenderEntry entry) {
+        return entry != null && entry.isToolSummary() && entry.toolCaller() == ToolCaller.MCP;
     }
 
     private ChatMemory createChatMemory() {

@@ -4,6 +4,7 @@ import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
+import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.openai.OpenAiTokenCountEstimator;
 import dev.langchain4j.model.output.TokenUsage;
@@ -45,6 +46,17 @@ public class AssistantProfileChatMemoryTest {
             .isEqualTo(MessageBuilder.CONTROL_INSTRUCTION_PREFIX + "Now you have the profile profile.");
         assertThat(messages.get(4)).isInstanceOf(InstructionAckMessage.class);
         assertThat(((AiMessage) messages.get(4)).text()).isEqualTo("ok");
+    }
+
+    @Test
+    public void providerSystemMessageUpdatesComposedTextWithoutReplacingCapturedBaseText() {
+        AssistantProfileChatMemory uut = createMemory(500);
+        uut.add(new GeneralSystemMessage("base", "old composed"));
+
+        uut.add(SystemMessage.from("new composed"));
+
+        assertThat(uut.capturedSystemMessage()).isEqualTo("base");
+        assertThat(uut.composedSystemMessage()).isEqualTo("new composed");
     }
 
     @Test

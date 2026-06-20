@@ -19,6 +19,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.plugin.ai.chat.memory.AssistantProfileChatMemory;
 import org.freeplane.plugin.ai.chat.memory.ChatTokenUsageTracker;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevelSettings;
@@ -26,6 +27,7 @@ import org.freeplane.plugin.ai.tools.code.AiCodeToolSet;
 import org.freeplane.plugin.ai.tools.formula.FormulaEditingAccess;
 import org.freeplane.plugin.ai.tools.formula.FormulaEditingSettings;
 import org.freeplane.plugin.ai.tools.AIToolSet;
+import org.freeplane.plugin.ai.tools.MessageBuilder;
 import org.freeplane.plugin.ai.tools.utilities.ToolCallSummary;
 import org.freeplane.plugin.ai.tools.utilities.ToolCallSummaryHandler;
 import org.freeplane.plugin.ai.tools.utilities.ToolCaller;
@@ -51,8 +53,9 @@ public class AIChatService {
     private final Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier;
     private final Supplier<Boolean> formulaEditingEnabledSupplier;
     private final Function<ToolAvailabilityLevel, AIAssistant> assistantFactory;
-    private final String systemMessage;
-    private final boolean exactSystemMessage;
+    private final String baseSystemMessage;
+    private final boolean hiddenRequest;
+    private final SystemInstructionComposer systemInstructionComposer;
     private ToolAvailabilityLevel lastToolAvailability;
 
     public AIChatService(ChatModel chatLanguageModel, AIToolSet toolSet, ChatMemory chatMemory,
@@ -139,7 +142,7 @@ public class AIChatService {
                   Supplier<Boolean> formulaEditingEnabledSupplier,
                   Function<ToolAvailabilityLevel, AIAssistant> assistantFactory,
                   String systemMessage,
-                  boolean exactSystemMessage) {
+                  boolean hiddenRequest) {
         Objects.requireNonNull(chatTokenUsageTracker, "chatTokenUsageTracker");
         this.chatLanguageModel = chatLanguageModel;
         this.toolSet = toolSet;
@@ -164,8 +167,9 @@ public class AIChatService {
                     return buildAssistant(toolAvailability);
                 }
             };
-        this.systemMessage = systemMessage == null ? null : systemMessage.trim();
-        this.exactSystemMessage = exactSystemMessage;
+        this.baseSystemMessage = systemMessage == null ? null : systemMessage.trim();
+        this.hiddenRequest = hiddenRequest;
+        this.systemInstructionComposer = new SystemInstructionComposer();
         this.lastToolAvailability = currentToolAvailability();
         this.assistant = this.assistantFactory.apply(lastToolAvailability);
     }
@@ -249,16 +253,16 @@ public class AIChatService {
         return new Function<Object, String>() {
             @Override
             public String apply(Object input) {
-                if (exactSystemMessage) {
-                    return systemMessage == null ? "" : systemMessage;
-                }
-                String baseMessage = systemMessage == null
-                    ? toolSet.systemMessageForChat(input, normalizedAvailability)
-                    : toolSet.systemMessageForChat(input, normalizedAvailability, systemMessage);
-                if (aiCodeToolSet == null) {
-                    return baseMessage;
-                }
-                return appendGuidance(baseMessage, aiCodeToolSet.systemMessageForChat(input));
+                String baseMessage = baseSystemMessage == null
+                    ? MessageBuilder.configuredSystemMessage()
+                    : baseSystemMessage;
+                String codeHostGuidance = aiCodeToolSet == null ? null : aiCodeToolSet.systemMessageForChat(input);
+                return systemInstructionComposer.compose(new SystemInstructionContext(
+                    baseMessage,
+                    normalizedAvailability,
+                    hiddenRequest ? RequestVisibility.HIDDEN : RequestVisibility.VISIBLE,
+                    hasProfileInstruction(),
+                    codeHostGuidance));
             }
         };
     }
@@ -282,16 +286,9 @@ public class AIChatService {
         return toolNames;
     }
 
-    private String appendGuidance(String baseMessage, String extraGuidance) {
-        String safeBase = baseMessage == null ? "" : baseMessage.trim();
-        String safeExtra = extraGuidance == null ? "" : extraGuidance.trim();
-        if (safeBase.isEmpty()) {
-            return safeExtra;
-        }
-        if (safeExtra.isEmpty()) {
-            return safeBase;
-        }
-        return safeBase + "\n\n" + safeExtra;
+    private boolean hasProfileInstruction() {
+        return chatMemory instanceof AssistantProfileChatMemory
+            && ((AssistantProfileChatMemory) chatMemory).hasProfileInstruction();
     }
 
     public interface AIAssistant {

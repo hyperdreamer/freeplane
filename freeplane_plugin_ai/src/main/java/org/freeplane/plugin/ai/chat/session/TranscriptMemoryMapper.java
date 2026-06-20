@@ -70,7 +70,9 @@ class TranscriptMemoryMapper {
             return null;
         }
         if (entry.getRole() == ChatTranscriptRole.SYSTEM) {
-            return new GeneralSystemMessage(entry.getText() == null ? "" : entry.getText());
+            String composedText = entry.getText() == null ? "" : entry.getText();
+            String baseText = entry.getBaseSystemText() == null ? composedText : entry.getBaseSystemText();
+            return new GeneralSystemMessage(baseText, composedText);
         }
         if (entry.getRole() == ChatTranscriptRole.ASSISTANT) {
             if (entry.getText() == null) {
@@ -119,8 +121,11 @@ class TranscriptMemoryMapper {
                 false);
         }
         if (message instanceof GeneralSystemMessage) {
-            return new ChatTranscriptEntry(ChatTranscriptRole.SYSTEM,
-                ((GeneralSystemMessage) message).text());
+            GeneralSystemMessage systemMessage = (GeneralSystemMessage) message;
+            return new ChatTranscriptEntry(
+                ChatTranscriptRole.SYSTEM,
+                systemMessage.text(),
+                systemMessage.baseText());
         }
         if (message instanceof RemovedForSpaceSystemMessage) {
             return new ChatTranscriptEntry(ChatTranscriptRole.REMOVED_FOR_SPACE_SYSTEM,

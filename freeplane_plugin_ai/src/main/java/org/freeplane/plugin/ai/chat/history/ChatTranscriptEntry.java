@@ -16,13 +16,19 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 public class ChatTranscriptEntry {
     private ChatTranscriptRole role;
     private String text;
+    private String baseSystemText;
 
     public ChatTranscriptEntry() {
     }
 
     public ChatTranscriptEntry(ChatTranscriptRole role, String text) {
+        this(role, text, null);
+    }
+
+    public ChatTranscriptEntry(ChatTranscriptRole role, String text, String baseSystemText) {
         this.role = role;
         this.text = text;
+        this.baseSystemText = baseSystemText;
     }
 
     public ChatTranscriptRole getRole() {
@@ -39,5 +45,13 @@ public class ChatTranscriptEntry {
 
     public void setText(String text) {
         this.text = text;
+    }
+
+    public String getBaseSystemText() {
+        return baseSystemText;
+    }
+
+    public void setBaseSystemText(String baseSystemText) {
+        this.baseSystemText = baseSystemText;
     }
 }

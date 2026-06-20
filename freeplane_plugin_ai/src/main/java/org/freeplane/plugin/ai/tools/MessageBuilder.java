@@ -59,22 +59,21 @@ public class MessageBuilder {
     }
 
     public String buildForChat(String systemMessage, ToolAvailabilityLevel toolAvailability) {
+        return buildForChat(systemMessage, toolAvailability, true, true);
+    }
+
+    public String buildForChat(String systemMessage,
+                               ToolAvailabilityLevel toolAvailability,
+                               boolean includeProfileControlGuidance,
+                               boolean includeMarkdownResponseGuidance) {
         ToolAvailabilityLevel normalizedAvailability = toolAvailability == null
             ? ToolAvailabilityLevel.EDITING
             : toolAvailability;
         String message = systemMessage;
-        String guidance;
-        if (normalizedAvailability == ToolAvailabilityLevel.DISABLED) {
-            guidance = NO_TOOLS_GUIDANCE + "\n\n" + PROFILE_CONTROL_GUIDANCE + "\n\n"
-                + MARKDOWN_RESPONSE_GUIDANCE;
-        } else if (normalizedAvailability == ToolAvailabilityLevel.READING) {
-            guidance = MAP_SELECTION_GUIDANCE + "\n\n" + READ_ONLY_FREEPLANE_GUIDANCE + "\n\n"
-                + PROFILE_CONTROL_GUIDANCE + "\n\n" + MARKDOWN_RESPONSE_GUIDANCE + "\n\n"
-                + TOOL_CALL_REQUEST_WRAPPER_GUIDANCE;
-        } else {
-            guidance = MAP_SELECTION_GUIDANCE + "\n\n" + PROFILE_CONTROL_GUIDANCE + "\n\n"
-                + MARKDOWN_RESPONSE_GUIDANCE + "\n\n" + TOOL_CALL_REQUEST_WRAPPER_GUIDANCE;
-        }
+        String guidance = buildGuidance(
+            normalizedAvailability,
+            includeProfileControlGuidance,
+            includeMarkdownResponseGuidance);
         if (message == null) {
             return guidance;
         }
@@ -82,7 +81,53 @@ public class MessageBuilder {
         if (trimmed.isEmpty()) {
             return guidance;
         }
+        if (guidance == null || guidance.trim().isEmpty()) {
+            return trimmed;
+        }
         return trimmed + "\n\n" + guidance;
+    }
+
+    private String buildGuidance(ToolAvailabilityLevel toolAvailability,
+                                 boolean includeProfileControlGuidance,
+                                 boolean includeMarkdownResponseGuidance) {
+        StringBuilder guidance = new StringBuilder();
+        if (toolAvailability == ToolAvailabilityLevel.DISABLED) {
+            appendGuidance(guidance, NO_TOOLS_GUIDANCE);
+            appendOptionalCommonGuidance(guidance, includeProfileControlGuidance, includeMarkdownResponseGuidance);
+            return guidance.toString();
+        }
+        if (toolAvailability == ToolAvailabilityLevel.READING) {
+            appendGuidance(guidance, MAP_SELECTION_GUIDANCE);
+            appendGuidance(guidance, READ_ONLY_FREEPLANE_GUIDANCE);
+            appendOptionalCommonGuidance(guidance, includeProfileControlGuidance, includeMarkdownResponseGuidance);
+            appendGuidance(guidance, TOOL_CALL_REQUEST_WRAPPER_GUIDANCE);
+            return guidance.toString();
+        }
+        appendGuidance(guidance, MAP_SELECTION_GUIDANCE);
+        appendOptionalCommonGuidance(guidance, includeProfileControlGuidance, includeMarkdownResponseGuidance);
+        appendGuidance(guidance, TOOL_CALL_REQUEST_WRAPPER_GUIDANCE);
+        return guidance.toString();
+    }
+
+    private void appendOptionalCommonGuidance(StringBuilder guidance,
+                                              boolean includeProfileControlGuidance,
+                                              boolean includeMarkdownResponseGuidance) {
+        if (includeProfileControlGuidance) {
+            appendGuidance(guidance, PROFILE_CONTROL_GUIDANCE);
+        }
+        if (includeMarkdownResponseGuidance) {
+            appendGuidance(guidance, MARKDOWN_RESPONSE_GUIDANCE);
+        }
+    }
+
+    private void appendGuidance(StringBuilder guidance, String text) {
+        if (text == null || text.trim().isEmpty()) {
+            return;
+        }
+        if (guidance.length() > 0) {
+            guidance.append("\n\n");
+        }
+        guidance.append(text.trim());
     }
 
     public static String configuredSystemMessage() {

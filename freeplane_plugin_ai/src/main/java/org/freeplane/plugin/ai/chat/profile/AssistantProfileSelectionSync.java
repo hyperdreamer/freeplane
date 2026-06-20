@@ -17,6 +17,7 @@ public class AssistantProfileSelectionSync {
     private final LiveChatController liveChatController;
     private ChatMemory chatMemory;
     private Consumer<String> profileMessageConsumer;
+    private Runnable previewRefreshListener;
     private AssistantProfile pendingProfile;
 
     public AssistantProfileSelectionSync(AssistantProfileSelectionModel selectionModel, LiveChatController liveChatController) {
@@ -43,6 +44,10 @@ public class AssistantProfileSelectionSync {
 
     public void setProfileMessageConsumer(Consumer<String> profileMessageConsumer) {
         this.profileMessageConsumer = profileMessageConsumer;
+    }
+
+    public void setPreviewRefreshListener(Runnable previewRefreshListener) {
+        this.previewRefreshListener = previewRefreshListener;
     }
 
     void applyAssistantProfileSelection(AssistantProfile profile) {
@@ -77,6 +82,7 @@ public class AssistantProfileSelectionSync {
         }
         selectionModel.setSelectedProfile(profile, true);
         pendingProfile = profile;
+        notifyPreviewRefresh();
     }
 
     AssistantProfile selectForActivation(boolean fromTranscriptRestore) {
@@ -112,6 +118,15 @@ public class AssistantProfileSelectionSync {
         AssistantProfile profile = pendingProfile;
         pendingProfile = null;
         applyAssistantProfileSelection(profile);
+        notifyPreviewRefresh();
+    }
+
+    public AssistantProfileSwitchMessage pendingProfileMessageIfDifferent() {
+        AssistantProfileSwitchMessage message = toProfileSwitchMessage(pendingProfile);
+        if (message == null || isSameAsActiveProfileMessage(message)) {
+            return null;
+        }
+        return message;
     }
 
     public ProfileRequestResolution resolveRequestProfile(String profileName, String profileMessage) {
@@ -248,6 +263,12 @@ public class AssistantProfileSelectionSync {
 
     private String normalize(String text) {
         return text == null ? "" : text.trim();
+    }
+
+    private void notifyPreviewRefresh() {
+        if (previewRefreshListener != null) {
+            previewRefreshListener.run();
+        }
     }
 
     public static class ProfileRequestResolution {

@@ -6,6 +6,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
+import org.freeplane.plugin.ai.chat.memory.AssistantProfileChatMemory;
+import org.freeplane.plugin.ai.chat.memory.AssistantProfileSwitchMessage;
 import org.freeplane.plugin.ai.chat.memory.ChatTokenUsageTracker;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.tools.code.AiCodeToolSet;
@@ -14,7 +16,6 @@ import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -69,8 +70,6 @@ public class AIChatServiceTest {
     @Test
     public void systemMessageProviderUsesResolvedToolAvailability() {
         AIToolSet toolSet = mock(AIToolSet.class);
-        when(toolSet.systemMessageForChat("request", ToolAvailabilityLevel.READING))
-            .thenReturn("reading-guidance");
 
         AIChatService uut = new AIChatService(
             mock(ChatModel.class),
@@ -89,15 +88,14 @@ public class AIChatServiceTest {
 
         String message = uut.systemMessageProvider(ToolAvailabilityLevel.READING).apply("request");
 
-        assertThat(message).isEqualTo("reading-guidance");
-        verify(toolSet).systemMessageForChat("request", ToolAvailabilityLevel.READING);
+        assertThat(message).contains("Available Freeplane tools are limited to reading");
+        assertThat(message).contains("Respond in Markdown.");
+        assertThat(message).doesNotContain("Profile changes are communicated");
     }
 
     @Test
-    public void systemMessageProviderUsesCapturedVisibleSystemMessage() {
+    public void systemMessageProviderUsesCapturedVisibleSystemMessageAsBaseText() {
         AIToolSet toolSet = mock(AIToolSet.class);
-        when(toolSet.systemMessageForChat("request", ToolAvailabilityLevel.READING, "captured"))
-            .thenReturn("captured guidance");
 
         AIChatService uut = new AIChatService(
             mock(ChatModel.class),
@@ -118,14 +116,15 @@ public class AIChatServiceTest {
 
         String message = uut.systemMessageProvider(ToolAvailabilityLevel.READING).apply("request");
 
-        assertThat(message).isEqualTo("captured guidance");
-        verify(toolSet).systemMessageForChat("request", ToolAvailabilityLevel.READING, "captured");
+        assertThat(message).startsWith("captured\n\n");
+        assertThat(message).contains("Available Freeplane tools are limited to reading");
     }
 
     @Test
-    public void exactSystemMessageBypassesFreeplaneGuidance() {
+    public void hiddenRequestSystemMessageIsBaseTextAndDoesNotBypassDynamicGuidance() {
         AIToolSet toolSet = mock(AIToolSet.class);
         AiCodeToolSet aiCodeToolSet = mock(AiCodeToolSet.class);
+        when(aiCodeToolSet.systemMessageForChat("request")).thenReturn("code guidance");
 
         AIChatService uut = new AIChatService(
             mock(ChatModel.class),
@@ -141,14 +140,43 @@ public class AIChatServiceTest {
             () -> ToolAvailabilityLevel.READING,
             () -> Boolean.FALSE,
             availability -> mock(AIChatService.AIAssistant.class),
-            " exact ",
+            " hidden base ",
             true);
 
         String message = uut.systemMessageProvider(ToolAvailabilityLevel.READING).apply("request");
 
-        assertThat(message).isEqualTo("exact");
-        verify(toolSet, never()).systemMessageForChat("request", ToolAvailabilityLevel.READING);
-        verify(aiCodeToolSet, never()).systemMessageForChat("request");
+        assertThat(message).startsWith("hidden base\n\n");
+        assertThat(message).contains("Available Freeplane tools are limited to reading");
+        assertThat(message).contains("code guidance");
+        assertThat(message).doesNotContain("Respond in Markdown.");
+    }
+
+    @Test
+    public void systemMessageProviderIncludesProfileControlGuidanceWhenMemoryHasProfileMessage() {
+        AIToolSet toolSet = mock(AIToolSet.class);
+        AssistantProfileChatMemory chatMemory = AssistantProfileChatMemory.withMaxTokens(500);
+        chatMemory.add(new AssistantProfileSwitchMessage("profile", "Reviewer", "profile guidance"));
+
+        AIChatService uut = new AIChatService(
+            mock(ChatModel.class),
+            toolSet,
+            Collections.<Object>singletonList(toolSet),
+            null,
+            chatMemory,
+            new ChatTokenUsageTracker(totals -> {
+            }),
+            null,
+            null,
+            null,
+            () -> ToolAvailabilityLevel.READING,
+            () -> Boolean.FALSE,
+            availability -> mock(AIChatService.AIAssistant.class),
+            "base",
+            false);
+
+        String message = uut.systemMessageProvider(ToolAvailabilityLevel.READING).apply("request");
+
+        assertThat(message).contains("Profile changes are communicated");
     }
 
     @Test
@@ -224,7 +252,6 @@ public class AIChatServiceTest {
     public void systemMessageProviderAppendsCodeGuidanceWhenPresent() {
         AIToolSet toolSet = mock(AIToolSet.class);
         AiCodeToolSet aiCodeToolSet = mock(AiCodeToolSet.class);
-        when(toolSet.systemMessageForChat("request", ToolAvailabilityLevel.READING)).thenReturn("base guidance");
         when(aiCodeToolSet.systemMessageForChat("request")).thenReturn("code guidance");
 
         AIChatService uut = new AIChatService(
@@ -244,6 +271,7 @@ public class AIChatServiceTest {
 
         String message = uut.systemMessageProvider(ToolAvailabilityLevel.READING).apply("request");
 
-        assertThat(message).isEqualTo("base guidance\n\ncode guidance");
+        assertThat(message).contains("Available Freeplane tools are limited to reading");
+        assertThat(message).contains("code guidance");
     }
 }

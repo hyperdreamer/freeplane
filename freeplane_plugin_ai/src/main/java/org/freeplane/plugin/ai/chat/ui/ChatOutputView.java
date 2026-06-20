@@ -57,8 +57,8 @@ class ChatOutputView {
         chatMemoryHistoryRenderer.rebuildFromMessages(entries);
     }
 
-    void setInstructionMessageRenderingMode(InstructionMessageRenderingMode instructionMessageRenderingMode) {
-        chatMemoryHistoryRenderer.setInstructionMessageRenderingMode(instructionMessageRenderingMode);
+    void setInstructionHistoryRenderingMode(InstructionHistoryRenderingMode instructionHistoryRenderingMode) {
+        chatMemoryHistoryRenderer.setInstructionHistoryRenderingMode(instructionHistoryRenderingMode);
     }
 
     void appendHistoryEntry(ChatMemoryRenderEntry entry) {

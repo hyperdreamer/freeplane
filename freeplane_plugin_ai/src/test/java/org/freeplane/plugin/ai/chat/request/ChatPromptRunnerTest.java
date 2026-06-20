@@ -149,7 +149,9 @@ public class ChatPromptRunnerTest {
                 org.mockito.ArgumentMatchers.<Supplier<Boolean>>any(),
                 org.mockito.ArgumentMatchers.nullable(Consumer.class),
                 org.mockito.ArgumentMatchers.<Supplier<ToolAvailabilityLevel>>any(),
-                nullable(String.class)))
+                nullable(String.class),
+                nullable(String.class),
+                org.mockito.ArgumentMatchers.anyBoolean()))
                 .thenReturn(mock(AIChatService.class));
 
             boolean started = uut.submitHiddenRequest(
@@ -200,7 +202,9 @@ public class ChatPromptRunnerTest {
                 org.mockito.ArgumentMatchers.<Supplier<Boolean>>any(),
                 org.mockito.ArgumentMatchers.nullable(Consumer.class),
                 org.mockito.ArgumentMatchers.<Supplier<ToolAvailabilityLevel>>any(),
-                nullable(String.class)))
+                nullable(String.class),
+                nullable(String.class),
+                org.mockito.ArgumentMatchers.anyBoolean()))
                 .thenReturn(mock(AIChatService.class));
 
             boolean started = uut.submitHiddenRequest(

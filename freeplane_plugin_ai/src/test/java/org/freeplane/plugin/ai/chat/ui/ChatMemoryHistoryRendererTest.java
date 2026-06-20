@@ -47,7 +47,7 @@ public class ChatMemoryHistoryRendererTest {
     @Test
     public void fullInstructionModeShowsSystemAndProfileSnapshots() {
         RenderFixture fixture = new RenderFixture();
-        fixture.uut.setInstructionMessageRenderingMode(InstructionMessageRenderingMode.FULL);
+        fixture.uut.setInstructionHistoryRenderingMode(InstructionHistoryRenderingMode.FULL);
         List<ChatMemoryRenderEntry> messages = Arrays.asList(
             ChatMemoryRenderEntry.forMessage(new GeneralSystemMessage("system snapshot")),
             ChatMemoryRenderEntry.forMessage(new AssistantProfileSwitchMessage(
@@ -58,7 +58,7 @@ public class ChatMemoryHistoryRendererTest {
         fixture.uut.rebuildFromMessages(messages);
 
         String html = fixture.html();
-        assertThat(html).contains("message-system");
+        assertThat(html).doesNotContain("message-system");
         assertThat(html).contains("system snapshot");
         assertThat(html).contains("message-profile");
         assertThat(html).contains("profile snapshot");

@@ -216,7 +216,7 @@ public class ChatPromptRunner {
                                 boolean showProgressDialog,
                                 HiddenAiRequestObserverBridge observer) {
         return submitHiddenRequest(requestName, promptText, selectedModelOverride, resolvedToolAvailability,
-            selectionOverride, owner, showProgressDialog, observer, null, false, null);
+            selectionOverride, owner, showProgressDialog, observer, null, true, null);
     }
 
     public boolean submitHiddenRequest(String requestName,
@@ -228,7 +228,7 @@ public class ChatPromptRunner {
                                 boolean showProgressDialog,
                                 HiddenAiRequestObserverBridge observer,
                                 String systemMessage,
-                                boolean exactSystemMessage,
+                                boolean hiddenRequest,
                                 AssistantProfileSwitchMessage requestedProfileMessage) {
         final String preparedMessage;
         try {
@@ -255,7 +255,7 @@ public class ChatPromptRunner {
             selectedModelOverride,
             resolvedToolAvailability,
             systemMessage,
-            exactSystemMessage);
+            hiddenRequest);
         if (promptService == null) {
             return false;
         }
@@ -275,7 +275,7 @@ public class ChatPromptRunner {
                                                   String selectedModelOverride,
                                                   ToolAvailabilityLevel toolAvailability,
                                                   String systemMessage,
-                                                  boolean exactSystemMessage) {
+                                                  boolean hiddenRequest) {
         AIToolSetBuilder toolSetBuilder = new AIToolSetBuilder()
             .toolCallSummaryHandler(toolCallSummaryHandler)
             .availableMaps(availableMaps)
@@ -294,7 +294,7 @@ public class ChatPromptRunner {
                 return toolAvailability;
             }
         };
-        if (systemMessage == null && !exactSystemMessage) {
+        if (systemMessage == null && !hiddenRequest) {
             return AIChatServiceFactory.createService(
                 (org.freeplane.plugin.ai.tools.AIToolSet) toolObjects.get(0),
                 toolObjects,
@@ -317,7 +317,7 @@ public class ChatPromptRunner {
             requestToolAvailabilitySupplier,
             selectedModelOverride,
             systemMessage,
-            exactSystemMessage);
+            hiddenRequest);
     }
 
     private String capturedSystemMessage(ChatMemory chatMemory) {

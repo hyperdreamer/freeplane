@@ -23,7 +23,7 @@ class ChatMemoryHistoryRenderer {
     private final ChatMessageHistory messageHistory;
     private final ChatMessageRenderer messageRenderer;
     private final ProfileMessageFormatter profileMessageFormatter;
-    private InstructionMessageRenderingMode instructionMessageRenderingMode = InstructionMessageRenderingMode.BRIEF;
+    private InstructionHistoryRenderingMode instructionHistoryRenderingMode = InstructionHistoryRenderingMode.BRIEF;
 
     ChatMemoryHistoryRenderer(ChatMessageHistory messageHistory, ChatMessageRenderer messageRenderer) {
         this(messageHistory, messageRenderer, profileName -> {
@@ -65,10 +65,10 @@ class ChatMemoryHistoryRenderer {
         appendMessage(entry);
     }
 
-    void setInstructionMessageRenderingMode(InstructionMessageRenderingMode instructionMessageRenderingMode) {
-        this.instructionMessageRenderingMode = instructionMessageRenderingMode == null
-            ? InstructionMessageRenderingMode.BRIEF
-            : instructionMessageRenderingMode;
+    void setInstructionHistoryRenderingMode(InstructionHistoryRenderingMode instructionHistoryRenderingMode) {
+        this.instructionHistoryRenderingMode = instructionHistoryRenderingMode == null
+            ? InstructionHistoryRenderingMode.BRIEF
+            : instructionHistoryRenderingMode;
     }
 
     private void appendMessage(ChatMemoryRenderEntry entry) {
@@ -99,16 +99,16 @@ class ChatMemoryHistoryRenderer {
         if (message instanceof AssistantProfileSwitchMessage) {
             AssistantProfileSwitchMessage profileMessage =
                 (AssistantProfileSwitchMessage) message;
-            String text = instructionMessageRenderingMode == InstructionMessageRenderingMode.FULL
+            String text = instructionHistoryRenderingMode == InstructionHistoryRenderingMode.FULL
                 ? profileMessage.getProfileMessage()
                 : buildProfilePaneMessage(profileMessage.getProfileName());
             return new MessageHistoryEntry(text, RenderCategory.PROFILE);
         }
         if (message instanceof GeneralSystemMessage) {
-            if (instructionMessageRenderingMode != InstructionMessageRenderingMode.FULL) {
+            if (instructionHistoryRenderingMode != InstructionHistoryRenderingMode.FULL) {
                 return null;
             }
-            return new MessageHistoryEntry(((GeneralSystemMessage) message).text(), RenderCategory.SYSTEM);
+            return new MessageHistoryEntry(((GeneralSystemMessage) message).text(), RenderCategory.PROFILE);
         }
         if (message instanceof TranscriptHiddenSystemMessage) {
             return null;
