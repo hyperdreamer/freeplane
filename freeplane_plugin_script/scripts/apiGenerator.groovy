@@ -232,7 +232,7 @@ def formatFieldKey(Field field){
 }
 
 def formatField(Map att){
-    return "<html><body><b>${formatReturnType(att['return_type'] )}.${att['name']}</b></body></html>".toString()
+    return "<html><body><b>${formatReturnType(att['return_type'] )} ${att['name']}</b></body></html>".toString()
 }
 
 def formatProperty(String property, String type, String mode) {
