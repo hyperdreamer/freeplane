@@ -24,9 +24,7 @@ public class MessageBuilder {
     private static final String PROFILE_CONTROL_GUIDANCE =
         "Control instructions start with: " + CONTROL_INSTRUCTION_PREFIX
             + "Profile changes are communicated through these control instructions. "
-            + "Treat the latest profile change as authoritative. "
-            + "Older profile changes may omit profile definition and include only "
-            + "\"Now you have the profile <Name>.\"";
+            + "Treat the latest profile change as authoritative.";
     
     @FunctionalInterface
     interface MessageTextProvider {
