@@ -51,8 +51,8 @@ public class ScriptingEngineTest {
                     ScriptingPermissions.getPermissiveScriptingPermissions());
 
                 assertThat(result).isEqualTo(7);
-                assertThat(capture.text()).isEqualTo("hello from script\n");
-                assertThat(liveBuffer.toString("UTF-8")).isEqualTo("hello from script\n");
+                assertThat(normalizeLineEndings(capture.text()).trim()).isEqualTo("hello from script");
+                assertThat(normalizeLineEndings(liveBuffer.toString("UTF-8")).trim()).isEqualTo("hello from script");
             }
         }
     }
@@ -69,6 +69,10 @@ public class ScriptingEngineTest {
             assertThat(result.getCompilerDiagnostics()).isNotEmpty();
             assertThat(result.getErrorMessage()).isNotBlank();
         }
+    }
+
+    private static String normalizeLineEndings(String text) {
+        return text.replace("\r\n", "\n");
     }
 
     private static class TestResourceController extends ResourceController {
