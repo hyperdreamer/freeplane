@@ -130,7 +130,7 @@ public class ToolbarLayout implements LayoutManager {
 				hasVisibleComponentInBlock = false;
 			}
 			if (component == null) {
-				if (lastBlockStart == container.getComponentCount()) {
+				if (lastBlockStart >= container.getComponentCount()) {
 					break;
 				}
 				lastBlockFinish = container.getComponentCount();
@@ -216,7 +216,7 @@ public class ToolbarLayout implements LayoutManager {
 	                hasVisibleComponentInBlock = false;
 	            }
 	            if (component == null) {
-	                if (lastBlockStart == container.getComponentCount()) {
+	                if (lastBlockStart >= container.getComponentCount()) {
 	                    break;
 	                }
 	                lastBlockFinish = container.getComponentCount();
