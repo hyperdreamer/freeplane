@@ -265,6 +265,12 @@ public class AIToolSet {
         return messageBuilder.buildForChat(toolAvailability);
     }
 
+    public String systemMessageForChat(@SuppressWarnings("unused") Object input,
+                                       ToolAvailabilityLevel toolAvailability,
+                                       String systemMessage) {
+        return messageBuilder.buildForChat(systemMessage, toolAvailability);
+    }
+
     @Tool("Read nodes with descendants.")
     public ReadNodesWithDescendantsResponse readNodesWithDescendants(ReadNodesWithDescendantsRequest request) {
         try {

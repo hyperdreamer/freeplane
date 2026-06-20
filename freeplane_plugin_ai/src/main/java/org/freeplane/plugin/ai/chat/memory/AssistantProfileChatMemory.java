@@ -218,7 +218,22 @@ public class AssistantProfileChatMemory implements ChatMemory {
     }
 
     public List<ChatTranscriptEntry> transcriptEntriesForPersistence() {
-        return transcriptProjector.buildTranscriptEntries(filteredChatMessages());
+        return transcriptProjector.buildTranscriptEntries(generalSystemMessage, filteredChatMessages());
+    }
+
+    public String capturedSystemMessage() {
+        return generalSystemMessage == null ? null : generalSystemMessage.text();
+    }
+
+    public AssistantProfileSwitchMessage latestProfileSwitchMessage() {
+        int index = findLatestProfileSwitchIndex(activeConversationEndIndex());
+        if (index < 0 || index >= conversationMessages.size()) {
+            return null;
+        }
+        ChatMessage message = conversationMessages.get(index);
+        return message instanceof AssistantProfileSwitchMessage
+            ? (AssistantProfileSwitchMessage) message
+            : null;
     }
 
     public List<ChatMemoryRenderEntry> activeConversationRenderEntries() {
@@ -497,7 +512,7 @@ public class AssistantProfileChatMemory implements ChatMemory {
             return new AssistantProfileInstructionMessage(
                 profileSwitchMessage.getProfileId(),
                 profileSwitchMessage.getProfileName(),
-                "");
+                profileSwitchMessage.getProfileMessage());
         };
     }
 

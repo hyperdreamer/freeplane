@@ -138,7 +138,7 @@
   5. Add script API and routing changes.
 
 ## Subtask: Persist captured chat system message
-- **Status:** backlog
+- **Status:** review
 
 - **Research:**
   ```plantuml
@@ -302,7 +302,7 @@
       verify it receives a trimmed current-global snapshot.
 
 ## Subtask: Persist profile message snapshots
-- **Status:** backlog
+- **Status:** review
 
 - **Research:**
   ```plantuml
@@ -472,7 +472,7 @@
       message.
 
 ## Subtask: Render system-message chat-start block
-- **Status:** backlog
+- **Status:** review
 
 - **Research:**
   ```plantuml
@@ -582,7 +582,7 @@
       visible in the history.
 
 ## Subtask: Add brief/full rendering for instruction blocks
-- **Status:** backlog
+- **Status:** review
 
 - **Research:**
   ```plantuml
@@ -692,8 +692,14 @@
     - Toggle brief/full mode and verify rendered system/profile blocks
       update without changing transcript content.
 
+- **Implementation notes:**
+  - **Tradeoffs:**
+    - Kept the instruction-message rendering switch session-local
+      because the surrounding chat popup has no existing persisted
+      preference pattern for this kind of display toggle.
+
 ## Subtask: Add script API and routing changes
-- **Status:** backlog
+- **Status:** review
 
 - **Research:**
   ```plantuml

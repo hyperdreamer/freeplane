@@ -17,8 +17,10 @@ import org.freeplane.plugin.ai.chat.history.MapRootShortTextCount;
 import org.freeplane.plugin.ai.chat.memory.AssistantProfileChatMemory;
 import org.freeplane.plugin.ai.chat.memory.AssistantProfileSwitchMessage;
 import org.freeplane.plugin.ai.chat.memory.ChatMemorySettings;
+import org.freeplane.plugin.ai.chat.memory.GeneralSystemMessage;
 import org.freeplane.plugin.ai.chat.memory.TranscriptHiddenSystemMessage;
 import org.freeplane.plugin.ai.chat.memory.ChatTokenUsageState;
+import org.freeplane.plugin.ai.tools.MessageBuilder;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.chat.ui.AIChatPanel;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
@@ -96,6 +98,7 @@ public class LiveChatController {
     }
 
     public void initialize(ChatMemory chatMemory) {
+        ensureCapturedSystemMessage(chatMemory, MessageBuilder.configuredSystemMessage());
         LiveChatSession initialSession = liveChatSessionManager.createSession(chatMemory, buildDefaultChatName());
         liveChatSessionManager.setCurrentSession(initialSession.getId());
         sessionActivationHandler.activate(chatMemory, false);
@@ -118,9 +121,24 @@ public class LiveChatController {
     public LiveChatSessionId startNewPromptChat(ChatMemory chatMemory, String displayName,
                                                 String selectedModelOverride,
                                                 ToolAvailabilityLevel toolAvailabilityOverride) {
+        return startNewPromptChat(chatMemory, displayName, selectedModelOverride, toolAvailabilityOverride, true);
+    }
+
+    public LiveChatSessionId startNewScriptChat(ChatMemory chatMemory, String displayName,
+                                                String selectedModelOverride,
+                                                ToolAvailabilityLevel toolAvailabilityOverride) {
+        boolean nameEdited = displayName != null && !displayName.trim().isEmpty();
+        return startNewPromptChat(chatMemory, displayName, selectedModelOverride, toolAvailabilityOverride, nameEdited);
+    }
+
+    private LiveChatSessionId startNewPromptChat(ChatMemory chatMemory, String displayName,
+                                                 String selectedModelOverride,
+                                                 ToolAvailabilityLevel toolAvailabilityOverride,
+                                                 boolean nameEdited) {
         if (chatMemory == null) {
             return null;
         }
+        ensureCapturedSystemMessage(chatMemory, MessageBuilder.configuredSystemMessage());
         persistCurrentSession();
         String effectiveDisplayName = displayName == null || displayName.trim().isEmpty()
             ? buildDefaultChatName()
@@ -131,7 +149,7 @@ public class LiveChatController {
             false,
             toolAvailabilityOverride);
         promptSession.setSelectedModelOverride(selectedModelOverride);
-        promptSession.setNameEdited(true);
+        promptSession.setNameEdited(nameEdited);
         switchToSession(promptSession.getId(), false, false);
         return promptSession.getId();
     }
@@ -170,6 +188,11 @@ public class LiveChatController {
     public String sessionSelectedModelOverride(LiveChatSessionId sessionId) {
         LiveChatSession session = liveChatSessionManager.findSession(sessionId);
         return session == null ? null : session.getSelectedModelOverride();
+    }
+
+    public String sessionCapturedSystemMessage(LiveChatSessionId sessionId) {
+        AssistantProfileChatMemory memory = activeAssistantProfileChatMemory(liveChatSessionManager.findSession(sessionId));
+        return memory == null || memory.capturedSystemMessage() == null ? "" : memory.capturedSystemMessage().trim();
     }
 
     public void clearCurrentSessionSelectedModelOverride() {
@@ -329,7 +352,7 @@ public class LiveChatController {
 
     private LiveChatSessionId switchToNewSession() {
         persistCurrentSession();
-        ChatMemory newChatMemory = createChatMemory();
+        ChatMemory newChatMemory = createChatMemoryWithCapturedSystemMessage(MessageBuilder.configuredSystemMessage());
         LiveChatSession newSession = liveChatSessionManager.createSession(newChatMemory, buildDefaultChatName());
         switchToSession(newSession.getId(), false, false);
         return newSession.getId();
@@ -385,7 +408,7 @@ public class LiveChatController {
         if (!isActive) {
             return;
         }
-        ChatMemory newChatMemory = createChatMemory();
+        ChatMemory newChatMemory = createChatMemoryWithCapturedSystemMessage(MessageBuilder.configuredSystemMessage());
         LiveChatSession newSession = liveChatSessionManager.createSession(newChatMemory, buildDefaultChatName());
         liveChatSessionManager.setCurrentSession(newSession.getId());
         sessionActivationHandler.activate(newChatMemory, false);
@@ -398,7 +421,7 @@ public class LiveChatController {
         }
         session.setTranscriptEntries(transcriptMemoryMapper.toTranscriptEntries(session.getChatMemory()));
         storeTokenUsageState(session);
-        if (session.getTranscriptEntries().isEmpty() && session.getTranscriptId() == null) {
+        if (isEmptyTranscript(session.getTranscriptEntries()) && session.getTranscriptId() == null) {
             return;
         }
         ChatTranscriptRecord record = new ChatTranscriptRecord();
@@ -423,6 +446,15 @@ public class LiveChatController {
         ChatTranscriptId transcriptId = transcriptStore.save(record, session.getTranscriptId());
         session.setTranscriptId(transcriptId);
         session.setLastActivityTimestamp(record.getTimestamp());
+    }
+
+    private boolean isEmptyTranscript(List<ChatTranscriptEntry> entries) {
+        if (entries == null || entries.isEmpty()) {
+            return true;
+        }
+        return entries.size() == 1
+            && entries.get(0) != null
+            && entries.get(0).getRole() == org.freeplane.plugin.ai.chat.history.ChatTranscriptRole.SYSTEM;
     }
 
     private String buildDefaultChatName() {
@@ -513,7 +545,7 @@ public class LiveChatController {
         if (record == null) {
             return;
         }
-        ChatMemory newChatMemory = createChatMemory();
+        ChatMemory newChatMemory = createChatMemoryWithoutCapturedSystemMessage();
         String displayName = record.getDisplayName() == null || record.getDisplayName().trim().isEmpty()
             ? buildDefaultChatName()
             : record.getDisplayName();
@@ -551,6 +583,9 @@ public class LiveChatController {
         transcriptMemoryMapper.seedTranscriptWithHiddenExchange(session.getChatMemory(), record.getEntries(),
             TRANSCRIPT_HIDDEN_SYSTEM_MESSAGE);
         AssistantProfileChatMemory memory = activeAssistantProfileChatMemory(session);
+        if (memory != null && !hasSystemTranscriptEntry(record.getEntries())) {
+            memory.add(new GeneralSystemMessage(MessageBuilder.configuredSystemMessage()));
+        }
         if (memory != null) {
             memory.initializeUndoRedoFromMessages();
             memory.expandWindowAfterTranscriptRestoreIfUnderutilized();
@@ -573,10 +608,38 @@ public class LiveChatController {
         return null;
     }
 
-    private ChatMemory createChatMemory() {
+    private ChatMemory createChatMemoryWithoutCapturedSystemMessage() {
         return AssistantProfileChatMemory.builder()
             .dynamicMaxTokens(ignored -> chatMemorySettings.getMaximumTokenCount())
             .build();
+    }
+
+    private ChatMemory createChatMemoryWithCapturedSystemMessage(String systemMessage) {
+        ChatMemory chatMemory = createChatMemoryWithoutCapturedSystemMessage();
+        chatMemory.add(new GeneralSystemMessage(systemMessage == null ? "" : systemMessage.trim()));
+        return chatMemory;
+    }
+
+    private boolean hasSystemTranscriptEntry(List<ChatTranscriptEntry> entries) {
+        if (entries == null) {
+            return false;
+        }
+        for (ChatTranscriptEntry entry : entries) {
+            if (entry != null && entry.getRole() == org.freeplane.plugin.ai.chat.history.ChatTranscriptRole.SYSTEM) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void ensureCapturedSystemMessage(ChatMemory chatMemory, String defaultSystemMessage) {
+        if (!(chatMemory instanceof AssistantProfileChatMemory)) {
+            return;
+        }
+        AssistantProfileChatMemory assistantProfileChatMemory = (AssistantProfileChatMemory) chatMemory;
+        if (assistantProfileChatMemory.capturedSystemMessage() == null) {
+            assistantProfileChatMemory.add(new GeneralSystemMessage(defaultSystemMessage));
+        }
     }
 
     private void storeTokenUsageState(LiveChatSession session) {

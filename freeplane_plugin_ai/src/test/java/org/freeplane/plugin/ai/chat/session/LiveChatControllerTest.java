@@ -85,7 +85,7 @@ public class LiveChatControllerTest {
             assertThat(record.hasToolAvailabilityOverrideMetadata()).isTrue();
             assertThat(record.getEntries())
                 .extracting(ChatTranscriptEntry::getRole)
-                .containsExactly(ChatTranscriptRole.USER, ChatTranscriptRole.ASSISTANT);
+                .containsExactly(ChatTranscriptRole.SYSTEM, ChatTranscriptRole.USER, ChatTranscriptRole.ASSISTANT);
         } finally {
             deleteRecursively(tempDir);
         }

@@ -237,8 +237,8 @@ public class ChatPromptRunnerTest {
             null,
             availableMaps,
             aiPromptRequestComposer,
-            (sessionId, service, preparedMessage, requestFlow, requestTokenUsageTracker, requestCallbacks) ->
-                seenPreparedMessage.set(preparedMessage),
+            (sessionId, service, preparedMessage, requestFlow, requestTokenUsageTracker,
+             requestCallbacks, requestedProfileMessage) -> seenPreparedMessage.set(preparedMessage),
             null,
             () -> ToolAvailabilityLevel.EDITING,
             () -> null,
@@ -261,7 +261,8 @@ public class ChatPromptRunnerTest {
             null,
             availableMaps,
             new AiPromptRequestComposer(availableMaps, mock(TextController.class)),
-            (sessionId, service, preparedMessage, requestFlow, requestTokenUsageTracker, requestCallbacks) -> {
+            (sessionId, service, preparedMessage, requestFlow, requestTokenUsageTracker,
+             requestCallbacks, requestedProfileMessage) -> {
             },
             null,
             () -> ToolAvailabilityLevel.EDITING,

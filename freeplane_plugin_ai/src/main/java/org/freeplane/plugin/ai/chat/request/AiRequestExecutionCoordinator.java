@@ -55,7 +55,7 @@ public class AiRequestExecutionCoordinator {
         }
         AiRequestMode mode = request.getMode();
         switch (mode) {
-            case SHOW_IN_CHAT:
+            case SHOW_IN_NEW_CHAT:
                 aiChatPanel.startShownAiRequest(request, handle, timeoutControllerFactory.create(request, handle));
                 return handle;
             case ADD_TO_CHAT:

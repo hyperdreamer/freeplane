@@ -14,6 +14,7 @@ import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -90,6 +91,64 @@ public class AIChatServiceTest {
 
         assertThat(message).isEqualTo("reading-guidance");
         verify(toolSet).systemMessageForChat("request", ToolAvailabilityLevel.READING);
+    }
+
+    @Test
+    public void systemMessageProviderUsesCapturedVisibleSystemMessage() {
+        AIToolSet toolSet = mock(AIToolSet.class);
+        when(toolSet.systemMessageForChat("request", ToolAvailabilityLevel.READING, "captured"))
+            .thenReturn("captured guidance");
+
+        AIChatService uut = new AIChatService(
+            mock(ChatModel.class),
+            toolSet,
+            Collections.<Object>singletonList(toolSet),
+            null,
+            null,
+            new ChatTokenUsageTracker(totals -> {
+            }),
+            null,
+            null,
+            null,
+            () -> ToolAvailabilityLevel.READING,
+            () -> Boolean.FALSE,
+            availability -> mock(AIChatService.AIAssistant.class),
+            " captured ",
+            false);
+
+        String message = uut.systemMessageProvider(ToolAvailabilityLevel.READING).apply("request");
+
+        assertThat(message).isEqualTo("captured guidance");
+        verify(toolSet).systemMessageForChat("request", ToolAvailabilityLevel.READING, "captured");
+    }
+
+    @Test
+    public void exactSystemMessageBypassesFreeplaneGuidance() {
+        AIToolSet toolSet = mock(AIToolSet.class);
+        AiCodeToolSet aiCodeToolSet = mock(AiCodeToolSet.class);
+
+        AIChatService uut = new AIChatService(
+            mock(ChatModel.class),
+            toolSet,
+            Collections.<Object>singletonList(toolSet),
+            aiCodeToolSet,
+            null,
+            new ChatTokenUsageTracker(totals -> {
+            }),
+            null,
+            null,
+            null,
+            () -> ToolAvailabilityLevel.READING,
+            () -> Boolean.FALSE,
+            availability -> mock(AIChatService.AIAssistant.class),
+            " exact ",
+            true);
+
+        String message = uut.systemMessageProvider(ToolAvailabilityLevel.READING).apply("request");
+
+        assertThat(message).isEqualTo("exact");
+        verify(toolSet, never()).systemMessageForChat("request", ToolAvailabilityLevel.READING);
+        verify(aiCodeToolSet, never()).systemMessageForChat("request");
     }
 
     @Test

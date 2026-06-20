@@ -1,6 +1,7 @@
 package org.freeplane.plugin.ai.chat.profile;
 
 import dev.langchain4j.memory.ChatMemory;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 import org.freeplane.plugin.ai.chat.history.AssistantProfileTranscriptEntry;
@@ -9,6 +10,7 @@ import org.freeplane.plugin.ai.chat.memory.AssistantProfileChatMemory;
 import org.freeplane.plugin.ai.chat.memory.AssistantProfileInstructionMessage;
 import org.freeplane.plugin.ai.chat.memory.AssistantProfileSwitchMessage;
 import org.freeplane.plugin.ai.chat.session.LiveChatController;
+import org.freeplane.plugin.ai.tools.MessageBuilder;
 
 public class AssistantProfileSelectionSync {
     private final AssistantProfileSelectionModel selectionModel;
@@ -16,8 +18,6 @@ public class AssistantProfileSelectionSync {
     private ChatMemory chatMemory;
     private Consumer<String> profileMessageConsumer;
     private AssistantProfile pendingProfile;
-    private String pendingProfileId;
-    private String lastInjectedProfileId;
 
     public AssistantProfileSelectionSync(AssistantProfileSelectionModel selectionModel, LiveChatController liveChatController) {
         this.selectionModel = selectionModel;
@@ -33,16 +33,10 @@ public class AssistantProfileSelectionSync {
                 if (profileSwitchMessage == null) {
                     return null;
                 }
-                AssistantProfile selectedProfile = selectionModel.getSelectedProfile();
-                AssistantProfile resolvedProfile =
-                    selectionModel.findProfileById(profileSwitchMessage.getProfileId());
-                if (resolvedProfile == null) {
-                    resolvedProfile = selectedProfile == null ? AssistantProfile.defaultProfile() : selectedProfile;
-                }
                 return new AssistantProfileInstructionMessage(
-                    resolvedProfile.getId(),
-                    resolvedProfile.getName(),
-                    resolvedProfile.getPrompt());
+                    profileSwitchMessage.getProfileId(),
+                    profileSwitchMessage.getProfileName(),
+                    profileSwitchMessage.getProfileMessage());
             });
         }
     }
@@ -52,23 +46,29 @@ public class AssistantProfileSelectionSync {
     }
 
     void applyAssistantProfileSelection(AssistantProfile profile) {
-        if (profile == null) {
-            return;
+        addProfileMessageIfDifferent(toProfileSwitchMessage(profile));
+    }
+
+    public boolean addProfileMessageIfDifferent(AssistantProfileSwitchMessage message) {
+        if (message == null) {
+            return false;
         }
-        AssistantProfileSwitchMessage message = new AssistantProfileSwitchMessage(
-            profile.getId(),
-            profile.getName());
-        if (message.getProfileId().isEmpty() && message.getProfileName().isEmpty()) {
-            return;
+        if (message.getProfileId().isEmpty()
+            && message.getProfileName().isEmpty()
+            && message.getProfileMessage().trim().isEmpty()) {
+            return false;
+        }
+        if (isSameAsActiveProfileMessage(message)) {
+            return false;
         }
         if (chatMemory != null) {
             chatMemory.add(message);
         }
         liveChatController.recordAssistantProfileMessage(message);
         if (profileMessageConsumer != null) {
-            profileMessageConsumer.accept(profile.getName());
+            profileMessageConsumer.accept(message.getProfileName());
         }
-        lastInjectedProfileId = profileId(profile);
+        return true;
     }
 
     void handleUserSelection(AssistantProfile profile) {
@@ -77,7 +77,6 @@ public class AssistantProfileSelectionSync {
         }
         selectionModel.setSelectedProfile(profile, true);
         pendingProfile = profile;
-        pendingProfileId = profileId(profile);
     }
 
     AssistantProfile selectForActivation(boolean fromTranscriptRestore) {
@@ -85,9 +84,7 @@ public class AssistantProfileSelectionSync {
         AssistantProfileTranscriptEntry profileEntry = findLastAssistantProfileEntry(entries);
         AssistantProfile selected = selectionModel.getSelectedProfile();
         if (profileEntry == null && !fromTranscriptRestore) {
-            lastInjectedProfileId = null;
             pendingProfile = selected;
-            pendingProfileId = profileId(selected);
             return selected;
         }
         String transcriptProfileId = profileEntry == null ? "" : normalize(profileEntry.getProfileId());
@@ -100,43 +97,146 @@ public class AssistantProfileSelectionSync {
                 transcriptProfileExists = true;
             }
         }
-        if (fromTranscriptRestore) {
-            if (profileEntry != null && transcriptProfileExists) {
-                lastInjectedProfileId = profileId(selected);
-            } else {
-                lastInjectedProfileId = null;
-            }
-            pendingProfile = selected;
-            pendingProfileId = profileId(selected);
-            return selected;
-        }
         if (profileEntry != null && !transcriptProfileId.isEmpty() && !transcriptProfileExists) {
-            lastInjectedProfileId = null;
             pendingProfile = selected;
-            pendingProfileId = profileId(selected);
             return selected;
         }
-        lastInjectedProfileId = profileId(selected);
-        pendingProfile = selected;
-        pendingProfileId = lastInjectedProfileId;
+        pendingProfile = shouldInjectSelectedProfile(profileEntry, selected) ? selected : null;
         return selected;
     }
 
     public void maybeInjectBeforeUserMessage() {
-        if (pendingProfile == null || pendingProfileId == null || pendingProfileId.trim().isEmpty()) {
+        if (pendingProfile == null) {
             return;
         }
-        if (pendingProfileId.equals(lastInjectedProfileId)) {
-            pendingProfile = null;
-            pendingProfileId = null;
-            return;
-        }
-        applyAssistantProfileSelection(pendingProfile);
+        AssistantProfile profile = pendingProfile;
         pendingProfile = null;
-        pendingProfileId = null;
+        applyAssistantProfileSelection(profile);
+    }
+
+    public ProfileRequestResolution resolveRequestProfile(String profileName, String profileMessage) {
+        if (profileName == null && profileMessage == null) {
+            return ProfileRequestResolution.none();
+        }
+        String normalizedName = normalize(profileName);
+        if (profileMessage == null) {
+            if (normalizedName.isEmpty()) {
+                return ProfileRequestResolution.configurationError("AI profile name must not be empty.");
+            }
+            List<AssistantProfile> matches = findProfilesByName(normalizedName);
+            if (matches.isEmpty()) {
+                return ProfileRequestResolution.configurationError(
+                    "AI profile not found: " + normalizedName);
+            }
+            if (matches.size() > 1) {
+                return ProfileRequestResolution.configurationError(
+                    "AI profile name is ambiguous: " + normalizedName);
+            }
+            return ProfileRequestResolution.message(toProfileSwitchMessage(matches.get(0)));
+        }
+        String normalizedMessage = normalize(profileMessage);
+        if (normalizedMessage.isEmpty() && normalizedName.isEmpty()) {
+            return ProfileRequestResolution.none();
+        }
+        String effectiveMessage = normalizedMessage.isEmpty()
+            ? MessageBuilder.buildAssistantProfileMarker(normalizedName)
+            : normalizedMessage;
+        return ProfileRequestResolution.message(
+            new AssistantProfileSwitchMessage("", normalizedName, effectiveMessage));
+    }
+
+    private boolean shouldInjectSelectedProfile(AssistantProfileTranscriptEntry profileEntry,
+                                                AssistantProfile selected) {
+        if (selected == null) {
+            return false;
+        }
+        AssistantProfileSwitchMessage selectedMessage = toProfileSwitchMessage(selected);
+        if (selectedMessage == null) {
+            return false;
+        }
+        if (profileEntry == null) {
+            return true;
+        }
+        return !sameProfileMessage(
+            normalize(profileEntry.getProfileName()),
+            transcriptProfileMessage(profileEntry, selectedMessage),
+            selectedMessage.getProfileName(),
+            selectedMessage.getProfileMessage());
+    }
+
+    private List<AssistantProfile> findProfilesByName(String profileName) {
+        List<AssistantProfile> matches = new ArrayList<AssistantProfile>();
+        List<AssistantProfile> profiles = selectionModel.getProfiles();
+        if (profiles == null) {
+            return matches;
+        }
+        for (AssistantProfile profile : profiles) {
+            if (profileName.equals(normalize(profile.getName()))) {
+                matches.add(profile);
+            }
+        }
+        return matches;
+    }
+
+    private AssistantProfileSwitchMessage toProfileSwitchMessage(AssistantProfile profile) {
+        if (profile == null) {
+            return null;
+        }
+        String profileId = normalize(profile.getId());
+        String profileName = normalize(profile.getName());
+        String profilePrompt = normalize(profile.getPrompt());
+        if (profileId.isEmpty() && profileName.isEmpty() && profilePrompt.isEmpty()) {
+            return null;
+        }
+        String profileMessage = configuredProfileMessage(profileName, profilePrompt);
+        return new AssistantProfileSwitchMessage(profileId, profileName, profileMessage);
+    }
+
+    private String configuredProfileMessage(String profileName, String profilePrompt) {
+        String normalizedPrompt = normalize(profilePrompt);
+        if (normalizedPrompt.isEmpty()) {
+            return MessageBuilder.buildAssistantProfileMarker(profileName);
+        }
+        return MessageBuilder.buildAssistantProfileInstruction(profileName, normalizedPrompt, true);
+    }
+
+    private boolean isSameAsActiveProfileMessage(AssistantProfileSwitchMessage message) {
+        if (!(chatMemory instanceof AssistantProfileChatMemory)) {
+            return false;
+        }
+        AssistantProfileSwitchMessage activeMessage =
+            ((AssistantProfileChatMemory) chatMemory).latestProfileSwitchMessage();
+        return activeMessage != null
+            && sameProfileMessage(
+                activeMessage.getProfileName(),
+                activeMessage.getProfileMessage(),
+                message.getProfileName(),
+                message.getProfileMessage());
+    }
+
+    private boolean sameProfileMessage(String leftName,
+                                       String leftMessage,
+                                       String rightName,
+                                       String rightMessage) {
+        return normalize(leftName).equals(normalize(rightName))
+            && normalize(leftMessage).equals(normalize(rightMessage));
+    }
+
+    private String transcriptProfileMessage(AssistantProfileTranscriptEntry profileEntry,
+                                            AssistantProfileSwitchMessage selectedMessage) {
+        String profileMessage = normalize(profileEntry.getProfileMessage());
+        if (!profileMessage.isEmpty()) {
+            return profileMessage;
+        }
+        return selectedMessage == null
+            ? MessageBuilder.buildAssistantProfileMarker(profileEntry.getProfileName())
+            : selectedMessage.getProfileMessage();
     }
 
     private AssistantProfileTranscriptEntry findLastAssistantProfileEntry(List<ChatTranscriptEntry> entries) {
+        if (entries == null) {
+            return null;
+        }
         for (int index = entries.size() - 1; index >= 0; index--) {
             ChatTranscriptEntry entry = entries.get(index);
             if (entry instanceof AssistantProfileTranscriptEntry) {
@@ -146,14 +246,37 @@ public class AssistantProfileSelectionSync {
         return null;
     }
 
-    private String profileId(AssistantProfile profile) {
-        if (profile == null) {
-            return "";
-        }
-        return normalize(profile.getId());
-    }
-
     private String normalize(String text) {
         return text == null ? "" : text.trim();
+    }
+
+    public static class ProfileRequestResolution {
+        private final AssistantProfileSwitchMessage message;
+        private final String configurationErrorDetail;
+
+        private ProfileRequestResolution(AssistantProfileSwitchMessage message, String configurationErrorDetail) {
+            this.message = message;
+            this.configurationErrorDetail = configurationErrorDetail;
+        }
+
+        public static ProfileRequestResolution none() {
+            return new ProfileRequestResolution(null, null);
+        }
+
+        public static ProfileRequestResolution message(AssistantProfileSwitchMessage message) {
+            return new ProfileRequestResolution(message, null);
+        }
+
+        public static ProfileRequestResolution configurationError(String configurationErrorDetail) {
+            return new ProfileRequestResolution(null, configurationErrorDetail);
+        }
+
+        public AssistantProfileSwitchMessage getMessage() {
+            return message;
+        }
+
+        public String getConfigurationErrorDetail() {
+            return configurationErrorDetail;
+        }
     }
 }

@@ -38,6 +38,9 @@ public class AiRequestOptionsTest {
         assertThat(options.getModelSelection()).isNull();
         assertThat(options.getToolAvailability()).isNull();
         assertThat(options.getSelectionOverride()).isNull();
+        assertThat(options.getSystemMessage()).isNull();
+        assertThat(options.getProfileName()).isNull();
+        assertThat(options.getProfileMessage()).isNull();
     }
 
     @Test
@@ -51,6 +54,8 @@ public class AiRequestOptionsTest {
             .modelSelection(AiModelSelection.explicit("openrouter", "openai/gpt-4.1-mini"))
             .toolAvailability(AiToolAvailability.READING)
             .selectionOverride(override)
+            .systemMessage(" system ")
+            .profile(" reviewer ", " check strictly ")
             .build();
 
         assertThat(options.getTimeout()).isEqualTo(Duration.ofSeconds(10));
@@ -59,6 +64,39 @@ public class AiRequestOptionsTest {
             .isEqualTo(AiModelSelection.explicit("openrouter", "openai/gpt-4.1-mini"));
         assertThat(options.getToolAvailability()).isEqualTo(AiToolAvailability.READING);
         assertThat(options.getSelectionOverride()).isSameAs(override);
+        assertThat(options.getSystemMessage()).isEqualTo("system");
+        assertThat(options.getProfileName()).isEqualTo("reviewer");
+        assertThat(options.getProfileMessage()).isEqualTo("check strictly");
+    }
+
+    @Test
+    public void preservesExplicitEmptySystemMessage() {
+        AiRequestOptions options = AiRequestOptions.builder()
+            .timeout(Duration.ofSeconds(10))
+            .systemMessage("   ")
+            .build();
+
+        assertThat(options.getSystemMessage()).isEqualTo("");
+    }
+
+    @Test
+    public void configuredProfileLookupStoresTrimmedNameOnly() {
+        AiRequestOptions options = AiRequestOptions.builder()
+            .timeout(Duration.ofSeconds(10))
+            .profile(" reviewer ")
+            .build();
+
+        assertThat(options.getProfileName()).isEqualTo("reviewer");
+        assertThat(options.getProfileMessage()).isNull();
+    }
+
+    @Test
+    public void explicitProfileRejectsNullMessage() {
+        assertThatThrownBy(() -> AiRequestOptions.builder()
+            .timeout(Duration.ofSeconds(10))
+            .profile("reviewer", null))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessageContaining("message");
     }
 
     @Test
@@ -92,7 +130,7 @@ public class AiRequestOptionsTest {
     @Test
     public void exposesStablePublicEnumValues() {
         assertThat(AiRequestMode.values()).extracting(Enum::name)
-            .containsExactly("SHOW_IN_CHAT", "ADD_TO_CHAT", "HIDDEN_WITH_CANCEL_DIALOG", "HIDDEN");
+            .containsExactly("SHOW_IN_NEW_CHAT", "ADD_TO_CHAT", "HIDDEN_WITH_CANCEL_DIALOG", "HIDDEN");
         assertThat(AiToolAvailability.values()).extracting(Enum::name)
             .containsExactly("CURRENT", "DISABLED", "READING", "EDITING", "SCRIPT_EXECUTION");
         assertThat(AiRequestStatus.values()).extracting(Enum::name)

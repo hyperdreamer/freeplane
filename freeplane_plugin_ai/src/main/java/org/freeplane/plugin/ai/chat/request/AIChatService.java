@@ -51,6 +51,8 @@ public class AIChatService {
     private final Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier;
     private final Supplier<Boolean> formulaEditingEnabledSupplier;
     private final Function<ToolAvailabilityLevel, AIAssistant> assistantFactory;
+    private final String systemMessage;
+    private final boolean exactSystemMessage;
     private ToolAvailabilityLevel lastToolAvailability;
 
     public AIChatService(ChatModel chatLanguageModel, AIToolSet toolSet, ChatMemory chatMemory,
@@ -119,6 +121,25 @@ public class AIChatService {
                   Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier,
                   Supplier<Boolean> formulaEditingEnabledSupplier,
                   Function<ToolAvailabilityLevel, AIAssistant> assistantFactory) {
+        this(chatLanguageModel, toolSet, toolObjects, aiCodeToolSet, chatMemory, chatTokenUsageTracker,
+            toolCallSummaryHandler, cancellationSupplier, tokenUsageConsumer, toolAvailabilitySupplier,
+            formulaEditingEnabledSupplier, assistantFactory, null, false);
+    }
+
+    AIChatService(ChatModel chatLanguageModel,
+                  AIToolSet toolSet,
+                  Collection<?> toolObjects,
+                  AiCodeToolSet aiCodeToolSet,
+                  ChatMemory chatMemory,
+                  ChatTokenUsageTracker chatTokenUsageTracker,
+                  ToolCallSummaryHandler toolCallSummaryHandler,
+                  Supplier<Boolean> cancellationSupplier,
+                  Consumer<TokenUsage> tokenUsageConsumer,
+                  Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier,
+                  Supplier<Boolean> formulaEditingEnabledSupplier,
+                  Function<ToolAvailabilityLevel, AIAssistant> assistantFactory,
+                  String systemMessage,
+                  boolean exactSystemMessage) {
         Objects.requireNonNull(chatTokenUsageTracker, "chatTokenUsageTracker");
         this.chatLanguageModel = chatLanguageModel;
         this.toolSet = toolSet;
@@ -143,6 +164,8 @@ public class AIChatService {
                     return buildAssistant(toolAvailability);
                 }
             };
+        this.systemMessage = systemMessage == null ? null : systemMessage.trim();
+        this.exactSystemMessage = exactSystemMessage;
         this.lastToolAvailability = currentToolAvailability();
         this.assistant = this.assistantFactory.apply(lastToolAvailability);
     }
@@ -226,7 +249,12 @@ public class AIChatService {
         return new Function<Object, String>() {
             @Override
             public String apply(Object input) {
-                String baseMessage = toolSet.systemMessageForChat(input, normalizedAvailability);
+                if (exactSystemMessage) {
+                    return systemMessage == null ? "" : systemMessage;
+                }
+                String baseMessage = systemMessage == null
+                    ? toolSet.systemMessageForChat(input, normalizedAvailability)
+                    : toolSet.systemMessageForChat(input, normalizedAvailability, systemMessage);
                 if (aiCodeToolSet == null) {
                     return baseMessage;
                 }

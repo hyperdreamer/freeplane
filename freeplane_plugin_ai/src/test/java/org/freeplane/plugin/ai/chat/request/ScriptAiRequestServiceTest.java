@@ -38,6 +38,8 @@ public class ScriptAiRequestServiceTest {
         AiRequestOptions options = AiRequestOptions.builder()
             .timeout(Duration.ofSeconds(1))
             .mode(AiRequestMode.HIDDEN)
+            .systemMessage(" system ")
+            .profile(" reviewer ", " profile message ")
             .build();
 
         uut.askAi("Prompt", options, result -> {
@@ -50,6 +52,9 @@ public class ScriptAiRequestServiceTest {
         assertThat(seenRequest.get().getMode()).isEqualTo(AiRequestMode.HIDDEN);
         assertThat(seenRequest.get().getModelSelection()).isEqualTo(AiModelSelection.current());
         assertThat(seenRequest.get().getToolAvailability()).isEqualTo(AiToolAvailability.CURRENT);
+        assertThat(seenRequest.get().getSystemMessage()).isEqualTo("system");
+        assertThat(seenRequest.get().getProfileName()).isEqualTo("reviewer");
+        assertThat(seenRequest.get().getProfileMessage()).isEqualTo("profile message");
     }
 
     @Test
@@ -151,6 +156,8 @@ public class ScriptAiRequestServiceTest {
             .modelSelection(AiModelSelection.current())
             .toolAvailability(AiToolAvailability.CURRENT)
             .selectionOverride(selectionOverride)
+            .systemMessage("saved system")
+            .profile("saved profile")
             .build();
 
         uut.runAiPrompt("Rewrite", options, result -> {
@@ -164,6 +171,9 @@ public class ScriptAiRequestServiceTest {
         assertThat(seenRequest.get().getModelSelection()).isEqualTo(AiModelSelection.current());
         assertThat(seenRequest.get().getToolAvailability()).isEqualTo(AiToolAvailability.CURRENT);
         assertThat(seenRequest.get().getSelectionOverride()).isSameAs(selectionOverride);
+        assertThat(seenRequest.get().getSystemMessage()).isEqualTo("saved system");
+        assertThat(seenRequest.get().getProfileName()).isEqualTo("saved profile");
+        assertThat(seenRequest.get().getProfileMessage()).isNull();
     }
 
     @Test

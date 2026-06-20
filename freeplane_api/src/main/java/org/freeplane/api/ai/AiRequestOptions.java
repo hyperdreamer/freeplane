@@ -11,6 +11,9 @@ public class AiRequestOptions {
     private final AiModelSelection modelSelection;
     private final AiToolAvailability toolAvailability;
     private final AiSelectionOverride selectionOverride;
+    private final String systemMessage;
+    private final String profileName;
+    private final String profileMessage;
 
     private AiRequestOptions(Builder builder) {
         this.timeout = requirePositiveTimeout(builder.timeout);
@@ -18,6 +21,9 @@ public class AiRequestOptions {
         this.modelSelection = builder.modelSelection;
         this.toolAvailability = builder.toolAvailability;
         this.selectionOverride = builder.selectionOverride;
+        this.systemMessage = normalizeNullable(builder.systemMessage);
+        this.profileName = normalizeNullable(builder.profileName);
+        this.profileMessage = normalizeNullable(builder.profileMessage);
     }
 
     public static Builder builder() {
@@ -44,6 +50,18 @@ public class AiRequestOptions {
         return selectionOverride;
     }
 
+    public String getSystemMessage() {
+        return systemMessage;
+    }
+
+    public String getProfileName() {
+        return profileName;
+    }
+
+    public String getProfileMessage() {
+        return profileMessage;
+    }
+
     private static Duration requirePositiveTimeout(Duration timeout) {
         Duration requiredTimeout = Objects.requireNonNull(timeout, "timeout");
         if (requiredTimeout.isZero() || requiredTimeout.isNegative()) {
@@ -52,12 +70,19 @@ public class AiRequestOptions {
         return requiredTimeout;
     }
 
+    private static String normalizeNullable(String value) {
+        return value == null ? null : value.trim();
+    }
+
     public static class Builder {
         private Duration timeout;
         private AiRequestMode mode;
         private AiModelSelection modelSelection;
         private AiToolAvailability toolAvailability;
         private AiSelectionOverride selectionOverride;
+        private String systemMessage;
+        private String profileName;
+        private String profileMessage;
 
         public Builder timeout(Duration timeout) {
             this.timeout = timeout;
@@ -81,6 +106,23 @@ public class AiRequestOptions {
 
         public Builder selectionOverride(AiSelectionOverride selectionOverride) {
             this.selectionOverride = selectionOverride;
+            return this;
+        }
+
+        public Builder systemMessage(String systemMessage) {
+            this.systemMessage = systemMessage;
+            return this;
+        }
+
+        public Builder profile(String name) {
+            this.profileName = name == null ? "" : name;
+            this.profileMessage = null;
+            return this;
+        }
+
+        public Builder profile(String name, String message) {
+            this.profileName = name == null ? "" : name;
+            this.profileMessage = Objects.requireNonNull(message, "message");
             return this;
         }
 

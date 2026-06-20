@@ -33,8 +33,8 @@ public class AiRequestExecutionCoordinatorTest {
             new AddToChatDispatchJobFactory(aiChatPanel),
             timeoutFactory,
             new RecordingExecutor());
-        ResolvedAiRequest firstRequest = request(AiRequestMode.SHOW_IN_CHAT);
-        ResolvedAiRequest secondRequest = request(AiRequestMode.SHOW_IN_CHAT);
+        ResolvedAiRequest firstRequest = request(AiRequestMode.SHOW_IN_NEW_CHAT);
+        ResolvedAiRequest secondRequest = request(AiRequestMode.SHOW_IN_NEW_CHAT);
         AiRequestHandleImpl firstHandle = new AiRequestHandleImpl(Runnable::run, result -> {
         });
         AiRequestHandleImpl secondHandle = new AiRequestHandleImpl(Runnable::run, result -> {

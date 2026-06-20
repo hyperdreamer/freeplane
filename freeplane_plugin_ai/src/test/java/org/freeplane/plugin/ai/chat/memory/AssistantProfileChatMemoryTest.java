@@ -90,7 +90,7 @@ public class AssistantProfileChatMemoryTest {
             .containsExactly("general", "u1", "a1");
         assertThat(uut.transcriptEntriesForPersistence())
             .extracting(ChatTranscriptEntry::getText)
-            .containsExactly("u1", "a1");
+            .containsExactly("general", "u1", "a1");
     }
 
     @Test

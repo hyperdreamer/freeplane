@@ -10,6 +10,7 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 import org.freeplane.plugin.ai.chat.memory.ChatTokenUsageTracker;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
+import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevelSettings;
 import org.freeplane.plugin.ai.tools.code.AiCodeToolSet;
 import org.freeplane.plugin.ai.tools.formula.FormulaEditingSettings;
 import org.freeplane.plugin.ai.model.AIChatModelFactory;
@@ -66,6 +67,21 @@ public class AIChatServiceFactory {
                                               Consumer<TokenUsage> tokenUsageConsumer,
                                               Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier,
                                               String selectedModelOverride) {
+        return createService(toolSet, toolObjects, chatMemory, chatTokenUsageTracker, toolCallSummaryHandler,
+            cancellationSupplier, tokenUsageConsumer, toolAvailabilitySupplier, selectedModelOverride, null, false);
+    }
+
+    public static AIChatService createService(AIToolSet toolSet,
+                                              Collection<?> toolObjects,
+                                              ChatMemory chatMemory,
+                                              ChatTokenUsageTracker chatTokenUsageTracker,
+                                              ToolCallSummaryHandler toolCallSummaryHandler,
+                                              Supplier<Boolean> cancellationSupplier,
+                                              Consumer<TokenUsage> tokenUsageConsumer,
+                                              Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier,
+                                              String selectedModelOverride,
+                                              String systemMessage,
+                                              boolean exactSystemMessage) {
         Objects.requireNonNull(toolSet, "toolSet");
         Collection<?> effectiveToolObjects = toolObjects == null
             ? Collections.<Object>singletonList(toolSet)
@@ -75,11 +91,27 @@ public class AIChatServiceFactory {
         AiCodeToolSet aiCodeToolSet = findAiCodeToolSet(effectiveToolObjects);
         if (toolAvailabilitySupplier == null) {
             return new AIChatService(chatLanguageModel, toolSet, effectiveToolObjects, aiCodeToolSet, chatMemory,
-                chatTokenUsageTracker, toolCallSummaryHandler, cancellationSupplier, tokenUsageConsumer);
+                chatTokenUsageTracker, toolCallSummaryHandler, cancellationSupplier, tokenUsageConsumer,
+                new Supplier<ToolAvailabilityLevel>() {
+                    @Override
+                    public ToolAvailabilityLevel get() {
+                        try {
+                            return new ToolAvailabilityLevelSettings().getToolAvailability();
+                        } catch (Exception ignored) {
+                            return ToolAvailabilityLevel.EDITING;
+                        }
+                    }
+                },
+                () -> Boolean.valueOf(new FormulaEditingSettings().isEnabled()),
+                null,
+                systemMessage,
+                exactSystemMessage);
         }
         return new AIChatService(chatLanguageModel, toolSet, effectiveToolObjects, aiCodeToolSet, chatMemory,
             chatTokenUsageTracker, toolCallSummaryHandler, cancellationSupplier, tokenUsageConsumer,
-            toolAvailabilitySupplier, () -> Boolean.valueOf(new FormulaEditingSettings().isEnabled()), null);
+            toolAvailabilitySupplier, () -> Boolean.valueOf(new FormulaEditingSettings().isEnabled()), null,
+            systemMessage,
+            exactSystemMessage);
     }
 
     public static AIChatService createService(AIToolSet toolSet, ChatMemory chatMemory,

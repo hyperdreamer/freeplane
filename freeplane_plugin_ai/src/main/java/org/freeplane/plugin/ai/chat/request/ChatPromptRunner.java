@@ -13,6 +13,7 @@ import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.plugin.ai.chat.memory.AssistantProfileChatMemory;
+import org.freeplane.plugin.ai.chat.memory.AssistantProfileSwitchMessage;
 import org.freeplane.plugin.ai.chat.memory.ChatMemorySettings;
 import org.freeplane.plugin.ai.chat.memory.ChatTokenUsageTracker;
 import org.freeplane.plugin.ai.chat.memory.ChatUsageTotals;
@@ -35,7 +36,8 @@ public class ChatPromptRunner {
                             String preparedMessage,
                             ChatRequestFlow requestFlow,
                             ChatTokenUsageTracker requestTokenUsageTracker,
-                            VisiblePromptRequestCallbacks requestCallbacks);
+                            VisiblePromptRequestCallbacks requestCallbacks,
+                            AssistantProfileSwitchMessage requestedProfileMessage);
     }
 
     public interface VisiblePromptRequestCallbacks {
@@ -159,6 +161,16 @@ public class ChatPromptRunner {
                              ToolAvailabilityLevel resolvedToolAvailability,
                              SelectionIdentifiersResponse selectionOverride,
                              VisiblePromptRequestCallbacks requestCallbacks) {
+        return startShownPrompt(promptText, selectedModelOverride, resolvedToolAvailability, selectionOverride,
+            requestCallbacks, null);
+    }
+
+    public boolean startShownPrompt(String promptText,
+                             String selectedModelOverride,
+                             ToolAvailabilityLevel resolvedToolAvailability,
+                             SelectionIdentifiersResponse selectionOverride,
+                             VisiblePromptRequestCallbacks requestCallbacks,
+                             AssistantProfileSwitchMessage requestedProfileMessage) {
         if (shownPromptChatMemory == null || shownMapAccessListener == null
             || shownRequestFlow == null || shownRequestTokenUsageTracker == null
             || shownSessionId == null) {
@@ -178,7 +190,9 @@ public class ChatPromptRunner {
             shownRequestFlow::onProviderUsage,
             shownRequestTokenUsageTracker,
             selectedModelOverride,
-            resolvedToolAvailability);
+            resolvedToolAvailability,
+            capturedSystemMessage(shownPromptChatMemory),
+            false);
         if (promptService == null) {
             return false;
         }
@@ -188,7 +202,8 @@ public class ChatPromptRunner {
             preparedMessage,
             shownRequestFlow,
             shownRequestTokenUsageTracker,
-            requestCallbacks);
+            requestCallbacks,
+            requestedProfileMessage);
         return true;
     }
 
@@ -200,14 +215,34 @@ public class ChatPromptRunner {
                                 Component owner,
                                 boolean showProgressDialog,
                                 HiddenAiRequestObserverBridge observer) {
+        return submitHiddenRequest(requestName, promptText, selectedModelOverride, resolvedToolAvailability,
+            selectionOverride, owner, showProgressDialog, observer, null, false, null);
+    }
+
+    public boolean submitHiddenRequest(String requestName,
+                                String promptText,
+                                String selectedModelOverride,
+                                ToolAvailabilityLevel resolvedToolAvailability,
+                                SelectionIdentifiersResponse selectionOverride,
+                                Component owner,
+                                boolean showProgressDialog,
+                                HiddenAiRequestObserverBridge observer,
+                                String systemMessage,
+                                boolean exactSystemMessage,
+                                AssistantProfileSwitchMessage requestedProfileMessage) {
         final String preparedMessage;
         try {
             preparedMessage = aiPromptRequestComposer.compose(promptText, resolvedToolAvailability, selectionOverride);
         } catch (RuntimeException error) {
             return false;
         }
+        ChatMemory hiddenChatMemory = AssistantProfileChatMemory.withMaxTokens(
+            new ChatMemorySettings().getMaximumTokenCount());
+        if (requestedProfileMessage != null) {
+            hiddenChatMemory.add(requestedProfileMessage);
+        }
         AIChatService promptService = createPromptChatService(
-            AssistantProfileChatMemory.withMaxTokens(new ChatMemorySettings().getMaximumTokenCount()),
+            hiddenChatMemory,
             null,
             null,
             hiddenPromptRequestRunner.cancellationSupplier(),
@@ -218,7 +253,9 @@ public class ChatPromptRunner {
                 }
             }),
             selectedModelOverride,
-            resolvedToolAvailability);
+            resolvedToolAvailability,
+            systemMessage,
+            exactSystemMessage);
         if (promptService == null) {
             return false;
         }
@@ -236,7 +273,9 @@ public class ChatPromptRunner {
                                                   Consumer<TokenUsage> tokenUsageConsumer,
                                                   ChatTokenUsageTracker tokenUsageTracker,
                                                   String selectedModelOverride,
-                                                  ToolAvailabilityLevel toolAvailability) {
+                                                  ToolAvailabilityLevel toolAvailability,
+                                                  String systemMessage,
+                                                  boolean exactSystemMessage) {
         AIToolSetBuilder toolSetBuilder = new AIToolSetBuilder()
             .toolCallSummaryHandler(toolCallSummaryHandler)
             .availableMaps(availableMaps)
@@ -249,6 +288,24 @@ public class ChatPromptRunner {
                 () -> Boolean.valueOf(new FormulaEditingSettings().isEnabled()),
                 codeHostService));
         List<Object> toolObjects = toolSetBuilder.buildToolObjects();
+        Supplier<ToolAvailabilityLevel> requestToolAvailabilitySupplier = new Supplier<ToolAvailabilityLevel>() {
+            @Override
+            public ToolAvailabilityLevel get() {
+                return toolAvailability;
+            }
+        };
+        if (systemMessage == null && !exactSystemMessage) {
+            return AIChatServiceFactory.createService(
+                (org.freeplane.plugin.ai.tools.AIToolSet) toolObjects.get(0),
+                toolObjects,
+                promptChatMemory,
+                tokenUsageTracker,
+                toolCallSummaryHandler,
+                cancellationSupplier,
+                tokenUsageConsumer,
+                requestToolAvailabilitySupplier,
+                selectedModelOverride);
+        }
         return AIChatServiceFactory.createService(
             (org.freeplane.plugin.ai.tools.AIToolSet) toolObjects.get(0),
             toolObjects,
@@ -257,13 +314,18 @@ public class ChatPromptRunner {
             toolCallSummaryHandler,
             cancellationSupplier,
             tokenUsageConsumer,
-            new Supplier<ToolAvailabilityLevel>() {
-                @Override
-                public ToolAvailabilityLevel get() {
-                    return toolAvailability;
-                }
-            },
-            selectedModelOverride);
+            requestToolAvailabilitySupplier,
+            selectedModelOverride,
+            systemMessage,
+            exactSystemMessage);
+    }
+
+    private String capturedSystemMessage(ChatMemory chatMemory) {
+        if (chatMemory instanceof AssistantProfileChatMemory) {
+            String captured = ((AssistantProfileChatMemory) chatMemory).capturedSystemMessage();
+            return captured == null ? "" : captured;
+        }
+        return null;
     }
 
     private String promptFailureMessage(String promptName, String errorMessage) {

@@ -1,6 +1,7 @@
 package org.freeplane.plugin.ai.chat.history;
 
 public enum ChatTranscriptRole {
+    SYSTEM,
     USER,
     ASSISTANT,
     ASSISTANT_PROFILE_SYSTEM,

@@ -15,6 +15,9 @@ public final class ResolvedAiRequest {
     private final AiModelSelection modelSelection;
     private final AiToolAvailability toolAvailability;
     private final AiSelectionOverride selectionOverride;
+    private final String systemMessage;
+    private final String profileName;
+    private final String profileMessage;
 
     public ResolvedAiRequest(String promptText,
                       String promptDisplayName,
@@ -23,6 +26,20 @@ public final class ResolvedAiRequest {
                       AiModelSelection modelSelection,
                       AiToolAvailability toolAvailability,
                       AiSelectionOverride selectionOverride) {
+        this(promptText, promptDisplayName, timeout, mode, modelSelection, toolAvailability, selectionOverride,
+            null, null, null);
+    }
+
+    public ResolvedAiRequest(String promptText,
+                      String promptDisplayName,
+                      Duration timeout,
+                      AiRequestMode mode,
+                      AiModelSelection modelSelection,
+                      AiToolAvailability toolAvailability,
+                      AiSelectionOverride selectionOverride,
+                      String systemMessage,
+                      String profileName,
+                      String profileMessage) {
         this.promptText = Objects.requireNonNull(promptText, "promptText");
         this.promptDisplayName = normalizeOptional(promptDisplayName);
         this.timeout = Objects.requireNonNull(timeout, "timeout");
@@ -30,6 +47,9 @@ public final class ResolvedAiRequest {
         this.modelSelection = Objects.requireNonNull(modelSelection, "modelSelection");
         this.toolAvailability = Objects.requireNonNull(toolAvailability, "toolAvailability");
         this.selectionOverride = selectionOverride;
+        this.systemMessage = normalizeNullable(systemMessage);
+        this.profileName = normalizeNullable(profileName);
+        this.profileMessage = normalizeNullable(profileMessage);
     }
 
     public String getPromptText() {
@@ -60,11 +80,31 @@ public final class ResolvedAiRequest {
         return selectionOverride;
     }
 
+    public String getSystemMessage() {
+        return systemMessage;
+    }
+
+    public String getProfileName() {
+        return profileName;
+    }
+
+    public String getProfileMessage() {
+        return profileMessage;
+    }
+
+    public boolean hasProfileRequest() {
+        return profileName != null || profileMessage != null;
+    }
+
     private static String normalizeOptional(String value) {
         if (value == null) {
             return null;
         }
         String normalized = value.trim();
         return normalized.isEmpty() ? null : normalized;
+    }
+
+    private static String normalizeNullable(String value) {
+        return value == null ? null : value.trim();
     }
 }

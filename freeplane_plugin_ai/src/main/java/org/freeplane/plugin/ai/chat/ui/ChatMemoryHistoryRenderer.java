@@ -23,6 +23,7 @@ class ChatMemoryHistoryRenderer {
     private final ChatMessageHistory messageHistory;
     private final ChatMessageRenderer messageRenderer;
     private final ProfileMessageFormatter profileMessageFormatter;
+    private InstructionMessageRenderingMode instructionMessageRenderingMode = InstructionMessageRenderingMode.BRIEF;
 
     ChatMemoryHistoryRenderer(ChatMessageHistory messageHistory, ChatMessageRenderer messageRenderer) {
         this(messageHistory, messageRenderer, profileName -> {
@@ -64,6 +65,12 @@ class ChatMemoryHistoryRenderer {
         appendMessage(entry);
     }
 
+    void setInstructionMessageRenderingMode(InstructionMessageRenderingMode instructionMessageRenderingMode) {
+        this.instructionMessageRenderingMode = instructionMessageRenderingMode == null
+            ? InstructionMessageRenderingMode.BRIEF
+            : instructionMessageRenderingMode;
+    }
+
     private void appendMessage(ChatMemoryRenderEntry entry) {
         MessageHistoryEntry historyEntry = toMessageHistoryEntry(entry);
         if (historyEntry == null || historyEntry.sourceText == null) {
@@ -92,12 +99,16 @@ class ChatMemoryHistoryRenderer {
         if (message instanceof AssistantProfileSwitchMessage) {
             AssistantProfileSwitchMessage profileMessage =
                 (AssistantProfileSwitchMessage) message;
-            return new MessageHistoryEntry(
-                buildProfilePaneMessage(profileMessage.getProfileName()),
-                RenderCategory.PROFILE);
+            String text = instructionMessageRenderingMode == InstructionMessageRenderingMode.FULL
+                ? profileMessage.getProfileMessage()
+                : buildProfilePaneMessage(profileMessage.getProfileName());
+            return new MessageHistoryEntry(text, RenderCategory.PROFILE);
         }
         if (message instanceof GeneralSystemMessage) {
-            return null;
+            if (instructionMessageRenderingMode != InstructionMessageRenderingMode.FULL) {
+                return null;
+            }
+            return new MessageHistoryEntry(((GeneralSystemMessage) message).text(), RenderCategory.SYSTEM);
         }
         if (message instanceof TranscriptHiddenSystemMessage) {
             return null;

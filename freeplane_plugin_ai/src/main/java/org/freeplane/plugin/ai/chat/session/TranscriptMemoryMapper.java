@@ -12,6 +12,7 @@ import org.freeplane.plugin.ai.chat.history.ChatTranscriptRole;
 import org.freeplane.plugin.ai.chat.memory.AssistantProfileChatMemory;
 import org.freeplane.plugin.ai.chat.memory.AssistantProfileSwitchMessage;
 import org.freeplane.plugin.ai.chat.memory.AutomaticCodeStatusMessage;
+import org.freeplane.plugin.ai.chat.memory.GeneralSystemMessage;
 import org.freeplane.plugin.ai.chat.memory.InstructionAckMessage;
 import org.freeplane.plugin.ai.chat.memory.RemovedForSpaceSystemMessage;
 import org.freeplane.plugin.ai.chat.memory.TranscriptHiddenSystemMessage;
@@ -68,6 +69,9 @@ class TranscriptMemoryMapper {
         if (entry == null || entry.getRole() == null) {
             return null;
         }
+        if (entry.getRole() == ChatTranscriptRole.SYSTEM) {
+            return new GeneralSystemMessage(entry.getText() == null ? "" : entry.getText());
+        }
         if (entry.getRole() == ChatTranscriptRole.ASSISTANT) {
             if (entry.getText() == null) {
                 return null;
@@ -81,7 +85,8 @@ class TranscriptMemoryMapper {
             AssistantProfileTranscriptEntry assistantProfileEntry = (AssistantProfileTranscriptEntry) entry;
             return new AssistantProfileSwitchMessage(
                 assistantProfileEntry.getProfileId(),
-                assistantProfileEntry.getProfileName());
+                assistantProfileEntry.getProfileName(),
+                assistantProfileEntry.getProfileMessage());
         }
         if (entry.getRole() == ChatTranscriptRole.REMOVED_FOR_SPACE_SYSTEM) {
             if (entry.getText() == null) {
@@ -110,7 +115,12 @@ class TranscriptMemoryMapper {
             return new AssistantProfileTranscriptEntry(
                 profileMessage.getProfileId(),
                 profileMessage.getProfileName(),
+                profileMessage.getProfileMessage(),
                 false);
+        }
+        if (message instanceof GeneralSystemMessage) {
+            return new ChatTranscriptEntry(ChatTranscriptRole.SYSTEM,
+                ((GeneralSystemMessage) message).text());
         }
         if (message instanceof RemovedForSpaceSystemMessage) {
             return new ChatTranscriptEntry(ChatTranscriptRole.REMOVED_FOR_SPACE_SYSTEM,

@@ -22,9 +22,10 @@ public class ChatTranscriptStoreTest {
             ChatTranscriptStore store = new ChatTranscriptStore(new ObjectMapper(), tempDir);
             ChatTranscriptRecord record = new ChatTranscriptRecord();
             List<ChatTranscriptEntry> entries = Arrays.asList(
+                new ChatTranscriptEntry(ChatTranscriptRole.SYSTEM, "system"),
                 new ChatTranscriptEntry(ChatTranscriptRole.USER, "user"),
                 new ChatTranscriptEntry(ChatTranscriptRole.ASSISTANT, "assistant"),
-                new AssistantProfileTranscriptEntry("profile-a", "A sayer", true),
+                new AssistantProfileTranscriptEntry("profile-a", "A sayer", "Profile definition", true),
                 new ChatTranscriptEntry(ChatTranscriptRole.REMOVED_FOR_SPACE_SYSTEM, "removed"));
             record.setAssistantProfileEnabled(false);
             record.setSelectedModelOverride("openrouter|openai/gpt-4.1-mini");
@@ -38,15 +39,17 @@ public class ChatTranscriptStoreTest {
             assertThat(loaded.getEntries())
                 .extracting(ChatTranscriptEntry::getRole)
                 .containsExactly(
+                    ChatTranscriptRole.SYSTEM,
                     ChatTranscriptRole.USER,
                     ChatTranscriptRole.ASSISTANT,
                     ChatTranscriptRole.ASSISTANT_PROFILE_SYSTEM,
                     ChatTranscriptRole.REMOVED_FOR_SPACE_SYSTEM);
-            assertThat(loaded.getEntries().get(2)).isInstanceOf(AssistantProfileTranscriptEntry.class);
+            assertThat(loaded.getEntries().get(3)).isInstanceOf(AssistantProfileTranscriptEntry.class);
             AssistantProfileTranscriptEntry profileEntry =
-                (AssistantProfileTranscriptEntry) loaded.getEntries().get(2);
+                (AssistantProfileTranscriptEntry) loaded.getEntries().get(3);
             assertThat(profileEntry.getProfileId()).isEqualTo("profile-a");
             assertThat(profileEntry.getProfileName()).isEqualTo("A sayer");
+            assertThat(profileEntry.getProfileMessage()).isEqualTo("Profile definition");
             assertThat(profileEntry.containsProfileDefinition()).isTrue();
             assertThat(loaded.getAssistantProfileEnabled()).isFalse();
             assertThat(loaded.getSelectedModelOverride()).isEqualTo("openrouter|openai/gpt-4.1-mini");

@@ -73,7 +73,10 @@ public class ScriptAiRequestService implements AiRequestService {
             requireMode(options),
             options.getModelSelection() == null ? AiModelSelection.current() : options.getModelSelection(),
             options.getToolAvailability() == null ? AiToolAvailability.CURRENT : options.getToolAvailability(),
-            options.getSelectionOverride());
+            options.getSelectionOverride(),
+            options.getSystemMessage(),
+            options.getProfileName(),
+            options.getProfileMessage());
         return dispatchAcceptedRequest(request, callback);
     }
 
@@ -148,7 +151,7 @@ public class ScriptAiRequestService implements AiRequestService {
             : resolveSavedPromptToolAvailability(savedPrompt);
         AiRequestMode mode = options.getMode() != null
             ? options.getMode()
-            : (savedPrompt.isShowInChat() ? AiRequestMode.SHOW_IN_CHAT : AiRequestMode.HIDDEN_WITH_CANCEL_DIALOG);
+            : (savedPrompt.isShowInChat() ? AiRequestMode.SHOW_IN_NEW_CHAT : AiRequestMode.HIDDEN_WITH_CANCEL_DIALOG);
         return SavedPromptResolution.success(new ResolvedAiRequest(
             savedPrompt.getPrompt(),
             savedPrompt.getName(),
@@ -156,7 +159,10 @@ public class ScriptAiRequestService implements AiRequestService {
             mode,
             modelSelectionResolution.modelSelection,
             toolAvailability,
-            options.getSelectionOverride()));
+            options.getSelectionOverride(),
+            options.getSystemMessage(),
+            options.getProfileName(),
+            options.getProfileMessage()));
     }
 
     private ModelSelectionResolution resolveSavedPromptModelSelection(AiPrompt savedPrompt) {

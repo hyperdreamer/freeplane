@@ -7,6 +7,7 @@ import java.util.Collections;
 import java.util.List;
 import org.freeplane.plugin.ai.chat.history.AssistantProfileTranscriptEntry;
 import org.freeplane.plugin.ai.chat.history.ChatTranscriptEntry;
+import org.freeplane.plugin.ai.chat.memory.AssistantProfileChatMemory;
 import org.freeplane.plugin.ai.chat.memory.AssistantProfileSwitchMessage;
 import org.freeplane.plugin.ai.chat.session.LiveChatController;
 import org.junit.Test;
@@ -128,6 +129,106 @@ public class AssistantProfileSelectionSyncTest {
 
         assertThat(selected).isEqualTo(current);
         verify(chatMemory).add(any(AssistantProfileSwitchMessage.class));
+    }
+
+    @Test
+    public void selectForActivation_injectsWhenStoredProfileSnapshotDiffersFromCurrentPrompt() {
+        AssistantProfileSelectionModel selectionModel = mock(AssistantProfileSelectionModel.class);
+        LiveChatController liveChatController = mock(LiveChatController.class);
+        ChatMemory chatMemory = mock(ChatMemory.class);
+        AssistantProfile current = new AssistantProfile("profile-a", "A", "Prompt B");
+        when(liveChatController.snapshotTranscriptEntries()).thenReturn(Arrays.asList(
+            new AssistantProfileTranscriptEntry("profile-a", "A", "Now you have the profile A.\nProfile definition: Prompt A", true)));
+        when(selectionModel.findProfileById("profile-a")).thenReturn(current);
+
+        AssistantProfileSelectionSync uut = new AssistantProfileSelectionSync(
+            selectionModel, liveChatController);
+        uut.setChatMemory(chatMemory);
+
+        uut.selectForActivation(false);
+        uut.maybeInjectBeforeUserMessage();
+
+        verify(chatMemory).add((dev.langchain4j.data.message.ChatMessage) argThat(message ->
+            message instanceof AssistantProfileSwitchMessage
+                && "A".equals(((AssistantProfileSwitchMessage) message).getProfileName())
+                && ((AssistantProfileSwitchMessage) message).getProfileMessage().contains("Prompt B")));
+    }
+
+    @Test
+    public void requestProfileByNameResolvesConfiguredProfileSnapshot() {
+        AssistantProfileSelectionModel selectionModel = mock(AssistantProfileSelectionModel.class);
+        LiveChatController liveChatController = mock(LiveChatController.class);
+        when(selectionModel.getProfiles()).thenReturn(Arrays.asList(
+            new AssistantProfile("profile-a", "Reviewer", "Check strictly")));
+        AssistantProfileSelectionSync uut = new AssistantProfileSelectionSync(
+            selectionModel, liveChatController);
+
+        AssistantProfileSelectionSync.ProfileRequestResolution resolution =
+            uut.resolveRequestProfile(" Reviewer ", null);
+
+        assertThat(resolution.getConfigurationErrorDetail()).isNull();
+        assertThat(resolution.getMessage().getProfileId()).isEqualTo("profile-a");
+        assertThat(resolution.getMessage().getProfileName()).isEqualTo("Reviewer");
+        assertThat(resolution.getMessage().getProfileMessage()).contains("Check strictly");
+    }
+
+    @Test
+    public void requestProfileByNameFailsForAmbiguousName() {
+        AssistantProfileSelectionModel selectionModel = mock(AssistantProfileSelectionModel.class);
+        LiveChatController liveChatController = mock(LiveChatController.class);
+        when(selectionModel.getProfiles()).thenReturn(Arrays.asList(
+            new AssistantProfile("a", "Reviewer", "A"),
+            new AssistantProfile("b", "Reviewer", "B")));
+        AssistantProfileSelectionSync uut = new AssistantProfileSelectionSync(
+            selectionModel, liveChatController);
+
+        AssistantProfileSelectionSync.ProfileRequestResolution resolution =
+            uut.resolveRequestProfile("Reviewer", null);
+
+        assertThat(resolution.getConfigurationErrorDetail()).contains("ambiguous");
+        assertThat(resolution.getMessage()).isNull();
+    }
+
+    @Test
+    public void explicitRequestProfileDoesNotMutateConfiguredProfiles() {
+        AssistantProfileSelectionModel selectionModel = mock(AssistantProfileSelectionModel.class);
+        LiveChatController liveChatController = mock(LiveChatController.class);
+        AssistantProfileSelectionSync uut = new AssistantProfileSelectionSync(
+            selectionModel, liveChatController);
+
+        AssistantProfileSelectionSync.ProfileRequestResolution resolution =
+            uut.resolveRequestProfile(" Local ", " Be concise ");
+
+        assertThat(resolution.getConfigurationErrorDetail()).isNull();
+        assertThat(resolution.getMessage().getProfileName()).isEqualTo("Local");
+        assertThat(resolution.getMessage().getProfileMessage()).isEqualTo("Be concise");
+        verify(selectionModel, never()).setSelectedProfile(any(AssistantProfile.class), org.mockito.ArgumentMatchers.anyBoolean());
+        verify(selectionModel, never()).saveProfiles(any());
+    }
+
+    @Test
+    public void duplicateRequestProfileIsSkippedWhenNameAndMessageMatchActiveProfile() {
+        AssistantProfileSelectionModel selectionModel = mock(AssistantProfileSelectionModel.class);
+        LiveChatController liveChatController = mock(LiveChatController.class);
+        AssistantProfileChatMemory chatMemory = AssistantProfileChatMemory.withMaxTokens(500);
+        AssistantProfileSwitchMessage active = new AssistantProfileSwitchMessage(
+            "profile-a",
+            "Reviewer",
+            "Be concise");
+        chatMemory.add(active);
+        AssistantProfileSelectionSync uut = new AssistantProfileSelectionSync(
+            selectionModel, liveChatController);
+        uut.setChatMemory(chatMemory);
+
+        boolean added = uut.addProfileMessageIfDifferent(new AssistantProfileSwitchMessage(
+            "profile-b",
+            " Reviewer ",
+            " Be concise "));
+
+        assertThat(added).isFalse();
+        assertThat(chatMemory.transcriptEntriesForPersistence())
+            .filteredOn(entry -> entry instanceof AssistantProfileTranscriptEntry)
+            .hasSize(1);
     }
 
     @Test

@@ -57,10 +57,14 @@ public class MessageBuilder {
     }
 
     public String buildForChat(ToolAvailabilityLevel toolAvailability) {
+        return buildForChat(messageTextProvider.getMessageText(), toolAvailability);
+    }
+
+    public String buildForChat(String systemMessage, ToolAvailabilityLevel toolAvailability) {
         ToolAvailabilityLevel normalizedAvailability = toolAvailability == null
             ? ToolAvailabilityLevel.EDITING
             : toolAvailability;
-        String message = messageTextProvider.getMessageText();
+        String message = systemMessage;
         String guidance;
         if (normalizedAvailability == ToolAvailabilityLevel.DISABLED) {
             guidance = NO_TOOLS_GUIDANCE + "\n\n" + PROFILE_CONTROL_GUIDANCE + "\n\n"
@@ -81,6 +85,19 @@ public class MessageBuilder {
             return guidance;
         }
         return trimmed + "\n\n" + guidance;
+    }
+
+    public static String configuredSystemMessage() {
+        try {
+            ResourceController resourceController = ResourceController.getResourceController();
+            if (resourceController == null) {
+                return "";
+            }
+            String message = resourceController.getProperty(SYSTEM_MESSAGE_PROPERTY);
+            return message == null ? "" : message.trim();
+        } catch (RuntimeException error) {
+            return "";
+        }
     }
 
     public static String buildAssistantProfileInstruction(String profileName,

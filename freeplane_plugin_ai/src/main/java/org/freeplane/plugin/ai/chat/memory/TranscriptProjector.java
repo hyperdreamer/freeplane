@@ -12,8 +12,12 @@ import org.freeplane.plugin.ai.tools.MessageBuilder;
 
 class TranscriptProjector {
 
-    List<ChatTranscriptEntry> buildTranscriptEntries(FilteredChatMessages filteredChatMessages) {
+    List<ChatTranscriptEntry> buildTranscriptEntries(GeneralSystemMessage generalSystemMessage,
+                                                      FilteredChatMessages filteredChatMessages) {
         List<ChatTranscriptEntry> entries = new ArrayList<>();
+        if (generalSystemMessage != null) {
+            entries.add(new ChatTranscriptEntry(ChatTranscriptRole.SYSTEM, generalSystemMessage.text()));
+        }
         if (filteredChatMessages == null) {
             return entries;
         }
@@ -41,6 +45,7 @@ class TranscriptProjector {
             return new AssistantProfileTranscriptEntry(
                 profileMessage.getProfileId(),
                 profileMessage.getProfileName(),
+                profileMessage.getProfileMessage(),
                 false);
         }
         if (message instanceof AutomaticCodeStatusMessage) {

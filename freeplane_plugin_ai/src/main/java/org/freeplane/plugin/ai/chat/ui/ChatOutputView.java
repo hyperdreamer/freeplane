@@ -57,6 +57,10 @@ class ChatOutputView {
         chatMemoryHistoryRenderer.rebuildFromMessages(entries);
     }
 
+    void setInstructionMessageRenderingMode(InstructionMessageRenderingMode instructionMessageRenderingMode) {
+        chatMemoryHistoryRenderer.setInstructionMessageRenderingMode(instructionMessageRenderingMode);
+    }
+
     void appendHistoryEntry(ChatMemoryRenderEntry entry) {
         if (SwingUtilities.isEventDispatchThread()) {
             chatMemoryHistoryRenderer.appendEntry(entry);
