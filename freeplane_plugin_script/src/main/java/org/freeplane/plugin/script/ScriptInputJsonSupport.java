@@ -2,6 +2,8 @@ package org.freeplane.plugin.script;
 
 import groovy.json.JsonException;
 import groovy.json.JsonSlurper;
+import java.security.AccessController;
+import java.security.PrivilegedAction;
 import java.util.Collections;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -13,6 +15,7 @@ import org.freeplane.features.ai.code.CodeStateField;
 import org.freeplane.features.ai.code.CodeStateToken;
 import org.freeplane.features.mode.Controller;
 
+@SuppressWarnings("removal")
 public class ScriptInputJsonSupport {
     public static final String ARGUMENTS_VARIABLE_NAME = "args";
     public static final String SAVED_SCRIPT_INPUT_PREFIX = "args_for_";
@@ -121,13 +124,37 @@ public class ScriptInputJsonSupport {
     }
 
     private static ParseResult parseNonBlank(String argumentsJsonText) {
+        ClassLoader oldContextClassLoader = getContextClassLoader();
         try {
+            setContextClassLoader(JsonSlurper.class.getClassLoader());
             return new ParseResult(new JsonSlurper().parseText(argumentsJsonText), null);
         } catch (JsonException error) {
             return new ParseResult(null, diagnostic(error));
         } catch (RuntimeException error) {
             return new ParseResult(null, new CodeStateDiagnostic(CodeStateField.ARGUMENTS_JSON, error.getMessage(), null, null));
         }
+        finally {
+            setContextClassLoader(oldContextClassLoader);
+        }
+    }
+
+    private static ClassLoader getContextClassLoader() {
+        return AccessController.doPrivileged(new PrivilegedAction<ClassLoader>() {
+            @Override
+            public ClassLoader run() {
+                return Thread.currentThread().getContextClassLoader();
+            }
+        });
+    }
+
+    private static void setContextClassLoader(final ClassLoader classLoader) {
+        AccessController.doPrivileged(new PrivilegedAction<Void>() {
+            @Override
+            public Void run() {
+                Thread.currentThread().setContextClassLoader(classLoader);
+                return null;
+            }
+        });
     }
 
     private static CodeStateDiagnostic diagnostic(JsonException error) {
