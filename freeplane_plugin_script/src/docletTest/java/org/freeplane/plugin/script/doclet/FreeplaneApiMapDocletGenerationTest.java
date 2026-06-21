@@ -82,6 +82,30 @@ public class FreeplaneApiMapDocletGenerationTest {
         Element nodeGroup = findNodeByTextPrefix(rootNode, "Node — Node summary.");
         assertThat(nodeGroup).isNotNull();
         assertThat(immediateChildTexts(nodeGroup)).contains("Types", "Properties", "Methods");
+
+        Element apiGroupsNode = findNodeByTextPrefix(rootNode, "API groups");
+        assertThat(findImmediateChildByTextPrefix(apiGroupsNode, "Proxy.Node —")).isNull();
+
+        Element optionsGroup = findImmediateChildByTextPrefix(apiGroupsNode, "AiRequestOptions — Options summary.");
+        assertThat(optionsGroup).isNotNull();
+        assertThat(immediateChildTexts(optionsGroup)).contains("Type", "Methods", "Nested types");
+        assertThat(descendantTexts(optionsGroup)).contains("AiRequestOptions.Builder — Builder summary.");
+
+        Element builderGroup = findImmediateChildByTextPrefix(apiGroupsNode,
+            "AiRequestOptions.Builder — Builder summary.");
+        assertThat(builderGroup).isNotNull();
+        assertThat(immediateChildTexts(builderGroup)).contains("Type", "Methods");
+        assertThat(descendantTexts(builderGroup)).contains(
+            "build(): AiRequestOptions",
+            "mode(mode: String): AiRequestOptions.Builder",
+            "timeout(timeout: Duration): AiRequestOptions.Builder");
+
+        Element packagesNode = findNodeByTextPrefix(rootNode, "Packages");
+        Element packageBuilderNode = findNodeByTextPrefix(packagesNode, "AiRequestOptions.Builder [class]");
+        assertThat(packageBuilderNode).isNotNull();
+        assertThat(descendantTexts(packageBuilderNode))
+            .doesNotContain("Methods")
+            .doesNotContain("timeout(timeout: Duration): AiRequestOptions.Builder");
     }
 
     private List<String> buildCommand(File sourceRoot, File outputFile) {
@@ -98,6 +122,7 @@ public class FreeplaneApiMapDocletGenerationTest {
         command.add(sourceRoot.getAbsolutePath());
         command.add(new File(sourceRoot, "org/freeplane/plugin/script/proxy/Proxy.java").getAbsolutePath());
         command.add(new File(sourceRoot, "org/freeplane/plugin/script/proxy/Convertible.java").getAbsolutePath());
+        command.add(new File(sourceRoot, "org/freeplane/api/AiRequestOptions.java").getAbsolutePath());
         command.add(new File(sourceRoot, "org/freeplane/api/NodeRO.java").getAbsolutePath());
         command.add(new File(sourceRoot, "org/freeplane/api/Node.java").getAbsolutePath());
         command.add(new File(sourceRoot, "org/freeplane/api/Convertible.java").getAbsolutePath());
@@ -144,6 +169,27 @@ public class FreeplaneApiMapDocletGenerationTest {
                 + "    /** For implicit conversion to boolean. */\n"
                 + "    public boolean asBoolean() {\n"
                 + "        return false;\n"
+                + "    }\n"
+                + "}\n");
+        writeSource(sourceRoot, "org/freeplane/api/AiRequestOptions.java",
+            "package org.freeplane.api;\n"
+                + "/** Options summary. */\n"
+                + "public class AiRequestOptions {\n"
+                + "    /** Creates a builder. */\n"
+                + "    public static Builder builder() {\n"
+                + "        return new Builder();\n"
+                + "    }\n"
+                + "    /** Builder summary. */\n"
+                + "    public static class Builder {\n"
+                + "        public Builder mode(String mode) {\n"
+                + "            return this;\n"
+                + "        }\n"
+                + "        public Builder timeout(java.time.Duration timeout) {\n"
+                + "            return this;\n"
+                + "        }\n"
+                + "        public AiRequestOptions build() {\n"
+                + "            return new AiRequestOptions();\n"
+                + "        }\n"
                 + "    }\n"
                 + "}\n");
         writeSource(sourceRoot, "org/freeplane/api/NodeRO.java",
@@ -248,6 +294,20 @@ public class FreeplaneApiMapDocletGenerationTest {
                 Element match = findNodeByTextPrefix((Element) child, textPrefix);
                 if (match != null) {
                     return match;
+                }
+            }
+        }
+        return null;
+    }
+
+    private Element findImmediateChildByTextPrefix(Element element, String textPrefix) {
+        NodeList children = element.getChildNodes();
+        for (int index = 0; index < children.getLength(); index += 1) {
+            Node child = children.item(index);
+            if (child instanceof Element && "node".equals(((Element) child).getTagName())) {
+                Element childElement = (Element) child;
+                if (childElement.hasAttribute("TEXT") && childElement.getAttribute("TEXT").startsWith(textPrefix)) {
+                    return childElement;
                 }
             }
         }

@@ -462,3 +462,179 @@
       module. That keeps the build-local doclet design intact while
       restoring a clean Java 8-oriented Eclipse project for ordinary
       plugin work.
+
+## Subtask: Generate API groups for public nested types
+- **Status:** done
+- **Scope:** Make every visible nested type collected from the curated
+  scripting API source set eligible for full API-group generation, not
+  only for structural listing under its enclosing type. Cover
+  `org.freeplane.api.ai.AiRequestOptions.Builder` and all similar
+  public or protected nested exact types. Do not require Javadoc
+  comments for methods to appear. Do not commit the generated
+  `freeplane-api.mm` file.
+- **Motivation:** The generated API map is the evidence source for the
+  scripting assistant. If a public nested type is present only as a
+  `Nested types` reference, the assistant has no generated-map evidence
+  for that type's script-facing methods.
+- **Scenario:** A script author or scripting assistant discovers
+  `AiRequestOptions.builder()` in the API map. The returned
+  `AiRequestOptions.Builder` type must lead to generated-map method
+  evidence for the fluent builder calls and `build()`. The same rule
+  applies to other visible nested exact types in the curated scripting
+  API source set.
+- **Constraints:**
+  - Preserve the current `Packages` branch as structure-only navigation.
+  - Preserve parent API-group `Nested types` references; they remain
+    orientation links, not the only documentation for nested types.
+  - Preserve existing proxy/API mirror grouping such as `Node` and
+    `Convertible`; do not duplicate exact types already assigned to a
+    mirrored family.
+  - Use a general nested-type rule; do not special-case
+    `AiRequestOptions.Builder`.
+  - Keep generated output deterministic and keep using clone-based exact
+    type reuse.
+- **Briefing:** Relevant files are
+  `freeplane_plugin_script/src/doclet/java/org/freeplane/plugin/script/doclet/ApiModelBuilder.java`,
+  `freeplane_plugin_script/src/docletTest/java/org/freeplane/plugin/script/doclet/FreeplaneApiMapDocletGenerationTest.java`,
+  `freeplane_plugin_script/build.gradle`, and
+  `freeplane_api/src/main/java/org/freeplane/api/ai/AiRequestOptions.java`.
+- **Research:**
+  ```plantuml
+  @startuml
+  set separator none
+  package "freeplane_plugin_script doclet" {
+    package "current" {
+      class ApiModelBuilder {
+        +build()
+        -collectIncludedTypes()
+        -buildDocumentationFamilies()
+        -isMirroredFamilyExactType(TypeElement)
+        -buildApiGroupNode(DocumentationFamily)
+        -projectSurface(TypeElement)
+      }
+      class DocumentationFamily
+      class ApiMapNode
+    }
+  }
+  ApiModelBuilder --> DocumentationFamily
+  ApiModelBuilder --> ApiMapNode
+  @enduml
+  ```
+
+  ```plantuml
+  @startuml
+  participant "Javadoc" as Javadoc
+  participant "ApiModelBuilder" as Builder
+  participant "API groups" as Groups
+  participant "Packages" as Packages
+  Javadoc -> Builder : collectIncludedTypes(top-level roots)
+  Builder -> Builder : collectNestedTypes(top-level type)
+  Builder -> Groups : buildDocumentationFamilies(top-level API + Proxy nested families)
+  Builder -> Packages : buildPackageTypeNode(top-level + nested exact type nodes)
+  @enduml
+  ```
+
+  - `collectIncludedTypes()` recursively records visible nested types in
+    `includedTypesByQualifiedName`.
+  - `buildPackageTypeNode()` already renders nested exact type nodes in
+    the `Packages` branch.
+  - `buildApiGroupNode()` can render properties, methods, constants, and
+    nested-type references for any `DocumentationFamily` exact type.
+  - `buildDocumentationFamilies()` currently creates singleton API
+    groups only from `includedTopLevelTypes`.
+  - `isMirroredFamilyExactType()` treats Proxy nested types as mirrored
+    family members, but treats nested `org.freeplane.api` types as not
+    mirrored.
+  - The generated `BIN/doc/api/freeplane-api.mm` currently lists
+    `AiRequestOptions.Builder` under `AiRequestOptions` / `Nested types`,
+    but has no API group containing the builder methods `timeout`,
+    `mode`, `modelSelection`, `toolAvailability`, `selectionOverride`,
+    `systemMessage`, `exactSystemMessage`, `profile`, or `build`.
+- **Analysis:**
+  - Generate full API groups for visible nested exact types because the
+    generated map is the scripting assistant's evidence source.
+  - Keep `Packages` member-free because it is structural navigation, not
+    the full documentation branch.
+  - Keep parent `Nested types` references because they remain useful
+    orientation from the enclosing API group.
+  - Reuse the existing surface projection for nested-type members
+    because the missing behavior is family eligibility, not method
+    extraction.
+- **Design:**
+  ```plantuml
+  @startuml
+  set separator none
+  package "freeplane_plugin_script doclet" {
+    package "target" {
+      class ApiModelBuilder {
+        +build()
+        -buildDocumentationFamilies()
+        -isMirroredFamilyExactType(TypeElement)
+        -familyBaseLabel(TypeElement)
+        -buildApiGroupNode(DocumentationFamily)
+        -projectSurface(TypeElement)
+      }
+      class DocumentationFamily {
+        +addExactType(TypeElement)
+      }
+      class ApiMapNode
+    }
+  }
+  ApiModelBuilder --> DocumentationFamily : creates mirrored and singleton families
+  ApiModelBuilder --> ApiMapNode : renders API groups and packages
+  @enduml
+  ```
+
+  ```plantuml
+  @startuml
+  participant "Javadoc" as Javadoc
+  participant "ApiModelBuilder" as Builder
+  participant "API groups" as Groups
+  participant "Packages" as Packages
+  Javadoc -> Builder : collectIncludedTypes(top-level roots)
+  Builder -> Builder : collectNestedTypes(top-level type)
+  Builder -> Groups : create mirrored families for current mirror rules
+  Builder -> Groups : create singleton families for remaining exact types
+  Builder -> Packages : build structural tree for top-level and nested types
+  @enduml
+  ```
+
+  - Change family construction to track all exact types already assigned
+    to mirrored families, not only mirrored top-level type names.
+  - Create singleton documentation families from remaining included
+    exact types, including visible nested types, unless the exact type is
+    excluded.
+  - Label singleton nested-type API groups with the same displayed exact
+    type name used by exact type nodes, for example
+    `AiRequestOptions.Builder`, so generic names such as `Builder` do
+    not become ambiguous.
+  - Keep Proxy nested types on their existing mirrored-family path so
+    groups such as `Node` and `MindMap` keep their current labels and
+    merged read/write surface behavior.
+  - Leave member projection unchanged: nested-type API groups use the
+    existing property, method, constant, documentation, and availability
+    generation rules.
+  - Extend the doclet fixture with a public nested API type that has
+    visible builder-style methods and assert that the generated map has
+    both the parent `Nested types` reference and a full nested-type API
+    group with methods.
+- **Test specification:**
+  - **Automated tests:**
+    - A doclet fixture with a public nested type under an included
+      `org.freeplane.api` top-level type generates a full API group for
+      the nested type.
+    - The nested-type API group label uses the displayed exact type name
+      including the enclosing type name.
+    - The nested-type API group contains visible methods even when those
+      methods have no Javadoc comments.
+    - The enclosing type still contains a `Nested types` reference to
+      the nested type.
+    - The `Packages` branch still lists the nested exact type
+      structurally and does not gain member documentation.
+    - Existing mirrored Proxy/API groups keep their current labels and
+      do not gain duplicate singleton groups for exact types already in
+      mirrored families.
+    - Generated output from the current curated sources contains an
+      `AiRequestOptions.Builder` API group with its fluent option
+      methods and `build()`.
+  - **Manual tests:** N/A

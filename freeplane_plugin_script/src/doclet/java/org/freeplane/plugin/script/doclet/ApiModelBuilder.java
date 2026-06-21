@@ -178,7 +178,7 @@ final class ApiModelBuilder {
 
     private List<DocumentationFamily> buildDocumentationFamilies() {
         Map<String, DocumentationFamily> familiesByKey = new LinkedHashMap<String, DocumentationFamily>();
-        Set<String> mirroredTopLevelTypeNames = new LinkedHashSet<String>();
+        Set<String> mirroredExactTypeNames = new LinkedHashSet<String>();
         for (TypeElement typeElement : includedTypesByQualifiedName.values()) {
             if (!isMirroredFamilyExactType(typeElement)) {
                 continue;
@@ -190,23 +190,21 @@ final class ApiModelBuilder {
                 familiesByKey.put("mirror:" + baseLabel, family);
             }
             family.addExactType(typeElement);
-            if (!typeElement.getNestingKind().isNested()) {
-                mirroredTopLevelTypeNames.add(qualifiedName(typeElement));
-            }
+            mirroredExactTypeNames.add(qualifiedName(typeElement));
         }
-        for (TypeElement topLevelType : includedTopLevelTypes) {
-            if (isExcludedExactType(topLevelType)) {
+        for (TypeElement typeElement : includedTypesByQualifiedName.values()) {
+            if (isExcludedExactType(typeElement)) {
                 continue;
             }
-            String qualifiedName = qualifiedName(topLevelType);
+            String qualifiedName = qualifiedName(typeElement);
             if (PROXY_TOP_LEVEL_TYPE.equals(qualifiedName)) {
                 continue;
             }
-            if (mirroredTopLevelTypeNames.contains(qualifiedName)) {
+            if (mirroredExactTypeNames.contains(qualifiedName)) {
                 continue;
             }
-            DocumentationFamily family = new DocumentationFamily(topLevelType.getSimpleName().toString());
-            family.addExactType(topLevelType);
+            DocumentationFamily family = new DocumentationFamily(singletonFamilyLabel(typeElement));
+            family.addExactType(typeElement);
             familiesByKey.put("singleton:" + qualifiedName, family);
         }
         Map<String, Integer> labelCounts = new LinkedHashMap<String, Integer>();
@@ -248,6 +246,12 @@ final class ApiModelBuilder {
             return simpleName.substring(0, simpleName.length() - 2);
         }
         return PROXY_MIND_MAP_TYPE.equals(qualifiedName(typeElement)) ? "MindMap" : simpleName;
+    }
+
+    private String singletonFamilyLabel(TypeElement typeElement) {
+        return typeElement.getNestingKind().isNested()
+            ? displayedExactTypeName(typeElement)
+            : typeElement.getSimpleName().toString();
     }
 
     private ApiMapNode buildApiGroupNode(DocumentationFamily family) {
