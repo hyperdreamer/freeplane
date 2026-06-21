@@ -39,6 +39,7 @@ public class AiRequestOptionsTest {
         assertThat(options.getToolAvailability()).isNull();
         assertThat(options.getSelectionOverride()).isNull();
         assertThat(options.getSystemMessage()).isNull();
+        assertThat(options.isSystemMessageExact()).isFalse();
         assertThat(options.getProfileName()).isNull();
         assertThat(options.getProfileMessage()).isNull();
     }
@@ -65,6 +66,7 @@ public class AiRequestOptionsTest {
         assertThat(options.getToolAvailability()).isEqualTo(AiToolAvailability.READING);
         assertThat(options.getSelectionOverride()).isSameAs(override);
         assertThat(options.getSystemMessage()).isEqualTo("system");
+        assertThat(options.isSystemMessageExact()).isFalse();
         assertThat(options.getProfileName()).isEqualTo("reviewer");
         assertThat(options.getProfileMessage()).isEqualTo("check strictly");
     }
@@ -77,6 +79,60 @@ public class AiRequestOptionsTest {
             .build();
 
         assertThat(options.getSystemMessage()).isEqualTo("");
+        assertThat(options.isSystemMessageExact()).isFalse();
+    }
+
+    @Test
+    public void exactSystemMessageStoresTrimmedExactText() {
+        AiRequestOptions options = AiRequestOptions.builder()
+            .timeout(Duration.ofSeconds(10))
+            .exactSystemMessage(" exact ")
+            .build();
+
+        assertThat(options.getSystemMessage()).isEqualTo("exact");
+        assertThat(options.isSystemMessageExact()).isTrue();
+    }
+
+    @Test
+    public void exactSystemMessagePreservesExplicitEmptyText() {
+        AiRequestOptions options = AiRequestOptions.builder()
+            .timeout(Duration.ofSeconds(10))
+            .exactSystemMessage("   ")
+            .build();
+
+        assertThat(options.getSystemMessage()).isEqualTo("");
+        assertThat(options.isSystemMessageExact()).isTrue();
+    }
+
+    @Test
+    public void exactSystemMessageNullClearsExactness() {
+        AiRequestOptions options = AiRequestOptions.builder()
+            .timeout(Duration.ofSeconds(10))
+            .exactSystemMessage("exact")
+            .exactSystemMessage(null)
+            .build();
+
+        assertThat(options.getSystemMessage()).isNull();
+        assertThat(options.isSystemMessageExact()).isFalse();
+    }
+
+    @Test
+    public void lastSystemMessageBuilderCallWinsExactness() {
+        AiRequestOptions normal = AiRequestOptions.builder()
+            .timeout(Duration.ofSeconds(10))
+            .exactSystemMessage("exact")
+            .systemMessage("normal")
+            .build();
+        AiRequestOptions exact = AiRequestOptions.builder()
+            .timeout(Duration.ofSeconds(10))
+            .systemMessage("normal")
+            .exactSystemMessage("exact")
+            .build();
+
+        assertThat(normal.getSystemMessage()).isEqualTo("normal");
+        assertThat(normal.isSystemMessageExact()).isFalse();
+        assertThat(exact.getSystemMessage()).isEqualTo("exact");
+        assertThat(exact.isSystemMessageExact()).isTrue();
     }
 
     @Test

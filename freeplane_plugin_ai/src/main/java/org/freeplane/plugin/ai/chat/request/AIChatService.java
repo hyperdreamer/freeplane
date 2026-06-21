@@ -54,6 +54,7 @@ public class AIChatService {
     private final Supplier<Boolean> formulaEditingEnabledSupplier;
     private final Function<ToolAvailabilityLevel, AIAssistant> assistantFactory;
     private final String baseSystemMessage;
+    private final boolean isSystemMessageExact;
     private final boolean hiddenRequest;
     private final SystemInstructionComposer systemInstructionComposer;
     private ToolAvailabilityLevel lastToolAvailability;
@@ -126,7 +127,7 @@ public class AIChatService {
                   Function<ToolAvailabilityLevel, AIAssistant> assistantFactory) {
         this(chatLanguageModel, toolSet, toolObjects, aiCodeToolSet, chatMemory, chatTokenUsageTracker,
             toolCallSummaryHandler, cancellationSupplier, tokenUsageConsumer, toolAvailabilitySupplier,
-            formulaEditingEnabledSupplier, assistantFactory, null, false);
+            formulaEditingEnabledSupplier, assistantFactory, null, false, false);
     }
 
     AIChatService(ChatModel chatLanguageModel,
@@ -142,6 +143,7 @@ public class AIChatService {
                   Supplier<Boolean> formulaEditingEnabledSupplier,
                   Function<ToolAvailabilityLevel, AIAssistant> assistantFactory,
                   String systemMessage,
+                  boolean isSystemMessageExact,
                   boolean hiddenRequest) {
         Objects.requireNonNull(chatTokenUsageTracker, "chatTokenUsageTracker");
         this.chatLanguageModel = chatLanguageModel;
@@ -168,6 +170,7 @@ public class AIChatService {
                 }
             };
         this.baseSystemMessage = systemMessage == null ? null : systemMessage.trim();
+        this.isSystemMessageExact = isSystemMessageExact && this.baseSystemMessage != null;
         this.hiddenRequest = hiddenRequest;
         this.systemInstructionComposer = new SystemInstructionComposer();
         this.lastToolAvailability = currentToolAvailability();
@@ -253,12 +256,13 @@ public class AIChatService {
         return new Function<Object, String>() {
             @Override
             public String apply(Object input) {
-                String baseMessage = baseSystemMessage == null
+                String baseMessage = baseSystemMessage == null && !isSystemMessageExact
                     ? MessageBuilder.configuredSystemMessage()
                     : baseSystemMessage;
                 String codeHostGuidance = aiCodeToolSet == null ? null : aiCodeToolSet.systemMessageForChat(input);
                 return systemInstructionComposer.compose(new SystemInstructionContext(
                     baseMessage,
+                    isSystemMessageExact,
                     normalizedAvailability,
                     hiddenRequest ? RequestVisibility.HIDDEN : RequestVisibility.VISIBLE,
                     hasProfileInstruction(),

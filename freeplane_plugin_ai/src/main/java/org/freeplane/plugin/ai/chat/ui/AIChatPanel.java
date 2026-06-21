@@ -851,6 +851,10 @@ public class AIChatPanel extends JPanel {
                 null,
                 owner,
                 true,
+                null,
+                null,
+                false,
+                true,
                 null)) {
             notifyUser(configurationErrorMessage(selectedModelOverride), true);
         }
@@ -884,7 +888,9 @@ public class AIChatPanel extends JPanel {
             resolvePromptStyleToolAvailability(request.getToolAvailability());
         ToolAvailabilityLevel toolAvailabilityOverride =
             explicitToolAvailabilityOverride(request.getToolAvailability());
-        ChatMemory promptChatMemory = createChatMemory(capturedSystemMessageFor(request));
+        ChatMemory promptChatMemory = createChatMemory(
+            capturedSystemMessageFor(request),
+            isSystemMessageExactFor(request));
         LiveChatSessionId sessionId = liveChatController.startNewPromptChat(
             promptChatMemory,
             promptDisplayName(request.getPromptDisplayName()),
@@ -1048,6 +1054,7 @@ public class AIChatPanel extends JPanel {
             showProgressDialog,
             hiddenRequestObserver,
             request.getSystemMessage(),
+            request.isSystemMessageExact(),
             true,
             profileResolution.getMessage());
         if (!started) {
@@ -1094,13 +1101,19 @@ public class AIChatPanel extends JPanel {
         return MessageBuilder.configuredSystemMessage();
     }
 
+    private boolean isSystemMessageExactFor(ResolvedAiRequest request) {
+        return request != null && request.isSystemMessageExact();
+    }
+
     private String composeSystemInstruction(LiveChatSessionId sessionId,
                                             String baseSystemMessage,
+                                            boolean isSystemMessageExact,
                                             ToolAvailabilityLevel toolAvailability,
                                             RequestVisibility visibility,
                                             boolean hasProfileInstruction) {
         return systemInstructionComposer.compose(new SystemInstructionContext(
             baseSystemMessage,
+            isSystemMessageExact,
             toolAvailability,
             visibility,
             hasProfileInstruction,
@@ -1129,15 +1142,21 @@ public class AIChatPanel extends JPanel {
                                                   ToolAvailabilityLevel toolAvailability,
                                                   AssistantProfileSwitchMessage pendingProfileMessage) {
         String baseSystemMessage = liveChatController.sessionCapturedSystemMessage(sessionId);
+        boolean isSystemMessageExact = liveChatController.isSessionSystemMessageExact(sessionId);
         boolean hasProfileInstruction = liveChatController.sessionHasProfileInstruction(sessionId)
             || pendingProfileMessage != null;
         String composedSystemMessage = composeSystemInstruction(
             sessionId,
             baseSystemMessage,
+            isSystemMessageExact,
             toolAvailability,
             RequestVisibility.VISIBLE,
             hasProfileInstruction);
-        liveChatController.updateSessionSystemMessage(sessionId, baseSystemMessage, composedSystemMessage);
+        liveChatController.updateSessionSystemMessage(
+            sessionId,
+            baseSystemMessage,
+            composedSystemMessage,
+            isSystemMessageExact);
     }
 
     private SelectionIdentifiersResponse resolveSelectionOverride(AiSelectionOverride selectionOverride) {
@@ -1194,7 +1213,9 @@ public class AIChatPanel extends JPanel {
 
     private LiveChatSessionId startNewAddToChatSession(ResolvedAiRequest request,
                                                        String selectedModelOverride) {
-        ChatMemory promptChatMemory = createChatMemory(capturedSystemMessageFor(request));
+        ChatMemory promptChatMemory = createChatMemory(
+            capturedSystemMessageFor(request),
+            isSystemMessageExactFor(request));
         return liveChatController.startNewScriptChat(
             promptChatMemory,
             request.getPromptDisplayName(),
@@ -1206,7 +1227,8 @@ public class AIChatPanel extends JPanel {
         if (request.getSystemMessage() == null) {
             return true;
         }
-        return request.getSystemMessage().equals(liveChatController.sessionCapturedSystemMessage(sessionId));
+        return request.getSystemMessage().equals(liveChatController.sessionCapturedSystemMessage(sessionId))
+            && request.isSystemMessageExact() == liveChatController.isSessionSystemMessageExact(sessionId);
     }
 
     private PromptReferenceMatch resolvePromptReference(String userMessage) {
@@ -1449,6 +1471,7 @@ public class AIChatPanel extends JPanel {
                 () -> Boolean.valueOf(new FormulaEditingSettings().isEnabled()),
                 sessionCodeHostService));
         List<Object> toolObjects = toolSetBuilder.buildToolObjects();
+        String baseSystemMessage = liveChatController.sessionCapturedSystemMessage(sessionId);
         return AIChatServiceFactory.createService(
             (org.freeplane.plugin.ai.tools.AIToolSet) toolObjects.get(0),
             toolObjects,
@@ -1459,7 +1482,8 @@ public class AIChatPanel extends JPanel {
             requestFlow::onProviderUsage,
             toolAvailabilityOverride == null ? null : () -> toolAvailabilityOverride,
             selectedModelOverride,
-            liveChatController.sessionCapturedSystemMessage(sessionId),
+            baseSystemMessage,
+            liveChatController.isSessionSystemMessageExact(sessionId),
             false);
     }
 
@@ -2049,6 +2073,7 @@ public class AIChatPanel extends JPanel {
         String systemText = composeSystemInstruction(
             sessionId,
             baseSystemMessage,
+            liveChatController.isSessionSystemMessageExact(sessionId),
             resolveEffectiveToolAvailability(sessionId),
             RequestVisibility.VISIBLE,
             hasProfileInstruction);
@@ -2159,16 +2184,17 @@ public class AIChatPanel extends JPanel {
     }
 
     private ChatMemory createChatMemory() {
-        return createChatMemory(MessageBuilder.configuredSystemMessage());
+        return createChatMemory(MessageBuilder.configuredSystemMessage(), false);
     }
 
-    private ChatMemory createChatMemory(String capturedSystemMessage) {
+    private ChatMemory createChatMemory(String capturedSystemMessage, boolean isSystemMessageExact) {
         ChatMemorySettings chatMemorySettings = new ChatMemorySettings();
         ChatMemory memory = AssistantProfileChatMemory.builder()
             .dynamicMaxTokens(ignored -> chatMemorySettings.getMaximumTokenCount())
             .tokenEstimatorModelNameProvider(this::currentModelNameForTokenEstimator)
             .build();
-        memory.add(new GeneralSystemMessage(capturedSystemMessage == null ? "" : capturedSystemMessage.trim()));
+        String baseSystemMessage = capturedSystemMessage == null ? "" : capturedSystemMessage.trim();
+        memory.add(new GeneralSystemMessage(baseSystemMessage, baseSystemMessage, isSystemMessageExact));
         return memory;
     }
 

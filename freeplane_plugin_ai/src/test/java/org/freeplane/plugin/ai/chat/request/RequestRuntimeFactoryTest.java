@@ -107,7 +107,11 @@ public class RequestRuntimeFactoryTest {
             AiRequestMode.ADD_TO_CHAT,
             AiModelSelection.current(),
             AiToolAvailability.CURRENT,
-            (AiSelectionOverride) null);
+            (AiSelectionOverride) null,
+            null,
+            false,
+            null,
+            null);
         AddToChatDispatchJob firstJob = jobFactory.create(
             request,
             new AiRequestHandleImpl(Runnable::run, result -> {

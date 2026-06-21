@@ -28,7 +28,7 @@ public class TranscriptMemoryMapperTest {
         TranscriptMemoryMapper uut = new TranscriptMemoryMapper();
         AssistantProfileChatMemory memory = AssistantProfileChatMemory.withMaxTokens(500);
         List<ChatTranscriptEntry> entries = Arrays.asList(
-            new ChatTranscriptEntry(ChatTranscriptRole.SYSTEM, "composed system", "captured base"),
+            new ChatTranscriptEntry(ChatTranscriptRole.SYSTEM, "composed system", "captured base", true),
             new ChatTranscriptEntry(ChatTranscriptRole.USER, "first user"),
             new ChatTranscriptEntry(ChatTranscriptRole.ASSISTANT, "first assistant"));
 
@@ -39,6 +39,7 @@ public class TranscriptMemoryMapperTest {
         assertThat(messages.get(0)).isInstanceOf(GeneralSystemMessage.class);
         assertThat(((GeneralSystemMessage) messages.get(0)).text()).isEqualTo("composed system");
         assertThat(((GeneralSystemMessage) messages.get(0)).baseText()).isEqualTo("captured base");
+        assertThat(((GeneralSystemMessage) messages.get(0)).isSystemMessageExact()).isTrue();
         assertThat(messages.get(1)).isInstanceOf(UserMessage.class);
         assertThat(((UserMessage) messages.get(1)).singleText())
             .isEqualTo(MessageBuilder.CONTROL_INSTRUCTION_PREFIX
@@ -79,7 +80,7 @@ public class TranscriptMemoryMapperTest {
     public void toTranscriptEntries_exportsConversationMessages() {
         TranscriptMemoryMapper uut = new TranscriptMemoryMapper();
         AssistantProfileChatMemory memory = AssistantProfileChatMemory.withMaxTokens(500);
-        memory.add(new GeneralSystemMessage("captured base", "composed system"));
+        memory.add(new GeneralSystemMessage("captured base", "composed system", true));
         memory.add(new AssistantProfileSwitchMessage("profile-a", "A sayer", "Profile instructions"));
         memory.add(UserMessage.from("hello"));
         memory.add(AiMessage.from("world"));
@@ -91,6 +92,7 @@ public class TranscriptMemoryMapperTest {
         assertThat(entries.get(0).getRole()).isEqualTo(ChatTranscriptRole.SYSTEM);
         assertThat(entries.get(0).getText()).isEqualTo("composed system");
         assertThat(entries.get(0).getBaseSystemText()).isEqualTo("captured base");
+        assertThat(entries.get(0).isSystemMessageExact()).isTrue();
         assertThat(entries.get(1)).isInstanceOf(AssistantProfileTranscriptEntry.class);
         assertThat(entries.get(1).getRole()).isEqualTo(ChatTranscriptRole.ASSISTANT_PROFILE_SYSTEM);
         assertThat(((AssistantProfileTranscriptEntry) entries.get(1)).getProfileMessage())

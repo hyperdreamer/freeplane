@@ -192,6 +192,7 @@ public class ChatPromptRunner {
             selectedModelOverride,
             resolvedToolAvailability,
             capturedSystemMessage(shownPromptChatMemory),
+            isSystemMessageExact(shownPromptChatMemory),
             false);
         if (promptService == null) {
             return false;
@@ -214,20 +215,9 @@ public class ChatPromptRunner {
                                 SelectionIdentifiersResponse selectionOverride,
                                 Component owner,
                                 boolean showProgressDialog,
-                                HiddenAiRequestObserverBridge observer) {
-        return submitHiddenRequest(requestName, promptText, selectedModelOverride, resolvedToolAvailability,
-            selectionOverride, owner, showProgressDialog, observer, null, true, null);
-    }
-
-    public boolean submitHiddenRequest(String requestName,
-                                String promptText,
-                                String selectedModelOverride,
-                                ToolAvailabilityLevel resolvedToolAvailability,
-                                SelectionIdentifiersResponse selectionOverride,
-                                Component owner,
-                                boolean showProgressDialog,
                                 HiddenAiRequestObserverBridge observer,
                                 String systemMessage,
+                                boolean isSystemMessageExact,
                                 boolean hiddenRequest,
                                 AssistantProfileSwitchMessage requestedProfileMessage) {
         final String preparedMessage;
@@ -255,6 +245,7 @@ public class ChatPromptRunner {
             selectedModelOverride,
             resolvedToolAvailability,
             systemMessage,
+            isSystemMessageExact,
             hiddenRequest);
         if (promptService == null) {
             return false;
@@ -275,6 +266,7 @@ public class ChatPromptRunner {
                                                   String selectedModelOverride,
                                                   ToolAvailabilityLevel toolAvailability,
                                                   String systemMessage,
+                                                  boolean isSystemMessageExact,
                                                   boolean hiddenRequest) {
         AIToolSetBuilder toolSetBuilder = new AIToolSetBuilder()
             .toolCallSummaryHandler(toolCallSummaryHandler)
@@ -317,6 +309,7 @@ public class ChatPromptRunner {
             requestToolAvailabilitySupplier,
             selectedModelOverride,
             systemMessage,
+            isSystemMessageExact,
             hiddenRequest);
     }
 
@@ -326,6 +319,11 @@ public class ChatPromptRunner {
             return captured == null ? "" : captured;
         }
         return null;
+    }
+
+    private boolean isSystemMessageExact(ChatMemory chatMemory) {
+        return chatMemory instanceof AssistantProfileChatMemory
+            && ((AssistantProfileChatMemory) chatMemory).isSystemMessageExact();
     }
 
     private String promptFailureMessage(String promptName, String errorMessage) {

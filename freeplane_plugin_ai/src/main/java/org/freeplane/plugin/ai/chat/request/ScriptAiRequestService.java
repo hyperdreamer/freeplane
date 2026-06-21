@@ -75,6 +75,7 @@ public class ScriptAiRequestService implements AiRequestService {
             options.getToolAvailability() == null ? AiToolAvailability.CURRENT : options.getToolAvailability(),
             options.getSelectionOverride(),
             options.getSystemMessage(),
+            options.isSystemMessageExact(),
             options.getProfileName(),
             options.getProfileMessage());
         return dispatchAcceptedRequest(request, callback);
@@ -161,6 +162,7 @@ public class ScriptAiRequestService implements AiRequestService {
             toolAvailability,
             options.getSelectionOverride(),
             options.getSystemMessage(),
+            options.isSystemMessageExact(),
             options.getProfileName(),
             options.getProfileMessage()));
     }

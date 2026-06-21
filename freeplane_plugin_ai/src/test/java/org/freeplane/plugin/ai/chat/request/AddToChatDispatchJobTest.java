@@ -99,6 +99,10 @@ public class AddToChatDispatchJobTest {
             AiRequestMode.ADD_TO_CHAT,
             AiModelSelection.current(),
             AiToolAvailability.CURRENT,
-            (AiSelectionOverride) null);
+            (AiSelectionOverride) null,
+            null,
+            false,
+            null,
+            null);
     }
 }

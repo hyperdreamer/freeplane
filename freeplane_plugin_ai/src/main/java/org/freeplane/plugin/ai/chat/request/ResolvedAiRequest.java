@@ -16,6 +16,7 @@ public final class ResolvedAiRequest {
     private final AiToolAvailability toolAvailability;
     private final AiSelectionOverride selectionOverride;
     private final String systemMessage;
+    private final boolean isSystemMessageExact;
     private final String profileName;
     private final String profileMessage;
 
@@ -25,19 +26,9 @@ public final class ResolvedAiRequest {
                       AiRequestMode mode,
                       AiModelSelection modelSelection,
                       AiToolAvailability toolAvailability,
-                      AiSelectionOverride selectionOverride) {
-        this(promptText, promptDisplayName, timeout, mode, modelSelection, toolAvailability, selectionOverride,
-            null, null, null);
-    }
-
-    public ResolvedAiRequest(String promptText,
-                      String promptDisplayName,
-                      Duration timeout,
-                      AiRequestMode mode,
-                      AiModelSelection modelSelection,
-                      AiToolAvailability toolAvailability,
                       AiSelectionOverride selectionOverride,
                       String systemMessage,
+                      boolean isSystemMessageExact,
                       String profileName,
                       String profileMessage) {
         this.promptText = Objects.requireNonNull(promptText, "promptText");
@@ -48,6 +39,7 @@ public final class ResolvedAiRequest {
         this.toolAvailability = Objects.requireNonNull(toolAvailability, "toolAvailability");
         this.selectionOverride = selectionOverride;
         this.systemMessage = normalizeNullable(systemMessage);
+        this.isSystemMessageExact = isSystemMessageExact && this.systemMessage != null;
         this.profileName = normalizeNullable(profileName);
         this.profileMessage = normalizeNullable(profileMessage);
     }
@@ -82,6 +74,10 @@ public final class ResolvedAiRequest {
 
     public String getSystemMessage() {
         return systemMessage;
+    }
+
+    public boolean isSystemMessageExact() {
+        return isSystemMessageExact;
     }
 
     public String getProfileName() {

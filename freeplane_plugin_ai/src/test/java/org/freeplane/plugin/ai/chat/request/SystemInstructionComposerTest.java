@@ -12,6 +12,7 @@ public class SystemInstructionComposerTest {
 
         String message = uut.compose(new SystemInstructionContext(
             " base ",
+            false,
             ToolAvailabilityLevel.READING,
             RequestVisibility.VISIBLE,
             true,
@@ -30,6 +31,7 @@ public class SystemInstructionComposerTest {
 
         String message = uut.compose(new SystemInstructionContext(
             "base",
+            false,
             ToolAvailabilityLevel.DISABLED,
             RequestVisibility.HIDDEN,
             false,
@@ -47,12 +49,14 @@ public class SystemInstructionComposerTest {
 
         String withoutProfile = uut.compose(new SystemInstructionContext(
             "base",
+            false,
             ToolAvailabilityLevel.EDITING,
             RequestVisibility.VISIBLE,
             false,
             null));
         String withProfile = uut.compose(new SystemInstructionContext(
             "base",
+            false,
             ToolAvailabilityLevel.EDITING,
             RequestVisibility.VISIBLE,
             true,
@@ -60,5 +64,35 @@ public class SystemInstructionComposerTest {
 
         assertThat(withoutProfile).doesNotContain("Profile changes are communicated");
         assertThat(withProfile).contains("Profile changes are communicated");
+    }
+
+    @Test
+    public void exactSystemMessageSuppressesAllFreeplaneGuidance() {
+        SystemInstructionComposer uut = new SystemInstructionComposer();
+
+        String message = uut.compose(new SystemInstructionContext(
+            " exact ",
+            true,
+            ToolAvailabilityLevel.READING,
+            RequestVisibility.VISIBLE,
+            true,
+            "code guidance"));
+
+        assertThat(message).isEqualTo("exact");
+    }
+
+    @Test
+    public void exactEmptySystemMessageReturnsEmptyText() {
+        SystemInstructionComposer uut = new SystemInstructionComposer();
+
+        String message = uut.compose(new SystemInstructionContext(
+            "   ",
+            true,
+            ToolAvailabilityLevel.EDITING,
+            RequestVisibility.HIDDEN,
+            true,
+            "code guidance"));
+
+        assertThat(message).isEmpty();
     }
 }

@@ -17,6 +17,10 @@ public final class SystemInstructionComposer {
         if (context == null) {
             return "";
         }
+        if (context.isSystemMessageExact()) {
+            String baseSystemMessage = context.getBaseSystemMessage();
+            return baseSystemMessage == null ? "" : baseSystemMessage;
+        }
         String baseMessage = messageBuilder.buildForChat(
             context.getBaseSystemMessage(),
             context.getToolAvailability(),

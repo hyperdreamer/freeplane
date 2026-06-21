@@ -1,6 +1,7 @@
 package org.freeplane.plugin.ai.chat.history;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 
@@ -18,6 +19,7 @@ public class ChatTranscriptEntry {
     private ChatTranscriptRole role;
     private String text;
     private String baseSystemText;
+    private boolean isSystemMessageExact;
     private String promptName;
     private String promptText;
     private String modelFacingText;
@@ -27,13 +29,17 @@ public class ChatTranscriptEntry {
     }
 
     public ChatTranscriptEntry(ChatTranscriptRole role, String text) {
-        this(role, text, null);
+        this(role, text, null, false);
     }
 
-    public ChatTranscriptEntry(ChatTranscriptRole role, String text, String baseSystemText) {
+    public ChatTranscriptEntry(ChatTranscriptRole role,
+                               String text,
+                               String baseSystemText,
+                               boolean isSystemMessageExact) {
         this.role = role;
         this.text = text;
         this.baseSystemText = baseSystemText;
+        this.isSystemMessageExact = isSystemMessageExact;
     }
 
     public ChatTranscriptRole getRole() {
@@ -58,6 +64,17 @@ public class ChatTranscriptEntry {
 
     public void setBaseSystemText(String baseSystemText) {
         this.baseSystemText = baseSystemText;
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_DEFAULT)
+    @JsonProperty("isSystemMessageExact")
+    public boolean isSystemMessageExact() {
+        return isSystemMessageExact;
+    }
+
+    @JsonProperty("isSystemMessageExact")
+    public void setSystemMessageExact(boolean isSystemMessageExact) {
+        this.isSystemMessageExact = isSystemMessageExact;
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)

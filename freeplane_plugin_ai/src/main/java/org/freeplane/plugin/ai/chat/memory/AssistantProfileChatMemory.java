@@ -240,8 +240,12 @@ public class AssistantProfileChatMemory implements ChatMemory {
         return generalSystemMessage == null ? null : generalSystemMessage.composedText();
     }
 
-    public void updateSystemMessage(String baseText, String composedText) {
-        setGeneralSystemMessage(new GeneralSystemMessage(baseText, composedText));
+    public boolean isSystemMessageExact() {
+        return generalSystemMessage != null && generalSystemMessage.isSystemMessageExact();
+    }
+
+    public void updateSystemMessage(String baseText, String composedText, boolean isSystemMessageExact) {
+        setGeneralSystemMessage(new GeneralSystemMessage(baseText, composedText, isSystemMessageExact));
         invalidateDerivedFiltering();
     }
 
@@ -348,9 +352,10 @@ public class AssistantProfileChatMemory implements ChatMemory {
         }
         String text = message.text();
         if (generalSystemMessage != null) {
-            return new GeneralSystemMessage(generalSystemMessage.baseText(), text);
+            return new GeneralSystemMessage(generalSystemMessage.baseText(), text,
+                generalSystemMessage.isSystemMessageExact());
         }
-        return new GeneralSystemMessage(text);
+        return new GeneralSystemMessage(text, text, false);
     }
 
     private void rebuildTurnBoundaries() {

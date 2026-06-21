@@ -22,7 +22,7 @@ public class ChatTranscriptStoreTest {
             ChatTranscriptStore store = new ChatTranscriptStore(new ObjectMapper(), tempDir);
             ChatTranscriptRecord record = new ChatTranscriptRecord();
             List<ChatTranscriptEntry> entries = Arrays.asList(
-                new ChatTranscriptEntry(ChatTranscriptRole.SYSTEM, "system"),
+                new ChatTranscriptEntry(ChatTranscriptRole.SYSTEM, "system", "base system", true),
                 new ChatTranscriptEntry(ChatTranscriptRole.USER, "user"),
                 new ChatTranscriptEntry(ChatTranscriptRole.ASSISTANT, "assistant"),
                 new AssistantProfileTranscriptEntry("profile-a", "A sayer", "Profile definition", true),
@@ -44,6 +44,8 @@ public class ChatTranscriptStoreTest {
                     ChatTranscriptRole.ASSISTANT,
                     ChatTranscriptRole.ASSISTANT_PROFILE_SYSTEM,
                     ChatTranscriptRole.REMOVED_FOR_SPACE_SYSTEM);
+            assertThat(loaded.getEntries().get(0).getBaseSystemText()).isEqualTo("base system");
+            assertThat(loaded.getEntries().get(0).isSystemMessageExact()).isTrue();
             assertThat(loaded.getEntries().get(3)).isInstanceOf(AssistantProfileTranscriptEntry.class);
             AssistantProfileTranscriptEntry profileEntry =
                 (AssistantProfileTranscriptEntry) loaded.getEntries().get(3);

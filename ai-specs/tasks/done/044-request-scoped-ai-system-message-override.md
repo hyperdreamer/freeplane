@@ -7,9 +7,12 @@
   the script AI request API so `askAi(...)` and
   `runAiPrompt(..., AiRequestOptions, ...)` can supply request-scoped
   system and profile messages. Rename visible request mode
-  `SHOW_IN_CHAT` to `SHOW_IN_NEW_CHAT`. Request-scoped system text is
-  base instruction text only; dynamic Freeplane guidance remains
-  composed per request. Add an independent next-request instruction
+  `SHOW_IN_CHAT` to `SHOW_IN_NEW_CHAT`. Normal request-scoped system
+  text is base instruction text only; dynamic Freeplane guidance
+  remains composed per request. Add an exact request system-message
+  option that suppresses Freeplane-composed system additions for that
+  request state while leaving tool authorization to
+  `AiToolAvailability`. Add an independent next-request instruction
   preview for visible chats.
 - **Motivation:**
   Current visible chats do not persist the effective system message and
@@ -43,21 +46,34 @@
   request, omits Markdown response guidance, and keeps tool
   authorization governed by `AiToolAvailability`.
 
+  A script calls `c.askAi(...)` with
+  `AiRequestOptions.exactSystemMessage(...)`. Freeplane trims the text,
+  uses it as exact provider system text for the request state, and
+  suppresses Freeplane-composed system additions such as
+  tool-availability, profile-control, Markdown, map-selection, and
+  code-host guidance. Tool exposure is still governed by
+  `AiToolAvailability`, and provider-side tool metadata remains outside
+  Freeplane-composed system text.
+
   A user enables next-request instruction preview. Freeplane renders
   the chat using the current historical instruction rendering setting
   and shows a clearly labelled, non-persistent preview component for
   the next visible request. The preview appears after the profile
   selector and before the message input, uses current tool availability
   and pending profile injection state, includes Freeplane-composed
-  dynamic system guidance, excludes LangChain4j-generated tool
-  descriptions, and does not change the transcript.
+  dynamic system guidance unless the chat/request state is exact,
+  excludes LangChain4j-generated tool descriptions, and does not change
+  the transcript.
 - **Glossary:**
   ```mermaid
   flowchart LR
     A["global ai_system_message"] -- default for new chat --> B["captured chat base system message"]
-    C["AiRequestOptions.systemMessage"] -- request override for new/request chat --> B
-    B -- immutable base text --> D["Freeplane-composed system text"]
-    E["Freeplane provider guidance"] -- dynamic guidance --> D
+    C["AiRequestOptions.systemMessage"] -- normal request base override --> B
+    R["AiRequestOptions.exactSystemMessage"] -- exact request override --> B
+    R -- sets exact flag --> S["exact system-message flag"]
+    B -- immutable base text --> D["effective provider system text"]
+    E["Freeplane provider guidance"] -- dynamic guidance unless exact --> D
+    S -- suppresses Freeplane additions --> D
     L["visible vs hidden request"] -- controls Markdown guidance --> E
     J["AiToolAvailability"] -- controls tool guidance --> E
     F["AiRequestOptions.profile(name)"] -- resolves configured profile --> G["profile message event"]
@@ -66,20 +82,24 @@
     G -- applies from event onward --> I["following turns"]
     J -- authorizes --> K["tool exposure"]
     C -- does not authorize --> K
+    R -- does not authorize --> K
     G -- does not authorize --> K
     D -- sent to provider --> M["provider system text"]
     D -- rendered when committed --> N["full instruction history"]
     O["pending profile event"] -- preview-only input --> P["next request instruction preview"]
     B --> P
     E --> P
+    S --> P
     P -- not persisted --> Q["chat rendering surface"]
   ```
 
   - `captured chat system message`
     - Trimmed user/request base system instruction stored with a
       visible chat at chat creation. It is immutable for that chat,
-      persisted, restored, and combined with dynamic Freeplane guidance
-      before provider submission or full instruction rendering.
+      persisted, and restored with its exact/non-exact state. It is
+      combined with dynamic Freeplane guidance before provider
+      submission or full instruction rendering unless exact
+      system-message state requires exact text.
   - `profile message event`
     - Trimmed profile instruction snapshot inserted at a specific point
       in the conversation. It affects subsequent calls, not earlier
@@ -87,10 +107,16 @@
       effective text.
   - `request system message`
     - Optional trimmed base system text supplied through
-      `AiRequestOptions`. It never suppresses dynamic Freeplane
-      guidance. In visible modes, it determines a new chat's captured
-      base system message and determines whether `ADD_TO_CHAT` may
-      append to the selected chat.
+      `AiRequestOptions.systemMessage(String)`. It never suppresses
+      dynamic Freeplane guidance. In visible modes, it determines a new
+      chat's captured base system message and determines whether
+      `ADD_TO_CHAT` may append to the selected chat.
+  - `exact request system message`
+    - Optional trimmed exact system text supplied through
+      `AiRequestOptions.exactSystemMessage(String)`. It suppresses
+      Freeplane-composed system additions for the request state but does
+      not change `AiToolAvailability`, tool exposure, or provider-side
+      generated tool metadata.
   - `request profile message`
     - Optional profile instruction supplied through
       `AiRequestOptions.profile(String name)` or
@@ -102,20 +128,21 @@
   - `Freeplane provider guidance`
     - Generated system guidance needed for Freeplane tool, selection,
       code-host, profile-control, Markdown, or protocol behavior. It is
-      distinct from captured base system text and remains subordinate
-      to `AiToolAvailability`. Profile-control guidance is included
+      distinct from captured base system text, remains subordinate to
+      `AiToolAvailability`, and is omitted only when exact system-message
+      state requires exact text. Profile-control guidance is included
       only when profile messages are present or about to be injected.
       Markdown response guidance is included only for visible chat
       requests.
   - `next request instruction preview`
-    - Non-persistent rendering of the Freeplane-composed instruction
-      blocks that would be sent by the next visible request. It is
-      shown in a separate preview component after the profile selector
-      and before the message input, uses rendering close to committed
-      instruction messages, and is clearly labelled as preview. Because
-      user-message submission enforces pending profile changes, preview
-      applies any pending profile event before composing the previewed
-      system text. It excludes LangChain4j-generated tool descriptions.
+    - Non-persistent rendering of the effective instruction blocks that
+      would be sent by the next visible request. It is shown in a
+      separate preview component after the profile selector and before
+      the message input, uses rendering close to committed instruction
+      messages, and is clearly labelled as preview. Because user-message
+      submission enforces pending profile changes, preview applies any
+      pending profile event before resolving the previewed system text.
+      It excludes LangChain4j-generated tool descriptions.
 - **Constraints:**
   - Keep `AiToolAvailability` / `ToolAvailabilityLevel` as the real
     authorization boundary. System/profile text must not grant or
@@ -124,16 +151,20 @@
     before storage, comparison, rendering, or provider submission.
   - Treat an explicit empty system message as an empty system message,
     not as "use the global default".
-  - Captured and request system messages are base user text only. They
-    must not override or bypass dynamic Freeplane guidance.
+  - Captured and normal request system messages are base user text only.
+    They must not override or bypass dynamic Freeplane guidance.
+  - `AiRequestOptions.exactSystemMessage(String)` is the only request API
+    that may suppress Freeplane-composed system additions. It must not
+    change tool authorization, tool exposure, or provider-side generated
+    tool metadata.
   - Do not mutate a visible chat's captured base system message after
     chat creation.
   - `SHOW_IN_NEW_CHAT` always creates a new visible chat.
   - `ADD_TO_CHAT` is the only script mode that may append to an
     existing visible chat.
-  - If `ADD_TO_CHAT` supplies a system message and the trimmed value
-    differs from the selected chat's captured system message, create a
-    new visible chat instead of appending.
+  - If `ADD_TO_CHAT` supplies a system message and either the trimmed
+    value or exactness differs from the selected chat's captured system
+    state, create a new visible chat instead of appending.
   - If `ADD_TO_CHAT` supplies no system message, append using the
     selected chat's captured system message when a selected chat is
     available. Do not compare with the current global
@@ -144,8 +175,9 @@
     profile message.
   - Markdown response guidance must not be added to hidden requests.
   - Full instruction rendering must include Freeplane-composed dynamic
-    system guidance, but not automatically generated LangChain4j tool
-    descriptions or schemas.
+    system guidance for non-exact system messages and exact system text
+    for exact system messages, but not automatically
+    generated LangChain4j tool descriptions or schemas.
   - Next-request instruction preview must be rendered in a separate
     component after the profile selector and before the message input.
     It must be non-persistent and must not affect transcript
@@ -163,6 +195,9 @@
   - `freeplane_plugin_ai/.../chat/ui/AIChatPanel.java`
   - `freeplane_plugin_ai/.../chat/request/ChatPromptRunner.java`
   - `freeplane_plugin_ai/.../chat/request/AIChatService.java`
+  - `freeplane_plugin_ai/.../chat/request/AIChatServiceFactory.java`
+  - `freeplane_plugin_ai/.../chat/request/SystemInstructionComposer.java`
+  - `freeplane_plugin_ai/.../chat/request/SystemInstructionContext.java`
   - `freeplane_plugin_ai/.../chat/session/LiveChatController.java`
   - `freeplane_plugin_ai/.../chat/session/LiveChatSession.java`
   - `freeplane_plugin_ai/.../chat/session/TranscriptMemoryMapper.java`
@@ -182,6 +217,7 @@
   4. Add brief/full rendering for instruction blocks.
   5. Add script API and routing changes.
   6. Compose dynamic instruction text and preview next request.
+  7. Add exact request system-message API.
 
 ## Subtask: Persist captured chat system message
 - **Status:** review
@@ -1298,3 +1334,239 @@
       Markdown response guidance.
     - Use a chat with no profile messages and verify profile-control
       guidance is absent; then inject a profile and verify it appears.
+
+## Subtask: Add exact request system-message API
+- **Status:** done
+
+- **Research:**
+  ```plantuml
+  @startuml
+  set separator none
+  package "freeplane_api.ai" {
+    class AiRequestOptions {
+      - systemMessage : String
+      + getSystemMessage() : String
+      + builder() : Builder
+    }
+    class Builder {
+      + systemMessage(String) : Builder
+    }
+  }
+  package "freeplane_plugin_ai.chat.request" {
+    class ResolvedAiRequest {
+      - systemMessage : String
+      + getSystemMessage() : String
+    }
+    class SystemInstructionContext {
+      - baseSystemMessage : String
+      - toolAvailability : ToolAvailabilityLevel
+      - visibility : RequestVisibility
+      - hasProfileInstruction : boolean
+      - codeHostGuidance : String
+    }
+    class SystemInstructionComposer {
+      + compose(SystemInstructionContext) : String
+    }
+    class AIChatService {
+      - baseSystemMessage : String
+      - hiddenRequest : boolean
+      + systemMessageProvider(ToolAvailabilityLevel) : Function<Object, String>
+    }
+  }
+  package "freeplane_plugin_ai.tools" {
+    class MessageBuilder {
+      + buildForChat(String, ToolAvailabilityLevel, boolean, boolean) : String
+    }
+  }
+  package "freeplane_plugin_ai.chat.memory" {
+    class GeneralSystemMessage {
+      - baseText : String
+      - composedText : String
+      + baseText() : String
+      + composedText() : String
+    }
+  }
+  package "freeplane_plugin_ai.chat.history" {
+    class ChatTranscriptEntry {
+      - text : String
+      - baseSystemText : String
+    }
+  }
+  AiRequestOptions --> ResolvedAiRequest : copies text only
+  ResolvedAiRequest --> AIChatService
+  AIChatService --> SystemInstructionContext
+  SystemInstructionComposer ..> SystemInstructionContext
+  SystemInstructionComposer ..> MessageBuilder : always composes guidance
+  GeneralSystemMessage --> ChatTranscriptEntry : persists no exact flag
+  @enduml
+  ```
+
+  - `AiRequestOptions.Builder.systemMessage(String)` stores one nullable
+    system-message string. `AiRequestOptions` has no state that
+    distinguishes a normal base override from an exact override.
+  - `ScriptAiRequestService` copies only the normalized system-message
+    text into `ResolvedAiRequest` for raw `askAi(...)` and
+    `runAiPrompt(..., AiRequestOptions, ...)`.
+  - `SystemInstructionComposer.compose(...)` always calls
+    `MessageBuilder.buildForChat(...)` and then appends code-host
+    guidance when present. Its context has no exact-system flag.
+  - `AIChatService.systemMessageProvider(...)` chooses either the
+    request base system message or the configured global message, then
+    asks `SystemInstructionComposer` to add dynamic guidance.
+  - Visible chat memory stores `GeneralSystemMessage(baseText,
+    composedText)`. Transcript persistence stores `text` and
+    `baseSystemText`, but no flag that would preserve exact-system
+    behavior across restore or later visible-chat requests.
+  - `ADD_TO_CHAT` compatibility compares only the request base system
+    text with the selected chat's captured base system text.
+
+- **Analysis:**
+  - Keep `systemMessage(String)` as a normal base override because
+    existing callers rely on dynamic Freeplane guidance being composed
+    around that text.
+  - Exact system-message behavior needs explicit state because the same
+    trimmed text can mean either "base text plus dynamic additions" or
+    "exact provider system text".
+  - Visible chats need to persist exactness with captured system state;
+    otherwise restore or a later turn could silently add dynamic
+    guidance to a chat that started with an exact system message.
+  - `ADD_TO_CHAT` compatibility must include exactness, not only base
+    text, because appending an exact request to a non-exact chat or the
+    reverse changes the effective provider system contract.
+  - Exactness suppresses Freeplane-composed system additions only. It
+    must not change `AiToolAvailability`, allowed tool names, or
+    provider-side generated tool descriptions/schemas.
+
+- **Design:**
+  ```plantuml
+  @startuml
+  set separator none
+  package "freeplane_api.ai" {
+    class AiRequestOptions {
+      - systemMessage : String
+      - isSystemMessageExact : boolean
+      + getSystemMessage() : String
+      + isSystemMessageExact() : boolean
+      + builder() : Builder
+    }
+    class Builder {
+      + systemMessage(String) : Builder
+      + exactSystemMessage(String) : Builder
+    }
+  }
+  package "freeplane_plugin_ai.chat.request" {
+    class ResolvedAiRequest {
+      - systemMessage : String
+      - isSystemMessageExact : boolean
+      + getSystemMessage() : String
+      + isSystemMessageExact() : boolean
+    }
+    class SystemInstructionContext {
+      - baseSystemMessage : String
+      - isSystemMessageExact : boolean
+      - toolAvailability : ToolAvailabilityLevel
+      - visibility : RequestVisibility
+      - hasProfileInstruction : boolean
+      - codeHostGuidance : String
+    }
+    class SystemInstructionComposer {
+      + compose(SystemInstructionContext) : String
+    }
+    class AIChatService {
+      - baseSystemMessage : String
+      - isSystemMessageExact : boolean
+      - hiddenRequest : boolean
+      + systemMessageProvider(ToolAvailabilityLevel) : Function<Object, String>
+    }
+  }
+  package "freeplane_plugin_ai.chat.memory" {
+    class GeneralSystemMessage {
+      - baseText : String
+      - composedText : String
+      - isSystemMessageExact : boolean
+      + baseText() : String
+      + composedText() : String
+      + isSystemMessageExact() : boolean
+    }
+  }
+  package "freeplane_plugin_ai.chat.history" {
+    class ChatTranscriptEntry {
+      - text : String
+      - baseSystemText : String
+      - isSystemMessageExact : boolean
+    }
+  }
+  AiRequestOptions --> ResolvedAiRequest
+  ResolvedAiRequest --> AIChatService
+  AIChatService --> SystemInstructionContext
+  SystemInstructionComposer ..> SystemInstructionContext
+  GeneralSystemMessage --> ChatTranscriptEntry
+  @enduml
+  ```
+
+  - Add `AiRequestOptions.Builder.exactSystemMessage(String)` and
+    `AiRequestOptions.isSystemMessageExact()`.
+  - `systemMessage(String)` keeps current semantics and sets
+    `isSystemMessageExact` to `false`.
+  - `exactSystemMessage(String)` stores the same normalized
+    `systemMessage` value and sets `isSystemMessageExact` to `true` when
+    the value is non-`null`. `exactSystemMessage(null)` clears the
+    request system message and clears exactness.
+  - Explicit empty exact text is valid: `exactSystemMessage("")` builds
+    an empty exact system message with `isSystemMessageExact() == true`.
+  - If a builder receives both `systemMessage(...)` and
+    `exactSystemMessage(...)`, the later call wins for both text and
+    exactness.
+  - Copy `isSystemMessageExact` into `ResolvedAiRequest` for raw
+    `askAi(...)` and `runAiPrompt(..., AiRequestOptions, ...)`.
+  - Add `isSystemMessageExact` to `SystemInstructionContext`. When it is
+    true, `SystemInstructionComposer.compose(...)` returns the trimmed
+    base system message exactly and does not call
+    `MessageBuilder.buildForChat(...)` or append code-host guidance.
+  - Hidden requests pass `isSystemMessageExact` through
+    `ChatPromptRunner`, `AIChatServiceFactory`, and `AIChatService`.
+    Normal request system messages keep current dynamic composition;
+    exact request system messages produce exact provider system text.
+  - Visible new-chat routing stores both captured base text and
+    exactness in `GeneralSystemMessage`. New chats without a request
+    system message use the global default with non-exact system state.
+  - Persist and restore the exact flag with system transcript entries.
+  - `ADD_TO_CHAT` with a request system message appends only when both
+    the trimmed base text and `isSystemMessageExact` match the selected
+    chat. Otherwise it starts a new visible chat. `ADD_TO_CHAT` without
+    a request system message appends to the selected chat when available
+    and preserves that chat's existing exactness.
+  - Committed full instruction rendering and next-request preview pass
+    the visible chat's exact flag into `SystemInstructionComposer`, so
+    exact chats show exact system text and non-exact chats show composed
+    dynamic guidance.
+  - Do not change allowed-tool calculation, tool registration, profile
+    event insertion, prompt-reference composition, token accounting, or
+    LangChain4j-generated tool descriptions/schemas.
+
+- **Test specification:**
+  - Automated tests:
+    - Extend `AiRequestOptionsTest` to verify
+      `exactSystemMessage(String)`, `isSystemMessageExact()`, trimming,
+      explicit empty exact text, `exactSystemMessage(null)` clearing
+      exactness, and last-call-wins behavior with `systemMessage(...)`.
+    - Extend `ScriptAiRequestServiceTest` to verify raw `askAi(...)`
+      and `runAiPrompt(..., AiRequestOptions, ...)` copy the exact flag
+      into `ResolvedAiRequest`.
+    - Extend `SystemInstructionComposerTest` to verify exact contexts
+      return exact trimmed base text for visible and hidden requests,
+      all tool-availability levels, profile-control input, and
+      code-host guidance input, including explicit empty exact system
+      text.
+    - Extend `AIChatServiceTest` to verify exact provider system text
+      bypasses Freeplane-composed dynamic guidance while allowed tool
+      selection remains governed by `AiToolAvailability`.
+    - Extend `TranscriptMemoryMapperTest` and `ChatTranscriptStoreTest`
+      to verify exact-system flag persistence and restore.
+    - Extend `AIChatPanelScriptRequestTest` to verify visible new-chat
+      creation with exact system state, committed system rendering with
+      exact text, `ADD_TO_CHAT` compatibility comparing both base text
+      and exactness, `ADD_TO_CHAT` without a request system message
+      preserving selected-chat exactness, and next-request preview
+      rendering exact text for exact chats.
+  - Manual tests: N/A

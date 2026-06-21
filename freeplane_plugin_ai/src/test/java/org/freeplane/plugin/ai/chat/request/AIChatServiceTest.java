@@ -112,6 +112,7 @@ public class AIChatServiceTest {
             () -> Boolean.FALSE,
             availability -> mock(AIChatService.AIAssistant.class),
             " captured ",
+            false,
             false);
 
         String message = uut.systemMessageProvider(ToolAvailabilityLevel.READING).apply("request");
@@ -141,6 +142,7 @@ public class AIChatServiceTest {
             () -> Boolean.FALSE,
             availability -> mock(AIChatService.AIAssistant.class),
             " hidden base ",
+            false,
             true);
 
         String message = uut.systemMessageProvider(ToolAvailabilityLevel.READING).apply("request");
@@ -149,6 +151,37 @@ public class AIChatServiceTest {
         assertThat(message).contains("Available Freeplane tools are limited to reading");
         assertThat(message).contains("code guidance");
         assertThat(message).doesNotContain("Respond in Markdown.");
+    }
+
+    @Test
+    public void exactSystemMessageBypassesDynamicGuidanceButNotAllowedToolSelection() {
+        AIToolSet toolSet = mock(AIToolSet.class);
+        AiCodeToolSet aiCodeToolSet = mock(AiCodeToolSet.class);
+        when(aiCodeToolSet.systemMessageForChat("request")).thenReturn("code guidance");
+
+        AIChatService uut = new AIChatService(
+            mock(ChatModel.class),
+            toolSet,
+            Collections.<Object>singletonList(toolSet),
+            aiCodeToolSet,
+            null,
+            new ChatTokenUsageTracker(totals -> {
+            }),
+            null,
+            null,
+            null,
+            () -> ToolAvailabilityLevel.READING,
+            () -> Boolean.FALSE,
+            availability -> mock(AIChatService.AIAssistant.class),
+            " exact ",
+            true,
+            true);
+
+        String message = uut.systemMessageProvider(ToolAvailabilityLevel.READING).apply("request");
+
+        assertThat(message).isEqualTo("exact");
+        assertThat(uut.allowedToolNames(ToolAvailabilityLevel.READING))
+            .containsAll(ToolAvailabilityLevel.READING.allowedToolNames());
     }
 
     @Test
@@ -172,6 +205,7 @@ public class AIChatServiceTest {
             () -> Boolean.FALSE,
             availability -> mock(AIChatService.AIAssistant.class),
             "base",
+            false,
             false);
 
         String message = uut.systemMessageProvider(ToolAvailabilityLevel.READING).apply("request");

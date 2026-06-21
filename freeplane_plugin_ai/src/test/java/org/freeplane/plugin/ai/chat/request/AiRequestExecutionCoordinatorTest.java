@@ -108,7 +108,11 @@ public class AiRequestExecutionCoordinatorTest {
             mode,
             AiModelSelection.current(),
             AiToolAvailability.CURRENT,
-            (AiSelectionOverride) null);
+            (AiSelectionOverride) null,
+            null,
+            false,
+            null,
+            null);
     }
 
     private static class RecordingExecutor extends AbstractExecutorService {

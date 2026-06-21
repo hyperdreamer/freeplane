@@ -151,6 +151,7 @@ public class ChatPromptRunnerTest {
                 org.mockito.ArgumentMatchers.<Supplier<ToolAvailabilityLevel>>any(),
                 nullable(String.class),
                 nullable(String.class),
+                org.mockito.ArgumentMatchers.anyBoolean(),
                 org.mockito.ArgumentMatchers.anyBoolean()))
                 .thenReturn(mock(AIChatService.class));
 
@@ -162,7 +163,11 @@ public class ChatPromptRunnerTest {
                 null,
                 owner,
                 false,
-                mock(HiddenAiRequestObserverBridge.class));
+                mock(HiddenAiRequestObserverBridge.class),
+                null,
+                false,
+                true,
+                null);
 
             assertThat(started).isTrue();
             flushEdt();
@@ -204,6 +209,7 @@ public class ChatPromptRunnerTest {
                 org.mockito.ArgumentMatchers.<Supplier<ToolAvailabilityLevel>>any(),
                 nullable(String.class),
                 nullable(String.class),
+                org.mockito.ArgumentMatchers.anyBoolean(),
                 org.mockito.ArgumentMatchers.anyBoolean()))
                 .thenReturn(mock(AIChatService.class));
 
@@ -215,7 +221,11 @@ public class ChatPromptRunnerTest {
                 null,
                 owner,
                 true,
-                observer);
+                observer,
+                null,
+                false,
+                true,
+                null);
 
             assertThat(started).isTrue();
             flushEdt();

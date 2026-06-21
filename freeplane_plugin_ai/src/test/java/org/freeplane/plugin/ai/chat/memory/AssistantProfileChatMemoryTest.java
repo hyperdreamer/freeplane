@@ -29,7 +29,7 @@ public class AssistantProfileChatMemoryTest {
         uut.add(UserMessage.from("hello"));
         uut.add(new TranscriptHiddenSystemMessage("hidden"));
         uut.add(new AssistantProfileSwitchMessage("profile", "profile"));
-        uut.add(new GeneralSystemMessage("general"));
+        uut.add(new GeneralSystemMessage("general", "general", false));
 
         List<ChatMessage> messages = uut.messages();
         assertThat(messages).hasSize(5);
@@ -51,7 +51,7 @@ public class AssistantProfileChatMemoryTest {
     @Test
     public void providerSystemMessageUpdatesComposedTextWithoutReplacingCapturedBaseText() {
         AssistantProfileChatMemory uut = createMemory(500);
-        uut.add(new GeneralSystemMessage("base", "old composed"));
+        uut.add(new GeneralSystemMessage("base", "old composed", false));
 
         uut.add(SystemMessage.from("new composed"));
 
@@ -78,7 +78,7 @@ public class AssistantProfileChatMemoryTest {
     public void storedGeneralSystemMessageIsProjectorInputNotSelectedChatContent() {
         AssistantProfileChatMemory uut = createMemory(500);
 
-        uut.add(new GeneralSystemMessage("general"));
+        uut.add(new GeneralSystemMessage("general", "general", false));
         uut.add(UserMessage.from("u1"));
         uut.add(AiMessage.from("a1"));
 
@@ -112,7 +112,7 @@ public class AssistantProfileChatMemoryTest {
             AiMessage.from("second answer"));
         AssistantProfileChatMemory uut = createMemory(maxTokens);
 
-        uut.add(new GeneralSystemMessage("general"));
+        uut.add(new GeneralSystemMessage("general", "general", false));
         uut.add(new TranscriptHiddenSystemMessage("hidden"));
         uut.add(UserMessage.from("first"));
         uut.add(AiMessage.from("first answer"));

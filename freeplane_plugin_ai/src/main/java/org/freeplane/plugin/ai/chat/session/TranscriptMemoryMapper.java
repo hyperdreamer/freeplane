@@ -73,7 +73,7 @@ class TranscriptMemoryMapper {
         if (entry.getRole() == ChatTranscriptRole.SYSTEM) {
             String composedText = entry.getText() == null ? "" : entry.getText();
             String baseText = entry.getBaseSystemText() == null ? composedText : entry.getBaseSystemText();
-            return new GeneralSystemMessage(baseText, composedText);
+            return new GeneralSystemMessage(baseText, composedText, entry.isSystemMessageExact());
         }
         if (entry.getRole() == ChatTranscriptRole.ASSISTANT) {
             if (entry.getText() == null) {
@@ -160,7 +160,8 @@ class TranscriptMemoryMapper {
             return new ChatTranscriptEntry(
                 ChatTranscriptRole.SYSTEM,
                 systemMessage.text(),
-                systemMessage.baseText());
+                systemMessage.baseText(),
+                systemMessage.isSystemMessageExact());
         }
         if (message instanceof RemovedForSpaceSystemMessage) {
             return new ChatTranscriptEntry(ChatTranscriptRole.REMOVED_FOR_SPACE_SYSTEM,

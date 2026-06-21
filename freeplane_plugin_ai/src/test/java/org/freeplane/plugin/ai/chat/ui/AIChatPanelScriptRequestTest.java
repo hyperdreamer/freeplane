@@ -445,6 +445,27 @@ public class AIChatPanelScriptRequestTest {
     }
 
     @Test
+    public void instructionPreviewUsesExactSystemMessageWithoutDynamicGuidance() throws Exception {
+        PanelHarness harness = newPanelHarness(true);
+        NextRequestInstructionPreviewView previewView = mock(NextRequestInstructionPreviewView.class);
+        harness.liveChatController.chatMemory(harness.sessionId).add(
+            new GeneralSystemMessage(" exact system ", " exact system ", true));
+        setField(harness.panel, "nextRequestInstructionPreviewView", previewView);
+        setField(harness.panel, "showNextRequestInstructionPreview", true);
+
+        invokeRefreshInstructionPreview(harness.panel);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<java.util.List<PreviewInstructionBlock>> blocksCaptor =
+            ArgumentCaptor.forClass((Class) java.util.List.class);
+        verify(previewView).showPreview(blocksCaptor.capture());
+        java.util.List<PreviewInstructionBlock> blocks = blocksCaptor.getValue();
+        assertThat(blocks.get(0).getKind()).isEqualTo(PreviewInstructionKind.SYSTEM);
+        assertThat(blocks.get(0).getText()).isEqualTo("exact system");
+        assertThat(blocks.get(0).getText()).doesNotContain("Respond in Markdown.");
+    }
+
+    @Test
     public void instructionPreviewRepeatsLatestCommittedProfileWhenThereIsNoPendingProfileChange() throws Exception {
         PanelHarness harness = newPanelHarness(true);
         NextRequestInstructionPreviewView previewView = mock(NextRequestInstructionPreviewView.class);
@@ -528,6 +549,10 @@ public class AIChatPanelScriptRequestTest {
             AiRequestMode.ADD_TO_CHAT,
             AiModelSelection.explicit("openrouter", "openai/gpt-4.1-mini"),
             AiToolAvailability.DISABLED,
+            null,
+            null,
+            false,
+            null,
             null);
         AiRequestHandleImpl handle = new AiRequestHandleImpl(Runnable::run, result -> {
         });
@@ -563,6 +588,7 @@ public class AIChatPanelScriptRequestTest {
                 org.mockito.ArgumentMatchers.<Supplier<ToolAvailabilityLevel>>any(),
                 nullable(String.class),
                 nullable(String.class),
+                org.mockito.ArgumentMatchers.anyBoolean(),
                 org.mockito.ArgumentMatchers.anyBoolean()))
                 .thenAnswer(invocation -> {
                     @SuppressWarnings("unchecked")
@@ -589,7 +615,7 @@ public class AIChatPanelScriptRequestTest {
     @Test
     public void addToChatWithMatchingRequestSystemMessageReusesSelectedSession() throws Exception {
         PanelHarness harness = newPanelHarness(true);
-        harness.liveChatController.chatMemory(harness.sessionId).add(new GeneralSystemMessage("selected system"));
+        harness.liveChatController.chatMemory(harness.sessionId).add(new GeneralSystemMessage("selected system", "selected system", false));
         ChatRequestFlow requestFlow = mock(ChatRequestFlow.class);
         ChatRequestFlowFactory chatRequestFlowFactory = mock(ChatRequestFlowFactory.class);
         when(chatRequestFlowFactory.create(any(), any())).thenReturn(requestFlow);
@@ -604,6 +630,7 @@ public class AIChatPanelScriptRequestTest {
             AiToolAvailability.CURRENT,
             null,
             " selected system ",
+            false,
             null,
             null);
 
@@ -638,6 +665,7 @@ public class AIChatPanelScriptRequestTest {
                 org.mockito.ArgumentMatchers.<Supplier<ToolAvailabilityLevel>>any(),
                 nullable(String.class),
                 nullable(String.class),
+                org.mockito.ArgumentMatchers.anyBoolean(),
                 org.mockito.ArgumentMatchers.anyBoolean()))
                 .thenAnswer(invocation -> {
                     seenSystemMessage.set(invocation.getArgument(9));
@@ -657,14 +685,16 @@ public class AIChatPanelScriptRequestTest {
     }
 
     @Test
-    public void addToChatWithDifferentRequestSystemMessageStartsNewSession() throws Exception {
+    public void addToChatWithMatchingExactRequestSystemMessageReusesSelectedSession() throws Exception {
         PanelHarness harness = newPanelHarness(true);
-        harness.liveChatController.chatMemory(harness.sessionId).add(new GeneralSystemMessage("old system"));
+        harness.liveChatController.chatMemory(harness.sessionId).add(
+            new GeneralSystemMessage("selected system", "selected system", true));
         ChatRequestFlow requestFlow = mock(ChatRequestFlow.class);
         ChatRequestFlowFactory chatRequestFlowFactory = mock(ChatRequestFlowFactory.class);
         when(chatRequestFlowFactory.create(any(), any())).thenReturn(requestFlow);
         setField(harness.panel, "chatRequestFlowFactory", chatRequestFlowFactory);
         AtomicReference<String> seenSystemMessage = new AtomicReference<String>();
+        AtomicReference<Boolean> seenIsSystemMessageExact = new AtomicReference<Boolean>();
         ResolvedAiRequest request = new ResolvedAiRequest(
             "Prompt",
             null,
@@ -673,7 +703,8 @@ public class AIChatPanelScriptRequestTest {
             AiModelSelection.current(),
             AiToolAvailability.CURRENT,
             null,
-            "new system",
+            " selected system ",
+            true,
             null,
             null);
 
@@ -708,6 +739,150 @@ public class AIChatPanelScriptRequestTest {
                 org.mockito.ArgumentMatchers.<Supplier<ToolAvailabilityLevel>>any(),
                 nullable(String.class),
                 nullable(String.class),
+                eq(true),
+                eq(false)))
+                .thenAnswer(invocation -> {
+                    seenSystemMessage.set(invocation.getArgument(9));
+                    seenIsSystemMessageExact.set(invocation.getArgument(10));
+                    return mock(AIChatService.class);
+                });
+
+            ChatRequestFlow started = harness.panel.startAddToChatAiRequestAtDispatch(
+                request,
+                new AiRequestHandleImpl(Runnable::run, result -> {
+                }));
+
+            assertThat(started).isSameAs(requestFlow);
+        }
+
+        assertThat(harness.liveChatController.currentSessionId()).isEqualTo(harness.sessionId);
+        assertThat(seenSystemMessage.get()).isEqualTo("selected system");
+        assertThat(seenIsSystemMessageExact.get()).isTrue();
+    }
+
+    @Test
+    public void addToChatWithSameTextButDifferentExactnessStartsNewSession() throws Exception {
+        PanelHarness harness = newPanelHarness(true);
+        harness.liveChatController.chatMemory(harness.sessionId).add(new GeneralSystemMessage("same system", "same system", false));
+        ChatRequestFlow requestFlow = mock(ChatRequestFlow.class);
+        ChatRequestFlowFactory chatRequestFlowFactory = mock(ChatRequestFlowFactory.class);
+        when(chatRequestFlowFactory.create(any(), any())).thenReturn(requestFlow);
+        setField(harness.panel, "chatRequestFlowFactory", chatRequestFlowFactory);
+        ResolvedAiRequest request = new ResolvedAiRequest(
+            "Prompt",
+            null,
+            Duration.ofSeconds(10),
+            AiRequestMode.ADD_TO_CHAT,
+            AiModelSelection.current(),
+            AiToolAvailability.CURRENT,
+            null,
+            "same system",
+            true,
+            null,
+            null);
+
+        try (MockedStatic<TextUtils> textUtils = mockStatic(TextUtils.class);
+             MockedStatic<ResourceController> resourceControllers = mockStatic(ResourceController.class);
+             MockedStatic<UITools> uiTools = mockStatic(UITools.class);
+             MockedStatic<AIChatServiceFactory> chatServiceFactory = mockStatic(AIChatServiceFactory.class);
+             MockedConstruction<AIToolSetBuilder> toolSetBuilders = mockConstruction(AIToolSetBuilder.class,
+                 (mock, context) -> {
+                     AIToolSet toolSet = mock(AIToolSet.class);
+                     when(mock.toolCallSummaryHandler(any())).thenReturn(mock);
+                     when(mock.availableMaps(any())).thenReturn(mock);
+                     when(mock.mapAccessListener(any())).thenReturn(mock);
+                     when(mock.codeHostService(org.mockito.ArgumentMatchers.nullable(org.freeplane.features.ai.code.AiCodeHostService.class))).thenReturn(mock);
+                     when(mock.aiCodeOperationAuthorizer(org.mockito.ArgumentMatchers.nullable(org.freeplane.plugin.ai.tools.code.AiCodeOperationAuthorizer.class))).thenReturn(mock);
+                     when(mock.build()).thenReturn(toolSet);
+                     when(mock.buildToolObjects()).thenReturn(java.util.Collections.<Object>singletonList(toolSet));
+                 })) {
+            ResourceController resourceController = mock(ResourceController.class);
+            resourceControllers.when(ResourceController::getResourceController).thenReturn(resourceController);
+            JTabbedPane tabs = mock(JTabbedPane.class);
+            when(tabs.getSelectedComponent()).thenReturn(harness.panel);
+            uiTools.when(UITools::getFreeplaneTabbedPanel).thenReturn(tabs);
+            chatServiceFactory.when(() -> AIChatServiceFactory.createService(
+                any(AIToolSet.class),
+                org.mockito.ArgumentMatchers.<java.util.Collection<?>>any(),
+                any(ChatMemory.class),
+                any(ChatTokenUsageTracker.class),
+                any(ToolCallSummaryHandler.class),
+                org.mockito.ArgumentMatchers.<Supplier<Boolean>>any(),
+                org.mockito.ArgumentMatchers.<Consumer<TokenUsage>>any(),
+                org.mockito.ArgumentMatchers.<Supplier<ToolAvailabilityLevel>>any(),
+                nullable(String.class),
+                nullable(String.class),
+                eq(true),
+                eq(false)))
+                .thenReturn(mock(AIChatService.class));
+
+            ChatRequestFlow started = harness.panel.startAddToChatAiRequestAtDispatch(
+                request,
+                new AiRequestHandleImpl(Runnable::run, result -> {
+                }));
+
+            assertThat(started).isSameAs(requestFlow);
+        }
+
+        assertThat(harness.liveChatController.currentSessionId()).isNotEqualTo(harness.sessionId);
+        ChatMemory newMemory = harness.liveChatController.chatMemory(harness.liveChatController.currentSessionId());
+        assertThat(((AssistantProfileChatMemory) newMemory).isSystemMessageExact()).isTrue();
+    }
+
+    @Test
+    public void addToChatWithDifferentRequestSystemMessageStartsNewSession() throws Exception {
+        PanelHarness harness = newPanelHarness(true);
+        harness.liveChatController.chatMemory(harness.sessionId).add(new GeneralSystemMessage("old system", "old system", false));
+        ChatRequestFlow requestFlow = mock(ChatRequestFlow.class);
+        ChatRequestFlowFactory chatRequestFlowFactory = mock(ChatRequestFlowFactory.class);
+        when(chatRequestFlowFactory.create(any(), any())).thenReturn(requestFlow);
+        setField(harness.panel, "chatRequestFlowFactory", chatRequestFlowFactory);
+        AtomicReference<String> seenSystemMessage = new AtomicReference<String>();
+        ResolvedAiRequest request = new ResolvedAiRequest(
+            "Prompt",
+            null,
+            Duration.ofSeconds(10),
+            AiRequestMode.ADD_TO_CHAT,
+            AiModelSelection.current(),
+            AiToolAvailability.CURRENT,
+            null,
+            "new system",
+            false,
+            null,
+            null);
+
+        try (MockedStatic<TextUtils> textUtils = mockStatic(TextUtils.class);
+             MockedStatic<ResourceController> resourceControllers = mockStatic(ResourceController.class);
+             MockedStatic<UITools> uiTools = mockStatic(UITools.class);
+             MockedStatic<AIChatServiceFactory> chatServiceFactory = mockStatic(AIChatServiceFactory.class);
+             MockedConstruction<AIToolSetBuilder> toolSetBuilders = mockConstruction(AIToolSetBuilder.class,
+                 (mock, context) -> {
+                     AIToolSet toolSet = mock(AIToolSet.class);
+                     when(mock.toolCallSummaryHandler(any())).thenReturn(mock);
+                     when(mock.availableMaps(any())).thenReturn(mock);
+                     when(mock.mapAccessListener(any())).thenReturn(mock);
+                     when(mock.codeHostService(org.mockito.ArgumentMatchers.nullable(org.freeplane.features.ai.code.AiCodeHostService.class))).thenReturn(mock);
+                     when(mock.aiCodeOperationAuthorizer(org.mockito.ArgumentMatchers.nullable(org.freeplane.plugin.ai.tools.code.AiCodeOperationAuthorizer.class))).thenReturn(mock);
+                     when(mock.build()).thenReturn(toolSet);
+                     when(mock.buildToolObjects()).thenReturn(java.util.Collections.<Object>singletonList(toolSet));
+                 })) {
+            ResourceController resourceController = mock(ResourceController.class);
+            resourceControllers.when(ResourceController::getResourceController).thenReturn(resourceController);
+            JTabbedPane tabs = mock(JTabbedPane.class);
+            when(tabs.getSelectedComponent()).thenReturn(harness.panel);
+            uiTools.when(UITools::getFreeplaneTabbedPanel).thenReturn(tabs);
+            chatServiceFactory.when(() -> AIChatServiceFactory.createService(
+                any(AIToolSet.class),
+                org.mockito.ArgumentMatchers.<java.util.Collection<?>>any(),
+                any(ChatMemory.class),
+                any(ChatTokenUsageTracker.class),
+                any(ToolCallSummaryHandler.class),
+                org.mockito.ArgumentMatchers.<Supplier<Boolean>>any(),
+                org.mockito.ArgumentMatchers.<Consumer<TokenUsage>>any(),
+                org.mockito.ArgumentMatchers.<Supplier<ToolAvailabilityLevel>>any(),
+                nullable(String.class),
+                nullable(String.class),
+                org.mockito.ArgumentMatchers.anyBoolean(),
                 org.mockito.ArgumentMatchers.anyBoolean()))
                 .thenAnswer(invocation -> {
                     seenSystemMessage.set(invocation.getArgument(9));
@@ -741,6 +916,10 @@ public class AIChatPanelScriptRequestTest {
             AiRequestMode.ADD_TO_CHAT,
             AiModelSelection.current(),
             AiToolAvailability.CURRENT,
+            null,
+            null,
+            false,
+            null,
             null);
 
         try (MockedStatic<TextUtils> textUtils = mockStatic(TextUtils.class);
@@ -774,6 +953,7 @@ public class AIChatPanelScriptRequestTest {
                 org.mockito.ArgumentMatchers.<Supplier<ToolAvailabilityLevel>>any(),
                 nullable(String.class),
                 nullable(String.class),
+                org.mockito.ArgumentMatchers.anyBoolean(),
                 org.mockito.ArgumentMatchers.anyBoolean()))
                 .thenReturn(mock(AIChatService.class));
 
@@ -803,6 +983,10 @@ public class AIChatPanelScriptRequestTest {
             AiRequestMode.ADD_TO_CHAT,
             AiModelSelection.current(),
             AiToolAvailability.CURRENT,
+            null,
+            null,
+            false,
+            null,
             null);
 
         try (MockedStatic<TextUtils> textUtils = mockStatic(TextUtils.class);
@@ -836,6 +1020,7 @@ public class AIChatPanelScriptRequestTest {
                 org.mockito.ArgumentMatchers.<Supplier<ToolAvailabilityLevel>>any(),
                 nullable(String.class),
                 nullable(String.class),
+                org.mockito.ArgumentMatchers.anyBoolean(),
                 org.mockito.ArgumentMatchers.anyBoolean()))
                 .thenReturn(mock(AIChatService.class));
 
@@ -870,6 +1055,10 @@ public class AIChatPanelScriptRequestTest {
             AiRequestMode.ADD_TO_CHAT,
             AiModelSelection.current(),
             AiToolAvailability.CURRENT,
+            null,
+            null,
+            false,
+            null,
             null);
 
         try (MockedStatic<TextUtils> textUtils = mockStatic(TextUtils.class);
@@ -903,6 +1092,7 @@ public class AIChatPanelScriptRequestTest {
                 org.mockito.ArgumentMatchers.<Supplier<ToolAvailabilityLevel>>any(),
                 nullable(String.class),
                 nullable(String.class),
+                org.mockito.ArgumentMatchers.anyBoolean(),
                 org.mockito.ArgumentMatchers.anyBoolean()))
                 .thenAnswer(invocation -> {
                     @SuppressWarnings("unchecked")
@@ -946,6 +1136,10 @@ public class AIChatPanelScriptRequestTest {
                 AiRequestMode.ADD_TO_CHAT,
                 AiModelSelection.current(),
                 AiToolAvailability.CURRENT,
+                null,
+                null,
+                false,
+                null,
                 null),
             handle);
 
@@ -975,6 +1169,10 @@ public class AIChatPanelScriptRequestTest {
             null,
             null,
             true,
+            null,
+            null,
+            false,
+            true,
             null)).thenReturn(true);
         when(shownRunner.startShownPrompt("Prompt body", null, ToolAvailabilityLevel.EDITING, null, null))
             .thenReturn(true);
@@ -999,6 +1197,10 @@ public class AIChatPanelScriptRequestTest {
             null,
             null,
             true,
+            null,
+            null,
+            false,
+            true,
             null);
         verify(chatPromptRunnerFactory).createShown(any(), any(), eq(requestFlow), any(), any());
         verify(shownRunner).startShownPrompt("Prompt body", null, ToolAvailabilityLevel.EDITING, null, null);
@@ -1022,6 +1224,10 @@ public class AIChatPanelScriptRequestTest {
             null,
             null,
             true,
+            null,
+            null,
+            false,
+            true,
             null)).thenReturn(true);
         setField(harness.panel, "chatPromptRunnerFactory", chatPromptRunnerFactory);
 
@@ -1035,6 +1241,10 @@ public class AIChatPanelScriptRequestTest {
             ToolAvailabilityLevel.EDITING,
             null,
             null,
+            true,
+            null,
+            null,
+            false,
             true,
             null);
     }

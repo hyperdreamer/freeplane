@@ -195,12 +195,20 @@ public class LiveChatController {
         return memory == null || memory.capturedSystemMessage() == null ? "" : memory.capturedSystemMessage().trim();
     }
 
-    public void updateSessionSystemMessage(LiveChatSessionId sessionId, String baseText, String composedText) {
+    public boolean isSessionSystemMessageExact(LiveChatSessionId sessionId) {
+        AssistantProfileChatMemory memory = activeAssistantProfileChatMemory(liveChatSessionManager.findSession(sessionId));
+        return memory != null && memory.isSystemMessageExact();
+    }
+
+    public void updateSessionSystemMessage(LiveChatSessionId sessionId,
+                                           String baseText,
+                                           String composedText,
+                                           boolean isSystemMessageExact) {
         AssistantProfileChatMemory memory = activeAssistantProfileChatMemory(liveChatSessionManager.findSession(sessionId));
         if (memory == null) {
             return;
         }
-        memory.updateSystemMessage(baseText, composedText);
+        memory.updateSystemMessage(baseText, composedText, isSystemMessageExact);
     }
 
     public boolean sessionHasProfileInstruction(LiveChatSessionId sessionId) {
@@ -602,7 +610,8 @@ public class LiveChatController {
             TRANSCRIPT_HIDDEN_SYSTEM_MESSAGE);
         AssistantProfileChatMemory memory = activeAssistantProfileChatMemory(session);
         if (memory != null && !hasSystemTranscriptEntry(record.getEntries())) {
-            memory.add(new GeneralSystemMessage(MessageBuilder.configuredSystemMessage()));
+            String systemMessage = MessageBuilder.configuredSystemMessage();
+            memory.add(new GeneralSystemMessage(systemMessage, systemMessage, false));
         }
         if (memory != null) {
             memory.initializeUndoRedoFromMessages();
@@ -634,7 +643,8 @@ public class LiveChatController {
 
     private ChatMemory createChatMemoryWithCapturedSystemMessage(String systemMessage) {
         ChatMemory chatMemory = createChatMemoryWithoutCapturedSystemMessage();
-        chatMemory.add(new GeneralSystemMessage(systemMessage == null ? "" : systemMessage.trim()));
+        String normalizedSystemMessage = systemMessage == null ? "" : systemMessage.trim();
+        chatMemory.add(new GeneralSystemMessage(normalizedSystemMessage, normalizedSystemMessage, false));
         return chatMemory;
     }
 
@@ -656,7 +666,8 @@ public class LiveChatController {
         }
         AssistantProfileChatMemory assistantProfileChatMemory = (AssistantProfileChatMemory) chatMemory;
         if (assistantProfileChatMemory.capturedSystemMessage() == null) {
-            assistantProfileChatMemory.add(new GeneralSystemMessage(defaultSystemMessage));
+            String systemMessage = defaultSystemMessage == null ? "" : defaultSystemMessage.trim();
+            assistantProfileChatMemory.add(new GeneralSystemMessage(systemMessage, systemMessage, false));
         }
     }
 

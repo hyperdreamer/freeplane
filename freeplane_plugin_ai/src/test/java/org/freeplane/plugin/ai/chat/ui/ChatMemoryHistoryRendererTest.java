@@ -28,7 +28,7 @@ public class ChatMemoryHistoryRendererTest {
     public void rebuildFromMessages_rendersUserAssistantAndProfileMessages() {
         RenderFixture fixture = new RenderFixture();
         List<ChatMemoryRenderEntry> messages = Arrays.asList(
-            ChatMemoryRenderEntry.forMessage(new GeneralSystemMessage("system hidden")),
+            ChatMemoryRenderEntry.forMessage(new GeneralSystemMessage("system hidden", "system hidden", false)),
             ChatMemoryRenderEntry.forMessage(UserMessage.from("u1")),
             ChatMemoryRenderEntry.forMessage(new AssistantProfileSwitchMessage("profile", "Profile A")),
             ChatMemoryRenderEntry.forMessage(new InstructionAckMessage()),
@@ -92,7 +92,7 @@ public class ChatMemoryHistoryRendererTest {
         RenderFixture fixture = new RenderFixture();
         fixture.uut.setInstructionHistoryRenderingMode(InstructionHistoryRenderingMode.FULL);
         List<ChatMemoryRenderEntry> messages = Arrays.asList(
-            ChatMemoryRenderEntry.forMessage(new GeneralSystemMessage("system snapshot")),
+            ChatMemoryRenderEntry.forMessage(new GeneralSystemMessage("system snapshot", "system snapshot", false)),
             ChatMemoryRenderEntry.forMessage(new AssistantProfileSwitchMessage(
                 "profile",
                 "Profile A",

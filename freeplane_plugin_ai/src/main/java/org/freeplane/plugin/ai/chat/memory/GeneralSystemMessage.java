@@ -6,15 +6,13 @@ public class GeneralSystemMessage extends SystemMessage {
     private static final String NON_EMPTY_SUPER_TEXT = "captured system message";
     private final String baseText;
     private final String composedText;
+    private final boolean isSystemMessageExact;
 
-    public GeneralSystemMessage(String text) {
-        this(text, text);
-    }
-
-    public GeneralSystemMessage(String baseText, String composedText) {
+    public GeneralSystemMessage(String baseText, String composedText, boolean isSystemMessageExact) {
         super(normalizeForSuper(composedText));
         this.baseText = normalize(baseText);
         this.composedText = normalize(composedText);
+        this.isSystemMessageExact = isSystemMessageExact;
     }
 
     public String baseText() {
@@ -23,6 +21,10 @@ public class GeneralSystemMessage extends SystemMessage {
 
     public String composedText() {
         return composedText;
+    }
+
+    public boolean isSystemMessageExact() {
+        return isSystemMessageExact;
     }
 
     @Override

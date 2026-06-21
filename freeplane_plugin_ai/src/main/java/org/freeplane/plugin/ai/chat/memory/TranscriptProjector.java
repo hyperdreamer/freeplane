@@ -19,7 +19,8 @@ class TranscriptProjector {
             entries.add(new ChatTranscriptEntry(
                 ChatTranscriptRole.SYSTEM,
                 generalSystemMessage.text(),
-                generalSystemMessage.baseText()));
+                generalSystemMessage.baseText(),
+                generalSystemMessage.isSystemMessageExact()));
         }
         if (filteredChatMessages == null) {
             return entries;

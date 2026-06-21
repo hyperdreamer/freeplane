@@ -68,7 +68,8 @@ public class AIChatServiceFactory {
                                               Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier,
                                               String selectedModelOverride) {
         return createService(toolSet, toolObjects, chatMemory, chatTokenUsageTracker, toolCallSummaryHandler,
-            cancellationSupplier, tokenUsageConsumer, toolAvailabilitySupplier, selectedModelOverride, null, false);
+            cancellationSupplier, tokenUsageConsumer, toolAvailabilitySupplier, selectedModelOverride,
+            null, false, false);
     }
 
     public static AIChatService createService(AIToolSet toolSet,
@@ -81,6 +82,7 @@ public class AIChatServiceFactory {
                                               Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier,
                                               String selectedModelOverride,
                                               String systemMessage,
+                                              boolean isSystemMessageExact,
                                               boolean hiddenRequest) {
         Objects.requireNonNull(toolSet, "toolSet");
         Collection<?> effectiveToolObjects = toolObjects == null
@@ -105,12 +107,14 @@ public class AIChatServiceFactory {
                 () -> Boolean.valueOf(new FormulaEditingSettings().isEnabled()),
                 null,
                 systemMessage,
+                isSystemMessageExact,
                 hiddenRequest);
         }
         return new AIChatService(chatLanguageModel, toolSet, effectiveToolObjects, aiCodeToolSet, chatMemory,
             chatTokenUsageTracker, toolCallSummaryHandler, cancellationSupplier, tokenUsageConsumer,
             toolAvailabilitySupplier, () -> Boolean.valueOf(new FormulaEditingSettings().isEnabled()), null,
             systemMessage,
+            isSystemMessageExact,
             hiddenRequest);
     }
 

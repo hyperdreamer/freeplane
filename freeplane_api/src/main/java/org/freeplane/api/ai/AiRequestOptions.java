@@ -12,6 +12,7 @@ public class AiRequestOptions {
     private final AiToolAvailability toolAvailability;
     private final AiSelectionOverride selectionOverride;
     private final String systemMessage;
+    private final boolean isSystemMessageExact;
     private final String profileName;
     private final String profileMessage;
 
@@ -22,6 +23,7 @@ public class AiRequestOptions {
         this.toolAvailability = builder.toolAvailability;
         this.selectionOverride = builder.selectionOverride;
         this.systemMessage = normalizeNullable(builder.systemMessage);
+        this.isSystemMessageExact = builder.isSystemMessageExact && this.systemMessage != null;
         this.profileName = normalizeNullable(builder.profileName);
         this.profileMessage = normalizeNullable(builder.profileMessage);
     }
@@ -54,6 +56,10 @@ public class AiRequestOptions {
         return systemMessage;
     }
 
+    public boolean isSystemMessageExact() {
+        return isSystemMessageExact;
+    }
+
     public String getProfileName() {
         return profileName;
     }
@@ -81,6 +87,7 @@ public class AiRequestOptions {
         private AiToolAvailability toolAvailability;
         private AiSelectionOverride selectionOverride;
         private String systemMessage;
+        private boolean isSystemMessageExact;
         private String profileName;
         private String profileMessage;
 
@@ -111,6 +118,13 @@ public class AiRequestOptions {
 
         public Builder systemMessage(String systemMessage) {
             this.systemMessage = systemMessage;
+            this.isSystemMessageExact = false;
+            return this;
+        }
+
+        public Builder exactSystemMessage(String systemMessage) {
+            this.systemMessage = systemMessage;
+            this.isSystemMessageExact = systemMessage != null;
             return this;
         }
 
