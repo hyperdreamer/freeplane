@@ -36,6 +36,7 @@ public class AssistantProfileChatMemory implements ChatMemory {
     private GeneralSystemMessage generalSystemMessage;
     private final List<ChatMessage> conversationMessages = new ArrayList<>();
     private final List<Integer> turnEndIndexes = new ArrayList<>();
+    private PromptReferenceUserMessage nextPromptReferenceMessage;
     private ChatMessageFilter.FilteringComputation cachedFilteringComputation;
     private boolean derivedFilteringDirty = true;
 
@@ -89,7 +90,11 @@ public class AssistantProfileChatMemory implements ChatMemory {
             invalidateDerivedFiltering();
             return;
         }
+        if (message instanceof UserMessage) {
+            message = consumeNextPromptReferenceIfMatching((UserMessage) message);
+        }
         if (message instanceof UserMessage
+            && !(message instanceof PromptReferenceUserMessage)
             && !(message instanceof AutomaticCodeStatusMessage)
             && AutomaticCodeStatusMessage.isAutomaticCodeStatusText(((UserMessage) message).singleText())) {
             message = new AutomaticCodeStatusMessage(((UserMessage) message).singleText());
@@ -110,6 +115,7 @@ public class AssistantProfileChatMemory implements ChatMemory {
     @Override
     public void clear() {
         generalSystemMessage = null;
+        nextPromptReferenceMessage = null;
         conversationMessages.clear();
         viewState.clear();
         turnEndIndexes.clear();
@@ -126,6 +132,7 @@ public class AssistantProfileChatMemory implements ChatMemory {
     }
 
     public void truncateConversationMessagesTo(int size) {
+        nextPromptReferenceMessage = null;
         int targetSize = Math.max(0, Math.min(size, conversationMessages.size()));
         while (conversationMessages.size() > targetSize) {
             removeConversationMessage(conversationMessages.size() - 1);
@@ -137,6 +144,10 @@ public class AssistantProfileChatMemory implements ChatMemory {
 
     public boolean canRedo() {
         return turnTracker.canRedo(turnEndIndexes, viewState);
+    }
+
+    public void useNextPromptReference(PromptReferenceUserMessage promptReferenceMessage) {
+        nextPromptReferenceMessage = promptReferenceMessage == null ? null : promptReferenceMessage.copy();
     }
 
     public String undo() {
@@ -381,6 +392,9 @@ public class AssistantProfileChatMemory implements ChatMemory {
         int safeTo = Math.min(to, conversationMessages.size());
         for (int index = safeTo - 1; index >= safeFrom; index--) {
             ChatMessage message = conversationMessages.get(index);
+            if (message instanceof PromptReferenceUserMessage) {
+                return ((PromptReferenceUserMessage) message).getVisibleText();
+            }
             if (message instanceof UserMessage) {
                 String text = ((UserMessage) message).singleText();
                 if (text != null && !text.startsWith(MessageBuilder.CONTROL_INSTRUCTION_PREFIX)) {
@@ -389,6 +403,22 @@ public class AssistantProfileChatMemory implements ChatMemory {
             }
         }
         return "";
+    }
+
+    private ChatMessage consumeNextPromptReferenceIfMatching(UserMessage message) {
+        PromptReferenceUserMessage promptReferenceMessage = nextPromptReferenceMessage;
+        if (promptReferenceMessage == null) {
+            return message;
+        }
+        String text = message.singleText();
+        if (promptReferenceMessage.getModelFacingText().equals(text)) {
+            nextPromptReferenceMessage = null;
+            return promptReferenceMessage.copy();
+        }
+        if (text != null && !text.startsWith(MessageBuilder.CONTROL_INSTRUCTION_PREFIX)) {
+            nextPromptReferenceMessage = null;
+        }
+        return message;
     }
 
     private void setGeneralSystemMessage(GeneralSystemMessage message) {

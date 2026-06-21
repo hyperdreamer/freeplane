@@ -58,6 +58,17 @@ class TranscriptProjector {
             }
             return new ChatTranscriptEntry(ChatTranscriptRole.AUTOMATIC_CODE_STATUS, text);
         }
+        if (message instanceof PromptReferenceUserMessage) {
+            PromptReferenceUserMessage promptReferenceMessage = (PromptReferenceUserMessage) message;
+            ChatTranscriptEntry entry = new ChatTranscriptEntry(
+                ChatTranscriptRole.USER,
+                promptReferenceMessage.getVisibleText());
+            entry.setPromptName(promptReferenceMessage.getPromptName());
+            entry.setPromptText(promptReferenceMessage.getPromptText());
+            entry.setModelFacingText(promptReferenceMessage.getModelFacingText());
+            entry.setPromptReferenceEndOffset(Integer.valueOf(promptReferenceMessage.getReferenceEndOffset()));
+            return entry;
+        }
         if (message instanceof UserMessage) {
             String text = ((UserMessage) message).singleText();
             if (text == null || text.trim().isEmpty() || text.startsWith(MessageBuilder.CONTROL_INSTRUCTION_PREFIX)) {

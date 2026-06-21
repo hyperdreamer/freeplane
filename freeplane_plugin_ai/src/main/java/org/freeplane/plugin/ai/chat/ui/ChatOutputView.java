@@ -5,6 +5,7 @@ import javax.swing.JLabel;
 import javax.swing.SwingUtilities;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.plugin.ai.chat.memory.ChatMemoryRenderEntry;
+import org.freeplane.plugin.ai.chat.memory.PromptReferenceUserMessage;
 import org.freeplane.plugin.ai.chat.memory.ChatUsageTotals;
 import org.freeplane.plugin.ai.chat.session.LiveChatController;
 
@@ -14,6 +15,7 @@ class ChatOutputView {
     private final ChatMemoryHistoryRenderer chatMemoryHistoryRenderer;
     private final LiveChatController liveChatController;
     private final JLabel tokenUsageLabel;
+    private InstructionHistoryRenderingMode instructionHistoryRenderingMode = InstructionHistoryRenderingMode.BRIEF;
 
     ChatOutputView(ChatMessageHistory messageHistory,
                    LiveChatController liveChatController,
@@ -27,6 +29,10 @@ class ChatOutputView {
 
     void appendUserMessage(String text) {
         appendChatMessage(text, ChatMessageCategory.USER);
+    }
+
+    void appendPromptReferenceUserMessage(PromptReferenceUserMessage message) {
+        appendPromptReferenceMessage(message);
     }
 
     void appendAssistantMessage(String text) {
@@ -58,6 +64,9 @@ class ChatOutputView {
     }
 
     void setInstructionHistoryRenderingMode(InstructionHistoryRenderingMode instructionHistoryRenderingMode) {
+        this.instructionHistoryRenderingMode = instructionHistoryRenderingMode == null
+            ? InstructionHistoryRenderingMode.BRIEF
+            : instructionHistoryRenderingMode;
         chatMemoryHistoryRenderer.setInstructionHistoryRenderingMode(instructionHistoryRenderingMode);
     }
 
@@ -95,6 +104,29 @@ class ChatOutputView {
         } else if (category == ChatMessageCategory.ASSISTANT) {
             liveChatController.recordAssistantMessage(text);
         }
+    }
+
+    private void appendPromptReferenceMessage(PromptReferenceUserMessage message) {
+        if (message == null) {
+            return;
+        }
+        if (SwingUtilities.isEventDispatchThread()) {
+            appendPromptReferenceMessageInternal(message);
+        } else {
+            SwingUtilities.invokeLater(() -> appendPromptReferenceMessageInternal(message));
+        }
+    }
+
+    private void appendPromptReferenceMessageInternal(PromptReferenceUserMessage message) {
+        String visibleText = message.getVisibleText();
+        String renderedText = messageRenderer.renderPromptReferenceMessage(
+            visibleText,
+            message.getReferenceEndOffset(),
+            message.getPromptName(),
+            message.getPromptText(),
+            instructionHistoryRenderingMode == InstructionHistoryRenderingMode.FULL);
+        messageHistory.appendMessage(visibleText, renderedText, ChatMessageCategory.USER.getStyleClassName());
+        liveChatController.recordUserMessage(visibleText);
     }
 
     private void appendTransientMessage(String sourceText, ChatMessageCategory category, boolean renderAsAssistant) {

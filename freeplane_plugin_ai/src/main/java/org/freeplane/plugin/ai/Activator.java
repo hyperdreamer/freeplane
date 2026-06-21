@@ -92,6 +92,7 @@ public class Activator implements BundleActivator {
                         aiChatPanel,
                         TextUtils.getText("ai_panel"));
                     promptActionRegistry = AiPromptMenuInstaller.install(modeController, aiChatPanel);
+                    aiChatPanel.setPromptActionRegistry(promptActionRegistry);
                     registerAiRequestService(context, promptActionRegistry);
                     startModelContextProtocolServer(aiChatPanel, codeHostService, modeController);
                     addPreferencesToOptionPanel();

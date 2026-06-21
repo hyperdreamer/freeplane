@@ -13,6 +13,7 @@ import org.freeplane.plugin.ai.chat.memory.AssistantProfileSwitchMessage;
 import org.freeplane.plugin.ai.chat.memory.ChatMemoryRenderEntry;
 import org.freeplane.plugin.ai.chat.memory.GeneralSystemMessage;
 import org.freeplane.plugin.ai.chat.memory.InstructionAckMessage;
+import org.freeplane.plugin.ai.chat.memory.PromptReferenceUserMessage;
 import org.freeplane.plugin.ai.chat.memory.RemovedForSpaceSystemMessage;
 import org.freeplane.plugin.ai.chat.memory.TranscriptHiddenSystemMessage;
 import org.freeplane.plugin.ai.tools.MessageBuilder;
@@ -42,6 +43,48 @@ public class ChatMemoryHistoryRendererTest {
         assertThat(html).contains("Profile Profile A");
         assertThat(html).doesNotContain("ok");
         assertThat(html).doesNotContain("system hidden");
+    }
+
+    @Test
+    public void rebuildFromMessages_underlinesPromptReferenceVisibleText() {
+        RenderFixture fixture = new RenderFixture();
+        List<ChatMemoryRenderEntry> messages = Arrays.asList(
+            ChatMemoryRenderEntry.forMessage(new PromptReferenceUserMessage(
+                "/Summarize branch suffix",
+                "Summarize branch",
+                "Prompt text",
+                "Prompt text suffix",
+                "/Summarize branch".length())));
+
+        fixture.uut.rebuildFromMessages(messages);
+
+        String html = fixture.html();
+        assertThat(html).contains("message-user");
+        assertThat(html).contains("<u>/Summarize branch</u>");
+        assertThat(html).contains("/Summarize branch");
+        assertThat(html).contains("suffix");
+        assertThat(html).doesNotContain("Prompt text");
+        assertThat(html).doesNotContain("Prompt text suffix");
+    }
+
+    @Test
+    public void fullInstructionModeShowsPromptReferencePromptText() {
+        RenderFixture fixture = new RenderFixture();
+        fixture.uut.setInstructionHistoryRenderingMode(InstructionHistoryRenderingMode.FULL);
+        List<ChatMemoryRenderEntry> messages = Arrays.asList(
+            ChatMemoryRenderEntry.forMessage(new PromptReferenceUserMessage(
+                "/Summarize branch suffix",
+                "Summarize branch",
+                "Prompt text",
+                "Prompt text suffix",
+                "/Summarize branch".length())));
+
+        fixture.uut.rebuildFromMessages(messages);
+
+        String html = fixture.html();
+        assertThat(html).contains("Prompt: Summarize branch");
+        assertThat(html).contains("Prompt text");
+        assertThat(html).doesNotContain("Prompt text suffix");
     }
 
     @Test

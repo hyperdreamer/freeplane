@@ -1,5 +1,6 @@
 package org.freeplane.plugin.ai.chat.history;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 
@@ -17,6 +18,10 @@ public class ChatTranscriptEntry {
     private ChatTranscriptRole role;
     private String text;
     private String baseSystemText;
+    private String promptName;
+    private String promptText;
+    private String modelFacingText;
+    private Integer promptReferenceEndOffset;
 
     public ChatTranscriptEntry() {
     }
@@ -53,5 +58,41 @@ public class ChatTranscriptEntry {
 
     public void setBaseSystemText(String baseSystemText) {
         this.baseSystemText = baseSystemText;
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public String getPromptName() {
+        return promptName;
+    }
+
+    public void setPromptName(String promptName) {
+        this.promptName = promptName;
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public String getPromptText() {
+        return promptText;
+    }
+
+    public void setPromptText(String promptText) {
+        this.promptText = promptText;
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public String getModelFacingText() {
+        return modelFacingText;
+    }
+
+    public void setModelFacingText(String modelFacingText) {
+        this.modelFacingText = modelFacingText;
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public Integer getPromptReferenceEndOffset() {
+        return promptReferenceEndOffset;
+    }
+
+    public void setPromptReferenceEndOffset(Integer promptReferenceEndOffset) {
+        this.promptReferenceEndOffset = promptReferenceEndOffset;
     }
 }

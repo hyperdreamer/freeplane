@@ -87,6 +87,7 @@ import org.freeplane.plugin.ai.chat.memory.ChatTokenCounterSettings;
 import org.freeplane.plugin.ai.chat.memory.ChatTokenUsageTracker;
 import org.freeplane.plugin.ai.chat.memory.ChatUsageTotals;
 import org.freeplane.plugin.ai.chat.memory.GeneralSystemMessage;
+import org.freeplane.plugin.ai.chat.memory.PromptReferenceUserMessage;
 import org.freeplane.plugin.ai.chat.profile.AssistantProfilePaneBuilder;
 import org.freeplane.plugin.ai.chat.profile.AssistantProfileSelectionModel;
 import org.freeplane.plugin.ai.chat.profile.AssistantProfileSelectionSync;
@@ -133,6 +134,7 @@ import org.freeplane.plugin.ai.model.AIModelCatalog;
 import org.freeplane.plugin.ai.model.AIModelSelection;
 import org.freeplane.plugin.ai.model.AIProviderConfiguration;
 import org.freeplane.plugin.ai.prompt.AiPrompt;
+import org.freeplane.plugin.ai.prompt.AiPromptActionRegistry;
 import org.freeplane.plugin.ai.prompt.AiPromptProgressDialogFactory;
 import org.freeplane.plugin.ai.prompt.AiPromptRequestComposer;
 import org.freeplane.plugin.ai.tools.AIToolSetBuilder;
@@ -180,6 +182,9 @@ public class AIChatPanel extends JPanel {
     private final ChatOutputView chatOutputView;
     private final ChatInputControls chatInputControls;
     private final AiPromptRequestComposer aiPromptRequestComposer;
+    private final PromptReferenceResolver promptReferenceResolver;
+    private final SlashPromptCompletionController slashPromptCompletionController;
+    private AiPromptActionRegistry promptActionRegistry;
     private final AiRequestConfigurationResolver aiRequestConfigurationResolver;
     private final AiSelectionOverrideResolver aiSelectionOverrideResolver;
     private ChatMemory chatMemory;
@@ -284,6 +289,15 @@ public class AIChatPanel extends JPanel {
         availableMaps = new AvailableMaps(new ControllerMapModelProvider());
         TextController textController = requireTextController();
         aiPromptRequestComposer = new AiPromptRequestComposer(availableMaps, textController);
+        promptReferenceResolver = new PromptReferenceResolver();
+        slashPromptCompletionController = new SlashPromptCompletionController(
+            inputArea,
+            () -> promptActionRegistry == null
+                ? Collections.<AiPrompt>emptyList()
+                : promptActionRegistry.prompts(),
+            promptReferenceResolver,
+            this::refreshInstructionPreview);
+        slashPromptCompletionController.install();
         aiSelectionOverrideResolver = new AiSelectionOverrideResolver(availableMaps, textController);
         chatNameFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
         liveChatController = new LiveChatController(
@@ -767,8 +781,20 @@ public class AIChatPanel extends JPanel {
             notifyVisibleConfigurationError(sessionId);
             return;
         }
+        PromptReferenceMatch promptReferenceMatch = resolvePromptReference(userMessage);
         startVisibleRequest(sessionId, userMessage, requestService, requestFlow, requestTokenUsageTracker,
-            true, true);
+            true, true, promptReferenceMatch);
+    }
+
+    public void setPromptActionRegistry(AiPromptActionRegistry promptActionRegistry) {
+        this.promptActionRegistry = promptActionRegistry;
+        refreshPromptCompletion();
+    }
+
+    public void refreshPromptCompletion() {
+        if (slashPromptCompletionController != null) {
+            slashPromptCompletionController.refreshFromPromptListChange();
+        }
     }
 
     public void runPrompt(AiPrompt prompt) {
@@ -966,7 +992,8 @@ public class AIChatPanel extends JPanel {
             false,
             resolvedToolAvailability,
             request.getSelectionOverride(),
-            profileResolution.getMessage());
+            profileResolution.getMessage(),
+            null);
         return started ? requestFlow : null;
     }
 
@@ -1182,6 +1209,13 @@ public class AIChatPanel extends JPanel {
         return request.getSystemMessage().equals(liveChatController.sessionCapturedSystemMessage(sessionId));
     }
 
+    private PromptReferenceMatch resolvePromptReference(String userMessage) {
+        if (promptActionRegistry == null) {
+            return null;
+        }
+        return promptReferenceResolver.resolveLeadingReference(userMessage, promptActionRegistry.prompts());
+    }
+
     private boolean startVisibleRequest(LiveChatSessionId sessionId,
                                         String userMessage,
                                         AIChatService requestService,
@@ -1191,7 +1225,20 @@ public class AIChatPanel extends JPanel {
                                         boolean updateSessionName) {
         return startVisibleRequest(sessionId, userMessage, requestService, requestFlow,
             requestTokenUsageTracker, injectAssistantProfile, updateSessionName,
-            null, null, null);
+            null, null, null, null);
+    }
+
+    private boolean startVisibleRequest(LiveChatSessionId sessionId,
+                                        String userMessage,
+                                        AIChatService requestService,
+                                        ChatRequestFlow requestFlow,
+                                        ChatTokenUsageTracker requestTokenUsageTracker,
+                                        boolean injectAssistantProfile,
+                                        boolean updateSessionName,
+                                        PromptReferenceMatch promptReferenceMatch) {
+        return startVisibleRequest(sessionId, userMessage, requestService, requestFlow,
+            requestTokenUsageTracker, injectAssistantProfile, updateSessionName,
+            null, null, null, promptReferenceMatch);
     }
 
     private boolean startVisibleRequest(LiveChatSessionId sessionId,
@@ -1203,21 +1250,28 @@ public class AIChatPanel extends JPanel {
                                         boolean updateSessionName,
                                         ToolAvailabilityLevel resolvedToolAvailability,
                                         AiSelectionOverride selectionOverride,
-                                        AssistantProfileSwitchMessage requestedProfileMessage) {
+                                        AssistantProfileSwitchMessage requestedProfileMessage,
+                                        PromptReferenceMatch promptReferenceMatch) {
         if (sessionId == null || requestService == null) {
             return false;
         }
-        String preparedMessage = userMessage;
+        String visibleMessage = userMessage;
+        String preparedMessage = promptReferenceMatch == null
+            ? userMessage
+            : promptReferenceMatch.getModelFacingText();
         if (resolvedToolAvailability != null) {
             try {
                 preparedMessage = aiPromptRequestComposer.compose(
-                    userMessage,
+                    preparedMessage,
                     resolvedToolAvailability,
                     resolveSelectionOverride(selectionOverride));
             } catch (RuntimeException error) {
                 return false;
             }
         }
+        PromptReferenceUserMessage promptReferenceUserMessage = createPromptReferenceUserMessage(
+            promptReferenceMatch,
+            preparedMessage);
         registerVisibleRequest(sessionId, requestFlow, requestTokenUsageTracker);
         requestFlow.updateChatMemory(liveChatController.chatMemory(sessionId));
         AssistantProfileSwitchMessage pendingProfileMessage = requestedProfileMessage;
@@ -1229,7 +1283,8 @@ public class AIChatPanel extends JPanel {
             ? resolveEffectiveToolAvailability(sessionId)
             : resolvedToolAvailability;
         updateCommittedSystemInstruction(sessionId, effectiveToolAvailability, pendingProfileMessage);
-        requestFlow.beginRequest(preparedMessage);
+        installNextPromptReference(sessionId, promptReferenceUserMessage);
+        requestFlow.beginRequest(visibleMessage, preparedMessage);
         boolean profileMessageChanged = false;
         if (requestedProfileMessage != null && liveChatController.isCurrentSession(sessionId)) {
             profileMessageChanged = assistantProfileSelectionSync.addProfileMessageIfDifferent(requestedProfileMessage);
@@ -1244,7 +1299,12 @@ public class AIChatPanel extends JPanel {
         }
         requestFlow.captureChatSnapshot();
         if (liveChatController.isCurrentSession(sessionId)) {
-            appendUserMessage(preparedMessage);
+            if (promptReferenceUserMessage == null) {
+                appendUserMessage(preparedMessage);
+            }
+            else {
+                chatOutputView.appendPromptReferenceUserMessage(promptReferenceUserMessage);
+            }
             inputArea.setText("");
         }
         if (updateSessionName && liveChatController.isCurrentSession(sessionId)) {
@@ -1526,6 +1586,27 @@ public class AIChatPanel extends JPanel {
         return null;
     }
 
+    private PromptReferenceUserMessage createPromptReferenceUserMessage(PromptReferenceMatch promptReferenceMatch,
+                                                                        String modelFacingText) {
+        if (promptReferenceMatch == null) {
+            return null;
+        }
+        return new PromptReferenceUserMessage(
+            promptReferenceMatch.getVisibleText(),
+            promptReferenceMatch.getPromptName(),
+            promptReferenceMatch.getPromptText(),
+            modelFacingText,
+            promptReferenceMatch.getReferenceEndOffset());
+    }
+
+    private void installNextPromptReference(LiveChatSessionId sessionId,
+                                            PromptReferenceUserMessage promptReferenceUserMessage) {
+        ChatMemory sessionMemory = liveChatController.chatMemory(sessionId);
+        if (sessionMemory instanceof AssistantProfileChatMemory) {
+            ((AssistantProfileChatMemory) sessionMemory).useNextPromptReference(promptReferenceUserMessage);
+        }
+    }
+
     private void openPromptChat(LiveChatSessionId sessionId,
                                 AIChatService promptService,
                                 String preparedMessage,
@@ -1535,7 +1616,7 @@ public class AIChatPanel extends JPanel {
                                 AssistantProfileSwitchMessage requestedProfileMessage) {
         showChatTab();
         startVisibleRequest(sessionId, preparedMessage, promptService, requestFlow,
-            requestTokenUsageTracker, false, false, null, null, requestedProfileMessage);
+            requestTokenUsageTracker, false, false, null, null, requestedProfileMessage, null);
     }
 
     private void cancelActiveRequest() {
@@ -1984,7 +2065,21 @@ public class AIChatPanel extends JPanel {
                 previewProfileMessage.getProfileMessage(),
                 PreviewInstructionKind.PROFILE));
         }
+        PromptReferenceMatch promptReferenceMatch = resolvePromptReference(inputArea.getText().trim());
+        if (promptReferenceMatch != null && !promptReferenceMatch.getPromptText().trim().isEmpty()) {
+            blocks.add(new PreviewInstructionBlock(
+                promptPreviewLabel(promptReferenceMatch),
+                promptReferenceMatch.getPromptText(),
+                PreviewInstructionKind.PROMPT));
+        }
         return blocks;
+    }
+
+    private String promptPreviewLabel(PromptReferenceMatch promptReferenceMatch) {
+        String promptName = promptReferenceMatch == null ? "" : promptReferenceMatch.getPromptName();
+        return promptName == null || promptName.trim().isEmpty()
+            ? "Prompt"
+            : java.text.MessageFormat.format("Prompt: {0}", promptName.trim());
     }
 
     private String profilePreviewLabel(AssistantProfileSwitchMessage profileMessage) {

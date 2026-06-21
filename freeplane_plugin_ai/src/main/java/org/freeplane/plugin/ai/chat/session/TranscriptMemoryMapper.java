@@ -14,6 +14,7 @@ import org.freeplane.plugin.ai.chat.memory.AssistantProfileSwitchMessage;
 import org.freeplane.plugin.ai.chat.memory.AutomaticCodeStatusMessage;
 import org.freeplane.plugin.ai.chat.memory.GeneralSystemMessage;
 import org.freeplane.plugin.ai.chat.memory.InstructionAckMessage;
+import org.freeplane.plugin.ai.chat.memory.PromptReferenceUserMessage;
 import org.freeplane.plugin.ai.chat.memory.RemovedForSpaceSystemMessage;
 import org.freeplane.plugin.ai.chat.memory.TranscriptHiddenSystemMessage;
 import org.freeplane.plugin.ai.tools.MessageBuilder;
@@ -105,7 +106,41 @@ class TranscriptMemoryMapper {
         if (entry.getText() == null) {
             return null;
         }
+        if (entry.getRole() == ChatTranscriptRole.USER && hasPromptReferencePayload(entry)) {
+            return new PromptReferenceUserMessage(
+                entry.getText(),
+                entry.getPromptName(),
+                promptText(entry),
+                entry.getModelFacingText(),
+                promptReferenceEndOffset(entry));
+        }
         return new UserMessage(entry.getText());
+    }
+
+    private boolean hasPromptReferencePayload(ChatTranscriptEntry entry) {
+        return entry != null
+            && entry.getModelFacingText() != null
+            && entry.getPromptReferenceEndOffset() != null;
+    }
+
+    private String promptText(ChatTranscriptEntry entry) {
+        String promptText = entry.getPromptText();
+        if (promptText != null) {
+            return promptText;
+        }
+        String visibleSuffix = entry.getText() == null
+            ? ""
+            : entry.getText().substring(promptReferenceEndOffset(entry));
+        String modelFacingText = entry.getModelFacingText() == null ? "" : entry.getModelFacingText();
+        return modelFacingText.endsWith(visibleSuffix)
+            ? modelFacingText.substring(0, modelFacingText.length() - visibleSuffix.length())
+            : modelFacingText;
+    }
+
+    private int promptReferenceEndOffset(ChatTranscriptEntry entry) {
+        Integer offset = entry.getPromptReferenceEndOffset();
+        int visibleLength = entry.getText() == null ? 0 : entry.getText().length();
+        return offset == null ? 0 : Math.max(0, Math.min(offset.intValue(), visibleLength));
     }
 
     private ChatTranscriptEntry toTranscriptEntry(ChatMessage message) {
@@ -137,6 +172,17 @@ class TranscriptMemoryMapper {
                 return null;
             }
             return new ChatTranscriptEntry(ChatTranscriptRole.AUTOMATIC_CODE_STATUS, text);
+        }
+        if (message instanceof PromptReferenceUserMessage) {
+            PromptReferenceUserMessage promptReferenceMessage = (PromptReferenceUserMessage) message;
+            ChatTranscriptEntry entry = new ChatTranscriptEntry(
+                ChatTranscriptRole.USER,
+                promptReferenceMessage.getVisibleText());
+            entry.setPromptName(promptReferenceMessage.getPromptName());
+            entry.setPromptText(promptReferenceMessage.getPromptText());
+            entry.setModelFacingText(promptReferenceMessage.getModelFacingText());
+            entry.setPromptReferenceEndOffset(Integer.valueOf(promptReferenceMessage.getReferenceEndOffset()));
+            return entry;
         }
         if (message instanceof UserMessage) {
             String text = ((UserMessage) message).singleText();

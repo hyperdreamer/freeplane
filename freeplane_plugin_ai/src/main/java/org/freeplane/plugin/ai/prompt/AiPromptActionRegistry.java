@@ -34,7 +34,7 @@ public class AiPromptActionRegistry {
         reloadState();
     }
 
-    List<AiPrompt> getPrompts() {
+    public List<AiPrompt> prompts() {
         return dialogState.getSavedPrompts();
     }
 
@@ -70,6 +70,7 @@ public class AiPromptActionRegistry {
     public void persistStateAndRefreshMenus() {
         persistStateIfChanged();
         menusRebuilder.run();
+        aiChatPanel.refreshPromptCompletion();
     }
 
     public void persistStateIfChanged() {

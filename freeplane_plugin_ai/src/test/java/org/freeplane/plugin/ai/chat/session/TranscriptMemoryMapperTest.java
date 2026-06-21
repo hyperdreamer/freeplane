@@ -14,6 +14,7 @@ import org.freeplane.plugin.ai.chat.memory.AutomaticCodeStatusMessage;
 import org.freeplane.plugin.ai.chat.memory.ChatMemoryRenderEntry;
 import org.freeplane.plugin.ai.chat.memory.GeneralSystemMessage;
 import org.freeplane.plugin.ai.chat.memory.InstructionAckMessage;
+import org.freeplane.plugin.ai.chat.memory.PromptReferenceUserMessage;
 import org.freeplane.plugin.ai.chat.memory.RemovedForSpaceSystemMessage;
 import org.freeplane.plugin.ai.chat.memory.TranscriptHiddenSystemMessage;
 import org.freeplane.plugin.ai.tools.MessageBuilder;
@@ -130,6 +131,28 @@ public class TranscriptMemoryMapperTest {
         assertThat(messages.get(0)).isInstanceOf(AutomaticCodeStatusMessage.class);
         assertThat(((AutomaticCodeStatusMessage) messages.get(0)).singleText())
             .isEqualTo("Automatic app-authored code-status message:\ncodeState=RUN_FAILED");
+    }
+
+    @Test
+    public void promptReferenceTranscriptEntriesRestoreCapturedModelFacingTextWithoutPromptLookup() {
+        TranscriptMemoryMapper uut = new TranscriptMemoryMapper();
+        AssistantProfileChatMemory memory = AssistantProfileChatMemory.withMaxTokens(500);
+        ChatTranscriptEntry entry = new ChatTranscriptEntry(
+            ChatTranscriptRole.USER,
+            "/Summarize branch suffix");
+        entry.setPromptName("Summarize branch");
+        entry.setPromptText("Captured prompt text");
+        entry.setModelFacingText("Captured prompt text suffix");
+        entry.setPromptReferenceEndOffset(Integer.valueOf("/Summarize branch".length()));
+
+        uut.seedTranscriptWithHiddenExchange(memory, Arrays.asList(entry), null);
+
+        ChatMessage restoredMessage = memory.activeConversationRenderEntries().get(0).chatMessage();
+        assertThat(restoredMessage).isInstanceOf(PromptReferenceUserMessage.class);
+        assertThat(((PromptReferenceUserMessage) restoredMessage).getVisibleText())
+            .isEqualTo("/Summarize branch suffix");
+        assertThat(((UserMessage) memory.messages().get(0)).singleText())
+            .isEqualTo("Captured prompt text suffix");
     }
 
     @Test

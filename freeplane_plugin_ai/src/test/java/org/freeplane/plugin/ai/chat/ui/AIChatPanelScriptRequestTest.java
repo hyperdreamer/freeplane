@@ -76,6 +76,7 @@ import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevelSettings;
 import org.freeplane.plugin.ai.code.RoutingAiCodeHostService;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.freeplane.plugin.ai.prompt.AiPrompt;
+import org.freeplane.plugin.ai.prompt.AiPromptActionRegistry;
 import org.freeplane.plugin.ai.prompt.AiPromptRequestComposer;
 import org.freeplane.plugin.ai.tools.AIToolSet;
 import org.freeplane.plugin.ai.tools.AIToolSetBuilder;
@@ -468,6 +469,33 @@ public class AIChatPanelScriptRequestTest {
         assertThat(blocks.get(1).getKind()).isEqualTo(PreviewInstructionKind.PROFILE);
         assertThat(blocks.get(1).getLabel()).isEqualTo("Profile message: Reviewer");
         assertThat(blocks.get(1).getText()).isEqualTo("profile instructions");
+    }
+
+    @Test
+    public void instructionPreviewIncludesPromptReferencePromptTextOnly() throws Exception {
+        PanelHarness harness = newPanelHarness(true);
+        NextRequestInstructionPreviewView previewView = mock(NextRequestInstructionPreviewView.class);
+        AiPromptActionRegistry promptActionRegistry = mock(AiPromptActionRegistry.class);
+        when(promptActionRegistry.prompts()).thenReturn(java.util.Arrays.asList(
+            new AiPrompt("Summarize branch", "Prompt instructions", false)));
+        JTextArea inputArea = new JTextArea("/Summarize branch user suffix");
+        setField(harness.panel, "nextRequestInstructionPreviewView", previewView);
+        setField(harness.panel, "promptActionRegistry", promptActionRegistry);
+        setField(harness.panel, "inputArea", inputArea);
+        setField(harness.panel, "showNextRequestInstructionPreview", true);
+
+        invokeRefreshInstructionPreview(harness.panel);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<java.util.List<PreviewInstructionBlock>> blocksCaptor =
+            ArgumentCaptor.forClass((Class) java.util.List.class);
+        verify(previewView).showPreview(blocksCaptor.capture());
+        java.util.List<PreviewInstructionBlock> blocks = blocksCaptor.getValue();
+        PreviewInstructionBlock promptBlock = blocks.get(blocks.size() - 1);
+        assertThat(promptBlock.getKind()).isEqualTo(PreviewInstructionKind.PROMPT);
+        assertThat(promptBlock.getLabel()).isEqualTo("Prompt: Summarize branch");
+        assertThat(promptBlock.getText()).isEqualTo("Prompt instructions");
+        assertThat(promptBlock.getText()).doesNotContain("user suffix");
     }
 
     @Test
@@ -1229,6 +1257,7 @@ public class AIChatPanelScriptRequestTest {
         setField(panel, "aiRequestConfigurationResolver", aiRequestConfigurationResolver);
         setField(panel, "configuration", configuration);
         setField(panel, "aiPromptRequestComposer", new AiPromptRequestComposer(availableMaps, textController));
+        setField(panel, "promptReferenceResolver", new PromptReferenceResolver());
         setField(panel, "aiSelectionOverrideResolver", mock(AiSelectionOverrideResolver.class));
         setField(panel, "availableMaps", availableMaps);
         setField(panel, "assistantProfileSelectionSync", mock(AssistantProfileSelectionSync.class));

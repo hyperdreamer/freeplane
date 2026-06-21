@@ -29,6 +29,37 @@ public class AiPromptActionRegistryTest {
     }
 
     @Test
+    public void prompts_returnsSavedPromptsInOrderAndDefensiveCopies() throws IOException {
+        Path tempDir = Files.createTempDirectory("ai-prompts");
+        try {
+            Path path = tempDir.resolve(AiPromptStore.PROMPTS_FILE_NAME);
+            AiPromptActionRegistry registry = new AiPromptActionRegistry(
+                new AiPromptStore(new ObjectMapper(), path),
+                mock(AIChatPanel.class),
+                () -> {
+                });
+            registry.getDialogState().loadSavedPrompts(Arrays.asList(
+                new AiPrompt("Rewrite", "Prompt", false),
+                new AiPrompt("Summarize", "Other", true)));
+            registry.getDialogState().beginNewDraft();
+            registry.getDialogState().updateDraft("Draft only", "Draft prompt", true, "", "");
+
+            java.util.List<AiPrompt> prompts = registry.prompts();
+            prompts.get(0).setPrompt("Changed");
+
+            assertThat(prompts)
+                .extracting(AiPrompt::getName)
+                .containsExactly("Rewrite", "Summarize");
+            assertThat(registry.prompts())
+                .extracting(AiPrompt::getPrompt)
+                .containsExactly("Prompt", "Other");
+        }
+        finally {
+            deleteRecursively(tempDir);
+        }
+    }
+
+    @Test
     public void persistStateIfChanged_doesNotCreateFileForUnchangedEmptyState() throws IOException {
         Path tempDir = Files.createTempDirectory("ai-prompts");
         try {

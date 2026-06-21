@@ -42,6 +42,24 @@ public class ChatRequestFlowTest {
     }
 
     @Test
+    public void failureRestoresVisibleTextWhenModelFacingTextDiffers() throws Exception {
+        RecordingCallbacks callbacks = new RecordingCallbacks();
+        ChatRequestFlow uut = new ChatRequestFlow(callbacks, new ChatTokenUsageTracker(totals -> {}));
+        AIChatService chatService = mock(AIChatService.class);
+        when(chatService.chat("Prompt text suffix"))
+            .thenThrow(new RuntimeException("failed"));
+
+        uut.beginRequest("/Summarize suffix", "Prompt text suffix");
+        uut.submitRequest(chatService);
+
+        assertThat(callbacks.awaitFinished()).isTrue();
+        assertThat(callbacks.restoreCount).isEqualTo(1);
+        assertThat(callbacks.lastRestoredUserText).isEqualTo("/Summarize suffix");
+        assertThat(callbacks.lastFailureUserMessage).isEqualTo("/Summarize suffix");
+        verify(chatService, times(1)).chat("Prompt text suffix");
+    }
+
+    @Test
     public void cancelRestoresChatSnapshotWithoutFailureMessage() throws Exception {
         RecordingCallbacks callbacks = new RecordingCallbacks();
         ChatRequestFlow uut = new ChatRequestFlow(callbacks, new ChatTokenUsageTracker(totals -> {}));
@@ -296,6 +314,7 @@ public class ChatRequestFlowTest {
         private int cancelledCount;
         private String lastFailureUserMessage;
         private String lastFailureMessage;
+        private String lastRestoredUserText;
         private int synchronizeTranscriptCount;
         private int rebuildHistoryCount;
         private int restoreCount;
@@ -318,6 +337,7 @@ public class ChatRequestFlowTest {
         @Override
         public void onUserTextRestored(String userText) {
             restoreCount++;
+            lastRestoredUserText = userText;
         }
 
         @Override

@@ -40,6 +40,7 @@ public class ChatRequestFlow {
     private int activeRequestId;
     private int snapshotChatSize;
     private String snapshotUserText;
+    private String snapshotModelText;
     private TokenUsage responseUsage;
     private String requestFailureMessage;
     private long requestStartVisibleHistoryRebuildCounter;
@@ -94,20 +95,25 @@ public class ChatRequestFlow {
     }
 
     public void beginRequest(String userMessage) {
+        beginRequest(userMessage, userMessage);
+    }
+
+    public void beginRequest(String visibleUserMessage, String modelFacingMessage) {
         requestCancellation.reset();
         activeRequestId++;
-        snapshotUserText = userMessage;
+        snapshotUserText = visibleUserMessage;
+        snapshotModelText = modelFacingMessage == null ? visibleUserMessage : modelFacingMessage;
         snapshotChatSize = singleTurnChatMemory.snapshotSize();
         requestFailureMessage = null;
         requestStartVisibleHistoryRebuildCounter = callbacks.currentVisibleHistoryRebuildCounter();
         rebuildVisibleHistoryAfterResponse = org.freeplane.plugin.ai.chat.memory.AutomaticCodeStatusMessage
-            .isAutomaticCodeStatusText(userMessage);
+            .isAutomaticCodeStatusText(snapshotModelText);
         requestInProgress = true;
         callbacks.onRequestStarted();
     }
 
     public void submitRequest(AIChatService chatService) {
-        executeRequestWorker(chatService, snapshotUserText, activeRequestId);
+        executeRequestWorker(chatService, snapshotModelText, activeRequestId);
     }
 
     public void captureChatSnapshot() {
@@ -205,6 +211,7 @@ public class ChatRequestFlow {
     private void clearRequestState() {
         snapshotChatSize = 0;
         snapshotUserText = null;
+        snapshotModelText = null;
         responseUsage = null;
         requestFailureMessage = null;
         requestStartVisibleHistoryRebuildCounter = 0L;

@@ -22,6 +22,39 @@ class ChatMessageRenderer {
         return formatPlainText(text);
     }
 
+    String renderPromptReferenceMessage(String text, int referenceEndOffset) {
+        return renderPromptReferenceMessage(text, referenceEndOffset, null, null, false);
+    }
+
+    String renderPromptReferenceMessage(String text,
+                                        int referenceEndOffset,
+                                        String promptName,
+                                        String promptText,
+                                        boolean includePromptText) {
+        String normalized = normalizeNewlines(text);
+        int safeReferenceEndOffset = Math.max(0, Math.min(referenceEndOffset, normalized.length()));
+        String referenceText = normalized.substring(0, safeReferenceEndOffset);
+        String remainingText = normalized.substring(safeReferenceEndOffset);
+        StringBuilder rendered = new StringBuilder();
+        rendered.append("<span style=\"text-decoration: underline;\">")
+            .append(formatPlainText(referenceText))
+            .append("</span>")
+            .append(formatPlainText(remainingText));
+        if (includePromptText && promptText != null && !promptText.trim().isEmpty()) {
+            rendered.append("<div class=\"message-prompt-reference-instruction\"><b>")
+                .append(HtmlUtils.toXMLEscapedText(promptReferenceLabel(promptName)))
+                .append("</b><br>")
+                .append(formatPlainText(promptText))
+                .append("</div>");
+        }
+        return rendered.toString();
+    }
+
+    private String promptReferenceLabel(String promptName) {
+        String normalizedPromptName = promptName == null ? "" : promptName.trim();
+        return normalizedPromptName.isEmpty() ? "Prompt" : "Prompt: " + normalizedPromptName;
+    }
+
     String renderFailureMessage(String text) {
         String normalized = normalizeNewlines(text);
         StringBuilder rendered = new StringBuilder();

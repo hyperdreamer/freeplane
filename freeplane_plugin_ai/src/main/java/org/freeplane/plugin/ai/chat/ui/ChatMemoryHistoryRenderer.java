@@ -13,6 +13,7 @@ import org.freeplane.plugin.ai.chat.memory.AutomaticCodeStatusMessage;
 import org.freeplane.plugin.ai.chat.memory.ChatMemoryRenderEntry;
 import org.freeplane.plugin.ai.chat.memory.GeneralSystemMessage;
 import org.freeplane.plugin.ai.chat.memory.InstructionAckMessage;
+import org.freeplane.plugin.ai.chat.memory.PromptReferenceUserMessage;
 import org.freeplane.plugin.ai.chat.memory.RemovedForSpaceSystemMessage;
 import org.freeplane.plugin.ai.chat.memory.TranscriptHiddenSystemMessage;
 import org.freeplane.plugin.ai.tools.MessageBuilder;
@@ -76,9 +77,16 @@ class ChatMemoryHistoryRenderer {
         if (historyEntry == null || historyEntry.sourceText == null) {
             return;
         }
-        String renderedText = messageRenderer.renderMessage(
-            historyEntry.sourceText,
-            historyEntry.category == RenderCategory.ASSISTANT);
+        String renderedText = historyEntry.promptReferenceEndOffset == null
+            ? messageRenderer.renderMessage(
+                historyEntry.sourceText,
+                historyEntry.category == RenderCategory.ASSISTANT)
+            : messageRenderer.renderPromptReferenceMessage(
+                historyEntry.sourceText,
+                historyEntry.promptReferenceEndOffset.intValue(),
+                historyEntry.promptName,
+                historyEntry.promptText,
+                instructionHistoryRenderingMode == InstructionHistoryRenderingMode.FULL);
         messageHistory.appendMessage(
             historyEntry.sourceText,
             renderedText,
@@ -131,6 +139,15 @@ class ChatMemoryHistoryRenderer {
         }
         if (message instanceof AutomaticCodeStatusMessage) {
             return new MessageHistoryEntry(((AutomaticCodeStatusMessage) message).singleText(), RenderCategory.SYSTEM);
+        }
+        if (message instanceof PromptReferenceUserMessage) {
+            PromptReferenceUserMessage promptReferenceMessage = (PromptReferenceUserMessage) message;
+            return new MessageHistoryEntry(
+                promptReferenceMessage.getVisibleText(),
+                RenderCategory.USER,
+                promptReferenceMessage.getReferenceEndOffset(),
+                promptReferenceMessage.getPromptName(),
+                promptReferenceMessage.getPromptText());
         }
         if (message instanceof UserMessage) {
             String text = ((UserMessage) message).singleText();
@@ -217,10 +234,28 @@ class ChatMemoryHistoryRenderer {
     private static class MessageHistoryEntry {
         private final String sourceText;
         private final RenderCategory category;
+        private final Integer promptReferenceEndOffset;
+        private final String promptName;
+        private final String promptText;
 
         private MessageHistoryEntry(String sourceText, RenderCategory category) {
+            this(sourceText, category, null);
+        }
+
+        private MessageHistoryEntry(String sourceText, RenderCategory category, Integer promptReferenceEndOffset) {
+            this(sourceText, category, promptReferenceEndOffset, null, null);
+        }
+
+        private MessageHistoryEntry(String sourceText,
+                                    RenderCategory category,
+                                    Integer promptReferenceEndOffset,
+                                    String promptName,
+                                    String promptText) {
             this.sourceText = sourceText;
             this.category = category;
+            this.promptReferenceEndOffset = promptReferenceEndOffset;
+            this.promptName = promptName;
+            this.promptText = promptText;
         }
     }
 
