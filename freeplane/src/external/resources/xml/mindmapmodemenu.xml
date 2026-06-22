@@ -637,6 +637,7 @@
 			<Entry name="ManageAddOnsAction" plugin="org.freeplane.plugin.script" />
 			<Entry name="scripting" plugin="org.freeplane.plugin.script" builder="userScripts" />
 			<Entry name="ExecuteScriptForSelectionAction" plugin="org.freeplane.plugin.script" />
+			<Entry name="SetBooleanPropertyAction.select_node_on_menuitem_link_clicked" />
 			<Entry name="ExecuteScriptForAllNodes" plugin="org.freeplane.plugin.script" />
 			<Entry name="ScriptEditor" />
 						<Entry name="formula.EvaluateAllAction" plugin="org.freeplane.plugin.formula" />

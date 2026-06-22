@@ -111,6 +111,7 @@ import org.freeplane.features.url.UrlManager;
 public class LinkController extends SelectionController implements IExtension {
     public static final String MENUITEM_SCHEME = "menuitem";
 	public static final String EXECUTE_APP_SCHEME = "execute";
+	private static final String SELECT_NODE_WHEN_ITS_MENUITEM_LINK_IS_CLICKED_PROPERTY = "select_node_on_menuitem_link_clicked";
 	public static LinkController getController() {
 		final ModeController modeController = Controller.getCurrentModeController();
 		return getController(modeController);
@@ -631,6 +632,9 @@ public class LinkController extends SelectionController implements IExtension {
 				final Action action = modeController.getAction(actionKey);
 
 				if (action != null) {
+					if (ResourceController.getResourceController().getBooleanProperty(SELECT_NODE_WHEN_ITS_MENUITEM_LINK_IS_CLICKED_PROPERTY, false)) {
+						Controller.getCurrentController().getSelection().selectAsTheOnlyOneSelected(selectedNode);
+					}
 					action.actionPerformed(e);
 				} else {
 					LogUtils.warn("Trying to call a menu hyperlink action with key '" //

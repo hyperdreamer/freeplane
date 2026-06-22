@@ -334,6 +334,7 @@
 				<radiobuttons name="siblingSelection" enum="org.freeplane.view.swing.map.SiblingSelection"/>
 				<boolean name="synchronizeSelectionOnlyOnBranchChange" />
 				<boolean name="selected_map_follows_active_window" />
+				<boolean name="select_node_on_menuitem_link_clicked" />
 			</separator>
 			<separator name="scrollling">
 				<number name="scrollbar_increment" />
