@@ -21,6 +21,7 @@ package org.freeplane.main.application;
 
 import java.awt.Container;
 import java.awt.EventQueue;
+import java.awt.GraphicsConfiguration;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -191,8 +192,12 @@ public class FreeplaneGUIStarter implements FreeplaneStarter {
 				@Override
 				public void run() {
 					FrameController.setLookAndFeel(lookandfeel);
-					final JFrame frame;
-					frame = new JFrame("Freeplane");
+					final GraphicsConfiguration storedFrameGraphicsConfiguration = ApplicationViewController
+					    .getStoredFrameGraphicsConfiguration();
+					final JFrame frame = storedFrameGraphicsConfiguration != null
+							? new JFrame("Freeplane", storedFrameGraphicsConfiguration)
+							: new JFrame("Freeplane");
+					frame.setBounds(ApplicationViewController.getStoredFrameBounds(frame));
 					frame.setContentPane(new JPanel(){
 
 						@Override

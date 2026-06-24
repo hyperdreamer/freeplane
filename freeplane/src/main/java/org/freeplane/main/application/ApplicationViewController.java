@@ -25,6 +25,9 @@ import java.awt.ComponentOrientation;
 import java.awt.Container;
 import java.awt.Cursor;
 import java.awt.Frame;
+import java.awt.GraphicsConfiguration;
+import java.awt.GraphicsDevice;
+import java.awt.GraphicsEnvironment;
 import java.awt.Image;
 import java.awt.Rectangle;
 import java.awt.Window;
@@ -57,6 +60,12 @@ import org.freeplane.view.swing.map.MapView;
 import org.freeplane.view.swing.map.overview.BookmarkToolbarPane;
 
 class ApplicationViewController extends FrameController {
+	private static final String APPWINDOW_WIDTH = "appwindow_width";
+	private static final String APPWINDOW_HEIGHT = "appwindow_height";
+	private static final String APPWINDOW_X = "appwindow_x";
+	private static final String APPWINDOW_Y = "appwindow_y";
+	private static final String APPWINDOW_STATE = "appwindow_state";
+
 	private static Image frameIcon(String size) {
         return new ImageIcon(ResourceController.getResourceController().getResource(
                 "/images/Freeplane_frame_icon_"+ size + ".png")).getImage();
@@ -69,6 +78,34 @@ class ApplicationViewController extends FrameController {
 	private MapViewDockingWindows mapViewWindows;
 	private final java.util.Map<Window, BookmarkToolbarPane> bookmarkToolbarPanes = new java.util.HashMap<>();
 	private final FrameComponentMover frameComponentMover;
+
+	static Rectangle getStoredFrameBounds(final Component frame) {
+		final ResourceController resourceController = ResourceController.getResourceController();
+		final int winWidth = resourceController.getIntProperty(APPWINDOW_WIDTH, -1);
+		final int winHeight = resourceController.getIntProperty(APPWINDOW_HEIGHT, -1);
+		final int winX = resourceController.getIntProperty(APPWINDOW_X, -1);
+		final int winY = resourceController.getIntProperty(APPWINDOW_Y, -1);
+		return UITools.getValidFrameBounds(frame, winX, winY, winWidth, winHeight);
+	}
+
+	static GraphicsConfiguration getStoredFrameGraphicsConfiguration() {
+		final ResourceController resourceController = ResourceController.getResourceController();
+		final int winX = resourceController.getIntProperty(APPWINDOW_X, -1);
+		final int winY = resourceController.getIntProperty(APPWINDOW_Y, -1);
+		if (winX == -1 || winY == -1) {
+			return null;
+		}
+		final GraphicsEnvironment graphicsEnvironment = GraphicsEnvironment.getLocalGraphicsEnvironment();
+		for (final GraphicsDevice graphicsDevice : graphicsEnvironment.getScreenDevices()) {
+			for (final GraphicsConfiguration graphicsConfiguration : graphicsDevice.getConfigurations()) {
+				if (graphicsConfiguration.getBounds().contains(winX, winY)) {
+					return graphicsConfiguration;
+				}
+			}
+		}
+		return null;
+	}
+
     public ApplicationViewController( Controller controller, final IMapViewManager mapViewController,
 	                                 final JFrame frame, FrameComponentMover frameComponentMover) {
 		super(controller, mapViewController, "");
@@ -215,12 +252,12 @@ class ApplicationViewController extends FrameController {
 		if (mainFrame.isResizable()) {
 			final int winState = mainFrame.getExtendedState() & ~Frame.ICONIFIED;
 			if (Frame.MAXIMIZED_BOTH != (winState & Frame.MAXIMIZED_BOTH)) {
-				resourceController.setProperty("appwindow_x", String.valueOf(mainFrame.getX()));
-				resourceController.setProperty("appwindow_y", String.valueOf(mainFrame.getY()));
-				resourceController.setProperty("appwindow_width", String.valueOf(mainFrame.getWidth()));
-				resourceController.setProperty("appwindow_height", String.valueOf(mainFrame.getHeight()));
+				resourceController.setProperty(APPWINDOW_X, String.valueOf(mainFrame.getX()));
+				resourceController.setProperty(APPWINDOW_Y, String.valueOf(mainFrame.getY()));
+				resourceController.setProperty(APPWINDOW_WIDTH, String.valueOf(mainFrame.getWidth()));
+				resourceController.setProperty(APPWINDOW_HEIGHT, String.valueOf(mainFrame.getHeight()));
 			}
-			resourceController.setProperty("appwindow_state", String.valueOf(winState));
+			resourceController.setProperty(APPWINDOW_STATE, String.valueOf(winState));
 		}
 		mapViewWindows.saveLayout();
 		resourceController.getLastOpenedList().saveProperties();
@@ -312,19 +349,16 @@ class ApplicationViewController extends FrameController {
 			 */
 		});
 		frame.setFocusTraversalKeysEnabled(false);
-		final int win_width = ResourceController.getResourceController().getIntProperty("appwindow_width", -1);
-		final int win_height = ResourceController.getResourceController().getIntProperty("appwindow_height", -1);
-		final int win_x = ResourceController.getResourceController().getIntProperty("appwindow_x", -1);
-		final int win_y = ResourceController.getResourceController().getIntProperty("appwindow_y", -1);
-		final Rectangle frameBounds = UITools.getValidFrameBounds(frame, win_x, win_y, win_width, win_height);
-        frame.setBounds(frameBounds);
+        frame.setBounds(getStoredFrameBounds(frame));
 		frame.applyComponentOrientation(ComponentOrientation.getOrientation(Locale.getDefault()));
 
 
 		int win_state = Integer
-		    .parseInt(ResourceController.getResourceController().getProperty("appwindow_state", "0"));
+		    .parseInt(ResourceController.getResourceController().getProperty(APPWINDOW_STATE, "0"));
 		win_state = ((win_state & Frame.ICONIFIED) != 0) ? Frame.NORMAL : win_state;
-		frame.setExtendedState(win_state);
+		if (!Compat.isMacOsX() || (win_state & Frame.MAXIMIZED_BOTH) == 0) {
+			frame.setExtendedState(win_state);
+		}
 
 		// Register full screen listener for macOS
 		Compat.registerFullScreenListener(frame);
