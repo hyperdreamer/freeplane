@@ -2,6 +2,7 @@ package org.freeplane.plugin.script;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.net.URL;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -20,25 +21,29 @@ public class ScriptContext implements AccessedNodes {
     private final ScriptingPermissions effectivePermissions;
     private final boolean dependencyTrackingEnabled;
     private final Map<String, Object> boundVariables;
+    private final PrintStream callbackOutputStream;
 
     public ScriptContext(NodeScript nodeScript) {
         this(nodeScript,
             nodeScript != null ? new RelatedElements(nodeScript.node) : null,
             null,
             true,
-            Collections.<String, Object>emptyMap());
+            Collections.<String, Object>emptyMap(),
+            null);
     }
 
     private ScriptContext(NodeScript nodeScript,
                           RelatedElements relatedElements,
                           ScriptingPermissions effectivePermissions,
                           boolean dependencyTrackingEnabled,
-                          Map<String, Object> boundVariables) {
+                          Map<String, Object> boundVariables,
+                          PrintStream callbackOutputStream) {
         this.nodeScript = nodeScript;
         this.relatedElements = relatedElements;
         this.effectivePermissions = effectivePermissions;
         this.dependencyTrackingEnabled = dependencyTrackingEnabled;
         this.boundVariables = Collections.unmodifiableMap(new LinkedHashMap<String, Object>(boundVariables));
+        this.callbackOutputStream = callbackOutputStream;
     }
 
     public NodeScript getNodeScript() {
@@ -57,14 +62,16 @@ public class ScriptContext implements AccessedNodes {
         if (this.effectivePermissions == effectivePermissions) {
             return this;
         }
-        return new ScriptContext(nodeScript, relatedElements, effectivePermissions, dependencyTrackingEnabled, boundVariables);
+        return new ScriptContext(nodeScript, relatedElements, effectivePermissions, dependencyTrackingEnabled,
+            boundVariables, callbackOutputStream);
     }
 
     public ScriptContext withDependencyTracking(boolean dependencyTrackingEnabled) {
         if (this.dependencyTrackingEnabled == dependencyTrackingEnabled) {
             return this;
         }
-        return new ScriptContext(nodeScript, relatedElements, effectivePermissions, dependencyTrackingEnabled, boundVariables);
+        return new ScriptContext(nodeScript, relatedElements, effectivePermissions, dependencyTrackingEnabled,
+            boundVariables, callbackOutputStream);
     }
 
     public ScriptContext withBoundVariables(Map<String, Object> additionalBoundVariables) {
@@ -73,11 +80,24 @@ public class ScriptContext implements AccessedNodes {
         }
         Map<String, Object> merged = new LinkedHashMap<String, Object>(boundVariables);
         merged.putAll(additionalBoundVariables);
-        return new ScriptContext(nodeScript, relatedElements, effectivePermissions, dependencyTrackingEnabled, merged);
+        return new ScriptContext(nodeScript, relatedElements, effectivePermissions, dependencyTrackingEnabled,
+            merged, callbackOutputStream);
     }
 
     public Map<String, Object> getBoundVariables() {
         return boundVariables;
+    }
+
+    public PrintStream getCallbackOutputStream() {
+        return callbackOutputStream;
+    }
+
+    public ScriptContext withCallbackOutputStream(PrintStream callbackOutputStream) {
+        if (this.callbackOutputStream == callbackOutputStream) {
+            return this;
+        }
+        return new ScriptContext(nodeScript, relatedElements, effectivePermissions, dependencyTrackingEnabled,
+            boundVariables, callbackOutputStream);
     }
 
     public File toAbsoluteFile(File file) {

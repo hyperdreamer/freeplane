@@ -52,7 +52,13 @@ public class ScriptRunner {
 		return this;
     }
 
-	public Object execute(final NodeModel node) {
-		return script.execute(node, outStream, errorHandler, scriptContext);
-	}
+    public Object execute(final NodeModel node) {
+        ScriptContext effectiveScriptContext = scriptContext;
+        if (outStream != null
+                && (effectiveScriptContext == null || effectiveScriptContext.getCallbackOutputStream() == null)) {
+            effectiveScriptContext = (effectiveScriptContext == null ? new ScriptContext(null) : effectiveScriptContext)
+                .withCallbackOutputStream(outStream);
+        }
+        return script.execute(node, outStream, errorHandler, effectiveScriptContext);
+    }
 }

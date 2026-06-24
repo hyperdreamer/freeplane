@@ -6,6 +6,7 @@ package org.freeplane.plugin.script.proxy;
 import java.awt.GraphicsEnvironment;
 import java.io.File;
 import java.io.InputStream;
+import java.io.PrintStream;
 import java.net.URL;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
@@ -32,6 +33,7 @@ import org.freeplane.api.ai.AiRequestCallback;
 import org.freeplane.api.ai.AiRequestHandle;
 import org.freeplane.api.ai.AiRequestOptions;
 import org.freeplane.api.ai.AiRequestRejectedException;
+import org.freeplane.api.ai.AiRequestResult;
 import org.freeplane.api.ai.AiRequestService;
 import org.freeplane.api.ai.AiRequestStatus;
 import org.freeplane.core.resources.ResourceController;
@@ -469,8 +471,10 @@ class ControllerProxy implements Proxy.Controller {
                                                  AiServiceCall aiServiceCall) {
         final ScriptContext originatingScriptContext = resolveOriginatingScriptContext();
         assertAiRequestPermissionGranted(originatingScriptContext);
+        final PrintStream callbackOutputStream = originatingScriptContext == null
+            ? null : originatingScriptContext.getCallbackOutputStream();
         final AiRequestCallback wrappedCallback = result -> ExecutingScriptContextStack.INSTANCE
-            .withContext(originatingScriptContext, () -> callback.accept(result));
+            .withContext(originatingScriptContext, () -> invokeCallback(callback, result, callbackOutputStream));
         return AccessController.doPrivileged(new PrivilegedAction<AiRequestHandle>() {
             @Override
             public AiRequestHandle run() {
@@ -483,6 +487,23 @@ class ControllerProxy implements Proxy.Controller {
                 return aiServiceCall.call(aiRequestService, wrappedCallback);
             }
         });
+    }
+
+    private void invokeCallback(AiRequestCallback callback,
+                                AiRequestResult result,
+                                PrintStream callbackOutputStream) {
+        if (callbackOutputStream == null) {
+            callback.accept(result);
+            return;
+        }
+        PrintStream previousOut = System.out;
+        try {
+            System.setOut(callbackOutputStream);
+            callback.accept(result);
+        }
+        finally {
+            System.setOut(previousOut);
+        }
     }
 
     private static AiRequestService lookupAiRequestService() {

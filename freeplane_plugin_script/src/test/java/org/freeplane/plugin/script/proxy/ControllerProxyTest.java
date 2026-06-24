@@ -12,6 +12,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import groovy.lang.Closure;
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.io.UnsupportedEncodingException;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
@@ -345,6 +348,85 @@ public class ControllerProxyTest {
     }
 
     @Test
+    public void askAiCallbackUsesOriginatingOutputStreamAndRestoresSystemOut() throws Exception {
+        AiRequestService requestService = mock(AiRequestService.class);
+        AiRequestHandle expectedHandle = mock(AiRequestHandle.class);
+        AtomicReference<AiRequestCallback> capturedCallback = new AtomicReference<AiRequestCallback>();
+        when(requestService.askAi(anyString(), any(), any())).thenAnswer(invocation -> {
+            capturedCallback.set(invocation.getArgument(2));
+            return expectedHandle;
+        });
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        PrintStream callbackOutputStream = new PrintStream(output, true, "UTF-8");
+        PrintStream originalOut = System.out;
+        ControllerProxy uut = new ControllerProxy(
+            allowingScriptContext().withCallbackOutputStream(callbackOutputStream),
+            () -> requestService);
+
+        uut.askAi("Prompt", askOptions(), result -> {
+            assertThat(System.out).isSameAs(callbackOutputStream);
+            System.out.print("callback output");
+        });
+        capturedCallback.get().accept(new AiRequestResult(AiRequestStatus.SUCCEEDED, "response", null));
+
+        assertThat(System.out).isSameAs(originalOut);
+        assertThat(utf8(output)).isEqualTo("callback output");
+    }
+
+    @Test
+    public void runAiPromptCallbackUsesOriginatingOutputStreamAndPreservesPermissions() throws Exception {
+        AiRequestService requestService = mock(AiRequestService.class);
+        AiRequestHandle expectedHandle = mock(AiRequestHandle.class);
+        AtomicReference<AiRequestCallback> capturedCallback = new AtomicReference<AiRequestCallback>();
+        when(requestService.runAiPrompt(anyString(), any(Duration.class), any())).thenAnswer(invocation -> {
+            capturedCallback.set(invocation.getArgument(2));
+            return expectedHandle;
+        });
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        PrintStream callbackOutputStream = new PrintStream(output, true, "UTF-8");
+        PrintStream originalOut = System.out;
+        ControllerProxy uut = new ControllerProxy(
+            allowingScriptContext().withCallbackOutputStream(callbackOutputStream),
+            () -> requestService);
+
+        uut.runAiPrompt("Rewrite", Duration.ofSeconds(10), result -> {
+            assertThat(System.out).isSameAs(callbackOutputStream);
+            System.out.print("prompt output");
+        });
+        capturedCallback.get().accept(new AiRequestResult(AiRequestStatus.SUCCEEDED, "response", null));
+
+        assertThat(System.out).isSameAs(originalOut);
+        assertThat(utf8(output)).isEqualTo("prompt output");
+        verify(requestService).runAiPrompt(eq("Rewrite"), eq(Duration.ofSeconds(10)), any());
+    }
+
+    @Test
+    public void callbackWithoutOutputStreamPreservesExistingOutputBehaviorAndScriptContext() {
+        AiRequestService requestService = mock(AiRequestService.class);
+        AiRequestHandle expectedHandle = mock(AiRequestHandle.class);
+        AtomicReference<AiRequestCallback> capturedCallback = new AtomicReference<AiRequestCallback>();
+        when(requestService.askAi(anyString(), any(), any())).thenAnswer(invocation -> {
+            capturedCallback.set(invocation.getArgument(2));
+            return expectedHandle;
+        });
+        ScriptContext originatingScriptContext = allowingScriptContext();
+        PrintStream originalOut = System.out;
+        AtomicReference<ScriptContext> contextSeenInsideCallback = new AtomicReference<ScriptContext>();
+        AtomicReference<PrintStream> outSeenInsideCallback = new AtomicReference<PrintStream>();
+        ControllerProxy uut = new ControllerProxy(originatingScriptContext, () -> requestService);
+
+        uut.askAi("Prompt", askOptions(), result -> {
+            contextSeenInsideCallback.set(ExecutingScriptContextStack.INSTANCE.getCurrentContext());
+            outSeenInsideCallback.set(System.out);
+        });
+        capturedCallback.get().accept(new AiRequestResult(AiRequestStatus.SUCCEEDED, "response", null));
+
+        assertThat(contextSeenInsideCallback.get()).isSameAs(originatingScriptContext);
+        assertThat(outSeenInsideCallback.get()).isSameAs(originalOut);
+        assertThat(System.out).isSameAs(originalOut);
+    }
+
+    @Test
     public void runAiPrompt_restoresOriginatingScriptContextForCallbackHelperLookups() throws Exception {
         BundleContext bundleContext = mock(BundleContext.class);
         @SuppressWarnings("unchecked")
@@ -390,6 +472,10 @@ public class ControllerProxyTest {
         } finally {
             activator.stop(bundleContext);
         }
+    }
+
+    private String utf8(ByteArrayOutputStream output) throws UnsupportedEncodingException {
+        return output.toString("UTF-8");
     }
 
     private AiRequestOptions askOptions() {

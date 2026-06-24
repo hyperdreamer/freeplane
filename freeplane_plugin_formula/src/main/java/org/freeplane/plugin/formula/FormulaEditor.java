@@ -175,11 +175,18 @@ class FormulaEditor extends EditNodeDialog implements INodeSelector, AiCodeEdito
                     issueAttachment.recordCodeState(validationFailureState);
                 }
             }
-            if (issueAttachment != null) {
-                issueAttachment.requestRepair(new AiChatRepairRequest(REPAIR_PROMPT, validationFailureState));
-            }
+            requestFormulaRepairIfConfirmed(issueAttachment, validationFailureState, answer);
         }
         return false;
+    }
+
+    static void requestFormulaRepairIfConfirmed(AiChatAttachment attachment,
+                                                ReadCodeResponse validationFailureState,
+                                                int confirmationAnswer) {
+        if (attachment == null || validationFailureState == null || confirmationAnswer != JOptionPane.YES_OPTION) {
+            return;
+        }
+        attachment.requestRepair(new AiChatRepairRequest(REPAIR_PROMPT, validationFailureState));
     }
 
     @Override

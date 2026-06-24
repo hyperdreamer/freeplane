@@ -190,7 +190,7 @@ public class SingleEditorAttachmentServiceTest {
     }
 
     @Test
-    public void manualFailureRecordedOnAttachmentAutoPostsAutomaticCodeStatus() {
+    public void recordCodeStateStoresManualScriptFailureWithoutSubmittingChatMessage() {
         AIChatPanel aiChatPanel = mock(AIChatPanel.class);
         AttachedEditorChatModeSettings settings = mock(AttachedEditorChatModeSettings.class);
         LiveChatSessionId sessionId = LiveChatSessionId.create();
@@ -205,14 +205,18 @@ public class SingleEditorAttachmentServiceTest {
             "text/x-freeplane-script-groovy",
             CodeState.RUN_FAILED,
             ScriptRunInitiator.USER,
-            new CodeStateToken("code", "args"),
+            null,
             new CodeStateContent("println 1", null),
             Collections.singletonList(new CodeStateDiagnostic(CodeStateField.SOURCE_TEXT, "broken", 1, 1)),
             "broken",
             null,
             null));
 
-        verify(aiChatPanel).submitMessageToSession(eq(sessionId), any());
+        ReadCodeResponse recordedState = readCurrentState(uut);
+
+        assertThat(recordedState.getCodeState()).isEqualTo(CodeState.RUN_FAILED);
+        assertThat(recordedState.getRunInitiator()).isEqualTo(ScriptRunInitiator.USER);
+        verify(aiChatPanel, never()).submitMessageToSession(eq(sessionId), any());
     }
 
     @Test

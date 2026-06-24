@@ -101,7 +101,10 @@ class ScriptingRegistration {
 		}
 
 		@Override
-        public Object executeScript(final int pIndex, final PrintStream pOutStream, final IFreeplaneScriptErrorHandler pErrorHandler) {
+        public Object executeScript(final int pIndex,
+                                    final PrintStream pOutStream,
+                                    final PrintStream pCallbackOutputStream,
+                                    final IFreeplaneScriptErrorHandler pErrorHandler) {
 			final ModeController modeController = Controller.getCurrentModeController();
 			final ScriptingPermissions restrictedPermissions = ScriptingPermissions.getPermissiveScriptingPermissions();
             ScriptInputJsonSupport.ParseResult parseResult = ScriptInputJsonSupport.parseInputText(mInputText);
@@ -109,7 +112,8 @@ class ScriptingRegistration {
                 throw ScriptInputJsonSupport.toExecuteScriptException(parseResult.getDiagnostic());
             }
             ScriptContext scriptContext = new ScriptContext(null)
-                .withBoundVariables(ScriptInputJsonSupport.boundVariables(parseResult.getArgsValue()));
+                .withBoundVariables(ScriptInputJsonSupport.boundVariables(parseResult.getArgsValue()))
+                .withCallbackOutputStream(pCallbackOutputStream);
 			return ScriptingEngine.executeScript(modeController.getMapController().getSelectedNode(), mScript,
 			    pErrorHandler, pOutStream, scriptContext, restrictedPermissions);
 		}

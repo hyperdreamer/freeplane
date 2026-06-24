@@ -133,6 +133,7 @@ class ScriptEditor extends AFreeplaneAction {
 
         public Object executeScript(final int pIndex,
                                     final PrintStream pOutStream,
+                                    final PrintStream pCallbackOutputStream,
                                     final IFreeplaneScriptErrorHandler pErrorHandler) {
             final ScriptHolder scriptHolder = getScript(pIndex);
             ModeController mMindMapController = Controller.getCurrentModeController();
@@ -141,7 +142,8 @@ class ScriptEditor extends AFreeplaneAction {
                 throw ScriptInputJsonSupport.toExecuteScriptException(parseResult.getDiagnostic());
             }
             ScriptContext scriptContext = new ScriptContext(null)
-                .withBoundVariables(ScriptInputJsonSupport.boundVariables(parseResult.getArgsValue()));
+                .withBoundVariables(ScriptInputJsonSupport.boundVariables(parseResult.getArgsValue()))
+                .withCallbackOutputStream(pCallbackOutputStream);
             return ScriptingEngine.executeScript(
                 mMindMapController.getMapController().getSelectedNode(),
                 scriptHolder.getScript(),

@@ -28,7 +28,6 @@ import org.freeplane.features.ai.code.RunCodeResponse;
 import org.freeplane.features.ai.code.ScriptHost;
 import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeResponse;
-import org.freeplane.plugin.ai.chat.memory.AutomaticCodeStatusMessage;
 import org.freeplane.plugin.ai.chat.session.LiveChatSessionId;
 import org.freeplane.plugin.ai.chat.ui.AIChatPanel;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
@@ -184,11 +183,6 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
         }
         ReadCodeResponse normalizedState = normalizedRecordedState(activeAttachment, state);
         activeAttachment.latestCodeState = normalizedState;
-        if (shouldAutoPostAttachedManualFailure(normalizedState)) {
-            aiChatPanel.submitMessageToSession(
-                activeAttachment.owningSessionId,
-                AutomaticCodeStatusMessage.forCodeState(normalizedState).singleText());
-        }
     }
 
     private synchronized void clearCodeState(long attachmentId) {
@@ -196,12 +190,6 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
             return;
         }
         activeAttachment.latestCodeState = null;
-    }
-
-    private boolean shouldAutoPostAttachedManualFailure(ReadCodeResponse state) {
-        return state != null
-            && state.getRunInitiator() == org.freeplane.features.ai.code.ScriptRunInitiator.USER
-            && state.getCodeState() != CodeState.RUN_SUCCEEDED;
     }
 
     private synchronized void showOwningChat(long attachmentId) {

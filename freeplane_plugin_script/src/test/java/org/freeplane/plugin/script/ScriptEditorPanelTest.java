@@ -7,6 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import java.util.Collections;
+import javax.swing.JOptionPane;
 import org.freeplane.features.ai.code.AiChatAttachment;
 import org.freeplane.features.ai.code.AiChatRepairRequest;
 import org.freeplane.features.ai.code.CodeState;
@@ -43,6 +44,40 @@ public class ScriptEditorPanelTest {
 
         ScriptEditorPanel.requestAttachedManualRepair(attachment, codeState);
 
+        assertRepairRequestedWithCodeState(attachment, codeState);
+    }
+
+    @Test
+    public void manualAttachedScriptFailureRequestsRepairOnlyAfterAcceptedConfirmation() {
+        AiChatAttachment attachment = mock(AiChatAttachment.class);
+        RunCodeResponse response = failedRunResponse();
+        ReadCodeResponse codeState = ScriptEditorPanel.manualRunCodeState(response, new CodeStateContent("println 1", "{"));
+
+        ScriptEditorPanel.requestAttachedManualRepairIfConfirmed(
+            attachment,
+            codeState,
+            response,
+            runResponse -> JOptionPane.YES_OPTION);
+
+        assertRepairRequestedWithCodeState(attachment, codeState);
+    }
+
+    @Test
+    public void manualAttachedScriptFailureDoesNotRequestRepairWhenConfirmationDeclined() {
+        AiChatAttachment attachment = mock(AiChatAttachment.class);
+        RunCodeResponse response = failedRunResponse();
+        ReadCodeResponse codeState = ScriptEditorPanel.manualRunCodeState(response, new CodeStateContent("println 1", "{"));
+
+        ScriptEditorPanel.requestAttachedManualRepairIfConfirmed(
+            attachment,
+            codeState,
+            response,
+            runResponse -> JOptionPane.NO_OPTION);
+
+        verify(attachment, never()).requestRepair(any(AiChatRepairRequest.class));
+    }
+
+    private void assertRepairRequestedWithCodeState(AiChatAttachment attachment, ReadCodeResponse codeState) {
         ArgumentCaptor<AiChatRepairRequest> requestCaptor = ArgumentCaptor.forClass(AiChatRepairRequest.class);
         verify(attachment).requestRepair(requestCaptor.capture());
         assertThat(requestCaptor.getValue().getCodeState()).isSameAs(codeState);

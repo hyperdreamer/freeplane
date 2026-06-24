@@ -171,7 +171,10 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 
 		void endDialog(boolean pIsCanceled);
 
-		Object executeScript(int pIndex, PrintStream outStream, IFreeplaneScriptErrorHandler pErrorHandler);
+        Object executeScript(int pIndex,
+                             PrintStream outStream,
+                             PrintStream callbackOutputStream,
+                             IFreeplaneScriptErrorHandler pErrorHandler);
 
 		int getAmountOfScripts();
 
@@ -693,15 +696,20 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 				null);
 		}
 		final int[] lineNumber = new int[] { -1 };
-		CapturedPrintStream outputCapture = CapturedPrintStream.tee(System.out);
-		try {
-			Object result = mScriptModel.executeScript(mScriptList.getSelectedIndex(), outputCapture.printStream(), new IFreeplaneScriptErrorHandler() {
-				@Override
-				public void gotoLine(final int pLineNumber) {
-					lineNumber[0] = pLineNumber;
-					ActionUtils.setCaretPosition(mScriptTextField, pLineNumber, 1);
-				}
-			});
+        CapturedPrintStream outputCapture = CapturedPrintStream.tee(System.out);
+        PrintStream callbackOutputStream = getPrintStream();
+        try {
+            Object result = mScriptModel.executeScript(
+                mScriptList.getSelectedIndex(),
+                outputCapture.printStream(),
+                callbackOutputStream,
+                new IFreeplaneScriptErrorHandler() {
+                    @Override
+                    public void gotoLine(final int pLineNumber) {
+                        lineNumber[0] = pLineNumber;
+                        ActionUtils.setCaretPosition(mScriptTextField, pLineNumber, 1);
+                    }
+                });
 			return new RunCodeResponse(
 				ScriptHost.ATTACHED_EDITOR,
 				AI_ATTACHMENT_CONTENT_TYPE,
@@ -797,26 +805,56 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 		return codeState;
 	}
 
-	static void requestAttachedManualRepair(AiChatAttachment attachment, ReadCodeResponse codeState) {
-		if (attachment == null || codeState == null) {
-			return;
-		}
-		attachment.requestRepair(new AiChatRepairRequest(ATTACHED_SCRIPT_FAILURE_PROMPT, codeState));
-	}
+    static void requestAttachedManualRepair(AiChatAttachment attachment, ReadCodeResponse codeState) {
+        if (attachment == null || codeState == null) {
+            return;
+        }
+        attachment.requestRepair(new AiChatRepairRequest(ATTACHED_SCRIPT_FAILURE_PROMPT, codeState));
+    }
 
-	private ReadCodeResponse recordAiAttachmentAfterManualRun(RunCodeResponse response) {
-		return recordAttachedManualRunState(aiChatAttachment, response, getCodeStateContent());
-	}
+    static void requestAttachedManualRepairIfConfirmed(AiChatAttachment attachment,
+                                                       ReadCodeResponse codeState,
+                                                       RunCodeResponse response,
+                                                       ManualRepairConfirmation confirmation) {
+        if (attachment == null || codeState == null || !isFailedManualRun(response) || confirmation == null) {
+            return;
+        }
+        int answer = confirmation.confirmRepair(response);
+        if (answer == JOptionPane.YES_OPTION) {
+            requestAttachedManualRepair(attachment, codeState);
+        }
+    }
 
-	private void showManualRunFailure(RunCodeResponse response, ReadCodeResponse codeState) {
-		if (response == null || response.getCodeState() == CodeState.RUN_SUCCEEDED || response.getErrorMessage() == null) {
-			return;
-		}
-		if (aiChatAttachment != null && codeState != null) {
-			return;
-		}
-		UITools.errorMessage(response.getErrorMessage());
-	}
+    private static boolean isFailedManualRun(RunCodeResponse response) {
+        return response != null
+            && response.getCodeState() != CodeState.RUN_SUCCEEDED
+            && response.getErrorMessage() != null;
+    }
+
+    private ReadCodeResponse recordAiAttachmentAfterManualRun(RunCodeResponse response) {
+        return recordAttachedManualRunState(aiChatAttachment, response, getCodeStateContent());
+    }
+
+    private void showManualRunFailure(RunCodeResponse response, ReadCodeResponse codeState) {
+        if (response == null || response.getCodeState() == CodeState.RUN_SUCCEEDED || response.getErrorMessage() == null) {
+            return;
+        }
+        if (aiChatAttachment != null && codeState != null) {
+            requestAttachedManualRepairIfConfirmed(aiChatAttachment, codeState, response, runResponse ->
+                JOptionPane.showConfirmDialog(
+                    this,
+                    buildManualRunFailureDialogMessage(runResponse),
+                    "Freeplane",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.ERROR_MESSAGE));
+            return;
+        }
+        UITools.errorMessage(response.getErrorMessage());
+    }
+
+    interface ManualRepairConfirmation {
+        int confirmRepair(RunCodeResponse response);
+    }
 
 	private Object buildManualRunFailureDialogMessage(RunCodeResponse response) {
 		JTextArea messageArea = new JTextArea(response.getErrorMessage());

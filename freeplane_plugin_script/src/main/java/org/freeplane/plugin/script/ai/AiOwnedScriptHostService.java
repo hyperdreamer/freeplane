@@ -447,7 +447,8 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
             CapturedPrintStream outputCapture = CapturedPrintStream.tee(System.out);
             try {
                 ScriptContext scriptContext = new ScriptContext(null)
-                    .withBoundVariables(ScriptInputJsonSupport.boundVariables(argsValue));
+                    .withBoundVariables(ScriptInputJsonSupport.boundVariables(argsValue))
+                    .withCallbackOutputStream(System.out);
                 Object result = ScriptingEngine.executeScript(
                     selectedNode,
                     content.getSourceText(),
