@@ -33,7 +33,7 @@ import javax.swing.ScrollPaneConstants;
  */
 public class JAutoScrollBarPane extends JScrollPane {
 	/**
-	 * 
+	 *
 	 */
 	private static final long serialVersionUID = 1L;
 
@@ -79,7 +79,7 @@ public class JAutoScrollBarPane extends JScrollPane {
 	 */
 	@Override
 	public Dimension getPreferredSize() {
-		if (!isValid()) {
+		if (!isValid() && getWidth() > 0 && getHeight() > 0) {
 			doLayout();
 		}
 		return super.getPreferredSize();
