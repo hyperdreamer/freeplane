@@ -24,6 +24,7 @@ import java.awt.BorderLayout;
 import java.awt.Container;
 import java.awt.Font;
 import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.IOException;
@@ -33,25 +34,7 @@ import java.io.UnsupportedEncodingException;
 import java.util.Collections;
 import java.util.List;
 
-import javax.swing.AbstractAction;
-import javax.swing.Action;
-import javax.swing.DefaultListModel;
-import javax.swing.JButton;
-import javax.swing.JDialog;
-import javax.swing.JEditorPane;
-import javax.swing.JLabel;
-import javax.swing.JList;
-import javax.swing.JMenu;
-import javax.swing.JMenuBar;
-import javax.swing.JMenuItem;
-import javax.swing.JOptionPane;
-import javax.swing.JScrollPane;
-import javax.swing.JSplitPane;
-import javax.swing.JTextArea;
-import javax.swing.JToggleButton;
-import javax.swing.ListSelectionModel;
-import javax.swing.WindowConstants;
-import javax.swing.SwingUtilities;
+import javax.swing.*;
 import javax.swing.event.CaretEvent;
 import javax.swing.event.CaretListener;
 import javax.swing.event.ListSelectionEvent;
@@ -204,7 +187,7 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 				mLastSelected = null;
 				final int scriptIndex = mScriptModel.addNewScript();
 				updateFields();
-				select(scriptIndex);
+				select(scriptIndex, true);
 				SwingUtilities.invokeLater(new Runnable() {
 					@Override
 					public void run() {
@@ -377,6 +360,7 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 	final private JLabel mStatus;
     private final boolean mSavedNodeScriptEditor;
 	private AiChatAttachment aiChatAttachment;
+	private boolean mSelectShouldMoveFocus = false;
 
 	public ScriptEditorPanel( final IScriptModel pScriptModel,
 	                         final boolean pHasNewScriptFunctionality) {
@@ -397,8 +381,10 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
                 SwingUtilities.invokeLater(new Runnable() {
                     @Override
                     public void run() {
-                    	if(mScriptList.getModel().getSize() > 0)
-                    		mScriptList.setSelectedIndex(0);
+                    	if(mScriptList.getModel().getSize() > 0) {
+							mScriptList.setSelectedIndex(0);
+							mScriptList.requestFocusInWindow();
+						}
                     }
                 });
             }
@@ -425,13 +411,28 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 				if (pEvent.getValueIsAdjusting()) {
 					return;
 				}
-				select(mScriptList.getSelectedIndex());
+				select(mScriptList.getSelectedIndex(), mSelectShouldMoveFocus);
+				mSelectShouldMoveFocus = false;
 			}
 		});
+		mScriptList.addMouseListener(new java.awt.event.MouseAdapter() {
+			@Override
+			public void mousePressed(java.awt.event.MouseEvent e) {
+				mSelectShouldMoveFocus = true;
+			}
+		});
+		mScriptList.addKeyListener(new java.awt.event.KeyAdapter() {
+			@Override
+			public void keyPressed(java.awt.event.KeyEvent e) {
+				if (e.getKeyCode() == java.awt.event.KeyEvent.VK_ENTER) {
+					mSelectShouldMoveFocus = true;
+				}
+			}
+		});;
 		final JEditorPane editorPane = new JEditorPane();
 		SourceTextEditorUIConfigurator.configureColors(editorPane);
 		mScriptTextField = editorPane;
-        mScriptInputField = new JTextArea();
+		mScriptInputField = new JTextArea();
 		mScriptTextField.setEnabled(false);
         mScriptInputField.setEnabled(false);
 		JScrollPane scriptScrollPane = new JRestrictedSizeScrollPane(mScriptTextField);
@@ -494,6 +495,8 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 		mRunAction = new RunAction();
 		mRunAction.setEnabled(false);
 		addButton(menuBar, mRunAction, "plugins/ScriptEditor.run");
+		final AbstractAction exitAction = new ExitAction(TextUtils.getRawText("plugins/ScriptEditor.exit"));
+		addButton(menuBar, exitAction, "plugins/ScriptEditor.exit");
 		mAttachToAiButton = TranslatedElementFactory.createToggleButton("plugins/ScriptEditor.ai");
 		mAttachToAiButton.setEnabled(false);
 		mAttachToAiButton.setIcon(ResourceController.getResourceController().getImageIcon(AI_TAB_ICON_RESOURCE));
@@ -504,8 +507,6 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 		addAction(menu, mSignAction);
 		final AbstractAction cancelAction = new CancelAction(TextUtils.getRawText("plugins/ScriptEditor.cancel"));
 		addAction(menu, cancelAction);
-		final AbstractAction exitAction = new ExitAction(TextUtils.getRawText("plugins/ScriptEditor.exit"));
-		addAction(menu, exitAction);
 		menuBar.add(menu);
 		this.setJMenuBar(menuBar);
 		final ScriptEditorWindowConfigurationStorage storage = mScriptModel.decorateDialog(this,
@@ -518,6 +519,19 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 			mCentralUpperPanel.setDividerLocation(100);
 			mCentralPanel.setDividerLocation(240);
 		}
+		mScriptList.setToolTipText("Use Alt+` to switch between list and editor");
+		final KeyStroke keystroke = KeyStroke.getKeyStroke(KeyEvent.VK_BACK_QUOTE, KeyEvent.ALT_DOWN_MASK);
+		mScriptList.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(keystroke, "focusMe");
+		mScriptList.getActionMap().put("focusMe", new AbstractAction() {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				if (mScriptList.isFocusOwner()) {
+					mScriptTextField.requestFocusInWindow();
+				} else {
+					mScriptList.requestFocusInWindow();
+				}
+			}
+		});
 	}
 
 	private void addAction(final JMenu menu, final AbstractAction action) {
@@ -556,7 +570,7 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 	 */
 	private void disposeDialog(final boolean pIsCanceled) {
 		if (!mScriptList.isSelectionEmpty()) {
-			select(mScriptList.getSelectedIndex());
+			select(mScriptList.getSelectedIndex(), false);
 		}
 		if (pIsCanceled && mScriptModel.isDirty()) {
 			final int action = JOptionPane.showConfirmDialog(this, TextUtils
@@ -968,7 +982,7 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
         return CodeStateToken.fingerprint(text);
 	}
 
-	private void select(final int pIndex) {
+	private void select(final int pIndex, final boolean moveFocus) {
 		mScriptTextField.setEnabled(pIndex >= 0);
         mScriptInputField.setEnabled(pIndex >= 0);
 		mRunAction.setEnabled(pIndex >= 0);
@@ -987,16 +1001,25 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 		if (pIndex >= 0 && mScriptList.getSelectedIndex() != pIndex) {
 			mScriptList.setSelectedIndex(pIndex);
 		}
-		mScriptTextField.requestFocusInWindow();
+		if (moveFocus) {
+			mScriptTextField.requestFocusInWindow();
+		}
 	}
 
 	private void storeCurrent() {
 		if (mLastSelected != null) {
 			final int oldIndex = mLastSelected;
-            ScriptHolder currentScript = mScriptModel.getScript(oldIndex)
-                .setScript(mScriptTextField.getText())
-                .setArgumentsJsonText(mScriptInputField.getText());
-			mScriptModel.setScript(oldIndex, currentScript);
+			ScriptHolder currentScript = mScriptModel.getScript(oldIndex);
+			String newScript = mScriptTextField.getText();
+			String newArgumentsJsonText = mScriptInputField.getText();
+			boolean scriptChanged = !newScript.equals(currentScript.getScript());
+			boolean argumentsChanged = !newArgumentsJsonText.equals(
+					currentScript.getArgumentsJsonText() == null ? "" : currentScript.getArgumentsJsonText());
+			if (scriptChanged || argumentsChanged) {
+				currentScript.setScript(newScript)
+						.setArgumentsJsonText(newArgumentsJsonText);
+				mScriptModel.setScript(oldIndex, currentScript);
+			}
 		}
 	}
 

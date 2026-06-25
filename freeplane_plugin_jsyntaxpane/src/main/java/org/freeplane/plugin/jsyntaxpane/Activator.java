@@ -11,6 +11,7 @@ import javax.swing.JTextField;
 
 import org.freeplane.core.ui.components.UITools;
 import org.freeplane.core.util.ColorUtils;
+import org.freeplane.core.util.Compat;
 import org.freeplane.features.mode.ModeController;
 import org.freeplane.features.mode.mindmapmode.MModeController;
 import org.freeplane.main.application.CommandLineOptions;
@@ -66,7 +67,11 @@ public class Activator implements BundleActivator {
 					+ ", de.sciss.syntaxpane.components.LineNumbersRuler" //
 					+ ", de.sciss.syntaxpane.components.TokenMarker" //
 					+ ", org.freeplane.plugin.jsyntaxpane.NodeIdHighLighter";
-			DefaultSyntaxKit.getConfig(GroovySyntaxKit.class).put("Components", components);
+			Configuration groovyConfig = DefaultSyntaxKit.getConfig(GroovySyntaxKit.class);
+			groovyConfig.put("Components", components);
+			if (Compat.isWindowsOS()){
+				stripBold(defaultConfig, groovyConfig);
+			}
 		}
 		finally {
 			Thread.currentThread().setContextClassLoader(contextClassLoader);
@@ -84,6 +89,17 @@ public class Activator implements BundleActivator {
 		return ! UITools.isLight(background);
 	}
 
+
+	private static void stripBold(Configuration source, Configuration target) {
+		for (String key : source.keySet()) {
+			if (!key.startsWith("Style.")) continue;
+			String value = source.get(key);
+			String stripped = value.replaceAll(",\\s*1$", ", 0").replaceAll(",\\s*3$", ", 2");
+			if (!stripped.equals(value)) {
+				target.put(key, stripped);
+			}
+		}
+	}
 
 	/*
 	 * (non-Javadoc)
