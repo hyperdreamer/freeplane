@@ -162,31 +162,54 @@ class FormulaEditor extends EditNodeDialog implements INodeSelector, AiCodeEdito
         if (issueAttachment != null) {
             issueAttachment.recordCodeState(validationFailureState);
         }
+        if (!canAttachToAi()) {
+            showValidationFailureMessage(validationResult);
+            return false;
+        }
         int answer = JOptionPane.showConfirmDialog(
             SwingUtilities.getWindowAncestor(textEditor),
             buildValidationFailureDialogMessage(validationResult),
             FormulaPluginUtils.getFormulaText("execution_failed.title"),
             JOptionPane.YES_NO_OPTION,
             JOptionPane.ERROR_MESSAGE);
-        if (answer == JOptionPane.YES_OPTION) {
-            if (issueAttachment == null) {
-                issueAttachment = attachToAi();
-                if (issueAttachment != null) {
-                    issueAttachment.recordCodeState(validationFailureState);
-                }
-            }
-            requestFormulaRepairIfConfirmed(issueAttachment, validationFailureState, answer);
-        }
+        requestFormulaRepairIfAvailable(
+            issueAttachment,
+            validationFailureState,
+            answer,
+            true,
+            this::attachToAi);
         return false;
     }
 
     static void requestFormulaRepairIfConfirmed(AiChatAttachment attachment,
                                                 ReadCodeResponse validationFailureState,
                                                 int confirmationAnswer) {
-        if (attachment == null || validationFailureState == null || confirmationAnswer != JOptionPane.YES_OPTION) {
+        requestFormulaRepairIfAvailable(attachment, validationFailureState, confirmationAnswer, true, null);
+    }
+
+    static void requestFormulaRepairIfAvailable(AiChatAttachment attachment,
+                                                ReadCodeResponse validationFailureState,
+                                                int confirmationAnswer,
+                                                boolean canRequestAiRepair,
+                                                AttachmentSupplier attachmentSupplier) {
+        if (!canRequestAiRepair
+            || validationFailureState == null
+            || confirmationAnswer != JOptionPane.YES_OPTION) {
             return;
         }
-        attachment.requestRepair(new AiChatRepairRequest(REPAIR_PROMPT, validationFailureState));
+        AiChatAttachment repairAttachment = attachment;
+        if (repairAttachment == null && attachmentSupplier != null) {
+            repairAttachment = attachmentSupplier.attach();
+        }
+        if (repairAttachment == null) {
+            return;
+        }
+        repairAttachment.recordCodeState(validationFailureState);
+        repairAttachment.requestRepair(new AiChatRepairRequest(REPAIR_PROMPT, validationFailureState));
+    }
+
+    interface AttachmentSupplier {
+        AiChatAttachment attach();
     }
 
     @Override
@@ -354,16 +377,28 @@ class FormulaEditor extends EditNodeDialog implements INodeSelector, AiCodeEdito
         return builder.toString();
     }
 
+    private void showValidationFailureMessage(AiChatCodeOperationResult validationResult) {
+        JOptionPane.showMessageDialog(
+            SwingUtilities.getWindowAncestor(textEditor),
+            buildValidationFailureMessage(validationResult),
+            FormulaPluginUtils.getFormulaText("execution_failed.title"),
+            JOptionPane.ERROR_MESSAGE);
+    }
+
     private AiChatAttachment attachToAi() {
         AiChatAttachmentService attachmentService = lookupAiChatAttachmentService();
-        if (attachmentService == null) {
-            LogUtils.severe("AI attachment service is unavailable.");
+        if (attachmentService == null || !attachmentService.isAiConfigured()) {
             updateAiAttachButtonState();
             return null;
         }
         AiChatAttachment attachment = attachmentService.attachEditor(this, FormulaTextTransformer.AI_ATTACHMENT_CONTENT_TYPE);
         setAiChatAttachment(attachment);
         return attachment;
+    }
+
+    private boolean canAttachToAi() {
+        AiChatAttachmentService attachmentService = lookupAiChatAttachmentService();
+        return attachmentService != null && attachmentService.isAiConfigured();
     }
 
     private AiChatAttachmentService lookupAiChatAttachmentService() {
@@ -406,7 +441,12 @@ class FormulaEditor extends EditNodeDialog implements INodeSelector, AiCodeEdito
     private void updateAiAttachButtonState() {
         if (aiAttachButton != null) {
             aiAttachButton.setSelected(aiChatAttachment != null);
+            aiAttachButton.setEnabled(shouldEnableAiAttachButton(aiChatAttachment, canAttachToAi()));
         }
+    }
+
+    static boolean shouldEnableAiAttachButton(AiChatAttachment attachment, boolean canAttachToAi) {
+        return attachment != null || canAttachToAi;
     }
 
     private String fingerprint(String text) {

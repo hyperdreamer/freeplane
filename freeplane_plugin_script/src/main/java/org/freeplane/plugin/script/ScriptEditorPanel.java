@@ -117,13 +117,7 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 				updateAiAttachButtonState();
 				return;
 			}
-			AiChatAttachmentService attachmentService = lookupAiChatAttachmentService();
-			if (attachmentService == null) {
-				LogUtils.severe("AI attachment service is unavailable.");
-				updateAiAttachButtonState();
-				return;
-			}
-			setAiChatAttachment(attachmentService.attachEditor(ScriptEditorPanel.this, AI_ATTACHMENT_CONTENT_TYPE));
+			attachToAi();
 		}
 	}
 
@@ -553,6 +547,8 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 
 	private void updateAiAttachButtonState() {
 		mAttachToAiButton.setSelected(aiChatAttachment != null);
+        mAttachToAiButton.setEnabled(!mScriptList.isSelectionEmpty()
+            && shouldEnableAiAttachButton(aiChatAttachment, canAttachToAi()));
 	}
 
 	/**
@@ -816,13 +812,31 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
                                                        ReadCodeResponse codeState,
                                                        RunCodeResponse response,
                                                        ManualRepairConfirmation confirmation) {
-        if (attachment == null || codeState == null || !isFailedManualRun(response) || confirmation == null) {
+        requestAttachedManualRepairIfAvailable(attachment, codeState, response, true, confirmation, null);
+    }
+
+    static void requestAttachedManualRepairIfAvailable(AiChatAttachment attachment,
+                                                       ReadCodeResponse codeState,
+                                                       RunCodeResponse response,
+                                                       boolean canRequestAiRepair,
+                                                       ManualRepairConfirmation confirmation,
+                                                       AttachmentSupplier attachmentSupplier) {
+        if (!canRequestAiRepair || codeState == null || !isFailedManualRun(response) || confirmation == null) {
             return;
         }
         int answer = confirmation.confirmRepair(response);
-        if (answer == JOptionPane.YES_OPTION) {
-            requestAttachedManualRepair(attachment, codeState);
+        if (answer != JOptionPane.YES_OPTION) {
+            return;
         }
+        AiChatAttachment repairAttachment = attachment;
+        if (repairAttachment == null && attachmentSupplier != null) {
+            repairAttachment = attachmentSupplier.attach();
+        }
+        if (repairAttachment == null) {
+            return;
+        }
+        repairAttachment.recordCodeState(codeState);
+        requestAttachedManualRepair(repairAttachment, codeState);
     }
 
     private static boolean isFailedManualRun(RunCodeResponse response) {
@@ -839,14 +853,19 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
         if (response == null || response.getCodeState() == CodeState.RUN_SUCCEEDED || response.getErrorMessage() == null) {
             return;
         }
-        if (aiChatAttachment != null && codeState != null) {
-            requestAttachedManualRepairIfConfirmed(aiChatAttachment, codeState, response, runResponse ->
-                JOptionPane.showConfirmDialog(
+        if (canAttachToAi()) {
+            requestAttachedManualRepairIfAvailable(
+                aiChatAttachment,
+                codeState,
+                response,
+                true,
+                runResponse -> JOptionPane.showConfirmDialog(
                     this,
                     buildManualRunFailureDialogMessage(runResponse),
                     "Freeplane",
                     JOptionPane.YES_NO_OPTION,
-                    JOptionPane.ERROR_MESSAGE));
+                    JOptionPane.ERROR_MESSAGE),
+                this::attachToAi);
             return;
         }
         UITools.errorMessage(response.getErrorMessage());
@@ -854,6 +873,30 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 
     interface ManualRepairConfirmation {
         int confirmRepair(RunCodeResponse response);
+    }
+
+    interface AttachmentSupplier {
+        AiChatAttachment attach();
+    }
+
+    private AiChatAttachment attachToAi() {
+        AiChatAttachmentService attachmentService = lookupAiChatAttachmentService();
+        if (attachmentService == null || !attachmentService.isAiConfigured()) {
+            updateAiAttachButtonState();
+            return null;
+        }
+        AiChatAttachment attachment = attachmentService.attachEditor(this, AI_ATTACHMENT_CONTENT_TYPE);
+        setAiChatAttachment(attachment);
+        return attachment;
+    }
+
+    private boolean canAttachToAi() {
+        AiChatAttachmentService attachmentService = lookupAiChatAttachmentService();
+        return attachmentService != null && attachmentService.isAiConfigured();
+    }
+
+    static boolean shouldEnableAiAttachButton(AiChatAttachment attachment, boolean canAttachToAi) {
+        return attachment != null || canAttachToAi;
     }
 
 	private Object buildManualRunFailureDialogMessage(RunCodeResponse response) {
@@ -929,7 +972,7 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 		mScriptTextField.setEnabled(pIndex >= 0);
         mScriptInputField.setEnabled(pIndex >= 0);
 		mRunAction.setEnabled(pIndex >= 0);
-		mAttachToAiButton.setEnabled(pIndex >= 0);
+        updateAiAttachButtonState();
 		mSignAction.setEnabled(pIndex >= 0);
 		if (pIndex < 0) {
 			mScriptTextField.setText("");

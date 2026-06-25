@@ -1668,6 +1668,10 @@ public class AIChatPanel extends JPanel {
         });
     }
 
+    public boolean isAiProviderConfigured() {
+        return isProviderConfigured();
+    }
+
     private boolean isProviderConfigured() {
         return isNonEmptyText(configuration.getOpenRouterKey())
             || isNonEmptyText(configuration.getGeminiKey())

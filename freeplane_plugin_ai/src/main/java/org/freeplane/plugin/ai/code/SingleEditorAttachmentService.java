@@ -50,6 +50,11 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
     }
 
     @Override
+    public boolean isAiConfigured() {
+        return aiChatPanel.isAiProviderConfigured();
+    }
+
+    @Override
     public synchronized AiChatAttachment attachEditor(AiChatAttachableEditor editor, String contentType) {
         Objects.requireNonNull(editor, "editor");
         String safeContentType = normalizeContentType(contentType);

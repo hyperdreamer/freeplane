@@ -1,6 +1,32 @@
 # Task: Attached script repair consent and callback output
 - **Task Identifier:** 2026-06-22-script-output
 - **Scope:**
+  Govern AI repair consent and asynchronous callback output for script
+  and formula editor interactions with attached AI code state.
+
+- **Motivation:**
+  Editor-originated AI repair must be explicit and consent-gated.
+  Script-facing asynchronous AI callbacks should write to the output
+  target that belongs to the originating script execution when such a
+  target exists.
+
+- **Briefing:**
+  Relevant code spans the script, formula, and AI plugins. The script
+  editor implements `AiCodeEditor` in
+  `freeplane_plugin_script/src/main/java/org/freeplane/plugin/script/ScriptEditorPanel.java`.
+  Formula editor repair behavior is in
+  `freeplane_plugin_formula/src/main/java/org/freeplane/plugin/formula/FormulaEditor.java`.
+  Attached editor state and repair routing are handled by
+  `freeplane_plugin_ai/src/main/java/org/freeplane/plugin/ai/code/SingleEditorAttachmentService.java`.
+  Script-facing AI requests are exposed through
+  `freeplane_plugin_script/src/main/java/org/freeplane/plugin/script/proxy/ControllerProxy.java`
+  and implemented by
+  `freeplane_plugin_ai/src/main/java/org/freeplane/plugin/ai/chat/request/ScriptAiRequestService.java`.
+
+## Subtask: Consent-gated repair and callback output
+- **Status:** done
+
+- **Scope:**
   Fix two attached-script editor behaviors:
   - manual run failures of an attached script editor must not
     automatically submit a chat message or start an AI repair request;
@@ -73,22 +99,6 @@
     only to display callback output.
   - Existing permission checks for script-facing AI requests must stay
     in force.
-
-- **Briefing:**
-  Relevant code spans the script, formula, and AI plugins. The script
-  editor implements `AiCodeEditor` in
-  `freeplane_plugin_script/src/main/java/org/freeplane/plugin/script/ScriptEditorPanel.java`.
-  Formula editor repair behavior is in
-  `freeplane_plugin_formula/src/main/java/org/freeplane/plugin/formula/FormulaEditor.java`.
-  Attached editor state and repair routing are handled by
-  `freeplane_plugin_ai/src/main/java/org/freeplane/plugin/ai/code/SingleEditorAttachmentService.java`.
-  Script-facing AI requests are exposed through
-  `freeplane_plugin_script/src/main/java/org/freeplane/plugin/script/proxy/ControllerProxy.java`
-  and implemented by
-  `freeplane_plugin_ai/src/main/java/org/freeplane/plugin/ai/chat/request/ScriptAiRequestService.java`.
-  Script output is currently redirected during Groovy execution in
-  `GroovyScript.execute(...)` and attached-editor runs use
-  `ScriptEditorPanel.runCode(...)`.
 
 - **Research:**
   ```plantuml
@@ -170,10 +180,10 @@
   restores the previous stream. `ScriptEditorPanel.runCode(...)` uses
   a `CapturedPrintStream` for the immediate run result, and that
   capture is closed before an asynchronous AI callback can execute.
-  Non-editor script file execution through `ScriptingEngine.executeScript(File, ...)`
-  uses `ScriptRunner` without an attached editor; `ScriptRunner` has a
-  default output stream of `System.out` unless a caller supplies a
-  different stream.
+  Non-editor script file execution through
+  `ScriptingEngine.executeScript(File, ...)` uses `ScriptRunner`
+  without an attached editor; `ScriptRunner` has a default output
+  stream of `System.out` unless a caller supplies a different stream.
 
 - **Analysis:**
   - Attached script manual failures should follow the formula editor
@@ -303,3 +313,235 @@
       case only. Its callback output remains bound to `System.out` so
       the short-lived run capture is not kept open and AI-owned
       user-run follow-up behavior is unchanged.
+
+## Subtask: Prompt for AI repair before attachment
+- **Status:** done
+
+- **Scope:**
+  Change editor repair prompting so AI repair help is offered before an
+  editor is attached. Applies to script manual-run failures and formula
+  validation failures.
+
+  In scope:
+  - show the AI repair confirmation when AI is configured, even if the
+    editor is not currently attached;
+  - attach the editor only after the user accepts AI help;
+  - record the failure state on the attachment created after acceptance
+    before requesting repair;
+  - disable the attach-AI button when no AI provider is configured;
+  - suppress the AI repair confirmation when no AI provider is
+    configured.
+
+  Out of scope:
+  - changing provider configuration UI;
+  - changing tool authorization after attachment;
+  - changing script callback output routing from the previous subtask.
+
+- **Motivation:**
+  The current script repair prompt is shown only when the script editor
+  is already attached to AI. The desired behavior is to ask for repair
+  consent first and create the attachment only when the user accepts.
+  When no AI provider is configured, offering AI repair is misleading
+  and the attach-AI control should not be usable.
+
+- **Scenario:**
+  A user has a configured AI provider and runs a failing script from an
+  unattached script editor. Freeplane shows the AI repair confirmation.
+  If the user accepts, Freeplane attaches the script editor to AI,
+  records the run failure as attached code state, and sends the repair
+  request. If the user declines or closes the confirmation, Freeplane
+  does not attach the editor and does not send a repair request.
+
+  A user has a configured AI provider and submits an invalid formula
+  from an unattached formula editor. Freeplane shows the AI repair
+  confirmation. If the user accepts, Freeplane attaches the formula
+  editor, records the validation failure as attached code state, and
+  sends the repair request.
+
+  A user has no configured AI provider. Script run failures and formula
+  validation failures do not show the AI repair confirmation. The
+  editor's attach-AI button is disabled. The local script or formula
+  error remains visible through the non-AI error path.
+
+- **Constraints:**
+  - Attachment must happen only after accepted repair confirmation when
+    the editor was not already attached.
+  - Existing attachments must continue to be reused.
+  - Failure state must be recorded before `requestRepair(...)` starts.
+  - The attach-AI button must reflect AI provider configuration and
+    attachment state.
+  - The repair confirmation must not be shown when AI is unavailable or
+    no provider is configured.
+
+- **Research:**
+  ```plantuml
+  @startuml
+  title Current script repair prompt before attachment
+  participant User
+  participant ScriptEditorPanel
+  participant AiChatAttachmentService
+
+  User -> ScriptEditorPanel : run failing script
+  ScriptEditorPanel -> ScriptEditorPanel : recordAttachedManualRunState(aiChatAttachment, failure)
+  alt aiChatAttachment exists
+    ScriptEditorPanel -> User : show AI repair confirmation
+  else no attachment
+    ScriptEditorPanel -> User : show local error only
+  end
+  User -> ScriptEditorPanel : click attach-AI button
+  ScriptEditorPanel -> AiChatAttachmentService : attachEditor(...)
+  @enduml
+  ```
+
+  `ScriptEditorPanel.showManualRunFailure(...)` currently enters the
+  confirmation path only when `aiChatAttachment != null` and a recorded
+  code state exists. Otherwise it shows `UITools.errorMessage(...)`.
+  `AttachToAiAction` looks up `AiChatAttachmentService` and attaches
+  directly. `updateAiAttachButtonState()` only mirrors selected state;
+  it does not disable the button when AI is unconfigured.
+
+  ```plantuml
+  @startuml
+  title Current formula repair prompt before attachment
+  participant User
+  participant FormulaEditor
+  participant AiChatAttachmentService
+
+  User -> FormulaEditor : submit invalid formula
+  FormulaEditor -> User : show AI repair confirmation
+  User -> FormulaEditor : choose Yes
+  FormulaEditor -> AiChatAttachmentService : attachEditor(...)
+  FormulaEditor -> AiChatAttachmentService : recordCodeState(failure)
+  FormulaEditor -> AiChatAttachmentService : requestRepair(failure)
+  @enduml
+  ```
+
+  `FormulaEditor.submitEditedText(...)` already shows the repair
+  confirmation before attachment and attaches on acceptance, but it
+  does not suppress the AI repair confirmation when no AI provider is
+  configured. Its attach button also only mirrors selected state.
+
+  `AiChatAttachmentService` exposes only `attachEditor(...)`. The
+  service is registered by the AI plugin even when no provider is
+  configured. `AIChatPanel` has provider-configuration knowledge in a
+  private `isProviderConfigured()` method based on OpenRouter key,
+  Gemini key, or Ollama service address.
+
+- **Analysis:**
+  - The AI repair confirmation should be gated by AI provider
+    configuration because accepting the prompt necessarily starts an AI
+    repair request.
+  - The attachment service needs to expose provider availability
+    because script and formula editors can only see the attachment
+    service, not `AIChatPanel` internals.
+  - Script repair should match the formula attach-after-accept flow
+    because both are editor-originated repair requests for attached
+    code.
+
+- **Design:**
+  ```plantuml
+  @startuml
+  set separator none
+  package "target repair availability and attachment" {
+    interface AiChatAttachmentService {
+      + isAiConfigured() : boolean
+      + attachEditor(AiChatAttachableEditor, String) : AiChatAttachment
+    }
+    class SingleEditorAttachmentService {
+      + isAiConfigured() : boolean
+      + attachEditor(AiChatAttachableEditor, String) : AiChatAttachment
+    }
+    class AIChatPanel {
+      + isAiProviderConfigured() : boolean
+    }
+    class ScriptEditorPanel {
+      - attachToAi() : AiChatAttachment
+      - canAttachToAi() : boolean
+      - updateAiAttachButtonState() : void
+    }
+    class FormulaEditor {
+      - attachToAi() : AiChatAttachment
+      - canAttachToAi() : boolean
+      - updateAiAttachButtonState() : void
+    }
+
+    SingleEditorAttachmentService ..|> AiChatAttachmentService
+    SingleEditorAttachmentService --> AIChatPanel
+    ScriptEditorPanel --> AiChatAttachmentService
+    FormulaEditor --> AiChatAttachmentService
+  }
+  @enduml
+  ```
+
+  `AiChatAttachmentService.isAiConfigured()` reports whether AI repair
+  can be offered. `SingleEditorAttachmentService` implements it by
+  delegating to `AIChatPanel.isAiProviderConfigured()`, which exposes
+  the existing provider-configuration check currently held privately in
+  `AIChatPanel`.
+
+  `ScriptEditorPanel.updateAiAttachButtonState()` and
+  `FormulaEditor.updateAiAttachButtonState()` disable the attach-AI
+  button when `AiChatAttachmentService` is absent or reports no
+  configured provider. If an editor is already attached, the selected
+  state remains accurate and detach remains possible.
+
+  ```plantuml
+  @startuml
+  title Target script repair prompt before attachment
+  participant User
+  participant ScriptEditorPanel
+  participant AiChatAttachmentService
+
+  User -> ScriptEditorPanel : run failing script
+  ScriptEditorPanel -> AiChatAttachmentService : isAiConfigured()
+  alt AI configured
+    ScriptEditorPanel -> User : show AI repair confirmation
+    User -> ScriptEditorPanel : choose Yes
+    ScriptEditorPanel -> AiChatAttachmentService : attachEditor(...) if needed
+    ScriptEditorPanel -> AiChatAttachmentService : recordCodeState(failure)
+    ScriptEditorPanel -> AiChatAttachmentService : requestRepair(failure)
+  else AI not configured
+    ScriptEditorPanel -> User : show local error only
+  end
+  @enduml
+  ```
+
+  Script repair state is built independently of current attachment.
+  When AI repair is available, `ScriptEditorPanel` shows the repair
+  confirmation. If the user accepts and no attachment exists, it calls
+  `attachToAi()`, records the failure on the resulting attachment, and
+  calls `requestRepair(...)`. If the user declines, no attachment is
+  created. If AI repair is not available, the existing local error path
+  is used and no AI repair confirmation appears.
+
+  Formula repair keeps its current attach-after-accept behavior and
+  adds the same AI-availability gate. When AI repair is not available,
+  formula validation failure displays local validation failure details
+  without the AI repair prompt.
+
+- **Test specification:**
+  Automated tests:
+  - Script manual failure with configured AI and no existing attachment
+    shows the repair confirmation, attaches after accepted
+    confirmation, records the failure state, and requests repair.
+  - Script manual failure with configured AI and no existing attachment
+    does not attach or request repair when confirmation is declined.
+  - Script manual failure with no configured AI does not show the AI
+    repair confirmation, does not attach, and keeps the local error
+    path.
+  - Formula validation failure with configured AI and no existing
+    attachment attaches after accepted confirmation, records the
+    validation failure state, and requests repair.
+  - Formula validation failure with no configured AI does not show the
+    AI repair confirmation and keeps the local validation-failure path.
+  - Script and formula attach-AI buttons are disabled when no AI
+    provider is configured and enabled when one is configured.
+  - `SingleEditorAttachmentService.isAiConfigured()` reports the
+    provider-configuration state exposed by `AIChatPanel`.
+
+  Manual tests:
+  - With AI configured, run a failing unattached script, accept repair,
+    and verify the editor attaches and AI receives the repair request.
+  - With no AI configured, open script and formula editors and verify
+    the attach-AI buttons are disabled and AI repair prompts are not
+    shown for failures.

@@ -6,6 +6,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import java.util.concurrent.atomic.AtomicBoolean;
 import javax.swing.JOptionPane;
 import org.freeplane.features.ai.code.AiChatAttachment;
 import org.freeplane.features.ai.code.AiChatRepairRequest;
@@ -44,6 +45,53 @@ public class FormulaEditorTest {
             JOptionPane.NO_OPTION);
 
         verify(attachment, never()).requestRepair(any(AiChatRepairRequest.class));
+    }
+
+    @Test
+    public void formulaValidationFailureAttachesAfterAcceptedConfirmationWhenUnattached() {
+        AiChatAttachment attachment = mock(AiChatAttachment.class);
+        ReadCodeResponse validationFailureState = validationFailureState();
+
+        FormulaEditor.requestFormulaRepairIfAvailable(
+            null,
+            validationFailureState,
+            JOptionPane.YES_OPTION,
+            true,
+            () -> attachment);
+
+        verify(attachment).recordCodeState(validationFailureState);
+        ArgumentCaptor<AiChatRepairRequest> requestCaptor = ArgumentCaptor.forClass(AiChatRepairRequest.class);
+        verify(attachment).requestRepair(requestCaptor.capture());
+        assertThat(requestCaptor.getValue().getCodeState()).isSameAs(validationFailureState);
+    }
+
+    @Test
+    public void formulaValidationFailureDoesNotAttachWhenAiRepairUnavailable() {
+        AiChatAttachment attachment = mock(AiChatAttachment.class);
+        AtomicBoolean attachmentRequested = new AtomicBoolean(false);
+
+        FormulaEditor.requestFormulaRepairIfAvailable(
+            null,
+            validationFailureState(),
+            JOptionPane.YES_OPTION,
+            false,
+            () -> {
+                attachmentRequested.set(true);
+                return attachment;
+            });
+
+        assertThat(attachmentRequested.get()).isFalse();
+        verify(attachment, never()).recordCodeState(any(ReadCodeResponse.class));
+        verify(attachment, never()).requestRepair(any(AiChatRepairRequest.class));
+    }
+
+    @Test
+    public void attachAiButtonIsEnabledOnlyWhenAttachedOrAiRepairAvailable() {
+        AiChatAttachment attachment = mock(AiChatAttachment.class);
+
+        assertThat(FormulaEditor.shouldEnableAiAttachButton(null, false)).isFalse();
+        assertThat(FormulaEditor.shouldEnableAiAttachButton(null, true)).isTrue();
+        assertThat(FormulaEditor.shouldEnableAiAttachButton(attachment, false)).isTrue();
     }
 
     private ReadCodeResponse validationFailureState() {

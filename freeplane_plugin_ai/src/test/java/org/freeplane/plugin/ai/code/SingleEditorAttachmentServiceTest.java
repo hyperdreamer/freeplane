@@ -54,6 +54,17 @@ public class SingleEditorAttachmentServiceTest {
     }
 
     @Test
+    public void isAiConfiguredReportsAiChatPanelProviderConfiguration() {
+        AIChatPanel aiChatPanel = mock(AIChatPanel.class);
+        AttachedEditorChatModeSettings settings = mock(AttachedEditorChatModeSettings.class);
+        when(aiChatPanel.isAiProviderConfigured()).thenReturn(true, false);
+        SingleEditorAttachmentService uut = new SingleEditorAttachmentService(aiChatPanel, settings);
+
+        assertThat(uut.isAiConfigured()).isTrue();
+        assertThat(uut.isAiConfigured()).isFalse();
+    }
+
+    @Test
     public void attachModeNewChatStartsNewChatAndShowsIt() {
         AIChatPanel aiChatPanel = mock(AIChatPanel.class);
         AttachedEditorChatModeSettings settings = mock(AttachedEditorChatModeSettings.class);

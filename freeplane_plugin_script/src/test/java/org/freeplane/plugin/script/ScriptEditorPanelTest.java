@@ -7,6 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import java.util.Collections;
+import java.util.concurrent.atomic.AtomicBoolean;
 import javax.swing.JOptionPane;
 import org.freeplane.features.ai.code.AiChatAttachment;
 import org.freeplane.features.ai.code.AiChatRepairRequest;
@@ -75,6 +76,61 @@ public class ScriptEditorPanelTest {
             runResponse -> JOptionPane.NO_OPTION);
 
         verify(attachment, never()).requestRepair(any(AiChatRepairRequest.class));
+    }
+
+    @Test
+    public void manualAttachedScriptFailureAttachesAfterAcceptedConfirmationWhenUnattached() {
+        AiChatAttachment attachment = mock(AiChatAttachment.class);
+        RunCodeResponse response = failedRunResponse();
+        ReadCodeResponse codeState = ScriptEditorPanel.manualRunCodeState(response, new CodeStateContent("println 1", "{"));
+
+        ScriptEditorPanel.requestAttachedManualRepairIfAvailable(
+            null,
+            codeState,
+            response,
+            true,
+            runResponse -> JOptionPane.YES_OPTION,
+            () -> attachment);
+
+        verify(attachment).recordCodeState(codeState);
+        assertRepairRequestedWithCodeState(attachment, codeState);
+    }
+
+    @Test
+    public void manualAttachedScriptFailureDoesNotConfirmOrAttachWhenAiRepairUnavailable() {
+        AiChatAttachment attachment = mock(AiChatAttachment.class);
+        AtomicBoolean confirmationShown = new AtomicBoolean(false);
+        AtomicBoolean attachmentRequested = new AtomicBoolean(false);
+        RunCodeResponse response = failedRunResponse();
+        ReadCodeResponse codeState = ScriptEditorPanel.manualRunCodeState(response, new CodeStateContent("println 1", "{"));
+
+        ScriptEditorPanel.requestAttachedManualRepairIfAvailable(
+            null,
+            codeState,
+            response,
+            false,
+            runResponse -> {
+                confirmationShown.set(true);
+                return JOptionPane.YES_OPTION;
+            },
+            () -> {
+                attachmentRequested.set(true);
+                return attachment;
+            });
+
+        assertThat(confirmationShown.get()).isFalse();
+        assertThat(attachmentRequested.get()).isFalse();
+        verify(attachment, never()).recordCodeState(any(ReadCodeResponse.class));
+        verify(attachment, never()).requestRepair(any(AiChatRepairRequest.class));
+    }
+
+    @Test
+    public void attachAiButtonIsEnabledOnlyWhenAttachedOrAiRepairAvailable() {
+        AiChatAttachment attachment = mock(AiChatAttachment.class);
+
+        assertThat(ScriptEditorPanel.shouldEnableAiAttachButton(null, false)).isFalse();
+        assertThat(ScriptEditorPanel.shouldEnableAiAttachButton(null, true)).isTrue();
+        assertThat(ScriptEditorPanel.shouldEnableAiAttachButton(attachment, false)).isTrue();
     }
 
     private void assertRepairRequestedWithCodeState(AiChatAttachment attachment, ReadCodeResponse codeState) {
