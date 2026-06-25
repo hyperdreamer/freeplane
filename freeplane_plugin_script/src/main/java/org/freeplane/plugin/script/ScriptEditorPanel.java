@@ -950,10 +950,17 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 	private void storeCurrent() {
 		if (mLastSelected != null) {
 			final int oldIndex = mLastSelected;
-            ScriptHolder currentScript = mScriptModel.getScript(oldIndex)
-                .setScript(mScriptTextField.getText())
-                .setArgumentsJsonText(mScriptInputField.getText());
-			mScriptModel.setScript(oldIndex, currentScript);
+			ScriptHolder currentScript = mScriptModel.getScript(oldIndex);
+			String newScript = mScriptTextField.getText();
+			String newArgumentsJsonText = mScriptInputField.getText();
+			boolean scriptChanged = !newScript.equals(currentScript.getScript());
+			boolean argumentsChanged = !newArgumentsJsonText.equals(
+					currentScript.getArgumentsJsonText() == null ? "" : currentScript.getArgumentsJsonText());
+			if (scriptChanged || argumentsChanged) {
+				currentScript.setScript(newScript)
+						.setArgumentsJsonText(newArgumentsJsonText);
+				mScriptModel.setScript(oldIndex, currentScript);
+			}
 		}
 	}
 
