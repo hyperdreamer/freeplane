@@ -193,7 +193,7 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 				mLastSelected = null;
 				final int scriptIndex = mScriptModel.addNewScript();
 				updateFields();
-				select(scriptIndex);
+				select(scriptIndex, true);
 				SwingUtilities.invokeLater(new Runnable() {
 					@Override
 					public void run() {
@@ -366,6 +366,7 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 	final private JLabel mStatus;
     private final boolean mSavedNodeScriptEditor;
 	private AiChatAttachment aiChatAttachment;
+	private boolean mSelectShouldMoveFocus = false;
 
 	public ScriptEditorPanel( final IScriptModel pScriptModel,
 	                         final boolean pHasNewScriptFunctionality) {
@@ -414,9 +415,24 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 				if (pEvent.getValueIsAdjusting()) {
 					return;
 				}
-				select(mScriptList.getSelectedIndex());
+				select(mScriptList.getSelectedIndex(), mSelectShouldMoveFocus);
+				mSelectShouldMoveFocus = false;
 			}
 		});
+		mScriptList.addMouseListener(new java.awt.event.MouseAdapter() {
+			@Override
+			public void mousePressed(java.awt.event.MouseEvent e) {
+				mSelectShouldMoveFocus = true;
+			}
+		});
+		mScriptList.addKeyListener(new java.awt.event.KeyAdapter() {
+			@Override
+			public void keyPressed(java.awt.event.KeyEvent e) {
+				if (e.getKeyCode() == java.awt.event.KeyEvent.VK_ENTER) {
+					mSelectShouldMoveFocus = true;
+				}
+			}
+		});;
 		final JEditorPane editorPane = new JEditorPane();
 		SourceTextEditorUIConfigurator.configureColors(editorPane);
 		mScriptTextField = editorPane;
@@ -556,7 +572,7 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 	 */
 	private void disposeDialog(final boolean pIsCanceled) {
 		if (!mScriptList.isSelectionEmpty()) {
-			select(mScriptList.getSelectedIndex());
+			select(mScriptList.getSelectedIndex(), false);
 		}
 		if (pIsCanceled && mScriptModel.isDirty()) {
 			final int action = JOptionPane.showConfirmDialog(this, TextUtils
@@ -921,7 +937,7 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
         return CodeStateToken.fingerprint(text);
 	}
 
-	private void select(final int pIndex) {
+	private void select(final int pIndex, final boolean moveFocus) {
 		mScriptTextField.setEnabled(pIndex >= 0);
         mScriptInputField.setEnabled(pIndex >= 0);
 		mRunAction.setEnabled(pIndex >= 0);
@@ -940,7 +956,9 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 		if (pIndex >= 0 && mScriptList.getSelectedIndex() != pIndex) {
 			mScriptList.setSelectedIndex(pIndex);
 		}
-		mScriptTextField.requestFocusInWindow();
+		if (moveFocus) {
+			mScriptTextField.requestFocusInWindow();
+		}
 	}
 
 	private void storeCurrent() {
