@@ -500,6 +500,8 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 		mRunAction = new RunAction();
 		mRunAction.setEnabled(false);
 		addButton(menuBar, mRunAction, "plugins/ScriptEditor.run");
+		final AbstractAction exitAction = new ExitAction(TextUtils.getRawText("plugins/ScriptEditor.exit"));
+		addButton(menuBar, exitAction, "plugins/ScriptEditor.exit");
 		mAttachToAiButton = TranslatedElementFactory.createToggleButton("plugins/ScriptEditor.ai");
 		mAttachToAiButton.setEnabled(false);
 		mAttachToAiButton.setIcon(ResourceController.getResourceController().getImageIcon(AI_TAB_ICON_RESOURCE));
@@ -510,8 +512,6 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 		addAction(menu, mSignAction);
 		final AbstractAction cancelAction = new CancelAction(TextUtils.getRawText("plugins/ScriptEditor.cancel"));
 		addAction(menu, cancelAction);
-		final AbstractAction exitAction = new ExitAction(TextUtils.getRawText("plugins/ScriptEditor.exit"));
-		addAction(menu, exitAction);
 		menuBar.add(menu);
 		this.setJMenuBar(menuBar);
 		final ScriptEditorWindowConfigurationStorage storage = mScriptModel.decorateDialog(this,
