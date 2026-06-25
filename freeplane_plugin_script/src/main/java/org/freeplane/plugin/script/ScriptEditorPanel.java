@@ -24,6 +24,7 @@ import java.awt.BorderLayout;
 import java.awt.Container;
 import java.awt.Font;
 import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.IOException;
@@ -33,25 +34,7 @@ import java.io.UnsupportedEncodingException;
 import java.util.Collections;
 import java.util.List;
 
-import javax.swing.AbstractAction;
-import javax.swing.Action;
-import javax.swing.DefaultListModel;
-import javax.swing.JButton;
-import javax.swing.JDialog;
-import javax.swing.JEditorPane;
-import javax.swing.JLabel;
-import javax.swing.JList;
-import javax.swing.JMenu;
-import javax.swing.JMenuBar;
-import javax.swing.JMenuItem;
-import javax.swing.JOptionPane;
-import javax.swing.JScrollPane;
-import javax.swing.JSplitPane;
-import javax.swing.JTextArea;
-import javax.swing.JToggleButton;
-import javax.swing.ListSelectionModel;
-import javax.swing.WindowConstants;
-import javax.swing.SwingUtilities;
+import javax.swing.*;
 import javax.swing.event.CaretEvent;
 import javax.swing.event.CaretListener;
 import javax.swing.event.ListSelectionEvent;
@@ -437,7 +420,7 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 		final JEditorPane editorPane = new JEditorPane();
 		SourceTextEditorUIConfigurator.configureColors(editorPane);
 		mScriptTextField = editorPane;
-        mScriptInputField = new JTextArea();
+		mScriptInputField = new JTextArea();
 		mScriptTextField.setEnabled(false);
         mScriptInputField.setEnabled(false);
 		JScrollPane scriptScrollPane = new JRestrictedSizeScrollPane(mScriptTextField);
@@ -524,6 +507,19 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
 			mCentralUpperPanel.setDividerLocation(100);
 			mCentralPanel.setDividerLocation(240);
 		}
+		mScriptList.setToolTipText("Use Alt+` to switch between list and editor");
+		final KeyStroke keystroke = KeyStroke.getKeyStroke(KeyEvent.VK_BACK_QUOTE, KeyEvent.ALT_DOWN_MASK);
+		mScriptList.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(keystroke, "focusMe");
+		mScriptList.getActionMap().put("focusMe", new AbstractAction() {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				if (mScriptList.isFocusOwner()) {
+					mScriptTextField.requestFocusInWindow();
+				} else {
+					mScriptList.requestFocusInWindow();
+				}
+			}
+		});
 	}
 
 	private void addAction(final JMenu menu, final AbstractAction action) {
