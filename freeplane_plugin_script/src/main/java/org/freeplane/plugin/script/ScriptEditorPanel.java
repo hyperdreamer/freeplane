@@ -387,8 +387,10 @@ class ScriptEditorPanel extends JDialog implements AiCodeEditor {
                 SwingUtilities.invokeLater(new Runnable() {
                     @Override
                     public void run() {
-                    	if(mScriptList.getModel().getSize() > 0)
-                    		mScriptList.setSelectedIndex(0);
+                    	if(mScriptList.getModel().getSize() > 0) {
+							mScriptList.setSelectedIndex(0);
+							mScriptList.requestFocusInWindow();
+						}
                     }
                 });
             }
