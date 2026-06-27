@@ -10,12 +10,15 @@ import java.util.function.Supplier;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.features.text.TextController;
+import org.freeplane.api.ai.AiThinkingEffort;
+import org.freeplane.plugin.ai.chat.memory.AssistantProfileSwitchMessage;
 import org.freeplane.plugin.ai.chat.memory.ChatTokenUsageTracker;
 import org.freeplane.plugin.ai.chat.session.LiveChatSessionId;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.tools.code.AiCodeOperationAuthorizer;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.freeplane.plugin.ai.model.AIModelConfiguration;
+import org.freeplane.plugin.ai.model.AIModelSelection;
 import org.freeplane.plugin.ai.prompt.AiPromptProgressDialogFactory;
 import org.freeplane.plugin.ai.prompt.AiPromptRequestComposer;
 import org.freeplane.plugin.ai.prompt.ui.AiPromptProgressDialog;
@@ -126,6 +129,69 @@ public class ChatPromptRunnerTest {
 
         assertThat(seenPreparedMessage.get()).startsWith("Selected map and node identifiers:\n");
         assertThat(seenPreparedMessage.get()).endsWith("Rewrite the selected nodes.");
+    }
+
+    @Test
+    public void startShownPrompt_fillsUnsetRequestFieldsFromProfileConfiguration() {
+        AvailableMaps availableMaps = mock(AvailableMaps.class);
+        AiPromptRequestComposer aiPromptRequestComposer =
+            new AiPromptRequestComposer(availableMaps, mock(TextController.class));
+        ChatMemory promptChatMemory = mock(ChatMemory.class);
+        AIChatService promptService = mock(AIChatService.class);
+        AtomicReference<String> seenPreparedMessage = new AtomicReference<String>();
+        AtomicReference<AIModelConfiguration> seenModelConfiguration = new AtomicReference<AIModelConfiguration>();
+        ChatPromptRunner uut = newShownPromptRunner(
+            availableMaps,
+            aiPromptRequestComposer,
+            promptChatMemory,
+            seenPreparedMessage);
+        AIModelConfiguration requestConfiguration = AIModelConfiguration.of(
+            AIModelSelection.fromSelectionValue("openrouter|openai/gpt-4.1-mini"),
+            null,
+            null);
+        AIModelConfiguration profileConfiguration = AIModelConfiguration.of(
+            null,
+            AiThinkingEffort.HIGH,
+            Double.valueOf(0.4));
+        AssistantProfileSwitchMessage profileMessage = new AssistantProfileSwitchMessage(
+            "profile-id",
+            "Reviewer",
+            "Review strictly",
+            profileConfiguration);
+
+        try (MockedStatic<AIChatServiceFactory> chatServiceFactory = mockStatic(AIChatServiceFactory.class);
+             MockedConstruction<AIToolSetBuilder> toolSetBuilders = promptServiceBuilderConstruction()) {
+            chatServiceFactory.when(() -> AIChatServiceFactory.createService(
+                any(AIToolSet.class),
+                org.mockito.ArgumentMatchers.<Collection<?>>any(),
+                any(ChatMemory.class),
+                any(ChatTokenUsageTracker.class),
+                nullable(ToolCallSummaryHandler.class),
+                org.mockito.ArgumentMatchers.<Supplier<Boolean>>any(),
+                org.mockito.ArgumentMatchers.nullable(Consumer.class),
+                org.mockito.ArgumentMatchers.<Supplier<ToolAvailabilityLevel>>any(),
+                nullable(AIModelConfiguration.class)))
+                .thenAnswer(invocation -> {
+                    seenModelConfiguration.set(invocation.getArgument(8));
+                    return promptService;
+                });
+
+            boolean started = uut.startShownPrompt(
+                "Rewrite the selected nodes.",
+                requestConfiguration,
+                ToolAvailabilityLevel.DISABLED,
+                null,
+                null,
+                profileMessage);
+
+            assertThat(started).isTrue();
+        }
+
+        assertThat(seenPreparedMessage.get()).isEqualTo("Rewrite the selected nodes.");
+        assertThat(seenModelConfiguration.get().getModelSelection())
+            .isEqualTo(requestConfiguration.getModelSelection());
+        assertThat(seenModelConfiguration.get().getThinkingEffort()).isEqualTo(AiThinkingEffort.HIGH);
+        assertThat(seenModelConfiguration.get().getTemperature()).isEqualTo(0.4);
     }
 
     @Test

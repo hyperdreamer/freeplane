@@ -175,8 +175,10 @@ public class AssistantProfileSelectionSync {
         return !sameProfileMessage(
             normalize(profileEntry.getProfileName()),
             transcriptProfileMessage(profileEntry, selectedMessage),
+            profileEntry.getModelConfiguration(),
             selectedMessage.getProfileName(),
-            selectedMessage.getProfileMessage());
+            selectedMessage.getProfileMessage(),
+            selectedMessage.getModelConfiguration());
     }
 
     private List<AssistantProfile> findProfilesByName(String profileName) {
@@ -204,7 +206,11 @@ public class AssistantProfileSelectionSync {
             return null;
         }
         String profileMessage = configuredProfileMessage(profileName, profilePrompt);
-        return new AssistantProfileSwitchMessage(profileId, profileName, profileMessage);
+        return new AssistantProfileSwitchMessage(
+            profileId,
+            profileName,
+            profileMessage,
+            profile.getModelConfiguration());
     }
 
     private String configuredProfileMessage(String profileName, String profilePrompt) {
@@ -225,16 +231,21 @@ public class AssistantProfileSelectionSync {
             && sameProfileMessage(
                 activeMessage.getProfileName(),
                 activeMessage.getProfileMessage(),
+                activeMessage.getModelConfiguration(),
                 message.getProfileName(),
-                message.getProfileMessage());
+                message.getProfileMessage(),
+                message.getModelConfiguration());
     }
 
     private boolean sameProfileMessage(String leftName,
                                        String leftMessage,
+                                       org.freeplane.plugin.ai.model.AIModelConfiguration leftModelConfiguration,
                                        String rightName,
-                                       String rightMessage) {
+                                       String rightMessage,
+                                       org.freeplane.plugin.ai.model.AIModelConfiguration rightModelConfiguration) {
         return normalize(leftName).equals(normalize(rightName))
-            && normalize(leftMessage).equals(normalize(rightMessage));
+            && normalize(leftMessage).equals(normalize(rightMessage))
+            && java.util.Objects.equals(leftModelConfiguration, rightModelConfiguration);
     }
 
     private String transcriptProfileMessage(AssistantProfileTranscriptEntry profileEntry,

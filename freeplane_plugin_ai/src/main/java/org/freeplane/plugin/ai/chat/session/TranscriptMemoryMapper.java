@@ -89,7 +89,8 @@ class TranscriptMemoryMapper {
             return new AssistantProfileSwitchMessage(
                 assistantProfileEntry.getProfileId(),
                 assistantProfileEntry.getProfileName(),
-                assistantProfileEntry.getProfileMessage());
+                assistantProfileEntry.getProfileMessage(),
+                assistantProfileEntry.getModelConfiguration());
         }
         if (entry.getRole() == ChatTranscriptRole.REMOVED_FOR_SPACE_SYSTEM) {
             if (entry.getText() == null) {
@@ -153,6 +154,7 @@ class TranscriptMemoryMapper {
                 profileMessage.getProfileId(),
                 profileMessage.getProfileName(),
                 profileMessage.getProfileMessage(),
+                profileMessage.getModelConfiguration(),
                 false);
         }
         if (message instanceof GeneralSystemMessage) {

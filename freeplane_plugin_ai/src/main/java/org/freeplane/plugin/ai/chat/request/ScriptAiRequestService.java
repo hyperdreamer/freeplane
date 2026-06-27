@@ -142,12 +142,17 @@ public class ScriptAiRequestService implements AiRequestService {
     }
 
     private SavedPromptResolution resolveSavedPromptRequest(AiPrompt savedPrompt, AiRequestOptions options) {
-        ModelConfigurationResolution modelConfigurationResolution = options.getModelConfiguration() != null
-            ? ModelConfigurationResolution.success(withDefaultModelSelection(options.getModelConfiguration()))
-            : resolveSavedPromptModelConfiguration(savedPrompt);
+        ModelConfigurationResolution modelConfigurationResolution = resolveSavedPromptModelConfiguration(
+            savedPrompt,
+            options.getModelConfiguration() == null || options.getModelConfiguration().getModelSelection() == null);
         if (modelConfigurationResolution.configurationErrorDetail != null) {
             return SavedPromptResolution.configurationError(modelConfigurationResolution.configurationErrorDetail);
         }
+        AiModelConfiguration resolvedModelConfiguration = options.getModelConfiguration() == null
+            ? modelConfigurationResolution.modelConfiguration
+            : withDefaultModelSelection(mergeModelConfigurations(
+                options.getModelConfiguration(),
+                modelConfigurationResolution.modelConfiguration));
         AiToolAvailability toolAvailability = options.getToolAvailability() != null
             ? options.getToolAvailability()
             : resolveSavedPromptToolAvailability(savedPrompt);
@@ -159,7 +164,7 @@ public class ScriptAiRequestService implements AiRequestService {
             savedPrompt.getName(),
             options.getTimeout(),
             mode,
-            modelConfigurationResolution.modelConfiguration,
+            resolvedModelConfiguration,
             toolAvailability,
             options.getSelectionOverride(),
             options.getSystemMessage(),
@@ -168,19 +173,55 @@ public class ScriptAiRequestService implements AiRequestService {
             options.getProfileMessage()));
     }
 
-    private ModelConfigurationResolution resolveSavedPromptModelConfiguration(AiPrompt savedPrompt) {
+    private ModelConfigurationResolution resolveSavedPromptModelConfiguration(AiPrompt savedPrompt,
+                                                                              boolean requireValidModelSelection) {
+        org.freeplane.plugin.ai.model.AIModelConfiguration savedConfiguration =
+            savedPrompt.getModelConfiguration();
         String selectionValue = normalizeOptional(savedPrompt.getModelSelectionValue());
-        if (selectionValue == null) {
-            return ModelConfigurationResolution.success(defaultModelConfiguration());
-        }
-        AIModelSelection parsedSelection = AIModelSelection.fromSelectionValue(selectionValue);
-        if (parsedSelection == null) {
+        if (requireValidModelSelection
+            && selectionValue != null
+            && (savedConfiguration == null || savedConfiguration.getModelSelection() == null)) {
             return ModelConfigurationResolution.configurationError(
                 "Malformed saved AI prompt model selection for prompt '" + safePromptName(savedPrompt) + "'.");
         }
-        return ModelConfigurationResolution.success(AiModelConfiguration.builder()
-            .modelSelection(AiModelSelection.explicit(parsedSelection.getProviderName(), parsedSelection.getModelName()))
-            .build());
+        if (savedConfiguration == null) {
+            return ModelConfigurationResolution.success(defaultModelConfiguration());
+        }
+        AiModelConfiguration publicConfiguration = toPublicModelConfiguration(savedConfiguration);
+        return ModelConfigurationResolution.success(withDefaultModelSelection(publicConfiguration));
+    }
+
+    private AiModelConfiguration mergeModelConfigurations(AiModelConfiguration override,
+                                                          AiModelConfiguration fallback) {
+        if (override == null) {
+            return fallback;
+        }
+        if (fallback == null) {
+            return override;
+        }
+        return AiModelConfiguration.builder()
+            .modelSelection(override.getModelSelection() != null
+                ? override.getModelSelection()
+                : fallback.getModelSelection())
+            .thinkingEffort(override.getThinkingEffort() != null
+                ? override.getThinkingEffort()
+                : fallback.getThinkingEffort())
+            .temperature(override.getTemperature() != null
+                ? override.getTemperature()
+                : fallback.getTemperature())
+            .build();
+    }
+
+    private AiModelConfiguration toPublicModelConfiguration(
+        org.freeplane.plugin.ai.model.AIModelConfiguration modelConfiguration) {
+        AiModelConfiguration.Builder builder = AiModelConfiguration.builder();
+        if (modelConfiguration.getModelSelection() != null) {
+            org.freeplane.plugin.ai.model.AIModelSelection selection = modelConfiguration.getModelSelection();
+            builder.modelSelection(AiModelSelection.explicit(selection.getProviderName(), selection.getModelName()));
+        }
+        builder.thinkingEffort(modelConfiguration.getThinkingEffort());
+        builder.temperature(modelConfiguration.getTemperature());
+        return builder.build();
     }
 
     private AiModelConfiguration withDefaultModelSelection(AiModelConfiguration modelConfiguration) {

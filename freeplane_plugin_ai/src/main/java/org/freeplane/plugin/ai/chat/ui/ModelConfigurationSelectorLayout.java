@@ -6,12 +6,12 @@ import java.awt.Dimension;
 import java.awt.Insets;
 import java.awt.LayoutManager2;
 
-class ModelConfigurationSelectorLayout implements LayoutManager2 {
+public class ModelConfigurationSelectorLayout implements LayoutManager2 {
     private final int gap;
     private Component modelSelector;
     private Component thinkingSelector;
 
-    ModelConfigurationSelectorLayout(int gap) {
+    public ModelConfigurationSelectorLayout(int gap) {
         this.gap = Math.max(0, gap);
     }
 

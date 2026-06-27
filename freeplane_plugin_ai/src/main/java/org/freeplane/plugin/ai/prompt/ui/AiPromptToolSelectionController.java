@@ -17,7 +17,7 @@ public class AiPromptToolSelectionController {
 
     public AiPromptToolSelectionController() {
         this(
-            TextUtils.getText("ai_prompt_use_current_tools"),
+            TextUtils.getText("ai_prompt_current"),
             TextUtils.getText("OptionPanel.ToolAvailabilityLevel.SCRIPT_EXECUTION"),
             TextUtils.getText("OptionPanel.ToolAvailabilityLevel.EDITING"),
             TextUtils.getText("OptionPanel.ToolAvailabilityLevel.READING"),

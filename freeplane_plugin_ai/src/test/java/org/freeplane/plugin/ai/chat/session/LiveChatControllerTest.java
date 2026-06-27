@@ -25,6 +25,7 @@ import org.freeplane.plugin.ai.chat.memory.ChatMemorySettings;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.chat.ui.AIChatPanel;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
+import org.freeplane.plugin.ai.model.AIModelSelection;
 import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -87,6 +88,8 @@ public class LiveChatControllerTest {
 
             assertThat(record.getAssistantProfileEnabled()).isFalse();
             assertThat(record.getSelectedModelOverride()).isEqualTo("openrouter|openai/gpt-4.1-mini");
+            assertThat(record.getModelConfigurationOverride().getModelSelection())
+                .isEqualTo(AIModelSelection.fromSelectionValue("openrouter|openai/gpt-4.1-mini"));
             assertThat(record.getToolAvailabilityOverride()).isEqualTo("reading");
             assertThat(record.hasToolAvailabilityOverrideMetadata()).isTrue();
             assertThat(record.getEntries())

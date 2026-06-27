@@ -21,6 +21,7 @@ import org.freeplane.plugin.ai.chat.memory.ChatMemorySettings;
 import org.freeplane.plugin.ai.chat.memory.GeneralSystemMessage;
 import org.freeplane.plugin.ai.chat.memory.TranscriptHiddenSystemMessage;
 import org.freeplane.plugin.ai.chat.memory.ChatTokenUsageState;
+import org.freeplane.plugin.ai.model.AIModelConfiguration;
 import org.freeplane.plugin.ai.tools.MessageBuilder;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.chat.ui.AIChatPanel;
@@ -122,18 +123,33 @@ public class LiveChatController {
     public LiveChatSessionId startNewPromptChat(ChatMemory chatMemory, String displayName,
                                                 String selectedModelOverride,
                                                 ToolAvailabilityLevel toolAvailabilityOverride) {
-        return startNewPromptChat(chatMemory, displayName, selectedModelOverride, toolAvailabilityOverride, true);
+        return startNewPromptChat(chatMemory, displayName,
+            AIModelConfiguration.fromSelectionValue(selectedModelOverride), toolAvailabilityOverride, true);
+    }
+
+    public LiveChatSessionId startNewPromptChat(ChatMemory chatMemory, String displayName,
+                                                AIModelConfiguration modelConfigurationOverride,
+                                                ToolAvailabilityLevel toolAvailabilityOverride) {
+        return startNewPromptChat(chatMemory, displayName, modelConfigurationOverride, toolAvailabilityOverride, true);
     }
 
     public LiveChatSessionId startNewScriptChat(ChatMemory chatMemory, String displayName,
                                                 String selectedModelOverride,
                                                 ToolAvailabilityLevel toolAvailabilityOverride) {
+        return startNewScriptChat(chatMemory, displayName,
+            AIModelConfiguration.fromSelectionValue(selectedModelOverride), toolAvailabilityOverride);
+    }
+
+    public LiveChatSessionId startNewScriptChat(ChatMemory chatMemory, String displayName,
+                                                AIModelConfiguration modelConfigurationOverride,
+                                                ToolAvailabilityLevel toolAvailabilityOverride) {
         boolean nameEdited = displayName != null && !displayName.trim().isEmpty();
-        return startNewPromptChat(chatMemory, displayName, selectedModelOverride, toolAvailabilityOverride, nameEdited);
+        return startNewPromptChat(chatMemory, displayName,
+            modelConfigurationOverride, toolAvailabilityOverride, nameEdited);
     }
 
     private LiveChatSessionId startNewPromptChat(ChatMemory chatMemory, String displayName,
-                                                 String selectedModelOverride,
+                                                 AIModelConfiguration modelConfigurationOverride,
                                                  ToolAvailabilityLevel toolAvailabilityOverride,
                                                  boolean nameEdited) {
         if (chatMemory == null) {
@@ -149,14 +165,18 @@ public class LiveChatController {
             effectiveDisplayName,
             false,
             toolAvailabilityOverride);
-        promptSession.setSelectedModelOverride(selectedModelOverride);
+        promptSession.setModelConfigurationOverride(modelConfigurationOverride);
         promptSession.setNameEdited(nameEdited);
         switchToSession(promptSession.getId(), false, false);
         return promptSession.getId();
     }
 
     public boolean currentSessionUsesAssistantProfile() {
-        LiveChatSession session = liveChatSessionManager.getCurrentSession();
+        return sessionUsesAssistantProfile(liveChatSessionManager.getCurrentSessionId());
+    }
+
+    public boolean sessionUsesAssistantProfile(LiveChatSessionId sessionId) {
+        LiveChatSession session = liveChatSessionManager.findSession(sessionId);
         return session == null || session.isAssistantProfileEnabled();
     }
 
@@ -189,6 +209,11 @@ public class LiveChatController {
     public String sessionSelectedModelOverride(LiveChatSessionId sessionId) {
         LiveChatSession session = liveChatSessionManager.findSession(sessionId);
         return session == null ? null : session.getSelectedModelOverride();
+    }
+
+    public AIModelConfiguration sessionModelConfigurationOverride(LiveChatSessionId sessionId) {
+        LiveChatSession session = liveChatSessionManager.findSession(sessionId);
+        return session == null ? null : session.getModelConfigurationOverride();
     }
 
     public AiThinkingEffort currentSessionThinkingEffortOverride() {
@@ -245,6 +270,15 @@ public class LiveChatController {
             return;
         }
         session.setSelectedModelOverride(selectedModelOverride);
+    }
+
+    public void setSessionModelConfigurationOverride(LiveChatSessionId sessionId,
+                                                     AIModelConfiguration modelConfigurationOverride) {
+        LiveChatSession session = liveChatSessionManager.findSession(sessionId);
+        if (session == null) {
+            return;
+        }
+        session.setModelConfigurationOverride(modelConfigurationOverride);
     }
 
     public void clearCurrentSessionThinkingEffortOverride() {
@@ -480,7 +514,7 @@ public class LiveChatController {
         ChatTranscriptRecord record = new ChatTranscriptRecord();
         record.setDisplayName(session.getDisplayName());
         record.setAssistantProfileEnabled(session.isAssistantProfileEnabled());
-        record.setSelectedModelOverride(session.getSelectedModelOverride());
+        record.setModelConfigurationOverride(session.getModelConfigurationOverride());
         record.setToolAvailabilityOverride(toToolAvailabilityPreferenceValue(session.getToolAvailabilityOverride()));
         record.setEntries(new ArrayList<>(session.getTranscriptEntries()));
         List<MapRootShortTextCount> currentCounts = mapRootShortTextFormatter.buildCounts(
@@ -618,7 +652,7 @@ public class LiveChatController {
         if (!assistantProfileEnabled) {
             newSession.setNameEdited(true);
         }
-        newSession.setSelectedModelOverride(hasSessionMetadata ? record.getSelectedModelOverride() : null);
+        newSession.setModelConfigurationOverride(hasSessionMetadata ? record.getModelConfigurationOverride() : null);
         newSession.setTranscriptId(transcriptId);
         newSession.setLastActivityTimestamp(record.getTimestamp());
         newSession.setMapRootShortTextCounts(record.getMapRootShortTextCounts());

@@ -489,7 +489,7 @@
   - Manual tests: N/A
 
 ## Subtask: Introduce model configuration and provider mappings
-- **Status:** review
+- **Status:** done
 - **Scope:**
   Add internal and public model-configuration value objects, replace
   direct model-selection request boundaries, parse global default model
@@ -599,7 +599,7 @@
   - Manual tests: N/A
 
 ## Subtask: Add current-chat thinking effort selector
-- **Status:** review
+- **Status:** done
 - **Scope:**
   Add a visible-chat thinking-effort drop-down selector beside the model
   selector. The selector follows the model selector's preference-backed
@@ -659,13 +659,13 @@
   - Manual tests: N/A
 
 ## Subtask: Add prompt model configuration
-- **Status:** backlog
+- **Status:** done
 - **Scope:**
   Replace prompt direct `modelSelectionValue` storage with nested model
   configuration, recover existing prompt model selection at read time,
-  add optional thinking-effort and temperature controls to prompt UI,
-  and route prompt model configuration through hidden prompt execution
-  and shown prompt chat session metadata.
+  add optional model-selection, thinking-effort, and temperature controls
+  to prompt UI, and route prompt model configuration through hidden
+  prompt execution and shown prompt chat session metadata.
 - **Motivation:**
   Prompts are reusable request presets. They need model configuration so
   a prompt can consistently request a specific model and generation
@@ -686,6 +686,9 @@
     new model configuration. New prompt JSON must not write
     `modelSelectionValue`.
   - A prompt launch must not write global model-configuration defaults.
+  - Prompt model and thinking controls must use the same optional-field
+    semantics: the inherited/current option stores an unset field, and
+    an explicit option stores only that prompt field.
   - Prompt explicit values are stronger than profile, current-chat, and
     global values for the prompt request.
   - A shown prompt chat persists explicit prompt model-configuration
@@ -705,6 +708,13 @@
   - Jackson can support one-way recovery by accepting the old
     `modelSelectionValue` field for input while omitting it from new
     output.
+  - The chat selector layout exists in `ModelConfigurationSelectorLayout`:
+    it keeps model and thinking selectors on one line, keeps the
+    thinking selector at preferred width, and does not lay out the model
+    selector narrower than the thinking selector.
+  - Prompt model selection already has an inherited/current option. The
+    prompt thinking selector should mirror that behavior instead of
+    writing `ai_thinking_effort`.
 - **Analysis:**
   - Recover old prompt model selection only at read time because user
     prompts are persisted data, while retaining old write fields would
@@ -715,9 +725,13 @@
   populates only `modelConfiguration.modelSelection`. Remove new writes
   of the old field.
 
-  Add prompt-manager controls beside the existing model/tool controls:
-  model selection remains the selected-model part of prompt model
-  configuration, and new controls edit thinking effort and temperature.
+  Add prompt-manager model and thinking controls using the same one-line
+  selector layout used by visible chat. The model selector keeps its
+  existing inherited/current option; the thinking selector adds a matching
+  inherited/current option and explicit `AiThinkingEffort` values. Both
+  selectors update the prompt draft only, not global preferences. Add a
+  temperature control as a separate optional field.
+
   Hidden prompt creation passes prompt model configuration into service
   creation for that request. Shown prompt chat creation stores prompt
   model configuration in live-session metadata and transcript metadata,
@@ -729,6 +743,9 @@
     - Prompt store writes new prompt JSON without `modelSelectionValue`.
     - Prompt manager dirty-state, save, save-as-new, delete, and draft
       restore include model configuration fields.
+    - Prompt manager model and thinking selectors use the shared
+      one-line layout and store inherited/current choices as unset
+      model-configuration fields without writing global preferences.
     - Hidden prompt execution passes prompt model configuration to
       service/model creation without changing global defaults.
     - Shown prompt chats persist prompt model configuration in
@@ -738,7 +755,7 @@
   - Manual tests: N/A
 
 ## Subtask: Add profile configuration and persisted chat model metadata
-- **Status:** backlog
+- **Status:** done
 - **Scope:**
   Add optional model configuration to assistant profiles, recover
   existing profiles with every field unset, preserve selected profile
@@ -755,10 +772,11 @@
   fields. The profile behaves as before until the user edits and saves
   model-configuration values.
 
-  A user selects a profile with `thinking effort=high` and
-  `temperature=0.4`; requests using that profile resolve those values
-  unless a stronger prompt/request value applies. The profile switch is
-  recorded so transcript restore keeps the parameter values active.
+  A user selects a profile with a specific model, `thinking effort=high`,
+  and `temperature=0.4`; requests using that profile resolve those
+  values unless a stronger prompt/request value applies. The profile
+  switch is recorded so transcript restore keeps the parameter values
+  active.
 
   A visible chat has a live `minimal` thinking-effort override. Saving
   and restoring that chat preserves the override through transcript
@@ -773,8 +791,14 @@
   - Existing transcript JSON with `selectedModelOverride` must recover
     that value into session model configuration. New transcript JSON must
     not write `selectedModelOverride`.
+  - Profile model and thinking controls must use the same optional-field
+    semantics: the inherited/current option stores an unset field, and
+    an explicit option stores only that profile field.
   - Persisted current-chat thinking metadata must not write the global
-    thinking-effort preference.
+    thinking-effort preference during transcript restore. If the user
+    explicitly changes the visible chat thinking selector after restore,
+    it follows model-selector behavior: write the global preference and
+    clear the active session override.
   - Current-chat temperature UI remains out of scope.
   - If profile and current-chat thinking values both exist, the
     confirmed resolution order keeps the profile value stronger than the
@@ -795,6 +819,11 @@
   - `LiveChatSession` and `ChatTranscriptRecord` currently store
     `selectedModelOverride`; both must move to model configuration with
     read-time recovery.
+  - The chat selector layout exists in `ModelConfigurationSelectorLayout`:
+    it should also be used for profile model/thinking controls so the
+    model selector is not laid out narrower than the thinking selector.
+  - Profile model and thinking selectors should mirror the prompt/model
+    optional-field behavior instead of writing global preferences.
 - **Analysis:**
   - Store profile configuration values in profile switch messages because
     a restored transcript should not silently adopt later edits to the
@@ -807,9 +836,13 @@
 - **Design:**
   Extend `AssistantProfile` with nested `modelConfiguration`. Existing
   profile files missing the object load with all fields unset. Extend
-  profile manager UI to edit thinking effort and temperature values.
-  Profile model selection remains unset in this task unless an existing
-  request or prompt supplies it.
+  profile manager UI with model and thinking controls using the same
+  one-line selector layout used by visible chat and prompt UI. The model
+  selector has an inherited/current option and explicit models; the
+  thinking selector has a matching inherited/current option and explicit
+  `AiThinkingEffort` values. Both selectors update the profile draft
+  only, not global preferences. Add a temperature control as a separate
+  optional field.
 
   Extend `AssistantProfileSwitchMessage`,
   `AssistantProfileTranscriptEntry`, and `TranscriptMemoryMapper` so
@@ -819,15 +852,20 @@
 
   Replace `selectedModelOverride` session and transcript metadata with
   `modelConfigurationOverride`. Existing transcript `selectedModelOverride`
-  is accepted only as a read-time recovery source. The existing live
-  current-chat thinking selector reads and writes the thinking field of
-  the session model-configuration override.
+  is accepted only as a read-time recovery source. Restored session model
+  configuration acts as the displayed override for the visible chat
+  model/thinking selectors. Explicit user changes in those visible-chat
+  selectors write the corresponding global preference and clear the
+  active session override.
 - **Test specification:**
   - Automated tests:
     - Profile store loads old profile JSON with every model-configuration
       field unset.
-    - Profile manager save and reload preserve thinking effort and
-      temperature values in model configuration.
+    - Profile manager save and reload preserve model selection, thinking
+      effort, and temperature values in model configuration.
+    - Profile manager model and thinking selectors use the shared
+      one-line layout and store inherited/current choices as unset
+      model-configuration fields without writing global preferences.
     - Profile switch messages and transcript entries preserve selected
       profile model configuration values.
     - Transcript restore recovers old `selectedModelOverride` into
@@ -839,7 +877,9 @@
       provider default.
     - Persisted current-chat thinking override metadata restores into
       the active session thinking override field and does not write the
-      global preference.
+      global preference during restore.
+    - Explicit visible-chat selector changes after restore clear the
+      active session thinking override and write `ai_thinking_effort`.
     - Transcript restore preserves current-chat thinking override and
       profile-carried configuration values.
   - Manual tests: N/A

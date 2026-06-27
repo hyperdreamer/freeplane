@@ -2,14 +2,16 @@ package org.freeplane.plugin.ai.chat.history;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonSetter;
 import java.util.ArrayList;
 import java.util.List;
+import org.freeplane.plugin.ai.model.AIModelConfiguration;
 
 public class ChatTranscriptRecord {
     private long timestamp;
     private String displayName;
     private Boolean assistantProfileEnabled;
-    private String selectedModelOverride;
+    private AIModelConfiguration modelConfigurationOverride;
     private String toolAvailabilityOverride;
     private boolean toolAvailabilityOverrideMetadata;
     private List<MapRootShortTextCount> mapRootShortTextCounts = new ArrayList<>();
@@ -42,12 +44,23 @@ public class ChatTranscriptRecord {
         this.assistantProfileEnabled = assistantProfileEnabled;
     }
 
-    public String getSelectedModelOverride() {
-        return selectedModelOverride;
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public AIModelConfiguration getModelConfigurationOverride() {
+        return modelConfigurationOverride;
     }
 
+    public void setModelConfigurationOverride(AIModelConfiguration modelConfigurationOverride) {
+        this.modelConfigurationOverride = normalizeModelConfiguration(modelConfigurationOverride);
+    }
+
+    @JsonIgnore
+    public String getSelectedModelOverride() {
+        return selectedModelOverride(modelConfigurationOverride);
+    }
+
+    @JsonSetter("selectedModelOverride")
     public void setSelectedModelOverride(String selectedModelOverride) {
-        this.selectedModelOverride = selectedModelOverride;
+        setModelConfigurationOverride(AIModelConfiguration.fromSelectionValue(selectedModelOverride));
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -87,5 +100,26 @@ public class ChatTranscriptRecord {
 
     public void setEntries(List<ChatTranscriptEntry> entries) {
         this.entries = entries == null ? new ArrayList<>() : entries;
+    }
+
+    private static String selectedModelOverride(AIModelConfiguration modelConfiguration) {
+        if (modelConfiguration == null || modelConfiguration.getModelSelection() == null) {
+            return null;
+        }
+        return org.freeplane.plugin.ai.model.AIModelSelection.createSelectionValue(
+            modelConfiguration.getModelSelection().getProviderName(),
+            modelConfiguration.getModelSelection().getModelName());
+    }
+
+    private static AIModelConfiguration normalizeModelConfiguration(AIModelConfiguration modelConfiguration) {
+        if (modelConfiguration == null) {
+            return null;
+        }
+        if (modelConfiguration.getModelSelection() == null
+            && modelConfiguration.getThinkingEffort() == null
+            && modelConfiguration.getTemperature() == null) {
+            return null;
+        }
+        return modelConfiguration;
     }
 }

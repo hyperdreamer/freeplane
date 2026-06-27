@@ -9,6 +9,9 @@ import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Arrays;
+import org.freeplane.api.ai.AiThinkingEffort;
+import org.freeplane.plugin.ai.model.AIModelConfiguration;
+import org.freeplane.plugin.ai.model.AIModelSelection;
 import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -32,6 +35,7 @@ public class AiPromptStoreTest {
                         "gemini|gemini-2.5-flash", "disabled")));
 
             store.saveState(state);
+            String writtenJson = new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
             AiPromptStore.PersistedState loaded = store.loadState();
 
             assertThat(loaded.getSavedPrompts())
@@ -49,6 +53,84 @@ public class AiPromptStoreTest {
             assertThat(loaded.getDialogState().getDraft().isShowInChat()).isTrue();
             assertThat(loaded.getDialogState().getDraft().getModelSelectionValue()).isEqualTo("gemini|gemini-2.5-flash");
             assertThat(loaded.getDialogState().getDraft().getToolAvailabilitySelectionValue()).isEqualTo("disabled");
+            assertThat(writtenJson).doesNotContain("modelSelectionValue");
+            assertThat(writtenJson).contains("modelConfiguration");
+        }
+        finally {
+            deleteRecursively(tempDir);
+        }
+    }
+
+    @Test
+    public void loadState_recoversLegacyModelSelectionValueIntoModelConfiguration() throws IOException {
+        Path tempDir = Files.createTempDirectory("ai-prompts");
+        try {
+            Path path = tempDir.resolve(AiPromptStore.PROMPTS_FILE_NAME);
+            Files.write(
+                path,
+                ("{\"savedPrompts\":[{\"name\":\"Rewrite\",\"prompt\":\"Prompt\","
+                    + "\"showInChat\":true,\"modelSelectionValue\":\"openrouter|openai/gpt-4.1-mini\"}],"
+                    + "\"dialogState\":{\"draft\":{\"name\":\"Draft\",\"prompt\":\"Draft prompt\","
+                    + "\"modelSelectionValue\":\"gemini|gemini-2.5-flash\"}}}")
+                    .getBytes(StandardCharsets.UTF_8));
+            AiPromptStore store = new AiPromptStore(new ObjectMapper(), path);
+
+            AiPromptStore.PersistedState loaded = store.loadState();
+
+            AiPrompt savedPrompt = loaded.getSavedPrompts().get(0);
+            assertThat(savedPrompt.getModelSelectionValue()).isEqualTo("openrouter|openai/gpt-4.1-mini");
+            assertThat(savedPrompt.getModelConfiguration().getModelSelection())
+                .isEqualTo(AIModelSelection.fromSelectionValue("openrouter|openai/gpt-4.1-mini"));
+            assertThat(loaded.getDialogState().getDraft().getModelSelectionValue())
+                .isEqualTo("gemini|gemini-2.5-flash");
+        }
+        finally {
+            deleteRecursively(tempDir);
+        }
+    }
+
+    @Test
+    public void saveAndLoad_preservesPromptThinkingEffortAndTemperature() throws IOException {
+        Path tempDir = Files.createTempDirectory("ai-prompts");
+        try {
+            Path path = tempDir.resolve(AiPromptStore.PROMPTS_FILE_NAME);
+            AiPrompt prompt = new AiPrompt("Rewrite", "Prompt", false);
+            prompt.setModelConfiguration(AIModelConfiguration.of(
+                AIModelSelection.fromSelectionValue("openrouter|openai/gpt-4.1-mini"),
+                AiThinkingEffort.LOW,
+                Double.valueOf(0.2)));
+            AiPromptStore store = new AiPromptStore(new ObjectMapper(), path);
+
+            store.saveState(new AiPromptStore.PersistedState(
+                Arrays.asList(prompt),
+                new AiPromptStore.PersistedDialogState()));
+            AiPrompt loaded = store.loadState().getSavedPrompts().get(0);
+
+            assertThat(loaded.getModelConfiguration()).isEqualTo(prompt.getModelConfiguration());
+            assertThat(loaded.getThinkingEffort()).isEqualTo(AiThinkingEffort.LOW);
+            assertThat(loaded.getTemperature()).isEqualTo(0.2);
+        }
+        finally {
+            deleteRecursively(tempDir);
+        }
+    }
+
+    @Test
+    public void loadState_ignoresInvalidPersistedTemperatureWithoutDroppingPrompt() throws IOException {
+        Path tempDir = Files.createTempDirectory("ai-prompts");
+        try {
+            Path path = tempDir.resolve(AiPromptStore.PROMPTS_FILE_NAME);
+            Files.write(
+                path,
+                ("{\"savedPrompts\":[{\"name\":\"Rewrite\",\"prompt\":\"Prompt\","
+                    + "\"modelConfiguration\":{\"thinkingEffort\":\"LOW\",\"temperature\":\"broken\"}}]}")
+                    .getBytes(StandardCharsets.UTF_8));
+            AiPromptStore store = new AiPromptStore(new ObjectMapper(), path);
+
+            AiPrompt loaded = store.loadState().getSavedPrompts().get(0);
+
+            assertThat(loaded.getThinkingEffort()).isEqualTo(AiThinkingEffort.LOW);
+            assertThat(loaded.getTemperature()).isNull();
         }
         finally {
             deleteRecursively(tempDir);

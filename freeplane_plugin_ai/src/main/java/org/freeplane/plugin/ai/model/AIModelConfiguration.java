@@ -1,5 +1,8 @@
 package org.freeplane.plugin.ai.model;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.Objects;
 import org.freeplane.api.ai.AiThinkingEffort;
 
@@ -8,10 +11,11 @@ public class AIModelConfiguration {
     private final AiThinkingEffort thinkingEffort;
     private final Double temperature;
 
-    private AIModelConfiguration(AIModelSelection modelSelection,
-                                 AiThinkingEffort thinkingEffort,
-                                 Double temperature) {
-        this.modelSelection = modelSelection;
+    @JsonCreator
+    private AIModelConfiguration(@JsonProperty("modelSelection") AIModelSelection modelSelection,
+                                 @JsonProperty("thinkingEffort") AiThinkingEffort thinkingEffort,
+                                 @JsonProperty("temperature") Object temperature) {
+        this.modelSelection = normalizeModelSelection(modelSelection);
         this.thinkingEffort = thinkingEffort;
         this.temperature = normalizeTemperature(temperature);
     }
@@ -40,14 +44,17 @@ public class AIModelConfiguration {
             temperature != null ? temperature : fallback.temperature);
     }
 
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     public AIModelSelection getModelSelection() {
         return modelSelection;
     }
 
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     public AiThinkingEffort getThinkingEffort() {
         return thinkingEffort;
     }
 
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     public Double getTemperature() {
         return temperature;
     }
@@ -68,13 +75,36 @@ public class AIModelConfiguration {
             && Objects.equals(temperature, other.temperature);
     }
 
-    private static Double normalizeTemperature(Double temperature) {
+    private static AIModelSelection normalizeModelSelection(AIModelSelection modelSelection) {
+        if (modelSelection == null
+            || modelSelection.getProviderName() == null
+            || modelSelection.getProviderName().trim().isEmpty()
+            || modelSelection.getModelName() == null
+            || modelSelection.getModelName().trim().isEmpty()) {
+            return null;
+        }
+        return modelSelection;
+    }
+
+    private static Double normalizeTemperature(Object temperature) {
         if (temperature == null) {
             return null;
         }
-        if (temperature.isNaN() || temperature.isInfinite()) {
+        final Double parsedTemperature;
+        if (temperature instanceof Number) {
+            parsedTemperature = Double.valueOf(((Number) temperature).doubleValue());
+        }
+        else {
+            try {
+                parsedTemperature = Double.valueOf(temperature.toString().trim());
+            }
+            catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        if (parsedTemperature.isNaN() || parsedTemperature.isInfinite()) {
             return null;
         }
-        return temperature;
+        return parsedTemperature;
     }
 }

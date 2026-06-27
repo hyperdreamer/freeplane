@@ -10,6 +10,8 @@ import org.freeplane.plugin.ai.chat.history.ChatTranscriptEntry;
 import org.freeplane.plugin.ai.chat.history.ChatTranscriptId;
 import org.freeplane.plugin.ai.chat.history.MapRootShortTextCount;
 import org.freeplane.plugin.ai.chat.memory.ChatTokenUsageState;
+import org.freeplane.plugin.ai.model.AIModelConfiguration;
+import org.freeplane.plugin.ai.model.AIModelSelection;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 
 final class LiveChatSession {
@@ -19,8 +21,7 @@ final class LiveChatSession {
     private final List<MapRootShortTextCount> mapRootShortTextCounts;
     private final boolean assistantProfileEnabled;
     private ToolAvailabilityLevel toolAvailabilityOverride;
-    private String selectedModelOverride;
-    private AiThinkingEffort thinkingEffortOverride;
+    private AIModelConfiguration modelConfigurationOverride;
     private List<ChatTranscriptEntry> transcriptEntries;
     private ChatTranscriptId transcriptId;
     private String displayName;
@@ -137,25 +138,67 @@ final class LiveChatSession {
         this.toolAvailabilityOverride = toolAvailabilityOverride;
     }
 
+    AIModelConfiguration getModelConfigurationOverride() {
+        return modelConfigurationOverride;
+    }
+
+    void setModelConfigurationOverride(AIModelConfiguration modelConfigurationOverride) {
+        this.modelConfigurationOverride = normalizeModelConfiguration(modelConfigurationOverride);
+    }
+
     String getSelectedModelOverride() {
-        return selectedModelOverride;
+        return selectionValue(modelConfigurationOverride);
     }
 
     void setSelectedModelOverride(String selectedModelOverride) {
-        if (selectedModelOverride == null) {
-            this.selectedModelOverride = null;
-            return;
-        }
-        String normalized = selectedModelOverride.trim();
-        this.selectedModelOverride = normalized.isEmpty() ? null : normalized;
+        AIModelSelection modelSelection = AIModelSelection.fromSelectionValue(normalizeOptional(selectedModelOverride));
+        AiThinkingEffort thinkingEffort = modelConfigurationOverride == null
+            ? null
+            : modelConfigurationOverride.getThinkingEffort();
+        Double temperature = modelConfigurationOverride == null ? null : modelConfigurationOverride.getTemperature();
+        modelConfigurationOverride = normalizeModelConfiguration(
+            AIModelConfiguration.of(modelSelection, thinkingEffort, temperature));
     }
 
     AiThinkingEffort getThinkingEffortOverride() {
-        return thinkingEffortOverride;
+        return modelConfigurationOverride == null ? null : modelConfigurationOverride.getThinkingEffort();
     }
 
     void setThinkingEffortOverride(AiThinkingEffort thinkingEffortOverride) {
-        this.thinkingEffortOverride = thinkingEffortOverride;
+        AIModelSelection modelSelection = modelConfigurationOverride == null
+            ? null
+            : modelConfigurationOverride.getModelSelection();
+        Double temperature = modelConfigurationOverride == null ? null : modelConfigurationOverride.getTemperature();
+        modelConfigurationOverride = normalizeModelConfiguration(
+            AIModelConfiguration.of(modelSelection, thinkingEffortOverride, temperature));
+    }
+
+    private static String selectionValue(AIModelConfiguration modelConfiguration) {
+        if (modelConfiguration == null || modelConfiguration.getModelSelection() == null) {
+            return null;
+        }
+        AIModelSelection selection = modelConfiguration.getModelSelection();
+        return AIModelSelection.createSelectionValue(selection.getProviderName(), selection.getModelName());
+    }
+
+    private static AIModelConfiguration normalizeModelConfiguration(AIModelConfiguration modelConfiguration) {
+        if (modelConfiguration == null) {
+            return null;
+        }
+        if (modelConfiguration.getModelSelection() == null
+            && modelConfiguration.getThinkingEffort() == null
+            && modelConfiguration.getTemperature() == null) {
+            return null;
+        }
+        return modelConfiguration;
+    }
+
+    private static String normalizeOptional(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim();
+        return normalized.isEmpty() ? null : normalized;
     }
 
 }

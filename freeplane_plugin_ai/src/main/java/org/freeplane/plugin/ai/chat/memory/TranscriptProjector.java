@@ -50,6 +50,7 @@ class TranscriptProjector {
                 profileMessage.getProfileId(),
                 profileMessage.getProfileName(),
                 profileMessage.getProfileMessage(),
+                profileMessage.getModelConfiguration(),
                 false);
         }
         if (message instanceof AutomaticCodeStatusMessage) {

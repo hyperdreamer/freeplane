@@ -9,7 +9,7 @@ public class AiPromptToolSelectionControllerTest {
     @Test
     public void constructor_createsNonEditableDropdownWithAllOptions() {
         AiPromptToolSelectionController uut = new AiPromptToolSelectionController(
-            "Use current tools",
+            "Current",
             "Script execution",
             "Editing",
             "Reading",
@@ -18,7 +18,7 @@ public class AiPromptToolSelectionControllerTest {
 
         assertThat(comboBox.isEditable()).isFalse();
         assertThat(comboBox.getItemCount()).isEqualTo(5);
-        assertThat(comboBox.getItemAt(0).toString()).isEqualTo("Use current tools");
+        assertThat(comboBox.getItemAt(0).toString()).isEqualTo("Current");
         assertThat(comboBox.getItemAt(1).toString()).isEqualTo("Script execution");
         assertThat(comboBox.getItemAt(2).toString()).isEqualTo("Editing");
         assertThat(comboBox.getItemAt(3).toString()).isEqualTo("Reading");
@@ -28,7 +28,7 @@ public class AiPromptToolSelectionControllerTest {
     @Test
     public void setSelectedToolAvailabilitySelectionValue_defaultsUnknownValuesToCurrentTools() {
         AiPromptToolSelectionController uut = new AiPromptToolSelectionController(
-            "Use current tools",
+            "Current",
             "Script execution",
             "Editing",
             "Reading",

@@ -2,8 +2,11 @@ package org.freeplane.plugin.ai.prompt.ui;
 
 import java.util.Arrays;
 import javax.swing.JDialog;
+import org.freeplane.api.ai.AiThinkingEffort;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.resources.WindowConfigurationStorage;
+import org.freeplane.plugin.ai.model.AIModelConfiguration;
+import org.freeplane.plugin.ai.model.AIModelSelection;
 import org.freeplane.plugin.ai.prompt.AiPrompt;
 import org.freeplane.plugin.ai.prompt.AiPromptStore;
 import org.junit.Test;
@@ -103,6 +106,17 @@ public class AiPromptManagerDialogTest {
     }
 
     @Test
+    public void editorState_marksThinkingEffortAndTemperatureChangesAsDirty() {
+        AiPromptManagerDialog.EditorState state = new AiPromptManagerDialog.EditorState();
+        state.loadSavedPrompts(Arrays.asList(new AiPrompt("Rewrite", "Prompt", false, "", "")));
+        state.selectSavedPrompt(0);
+
+        state.updateDraft("Rewrite", "Prompt", false, "", AiThinkingEffort.LOW, Double.valueOf(0.2), "");
+
+        assertThat(state.isDirty()).isTrue();
+    }
+
+    @Test
     public void editorState_marksToolSelectionChangesAsDirty() {
         AiPromptManagerDialog.EditorState state = new AiPromptManagerDialog.EditorState();
         state.loadSavedPrompts(Arrays.asList(new AiPrompt("Rewrite", "Prompt", false, "", "")));
@@ -137,6 +151,26 @@ public class AiPromptManagerDialogTest {
                 "disabled"));
         assertThat(state.getSelectedSavedPromptIndex()).isEqualTo(0);
         assertThat(state.isDirty()).isFalse();
+    }
+
+    @Test
+    public void editorState_save_preservesModelConfigurationFields() {
+        AiPromptManagerDialog.EditorState state = new AiPromptManagerDialog.EditorState();
+        state.loadSavedPrompts(Arrays.asList(new AiPrompt("Rewrite", "Prompt", false, "", "")));
+        state.selectSavedPrompt(0);
+
+        state.updateDraft("Rewrite", "Prompt", false,
+            "openrouter|openai/gpt-4.1-mini",
+            AiThinkingEffort.HIGH,
+            Double.valueOf(0.4),
+            "");
+        state.save(DEFAULT_NEW_PROMPT_NAME);
+
+        assertThat(state.getSavedPrompts().get(0).getModelConfiguration())
+            .isEqualTo(AIModelConfiguration.of(
+                AIModelSelection.fromSelectionValue("openrouter|openai/gpt-4.1-mini"),
+                AiThinkingEffort.HIGH,
+                Double.valueOf(0.4)));
     }
 
     @Test

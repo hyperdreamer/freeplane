@@ -1,5 +1,7 @@
 package org.freeplane.plugin.ai.model;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.Objects;
 
 public class AIModelSelection {
@@ -7,9 +9,11 @@ public class AIModelSelection {
     private final String providerName;
     private final String modelName;
 
-    private AIModelSelection(String providerName, String modelName) {
-        this.providerName = providerName;
-        this.modelName = modelName;
+    @JsonCreator
+    private AIModelSelection(@JsonProperty("providerName") String providerName,
+                             @JsonProperty("modelName") String modelName) {
+        this.providerName = normalize(providerName);
+        this.modelName = normalize(modelName);
     }
 
     public static AIModelSelection fromSelectionValue(String selectionValue) {
@@ -20,8 +24,8 @@ public class AIModelSelection {
         if (separatorIndex <= 0 || separatorIndex >= selectionValue.length() - 1) {
             return null;
         }
-        String providerName = selectionValue.substring(0, separatorIndex);
-        String modelName = selectionValue.substring(separatorIndex + 1);
+        String providerName = selectionValue.substring(0, separatorIndex).trim();
+        String modelName = selectionValue.substring(separatorIndex + 1).trim();
         if (providerName.isEmpty() || modelName.isEmpty()) {
             return null;
         }
@@ -38,6 +42,10 @@ public class AIModelSelection {
 
     public String getModelName() {
         return modelName;
+    }
+
+    private static String normalize(String value) {
+        return value == null ? null : value.trim();
     }
 
     @Override

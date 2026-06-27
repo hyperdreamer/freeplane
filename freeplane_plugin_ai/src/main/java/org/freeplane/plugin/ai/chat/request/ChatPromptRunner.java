@@ -190,7 +190,7 @@ public class ChatPromptRunner {
             shownRequestFlow.cancellationSupplier(),
             shownRequestFlow::onProviderUsage,
             shownRequestTokenUsageTracker,
-            modelConfigurationOverride,
+            modelConfigurationWithProfileFallback(modelConfigurationOverride, requestedProfileMessage),
             resolvedToolAvailability,
             capturedSystemMessage(shownPromptChatMemory),
             isSystemMessageExact(shownPromptChatMemory),
@@ -243,7 +243,7 @@ public class ChatPromptRunner {
                 public void accept(ChatUsageTotals totals) {
                 }
             }),
-            modelConfigurationOverride,
+            modelConfigurationWithProfileFallback(modelConfigurationOverride, requestedProfileMessage),
             resolvedToolAvailability,
             systemMessage,
             isSystemMessageExact,
@@ -256,6 +256,18 @@ public class ChatPromptRunner {
         showHiddenPromptProgressDialog = showProgressDialog;
         hiddenPromptRequestRunner.submit(requestName, promptService, preparedMessage);
         return true;
+    }
+
+    private AIModelConfiguration modelConfigurationWithProfileFallback(
+        AIModelConfiguration modelConfigurationOverride,
+        AssistantProfileSwitchMessage requestedProfileMessage) {
+        AIModelConfiguration profileModelConfiguration = requestedProfileMessage == null
+            ? null
+            : requestedProfileMessage.getModelConfiguration();
+        if (modelConfigurationOverride == null) {
+            return profileModelConfiguration;
+        }
+        return modelConfigurationOverride.withFallback(profileModelConfiguration);
     }
 
     private AIChatService createPromptChatService(ChatMemory promptChatMemory,

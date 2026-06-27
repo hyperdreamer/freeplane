@@ -8,7 +8,10 @@ import java.util.List;
 import org.freeplane.plugin.ai.chat.history.AssistantProfileTranscriptEntry;
 import org.freeplane.plugin.ai.chat.history.ChatTranscriptEntry;
 import org.freeplane.plugin.ai.chat.memory.AssistantProfileChatMemory;
+import org.freeplane.api.ai.AiThinkingEffort;
 import org.freeplane.plugin.ai.chat.memory.AssistantProfileSwitchMessage;
+import org.freeplane.plugin.ai.model.AIModelConfiguration;
+import org.freeplane.plugin.ai.model.AIModelSelection;
 import org.freeplane.plugin.ai.chat.session.LiveChatController;
 import org.junit.Test;
 
@@ -229,6 +232,38 @@ public class AssistantProfileSelectionSyncTest {
         assertThat(chatMemory.transcriptEntriesForPersistence())
             .filteredOn(entry -> entry instanceof AssistantProfileTranscriptEntry)
             .hasSize(1);
+    }
+
+    @Test
+    public void duplicateRequestProfileIsAddedWhenModelConfigurationDiffers() {
+        AssistantProfileSelectionModel selectionModel = mock(AssistantProfileSelectionModel.class);
+        LiveChatController liveChatController = mock(LiveChatController.class);
+        AssistantProfileChatMemory chatMemory = AssistantProfileChatMemory.withMaxTokens(500);
+        AIModelConfiguration activeConfiguration = AIModelConfiguration.of(
+            AIModelSelection.fromSelectionValue("openrouter|openai/gpt-4.1-mini"),
+            AiThinkingEffort.LOW,
+            null);
+        AIModelConfiguration newConfiguration = AIModelConfiguration.of(
+            AIModelSelection.fromSelectionValue("openrouter|openai/gpt-4.1-mini"),
+            AiThinkingEffort.HIGH,
+            null);
+        chatMemory.add(new AssistantProfileSwitchMessage(
+            "profile-a",
+            "Reviewer",
+            "Be concise",
+            activeConfiguration));
+        AssistantProfileSelectionSync uut = new AssistantProfileSelectionSync(
+            selectionModel, liveChatController);
+        uut.setChatMemory(chatMemory);
+
+        boolean added = uut.addProfileMessageIfDifferent(new AssistantProfileSwitchMessage(
+            "profile-a",
+            "Reviewer",
+            "Be concise",
+            newConfiguration));
+
+        assertThat(added).isTrue();
+        assertThat(chatMemory.latestProfileSwitchMessage().getModelConfiguration()).isEqualTo(newConfiguration);
     }
 
     @Test

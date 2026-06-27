@@ -17,12 +17,20 @@ import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
+import javax.swing.JComboBox;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
 import org.freeplane.core.resources.ResourceController;
+import org.freeplane.api.ai.AiThinkingEffort;
 import org.freeplane.core.resources.WindowConfigurationStorage;
+import org.freeplane.plugin.ai.chat.ui.ModelConfigurationSelectorLayout;
+import org.freeplane.plugin.ai.model.AIModelCatalog;
+import org.freeplane.plugin.ai.model.AIModelDescriptor;
+import org.freeplane.plugin.ai.model.AIProviderConfiguration;
+import org.freeplane.plugin.ai.prompt.ui.AiPromptModelSelectionController;
+import org.freeplane.plugin.ai.prompt.ui.AiPromptThinkingEffortSelectionController;
 
 class AssistantProfileManagerDialog extends JDialog {
     private static final long serialVersionUID = 1L;
@@ -34,7 +42,14 @@ class AssistantProfileManagerDialog extends JDialog {
     private final JList<AssistantProfile> profilesList = new JList<>(listModel);
     private final JTextField nameField = new JTextField();
     private final JTextArea promptArea = new JTextArea();
+    private final JTextField temperatureField = new JTextField();
     private final JButton deleteButton = new JButton("Delete");
+    private final AIProviderConfiguration configuration = new AIProviderConfiguration();
+    private final AiPromptModelSelectionController modelSelectionController =
+        new AiPromptModelSelectionController(configuration, new AIModelCatalog(configuration));
+    private final AiPromptThinkingEffortSelectionController thinkingEffortSelectionController =
+        new AiPromptThinkingEffortSelectionController();
+    private boolean updatingFields;
     private final WindowGeometryPersistence windowGeometryPersistence;
 
     AssistantProfileManagerDialog(Window owner, AssistantProfileSelectionModel selectionModel) {
@@ -66,6 +81,8 @@ class AssistantProfileManagerDialog extends JDialog {
     }
 
     void openDialog() {
+        AssistantProfile profile = profilesList.getSelectedValue();
+        modelSelectionController.refreshModelSelectionList(profile == null ? "" : profile.getModelSelectionValue());
         setVisible(true);
     }
 
@@ -76,15 +93,7 @@ class AssistantProfileManagerDialog extends JDialog {
                 return;
             }
             AssistantProfile profile = profilesList.getSelectedValue();
-            if (profile == null) {
-                nameField.setText("");
-                promptArea.setText("");
-                deleteButton.setEnabled(false);
-                return;
-            }
-            nameField.setText(profile.getName());
-            promptArea.setText(profile.getPrompt());
-            deleteButton.setEnabled(listModel.getSize() > 1);
+            updateFieldsFromSelectedProfile(profile);
         });
         nameField.addFocusListener(new java.awt.event.FocusAdapter() {
             @Override
@@ -92,6 +101,15 @@ class AssistantProfileManagerDialog extends JDialog {
                 updateSelectedProfileFromFields();
             }
         });
+        temperatureField.addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override
+            public void focusLost(java.awt.event.FocusEvent event) {
+                updateSelectedProfileFromFields();
+            }
+        });
+        modelSelectionController.setModelSelectionChangeListener(selectionValue -> updateSelectedProfileFromFields());
+        thinkingEffortSelectionController.setThinkingEffortSelectionChangeListener(
+            thinkingEffort -> updateSelectedProfileFromFields());
 
         JPanel listPanel = new JPanel(new BorderLayout(5, 5));
         listPanel.add(new JLabel("Profiles"), BorderLayout.NORTH);
@@ -100,14 +118,32 @@ class AssistantProfileManagerDialog extends JDialog {
         JPanel editorPanel = new JPanel(new BorderLayout(5, 5));
         editorPanel.add(new JLabel("Name"), BorderLayout.NORTH);
         editorPanel.add(nameField, BorderLayout.CENTER);
+
+        JComboBox<AIModelDescriptor> modelSelectionComboBox = modelSelectionController.getModelSelectionComboBox();
+        JPanel modelPanel = titledPanel("Model", modelSelectionComboBox);
+        JComboBox<AiPromptThinkingEffortSelectionController.ThinkingEffortOption> thinkingEffortComboBox =
+            thinkingEffortSelectionController.getThinkingEffortComboBox();
+        JPanel thinkingPanel = titledPanel("Thinking effort", thinkingEffortComboBox);
+        JPanel modelSelectorPanel = new JPanel(new ModelConfigurationSelectorLayout(5));
+        modelSelectorPanel.add(modelPanel, "model");
+        modelSelectorPanel.add(thinkingPanel, "thinking");
+        JPanel temperaturePanel = titledPanel("Temperature", temperatureField);
+        JPanel modelConfigurationPanel = new JPanel(new BorderLayout(5, 5));
+        modelConfigurationPanel.add(modelSelectorPanel, BorderLayout.NORTH);
+        modelConfigurationPanel.add(temperaturePanel, BorderLayout.SOUTH);
+
         JPanel promptPanel = new JPanel(new BorderLayout(5, 5));
         promptPanel.add(new JLabel("Prompt"), BorderLayout.NORTH);
         promptArea.setLineWrap(true);
         promptArea.setWrapStyleWord(true);
         promptPanel.add(new JScrollPane(promptArea), BorderLayout.CENTER);
 
+        JPanel topEditorPanel = new JPanel(new BorderLayout(5, 5));
+        topEditorPanel.add(editorPanel, BorderLayout.NORTH);
+        topEditorPanel.add(modelConfigurationPanel, BorderLayout.SOUTH);
+
         JPanel rightPanel = new JPanel(new BorderLayout(5, 5));
-        rightPanel.add(editorPanel, BorderLayout.NORTH);
+        rightPanel.add(topEditorPanel, BorderLayout.NORTH);
         rightPanel.add(promptPanel, BorderLayout.CENTER);
 
         JPanel contentPanel = new JPanel(new BorderLayout(10, 10));
@@ -131,6 +167,37 @@ class AssistantProfileManagerDialog extends JDialog {
 
         add(contentPanel, BorderLayout.CENTER);
         add(buttonPanel, BorderLayout.SOUTH);
+    }
+
+    private JPanel titledPanel(String title, javax.swing.JComponent component) {
+        JPanel panel = new JPanel(new BorderLayout(5, 5));
+        panel.setBorder(javax.swing.BorderFactory.createTitledBorder(title));
+        panel.add(component, BorderLayout.CENTER);
+        return panel;
+    }
+
+    private void updateFieldsFromSelectedProfile(AssistantProfile profile) {
+        updatingFields = true;
+        try {
+            if (profile == null) {
+                nameField.setText("");
+                promptArea.setText("");
+                modelSelectionController.setSelectedModelSelectionValue("");
+                thinkingEffortSelectionController.setSelectedThinkingEffort(null);
+                temperatureField.setText("");
+                deleteButton.setEnabled(false);
+                return;
+            }
+            nameField.setText(profile.getName());
+            promptArea.setText(profile.getPrompt());
+            modelSelectionController.setSelectedModelSelectionValue(profile.getModelSelectionValue());
+            thinkingEffortSelectionController.setSelectedThinkingEffort(profile.getThinkingEffort());
+            temperatureField.setText(formatTemperature(profile.getTemperature()));
+            deleteButton.setEnabled(listModel.getSize() > 1);
+        }
+        finally {
+            updatingFields = false;
+        }
     }
 
     private void loadProfiles() {
@@ -170,12 +237,18 @@ class AssistantProfileManagerDialog extends JDialog {
     }
 
     private void updateSelectedProfileFromFields() {
+        if (updatingFields) {
+            return;
+        }
         AssistantProfile profile = profilesList.getSelectedValue();
         if (profile == null) {
             return;
         }
         profile.setName(nameField.getText());
         profile.setPrompt(promptArea.getText());
+        profile.setModelSelectionValue(modelSelectionController.getSelectedModelSelectionValue());
+        profile.setThinkingEffort(thinkingEffortSelectionController.getSelectedThinkingEffort());
+        profile.setTemperature(parseOptionalTemperature(temperatureField.getText()));
         profilesList.repaint();
     }
 
@@ -183,6 +256,24 @@ class AssistantProfileManagerDialog extends JDialog {
         updateSelectedProfileFromFields();
         persistProfiles();
         closeDialog();
+    }
+
+    private Double parseOptionalTemperature(String value) {
+        String normalized = value == null ? "" : value.trim();
+        if (normalized.isEmpty()) {
+            return null;
+        }
+        try {
+            Double temperature = Double.valueOf(normalized);
+            return temperature.isNaN() || temperature.isInfinite() ? null : temperature;
+        }
+        catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private String formatTemperature(Double temperature) {
+        return temperature == null ? "" : temperature.toString();
     }
 
     private void persistProfiles() {
