@@ -35,7 +35,7 @@ public class AiRequestOptionsTest {
 
         assertThat(options.getTimeout()).isEqualTo(Duration.ofSeconds(10));
         assertThat(options.getMode()).isNull();
-        assertThat(options.getModelSelection()).isNull();
+        assertThat(options.getModelConfiguration()).isNull();
         assertThat(options.getToolAvailability()).isNull();
         assertThat(options.getSelectionOverride()).isNull();
         assertThat(options.getSystemMessage()).isNull();
@@ -52,7 +52,11 @@ public class AiRequestOptionsTest {
         AiRequestOptions options = AiRequestOptions.builder()
             .timeout(Duration.ofSeconds(10))
             .mode(AiRequestMode.ADD_TO_CHAT)
-            .modelSelection(AiModelSelection.explicit("openrouter", "openai/gpt-4.1-mini"))
+            .modelConfiguration(AiModelConfiguration.builder()
+                .modelSelection(AiModelSelection.explicit("openrouter", "openai/gpt-4.1-mini"))
+                .thinkingEffort(AiThinkingEffort.HIGH)
+                .temperature(Double.valueOf(0.2))
+                .build())
             .toolAvailability(AiToolAvailability.READING)
             .selectionOverride(override)
             .systemMessage(" system ")
@@ -61,8 +65,10 @@ public class AiRequestOptionsTest {
 
         assertThat(options.getTimeout()).isEqualTo(Duration.ofSeconds(10));
         assertThat(options.getMode()).isEqualTo(AiRequestMode.ADD_TO_CHAT);
-        assertThat(options.getModelSelection())
+        assertThat(options.getModelConfiguration().getModelSelection())
             .isEqualTo(AiModelSelection.explicit("openrouter", "openai/gpt-4.1-mini"));
+        assertThat(options.getModelConfiguration().getThinkingEffort()).isEqualTo(AiThinkingEffort.HIGH);
+        assertThat(options.getModelConfiguration().getTemperature()).isEqualTo(0.2);
         assertThat(options.getToolAvailability()).isEqualTo(AiToolAvailability.READING);
         assertThat(options.getSelectionOverride()).isSameAs(override);
         assertThat(options.getSystemMessage()).isEqualTo("system");
@@ -175,12 +181,29 @@ public class AiRequestOptionsTest {
     }
 
     @Test
+    public void defaultModelSelectionHasNoExplicitProviderOrModel() {
+        AiModelSelection selection = AiModelSelection.defaultModel();
+
+        assertThat(selection.isDefaultModel()).isTrue();
+        assertThat(selection.getProviderName()).isNull();
+        assertThat(selection.getModelName()).isNull();
+    }
+
+    @Test
     public void explicitModelSelectionNormalizesProviderAndModel() {
         AiModelSelection selection = AiModelSelection.explicit(" openrouter ", " openai/gpt-4.1-mini ");
 
-        assertThat(selection.isCurrent()).isFalse();
+        assertThat(selection.isDefaultModel()).isFalse();
         assertThat(selection.getProviderName()).isEqualTo("openrouter");
         assertThat(selection.getModelName()).isEqualTo("openai/gpt-4.1-mini");
+    }
+
+    @Test
+    public void thinkingEffortParsesPreferenceValuesAndProvidesOpenAiValue() {
+        assertThat(AiThinkingEffort.fromPreferenceValue(" xhigh ")).isEqualTo(AiThinkingEffort.XHIGH);
+        assertThat(AiThinkingEffort.fromPreferenceValue("XHIGH")).isEqualTo(AiThinkingEffort.XHIGH);
+        assertThat(AiThinkingEffort.fromPreferenceValue("inherit")).isNull();
+        assertThat(AiThinkingEffort.HIGH.toOpenAiValue()).isEqualTo("high");
     }
 
     @Test
@@ -189,6 +212,8 @@ public class AiRequestOptionsTest {
             .containsExactly("SHOW_IN_NEW_CHAT", "ADD_TO_CHAT", "HIDDEN_WITH_CANCEL_DIALOG", "HIDDEN");
         assertThat(AiToolAvailability.values()).extracting(Enum::name)
             .containsExactly("CURRENT", "DISABLED", "READING", "EDITING", "SCRIPT_EXECUTION");
+        assertThat(AiThinkingEffort.values()).extracting(Enum::name)
+            .containsExactly("MAX", "XHIGH", "HIGH", "MEDIUM", "LOW", "MINIMAL", "NONE");
         assertThat(AiRequestStatus.values()).extracting(Enum::name)
             .containsExactly(
                 "SUCCEEDED",
@@ -210,6 +235,8 @@ public class AiRequestOptionsTest {
         assertThat(AiRequestOptions.class.getPackage().getName()).isEqualTo("org.freeplane.api.ai");
         assertThat(AiRequestResult.class.getPackage().getName()).isEqualTo("org.freeplane.api.ai");
         assertThat(AiModelSelection.class.getPackage().getName()).isEqualTo("org.freeplane.api.ai");
+        assertThat(AiModelConfiguration.class.getPackage().getName()).isEqualTo("org.freeplane.api.ai");
+        assertThat(AiThinkingEffort.class.getPackage().getName()).isEqualTo("org.freeplane.api.ai");
         assertThat(AiSelectionOverride.class.getPackage().getName()).isEqualTo("org.freeplane.api.ai");
         assertThat(AiRequestRejectedException.class.getPackage().getName()).isEqualTo("org.freeplane.api.ai");
         assertThat(AiRequestCallback.class.getPackage().getName()).isEqualTo("org.freeplane.api.ai");

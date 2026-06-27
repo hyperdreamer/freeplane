@@ -22,6 +22,7 @@ import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.tools.code.AiCodeOperationAuthorizer;
 import org.freeplane.plugin.ai.tools.formula.FormulaEditingSettings;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
+import org.freeplane.plugin.ai.model.AIModelConfiguration;
 import org.freeplane.plugin.ai.prompt.AiPromptProgressDialogFactory;
 import org.freeplane.plugin.ai.prompt.AiPromptRequestComposer;
 import org.freeplane.plugin.ai.prompt.ui.AiPromptProgressDialog;
@@ -157,16 +158,16 @@ public class ChatPromptRunner {
     }
 
     public boolean startShownPrompt(String promptText,
-                             String selectedModelOverride,
+                             AIModelConfiguration modelConfigurationOverride,
                              ToolAvailabilityLevel resolvedToolAvailability,
                              SelectionIdentifiersResponse selectionOverride,
                              VisiblePromptRequestCallbacks requestCallbacks) {
-        return startShownPrompt(promptText, selectedModelOverride, resolvedToolAvailability, selectionOverride,
+        return startShownPrompt(promptText, modelConfigurationOverride, resolvedToolAvailability, selectionOverride,
             requestCallbacks, null);
     }
 
     public boolean startShownPrompt(String promptText,
-                             String selectedModelOverride,
+                             AIModelConfiguration modelConfigurationOverride,
                              ToolAvailabilityLevel resolvedToolAvailability,
                              SelectionIdentifiersResponse selectionOverride,
                              VisiblePromptRequestCallbacks requestCallbacks,
@@ -189,7 +190,7 @@ public class ChatPromptRunner {
             shownRequestFlow.cancellationSupplier(),
             shownRequestFlow::onProviderUsage,
             shownRequestTokenUsageTracker,
-            selectedModelOverride,
+            modelConfigurationOverride,
             resolvedToolAvailability,
             capturedSystemMessage(shownPromptChatMemory),
             isSystemMessageExact(shownPromptChatMemory),
@@ -210,7 +211,7 @@ public class ChatPromptRunner {
 
     public boolean submitHiddenRequest(String requestName,
                                 String promptText,
-                                String selectedModelOverride,
+                                AIModelConfiguration modelConfigurationOverride,
                                 ToolAvailabilityLevel resolvedToolAvailability,
                                 SelectionIdentifiersResponse selectionOverride,
                                 Component owner,
@@ -242,7 +243,7 @@ public class ChatPromptRunner {
                 public void accept(ChatUsageTotals totals) {
                 }
             }),
-            selectedModelOverride,
+            modelConfigurationOverride,
             resolvedToolAvailability,
             systemMessage,
             isSystemMessageExact,
@@ -263,7 +264,7 @@ public class ChatPromptRunner {
                                                   Supplier<Boolean> cancellationSupplier,
                                                   Consumer<TokenUsage> tokenUsageConsumer,
                                                   ChatTokenUsageTracker tokenUsageTracker,
-                                                  String selectedModelOverride,
+                                                  AIModelConfiguration modelConfigurationOverride,
                                                   ToolAvailabilityLevel toolAvailability,
                                                   String systemMessage,
                                                   boolean isSystemMessageExact,
@@ -296,7 +297,7 @@ public class ChatPromptRunner {
                 cancellationSupplier,
                 tokenUsageConsumer,
                 requestToolAvailabilitySupplier,
-                selectedModelOverride);
+                modelConfigurationOverride);
         }
         return AIChatServiceFactory.createService(
             (org.freeplane.plugin.ai.tools.AIToolSet) toolObjects.get(0),
@@ -307,7 +308,7 @@ public class ChatPromptRunner {
             cancellationSupplier,
             tokenUsageConsumer,
             requestToolAvailabilitySupplier,
-            selectedModelOverride,
+            modelConfigurationOverride,
             systemMessage,
             isSystemMessageExact,
             hiddenRequest);

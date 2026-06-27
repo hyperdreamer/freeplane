@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import org.freeplane.api.ai.AiThinkingEffort;
 import org.freeplane.plugin.ai.chat.history.ChatTranscriptEntry;
 import org.freeplane.plugin.ai.chat.history.ChatTranscriptId;
 import org.freeplane.plugin.ai.chat.history.MapRootShortTextCount;
@@ -19,6 +20,7 @@ final class LiveChatSession {
     private final boolean assistantProfileEnabled;
     private ToolAvailabilityLevel toolAvailabilityOverride;
     private String selectedModelOverride;
+    private AiThinkingEffort thinkingEffortOverride;
     private List<ChatTranscriptEntry> transcriptEntries;
     private ChatTranscriptId transcriptId;
     private String displayName;
@@ -146,6 +148,14 @@ final class LiveChatSession {
         }
         String normalized = selectedModelOverride.trim();
         this.selectedModelOverride = normalized.isEmpty() ? null : normalized;
+    }
+
+    AiThinkingEffort getThinkingEffortOverride() {
+        return thinkingEffortOverride;
+    }
+
+    void setThinkingEffortOverride(AiThinkingEffort thinkingEffortOverride) {
+        this.thinkingEffortOverride = thinkingEffortOverride;
     }
 
 }

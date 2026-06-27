@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.TimeUnit;
+import org.freeplane.api.ai.AiModelConfiguration;
 import org.freeplane.api.ai.AiModelSelection;
 import org.freeplane.api.ai.AiRequestHandle;
 import org.freeplane.api.ai.AiRequestMode;
@@ -106,7 +107,7 @@ public class AiRequestExecutionCoordinatorTest {
             null,
             Duration.ofSeconds(10),
             mode,
-            AiModelSelection.current(),
+            AiModelConfiguration.builder().modelSelection(AiModelSelection.defaultModel()).build(),
             AiToolAvailability.CURRENT,
             (AiSelectionOverride) null,
             null,

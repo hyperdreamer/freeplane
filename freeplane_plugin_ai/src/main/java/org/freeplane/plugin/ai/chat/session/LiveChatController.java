@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Supplier;
+import org.freeplane.api.ai.AiThinkingEffort;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.text.TextController;
 import org.freeplane.plugin.ai.chat.history.ChatTranscriptEntry;
@@ -190,6 +191,15 @@ public class LiveChatController {
         return session == null ? null : session.getSelectedModelOverride();
     }
 
+    public AiThinkingEffort currentSessionThinkingEffortOverride() {
+        return sessionThinkingEffortOverride(liveChatSessionManager.getCurrentSessionId());
+    }
+
+    public AiThinkingEffort sessionThinkingEffortOverride(LiveChatSessionId sessionId) {
+        LiveChatSession session = liveChatSessionManager.findSession(sessionId);
+        return session == null ? null : session.getThinkingEffortOverride();
+    }
+
     public String sessionCapturedSystemMessage(LiveChatSessionId sessionId) {
         AssistantProfileChatMemory memory = activeAssistantProfileChatMemory(liveChatSessionManager.findSession(sessionId));
         return memory == null || memory.capturedSystemMessage() == null ? "" : memory.capturedSystemMessage().trim();
@@ -235,6 +245,23 @@ public class LiveChatController {
             return;
         }
         session.setSelectedModelOverride(selectedModelOverride);
+    }
+
+    public void clearCurrentSessionThinkingEffortOverride() {
+        setCurrentSessionThinkingEffortOverride(null);
+    }
+
+    public void setCurrentSessionThinkingEffortOverride(AiThinkingEffort thinkingEffortOverride) {
+        setSessionThinkingEffortOverride(liveChatSessionManager.getCurrentSessionId(), thinkingEffortOverride);
+    }
+
+    public void setSessionThinkingEffortOverride(LiveChatSessionId sessionId,
+                                                 AiThinkingEffort thinkingEffortOverride) {
+        LiveChatSession session = liveChatSessionManager.findSession(sessionId);
+        if (session == null) {
+            return;
+        }
+        session.setThinkingEffortOverride(thinkingEffortOverride);
     }
 
     public void clearCurrentSessionToolAvailabilityOverride() {

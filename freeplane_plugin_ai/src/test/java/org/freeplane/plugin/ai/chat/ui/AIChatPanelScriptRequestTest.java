@@ -24,7 +24,9 @@ import javax.swing.JLabel;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
 import javax.swing.text.html.HTMLEditorKit;
+import org.freeplane.api.ai.AiModelConfiguration;
 import org.freeplane.api.ai.AiModelSelection;
+import org.freeplane.api.ai.AiThinkingEffort;
 import org.freeplane.api.ai.AiRequestMode;
 import org.freeplane.api.ai.AiRequestStatus;
 import org.freeplane.api.ai.AiToolAvailability;
@@ -75,6 +77,7 @@ import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevelSettings;
 import org.freeplane.plugin.ai.code.RoutingAiCodeHostService;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
+import org.freeplane.plugin.ai.model.AIModelConfiguration;
 import org.freeplane.plugin.ai.prompt.AiPrompt;
 import org.freeplane.plugin.ai.prompt.AiPromptActionRegistry;
 import org.freeplane.plugin.ai.prompt.AiPromptRequestComposer;
@@ -532,14 +535,16 @@ public class AIChatPanelScriptRequestTest {
     }
 
     @Test
-    public void addToChatWithExistingVisibleChatReusesSessionAndAppliesExplicitOverridesBeforeSending() throws Exception {
+    public void addToChatWithExistingVisibleChatReusesSessionAndAppliesExplicitOverridesAndSessionThinkingBeforeSending() throws Exception {
         PanelHarness harness = newPanelHarness(true);
         ChatRequestFlow requestFlow = mock(ChatRequestFlow.class);
         ChatRequestFlowFactory chatRequestFlowFactory = mock(ChatRequestFlowFactory.class);
         when(chatRequestFlowFactory.create(any(), any())).thenReturn(requestFlow);
         setField(harness.panel, "chatRequestFlowFactory", chatRequestFlowFactory);
         AtomicReference<String> seenSelectedModel = new AtomicReference<String>();
+        AtomicReference<AiThinkingEffort> seenThinkingEffort = new AtomicReference<AiThinkingEffort>();
         AtomicReference<ToolAvailabilityLevel> seenToolAvailability = new AtomicReference<ToolAvailabilityLevel>();
+        harness.liveChatController.setCurrentSessionThinkingEffortOverride(AiThinkingEffort.LOW);
         LiveChatSessionId originalSessionId = harness.sessionId;
         String explicitSelection = "openrouter|openai/gpt-4.1-mini";
         ResolvedAiRequest request = new ResolvedAiRequest(
@@ -547,7 +552,7 @@ public class AIChatPanelScriptRequestTest {
             null,
             Duration.ofSeconds(10),
             AiRequestMode.ADD_TO_CHAT,
-            AiModelSelection.explicit("openrouter", "openai/gpt-4.1-mini"),
+            AiModelConfiguration.builder().modelSelection(AiModelSelection.explicit("openrouter", "openai/gpt-4.1-mini")).build(),
             AiToolAvailability.DISABLED,
             null,
             null,
@@ -586,7 +591,7 @@ public class AIChatPanelScriptRequestTest {
                 org.mockito.ArgumentMatchers.<Supplier<Boolean>>any(),
                 org.mockito.ArgumentMatchers.<Consumer<TokenUsage>>any(),
                 org.mockito.ArgumentMatchers.<Supplier<ToolAvailabilityLevel>>any(),
-                nullable(String.class),
+                nullable(AIModelConfiguration.class),
                 nullable(String.class),
                 org.mockito.ArgumentMatchers.anyBoolean(),
                 org.mockito.ArgumentMatchers.anyBoolean()))
@@ -594,7 +599,9 @@ public class AIChatPanelScriptRequestTest {
                     @SuppressWarnings("unchecked")
                     Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier = invocation.getArgument(7);
                     seenToolAvailability.set(toolAvailabilitySupplier == null ? null : toolAvailabilitySupplier.get());
-                    seenSelectedModel.set(invocation.getArgument(8));
+                    AIModelConfiguration modelConfiguration = invocation.getArgument(8);
+                    seenSelectedModel.set(selectionValue(modelConfiguration));
+                    seenThinkingEffort.set(modelConfiguration == null ? null : modelConfiguration.getThinkingEffort());
                     return mock(AIChatService.class);
                 });
 
@@ -608,6 +615,7 @@ public class AIChatPanelScriptRequestTest {
         assertThat(harness.liveChatController.currentSessionToolAvailabilityOverride())
             .isEqualTo(ToolAvailabilityLevel.DISABLED);
         assertThat(seenSelectedModel.get()).isEqualTo(explicitSelection);
+        assertThat(seenThinkingEffort.get()).isEqualTo(AiThinkingEffort.LOW);
         assertThat(seenToolAvailability.get()).isEqualTo(ToolAvailabilityLevel.DISABLED);
         verify(harness.chatOutputView).appendUserMessage("Prompt");
     }
@@ -626,7 +634,7 @@ public class AIChatPanelScriptRequestTest {
             null,
             Duration.ofSeconds(10),
             AiRequestMode.ADD_TO_CHAT,
-            AiModelSelection.current(),
+            AiModelConfiguration.builder().modelSelection(AiModelSelection.defaultModel()).build(),
             AiToolAvailability.CURRENT,
             null,
             " selected system ",
@@ -663,7 +671,7 @@ public class AIChatPanelScriptRequestTest {
                 org.mockito.ArgumentMatchers.<Supplier<Boolean>>any(),
                 org.mockito.ArgumentMatchers.<Consumer<TokenUsage>>any(),
                 org.mockito.ArgumentMatchers.<Supplier<ToolAvailabilityLevel>>any(),
-                nullable(String.class),
+                nullable(AIModelConfiguration.class),
                 nullable(String.class),
                 org.mockito.ArgumentMatchers.anyBoolean(),
                 org.mockito.ArgumentMatchers.anyBoolean()))
@@ -700,7 +708,7 @@ public class AIChatPanelScriptRequestTest {
             null,
             Duration.ofSeconds(10),
             AiRequestMode.ADD_TO_CHAT,
-            AiModelSelection.current(),
+            AiModelConfiguration.builder().modelSelection(AiModelSelection.defaultModel()).build(),
             AiToolAvailability.CURRENT,
             null,
             " selected system ",
@@ -737,7 +745,7 @@ public class AIChatPanelScriptRequestTest {
                 org.mockito.ArgumentMatchers.<Supplier<Boolean>>any(),
                 org.mockito.ArgumentMatchers.<Consumer<TokenUsage>>any(),
                 org.mockito.ArgumentMatchers.<Supplier<ToolAvailabilityLevel>>any(),
-                nullable(String.class),
+                nullable(AIModelConfiguration.class),
                 nullable(String.class),
                 eq(true),
                 eq(false)))
@@ -773,7 +781,7 @@ public class AIChatPanelScriptRequestTest {
             null,
             Duration.ofSeconds(10),
             AiRequestMode.ADD_TO_CHAT,
-            AiModelSelection.current(),
+            AiModelConfiguration.builder().modelSelection(AiModelSelection.defaultModel()).build(),
             AiToolAvailability.CURRENT,
             null,
             "same system",
@@ -810,7 +818,7 @@ public class AIChatPanelScriptRequestTest {
                 org.mockito.ArgumentMatchers.<Supplier<Boolean>>any(),
                 org.mockito.ArgumentMatchers.<Consumer<TokenUsage>>any(),
                 org.mockito.ArgumentMatchers.<Supplier<ToolAvailabilityLevel>>any(),
-                nullable(String.class),
+                nullable(AIModelConfiguration.class),
                 nullable(String.class),
                 eq(true),
                 eq(false)))
@@ -843,7 +851,7 @@ public class AIChatPanelScriptRequestTest {
             null,
             Duration.ofSeconds(10),
             AiRequestMode.ADD_TO_CHAT,
-            AiModelSelection.current(),
+            AiModelConfiguration.builder().modelSelection(AiModelSelection.defaultModel()).build(),
             AiToolAvailability.CURRENT,
             null,
             "new system",
@@ -880,7 +888,7 @@ public class AIChatPanelScriptRequestTest {
                 org.mockito.ArgumentMatchers.<Supplier<Boolean>>any(),
                 org.mockito.ArgumentMatchers.<Consumer<TokenUsage>>any(),
                 org.mockito.ArgumentMatchers.<Supplier<ToolAvailabilityLevel>>any(),
-                nullable(String.class),
+                nullable(AIModelConfiguration.class),
                 nullable(String.class),
                 org.mockito.ArgumentMatchers.anyBoolean(),
                 org.mockito.ArgumentMatchers.anyBoolean()))
@@ -914,7 +922,7 @@ public class AIChatPanelScriptRequestTest {
             null,
             Duration.ofSeconds(10),
             AiRequestMode.ADD_TO_CHAT,
-            AiModelSelection.current(),
+            AiModelConfiguration.builder().modelSelection(AiModelSelection.defaultModel()).build(),
             AiToolAvailability.CURRENT,
             null,
             null,
@@ -951,7 +959,7 @@ public class AIChatPanelScriptRequestTest {
                 org.mockito.ArgumentMatchers.<Supplier<Boolean>>any(),
                 org.mockito.ArgumentMatchers.<Consumer<TokenUsage>>any(),
                 org.mockito.ArgumentMatchers.<Supplier<ToolAvailabilityLevel>>any(),
-                nullable(String.class),
+                nullable(AIModelConfiguration.class),
                 nullable(String.class),
                 org.mockito.ArgumentMatchers.anyBoolean(),
                 org.mockito.ArgumentMatchers.anyBoolean()))
@@ -981,7 +989,7 @@ public class AIChatPanelScriptRequestTest {
             "Rewrite",
             Duration.ofSeconds(10),
             AiRequestMode.ADD_TO_CHAT,
-            AiModelSelection.current(),
+            AiModelConfiguration.builder().modelSelection(AiModelSelection.defaultModel()).build(),
             AiToolAvailability.CURRENT,
             null,
             null,
@@ -1018,7 +1026,7 @@ public class AIChatPanelScriptRequestTest {
                 org.mockito.ArgumentMatchers.<Supplier<Boolean>>any(),
                 org.mockito.ArgumentMatchers.<Consumer<TokenUsage>>any(),
                 org.mockito.ArgumentMatchers.<Supplier<ToolAvailabilityLevel>>any(),
-                nullable(String.class),
+                nullable(AIModelConfiguration.class),
                 nullable(String.class),
                 org.mockito.ArgumentMatchers.anyBoolean(),
                 org.mockito.ArgumentMatchers.anyBoolean()))
@@ -1053,7 +1061,7 @@ public class AIChatPanelScriptRequestTest {
             null,
             Duration.ofSeconds(10),
             AiRequestMode.ADD_TO_CHAT,
-            AiModelSelection.current(),
+            AiModelConfiguration.builder().modelSelection(AiModelSelection.defaultModel()).build(),
             AiToolAvailability.CURRENT,
             null,
             null,
@@ -1090,7 +1098,7 @@ public class AIChatPanelScriptRequestTest {
                 org.mockito.ArgumentMatchers.<Supplier<Boolean>>any(),
                 org.mockito.ArgumentMatchers.<Consumer<TokenUsage>>any(),
                 org.mockito.ArgumentMatchers.<Supplier<ToolAvailabilityLevel>>any(),
-                nullable(String.class),
+                nullable(AIModelConfiguration.class),
                 nullable(String.class),
                 org.mockito.ArgumentMatchers.anyBoolean(),
                 org.mockito.ArgumentMatchers.anyBoolean()))
@@ -1098,7 +1106,7 @@ public class AIChatPanelScriptRequestTest {
                     @SuppressWarnings("unchecked")
                     Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier = invocation.getArgument(7);
                     seenToolAvailability.set(toolAvailabilitySupplier == null ? null : toolAvailabilitySupplier.get());
-                    seenSelectedModel.set(invocation.getArgument(8));
+                    seenSelectedModel.set(selectionValue(invocation.getArgument(8)));
                     return mock(AIChatService.class);
                 });
 
@@ -1134,7 +1142,7 @@ public class AIChatPanelScriptRequestTest {
                 null,
                 Duration.ofSeconds(10),
                 AiRequestMode.ADD_TO_CHAT,
-                AiModelSelection.current(),
+                AiModelConfiguration.builder().modelSelection(AiModelSelection.defaultModel()).build(),
                 AiToolAvailability.CURRENT,
                 null,
                 null,
@@ -1464,6 +1472,7 @@ public class AIChatPanelScriptRequestTest {
         setField(panel, "visibleAiRequestCallbacksFactory", new VisibleAiRequestCallbacksFactory());
         setField(panel, "chatToolAvailabilityMenu", mock(ToolAvailabilityLevelMenu.class));
         setField(panel, "modelSelectionController", mock(ChatModelSelector.class));
+        setField(panel, "thinkingEffortSelector", mock(ChatThinkingEffortSelector.class));
         setField(panel, "aiRequestConfigurationResolver", aiRequestConfigurationResolver);
         setField(panel, "configuration", configuration);
         setField(panel, "aiPromptRequestComposer", new AiPromptRequestComposer(availableMaps, textController));
@@ -1661,6 +1670,16 @@ public class AIChatPanelScriptRequestTest {
         public void showCurrentCode() {
             shownCode = "current";
         }
+    }
+
+    private static String selectionValue(AIModelConfiguration modelConfiguration) {
+        if (modelConfiguration == null || modelConfiguration.getModelSelection() == null) {
+            return null;
+        }
+        org.freeplane.plugin.ai.model.AIModelSelection selection = modelConfiguration.getModelSelection();
+        return org.freeplane.plugin.ai.model.AIModelSelection.createSelectionValue(
+            selection.getProviderName(),
+            selection.getModelName());
     }
 
     private static class PanelHarness {

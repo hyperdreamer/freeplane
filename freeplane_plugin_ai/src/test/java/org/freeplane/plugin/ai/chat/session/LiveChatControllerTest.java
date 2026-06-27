@@ -13,6 +13,7 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.freeplane.api.ai.AiThinkingEffort;
 import org.freeplane.features.text.TextController;
 import org.freeplane.plugin.ai.chat.history.ChatTranscriptEntry;
 import org.freeplane.plugin.ai.chat.history.ChatTranscriptId;
@@ -31,7 +32,7 @@ import static org.mockito.Mockito.mock;
 
 public class LiveChatControllerTest {
     @Test
-    public void startNewPromptChat_tracksSelectedModelAndToolOverridesInSession() throws IOException {
+    public void startNewPromptChat_tracksSelectedModelThinkingAndToolOverridesInSession() throws IOException {
         Path tempDir = Files.createTempDirectory("live-chat-controller");
         try {
             ChatTranscriptStore store = newTestStore(tempDir);
@@ -47,6 +48,11 @@ public class LiveChatControllerTest {
             assertThat(uut.currentSessionUsesAssistantProfile()).isFalse();
             assertThat(uut.currentSessionToolAvailabilityOverride()).isEqualTo(ToolAvailabilityLevel.READING);
             assertThat(uut.currentSessionSelectedModelOverride()).isEqualTo("openrouter|openai/gpt-4.1-mini");
+
+            uut.setCurrentSessionThinkingEffortOverride(AiThinkingEffort.HIGH);
+            assertThat(uut.currentSessionThinkingEffortOverride()).isEqualTo(AiThinkingEffort.HIGH);
+            uut.clearCurrentSessionThinkingEffortOverride();
+            assertThat(uut.currentSessionThinkingEffortOverride()).isNull();
 
             uut.clearCurrentSessionSelectedModelOverride();
             uut.clearCurrentSessionToolAvailabilityOverride();

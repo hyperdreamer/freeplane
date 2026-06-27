@@ -14,6 +14,7 @@ import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevelSettings;
 import org.freeplane.plugin.ai.tools.code.AiCodeToolSet;
 import org.freeplane.plugin.ai.tools.formula.FormulaEditingSettings;
 import org.freeplane.plugin.ai.model.AIChatModelFactory;
+import org.freeplane.plugin.ai.model.AIModelConfiguration;
 import org.freeplane.plugin.ai.model.AIProviderConfiguration;
 import org.freeplane.plugin.ai.tools.AIToolSet;
 import org.freeplane.plugin.ai.tools.utilities.ToolCallSummaryHandler;
@@ -27,7 +28,7 @@ public class AIChatServiceFactory {
                                               ChatTokenUsageTracker chatTokenUsageTracker,
                                               ToolCallSummaryHandler toolCallSummaryHandler) {
         return createService(toolSet, Collections.<Object>singletonList(toolSet), chatMemory,
-            chatTokenUsageTracker, toolCallSummaryHandler, null, null, null, null);
+            chatTokenUsageTracker, toolCallSummaryHandler, null, null, null, (AIModelConfiguration) null);
     }
 
     public static AIChatService createService(AIToolSet toolSet, ChatMemory chatMemory,
@@ -35,7 +36,8 @@ public class AIChatServiceFactory {
                                               ToolCallSummaryHandler toolCallSummaryHandler,
                                               Supplier<Boolean> cancellationSupplier) {
         return createService(toolSet, Collections.<Object>singletonList(toolSet), chatMemory,
-            chatTokenUsageTracker, toolCallSummaryHandler, cancellationSupplier, null, null, null);
+            chatTokenUsageTracker, toolCallSummaryHandler, cancellationSupplier, null, null,
+            (AIModelConfiguration) null);
     }
 
     public static AIChatService createService(AIToolSet toolSet, ChatMemory chatMemory,
@@ -44,7 +46,8 @@ public class AIChatServiceFactory {
                                               Supplier<Boolean> cancellationSupplier,
                                               Consumer<TokenUsage> tokenUsageConsumer) {
         return createService(toolSet, Collections.<Object>singletonList(toolSet), chatMemory,
-            chatTokenUsageTracker, toolCallSummaryHandler, cancellationSupplier, tokenUsageConsumer, null, null);
+            chatTokenUsageTracker, toolCallSummaryHandler, cancellationSupplier, tokenUsageConsumer, null,
+            (AIModelConfiguration) null);
     }
 
     public static AIChatService createService(AIToolSet toolSet, ChatMemory chatMemory,
@@ -55,7 +58,7 @@ public class AIChatServiceFactory {
                                               Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier) {
         return createService(toolSet, Collections.<Object>singletonList(toolSet), chatMemory,
             chatTokenUsageTracker, toolCallSummaryHandler, cancellationSupplier, tokenUsageConsumer,
-            toolAvailabilitySupplier, null);
+            toolAvailabilitySupplier, (AIModelConfiguration) null);
     }
 
     public static AIChatService createService(AIToolSet toolSet,
@@ -66,9 +69,9 @@ public class AIChatServiceFactory {
                                               Supplier<Boolean> cancellationSupplier,
                                               Consumer<TokenUsage> tokenUsageConsumer,
                                               Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier,
-                                              String selectedModelOverride) {
+                                              AIModelConfiguration modelConfigurationOverride) {
         return createService(toolSet, toolObjects, chatMemory, chatTokenUsageTracker, toolCallSummaryHandler,
-            cancellationSupplier, tokenUsageConsumer, toolAvailabilitySupplier, selectedModelOverride,
+            cancellationSupplier, tokenUsageConsumer, toolAvailabilitySupplier, modelConfigurationOverride,
             null, false, false);
     }
 
@@ -80,7 +83,7 @@ public class AIChatServiceFactory {
                                               Supplier<Boolean> cancellationSupplier,
                                               Consumer<TokenUsage> tokenUsageConsumer,
                                               Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier,
-                                              String selectedModelOverride,
+                                              AIModelConfiguration modelConfigurationOverride,
                                               String systemMessage,
                                               boolean isSystemMessageExact,
                                               boolean hiddenRequest) {
@@ -88,8 +91,10 @@ public class AIChatServiceFactory {
         Collection<?> effectiveToolObjects = toolObjects == null
             ? Collections.<Object>singletonList(toolSet)
             : toolObjects;
-        AIProviderConfiguration configuration = new AIProviderConfiguration(selectedModelOverride);
-        ChatModel chatLanguageModel = AIChatModelFactory.createChatLanguageModel(configuration);
+        AIProviderConfiguration configuration = new AIProviderConfiguration();
+        ChatModel chatLanguageModel = AIChatModelFactory.createChatLanguageModel(
+            configuration,
+            modelConfigurationOverride);
         AiCodeToolSet aiCodeToolSet = findAiCodeToolSet(effectiveToolObjects);
         if (toolAvailabilitySupplier == null) {
             return new AIChatService(chatLanguageModel, toolSet, effectiveToolObjects, aiCodeToolSet, chatMemory,
@@ -124,10 +129,10 @@ public class AIChatServiceFactory {
                                               Supplier<Boolean> cancellationSupplier,
                                               Consumer<TokenUsage> tokenUsageConsumer,
                                               Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier,
-                                              String selectedModelOverride) {
+                                              AIModelConfiguration modelConfigurationOverride) {
         return createService(toolSet, Collections.<Object>singletonList(toolSet), chatMemory,
             chatTokenUsageTracker, toolCallSummaryHandler, cancellationSupplier, tokenUsageConsumer,
-            toolAvailabilitySupplier, selectedModelOverride);
+            toolAvailabilitySupplier, modelConfigurationOverride);
     }
 
     private static AiCodeToolSet findAiCodeToolSet(Collection<?> toolObjects) {

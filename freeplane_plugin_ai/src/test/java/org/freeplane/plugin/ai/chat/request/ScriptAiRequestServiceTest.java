@@ -7,6 +7,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.freeplane.api.MindMap;
+import org.freeplane.api.ai.AiModelConfiguration;
 import org.freeplane.api.ai.AiModelSelection;
 import org.freeplane.api.ai.AiRequestHandle;
 import org.freeplane.api.ai.AiRequestMode;
@@ -50,7 +51,7 @@ public class ScriptAiRequestServiceTest {
         assertThat(seenRequest.get().getPromptDisplayName()).isNull();
         assertThat(seenRequest.get().getTimeout()).isEqualTo(Duration.ofSeconds(1));
         assertThat(seenRequest.get().getMode()).isEqualTo(AiRequestMode.HIDDEN);
-        assertThat(seenRequest.get().getModelSelection()).isEqualTo(AiModelSelection.current());
+        assertThat(seenRequest.get().getModelConfiguration().getModelSelection()).isEqualTo(AiModelSelection.defaultModel());
         assertThat(seenRequest.get().getToolAvailability()).isEqualTo(AiToolAvailability.CURRENT);
         assertThat(seenRequest.get().getSystemMessage()).isEqualTo("system");
         assertThat(seenRequest.get().isSystemMessageExact()).isTrue();
@@ -127,7 +128,7 @@ public class ScriptAiRequestServiceTest {
         assertThat(seenRequest.get().getPromptDisplayName()).isEqualTo("Rewrite");
         assertThat(seenRequest.get().getTimeout()).isEqualTo(Duration.ofSeconds(30));
         assertThat(seenRequest.get().getMode()).isEqualTo(AiRequestMode.HIDDEN_WITH_CANCEL_DIALOG);
-        assertThat(seenRequest.get().getModelSelection())
+        assertThat(seenRequest.get().getModelConfiguration().getModelSelection())
             .isEqualTo(AiModelSelection.explicit("openrouter", "openai/gpt-4.1-mini"));
         assertThat(seenRequest.get().getToolAvailability()).isEqualTo(AiToolAvailability.READING);
     }
@@ -154,7 +155,7 @@ public class ScriptAiRequestServiceTest {
         AiRequestOptions options = AiRequestOptions.builder()
             .timeout(Duration.ofSeconds(30))
             .mode(AiRequestMode.ADD_TO_CHAT)
-            .modelSelection(AiModelSelection.current())
+            .modelConfiguration(AiModelConfiguration.builder().modelSelection(AiModelSelection.defaultModel()).build())
             .toolAvailability(AiToolAvailability.CURRENT)
             .selectionOverride(selectionOverride)
             .exactSystemMessage("saved system")
@@ -169,7 +170,7 @@ public class ScriptAiRequestServiceTest {
         assertThat(seenRequest.get().getPromptDisplayName()).isEqualTo("Rewrite");
         assertThat(seenRequest.get().getTimeout()).isEqualTo(Duration.ofSeconds(30));
         assertThat(seenRequest.get().getMode()).isEqualTo(AiRequestMode.ADD_TO_CHAT);
-        assertThat(seenRequest.get().getModelSelection()).isEqualTo(AiModelSelection.current());
+        assertThat(seenRequest.get().getModelConfiguration().getModelSelection()).isEqualTo(AiModelSelection.defaultModel());
         assertThat(seenRequest.get().getToolAvailability()).isEqualTo(AiToolAvailability.CURRENT);
         assertThat(seenRequest.get().getSelectionOverride()).isSameAs(selectionOverride);
         assertThat(seenRequest.get().getSystemMessage()).isEqualTo("saved system");

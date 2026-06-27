@@ -78,6 +78,21 @@ public class ChatModelSelectorTest {
     }
 
     @Test
+    public void setMinimumAndPreferredWidth_keepsModelSelectorAtLeastGivenMinimum() {
+        ChatModelSelector uut = newController();
+
+        uut.setMinimumAndPreferredWidth(150, 120);
+
+        assertThat(uut.getModelSelectionComboBox().getMinimumSize().width).isEqualTo(150);
+        assertThat(uut.getModelSelectionComboBox().getPreferredSize().width).isEqualTo(150);
+
+        uut.setMinimumAndPreferredWidth(150, 280);
+
+        assertThat(uut.getModelSelectionComboBox().getMinimumSize().width).isEqualTo(150);
+        assertThat(uut.getModelSelectionComboBox().getPreferredSize().width).isEqualTo(280);
+    }
+
+    @Test
     public void renderer_showsFormattedDisplayName_forSelectedUnavailableValue() {
         ChatModelSelector uut = newController();
         JComboBox<AIModelDescriptor> selector = uut.getModelSelectionComboBox();

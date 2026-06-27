@@ -1,5 +1,6 @@
 package org.freeplane.plugin.ai.chat.request;
 
+import org.freeplane.api.ai.AiModelConfiguration;
 import org.freeplane.api.ai.AiModelSelection;
 import org.freeplane.api.ai.AiToolAvailability;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
@@ -12,13 +13,14 @@ public class AiRequestMappingsTest {
     @Test
     public void mapsExplicitModelSelectionToInternalSelectionValue() {
         assertThat(AiRequestMappings.toSelectedModelOverride(
-            AiModelSelection.explicit("openrouter", "openai/gpt-4.1-mini")))
+            AiModelConfiguration.builder().modelSelection(AiModelSelection.explicit("openrouter", "openai/gpt-4.1-mini")).build()))
             .isEqualTo("openrouter|openai/gpt-4.1-mini");
     }
 
     @Test
-    public void mapsCurrentModelSelectionToNullOverride() {
-        assertThat(AiRequestMappings.toSelectedModelOverride(AiModelSelection.current())).isNull();
+    public void mapsDefaultModelSelectionToNullOverride() {
+        assertThat(AiRequestMappings.toSelectedModelOverride(
+            AiModelConfiguration.builder().modelSelection(AiModelSelection.defaultModel()).build())).isNull();
     }
 
     @Test

@@ -2,20 +2,22 @@ package org.freeplane.api.ai;
 
 import java.util.Objects;
 
-/** Explicit or current model selection for an {@link AiRequestOptions}.
+/** Explicit provider/model choice or default-model marker inside an {@link AiModelConfiguration}.
  * @since 1.13.3 */
 public class AiModelSelection {
     private final String providerName;
     private final String modelName;
-    private final boolean current;
+    private final boolean defaultModel;
 
-    private AiModelSelection(String providerName, String modelName, boolean current) {
+    private AiModelSelection(String providerName, String modelName, boolean defaultModel) {
         this.providerName = providerName;
         this.modelName = modelName;
-        this.current = current;
+        this.defaultModel = defaultModel;
     }
 
-    public static AiModelSelection current() {
+    /** Selects the default model resolved by the request execution context.
+     * Other model-configuration fields inherit independently. */
+    public static AiModelSelection defaultModel() {
         return new AiModelSelection(null, null, true);
     }
 
@@ -25,8 +27,8 @@ public class AiModelSelection {
         return new AiModelSelection(normalizedProviderName, normalizedModelName, false);
     }
 
-    public boolean isCurrent() {
-        return current;
+    public boolean isDefaultModel() {
+        return defaultModel;
     }
 
     public String getProviderName() {
@@ -39,7 +41,7 @@ public class AiModelSelection {
 
     @Override
     public int hashCode() {
-        return Objects.hash(providerName, modelName, current);
+        return Objects.hash(providerName, modelName, defaultModel);
     }
 
     @Override
@@ -48,7 +50,7 @@ public class AiModelSelection {
             return false;
         }
         AiModelSelection other = (AiModelSelection) obj;
-        return current == other.current
+        return defaultModel == other.defaultModel
             && Objects.equals(providerName, other.providerName)
             && Objects.equals(modelName, other.modelName);
     }

@@ -20,6 +20,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import org.freeplane.api.ai.AiModelConfiguration;
 import org.freeplane.api.ai.AiModelSelection;
 import org.freeplane.api.ai.AiRequestCallback;
 import org.freeplane.api.ai.AiRequestHandle;
@@ -482,7 +483,9 @@ public class ControllerProxyTest {
         return AiRequestOptions.builder()
             .timeout(Duration.ofSeconds(10))
             .mode(AiRequestMode.HIDDEN)
-            .modelSelection(AiModelSelection.current())
+            .modelConfiguration(AiModelConfiguration.builder()
+                .modelSelection(AiModelSelection.defaultModel())
+                .build())
             .toolAvailability(AiToolAvailability.CURRENT)
             .build();
     }

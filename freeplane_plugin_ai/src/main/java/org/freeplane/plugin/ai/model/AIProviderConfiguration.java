@@ -2,12 +2,15 @@ package org.freeplane.plugin.ai.model;
 
 import java.util.Collections;
 import java.util.Map;
+import org.freeplane.api.ai.AiThinkingEffort;
 import org.freeplane.core.resources.ResourceController;
 
 public class AIProviderConfiguration {
     private static final String AI_PROVIDER_NAME_PROPERTY = "ai_provider_name";
     private static final String AI_MODEL_NAME_PROPERTY = "ai_model_name";
     private static final String AI_SELECTED_MODEL_PROPERTY = "ai_selected_model";
+    public static final String AI_THINKING_EFFORT_PROPERTY = "ai_thinking_effort";
+    private static final String AI_TEMPERATURE_PROPERTY = "ai_temperature";
     private static final String AI_OPENROUTER_SERVICE_ADDRESS_PROPERTY = "ai_openrouter_service_address";
     private static final String AI_OPENROUTER_KEY_PROPERTY = "ai_openrouter_key";
     private static final String AI_OPENROUTER_MODEL_ALLOWLIST_PROPERTY = "ai_openrouter_model_allowlist";
@@ -19,39 +22,29 @@ public class AIProviderConfiguration {
     private static final String AI_OLLAMA_MODEL_ALLOWLIST_PROPERTY = "ai_ollama_model_allowlist";
 
     private final ResourceController resourceController;
-    private final String selectedModelValueOverride;
 
     public AIProviderConfiguration() {
-        this(ResourceController.getResourceController(), null);
-    }
-
-    public AIProviderConfiguration(String selectedModelValueOverride) {
-        this(ResourceController.getResourceController(), selectedModelValueOverride);
+        this(ResourceController.getResourceController());
     }
 
     AIProviderConfiguration(ResourceController resourceController) {
-        this(resourceController, null);
-    }
-
-    AIProviderConfiguration(ResourceController resourceController, String selectedModelValueOverride) {
         this.resourceController = resourceController;
-        this.selectedModelValueOverride = normalizeOverride(selectedModelValueOverride);
     }
 
     public String getSelectedModelValue() {
-        if (selectedModelValueOverride != null) {
-            return selectedModelValueOverride;
-        }
-        String selectedModelValue = getStoredSelectedModelValue();
-        if (selectedModelValue != null) {
-            return selectedModelValue;
-        }
-        String providerName = resourceController.getProperty(AI_PROVIDER_NAME_PROPERTY);
-        String modelName = resourceController.getProperty(AI_MODEL_NAME_PROPERTY);
-        if (providerName == null || providerName.isEmpty() || modelName == null || modelName.isEmpty()) {
+        AIModelSelection selection = getDefaultModelSelection();
+        if (selection == null) {
             return null;
         }
-        return AIModelSelection.createSelectionValue(providerName, modelName);
+        return AIModelSelection.createSelectionValue(selection.getProviderName(), selection.getModelName());
+    }
+
+
+    public AIModelConfiguration getDefaultModelConfiguration() {
+        return AIModelConfiguration.of(
+            getDefaultModelSelection(),
+            parseThinkingEffort(resourceController.getProperty(AI_THINKING_EFFORT_PROPERTY)),
+            parseTemperature(resourceController.getProperty(AI_TEMPERATURE_PROPERTY)));
     }
 
     public String getStoredSelectedModelValue() {
@@ -60,6 +53,11 @@ public class AIProviderConfiguration {
 
     public void setSelectedModelValue(String selectionValue) {
         resourceController.setProperty(AI_SELECTED_MODEL_PROPERTY, selectionValue);
+    }
+
+    public void setThinkingEffortValue(AiThinkingEffort thinkingEffort) {
+        AiThinkingEffort value = thinkingEffort == null ? AiThinkingEffort.MEDIUM : thinkingEffort;
+        resourceController.setProperty(AI_THINKING_EFFORT_PROPERTY, value.name());
     }
 
     public String getOpenrouterServiceAddress() {
@@ -110,16 +108,43 @@ public class AIProviderConfiguration {
         return resourceController.getProperty(AI_OLLAMA_MODEL_ALLOWLIST_PROPERTY);
     }
 
+    private AIModelSelection getDefaultModelSelection() {
+        AIModelSelection storedSelection = AIModelSelection.fromSelectionValue(getStoredSelectedModelValue());
+        if (storedSelection != null) {
+            return storedSelection;
+        }
+        String providerName = resourceController.getProperty(AI_PROVIDER_NAME_PROPERTY);
+        String modelName = resourceController.getProperty(AI_MODEL_NAME_PROPERTY);
+        if (providerName == null || providerName.isEmpty() || modelName == null || modelName.isEmpty()) {
+            return null;
+        }
+        return AIModelSelection.fromSelectionValue(AIModelSelection.createSelectionValue(providerName, modelName));
+    }
+
+    private AiThinkingEffort parseThinkingEffort(String value) {
+        AiThinkingEffort thinkingEffort = AiThinkingEffort.fromPreferenceValue(value);
+        return thinkingEffort == null ? AiThinkingEffort.MEDIUM : thinkingEffort;
+    }
+
+    private Double parseTemperature(String value) {
+        String normalized = trimToEmpty(value);
+        if (normalized.isEmpty()) {
+            return null;
+        }
+        try {
+            Double temperature = Double.valueOf(normalized);
+            return temperature.isNaN() || temperature.isInfinite() ? null : temperature;
+        }
+        catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
     private boolean hasNonBlankText(String value) {
         return !trimToEmpty(value).isEmpty();
     }
 
     private String trimToEmpty(String value) {
         return value == null ? "" : value.trim();
-    }
-
-    private String normalizeOverride(String selectedModelValueOverride) {
-        String normalized = trimToEmpty(selectedModelValueOverride);
-        return normalized.isEmpty() ? null : normalized;
     }
 }

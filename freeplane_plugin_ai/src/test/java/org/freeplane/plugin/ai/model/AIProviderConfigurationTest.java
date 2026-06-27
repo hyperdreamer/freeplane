@@ -1,11 +1,13 @@
 package org.freeplane.plugin.ai.model;
 
 import java.util.Map;
+import org.freeplane.api.ai.AiThinkingEffort;
 import org.freeplane.core.resources.ResourceController;
 import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class AIProviderConfigurationTest {
@@ -47,12 +49,55 @@ public class AIProviderConfigurationTest {
     }
 
     @Test
-    public void getSelectedModelValue_prefersExplicitOverride() {
+    public void getSelectedModelValue_returnsStoredSelectedModel() {
         ResourceController resourceController = mock(ResourceController.class);
         when(resourceController.getProperty("ai_selected_model")).thenReturn("gemini|gemini-2.5-flash");
-        AIProviderConfiguration uut = new AIProviderConfiguration(resourceController, "openrouter|openai/gpt-4.1-mini");
+        AIProviderConfiguration uut = configurationWith(resourceController);
 
-        assertThat(uut.getSelectedModelValue()).isEqualTo("openrouter|openai/gpt-4.1-mini");
+        assertThat(uut.getSelectedModelValue()).isEqualTo("gemini|gemini-2.5-flash");
+    }
+
+    @Test
+    public void getDefaultModelConfiguration_parsesStoredModelThinkingAndTemperature() {
+        ResourceController resourceController = mock(ResourceController.class);
+        when(resourceController.getProperty("ai_selected_model")).thenReturn("openrouter|openai/gpt-5");
+        when(resourceController.getProperty("ai_thinking_effort")).thenReturn(" XHIGH ");
+        when(resourceController.getProperty("ai_temperature")).thenReturn(" 0.25 ");
+        AIProviderConfiguration uut = configurationWith(resourceController);
+
+        AIModelConfiguration modelConfiguration = uut.getDefaultModelConfiguration();
+
+        assertThat(modelConfiguration.getModelSelection())
+            .isEqualTo(AIModelSelection.fromSelectionValue("openrouter|openai/gpt-5"));
+        assertThat(modelConfiguration.getThinkingEffort()).isEqualTo(AiThinkingEffort.XHIGH);
+        assertThat(modelConfiguration.getTemperature()).isEqualTo(0.25);
+    }
+
+    @Test
+    public void setThinkingEffortValue_writesThinkingEffortPreference() {
+        ResourceController resourceController = mock(ResourceController.class);
+        AIProviderConfiguration uut = configurationWith(resourceController);
+
+        uut.setThinkingEffortValue(AiThinkingEffort.LOW);
+        uut.setThinkingEffortValue(null);
+
+        verify(resourceController).setProperty("ai_thinking_effort", "LOW");
+        verify(resourceController).setProperty("ai_thinking_effort", "MEDIUM");
+    }
+
+    @Test
+    public void getDefaultModelConfiguration_usesMediumThinkingForBlankInvalidAndLegacyInheritValues() {
+        ResourceController resourceController = mock(ResourceController.class);
+        when(resourceController.getProperty("ai_selected_model")).thenReturn("openrouter|openai/gpt-5");
+        when(resourceController.getProperty("ai_thinking_effort")).thenReturn("inherit", "not-a-value", "  ");
+        when(resourceController.getProperty("ai_temperature")).thenReturn("not-a-number");
+        AIProviderConfiguration uut = configurationWith(resourceController);
+
+        assertThat(uut.getDefaultModelConfiguration().getThinkingEffort()).isEqualTo(AiThinkingEffort.MEDIUM);
+        assertThat(uut.getDefaultModelConfiguration().getThinkingEffort()).isEqualTo(AiThinkingEffort.MEDIUM);
+        AIModelConfiguration modelConfiguration = uut.getDefaultModelConfiguration();
+        assertThat(modelConfiguration.getThinkingEffort()).isEqualTo(AiThinkingEffort.MEDIUM);
+        assertThat(modelConfiguration.getTemperature()).isNull();
     }
 
     private AIProviderConfiguration configurationWith(ResourceController resourceController) {

@@ -2,17 +2,17 @@ package org.freeplane.plugin.ai.chat.request;
 
 import java.time.Duration;
 import java.util.Objects;
-import org.freeplane.api.ai.AiModelSelection;
+import org.freeplane.api.ai.AiModelConfiguration;
 import org.freeplane.api.ai.AiRequestMode;
 import org.freeplane.api.ai.AiSelectionOverride;
 import org.freeplane.api.ai.AiToolAvailability;
 
-public final class ResolvedAiRequest {
+public class ResolvedAiRequest {
     private final String promptText;
     private final String promptDisplayName;
     private final Duration timeout;
     private final AiRequestMode mode;
-    private final AiModelSelection modelSelection;
+    private final AiModelConfiguration modelConfiguration;
     private final AiToolAvailability toolAvailability;
     private final AiSelectionOverride selectionOverride;
     private final String systemMessage;
@@ -24,7 +24,7 @@ public final class ResolvedAiRequest {
                       String promptDisplayName,
                       Duration timeout,
                       AiRequestMode mode,
-                      AiModelSelection modelSelection,
+                      AiModelConfiguration modelConfiguration,
                       AiToolAvailability toolAvailability,
                       AiSelectionOverride selectionOverride,
                       String systemMessage,
@@ -35,7 +35,7 @@ public final class ResolvedAiRequest {
         this.promptDisplayName = normalizeOptional(promptDisplayName);
         this.timeout = Objects.requireNonNull(timeout, "timeout");
         this.mode = Objects.requireNonNull(mode, "mode");
-        this.modelSelection = Objects.requireNonNull(modelSelection, "modelSelection");
+        this.modelConfiguration = Objects.requireNonNull(modelConfiguration, "modelConfiguration");
         this.toolAvailability = Objects.requireNonNull(toolAvailability, "toolAvailability");
         this.selectionOverride = selectionOverride;
         this.systemMessage = normalizeNullable(systemMessage);
@@ -60,8 +60,8 @@ public final class ResolvedAiRequest {
         return mode;
     }
 
-    public AiModelSelection getModelSelection() {
-        return modelSelection;
+    public AiModelConfiguration getModelConfiguration() {
+        return modelConfiguration;
     }
 
     public AiToolAvailability getToolAvailability() {

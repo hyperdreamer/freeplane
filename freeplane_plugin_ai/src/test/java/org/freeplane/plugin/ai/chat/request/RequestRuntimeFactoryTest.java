@@ -3,6 +3,7 @@ package org.freeplane.plugin.ai.chat.request;
 import dev.langchain4j.memory.ChatMemory;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.freeplane.api.ai.AiModelConfiguration;
 import org.freeplane.api.ai.AiModelSelection;
 import org.freeplane.api.ai.AiRequestMode;
 import org.freeplane.api.ai.AiSelectionOverride;
@@ -105,7 +106,7 @@ public class RequestRuntimeFactoryTest {
             null,
             Duration.ofSeconds(10),
             AiRequestMode.ADD_TO_CHAT,
-            AiModelSelection.current(),
+            AiModelConfiguration.builder().modelSelection(AiModelSelection.defaultModel()).build(),
             AiToolAvailability.CURRENT,
             (AiSelectionOverride) null,
             null,

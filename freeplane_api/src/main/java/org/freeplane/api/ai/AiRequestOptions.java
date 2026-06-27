@@ -8,7 +8,7 @@ import java.util.Objects;
 public class AiRequestOptions {
     private final Duration timeout;
     private final AiRequestMode mode;
-    private final AiModelSelection modelSelection;
+    private final AiModelConfiguration modelConfiguration;
     private final AiToolAvailability toolAvailability;
     private final AiSelectionOverride selectionOverride;
     private final String systemMessage;
@@ -19,7 +19,7 @@ public class AiRequestOptions {
     private AiRequestOptions(Builder builder) {
         this.timeout = requirePositiveTimeout(builder.timeout);
         this.mode = builder.mode;
-        this.modelSelection = builder.modelSelection;
+        this.modelConfiguration = builder.modelConfiguration;
         this.toolAvailability = builder.toolAvailability;
         this.selectionOverride = builder.selectionOverride;
         this.systemMessage = normalizeNullable(builder.systemMessage);
@@ -40,8 +40,8 @@ public class AiRequestOptions {
         return mode;
     }
 
-    public AiModelSelection getModelSelection() {
-        return modelSelection;
+    public AiModelConfiguration getModelConfiguration() {
+        return modelConfiguration;
     }
 
     public AiToolAvailability getToolAvailability() {
@@ -83,7 +83,7 @@ public class AiRequestOptions {
     public static class Builder {
         private Duration timeout;
         private AiRequestMode mode;
-        private AiModelSelection modelSelection;
+        private AiModelConfiguration modelConfiguration;
         private AiToolAvailability toolAvailability;
         private AiSelectionOverride selectionOverride;
         private String systemMessage;
@@ -101,8 +101,8 @@ public class AiRequestOptions {
             return this;
         }
 
-        public Builder modelSelection(AiModelSelection modelSelection) {
-            this.modelSelection = modelSelection;
+        public Builder modelConfiguration(AiModelConfiguration modelConfiguration) {
+            this.modelConfiguration = modelConfiguration;
             return this;
         }
 

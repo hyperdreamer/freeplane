@@ -1,5 +1,7 @@
 package org.freeplane.plugin.ai.model;
 
+import java.util.Objects;
+
 public class AIModelSelection {
     static final String SELECTION_SEPARATOR = "|";
     private final String providerName;
@@ -36,5 +38,20 @@ public class AIModelSelection {
 
     public String getModelName() {
         return modelName;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(providerName, modelName);
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (!(obj instanceof AIModelSelection)) {
+            return false;
+        }
+        AIModelSelection other = (AIModelSelection) obj;
+        return Objects.equals(providerName, other.providerName)
+            && Objects.equals(modelName, other.modelName);
     }
 }

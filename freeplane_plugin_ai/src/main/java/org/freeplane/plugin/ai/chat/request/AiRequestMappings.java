@@ -1,18 +1,33 @@
 package org.freeplane.plugin.ai.chat.request;
 
+import org.freeplane.api.ai.AiModelConfiguration;
 import org.freeplane.api.ai.AiModelSelection;
 import org.freeplane.api.ai.AiToolAvailability;
-import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.model.AIModelSelection;
+import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 
 public class AiRequestMappings {
     private AiRequestMappings() {
     }
 
-    public static String toSelectedModelOverride(AiModelSelection selection) {
-        if (selection == null || selection.isCurrent()) {
+    public static org.freeplane.plugin.ai.model.AIModelConfiguration toModelConfiguration(
+        AiModelConfiguration configuration) {
+        if (configuration == null) {
             return null;
         }
+        return org.freeplane.plugin.ai.model.AIModelConfiguration.of(
+            toInternalModelSelection(configuration.getModelSelection()),
+            configuration.getThinkingEffort(),
+            configuration.getTemperature());
+    }
+
+    public static String toSelectedModelOverride(AiModelConfiguration configuration) {
+        org.freeplane.plugin.ai.model.AIModelConfiguration internalConfiguration =
+            toModelConfiguration(configuration);
+        if (internalConfiguration == null || internalConfiguration.getModelSelection() == null) {
+            return null;
+        }
+        AIModelSelection selection = internalConfiguration.getModelSelection();
         return AIModelSelection.createSelectionValue(selection.getProviderName(), selection.getModelName());
     }
 
@@ -34,4 +49,13 @@ public class AiRequestMappings {
                 return null;
         }
     }
+
+    private static AIModelSelection toInternalModelSelection(AiModelSelection selection) {
+        if (selection == null || selection.isDefaultModel()) {
+            return null;
+        }
+        return AIModelSelection.fromSelectionValue(
+            AIModelSelection.createSelectionValue(selection.getProviderName(), selection.getModelName()));
+    }
+
 }

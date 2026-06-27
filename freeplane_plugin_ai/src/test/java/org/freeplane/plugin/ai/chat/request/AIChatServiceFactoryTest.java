@@ -5,10 +5,11 @@ import dev.langchain4j.model.chat.ChatModel;
 import java.util.concurrent.atomic.AtomicReference;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.plugin.ai.chat.memory.ChatTokenUsageTracker;
-import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
-import org.freeplane.plugin.ai.model.AIChatModelFactory;
-import org.freeplane.plugin.ai.model.AIProviderConfiguration;
+import org.freeplane.plugin.ai.model.AIModelConfiguration;
+import org.freeplane.plugin.ai.model.AIModelSelection;
 import org.freeplane.plugin.ai.tools.AIToolSet;
+import org.freeplane.plugin.ai.model.AIChatModelFactory;
+import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.junit.Test;
 import org.mockito.MockedConstruction;
 import org.mockito.MockedStatic;
@@ -21,17 +22,18 @@ import static org.mockito.Mockito.mockStatic;
 public class AIChatServiceFactoryTest {
 
     @Test
-    public void createService_usesSelectedModelOverrideWithoutMutatingGlobalSelection() {
-        AtomicReference<String> seenSelectionValue = new AtomicReference<String>();
+    public void createService_passesRequestModelConfigurationWithoutMutatingGlobalSelection() {
+        AtomicReference<AIModelConfiguration> seenRequestConfiguration = new AtomicReference<AIModelConfiguration>();
 
         try (MockedStatic<ResourceController> resourceController = mockStatic(ResourceController.class);
              MockedStatic<AIChatModelFactory> modelFactory = mockStatic(AIChatModelFactory.class, invocation -> {
-                 AIProviderConfiguration configuration = invocation.getArgument(0);
-                 seenSelectionValue.set(configuration.getSelectedModelValue());
+                 seenRequestConfiguration.set(invocation.getArgument(1));
                  return mock(ChatModel.class);
              });
              MockedConstruction<AIChatService> chatServices = mockConstruction(AIChatService.class)) {
             resourceController.when(ResourceController::getResourceController).thenReturn(mock(ResourceController.class));
+            AIModelConfiguration modelConfiguration = AIModelConfiguration.fromSelectionValue(
+                "openrouter|openai/gpt-4.1-mini");
             AIChatServiceFactory.createService(
                 mock(AIToolSet.class),
                 mock(ChatMemory.class),
@@ -41,10 +43,11 @@ public class AIChatServiceFactoryTest {
                 null,
                 null,
                 () -> ToolAvailabilityLevel.EDITING,
-                "openrouter|openai/gpt-4.1-mini"
+                modelConfiguration
             );
 
-            assertThat(seenSelectionValue.get()).isEqualTo("openrouter|openai/gpt-4.1-mini");
+            AIModelSelection selection = seenRequestConfiguration.get().getModelSelection();
+            assertThat(selection).isEqualTo(AIModelSelection.fromSelectionValue("openrouter|openai/gpt-4.1-mini"));
             assertThat(chatServices.constructed()).hasSize(1);
         }
     }

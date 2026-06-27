@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.util.Locale;
 import java.util.Objects;
 import javax.swing.SwingUtilities;
+import org.freeplane.api.ai.AiModelConfiguration;
 import org.freeplane.api.ai.AiModelSelection;
 import org.freeplane.api.ai.AiRequestCallback;
 import org.freeplane.api.ai.AiRequestHandle;
@@ -71,7 +72,7 @@ public class ScriptAiRequestService implements AiRequestService {
             null,
             options.getTimeout(),
             requireMode(options),
-            options.getModelSelection() == null ? AiModelSelection.current() : options.getModelSelection(),
+            withDefaultModelSelection(options.getModelConfiguration()),
             options.getToolAvailability() == null ? AiToolAvailability.CURRENT : options.getToolAvailability(),
             options.getSelectionOverride(),
             options.getSystemMessage(),
@@ -141,11 +142,11 @@ public class ScriptAiRequestService implements AiRequestService {
     }
 
     private SavedPromptResolution resolveSavedPromptRequest(AiPrompt savedPrompt, AiRequestOptions options) {
-        ModelSelectionResolution modelSelectionResolution = options.getModelSelection() != null
-            ? ModelSelectionResolution.success(options.getModelSelection())
-            : resolveSavedPromptModelSelection(savedPrompt);
-        if (modelSelectionResolution.configurationErrorDetail != null) {
-            return SavedPromptResolution.configurationError(modelSelectionResolution.configurationErrorDetail);
+        ModelConfigurationResolution modelConfigurationResolution = options.getModelConfiguration() != null
+            ? ModelConfigurationResolution.success(withDefaultModelSelection(options.getModelConfiguration()))
+            : resolveSavedPromptModelConfiguration(savedPrompt);
+        if (modelConfigurationResolution.configurationErrorDetail != null) {
+            return SavedPromptResolution.configurationError(modelConfigurationResolution.configurationErrorDetail);
         }
         AiToolAvailability toolAvailability = options.getToolAvailability() != null
             ? options.getToolAvailability()
@@ -158,7 +159,7 @@ public class ScriptAiRequestService implements AiRequestService {
             savedPrompt.getName(),
             options.getTimeout(),
             mode,
-            modelSelectionResolution.modelSelection,
+            modelConfigurationResolution.modelConfiguration,
             toolAvailability,
             options.getSelectionOverride(),
             options.getSystemMessage(),
@@ -167,19 +168,39 @@ public class ScriptAiRequestService implements AiRequestService {
             options.getProfileMessage()));
     }
 
-    private ModelSelectionResolution resolveSavedPromptModelSelection(AiPrompt savedPrompt) {
+    private ModelConfigurationResolution resolveSavedPromptModelConfiguration(AiPrompt savedPrompt) {
         String selectionValue = normalizeOptional(savedPrompt.getModelSelectionValue());
         if (selectionValue == null) {
-            return ModelSelectionResolution.success(AiModelSelection.current());
+            return ModelConfigurationResolution.success(defaultModelConfiguration());
         }
         AIModelSelection parsedSelection = AIModelSelection.fromSelectionValue(selectionValue);
         if (parsedSelection == null) {
-            return ModelSelectionResolution.configurationError(
+            return ModelConfigurationResolution.configurationError(
                 "Malformed saved AI prompt model selection for prompt '" + safePromptName(savedPrompt) + "'.");
         }
-        return ModelSelectionResolution.success(AiModelSelection.explicit(
-            parsedSelection.getProviderName(),
-            parsedSelection.getModelName()));
+        return ModelConfigurationResolution.success(AiModelConfiguration.builder()
+            .modelSelection(AiModelSelection.explicit(parsedSelection.getProviderName(), parsedSelection.getModelName()))
+            .build());
+    }
+
+    private AiModelConfiguration withDefaultModelSelection(AiModelConfiguration modelConfiguration) {
+        if (modelConfiguration == null) {
+            return defaultModelConfiguration();
+        }
+        if (modelConfiguration.getModelSelection() != null) {
+            return modelConfiguration;
+        }
+        return AiModelConfiguration.builder()
+            .modelSelection(AiModelSelection.defaultModel())
+            .thinkingEffort(modelConfiguration.getThinkingEffort())
+            .temperature(modelConfiguration.getTemperature())
+            .build();
+    }
+
+    private AiModelConfiguration defaultModelConfiguration() {
+        return AiModelConfiguration.builder()
+            .modelSelection(AiModelSelection.defaultModel())
+            .build();
     }
 
     private AiToolAvailability resolveSavedPromptToolAvailability(AiPrompt savedPrompt) {
@@ -246,21 +267,21 @@ public class ScriptAiRequestService implements AiRequestService {
         }
     }
 
-    private static class ModelSelectionResolution {
-        private final AiModelSelection modelSelection;
+    private static class ModelConfigurationResolution {
+        private final AiModelConfiguration modelConfiguration;
         private final String configurationErrorDetail;
 
-        private ModelSelectionResolution(AiModelSelection modelSelection, String configurationErrorDetail) {
-            this.modelSelection = modelSelection;
+        private ModelConfigurationResolution(AiModelConfiguration modelConfiguration, String configurationErrorDetail) {
+            this.modelConfiguration = modelConfiguration;
             this.configurationErrorDetail = configurationErrorDetail;
         }
 
-        private static ModelSelectionResolution success(AiModelSelection modelSelection) {
-            return new ModelSelectionResolution(modelSelection, null);
+        private static ModelConfigurationResolution success(AiModelConfiguration modelConfiguration) {
+            return new ModelConfigurationResolution(modelConfiguration, null);
         }
 
-        private static ModelSelectionResolution configurationError(String configurationErrorDetail) {
-            return new ModelSelectionResolution(null, configurationErrorDetail);
+        private static ModelConfigurationResolution configurationError(String configurationErrorDetail) {
+            return new ModelConfigurationResolution(null, configurationErrorDetail);
         }
     }
 }

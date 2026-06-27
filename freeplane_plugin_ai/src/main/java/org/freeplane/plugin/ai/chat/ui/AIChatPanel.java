@@ -131,6 +131,7 @@ import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.freeplane.plugin.ai.maps.ControllerMapModelProvider;
 import org.freeplane.plugin.ai.model.AIChatModelFactory;
 import org.freeplane.plugin.ai.model.AIModelCatalog;
+import org.freeplane.plugin.ai.model.AIModelConfiguration;
 import org.freeplane.plugin.ai.model.AIModelSelection;
 import org.freeplane.plugin.ai.model.AIProviderConfiguration;
 import org.freeplane.plugin.ai.prompt.AiPrompt;
@@ -177,6 +178,7 @@ public class AIChatPanel extends JPanel {
     private final ToolAvailabilityLevelSettings chatToolAvailabilitySettings;
     private final ChatDisplaySettings chatDisplaySettings;
     private final ChatModelSelector modelSelectionController;
+    private final ChatThinkingEffortSelector thinkingEffortSelector;
     private final PromptToolSelectionResolver promptToolSelectionResolver;
     private final ToolAvailabilityLevelMenu chatToolAvailabilityMenu;
     private final ChatOutputView chatOutputView;
@@ -281,6 +283,7 @@ public class AIChatPanel extends JPanel {
         modelSelectionController = new ChatModelSelector(configuration, new AIModelCatalog(configuration));
         modelSelectionController.setModelSelectionChangeListener(modelDescriptor -> {
         });
+        thinkingEffortSelector = new ChatThinkingEffortSelector(configuration);
         AssistantProfileSelectionModel assistantProfileSelectionModel = new AssistantProfileSelectionModel();
         chatMemory = createChatMemory();
         tokenUsageLabel = new JLabel();
@@ -315,6 +318,10 @@ public class AIChatPanel extends JPanel {
         chatOutputView = new ChatOutputView(messageHistory, liveChatController, tokenUsageLabel);
         modelSelectionController.setExplicitUserModelSelectionChangeListener(modelDescriptor ->
             liveChatController.clearCurrentSessionSelectedModelOverride());
+        thinkingEffortSelector.setExplicitUserThinkingEffortSelectionChangeListener(thinkingEffort -> {
+            liveChatController.clearCurrentSessionThinkingEffortOverride();
+            refreshInstructionPreview();
+        });
         assistantProfileSelectionSync = new AssistantProfileSelectionSync(
             assistantProfileSelectionModel,
             liveChatController);
@@ -493,7 +500,14 @@ public class AIChatPanel extends JPanel {
         TranslatedElementFactory.createTooltip(menuButton, "preferences");
         menuButton.addActionListener(event -> menuPopup.show(menuButton, 0, menuButton.getHeight()));
         topBar.add(menuButton, BorderLayout.WEST);
-        topBar.add(modelSelectionController.getModelSelectionComboBox(), BorderLayout.CENTER);
+        JPanel modelConfigurationSelectors = new JPanel(new ModelConfigurationSelectorLayout(TOP_BAR_HORIZONTAL_GAP));
+        Dimension thinkingEffortSize = thinkingEffortSelector.getComboBox().getPreferredSize();
+        modelSelectionController.setMinimumAndPreferredWidth(
+            thinkingEffortSize.width,
+            Math.max(thinkingEffortSize.width, 280));
+        modelConfigurationSelectors.add(modelSelectionController.getModelSelectionComboBox(), "model");
+        modelConfigurationSelectors.add(thinkingEffortSelector.getComboBox(), "thinking");
+        topBar.add(modelConfigurationSelectors, BorderLayout.CENTER);
         JPanel rightButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, TOP_BAR_HORIZONTAL_GAP, 0));
         String historyIconPath = "/images/ai_history.svg?useAccentColor=true";
         JButton chatsButton = TranslatedElementFactory.createButtonWithIcon(historyIconPath, "ai_chat_chats");
@@ -714,6 +728,13 @@ public class AIChatPanel extends JPanel {
             new IFreeplanePropertyListener() {
                 @Override
                 public void propertyChanged(String propertyName, String newValue, String oldValue) {
+                    if (AIProviderConfiguration.AI_THINKING_EFFORT_PROPERTY.equals(propertyName)) {
+                        SwingUtilities.invokeLater(() -> {
+                            updateThinkingEffortSelectorSelection();
+                            refreshInstructionPreview();
+                        });
+                        return;
+                    }
                     if (!MessageBuilder.SYSTEM_MESSAGE_PROPERTY.equals(propertyName)
                         && !ToolAvailabilityLevelSettings.TOOL_AVAILABILITY_PROPERTY.equals(propertyName)) {
                         return;
@@ -806,6 +827,7 @@ public class AIChatPanel extends JPanel {
             return;
         }
         String selectedModelOverride = normalizeSelectionValue(prompt.getModelSelectionValue());
+        AIModelConfiguration promptModelConfiguration = AIModelConfiguration.fromSelectionValue(selectedModelOverride);
         ToolAvailabilityLevel resolvedToolAvailability =
             promptToolSelectionResolver.resolveEffectiveToolAvailability(prompt.getToolAvailabilitySelectionValue());
         ToolAvailabilityLevel toolAvailabilityOverride =
@@ -833,7 +855,7 @@ public class AIChatPanel extends JPanel {
                 sessionId);
             if (!chatPromptRunner.startShownPrompt(
                     prompt.getPrompt(),
-                    selectedModelOverride,
+                    promptModelConfiguration,
                     resolvedToolAvailability,
                     null,
                     null)) {
@@ -846,7 +868,7 @@ public class AIChatPanel extends JPanel {
         if (!chatPromptRunner.submitHiddenRequest(
                 prompt.getName(),
                 prompt.getPrompt(),
-                selectedModelOverride,
+                promptModelConfiguration,
                 resolvedToolAvailability,
                 null,
                 owner,
@@ -870,7 +892,8 @@ public class AIChatPanel extends JPanel {
         if (handle.isDone()) {
             return;
         }
-        String selectedModelOverride = AiRequestMappings.toSelectedModelOverride(request.getModelSelection());
+        AIModelConfiguration requestModelConfiguration = internalModelConfiguration(request);
+        String selectedModelOverride = AiRequestMappings.toSelectedModelOverride(request.getModelConfiguration());
         AiRequestConfigurationResolver.Issue configurationIssue =
             aiRequestConfigurationResolver.resolve(selectedModelOverride);
         if (configurationIssue != null) {
@@ -925,7 +948,7 @@ public class AIChatPanel extends JPanel {
             sessionId);
         boolean started = chatPromptRunner.startShownPrompt(
             request.getPromptText(),
-            selectedModelOverride,
+            requestModelConfiguration,
             resolvedToolAvailability,
             resolveSelectionOverride(request.getSelectionOverride()),
             requestCallbacks,
@@ -952,9 +975,10 @@ public class AIChatPanel extends JPanel {
             : null;
         boolean appendToSelectedSession = selectedSessionId != null
             && isAddToChatSystemMessageCompatible(selectedSessionId, request);
-        String selectedModelOverride = request.getModelSelection().isCurrent()
+        AIModelConfiguration requestModelConfiguration = internalModelConfiguration(request);
+        String selectedModelOverride = requestUsesDefaultModel(request)
             ? (appendToSelectedSession ? liveChatController.sessionSelectedModelOverride(selectedSessionId) : null)
-            : AiRequestMappings.toSelectedModelOverride(request.getModelSelection());
+            : AiRequestMappings.toSelectedModelOverride(request.getModelConfiguration());
         AiRequestConfigurationResolver.Issue configurationIssue =
             aiRequestConfigurationResolver.resolve(selectedModelOverride);
         if (configurationIssue != null) {
@@ -978,7 +1002,11 @@ public class AIChatPanel extends JPanel {
             sessionId,
             requestTokenUsageTracker,
             visibleAiRequestCallbacksFactory.create(handle));
-        AIChatService requestService = createVisibleRequestService(sessionId, requestFlow, requestTokenUsageTracker);
+        AIChatService requestService = createVisibleRequestService(
+            sessionId,
+            requestFlow,
+            requestTokenUsageTracker,
+            requestModelConfiguration);
         if (requestService == null) {
             handle.complete(configurationErrorOrFailedResult(
                 liveChatController.sessionSelectedModelOverride(sessionId),
@@ -1010,7 +1038,8 @@ public class AIChatPanel extends JPanel {
         if (handle.isDone()) {
             return;
         }
-        String selectedModelOverride = AiRequestMappings.toSelectedModelOverride(request.getModelSelection());
+        AIModelConfiguration requestModelConfiguration = internalModelConfiguration(request);
+        String selectedModelOverride = AiRequestMappings.toSelectedModelOverride(request.getModelConfiguration());
         AiRequestConfigurationResolver.Issue configurationIssue =
             aiRequestConfigurationResolver.resolve(selectedModelOverride);
         if (configurationIssue != null) {
@@ -1047,7 +1076,7 @@ public class AIChatPanel extends JPanel {
         boolean started = chatPromptRunner.submitHiddenRequest(
             request.getPromptDisplayName(),
             request.getPromptText(),
-            selectedModelOverride,
+            requestModelConfiguration,
             resolvedToolAvailability,
             resolveSelectionOverride(request.getSelectionOverride()),
             null,
@@ -1163,6 +1192,17 @@ public class AIChatPanel extends JPanel {
         return aiSelectionOverrideResolver.resolve(selectionOverride);
     }
 
+    private AIModelConfiguration internalModelConfiguration(ResolvedAiRequest request) {
+        return request == null ? null : AiRequestMappings.toModelConfiguration(request.getModelConfiguration());
+    }
+
+    private boolean requestUsesDefaultModel(ResolvedAiRequest request) {
+        return request == null
+            || request.getModelConfiguration() == null
+            || request.getModelConfiguration().getModelSelection() == null
+            || request.getModelConfiguration().getModelSelection().isDefaultModel();
+    }
+
     private ToolAvailabilityLevel resolvePromptStyleToolAvailability(AiToolAvailability toolAvailability) {
         ToolAvailabilityLevel mappedAvailability = AiRequestMappings.toToolAvailabilityLevel(toolAvailability);
         return mappedAvailability == null ? chatToolAvailabilitySettings.getToolAvailability() : mappedAvailability;
@@ -1183,7 +1223,7 @@ public class AIChatPanel extends JPanel {
     private void applyAddToChatSessionOverrides(LiveChatSessionId sessionId,
                                                 ResolvedAiRequest request,
                                                 String selectedModelOverride) {
-        if (!request.getModelSelection().isCurrent()) {
+        if (!requestUsesDefaultModel(request)) {
             liveChatController.setSessionSelectedModelOverride(sessionId, selectedModelOverride);
         }
         ToolAvailabilityLevel explicitToolAvailability =
@@ -1219,7 +1259,7 @@ public class AIChatPanel extends JPanel {
         return liveChatController.startNewScriptChat(
             promptChatMemory,
             request.getPromptDisplayName(),
-            request.getModelSelection().isCurrent() ? null : selectedModelOverride,
+            requestUsesDefaultModel(request) ? null : selectedModelOverride,
             explicitToolAvailabilityOverride(request.getToolAvailability()));
     }
 
@@ -1452,10 +1492,24 @@ public class AIChatPanel extends JPanel {
     private AIChatService createVisibleRequestService(LiveChatSessionId sessionId,
                                                       ChatRequestFlow requestFlow,
                                                       ChatTokenUsageTracker requestTokenUsageTracker) {
+        return createVisibleRequestService(sessionId, requestFlow, requestTokenUsageTracker, null);
+    }
+
+    private AIChatService createVisibleRequestService(LiveChatSessionId sessionId,
+                                                      ChatRequestFlow requestFlow,
+                                                      ChatTokenUsageTracker requestTokenUsageTracker,
+                                                      AIModelConfiguration requestModelConfiguration) {
         String selectedModelOverride = liveChatController.sessionSelectedModelOverride(sessionId);
         if (configurationErrorMessage(selectedModelOverride) != null) {
             return null;
         }
+        AIModelConfiguration sessionModelConfiguration = AIModelConfiguration.of(
+            AIModelSelection.fromSelectionValue(selectedModelOverride),
+            liveChatController.sessionThinkingEffortOverride(sessionId),
+            null);
+        AIModelConfiguration modelConfiguration = requestModelConfiguration == null
+            ? sessionModelConfiguration
+            : requestModelConfiguration.withFallback(sessionModelConfiguration);
         ToolAvailabilityLevel toolAvailabilityOverride =
             liveChatController.sessionToolAvailabilityOverride(sessionId);
         AiCodeHostService sessionCodeHostService = sessionAwareCodeHostService(sessionId);
@@ -1481,7 +1535,7 @@ public class AIChatPanel extends JPanel {
             requestFlow.cancellationSupplier(),
             requestFlow::onProviderUsage,
             toolAvailabilityOverride == null ? null : () -> toolAvailabilityOverride,
-            selectedModelOverride,
+            modelConfiguration,
             baseSystemMessage,
             liveChatController.isSessionSystemMessageExact(sessionId),
             false);
@@ -1703,6 +1757,11 @@ public class AIChatPanel extends JPanel {
             toolAvailability.name());
         liveChatController.clearCurrentSessionToolAvailabilityOverride();
         refreshInstructionPreview();
+    }
+
+    private void updateThinkingEffortSelectorSelection() {
+        thinkingEffortSelector.setDisplayedThinkingEffortOverride(
+            liveChatController.currentSessionThinkingEffortOverride());
     }
 
     private void updateToolAvailabilityMenuSelection() {
@@ -1965,6 +2024,7 @@ public class AIChatPanel extends JPanel {
         currentSessionUsesAssistantProfile = liveChatController.currentSessionUsesAssistantProfile();
         modelSelectionController.setDisplayedSelectionValueOverride(
             liveChatController.currentSessionSelectedModelOverride());
+        updateThinkingEffortSelectorSelection();
         updateToolAvailabilityMenuSelection();
         LiveChatSessionId sessionId = liveChatController.currentSessionId();
         ChatTokenUsageTracker activeRequestTracker = sessionId == null

@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import org.freeplane.api.ai.AiModelConfiguration;
 import org.freeplane.api.ai.AiModelSelection;
 import org.freeplane.api.ai.AiRequestMode;
 import org.freeplane.api.ai.AiRequestStatus;
@@ -97,7 +98,7 @@ public class AddToChatDispatchJobTest {
             null,
             Duration.ofSeconds(10),
             AiRequestMode.ADD_TO_CHAT,
-            AiModelSelection.current(),
+            AiModelConfiguration.builder().modelSelection(AiModelSelection.defaultModel()).build(),
             AiToolAvailability.CURRENT,
             (AiSelectionOverride) null,
             null,

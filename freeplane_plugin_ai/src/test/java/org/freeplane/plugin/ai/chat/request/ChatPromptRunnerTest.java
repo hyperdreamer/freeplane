@@ -15,6 +15,7 @@ import org.freeplane.plugin.ai.chat.session.LiveChatSessionId;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.tools.code.AiCodeOperationAuthorizer;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
+import org.freeplane.plugin.ai.model.AIModelConfiguration;
 import org.freeplane.plugin.ai.prompt.AiPromptProgressDialogFactory;
 import org.freeplane.plugin.ai.prompt.AiPromptRequestComposer;
 import org.freeplane.plugin.ai.prompt.ui.AiPromptProgressDialog;
@@ -63,7 +64,7 @@ public class ChatPromptRunnerTest {
                 org.mockito.ArgumentMatchers.<Supplier<Boolean>>any(),
                 org.mockito.ArgumentMatchers.nullable(Consumer.class),
                 org.mockito.ArgumentMatchers.<Supplier<ToolAvailabilityLevel>>any(),
-                nullable(String.class)))
+                nullable(AIModelConfiguration.class)))
                 .thenAnswer(invocation -> {
                     @SuppressWarnings("unchecked")
                     Supplier<ToolAvailabilityLevel> toolAvailabilitySupplier = invocation.getArgument(7);
@@ -110,7 +111,7 @@ public class ChatPromptRunnerTest {
                 org.mockito.ArgumentMatchers.<Supplier<Boolean>>any(),
                 org.mockito.ArgumentMatchers.nullable(Consumer.class),
                 org.mockito.ArgumentMatchers.<Supplier<ToolAvailabilityLevel>>any(),
-                nullable(String.class)))
+                nullable(AIModelConfiguration.class)))
                 .thenReturn(promptService);
 
             boolean started = uut.startShownPrompt(
@@ -149,7 +150,7 @@ public class ChatPromptRunnerTest {
                 org.mockito.ArgumentMatchers.<Supplier<Boolean>>any(),
                 org.mockito.ArgumentMatchers.nullable(Consumer.class),
                 org.mockito.ArgumentMatchers.<Supplier<ToolAvailabilityLevel>>any(),
-                nullable(String.class),
+                nullable(AIModelConfiguration.class),
                 nullable(String.class),
                 org.mockito.ArgumentMatchers.anyBoolean(),
                 org.mockito.ArgumentMatchers.anyBoolean()))
@@ -207,7 +208,7 @@ public class ChatPromptRunnerTest {
                 org.mockito.ArgumentMatchers.<Supplier<Boolean>>any(),
                 org.mockito.ArgumentMatchers.nullable(Consumer.class),
                 org.mockito.ArgumentMatchers.<Supplier<ToolAvailabilityLevel>>any(),
-                nullable(String.class),
+                nullable(AIModelConfiguration.class),
                 nullable(String.class),
                 org.mockito.ArgumentMatchers.anyBoolean(),
                 org.mockito.ArgumentMatchers.anyBoolean()))

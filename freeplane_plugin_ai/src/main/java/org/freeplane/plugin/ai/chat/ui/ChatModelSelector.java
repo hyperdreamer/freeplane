@@ -39,6 +39,13 @@ class ChatModelSelector {
         return modelSelectionComboBox;
     }
 
+    void setMinimumAndPreferredWidth(int minimumWidth, int preferredWidth) {
+        Dimension preferredSize = modelSelectionComboBox.getPreferredSize();
+        int width = Math.max(minimumWidth, preferredWidth);
+        modelSelectionComboBox.setMinimumSize(new Dimension(minimumWidth, preferredSize.height));
+        modelSelectionComboBox.setPreferredSize(new Dimension(width, preferredSize.height));
+    }
+
     void setModelSelectionChangeListener(Consumer<AIModelDescriptor> modelSelectionChangeListener) {
         this.modelSelectionChangeListener = modelSelectionChangeListener;
     }
