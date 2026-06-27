@@ -541,7 +541,7 @@ public class AIChatPanel extends JPanel {
         preferencesMenuItem.setIcon(preferencesIcon);
         menuPopup.add(preferencesMenuItem);
         addToolAvailabilityLevelMenu(menuPopup);
-        Action manageProfilesAction = new AbstractAction() {
+        Action editProfilesAction = new AbstractAction() {
             private static final long serialVersionUID = 1L;
 
             @Override
@@ -549,11 +549,25 @@ public class AIChatPanel extends JPanel {
                 assistantProfilePaneBuilder.openAssistantProfileManager();
             }
         };
-        JMenuItem manageProfilesMenuItem = TranslatedElementFactory.createMenuItem(
-            manageProfilesAction,
-            AssistantProfilePaneBuilder.MANAGE_PROFILES_TEXT_KEY);
-        manageProfilesMenuItem.setIcon(assistantProfileIcon);
-        menuPopup.add(manageProfilesMenuItem);
+        JMenuItem editProfilesMenuItem = TranslatedElementFactory.createMenuItem(
+            editProfilesAction,
+            AssistantProfilePaneBuilder.EDIT_PROFILES_TEXT_KEY);
+        editProfilesMenuItem.setIcon(assistantProfileIcon);
+        menuPopup.add(editProfilesMenuItem);
+        Action editPromptsAction = new AbstractAction() {
+            private static final long serialVersionUID = 1L;
+
+            @Override
+            public void actionPerformed(ActionEvent event) {
+                if (promptActionRegistry != null) {
+                    promptActionRegistry.openPromptManager();
+                }
+            }
+        };
+        JMenuItem editPromptsMenuItem = TranslatedElementFactory.createMenuItem(
+            editPromptsAction,
+            "EditAiPromptsAction");
+        menuPopup.add(editPromptsMenuItem);
         Action reopenAiOwnedScriptAction = new AbstractAction() {
             private static final long serialVersionUID = 1L;
 

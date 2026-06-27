@@ -14,7 +14,7 @@ public final class AiPromptMenuInstaller {
             new AiPromptStore(),
             aiChatPanel,
             () -> modeController.getUserInputListenerFactory().rebuildMenus("aiPromptMenu"));
-        modeController.addAction(new ManageAiPromptsAction(promptActionRegistry));
+        modeController.addAction(new EditAiPromptsAction(promptActionRegistry));
         modeController.addUiBuilder(
             Phase.ACTIONS,
             "ai_prompt_actions",

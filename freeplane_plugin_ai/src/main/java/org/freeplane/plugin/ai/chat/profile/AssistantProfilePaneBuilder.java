@@ -10,11 +10,11 @@ import javax.swing.SwingUtilities;
 import org.freeplane.core.ui.textchanger.TranslatedElementFactory;
 
 public class AssistantProfilePaneBuilder {
-    public static final String MANAGE_PROFILES_TEXT_KEY = "ai_chat_manage_profiles";
+    public static final String EDIT_PROFILES_TEXT_KEY = "ai_chat_edit_profiles";
     private final AssistantProfileSelectionModel selectionModel;
     private final AssistantProfileSelectionSync selectionSync;
     private final JComboBox<AssistantProfile> selector = new JComboBox<>();
-    private final JButton manageProfilesButton;
+    private final JButton editProfilesButton;
     private boolean updatingSelection;
     private JPanel panel;
 
@@ -23,12 +23,12 @@ public class AssistantProfilePaneBuilder {
                                 Icon assistantProfileIcon) {
         this.selectionModel = selectionModel;
         this.selectionSync = selectionSync;
-        this.manageProfilesButton = new JButton(assistantProfileIcon);
+        this.editProfilesButton = new JButton(assistantProfileIcon);
     }
 
     public void initialize() {
         selector.addActionListener(event -> handleAssistantProfileSelection());
-        manageProfilesButton.addActionListener(event -> openAssistantProfileManager());
+        editProfilesButton.addActionListener(event -> openAssistantProfileManager());
         setAssistantProfileSelection(selectionModel.getSelectedProfile(), true);
     }
 
@@ -36,8 +36,8 @@ public class AssistantProfilePaneBuilder {
         if (panel == null) {
             panel = new JPanel(new BorderLayout(5, 0));
             panel.add(selector, BorderLayout.CENTER);
-            TranslatedElementFactory.createTooltip(manageProfilesButton, MANAGE_PROFILES_TEXT_KEY);
-            panel.add(manageProfilesButton, BorderLayout.EAST);
+            TranslatedElementFactory.createTooltip(editProfilesButton, EDIT_PROFILES_TEXT_KEY);
+            panel.add(editProfilesButton, BorderLayout.EAST);
         }
         return panel;
     }
@@ -49,7 +49,7 @@ public class AssistantProfilePaneBuilder {
 
     public void setSelectionEnabled(boolean enabled) {
         selector.setEnabled(enabled);
-        manageProfilesButton.setEnabled(enabled);
+        editProfilesButton.setEnabled(enabled);
     }
 
     private void handleAssistantProfileSelection() {

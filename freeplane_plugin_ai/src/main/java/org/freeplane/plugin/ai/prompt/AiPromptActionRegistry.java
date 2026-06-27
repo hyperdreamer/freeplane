@@ -62,7 +62,7 @@ public class AiPromptActionRegistry {
         return actions;
     }
 
-    void openPromptManager() {
+    public void openPromptManager() {
         AiPromptManagerDialog dialog = new AiPromptManagerDialog(findOwnerComponent(), this);
         dialog.openDialog();
     }
