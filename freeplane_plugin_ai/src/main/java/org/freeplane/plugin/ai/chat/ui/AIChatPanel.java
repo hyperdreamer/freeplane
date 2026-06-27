@@ -564,9 +564,9 @@ public class AIChatPanel extends JPanel {
                 }
             }
         };
-        JMenuItem editPromptsMenuItem = TranslatedElementFactory.createMenuItem(
+        JMenuItem editPromptsMenuItem = createMenuItem(
             editPromptsAction,
-            "EditAiPromptsAction");
+            "EditAiPromptsAction.text");
         menuPopup.add(editPromptsMenuItem);
         Action reopenAiOwnedScriptAction = new AbstractAction() {
             private static final long serialVersionUID = 1L;
@@ -651,7 +651,14 @@ public class AIChatPanel extends JPanel {
         if (action == null) {
             return;
         }
-        menuPopup.add(TranslatedElementFactory.createMenuItem(action, action.getTextKey()));
+        menuPopup.add(createMenuItem(action, action.getTextKey()));
+    }
+
+    private JMenuItem createMenuItem(Action action, String textKey) {
+        JMenuItem menuItem = action == null ? new JMenuItem() : new JMenuItem(action);
+        LabelAndMnemonicSetter.setLabelAndMnemonic(menuItem, TextUtils.getRawText(textKey));
+        TranslatedElement.TEXT.setKey(menuItem, textKey);
+        return menuItem;
     }
 
     private void addToggleMenuItem(JPopupMenu menuPopup, AFreeplaneAction action) {
