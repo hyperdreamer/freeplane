@@ -11,6 +11,7 @@ Bookmarks outline and bookmark toolbar can follow the view root
 Switch AI Chat tool availability between reading, editing and disabled
 Add reusable AI prompts that are managed in a dialog like assistant profiles, exposed as dynamic actions
   - Tools->AI prompts->Edit prompts...
+Thinking effort and temperature configuration
 Bug fixes
 
 ==============================
