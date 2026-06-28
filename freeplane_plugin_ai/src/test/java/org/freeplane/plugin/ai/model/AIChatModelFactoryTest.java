@@ -9,6 +9,7 @@ import java.lang.reflect.Field;
 import java.util.Collections;
 import java.util.Map;
 import java.util.function.Supplier;
+import org.freeplane.api.ai.AiTemperature;
 import org.freeplane.api.ai.AiThinkingEffort;
 import org.junit.Test;
 
@@ -37,7 +38,7 @@ public class AIChatModelFactoryTest {
         AIModelConfiguration modelConfiguration = AIModelConfiguration.of(
             AIModelSelection.fromSelectionValue("openrouter|openai/gpt-5"),
             AiThinkingEffort.XHIGH,
-            Double.valueOf(0.2));
+            AiTemperature.of(0.2));
         when(configuration.getDefaultModelConfiguration()).thenReturn(modelConfiguration);
         when(configuration.getOpenRouterKey()).thenReturn("test-key");
         when(configuration.getOpenrouterServiceAddress()).thenReturn("https://openrouter.ai/api/v1");
@@ -51,12 +52,28 @@ public class AIChatModelFactoryTest {
     }
 
     @Test
+    public void createChatLanguageModel_omitsOpenRouterTemperatureForModelDefault() throws Exception {
+        AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
+        AIModelConfiguration modelConfiguration = AIModelConfiguration.of(
+            AIModelSelection.fromSelectionValue("openrouter|openai/gpt-5"),
+            AiThinkingEffort.XHIGH,
+            AiTemperature.modelDefault());
+        when(configuration.getDefaultModelConfiguration()).thenReturn(modelConfiguration);
+        when(configuration.getOpenRouterKey()).thenReturn("test-key");
+        when(configuration.getOpenrouterServiceAddress()).thenReturn("https://openrouter.ai/api/v1");
+
+        ChatModel chatModel = AIChatModelFactory.createChatLanguageModel(configuration);
+
+        assertThat(openAiRequestParameters(chatModel).temperature()).isNull();
+    }
+
+    @Test
     public void createChatLanguageModel_resolvesRequestConfigurationOverDefaultsByField() throws Exception {
         AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
         AIModelConfiguration defaultConfiguration = AIModelConfiguration.of(
             AIModelSelection.fromSelectionValue("openrouter|openai/gpt-5"),
             AiThinkingEffort.HIGH,
-            Double.valueOf(0.9));
+            AiTemperature.of(0.9));
         AIModelConfiguration requestConfiguration = AIModelConfiguration.of(
             null,
             AiThinkingEffort.NONE,
@@ -70,6 +87,26 @@ public class AIChatModelFactoryTest {
 
         assertThat(parameters.temperature()).isEqualTo(0.9);
         assertThat(parameters.reasoningEffort()).isEqualTo("none");
+    }
+
+    @Test
+    public void createChatLanguageModel_usesRequestModelDefaultInsteadOfFallbackTemperature() throws Exception {
+        AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
+        AIModelConfiguration defaultConfiguration = AIModelConfiguration.of(
+            AIModelSelection.fromSelectionValue("openrouter|openai/gpt-5"),
+            AiThinkingEffort.HIGH,
+            AiTemperature.of(0.9));
+        AIModelConfiguration requestConfiguration = AIModelConfiguration.of(
+            null,
+            null,
+            AiTemperature.modelDefault());
+        when(configuration.getDefaultModelConfiguration()).thenReturn(defaultConfiguration);
+        when(configuration.getOpenRouterKey()).thenReturn("test-key");
+        when(configuration.getOpenrouterServiceAddress()).thenReturn("https://openrouter.ai/api/v1");
+
+        ChatModel chatModel = AIChatModelFactory.createChatLanguageModel(configuration, requestConfiguration);
+
+        assertThat(openAiRequestParameters(chatModel).temperature()).isNull();
     }
 
     @Test
@@ -90,7 +127,7 @@ public class AIChatModelFactoryTest {
         AIModelConfiguration modelConfiguration = AIModelConfiguration.of(
             AIModelSelection.fromSelectionValue("gemini|gemini-2.5-flash"),
             AiThinkingEffort.MAX,
-            Double.valueOf(0.3));
+            AiTemperature.of(0.3));
         when(configuration.getDefaultModelConfiguration()).thenReturn(modelConfiguration);
         when(configuration.getGeminiKey()).thenReturn("test-key");
         when(configuration.getGeminiServiceAddress()).thenReturn("https://generativelanguage.googleapis.com/v1beta");
@@ -103,6 +140,22 @@ public class AIChatModelFactoryTest {
         assertThat(thinkingConfig.includeThoughts()).isTrue();
         assertThat(fieldValue(chatModel, "returnThinking")).isEqualTo(Boolean.TRUE);
         assertThat(fieldValue(chatModel, "sendThinking")).isEqualTo(Boolean.TRUE);
+    }
+
+    @Test
+    public void createChatLanguageModel_omitsGeminiTemperatureForModelDefault() throws Exception {
+        AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
+        AIModelConfiguration modelConfiguration = AIModelConfiguration.of(
+            AIModelSelection.fromSelectionValue("gemini|gemini-2.5-flash"),
+            AiThinkingEffort.MAX,
+            AiTemperature.modelDefault());
+        when(configuration.getDefaultModelConfiguration()).thenReturn(modelConfiguration);
+        when(configuration.getGeminiKey()).thenReturn("test-key");
+        when(configuration.getGeminiServiceAddress()).thenReturn("https://generativelanguage.googleapis.com/v1beta");
+
+        ChatModel chatModel = AIChatModelFactory.createChatLanguageModel(configuration);
+
+        assertThat(defaultRequestParameters(chatModel).temperature()).isNull();
     }
 
     @Test
@@ -156,7 +209,7 @@ public class AIChatModelFactoryTest {
         AIModelConfiguration modelConfiguration = AIModelConfiguration.of(
             AIModelSelection.fromSelectionValue("ollama|llama3.2"),
             AiThinkingEffort.HIGH,
-            Double.valueOf(0.4));
+            AiTemperature.of(0.4));
         when(configuration.getDefaultModelConfiguration()).thenReturn(modelConfiguration);
         when(configuration.getOllamaServiceAddress()).thenReturn("https://example.ollama.test");
         when(configuration.getOllamaRequestHeaders()).thenReturn(Collections.emptyMap());
@@ -167,6 +220,24 @@ public class AIChatModelFactoryTest {
 
         assertThat(parameters.temperature()).isEqualTo(0.4);
         assertThat(parameters.think()).isEqualTo(Boolean.TRUE);
+    }
+
+    @Test
+    public void createChatLanguageModel_omitsOllamaTemperatureForModelDefault() throws Exception {
+        AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
+        AIModelConfiguration modelConfiguration = AIModelConfiguration.of(
+            AIModelSelection.fromSelectionValue("ollama|llama3.2"),
+            AiThinkingEffort.HIGH,
+            AiTemperature.modelDefault());
+        when(configuration.getDefaultModelConfiguration()).thenReturn(modelConfiguration);
+        when(configuration.getOllamaServiceAddress()).thenReturn("https://example.ollama.test");
+        when(configuration.getOllamaRequestHeaders()).thenReturn(Collections.emptyMap());
+
+        ChatModel chatModel = AIChatModelFactory.createChatLanguageModel(configuration);
+        OllamaChatRequestParameters parameters =
+            (OllamaChatRequestParameters) fieldValue(chatModel, "defaultRequestParameters");
+
+        assertThat(parameters.temperature()).isNull();
     }
 
     @Test

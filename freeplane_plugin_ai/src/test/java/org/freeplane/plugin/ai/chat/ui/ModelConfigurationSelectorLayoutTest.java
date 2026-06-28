@@ -26,6 +26,27 @@ public class ModelConfigurationSelectorLayoutTest {
     }
 
     @Test
+    public void layoutDoesNotShrinkModelSelectorBelowWidestCompactSelectorWidth() {
+        JPanel panel = new JPanel(new ModelConfigurationSelectorLayout(2));
+        JButton modelSelector = new JButton();
+        modelSelector.setPreferredSize(new Dimension(280, 24));
+        JButton thinkingSelector = new JButton();
+        thinkingSelector.setPreferredSize(new Dimension(100, 24));
+        JButton temperatureSelector = new JButton();
+        temperatureSelector.setPreferredSize(new Dimension(130, 24));
+        panel.add(modelSelector, "model");
+        panel.add(thinkingSelector, "thinking");
+        panel.add(temperatureSelector, "temperature");
+
+        panel.setSize(new Dimension(250, 24));
+        panel.doLayout();
+
+        assertThat(modelSelector.getWidth()).isEqualTo(temperatureSelector.getPreferredSize().width);
+        assertThat(thinkingSelector.getX()).isEqualTo(modelSelector.getWidth() + 2);
+        assertThat(temperatureSelector.getX()).isEqualTo(modelSelector.getWidth() + 2 + thinkingSelector.getWidth() + 2);
+    }
+
+    @Test
     public void layoutGivesAvailableWidthToModelSelectorWhenEnoughSpaceExists() {
         JPanel panel = new JPanel(new ModelConfigurationSelectorLayout(2));
         JButton modelSelector = new JButton();

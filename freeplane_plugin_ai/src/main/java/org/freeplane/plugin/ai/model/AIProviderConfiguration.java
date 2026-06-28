@@ -2,6 +2,7 @@ package org.freeplane.plugin.ai.model;
 
 import java.util.Collections;
 import java.util.Map;
+import org.freeplane.api.ai.AiTemperature;
 import org.freeplane.api.ai.AiThinkingEffort;
 import org.freeplane.core.resources.ResourceController;
 
@@ -10,7 +11,7 @@ public class AIProviderConfiguration {
     private static final String AI_MODEL_NAME_PROPERTY = "ai_model_name";
     private static final String AI_SELECTED_MODEL_PROPERTY = "ai_selected_model";
     public static final String AI_THINKING_EFFORT_PROPERTY = "ai_thinking_effort";
-    private static final String AI_TEMPERATURE_PROPERTY = "ai_temperature";
+    public static final String AI_TEMPERATURE_PROPERTY = "ai_temperature";
     private static final String AI_OPENROUTER_SERVICE_ADDRESS_PROPERTY = "ai_openrouter_service_address";
     private static final String AI_OPENROUTER_KEY_PROPERTY = "ai_openrouter_key";
     private static final String AI_OPENROUTER_MODEL_ALLOWLIST_PROPERTY = "ai_openrouter_model_allowlist";
@@ -44,7 +45,8 @@ public class AIProviderConfiguration {
         return AIModelConfiguration.of(
             getDefaultModelSelection(),
             parseThinkingEffort(resourceController.getProperty(AI_THINKING_EFFORT_PROPERTY)),
-            parseTemperature(resourceController.getProperty(AI_TEMPERATURE_PROPERTY)));
+            AIModelTemperatureStorage.fromGlobalPreferenceValue(
+                resourceController.getProperty(AI_TEMPERATURE_PROPERTY)));
     }
 
     public String getStoredSelectedModelValue() {
@@ -58,6 +60,12 @@ public class AIProviderConfiguration {
     public void setThinkingEffortValue(AiThinkingEffort thinkingEffort) {
         AiThinkingEffort value = thinkingEffort == null ? AiThinkingEffort.MEDIUM : thinkingEffort;
         resourceController.setProperty(AI_THINKING_EFFORT_PROPERTY, value.name());
+    }
+
+    public void setTemperatureValue(AiTemperature temperature) {
+        resourceController.setProperty(
+            AI_TEMPERATURE_PROPERTY,
+            AIModelTemperatureStorage.toPreferenceValue(temperature));
     }
 
     public String getOpenrouterServiceAddress() {
@@ -124,20 +132,6 @@ public class AIProviderConfiguration {
     private AiThinkingEffort parseThinkingEffort(String value) {
         AiThinkingEffort thinkingEffort = AiThinkingEffort.fromPreferenceValue(value);
         return thinkingEffort == null ? AiThinkingEffort.MEDIUM : thinkingEffort;
-    }
-
-    private Double parseTemperature(String value) {
-        String normalized = trimToEmpty(value);
-        if (normalized.isEmpty()) {
-            return null;
-        }
-        try {
-            Double temperature = Double.valueOf(normalized);
-            return temperature.isNaN() || temperature.isInfinite() ? null : temperature;
-        }
-        catch (NumberFormatException ignored) {
-            return null;
-        }
     }
 
     private boolean hasNonBlankText(String value) {

@@ -1,15 +1,17 @@
 package org.freeplane.plugin.ai.model;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.Objects;
+import org.freeplane.api.ai.AiTemperature;
 import org.freeplane.api.ai.AiThinkingEffort;
 
 public class AIModelConfiguration {
     private final AIModelSelection modelSelection;
     private final AiThinkingEffort thinkingEffort;
-    private final Double temperature;
+    private final AiTemperature temperature;
 
     @JsonCreator
     private AIModelConfiguration(@JsonProperty("modelSelection") AIModelSelection modelSelection,
@@ -17,12 +19,20 @@ public class AIModelConfiguration {
                                  @JsonProperty("temperature") Object temperature) {
         this.modelSelection = normalizeModelSelection(modelSelection);
         this.thinkingEffort = thinkingEffort;
-        this.temperature = normalizeTemperature(temperature);
+        this.temperature = AIModelTemperatureStorage.fromStoredValue(temperature);
+    }
+
+    private AIModelConfiguration(AIModelSelection modelSelection,
+                                 AiThinkingEffort thinkingEffort,
+                                 AiTemperature temperature) {
+        this.modelSelection = normalizeModelSelection(modelSelection);
+        this.thinkingEffort = thinkingEffort;
+        this.temperature = temperature;
     }
 
     public static AIModelConfiguration of(AIModelSelection modelSelection,
                                           AiThinkingEffort thinkingEffort,
-                                          Double temperature) {
+                                          AiTemperature temperature) {
         return new AIModelConfiguration(modelSelection, thinkingEffort, temperature);
     }
 
@@ -54,9 +64,15 @@ public class AIModelConfiguration {
         return thinkingEffort;
     }
 
-    @JsonInclude(JsonInclude.Include.NON_NULL)
-    public Double getTemperature() {
+    @JsonIgnore
+    public AiTemperature getTemperature() {
         return temperature;
+    }
+
+    @JsonProperty("temperature")
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public Object getStoredTemperature() {
+        return AIModelTemperatureStorage.toStoredValue(temperature);
     }
 
     @Override
@@ -84,27 +100,5 @@ public class AIModelConfiguration {
             return null;
         }
         return modelSelection;
-    }
-
-    private static Double normalizeTemperature(Object temperature) {
-        if (temperature == null) {
-            return null;
-        }
-        final Double parsedTemperature;
-        if (temperature instanceof Number) {
-            parsedTemperature = Double.valueOf(((Number) temperature).doubleValue());
-        }
-        else {
-            try {
-                parsedTemperature = Double.valueOf(temperature.toString().trim());
-            }
-            catch (NumberFormatException ignored) {
-                return null;
-            }
-        }
-        if (parsedTemperature.isNaN() || parsedTemperature.isInfinite()) {
-            return null;
-        }
-        return parsedTemperature;
     }
 }

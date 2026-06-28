@@ -2,6 +2,7 @@ package org.freeplane.plugin.ai.prompt.ui;
 
 import java.util.Arrays;
 import javax.swing.JDialog;
+import org.freeplane.api.ai.AiTemperature;
 import org.freeplane.api.ai.AiThinkingEffort;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.resources.WindowConfigurationStorage;
@@ -111,7 +112,7 @@ public class AiPromptManagerDialogTest {
         state.loadSavedPrompts(Arrays.asList(new AiPrompt("Rewrite", "Prompt", false, "", "")));
         state.selectSavedPrompt(0);
 
-        state.updateDraft("Rewrite", "Prompt", false, "", AiThinkingEffort.LOW, Double.valueOf(0.2), "");
+        state.updateDraft("Rewrite", "Prompt", false, "", AiThinkingEffort.LOW, AiTemperature.of(0.2), "");
 
         assertThat(state.isDirty()).isTrue();
     }
@@ -162,7 +163,7 @@ public class AiPromptManagerDialogTest {
         state.updateDraft("Rewrite", "Prompt", false,
             "openrouter|openai/gpt-4.1-mini",
             AiThinkingEffort.HIGH,
-            Double.valueOf(0.4),
+            AiTemperature.of(0.4),
             "");
         state.save(DEFAULT_NEW_PROMPT_NAME);
 
@@ -170,7 +171,7 @@ public class AiPromptManagerDialogTest {
             .isEqualTo(AIModelConfiguration.of(
                 AIModelSelection.fromSelectionValue("openrouter|openai/gpt-4.1-mini"),
                 AiThinkingEffort.HIGH,
-                Double.valueOf(0.4)));
+                AiTemperature.of(0.4)));
     }
 
     @Test

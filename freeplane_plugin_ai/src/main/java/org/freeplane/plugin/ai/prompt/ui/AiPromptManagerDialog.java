@@ -31,6 +31,7 @@ import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.resources.WindowConfigurationStorage;
 import org.freeplane.core.ui.textchanger.TranslatedElementFactory;
 import org.freeplane.core.util.TextUtils;
+import org.freeplane.api.ai.AiTemperature;
 import org.freeplane.api.ai.AiThinkingEffort;
 import org.freeplane.plugin.ai.chat.ui.ModelConfigurationSelectorLayout;
 import org.freeplane.plugin.ai.model.AIModelCatalog;
@@ -54,7 +55,6 @@ public class AiPromptManagerDialog extends JDialog {
     private final JList<AiPrompt> promptsList = new JList<AiPrompt>(listModel);
     private final JTextField nameField = new JTextField();
     private final JTextArea promptArea = new JTextArea();
-    private final JTextField temperatureField = new JTextField();
     private final JCheckBox showInChatCheckBox = new JCheckBox(TextUtils.getText("ai_prompt_show_in_chat"));
     private final JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
     private final JButton newButton = new JButton(TextUtils.getText("ai_prompt_new"));
@@ -68,6 +68,8 @@ public class AiPromptManagerDialog extends JDialog {
         new AiPromptModelSelectionController(configuration, new AIModelCatalog(configuration));
     private final AiPromptThinkingEffortSelectionController thinkingEffortSelectionController =
         new AiPromptThinkingEffortSelectionController();
+    private final AiTemperatureSelectionController temperatureSelectionController =
+        new AiTemperatureSelectionController(true);
     private final AiPromptToolSelectionController toolSelectionController =
         new AiPromptToolSelectionController();
     private final WindowGeometryPersistence windowGeometryPersistence;
@@ -135,11 +137,12 @@ public class AiPromptManagerDialog extends JDialog {
         };
         nameField.getDocument().addDocumentListener(documentListener);
         promptArea.getDocument().addDocumentListener(documentListener);
-        temperatureField.getDocument().addDocumentListener(documentListener);
         showInChatCheckBox.addActionListener(event -> updateDraftFromFields());
         modelSelectionController.setModelSelectionChangeListener(selectionValue -> updateDraftFromFields());
         thinkingEffortSelectionController.setThinkingEffortSelectionChangeListener(
             thinkingEffort -> updateDraftFromFields());
+        temperatureSelectionController.setTemperatureSelectionChangeListener(
+            temperature -> updateDraftFromFields());
         toolSelectionController.setToolSelectionChangeListener(selectionValue -> updateDraftFromFields());
 
         JPanel listPanel = createLabeledPanel("ai_prompt_list_label", new JScrollPane(promptsList));
@@ -153,15 +156,18 @@ public class AiPromptManagerDialog extends JDialog {
             thinkingEffortSelectionController.getThinkingEffortComboBox();
         JPanel thinkingEffortPanel = createTitledPanel("ai_prompt_thinking_effort_label", thinkingEffortComboBox);
 
+        JComboBox<AiTemperatureSelectionController.TemperatureOption> temperatureComboBox =
+            temperatureSelectionController.getComboBox();
+        JPanel temperaturePanel = createTitledPanel("ai_prompt_temperature_label", temperatureComboBox);
+
         JPanel modelConfigurationSelectorPanel = new JPanel(new ModelConfigurationSelectorLayout(5));
         modelConfigurationSelectorPanel.add(modelPanel, "model");
         modelConfigurationSelectorPanel.add(thinkingEffortPanel, "thinking");
+        modelConfigurationSelectorPanel.add(temperaturePanel, "temperature");
 
         JComboBox<AiPromptToolSelectionController.ToolSelectionOption> toolSelectionComboBox =
             toolSelectionController.getToolSelectionComboBox();
         JPanel toolPanel = createTitledPanel("ai_prompt_tool_label", toolSelectionComboBox);
-
-        JPanel temperaturePanel = createTitledPanel("ai_prompt_temperature_label", temperatureField);
 
         promptArea.setLineWrap(true);
         promptArea.setWrapStyleWord(true);
@@ -171,13 +177,9 @@ public class AiPromptManagerDialog extends JDialog {
         selectionPanel.add(modelConfigurationSelectorPanel, BorderLayout.CENTER);
         selectionPanel.add(toolPanel, BorderLayout.EAST);
 
-        JPanel modelParametersPanel = new JPanel(new BorderLayout(5, 5));
-        modelParametersPanel.add(selectionPanel, BorderLayout.NORTH);
-        modelParametersPanel.add(temperaturePanel, BorderLayout.SOUTH);
-
         JPanel fieldsPanel = new JPanel(new BorderLayout(5, 5));
         fieldsPanel.add(namePanel, BorderLayout.NORTH);
-        fieldsPanel.add(modelParametersPanel, BorderLayout.SOUTH);
+        fieldsPanel.add(selectionPanel, BorderLayout.SOUTH);
 
         JPanel rightPanel = new JPanel(new BorderLayout(5, 5));
         rightPanel.add(fieldsPanel, BorderLayout.NORTH);
@@ -344,7 +346,7 @@ public class AiPromptManagerDialog extends JDialog {
             showInChatCheckBox.isSelected(),
             modelSelectionController.getSelectedModelSelectionValue(),
             thinkingEffortSelectionController.getSelectedThinkingEffort(),
-            parseOptionalTemperature(temperatureField.getText()),
+            temperatureSelectionController.getSelectedTemperature(),
             toolSelectionController.getSelectedToolAvailabilitySelectionValue());
         refreshButtons();
     }
@@ -388,7 +390,7 @@ public class AiPromptManagerDialog extends JDialog {
             showInChatCheckBox.setSelected(currentDraft.isShowInChat());
             modelSelectionController.setSelectedModelSelectionValue(currentDraft.getModelSelectionValue());
             thinkingEffortSelectionController.setSelectedThinkingEffort(currentDraft.getThinkingEffort());
-            temperatureField.setText(formatTemperature(currentDraft.getTemperature()));
+            temperatureSelectionController.setSelectedTemperature(currentDraft.getTemperature());
             toolSelectionController.setSelectedToolAvailabilitySelectionValue(
                 currentDraft.getToolAvailabilitySelectionValue());
         }
@@ -404,24 +406,6 @@ public class AiPromptManagerDialog extends JDialog {
 
     private String defaultNewPromptName() {
         return TextUtils.getText("ai_prompt_new_name");
-    }
-
-    private Double parseOptionalTemperature(String value) {
-        String normalized = value == null ? "" : value.trim();
-        if (normalized.isEmpty()) {
-            return null;
-        }
-        try {
-            Double temperature = Double.valueOf(normalized);
-            return temperature.isNaN() || temperature.isInfinite() ? null : temperature;
-        }
-        catch (NumberFormatException ignored) {
-            return null;
-        }
-    }
-
-    private String formatTemperature(Double temperature) {
-        return temperature == null ? "" : temperature.toString();
     }
 
     private void ensureButtonRowIsVisible() {
@@ -557,7 +541,7 @@ public class AiPromptManagerDialog extends JDialog {
         public void updateDraft(String name, String prompt, boolean showInChat,
                                 String modelSelectionValue,
                                 AiThinkingEffort thinkingEffort,
-                                Double temperature,
+                                AiTemperature temperature,
                                 String toolAvailabilitySelectionValue) {
             currentDraft.setName(safe(name));
             currentDraft.setPrompt(safe(prompt));

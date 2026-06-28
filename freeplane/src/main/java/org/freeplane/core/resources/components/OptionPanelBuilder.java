@@ -47,6 +47,7 @@ import org.freeplane.core.ui.IndexedTree;
 import org.freeplane.core.ui.TimePeriodUnits;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.TextUtils;
+import org.freeplane.features.mode.Controller;
 import org.freeplane.n3.nanoxml.XMLElement;
 import org.freeplane.n3.nanoxml.XMLException;
 
@@ -146,6 +147,42 @@ public class OptionPanelBuilder {
 				}
 				displayedItems.add(displayedItem);
 			}
+		}
+	}
+
+	private class ChoiceOrNumberOptionCreator extends PropertyCreator {
+		@Override
+		public IPropertyControlCreator getCreator(final String name, final XMLElement data) {
+			final int childrenCount = data.getChildrenCount();
+			final Vector<String> choices = new Vector<String>(childrenCount);
+			final Vector<Object> displayedItems = new Vector<Object>(childrenCount);
+			for (int i = 0; i < data.getChildrenCount(); i++) {
+				final XMLElement element = data.getChildAtIndex(i);
+				final String choice = element.getAttribute("value", null);
+				choices.add(choice);
+				final String translationKey = element.getAttribute("text", "OptionPanel." + choice);
+				displayedItems.add(textOrKey(translationKey));
+			}
+			final String customTextKey = data.getAttribute("customText", "OptionPanel." + name + ".custom");
+			final String customText = textOrKey(customTextKey);
+			final String blankValue = data.getAttribute("blankValue", "");
+			return new IPropertyControlCreator() {
+				@Override
+				public IPropertyControl createControl() {
+					return new ChoiceOrNumberProperty(name, choices, displayedItems, customText, blankValue);
+				}
+
+				@Override
+				public String getPropertyName() {
+					return name;
+				}
+			};
+		}
+
+		private String textOrKey(String translationKey) {
+			return Controller.getCurrentController() == null
+				? translationKey
+				: TextUtils.getOptionalText(translationKey);
 		}
 	}
 
@@ -923,6 +960,7 @@ public class OptionPanelBuilder {
 		readManager.addElementHandler("path", new PathOptionCreator());
 		readManager.addElementHandler("color", new ColorOptionCreator());
 		readManager.addElementHandler("combo", new ComboOptionCreator());
+		readManager.addElementHandler("choice_or_number", new ChoiceOrNumberOptionCreator());
 		readManager.addElementHandler("radiobuttons", new RadioButtonsOptionCreator());
 		readManager.addElementHandler("languages", new LanguagesComboCreator());
 		readManager.addElementHandler("key", new KeyOptionCreator());

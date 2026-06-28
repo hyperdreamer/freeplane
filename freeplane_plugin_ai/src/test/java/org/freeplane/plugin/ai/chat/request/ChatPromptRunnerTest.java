@@ -10,6 +10,7 @@ import java.util.function.Supplier;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.features.text.TextController;
+import org.freeplane.api.ai.AiTemperature;
 import org.freeplane.api.ai.AiThinkingEffort;
 import org.freeplane.plugin.ai.chat.memory.AssistantProfileSwitchMessage;
 import org.freeplane.plugin.ai.chat.memory.ChatTokenUsageTracker;
@@ -152,7 +153,7 @@ public class ChatPromptRunnerTest {
         AIModelConfiguration profileConfiguration = AIModelConfiguration.of(
             null,
             AiThinkingEffort.HIGH,
-            Double.valueOf(0.4));
+            AiTemperature.of(0.4));
         AssistantProfileSwitchMessage profileMessage = new AssistantProfileSwitchMessage(
             "profile-id",
             "Reviewer",
@@ -191,7 +192,7 @@ public class ChatPromptRunnerTest {
         assertThat(seenModelConfiguration.get().getModelSelection())
             .isEqualTo(requestConfiguration.getModelSelection());
         assertThat(seenModelConfiguration.get().getThinkingEffort()).isEqualTo(AiThinkingEffort.HIGH);
-        assertThat(seenModelConfiguration.get().getTemperature()).isEqualTo(0.4);
+        assertThat(seenModelConfiguration.get().getTemperature()).isEqualTo(AiTemperature.of(0.4));
     }
 
     @Test

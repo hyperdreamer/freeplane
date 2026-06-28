@@ -10,6 +10,7 @@ public class ModelConfigurationSelectorLayout implements LayoutManager2 {
     private final int gap;
     private Component modelSelector;
     private Component thinkingSelector;
+    private Component temperatureSelector;
 
     public ModelConfigurationSelectorLayout(int gap) {
         this.gap = Math.max(0, gap);
@@ -25,7 +26,11 @@ public class ModelConfigurationSelectorLayout implements LayoutManager2 {
             thinkingSelector = component;
             return;
         }
-        throw new IllegalArgumentException("Expected constraints 'model' or 'thinking'");
+        if ("temperature".equals(constraints)) {
+            temperatureSelector = component;
+            return;
+        }
+        throw new IllegalArgumentException("Expected constraints 'model', 'thinking', or 'temperature'");
     }
 
     @Override
@@ -41,6 +46,9 @@ public class ModelConfigurationSelectorLayout implements LayoutManager2 {
         if (component == thinkingSelector) {
             thinkingSelector = null;
         }
+        if (component == temperatureSelector) {
+            temperatureSelector = null;
+        }
     }
 
     @Override
@@ -48,8 +56,10 @@ public class ModelConfigurationSelectorLayout implements LayoutManager2 {
         Insets insets = parent.getInsets();
         Dimension modelSize = preferredSize(modelSelector);
         Dimension thinkingSize = preferredSize(thinkingSelector);
-        int width = insets.left + modelSize.width + gap + thinkingSize.width + insets.right;
-        int height = insets.top + Math.max(modelSize.height, thinkingSize.height) + insets.bottom;
+        Dimension temperatureSize = preferredSize(temperatureSelector);
+        int compactWidth = compactWidth(thinkingSize, temperatureSize);
+        int width = insets.left + modelSize.width + gapWidth() + compactWidth + insets.right;
+        int height = insets.top + maxHeight(modelSize, thinkingSize, temperatureSize) + insets.bottom;
         return new Dimension(width, height);
     }
 
@@ -57,8 +67,12 @@ public class ModelConfigurationSelectorLayout implements LayoutManager2 {
     public Dimension minimumLayoutSize(Container parent) {
         Insets insets = parent.getInsets();
         Dimension thinkingSize = preferredSize(thinkingSelector);
-        int width = insets.left + thinkingSize.width + gap + thinkingSize.width + insets.right;
-        int height = insets.top + thinkingSize.height + insets.bottom;
+        Dimension temperatureSize = preferredSize(temperatureSelector);
+        int minimumModelWidth = Math.max(thinkingSize.width, temperatureSize.width);
+        int width = insets.left + minimumModelWidth + gapWidth()
+            + compactWidth(thinkingSize, temperatureSize) + insets.right;
+        int height = insets.top + maxHeight(preferredSize(modelSelector), thinkingSize, temperatureSize)
+            + insets.bottom;
         return new Dimension(width, height);
     }
 
@@ -87,14 +101,36 @@ public class ModelConfigurationSelectorLayout implements LayoutManager2 {
             return;
         }
         Insets insets = parent.getInsets();
-        Dimension thinkingSize = thinkingSelector.getPreferredSize();
         Dimension modelPreferredSize = modelSelector.getPreferredSize();
+        Dimension thinkingSize = thinkingSelector.getPreferredSize();
+        Dimension temperatureSize = preferredSize(temperatureSelector);
         int availableWidth = Math.max(0, parent.getWidth() - insets.left - insets.right);
-        int modelWidth = Math.max(thinkingSize.width, availableWidth - thinkingSize.width - gap);
-        int height = Math.max(modelPreferredSize.height, thinkingSize.height);
+        int minimumModelWidth = Math.max(thinkingSize.width, temperatureSize.width);
+        int compactWidth = compactWidth(thinkingSize, temperatureSize);
+        int modelWidth = Math.max(minimumModelWidth, availableWidth - compactWidth - gapWidth());
+        int height = maxHeight(modelPreferredSize, thinkingSize, temperatureSize);
         int y = insets.top + Math.max(0, parent.getHeight() - insets.top - insets.bottom - height) / 2;
-        modelSelector.setBounds(insets.left, y, modelWidth, modelPreferredSize.height);
-        thinkingSelector.setBounds(insets.left + modelWidth + gap, y, thinkingSize.width, thinkingSize.height);
+        int x = insets.left;
+        modelSelector.setBounds(x, y, modelWidth, modelPreferredSize.height);
+        x += modelWidth + gap;
+        thinkingSelector.setBounds(x, y, thinkingSize.width, thinkingSize.height);
+        x += thinkingSize.width;
+        if (temperatureSelector != null) {
+            x += gap;
+            temperatureSelector.setBounds(x, y, temperatureSize.width, temperatureSize.height);
+        }
+    }
+
+    private int gapWidth() {
+        return gap;
+    }
+
+    private int compactWidth(Dimension thinkingSize, Dimension temperatureSize) {
+        return thinkingSize.width + (temperatureSelector == null ? 0 : gap + temperatureSize.width);
+    }
+
+    private int maxHeight(Dimension modelSize, Dimension thinkingSize, Dimension temperatureSize) {
+        return Math.max(modelSize.height, Math.max(thinkingSize.height, temperatureSize.height));
     }
 
     private Dimension preferredSize(Component component) {

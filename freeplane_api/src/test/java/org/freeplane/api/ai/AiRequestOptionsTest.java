@@ -14,6 +14,28 @@ import org.junit.Test;
 public class AiRequestOptionsTest {
 
     @Test
+    public void aiTemperatureRepresentsModelDefaultAndNumericStates() {
+        assertThat(AiTemperature.modelDefault().isModelDefault()).isTrue();
+        assertThat(AiTemperature.modelDefault().isNumeric()).isFalse();
+        assertThat(AiTemperature.modelDefault().getValue()).isNull();
+
+        AiTemperature numericTemperature = AiTemperature.of(0.2);
+        assertThat(numericTemperature.isModelDefault()).isFalse();
+        assertThat(numericTemperature.isNumeric()).isTrue();
+        assertThat(numericTemperature.getValue()).isEqualTo(0.2);
+    }
+
+    @Test
+    public void aiTemperatureRejectsNonFiniteNumericValues() {
+        assertThatThrownBy(() -> AiTemperature.of(Double.NaN))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("temperature");
+        assertThatThrownBy(() -> AiTemperature.of(Double.POSITIVE_INFINITY))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("temperature");
+    }
+
+    @Test
     public void rejectsMissingTimeout() {
         assertThatThrownBy(() -> AiRequestOptions.builder().build())
             .isInstanceOf(NullPointerException.class)
@@ -55,7 +77,7 @@ public class AiRequestOptionsTest {
             .modelConfiguration(AiModelConfiguration.builder()
                 .modelSelection(AiModelSelection.explicit("openrouter", "openai/gpt-4.1-mini"))
                 .thinkingEffort(AiThinkingEffort.HIGH)
-                .temperature(Double.valueOf(0.2))
+                .temperature(AiTemperature.of(0.2))
                 .build())
             .toolAvailability(AiToolAvailability.READING)
             .selectionOverride(override)
@@ -68,7 +90,7 @@ public class AiRequestOptionsTest {
         assertThat(options.getModelConfiguration().getModelSelection())
             .isEqualTo(AiModelSelection.explicit("openrouter", "openai/gpt-4.1-mini"));
         assertThat(options.getModelConfiguration().getThinkingEffort()).isEqualTo(AiThinkingEffort.HIGH);
-        assertThat(options.getModelConfiguration().getTemperature()).isEqualTo(0.2);
+        assertThat(options.getModelConfiguration().getTemperature()).isEqualTo(AiTemperature.of(0.2));
         assertThat(options.getToolAvailability()).isEqualTo(AiToolAvailability.READING);
         assertThat(options.getSelectionOverride()).isSameAs(override);
         assertThat(options.getSystemMessage()).isEqualTo("system");

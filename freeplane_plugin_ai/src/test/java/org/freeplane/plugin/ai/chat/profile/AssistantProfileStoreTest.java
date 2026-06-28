@@ -10,6 +10,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
+import org.freeplane.api.ai.AiTemperature;
 import org.freeplane.api.ai.AiThinkingEffort;
 import org.freeplane.plugin.ai.model.AIModelConfiguration;
 import org.freeplane.plugin.ai.model.AIModelSelection;
@@ -62,6 +63,28 @@ public class AssistantProfileStoreTest {
     }
 
     @Test
+    public void loadProfiles_preservesModelDefaultTemperature() throws IOException {
+        Path tempDir = Files.createTempDirectory("assistant-profiles");
+        try {
+            Path path = tempDir.resolve(AssistantProfileStore.PROFILES_FILE_NAME);
+            Files.write(
+                path,
+                ("[{\"id\":\"id-1\",\"name\":\"First\",\"prompt\":\"one\","
+                    + "\"modelConfiguration\":{\"thinkingEffort\":\"HIGH\",\"temperature\":\"model_default\"}}]")
+                    .getBytes(StandardCharsets.UTF_8));
+            AssistantProfileStore store = new AssistantProfileStore(new ObjectMapper(), path);
+
+            List<AssistantProfile> loaded = store.loadProfiles();
+
+            assertThat(loaded).hasSize(1);
+            assertThat(loaded.get(0).getThinkingEffort()).isEqualTo(AiThinkingEffort.HIGH);
+            assertThat(loaded.get(0).getTemperature()).isEqualTo(AiTemperature.modelDefault());
+        } finally {
+            deleteRecursively(tempDir);
+        }
+    }
+
+    @Test
     public void saveAndLoad_preservesProfiles() throws IOException {
         Path tempDir = Files.createTempDirectory("assistant-profiles");
         try {
@@ -72,7 +95,7 @@ public class AssistantProfileStoreTest {
                     AIModelConfiguration.of(
                         AIModelSelection.fromSelectionValue("openrouter|openai/gpt-4.1-mini"),
                         AiThinkingEffort.HIGH,
-                        Double.valueOf(0.4))),
+                        AiTemperature.of(0.4))),
                 new AssistantProfile("id-2", "Second", "two"));
 
             store.saveProfiles(profiles);

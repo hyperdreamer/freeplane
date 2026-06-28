@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import org.freeplane.api.ai.AiTemperature;
 import org.freeplane.api.ai.AiThinkingEffort;
 import org.freeplane.plugin.ai.chat.history.ChatTranscriptEntry;
 import org.freeplane.plugin.ai.chat.history.ChatTranscriptId;
@@ -155,7 +156,7 @@ final class LiveChatSession {
         AiThinkingEffort thinkingEffort = modelConfigurationOverride == null
             ? null
             : modelConfigurationOverride.getThinkingEffort();
-        Double temperature = modelConfigurationOverride == null ? null : modelConfigurationOverride.getTemperature();
+        AiTemperature temperature = modelConfigurationOverride == null ? null : modelConfigurationOverride.getTemperature();
         modelConfigurationOverride = normalizeModelConfiguration(
             AIModelConfiguration.of(modelSelection, thinkingEffort, temperature));
     }
@@ -168,9 +169,24 @@ final class LiveChatSession {
         AIModelSelection modelSelection = modelConfigurationOverride == null
             ? null
             : modelConfigurationOverride.getModelSelection();
-        Double temperature = modelConfigurationOverride == null ? null : modelConfigurationOverride.getTemperature();
+        AiTemperature temperature = modelConfigurationOverride == null ? null : modelConfigurationOverride.getTemperature();
         modelConfigurationOverride = normalizeModelConfiguration(
             AIModelConfiguration.of(modelSelection, thinkingEffortOverride, temperature));
+    }
+
+    AiTemperature getTemperatureOverride() {
+        return modelConfigurationOverride == null ? null : modelConfigurationOverride.getTemperature();
+    }
+
+    void setTemperatureOverride(AiTemperature temperatureOverride) {
+        AIModelSelection modelSelection = modelConfigurationOverride == null
+            ? null
+            : modelConfigurationOverride.getModelSelection();
+        AiThinkingEffort thinkingEffort = modelConfigurationOverride == null
+            ? null
+            : modelConfigurationOverride.getThinkingEffort();
+        modelConfigurationOverride = normalizeModelConfiguration(
+            AIModelConfiguration.of(modelSelection, thinkingEffort, temperatureOverride));
     }
 
     private static String selectionValue(AIModelConfiguration modelConfiguration) {

@@ -23,7 +23,6 @@ import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
 import org.freeplane.core.resources.ResourceController;
-import org.freeplane.api.ai.AiThinkingEffort;
 import org.freeplane.core.resources.WindowConfigurationStorage;
 import org.freeplane.plugin.ai.chat.ui.ModelConfigurationSelectorLayout;
 import org.freeplane.plugin.ai.model.AIModelCatalog;
@@ -31,6 +30,7 @@ import org.freeplane.plugin.ai.model.AIModelDescriptor;
 import org.freeplane.plugin.ai.model.AIProviderConfiguration;
 import org.freeplane.plugin.ai.prompt.ui.AiPromptModelSelectionController;
 import org.freeplane.plugin.ai.prompt.ui.AiPromptThinkingEffortSelectionController;
+import org.freeplane.plugin.ai.prompt.ui.AiTemperatureSelectionController;
 
 class AssistantProfileManagerDialog extends JDialog {
     private static final long serialVersionUID = 1L;
@@ -42,13 +42,14 @@ class AssistantProfileManagerDialog extends JDialog {
     private final JList<AssistantProfile> profilesList = new JList<>(listModel);
     private final JTextField nameField = new JTextField();
     private final JTextArea promptArea = new JTextArea();
-    private final JTextField temperatureField = new JTextField();
     private final JButton deleteButton = new JButton("Delete");
     private final AIProviderConfiguration configuration = new AIProviderConfiguration();
     private final AiPromptModelSelectionController modelSelectionController =
         new AiPromptModelSelectionController(configuration, new AIModelCatalog(configuration));
     private final AiPromptThinkingEffortSelectionController thinkingEffortSelectionController =
         new AiPromptThinkingEffortSelectionController();
+    private final AiTemperatureSelectionController temperatureSelectionController =
+        new AiTemperatureSelectionController(true);
     private boolean updatingFields;
     private final WindowGeometryPersistence windowGeometryPersistence;
 
@@ -101,15 +102,11 @@ class AssistantProfileManagerDialog extends JDialog {
                 updateSelectedProfileFromFields();
             }
         });
-        temperatureField.addFocusListener(new java.awt.event.FocusAdapter() {
-            @Override
-            public void focusLost(java.awt.event.FocusEvent event) {
-                updateSelectedProfileFromFields();
-            }
-        });
         modelSelectionController.setModelSelectionChangeListener(selectionValue -> updateSelectedProfileFromFields());
         thinkingEffortSelectionController.setThinkingEffortSelectionChangeListener(
             thinkingEffort -> updateSelectedProfileFromFields());
+        temperatureSelectionController.setTemperatureSelectionChangeListener(
+            temperature -> updateSelectedProfileFromFields());
 
         JPanel listPanel = new JPanel(new BorderLayout(5, 5));
         listPanel.add(new JLabel("Profiles"), BorderLayout.NORTH);
@@ -124,13 +121,15 @@ class AssistantProfileManagerDialog extends JDialog {
         JComboBox<AiPromptThinkingEffortSelectionController.ThinkingEffortOption> thinkingEffortComboBox =
             thinkingEffortSelectionController.getThinkingEffortComboBox();
         JPanel thinkingPanel = titledPanel("Thinking effort", thinkingEffortComboBox);
+        JComboBox<AiTemperatureSelectionController.TemperatureOption> temperatureComboBox =
+            temperatureSelectionController.getComboBox();
+        JPanel temperaturePanel = titledPanel("Temperature", temperatureComboBox);
         JPanel modelSelectorPanel = new JPanel(new ModelConfigurationSelectorLayout(5));
         modelSelectorPanel.add(modelPanel, "model");
         modelSelectorPanel.add(thinkingPanel, "thinking");
-        JPanel temperaturePanel = titledPanel("Temperature", temperatureField);
+        modelSelectorPanel.add(temperaturePanel, "temperature");
         JPanel modelConfigurationPanel = new JPanel(new BorderLayout(5, 5));
         modelConfigurationPanel.add(modelSelectorPanel, BorderLayout.NORTH);
-        modelConfigurationPanel.add(temperaturePanel, BorderLayout.SOUTH);
 
         JPanel promptPanel = new JPanel(new BorderLayout(5, 5));
         promptPanel.add(new JLabel("Prompt"), BorderLayout.NORTH);
@@ -184,7 +183,7 @@ class AssistantProfileManagerDialog extends JDialog {
                 promptArea.setText("");
                 modelSelectionController.setSelectedModelSelectionValue("");
                 thinkingEffortSelectionController.setSelectedThinkingEffort(null);
-                temperatureField.setText("");
+                temperatureSelectionController.setSelectedTemperature(null);
                 deleteButton.setEnabled(false);
                 return;
             }
@@ -192,7 +191,7 @@ class AssistantProfileManagerDialog extends JDialog {
             promptArea.setText(profile.getPrompt());
             modelSelectionController.setSelectedModelSelectionValue(profile.getModelSelectionValue());
             thinkingEffortSelectionController.setSelectedThinkingEffort(profile.getThinkingEffort());
-            temperatureField.setText(formatTemperature(profile.getTemperature()));
+            temperatureSelectionController.setSelectedTemperature(profile.getTemperature());
             deleteButton.setEnabled(listModel.getSize() > 1);
         }
         finally {
@@ -248,7 +247,7 @@ class AssistantProfileManagerDialog extends JDialog {
         profile.setPrompt(promptArea.getText());
         profile.setModelSelectionValue(modelSelectionController.getSelectedModelSelectionValue());
         profile.setThinkingEffort(thinkingEffortSelectionController.getSelectedThinkingEffort());
-        profile.setTemperature(parseOptionalTemperature(temperatureField.getText()));
+        profile.setTemperature(temperatureSelectionController.getSelectedTemperature());
         profilesList.repaint();
     }
 
@@ -256,24 +255,6 @@ class AssistantProfileManagerDialog extends JDialog {
         updateSelectedProfileFromFields();
         persistProfiles();
         closeDialog();
-    }
-
-    private Double parseOptionalTemperature(String value) {
-        String normalized = value == null ? "" : value.trim();
-        if (normalized.isEmpty()) {
-            return null;
-        }
-        try {
-            Double temperature = Double.valueOf(normalized);
-            return temperature.isNaN() || temperature.isInfinite() ? null : temperature;
-        }
-        catch (NumberFormatException ignored) {
-            return null;
-        }
-    }
-
-    private String formatTemperature(Double temperature) {
-        return temperature == null ? "" : temperature.toString();
     }
 
     private void persistProfiles() {

@@ -6,6 +6,7 @@ import dev.langchain4j.model.googleai.GoogleAiGeminiChatModel;
 import dev.langchain4j.model.ollama.OllamaChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import java.util.Map;
+import org.freeplane.api.ai.AiTemperature;
 import org.freeplane.api.ai.AiThinkingEffort;
 
 public class AIChatModelFactory {
@@ -39,9 +40,7 @@ public class AIChatModelFactory {
                 .modelName(modelName)
                 .maxRetries(CHAT_MODEL_MAX_RETRIES)
                 .parallelToolCalls(false);
-            if (modelConfiguration.getTemperature() != null) {
-                builder.temperature(modelConfiguration.getTemperature());
-            }
+            applyTemperature(builder::temperature, modelConfiguration.getTemperature());
             if (modelConfiguration.getThinkingEffort() != null) {
                 builder.reasoningEffort(modelConfiguration.getThinkingEffort().toOpenAiValue());
             }
@@ -56,9 +55,7 @@ public class AIChatModelFactory {
             if (serviceAddress != null && !serviceAddress.isEmpty()) {
                 builder.baseUrl(serviceAddress);
             }
-            if (modelConfiguration.getTemperature() != null) {
-                builder.temperature(modelConfiguration.getTemperature());
-            }
+            applyTemperature(builder::temperature, modelConfiguration.getTemperature());
             applyGeminiThinking(builder, modelName, modelConfiguration.getThinkingEffort());
             return builder.build();
         }
@@ -67,9 +64,7 @@ public class AIChatModelFactory {
                 .baseUrl(getOllamaServiceAddress(configuration))
                 .modelName(modelName)
                 .maxRetries(CHAT_MODEL_MAX_RETRIES);
-            if (modelConfiguration.getTemperature() != null) {
-                builder.temperature(modelConfiguration.getTemperature());
-            }
+            applyTemperature(builder::temperature, modelConfiguration.getTemperature());
             applyOllamaThinking(builder, modelConfiguration.getThinkingEffort());
             Map<String, String> requestHeaders = configuration.getOllamaRequestHeaders();
             if (!requestHeaders.isEmpty()) {
@@ -86,6 +81,13 @@ public class AIChatModelFactory {
         return requestConfiguration == null
             ? defaultConfiguration
             : requestConfiguration.withFallback(defaultConfiguration);
+    }
+
+    private static void applyTemperature(java.util.function.Consumer<Double> temperatureConsumer,
+                                         AiTemperature temperature) {
+        if (temperature != null && temperature.isNumeric()) {
+            temperatureConsumer.accept(temperature.getValue());
+        }
     }
 
     private static void applyOllamaThinking(OllamaChatModel.OllamaChatModelBuilder builder,

@@ -15,6 +15,7 @@ import org.freeplane.api.ai.AiRequestOptions;
 import org.freeplane.api.ai.AiRequestRejectedException;
 import org.freeplane.api.ai.AiRequestStatus;
 import org.freeplane.api.ai.AiSelectionOverride;
+import org.freeplane.api.ai.AiTemperature;
 import org.freeplane.api.ai.AiThinkingEffort;
 import org.freeplane.api.ai.AiToolAvailability;
 import org.freeplane.plugin.ai.prompt.AiPrompt;
@@ -114,7 +115,7 @@ public class ScriptAiRequestServiceTest {
             "openrouter|openai/gpt-4.1-mini",
             "reading");
         savedPrompt.setThinkingEffort(AiThinkingEffort.LOW);
-        savedPrompt.setTemperature(Double.valueOf(0.2));
+        savedPrompt.setTemperature(AiTemperature.of(0.2));
         ScriptAiRequestService uut = new ScriptAiRequestService(
             (request, handle) -> {
                 seenRequest.set(request);
@@ -135,7 +136,7 @@ public class ScriptAiRequestServiceTest {
             .isEqualTo(AiModelSelection.explicit("openrouter", "openai/gpt-4.1-mini"));
         assertThat(seenRequest.get().getModelConfiguration().getThinkingEffort())
             .isEqualTo(AiThinkingEffort.LOW);
-        assertThat(seenRequest.get().getModelConfiguration().getTemperature()).isEqualTo(0.2);
+        assertThat(seenRequest.get().getModelConfiguration().getTemperature()).isEqualTo(AiTemperature.of(0.2));
         assertThat(seenRequest.get().getToolAvailability()).isEqualTo(AiToolAvailability.READING);
     }
 
@@ -152,7 +153,7 @@ public class ScriptAiRequestServiceTest {
             "openrouter|openai/gpt-4.1-mini",
             "disabled");
         savedPrompt.setThinkingEffort(AiThinkingEffort.LOW);
-        savedPrompt.setTemperature(Double.valueOf(0.2));
+        savedPrompt.setTemperature(AiTemperature.of(0.2));
         ScriptAiRequestService uut = new ScriptAiRequestService(
             (request, handle) -> {
                 seenRequest.set(request);
@@ -180,13 +181,47 @@ public class ScriptAiRequestServiceTest {
         assertThat(seenRequest.get().getMode()).isEqualTo(AiRequestMode.ADD_TO_CHAT);
         assertThat(seenRequest.get().getModelConfiguration().getModelSelection()).isEqualTo(AiModelSelection.defaultModel());
         assertThat(seenRequest.get().getModelConfiguration().getThinkingEffort()).isEqualTo(AiThinkingEffort.LOW);
-        assertThat(seenRequest.get().getModelConfiguration().getTemperature()).isEqualTo(0.2);
+        assertThat(seenRequest.get().getModelConfiguration().getTemperature()).isEqualTo(AiTemperature.of(0.2));
         assertThat(seenRequest.get().getToolAvailability()).isEqualTo(AiToolAvailability.CURRENT);
         assertThat(seenRequest.get().getSelectionOverride()).isSameAs(selectionOverride);
         assertThat(seenRequest.get().getSystemMessage()).isEqualTo("saved system");
         assertThat(seenRequest.get().isSystemMessageExact()).isTrue();
         assertThat(seenRequest.get().getProfileName()).isEqualTo("saved profile");
         assertThat(seenRequest.get().getProfileMessage()).isNull();
+    }
+
+    @Test
+    public void runAiPromptWithOptions_usesRequestModelDefaultTemperatureOverSavedNumericTemperature() throws Exception {
+        CountDownLatch started = new CountDownLatch(1);
+        AtomicReference<ResolvedAiRequest> seenRequest = new AtomicReference<ResolvedAiRequest>();
+        AiPrompt savedPrompt = new AiPrompt(
+            "Rewrite",
+            "Rewrite the selection",
+            true,
+            "openrouter|openai/gpt-4.1-mini",
+            "disabled");
+        savedPrompt.setTemperature(AiTemperature.of(0.2));
+        ScriptAiRequestService uut = new ScriptAiRequestService(
+            (request, handle) -> {
+                seenRequest.set(request);
+                started.countDown();
+            },
+            promptName -> savedPrompt.copy(),
+            Runnable::run);
+        AiRequestOptions options = AiRequestOptions.builder()
+            .timeout(Duration.ofSeconds(30))
+            .mode(AiRequestMode.ADD_TO_CHAT)
+            .modelConfiguration(AiModelConfiguration.builder()
+                .temperature(AiTemperature.modelDefault())
+                .build())
+            .build();
+
+        uut.runAiPrompt("Rewrite", options, result -> {
+        });
+
+        assertThat(started.await(2, TimeUnit.SECONDS)).isTrue();
+        assertThat(seenRequest.get().getModelConfiguration().getTemperature())
+            .isEqualTo(AiTemperature.modelDefault());
     }
 
     @Test

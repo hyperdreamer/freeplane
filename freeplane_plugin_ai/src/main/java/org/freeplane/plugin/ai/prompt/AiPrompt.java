@@ -3,6 +3,7 @@ package org.freeplane.plugin.ai.prompt;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonSetter;
+import org.freeplane.api.ai.AiTemperature;
 import org.freeplane.api.ai.AiThinkingEffort;
 import org.freeplane.plugin.ai.model.AIModelConfiguration;
 import org.freeplane.plugin.ai.model.AIModelSelection;
@@ -97,18 +98,18 @@ public class AiPrompt {
 
     public void setThinkingEffort(AiThinkingEffort thinkingEffort) {
         AIModelSelection modelSelection = modelConfiguration == null ? null : modelConfiguration.getModelSelection();
-        Double temperature = modelConfiguration == null ? null : modelConfiguration.getTemperature();
+        AiTemperature temperature = modelConfiguration == null ? null : modelConfiguration.getTemperature();
         modelConfiguration = normalizeModelConfiguration(
             AIModelConfiguration.of(modelSelection, thinkingEffort, temperature));
         modelSelectionValue = selectionValue(modelConfiguration);
     }
 
     @JsonIgnore
-    public Double getTemperature() {
+    public AiTemperature getTemperature() {
         return modelConfiguration == null ? null : modelConfiguration.getTemperature();
     }
 
-    public void setTemperature(Double temperature) {
+    public void setTemperature(AiTemperature temperature) {
         AIModelSelection modelSelection = modelConfiguration == null ? null : modelConfiguration.getModelSelection();
         AiThinkingEffort thinkingEffort = modelConfiguration == null ? null : modelConfiguration.getThinkingEffort();
         modelConfiguration = normalizeModelConfiguration(
@@ -131,7 +132,7 @@ public class AiPrompt {
 
     private void setModelSelection(AIModelSelection modelSelection) {
         AiThinkingEffort thinkingEffort = modelConfiguration == null ? null : modelConfiguration.getThinkingEffort();
-        Double temperature = modelConfiguration == null ? null : modelConfiguration.getTemperature();
+        AiTemperature temperature = modelConfiguration == null ? null : modelConfiguration.getTemperature();
         modelConfiguration = normalizeModelConfiguration(
             AIModelConfiguration.of(modelSelection, thinkingEffort, temperature));
     }

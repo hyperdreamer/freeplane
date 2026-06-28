@@ -8,12 +8,12 @@ import java.util.Objects;
 public class AiModelConfiguration {
     private final AiModelSelection modelSelection;
     private final AiThinkingEffort thinkingEffort;
-    private final Double temperature;
+    private final AiTemperature temperature;
 
     private AiModelConfiguration(Builder builder) {
         this.modelSelection = builder.modelSelection;
         this.thinkingEffort = builder.thinkingEffort;
-        this.temperature = normalizeTemperature(builder.temperature);
+        this.temperature = builder.temperature;
     }
 
     public static Builder builder() {
@@ -28,7 +28,7 @@ public class AiModelConfiguration {
         return thinkingEffort;
     }
 
-    public Double getTemperature() {
+    public AiTemperature getTemperature() {
         return temperature;
     }
 
@@ -48,20 +48,10 @@ public class AiModelConfiguration {
             && Objects.equals(temperature, other.temperature);
     }
 
-    private static Double normalizeTemperature(Double temperature) {
-        if (temperature == null) {
-            return null;
-        }
-        if (temperature.isNaN() || temperature.isInfinite()) {
-            throw new IllegalArgumentException("temperature must be finite");
-        }
-        return temperature;
-    }
-
     public static class Builder {
         private AiModelSelection modelSelection;
         private AiThinkingEffort thinkingEffort;
-        private Double temperature;
+        private AiTemperature temperature;
 
         public Builder modelSelection(AiModelSelection modelSelection) {
             this.modelSelection = modelSelection;
@@ -73,7 +63,7 @@ public class AiModelConfiguration {
             return this;
         }
 
-        public Builder temperature(Double temperature) {
+        public Builder temperature(AiTemperature temperature) {
             this.temperature = temperature;
             return this;
         }

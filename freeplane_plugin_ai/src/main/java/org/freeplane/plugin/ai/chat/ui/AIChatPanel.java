@@ -46,6 +46,7 @@ import org.freeplane.api.ai.AiRequestHandle;
 import org.freeplane.api.ai.AiRequestResult;
 import org.freeplane.api.ai.AiRequestStatus;
 import org.freeplane.api.ai.AiSelectionOverride;
+import org.freeplane.api.ai.AiTemperature;
 import org.freeplane.api.ai.AiToolAvailability;
 import org.freeplane.core.resources.IFreeplanePropertyListener;
 import org.freeplane.core.resources.ResourceController;
@@ -181,6 +182,7 @@ public class AIChatPanel extends JPanel {
     private final ChatThinkingEffortSelector thinkingEffortSelector;
     private final PromptToolSelectionResolver promptToolSelectionResolver;
     private final ToolAvailabilityLevelMenu chatToolAvailabilityMenu;
+    private final ChatTemperatureMenu chatTemperatureMenu;
     private final ChatOutputView chatOutputView;
     private final ChatInputControls chatInputControls;
     private final AiPromptRequestComposer aiPromptRequestComposer;
@@ -315,6 +317,9 @@ public class AIChatPanel extends JPanel {
         chatToolAvailabilityMenu = new ToolAvailabilityLevelMenu(
             this::currentEffectiveToolAvailability,
             this::applyUserSelectedToolAvailability);
+        chatTemperatureMenu = new ChatTemperatureMenu(
+            this::currentEffectiveTemperature,
+            this::applyUserSelectedTemperature);
         chatOutputView = new ChatOutputView(messageHistory, liveChatController, tokenUsageLabel);
         modelSelectionController.setExplicitUserModelSelectionChangeListener(modelDescriptor ->
             liveChatController.clearCurrentSessionSelectedModelOverride());
@@ -541,6 +546,7 @@ public class AIChatPanel extends JPanel {
         preferencesMenuItem.setIcon(preferencesIcon);
         menuPopup.add(preferencesMenuItem);
         addToolAvailabilityLevelMenu(menuPopup);
+        addTemperatureMenu(menuPopup);
         Action editProfilesAction = new AbstractAction() {
             private static final long serialVersionUID = 1L;
 
@@ -608,6 +614,7 @@ public class AIChatPanel extends JPanel {
             @Override
             public void popupMenuWillBecomeVisible(PopupMenuEvent event) {
                 updateToolAvailabilityMenuSelection();
+                updateTemperatureMenuSelection();
                 showInstructionMessagesItem.setSelected(showInstructionMessages);
                 previewInstructionMessagesItem.setSelected(showNextRequestInstructionPreview);
                 reopenAiOwnedScriptMenuItem.setEnabled(canReopenAiOwnedCode());
@@ -626,6 +633,10 @@ public class AIChatPanel extends JPanel {
 
     private void addToolAvailabilityLevelMenu(JPopupMenu menuPopup) {
         chatToolAvailabilityMenu.addTo(menuPopup);
+    }
+
+    private void addTemperatureMenu(JPopupMenu menuPopup) {
+        chatTemperatureMenu.addTo(menuPopup);
     }
 
     private void addAiEditsMenuItems(JPopupMenu menuPopup) {
@@ -757,7 +768,8 @@ public class AIChatPanel extends JPanel {
                         return;
                     }
                     if (!MessageBuilder.SYSTEM_MESSAGE_PROPERTY.equals(propertyName)
-                        && !ToolAvailabilityLevelSettings.TOOL_AVAILABILITY_PROPERTY.equals(propertyName)) {
+                        && !ToolAvailabilityLevelSettings.TOOL_AVAILABILITY_PROPERTY.equals(propertyName)
+                        && !AIProviderConfiguration.AI_TEMPERATURE_PROPERTY.equals(propertyName)) {
                         return;
                     }
                     SwingUtilities.invokeLater(() -> refreshInstructionPreview());
@@ -1835,6 +1847,22 @@ public class AIChatPanel extends JPanel {
         refreshInstructionPreview();
     }
 
+    private AiTemperature currentEffectiveTemperature() {
+        AiTemperature temperatureOverride = liveChatController.currentSessionTemperatureOverride();
+        return temperatureOverride == null
+            ? configuration.getDefaultModelConfiguration().getTemperature()
+            : temperatureOverride;
+    }
+
+    private void applyUserSelectedTemperature(AiTemperature temperature) {
+        if (temperature == null) {
+            return;
+        }
+        configuration.setTemperatureValue(temperature);
+        liveChatController.clearCurrentSessionTemperatureOverride();
+        refreshInstructionPreview();
+    }
+
     private void updateThinkingEffortSelectorSelection() {
         thinkingEffortSelector.setDisplayedThinkingEffortOverride(
             liveChatController.currentSessionThinkingEffortOverride());
@@ -1842,6 +1870,10 @@ public class AIChatPanel extends JPanel {
 
     private void updateToolAvailabilityMenuSelection() {
         chatToolAvailabilityMenu.refreshSelection();
+    }
+
+    private void updateTemperatureMenuSelection() {
+        chatTemperatureMenu.refreshSelection();
     }
 
     private String configurationErrorMessage(String selectedModelOverride) {

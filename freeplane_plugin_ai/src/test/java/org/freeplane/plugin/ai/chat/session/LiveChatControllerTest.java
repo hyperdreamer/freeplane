@@ -13,6 +13,7 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.freeplane.api.ai.AiTemperature;
 import org.freeplane.api.ai.AiThinkingEffort;
 import org.freeplane.features.text.TextController;
 import org.freeplane.plugin.ai.chat.history.ChatTranscriptEntry;
@@ -54,6 +55,11 @@ public class LiveChatControllerTest {
             assertThat(uut.currentSessionThinkingEffortOverride()).isEqualTo(AiThinkingEffort.HIGH);
             uut.clearCurrentSessionThinkingEffortOverride();
             assertThat(uut.currentSessionThinkingEffortOverride()).isNull();
+
+            uut.setCurrentSessionTemperatureOverride(AiTemperature.modelDefault());
+            assertThat(uut.currentSessionTemperatureOverride()).isEqualTo(AiTemperature.modelDefault());
+            uut.clearCurrentSessionTemperatureOverride();
+            assertThat(uut.currentSessionTemperatureOverride()).isNull();
 
             uut.clearCurrentSessionSelectedModelOverride();
             uut.clearCurrentSessionToolAvailabilityOverride();

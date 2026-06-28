@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Arrays;
+import org.freeplane.api.ai.AiTemperature;
 import org.freeplane.api.ai.AiThinkingEffort;
 import org.freeplane.plugin.ai.model.AIModelConfiguration;
 import org.freeplane.plugin.ai.model.AIModelSelection;
@@ -98,7 +99,7 @@ public class AiPromptStoreTest {
             prompt.setModelConfiguration(AIModelConfiguration.of(
                 AIModelSelection.fromSelectionValue("openrouter|openai/gpt-4.1-mini"),
                 AiThinkingEffort.LOW,
-                Double.valueOf(0.2)));
+                AiTemperature.of(0.2)));
             AiPromptStore store = new AiPromptStore(new ObjectMapper(), path);
 
             store.saveState(new AiPromptStore.PersistedState(
@@ -108,7 +109,29 @@ public class AiPromptStoreTest {
 
             assertThat(loaded.getModelConfiguration()).isEqualTo(prompt.getModelConfiguration());
             assertThat(loaded.getThinkingEffort()).isEqualTo(AiThinkingEffort.LOW);
-            assertThat(loaded.getTemperature()).isEqualTo(0.2);
+            assertThat(loaded.getTemperature()).isEqualTo(AiTemperature.of(0.2));
+        }
+        finally {
+            deleteRecursively(tempDir);
+        }
+    }
+
+    @Test
+    public void loadState_preservesModelDefaultTemperature() throws IOException {
+        Path tempDir = Files.createTempDirectory("ai-prompts");
+        try {
+            Path path = tempDir.resolve(AiPromptStore.PROMPTS_FILE_NAME);
+            Files.write(
+                path,
+                ("{\"savedPrompts\":[{\"name\":\"Rewrite\",\"prompt\":\"Prompt\","
+                    + "\"modelConfiguration\":{\"thinkingEffort\":\"LOW\",\"temperature\":\"model_default\"}}]}")
+                    .getBytes(StandardCharsets.UTF_8));
+            AiPromptStore store = new AiPromptStore(new ObjectMapper(), path);
+
+            AiPrompt loaded = store.loadState().getSavedPrompts().get(0);
+
+            assertThat(loaded.getThinkingEffort()).isEqualTo(AiThinkingEffort.LOW);
+            assertThat(loaded.getTemperature()).isEqualTo(AiTemperature.modelDefault());
         }
         finally {
             deleteRecursively(tempDir);

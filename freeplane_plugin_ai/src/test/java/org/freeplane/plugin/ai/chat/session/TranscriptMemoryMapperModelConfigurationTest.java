@@ -3,6 +3,7 @@ package org.freeplane.plugin.ai.chat.session;
 import dev.langchain4j.memory.ChatMemory;
 import java.util.Collections;
 import java.util.List;
+import org.freeplane.api.ai.AiTemperature;
 import org.freeplane.api.ai.AiThinkingEffort;
 import org.freeplane.plugin.ai.chat.history.AssistantProfileTranscriptEntry;
 import org.freeplane.plugin.ai.chat.history.ChatTranscriptEntry;
@@ -20,7 +21,7 @@ public class TranscriptMemoryMapperModelConfigurationTest {
         AIModelConfiguration modelConfiguration = AIModelConfiguration.of(
             AIModelSelection.fromSelectionValue("openrouter|openai/gpt-4.1-mini"),
             AiThinkingEffort.HIGH,
-            Double.valueOf(0.4));
+            AiTemperature.of(0.4));
         AssistantProfileSwitchMessage message = new AssistantProfileSwitchMessage(
             "profile-id",
             "Reviewer",

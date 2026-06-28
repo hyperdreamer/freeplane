@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Supplier;
+import org.freeplane.api.ai.AiTemperature;
 import org.freeplane.api.ai.AiThinkingEffort;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.text.TextController;
@@ -225,6 +226,15 @@ public class LiveChatController {
         return session == null ? null : session.getThinkingEffortOverride();
     }
 
+    public AiTemperature currentSessionTemperatureOverride() {
+        return sessionTemperatureOverride(liveChatSessionManager.getCurrentSessionId());
+    }
+
+    public AiTemperature sessionTemperatureOverride(LiveChatSessionId sessionId) {
+        LiveChatSession session = liveChatSessionManager.findSession(sessionId);
+        return session == null ? null : session.getTemperatureOverride();
+    }
+
     public String sessionCapturedSystemMessage(LiveChatSessionId sessionId) {
         AssistantProfileChatMemory memory = activeAssistantProfileChatMemory(liveChatSessionManager.findSession(sessionId));
         return memory == null || memory.capturedSystemMessage() == null ? "" : memory.capturedSystemMessage().trim();
@@ -296,6 +306,23 @@ public class LiveChatController {
             return;
         }
         session.setThinkingEffortOverride(thinkingEffortOverride);
+    }
+
+    public void clearCurrentSessionTemperatureOverride() {
+        setCurrentSessionTemperatureOverride(null);
+    }
+
+    public void setCurrentSessionTemperatureOverride(AiTemperature temperatureOverride) {
+        setSessionTemperatureOverride(liveChatSessionManager.getCurrentSessionId(), temperatureOverride);
+    }
+
+    public void setSessionTemperatureOverride(LiveChatSessionId sessionId,
+                                              AiTemperature temperatureOverride) {
+        LiveChatSession session = liveChatSessionManager.findSession(sessionId);
+        if (session == null) {
+            return;
+        }
+        session.setTemperatureOverride(temperatureOverride);
     }
 
     public void clearCurrentSessionToolAvailabilityOverride() {

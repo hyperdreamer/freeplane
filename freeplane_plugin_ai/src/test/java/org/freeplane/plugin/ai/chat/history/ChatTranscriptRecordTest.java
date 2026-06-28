@@ -1,6 +1,7 @@
 package org.freeplane.plugin.ai.chat.history;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.freeplane.api.ai.AiTemperature;
 import org.freeplane.api.ai.AiThinkingEffort;
 import org.freeplane.plugin.ai.model.AIModelConfiguration;
 import org.freeplane.plugin.ai.model.AIModelSelection;
@@ -35,17 +36,30 @@ public class ChatTranscriptRecordTest {
     }
 
     @Test
+    public void deserializesModelDefaultTemperature() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+
+        ChatTranscriptRecord record = objectMapper.readValue(
+            "{\"modelConfigurationOverride\":{\"thinkingEffort\":\"LOW\",\"temperature\":\"model_default\"}}",
+            ChatTranscriptRecord.class);
+
+        assertThat(record.getModelConfigurationOverride().getThinkingEffort()).isEqualTo(AiThinkingEffort.LOW);
+        assertThat(record.getModelConfigurationOverride().getTemperature()).isEqualTo(AiTemperature.modelDefault());
+    }
+
+    @Test
     public void serializesModelConfigurationOverrideWithoutLegacySelectedModelOverride() throws Exception {
         ObjectMapper objectMapper = new ObjectMapper();
         ChatTranscriptRecord record = new ChatTranscriptRecord();
         record.setModelConfigurationOverride(AIModelConfiguration.of(
             AIModelSelection.fromSelectionValue("openrouter|openai/gpt-4.1-mini"),
             AiThinkingEffort.LOW,
-            Double.valueOf(0.2)));
+            AiTemperature.of(0.2)));
 
         String json = objectMapper.writeValueAsString(record);
 
         assertThat(json).contains("modelConfigurationOverride");
+        assertThat(json).contains("\"temperature\":0.2");
         assertThat(json).doesNotContain("selectedModelOverride");
     }
 }

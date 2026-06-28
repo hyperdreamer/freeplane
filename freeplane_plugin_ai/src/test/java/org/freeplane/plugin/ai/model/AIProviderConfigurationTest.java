@@ -1,6 +1,7 @@
 package org.freeplane.plugin.ai.model;
 
 import java.util.Map;
+import org.freeplane.api.ai.AiTemperature;
 import org.freeplane.api.ai.AiThinkingEffort;
 import org.freeplane.core.resources.ResourceController;
 import org.junit.Test;
@@ -70,7 +71,7 @@ public class AIProviderConfigurationTest {
         assertThat(modelConfiguration.getModelSelection())
             .isEqualTo(AIModelSelection.fromSelectionValue("openrouter|openai/gpt-5"));
         assertThat(modelConfiguration.getThinkingEffort()).isEqualTo(AiThinkingEffort.XHIGH);
-        assertThat(modelConfiguration.getTemperature()).isEqualTo(0.25);
+        assertThat(modelConfiguration.getTemperature()).isEqualTo(AiTemperature.of(0.25));
     }
 
     @Test
@@ -86,6 +87,18 @@ public class AIProviderConfigurationTest {
     }
 
     @Test
+    public void setTemperatureValue_writesTemperaturePreference() {
+        ResourceController resourceController = mock(ResourceController.class);
+        AIProviderConfiguration uut = configurationWith(resourceController);
+
+        uut.setTemperatureValue(AiTemperature.of(0.2));
+        uut.setTemperatureValue(AiTemperature.modelDefault());
+
+        verify(resourceController).setProperty("ai_temperature", "0.2");
+        verify(resourceController).setProperty("ai_temperature", "model_default");
+    }
+
+    @Test
     public void getDefaultModelConfiguration_usesMediumThinkingForBlankInvalidAndLegacyInheritValues() {
         ResourceController resourceController = mock(ResourceController.class);
         when(resourceController.getProperty("ai_selected_model")).thenReturn("openrouter|openai/gpt-5");
@@ -97,7 +110,7 @@ public class AIProviderConfigurationTest {
         assertThat(uut.getDefaultModelConfiguration().getThinkingEffort()).isEqualTo(AiThinkingEffort.MEDIUM);
         AIModelConfiguration modelConfiguration = uut.getDefaultModelConfiguration();
         assertThat(modelConfiguration.getThinkingEffort()).isEqualTo(AiThinkingEffort.MEDIUM);
-        assertThat(modelConfiguration.getTemperature()).isNull();
+        assertThat(modelConfiguration.getTemperature()).isEqualTo(AiTemperature.modelDefault());
     }
 
     private AIProviderConfiguration configurationWith(ResourceController resourceController) {
