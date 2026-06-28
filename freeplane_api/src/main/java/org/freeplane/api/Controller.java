@@ -180,11 +180,19 @@ public interface Controller extends ControllerRO, HeadlessMapCreator {
 	/**
 	 * Starts an asynchronous AI request for raw prompt text and delivers
 	 * the terminal result through the callback.
-	 * May throw {@link org.freeplane.api.ai.AiRequestRejectedException}
-	 * for same-thread pre-acceptance rejection.
-	 * In Groovy scripts, implementations may also support the natural
-	 * trailing-closure form, for example
-	 * <code>c.askAi("Prompt", AiRequestOptions.builder().timeout(Duration.ofSeconds(30)).mode(org.freeplane.api.ai.AiRequestMode.HIDDEN).build()) { result -&gt; println(result.status) }</code>.
+	 *
+	 * <p>The supplied options must include a positive timeout and a non-null
+	 * {@link org.freeplane.api.ai.AiRequestMode}. See
+	 * {@link AiRequestOptions.Builder#systemMessage(String)} and
+	 * {@link AiRequestOptions.Builder#exactSystemMessage(String)} for the
+	 * difference between a base system-message override and an exact system
+	 * instruction.</p>
+	 *
+	 * <p>May throw {@link org.freeplane.api.ai.AiRequestRejectedException}
+	 * for same-thread pre-acceptance rejection. In Groovy scripts,
+	 * implementations may also support the natural trailing-closure form, for
+	 * example
+	 * <code>c.askAi("Prompt", AiRequestOptions.builder().timeout(Duration.ofSeconds(30)).mode(org.freeplane.api.ai.AiRequestMode.HIDDEN).build()) { result -&gt; println(result.status) }</code>.</p>
 	 * @since 1.13.3
 	 */
 	AiRequestHandle askAi(String prompt, AiRequestOptions options, AiRequestCallback callback);
@@ -200,6 +208,11 @@ public interface Controller extends ControllerRO, HeadlessMapCreator {
 	/**
 	 * Starts an asynchronous AI request from a saved AI prompt name using
 	 * the supplied options to override saved-prompt execution defaults.
+	 *
+	 * <p>Unset option fields inherit from the saved prompt where applicable.
+	 * Explicit values in {@link AiRequestOptions} override saved-prompt values;
+	 * unset fields inside {@link org.freeplane.api.ai.AiModelConfiguration}
+	 * inherit independently.</p>
 	 * @since 1.13.3
 	 */
 	AiRequestHandle runAiPrompt(String promptName, AiRequestOptions options, AiRequestCallback callback);
