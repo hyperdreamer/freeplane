@@ -646,7 +646,7 @@
 						<Entry name="formula.TraceDependentsAction" plugin="org.freeplane.plugin.formula" accelerator="alt F7" />
 			<Entry builder="separator" />
 			<Entry name="aiPromptMenu" textKey="ai_prompt_menu">
-				<Entry name="ManageAiPromptsAction" />
+				<Entry name="EditAiPromptsAction" />
 				<Entry builder="ai_prompt_actions" />
 			</Entry>
 			<Entry builder="separator" />
@@ -793,7 +793,7 @@
 								<Entry builder="style_actions" />
 						</Entry>
 						<Entry name="aiPromptMenu" textKey="ai_prompt_menu">
-							<Entry name="ManageAiPromptsAction" />
+							<Entry name="EditAiPromptsAction" />
 							<Entry builder="ai_prompt_actions" />
 						</Entry>
 				</Entry>
