@@ -239,11 +239,11 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
             requireExpectedStateToken(request.getExpectedStateToken());
             currentScript.storedContent = sanitizeContent(request.getContent());
         }
-        CodeStateToken stateToken = currentStateToken();
-        currentScript.latestState = editedState(stateToken, currentScript.storedContent);
         if (dialog != null) {
             showCodeInDialog();
         }
+        CodeStateToken stateToken = currentStateToken();
+        currentScript.latestState = editedState(stateToken, currentScript.storedContent);
         return new WriteCodeResponse(
             ScriptHost.AI,
             AI_SCRIPT_CONTENT_TYPE,
