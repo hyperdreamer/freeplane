@@ -4,8 +4,8 @@
     <attribute_name VISIBLE="true" NAME="See also"/>
     <attribute_name VISIBLE="true" NAME="a2"/>
 </attribute_registry>
-<bookmarks/>
 <bookmark nodeId="ID_1723255651" name="Root" opensAsRoot="true"/>
+<bookmarks/>
 <node LOCALIZED_STYLE_REF="default" FOLDED="false" ID="ID_1723255651" BACKGROUND_COLOR="#00ff66">
 <icon BUILTIN="bee"/>
 <richcontent TYPE="NODE">
@@ -310,12 +310,12 @@
 <edge STYLE="hide_edge"/>
 </node>
 <node TEXT="Filter bar" ID="ID_1939718780" HGAP_QUANTITY="-711 px">
-<arrowlink SHAPE="LINE" COLOR="#000000" WIDTH="2" TRANSPARENCY="80" FONT_SIZE="12" FONT_FAMILY="SansSerif" DESTINATION="ID_1939718780" STARTINCLINATION="31.38461 pt;-2.76923 pt;" ENDINCLINATION="31.38461 pt;-2.76923 pt;" STARTARROW="NONE" ENDARROW="DEFAULT"/>
+<arrowlink SHAPE="LINE" COLOR="#000000" WIDTH="2" TRANSPARENCY="80" FONT_SIZE="12" FONT_FAMILY="SansSerif" DESTINATION="ID_1939718780" STARTINCLINATION="31.38461 pt;-1.84615 pt;" ENDINCLINATION="31.38461 pt;-1.84615 pt;" STARTARROW="NONE" ENDARROW="DEFAULT"/>
 <font NAME="SansSerif" BOLD="true" ITALIC="true"/>
 <edge STYLE="hide_edge"/>
 </node>
 <node TEXT="F-bar" ID="ID_1406478692" HGAP_QUANTITY="-688 px">
-<arrowlink SHAPE="LINE" COLOR="#000000" WIDTH="2" TRANSPARENCY="80" FONT_SIZE="12" FONT_FAMILY="SansSerif" DESTINATION="ID_1406478692" STARTINCLINATION="34.15384 pt;-11.07692 pt;" ENDINCLINATION="34.15384 pt;-11.07692 pt;" STARTARROW="NONE" ENDARROW="DEFAULT"/>
+<arrowlink SHAPE="LINE" COLOR="#000000" WIDTH="2" TRANSPARENCY="80" FONT_SIZE="12" FONT_FAMILY="SansSerif" DESTINATION="ID_1406478692" STARTINCLINATION="34.15384 pt;-10.15385 pt;" ENDINCLINATION="34.15384 pt;-10.15385 pt;" STARTARROW="NONE" ENDARROW="DEFAULT"/>
 <font NAME="SansSerif" BOLD="true" ITALIC="true"/>
 <edge STYLE="hide_edge"/>
 </node>
@@ -325,7 +325,7 @@
 <edge STYLE="hide_edge"/>
 </node>
 <node TEXT="Properties Panel" ID="ID_303482588" HGAP_QUANTITY="-146 px" VSHIFT_QUANTITY="30 px">
-<arrowlink SHAPE="LINE" COLOR="#000000" WIDTH="2" TRANSPARENCY="80" FONT_SIZE="12" FONT_FAMILY="SansSerif" DESTINATION="ID_303482588" STARTINCLINATION="14.76923 pt;-13.84615 pt;" ENDINCLINATION="14.76923 pt;-13.84615 pt;" STARTARROW="NONE" ENDARROW="DEFAULT"/>
+<arrowlink SHAPE="LINE" COLOR="#000000" WIDTH="2" TRANSPARENCY="80" FONT_SIZE="12" FONT_FAMILY="SansSerif" DESTINATION="ID_303482588" STARTINCLINATION="14.76923 pt;-12.92308 pt;" ENDINCLINATION="14.76923 pt;-12.92308 pt;" STARTARROW="NONE" ENDARROW="DEFAULT"/>
 <font NAME="SansSerif" BOLD="true" ITALIC="true"/>
 <edge STYLE="hide_edge"/>
 </node>
@@ -347,7 +347,7 @@
 <font BOLD="true" ITALIC="true"/>
 <hook URI="Images/doc/BackgroundContextMenu.png" SIZE="1.0" NAME="ExternalObject"/>
 <node TEXT="Open/close&#xa;Tool panel" ID="ID_724121688" HGAP_QUANTITY="56 px">
-<arrowlink SHAPE="LINE" COLOR="#000000" WIDTH="2" TRANSPARENCY="80" FONT_SIZE="12" FONT_FAMILY="SansSerif" DESTINATION="ID_724121688" STARTINCLINATION="71.07692 pt;-132 pt;" ENDINCLINATION="71.07692 pt;-132 pt;" STARTARROW="DEFAULT" ENDARROW="NONE"/>
+<arrowlink SHAPE="LINE" COLOR="#000000" WIDTH="2" TRANSPARENCY="80" FONT_SIZE="12" FONT_FAMILY="SansSerif" DESTINATION="ID_724121688" STARTINCLINATION="71.07692 pt;-131.07692 pt;" ENDINCLINATION="71.07692 pt;-131.07692 pt;" STARTARROW="DEFAULT" ENDARROW="NONE"/>
 <edge STYLE="hide_edge"/>
 <font BOLD="true" ITALIC="true"/>
 </node>
@@ -442,7 +442,7 @@
     <conditional_style ACTIVE="true" STYLE_REF="TitlesContent" LAST="false"/>
 </hook>
 <node TEXT="(relative) parent" STYLE_REF="ConsumerTopic" FOLDED="true" ID="ID_687495618" VSHIFT_QUANTITY="20 px">
-<arrowlink SHAPE="CUBIC_CURVE" COLOR="#000000" WIDTH="2" TRANSPARENCY="80" FONT_SIZE="12" FONT_FAMILY="SansSerif" DESTINATION="ID_1105307139" MIDDLE_LABEL="descendancy" STARTINCLINATION="18.46154 pt;-25.84615 pt;" ENDINCLINATION="-19.38461 pt;-25.84615 pt;" STARTARROW="NONE" ENDARROW="DEFAULT"/>
+<arrowlink SHAPE="CUBIC_CURVE" COLOR="#000000" WIDTH="2" TRANSPARENCY="80" FONT_SIZE="12" FONT_FAMILY="SansSerif" DESTINATION="ID_1105307139" MIDDLE_LABEL="descendancy" STARTINCLINATION="18.46154 pt;-24.92308 pt;" ENDINCLINATION="-18.46154 pt;-24.92308 pt;" STARTARROW="NONE" ENDARROW="DEFAULT"/>
 <node TEXT="child" STYLE_REF="ConsumerTopic" ID="ID_1105307139">
 <edge STYLE="bezier"/>
 </node>
@@ -3721,7 +3721,7 @@
     <conditional_style ACTIVE="true" STYLE_REF="BeginnerTopic" LAST="false"/>
 </hook>
 <node TEXT="a" FOLDED="true" ID="ID_1328399304" HGAP_QUANTITY="25 px" STYLE="as_parent">
-<arrowlink SHAPE="CUBIC_CURVE" COLOR="#000000" WIDTH="2" TRANSPARENCY="80" FONT_SIZE="12" FONT_FAMILY="SansSerif" DESTINATION="ID_581303769" MIDDLE_LABEL="label" STARTINCLINATION="6.46154 pt;-10.15385 pt;" ENDINCLINATION="-13.84615 pt;-59.07692 pt;" STARTARROW="NONE" ENDARROW="DEFAULT"/>
+<arrowlink SHAPE="CUBIC_CURVE" COLOR="#000000" WIDTH="2" TRANSPARENCY="80" FONT_SIZE="12" FONT_FAMILY="SansSerif" DESTINATION="ID_581303769" MIDDLE_LABEL="label" STARTINCLINATION="6.46154 pt;-9.23077 pt;" ENDINCLINATION="-12.92308 pt;-58.15384 pt;" STARTARROW="NONE" ENDARROW="DEFAULT"/>
 <edge STYLE="hide_edge"/>
 <node TEXT="b" FOLDED="true" ID="ID_273400211">
 <arrowlink SHAPE="LINE" COLOR="#000000" WIDTH="2" TRANSPARENCY="80" FONT_SIZE="12" FONT_FAMILY="SansSerif" DESTINATION="ID_273400211" MIDDLE_LABEL="connector&#xa;without&#xa;begin" STARTINCLINATION="13.84615 pt;63.69231 pt;" ENDINCLINATION="13.84615 pt;63.69231 pt;" STARTARROW="NONE" ENDARROW="NONE"/>
@@ -8576,7 +8576,7 @@ node alias can not be a number</pre>
   </head>
   <body>
     <p>
-      AI can inspect, summarize, rewrite, and help edit map content. Basic chat is available from Freeplane 1.13.1. Prompts, editor attachment, AI-owned script review, formula editing, and the current MCP behavior require Freeplane 1.13.3 or later.
+      AI can inspect, summarize, rewrite, and help edit map content. Basic chat is available from Freeplane 1.13.1. Prompts, model-parameter controls, editor attachment, AI-owned script review, formula editing, and the current MCP behavior require Freeplane 1.13.3 or later.
     </p>
   </body>
 </html>
@@ -8599,9 +8599,30 @@ node alias can not be a number</pre>
 </node>
 <node TEXT="Configure AI in Preferences for OpenRouter, Gemini, or Ollama." ID="ID_1465664050"/>
 <node TEXT="AI tool availability controls whether AI can only read, can edit, or can also execute scripts." ID="ID_84202638"/>
-<node TEXT="Open the AI panel, send a first request, and use New chat, Chats, or Manage profiles as needed." ID="ID_1831090603"/>
+<node TEXT="Open the AI panel, send a first request, and use New chat, Chats, Edit profiles..., the model selector, the thinking-effort selector, or Temperature as needed." ID="ID_1831090603"/>
+<node TEXT="If AI chat shows tool calls is enabled, chat can show what the AI inspected or changed." ID="ID_1465206260"/>
+<node TEXT="Interactive model parameters include the model selector, thinking effort, and Temperature. They affect ordinary chat; provider support for thinking controls can vary." ID="ID_212312775"/>
 </node>
-<node TEXT="AI chat workflows" STYLE_REF="Professional" FOLDED="true" ID="ID_905982129">
+<node TEXT="AI prompts and profiles" STYLE_REF="Professional" FOLDED="true" ID="ID_314207093">
+<node STYLE_REF="TitlesContent" ID="ID_1287649482"><richcontent TYPE="NODE">
+
+<html>
+  <head>
+    
+  </head>
+  <body>
+    <p>
+      Profiles are reusable instructions for AI chat requests. Prompts are reusable saved prompt texts/actions that can be referenced from chat, launched from AI menus, or run from scripts. Prompt visibility, model configuration, and tool settings apply when prompts are launched as saved actions.
+    </p>
+  </body>
+</html>
+</richcontent>
+</node>
+<node TEXT="Profiles affect AI chat instruction state in ordinary chats and script-started chat requests. Prompts can be referenced from chat with /prompt name, launched from AI menus, or run from scripts." ID="ID_1947000693"/>
+<node TEXT="When launched from menus, the prompts dialog, or scripts, prompts can open a visible chat or run hidden without replacing the current chat." ID="ID_140704021"/>
+<node TEXT="Prompts and profiles are stored in the Freeplane user directory as ai-prompts.json and ai-assistant-profiles.json." ID="ID_1484741674"/>
+<node TEXT="Profiles can store optional model, thinking effort, and temperature. Prompts can store model, thinking effort, temperature, and tools. Current means inherit; temperature Model default explicitly sends no temperature value." ID="ID_1193182744"/>
+<node TEXT="Slash prompt references in normal chat use only the saved prompt text. They ignore the prompt&apos;s saved visibility, model, thinking effort, temperature, and tool settings." ID="ID_736630271"/>
 <node STYLE_REF="TitlesContent" ID="ID_997284744"><richcontent TYPE="NODE">
 
 <html>
@@ -8618,26 +8639,7 @@ node alias can not be a number</pre>
 </node>
 <node TEXT="Profiles keep normal chat behavior consistent across many requests." ID="ID_537808641"/>
 <node TEXT="Prompts save repeatable actions such as branch summarization, branch spelling review, or decision drafting." ID="ID_58891207"/>
-<node TEXT="If AI chat shows tool calls is enabled, chat can show what the AI inspected or changed." ID="ID_1465206260"/>
-</node>
-<node TEXT="AI prompts and profiles" STYLE_REF="Professional" FOLDED="true" ID="ID_314207093">
-<node STYLE_REF="TitlesContent" ID="ID_1287649482"><richcontent TYPE="NODE">
-
-<html>
-  <head>
-    
-  </head>
-  <body>
-    <p>
-      Profiles are reusable instructions for ordinary AI chat. Prompts are saved actions that can run from menus with their own visibility, model, and tool settings.
-    </p>
-  </body>
-</html>
-</richcontent>
-</node>
-<node TEXT="Profiles affect normal chat; prompts are launched directly from AI menus." ID="ID_1947000693"/>
-<node TEXT="Prompts can open a visible chat or run hidden without replacing the current chat." ID="ID_140704021"/>
-<node TEXT="Prompts and profiles are stored in the Freeplane user directory as ai-prompts.json and ai-assistant-profiles.json." ID="ID_1484741674"/>
+<node TEXT="Slash prompt references start normal chat input with /prompt name. If it resolves to a saved prompt, Freeplane keeps the reference visible but sends the saved prompt text plus the remaining message to the model." ID="ID_1706302315"/>
 </node>
 <node TEXT="AI formulas and script editing" STYLE_REF="Professional" FOLDED="true" ID="ID_1029851274">
 <node STYLE_REF="TitlesContent" ID="ID_1152954335"><richcontent TYPE="NODE">
@@ -8660,6 +8662,7 @@ node alias can not be a number</pre>
 <node TEXT="Block formula map edits is enabled by default and can stop formulas that try to change the map during evaluation." ID="ID_1082806023"/>
 <node TEXT="See also: Using and writing formulas" ID="ID_1809934281" LINK="#ID_1694530970"/>
 <node TEXT="See also: Using and writing scripts" ID="ID_426270681" LINK="#ID_519455593"/>
+<node TEXT="Formula and attached-script AI repair is consent-gated. Freeplane can record failure state for AI context, but the repair request starts only after you confirm." ID="ID_827127346"/>
 </node>
 <node TEXT="AI-owned script execution" STYLE_REF="Professional" FOLDED="true" ID="ID_493361786">
 <node STYLE_REF="TitlesContent" ID="ID_198155792"><richcontent TYPE="NODE">
@@ -8708,16 +8711,17 @@ node alias can not be a number</pre>
   </head>
   <body>
     <p>
-      Most AI failures are configuration or permission problems. Check provider settings, model selection, and AI tool availability before assuming the feature is broken.
+      Most AI failures are configuration or permission problems. Check provider settings, model selection, model parameters, and AI tool availability before assuming the feature is broken.
     </p>
   </body>
 </html>
 </richcontent>
 </node>
-<node TEXT="First check provider settings, model selection, and AI tool availability in AI Preferences." ID="ID_381927285"/>
+<node TEXT="First check provider settings, model selection, model parameters, and AI tool availability in AI Preferences." ID="ID_381927285"/>
 <node TEXT="Missing formula editing usually means AI tool availability or AI may edit formulas is not enabled." ID="ID_1842933773"/>
 <node TEXT="MCP failures usually come from a disabled server, wrong port or token, or an empty token on the first request." ID="ID_1631349923"/>
 <node TEXT="Saved prompts and profiles live in the user directory; hidden prompts do not stay as visible chats." ID="ID_742557914"/>
+<node TEXT="Asynchronous script AI callbacks route println output back to the originating script output target when one exists. Freeplane does not create a script editor window only to show callback output." ID="ID_1237309379"/>
 </node>
 </node>
 <node TEXT="Best practices" STYLE_REF="Introduction" FOLDED="true" POSITION="bottom_or_right" ID="ID_722085722" NUMBERED="true">
