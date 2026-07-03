@@ -103,6 +103,24 @@ public class AiOwnedScriptHostServiceTest {
     }
 
     @Test
+    public void writeCodeReturnsTokenMatchingUpdatedDialogContent() {
+        LoadingDialogFactory dialogFactory = new LoadingDialogFactory();
+        AiOwnedScriptHostService uut = new AiOwnedScriptHostService(null, dialogFactory);
+        WriteCodeResponse first = uut.doWriteCode(writeRequest("println 1", null, null));
+        uut.showCurrentCode();
+        assertThat(dialogFactory.dialog.currentContent.getSourceText()).isEqualTo("println 1");
+
+        WriteCodeResponse second = uut.doWriteCode(writeRequest("println 2", null, first.getStateToken()));
+        ReadCodeResponse state = uut.doReadCode(new ReadCodeRequest(ScriptHost.AI));
+
+        assertThat(dialogFactory.dialog.currentContent.getSourceText()).isEqualTo("println 2");
+        assertThat(state.getContent().getSourceText()).isEqualTo("println 2");
+        assertThat(state.getStateToken()).isEqualTo(second.getStateToken());
+        assertThatCode(() -> uut.doRunCode(new RunCodeRequest(ScriptHost.AI, second.getStateToken())))
+            .doesNotThrowAnyException();
+    }
+
+    @Test
     public void dialogCancelAfterWaitingUpdatesStateToUserRunCancelled() {
         ResourceController resourceController = mock(ResourceController.class);
         when(resourceController.getEnumProperty(
