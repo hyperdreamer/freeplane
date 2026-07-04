@@ -80,6 +80,22 @@
     formula execution.
   - Do not add a user-facing advanced permission for reflection, method
     handles, arbitrary class loading/definition, or `Unsafe`.
+  - Treat Java serialization and serialization-filter mutation as
+    sandbox-relevant surfaces. Restricted execution must not set or
+    weaken JVM-wide or stream-specific deserialization filters, and any
+    deserialization-triggered code must retain the originating restricted
+    active context.
+  - Treat Groovy AST restrictions, compiler customizers, static checks,
+    and script-bytecode rewriting as defense-in-depth unless separate
+    implementation evidence proves complete coverage across Groovy
+    dynamic dispatch, generated classes, Grape-loaded code, helper
+    libraries, reflection, method handles, and deserialization-triggered
+    classpath code.
+  - GraalVM Polyglot/Truffle/Espresso is not an implementation path for
+    this task while direct live Java-object sharing remains required.
+    Treat it only as a fallback architecture if Freeplane accepts a
+    different scripting model based on a host/guest boundary, narrow
+    exported host APIs, proxies, or out-of-process execution.
   - Signed-script trust remains optional legacy compatibility. Preserve
     it only if implementation evidence shows it is effective and cheap
     to keep.
@@ -197,8 +213,46 @@
     file I/O, network I/O, process/native execution, JVM exit/halt,
     class loading/definition, reflection access suppression, method
     handles, `Unsafe`, preferences/properties/global setters,
+    serialization filter mutation and deserialization entry points,
     instrumentation/attach, module mutation, JMX mutation/invocation,
     and logging configuration APIs.
+  - Project search found direct Java serialization use in
+    `MapViewSerializer`, `MapViewDockingWindows`, and
+    `SingleInstanceManager`. Those uses must be classified by data
+    source, startup ordering, filter policy, and whether untrusted map or
+    restricted script state can influence the serialized bytes.
+  - PDF-source recovery from the external deep-research report produced
+    usable URLs. The markdown report's `turn...` citations are not
+    durable citations and must not be copied as evidence. Recovered
+    source URLs relevant to this task include:
+    - Oracle, "The Security Manager Is Permanently Disabled":
+      `https://docs.oracle.com/en/java/javase/25/security/security-manager-is-permanently-disabled.html`
+    - Inside Java, "Security and Sandboxing Post SecurityManager":
+      `https://inside.java/2021/04/23/security-and-sandboxing-post-securitymanager/`
+    - GraalVM sandboxing guide:
+      `https://www.graalvm.org/latest/security-guide/sandboxing/`
+    - GraalVM Espresso interoperability:
+      `https://www.graalvm.org/latest/reference-manual/espresso/interoperability/`
+    - OpenJDK JEP 290 and JEP 415:
+      `https://openjdk.org/jeps/290`, `https://openjdk.org/jeps/415`
+    - Oracle Java serialization filtering:
+      `https://docs.oracle.com/en/java/javase/17/core/serialization-filtering1.html`
+    - JDK 25 `ObjectInputFilter.Config` and `ObjectInputStream` APIs:
+      `https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/io/ObjectInputFilter.Config.html`,
+      `https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/io/ObjectInputStream.html`
+    - OpenJDK JEP 451 and JEP 472:
+      `https://openjdk.org/jeps/451`, `https://openjdk.org/jeps/472`
+    - JDK 25 restricted methods:
+      `https://docs.oracle.com/en/java/javase/25/core/restricted-methods.html`,
+      `https://docs.oracle.com/en/java/javase/25/docs/api/restricted-list.html`
+    - OpenSearch SecurityManager replacement work:
+      `https://opensearch.org/blog/finding-a-replacement-for-jsm-in-opensearch-3-0/`,
+      `https://github.com/opensearch-project/OpenSearch/issues/16634`
+    - Groovy and Jenkins sandboxing references:
+      `https://melix.github.io/blog/2015/03/sandboxing.html`,
+      `https://docs.groovy-lang.org/latest/html/api/org/codehaus/groovy/control/customizers/SecureASTCustomizer.html`,
+      `https://github.com/jenkinsci/groovy-sandbox/blob/master/README.md`,
+      `https://github.com/advisories/GHSA-7vr5-72w7-q6jc`
   - OpenSearch's Java-agent Security Manager replacement is useful prior
     art for Byte Buddy, endpoint interception, stack walking, and policy
     checking, but its static/global policy model is not directly
@@ -259,6 +313,32 @@
     reachable through reflection, method handles, generated classes,
     custom loaders, Grape-loaded code, and existing classpath helpers
     without going through Freeplane proxy APIs.
+  - Java deserialization is sandbox-relevant because it can execute
+    classpath code selected by serialized bytes and that executed code
+    may not itself be script-origin. The replacement must therefore
+    guard serialization-filter mutation and rely on active restricted
+    context for deserialization-triggered execution, not only on
+    script-origin caller detection.
+  - GraalVM Polyglot/Truffle sandboxing is not a real alternative under
+    this task's current constraints. Its documented security boundary is
+    the host/guest boundary, and exposed host methods become the attack
+    surface. It becomes a real alternative only if Freeplane drops or
+    revises the direct live Java-object-sharing requirement and redesigns
+    scripting around narrow host interop/proxy APIs or out-of-process
+    execution.
+  - Espresso is not selected and is not a current implementation path
+    because the available evidence does not show a mature drop-in sandbox
+    for Freeplane's current Groovy/JVM-bytecode embedding model with
+    direct same-heap Java-object sharing.
+  - Groovy `SecureASTCustomizer`, compiler filtering, static checks, and
+    bytecode rewriting can reduce attack surface and improve diagnostics,
+    but they are not sufficient as the primary boundary for Groovy's
+    dynamic dispatch, invokedynamic, MOP, reflection, method handles,
+    generated classes, Grape-loaded code, helper libraries, or
+    deserialization-triggered classpath execution.
+  - In-process endpoint guarding is not equivalent to an OS/process
+    isolation boundary. It is the selected path only because preserving
+    direct Java-object sharing is currently required.
   - Out-of-process isolation remains a fallback only if the in-process
     path is falsified. It would substantially redesign the current live
     Java-object scripting API.
@@ -287,11 +367,22 @@
     non-forgeable by script-origin code, auditable, limited to the
     approved operation, and absent during script-supplied callbacks.
   - Preserve direct Java-object sharing. Do not switch to out-of-process
-    isolation or a restricted/proxied scripting API unless this task is
-    revised after implementation evidence falsifies the in-process path.
+    isolation, GraalVM host/guest execution, or a restricted/proxied
+    scripting API unless this task is revised after implementation
+    evidence falsifies the in-process path or Freeplane explicitly drops
+    the direct-object-sharing requirement.
+  - Do not spend implementation effort on GraalVM Polyglot/Truffle or
+    Espresso in this task while the direct-object-sharing requirement
+    remains active.
   - Preserve mediated map/template/documentation/icon/resource loading as
     explicit Freeplane operations rather than as general file/network
     grants.
+  - Install Freeplane-owned deserialization filter policy early enough
+    that restricted execution cannot win startup ordering by configuring
+    `ObjectInputFilter` first. Guard JVM-wide and stream-specific filter
+    mutation from restricted scripts. Classify existing Freeplane
+    `ObjectInputStream` uses before deciding whether any restricted
+    script deserialization path remains allowed.
   - Preserve user `lib` and configured script classpath as trusted local
     code. Treat Grape-loaded code and generated/cached script code as
     script-origin unless explicitly classified otherwise by the sandbox
@@ -337,9 +428,14 @@
     read/write/delete, network connect/listen, process execution, native
     loading, JVM exit/halt, class-loader creation, class definition,
     reflection access suppression, method-handle private lookup/class
-    definition, `Unsafe`, global metaclass mutation, Grape without Grape
-    permission, Grape loader-routing into trusted loaders, and helper
-    code bypasses.
+    definition, `Unsafe`, serialization-filter mutation, global
+    metaclass mutation, Grape without Grape permission,
+    Grape loader-routing into trusted loaders, and helper code bypasses.
+  - Global acceptance requires tests that deserialization triggered from
+    restricted execution cannot bypass active restricted context through
+    non-script-origin classpath code, and that existing Freeplane
+    serialization uses run with the intended filter policy and data
+    source classification.
   - Global acceptance requires tests that allowed operations still work:
     explicitly permitted file/network/process/native operations,
     Freeplane intended Groovy meta features, normal Groovy dynamic
@@ -506,6 +602,12 @@
     mutation while preserving Freeplane-installed Groovy meta features.
   - Distinguish Groovy-owned reflection needed for normal dispatch from
     script-authored reflection used as a bypass.
+  - Keep Groovy compiler customizers, AST restrictions, static checks, or
+    bytecode rewriting as surface-reduction layers only. Do not treat
+    them as replacing endpoint guards unless a separate proof covers
+    dynamic dispatch, invokedynamic, generated classes, Grape-loaded
+    artifacts, helper-library calls, reflection, method handles, and
+    deserialization-triggered classpath execution.
 - **Test specification:**
   - Automated tests:
     - Grape is denied without Grape permission even when file-read or
@@ -515,6 +617,9 @@
     - Grape cannot load artifacts into trusted/unrelated class loaders.
     - Generated, cached, precompiled, and Grape-loaded helper code cannot
       exceed the originating script's sandbox restrictions.
+    - Compiler/AST/bytecode surface-reduction checks cannot be bypassed
+      in a way that disables the runtime endpoint guards or origin/context
+      propagation.
     - Restricted scripts cannot register persistent metaclass mutations
       that later affect trusted Freeplane code.
     - Freeplane's intended Groovy meta features and normal dynamic
@@ -620,6 +725,20 @@
       derived from open options and map mode. Per-operation `read`/`write`
       methods are secondary guards only if source validation shows an
       unguarded channel acquisition path remains.
+    - Java serialization and deserialization filters: agent/runtime guard
+      on `ObjectInputFilter.Config.setSerialFilter(ObjectInputFilter)`,
+      `ObjectInputFilter.Config.setSerialFilterFactory(BinaryOperator<ObjectInputFilter>)`,
+      `ObjectInputStream.setObjectInputFilter(ObjectInputFilter)`,
+      public `ObjectInputStream(InputStream)`, protected
+      `ObjectInputStream()`, `ObjectInputStream.readObject()`,
+      `ObjectInputStream.readUnshared()`, `ObjectInputStream.readFields()`,
+      and `ObjectInputStream.enableResolveObject(boolean)`; filter
+      mutation is global or stream policy mutation and is denied for
+      restricted scripts except a trusted Freeplane policy installation.
+      Deserialization itself is a restricted execution/code-triggering
+      endpoint: until the catalog proves a safe narrower rule, restricted
+      scripts may deserialize only through an approved Freeplane-mediated
+      policy that preserves active context and rejects policy weakening.
     - Socket constructors and connects: agent advice on `Socket(String,
       int)`, `Socket(InetAddress, int)`, `Socket(String, int,
       InetAddress, int)`, `Socket(InetAddress, int, InetAddress, int)`,
@@ -667,9 +786,10 @@
       `Linker.upcallStub(MethodHandle, FunctionDescriptor, Arena, Option...)`,
       `SymbolLookup.libraryLookup(String, Arena)`,
       `SymbolLookup.libraryLookup(Path, Arena)`,
-      `MemorySegment.ofAddress(long)`, and `MemorySegment.reinterpret(...)`
-      overloads; require process/native permission or deny for restricted
-      scripts if no safe inherited-origin model exists.
+      `MemorySegment.ofAddress(long)`, `MemorySegment.reinterpret(...)`
+      overloads, and `ModuleLayer.Controller.enableNativeAccess(Module)`;
+      require process/native permission or deny for restricted scripts if
+      no safe inherited-origin model exists.
     - JVM termination: agent advice on `System.exit(int)`,
       `Runtime.exit(int)`, and `Runtime.halt(int)`; deny for restricted
       scripts unless an explicit trusted Freeplane exit path applies.
@@ -749,7 +869,10 @@
       `loadAgent(String)`; restricted scripts denied.
     - Module mutation: agent advice on `Module.addReads(Module)`,
       `Module.addExports(String, Module)`, `Module.addOpens(String,
-      Module)`, `ModuleLayer.defineModulesWithOneLoader(...)`,
+      Module)`, `ModuleLayer.Controller.addReads(Module, Module)`,
+      `ModuleLayer.Controller.addExports(Module, String, Module)`,
+      `ModuleLayer.Controller.addOpens(Module, String, Module)`,
+      `ModuleLayer.defineModulesWithOneLoader(...)`,
       `ModuleLayer.defineModulesWithManyLoaders(...)`, and
       `ModuleLayer.defineModules(...)`; restricted scripts denied unless
       trusted Freeplane startup/module mediation applies.
@@ -799,6 +922,59 @@
       case exists for denial and, where applicable, allowed execution.
     - Catalog entries identify whether the guard is agent advice,
       runtime wrapper, Groovy/Grape guard, or safe-operation validation.
+  - Manual tests: N/A
+
+## Subtask: Install Java serialization filter policy and deserialization guards
+- **Status:** backlog
+- **Scope:**
+  Install and enforce the Java serialization policy needed by the
+  replacement sandbox. This subtask covers JVM-wide filter setup,
+  stream-filter mutation guards, existing Freeplane `ObjectInputStream`
+  use classification, and restricted-execution deserialization behavior.
+- **Motivation:**
+  Java deserialization can execute classpath code selected by serialized
+  bytes, and that code may not be script-origin even when restricted
+  script execution triggered it. Serialization filters are not a sandbox
+  replacement, but unrestricted filter mutation or unclassified
+  deserialization is a bypass risk for an active-context sandbox.
+- **Design:**
+  - Install a Freeplane-owned `ObjectInputFilter` factory before any
+    `ObjectInputStream` is created by Freeplane startup, plugins, or
+    libraries under Freeplane control.
+  - Guard `ObjectInputFilter.Config.setSerialFilter(...)`,
+    `ObjectInputFilter.Config.setSerialFilterFactory(...)`, and
+    `ObjectInputStream.setObjectInputFilter(...)` so restricted scripts
+    cannot set, replace, remove, or weaken JVM-wide or stream-specific
+    policy.
+  - Classify existing serialization uses in `MapViewSerializer`,
+    `MapViewDockingWindows`, and `SingleInstanceManager` by byte source,
+    trust boundary, expected classes, and safe-operation interaction.
+  - Ensure any deserialization triggered during restricted execution runs
+    with the originating active context so classpath gadget code cannot
+    bypass endpoint guards merely by not being script-origin code.
+  - Until the catalog proves a safe narrower rule, restricted script
+    deserialization is denied or allowed only through a trusted
+    Freeplane-mediated policy that rejects policy weakening and preserves
+    context. Do not add a user-facing deserialization permission without
+    explicit approval.
+  - Prefer allow-list and context-specific filter composition for
+    Freeplane-owned deserialization contexts; reject undecided classes for
+    untrusted-map or restricted-script-influenced data unless a reviewed
+    exception exists.
+- **Test specification:**
+  - Automated tests:
+    - Freeplane installs the serialization filter factory before any
+      checked `ObjectInputStream` construction path.
+    - Restricted scripts cannot call `setSerialFilter`,
+      `setSerialFilterFactory`, or `setObjectInputFilter` to weaken or
+      replace policy.
+    - Restricted deserialization attempts cannot trigger file, network,
+      process/native, class-definition, reflection-suppression, global
+      mutation, or JVM-exit endpoints through non-script-origin classpath
+      code.
+    - Existing Freeplane serialization paths accept their expected data
+      and reject unclassified or unexpected classes according to their
+      context policy.
   - Manual tests: N/A
 
 ## Subtask: Add Java agent endpoint guards and build artifact
