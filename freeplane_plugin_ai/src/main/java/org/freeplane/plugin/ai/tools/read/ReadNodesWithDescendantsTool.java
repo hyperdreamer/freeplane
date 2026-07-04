@@ -115,12 +115,12 @@ public class ReadNodesWithDescendantsTool {
         boolean includeIncomingConnectors = sections.contains(ContextSection.INCOMING_CONNECTORS);
         boolean includeCloneMetadata = sections.contains(ContextSection.CLONE_METADATA);
         int fullContentDepth = request.getFullContentDepth();
-        int summaryDepth = request.getSummaryDepth();
-        if (fullContentDepth < 0 || summaryDepth < 0) {
+        int additionalSummaryDepth = request.getAdditionalSummaryDepth();
+        if (fullContentDepth < 0 || additionalSummaryDepth < 0) {
             throw new IllegalArgumentException("Depth values must be 0 or greater");
         }
-        int maximumTotalTextCharacters = request.getMaximumTotalTextCharacters();
-        boolean enforceBudget = focusNodes.size() > 1 || fullContentDepth > 0 || summaryDepth > 0;
+        int maxCharacters = request.getMaxCharacters();
+        boolean enforceBudget = focusNodes.size() > 1 || fullContentDepth > 0 || additionalSummaryDepth > 0;
         List<ReadNodesWithDescendantsItem> items = new ArrayList<>();
         List<String> focusNodePreviewTexts = new ArrayList<>();
         int budgetUsed = 0;
@@ -142,7 +142,7 @@ public class ReadNodesWithDescendantsTool {
             }
             int itemSize = measureSerializedLength(item);
             if (enforceBudget) {
-                if (budgetUsed + itemSize > maximumTotalTextCharacters) {
+                if (budgetUsed + itemSize > maxCharacters) {
                     omittedFocusNodeCount = focusNodes.size() - items.size();
                     break;
                 }
@@ -176,11 +176,11 @@ public class ReadNodesWithDescendantsTool {
         boolean includeIncomingConnectors = sections.contains(ContextSection.INCOMING_CONNECTORS);
         boolean includeCloneMetadata = sections.contains(ContextSection.CLONE_METADATA);
         int fullContentDepth = request.getFullContentDepth();
-        int summaryDepth = request.getSummaryDepth();
-        if (fullContentDepth < 0 || summaryDepth < 0) {
+        int additionalSummaryDepth = request.getAdditionalSummaryDepth();
+        if (fullContentDepth < 0 || additionalSummaryDepth < 0) {
             throw new IllegalArgumentException("Depth values must be 0 or greater");
         }
-        int maximumTotalTextCharacters = request.getMaximumTotalTextCharacters();
+        int maxCharacters = request.getMaxCharacters();
         StringBuilder plainText = new StringBuilder();
         List<String> focusNodePreviewTexts = new ArrayList<>();
         int omittedFocusNodeCount = 0;
@@ -188,7 +188,7 @@ public class ReadNodesWithDescendantsTool {
         int omittedDescendantCount = 0;
         for (int focusIndex = 0; focusIndex < focusNodes.size(); focusIndex += 1) {
             NodeModel focusNode = focusNodes.get(focusIndex);
-            int remainingBudget = maximumTotalTextCharacters - plainText.length();
+            int remainingBudget = maxCharacters - plainText.length();
             if (remainingBudget <= 0) {
                 omittedFocusNodeCount = focusNodes.size() - focusIndex;
                 break;
@@ -301,7 +301,7 @@ public class ReadNodesWithDescendantsTool {
             NodeDepthItem nodeDepthItem = allNodes.get(index);
             nodes.add(nodeDepthItem);
             int itemSize = measureSerializedLength(baseItem);
-            if (enforceBudget && budgetUsed + itemSize > request.getMaximumTotalTextCharacters()) {
+            if (enforceBudget && budgetUsed + itemSize > request.getMaxCharacters()) {
                 nodes.remove(nodes.size() - 1);
                 if (nodes.isEmpty()) {
                     return null;
@@ -501,7 +501,7 @@ public class ReadNodesWithDescendantsTool {
                                                     boolean includeOutgoingConnectors,
                                                     boolean includeIncomingConnectors,
                                                     boolean includeCloneMetadata) {
-        int maximumDepth = request.getFullContentDepth() + request.getSummaryDepth();
+        int maximumDepth = request.getFullContentDepth() + request.getAdditionalSummaryDepth();
         List<NodeDepthItem> nodes = new ArrayList<>();
         Deque<NodeModel> stack = new ArrayDeque<>();
         Deque<Integer> depthStack = new ArrayDeque<>();
@@ -751,8 +751,8 @@ public class ReadNodesWithDescendantsTool {
         if (request != null && request.hasFullContentDepth()) {
             summaryText = summaryText + ", fullContentDepth=" + request.getFullContentDepth();
         }
-        if (request != null && request.hasSummaryDepth()) {
-            summaryText = summaryText + ", summaryDepth=" + request.getSummaryDepth();
+        if (request != null && request.hasAdditionalSummaryDepth()) {
+            summaryText = summaryText + ", additionalSummaryDepth=" + request.getAdditionalSummaryDepth();
         }
         if (request != null && !request.getContextSections().isEmpty()) {
             String sectionsText = ToolCallSummaryFormatter.joinEnumValues(
@@ -785,8 +785,8 @@ public class ReadNodesWithDescendantsTool {
         if (request != null && request.hasFullContentDepth()) {
             summaryText = summaryText + ", fullContentDepth=" + request.getFullContentDepth();
         }
-        if (request != null && request.hasSummaryDepth()) {
-            summaryText = summaryText + ", summaryDepth=" + request.getSummaryDepth();
+        if (request != null && request.hasAdditionalSummaryDepth()) {
+            summaryText = summaryText + ", additionalSummaryDepth=" + request.getAdditionalSummaryDepth();
         }
         if (request != null && !request.getContextSections().isEmpty()) {
             String sectionsText = ToolCallSummaryFormatter.joinEnumValues(

@@ -61,7 +61,7 @@ public class ReadNodesWithDescendantsToolSummaryTest {
         ToolCallSummary summary = readTool.buildToolCallSummary(request, response);
 
         assertThat(summary.getSummaryText()).isEqualTo(
-            "readNodesWithDescendants: items=0, fullContentDepth=2, summaryDepth=3, "
+            "readNodesWithDescendants: items=0, fullContentDepth=2, additionalSummaryDepth=3, "
                 + "sections=PARENT_SUMMARY,QUALIFIERS");
     }
 

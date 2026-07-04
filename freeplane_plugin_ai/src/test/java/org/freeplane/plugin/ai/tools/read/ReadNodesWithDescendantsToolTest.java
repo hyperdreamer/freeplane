@@ -239,6 +239,63 @@ public class ReadNodesWithDescendantsToolTest {
     }
 
     @Test
+    public void readNodesWithDescendants_usesAdditionalSummaryDepthAfterFullContentDepth() throws Exception {
+        AvailableMaps availableMaps = mock(AvailableMaps.class);
+        NodeContentItemReader nodeContentItemReader = mock(NodeContentItemReader.class);
+        ObjectMapper objectMapper = mock(ObjectMapper.class);
+        when(objectMapper.writeValueAsBytes(any())).thenReturn(new byte[100]);
+        MapModel mapModel = mock(MapModel.class);
+        NodeModel focusNode = mock(NodeModel.class);
+        NodeModel childNode = mock(NodeModel.class);
+        NodeModel grandchildNode = mock(NodeModel.class);
+        NodeModel greatGrandchildNode = mock(NodeModel.class);
+        UUID mapIdentifier = UUID.fromString("9cf8ec36-60b4-45b2-8864-1f2f5ed7d1d5");
+        when(availableMaps.findMapModel(eq(mapIdentifier), any())).thenReturn(mapModel);
+        when(mapModel.getNodeForID("ID_focus")).thenReturn(focusNode);
+        when(focusNode.getParentNode()).thenReturn(null);
+        when(focusNode.getChildren()).thenReturn(Collections.singletonList(childNode));
+        when(childNode.getChildren()).thenReturn(Collections.singletonList(grandchildNode));
+        when(grandchildNode.getChildren()).thenReturn(Collections.singletonList(greatGrandchildNode));
+        when(focusNode.createID()).thenReturn("ID_focus");
+        when(childNode.createID()).thenReturn("ID_child");
+        when(grandchildNode.createID()).thenReturn("ID_grandchild");
+        when(greatGrandchildNode.createID()).thenReturn("ID_great_grandchild");
+        when(nodeContentItemReader.readNodeContent(eq(focusNode), any(), eq(NodeContentPreset.FULL)))
+            .thenReturn(new NodeContentResponse(
+                null, new TextualContent("Focus full", null, null), null, null, null, null, null, null));
+        when(nodeContentItemReader.readNodeContent(eq(childNode), any(), eq(NodeContentPreset.FULL)))
+            .thenReturn(new NodeContentResponse(
+                null, new TextualContent("Child full", null, null), null, null, null, null, null, null));
+        TextController textController = mock(TextController.class);
+        when(textController.getShortPlainText(grandchildNode)).thenReturn("Grandchild brief");
+        when(textController.getShortPlainText(greatGrandchildNode)).thenReturn("Great grandchild brief");
+        ReadNodesWithDescendantsTool readTool = new ReadNodesWithDescendantsTool(
+            availableMaps, null, nodeContentItemReader, textController, objectMapper);
+        ReadNodesWithDescendantsRequest request = new ReadNodesWithDescendantsRequest(
+            mapIdentifier.toString(),
+            Collections.singletonList("ID_focus"),
+            null,
+            1,
+            1,
+            null);
+
+        ReadNodesWithDescendantsResponse response = readTool.readNodesWithDescendants(request);
+
+        ReadNodesWithDescendantsItem item = response.getItems().get(0);
+        List<NodeDepthItem> nodes = item.getNodes();
+        assertThat(nodes).hasSize(3);
+        assertThat(nodes.get(0).getNodeIdentifier()).isEqualTo("ID_focus");
+        assertThat(nodes.get(0).getDepth()).isEqualTo(0);
+        assertThat(nodes.get(0).getUnformattedText()).isEqualTo("Text: Focus full");
+        assertThat(nodes.get(1).getNodeIdentifier()).isEqualTo("ID_child");
+        assertThat(nodes.get(1).getDepth()).isEqualTo(1);
+        assertThat(nodes.get(1).getUnformattedText()).isEqualTo("Text: Child full");
+        assertThat(nodes.get(2).getNodeIdentifier()).isEqualTo("ID_grandchild");
+        assertThat(nodes.get(2).getDepth()).isEqualTo(2);
+        assertThat(nodes.get(2).getUnformattedText()).isEqualTo("Grandchild brief");
+    }
+
+    @Test
     public void readNodesWithDescendants_includesLinkAndCloneMetadataWhenRequested() throws Exception {
         AvailableMaps availableMaps = mock(AvailableMaps.class);
         NodeContentItemReader nodeContentItemReader = mock(NodeContentItemReader.class);

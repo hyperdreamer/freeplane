@@ -75,7 +75,7 @@ public class SearchNodesTool {
         boolean includesBreadcrumbPath = request.getResultSections().contains(SearchResultSection.BREADCRUMB_PATH);
         int offset = request.getOffset();
         int limit = request.getLimit();
-        int maximumTotalTextCharacters = request.getMaximumTotalTextCharacters();
+        int maxCharacters = request.getMaxCharacters();
         NodeContentRequest contentRequest = request.getNodeContentRequestForSearch();
         List<NodeModel> searchRoots = resolveSearchRoots(mapModel, request.getSubtreeRootNodeIdentifiers());
         NodeContentValueMatcher valueMatcher = new NodeContentValueMatcher(
@@ -94,7 +94,7 @@ public class SearchNodesTool {
         for (NodeModel nodeModel : pageNodes) {
             SearchResultItem resultItem = buildSearchResultItem(nodeModel, includesBreadcrumbPath);
             int itemSize = measureSerializedLength(resultItem);
-            if (budgetUsed + itemSize > maximumTotalTextCharacters) {
+            if (budgetUsed + itemSize > maxCharacters) {
                 omittedResultCount += 1;
                 continue;
             }

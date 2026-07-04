@@ -12,7 +12,7 @@ import org.freeplane.plugin.ai.tools.content.TextualContentRequest;
 public class SearchNodesRequest {
     private static final int DEFAULT_LIMIT = 200;
     private static final int DEFAULT_OFFSET = 0;
-    private static final int DEFAULT_MAXIMUM_TOTAL_TEXT_CHARACTERS = 65536;
+    private static final int DEFAULT_MAX_CHARACTERS = 65536;
     private static final SearchMatchingMode DEFAULT_MATCHING_MODE = SearchMatchingMode.CONTAINS;
     private static final SearchCaseSensitivity DEFAULT_CASE_SENSITIVITY = SearchCaseSensitivity.CASE_INSENSITIVE;
     private static final NodeContentRequest DEFAULT_CONTENT_REQUEST = new NodeContentRequest(
@@ -48,12 +48,7 @@ public class SearchNodesRequest {
     private final Integer limit;
     @JsonProperty(required = false)
     @Description("Maximum response length in characters (default: 65536).")
-    private final Integer maximumTotalTextCharacters;
-    private final boolean hasMatchingMode;
-    private final boolean hasCaseSensitivity;
-    private final boolean hasOffset;
-    private final boolean hasLimit;
-    private final boolean hasMaximumTotalTextCharacters;
+    private final Integer maxCharacters;
 
     @JsonCreator
     public SearchNodesRequest(@JsonProperty("mapIdentifier") String mapIdentifier,
@@ -65,26 +60,17 @@ public class SearchNodesRequest {
                               @JsonProperty("resultSections") List<SearchResultSection> resultSections,
                               @JsonProperty("offset") Integer offset,
                               @JsonProperty("limit") Integer limit,
-                              @JsonProperty("maximumTotalTextCharacters") Integer maximumTotalTextCharacters) {
+                              @JsonProperty("maxCharacters") Integer maxCharacters) {
         this.mapIdentifier = mapIdentifier;
         this.queryText = queryText;
         this.subtreeRootNodeIdentifiers = subtreeRootNodeIdentifiers;
-        this.nodeContentRequestForSearch = nodeContentRequestForSearch == null
-            ? DEFAULT_CONTENT_REQUEST
-            : nodeContentRequestForSearch;
-        this.hasMatchingMode = matchingMode != null;
-        this.matchingMode = matchingMode == null ? DEFAULT_MATCHING_MODE : matchingMode;
-        this.hasCaseSensitivity = caseSensitivity != null;
-        this.caseSensitivity = caseSensitivity == null ? DEFAULT_CASE_SENSITIVITY : caseSensitivity;
+        this.nodeContentRequestForSearch = nodeContentRequestForSearch;
+        this.matchingMode = matchingMode;
+        this.caseSensitivity = caseSensitivity;
         this.resultSections = normalizeResultSections(resultSections);
-        this.hasOffset = offset != null;
-        this.offset = offset == null ? DEFAULT_OFFSET : Math.max(0, offset);
-        this.hasLimit = limit != null;
-        this.limit = limit == null ? DEFAULT_LIMIT : Math.max(0, limit);
-        this.hasMaximumTotalTextCharacters = maximumTotalTextCharacters != null;
-        this.maximumTotalTextCharacters = maximumTotalTextCharacters == null
-            ? DEFAULT_MAXIMUM_TOTAL_TEXT_CHARACTERS
-            : maximumTotalTextCharacters;
+        this.offset = offset;
+        this.limit = limit;
+        this.maxCharacters = maxCharacters;
     }
 
     public String getMapIdentifier() {
@@ -100,15 +86,15 @@ public class SearchNodesRequest {
     }
 
     public NodeContentRequest getNodeContentRequestForSearch() {
-        return nodeContentRequestForSearch;
+        return nodeContentRequestForSearch == null ? DEFAULT_CONTENT_REQUEST : nodeContentRequestForSearch;
     }
 
     public SearchMatchingMode getMatchingMode() {
-        return matchingMode;
+        return matchingMode == null ? DEFAULT_MATCHING_MODE : matchingMode;
     }
 
     public SearchCaseSensitivity getCaseSensitivity() {
-        return caseSensitivity;
+        return caseSensitivity == null ? DEFAULT_CASE_SENSITIVITY : caseSensitivity;
     }
 
     public List<SearchResultSection> getResultSections() {
@@ -116,35 +102,31 @@ public class SearchNodesRequest {
     }
 
     public Integer getOffset() {
-        return offset;
+        return offset == null ? DEFAULT_OFFSET : Math.max(0, offset);
     }
 
     public Integer getLimit() {
-        return limit;
+        return limit == null ? DEFAULT_LIMIT : Math.max(0, limit);
     }
 
-    public Integer getMaximumTotalTextCharacters() {
-        return maximumTotalTextCharacters;
+    public Integer getMaxCharacters() {
+        return maxCharacters == null ? DEFAULT_MAX_CHARACTERS : maxCharacters;
     }
 
     public boolean hasMatchingMode() {
-        return hasMatchingMode;
+        return matchingMode != null;
     }
 
     public boolean hasCaseSensitivity() {
-        return hasCaseSensitivity;
+        return caseSensitivity != null;
     }
 
     public boolean hasOffset() {
-        return hasOffset;
+        return offset != null;
     }
 
     public boolean hasLimit() {
-        return hasLimit;
-    }
-
-    public boolean hasMaximumTotalTextCharacters() {
-        return hasMaximumTotalTextCharacters;
+        return limit != null;
     }
 
     private static List<SearchResultSection> normalizeResultSections(List<SearchResultSection> resultSections) {

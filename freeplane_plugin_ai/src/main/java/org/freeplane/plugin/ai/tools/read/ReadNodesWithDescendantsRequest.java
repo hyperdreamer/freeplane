@@ -9,8 +9,8 @@ import java.util.List;
 
 public class ReadNodesWithDescendantsRequest {
     private static final int DEFAULT_FULL_CONTENT_DEPTH = 0;
-    private static final int DEFAULT_SUMMARY_DEPTH = 1;
-    private static final int DEFAULT_MAXIMUM_TOTAL_TEXT_CHARACTERS = 65536;
+    private static final int DEFAULT_ADDITIONAL_SUMMARY_DEPTH = 1;
+    private static final int DEFAULT_MAX_CHARACTERS = 65536;
     @Description("Target map ID (from getSelectedMapAndNodeIdentifiers).")
     private final String mapIdentifier;
     @JsonProperty(required = false)
@@ -23,33 +23,25 @@ public class ReadNodesWithDescendantsRequest {
     @Description("Depth of full content (default: 0).")
     private final Integer fullContentDepth;
     @JsonProperty(required = false)
-    @Description("Summary depth beyond fullContentDepth (default: 1).")
-    private final Integer summaryDepth;
+    @Description("Additional summary-only depth beyond fullContentDepth (default: 1).")
+    private final Integer additionalSummaryDepth;
     @JsonProperty(required = false)
     @Description("Maximum response length in characters (default: 65536).")
-    private final Integer maximumTotalTextCharacters;
-    private final boolean hasFullContentDepth;
-    private final boolean hasSummaryDepth;
-    private final boolean hasMaximumTotalTextCharacters;
+    private final Integer maxCharacters;
 
     @JsonCreator
     public ReadNodesWithDescendantsRequest(@JsonProperty("mapIdentifier") String mapIdentifier,
-                                       @JsonProperty("nodeIdentifiers") List<String> nodeIdentifiers,
-                                       @JsonProperty("contextSections") List<ContextSection> contextSections,
-                                       @JsonProperty("fullContentDepth") Integer fullContentDepth,
-                                       @JsonProperty("summaryDepth") Integer summaryDepth,
-                                       @JsonProperty("maximumTotalTextCharacters") Integer maximumTotalTextCharacters) {
+                                           @JsonProperty("nodeIdentifiers") List<String> nodeIdentifiers,
+                                           @JsonProperty("contextSections") List<ContextSection> contextSections,
+                                           @JsonProperty("fullContentDepth") Integer fullContentDepth,
+                                           @JsonProperty("additionalSummaryDepth") Integer additionalSummaryDepth,
+                                           @JsonProperty("maxCharacters") Integer maxCharacters) {
         this.mapIdentifier = mapIdentifier;
         this.nodeIdentifiers = nodeIdentifiers;
         this.contextSections = normalizeContextSections(contextSections);
-        this.hasFullContentDepth = fullContentDepth != null;
-        this.fullContentDepth = fullContentDepth == null ? DEFAULT_FULL_CONTENT_DEPTH : fullContentDepth;
-        this.hasSummaryDepth = summaryDepth != null;
-        this.summaryDepth = summaryDepth == null ? DEFAULT_SUMMARY_DEPTH : summaryDepth;
-        this.hasMaximumTotalTextCharacters = maximumTotalTextCharacters != null;
-        this.maximumTotalTextCharacters = maximumTotalTextCharacters == null
-            ? DEFAULT_MAXIMUM_TOTAL_TEXT_CHARACTERS
-            : maximumTotalTextCharacters;
+        this.fullContentDepth = fullContentDepth;
+        this.additionalSummaryDepth = additionalSummaryDepth;
+        this.maxCharacters = maxCharacters;
     }
 
     public String getMapIdentifier() {
@@ -65,27 +57,23 @@ public class ReadNodesWithDescendantsRequest {
     }
 
     public Integer getFullContentDepth() {
-        return fullContentDepth;
+        return fullContentDepth == null ? DEFAULT_FULL_CONTENT_DEPTH : fullContentDepth;
     }
 
-    public Integer getSummaryDepth() {
-        return summaryDepth;
+    public Integer getAdditionalSummaryDepth() {
+        return additionalSummaryDepth == null ? DEFAULT_ADDITIONAL_SUMMARY_DEPTH : additionalSummaryDepth;
     }
 
-    public Integer getMaximumTotalTextCharacters() {
-        return maximumTotalTextCharacters;
+    public Integer getMaxCharacters() {
+        return maxCharacters == null ? DEFAULT_MAX_CHARACTERS : maxCharacters;
     }
 
     public boolean hasFullContentDepth() {
-        return hasFullContentDepth;
+        return fullContentDepth != null;
     }
 
-    public boolean hasSummaryDepth() {
-        return hasSummaryDepth;
-    }
-
-    public boolean hasMaximumTotalTextCharacters() {
-        return hasMaximumTotalTextCharacters;
+    public boolean hasAdditionalSummaryDepth() {
+        return additionalSummaryDepth != null;
     }
 
     private static List<ContextSection> normalizeContextSections(List<ContextSection> contextSections) {

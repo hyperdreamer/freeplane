@@ -28,6 +28,11 @@ import org.freeplane.features.ai.code.ScriptRunInitiator;
 import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeResponse;
 import org.freeplane.plugin.ai.tools.code.AiCodeToolSet;
+import org.freeplane.plugin.ai.tools.read.ContextSection;
+import org.freeplane.plugin.ai.tools.read.ReadNodesWithDescendantsRequest;
+import org.freeplane.plugin.ai.tools.search.SearchCaseSensitivity;
+import org.freeplane.plugin.ai.tools.search.SearchMatchingMode;
+import org.freeplane.plugin.ai.tools.search.SearchNodesRequest;
 import org.freeplane.plugin.ai.tools.utilities.ToolCallSummary;
 import org.junit.Test;
 
@@ -164,6 +169,48 @@ public class ModelContextProtocolToolDispatcherTest {
         assertThat(codeHostService.lastReadRequest).isNotNull();
         assertThat(codeHostService.lastReadRequest.getHost()).isEqualTo(ScriptHost.ATTACHED_EDITOR);
         assertThat(result.get().resultText()).contains("RUNNABLE");
+    }
+
+    @Test
+    public void dispatchBindsCurrentToolRequestFieldNames() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        RecordingContextGatheringToolSet toolSet = new RecordingContextGatheringToolSet();
+        ModelContextProtocolToolDispatcher dispatcher = new ModelContextProtocolToolDispatcher(
+            Arrays.<Object>asList(toolSet),
+            objectMapper);
+        AtomicReference<ToolExecutionResult> result = new AtomicReference<ToolExecutionResult>();
+
+        final JsonNode readArgumentsNode = objectMapper.readTree(
+            "{\"request\":{\"mapIdentifier\":\"map-identifier\",\"contextSections\":[\"QUALIFIERS\"],"
+                + "\"fullContentDepth\":2,\"additionalSummaryDepth\":3,\"maxCharacters\":1000}}");
+        SwingUtilities.invokeAndWait(() -> result.set(dispatcher.dispatch("readNodesWithDescendants", readArgumentsNode)));
+
+        assertThat(toolSet.lastReadRequest).isNotNull();
+        assertThat(toolSet.lastReadRequest.getFullContentDepth()).isEqualTo(2);
+        assertThat(toolSet.lastReadRequest.getAdditionalSummaryDepth()).isEqualTo(3);
+        assertThat(toolSet.lastReadRequest.getMaxCharacters()).isEqualTo(1000);
+        assertThat(toolSet.lastReadRequest.hasFullContentDepth()).isTrue();
+        assertThat(toolSet.lastReadRequest.hasAdditionalSummaryDepth()).isTrue();
+        assertThat(toolSet.lastReadRequest.getContextSections()).containsExactly(ContextSection.QUALIFIERS);
+        assertThat(result.get().resultText()).isEqualTo("read");
+
+        final JsonNode searchArgumentsNode = objectMapper.readTree(
+            "{\"request\":{\"mapIdentifier\":\"map-identifier\",\"queryText\":\"alpha\","
+                + "\"matchingMode\":\"EQUALS\",\"caseSensitivity\":\"CASE_SENSITIVE\","
+                + "\"offset\":4,\"limit\":5,\"maxCharacters\":2000}}");
+        SwingUtilities.invokeAndWait(() -> result.set(dispatcher.dispatch("searchNodes", searchArgumentsNode)));
+
+        assertThat(toolSet.lastSearchRequest).isNotNull();
+        assertThat(toolSet.lastSearchRequest.getMatchingMode()).isEqualTo(SearchMatchingMode.EQUALS);
+        assertThat(toolSet.lastSearchRequest.getCaseSensitivity()).isEqualTo(SearchCaseSensitivity.CASE_SENSITIVE);
+        assertThat(toolSet.lastSearchRequest.getOffset()).isEqualTo(4);
+        assertThat(toolSet.lastSearchRequest.getLimit()).isEqualTo(5);
+        assertThat(toolSet.lastSearchRequest.getMaxCharacters()).isEqualTo(2000);
+        assertThat(toolSet.lastSearchRequest.hasMatchingMode()).isTrue();
+        assertThat(toolSet.lastSearchRequest.hasCaseSensitivity()).isTrue();
+        assertThat(toolSet.lastSearchRequest.hasOffset()).isTrue();
+        assertThat(toolSet.lastSearchRequest.hasLimit()).isTrue();
+        assertThat(result.get().resultText()).isEqualTo("search");
     }
 
     @Test
@@ -342,6 +389,23 @@ public class ModelContextProtocolToolDispatcherTest {
         @Tool("first")
         public String firstTool() {
             return "first";
+        }
+    }
+
+    private static class RecordingContextGatheringToolSet {
+        private ReadNodesWithDescendantsRequest lastReadRequest;
+        private SearchNodesRequest lastSearchRequest;
+
+        @Tool("read")
+        public String readNodesWithDescendants(ReadNodesWithDescendantsRequest request) {
+            lastReadRequest = request;
+            return "read";
+        }
+
+        @Tool("search")
+        public String searchNodes(SearchNodesRequest request) {
+            lastSearchRequest = request;
+            return "search";
         }
     }
 
