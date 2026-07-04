@@ -164,7 +164,7 @@ public class NodeView extends JComponent implements INodeView, EdgeColorContext 
         private ChildNodesLayout childNodesLayout;
         private LayoutOrientation layoutOrientation;
         private ChildrenSides childrenSides;
-        private ChildNodeViewLayout cachedParent;
+        private ChildNodeViewLayout cachedParentLayout;
 
         public ChildNodeViewLayout(NodeModel viewedNode, MapView map, NodeView view) {
             super();
@@ -207,40 +207,41 @@ public class NodeView extends JComponent implements INodeView, EdgeColorContext 
         }
 
         private ChildNodesAlignment getDefaultChildNodesAlignment() {
-            ChildNodeViewLayout parent = getParent();
-            if(parent == null)
+            ChildNodeViewLayout parentLayout = getParentLayout();
+            if(parentLayout == null)
             	return ChildNodesAlignment.FLOW;
+            if(parentLayout.isSummary())
+                return parentLayout.getDefaultChildNodesAlignment();
 
             if(childNodesLayout.childNodesAlignment() == ChildNodesAlignment.STACKED_AUTO) {
-                if(parent.getChildNodesAlignment().isStacked())
-                    return parent.getChildNodesAlignment();
+                if(parentLayout.getChildNodesAlignment().isStacked())
+                    return parentLayout.getChildNodesAlignment();
                 else {
                     if(isEffectivelyTopOrLeft())
                         return ChildNodesAlignment.BEFORE_PARENT;
                     else
                         return   ChildNodesAlignment.AFTER_PARENT;
                 }
-            } else if(parent.usesHorizontalLayout() == usesHorizontalLayout())
-                return parent.getChildNodesAlignment();
+            } else if(parentLayout.usesHorizontalLayout() == usesHorizontalLayout())
+                return parentLayout.getChildNodesAlignment();
             else if(isTopOrLeft())
                 return ChildNodesAlignment.BEFORE_PARENT;
             else
                 return ChildNodesAlignment.AFTER_PARENT;
         }
 
-		private ChildNodeViewLayout getParent() {
-			if(cachedParent != null)
-				return cachedParent;
+		private ChildNodeViewLayout getParentLayout() {
+			if(cachedParentLayout != null)
+				return cachedParentLayout;
 			NodeView parentView = view != null ? view.getParentNodeView() : null;
             NodeModel parentNode = viewedNode.getParentNode();
-			ChildNodeViewLayout parent = parentView != null ? parentView.childNodeViewLayout()
-            		: parentNode != null ? cachedParent = new ChildNodeViewLayout(parentNode, map, null) : null;
-			return parent != null && parent.isSummary() ? parent.getParent() : parent;
+			return parentView != null ? parentView.childNodeViewLayout()
+            		: parentNode != null ? cachedParentLayout = new ChildNodeViewLayout(parentNode, map, null) : null;
 		}
 
         public ChildNodesLayout recalculateChildNodesLayout() {
             childNodesLayout = null;
-            cachedParent = null;
+            cachedParentLayout = null;
             return getChildNodesLayout();
         }
 
@@ -266,7 +267,7 @@ public class NodeView extends JComponent implements INodeView, EdgeColorContext 
                 updateChildrenSides();
                 childNodesLayout = ChildNodesLayout.using(layoutOrientation, childrenSides, childNodesAlignment)
                         .orElse(childNodesLayout);
-                cachedParent = null;
+                cachedParentLayout = null;
             }
         }
 
@@ -307,25 +308,25 @@ public class NodeView extends JComponent implements INodeView, EdgeColorContext 
                 isTopOrLeft = false;
             }
             else {
-                ChildNodeViewLayout parent = getParent();
-                ChildrenSides childrenSides = parent.childrenSides();
+                ChildNodeViewLayout parentLayout = getParentLayout();
+                ChildrenSides childrenSides = parentLayout.childrenSides();
                 if(childrenSides == ChildrenSides.TOP_OR_LEFT)
                     isTopOrLeft = true;
                 else if(childrenSides == ChildrenSides.BOTTOM_OR_RIGHT)
                     isTopOrLeft = false;
-                else if (parent.isRoot() || childrenSides == ChildrenSides.BOTH_SIDES) {
+                else if (parentLayout.isViewRoot() || childrenSides == ChildrenSides.BOTH_SIDES) {
                     Side side = viewedNode.getSide();
                     if (side != Side.DEFAULT)
                         isTopOrLeft = side == Side.TOP_OR_LEFT;
                     else
-                        isTopOrLeft = parent.viewedNode.isTopOrLeft(viewedNode.getMap().getRootNode());
+                        isTopOrLeft = parentLayout.viewedNode.isTopOrLeft(viewedNode.getMap().getRootNode());
                 } else
-                    isTopOrLeft = parent.isTopOrLeft();
+                    isTopOrLeft = parentLayout.isTopOrLeft();
             }
             this.side = isTopOrLeft ? Side.TOP_OR_LEFT :  Side.BOTTOM_OR_RIGHT;
         }
 
-        private boolean isRoot() {
+        private boolean isViewRoot() {
         	return view != null && view.isRoot();
 		}
 
@@ -350,9 +351,9 @@ public class NodeView extends JComponent implements INodeView, EdgeColorContext 
                         this.layoutOrientation = layoutOrientation;
                     break;
                 default:
-                    ChildNodeViewLayout parent = getParent();
-                    if(parent != null)
-                        this.layoutOrientation = parent.layoutOrientation();
+                    ChildNodeViewLayout parentLayout = getParentLayout();
+                    if(parentLayout != null)
+                        this.layoutOrientation = parentLayout.layoutOrientation();
                     else
                         this.layoutOrientation = LayoutOrientation.TOP_TO_BOTTOM;
                 }
@@ -360,11 +361,11 @@ public class NodeView extends JComponent implements INodeView, EdgeColorContext 
         }
 
         private boolean isEffectivelyTopOrLeft() {
-            ChildNodeViewLayout parent = getParent();
-            if(parent == null || parent.layoutOrientation() != layoutOrientation())
+            ChildNodeViewLayout parentLayout = getParentLayout();
+            if(parentLayout == null || parentLayout.layoutOrientation() != layoutOrientation())
                 return isTopOrLeft();
             else
-                return parent.isEffectivelyTopOrLeft();
+                return parentLayout.isEffectivelyTopOrLeft();
         }
 
         public boolean isTopOrLeft() {
