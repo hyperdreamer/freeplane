@@ -18,6 +18,7 @@ import org.freeplane.features.icon.IconController;
 import org.freeplane.features.map.MapController;
 import org.freeplane.features.map.NodeIterator;
 import org.freeplane.features.map.NodeModel;
+import org.freeplane.features.map.mindmapmode.MMapController;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
 import org.freeplane.features.mode.mindmapmode.MModeController;
@@ -37,12 +38,15 @@ import org.freeplane.plugin.ai.edits.AiEditsSettings;
 import org.freeplane.plugin.ai.edits.AiEditsStateIconProvider;
 import org.freeplane.plugin.ai.edits.ClearAiMarkersInMapAction;
 import org.freeplane.plugin.ai.edits.ClearAiMarkersInSelectionAction;
+import org.freeplane.plugin.ai.maps.AvailableMaps;
+import org.freeplane.plugin.ai.maps.ControllerMapModelProvider;
 import org.freeplane.plugin.ai.mcpserver.ModelContextProtocolAiCodeHostService;
 import org.freeplane.plugin.ai.mcpserver.ModelContextProtocolServer;
 import org.freeplane.plugin.ai.prompt.AiPromptActionRegistry;
 import org.freeplane.plugin.ai.prompt.AiPromptMenuInstaller;
 import org.freeplane.plugin.ai.tools.AIToolSetBuilder;
 import org.freeplane.plugin.ai.tools.MessageBuilder;
+import org.freeplane.plugin.ai.tools.documentation.ApiDocumentationMapLoader;
 import org.freeplane.plugin.ai.tools.utilities.ToolCaller;
 import org.osgi.framework.BundleActivator;
 import org.osgi.framework.BundleContext;
@@ -77,8 +81,12 @@ public class Activator implements BundleActivator {
                 public void installExtension(final ModeController modeController, CommandLineOptions options) {
                     addPluginDefaults();
                     registerAiEditsFeatures(modeController);
+                    MMapController mapController = (MMapController) modeController.getMapController();
+                    AvailableMaps availableMaps = new AvailableMaps(new ControllerMapModelProvider(),
+                        new ApiDocumentationMapLoader(mapController));
+                    mapController.addMapLifeCycleListener(availableMaps);
                     final JTabbedPane tabs = UITools.getFreeplaneTabbedPanel();
-                    aiChatPanel = new AIChatPanel();
+                    aiChatPanel = new AIChatPanel(availableMaps);
                     SingleEditorAttachmentService attachmentService =
                         new SingleEditorAttachmentService(aiChatPanel, new AttachedEditorChatModeSettings());
                     RoutingAiCodeHostService codeHostService = new RoutingAiCodeHostService(
@@ -94,7 +102,7 @@ public class Activator implements BundleActivator {
                     promptActionRegistry = AiPromptMenuInstaller.install(modeController, aiChatPanel);
                     aiChatPanel.setPromptActionRegistry(promptActionRegistry);
                     registerAiRequestService(context, promptActionRegistry);
-                    startModelContextProtocolServer(aiChatPanel, codeHostService, modeController);
+                    startModelContextProtocolServer(aiChatPanel, codeHostService, modeController, availableMaps);
                     addPreferencesToOptionPanel();
                 }
 
@@ -188,7 +196,8 @@ public class Activator implements BundleActivator {
 
                 private void startModelContextProtocolServer(AIChatPanel aiChatPanel,
                                                              RoutingAiCodeHostService codeHostService,
-                                                             ModeController modeController) {
+                                                             ModeController modeController,
+                                                             AvailableMaps availableMaps) {
                     if (modelContextProtocolServer == null) {
                         Controller controller = modeController.getController();
                         if (controller == null || controller.getViewController() == null) {
@@ -204,7 +213,7 @@ public class Activator implements BundleActivator {
                             null,
                             () -> Boolean.valueOf(new FormulaEditingSettings().isEnabled()),
                             mcpCodeHostService);
-                        AIToolSetBuilder toolSetBuilder = new AIToolSetBuilder()
+                        AIToolSetBuilder toolSetBuilder = new AIToolSetBuilder(availableMaps)
                             .toolCallSummaryHandler(aiChatPanel.toolCallSummaryHandler())
                             .toolCaller(ToolCaller.MCP)
                             .codeHostService(mcpCodeHostService)

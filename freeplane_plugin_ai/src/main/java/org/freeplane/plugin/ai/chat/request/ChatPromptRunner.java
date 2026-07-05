@@ -281,9 +281,8 @@ public class ChatPromptRunner {
                                                   String systemMessage,
                                                   boolean isSystemMessageExact,
                                                   boolean hiddenRequest) {
-        AIToolSetBuilder toolSetBuilder = new AIToolSetBuilder()
+        AIToolSetBuilder toolSetBuilder = new AIToolSetBuilder(availableMaps)
             .toolCallSummaryHandler(toolCallSummaryHandler)
-            .availableMaps(availableMaps)
             .mapAccessListener(mapAccessListener)
             .codeHostService(codeHostService)
             .aiCodeOperationAuthorizer(new AiCodeOperationAuthorizer(

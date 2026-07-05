@@ -101,8 +101,7 @@ public class AIToolSetBuilderTest {
 
         List<Object> toolObjects;
         try (MockedConstruction<AIToolSet> ignored = mockConstruction(AIToolSet.class)) {
-            toolObjects = new AIToolSetBuilder()
-                .availableMaps(mock(AvailableMaps.class))
+            toolObjects = new AIToolSetBuilder(mock(AvailableMaps.class))
                 .textController(mock(TextController.class))
                 .attributeController(mock(AttributeController.class))
                 .iconController(mock(IconController.class))

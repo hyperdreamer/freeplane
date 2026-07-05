@@ -21,6 +21,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.BorderFactory;
@@ -129,7 +130,6 @@ import org.freeplane.plugin.ai.edits.AiEditsSettings;
 import org.freeplane.plugin.ai.edits.ClearAiMarkersInMapAction;
 import org.freeplane.plugin.ai.edits.ClearAiMarkersInSelectionAction;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
-import org.freeplane.plugin.ai.maps.ControllerMapModelProvider;
 import org.freeplane.plugin.ai.model.AIChatModelFactory;
 import org.freeplane.plugin.ai.model.AIModelCatalog;
 import org.freeplane.plugin.ai.model.AIModelConfiguration;
@@ -228,7 +228,7 @@ public class AIChatPanel extends JPanel {
     private NextRequestInstructionPreviewView nextRequestInstructionPreviewView;
     private AiCodeHostService codeHostService;
 
-    public AIChatPanel() {
+    public AIChatPanel(AvailableMaps availableMaps) {
         setLayout(new BorderLayout());
         messageHistoryPane = new JEditorPane();
         messageHistoryPane.setContentType("text/html");
@@ -291,7 +291,7 @@ public class AIChatPanel extends JPanel {
         tokenUsageLabel = new JLabel();
         tokenUsageLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 20));
         chatTokenUsageTracker = new ChatTokenUsageTracker(this::updateTokenUsageLabel);
-        availableMaps = new AvailableMaps(new ControllerMapModelProvider());
+        this.availableMaps = Objects.requireNonNull(availableMaps, "availableMaps");
         TextController textController = requireTextController();
         aiPromptRequestComposer = new AiPromptRequestComposer(availableMaps, textController);
         promptReferenceResolver = new PromptReferenceResolver();
@@ -1601,9 +1601,8 @@ public class AIChatPanel extends JPanel {
         ToolAvailabilityLevel toolAvailabilityOverride =
             liveChatController.sessionToolAvailabilityOverride(sessionId);
         AiCodeHostService sessionCodeHostService = sessionAwareCodeHostService(sessionId);
-        AIToolSetBuilder toolSetBuilder = new AIToolSetBuilder()
+        AIToolSetBuilder toolSetBuilder = new AIToolSetBuilder(availableMaps)
             .toolCallSummaryHandler(requestFlow::onToolCallSummary)
-            .availableMaps(availableMaps)
             .mapAccessListener(liveChatController.mapAccessListener(sessionId))
             .codeHostService(sessionCodeHostService)
             .aiCodeOperationAuthorizer(new AiCodeOperationAuthorizer(

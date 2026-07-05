@@ -28,7 +28,6 @@ import org.freeplane.features.text.TextController;
 import org.freeplane.plugin.ai.tools.code.AiCodeOperationAuthorizer;
 import org.freeplane.plugin.ai.tools.code.AiCodeToolSet;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
-import org.freeplane.plugin.ai.maps.ControllerMapModelProvider;
 import org.freeplane.plugin.ai.tools.content.AttributesContentReader;
 import org.freeplane.plugin.ai.tools.content.ContentTypeConverter;
 import org.freeplane.plugin.ai.tools.content.EditableContentReader;
@@ -40,7 +39,6 @@ import org.freeplane.plugin.ai.tools.content.NodeContentReader;
 import org.freeplane.plugin.ai.tools.content.NodeStyleContentReader;
 import org.freeplane.plugin.ai.tools.content.TagsContentReader;
 import org.freeplane.plugin.ai.tools.content.TextualContentReader;
-import org.freeplane.plugin.ai.tools.documentation.ApiDocumentationMapLoader;
 import org.freeplane.plugin.ai.tools.documentation.GetApiDocumentationTool;
 import org.freeplane.plugin.ai.tools.formula.FormulaEditingSettings;
 import org.freeplane.plugin.ai.tools.text.DefaultEnglishTextProvider;
@@ -49,8 +47,8 @@ import org.freeplane.plugin.ai.tools.utilities.ToolCallSummaryHandler;
 import org.freeplane.plugin.ai.tools.utilities.ToolCaller;
 
 public class AIToolSetBuilder {
+    private final AvailableMaps availableMaps;
     private ToolCallSummaryHandler toolCallSummaryHandler;
-    private AvailableMaps availableMaps;
     private AvailableMaps.MapAccessListener mapAccessListener;
     private TextController textController;
     private AttributeController attributeController;
@@ -62,6 +60,10 @@ public class AIToolSetBuilder {
     private java.util.function.Supplier<Boolean> formulaEditingEnabledSupplier;
     private ToolCaller toolCaller = ToolCaller.CHAT;
 
+    public AIToolSetBuilder(AvailableMaps availableMaps) {
+        this.availableMaps = availableMaps;
+    }
+
     public AIToolSetBuilder toolCallSummaryHandler(ToolCallSummaryHandler handler) {
         this.toolCallSummaryHandler = handler;
         return this;
@@ -69,11 +71,6 @@ public class AIToolSetBuilder {
 
     public AIToolSetBuilder toolCaller(ToolCaller toolCaller) {
         this.toolCaller = Objects.requireNonNull(toolCaller, "toolCaller");
-        return this;
-    }
-
-    public AIToolSetBuilder availableMaps(AvailableMaps availableMaps) {
-        this.availableMaps = availableMaps;
         return this;
     }
 
@@ -142,7 +139,7 @@ public class AIToolSetBuilder {
 
     private ResolvedComponents resolveComponents() {
         MMapController mapController = this.mapController != null ? this.mapController : createMapController();
-        AvailableMaps availableMaps = this.availableMaps != null ? this.availableMaps : createAvailableMaps(mapController);
+        AvailableMaps availableMaps = this.availableMaps;
         TextController textController = this.textController != null ? this.textController : createTextController();
         AttributeController attributeController = this.attributeController != null ? this.attributeController
             : createAttributeController();
@@ -231,10 +228,6 @@ public class AIToolSetBuilder {
             public void removeRunListener(AiCodeRunListener listener) {
             }
         };
-    }
-
-    private AvailableMaps createAvailableMaps(MMapController mapController) {
-        return new AvailableMaps(new ControllerMapModelProvider(), new ApiDocumentationMapLoader(mapController));
     }
 
     private TextController createTextController() {

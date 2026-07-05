@@ -362,7 +362,6 @@ public class ChatPromptRunnerTest {
         return mockConstruction(AIToolSetBuilder.class, (mock, context) -> {
             AIToolSet toolSet = mock(AIToolSet.class);
             when(mock.toolCallSummaryHandler(nullable(ToolCallSummaryHandler.class))).thenReturn(mock);
-            when(mock.availableMaps(any())).thenReturn(mock);
             when(mock.mapAccessListener(nullable(AvailableMaps.MapAccessListener.class))).thenReturn(mock);
             when(mock.codeHostService(nullable(AiCodeHostService.class))).thenReturn(mock);
             when(mock.aiCodeOperationAuthorizer(nullable(AiCodeOperationAuthorizer.class))).thenReturn(mock);

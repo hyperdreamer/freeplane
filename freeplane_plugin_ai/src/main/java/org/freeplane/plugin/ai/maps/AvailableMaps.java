@@ -1,6 +1,7 @@
 package org.freeplane.plugin.ai.maps;
 
 import java.lang.ref.WeakReference;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -9,17 +10,19 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.WeakHashMap;
+import org.freeplane.features.map.IMapLifeCycleListener;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.plugin.ai.tools.documentation.ApiDocumentationMapLoader;
 
-public class AvailableMaps {
+public class AvailableMaps implements IMapLifeCycleListener {
     public static final UUID INTERNAL_API_DOCUMENTATION_MAP_IDENTIFIER = new UUID(0L, 1L);
 
     private final MapModelProvider mapModelProvider;
     private final ApiDocumentationMapLoader apiDocumentationMapLoader;
     private final Map<MapModel, UUID> mapIdentifiersByMapModel = new WeakHashMap<>();
     private final Map<UUID, WeakReference<MapModel>> mapReferencesByIdentifier = new HashMap<>();
+    private final Map<String, UUID> closedMapIdentifiersByUrlKey = new HashMap<>();
 
     public AvailableMaps(MapModelProvider mapModelProvider) {
         this(mapModelProvider, null);
@@ -44,6 +47,31 @@ public class AvailableMaps {
 
     public NodeModel getCurrentSelectedNodeModel() {
         return mapModelProvider.getCurrentSelectedNodeModel();
+    }
+
+    @Override
+    public void onCreate(MapModel mapModel) {
+        if (mapModel == null || mapIdentifiersByMapModel.containsKey(mapModel)) {
+            return;
+        }
+        UUID mapIdentifier = removeClosedMapIdentifier(mapModel);
+        if (mapIdentifier != null) {
+            registerMapIdentifier(mapModel, mapIdentifier);
+        }
+    }
+
+    @Override
+    public void onRemove(MapModel mapModel) {
+        if (mapModel == null) {
+            return;
+        }
+        UUID mapIdentifier = mapIdentifiersByMapModel.get(mapModel);
+        if (mapIdentifier == null || INTERNAL_API_DOCUMENTATION_MAP_IDENTIFIER.equals(mapIdentifier)) {
+            return;
+        }
+        mapIdentifiersByMapModel.remove(mapModel);
+        rememberClosedMapIdentifier(mapModel, mapIdentifier);
+        removeMapReference(mapIdentifier, mapModel);
     }
 
     public List<UUID> getAvailableMapIdentifiers() {
@@ -85,6 +113,9 @@ public class AvailableMaps {
         Objects.requireNonNull(mapModel, "mapModel");
         UUID mapIdentifier = mapIdentifiersByMapModel.get(mapModel);
         if (mapIdentifier == null) {
+            mapIdentifier = removeClosedMapIdentifier(mapModel);
+        }
+        if (mapIdentifier == null) {
             mapIdentifier = UUID.randomUUID();
         }
         return registerMapIdentifier(mapModel, mapIdentifier);
@@ -119,6 +150,37 @@ public class AvailableMaps {
             mapReferencesByIdentifier.remove(mapIdentifier);
         }
         return mapModel;
+    }
+
+    private UUID removeClosedMapIdentifier(MapModel mapModel) {
+        String urlKey = getUrlKey(mapModel);
+        return urlKey == null ? null : closedMapIdentifiersByUrlKey.remove(urlKey);
+    }
+
+    private void rememberClosedMapIdentifier(MapModel mapModel, UUID mapIdentifier) {
+        String urlKey = getUrlKey(mapModel);
+        if (urlKey != null) {
+            closedMapIdentifiersByUrlKey.put(urlKey, mapIdentifier);
+        }
+    }
+
+    private String getUrlKey(MapModel mapModel) {
+        return getUrlKey(mapModel.getURL());
+    }
+
+    private String getUrlKey(URL url) {
+        return url == null ? null : url.toExternalForm();
+    }
+
+    private void removeMapReference(UUID mapIdentifier, MapModel mapModel) {
+        WeakReference<MapModel> mapReference = mapReferencesByIdentifier.get(mapIdentifier);
+        if (mapReference == null) {
+            return;
+        }
+        MapModel referencedMapModel = mapReference.get();
+        if (referencedMapModel == null || referencedMapModel == mapModel) {
+            mapReferencesByIdentifier.remove(mapIdentifier);
+        }
     }
 
     private MapModel loadInternalApiDocumentationMap() {

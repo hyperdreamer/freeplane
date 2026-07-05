@@ -570,7 +570,6 @@ public class AIChatPanelScriptRequestTest {
                  (mock, context) -> {
                      AIToolSet toolSet = mock(AIToolSet.class);
                      when(mock.toolCallSummaryHandler(any())).thenReturn(mock);
-                     when(mock.availableMaps(any())).thenReturn(mock);
                      when(mock.mapAccessListener(any())).thenReturn(mock);
                      when(mock.codeHostService(org.mockito.ArgumentMatchers.nullable(org.freeplane.features.ai.code.AiCodeHostService.class))).thenReturn(mock);
                      when(mock.aiCodeOperationAuthorizer(org.mockito.ArgumentMatchers.nullable(org.freeplane.plugin.ai.tools.code.AiCodeOperationAuthorizer.class))).thenReturn(mock);
@@ -650,7 +649,6 @@ public class AIChatPanelScriptRequestTest {
                  (mock, context) -> {
                      AIToolSet toolSet = mock(AIToolSet.class);
                      when(mock.toolCallSummaryHandler(any())).thenReturn(mock);
-                     when(mock.availableMaps(any())).thenReturn(mock);
                      when(mock.mapAccessListener(any())).thenReturn(mock);
                      when(mock.codeHostService(org.mockito.ArgumentMatchers.nullable(org.freeplane.features.ai.code.AiCodeHostService.class))).thenReturn(mock);
                      when(mock.aiCodeOperationAuthorizer(org.mockito.ArgumentMatchers.nullable(org.freeplane.plugin.ai.tools.code.AiCodeOperationAuthorizer.class))).thenReturn(mock);
@@ -724,7 +722,6 @@ public class AIChatPanelScriptRequestTest {
                  (mock, context) -> {
                      AIToolSet toolSet = mock(AIToolSet.class);
                      when(mock.toolCallSummaryHandler(any())).thenReturn(mock);
-                     when(mock.availableMaps(any())).thenReturn(mock);
                      when(mock.mapAccessListener(any())).thenReturn(mock);
                      when(mock.codeHostService(org.mockito.ArgumentMatchers.nullable(org.freeplane.features.ai.code.AiCodeHostService.class))).thenReturn(mock);
                      when(mock.aiCodeOperationAuthorizer(org.mockito.ArgumentMatchers.nullable(org.freeplane.plugin.ai.tools.code.AiCodeOperationAuthorizer.class))).thenReturn(mock);
@@ -797,7 +794,6 @@ public class AIChatPanelScriptRequestTest {
                  (mock, context) -> {
                      AIToolSet toolSet = mock(AIToolSet.class);
                      when(mock.toolCallSummaryHandler(any())).thenReturn(mock);
-                     when(mock.availableMaps(any())).thenReturn(mock);
                      when(mock.mapAccessListener(any())).thenReturn(mock);
                      when(mock.codeHostService(org.mockito.ArgumentMatchers.nullable(org.freeplane.features.ai.code.AiCodeHostService.class))).thenReturn(mock);
                      when(mock.aiCodeOperationAuthorizer(org.mockito.ArgumentMatchers.nullable(org.freeplane.plugin.ai.tools.code.AiCodeOperationAuthorizer.class))).thenReturn(mock);
@@ -867,7 +863,6 @@ public class AIChatPanelScriptRequestTest {
                  (mock, context) -> {
                      AIToolSet toolSet = mock(AIToolSet.class);
                      when(mock.toolCallSummaryHandler(any())).thenReturn(mock);
-                     when(mock.availableMaps(any())).thenReturn(mock);
                      when(mock.mapAccessListener(any())).thenReturn(mock);
                      when(mock.codeHostService(org.mockito.ArgumentMatchers.nullable(org.freeplane.features.ai.code.AiCodeHostService.class))).thenReturn(mock);
                      when(mock.aiCodeOperationAuthorizer(org.mockito.ArgumentMatchers.nullable(org.freeplane.plugin.ai.tools.code.AiCodeOperationAuthorizer.class))).thenReturn(mock);
@@ -938,7 +933,6 @@ public class AIChatPanelScriptRequestTest {
                  (mock, context) -> {
                      AIToolSet toolSet = mock(AIToolSet.class);
                      when(mock.toolCallSummaryHandler(any())).thenReturn(mock);
-                     when(mock.availableMaps(any())).thenReturn(mock);
                      when(mock.mapAccessListener(any())).thenReturn(mock);
                      when(mock.codeHostService(org.mockito.ArgumentMatchers.nullable(org.freeplane.features.ai.code.AiCodeHostService.class))).thenReturn(mock);
                      when(mock.aiCodeOperationAuthorizer(org.mockito.ArgumentMatchers.nullable(org.freeplane.plugin.ai.tools.code.AiCodeOperationAuthorizer.class))).thenReturn(mock);
@@ -1005,7 +999,6 @@ public class AIChatPanelScriptRequestTest {
                  (mock, context) -> {
                      AIToolSet toolSet = mock(AIToolSet.class);
                      when(mock.toolCallSummaryHandler(any())).thenReturn(mock);
-                     when(mock.availableMaps(any())).thenReturn(mock);
                      when(mock.mapAccessListener(any())).thenReturn(mock);
                      when(mock.codeHostService(org.mockito.ArgumentMatchers.nullable(org.freeplane.features.ai.code.AiCodeHostService.class))).thenReturn(mock);
                      when(mock.aiCodeOperationAuthorizer(org.mockito.ArgumentMatchers.nullable(org.freeplane.plugin.ai.tools.code.AiCodeOperationAuthorizer.class))).thenReturn(mock);
@@ -1077,7 +1070,6 @@ public class AIChatPanelScriptRequestTest {
                  (mock, context) -> {
                      AIToolSet toolSet = mock(AIToolSet.class);
                      when(mock.toolCallSummaryHandler(any())).thenReturn(mock);
-                     when(mock.availableMaps(any())).thenReturn(mock);
                      when(mock.mapAccessListener(any())).thenReturn(mock);
                      when(mock.codeHostService(org.mockito.ArgumentMatchers.nullable(org.freeplane.features.ai.code.AiCodeHostService.class))).thenReturn(mock);
                      when(mock.aiCodeOperationAuthorizer(org.mockito.ArgumentMatchers.nullable(org.freeplane.plugin.ai.tools.code.AiCodeOperationAuthorizer.class))).thenReturn(mock);
