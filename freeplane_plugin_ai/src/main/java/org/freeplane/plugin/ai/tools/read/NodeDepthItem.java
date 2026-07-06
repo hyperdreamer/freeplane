@@ -12,8 +12,8 @@ import org.freeplane.plugin.ai.tools.content.ConnectorItem;
 public class NodeDepthItem {
     private final String nodeIdentifier;
     private final int depth;
-    @Description("Plain-text content for the node.")
-    private final String unformattedText;
+    @Description("Structured node content. String values are plain text, not HTML.")
+    private final ReadNodeContent content;
     @Description("Qualifiers when requested: summary_node, first_group_node.")
     private final List<String> qualifiers;
     private final String hyperlink;
@@ -24,7 +24,7 @@ public class NodeDepthItem {
     @JsonCreator
     public NodeDepthItem(@JsonProperty("nodeIdentifier") String nodeIdentifier,
                          @JsonProperty("depth") int depth,
-                         @JsonProperty("unformattedText") String unformattedText,
+                         @JsonProperty("content") ReadNodeContent content,
                          @JsonProperty("qualifiers") List<String> qualifiers,
                          @JsonProperty("hyperlink") String hyperlink,
                          @JsonProperty("outgoingConnectors") List<ConnectorItem> outgoingConnectors,
@@ -32,7 +32,7 @@ public class NodeDepthItem {
                          @JsonProperty("cloneMetadata") CloneMetadata cloneMetadata) {
         this.nodeIdentifier = nodeIdentifier;
         this.depth = depth;
-        this.unformattedText = unformattedText;
+        this.content = content;
         this.qualifiers = qualifiers;
         this.hyperlink = hyperlink;
         this.outgoingConnectors = outgoingConnectors;
@@ -48,8 +48,8 @@ public class NodeDepthItem {
         return depth;
     }
 
-    public String getUnformattedText() {
-        return unformattedText;
+    public ReadNodeContent getContent() {
+        return content;
     }
 
     public List<String> getQualifiers() {

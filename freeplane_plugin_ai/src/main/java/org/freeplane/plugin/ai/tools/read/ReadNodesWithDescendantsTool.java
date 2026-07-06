@@ -11,19 +11,16 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.map.SummaryNode;
 import org.freeplane.features.text.TextController;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.freeplane.plugin.ai.tools.content.AttributeEntry;
-import org.freeplane.plugin.ai.tools.content.AttributesContent;
 import org.freeplane.plugin.ai.tools.content.AttributesContentRequest;
 import org.freeplane.plugin.ai.tools.content.CloneMetadata;
 import org.freeplane.plugin.ai.tools.content.ConnectorItem;
 import org.freeplane.plugin.ai.tools.content.EditableContentRequest;
-import org.freeplane.plugin.ai.tools.content.IconsContent;
 import org.freeplane.plugin.ai.tools.content.IconsContentRequest;
 import org.freeplane.plugin.ai.tools.content.NodeContentItem;
 import org.freeplane.plugin.ai.tools.content.NodeContentItemReader;
@@ -31,9 +28,7 @@ import org.freeplane.plugin.ai.tools.content.NodeContentPreset;
 import org.freeplane.plugin.ai.tools.content.NodeContentRequest;
 import org.freeplane.plugin.ai.tools.content.NodeContentResponse;
 import org.freeplane.plugin.ai.tools.content.NodeLinkMetadataReader;
-import org.freeplane.plugin.ai.tools.content.TagsContent;
 import org.freeplane.plugin.ai.tools.content.TagsContentRequest;
-import org.freeplane.plugin.ai.tools.content.TextualContent;
 import org.freeplane.plugin.ai.tools.content.TextualContentRequest;
 import org.freeplane.plugin.ai.tools.search.OmissionReason;
 import org.freeplane.plugin.ai.tools.search.Omissions;
@@ -398,7 +393,7 @@ public class ReadNodesWithDescendantsTool {
         StringBuilder builder = new StringBuilder();
         String indent = repeatIndent(indentationLevel);
         String continuationIndent = indent + INDENT_UNIT;
-        String[] contentLines = splitLines(nodeDepthItem == null ? null : nodeDepthItem.getUnformattedText());
+        String[] contentLines = splitLines(nodeDepthItem == null ? null : renderPlainTextContent(nodeDepthItem.getContent()));
         String firstContentLine = contentLines.length == 0 ? "" : contentLines[0];
         StringBuilder firstLine = new StringBuilder(indent).append('-');
         boolean hasQualifiers = nodeDepthItem != null
@@ -541,15 +536,15 @@ public class ReadNodesWithDescendantsTool {
                                              boolean includeIncomingConnectors,
                                              boolean includeCloneMetadata) {
         int fullContentDepth = request.getFullContentDepth();
-        String unformattedText;
+        ReadNodeContent content;
         if (depth <= fullContentDepth) {
-            NodeContentResponse content = nodeContentItemReader.readNodeContent(
+            NodeContentResponse internalContent = nodeContentItemReader.readNodeContent(
                 nodeModel,
                 FULL_CONTENT_REQUEST,
                 NodeContentPreset.FULL);
-            unformattedText = buildUnformattedText(content);
+            content = ReadNodeContentMapper.fromFullContent(internalContent);
         } else {
-            unformattedText = readBriefText(nodeModel);
+            content = ReadNodeContentMapper.fromShortText(readBriefText(nodeModel));
         }
         List<String> qualifiers = includeQualifiers ? buildQualifiers(nodeModel) : null;
         String hyperlink = includeHyperlink ? NodeLinkMetadataReader.readHyperlink(nodeModel) : null;
@@ -560,7 +555,7 @@ public class ReadNodesWithDescendantsTool {
             ? NodeLinkMetadataReader.readIncomingConnectors(nodeModel)
             : null;
         CloneMetadata cloneMetadata = includeCloneMetadata ? NodeLinkMetadataReader.readCloneMetadata(nodeModel) : null;
-        return new NodeDepthItem(nodeModel.createID(), depth, unformattedText, qualifiers,
+        return new NodeDepthItem(nodeModel.createID(), depth, content, qualifiers,
             hyperlink, outgoingConnectors, incomingConnectors, cloneMetadata);
     }
 
@@ -577,7 +572,7 @@ public class ReadNodesWithDescendantsTool {
         if (parentNode == null) {
             return null;
         }
-        String unformattedText = readBriefText(parentNode);
+        ReadNodeContent content = ReadNodeContentMapper.fromShortText(readBriefText(parentNode));
         List<String> qualifiers = includeQualifiers ? buildQualifiers(parentNode) : null;
         String hyperlink = includeHyperlink ? NodeLinkMetadataReader.readHyperlink(parentNode) : null;
         List<ConnectorItem> outgoingConnectors = includeOutgoingConnectors
@@ -587,7 +582,7 @@ public class ReadNodesWithDescendantsTool {
             ? NodeLinkMetadataReader.readIncomingConnectors(parentNode)
             : null;
         CloneMetadata cloneMetadata = includeCloneMetadata ? NodeLinkMetadataReader.readCloneMetadata(parentNode) : null;
-        return new NodeDepthItem(parentNode.createID(), -1, unformattedText, qualifiers,
+        return new NodeDepthItem(parentNode.createID(), -1, content, qualifiers,
             hyperlink, outgoingConnectors, incomingConnectors, cloneMetadata);
     }
 
@@ -693,38 +688,34 @@ public class ReadNodesWithDescendantsTool {
         return textController.getShortPlainText(nodeModel);
     }
 
-    private String buildUnformattedText(NodeContentResponse content) {
+    private String renderPlainTextContent(ReadNodeContent content) {
         if (content == null) {
             return null;
         }
-        List<String> lines = new ArrayList<>();
-        TextualContent textualContent = content.getTextualContent();
-        if (textualContent != null) {
-            appendLabeledLine(lines, "Text", textualContent.getText());
-            appendLabeledLine(lines, "Details", textualContent.getDetails());
-            appendLabeledLine(lines, "Note", textualContent.getNote());
+        if (content.getShortText() != null) {
+            return content.getShortText();
         }
-        AttributesContent attributesContent = content.getAttributesContent();
-        if (attributesContent != null && attributesContent.getAttributes() != null
-            && !attributesContent.getAttributes().isEmpty()) {
-            List<String> entries = new ArrayList<>(attributesContent.getAttributes().size());
-            for (AttributeEntry attribute : attributesContent.getAttributes()) {
+        List<String> lines = new ArrayList<>();
+        appendLabeledLine(lines, "Text", content.getText());
+        appendLabeledLine(lines, "Details", content.getDetails());
+        appendLabeledLine(lines, "Note", content.getNote());
+        if (content.getAttributes() != null && !content.getAttributes().isEmpty()) {
+            List<String> entries = new ArrayList<>(content.getAttributes().size());
+            for (AttributeEntry attribute : content.getAttributes()) {
                 if (attribute == null) {
                     continue;
                 }
-                String value = HtmlUtils.htmlToPlain(attribute.getValue());
+                String value = attribute.getValue();
                 String name = attribute.getName();
                 entries.add(name + "=" + (value == null ? "" : value));
             }
             appendLabeledLine(lines, "Attributes", String.join("; ", entries));
         }
-        TagsContent tagsContent = content.getTagsContent();
-        if (tagsContent != null && tagsContent.getTags() != null && !tagsContent.getTags().isEmpty()) {
-            appendLabeledLine(lines, "Tags", String.join(", ", tagsContent.getTags()));
+        if (content.getTags() != null && !content.getTags().isEmpty()) {
+            appendLabeledLine(lines, "Tags", String.join(", ", content.getTags()));
         }
-        IconsContent iconsContent = content.getIconsContent();
-        if (iconsContent != null && iconsContent.getDescriptions() != null && !iconsContent.getDescriptions().isEmpty()) {
-            appendLabeledLine(lines, "Icons", String.join(", ", iconsContent.getDescriptions()));
+        if (content.getIcons() != null && !content.getIcons().isEmpty()) {
+            appendLabeledLine(lines, "Icons", String.join(", ", content.getIcons()));
         }
         if (lines.isEmpty()) {
             return null;

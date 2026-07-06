@@ -15,6 +15,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 public class AIToolSetToolExposureTest {
     @Test
+    public void readNodesWithDescendants_isExposedAsToolMethod() throws Exception {
+        Method method = AIToolSet.class.getMethod(
+            "readNodesWithDescendants",
+            ReadNodesWithDescendantsRequest.class);
+
+        Tool annotation = method.getAnnotation(Tool.class);
+
+        assertThat(annotation).isNotNull();
+    }
+
+    @Test
     public void readNodesWithDescendantsAsPlainText_isExposedAsToolMethod() throws Exception {
         Method method = AIToolSet.class.getMethod(
             "readNodesWithDescendantsAsPlainText",

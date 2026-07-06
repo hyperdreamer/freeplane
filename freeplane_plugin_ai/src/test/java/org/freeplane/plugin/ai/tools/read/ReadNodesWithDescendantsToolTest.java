@@ -21,14 +21,18 @@ import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.map.SummaryNodeFlag;
 import org.freeplane.features.text.TextController;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
+import org.freeplane.plugin.ai.tools.content.AttributeEntry;
+import org.freeplane.plugin.ai.tools.content.AttributesContent;
 import org.freeplane.plugin.ai.tools.content.CloneMetadata;
 import org.freeplane.plugin.ai.tools.content.ConnectorItem;
 import org.freeplane.plugin.ai.tools.content.EditableContent;
 import org.freeplane.plugin.ai.tools.content.EditableContentField;
+import org.freeplane.plugin.ai.tools.content.IconsContent;
 import org.freeplane.plugin.ai.tools.content.NodeContentItem;
 import org.freeplane.plugin.ai.tools.content.NodeContentItemReader;
 import org.freeplane.plugin.ai.tools.content.NodeContentPreset;
 import org.freeplane.plugin.ai.tools.content.NodeContentResponse;
+import org.freeplane.plugin.ai.tools.content.TagsContent;
 import org.freeplane.plugin.ai.tools.content.TextualContent;
 import org.freeplane.plugin.ai.tools.search.OmissionReason;
 import org.freeplane.plugin.ai.tools.search.Omissions;
@@ -49,7 +53,7 @@ public class ReadNodesWithDescendantsToolTest {
     }
 
     @Test
-    public void readNodesWithDescendants_returnsFocusAndSummaryChildrenWithBreadcrumbPath() throws Exception {
+    public void readNodesWithDescendants_returnsFlatContentForFullAndShortNodes() throws Exception {
         AvailableMaps availableMaps = mock(AvailableMaps.class);
         NodeContentItemReader nodeContentItemReader = mock(NodeContentItemReader.class);
         ObjectMapper objectMapper = mock(ObjectMapper.class);
@@ -96,13 +100,13 @@ public class ReadNodesWithDescendantsToolTest {
         assertThat(nodes).hasSize(3);
         assertThat(nodes.get(0).getNodeIdentifier()).isEqualTo("ID_focus");
         assertThat(nodes.get(0).getDepth()).isEqualTo(0);
-        assertThat(nodes.get(0).getUnformattedText()).isEqualTo("Text: Focus full");
+        assertThat(nodes.get(0).getContent().getText()).isEqualTo("Focus full");
         assertThat(nodes.get(1).getNodeIdentifier()).isEqualTo("ID_child_1");
         assertThat(nodes.get(1).getDepth()).isEqualTo(1);
-        assertThat(nodes.get(1).getUnformattedText()).isEqualTo("Child 1");
+        assertThat(nodes.get(1).getContent().getShortText()).isEqualTo("Child 1");
         assertThat(nodes.get(2).getNodeIdentifier()).isEqualTo("ID_child_2");
         assertThat(nodes.get(2).getDepth()).isEqualTo(1);
-        assertThat(nodes.get(2).getUnformattedText()).isEqualTo("Child 2");
+        assertThat(nodes.get(2).getContent().getShortText()).isEqualTo("Child 2");
         assertThat(nodes.get(0).getQualifiers()).isNull();
     }
 
@@ -235,7 +239,7 @@ public class ReadNodesWithDescendantsToolTest {
 
         ReadNodesWithDescendantsItem item = response.getItems().get(0);
         assertThat(item.getNodes()).hasSize(2);
-        assertThat(item.getNodes().get(1).getUnformattedText()).isEqualTo("Text: Child full");
+        assertThat(item.getNodes().get(1).getContent().getText()).isEqualTo("Child full");
     }
 
     @Test
@@ -286,13 +290,150 @@ public class ReadNodesWithDescendantsToolTest {
         assertThat(nodes).hasSize(3);
         assertThat(nodes.get(0).getNodeIdentifier()).isEqualTo("ID_focus");
         assertThat(nodes.get(0).getDepth()).isEqualTo(0);
-        assertThat(nodes.get(0).getUnformattedText()).isEqualTo("Text: Focus full");
+        assertThat(nodes.get(0).getContent().getText()).isEqualTo("Focus full");
         assertThat(nodes.get(1).getNodeIdentifier()).isEqualTo("ID_child");
         assertThat(nodes.get(1).getDepth()).isEqualTo(1);
-        assertThat(nodes.get(1).getUnformattedText()).isEqualTo("Text: Child full");
+        assertThat(nodes.get(1).getContent().getText()).isEqualTo("Child full");
         assertThat(nodes.get(2).getNodeIdentifier()).isEqualTo("ID_grandchild");
         assertThat(nodes.get(2).getDepth()).isEqualTo(2);
-        assertThat(nodes.get(2).getUnformattedText()).isEqualTo("Grandchild brief");
+        assertThat(nodes.get(2).getContent().getShortText()).isEqualTo("Grandchild brief");
+    }
+
+    @Test
+    public void readNodesWithDescendants_preservesTextPrefixAsNodeText() throws Exception {
+        AvailableMaps availableMaps = mock(AvailableMaps.class);
+        NodeContentItemReader nodeContentItemReader = mock(NodeContentItemReader.class);
+        ObjectMapper objectMapper = mock(ObjectMapper.class);
+        when(objectMapper.writeValueAsBytes(any())).thenReturn(new byte[100]);
+        MapModel mapModel = mock(MapModel.class);
+        NodeModel focusNode = mock(NodeModel.class);
+        UUID mapIdentifier = UUID.fromString("6930abae-aee1-4daa-ae64-7307039388d2");
+        when(availableMaps.findMapModel(eq(mapIdentifier), any())).thenReturn(mapModel);
+        when(mapModel.getNodeForID("ID_focus")).thenReturn(focusNode);
+        when(focusNode.getChildren()).thenReturn(Collections.emptyList());
+        when(focusNode.createID()).thenReturn("ID_focus");
+        when(nodeContentItemReader.readNodeContent(eq(focusNode), any(), eq(NodeContentPreset.FULL)))
+            .thenReturn(new NodeContentResponse(
+                null, new TextualContent("Text: actual", null, null), null, null, null, null, null, null));
+        TextController textController = mock(TextController.class);
+        ReadNodesWithDescendantsTool readTool = new ReadNodesWithDescendantsTool(
+            availableMaps, null, nodeContentItemReader, textController, objectMapper);
+        ReadNodesWithDescendantsRequest request = new ReadNodesWithDescendantsRequest(
+            mapIdentifier.toString(),
+            Collections.singletonList("ID_focus"),
+            null,
+            0,
+            0,
+            null);
+
+        ReadNodesWithDescendantsResponse response = readTool.readNodesWithDescendants(request);
+
+        ReadNodeContent content = response.getItems().get(0).getNodes().get(0).getContent();
+        assertThat(content.getText()).isEqualTo("Text: actual");
+    }
+
+    @Test
+    public void readNodesWithDescendants_returnsPlainStructuredContentNotHtml() throws Exception {
+        AvailableMaps availableMaps = mock(AvailableMaps.class);
+        NodeContentItemReader nodeContentItemReader = mock(NodeContentItemReader.class);
+        ObjectMapper objectMapper = mock(ObjectMapper.class);
+        when(objectMapper.writeValueAsBytes(any())).thenReturn(new byte[100]);
+        MapModel mapModel = mock(MapModel.class);
+        NodeModel focusNode = mock(NodeModel.class);
+        UUID mapIdentifier = UUID.fromString("b65ac7d1-fb97-4de5-9792-57e552d7a4c5");
+        when(availableMaps.findMapModel(eq(mapIdentifier), any())).thenReturn(mapModel);
+        when(mapModel.getNodeForID("ID_focus")).thenReturn(focusNode);
+        when(focusNode.getChildren()).thenReturn(Collections.emptyList());
+        when(focusNode.createID()).thenReturn("ID_focus");
+        NodeContentResponse focusFullContent = new NodeContentResponse(
+            null,
+            new TextualContent("Plain text", "Plain details", "Plain note"),
+            new AttributesContent(Collections.singletonList(new AttributeEntry(
+                "html",
+                "<html><body><p>A paragraph followed by an empty one</p><p></p></body></html>"))),
+            null,
+            null,
+            null,
+            null,
+            null);
+        when(nodeContentItemReader.readNodeContent(eq(focusNode), any(), eq(NodeContentPreset.FULL)))
+            .thenReturn(focusFullContent);
+        TextController textController = mock(TextController.class);
+        ReadNodesWithDescendantsTool readTool = new ReadNodesWithDescendantsTool(
+            availableMaps, null, nodeContentItemReader, textController, objectMapper);
+        ReadNodesWithDescendantsRequest request = new ReadNodesWithDescendantsRequest(
+            mapIdentifier.toString(),
+            Collections.singletonList("ID_focus"),
+            null,
+            0,
+            0,
+            null);
+
+        ReadNodesWithDescendantsResponse response = readTool.readNodesWithDescendants(request);
+
+        ReadNodeContent content = response.getItems().get(0).getNodes().get(0).getContent();
+        assertThat(content.getText()).isEqualTo("Plain text");
+        assertThat(content.getDetails()).isEqualTo("Plain details");
+        assertThat(content.getNote()).isEqualTo("Plain note");
+        assertThat(content.getAttributes()).hasSize(1);
+        assertThat(content.getAttributes().get(0).getValue()).isEqualTo("A paragraph followed by an empty one");
+    }
+
+    @Test
+    public void readNodesWithDescendants_returnsFlatNonTextFields() throws Exception {
+        AvailableMaps availableMaps = mock(AvailableMaps.class);
+        NodeContentItemReader nodeContentItemReader = mock(NodeContentItemReader.class);
+        ObjectMapper objectMapper = mock(ObjectMapper.class);
+        when(objectMapper.writeValueAsBytes(any())).thenReturn(new byte[100]);
+        MapModel mapModel = mock(MapModel.class);
+        NodeModel focusNode = mock(NodeModel.class);
+        UUID mapIdentifier = UUID.fromString("1562b37f-fd65-43db-8787-33bc207b01c9");
+        when(availableMaps.findMapModel(eq(mapIdentifier), any())).thenReturn(mapModel);
+        when(mapModel.getNodeForID("ID_focus")).thenReturn(focusNode);
+        when(focusNode.getChildren()).thenReturn(Collections.emptyList());
+        when(focusNode.createID()).thenReturn("ID_focus");
+        NodeContentResponse focusFullContent = new NodeContentResponse(
+            null,
+            new TextualContent("Text: actual", "Details", "Note"),
+            new AttributesContent(Collections.singletonList(new AttributeEntry("key", "value"))),
+            new TagsContent(Collections.singletonList("tag")),
+            new IconsContent(Collections.singletonList("button_ok")),
+            null,
+            null,
+            null);
+        when(nodeContentItemReader.readNodeContent(eq(focusNode), any(), eq(NodeContentPreset.FULL)))
+            .thenReturn(focusFullContent);
+        TextController textController = mock(TextController.class);
+        ReadNodesWithDescendantsTool readTool = new ReadNodesWithDescendantsTool(
+            availableMaps, null, nodeContentItemReader, textController, objectMapper);
+        ReadNodesWithDescendantsRequest request = new ReadNodesWithDescendantsRequest(
+            mapIdentifier.toString(),
+            Collections.singletonList("ID_focus"),
+            null,
+            0,
+            0,
+            null);
+
+        ReadNodesWithDescendantsResponse response = readTool.readNodesWithDescendants(request);
+
+        ReadNodeContent content = response.getItems().get(0).getNodes().get(0).getContent();
+        assertThat(content.getText()).isEqualTo("Text: actual");
+        assertThat(content.getDetails()).isEqualTo("Details");
+        assertThat(content.getNote()).isEqualTo("Note");
+        assertThat(content.getAttributes()).hasSize(1);
+        assertThat(content.getAttributes().get(0).getName()).isEqualTo("key");
+        assertThat(content.getAttributes().get(0).getValue()).isEqualTo("value");
+        assertThat(content.getTags()).containsExactly("tag");
+        assertThat(content.getIcons()).containsExactly("button_ok");
+        String serializedNode = new ObjectMapper().writeValueAsString(
+            response.getItems().get(0).getNodes().get(0));
+        assertThat(serializedNode).contains("\"content\"");
+        assertThat(serializedNode).contains("\"text\":\"Text: actual\"");
+        assertThat(serializedNode).doesNotContain("unformattedText");
+        assertThat(serializedNode).doesNotContain("textualContent");
+        assertThat(serializedNode).doesNotContain("attributesContent");
+        assertThat(serializedNode).doesNotContain("tagsContent");
+        assertThat(serializedNode).doesNotContain("iconsContent");
     }
 
     @Test
