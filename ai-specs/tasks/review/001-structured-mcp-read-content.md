@@ -13,10 +13,11 @@
   bullets or redundant labels that spend tokens without helping answer
   the user's question.
 - **Scenario:** An MCP client reads a selected subtree. JSON output
-  exposes structured node `content`. Plain-text output uses the node
-  text as the bullet title, labels only secondary fields such as
-  details and attributes, omits irrelevant empty leaf nodes, and renders
-  requested summary-structure qualifiers as semantic markers.
+  exposes structured node `content`. Plain-text output preserves the
+  actual Freeplane node topology, uses node text as the bullet title,
+  labels only secondary fields such as details and attributes, omits
+  irrelevant ordinary empty leaf nodes, and renders summary structure
+  nodes as semantic markers.
 - **Constraints:**
   - Preserve the existing request contracts for both subtree read tools.
   - Preserve the structured JSON response contract from the completed
@@ -39,14 +40,15 @@
   - The plain-text read tool is an LLM/agent context surface, not a
     human-display surface.
   - Empty plain-text bullets are not useful context when they represent
-    empty leaf nodes with no requested metadata.
+    ordinary empty leaf nodes with no requested metadata.
   - The primary node text should be the bullet title; a leading
     `Text:` label is redundant when the bullet already denotes the
     node.
   - Secondary fields still need labels because otherwise details,
     notes, attributes, tags, icons, and metadata lose field meaning.
-  - Empty summary-structure nodes are relevant only when their
-    structure is requested or needed to preserve rendered hierarchy.
+  - Summary structure nodes are part of the actual Freeplane topology
+    and must be rendered as structural markers in plain text even when
+    `QUALIFIERS` is not requested.
 
 ## Subtask: Return structured JSON content from subtree reads
 - **Status:** review
@@ -468,39 +470,34 @@
         remains exposed after the response DTO change.
 
 ## Subtask: Optimize plain-text subtree rendering for agent context
-- **Status:** in-progress
+- **Status:** review
 - **Scope:** Rework only `readNodesWithDescendantsAsPlainText` rendering
   so its compact text output is more useful as LLM/agent context. Keep
   the structured JSON behavior from the completed subtask unchanged.
   Keep the plain-text response envelope and budget mechanism, but allow
   the rendered text format to change.
 - **Motivation:** Current plain-text output can render `- Text: value`
-  for ordinary node text and `-` or `-  [summary_node]` for empty
-  structural nodes. For agents, those forms spend tokens and obscure
-  which information is actually useful for answering the user's
+  for ordinary node text and `-` or `-  [summary_node]` for hidden
+  summary-structure nodes. For agents, those forms spend tokens and
+  obscure the actual Freeplane topology needed to answer the user's
   question.
-- **Scenario:** For a selected subtree whose root text is `example
-  summary` and whose visible children are `adfsdf` and `1`, the default
-  plain-text output should be compact:
+- **Scenario:** For a selected subtree whose actual topology contains
+  summary group-start nodes and summary nodes, default plain-text output
+  preserves that topology with structural markers:
 
   ```text
   - example summary
+    - [summarized]
     - adfsdf
-    - 1
-  ```
-
-  If `QUALIFIERS` is requested for the same map shape, empty summary
-  structure nodes should use semantic markers instead of empty bullets
-  or raw qualifier names:
-
-  ```text
-  - example summary
-    - [summary group start]
-    - adfsdf
+      - sdfsdf
+      - sdfsdfaf
     - [summary]
-    - [summary group start]
+      - some SUMMARY content
+    - [summarized]
     - 1
+      - 2
     - [summary]
+      - some other Summary content
   ```
 
   Rich full-content nodes keep labels for secondary fields:
@@ -514,56 +511,38 @@
 - **Constraints:**
   - Do not change `readNodesWithDescendants` JSON output.
   - Do not change request parameters or add a new plain-text mode.
-  - Do not render irrelevant empty leaf nodes in plain text.
-  - Do not report semantically skipped empty leaves as budget omissions.
-    Budget omissions remain about text budget exhaustion.
-  - Preserve tree hierarchy when an otherwise empty node has rendered
-    descendants.
+  - Preserve actual Freeplane node topology in plain text: do not
+    promote children, reattach summary content, or infer structure from
+    visual layout.
+  - Render summary structure markers even when `QUALIFIERS` is not
+    requested.
+  - Render `summary_node` as `[summary]` and keep its child nodes under
+    that marker.
+  - Render `first_group_node` as `[summarized]`.
+  - Omit ordinary empty leaf nodes with no rendered metadata.
+  - Render ordinary empty non-leaf nodes as `[untitled]`.
+  - Do not report semantically skipped ordinary empty leaves as budget
+    omissions. Budget omissions remain about text budget exhaustion.
   - Preserve existing labels for secondary content and metadata lines.
   - Preserve existing short-text truncation behavior and continuation
     mark from `TextController.getShortPlainText(NodeModel)`.
 - **Briefing:** Current plain-text rendering is in
-  `ReadNodesWithDescendantsTool.renderFocusNodeAsPlainText(...)`,
-  `renderNodeContribution(...)`, and `renderPlainTextContent(...)`.
-  Nodes are held as a preorder flat `List<NodeDepthItem>` with `depth`.
-  Qualifiers are currently raw strings `summary_node` and
-  `first_group_node` when `ContextSection.QUALIFIERS` is requested.
+  `ReadNodesWithDescendantsTool.renderFocusNodeAsPlainText(...)` and
+  `renderNodeContribution(...)`. Nodes are held as a preorder flat
+  `List<NodeDepthItem>` with `depth`. `SummaryNode.isSummaryNode(...)`
+  and `SummaryNode.isFirstGroupNode(...)` are exposed in read DTOs as
+  qualifiers `summary_node` and `first_group_node`. Plain-text output
+  must use those flags as structural markers independent of whether the
+  caller requested `ContextSection.QUALIFIERS`.
 - **Research:**
-  - Live MCP output for the selected map without `QUALIFIERS` included
-    empty child bullets:
-
-    ```text
-    breadcrumbPath: example summary
-    - Text: example summary
-      -
-      - adfsdf
-      -
-      -
-      - 1
-      -
-    ```
-
-  - Live MCP structured output with `QUALIFIERS` showed the empty child
-    nodes were summary-structure nodes:
-
-    ```json
-    {"nodeIdentifier":"ID_1765161263","depth":1,"content":{"shortText":""},"qualifiers":["first_group_node"]}
-    {"nodeIdentifier":"ID_1666677276","depth":1,"content":{"shortText":""},"qualifiers":["summary_node"]}
-    ```
-
-  - Live MCP plain-text output with `QUALIFIERS` currently renders raw
-    qualifier names after an otherwise empty bullet:
-
-    ```text
-    - Text: example summary
-      -  [first_group_node]
-      - adfsdf
-      -  [summary_node]
-      -  [first_group_node]
-      - 1
-      -  [summary_node]
-    ```
-
+  - `SummaryNode.isHidden(NodeModel)` treats unfolded empty summary and
+    first-group nodes as hidden structural nodes.
+  - `summary_node` is the bracket-center/control node. It is not
+    rendered as content by Freeplane, but its children are the visible
+    summary content.
+  - `first_group_node` marks the start of the summarized group.
+  - Live MCP output before this subtask exposed empty bullets and raw
+    qualifier names for those structural nodes.
   - `TextController.getShortPlainText(NodeModel)` delegates to
     `getShortPlainText(nodeModel, 40, " ...")`, so summary-only node
     truncation already has an explicit continuation mark.
@@ -573,24 +552,24 @@
     `Text:` adds no field boundary the bullet does not already provide.
   - Secondary fields require labels because they are not implied by the
     bullet marker.
-  - Empty summary nodes and first-group nodes encode Freeplane summary
-    structure. They should not appear in default compact text when they
-    have no rendered content, but when qualifiers are requested their
-    marker should use semantic words that help an agent interpret the
-    map.
-  - Empty leaf nodes with no rendered content and no rendered metadata
-    should be skipped, not replaced with `[empty]`.
-  - Empty non-leaf nodes must still preserve hierarchy. If they have no
-    qualifier marker and no own rendered fields, render `[untitled]` as
-    the bullet title rather than emitting a bare `-`.
+  - Summary structure is topology, not optional display decoration, for
+    this agent-context surface.
+  - Because the whole node structure is available, the renderer should
+    not infer or rewrite hierarchy from visual layout.
+  - Ordinary empty leaf nodes with no rendered content and no rendered
+    metadata can be skipped because they carry no child topology.
+  - Ordinary empty non-leaf nodes must remain visible as `[untitled]`
+    so descendants are not promoted.
   - Full-content node text is not shortened by this tool. If the text
-    budget is exhausted, the existing omission mechanism should omit
-    later nodes rather than partially render a full-content field.
+    budget is exhausted, the existing omission mechanism omits later
+    rendered nodes rather than partially rendering a full-content field.
 - **Design:**
   - Change plain-text rendering only. `NodeDepthItem.content` remains
     the shared input for both read variants.
-  - Replace `renderPlainTextContent(ReadNodeContent)` with a helper
-    that returns ordered render lines:
+  - Plain-text reads always request qualifier flags internally so
+    summary structure can be rendered even without requested
+    `QUALIFIERS`.
+  - Use ordered render lines:
     - primary title line: `shortText` or `text` without a `Text:` label;
     - secondary content lines: labeled `Details:`, `Note:`,
       `Attributes:`, `Tags:`, and `Icons:`;
@@ -600,25 +579,25 @@
     remaining lines indented under the bullet.
   - Convert qualifier names to compact semantic markers for plain text:
     - `summary_node` -> `[summary]`;
-    - `first_group_node` -> `[summary group start]`.
-  - If a node has a primary title and qualifier markers, append markers
-    after the title on the same bullet line.
-  - If a node has no title or secondary lines but has qualifier
+    - `first_group_node` -> `[summarized]`.
+  - If a node has a primary title and structural markers, append the
+    markers after the title on the same bullet line.
+  - If a node has no title or secondary lines but has structural
     markers, use the marker text as the bullet title.
-  - Skip a node in plain-text output when all of these are true:
+  - Skip a node in plain-text output only when all of these are true:
     - it has no primary title;
     - it has no secondary content lines;
     - it has no rendered metadata lines;
-    - it has no qualifier markers; and
+    - it has no structural markers; and
     - it is a leaf in the rendered preorder range.
-  - If an otherwise empty node has rendered descendants, render
-    `[untitled]` to preserve the hierarchy instead of promoting
-    descendants or emitting a bare bullet.
+  - If an otherwise empty ordinary node has rendered descendants, render
+    `[untitled]` to preserve topology.
   - Determine whether a node has rendered descendants from the flat
     preorder list: the next node with greater depth means the current
     node has descendants in the rendered range.
-  - Skipped empty leaves do not increment `renderedNodeCount`, do not
-    consume text budget, and do not affect budget omission counts.
+  - Skipped ordinary empty leaves do not increment `renderedNodeCount`,
+    do not consume text budget, and do not affect budget omission
+    counts.
   - Keep short-text ellipsis behavior by continuing to use
     `TextController.getShortPlainText(NodeModel)` for summary-only
     nodes and by preserving returned short text exactly.
@@ -632,17 +611,31 @@
         details, note, attributes, tags, icons, hyperlinks, connectors,
         and clone metadata remain labeled continuation lines.
       - `readNodesWithDescendantsAsPlainText_omitsEmptyLeafNodesWithoutMetadata`:
-        empty leaf nodes with no requested qualifiers or metadata are
-        skipped and are not reported as budget omissions.
-      - `readNodesWithDescendantsAsPlainText_rendersSummaryMarkersWhenQualifiersRequested`:
-        `summary_node` renders as `[summary]` and `first_group_node`
-        renders as `[summary group start]`.
+        ordinary empty leaf nodes with no requested metadata are skipped
+        and are not reported as budget omissions.
+      - `readNodesWithDescendantsAsPlainText_rendersSummaryMarkersByDefaultAndPreservesTopology`:
+        `summary_node` renders as `[summary]`, `first_group_node`
+        renders as `[summarized]`, and summary content remains
+        indented under the `[summary]` marker.
       - `readNodesWithDescendantsAsPlainText_preservesUntitledBranches`:
-        an otherwise empty node with rendered descendants is kept as
-        `[untitled]` so indentation remains truthful.
+        an otherwise empty ordinary node with rendered descendants is
+        kept as `[untitled]` so indentation remains truthful.
       - `readNodesWithDescendantsAsPlainText_preservesShortTextContinuationMark`:
         shortened summary text returned by `TextController` is rendered
         unchanged, including ` ...`.
       - `readNodesWithDescendantsAsPlainText_countsRenderedCharactersAfterSkippingEmptyLeaves`:
         plain-text budget accounting measures the final rendered text
         after semantic empty-leaf skipping.
+- **Implementation notes:**
+  - Implemented plain-text rendering with ordered content, metadata,
+    and structural marker lines.
+  - Primary node text now renders as the bullet title. Secondary
+    content and metadata keep labels.
+  - Plain-text reads always include summary qualifiers internally so
+    summary topology is represented without requiring `QUALIFIERS` in
+    the request.
+  - Ordinary empty leaves without rendered content are skipped before
+    budget counting. Ordinary empty branches with rendered descendants
+    use `[untitled]` to preserve topology.
+  - Summary structure markers render as `[summary]` and
+    `[summarized]` in plain text.

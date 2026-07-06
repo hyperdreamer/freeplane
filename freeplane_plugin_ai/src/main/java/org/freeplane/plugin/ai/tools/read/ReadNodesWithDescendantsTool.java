@@ -62,6 +62,23 @@ public class ReadNodesWithDescendantsTool {
         }
     }
 
+    private static final class PlainTextNodeLines {
+        private final List<String> contentLines;
+        private final List<String> metadataLines;
+        private final List<String> qualifierMarkers;
+
+        private PlainTextNodeLines(List<String> contentLines, List<String> metadataLines,
+                                   List<String> qualifierMarkers) {
+            this.contentLines = contentLines;
+            this.metadataLines = metadataLines;
+            this.qualifierMarkers = qualifierMarkers;
+        }
+
+        private boolean hasOwnRenderableContent() {
+            return !contentLines.isEmpty() || !metadataLines.isEmpty() || !qualifierMarkers.isEmpty();
+        }
+    }
+
     private final AvailableMaps availableMaps;
     private final AvailableMaps.MapAccessListener mapAccessListener;
     private final NodeContentItemReader nodeContentItemReader;
@@ -165,7 +182,7 @@ public class ReadNodesWithDescendantsTool {
         validateDuplicateNodeIdentifiers(nodeIdentifiers);
         List<NodeModel> focusNodes = resolveFocusNodes(mapModel, nodeIdentifiers);
         List<ContextSection> sections = request.getContextSections();
-        boolean includeQualifiers = sections.contains(ContextSection.QUALIFIERS);
+        boolean includeQualifiers = true;
         boolean includeHyperlink = sections.contains(ContextSection.HYPERLINK);
         boolean includeOutgoingConnectors = sections.contains(ContextSection.OUTGOING_CONNECTORS);
         boolean includeIncomingConnectors = sections.contains(ContextSection.INCOMING_CONNECTORS);
@@ -355,15 +372,29 @@ public class ReadNodesWithDescendantsTool {
             appendLine(block, "breadcrumbPath: " + breadcrumbPath);
         }
         if (parentNode != null) {
-            appendLine(block, "parentSummary:");
-            appendBlockText(block, renderNodeContribution(parentNode, 1));
+            String parentContribution = renderNodeContribution(
+                1,
+                buildPlainTextNodeLines(parentNode),
+                false);
+            if (parentContribution != null) {
+                appendLine(block, "parentSummary:");
+                appendBlockText(block, parentContribution);
+            }
         }
         int renderedNodeCount = 0;
         int omittedChildCount = 0;
         int omittedDescendantCount = 0;
         for (int index = 0; index < allNodes.size(); index += 1) {
             NodeDepthItem node = allNodes.get(index);
-            String nodeContribution = renderNodeContribution(node, node.getDepth());
+            PlainTextNodeLines nodeLines = buildPlainTextNodeLines(node);
+            boolean hasRenderableDescendant = hasRenderableDescendant(allNodes, index);
+            String nodeContribution = renderNodeContribution(
+                node.getDepth(),
+                nodeLines,
+                hasRenderableDescendant);
+            if (nodeContribution == null) {
+                continue;
+            }
             int additionalLength = nodeContribution.length();
             if (block.length() > 0) {
                 additionalLength += 1;
@@ -372,14 +403,9 @@ public class ReadNodesWithDescendantsTool {
                 if (renderedNodeCount == 0) {
                     return new PlainTextRenderResult("", false, 0, 0);
                 }
-                for (int remaining = index; remaining < allNodes.size(); remaining += 1) {
-                    NodeDepthItem omittedNode = allNodes.get(remaining);
-                    if (omittedNode.getDepth() == 1) {
-                        omittedChildCount += 1;
-                    } else if (omittedNode.getDepth() > 1) {
-                        omittedDescendantCount += 1;
-                    }
-                }
+                int[] omittedCounts = countBudgetOmittedNodes(allNodes, index);
+                omittedChildCount += omittedCounts[0];
+                omittedDescendantCount += omittedCounts[1];
                 break;
             }
             appendBlockText(block, nodeContribution);
@@ -389,52 +415,181 @@ public class ReadNodesWithDescendantsTool {
             omittedChildCount, omittedDescendantCount);
     }
 
-    private String renderNodeContribution(NodeDepthItem nodeDepthItem, int indentationLevel) {
+    private String renderNodeContribution(int indentationLevel,
+                                          PlainTextNodeLines nodeLines,
+                                          boolean hasRenderableDescendant) {
+        if (!nodeLines.hasOwnRenderableContent() && !hasRenderableDescendant) {
+            return null;
+        }
         StringBuilder builder = new StringBuilder();
         String indent = repeatIndent(indentationLevel);
         String continuationIndent = indent + INDENT_UNIT;
-        String[] contentLines = splitLines(nodeDepthItem == null ? null : renderPlainTextContent(nodeDepthItem.getContent()));
-        String firstContentLine = contentLines.length == 0 ? "" : contentLines[0];
-        StringBuilder firstLine = new StringBuilder(indent).append('-');
-        boolean hasQualifiers = nodeDepthItem != null
-            && nodeDepthItem.getQualifiers() != null
-            && !nodeDepthItem.getQualifiers().isEmpty();
-        if (!firstContentLine.isEmpty() || hasQualifiers) {
-            firstLine.append(' ').append(firstContentLine);
+        List<String> continuationLines = new ArrayList<>();
+        String title;
+        if (!nodeLines.contentLines.isEmpty()) {
+            title = nodeLines.contentLines.get(0);
+            continuationLines.addAll(nodeLines.contentLines.subList(1, nodeLines.contentLines.size()));
+            if (!nodeLines.qualifierMarkers.isEmpty()) {
+                title = title + " " + String.join(" ", nodeLines.qualifierMarkers);
+            }
+            continuationLines.addAll(nodeLines.metadataLines);
+        } else if (!nodeLines.qualifierMarkers.isEmpty()) {
+            title = String.join(" ", nodeLines.qualifierMarkers);
+            continuationLines.addAll(nodeLines.metadataLines);
+        } else if (!nodeLines.metadataLines.isEmpty()) {
+            title = nodeLines.metadataLines.get(0);
+            continuationLines.addAll(nodeLines.metadataLines.subList(1, nodeLines.metadataLines.size()));
+        } else {
+            title = "[untitled]";
         }
-        if (hasQualifiers) {
-            firstLine.append(" [").append(String.join(", ", nodeDepthItem.getQualifiers())).append(']');
+        appendLine(builder, indent + "- " + title);
+        for (String continuationLine : continuationLines) {
+            appendLine(builder, continuationIndent + continuationLine);
         }
-        appendLine(builder, firstLine.toString());
-        for (int index = 1; index < contentLines.length; index += 1) {
-            appendLine(builder, continuationIndent + contentLines[index]);
+        return builder.toString();
+    }
+
+    private boolean hasRenderableDescendant(List<NodeDepthItem> nodes, int index) {
+        NodeDepthItem node = nodes.get(index);
+        int depth = node.getDepth();
+        for (int descendantIndex = index + 1; descendantIndex < nodes.size(); descendantIndex += 1) {
+            NodeDepthItem descendant = nodes.get(descendantIndex);
+            if (descendant.getDepth() <= depth) {
+                break;
+            }
+            if (buildPlainTextNodeLines(descendant).hasOwnRenderableContent()) {
+                return true;
+            }
         }
-        if (nodeDepthItem != null && nodeDepthItem.getHyperlink() != null) {
-            appendLine(builder, continuationIndent + "hyperlink: " + nodeDepthItem.getHyperlink());
+        return false;
+    }
+
+    private int[] countBudgetOmittedNodes(List<NodeDepthItem> nodes, int firstOmittedIndex) {
+        int omittedChildCount = 0;
+        int omittedDescendantCount = 0;
+        for (int index = firstOmittedIndex; index < nodes.size(); index += 1) {
+            NodeDepthItem omittedNode = nodes.get(index);
+            PlainTextNodeLines nodeLines = buildPlainTextNodeLines(omittedNode);
+            if (!nodeLines.hasOwnRenderableContent() && !hasRenderableDescendant(nodes, index)) {
+                continue;
+            }
+            if (omittedNode.getDepth() == 1) {
+                omittedChildCount += 1;
+            } else if (omittedNode.getDepth() > 1) {
+                omittedDescendantCount += 1;
+            }
         }
-        if (nodeDepthItem != null && nodeDepthItem.getOutgoingConnectors() != null) {
+        return new int[] { omittedChildCount, omittedDescendantCount };
+    }
+
+    private PlainTextNodeLines buildPlainTextNodeLines(NodeDepthItem nodeDepthItem) {
+        if (nodeDepthItem == null) {
+            return new PlainTextNodeLines(Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+        }
+        return new PlainTextNodeLines(
+            buildPlainTextContentLines(nodeDepthItem.getContent()),
+            buildPlainTextMetadataLines(nodeDepthItem),
+            buildPlainTextQualifierMarkers(nodeDepthItem.getQualifiers()));
+    }
+
+    private List<String> buildPlainTextContentLines(ReadNodeContent content) {
+        if (content == null) {
+            return Collections.emptyList();
+        }
+        List<String> lines = new ArrayList<>();
+        appendValueLines(lines, content.getShortText());
+        if (!lines.isEmpty()) {
+            return lines;
+        }
+        appendValueLines(lines, content.getText());
+        appendLabeledValueLines(lines, "Details", content.getDetails());
+        appendLabeledValueLines(lines, "Note", content.getNote());
+        if (content.getAttributes() != null && !content.getAttributes().isEmpty()) {
+            List<String> entries = new ArrayList<>(content.getAttributes().size());
+            for (AttributeEntry attribute : content.getAttributes()) {
+                if (attribute == null) {
+                    continue;
+                }
+                String value = attribute.getValue();
+                String name = attribute.getName();
+                entries.add(name + "=" + (value == null ? "" : value));
+            }
+            appendLabeledValueLines(lines, "Attributes", String.join("; ", entries));
+        }
+        if (content.getTags() != null && !content.getTags().isEmpty()) {
+            appendLabeledValueLines(lines, "Tags", String.join(", ", content.getTags()));
+        }
+        if (content.getIcons() != null && !content.getIcons().isEmpty()) {
+            appendLabeledValueLines(lines, "Icons", String.join(", ", content.getIcons()));
+        }
+        return lines;
+    }
+
+    private List<String> buildPlainTextMetadataLines(NodeDepthItem nodeDepthItem) {
+        List<String> lines = new ArrayList<>();
+        if (nodeDepthItem.getHyperlink() != null) {
+            lines.add("hyperlink: " + nodeDepthItem.getHyperlink());
+        }
+        if (nodeDepthItem.getOutgoingConnectors() != null) {
             for (ConnectorItem connector : nodeDepthItem.getOutgoingConnectors()) {
-                appendLine(builder, continuationIndent + buildConnectorLine("outgoingConnector", connector));
+                lines.add(buildConnectorLine("outgoingConnector", connector));
             }
         }
-        if (nodeDepthItem != null && nodeDepthItem.getIncomingConnectors() != null) {
+        if (nodeDepthItem.getIncomingConnectors() != null) {
             for (ConnectorItem connector : nodeDepthItem.getIncomingConnectors()) {
-                appendLine(builder, continuationIndent + buildConnectorLine("incomingConnector", connector));
+                lines.add(buildConnectorLine("incomingConnector", connector));
             }
         }
-        if (nodeDepthItem != null && nodeDepthItem.getCloneMetadata() != null) {
+        if (nodeDepthItem.getCloneMetadata() != null) {
             CloneMetadata cloneMetadata = nodeDepthItem.getCloneMetadata();
             List<String> cloneNodeIdentifiers = cloneMetadata.getCloneNodeIdentifiers();
             boolean hasCloneNodeIdentifiers = cloneNodeIdentifiers != null && !cloneNodeIdentifiers.isEmpty();
             if (cloneMetadata.isCloneTreeRoot() || cloneMetadata.isCloneTreeNode() || hasCloneNodeIdentifiers) {
                 String identifiers = hasCloneNodeIdentifiers ? String.join(", ", cloneNodeIdentifiers) : "";
-                appendLine(builder,
-                    continuationIndent + "cloneMetadata: cloneTreeRoot=" + cloneMetadata.isCloneTreeRoot()
-                        + ", cloneTreeNode=" + cloneMetadata.isCloneTreeNode()
-                        + ", cloneNodeIdentifiers=" + identifiers);
+                lines.add("cloneMetadata: cloneTreeRoot=" + cloneMetadata.isCloneTreeRoot()
+                    + ", cloneTreeNode=" + cloneMetadata.isCloneTreeNode()
+                    + ", cloneNodeIdentifiers=" + identifiers);
             }
         }
-        return builder.toString();
+        return lines;
+    }
+
+    private List<String> buildPlainTextQualifierMarkers(List<String> qualifiers) {
+        if (qualifiers == null || qualifiers.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<String> markers = new ArrayList<>(qualifiers.size());
+        for (String qualifier : qualifiers) {
+            if ("summary_node".equals(qualifier)) {
+                markers.add("[summary]");
+            } else if ("first_group_node".equals(qualifier)) {
+                markers.add("[summarized]");
+            }
+        }
+        return markers;
+    }
+
+    private void appendValueLines(List<String> lines, String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return;
+        }
+        for (String line : splitLines(value)) {
+            lines.add(line);
+        }
+    }
+
+    private void appendLabeledValueLines(List<String> lines, String label, String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return;
+        }
+        String[] valueLines = splitLines(value);
+        if (valueLines.length == 0) {
+            return;
+        }
+        lines.add(label + ": " + valueLines[0]);
+        for (int index = 1; index < valueLines.length; index += 1) {
+            lines.add(valueLines[index]);
+        }
     }
 
     private String buildConnectorLine(String label, ConnectorItem connector) {
@@ -686,48 +841,6 @@ public class ReadNodesWithDescendantsTool {
             return null;
         }
         return textController.getShortPlainText(nodeModel);
-    }
-
-    private String renderPlainTextContent(ReadNodeContent content) {
-        if (content == null) {
-            return null;
-        }
-        if (content.getShortText() != null) {
-            return content.getShortText();
-        }
-        List<String> lines = new ArrayList<>();
-        appendLabeledLine(lines, "Text", content.getText());
-        appendLabeledLine(lines, "Details", content.getDetails());
-        appendLabeledLine(lines, "Note", content.getNote());
-        if (content.getAttributes() != null && !content.getAttributes().isEmpty()) {
-            List<String> entries = new ArrayList<>(content.getAttributes().size());
-            for (AttributeEntry attribute : content.getAttributes()) {
-                if (attribute == null) {
-                    continue;
-                }
-                String value = attribute.getValue();
-                String name = attribute.getName();
-                entries.add(name + "=" + (value == null ? "" : value));
-            }
-            appendLabeledLine(lines, "Attributes", String.join("; ", entries));
-        }
-        if (content.getTags() != null && !content.getTags().isEmpty()) {
-            appendLabeledLine(lines, "Tags", String.join(", ", content.getTags()));
-        }
-        if (content.getIcons() != null && !content.getIcons().isEmpty()) {
-            appendLabeledLine(lines, "Icons", String.join(", ", content.getIcons()));
-        }
-        if (lines.isEmpty()) {
-            return null;
-        }
-        return String.join("\n", lines);
-    }
-
-    private void appendLabeledLine(List<String> lines, String label, String value) {
-        if (value == null || value.trim().isEmpty()) {
-            return;
-        }
-        lines.add(label + ": " + value);
     }
 
     public ToolCallSummary buildPlainTextToolCallSummary(ReadNodesWithDescendantsRequest request,
