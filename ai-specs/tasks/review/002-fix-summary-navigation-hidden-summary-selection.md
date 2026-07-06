@@ -1,0 +1,52 @@
+# Task: Fix summary navigation hidden-summary selection assertion
+- **Task Identifier:** 2026-07-06-summary-navigation
+- **Scope:** Fix Swing map keyboard navigation so directional selection never attempts to select hidden summary nodes in summary-of-summaries topology. The immediate reproducer is pressing `VK_LEFT` from the visible node `summary of summaries` in the saved map `/Users/dimitry/Downloads/example-summary2.mm`. In scope: `freeplane` core map-view navigation and regression coverage. Out of scope: MCP read-output rendering, map serialization format changes, summary-node model semantics, and weakening the hidden-summary selection assertion.
+- **Motivation:** The user-reported crash shows `java.lang.AssertionError: select invisible node` after `VK_LEFT`. The assertion is a valid invariant check: hidden summary nodes are structural and must not become selected visible content. The defect is earlier navigation code producing a hidden summary node as the next selection candidate.
+- **Scenario:** Given a reopened saved map containing adjacent summaries and a summary-of-summaries, when the selected node is visible summary content under a hidden summary node and the user presses `VK_LEFT`, Freeplane should either move selection to the correct visible navigation target or leave selection unchanged. It must not select, focus, or scroll to a hidden summary node.
+- **Constraints:**
+  - Keep `MapView.selectAsTheOnlyOneSelected(...)` rejecting hidden summary nodes.
+  - Preserve actual Freeplane node topology; do not reparent summary content or reinterpret visual brackets as parent-child structure.
+  - Prefer a narrow navigation-candidate fix over a broad behavior change.
+  - If reproduction shows more than one plausible visible target for `VK_LEFT`, pause for clarification before implementing target-selection behavior.
+  - Do not touch MCP/AI plugin read tools as part of this task.
+- **Briefing:** `DefaultNodeKeyListener.keyPressed(...)` handles `VK_LEFT` by calling `MapView.selectLeft(continious)`. The reported stack continues through `MapView.selectRelatedNode(...)`, `selectPreferredVisibleSiblingOrAncestor(...)`, and `select(...)`, then fails in `selectAsTheOnlyOneSelected(...)`. Summary structure is represented by hooks such as `SummaryNode`, `AlwaysUnfoldedNode`, and `FirstGroupNode`; hidden summary nodes are structural bracket nodes whose children contain visible summary content.
+- **Research:**
+  - Saved reproducer topology from `/Users/dimitry/Downloads/example-summary2.mm`:
+    - `ID_696401721`: `example summary`
+      - `ID_1765161263`: empty `FirstGroupNode`
+      - `ID_1033239866`: `adfsdf`
+      - `ID_1666677276`: empty `SummaryNode`, `AlwaysUnfoldedNode`, `FirstGroupNode`
+        - `ID_1273839723`: `some SUMMARY content`
+      - `ID_726437812`: empty `FirstGroupNode`
+      - `ID_942197000`: `1`
+      - `ID_891138603`: empty `SummaryNode`, `AlwaysUnfoldedNode`
+        - `ID_648467629`: `some other Summary content`
+        - `ID_1172080088`: `continued`
+      - `ID_1389952770`: empty `SummaryNode`, `AlwaysUnfoldedNode`
+        - `ID_145168391`: `summary of summaries`
+  - Current source line `MapView.java:1978` is the `newSelected == newSelectedAncestor` branch inside `selectPreferredVisibleSiblingOrAncestor(...)`.
+  - Current source line `MapView.java:2738` throws `AssertionError("select invisible node")` when `newSelected.getNode().isHiddenSummary()` is true.
+  - The user confirmed the crash reproduces after reopening the saved map, selecting `summary of summaries`, and pressing left. That makes a transient runtime-only state unlikely.
+  - `NodeModel.hasVisibleContent(Filter)` returns false for hidden summary nodes because it checks `!isHiddenSummary() && satisfies(filter)`.
+  - No existing `MapView` navigation test was found by searching `freeplane/src/test` for `MapViewTest`, `selectLeft`, `selectPreferredVisibleSiblingOrAncestor`, or `select invisible node`.
+- **Analysis:**
+  - Routing decision: this is a separate core navigation task, not part of the MCP structured/plain-text read task. The user confirmed creating it in `in-progress`.
+  - Current evidence points to the ancestor-navigation candidate path, because the stack line maps to the `newSelectedAncestor` selection branch in current source.
+  - The exact correct visible target after `VK_LEFT` is not yet proven from code alone. The implementation must derive it from existing navigation semantics or require user clarification before changing behavior.
+  - Removing the assertion, allowing hidden summaries to be selected, or silently treating hidden summaries as visible content would hide the invariant violation instead of fixing the navigation bug.
+- **Design:**
+  - Reproduce the crash with the saved summary-of-summaries topology or an equivalent minimal constructed map.
+  - Trace the three candidate sources in `selectPreferredVisibleSiblingOrAncestor(...)`: `suggestNewSelectedAncestor(...)`, `suggestNewSelectedSibling(...)`, and `suggestNewSelectedSummary(...)`.
+  - Fix the candidate source that returns a hidden summary node. If the hidden summary can still reach the final selection boundary through multiple sources, add a shared visible-selection normalization/guard before `select(...)` while keeping the final assertion unchanged.
+  - Resolve hidden-summary candidates to existing visible navigation targets only when current helper semantics already identify one. Otherwise leave selection unchanged and record why that is the least surprising behavior.
+  - Keep the change local to map navigation unless reproduction proves a deeper invariant violation in summary-node visibility helpers.
+- **Test specification:**
+  - **Automated tests:** N/A. No practical direct regression test was added because this navigation path depends on realized Swing `MapView`/`NodeView` layout, visibility, and keyboard selection state, and no existing map-view navigation test scaffold was found. The closest automated substitute is the existing `freeplane` compile and test suite.
+  - **Manual tests:**
+    - Open `/Users/dimitry/Downloads/example-summary2.mm`, select `summary of summaries`, press left, and verify no assertion is raised and selection remains on visible content.
+- **Implementation notes:**
+  - **Interpretations:**
+    - Treated `getVisibleSummarizedOrParentView(...)` as the invalid-candidate source because the stack selected `newSelectedAncestor` and the reproducer passed after resolving that helper's candidate to visible descendant content.
+  - **Tradeoffs:**
+    - Kept `MapView.selectAsTheOnlyOneSelected(...)` unchanged and fixed the ancestor-navigation candidate instead of weakening the hidden-summary selection assertion.
+    - Used manual saved-map verification rather than a new automated Swing navigation regression test because the existing test tree has no `MapView` navigation scaffold and this path depends on realized Swing layout state.

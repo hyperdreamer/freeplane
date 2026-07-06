@@ -1164,6 +1164,14 @@ public class NodeView extends JComponent implements INodeView, EdgeColorContext 
         }
         return newSelected;
     }
+
+    private NodeView getDescendantWithVisibleContent(PreferredChild preferredChild) {
+        final NodeView descendant = getDescendant(preferredChild);
+        if(descendant.isContentVisible())
+            return descendant;
+        return descendant.getPreferredVisibleChild(preferredChild, ChildrenSides.BOTH_SIDES);
+    }
+
     NodeView getVisibleSummarizedOrParentView(LayoutOrientation requiredLayoutOrientation, boolean isChildTopOrLeft) {
         final Container parent = getParent();
         if (!(parent instanceof NodeView)) {
@@ -1178,7 +1186,9 @@ public class NodeView extends JComponent implements INodeView, EdgeColorContext 
                 for (int i = index - 1; i >= 0; i--) {
                     final NodeView nextView = v.get(i);
                     if (nextView.isContentVisible() || nextView.isSubtreeVisible()) {
-                        return nextView.getDescendant(PreferredChild.FIRST);
+                        final NodeView visibleDescendant = nextView.getDescendantWithVisibleContent(PreferredChild.FIRST);
+                        if(visibleDescendant != null)
+                            return visibleDescendant;
                     }
                     if(! nextView.isSummary())
                         startFromSummary = false;
