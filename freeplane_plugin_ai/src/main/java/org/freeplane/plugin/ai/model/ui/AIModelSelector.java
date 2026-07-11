@@ -2,7 +2,9 @@ package org.freeplane.plugin.ai.model.ui;
 
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.event.ActionEvent;
 import java.awt.event.ItemEvent;
+import java.awt.event.KeyEvent;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -12,17 +14,22 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
+import javax.accessibility.Accessible;
+import javax.swing.AbstractAction;
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.JComboBox;
+import javax.swing.JComponent;
 import javax.swing.JList;
 import javax.swing.JTextField;
+import javax.swing.KeyStroke;
 import javax.swing.Timer;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.event.PopupMenuEvent;
 import javax.swing.event.PopupMenuListener;
 import javax.swing.plaf.basic.BasicComboBoxEditor;
+import javax.swing.plaf.basic.ComboPopup;
 
 import org.freeplane.core.ui.components.JComboBoxFactory;
 import org.freeplane.core.util.TextUtils;
@@ -32,6 +39,9 @@ import org.freeplane.plugin.ai.model.AIProviderConfiguration;
 
 public class AIModelSelector {
     private static final int FILTER_UPDATE_DELAY_MILLISECONDS = 200;
+    private static final String HIGHLIGHT_NEXT_MODEL_ACTION = "highlightNextAiModel";
+    private static final String HIGHLIGHT_PREVIOUS_MODEL_ACTION = "highlightPreviousAiModel";
+    private static final String COMMIT_HIGHLIGHTED_MODEL_ACTION = "commitHighlightedAiModel";
 
     private final AIProviderConfiguration configuration;
     private final AIModelFilterState filterState;
@@ -82,6 +92,7 @@ public class AIModelSelector {
             event -> applyPendingFilter());
         filterUpdateTimer.setRepeats(false);
         installListeners();
+        installEditorKeyBindings();
     }
 
     public JComboBox<AIModelDescriptor> getModelSelectionComboBox() {
@@ -180,6 +191,75 @@ public class AIModelSelector {
                 explicitSelectionChanged();
             }
         });
+    }
+
+    private void installEditorKeyBindings() {
+        bindEditorAction(
+            KeyEvent.VK_DOWN,
+            HIGHLIGHT_NEXT_MODEL_ACTION,
+            () -> movePopupHighlight(1));
+        bindEditorAction(
+            KeyEvent.VK_UP,
+            HIGHLIGHT_PREVIOUS_MODEL_ACTION,
+            () -> movePopupHighlight(-1));
+        bindEditorAction(
+            KeyEvent.VK_ENTER,
+            COMMIT_HIGHLIGHTED_MODEL_ACTION,
+            this::commitHighlightedModel);
+    }
+
+    private void bindEditorAction(int keyCode, String actionKey, Runnable action) {
+        editorComponent.getInputMap(JComponent.WHEN_FOCUSED).put(
+            KeyStroke.getKeyStroke(keyCode, 0), actionKey);
+        editorComponent.getActionMap().put(
+            actionKey,
+            new AbstractAction() {
+                private static final long serialVersionUID = 1L;
+
+                @Override
+                public void actionPerformed(ActionEvent event) {
+                    action.run();
+                }
+            });
+    }
+
+    private void movePopupHighlight(int direction) {
+        if (filterUpdateTimer.isRunning()) {
+            applyPendingFilter();
+        }
+        JList<Object> popupList = popupList();
+        if (popupList == null || popupList.getModel().getSize() == 0) {
+            return;
+        }
+        int selectedIndex = popupList.getSelectedIndex();
+        int targetIndex;
+        if (selectedIndex < 0) {
+            targetIndex = direction > 0 ? 0 : popupList.getModel().getSize() - 1;
+        }
+        else {
+            targetIndex = Math.max(
+                0,
+                Math.min(popupList.getModel().getSize() - 1, selectedIndex + direction));
+        }
+        popupList.setSelectedIndex(targetIndex);
+        popupList.ensureIndexIsVisible(targetIndex);
+    }
+
+    private void commitHighlightedModel() {
+        JList<Object> popupList = popupList();
+        if (popupList == null || !(popupList.getSelectedValue() instanceof AIModelDescriptor)) {
+            return;
+        }
+        modelSelectionComboBox.setSelectedItem(popupList.getSelectedValue());
+        modelSelectionComboBox.hidePopup();
+        if (filtering) {
+            endFiltering();
+        }
+    }
+
+    private JList<Object> popupList() {
+        Accessible popup = modelSelectionComboBox.getUI().getAccessibleChild(modelSelectionComboBox, 0);
+        return popup instanceof ComboPopup ? ((ComboPopup) popup).getList() : null;
     }
 
     private void filterChanged() {
@@ -311,11 +391,7 @@ public class AIModelSelector {
     }
 
     private boolean hasAnyProviderEnabled() {
-        boolean hasOpenrouterKey = configuration.getOpenRouterKey() != null
-            && !configuration.getOpenRouterKey().isEmpty();
-        boolean hasGeminiKey = configuration.getGeminiKey() != null
-            && !configuration.getGeminiKey().isEmpty();
-        return hasOpenrouterKey || hasGeminiKey || configuration.hasOllamaServiceAddress();
+        return configuration.hasConfiguredProvider();
     }
 
     private class ModelComboBoxEditor extends BasicComboBoxEditor {

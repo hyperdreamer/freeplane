@@ -5,6 +5,9 @@ import org.freeplane.core.util.TextUtils;
 import org.freeplane.plugin.ai.model.AIChatModelFactory;
 import org.freeplane.plugin.ai.model.AIModelSelection;
 import org.freeplane.plugin.ai.model.AIProviderConfiguration;
+import org.freeplane.plugin.ai.model.AIModelListConfiguration;
+import org.freeplane.plugin.ai.model.OpenAICompatibleProvider;
+import org.freeplane.plugin.ai.model.OpenAICompatibleProviderConfiguration;
 import org.junit.Test;
 import org.mockito.MockedStatic;
 
@@ -36,6 +39,7 @@ public class AiRequestConfigurationResolverTest {
     @Test
     public void reportsMissingProviderCredentialAsConfigurationError() {
         AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
+        whenOpenRouterConfiguration(configuration, "");
         String modelSelection = AIModelSelection.createSelectionValue(AIChatModelFactory.PROVIDER_NAME_OPENROUTER,
             "openai/gpt-4.1-mini");
 
@@ -49,12 +53,24 @@ public class AiRequestConfigurationResolverTest {
     @Test
     public void acceptsConfiguredExplicitModelSelection() {
         AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
-        when(configuration.getOpenRouterKey()).thenReturn("key");
+        whenOpenRouterConfiguration(configuration, "key");
         String modelSelection = AIModelSelection.createSelectionValue(AIChatModelFactory.PROVIDER_NAME_OPENROUTER,
             "openai/gpt-4.1-mini");
 
         AiRequestConfigurationResolver.Issue issue = new AiRequestConfigurationResolver(configuration).resolve(modelSelection);
 
         assertThat(issue).isNull();
+    }
+
+    private void whenOpenRouterConfiguration(AIProviderConfiguration configuration, String key) {
+        OpenAICompatibleProviderConfiguration providerConfiguration =
+            new OpenAICompatibleProviderConfiguration(
+                OpenAICompatibleProvider.OPENROUTER,
+                AIChatModelFactory.DEFAULT_OPENROUTER_SERVICE_ADDRESS,
+                AIChatModelFactory.DEFAULT_OPENROUTER_SERVICE_ADDRESS + "/models",
+                key,
+                AIModelListConfiguration.parse(""));
+        when(configuration.getOpenAICompatibleConfiguration(AIChatModelFactory.PROVIDER_NAME_OPENROUTER))
+            .thenReturn(providerConfiguration);
     }
 }

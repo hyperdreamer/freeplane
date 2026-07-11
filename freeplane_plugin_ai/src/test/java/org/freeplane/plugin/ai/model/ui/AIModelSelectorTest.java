@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -12,12 +14,17 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import javax.accessibility.Accessible;
+import javax.swing.Action;
 import javax.swing.ComboBoxModel;
 import javax.swing.JComboBox;
+import javax.swing.JList;
 import javax.swing.JTextField;
+import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.event.PopupMenuEvent;
 import javax.swing.event.PopupMenuListener;
+import javax.swing.plaf.basic.ComboPopup;
 
 import org.freeplane.plugin.ai.model.AIModelDescriptor;
 import org.freeplane.plugin.ai.model.AIProviderConfiguration;
@@ -154,6 +161,51 @@ public class AIModelSelectorTest {
     }
 
     @Test
+    public void arrowKeysHighlightEveryFilteredRowAndEnterCommitsOnlyHighlightedModel() throws Exception {
+        AIModelDescriptor alpha = descriptor("provider", "alpha", "Provider: match alpha");
+        AIModelDescriptor beta = descriptor("provider", "beta", "Provider: match beta");
+        AIModelDescriptor gamma = descriptor("provider", "gamma", "Provider: match gamma");
+        AIModelSelector uut = selector(new AIModelFilterState(), Collections.emptyList());
+        AtomicReference<AIModelDescriptor> selected = new AtomicReference<AIModelDescriptor>();
+        AtomicInteger notifications = new AtomicInteger();
+        uut.setExplicitModelSelectionListener(descriptor -> {
+            selected.set(descriptor);
+            notifications.incrementAndGet();
+        });
+        uut.setAvailableModelDescriptors(
+            Arrays.asList(gemini, alpha, beta, gamma),
+            gemini.getSelectionValue());
+        openPopup(uut);
+        setEditorText(uut, "match");
+
+        performEditorAction(uut, KeyEvent.VK_DOWN);
+        assertThat(highlightedPopupModel(uut)).isEqualTo(alpha);
+        performEditorAction(uut, KeyEvent.VK_DOWN);
+        assertThat(highlightedPopupModel(uut)).isEqualTo(beta);
+        performEditorAction(uut, KeyEvent.VK_DOWN);
+        assertThat(highlightedPopupModel(uut)).isEqualTo(gamma);
+        performEditorAction(uut, KeyEvent.VK_UP);
+        assertThat(highlightedPopupModel(uut)).isEqualTo(beta);
+        performEditorAction(uut, KeyEvent.VK_UP);
+        assertThat(highlightedPopupModel(uut)).isEqualTo(alpha);
+        performEditorAction(uut, KeyEvent.VK_DOWN);
+        performEditorAction(uut, KeyEvent.VK_DOWN);
+        assertThat(highlightedPopupModel(uut)).isEqualTo(gamma);
+
+        assertThat(uut.getSelectedModel()).isEqualTo(gemini);
+        assertThat(selected.get()).isNull();
+        assertThat(notifications).hasValue(0);
+        assertThat(editor(uut).getText()).isEqualTo("match");
+
+        performEditorAction(uut, KeyEvent.VK_ENTER);
+
+        assertThat(uut.getSelectedModel()).isEqualTo(gamma);
+        assertThat(selected).hasValue(gamma);
+        assertThat(notifications).hasValue(1);
+        assertThat(editor(uut).getText()).isEqualTo(gamma.getDisplayName());
+    }
+
+    @Test
     public void explicitFilteredSelection_notifiesOwnerAndRetainsFilter() throws Exception {
         AIModelFilterState filterState = new AIModelFilterState();
         AIModelSelector uut = selector(filterState, Collections.emptyList());
@@ -181,7 +233,7 @@ public class AIModelSelectorTest {
     private AIModelSelector selector(AIModelFilterState filterState,
                                      List<AIModelDescriptor> alwaysVisibleOptions) {
         AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
-        when(configuration.getOpenRouterKey()).thenReturn("key");
+        when(configuration.hasConfiguredProvider()).thenReturn(true);
         return new AIModelSelector(
             configuration,
             filterState,
@@ -232,6 +284,23 @@ public class AIModelSelectorTest {
             bounds[1] = editor.getSelectionEnd();
         });
         return bounds;
+    }
+
+    private void performEditorAction(AIModelSelector selector, int keyCode) throws Exception {
+        JTextField editor = editor(selector);
+        KeyStroke keyStroke = KeyStroke.getKeyStroke(keyCode, 0);
+        Object actionKey = editor.getInputMap().get(keyStroke);
+        Action action = editor.getActionMap().get(actionKey);
+        SwingUtilities.invokeAndWait(
+            () -> action.actionPerformed(
+                new ActionEvent(editor, ActionEvent.ACTION_PERFORMED, actionKey.toString())));
+    }
+
+    private Object highlightedPopupModel(AIModelSelector selector) {
+        JComboBox<AIModelDescriptor> comboBox = selector.getModelSelectionComboBox();
+        Accessible popup = comboBox.getUI().getAccessibleChild(comboBox, 0);
+        JList<Object> popupList = ((ComboPopup) popup).getList();
+        return popupList.getSelectedValue();
     }
 
     private AIModelDescriptor descriptor(String provider, String model, String displayName) {

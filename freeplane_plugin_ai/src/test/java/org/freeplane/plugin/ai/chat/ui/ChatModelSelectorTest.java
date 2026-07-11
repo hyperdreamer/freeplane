@@ -49,7 +49,7 @@ public class ChatModelSelectorTest {
     @Test
     public void selectedModelDisplay_remainsShortened() {
         AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
-        when(configuration.getOpenRouterKey()).thenReturn("key");
+        when(configuration.hasConfiguredProvider()).thenReturn(true);
         when(configuration.getStoredSelectedModelValue())
             .thenReturn("openrouter|openai/gpt-4.1-mini");
         when(configuration.getSelectedModelValue())
@@ -354,7 +354,7 @@ public class ChatModelSelectorTest {
     @Test
     public void filteredSelection_persistsModelAndRetainsSessionOverrideContract() throws Exception {
         AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
-        when(configuration.getOpenRouterKey()).thenReturn("key");
+        when(configuration.hasConfiguredProvider()).thenReturn(true);
         when(configuration.getStoredSelectedModelValue()).thenReturn("gemini|gemini-2.5-flash");
         when(configuration.getSelectedModelValue()).thenReturn("gemini|gemini-2.5-flash");
         AIModelFilterState filterState = new AIModelFilterState();

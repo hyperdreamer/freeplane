@@ -1,309 +1,268 @@
 package org.freeplane.plugin.ai.model;
 
 import java.io.StringReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicReference;
-import org.junit.After;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 public class AIModelCatalogTest {
-    @After
-    public void resetCatalogCaches() {
-        AIModelCatalog.resetOllamaCacheForTests();
-        AIModelCatalog.resetOpenrouterCacheForTests();
+    @Test
+    public void combinesEveryConfiguredProvider() {
+        List<OpenAICompatibleProviderConfiguration> providers = Arrays.asList(
+            automatic(OpenAICompatibleProvider.OPENAI, "https://openai.example", "a"),
+            automatic(OpenAICompatibleProvider.OPENROUTER, "https://openrouter.example", "b"),
+            automatic(OpenAICompatibleProvider.REQUESTY, "https://requesty.example", "c"),
+            automatic(OpenAICompatibleProvider.CUSTOM, "https://custom.example", ""));
+        AIProviderConfiguration configuration = configuration(providers);
+        OpenAICompatibleModelDiscovery discovery = mock(OpenAICompatibleModelDiscovery.class);
+        when(discovery.discover(any(OpenAICompatibleProviderConfiguration.class)))
+            .thenAnswer(invocation -> {
+                OpenAICompatibleProviderConfiguration provider = invocation.getArgument(0);
+                return AIModelDiscoveryResult.success(Collections.singletonList(
+                    discovered(provider.getProviderName(), "same-model", supported())));
+            });
+
+        List<AIModelDescriptor> models = catalog(configuration, discovery, metadata(), state()).getAvailableModels(true);
+
+        assertThat(models).extracting(AIModelDescriptor::getProviderName)
+            .containsExactly("custom", "openai", "openrouter", "requesty");
+        assertThat(models).extracting(AIModelDescriptor::getDisplayName)
+            .containsExactly(
+                "Custom: same-model",
+                "OpenAI: same-model",
+                "OpenRouter: same-model",
+                "Requesty: same-model");
     }
 
     @Test
-    public void parseOpenrouterModelsResponse_returnsModels() throws Exception {
-        AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
-        AIModelCatalog uut = new AIModelCatalog(configuration);
-        String responsePayload = "{\"data\":["
-            + "{\"id\":\"openai/gpt-5\",\"pricing\":{\"prompt\":\"0\",\"completion\":\"0\"}},"
-            + "{\"id\":\"unknown/model\",\"pricing\":{\"prompt\":\"0.01\",\"completion\":\"0.02\"}},"
-            + "{\"id\":null},"
-            + "null"
-            + "]}";
+    public void explicitProviderSkipsDiscoveryAndMetadata() {
+        OpenAICompatibleProviderConfiguration provider = new OpenAICompatibleProviderConfiguration(
+            OpenAICompatibleProvider.OPENAI,
+            "https://openai.example/v1",
+            "https://openai.example/v1/models",
+            "key",
+            AIModelListConfiguration.parse("gpt-explicit, gpt-*, second"));
+        AIProviderConfiguration configuration = configuration(Collections.singletonList(provider));
+        when(configuration.isGeminiConfigured()).thenReturn(true);
+        when(configuration.getGeminiModelListConfiguration())
+            .thenReturn(AIModelListConfiguration.parse("gemini-explicit"));
+        when(configuration.isOllamaConfigured()).thenReturn(true);
+        when(configuration.getOllamaModelListConfiguration())
+            .thenReturn(AIModelListConfiguration.parse("ollama-explicit"));
+        OpenAICompatibleModelDiscovery discovery = mock(OpenAICompatibleModelDiscovery.class);
+        OpenRouterModelMetadataCatalog metadata = metadata();
+        GeminiModelDiscovery geminiDiscovery = mock(GeminiModelDiscovery.class);
+        OllamaModelDiscovery ollamaDiscovery = mock(OllamaModelDiscovery.class);
+        AIModelCatalog catalog = new AIModelCatalog(
+            configuration,
+            state(),
+            discovery,
+            metadata,
+            geminiDiscovery,
+            ollamaDiscovery);
 
-        List<AIModelDescriptor> modelDescriptors = uut.parseOpenrouterModelsResponse(new StringReader(responsePayload));
+        List<AIModelDescriptor> models = catalog.getAvailableModels(true);
 
-        assertThat(modelDescriptors).hasSize(2);
-        AIModelDescriptor firstDescriptor = modelDescriptors.get(0);
-        assertThat(firstDescriptor.getProviderName()).isEqualTo(AIChatModelFactory.PROVIDER_NAME_OPENROUTER);
-        assertThat(firstDescriptor.getModelName()).isEqualTo("openai/gpt-5");
-        assertThat(firstDescriptor.isFreeModel()).isTrue();
-        AIModelDescriptor secondDescriptor = modelDescriptors.get(1);
-        assertThat(secondDescriptor.getModelName()).isEqualTo("unknown/model");
-        assertThat(secondDescriptor.isFreeModel()).isFalse();
+        assertThat(models).extracting(AIModelDescriptor::getModelName)
+            .containsExactly("gemini-explicit", "ollama-explicit", "gpt-explicit", "second");
+        verifyNoInteractions(discovery, metadata, geminiDiscovery, ollamaDiscovery);
     }
 
     @Test
-    public void parseOllamaModelsResponse_returnsModelNames() throws Exception {
-        AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
-        AIModelCatalog uut = new AIModelCatalog(configuration);
-        String responsePayload = "{\"models\":["
-            + "{\"name\":\"llama3\"},"
-            + "{\"name\":\"mistral\"},"
-            + "{\"name\":\"\"},"
-            + "{}"
-            + "]}";
+    public void automaticOpenAIUsesExactDirectAndMetadataIntersection() {
+        OpenAICompatibleProviderConfiguration provider =
+            automatic(OpenAICompatibleProvider.OPENAI, "https://openai.example", "key");
+        OpenAICompatibleModelDiscovery discovery = mock(OpenAICompatibleModelDiscovery.class);
+        when(discovery.discover(provider)).thenReturn(AIModelDiscoveryResult.success(Arrays.asList(
+            discovered("openai", "gpt-visible", AIModelCapabilities.UNKNOWN),
+            discovered("openai", "gpt-without-metadata", AIModelCapabilities.UNKNOWN))));
+        OpenRouterModelMetadataCatalog metadata = metadata();
+        when(metadata.find("openai/gpt-visible")).thenReturn(toolCapableMetadata("openai/gpt-visible"));
 
-        List<AIModelDescriptor> modelDescriptors = uut.parseOllamaModelsResponse(new StringReader(responsePayload));
+        List<AIModelDescriptor> models = catalog(
+            configuration(Collections.singletonList(provider)), discovery, metadata, state())
+            .getAvailableModels(true);
 
-        assertThat(modelDescriptors).extracting(AIModelDescriptor::getModelName)
-            .containsExactly("llama3", "mistral");
+        assertThat(models).extracting(AIModelDescriptor::getModelName)
+            .containsExactly("gpt-visible");
+        verify(metadata, never()).find("gpt-visible");
     }
 
     @Test
-    public void parseGeminiModelList_parsesLiteralEntries() {
-        AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
-        AIModelCatalog uut = new AIModelCatalog(configuration);
-        String modelListValue = "gemini-3-pro-preview\n"
-            + "gemini-3-flash-preview\n"
-            + "placeholder-model";
+    public void automaticOpenRouterAndRequestyUseNativeMetadata() throws Exception {
+        OpenAICompatibleProviderConfiguration openRouter =
+            automatic(OpenAICompatibleProvider.OPENROUTER, "https://openrouter.example", "router-key");
+        OpenAICompatibleProviderConfiguration requesty =
+            automatic(OpenAICompatibleProvider.REQUESTY, "https://requesty.example", "requesty-key");
+        OpenAICompatibleModelDiscovery parser = new OpenAICompatibleModelDiscovery();
+        List<DiscoveredAIModel> openRouterModels = parser.parseResponse(new StringReader(
+            "{\"data\":["
+                + "{\"id\":\"provider/tool\",\"supported_parameters\":[\"tools\"],"
+                + "\"architecture\":{\"output_modalities\":[\"text\"]}},"
+                + "{\"id\":\"provider/no-tool\",\"supported_parameters\":[],"
+                + "\"architecture\":{\"output_modalities\":[\"text\"]}}]}"),
+            OpenAICompatibleProvider.OPENROUTER);
+        List<DiscoveredAIModel> requestyModels = parser.parseResponse(new StringReader(
+            "{\"data\":["
+                + "{\"id\":\"provider/chat-tool\",\"api\":\"chat\","
+                + "\"supports_tool_calling\":true},"
+                + "{\"id\":\"provider/image\",\"api\":\"image\","
+                + "\"supports_tool_calling\":true}]}"),
+            OpenAICompatibleProvider.REQUESTY);
+        OpenAICompatibleModelDiscovery discovery = mock(OpenAICompatibleModelDiscovery.class);
+        when(discovery.discover(openRouter)).thenReturn(AIModelDiscoveryResult.success(openRouterModels));
+        when(discovery.discover(requesty)).thenReturn(AIModelDiscoveryResult.success(requestyModels));
+        OpenRouterModelMetadataCatalog metadata = metadata();
 
-        List<AIModelDescriptor> modelDescriptors = uut.parseGeminiModelList(modelListValue);
+        List<AIModelDescriptor> models = catalog(
+            configuration(Arrays.asList(openRouter, requesty)), discovery, metadata, state())
+            .getAvailableModels(true);
 
-        assertThat(modelDescriptors).hasSize(3);
-        AIModelDescriptor descriptor = modelDescriptors.get(0);
-        assertThat(descriptor.getProviderName()).isEqualTo(AIChatModelFactory.PROVIDER_NAME_GEMINI);
-        assertThat(descriptor.getModelName()).isEqualTo("gemini-3-pro-preview");
+        assertThat(models).extracting(AIModelDescriptor::getModelName)
+            .containsExactly("provider/tool", "provider/chat-tool");
+        verifyNoInteractions(metadata);
     }
 
     @Test
-    public void parseLiteralProviderModelList_ignoresWildcardEntries() {
-        AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
-        AIModelCatalog uut = new AIModelCatalog(configuration);
+    public void automaticCustomPrefersNativeMetadataThenOpenRouter() throws Exception {
+        OpenAICompatibleProviderConfiguration custom =
+            automatic(OpenAICompatibleProvider.CUSTOM, "https://custom.example", "");
+        OpenAICompatibleModelDiscovery parser = new OpenAICompatibleModelDiscovery();
+        List<DiscoveredAIModel> customModels = parser.parseResponse(new StringReader(
+            "{\"data\":["
+                + "{\"id\":\"native\",\"supported_parameters\":[\"tools\"],"
+                + "\"architecture\":{\"output_modalities\":[\"text\"]}},"
+                + "{\"id\":\"fallback\"},"
+                + "{\"id\":\"explicitly-unsupported\",\"supported_parameters\":[],"
+                + "\"architecture\":{\"output_modalities\":[\"text\"]}}]}"),
+            OpenAICompatibleProvider.CUSTOM);
+        OpenAICompatibleModelDiscovery discovery = mock(OpenAICompatibleModelDiscovery.class);
+        when(discovery.discover(custom)).thenReturn(AIModelDiscoveryResult.success(customModels));
+        OpenRouterModelMetadataCatalog metadata = metadata();
+        when(metadata.find("fallback")).thenReturn(toolCapableMetadata("fallback"));
 
-        List<AIModelDescriptor> modelDescriptors = uut.parseLiteralProviderModelList(
-            AIChatModelFactory.PROVIDER_NAME_OPENROUTER,
-            "openai/gpt-5,\nopenai/*,\n?\nclaude-sonnet-4"
-        );
+        List<AIModelDescriptor> models = catalog(
+            configuration(Collections.singletonList(custom)), discovery, metadata, state())
+            .getAvailableModels(true);
 
-        assertThat(modelDescriptors).extracting(AIModelDescriptor::getModelName)
-            .containsExactly("openai/gpt-5", "claude-sonnet-4");
+        assertThat(models).extracting(AIModelDescriptor::getModelName)
+            .containsExactly("fallback", "native");
+        verify(metadata, never()).find("explicitly-unsupported");
     }
 
     @Test
-    public void filterModelDescriptors_appliesWildcardAllowlist() {
-        AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
-        AIModelCatalog uut = new AIModelCatalog(configuration);
-        List<AIModelDescriptor> modelDescriptors = Arrays.asList(
-            new AIModelDescriptor("openrouter", "openai/gpt-5", "OpenRouter: openai/gpt-5", false),
-            new AIModelDescriptor("gemini", "gemini-3-flash-preview", "Gemini: gemini-3-flash-preview", false),
-            new AIModelDescriptor("ollama", "llama3", "Ollama: llama3", false)
-        );
+    public void providerFailureRemovesOnlyThatProvider() {
+        OpenAICompatibleProviderConfiguration openAI =
+            automatic(OpenAICompatibleProvider.OPENAI, "https://openai.example", "openai-key");
+        OpenAICompatibleProviderConfiguration requesty =
+            automatic(OpenAICompatibleProvider.REQUESTY, "https://requesty.example", "requesty-key");
+        OpenAICompatibleModelDiscovery discovery = mock(OpenAICompatibleModelDiscovery.class);
+        when(discovery.discover(openAI)).thenReturn(AIModelDiscoveryResult.failed());
+        when(discovery.discover(requesty)).thenReturn(AIModelDiscoveryResult.success(
+            Collections.singletonList(discovered("requesty", "working", supported()))));
 
-        List<AIModelDescriptor> filteredDescriptors = uut.filterModelDescriptors(
-            modelDescriptors,
-            "openai/*, *-preview"
-        );
+        List<AIModelDescriptor> models = catalog(
+            configuration(Arrays.asList(openAI, requesty)), discovery, metadata(), state())
+            .getAvailableModels(true);
 
-        assertThat(filteredDescriptors).extracting(AIModelDescriptor::getModelName)
-            .containsExactly("openai/gpt-5", "gemini-3-flash-preview");
+        assertThat(models).extracting(AIModelDescriptor::getProviderName)
+            .containsExactly("requesty");
     }
 
     @Test
-    public void applyRequestHeaders_setsAllConfiguredHeaders() {
+    public void freshCacheAvoidsRequestsAndFailedRefreshClearsSource() {
+        AtomicLong now = new AtomicLong(0);
+        AIModelCatalogState state = new AIModelCatalogState(now::get, 100);
+        OpenAICompatibleProviderConfiguration firstConfiguration =
+            automatic(OpenAICompatibleProvider.REQUESTY, "https://requesty.one", "key");
+        OpenAICompatibleProviderConfiguration changedConfiguration =
+            automatic(OpenAICompatibleProvider.REQUESTY, "https://requesty.two", "key");
+        OpenAICompatibleModelDiscovery discovery = mock(OpenAICompatibleModelDiscovery.class);
+        when(discovery.discover(firstConfiguration)).thenReturn(AIModelDiscoveryResult.success(
+            Collections.singletonList(discovered("requesty", "first", supported()))));
+        when(discovery.discover(changedConfiguration))
+            .thenReturn(AIModelDiscoveryResult.success(
+                Collections.singletonList(discovered("requesty", "second", supported()))))
+            .thenReturn(AIModelDiscoveryResult.failed());
+
+        AIModelCatalog firstCatalog = catalog(
+            configuration(Collections.singletonList(firstConfiguration)), discovery, metadata(), state);
+        assertThat(firstCatalog.getAvailableModels(true)).extracting(AIModelDescriptor::getModelName)
+            .containsExactly("first");
+        assertThat(firstCatalog.getAvailableModels(true)).extracting(AIModelDescriptor::getModelName)
+            .containsExactly("first");
+        verify(discovery, times(1)).discover(firstConfiguration);
+
+        AIModelCatalog changedCatalog = catalog(
+            configuration(Collections.singletonList(changedConfiguration)), discovery, metadata(), state);
+        assertThat(changedCatalog.getAvailableModels(true)).extracting(AIModelDescriptor::getModelName)
+            .containsExactly("second");
+        now.set(101);
+        assertThat(changedCatalog.getAvailableModels(true)).isEmpty();
+        assertThat(changedCatalog.getAvailableModels(false)).isEmpty();
+        verify(discovery, times(2)).discover(changedConfiguration);
+    }
+
+    private AIModelCatalog catalog(AIProviderConfiguration configuration,
+                                   OpenAICompatibleModelDiscovery discovery,
+                                   OpenRouterModelMetadataCatalog metadata,
+                                   AIModelCatalogState state) {
+        return new AIModelCatalog(configuration, state, discovery, metadata);
+    }
+
+    private AIProviderConfiguration configuration(
+        List<OpenAICompatibleProviderConfiguration> providerConfigurations) {
         AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
-        AIModelCatalog uut = new AIModelCatalog(configuration);
-        RecordingHttpURLConnection connection = new RecordingHttpURLConnection();
-        Map<String, String> requestHeaders = new HashMap<>();
-        requestHeaders.put("Authorization", "Bearer token-123");
-        requestHeaders.put("X-Test", "value");
-
-        uut.applyRequestHeaders(connection, requestHeaders);
-
-        assertThat(connection.getHeader("Authorization")).isEqualTo("Bearer token-123");
-        assertThat(connection.getHeader("X-Test")).isEqualTo("value");
+        when(configuration.getOpenAICompatibleConfigurations()).thenReturn(providerConfigurations);
+        return configuration;
     }
 
-    @Test
-    public void applyRequestHeaders_doesNothingForEmptyHeaders() {
-        AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
-        AIModelCatalog uut = new AIModelCatalog(configuration);
-        RecordingHttpURLConnection connection = new RecordingHttpURLConnection();
-
-        uut.applyRequestHeaders(connection, Collections.<String, String>emptyMap());
-
-        assertThat(connection.headerCount()).isZero();
+    private OpenAICompatibleProviderConfiguration automatic(OpenAICompatibleProvider provider,
+                                                              String serviceAddress,
+                                                              String key) {
+        return new OpenAICompatibleProviderConfiguration(
+            provider,
+            serviceAddress,
+            serviceAddress + "/models",
+            key,
+            AIModelListConfiguration.parse(""));
     }
 
-    @Test
-    public void getAvailableModels_retriesAfterFailedOllamaFetchWithoutCachingFailure() {
-        AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
-        when(configuration.hasOllamaServiceAddress()).thenReturn(true);
-        when(configuration.getOllamaServiceAddress()).thenReturn("https://ollama.example");
-        when(configuration.getOllamaRequestHeaders()).thenReturn(Collections.emptyMap());
-        TestableAIModelCatalog uut = new TestableAIModelCatalog(configuration,
-            AIModelCatalog.OllamaModelsFetchResult.failed(),
-            AIModelCatalog.OllamaModelsFetchResult.success(Collections.singletonList(
-                new AIModelDescriptor("ollama", "llama3", "Ollama: llama3", false))));
-
-        List<AIModelDescriptor> firstResponse = uut.getAvailableModels(true);
-        List<AIModelDescriptor> secondResponse = uut.getAvailableModels(true);
-
-        assertThat(firstResponse).isEmpty();
-        assertThat(secondResponse).extracting(AIModelDescriptor::getModelName).containsExactly("llama3");
-        assertThat(uut.fetchCount()).isEqualTo(2);
+    private DiscoveredAIModel discovered(String provider,
+                                         String model,
+                                         AIModelCapabilities capabilities) {
+        return new DiscoveredAIModel(provider, model, false, capabilities);
     }
 
-    @Test
-    public void getAvailableModels_refreshesImmediatelyWhenOllamaServiceAddressChanges() {
-        AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
-        AtomicReference<String> serviceAddress = new AtomicReference<>("https://ollama.one");
-        when(configuration.hasOllamaServiceAddress()).thenReturn(true);
-        when(configuration.getOllamaServiceAddress()).thenAnswer(invocation -> serviceAddress.get());
-        when(configuration.getOllamaRequestHeaders()).thenReturn(Collections.emptyMap());
-        TestableAIModelCatalog uut = new TestableAIModelCatalog(configuration,
-            AIModelCatalog.OllamaModelsFetchResult.success(Collections.singletonList(
-                new AIModelDescriptor("ollama", "first-model", "Ollama: first-model", false))),
-            AIModelCatalog.OllamaModelsFetchResult.success(Collections.singletonList(
-                new AIModelDescriptor("ollama", "second-model", "Ollama: second-model", false))));
-
-        List<AIModelDescriptor> firstResponse = uut.getAvailableModels(true);
-        serviceAddress.set("https://ollama.two");
-        List<AIModelDescriptor> secondResponse = uut.getAvailableModels(true);
-
-        assertThat(firstResponse).extracting(AIModelDescriptor::getModelName).containsExactly("first-model");
-        assertThat(secondResponse).extracting(AIModelDescriptor::getModelName).containsExactly("second-model");
-        assertThat(uut.fetchCount()).isEqualTo(2);
+    private AIModelCapabilities supported() {
+        return new AIModelCapabilities(CapabilitySupport.SUPPORTED, CapabilitySupport.SUPPORTED);
     }
 
-    @Test
-    public void getAvailableModels_refreshesImmediatelyWhenOllamaTokenHeadersChange() {
-        AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
-        AtomicReference<Map<String, String>> requestHeaders =
-            new AtomicReference<>(Collections.singletonMap("Authorization", "Bearer token-a"));
-        when(configuration.hasOllamaServiceAddress()).thenReturn(true);
-        when(configuration.getOllamaServiceAddress()).thenReturn("https://ollama.example");
-        when(configuration.getOllamaRequestHeaders()).thenAnswer(invocation -> requestHeaders.get());
-        TestableAIModelCatalog uut = new TestableAIModelCatalog(configuration,
-            AIModelCatalog.OllamaModelsFetchResult.success(Collections.singletonList(
-                new AIModelDescriptor("ollama", "token-a-model", "Ollama: token-a-model", false))),
-            AIModelCatalog.OllamaModelsFetchResult.success(Collections.singletonList(
-                new AIModelDescriptor("ollama", "token-b-model", "Ollama: token-b-model", false))));
-
-        List<AIModelDescriptor> firstResponse = uut.getAvailableModels(true);
-        requestHeaders.set(Collections.singletonMap("Authorization", "Bearer token-b"));
-        List<AIModelDescriptor> secondResponse = uut.getAvailableModels(true);
-
-        assertThat(firstResponse).extracting(AIModelDescriptor::getModelName).containsExactly("token-a-model");
-        assertThat(secondResponse).extracting(AIModelDescriptor::getModelName).containsExactly("token-b-model");
-        assertThat(uut.fetchCount()).isEqualTo(2);
+    private OpenRouterModelMetadataCatalog metadata() {
+        return mock(OpenRouterModelMetadataCatalog.class);
     }
 
-    @Test
-    public void getAvailableModels_usesOpenrouterAllowlistLiteralsWhenDiscoveryFails() {
-        AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
-        when(configuration.getOpenRouterKey()).thenReturn("test-key");
-        when(configuration.getOpenrouterModelAllowlistValue()).thenReturn("openai/gpt-5,\nopenai/*,\nanthropic/claude-sonnet-4");
-        TestableAIModelCatalog uut = new TestableAIModelCatalog(configuration);
-        uut.setOpenrouterModels(Collections.<AIModelDescriptor>emptyList());
-
-        List<AIModelDescriptor> modelDescriptors = uut.getAvailableModels(true);
-
-        assertThat(modelDescriptors).extracting(AIModelDescriptor::getModelName)
-            .containsExactly("openai/gpt-5", "anthropic/claude-sonnet-4");
+    private OpenAIModelItem toolCapableMetadata(String id) {
+        return OpenAIModelItem.create(
+            id,
+            Collections.singletonList("tools"),
+            Collections.singletonList("text"),
+            null,
+            null);
     }
 
-    @Test
-    public void getAvailableModels_prefersOpenrouterDiscoveryResultsOverAllowlistFallback() {
-        AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
-        when(configuration.getOpenRouterKey()).thenReturn("test-key");
-        when(configuration.getOpenrouterModelAllowlistValue()).thenReturn("");
-        TestableAIModelCatalog uut = new TestableAIModelCatalog(configuration);
-        uut.setOpenrouterModels(Collections.singletonList(
-            new AIModelDescriptor("openrouter", "remote-model", "OpenRouter: remote-model", false)));
-
-        List<AIModelDescriptor> modelDescriptors = uut.getAvailableModels(true);
-
-        assertThat(modelDescriptors).extracting(AIModelDescriptor::getModelName).containsExactly("remote-model");
-    }
-
-    private static class TestableAIModelCatalog extends AIModelCatalog {
-        private final List<OllamaModelsFetchResult> fetchResults;
-        private int fetchIndex;
-        private int fetchCount;
-        private List<AIModelDescriptor> openrouterModels = Collections.emptyList();
-
-        private TestableAIModelCatalog(AIProviderConfiguration configuration,
-                                       OllamaModelsFetchResult... fetchResults) {
-            super(configuration);
-            this.fetchResults = Arrays.asList(fetchResults);
-        }
-
-        @Override
-        List<AIModelDescriptor> fetchOpenrouterModels() {
-            return openrouterModels;
-        }
-
-        @Override
-        OllamaModelsFetchResult fetchOllamaModels() {
-            fetchCount++;
-            int selectedIndex = Math.min(fetchIndex, fetchResults.size() - 1);
-            OllamaModelsFetchResult fetchResult = fetchResults.get(selectedIndex);
-            fetchIndex++;
-            return fetchResult;
-        }
-
-        private int fetchCount() {
-            return fetchCount;
-        }
-
-        private void setOpenrouterModels(List<AIModelDescriptor> openrouterModels) {
-            this.openrouterModels = openrouterModels;
-        }
-    }
-
-    private static class RecordingHttpURLConnection extends HttpURLConnection {
-        private final Map<String, String> headers = new HashMap<>();
-
-        private RecordingHttpURLConnection() {
-            super(createUnusedUrl());
-        }
-
-        @Override
-        public void disconnect() {
-        }
-
-        @Override
-        public boolean usingProxy() {
-            return false;
-        }
-
-        @Override
-        public void connect() {
-        }
-
-        @Override
-        public void setRequestProperty(String key, String value) {
-            headers.put(key, value);
-        }
-
-        private String getHeader(String key) {
-            return headers.get(key);
-        }
-
-        private int headerCount() {
-            return headers.size();
-        }
-
-        private static URL createUnusedUrl() {
-            try {
-                return new URL("http://localhost");
-            } catch (Exception exception) {
-                throw new RuntimeException(exception);
-            }
-        }
+    private AIModelCatalogState state() {
+        return new AIModelCatalogState(() -> 0L, 100L);
     }
 }

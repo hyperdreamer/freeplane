@@ -5,6 +5,8 @@ import org.freeplane.core.util.TextUtils;
 import org.freeplane.plugin.ai.model.AIChatModelFactory;
 import org.freeplane.plugin.ai.model.AIModelSelection;
 import org.freeplane.plugin.ai.model.AIProviderConfiguration;
+import org.freeplane.plugin.ai.model.OpenAICompatibleProvider;
+import org.freeplane.plugin.ai.model.OpenAICompatibleProviderConfiguration;
 
 public class AiRequestConfigurationResolver {
     private final AIProviderConfiguration configuration;
@@ -24,25 +26,32 @@ public class AiRequestConfigurationResolver {
                 TextUtils.getText("ai_model_selection_missing"));
         }
         String providerName = selection.getProviderName();
-        if (AIChatModelFactory.PROVIDER_NAME_OPENROUTER.equalsIgnoreCase(providerName)) {
-            if (configuration.getOpenRouterKey() == null || configuration.getOpenRouterKey().isEmpty()) {
-                return new Issue(AiRequestStatus.CONFIGURATION_ERROR, "Missing OpenRouter key setting.");
+        OpenAICompatibleProvider openAICompatibleProvider =
+            OpenAICompatibleProvider.fromProviderName(providerName);
+        if (openAICompatibleProvider != null) {
+            OpenAICompatibleProviderConfiguration providerConfiguration =
+                configuration.getOpenAICompatibleConfiguration(providerName);
+            if (providerConfiguration != null && providerConfiguration.isConfigured()) {
+                return null;
             }
+            String missingSetting = openAICompatibleProvider == OpenAICompatibleProvider.CUSTOM
+                ? "service address"
+                : "key";
+            return new Issue(
+                AiRequestStatus.CONFIGURATION_ERROR,
+                "Missing " + openAICompatibleProvider.getDisplayName() + " " + missingSetting + " setting.");
         }
-        else if (AIChatModelFactory.PROVIDER_NAME_GEMINI.equalsIgnoreCase(providerName)) {
-            if (configuration.getGeminiKey() == null || configuration.getGeminiKey().isEmpty()) {
-                return new Issue(AiRequestStatus.CONFIGURATION_ERROR, "Missing Gemini key setting.");
-            }
+        if (AIChatModelFactory.PROVIDER_NAME_GEMINI.equalsIgnoreCase(providerName)) {
+            return configuration.isGeminiConfigured()
+                ? null
+                : new Issue(AiRequestStatus.CONFIGURATION_ERROR, "Missing Gemini key setting.");
         }
-        else if (AIChatModelFactory.PROVIDER_NAME_OLLAMA.equalsIgnoreCase(providerName)) {
-            if (!configuration.hasOllamaServiceAddress()) {
-                return new Issue(AiRequestStatus.CONFIGURATION_ERROR, "Missing Ollama service address setting.");
-            }
+        if (AIChatModelFactory.PROVIDER_NAME_OLLAMA.equalsIgnoreCase(providerName)) {
+            return configuration.isOllamaConfigured()
+                ? null
+                : new Issue(AiRequestStatus.CONFIGURATION_ERROR, "Missing Ollama service address setting.");
         }
-        else {
-            return new Issue(AiRequestStatus.CONFIGURATION_ERROR, "Unknown AI provider selection.");
-        }
-        return null;
+        return new Issue(AiRequestStatus.CONFIGURATION_ERROR, "Unknown AI provider selection.");
     }
 
     public static class Issue {

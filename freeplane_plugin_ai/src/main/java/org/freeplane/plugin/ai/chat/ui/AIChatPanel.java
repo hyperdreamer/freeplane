@@ -802,22 +802,31 @@ public class AIChatPanel extends JPanel {
     }
 
     private boolean isModelSelectionRefreshProperty(String propertyName) {
-        return "ai_openrouter_model_allowlist".equals(propertyName)
-            || "ai_gemini_model_list".equals(propertyName)
-            || "ai_ollama_model_allowlist".equals(propertyName)
-            || "ai_provider_name".equals(propertyName)
+        return "ai_provider_name".equals(propertyName)
             || "ai_model_name".equals(propertyName)
             || "ai_selected_model".equals(propertyName)
-            || "ai_openrouter_key".equals(propertyName)
-            || "ai_openrouter_service_address".equals(propertyName)
+            || isOpenAICompatibleModelProperty(propertyName)
             || "ai_gemini_key".equals(propertyName)
             || "ai_gemini_service_address".equals(propertyName)
+            || "ai_gemini_models".equals(propertyName)
             || "ai_ollama_api_key".equals(propertyName)
-            || "ai_ollama_service_address".equals(propertyName);
+            || "ai_ollama_service_address".equals(propertyName)
+            || "ai_ollama_models".equals(propertyName);
+    }
+
+    private boolean isOpenAICompatibleModelProperty(String propertyName) {
+        return propertyName != null
+            && (propertyName.startsWith("ai_openai_")
+                || propertyName.startsWith("ai_openrouter_")
+                || propertyName.startsWith("ai_requesty_")
+                || propertyName.startsWith("ai_custom_"));
     }
 
     private boolean isProviderConfigurationProperty(String propertyName) {
-        return "ai_openrouter_key".equals(propertyName)
+        return "ai_openai_key".equals(propertyName)
+            || "ai_openrouter_key".equals(propertyName)
+            || "ai_requesty_key".equals(propertyName)
+            || "ai_custom_service_address".equals(propertyName)
             || "ai_gemini_key".equals(propertyName)
             || "ai_ollama_service_address".equals(propertyName);
     }
@@ -1826,13 +1835,7 @@ public class AIChatPanel extends JPanel {
     }
 
     private boolean isProviderConfigured() {
-        return isNonEmptyText(configuration.getOpenRouterKey())
-            || isNonEmptyText(configuration.getGeminiKey())
-            || configuration.hasOllamaServiceAddress();
-    }
-
-    private boolean isNonEmptyText(String value) {
-        return value != null && !value.trim().isEmpty();
+        return configuration.hasConfiguredProvider();
     }
 
     private ToolAvailabilityLevel currentEffectiveToolAvailability() {

@@ -11,10 +11,17 @@ import org.freeplane.api.ai.AiThinkingEffort;
 
 public class AIChatModelFactory {
 
+    public static final String PROVIDER_NAME_OPENAI = "openai";
     public static final String PROVIDER_NAME_OPENROUTER = "openrouter";
+    public static final String PROVIDER_NAME_REQUESTY = "requesty";
+    public static final String PROVIDER_NAME_CUSTOM = "custom";
     public static final String PROVIDER_NAME_GEMINI = "gemini";
     public static final String PROVIDER_NAME_OLLAMA = "ollama";
+    public static final String DEFAULT_OPENAI_SERVICE_ADDRESS = "https://api.openai.com/v1";
     public static final String DEFAULT_OPENROUTER_SERVICE_ADDRESS = "https://openrouter.ai/api/v1";
+    public static final String DEFAULT_REQUESTY_SERVICE_ADDRESS = "https://router.requesty.ai/v1";
+    public static final String DEFAULT_GEMINI_SERVICE_ADDRESS =
+        "https://generativelanguage.googleapis.com/v1beta";
     static final int CHAT_MODEL_MAX_RETRIES = 2;
 
     private AIChatModelFactory() {
@@ -33,18 +40,18 @@ public class AIChatModelFactory {
         }
         String providerName = selection.getProviderName();
         String modelName = selection.getModelName();
-        if (PROVIDER_NAME_OPENROUTER.equalsIgnoreCase(providerName)) {
-            OpenAiChatModel.OpenAiChatModelBuilder builder = OpenAiChatModel.builder()
-                .baseUrl(getOpenrouterServiceAddress(configuration))
-                .apiKey(configuration.getOpenRouterKey())
-                .modelName(modelName)
-                .maxRetries(CHAT_MODEL_MAX_RETRIES)
-                .parallelToolCalls(false);
-            applyTemperature(builder::temperature, modelConfiguration.getTemperature());
-            if (modelConfiguration.getThinkingEffort() != null) {
-                builder.reasoningEffort(modelConfiguration.getThinkingEffort().toOpenAiValue());
+        OpenAICompatibleProvider openAICompatibleProvider =
+            OpenAICompatibleProvider.fromProviderName(providerName);
+        if (openAICompatibleProvider != null) {
+            OpenAICompatibleProviderConfiguration providerConfiguration =
+                configuration.getOpenAICompatibleConfiguration(providerName);
+            if (providerConfiguration == null) {
+                throw new IllegalArgumentException("Missing provider configuration: " + providerName);
             }
-            return builder.build();
+            return createOpenAICompatibleChatModel(
+                providerConfiguration,
+                modelName,
+                modelConfiguration);
         }
         if (PROVIDER_NAME_GEMINI.equalsIgnoreCase(providerName)) {
             GoogleAiGeminiChatModel.GoogleAiGeminiChatModelBuilder builder = GoogleAiGeminiChatModel.builder()
@@ -61,7 +68,7 @@ public class AIChatModelFactory {
         }
         if (PROVIDER_NAME_OLLAMA.equalsIgnoreCase(providerName)) {
             OllamaChatModel.OllamaChatModelBuilder builder = OllamaChatModel.builder()
-                .baseUrl(getOllamaServiceAddress(configuration))
+                .baseUrl(configuration.getOllamaServiceAddress())
                 .modelName(modelName)
                 .maxRetries(CHAT_MODEL_MAX_RETRIES);
             applyTemperature(builder::temperature, modelConfiguration.getTemperature());
@@ -73,6 +80,25 @@ public class AIChatModelFactory {
             return builder.build();
         }
         throw new IllegalArgumentException("Unknown provider name: " + providerName);
+    }
+
+    private static ChatModel createOpenAICompatibleChatModel(
+        OpenAICompatibleProviderConfiguration providerConfiguration,
+        String modelName,
+        AIModelConfiguration modelConfiguration) {
+        OpenAiChatModel.OpenAiChatModelBuilder builder = OpenAiChatModel.builder()
+            .baseUrl(providerConfiguration.getServiceAddress())
+            .modelName(modelName)
+            .maxRetries(CHAT_MODEL_MAX_RETRIES)
+            .parallelToolCalls(false);
+        if (!providerConfiguration.getApiKey().isEmpty()) {
+            builder.apiKey(providerConfiguration.getApiKey());
+        }
+        applyTemperature(builder::temperature, modelConfiguration.getTemperature());
+        if (modelConfiguration.getThinkingEffort() != null) {
+            builder.reasoningEffort(modelConfiguration.getThinkingEffort().toOpenAiValue());
+        }
+        return builder.build();
     }
 
     private static AIModelConfiguration effectiveModelConfiguration(AIProviderConfiguration configuration,
@@ -125,17 +151,5 @@ public class AIChatModelFactory {
                 .returnThinking(true)
                 .sendThinking(true);
         }
-    }
-
-    private static String getOpenrouterServiceAddress(AIProviderConfiguration configuration) {
-        String serviceAddress = configuration.getOpenrouterServiceAddress();
-        if (serviceAddress == null || serviceAddress.isEmpty()) {
-            return DEFAULT_OPENROUTER_SERVICE_ADDRESS;
-        }
-        return serviceAddress;
-    }
-
-    private static String getOllamaServiceAddress(AIProviderConfiguration configuration) {
-        return configuration.getOllamaServiceAddress();
     }
 }

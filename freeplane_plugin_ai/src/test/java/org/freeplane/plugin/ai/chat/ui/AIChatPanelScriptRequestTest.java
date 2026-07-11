@@ -1521,8 +1521,7 @@ public class AIChatPanelScriptRequestTest {
         when(aiRequestConfigurationResolver.resolve(any())).thenReturn(null);
         org.freeplane.plugin.ai.model.AIProviderConfiguration configuration =
             mock(org.freeplane.plugin.ai.model.AIProviderConfiguration.class);
-        when(configuration.getOpenRouterKey()).thenReturn("key");
-        when(configuration.hasOllamaServiceAddress()).thenReturn(false);
+        when(configuration.hasConfiguredProvider()).thenReturn(true);
         ChatTokenUsageTracker chatTokenUsageTracker = new ChatTokenUsageTracker(totals -> {
         });
 

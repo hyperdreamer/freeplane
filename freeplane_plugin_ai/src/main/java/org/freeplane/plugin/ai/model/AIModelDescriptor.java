@@ -77,8 +77,10 @@ public class AIModelDescriptor {
     }
 
     static String providerDisplayName(String providerName) {
-        if (AIChatModelFactory.PROVIDER_NAME_OPENROUTER.equals(providerName)) {
-            return "OpenRouter";
+        OpenAICompatibleProvider openAICompatibleProvider =
+            OpenAICompatibleProvider.fromProviderName(providerName);
+        if (openAICompatibleProvider != null) {
+            return openAICompatibleProvider.getDisplayName();
         }
         if (AIChatModelFactory.PROVIDER_NAME_GEMINI.equals(providerName)) {
             return "Gemini";

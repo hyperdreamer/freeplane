@@ -41,6 +41,7 @@ import org.freeplane.plugin.ai.edits.ClearAiMarkersInSelectionAction;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.freeplane.plugin.ai.maps.ControllerMapModelProvider;
 import org.freeplane.plugin.ai.mcpserver.ModelContextProtocolAiCodeHostService;
+import org.freeplane.plugin.ai.model.AIModelListPreferenceMigration;
 import org.freeplane.plugin.ai.mcpserver.ModelContextProtocolServer;
 import org.freeplane.plugin.ai.prompt.AiPromptActionRegistry;
 import org.freeplane.plugin.ai.prompt.AiPromptMenuInstaller;
@@ -57,7 +58,10 @@ public class Activator implements BundleActivator {
 
     private static final String PREFERENCES_RESOURCE = "preferences.xml";
     private static final String SYSTEM_MESSAGE_PROPERTY = MessageBuilder.SYSTEM_MESSAGE_PROPERTY;
+    private static final String OPENAI_KEY_PROPERTY = "ai_openai_key";
     private static final String OPENROUTER_KEY_PROPERTY = "ai_openrouter_key";
+    private static final String REQUESTY_KEY_PROPERTY = "ai_requesty_key";
+    private static final String CUSTOM_KEY_PROPERTY = "ai_custom_key";
     private static final String GEMINI_KEY_PROPERTY = "ai_gemini_key";
     private static final String OLLAMA_API_KEY_PROPERTY = "ai_ollama_api_key";
     private static final String MCP_TOKEN_PROPERTY = "ai_mcp_token";
@@ -123,6 +127,7 @@ public class Activator implements BundleActivator {
                     ResourceController.loadProperties(properties, defaults);
                     ResourceController resourceController = ResourceController.getResourceController();
                     resourceController.addDefaults(properties);
+                    AIModelListPreferenceMigration.migrate(resourceController);
                     properties.keySet()
                         .stream()
                         .filter(key -> !AiEditsSettings.AI_EDITS_STATE_ICON_VISIBLE_PROPERTY.equals(key))
@@ -132,7 +137,10 @@ public class Activator implements BundleActivator {
                 }
 
                 private void markSecretsForSeparatePersistence(ResourceController resourceController) {
+                    resourceController.persistPropertyInSecretsFile(OPENAI_KEY_PROPERTY);
                     resourceController.persistPropertyInSecretsFile(OPENROUTER_KEY_PROPERTY);
+                    resourceController.persistPropertyInSecretsFile(REQUESTY_KEY_PROPERTY);
+                    resourceController.persistPropertyInSecretsFile(CUSTOM_KEY_PROPERTY);
                     resourceController.persistPropertyInSecretsFile(GEMINI_KEY_PROPERTY);
                     resourceController.persistPropertyInSecretsFile(OLLAMA_API_KEY_PROPERTY);
                     resourceController.persistPropertyInSecretsFile(MCP_TOKEN_PROPERTY);

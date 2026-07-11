@@ -1,448 +1,215 @@
 package org.freeplane.plugin.ai.model;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.Reader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
-import java.util.regex.Pattern;
 
 public class AIModelCatalog {
-    private static final long OPENROUTER_REFRESH_INTERVAL_MILLISECONDS = 30L * 60L * 1000L;
-
-    private static final Object openrouterLock = new Object();
-    private static long lastOpenrouterRefreshTime;
-    private static List<AIModelDescriptor> cachedOpenrouterModels = Collections.emptyList();
-
-    private static final Object ollamaLock = new Object();
-    private static long lastOllamaRefreshTime;
-    private static List<AIModelDescriptor> cachedOllamaModels = Collections.emptyList();
-    private static String cachedOllamaCacheKey = "";
-
     private final AIProviderConfiguration configuration;
-    private final ObjectMapper objectMapper;
+    private final AIModelCatalogState state;
+    private final OpenAICompatibleModelDiscovery openAICompatibleDiscovery;
+    private final OpenRouterModelMetadataCatalog metadataCatalog;
+    private final OpenRouterModelMetadataInterpreter metadataInterpreter;
+    private final GeminiModelDiscovery geminiDiscovery;
+    private final OllamaModelDiscovery ollamaDiscovery;
 
     public AIModelCatalog(AIProviderConfiguration configuration) {
+        this(configuration, AIModelCatalogState.shared());
+    }
+
+    AIModelCatalog(AIProviderConfiguration configuration, AIModelCatalogState state) {
+        this(
+            configuration,
+            state,
+            new OpenAICompatibleModelDiscovery(),
+            new OpenRouterModelMetadataCatalog(state, OpenRouterModelMetadataCatalog.MODELS_ADDRESS));
+    }
+
+    AIModelCatalog(AIProviderConfiguration configuration,
+                   AIModelCatalogState state,
+                   OpenAICompatibleModelDiscovery openAICompatibleDiscovery,
+                   OpenRouterModelMetadataCatalog metadataCatalog) {
+        this(
+            configuration,
+            state,
+            openAICompatibleDiscovery,
+            metadataCatalog,
+            new GeminiModelDiscovery(metadataCatalog),
+            new OllamaModelDiscovery(metadataCatalog));
+    }
+
+    AIModelCatalog(AIProviderConfiguration configuration,
+                   AIModelCatalogState state,
+                   OpenAICompatibleModelDiscovery openAICompatibleDiscovery,
+                   OpenRouterModelMetadataCatalog metadataCatalog,
+                   GeminiModelDiscovery geminiDiscovery,
+                   OllamaModelDiscovery ollamaDiscovery) {
         this.configuration = configuration;
-        this.objectMapper = new ObjectMapper();
+        this.state = state;
+        this.openAICompatibleDiscovery = openAICompatibleDiscovery;
+        this.metadataCatalog = metadataCatalog;
+        this.metadataInterpreter = new OpenRouterModelMetadataInterpreter();
+        this.geminiDiscovery = geminiDiscovery;
+        this.ollamaDiscovery = ollamaDiscovery;
     }
 
     public List<AIModelDescriptor> getAvailableModels(boolean allowsRefresh) {
-        List<AIModelDescriptor> modelDescriptors = new ArrayList<>();
-        if (hasOpenrouterKey()) {
-            List<AIModelDescriptor> openrouterModels = getOpenrouterModels(allowsRefresh);
-            if (openrouterModels.isEmpty()) {
-                openrouterModels = parseLiteralProviderModelList(
-                    AIChatModelFactory.PROVIDER_NAME_OPENROUTER,
-                    configuration.getOpenrouterModelAllowlistValue()
-                );
-            }
-            modelDescriptors.addAll(filterModelDescriptors(openrouterModels,
-                configuration.getOpenrouterModelAllowlistValue()));
-        }
-        if (hasGeminiKey()) {
-            modelDescriptors.addAll(getGeminiModelsFromList());
-        }
-        if (configuration.hasOllamaServiceAddress()) {
-            List<AIModelDescriptor> ollamaModels = getOllamaModels(allowsRefresh);
-            if (ollamaModels.isEmpty()) {
-                ollamaModels = parseLiteralProviderModelList(
-                    AIChatModelFactory.PROVIDER_NAME_OLLAMA,
-                    configuration.getOllamaModelAllowlistValue()
-                );
-            }
-            modelDescriptors.addAll(filterModelDescriptors(ollamaModels,
-                configuration.getOllamaModelAllowlistValue()));
-        }
-        return modelDescriptors;
-    }
-
-    private boolean hasOpenrouterKey() {
-        String openrouterKey = configuration.getOpenRouterKey();
-        return openrouterKey != null && !openrouterKey.isEmpty();
-    }
-
-    private boolean hasGeminiKey() {
-        String geminiKey = configuration.getGeminiKey();
-        return geminiKey != null && !geminiKey.isEmpty();
-    }
-
-    private List<AIModelDescriptor> getOpenrouterModels(boolean allowsRefresh) {
-        if (!allowsRefresh) {
-            return cachedOpenrouterModels;
-        }
-        synchronized (openrouterLock) {
-            long currentTime = System.currentTimeMillis();
-            if (currentTime - lastOpenrouterRefreshTime < OPENROUTER_REFRESH_INTERVAL_MILLISECONDS) {
-                return cachedOpenrouterModels;
-            }
-            List<AIModelDescriptor> refreshedModels = fetchOpenrouterModels();
-            cachedOpenrouterModels = refreshedModels;
-            lastOpenrouterRefreshTime = currentTime;
-            return cachedOpenrouterModels;
-        }
-    }
-
-    private List<AIModelDescriptor> getOllamaModels(boolean allowsRefresh) {
-        String currentCacheKey = getOllamaCacheKey();
-        invalidateOllamaCacheIfConfigurationChanged(currentCacheKey);
-        if (!allowsRefresh) {
-            return cachedOllamaModels;
-        }
-        synchronized (ollamaLock) {
-            currentCacheKey = getOllamaCacheKey();
-            invalidateOllamaCacheIfConfigurationChanged(currentCacheKey);
-            long currentTime = System.currentTimeMillis();
-            if (currentTime - lastOllamaRefreshTime < OPENROUTER_REFRESH_INTERVAL_MILLISECONDS) {
-                return cachedOllamaModels;
-            }
-            OllamaModelsFetchResult refreshedModels = fetchOllamaModels();
-            if (refreshedModels.successful) {
-                cachedOllamaModels = refreshedModels.models;
-                lastOllamaRefreshTime = currentTime;
-            }
-            return cachedOllamaModels;
-        }
-    }
-
-    private void invalidateOllamaCacheIfConfigurationChanged(String currentCacheKey) {
-        if (!currentCacheKey.equals(cachedOllamaCacheKey)) {
-            cachedOllamaModels = Collections.emptyList();
-            lastOllamaRefreshTime = 0L;
-            cachedOllamaCacheKey = currentCacheKey;
-        }
-    }
-
-    private String getOllamaCacheKey() {
-        String serviceAddress = configuration.getOllamaServiceAddress();
-        Map<String, String> requestHeaders = configuration.getOllamaRequestHeaders();
-        return normalize(serviceAddress) + "|" + new TreeMap<>(requestHeaders).toString();
-    }
-
-    private String normalize(String value) {
-        return value == null ? "" : value.trim();
-    }
-
-    List<AIModelDescriptor> fetchOpenrouterModels() {
-        String serviceAddress = configuration.getOpenrouterServiceAddress();
-        if (serviceAddress == null || serviceAddress.isEmpty()) {
-            serviceAddress = AIChatModelFactory.DEFAULT_OPENROUTER_SERVICE_ADDRESS;
-        }
-        String modelsAddress = serviceAddress.endsWith("/") ? serviceAddress + "models" : serviceAddress + "/models";
-        try {
-            HttpURLConnection connection = (HttpURLConnection) new URL(modelsAddress).openConnection();
-            connection.setRequestMethod("GET");
-            connection.setConnectTimeout(5000);
-            connection.setReadTimeout(10000);
-            connection.setRequestProperty("HTTP-Referer", "https://github.com/freeplane/freeplane");
-            connection.setRequestProperty("X-Title", "Freeplane");
-            int responseCode = connection.getResponseCode();
-            if (responseCode != HttpURLConnection.HTTP_OK) {
-                return Collections.emptyList();
-            }
-            try (InputStream inputStream = connection.getInputStream();
-                 InputStreamReader reader = new InputStreamReader(inputStream, StandardCharsets.UTF_8)) {
-                return parseOpenrouterModelsResponse(reader);
-            }
-        } catch (IOException exception) {
-            return Collections.emptyList();
-        }
-    }
-
-    OllamaModelsFetchResult fetchOllamaModels() {
-        String serviceAddress = configuration.getOllamaServiceAddress();
-        String modelsAddress = serviceAddress.endsWith("/") ? serviceAddress + "api/tags" : serviceAddress + "/api/tags";
-        try {
-            HttpURLConnection connection = (HttpURLConnection) new URL(modelsAddress).openConnection();
-            connection.setRequestMethod("GET");
-            connection.setConnectTimeout(5000);
-            connection.setReadTimeout(10000);
-            applyRequestHeaders(connection, configuration.getOllamaRequestHeaders());
-            int responseCode = connection.getResponseCode();
-            if (responseCode != HttpURLConnection.HTTP_OK) {
-                return OllamaModelsFetchResult.failed();
-            }
-            try (InputStream inputStream = connection.getInputStream();
-                 InputStreamReader reader = new InputStreamReader(inputStream, StandardCharsets.UTF_8)) {
-                return OllamaModelsFetchResult.success(parseOllamaModelsResponse(reader));
-            }
-        } catch (IOException exception) {
-            return OllamaModelsFetchResult.failed();
-        }
-    }
-
-    void applyRequestHeaders(HttpURLConnection connection, Map<String, String> requestHeaders) {
-        for (Map.Entry<String, String> requestHeader : requestHeaders.entrySet()) {
-            connection.setRequestProperty(requestHeader.getKey(), requestHeader.getValue());
-        }
-    }
-
-    static void resetOllamaCacheForTests() {
-        cachedOllamaModels = Collections.emptyList();
-        lastOllamaRefreshTime = 0L;
-        cachedOllamaCacheKey = "";
-    }
-
-    static void resetOpenrouterCacheForTests() {
-        cachedOpenrouterModels = Collections.emptyList();
-        lastOpenrouterRefreshTime = 0L;
-    }
-
-    List<AIModelDescriptor> parseOpenrouterModelsResponse(Reader reader) throws IOException {
-        OpenrouterModelsResponse response = objectMapper.readValue(reader, OpenrouterModelsResponse.class);
-        if (response == null || response.models == null) {
-            return Collections.emptyList();
-        }
-        List<AIModelDescriptor> modelDescriptors = new ArrayList<>();
-        for (OpenrouterModelItem modelItem : response.models) {
-            if (modelItem == null || modelItem.modelIdentifier == null) {
-                continue;
-            }
-            boolean isFreeModel = isFreePricing(modelItem.pricing);
-            modelDescriptors.add(createModelDescriptor(
-                AIChatModelFactory.PROVIDER_NAME_OPENROUTER,
-                modelItem.modelIdentifier,
-                isFreeModel
-            ));
-        }
-        return modelDescriptors;
-    }
-
-    List<AIModelDescriptor> parseOllamaModelsResponse(Reader reader) throws IOException {
-        OllamaModelsResponse response = objectMapper.readValue(reader, OllamaModelsResponse.class);
-        if (response == null || response.models == null) {
-            return Collections.emptyList();
-        }
-        List<AIModelDescriptor> modelDescriptors = new ArrayList<>();
-        for (OllamaModelItem modelItem : response.models) {
-            if (modelItem == null || modelItem.modelName == null || modelItem.modelName.isEmpty()) {
-                continue;
-            }
-            modelDescriptors.add(createModelDescriptor(
-                AIChatModelFactory.PROVIDER_NAME_OLLAMA,
-                modelItem.modelName,
-                false
-            ));
-        }
-        return modelDescriptors;
-    }
-
-    List<AIModelDescriptor> filterModelDescriptors(List<AIModelDescriptor> modelDescriptors,
-                                                   String allowlistValue) {
-        if (modelDescriptors.isEmpty()) {
-            return modelDescriptors;
-        }
-        List<Pattern> allowlistPatterns = parseModelAllowlistPatterns(allowlistValue);
-        if (allowlistPatterns.isEmpty()) {
-            return modelDescriptors;
-        }
-        List<AIModelDescriptor> filteredDescriptors = new ArrayList<>();
-        for (AIModelDescriptor modelDescriptor : modelDescriptors) {
-            if (modelDescriptor == null) {
-                continue;
-            }
-            if (matchesAllowlist(modelDescriptor.getModelName(), allowlistPatterns)) {
-                filteredDescriptors.add(modelDescriptor);
+        List<AIModelDescriptor> descriptors = new ArrayList<>();
+        for (OpenAICompatibleProviderConfiguration providerConfiguration
+            : configuration.getOpenAICompatibleConfigurations()) {
+            if (providerConfiguration.isConfigured()) {
+                addOpenAICompatibleModels(descriptors, providerConfiguration, allowsRefresh);
             }
         }
-        return filteredDescriptors;
+        if (configuration.isGeminiConfigured()) {
+            addGeminiModels(descriptors, allowsRefresh);
+        }
+        if (configuration.isOllamaConfigured()) {
+            addOllamaModels(descriptors, allowsRefresh);
+        }
+        descriptors.sort(Comparator.comparing(AIModelDescriptor::getDisplayName));
+        return descriptors;
     }
 
-    private List<Pattern> parseModelAllowlistPatterns(String allowlistValue) {
-        if (allowlistValue == null || allowlistValue.trim().isEmpty()) {
-            return Collections.emptyList();
+    private void addOpenAICompatibleModels(List<AIModelDescriptor> descriptors,
+                                           OpenAICompatibleProviderConfiguration providerConfiguration,
+                                           boolean allowsRefresh) {
+        AIModelListConfiguration modelList = providerConfiguration.getModelListConfiguration();
+        if (modelList.isExplicit()) {
+            addExplicitModels(descriptors, providerConfiguration.getProviderName(), modelList);
+            return;
         }
-        List<Pattern> patterns = new ArrayList<>();
-        String[] entries = allowlistValue.split("[,\\r\\n]+");
-        for (String entry : entries) {
-            String trimmedEntry = entry.trim();
-            if (trimmedEntry.isEmpty()) {
-                continue;
+        AIModelCatalogCacheKey cacheKey = new AIModelCatalogCacheKey(
+            providerConfiguration.getProviderName(),
+            providerConfiguration.getModelsAddress(),
+            OpenRouterModelMetadataCatalog.MODELS_ADDRESS,
+            providerConfiguration.getApiKey());
+        AIModelDiscoveryResult result = state.getFresh(cacheKey);
+        if (result == null && allowsRefresh) {
+            result = discoverOpenAICompatibleModels(providerConfiguration);
+            record(cacheKey, result);
+        }
+        addAutomaticModels(descriptors, result, modelList);
+    }
+
+    private AIModelDiscoveryResult discoverOpenAICompatibleModels(
+        OpenAICompatibleProviderConfiguration providerConfiguration) {
+        AIModelDiscoveryResult directResult = openAICompatibleDiscovery.discover(providerConfiguration);
+        if (!directResult.isSuccessful()) {
+            return directResult;
+        }
+        List<DiscoveredAIModel> suitableModels = new ArrayList<>();
+        for (DiscoveredAIModel model : directResult.getModels()) {
+            AIModelCapabilities capabilities = model.getCapabilities();
+            if (!capabilities.isToolCapableTextModel()
+                && capabilities.hasUnknownCapability()
+                && !capabilities.hasUnsupportedCapability()) {
+                String metadataId = metadataId(providerConfiguration.getProvider(), model.getModelName());
+                capabilities = metadataInterpreter.interpret(metadataCatalog.find(metadataId));
             }
-            patterns.add(Pattern.compile(convertWildcardToRegex(trimmedEntry)));
-        }
-        return patterns;
-    }
-
-    List<AIModelDescriptor> parseLiteralProviderModelList(String providerName, String modelListValue) {
-        if (modelListValue == null || modelListValue.trim().isEmpty()) {
-            return Collections.emptyList();
-        }
-        List<AIModelDescriptor> modelDescriptors = new ArrayList<>();
-        String[] entries = modelListValue.split("[,\\r\\n]+");
-        for (String entry : entries) {
-            String trimmedEntry = entry.trim();
-            if (trimmedEntry.isEmpty() || containsWildcard(trimmedEntry)) {
-                continue;
-            }
-            modelDescriptors.add(createModelDescriptor(providerName, trimmedEntry, false));
-        }
-        return modelDescriptors;
-    }
-
-    private boolean matchesAllowlist(String modelName, List<Pattern> allowlistPatterns) {
-        if (modelName == null || modelName.isEmpty()) {
-            return false;
-        }
-        for (Pattern pattern : allowlistPatterns) {
-            if (pattern.matcher(modelName).matches()) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private String convertWildcardToRegex(String wildcardPattern) {
-        StringBuilder builder = new StringBuilder();
-        for (int index = 0; index < wildcardPattern.length(); index++) {
-            char character = wildcardPattern.charAt(index);
-            if (character == '*') {
-                builder.append(".*");
-            } else if (character == '?') {
-                builder.append('.');
-            } else {
-                if ("\\.^$|()[]{}+".indexOf(character) >= 0) {
-                    builder.append('\\');
-                }
-                builder.append(character);
+            if (capabilities.isToolCapableTextModel()) {
+                suitableModels.add(model.withCapabilities(capabilities));
             }
         }
-        return builder.toString();
+        return AIModelDiscoveryResult.success(suitableModels);
     }
 
-    private AIModelDescriptor createModelDescriptor(String providerName, String modelName, boolean isFreeModel) {
-        return new AIModelDescriptor(
-            providerName,
-            modelName,
-            buildDisplayName(providerName, modelName, isFreeModel),
-            isFreeModel
-        );
-    }
-
-    private String buildDisplayName(String providerName, String modelName, boolean isFreeModel) {
-        String providerDisplayName;
-        if (AIChatModelFactory.PROVIDER_NAME_OPENROUTER.equals(providerName)) {
-            providerDisplayName = "OpenRouter";
-        } else if (AIChatModelFactory.PROVIDER_NAME_GEMINI.equals(providerName)) {
-            providerDisplayName = "Gemini";
-        } else if (AIChatModelFactory.PROVIDER_NAME_OLLAMA.equals(providerName)) {
-            providerDisplayName = "Ollama";
-        } else {
-            providerDisplayName = providerName;
+    private void addGeminiModels(List<AIModelDescriptor> descriptors, boolean allowsRefresh) {
+        AIModelListConfiguration modelList = configuration.getGeminiModelListConfiguration();
+        if (modelList.isExplicit()) {
+            addExplicitModels(descriptors, AIChatModelFactory.PROVIDER_NAME_GEMINI, modelList);
+            return;
         }
-        String displayName = providerDisplayName + ": " + modelName;
-        if (isFreeModel) {
-            displayName = displayName + " (free)";
+        String modelsAddress = appendPath(configuration.getGeminiServiceAddress(), "models");
+        AIModelCatalogCacheKey cacheKey = new AIModelCatalogCacheKey(
+            AIChatModelFactory.PROVIDER_NAME_GEMINI,
+            modelsAddress,
+            OpenRouterModelMetadataCatalog.MODELS_ADDRESS,
+            configuration.getGeminiKey());
+        AIModelDiscoveryResult result = state.getFresh(cacheKey);
+        if (result == null && allowsRefresh) {
+            result = geminiDiscovery.discover(configuration);
+            record(cacheKey, result);
         }
-        return displayName;
+        addAutomaticModels(descriptors, result, modelList);
     }
 
-    private boolean isFreePricing(OpenrouterModelPricing pricing) {
-        if (pricing == null) {
-            return false;
+    private void addOllamaModels(List<AIModelDescriptor> descriptors, boolean allowsRefresh) {
+        AIModelListConfiguration modelList = configuration.getOllamaModelListConfiguration();
+        if (modelList.isExplicit()) {
+            addExplicitModels(descriptors, AIChatModelFactory.PROVIDER_NAME_OLLAMA, modelList);
+            return;
         }
-        return isZeroCost(pricing.promptPrice) && isZeroCost(pricing.completionPrice);
-    }
-
-    private boolean isZeroCost(String price) {
-        if (price == null || price.isEmpty()) {
-            return false;
+        String tagsAddress = appendPath(configuration.getOllamaServiceAddress(), "api/tags");
+        String showAddress = appendPath(configuration.getOllamaServiceAddress(), "api/show");
+        AIModelCatalogCacheKey cacheKey = new AIModelCatalogCacheKey(
+            AIChatModelFactory.PROVIDER_NAME_OLLAMA,
+            tagsAddress,
+            showAddress + "|" + OpenRouterModelMetadataCatalog.MODELS_ADDRESS,
+            configuration.getOllamaApiKey());
+        AIModelDiscoveryResult result = state.getFresh(cacheKey);
+        if (result == null && allowsRefresh) {
+            result = ollamaDiscovery.discover(configuration);
+            record(cacheKey, result);
         }
-        try {
-            return Double.parseDouble(price) == 0.0;
-        } catch (NumberFormatException exception) {
-            return false;
-        }
+        addAutomaticModels(descriptors, result, modelList);
     }
 
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    private static class OpenrouterModelsResponse {
-        @JsonProperty("data")
-        private List<OpenrouterModelItem> models;
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    private static class OpenrouterModelItem {
-        @JsonProperty("id")
-        private String modelIdentifier;
-        @JsonProperty("pricing")
-        private OpenrouterModelPricing pricing;
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    private static class OpenrouterModelPricing {
-        @JsonProperty("prompt")
-        private String promptPrice;
-        @JsonProperty("completion")
-        private String completionPrice;
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    private static class OllamaModelsResponse {
-        @JsonProperty("models")
-        private List<OllamaModelItem> models;
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    private static class OllamaModelItem {
-        @JsonProperty("name")
-        private String modelName;
-    }
-
-    static class OllamaModelsFetchResult {
-        private final boolean successful;
-        private final List<AIModelDescriptor> models;
-
-        private OllamaModelsFetchResult(boolean successful, List<AIModelDescriptor> models) {
-            this.successful = successful;
-            this.models = models;
-        }
-
-        static OllamaModelsFetchResult success(List<AIModelDescriptor> models) {
-            return new OllamaModelsFetchResult(true, models);
-        }
-
-        static OllamaModelsFetchResult failed() {
-            return new OllamaModelsFetchResult(false, Collections.<AIModelDescriptor>emptyList());
+    private void addExplicitModels(List<AIModelDescriptor> descriptors,
+                                   String providerName,
+                                   AIModelListConfiguration modelList) {
+        for (String modelName : modelList.getLiteralModelNames()) {
+            descriptors.add(createDescriptor(providerName, modelName, false));
         }
     }
 
-    List<AIModelDescriptor> parseGeminiModelList(String modelListValue) {
-        if (modelListValue == null || modelListValue.trim().isEmpty()) {
-            return Collections.emptyList();
+    private void addAutomaticModels(List<AIModelDescriptor> descriptors,
+                                    AIModelDiscoveryResult result,
+                                    AIModelListConfiguration modelList) {
+        if (result == null || !result.isSuccessful()) {
+            return;
         }
-        List<AIModelDescriptor> modelDescriptors = new ArrayList<>();
-        String[] entries = modelListValue.split("[,\\r\\n]+");
-        for (String entry : entries) {
-            String trimmedEntry = entry.trim();
-            if (trimmedEntry.isEmpty()) {
-                continue;
+        for (DiscoveredAIModel model : result.getModels()) {
+            if (model.getCapabilities().isToolCapableTextModel()
+                && modelList.accepts(model.getModelName())) {
+                descriptors.add(createDescriptor(
+                    model.getProviderName(),
+                    model.getModelName(),
+                    model.isFreeModel()));
             }
-            modelDescriptors.add(new AIModelDescriptor(
-                AIChatModelFactory.PROVIDER_NAME_GEMINI,
-                trimmedEntry,
-                buildDisplayName(AIChatModelFactory.PROVIDER_NAME_GEMINI, trimmedEntry, false),
-                false
-            ));
         }
-        return modelDescriptors;
     }
 
-    private boolean containsWildcard(String value) {
-        return value.indexOf('*') >= 0 || value.indexOf('?') >= 0;
+    private void record(AIModelCatalogCacheKey cacheKey, AIModelDiscoveryResult result) {
+        if (result.isSuccessful()) {
+            state.recordSuccess(cacheKey, result.getModels());
+        }
+        else {
+            state.recordFailure(cacheKey);
+        }
     }
 
-    private List<AIModelDescriptor> getGeminiModelsFromList() {
-        return parseGeminiModelList(configuration.getGeminiModelListValue());
+    private String metadataId(OpenAICompatibleProvider provider, String modelName) {
+        if (provider == OpenAICompatibleProvider.OPENAI) {
+            return "openai/" + modelName;
+        }
+        return modelName;
+    }
+
+    private AIModelDescriptor createDescriptor(String providerName,
+                                               String modelName,
+                                               boolean freeModel) {
+        String displayName = AIModelDescriptor.providerDisplayName(providerName) + ": " + modelName;
+        if (freeModel) {
+            displayName += " (free)";
+        }
+        return new AIModelDescriptor(providerName, modelName, displayName, freeModel);
+    }
+
+    private String appendPath(String baseAddress, String path) {
+        if (baseAddress == null || baseAddress.isEmpty()) {
+            return "";
+        }
+        return baseAddress.endsWith("/") ? baseAddress + path : baseAddress + "/" + path;
     }
 }

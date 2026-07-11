@@ -23,8 +23,11 @@ public class AIChatModelFactoryTest {
     public void createChatLanguageModel_setsMaxRetriesForOpenRouter() throws Exception {
         AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
         whenDefaultModelConfiguration(configuration, AIChatModelFactory.PROVIDER_NAME_OPENROUTER, "openai/gpt-5");
-        when(configuration.getOpenRouterKey()).thenReturn("test-key");
-        when(configuration.getOpenrouterServiceAddress()).thenReturn("https://openrouter.ai/api/v1");
+        whenOpenAICompatibleProvider(
+            configuration,
+            OpenAICompatibleProvider.OPENROUTER,
+            "https://openrouter.ai/api/v1",
+            "test-key");
 
         ChatModel chatModel = AIChatModelFactory.createChatLanguageModel(configuration);
 
@@ -40,8 +43,11 @@ public class AIChatModelFactoryTest {
             AiThinkingEffort.XHIGH,
             AiTemperature.of(0.2));
         when(configuration.getDefaultModelConfiguration()).thenReturn(modelConfiguration);
-        when(configuration.getOpenRouterKey()).thenReturn("test-key");
-        when(configuration.getOpenrouterServiceAddress()).thenReturn("https://openrouter.ai/api/v1");
+        whenOpenAICompatibleProvider(
+            configuration,
+            OpenAICompatibleProvider.OPENROUTER,
+            "https://openrouter.ai/api/v1",
+            "test-key");
 
         ChatModel chatModel = AIChatModelFactory.createChatLanguageModel(configuration);
         OpenAiChatRequestParameters parameters = openAiRequestParameters(chatModel);
@@ -59,8 +65,11 @@ public class AIChatModelFactoryTest {
             AiThinkingEffort.XHIGH,
             AiTemperature.modelDefault());
         when(configuration.getDefaultModelConfiguration()).thenReturn(modelConfiguration);
-        when(configuration.getOpenRouterKey()).thenReturn("test-key");
-        when(configuration.getOpenrouterServiceAddress()).thenReturn("https://openrouter.ai/api/v1");
+        whenOpenAICompatibleProvider(
+            configuration,
+            OpenAICompatibleProvider.OPENROUTER,
+            "https://openrouter.ai/api/v1",
+            "test-key");
 
         ChatModel chatModel = AIChatModelFactory.createChatLanguageModel(configuration);
 
@@ -79,8 +88,11 @@ public class AIChatModelFactoryTest {
             AiThinkingEffort.NONE,
             null);
         when(configuration.getDefaultModelConfiguration()).thenReturn(defaultConfiguration);
-        when(configuration.getOpenRouterKey()).thenReturn("test-key");
-        when(configuration.getOpenrouterServiceAddress()).thenReturn("https://openrouter.ai/api/v1");
+        whenOpenAICompatibleProvider(
+            configuration,
+            OpenAICompatibleProvider.OPENROUTER,
+            "https://openrouter.ai/api/v1",
+            "test-key");
 
         ChatModel chatModel = AIChatModelFactory.createChatLanguageModel(configuration, requestConfiguration);
         OpenAiChatRequestParameters parameters = openAiRequestParameters(chatModel);
@@ -101,12 +113,59 @@ public class AIChatModelFactoryTest {
             null,
             AiTemperature.modelDefault());
         when(configuration.getDefaultModelConfiguration()).thenReturn(defaultConfiguration);
-        when(configuration.getOpenRouterKey()).thenReturn("test-key");
-        when(configuration.getOpenrouterServiceAddress()).thenReturn("https://openrouter.ai/api/v1");
+        whenOpenAICompatibleProvider(
+            configuration,
+            OpenAICompatibleProvider.OPENROUTER,
+            "https://openrouter.ai/api/v1",
+            "test-key");
 
         ChatModel chatModel = AIChatModelFactory.createChatLanguageModel(configuration, requestConfiguration);
 
         assertThat(openAiRequestParameters(chatModel).temperature()).isNull();
+    }
+
+
+    @Test
+    public void createsEachOpenAICompatibleProviderWithOwnConfiguration() throws Exception {
+        for (OpenAICompatibleProvider provider : OpenAICompatibleProvider.values()) {
+            AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
+            String modelName = provider.getProviderName() + "-model";
+            whenDefaultModelConfiguration(configuration, provider.getProviderName(), modelName);
+            whenOpenAICompatibleProvider(
+                configuration,
+                provider,
+                "https://" + provider.getProviderName() + ".example/v1",
+                provider == OpenAICompatibleProvider.CUSTOM ? "" : provider.getProviderName() + "-key");
+
+            ChatModel chatModel = AIChatModelFactory.createChatLanguageModel(configuration);
+
+            assertThat(openAiRequestParameters(chatModel).modelName()).isEqualTo(modelName);
+            assertThat(openAiRequestParameters(chatModel).parallelToolCalls()).isFalse();
+            Object openAiClient = fieldValue(chatModel, "client");
+            assertThat(fieldValue(openAiClient, "baseUrl"))
+                .isEqualTo("https://" + provider.getProviderName() + ".example/v1");
+            @SuppressWarnings("unchecked")
+            Map<String, String> headers = (Map<String, String>) fieldValue(openAiClient, "defaultHeaders");
+            if (provider == OpenAICompatibleProvider.CUSTOM) {
+                assertThat(headers).doesNotContainKey("Authorization");
+            }
+            else {
+                assertThat(headers).containsEntry(
+                    "Authorization",
+                    "Bearer " + provider.getProviderName() + "-key");
+            }
+        }
+    }
+
+    @Test
+    public void rejectsUnknownProviderIdentity() {
+        AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
+        whenDefaultModelConfiguration(configuration, "unknown", "model");
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+            () -> AIChatModelFactory.createChatLanguageModel(configuration))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Unknown provider");
     }
 
     @Test
@@ -281,6 +340,22 @@ public class AIChatModelFactoryTest {
         ChatModel chatModel = AIChatModelFactory.createChatLanguageModel(configuration);
 
         assertThat(ollamaRequestHeaders(chatModel)).isEqualTo(Collections.emptyMap());
+    }
+
+
+    private void whenOpenAICompatibleProvider(AIProviderConfiguration configuration,
+                                              OpenAICompatibleProvider provider,
+                                              String serviceAddress,
+                                              String apiKey) {
+        OpenAICompatibleProviderConfiguration providerConfiguration =
+            new OpenAICompatibleProviderConfiguration(
+                provider,
+                serviceAddress,
+                serviceAddress + "/models",
+                apiKey,
+                AIModelListConfiguration.parse(""));
+        when(configuration.getOpenAICompatibleConfiguration(provider.getProviderName()))
+            .thenReturn(providerConfiguration);
     }
 
     private void whenDefaultModelConfiguration(AIProviderConfiguration configuration,

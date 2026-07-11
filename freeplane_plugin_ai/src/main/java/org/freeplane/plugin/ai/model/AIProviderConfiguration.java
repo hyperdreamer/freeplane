@@ -1,6 +1,8 @@
 package org.freeplane.plugin.ai.model;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import org.freeplane.api.ai.AiTemperature;
 import org.freeplane.api.ai.AiThinkingEffort;
@@ -12,15 +14,13 @@ public class AIProviderConfiguration {
     private static final String AI_SELECTED_MODEL_PROPERTY = "ai_selected_model";
     public static final String AI_THINKING_EFFORT_PROPERTY = "ai_thinking_effort";
     public static final String AI_TEMPERATURE_PROPERTY = "ai_temperature";
-    private static final String AI_OPENROUTER_SERVICE_ADDRESS_PROPERTY = "ai_openrouter_service_address";
-    private static final String AI_OPENROUTER_KEY_PROPERTY = "ai_openrouter_key";
-    private static final String AI_OPENROUTER_MODEL_ALLOWLIST_PROPERTY = "ai_openrouter_model_allowlist";
+
     private static final String AI_GEMINI_SERVICE_ADDRESS_PROPERTY = "ai_gemini_service_address";
     private static final String AI_GEMINI_KEY_PROPERTY = "ai_gemini_key";
-    private static final String AI_GEMINI_MODEL_LIST_PROPERTY = "ai_gemini_model_list";
+    private static final String AI_GEMINI_MODELS_PROPERTY = "ai_gemini_models";
     private static final String AI_OLLAMA_SERVICE_ADDRESS_PROPERTY = "ai_ollama_service_address";
     private static final String AI_OLLAMA_API_KEY_PROPERTY = "ai_ollama_api_key";
-    private static final String AI_OLLAMA_MODEL_ALLOWLIST_PROPERTY = "ai_ollama_model_allowlist";
+    private static final String AI_OLLAMA_MODELS_PROPERTY = "ai_ollama_models";
 
     private final ResourceController resourceController;
 
@@ -39,7 +39,6 @@ public class AIProviderConfiguration {
         }
         return AIModelSelection.createSelectionValue(selection.getProviderName(), selection.getModelName());
     }
-
 
     public AIModelConfiguration getDefaultModelConfiguration() {
         return AIModelConfiguration.of(
@@ -68,52 +67,116 @@ public class AIProviderConfiguration {
             AIModelTemperatureStorage.toPreferenceValue(temperature));
     }
 
-    public String getOpenrouterServiceAddress() {
-        return resourceController.getProperty(AI_OPENROUTER_SERVICE_ADDRESS_PROPERTY);
+    public List<OpenAICompatibleProviderConfiguration> getOpenAICompatibleConfigurations() {
+        List<OpenAICompatibleProviderConfiguration> configurations = new ArrayList<>();
+        for (OpenAICompatibleProvider provider : OpenAICompatibleProvider.values()) {
+            configurations.add(createOpenAICompatibleConfiguration(provider));
+        }
+        return Collections.unmodifiableList(configurations);
     }
 
-    public String getOpenRouterKey() {
-        return resourceController.getProperty(AI_OPENROUTER_KEY_PROPERTY);
+    public OpenAICompatibleProviderConfiguration getOpenAICompatibleConfiguration(String providerName) {
+        OpenAICompatibleProvider provider = OpenAICompatibleProvider.fromProviderName(providerName);
+        return provider == null ? null : createOpenAICompatibleConfiguration(provider);
     }
 
-    public String getOpenrouterModelAllowlistValue() {
-        return resourceController.getProperty(AI_OPENROUTER_MODEL_ALLOWLIST_PROPERTY);
+    public boolean isGeminiConfigured() {
+        return hasNonBlankText(getGeminiKey());
     }
 
-    public String getGeminiServiceAddress() {
-        return resourceController.getProperty(AI_GEMINI_SERVICE_ADDRESS_PROPERTY);
-    }
-
-    public String getGeminiKey() {
-        return resourceController.getProperty(AI_GEMINI_KEY_PROPERTY);
-    }
-
-    public String getGeminiModelListValue() {
-        return resourceController.getProperty(AI_GEMINI_MODEL_LIST_PROPERTY);
-    }
-
-    public String getOllamaServiceAddress() {
-        return resourceController.getProperty(AI_OLLAMA_SERVICE_ADDRESS_PROPERTY);
-    }
-
-    public String getOllamaApiKey() {
-        return resourceController.getProperty(AI_OLLAMA_API_KEY_PROPERTY);
-    }
-
-    public boolean hasOllamaServiceAddress() {
+    public boolean isOllamaConfigured() {
         return hasNonBlankText(getOllamaServiceAddress());
     }
 
+    public boolean hasConfiguredProvider() {
+        for (OpenAICompatibleProviderConfiguration configuration : getOpenAICompatibleConfigurations()) {
+            if (configuration.isConfigured()) {
+                return true;
+            }
+        }
+        return isGeminiConfigured() || isOllamaConfigured();
+    }
+
+    public String getGeminiServiceAddress() {
+        return valueOrDefault(
+            resourceController.getProperty(AI_GEMINI_SERVICE_ADDRESS_PROPERTY),
+            AIChatModelFactory.DEFAULT_GEMINI_SERVICE_ADDRESS);
+    }
+
+    public String getGeminiKey() {
+        return trimToEmpty(resourceController.getProperty(AI_GEMINI_KEY_PROPERTY));
+    }
+
+    public AIModelListConfiguration getGeminiModelListConfiguration() {
+        return AIModelListConfiguration.parse(resourceController.getProperty(AI_GEMINI_MODELS_PROPERTY));
+    }
+
+    public String getOllamaServiceAddress() {
+        return trimToEmpty(resourceController.getProperty(AI_OLLAMA_SERVICE_ADDRESS_PROPERTY));
+    }
+
+    public String getOllamaApiKey() {
+        return trimToEmpty(resourceController.getProperty(AI_OLLAMA_API_KEY_PROPERTY));
+    }
+
     public Map<String, String> getOllamaRequestHeaders() {
-        String apiKey = trimToEmpty(getOllamaApiKey());
+        String apiKey = getOllamaApiKey();
         if (apiKey.isEmpty()) {
             return Collections.emptyMap();
         }
         return Collections.singletonMap("Authorization", "Bearer " + apiKey);
     }
 
-    public String getOllamaModelAllowlistValue() {
-        return resourceController.getProperty(AI_OLLAMA_MODEL_ALLOWLIST_PROPERTY);
+    public AIModelListConfiguration getOllamaModelListConfiguration() {
+        return AIModelListConfiguration.parse(resourceController.getProperty(AI_OLLAMA_MODELS_PROPERTY));
+    }
+
+    private OpenAICompatibleProviderConfiguration createOpenAICompatibleConfiguration(
+        OpenAICompatibleProvider provider) {
+        String propertyPrefix = "ai_" + provider.getProviderName();
+        String serviceAddress = valueOrDefault(
+            resourceController.getProperty(propertyPrefix + "_service_address"),
+            defaultServiceAddress(provider));
+        String modelsAddress = appendPath(serviceAddress, "models");
+        if (provider == OpenAICompatibleProvider.CUSTOM) {
+            String configuredModelsAddress = trimToEmpty(
+                resourceController.getProperty("ai_custom_models_address"));
+            if (!configuredModelsAddress.isEmpty()) {
+                modelsAddress = configuredModelsAddress;
+            }
+        }
+        return new OpenAICompatibleProviderConfiguration(
+            provider,
+            serviceAddress,
+            modelsAddress,
+            resourceController.getProperty(propertyPrefix + "_key"),
+            AIModelListConfiguration.parse(resourceController.getProperty(propertyPrefix + "_models")));
+    }
+
+    private String defaultServiceAddress(OpenAICompatibleProvider provider) {
+        switch (provider) {
+            case OPENAI:
+                return AIChatModelFactory.DEFAULT_OPENAI_SERVICE_ADDRESS;
+            case OPENROUTER:
+                return AIChatModelFactory.DEFAULT_OPENROUTER_SERVICE_ADDRESS;
+            case REQUESTY:
+                return AIChatModelFactory.DEFAULT_REQUESTY_SERVICE_ADDRESS;
+            case CUSTOM:
+            default:
+                return "";
+        }
+    }
+
+    private String appendPath(String serviceAddress, String path) {
+        if (serviceAddress.isEmpty()) {
+            return "";
+        }
+        return serviceAddress.endsWith("/") ? serviceAddress + path : serviceAddress + "/" + path;
+    }
+
+    private String valueOrDefault(String value, String defaultValue) {
+        String normalizedValue = trimToEmpty(value);
+        return normalizedValue.isEmpty() ? defaultValue : normalizedValue;
     }
 
     private AIModelSelection getDefaultModelSelection() {
@@ -138,7 +201,7 @@ public class AIProviderConfiguration {
         return !trimToEmpty(value).isEmpty();
     }
 
-    private String trimToEmpty(String value) {
+    private static String trimToEmpty(String value) {
         return value == null ? "" : value.trim();
     }
 }
