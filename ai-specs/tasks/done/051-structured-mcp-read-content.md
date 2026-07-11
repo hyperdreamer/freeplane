@@ -51,7 +51,7 @@
     `QUALIFIERS` is not requested.
 
 ## Subtask: Return structured JSON content from subtree reads
-- **Status:** review
+- **Status:** done
 - **Scope:** Rework `readNodesWithDescendants` so its JSON response
   returns structured node content instead of presentation-formatted
   `unformattedText`. Keep `readNodesWithDescendantsAsPlainText` as the
@@ -470,7 +470,7 @@
         remains exposed after the response DTO change.
 
 ## Subtask: Optimize plain-text subtree rendering for agent context
-- **Status:** review
+- **Status:** done
 - **Scope:** Rework only `readNodesWithDescendantsAsPlainText` rendering
   so its compact text output is more useful as LLM/agent context. Keep
   the structured JSON behavior from the completed subtask unchanged.
