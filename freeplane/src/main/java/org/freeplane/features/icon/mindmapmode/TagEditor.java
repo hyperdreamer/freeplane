@@ -55,6 +55,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.BooleanSupplier;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -64,7 +66,6 @@ import javax.swing.Action;
 import javax.swing.ActionMap;
 import javax.swing.ComboBoxEditor;
 import javax.swing.DefaultCellEditor;
-import javax.swing.DefaultListCellRenderer;
 import javax.swing.DropMode;
 import javax.swing.InputMap;
 import javax.swing.JButton;
@@ -72,7 +73,6 @@ import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
-import javax.swing.JList;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
@@ -102,7 +102,6 @@ import org.freeplane.core.ui.ActionAcceleratorManager;
 import org.freeplane.core.ui.ColorTracker;
 import org.freeplane.core.ui.LabelAndMnemonicSetter;
 import org.freeplane.core.ui.components.AutoResizedTable;
-import org.freeplane.core.ui.components.JFilterableComboBox;
 import org.freeplane.core.ui.components.JRestrictedSizeScrollPane;
 import org.freeplane.core.ui.components.TagIcon;
 import org.freeplane.core.ui.components.UITools;
@@ -119,15 +118,56 @@ import org.freeplane.features.text.mindmapmode.EditorHolder;
 
 
 class TagEditor {
-    private static final JPanel TRANSPARENT_RENDERER = new JPanel();
-    static {
-        TRANSPARENT_RENDERER.setOpaque(false);
-    }
-
     static class TagEditorHolder extends EditorHolder {
 
         public TagEditorHolder(NodeModel node, Window window) {
             super(node, window);
+        }
+    }
+
+    static class TagCellEditor extends DefaultCellEditor {
+        private static final long serialVersionUID = 1L;
+        private final Function<String, Tag> tagCreator;
+        private final BooleanSupplier filterIsRunning;
+
+        TagCellEditor(JComboBox<Tag> comboBox,
+                      Function<String, Tag> tagCreator,
+                      BooleanSupplier filterIsRunning) {
+            super(comboBox);
+            this.tagCreator = tagCreator;
+            this.filterIsRunning = filterIsRunning;
+        }
+
+        @Override
+        public Object getCellEditorValue() {
+            Object value = super.getCellEditorValue();
+            return value instanceof Tag ? value : tagCreator.apply(value.toString());
+        }
+
+        @Override
+        public Component getTableCellEditorComponent(JTable table, Object value,
+                boolean isSelected, int row, int column) {
+            String text = value instanceof Tag ? ((Tag) value).getContent() : value.toString();
+            return super.getTableCellEditorComponent(table, text, isSelected, row, column);
+        }
+
+        @Override
+        public boolean isCellEditable(EventObject event) {
+            if (event instanceof MouseEvent) {
+                return super.isCellEditable(event);
+            }
+            if (event instanceof KeyEvent) {
+                KeyEvent keyEvent = (KeyEvent) event;
+                return !keyEvent.isControlDown() && !keyEvent.isMetaDown()
+                    && (keyEvent.getKeyChar() != KeyEvent.CHAR_UNDEFINED
+                        || keyEvent.getKeyCode() == KeyEvent.VK_F2);
+            }
+            return event instanceof InputMethodEvent;
+        }
+
+        @Override
+        public boolean stopCellEditing() {
+            return !filterIsRunning.getAsBoolean() && super.stopCellEditing();
         }
     }
 
@@ -835,71 +875,14 @@ class TagEditor {
 
         });
 
-        @SuppressWarnings("serial")
-        JFilterableComboBox<Tag> comboBox = new JFilterableComboBox<>(() -> tagCategories.getTagsAsListModel().stream(),
-                (text) -> text.isEmpty(),
-                (item, text) -> item.getContent().toLowerCase().contains(text.toLowerCase()),
-                (item, text) -> item.getContent().toLowerCase().equals(text.toLowerCase()));
-
-        @SuppressWarnings("serial")
-        DefaultListCellRenderer cellRenderer = new DefaultListCellRenderer() {
-
-            @Override
-            public Component getListCellRendererComponent(JList<?> list, Object value, int index,
-                    boolean isSelected, boolean cellHasFocus) {
-                Object displayedValue;
-                if(index == -1)
-                    return TRANSPARENT_RENDERER;
-                else if (value instanceof Tag){
-                    Tag tag = (Tag)value;
-                    displayedValue = new TagIcon(tag, table.getFont());
-                }
-                else
-                    displayedValue = value;
-                return super.getListCellRendererComponent(list, displayedValue, index, isSelected, cellHasFocus);
-            }};
-        comboBox.setRenderer(cellRenderer);
-        comboBox.setEditable(true);
-        JTextField editorComponent = (JTextField) comboBox.getEditor().getEditorComponent();
-        editorComponent.putClientProperty( "JTextField.selectAllOnFocusPolicy", "never");
-        DefaultCellEditor cellEditor = new DefaultCellEditor(comboBox) {
-            private static final long serialVersionUID = 1L;
-
-            @Override
-            public Object getCellEditorValue() {
-                Object value = super.getCellEditorValue();
-                if(value instanceof Tag)
-                    return value;
-                else
-                    return createTagIfAbsent(value.toString(), false);
-            }
-
-            @Override
-            public Component getTableCellEditorComponent(JTable table, Object value,
-                    boolean isSelected, int row, int column) {
-                final String text = (value instanceof Tag) ? ((Tag)value).getContent() : value.toString();
-                return super.getTableCellEditorComponent(table, text, isSelected, row, column);
-            }
-
-            @Override
-            public boolean isCellEditable(EventObject anEvent) {
-                if(anEvent instanceof MouseEvent)
-                   return super.isCellEditable(anEvent);
-               else if(anEvent instanceof KeyEvent) {
-                KeyEvent keyEvent = (KeyEvent)anEvent;
-                return ! keyEvent.isControlDown() && ! keyEvent.isMetaDown()
-                        && (keyEvent.getKeyChar() != KeyEvent.CHAR_UNDEFINED || keyEvent.getKeyCode() == KeyEvent.VK_F2);
-            } else
-                   return anEvent instanceof InputMethodEvent;
-            }
-
-            @Override
-            public boolean stopCellEditing() {
-                 return ! comboBox.isFilterRunning() && super.stopCellEditing();
-            }
-
-
-        };
+        TagSelector tagSelector = new TagSelector(
+            () -> tagCategories.getTagsAsListModel().stream(),
+            table::getFont);
+        JComboBox<Tag> comboBox = tagSelector.getComboBox();
+        DefaultCellEditor cellEditor = new TagCellEditor(
+            comboBox,
+            text -> createTagIfAbsent(text, false),
+            tagSelector::isFilterRunning);
         cellEditor.setClickCountToStart(2);
         table.getColumnModel().getColumn(0).setCellEditor(cellEditor);
 

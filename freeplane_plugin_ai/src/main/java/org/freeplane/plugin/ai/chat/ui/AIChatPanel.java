@@ -174,6 +174,7 @@ public class AIChatPanel extends JPanel {
     private String redoTooltipText;
     private String preferencesTooltipText;
     private String noProviderConfiguredText;
+    private String modelUnavailableText;
     private final JPopupMenu menuPopup;
     private final AIProviderConfiguration configuration;
     private final ToolAvailabilityLevelSettings chatToolAvailabilitySettings;
@@ -283,8 +284,7 @@ public class AIChatPanel extends JPanel {
         aiRequestConfigurationResolver = new AiRequestConfigurationResolver(configuration);
         chatDisplaySettings = new ChatDisplaySettings();
         modelSelectionController = new ChatModelSelector(configuration, new AIModelCatalog(configuration));
-        modelSelectionController.setModelSelectionChangeListener(modelDescriptor -> {
-        });
+        modelSelectionController.setModelSelectionChangeListener(modelDescriptor -> updateInputState());
         thinkingEffortSelector = new ChatThinkingEffortSelector(configuration);
         AssistantProfileSelectionModel assistantProfileSelectionModel = new AssistantProfileSelectionModel();
         chatMemory = createChatMemory();
@@ -389,6 +389,7 @@ public class AIChatPanel extends JPanel {
             + " (" + MenuUtils.formatKeyStroke(redoKeyStroke) + ")";
         preferencesTooltipText = TextUtils.getText("preferences");
         noProviderConfiguredText = TextUtils.getText("ai_chat_no_provider_configured");
+        modelUnavailableText = TextUtils.getText("ai_chat_model_unavailable");
         sendButton.setToolTipText(sendTooltipText);
         undoButton.setToolTipText(undoTooltipText);
         redoButton.setToolTipText(redoTooltipText);
@@ -461,6 +462,7 @@ public class AIChatPanel extends JPanel {
             cancelTooltipText,
             preferencesTooltipText,
             noProviderConfiguredText,
+            modelUnavailableText,
             this::updateUndoRedoButtonState);
         chatRequestFlowFactory = new ChatRequestFlowFactory();
         visibleAiRequestCallbacksFactory = new VisibleAiRequestCallbacksFactory();
@@ -822,6 +824,10 @@ public class AIChatPanel extends JPanel {
     private void sendMessage() {
         String userMessage = inputArea.getText().trim();
         if (userMessage.isEmpty()) {
+            return;
+        }
+        if (!modelSelectionController.hasAvailableSelectedModel()) {
+            notifyUser(modelUnavailableText, true);
             return;
         }
         LiveChatSessionId sessionId = liveChatController.currentSessionId();
@@ -1794,7 +1800,8 @@ public class AIChatPanel extends JPanel {
     private void updateInputState() {
         chatInputControls.update(
             isRequestActive(),
-            isProviderConfigured());
+            isProviderConfigured(),
+            modelSelectionController.hasAvailableSelectedModel());
     }
 
     private void configureEmptyHistoryFocusTransfer() {
@@ -2035,6 +2042,10 @@ public class AIChatPanel extends JPanel {
         }
         switchToSession(sessionId);
         showAndFocusInput();
+        if (!modelSelectionController.hasAvailableSelectedModel()) {
+            notifyUser(modelUnavailableText, true);
+            return false;
+        }
         ChatTokenUsageTracker requestTokenUsageTracker = createRequestTokenUsageTracker(sessionId);
         ChatRequestFlow requestFlow = createVisibleRequestFlow(sessionId, requestTokenUsageTracker, null);
         AIChatService requestService = createVisibleRequestService(sessionId, requestFlow, requestTokenUsageTracker);

@@ -125,6 +125,23 @@ public class AIChatPanelScriptRequestTest {
     }
 
     @Test
+    public void sendMessageStopsBeforeRequestConstructionForUnavailableModel() throws Exception {
+        PanelHarness harness = newPanelHarness(true);
+        ChatModelSelector modelSelector = (ChatModelSelector) getField(
+            harness.panel, "modelSelectionController");
+        when(modelSelector.hasAvailableSelectedModel()).thenReturn(false);
+        JTextArea inputArea = (JTextArea) getField(harness.panel, "inputArea");
+        inputArea.setText("message");
+        Method sendMessage = AIChatPanel.class.getDeclaredMethod("sendMessage");
+        sendMessage.setAccessible(true);
+
+        sendMessage.invoke(harness.panel);
+
+        verify(modelSelector).hasAvailableSelectedModel();
+        assertThat(inputArea.getText()).isEqualTo("message");
+    }
+
+    @Test
     public void mcpToolSummaryUsesCurrentVisibleRequestFlowWhenPresent() throws Exception {
         PanelHarness harness = newPanelHarness(true);
         ChatRequestFlow requestFlow = mock(ChatRequestFlow.class);

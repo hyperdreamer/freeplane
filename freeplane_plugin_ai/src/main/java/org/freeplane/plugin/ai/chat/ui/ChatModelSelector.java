@@ -1,49 +1,86 @@
 package org.freeplane.plugin.ai.chat.ui;
 
-import java.awt.Component;
 import java.awt.Dimension;
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.function.Consumer;
-import javax.swing.DefaultComboBoxModel;
-import javax.swing.DefaultListCellRenderer;
+import java.util.function.Supplier;
+
 import javax.swing.JComboBox;
-import javax.swing.JList;
 import javax.swing.SwingWorker;
+
+import org.freeplane.core.util.TextUtils;
 import org.freeplane.plugin.ai.model.AIModelCatalog;
 import org.freeplane.plugin.ai.model.AIModelDescriptor;
-import org.freeplane.plugin.ai.model.AIModelSelection;
 import org.freeplane.plugin.ai.model.AIProviderConfiguration;
+import org.freeplane.plugin.ai.model.ui.AIModelFilterState;
+import org.freeplane.plugin.ai.model.ui.AIModelSelector;
 
 class ChatModelSelector {
     private final AIProviderConfiguration configuration;
     private final AIModelCatalog modelCatalog;
-    private final JComboBox<AIModelDescriptor> modelSelectionComboBox;
-    private boolean isModelSelectionUpdateInProgress;
+    private final AIModelSelector modelSelector;
     private boolean isModelListLoadInProgress;
     private Consumer<AIModelDescriptor> modelSelectionChangeListener;
     private Consumer<AIModelDescriptor> explicitUserModelSelectionChangeListener;
     private String displayedSelectionValueOverride;
 
     ChatModelSelector(AIProviderConfiguration configuration, AIModelCatalog modelCatalog) {
+        this(configuration, modelCatalog, AIModelFilterState.shared());
+    }
+
+    ChatModelSelector(AIProviderConfiguration configuration,
+                      AIModelCatalog modelCatalog,
+                      AIModelFilterState filterState) {
+        this(
+            configuration,
+            modelCatalog,
+            new AIModelSelector(
+                configuration,
+                filterState,
+                Collections.emptyList(),
+                ChatModelSelector::renderSelectedModelName));
+    }
+
+    ChatModelSelector(AIProviderConfiguration configuration,
+                      AIModelCatalog modelCatalog,
+                      AIModelFilterState filterState,
+                      Supplier<String> noModelSelectedText) {
+        this(
+            configuration,
+            modelCatalog,
+            new AIModelSelector(
+                configuration,
+                filterState,
+                Collections.emptyList(),
+                ChatModelSelector::renderSelectedModelName,
+                noModelSelectedText));
+    }
+
+    private ChatModelSelector(AIProviderConfiguration configuration,
+                              AIModelCatalog modelCatalog,
+                              AIModelSelector modelSelector) {
         this.configuration = configuration;
         this.modelCatalog = modelCatalog;
-        this.modelSelectionComboBox = new JComboBox<>();
-        this.modelSelectionComboBox.setRenderer(new ModelSelectionRenderer());
-        this.modelSelectionComboBox.addActionListener(event -> onModelSelectionChanged());
+        this.modelSelector = modelSelector;
+        modelSelector.setExplicitModelSelectionListener(this::onExplicitModelSelectionChanged);
     }
 
     JComboBox<AIModelDescriptor> getModelSelectionComboBox() {
-        return modelSelectionComboBox;
+        return modelSelector.getModelSelectionComboBox();
+    }
+
+    boolean hasAvailableSelectedModel() {
+        AIModelDescriptor selectedModel = modelSelector.getSelectedModel();
+        return selectedModel != null && !selectedModel.isUnavailable();
     }
 
     void setMinimumAndPreferredWidth(int minimumWidth, int preferredWidth) {
-        Dimension preferredSize = modelSelectionComboBox.getPreferredSize();
+        JComboBox<AIModelDescriptor> comboBox = getModelSelectionComboBox();
+        Dimension preferredSize = comboBox.getPreferredSize();
         int width = Math.max(minimumWidth, preferredWidth);
-        modelSelectionComboBox.setMinimumSize(new Dimension(minimumWidth, preferredSize.height));
-        modelSelectionComboBox.setPreferredSize(new Dimension(width, preferredSize.height));
+        comboBox.setMinimumSize(new Dimension(minimumWidth, preferredSize.height));
+        comboBox.setPreferredSize(new Dimension(width, preferredSize.height));
     }
 
     void setModelSelectionChangeListener(Consumer<AIModelDescriptor> modelSelectionChangeListener) {
@@ -57,28 +94,11 @@ class ChatModelSelector {
 
     void setDisplayedSelectionValueOverride(String selectionValueOverride) {
         displayedSelectionValueOverride = normalizeSelectionValue(selectionValueOverride);
-        applyDisplayedSelectionValue(false);
+        modelSelector.setSelectedModelSelectionValue(effectiveSelectionValue());
     }
 
     void loadInitialModelSelectionList() {
         updateModelSelectionList(true);
-    }
-
-    private void onModelSelectionChanged() {
-        if (isModelSelectionUpdateInProgress) {
-            return;
-        }
-        Object selectedValue = modelSelectionComboBox.getSelectedItem();
-        if (!(selectedValue instanceof AIModelDescriptor)) {
-            configuration.setSelectedModelValue("");
-            notifyModelSelectionChange(null);
-            notifyExplicitUserModelSelectionChange(null);
-            return;
-        }
-        AIModelDescriptor selectedModel = (AIModelDescriptor) selectedValue;
-        configuration.setSelectedModelValue(selectedModel.getSelectionValue());
-        notifyModelSelectionChange(selectedModel);
-        notifyExplicitUserModelSelectionChange(selectedModel);
     }
 
     private void updateModelSelectionList(boolean allowsRefresh) {
@@ -86,7 +106,7 @@ class ChatModelSelector {
             return;
         }
         isModelListLoadInProgress = true;
-        modelSelectionComboBox.setEnabled(false);
+        getModelSelectionComboBox().setEnabled(false);
         new SwingWorker<List<AIModelDescriptor>, Void>() {
             @Override
             protected List<AIModelDescriptor> doInBackground() {
@@ -98,7 +118,8 @@ class ChatModelSelector {
                 List<AIModelDescriptor> modelDescriptors;
                 try {
                     modelDescriptors = get();
-                } catch (Exception exception) {
+                }
+                catch (Exception exception) {
                     modelDescriptors = Collections.emptyList();
                 }
                 applyModelSelectionList(modelDescriptors);
@@ -108,88 +129,18 @@ class ChatModelSelector {
     }
 
     void applyModelSelectionList(List<AIModelDescriptor> modelDescriptors) {
-        isModelSelectionUpdateInProgress = true;
-        try {
-            List<AIModelDescriptor> sortedModelDescriptors = new ArrayList<>(modelDescriptors);
-            sortedModelDescriptors.sort(Comparator.comparing(AIModelDescriptor::getDisplayName, String.CASE_INSENSITIVE_ORDER));
-            DefaultComboBoxModel<AIModelDescriptor> comboBoxModel = new DefaultComboBoxModel<>(
-                sortedModelDescriptors.toArray(new AIModelDescriptor[0])
-            );
-            modelSelectionComboBox.setModel(comboBoxModel);
-            applyDisplayedSelectionValue(true);
-            modelSelectionComboBox.setEnabled(hasAnyProviderEnabled());
-        } finally {
-            isModelSelectionUpdateInProgress = false;
+        modelSelector.setAvailableModelDescriptors(modelDescriptors, effectiveSelectionValue());
+        AIModelDescriptor selectedModel = modelSelector.getSelectedModel();
+        if (selectedModel != null) {
+            persistLegacySelectionIfNeeded(selectedModel.getSelectionValue());
+            notifyModelSelectionChange(selectedModel);
         }
     }
 
-    private void applyDisplayedSelectionValue(boolean notifySelectionChange) {
-        isModelSelectionUpdateInProgress = true;
-        try {
-            modelSelectionComboBox.setSelectedIndex(-1);
-            DefaultComboBoxModel<AIModelDescriptor> comboBoxModel = currentComboBoxModel();
-            applySelectionValue(descriptorsFrom(comboBoxModel), comboBoxModel, notifySelectionChange);
-        } finally {
-            isModelSelectionUpdateInProgress = false;
-        }
-    }
-
-    private void applySelectionValue(List<AIModelDescriptor> modelDescriptors,
-                                     DefaultComboBoxModel<AIModelDescriptor> comboBoxModel,
-                                     boolean notifySelectionChange) {
-        String selectionValue = effectiveSelectionValue();
-        AIModelSelection selection = AIModelSelection.fromSelectionValue(selectionValue);
-        if (selection == null) {
-            return;
-        }
-        for (AIModelDescriptor modelDescriptor : modelDescriptors) {
-            if (selection.getProviderName().equalsIgnoreCase(modelDescriptor.getProviderName())
-                && selection.getModelName().equals(modelDescriptor.getModelName())) {
-                modelSelectionComboBox.setSelectedItem(modelDescriptor);
-                persistLegacySelectionIfNeeded(modelDescriptor.getSelectionValue());
-                if (notifySelectionChange) {
-                    notifyModelSelectionChange(modelDescriptor);
-                }
-                return;
-            }
-        }
-        AIModelDescriptor unavailableSelection = AIModelDescriptor.unavailable(
-            selection.getProviderName(),
-            selection.getModelName());
-        comboBoxModel.addElement(unavailableSelection);
-        modelSelectionComboBox.setSelectedItem(unavailableSelection);
-        persistLegacySelectionIfNeeded(unavailableSelection.getSelectionValue());
-        if (notifySelectionChange) {
-            notifyModelSelectionChange(unavailableSelection);
-        }
-    }
-
-    private boolean hasAnyProviderEnabled() {
-        boolean hasOpenrouterKey = configuration.getOpenRouterKey() != null && !configuration.getOpenRouterKey().isEmpty();
-        boolean hasGeminiKey = configuration.getGeminiKey() != null && !configuration.getGeminiKey().isEmpty();
-        return hasOpenrouterKey || hasGeminiKey || configuration.hasOllamaServiceAddress();
-    }
-
-    private DefaultComboBoxModel<AIModelDescriptor> currentComboBoxModel() {
-        Object comboBoxModel = modelSelectionComboBox.getModel();
-        if (comboBoxModel instanceof DefaultComboBoxModel) {
-            @SuppressWarnings("unchecked")
-            DefaultComboBoxModel<AIModelDescriptor> typedModel =
-                (DefaultComboBoxModel<AIModelDescriptor>) comboBoxModel;
-            return typedModel;
-        }
-        return new DefaultComboBoxModel<>();
-    }
-
-    private List<AIModelDescriptor> descriptorsFrom(DefaultComboBoxModel<AIModelDescriptor> comboBoxModel) {
-        List<AIModelDescriptor> descriptors = new ArrayList<>();
-        for (int index = 0; index < comboBoxModel.getSize(); index++) {
-            AIModelDescriptor descriptor = comboBoxModel.getElementAt(index);
-            if (descriptor != null) {
-                descriptors.add(descriptor);
-            }
-        }
-        return descriptors;
+    private void onExplicitModelSelectionChanged(AIModelDescriptor selectedModel) {
+        configuration.setSelectedModelValue(selectedModel.getSelectionValue());
+        notifyModelSelectionChange(selectedModel);
+        notifyExplicitUserModelSelectionChange(selectedModel);
     }
 
     private String effectiveSelectionValue() {
@@ -229,54 +180,15 @@ class ChatModelSelector {
         }
     }
 
-    private static class ModelSelectionRenderer extends DefaultListCellRenderer {
-        private String preferredSizeText;
-        private boolean measuringPreferredSize;
-
-        @Override
-        public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
-            Component component = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
-            preferredSizeText = null;
-            if (value instanceof AIModelDescriptor) {
-                AIModelDescriptor modelDescriptor = (AIModelDescriptor) value;
-                preferredSizeText = index < 0 ? modelDescriptor.getDisplayName() : null;
-                String renderedText = index < 0
-                    ? renderSelectedModelName(modelDescriptor)
-                    : modelDescriptor.getDisplayName();
-                setText(renderedText);
-            }
-            return component;
+    private static String renderSelectedModelName(AIModelDescriptor modelDescriptor) {
+        if (modelDescriptor.isUnavailable()) {
+            return TextUtils.getText("ai_unknown_model");
         }
-
-        @Override
-        public Dimension getPreferredSize() {
-            boolean previousMeasuringState = measuringPreferredSize;
-            measuringPreferredSize = true;
-            try {
-                return super.getPreferredSize();
-            } finally {
-                measuringPreferredSize = previousMeasuringState;
-            }
+        String modelName = modelDescriptor.getModelName();
+        int separatorIndex = modelName.indexOf('/');
+        if (separatorIndex >= 0 && separatorIndex < modelName.length() - 1) {
+            return modelName.substring(separatorIndex + 1);
         }
-
-        @Override
-        public String getText() {
-            if (measuringPreferredSize && preferredSizeText != null) {
-                return preferredSizeText;
-            }
-            return super.getText();
-        }
-
-        private String renderSelectedModelName(AIModelDescriptor modelDescriptor) {
-            if (modelDescriptor.isUnavailable()) {
-                return modelDescriptor.getDisplayName();
-            }
-            String modelName = modelDescriptor.getModelName();
-            int separatorIndex = modelName.indexOf('/');
-            if (separatorIndex >= 0 && separatorIndex < modelName.length() - 1) {
-                return modelName.substring(separatorIndex + 1);
-            }
-            return modelName;
-        }
+        return modelName;
     }
 }

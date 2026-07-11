@@ -64,8 +64,8 @@ public class AiPromptManagerDialog extends JDialog {
     private final JButton deleteButton = new JButton(TextUtils.getText("delete"));
     private final JButton closeButton = new JButton(TextUtils.getText("close"));
     private final AIProviderConfiguration configuration = new AIProviderConfiguration();
-    private final AiPromptModelSelectionController modelSelectionController =
-        new AiPromptModelSelectionController(configuration, new AIModelCatalog(configuration));
+    private final AIModelOverrideSelector modelSelectionController =
+        new AIModelOverrideSelector(configuration, new AIModelCatalog(configuration));
     private final AiPromptThinkingEffortSelectionController thinkingEffortSelectionController =
         new AiPromptThinkingEffortSelectionController();
     private final AiTemperatureSelectionController temperatureSelectionController =

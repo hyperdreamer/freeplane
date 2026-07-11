@@ -2,16 +2,22 @@ package org.freeplane.plugin.ai.chat.ui;
 
 import java.awt.Component;
 import java.awt.Dimension;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.function.Consumer;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JList;
+import javax.swing.JTextField;
 import javax.swing.ListCellRenderer;
+import javax.swing.SwingUtilities;
+import javax.swing.event.PopupMenuEvent;
+import javax.swing.event.PopupMenuListener;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.plugin.ai.model.AIModelCatalog;
 import org.freeplane.plugin.ai.model.AIModelDescriptor;
 import org.freeplane.plugin.ai.model.AIProviderConfiguration;
+import org.freeplane.plugin.ai.model.ui.AIModelFilterState;
 import org.junit.Test;
 import org.mockito.MockedStatic;
 
@@ -38,6 +44,71 @@ public class ChatModelSelectorTest {
         JLabel label = renderLabel(selector, descriptor, -1);
 
         assertThat(label.getText()).isEqualTo("gpt-4.1-mini");
+    }
+
+    @Test
+    public void selectedModelDisplay_remainsShortened() {
+        AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
+        when(configuration.getOpenRouterKey()).thenReturn("key");
+        when(configuration.getStoredSelectedModelValue())
+            .thenReturn("openrouter|openai/gpt-4.1-mini");
+        when(configuration.getSelectedModelValue())
+            .thenReturn("openrouter|openai/gpt-4.1-mini");
+        ChatModelSelector uut = newSelector(configuration, mock(AIModelCatalog.class));
+        AIModelDescriptor descriptor = new AIModelDescriptor(
+            "openrouter",
+            "openai/gpt-4.1-mini",
+            "OpenRouter: openai/gpt-4.1-mini",
+            false
+        );
+
+        uut.applyModelSelectionList(Collections.singletonList(descriptor));
+
+        JTextField editor = (JTextField) uut.getModelSelectionComboBox()
+            .getEditor().getEditorComponent();
+        assertThat(editor.getText()).isEqualTo("gpt-4.1-mini");
+        assertThat(uut.getModelSelectionComboBox().getItemAt(0).getDisplayName())
+            .isEqualTo("OpenRouter: openai/gpt-4.1-mini");
+    }
+
+    @Test
+    public void hasAvailableSelectedModel_rejectsUnavailableSelection() {
+        AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
+        when(configuration.getStoredSelectedModelValue()).thenReturn("openrouter|missing/model");
+        when(configuration.getSelectedModelValue()).thenReturn("openrouter|missing/model");
+        ChatModelSelector uut = newSelector(configuration, mock(AIModelCatalog.class));
+
+        try (MockedStatic<TextUtils> textUtils = mockStatic(TextUtils.class)) {
+            textUtils.when(() -> TextUtils.format(
+                "ai_unavailable_format",
+                "OpenRouter: missing/model"
+            )).thenReturn("OpenRouter: missing/model unavailable");
+            textUtils.when(() -> TextUtils.getText("ai_unknown_model")).thenReturn("unknown");
+
+            uut.applyModelSelectionList(Collections.emptyList());
+
+            assertThat(uut.hasAvailableSelectedModel()).isFalse();
+        }
+    }
+
+    @Test
+    public void hasAvailableSelectedModel_acceptsCatalogSelection() {
+        AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
+        when(configuration.getStoredSelectedModelValue())
+            .thenReturn("openrouter|openai/gpt-4.1-mini");
+        when(configuration.getSelectedModelValue())
+            .thenReturn("openrouter|openai/gpt-4.1-mini");
+        ChatModelSelector uut = newSelector(configuration, mock(AIModelCatalog.class));
+        AIModelDescriptor descriptor = new AIModelDescriptor(
+            "openrouter",
+            "openai/gpt-4.1-mini",
+            "OpenRouter: openai/gpt-4.1-mini",
+            false
+        );
+
+        uut.applyModelSelectionList(Collections.singletonList(descriptor));
+
+        assertThat(uut.hasAvailableSelectedModel()).isTrue();
     }
 
     @Test
@@ -93,21 +164,25 @@ public class ChatModelSelectorTest {
     }
 
     @Test
-    public void renderer_showsFormattedDisplayName_forSelectedUnavailableValue() {
+    public void renderer_showsUnknown_forSelectedUnavailableValueAndFullNameInDropdown() {
         ChatModelSelector uut = newController();
         JComboBox<AIModelDescriptor> selector = uut.getModelSelectionComboBox();
-        AIModelDescriptor descriptor;
         try (MockedStatic<TextUtils> textUtils = mockStatic(TextUtils.class)) {
             textUtils.when(() -> TextUtils.format(
                 "ai_unavailable_format",
                 "OpenRouter: openai/gpt-4.1-mini"
             )).thenReturn("OpenRouter: openai/gpt-4.1-mini unavailable");
-            descriptor = AIModelDescriptor.unavailable("openrouter", "openai/gpt-4.1-mini");
+            textUtils.when(() -> TextUtils.getText("ai_unknown_model")).thenReturn("unknown");
+            AIModelDescriptor descriptor = AIModelDescriptor.unavailable(
+                "openrouter", "openai/gpt-4.1-mini");
+
+            String selectedValue = renderLabel(selector, descriptor, -1).getText();
+            String dropdownValue = renderLabel(selector, descriptor, 0).getText();
+
+            assertThat(selectedValue).isEqualTo("unknown");
+            assertThat(dropdownValue)
+                .isEqualTo("OpenRouter: openai/gpt-4.1-mini unavailable");
         }
-
-        JLabel label = renderLabel(selector, descriptor, -1);
-
-        assertThat(label.getText()).isEqualTo("OpenRouter: openai/gpt-4.1-mini unavailable");
     }
 
     @Test
@@ -124,13 +199,14 @@ public class ChatModelSelectorTest {
         AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
         when(configuration.getStoredSelectedModelValue()).thenReturn("openrouter|openai/gpt-4.1-mini");
         when(configuration.getSelectedModelValue()).thenReturn("openrouter|openai/gpt-4.1-mini");
-        ChatModelSelector uut = new ChatModelSelector(configuration, mock(AIModelCatalog.class));
+        ChatModelSelector uut = newSelector(configuration, mock(AIModelCatalog.class));
 
         try (MockedStatic<TextUtils> textUtils = mockStatic(TextUtils.class)) {
             textUtils.when(() -> TextUtils.format(
                 "ai_unavailable_format",
                 "OpenRouter: openai/gpt-4.1-mini"
             )).thenReturn("OpenRouter: openai/gpt-4.1-mini unavailable");
+            textUtils.when(() -> TextUtils.getText("ai_unknown_model")).thenReturn("unknown");
 
             uut.applyModelSelectionList(Collections.singletonList(new AIModelDescriptor(
                 "gemini",
@@ -152,13 +228,14 @@ public class ChatModelSelectorTest {
         AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
         when(configuration.getStoredSelectedModelValue()).thenReturn(null);
         when(configuration.getSelectedModelValue()).thenReturn("openrouter|openai/gpt-4.1-mini");
-        ChatModelSelector uut = new ChatModelSelector(configuration, mock(AIModelCatalog.class));
+        ChatModelSelector uut = newSelector(configuration, mock(AIModelCatalog.class));
 
         try (MockedStatic<TextUtils> textUtils = mockStatic(TextUtils.class)) {
             textUtils.when(() -> TextUtils.format(
                 "ai_unavailable_format",
                 "OpenRouter: openai/gpt-4.1-mini"
             )).thenReturn("OpenRouter: openai/gpt-4.1-mini unavailable");
+            textUtils.when(() -> TextUtils.getText("ai_unknown_model")).thenReturn("unknown");
 
             uut.applyModelSelectionList(Collections.singletonList(new AIModelDescriptor(
                 "gemini",
@@ -176,7 +253,7 @@ public class ChatModelSelectorTest {
         AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
         when(configuration.getStoredSelectedModelValue()).thenReturn("openrouter|openai/gpt-4.1-mini");
         when(configuration.getSelectedModelValue()).thenReturn("openrouter|openai/gpt-4.1-mini");
-        ChatModelSelector uut = new ChatModelSelector(configuration, mock(AIModelCatalog.class));
+        ChatModelSelector uut = newSelector(configuration, mock(AIModelCatalog.class));
         AIModelDescriptor availableDescriptor = new AIModelDescriptor(
             "gemini",
             "gemini-2.5-flash",
@@ -189,6 +266,7 @@ public class ChatModelSelectorTest {
                 "ai_unavailable_format",
                 "OpenRouter: openai/gpt-4.1-mini"
             )).thenReturn("OpenRouter: openai/gpt-4.1-mini unavailable");
+            textUtils.when(() -> TextUtils.getText("ai_unknown_model")).thenReturn("unknown");
 
             uut.applyModelSelectionList(Collections.singletonList(availableDescriptor));
         }
@@ -202,7 +280,7 @@ public class ChatModelSelectorTest {
         AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
         when(configuration.getStoredSelectedModelValue()).thenReturn("gemini|gemini-2.5-flash");
         when(configuration.getSelectedModelValue()).thenReturn("gemini|gemini-2.5-flash");
-        ChatModelSelector uut = new ChatModelSelector(configuration, mock(AIModelCatalog.class));
+        ChatModelSelector uut = newSelector(configuration, mock(AIModelCatalog.class));
         AIModelDescriptor geminiDescriptor = new AIModelDescriptor(
             "gemini",
             "gemini-2.5-flash",
@@ -230,7 +308,7 @@ public class ChatModelSelectorTest {
         when(configuration.getStoredSelectedModelValue()).thenReturn("gemini|gemini-2.5-flash");
         when(configuration.getSelectedModelValue()).thenReturn("gemini|gemini-2.5-flash");
         AIModelCatalog modelCatalog = mock(AIModelCatalog.class);
-        ChatModelSelector uut = new ChatModelSelector(configuration, modelCatalog);
+        ChatModelSelector uut = newSelector(configuration, modelCatalog);
         @SuppressWarnings("unchecked")
         Consumer<AIModelDescriptor> listener = mock(Consumer.class);
         uut.setExplicitUserModelSelectionChangeListener(listener);
@@ -257,10 +335,46 @@ public class ChatModelSelectorTest {
     }
 
     @Test
+    public void filteredSelection_persistsModelAndRetainsSessionOverrideContract() throws Exception {
+        AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
+        when(configuration.getOpenRouterKey()).thenReturn("key");
+        when(configuration.getStoredSelectedModelValue()).thenReturn("gemini|gemini-2.5-flash");
+        when(configuration.getSelectedModelValue()).thenReturn("gemini|gemini-2.5-flash");
+        AIModelFilterState filterState = new AIModelFilterState();
+        filterState.setFilterText("gpt");
+        ChatModelSelector uut = newSelector(
+            configuration, mock(AIModelCatalog.class), filterState);
+        @SuppressWarnings("unchecked")
+        Consumer<AIModelDescriptor> normalListener = mock(Consumer.class);
+        @SuppressWarnings("unchecked")
+        Consumer<AIModelDescriptor> explicitListener = mock(Consumer.class);
+        uut.setModelSelectionChangeListener(normalListener);
+        uut.setExplicitUserModelSelectionChangeListener(explicitListener);
+        AIModelDescriptor geminiDescriptor = new AIModelDescriptor(
+            "gemini", "gemini-2.5-flash", "Gemini: gemini-2.5-flash", false);
+        AIModelDescriptor openRouterDescriptor = new AIModelDescriptor(
+            "openrouter", "openai/gpt-4.1-mini", "OpenRouter: openai/gpt-4.1-mini", false);
+        uut.applyModelSelectionList(Arrays.asList(geminiDescriptor, openRouterDescriptor));
+        JComboBox<AIModelDescriptor> comboBox = uut.getModelSelectionComboBox();
+        SwingUtilities.invokeAndWait(() -> {
+            PopupMenuEvent event = new PopupMenuEvent(comboBox);
+            for (PopupMenuListener listener : comboBox.getPopupMenuListeners()) {
+                listener.popupMenuWillBecomeVisible(event);
+            }
+            comboBox.setSelectedItem(openRouterDescriptor);
+        });
+
+        verify(configuration).setSelectedModelValue("openrouter|openai/gpt-4.1-mini");
+        verify(normalListener).accept(openRouterDescriptor);
+        verify(explicitListener).accept(openRouterDescriptor);
+        assertThat(filterState.getFilterText()).isEqualTo("gpt");
+    }
+
+    @Test
     public void selectionChange_persistsProviderAndModelValue() {
         AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
         AIModelCatalog modelCatalog = mock(AIModelCatalog.class);
-        ChatModelSelector uut = new ChatModelSelector(configuration, modelCatalog);
+        ChatModelSelector uut = newSelector(configuration, modelCatalog);
         JComboBox<AIModelDescriptor> selector = uut.getModelSelectionComboBox();
         AIModelDescriptor descriptor = new AIModelDescriptor(
             "openrouter",
@@ -275,10 +389,25 @@ public class ChatModelSelectorTest {
         verify(configuration, atLeastOnce()).setSelectedModelValue("openrouter|openai/gpt-4.1-mini");
     }
 
+    private ChatModelSelector newSelector(AIProviderConfiguration configuration,
+                                          AIModelCatalog modelCatalog) {
+        return newSelector(configuration, modelCatalog, new AIModelFilterState());
+    }
+
+    private ChatModelSelector newSelector(AIProviderConfiguration configuration,
+                                          AIModelCatalog modelCatalog,
+                                          AIModelFilterState filterState) {
+        return new ChatModelSelector(
+            configuration,
+            modelCatalog,
+            filterState,
+            () -> "No model selected");
+    }
+
     private ChatModelSelector newController() {
         AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
         AIModelCatalog modelCatalog = mock(AIModelCatalog.class);
-        return new ChatModelSelector(configuration, modelCatalog);
+        return newSelector(configuration, modelCatalog);
     }
 
     private JLabel renderLabel(JComboBox<AIModelDescriptor> selector, AIModelDescriptor descriptor, int index) {

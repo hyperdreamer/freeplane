@@ -14,6 +14,7 @@ class ChatInputControls {
     private final String cancelTooltipText;
     private final String preferencesTooltipText;
     private final String noProviderConfiguredText;
+    private final String modelUnavailableText;
     private final Runnable undoRedoButtonStateUpdater;
 
     ChatInputControls(JTextArea inputArea,
@@ -25,6 +26,7 @@ class ChatInputControls {
                       String cancelTooltipText,
                       String preferencesTooltipText,
                       String noProviderConfiguredText,
+                      String modelUnavailableText,
                       Runnable undoRedoButtonStateUpdater) {
         this.inputArea = inputArea;
         this.sendButton = sendButton;
@@ -35,18 +37,24 @@ class ChatInputControls {
         this.cancelTooltipText = cancelTooltipText;
         this.preferencesTooltipText = preferencesTooltipText;
         this.noProviderConfiguredText = noProviderConfiguredText;
+        this.modelUnavailableText = modelUnavailableText;
         this.undoRedoButtonStateUpdater = undoRedoButtonStateUpdater;
     }
 
-    void update(boolean requestActive,  boolean providerConfigured) {
+    void update(boolean requestActive, boolean providerConfigured,
+                boolean selectedModelAvailable) {
         if (requestActive) {
             undoRedoButtonStateUpdater.run();
             return;
         }
-        if (providerConfigured) {
-            setProviderReadyState();
-        } else {
+        if (!providerConfigured) {
             setNoProviderState();
+        }
+        else if (!selectedModelAvailable) {
+            setModelUnavailableState();
+        }
+        else {
+            setProviderReadyState();
         }
         undoRedoButtonStateUpdater.run();
     }
@@ -66,6 +74,17 @@ class ChatInputControls {
         sendButton.setText(null);
         sendButton.setIcon(sendIcon);
         sendButton.setToolTipText(sendTooltipText);
+    }
+
+    private void setModelUnavailableState() {
+        inputArea.setEditable(true);
+        sendButton.setEnabled(false);
+        if (noProviderConfiguredText != null && noProviderConfiguredText.equals(inputArea.getText())) {
+            inputArea.setText("");
+        }
+        sendButton.setText(null);
+        sendButton.setIcon(sendIcon);
+        sendButton.setToolTipText(modelUnavailableText);
     }
 
     private void setNoProviderState() {

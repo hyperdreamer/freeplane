@@ -28,7 +28,7 @@ import org.freeplane.plugin.ai.chat.ui.ModelConfigurationSelectorLayout;
 import org.freeplane.plugin.ai.model.AIModelCatalog;
 import org.freeplane.plugin.ai.model.AIModelDescriptor;
 import org.freeplane.plugin.ai.model.AIProviderConfiguration;
-import org.freeplane.plugin.ai.prompt.ui.AiPromptModelSelectionController;
+import org.freeplane.plugin.ai.prompt.ui.AIModelOverrideSelector;
 import org.freeplane.plugin.ai.prompt.ui.AiPromptThinkingEffortSelectionController;
 import org.freeplane.plugin.ai.prompt.ui.AiTemperatureSelectionController;
 
@@ -44,8 +44,8 @@ class AssistantProfileManagerDialog extends JDialog {
     private final JTextArea promptArea = new JTextArea();
     private final JButton deleteButton = new JButton("Delete");
     private final AIProviderConfiguration configuration = new AIProviderConfiguration();
-    private final AiPromptModelSelectionController modelSelectionController =
-        new AiPromptModelSelectionController(configuration, new AIModelCatalog(configuration));
+    private final AIModelOverrideSelector modelSelectionController =
+        new AIModelOverrideSelector(configuration, new AIModelCatalog(configuration));
     private final AiPromptThinkingEffortSelectionController thinkingEffortSelectionController =
         new AiPromptThinkingEffortSelectionController();
     private final AiTemperatureSelectionController temperatureSelectionController =
