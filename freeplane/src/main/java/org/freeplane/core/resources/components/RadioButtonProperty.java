@@ -120,19 +120,19 @@ public class RadioButtonProperty extends PropertyBean implements IPropertyContro
     }
 
     @Override
-	public void appendToForm(final DefaultFormBuilder builder) {
-    	int rowCount = 0;
-    	for(JRadioButton button : buttonsByValue.values()) {
-    		if(0 == rowCount++) {
-    			super.appendToForm(builder, button);
-    		}
-    		else {
-    			builder.append("");
-    			button.setToolTipText(labelComponent.getToolTipText());
-    			builder.append(button);
-    			builder.getLayout().setRowSpec(builder.getRowCount() - 1, FormSpecs.NARROW_LINE_GAP_ROWSPEC);
-    		}
-    	}
+    public void appendToForm(final DefaultFormBuilder builder) {
+        int rowCount = 0;
+        for (JRadioButton button : buttonsByValue.values()) {
+            if (0 == rowCount++) {
+                super.appendToForm(builder, button);
+            }
+            else {
+                builder.append("");
+                button.setToolTipText(labelComponent.getToolTipText());
+                builder.append(alignValueComponentWithResetControl(button));
+                builder.getLayout().setRowSpec(builder.getRowCount() - 1, FormSpecs.NARROW_LINE_GAP_ROWSPEC);
+            }
+        }
     }
 
     public Vector<String> getPossibleValues() {

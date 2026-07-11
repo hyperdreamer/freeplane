@@ -128,7 +128,9 @@ public class ComboProperty extends PropertyBean implements ActionListener {
 			mComboBox.setSelectedItem(value);
 		}
 		else{
-			LogUtils.severe("Can't set the value:" + value + " into the combo box " + getName() + " containing values " + possibleValues);
+			if (value != null) {
+				LogUtils.severe("Can't set the value:" + value + " into the combo box " + getName() + " containing values " + possibleValues);
+			}
 			if (mComboBox.getModel().getSize() > 0) {
 				mComboBox.setSelectedIndex(0);
 			}

@@ -307,6 +307,8 @@ public abstract class ResourceController {
 		propertyChangeListeners.remove(listener);
 	}
 
+	abstract public void removeUserProperty(String key);
+
 	abstract public void saveProperties();
 
 	abstract public void setDefaultProperty(final String key, final String value);

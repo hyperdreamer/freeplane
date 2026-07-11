@@ -113,18 +113,29 @@ public class PathProperty extends PropertyBean {
 	}
 
 	private String path() {
-        if (value == null) {
+        return expandPath(value);
+    }
+
+    private String expandPath(String path) {
+        if (path == null) {
             return null;
         }
         String freeplaneUserDirectory = ResourceController.getResourceController().getFreeplaneUserDirectory();
-        String path = TextUtils.replaceAtBegin(value, "{freeplaneuserdir}", freeplaneUserDirectory);
-        path = TextUtils.replaceAtBegin(path, "{user.home}", System.getProperty("user.home"));
-        return path;
+        path = TextUtils.replaceAtBegin(path, "{freeplaneuserdir}", freeplaneUserDirectory);
+        return TextUtils.replaceAtBegin(path, "{user.home}", System.getProperty("user.home"));
     }
 
     @Override
 	public String getValue() {
-		return value;
+		return filenameField == null ? value : filenameField.getText();
+	}
+
+	@Override
+	protected boolean valuesEqual(String first, String second) {
+		if (first == null || second == null) {
+			return first == second;
+		}
+		return new File(expandPath(first)).equals(new File(expandPath(second)));
 	}
 
 	@Override

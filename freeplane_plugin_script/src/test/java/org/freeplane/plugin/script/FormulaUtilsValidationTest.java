@@ -77,6 +77,12 @@ public class FormulaUtilsValidationTest {
         }
 
         @Override
+        public void removeUserProperty(String key) {
+            unsecuredProperties.remove(key);
+            securedProperties.remove(key);
+        }
+
+        @Override
         public void saveProperties() {
         }
 

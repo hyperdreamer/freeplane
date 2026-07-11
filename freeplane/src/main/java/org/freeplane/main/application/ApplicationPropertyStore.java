@@ -155,6 +155,12 @@ class ApplicationPropertyStore {
 		return props.containsKey(key) || secretsProps.containsKey(key);
 	}
 
+	void removeUserProperty(String key) {
+		props.remove(key);
+		secretsProps.remove(key);
+		securedProps.remove(key);
+	}
+
 	private boolean loadUserProperties(Properties target, File file) {
 		try (InputStream in = new FileInputStream(file)) {
 			target.load(in);

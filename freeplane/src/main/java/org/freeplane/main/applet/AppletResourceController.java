@@ -87,6 +87,11 @@ class AppletResourceController extends ResourceController {
 	}
 
 	@Override
+	public void removeUserProperty(String key) {
+		userProps.remove(key);
+	}
+
+	@Override
 	public void saveProperties() {
 	}
 

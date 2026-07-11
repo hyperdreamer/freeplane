@@ -36,8 +36,10 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Properties;
+import java.util.Set;
 import java.util.Vector;
 
 import javax.swing.JButton;
@@ -72,7 +74,7 @@ class OptionPanel {
 	private static final String FILE_EXTENSION = "freeplaneoptions";
 
 	interface IOptionPanelFeedback {
-		void writeProperties(Properties props);
+		void writeProperties(Properties props, Set<String> userPropertiesToRemove);
 	}
 
 	static final String PREFERENCE_STORAGE_PROPERTY = "OptionPanel_Window_Properties";
@@ -195,6 +197,16 @@ class OptionPanel {
 
 		new DropTarget(centralPanel, fileOpener);
 
+		final JButton defaultsButton = new JButton();
+		LabelAndMnemonicSetter.setLabelAndMnemonic(defaultsButton, TextUtils.getRawText("defaults"));
+		defaultsButton.setToolTipText(TextUtils.getText("use_defaults"));
+		defaultsButton.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(final ActionEvent arg0) {
+				resetAllPropertiesToDefaults();
+			}
+		});
+
 		final JButton saveButton = new JButton();
 		LabelAndMnemonicSetter.setLabelAndMnemonic(saveButton, TextUtils.getRawText("save"));
 		saveButton.addActionListener(new ActionListener() {
@@ -229,12 +241,12 @@ class OptionPanel {
 			public void actionPerformed(final ActionEvent arg0) {
 				if (validate()) {
 					closeWindow();
-					feedback.writeProperties(getOptionProperties());
+					feedback.writeProperties(getChangedOptionProperties(), getUserPropertiesToRemove());
 				}
 			}
 		});
 		topDialog.getRootPane().setDefaultButton(okButton);
-		JButton[] buttons = { saveButton, loadButton, cancelButton, okButton };
+		JButton[] buttons = { defaultsButton, saveButton, loadButton, cancelButton, okButton };
 		final JPanel buttonPanel = buildRightAlignedBar(buttons);
 		buttonPanel.setAlignmentX(JComponent.RIGHT_ALIGNMENT);
 		MnemonicSetter.INSTANCE.setComponentMnemonics(buttonPanel);
@@ -320,8 +332,10 @@ class OptionPanel {
 				final PropertyBean bean = (PropertyBean) control;
 				final String name = bean.getName();
 				final String value = properties.getProperty(name);
-				if(value != null)
+				if(value != null) {
 					bean.setValue(value);
+					bean.cancelPendingUserPropertyRemoval();
+				}
 			}
 		}
 	}
@@ -372,6 +386,7 @@ class OptionPanel {
 				if(ResourceController.getResourceController().getBooleanProperty(propertyName + ".hide"))
 					continue;
 				final IPropertyControl control = creator.createControl();
+				configureReset(control);
 				controls.add(control);
 				if (parentControl != null)
 					parentControl.enables(control);
@@ -379,6 +394,14 @@ class OptionPanel {
 			}
 			else
 				addChildControls(parentControl, node);
+		}
+	}
+
+	private void configureReset(IPropertyControl control) {
+		if (control instanceof PropertyBean) {
+			final PropertyBean property = (PropertyBean) control;
+			final String defaultValue = ResourceController.getResourceController().getDefaultProperty(property.getName());
+			property.configureReset(defaultValue);
 		}
 	}
 
@@ -392,6 +415,43 @@ class OptionPanel {
 		storage.storeDialogPositions(topDialog, OptionPanel.PREFERENCE_STORAGE_PROPERTY);
 		topDialog.setVisible(false);
 		topDialog.dispose();
+	}
+
+	private void resetAllPropertiesToDefaults() {
+		for (final IPropertyControl control : controls) {
+			if (control instanceof PropertyBean) {
+				((PropertyBean) control).resetToDefault();
+			}
+		}
+	}
+
+	private Set<String> getUserPropertiesToRemove() {
+		final Set<String> propertyNames = new HashSet<String>();
+		for (final IPropertyControl control : controls) {
+			if (control instanceof PropertyBean) {
+				final PropertyBean bean = (PropertyBean) control;
+				if (bean.isUserPropertyRemovalPending()) {
+					propertyNames.add(bean.getName());
+				}
+			}
+		}
+		return propertyNames;
+	}
+
+	private Properties getChangedOptionProperties() {
+		final Properties properties = new Properties();
+		for (final IPropertyControl control : controls) {
+			if (control instanceof PropertyBean) {
+				final PropertyBean bean = (PropertyBean) control;
+				if (bean.isValueChanged() && !bean.isUserPropertyRemovalPending()) {
+					final String value = bean.getValue();
+					if (value != null) {
+						properties.setProperty(bean.getName(), value);
+					}
+				}
+			}
+		}
+		return properties;
 	}
 
 	private Properties getOptionProperties() {
@@ -409,12 +469,13 @@ class OptionPanel {
 	}
 
 	public void setProperties() {
+		final ResourceController resources = ResourceController.getResourceController();
 		for (final IPropertyControl control : controls) {
 			if (control instanceof PropertyBean) {
 				final PropertyBean bean = (PropertyBean) control;
 				final String name = bean.getName();
-				final String value = ResourceController.getResourceController().getProperty(name);
-				bean.setValue(value);
+				bean.setValue(resources.getProperty(name));
+				bean.initializeResetState(resources.isPropertySetByUser(name));
 			}
 		}
 	}

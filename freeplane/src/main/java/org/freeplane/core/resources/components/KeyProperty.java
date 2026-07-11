@@ -101,7 +101,9 @@ public class KeyProperty extends PropertyBean {
 		}
 		builder.add(label);
 		builder.nextColumn(2);
-		builder.add(mButton);
+		final JComponent valueComponent = decorateValueComponent(mButton);
+		valueComponent.setToolTipText(tooltip);
+		builder.add(valueComponent);
 		mButton.setToolTipText(tooltip);
 	}
 

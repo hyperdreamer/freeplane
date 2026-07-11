@@ -10,7 +10,9 @@ import java.awt.event.ComponentEvent;
 import java.awt.event.ComponentListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.util.Objects;
 import java.util.Properties;
+import java.util.Set;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
@@ -53,19 +55,12 @@ public final class PreferencesDialogLauncher {
         dialog.setResizable(true);
         dialog.setUndecorated(false);
         final OptionPanel options = new OptionPanel(dialog, new IOptionPanelFeedback() {
-            public void writeProperties(final Properties props) {
-                boolean propertiesChanged = false;
-                for (final Object keyObject : props.keySet()) {
-                    final String key = keyObject.toString();
-                    final String newProperty = props.getProperty(key);
-                    propertiesChanged = propertiesChanged
-                            || !newProperty.equals(ResourceController.getResourceController().getProperty(key));
-                    ResourceController.getResourceController().setProperty(key, newProperty);
-                }
-                if (propertiesChanged) {
+            public void writeProperties(final Properties props, final Set<String> userPropertiesToRemove) {
+                final ResourceController resources = ResourceController.getResourceController();
+                if (applyPreferenceChanges(resources, props, userPropertiesToRemove)) {
                     JOptionPane.showMessageDialog(UITools.getMenuComponent(), TextUtils
                             .getText("option_changes_may_require_restart"));
-                    ResourceController.getResourceController().saveProperties();
+                    resources.saveProperties();
                     UITools.resetMenuBarOnMac();
                 }
             }
@@ -119,6 +114,29 @@ public final class PreferencesDialogLauncher {
         }
 
         dialog.setVisible(true);
+    }
+
+    static boolean applyPreferenceChanges(ResourceController resources, Properties properties,
+            Set<String> userPropertiesToRemove) {
+        boolean propertiesChanged = false;
+        for (final Object keyObject : properties.keySet()) {
+            final String key = keyObject.toString();
+            if (userPropertiesToRemove.contains(key)) {
+                continue;
+            }
+            final String newProperty = properties.getProperty(key);
+            propertiesChanged = propertiesChanged || !newProperty.equals(resources.getProperty(key));
+            resources.setProperty(key, newProperty);
+        }
+        for (String key : userPropertiesToRemove) {
+            final boolean userPropertyWasSet = resources.isPropertySetByUser(key);
+            final String oldValue = resources.getProperty(key);
+            resources.removeUserProperty(key);
+            final String newValue = resources.getProperty(key);
+            propertiesChanged = propertiesChanged || userPropertyWasSet
+                    || !Objects.equals(oldValue, newValue);
+        }
+        return propertiesChanged;
     }
 
     private static JDialog createDialog(final Window window) {

@@ -66,6 +66,38 @@ public class ApplicationPropertyStoreTest {
 	}
 
 	@Test
+	public void removeUserPropertyRevealsDefault() {
+		uut.setDefaultProperty("property", "default");
+		uut.setProperty("property", "override");
+
+		uut.removeUserProperty("property");
+
+		assertThat(uut.getProperty("property")).isEqualTo("default");
+		assertThat(uut.isPropertySetByUser("property")).isFalse();
+	}
+
+	@Test
+	public void removeUserPropertyDeletesSecretAndSecuredValues() throws Exception {
+		uut.setDefaultProperty("property", "default");
+		uut.setProperty("property", "secret override");
+		uut.persistPropertyInSecretsFile("property");
+		uut.securePropertyForModification("property");
+
+		uut.removeUserProperty("property");
+
+		assertThat(uut.getProperty("property")).isEqualTo("default");
+		assertThat(uut.getSecuredProperties().getProperty("property")).isEqualTo("default");
+		assertThat(uut.isPropertySetByUser("property")).isFalse();
+
+		uut.setProperty("property", "later secret");
+		uut.saveProperties("test");
+		Properties autoProperties = loadProperties(temporaryDirectory.resolve("auto.properties"));
+		Properties secretProperties = loadProperties(temporaryDirectory.resolve("secrets.properties"));
+		assertThat(autoProperties).doesNotContainKey("property");
+		assertThat(secretProperties).containsEntry("property", "later secret");
+	}
+
+	@Test
 	public void unsecuredPropertiesEntrySetSkipsDefaultOnlyProperties() {
 		Properties defaultProperties = new Properties();
 		defaultProperties.setProperty("antialias", "enabled");
@@ -75,5 +107,13 @@ public class ApplicationPropertyStoreTest {
 
 		assertThat(uut.getUnsecuredProperties().entrySet()).isEmpty();
 		assertThat(uut.getUnsecuredProperties().getProperty("antialias")).isEqualTo("enabled");
+	}
+
+	private Properties loadProperties(Path file) throws Exception {
+		Properties properties = new Properties();
+		try (java.io.InputStream input = Files.newInputStream(file)) {
+			properties.load(input);
+		}
+		return properties;
 	}
 }

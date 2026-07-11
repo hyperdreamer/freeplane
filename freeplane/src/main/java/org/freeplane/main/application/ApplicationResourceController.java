@@ -104,9 +104,13 @@ public class ApplicationResourceController extends ResourceController {
 		}
 	}
 
-	/**
-	 * @param controller
-	 */
+	ApplicationResourceController(ApplicationPropertyStore propertyStore) {
+		super();
+		this.propertyStore = propertyStore;
+		resourceDirectories = new ArrayList<File>(0);
+		resourceLoaders = new LinkedHashSet<ClassLoader>();
+	}
+
 	public ApplicationResourceController() {
 		super();
 		resourceDirectories = new ArrayList<File>(2);
@@ -291,6 +295,13 @@ public class ApplicationResourceController extends ResourceController {
 	private void readDefaultPreferences(final Properties props, final String propsLoc) {
 		final URL defaultPropsURL = getResource(propsLoc);
 		loadProperties(props, defaultPropsURL);
+	}
+
+	@Override
+	public void removeUserProperty(String key) {
+		final String oldValue = getProperty(key);
+		propertyStore.removeUserProperty(key);
+		firePropertyChanged(key, getProperty(key), oldValue);
 	}
 
 	@Override

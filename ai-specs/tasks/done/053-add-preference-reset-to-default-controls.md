@@ -1,32 +1,36 @@
 # Task: Add preference reset-to-default controls
 
 - **Task Identifier:** 2026-07-11-preference-reset
-- **Scope:** Add a reset-to-default button to every Preferences dialog
-  property editor for which `ResourceController` supplies a non-null Freeplane
-  default. Keep each button visible and enable it only while its editor is
-  enabled and its current value differs from that default. Applying reset must
-  restore the editor value and mark the corresponding user property for
-  removal when the dialog is accepted. A later value change for that editor
-  must cancel the pending removal. For path properties, compare values after
-  expanding supported path placeholders, but restore the original
-  placeholder-preserving default. Exclude non-property controls and properties
-  without a Freeplane default.
+- **Scope:** Add a reset control to every Preferences dialog property editor.
+  For properties with a registered Freeplane default, reset must display that
+  default; for properties without one, it must display the editor's unset
+  representation by assigning `null`. In either case, reset marks the user
+  property for removal when the dialog is accepted. Keep each control visible
+  and enable it only while its editor is enabled and a user override exists or
+  the editor differs from its reset state. A later value change must cancel
+  pending removal. For paths, compare expanded placeholders but restore the
+  literal registered default. Accepting Preferences must write only edited
+  properties so untouched defaults and editor fallbacks do not become user
+  overrides. Exclude non-property controls. Add a `Defaults` button as the
+  first dialog action; it resets every property editor without saving or
+  closing and uses a `Use defaults` tooltip.
 - **Motivation:** Users need a visible, property-specific way to recognize and
   remove preference overrides without manually discovering or reproducing each
   Freeplane default value. Writing the current default as another user value is
   insufficient because it leaves an override that prevents future default
   changes from taking effect.
-- **Scenario:** A user opens Preferences and sees a reset icon beside every
-  property that has a Freeplane default. A reset icon is disabled when its
-  editor already contains that default or when the editor itself is disabled.
-  Equivalent path values compare equal after `{user.home}` and
-  `{freeplaneuserdir}` expansion. When the user activates an enabled reset
-  icon, the editor shows the literal Freeplane default and the dialog records
-  that the user override is to be removed. If the user subsequently chooses or
-  enters another value for that property, including by loading an options
-  file, the removal is canceled. Accepting the dialog removes each remaining
-  marked override and writes other edited values; canceling the dialog changes
-  no persisted properties.
+- **Scenario:** A user opens Preferences and sees a reset icon immediately
+  before every property editor. An icon is disabled when its editor is
+  disabled or when resetting would neither change the displayed value nor
+  remove an existing user override. Activating it displays the registered
+  default, or the editor's unset representation when no default is registered,
+  and records removal of the user override. Equivalent paths compare equal
+  after `{user.home}` and `{freeplaneuserdir}` expansion. A subsequent editor
+  choice, including an options-file load, cancels pending removal. Accepting
+  removes marked overrides and writes only changed, unmarked values; untouched
+  values are not promoted to overrides. Canceling changes nothing persisted.
+  The first dialog action, `Defaults`, applies the same reset intent to every
+  editor but neither saves nor closes the dialog.
 - **Constraints:**
   - Reset is a dialog-local action until the user accepts the Preferences
     dialog; it must not persist or notify application property listeners at
@@ -35,8 +39,11 @@
     storage while preserving the property's configured storage policy for
     future writes.
   - Existing Preferences validation and options-file save/load behavior must
-    continue to operate on the editor values. Loading a value is a later value
-    choice and therefore cancels a pending removal for that property.
+    continue to operate on all editor values. Loading a value is a later value
+    choice and therefore cancels pending removal for that property.
+  - Acceptance must persist only values changed from their loaded editor state;
+    an untouched registered default or control fallback must not become a user
+    override.
   - The control must use the style panel's revert icon presentation rather
     than introduce a second visual convention.
 - **Briefing:** The Preferences dialog is built in the `freeplane` module by
@@ -142,6 +149,12 @@
   `{freeplaneuserdir}` and `{user.home}` only when constructing a file path;
   consequently a placeholder default and an equivalent absolute editor value
   currently compare as different strings.
+
+  Some preference definitions have no registered default. In that case
+  `setProperties()` passes `null` to the editor, whose `setValue` implementation
+  produces a control-specific unset display such as empty text, `false`, a
+  numeric fallback, or the first combo entry. Existing acceptance then writes
+  that displayed fallback as a user property even if the user made no edit.
 - **Analysis:**
   - Applying reset marks the user override for removal on acceptance because
     writing the current default would continue to shadow future defaults.
@@ -150,6 +163,12 @@
   - Path equality expands supported placeholders, while reset preserves the
     literal default, because placeholder text is Freeplane's canonical and
     portable default representation.
+  - Missing registered defaults do not prevent override removal. Assigning
+    `null` reproduces the same control-specific unset representation used when
+    the dialog initially reads an absent property.
+  - Persisting only values changed from their loaded editor state prevents both
+    registered defaults and control fallbacks from being promoted to user
+    overrides merely by accepting Preferences.
 - **Design:**
 
   ```plantuml
@@ -169,8 +188,10 @@
           # appendToForm(builder, editor)
           # decorateValueComponent(editor) : JComponent
           # valuesEqual(first, second) : boolean
-          ~ configureResetToDefault(defaultValue)
+          ~ configureReset(defaultValue)
+          ~ initializeResetState(userPropertyWasSet)
           ~ cancelPendingUserPropertyRemoval()
+          ~ isValueChanged() : boolean
           ~ isUserPropertyRemovalPending() : boolean
         }
         class PathProperty {
@@ -180,17 +201,24 @@
         class PreferencePropertyResetControl {
           - property : PropertyBean
           - defaultValue : String
+          - loadedValue : String
+          - resetValue : String
+          - userPropertyWasSet : boolean
           - userPropertyRemovalPending : boolean
           - button : JButton
           ~ decorate(editor) : JComponent
+          ~ initialize(userPropertyWasSet)
           ~ setEditorEnabled(enabled)
           ~ cancelPendingRemoval()
+          ~ isValueChanged() : boolean
           ~ isUserPropertyRemovalPending() : boolean
         }
         class OptionPanel {
           - addChildControls(parentControl, controlsTree)
           - loadOptions(inputStream)
+          - resetAllPropertiesToDefaults()
           - getOptionProperties() : Properties
+          - getChangedOptionProperties() : Properties
           - getUserPropertiesToRemove() : Set<String>
         }
         interface "OptionPanel.IOptionPanelFeedback" as Feedback {
@@ -231,32 +259,38 @@
   @enduml
   ```
 
-  `OptionPanel` configures a reset control on each created `PropertyBean` whose
-  name has a non-null `ResourceController.getDefaultProperty(name)` result.
-  `PropertyBean` decorates its existing editor component with that control, so
-  normal, compound, and multi-row editors retain their current form layout.
-  `KeyProperty` uses the same decoration hook in its custom row construction.
-  Properties without defaults retain their existing rows unchanged.
+  `OptionPanel` configures a reset control on every created `PropertyBean`,
+  passing its nullable `ResourceController.getDefaultProperty(name)` result.
+  After loading each effective property, it records the normalized editor value
+  and whether a user override exists. Its `Defaults` action is the first button
+  in the bottom row and invokes every reset control without invoking feedback,
+  saving, or closing. `PropertyBean` decorates its existing editor component
+  with that control, placing the reset button immediately before the value
+  component. Multi-row radio-button editors reserve the same leading width on
+  every subsequent row so all choices remain aligned. `KeyProperty` uses the
+  same decoration hook in its custom row construction. Non-property controls
+  retain their existing rows unchanged.
 
-  `PreferencePropertyResetControl` owns its button, enabled state, default
-  value, pending-removal state, and listeners for the lifetime of the dialog
-  editor. It uses `IconFont.createIconButton()`, the style-panel revert
-  character, and the existing `reset_to_default` tooltip text. It listens to
-  the associated `PropertyBean` events and to descendant Swing text documents
-  found when it decorates the editor. Clicking it suppresses self-generated
-  change handling, sets the associated editor to the raw default, marks
-  removal pending, and refreshes the button. A subsequent editor event or text
-  edit clears the pending marker and refreshes the button. Its enabled state
-  is the conjunction of the editor's enabled state and
-  `!property.valuesEqual(property.getValue(), defaultValue)`.
+  `PreferencePropertyResetControl` owns its button, nullable default, loaded
+  editor value, initial user-override state, reset-result value,
+  pending-removal state, and listeners for the dialog lifetime. It uses
+  `IconFont.createIconButton()`, the style-panel revert character, and the
+  existing `reset_to_default` tooltip. Clicking suppresses self-generated
+  change handling, assigns the raw default or `null` when absent, captures the
+  editor's normalized result, marks removal pending, and refreshes the button.
+  A later editor event or text edit clears the pending marker. The button is
+  enabled only when the editor is enabled, reset is not pending, and either a
+  user override existed at load time or the editor differs from its reset
+  target or loaded unset state.
 
   `PropertyBean` composes the reset control only when configured by
   `OptionPanel`; its existing property-change contract remains unchanged.
-  Loading an options-file value explicitly cancels pending removal for each
-  loaded property even if setting that value emits no component event.
-  Acceptance treats removal as pending only while the editor still equals the
-  default, providing a final guard for custom editors that do not emit a
-  supported event.
+  Loading an options-file value explicitly cancels pending removal even if
+  setting that value emits no component event. Acceptance treats removal as
+  pending only while the editor still equals the captured normalized reset
+  result, providing a final guard for custom editors that emit no supported
+  event. Value-change detection compares the current editor value with the
+  normalized value captured by `setProperties()`.
 
   `PathProperty.getValue()` reads the displayed field after it exists so reset
   state and acceptance see in-progress text. `PathProperty.valuesEqual`
@@ -276,7 +310,8 @@
   participant ApplicationPropertyStore as Store
 
   User -> Reset : click enabled reset icon
-  Reset -> Editor : setValue(raw Freeplane default)
+  Reset -> Editor : setValue(raw default or null)
+  Reset -> Reset : capture normalized reset result
   Reset -> Reset : mark user-property removal pending
   alt user later changes this editor
     User -> Editor : choose or enter value
@@ -284,50 +319,65 @@
     Reset -> Reset : cancel pending removal
   end
   User -> OptionPanel : accept Preferences
-  OptionPanel -> Feedback : writeProperties(values, pending removals)
-  loop each property
-    alt pending removal
-      Feedback -> Resources : removeUserProperty(name)
-      Resources -> Store : removeUserProperty(name)
-      Store --> Resources : effective default revealed
-    else ordinary value
-      Feedback -> Resources : setProperty(name, value)
-      Resources -> Store : setProperty(name, value)
-    end
+  OptionPanel -> Feedback : writeProperties(changed values, pending removals)
+  loop each pending removal
+    Feedback -> Resources : removeUserProperty(name)
+    Resources -> Store : removeUserProperty(name)
+    Store --> Resources : default or absence revealed
+  end
+  loop each changed unmarked property
+    Feedback -> Resources : setProperty(name, value)
+    Resources -> Store : setProperty(name, value)
   end
   Resources -> Store : saveProperties()
   @enduml
   ```
 
-  Acceptance validates the complete editor-value `Properties` exactly as
-  today. The feedback receives those values plus the names still marked for
-  removal. It calls `removeUserProperty` instead of `setProperty` for marked
-  names and applies all other values normally. Removal deletes the explicit
-  key from normal, secret, and secured property layers, leaves secret-storage
-  routing metadata intact for future writes, and fires the normal effective
-  property-change notification from the former user value to the revealed
-  default. The restart notice and property-file save occur when either a value
-  changed or an existing user override was removed. Cancel performs neither
-  operation.
+  Acceptance and options-file export validate or serialize the complete
+  editor-value `Properties`. Persistence feedback instead receives only values
+  changed from their loaded normalized editor state, plus names still marked
+  for removal. It removes marked names and writes changed unmarked values.
+  Removal deletes the explicit key from normal, secret, and secured property
+  layers, leaves secret-storage routing metadata intact for future writes, and
+  fires the normal effective property-change notification from the former user
+  value to the revealed default or absence. The restart notice and property
+  save occur when a changed value was written or an existing override was
+  removed. Cancel performs neither operation.
 - **Test specification:**
   - **Automated tests:**
     - `OptionPanelTest`
-      - `configuresResetForEveryPropertyBeanWithDefault`: controls created for
-        properties with non-null defaults receive reset controls, while
-        non-property controls and properties without defaults do not.
+      - `configuresResetForEveryPropertyBean`: properties with or without
+        registered defaults receive reset controls; non-property controls do
+        not.
+      - `resetAllRestoresDefaultsAndUnsetsOtherPropertiesWithoutWriting`: the
+        global action restores registered defaults, unsets other properties,
+        marks removals, and leaves persistence feedback untouched.
+      - `unchangedPropertiesAreExcludedFromPreferenceChanges`: untouched
+        registered defaults and unset editor fallbacks are not returned for
+        persistence, while an edited value is returned.
       - `loadedValueCancelsPendingRemoval`: loading an options-file value after
         reset cancels that property's pending removal.
     - `PreferencePropertyResetControlTest`
-      - `resetButtonIsEnabledOnlyForEnabledNonDefaultEditor`: the rendered
-        reset button is enabled exactly when its editor is enabled and differs
-        from its default.
+      - `resetButtonReflectsDefaultOverrideAndEditorEnabledState`: the rendered
+        reset button accounts for editor enabled state, value equality, and an
+        existing override even when its value equals the registered default.
       - `resetButtonClickRestoresDefaultAndMarksRemoval`: clicking the rendered
         button writes the raw default to the editor and exposes pending user
         property removal.
       - `laterEditorChangeCancelsRemoval`: an editor change after reset cancels
         pending removal and recomputes button state.
+      - `resetWithoutRegisteredDefaultDisplaysUnsetValueAndMarksRemoval`: a
+        property without a registered default receives its unset editor value
+        and pending removal.
       - `pathResetKeepsPlaceholderDefault`: resetting a non-default path writes
         the original placeholder-preserving default into the editor.
+      - `radioButtonRowsReserveResetButtonWidth`: every radio-button row
+        reserves the reset button's leading width so all choices remain
+        horizontally aligned.
+    - `ComboPropertyTest`
+      - `nullValueSelectsFirstChoiceWithoutLoggingAnError`: intentional unset
+        selects the existing first-choice fallback without reporting a severe
+        invalid-value error.
     - `PathPropertyTest`
       - `placeholderPathEqualsExpandedPath`: `{user.home}` and
         `{freeplaneuserdir}` defaults compare equal to their corresponding
@@ -353,5 +403,26 @@
     - Open each Preferences tab and confirm reset icons align with their
       editors and visually match the style panel revert control, including
       compound and radio-button editors.
+    - Confirm `Defaults` is the first bottom-row button, has the `Use defaults`
+      tooltip, resets every editor to its registered default or unset state,
+      and neither closes nor saves the dialog.
+    - Open and accept Preferences without edits, then confirm no new user
+      overrides are persisted for defaults or control fallbacks.
     - Change a parent boolean preference and confirm dependent editors and
       their reset buttons enable and disable together.
+- **Implementation notes:**
+  - **Interpretations:**
+    - Resetting a property without a registered default calls `setValue(null)`
+      and captures the editor's normalized result; it does not invent a common
+      empty, false, numeric, or first-choice default.
+    - A non-editable combo interprets this intentional `null` input as its
+      existing first-choice fallback without severe logging. Unsupported
+      non-null values remain errors.
+  - **Tradeoffs:**
+    - Pending reset acceptance calls `removeUserProperty` even when no
+      persisted user override remains, so a transient secured value is also
+      cleared. Save and restart handling still occurs only when a persisted
+      user override existed or the effective value changed.
+    - Returning an edited value to its loaded representation is treated as no
+      value change and preserves any pre-existing override. Explicit reset is
+      required to remove that override.

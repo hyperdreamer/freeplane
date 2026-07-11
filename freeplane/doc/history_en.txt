@@ -26,6 +26,7 @@ Automatically discover models confirmed to support text output and tool calling
   - Migrate user-defined legacy model lists while discarding obsolete bundled defaults
 Keep unavailable selected AI models visible and prevent requests until an available model is selected
 Show modal errors when reusable prompts have no available effective model
+Reset individual or all Preferences values to their defaults
 Bug fixes
 
 ==============================
