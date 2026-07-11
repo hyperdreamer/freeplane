@@ -75,6 +75,14 @@ class ChatModelSelector {
         return selectedModel != null && !selectedModel.isUnavailable();
     }
 
+    boolean hasAvailableModelSelection(String selectionValueOverride) {
+        String selectionValue = normalizeSelectionValue(selectionValueOverride);
+        if (selectionValue == null) {
+            selectionValue = configuration.getSelectedModelValue();
+        }
+        return modelSelector.hasAvailableModelSelection(selectionValue);
+    }
+
     void setMinimumAndPreferredWidth(int minimumWidth, int preferredWidth) {
         JComboBox<AIModelDescriptor> comboBox = getModelSelectionComboBox();
         Dimension preferredSize = comboBox.getPreferredSize();

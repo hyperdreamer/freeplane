@@ -1,6 +1,7 @@
 package org.freeplane.plugin.ai.chat.request;
 
 import org.freeplane.api.ai.AiRequestStatus;
+import org.freeplane.core.util.TextUtils;
 import org.freeplane.plugin.ai.model.AIChatModelFactory;
 import org.freeplane.plugin.ai.model.AIModelSelection;
 import org.freeplane.plugin.ai.model.AIProviderConfiguration;
@@ -18,7 +19,9 @@ public class AiRequestConfigurationResolver {
             : selectedModelOverride;
         AIModelSelection selection = AIModelSelection.fromSelectionValue(effectiveSelectionValue);
         if (selection == null) {
-            return new Issue(AiRequestStatus.CONFIGURATION_ERROR, "Missing AI model selection.");
+            return new Issue(
+                AiRequestStatus.CONFIGURATION_ERROR,
+                TextUtils.getText("ai_model_selection_missing"));
         }
         String providerName = selection.getProviderName();
         if (AIChatModelFactory.PROVIDER_NAME_OPENROUTER.equalsIgnoreCase(providerName)) {

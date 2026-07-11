@@ -21,6 +21,8 @@ import java.util.function.Supplier;
 import javax.swing.JButton;
 import javax.swing.JEditorPane;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
 import javax.swing.text.html.HTMLEditorKit;
@@ -1167,6 +1169,59 @@ public class AIChatPanelScriptRequestTest {
     }
 
     @Test
+    public void runPromptUsingMissingCurrentModelStopsBeforeRequestConstruction() throws Exception {
+        PanelHarness harness = newPanelHarness(true);
+        AiRequestConfigurationResolver.Issue issue = new AiRequestConfigurationResolver.Issue(
+            AiRequestStatus.CONFIGURATION_ERROR,
+            "Select an AI model before running a request.");
+        when(harness.aiRequestConfigurationResolver.resolve(null)).thenReturn(issue);
+        ChatPromptRunnerFactory chatPromptRunnerFactory = mock(ChatPromptRunnerFactory.class);
+        setField(harness.panel, "chatPromptRunnerFactory", chatPromptRunnerFactory);
+        JPanel owner = new JPanel();
+
+        try (MockedStatic<UITools> uiTools = mockStatic(UITools.class)) {
+            harness.panel.runPrompt(new AiPrompt("Current model", "Prompt body", false), owner);
+
+            uiTools.verify(() -> UITools.informationMessage(
+                owner,
+                "Select an AI model before running a request.",
+                "Freeplane",
+                JOptionPane.ERROR_MESSAGE));
+        }
+
+        verify(harness.aiRequestConfigurationResolver).resolve(null);
+        org.mockito.Mockito.verifyNoInteractions(chatPromptRunnerFactory);
+    }
+
+    @Test
+    public void runPromptStopsBeforeRequestConstructionForUnavailableExplicitModel() throws Exception {
+        PanelHarness harness = newPanelHarness(true);
+        ChatModelSelector modelSelector = (ChatModelSelector) getField(
+            harness.panel, "modelSelectionController");
+        when(modelSelector.hasAvailableModelSelection("openrouter|missing/model")).thenReturn(false);
+        ChatPromptRunnerFactory chatPromptRunnerFactory = mock(ChatPromptRunnerFactory.class);
+        setField(harness.panel, "chatPromptRunnerFactory", chatPromptRunnerFactory);
+        AiPrompt prompt = new AiPrompt(
+            "Unavailable model", "Prompt body", false, "openrouter|missing/model");
+        JPanel owner = new JPanel();
+
+        try (MockedStatic<TextUtils> textUtils = mockStatic(TextUtils.class);
+             MockedStatic<UITools> uiTools = mockStatic(UITools.class)) {
+            String message = "Select an available AI model before running this prompt.";
+            textUtils.when(() -> TextUtils.getText("ai_prompt_model_unavailable"))
+                .thenReturn(message);
+
+            harness.panel.runPrompt(prompt, owner);
+
+            uiTools.verify(() -> UITools.informationMessage(
+                owner, message, "Freeplane", JOptionPane.ERROR_MESSAGE));
+        }
+
+        verify(modelSelector).hasAvailableModelSelection("openrouter|missing/model");
+        org.mockito.Mockito.verifyNoInteractions(chatPromptRunnerFactory);
+    }
+
+    @Test
     public void runPromptShownStartsAfterHiddenPromptLaunch() throws Exception {
         PanelHarness harness = newPanelHarness(true);
         ChatRequestFlow requestFlow = mock(ChatRequestFlow.class);
@@ -1480,7 +1535,9 @@ public class AIChatPanelScriptRequestTest {
         setField(panel, "chatRequestFlowFactory", chatRequestFlowFactory);
         setField(panel, "visibleAiRequestCallbacksFactory", new VisibleAiRequestCallbacksFactory());
         setField(panel, "chatToolAvailabilityMenu", mock(ToolAvailabilityLevelMenu.class));
-        setField(panel, "modelSelectionController", mock(ChatModelSelector.class));
+        ChatModelSelector modelSelectionController = mock(ChatModelSelector.class);
+        when(modelSelectionController.hasAvailableModelSelection(nullable(String.class))).thenReturn(true);
+        setField(panel, "modelSelectionController", modelSelectionController);
         setField(panel, "thinkingEffortSelector", mock(ChatThinkingEffortSelector.class));
         setField(panel, "aiRequestConfigurationResolver", aiRequestConfigurationResolver);
         setField(panel, "configuration", configuration);

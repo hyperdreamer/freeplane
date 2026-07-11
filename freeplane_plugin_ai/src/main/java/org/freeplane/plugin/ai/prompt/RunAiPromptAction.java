@@ -1,5 +1,6 @@
 package org.freeplane.plugin.ai.prompt;
 
+import java.awt.Component;
 import java.awt.event.ActionEvent;
 import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.plugin.ai.chat.ui.AIChatPanel;
@@ -22,6 +23,8 @@ class RunAiPromptAction extends AFreeplaneAction {
 
     @Override
     public void actionPerformed(ActionEvent event) {
-        aiChatPanel.runPrompt(prompt.copy());
+        Object eventSource = event == null ? null : event.getSource();
+        Component owner = eventSource instanceof Component ? (Component) eventSource : null;
+        aiChatPanel.runPrompt(prompt.copy(), owner);
     }
 }

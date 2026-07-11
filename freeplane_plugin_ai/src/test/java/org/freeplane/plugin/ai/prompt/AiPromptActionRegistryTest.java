@@ -1,6 +1,7 @@
 package org.freeplane.plugin.ai.prompt;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.awt.event.ActionEvent;
 import java.io.IOException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
@@ -8,6 +9,7 @@ import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Arrays;
+import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import org.freeplane.plugin.ai.chat.ui.AIChatPanel;
 import org.freeplane.plugin.ai.prompt.ui.AiPromptManagerDialog;
@@ -26,6 +28,32 @@ public class AiPromptActionRegistryTest {
     public void actionKey_usesTrimmedPromptName() {
         assertThat(AiPromptActionRegistry.actionKey("  Rewrite node  "))
             .isEqualTo("RunAiPromptAction.Rewrite node");
+    }
+
+    @Test
+    public void promptAction_passesEventSourceComponentAsErrorDialogOwner() throws IOException {
+        Path tempDir = Files.createTempDirectory("ai-prompts");
+        try {
+            AIChatPanel aiChatPanel = mock(AIChatPanel.class);
+            AiPromptActionRegistry registry = new AiPromptActionRegistry(
+                new AiPromptStore(new ObjectMapper(), tempDir.resolve(AiPromptStore.PROMPTS_FILE_NAME)),
+                aiChatPanel,
+                () -> {
+                });
+            registry.getDialogState().loadSavedPrompts(
+                Arrays.asList(new AiPrompt("Rewrite", "Prompt", false)));
+            JMenuItem menuItem = new JMenuItem();
+
+            registry.promptActions().get(0).actionPerformed(
+                new ActionEvent(menuItem, ActionEvent.ACTION_PERFORMED, "run"));
+
+            verify(aiChatPanel).runPrompt(
+                argThat(prompt -> prompt != null && prompt.getName().equals("Rewrite")),
+                same(menuItem));
+        }
+        finally {
+            deleteRecursively(tempDir);
+        }
     }
 
     @Test

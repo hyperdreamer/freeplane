@@ -11,7 +11,7 @@
 
 ## Subtask: Filter AI model selectors
 
-- **Status:** review
+- **Status:** in-progress
 - **Scope:** Add literal case-insensitive substring filtering to the chat,
   prompt, and assistant-profile model selectors. Share one non-persisted filter
   value for the Freeplane application session. Preserve model selection and
@@ -37,8 +37,13 @@
   starts with the user's edit and opens the popup. After 200 ms without another
   editor change, every model whose complete drop-down display name contains the
   entered text, ignoring case, remains visible. Prompt and profile selectors
-  continue to show “use current model” independently of the filter. Choosing a listed model by mouse or keyboard
-  updates the owning chat, prompt, or profile selection. Closing or canceling
+  continue to show “use current model” independently of the filter. Running a
+  prompt action stops before chat creation or request construction when its
+  explicit model is unavailable, or when it uses a missing or unavailable
+  current model; the user receives a translated modal error dialog owned by the
+  action source, including for actions invoked from the node popup menu. Choosing
+  a listed model by mouse or keyboard updates the owning chat, prompt, or profile
+  selection. Closing or canceling
   without choosing retains the filter for every model selector but restores the
   previously selected model as the closed editor value.
 - **Constraints:**
@@ -248,6 +253,7 @@
             + setAvailableModelDescriptors(descriptors, selectionValue)
             + setSelectedModelSelectionValue(selectionValue)
             + getSelectedModel()
+            + hasAvailableModelSelection(selectionValue)
             + setExplicitModelSelectionListener(listener)
             - installFilterListeners()
             ~ applyPendingFilter()
@@ -259,6 +265,7 @@
       package "chat.ui" {
         class AIChatPanel {
           - sendMessage()
+          + runPrompt(prompt, owner)
           - updateInputState()
           + submitMessageToSession(sessionId, userMessage)
         }
@@ -274,6 +281,7 @@
           ~ ChatModelSelector(configuration, modelCatalog, filterState)
           ~ getModelSelectionComboBox()
           ~ hasAvailableSelectedModel()
+          ~ hasAvailableModelSelection(selectionValueOverride)
           ~ applyModelSelectionList(descriptors)
           - onExplicitModelSelectionChanged(descriptor)
         }
@@ -407,7 +415,17 @@
   programmatic visible-message request construction. An unavailable or null
   selected descriptor leaves draft input editable, disables the send button,
   and produces the translated “Select an available AI model” message if a
-  non-button path attempts submission. `AIModelOverrideSelector` replaces
+  non-button path attempts submission. Prompt actions converge on
+  `AIChatPanel.runPrompt`. Before either shown or hidden execution, the panel
+  resolves provider configuration and checks the prompt's effective selection
+  against the catalog held by `ChatModelSelector`. “Use current model” resolves
+  through global configuration. Missing current selection produces translated
+  request-configuration text; an unavailable current or explicit prompt model
+  produces translated prompt-specific text. Both failures return before chat
+  creation, history mutation, or request construction. `RunAiPromptAction`
+  supplies its action-event source component as the dialog owner, and prompt
+  validation errors use a modal error dialog rather than chat/status output.
+  Script/API request semantics remain unchanged. `AIModelOverrideSelector` replaces
   `AiPromptModelSelectionController` and retains ownership of the empty
   selection value representing “use current model” and prompt/profile selection
   notifications. Each owner receives explicit descriptor choices from its
@@ -463,6 +481,9 @@
         selected descriptor is classified as unavailable for chat submission.
       - `hasAvailableSelectedModel_acceptsCatalogSelection`: a selected catalog
         descriptor is classified as available.
+      - `hasAvailableModelSelection_resolvesCurrentAndExplicitValuesAgainstCatalog`:
+        current and explicit prompt selection values are compared with the
+        loaded catalog while stale values are rejected.
       - `setDisplayedSelectionValueOverride_showsOverrideWithoutPersistingConfiguration`:
         session display overrides remain programmatic and non-persistent.
     - `ChatInputControlsTest`
@@ -471,10 +492,23 @@
         the send control and showing the availability tooltip.
       - `availableSelectedModel_reenablesSending`: choosing a catalog model
         restores normal send controls.
+    - `AiPromptActionRegistryTest`
+      - `promptAction_passesEventSourceComponentAsErrorDialogOwner`: a prompt
+        action passes its menu-item event source through to prompt execution.
     - `AIChatPanelScriptRequestTest`
       - `sendMessageStopsBeforeRequestConstructionForUnavailableModel`: a
         non-empty visible chat message retains its draft and returns before
         request construction when the selected descriptor is unknown.
+      - `runPromptUsingMissingCurrentModelStopsBeforeRequestConstruction`: a
+        prompt using current model presents the translated missing-selection
+        modal error using the supplied owner and returns without constructing a
+        request.
+      - `runPromptStopsBeforeRequestConstructionForUnavailableExplicitModel`:
+        a stale explicit prompt model presents the translated modal error using
+        the supplied owner and returns before shown or hidden execution.
+    - `AiRequestConfigurationResolverTest`
+      - `reportsMissingSelectedModelAsConfigurationError`: missing effective
+        selection returns the translated model-selection configuration error.
     - `AIModelOverrideSelectorTest`
       - `construction_suppliesUseCurrentModelAsAlwaysVisibleOption`: filtering
         through the composed selector always leaves the synthetic option visible.

@@ -119,6 +119,20 @@ public class AIModelSelector {
         return selectedModel;
     }
 
+    public boolean hasAvailableModelSelection(String selectionValue) {
+        AIModelSelection selection = AIModelSelection.fromSelectionValue(selectionValue);
+        if (selection == null) {
+            return false;
+        }
+        for (AIModelDescriptor descriptor : availableModelDescriptors) {
+            if (selection.getProviderName().equalsIgnoreCase(descriptor.getProviderName())
+                && selection.getModelName().equals(descriptor.getModelName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public void setExplicitModelSelectionListener(
         Consumer<AIModelDescriptor> explicitModelSelectionListener) {
         this.explicitModelSelectionListener = explicitModelSelectionListener;

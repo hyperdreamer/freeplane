@@ -112,6 +112,23 @@ public class ChatModelSelectorTest {
     }
 
     @Test
+    public void hasAvailableModelSelection_resolvesCurrentAndExplicitValuesAgainstCatalog() {
+        AIProviderConfiguration configuration = mock(AIProviderConfiguration.class);
+        when(configuration.getStoredSelectedModelValue()).thenReturn("gemini|gemini-2.5-flash");
+        when(configuration.getSelectedModelValue()).thenReturn("gemini|gemini-2.5-flash");
+        ChatModelSelector uut = newSelector(configuration, mock(AIModelCatalog.class));
+        AIModelDescriptor gemini = new AIModelDescriptor(
+            "gemini", "gemini-2.5-flash", "Gemini: gemini-2.5-flash", false);
+        AIModelDescriptor openRouter = new AIModelDescriptor(
+            "openrouter", "openai/gpt-4.1-mini", "OpenRouter: openai/gpt-4.1-mini", false);
+        uut.applyModelSelectionList(Arrays.asList(gemini, openRouter));
+
+        assertThat(uut.hasAvailableModelSelection(null)).isTrue();
+        assertThat(uut.hasAvailableModelSelection(openRouter.getSelectionValue())).isTrue();
+        assertThat(uut.hasAvailableModelSelection("openrouter|missing/model")).isFalse();
+    }
+
+    @Test
     public void renderer_showsDisplayName_forDropdownItems() {
         ChatModelSelector uut = newController();
         JComboBox<AIModelDescriptor> selector = uut.getModelSelectionComboBox();

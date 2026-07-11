@@ -32,6 +32,7 @@ import javax.swing.JComponent;
 import javax.swing.JEditorPane;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
@@ -882,7 +883,11 @@ public class AIChatPanel extends JPanel {
         AiRequestConfigurationResolver.Issue configurationIssue =
             aiRequestConfigurationResolver.resolve(selectedModelOverride);
         if (configurationIssue != null) {
-            notifyUser(configurationIssue.getDetail(), true);
+            showPromptActionError(owner, configurationIssue.getDetail());
+            return;
+        }
+        if (!modelSelectionController.hasAvailableModelSelection(selectedModelOverride)) {
+            showPromptActionError(owner, TextUtils.getText("ai_prompt_model_unavailable"));
             return;
         }
         if (prompt.isShowInChat()) {
@@ -925,7 +930,7 @@ public class AIChatPanel extends JPanel {
                 false,
                 true,
                 null)) {
-            notifyUser(configurationErrorMessage(selectedModelOverride), true);
+            showPromptActionError(owner, configurationErrorMessage(selectedModelOverride));
         }
     }
 
@@ -1901,6 +1906,14 @@ public class AIChatPanel extends JPanel {
 
     private void appendFailureMessages(String userText, String errorMessage) {
         chatOutputView.appendFailureMessages(userText, errorMessage);
+    }
+
+    private void showPromptActionError(Component owner, String message) {
+        if (message == null || message.trim().isEmpty()) {
+            return;
+        }
+        Component dialogOwner = owner == null ? UITools.getCurrentRootComponent() : owner;
+        UITools.informationMessage(dialogOwner, message, "Freeplane", JOptionPane.ERROR_MESSAGE);
     }
 
     private void notifyUser(String message, boolean error) {
