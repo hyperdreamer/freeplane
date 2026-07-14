@@ -4,22 +4,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import org.freeplane.features.map.NodeModel;
-import org.freeplane.features.text.TextController;
+import org.freeplane.plugin.ai.text.NodeTextPreviewFormatter;
 
 public class ModifiedNodeSummaryBuilder {
-    private static final int DEFAULT_MAXIMUM_TEXT_CHARACTERS = 20;
-    private static final String DEFAULT_CONTINUATION_MARK = " ...";
+    private final NodeTextPreviewFormatter nodeTextPreviewFormatter;
 
-    private final TextController textController;
-    private final int maximumTextCharacters;
-
-    public ModifiedNodeSummaryBuilder(TextController textController) {
-        this(textController, DEFAULT_MAXIMUM_TEXT_CHARACTERS);
-    }
-
-    ModifiedNodeSummaryBuilder(TextController textController, int maximumTextCharacters) {
-        this.textController = Objects.requireNonNull(textController, "textController");
-        this.maximumTextCharacters = maximumTextCharacters;
+    public ModifiedNodeSummaryBuilder(NodeTextPreviewFormatter nodeTextPreviewFormatter) {
+        this.nodeTextPreviewFormatter = Objects.requireNonNull(nodeTextPreviewFormatter, "nodeTextPreviewFormatter");
     }
 
     public List<ModifiedNodeSummary> buildSummaries(List<NodeModel> nodes, boolean includeDescendants) {
@@ -46,7 +37,7 @@ public class ModifiedNodeSummaryBuilder {
 
     private void addNode(NodeModel node, List<ModifiedNodeSummary> summaries) {
         String nodeIdentifier = node.createID();
-        String shortText = textController.getShortPlainText(node, maximumTextCharacters, DEFAULT_CONTINUATION_MARK);
+        String shortText = nodeTextPreviewFormatter.modifiedNodeSummaryText(node);
         summaries.add(new ModifiedNodeSummary(nodeIdentifier, shortText));
     }
 }

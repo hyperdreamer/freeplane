@@ -10,6 +10,7 @@ import org.freeplane.features.mode.Controller;
 import org.freeplane.features.text.TextController;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
+import org.freeplane.plugin.ai.text.NodeTextPreviewFormatter;
 import org.freeplane.plugin.ai.tools.selection.SelectionIdentifiersBuilder;
 import org.freeplane.plugin.ai.tools.selection.SelectionIdentifiersResponse;
 
@@ -68,7 +69,8 @@ public class AiPromptRequestComposer {
             AvailableMaps availableMaps, TextController textController) {
         final AvailableMaps safeAvailableMaps = Objects.requireNonNull(availableMaps, "availableMaps");
         final SelectionIdentifiersBuilder selectionIdentifiersBuilder =
-            new SelectionIdentifiersBuilder(Objects.requireNonNull(textController, "textController"));
+            new SelectionIdentifiersBuilder(new NodeTextPreviewFormatter(
+                Objects.requireNonNull(textController, "textController")));
         return new Supplier<SelectionIdentifiersResponse>() {
             @Override
             public SelectionIdentifiersResponse get() {

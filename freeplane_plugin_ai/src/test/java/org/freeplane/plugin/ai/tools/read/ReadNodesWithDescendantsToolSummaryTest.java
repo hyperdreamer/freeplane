@@ -4,6 +4,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import org.freeplane.features.text.TextController;
+import org.freeplane.plugin.ai.text.NodeTextPreviewFormatter;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.freeplane.plugin.ai.tools.content.NodeContentItemReader;
 import org.freeplane.plugin.ai.tools.utilities.ToolCallSummary;
@@ -19,7 +20,7 @@ public class ReadNodesWithDescendantsToolSummaryTest {
         NodeContentItemReader nodeContentItemReader = mock(NodeContentItemReader.class);
         TextController textController = mock(TextController.class);
         ReadNodesWithDescendantsTool readTool = new ReadNodesWithDescendantsTool(
-            availableMaps, null, nodeContentItemReader, textController);
+            availableMaps, null, nodeContentItemReader, new NodeTextPreviewFormatter(textController));
         ReadNodesWithDescendantsRequest request = new ReadNodesWithDescendantsRequest(
             "map-identifier",
             null,
@@ -47,7 +48,7 @@ public class ReadNodesWithDescendantsToolSummaryTest {
         NodeContentItemReader nodeContentItemReader = mock(NodeContentItemReader.class);
         TextController textController = mock(TextController.class);
         ReadNodesWithDescendantsTool readTool = new ReadNodesWithDescendantsTool(
-            availableMaps, null, nodeContentItemReader, textController);
+            availableMaps, null, nodeContentItemReader, new NodeTextPreviewFormatter(textController));
         ReadNodesWithDescendantsRequest request = new ReadNodesWithDescendantsRequest(
             "map-identifier",
             null,
@@ -71,7 +72,7 @@ public class ReadNodesWithDescendantsToolSummaryTest {
         NodeContentItemReader nodeContentItemReader = mock(NodeContentItemReader.class);
         TextController textController = mock(TextController.class);
         ReadNodesWithDescendantsTool readTool = new ReadNodesWithDescendantsTool(
-            availableMaps, null, nodeContentItemReader, textController);
+            availableMaps, null, nodeContentItemReader, new NodeTextPreviewFormatter(textController));
 
         ToolCallSummary summary = readTool.buildToolCallErrorSummary(null, new IllegalStateException("Missing\nmap"));
 

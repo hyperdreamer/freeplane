@@ -4,6 +4,7 @@ import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.note.NoteModel;
 import org.freeplane.features.text.DetailModel;
 import org.freeplane.features.text.TextController;
+import org.freeplane.plugin.ai.text.NodeTextPreviewFormatter;
 import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -16,13 +17,13 @@ public class TextualContentReaderTest {
     public void readBriefText_usesShortPlainText() {
         TextController textController = mock(TextController.class);
         NodeModel nodeModel = mock(NodeModel.class);
-        when(textController.getShortPlainText(nodeModel)).thenReturn("Short text");
-        TextualContentReader uut = new TextualContentReader(textController);
+        when(textController.getShortPlainText(nodeModel, 40, " ...")).thenReturn("Short text");
+        TextualContentReader uut = new TextualContentReader(textController, new NodeTextPreviewFormatter(textController));
 
         String briefText = uut.readBriefText(nodeModel);
 
         assertThat(briefText).isEqualTo("Short text");
-        verify(textController).getShortPlainText(nodeModel);
+        verify(textController).getShortPlainText(nodeModel, 40, " ...");
     }
 
     @Test
@@ -33,7 +34,7 @@ public class TextualContentReaderTest {
         when(nodeModel.getUserObject()).thenReturn(userObject);
         when(textController.getTransformedTextForClipboard(nodeModel, nodeModel, userObject))
             .thenReturn("Transformed text");
-        TextualContentReader uut = new TextualContentReader(textController);
+        TextualContentReader uut = new TextualContentReader(textController, new NodeTextPreviewFormatter(textController));
 
         TextualContent content = uut.readTextualContent(nodeModel, NodeContentPreset.FULL);
 
@@ -57,7 +58,7 @@ public class TextualContentReaderTest {
             .thenReturn("Details");
         when(textController.getTransformedTextForClipboard(nodeModel, noteModel, "Raw note"))
             .thenReturn("Note");
-        TextualContentReader uut = new TextualContentReader(textController);
+        TextualContentReader uut = new TextualContentReader(textController, new NodeTextPreviewFormatter(textController));
 
         TextualContent content = uut.readTextualContent(nodeModel, NodeContentPreset.FULL);
 

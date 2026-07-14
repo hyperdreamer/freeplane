@@ -3,6 +3,7 @@ package org.freeplane.plugin.ai.tools.search;
 import java.util.Arrays;
 import java.util.List;
 import org.freeplane.features.text.TextController;
+import org.freeplane.plugin.ai.text.NodeTextPreviewFormatter;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.freeplane.plugin.ai.tools.content.NodeContentItemReader;
 import org.freeplane.plugin.ai.tools.utilities.ToolCallSummary;
@@ -17,7 +18,7 @@ public class SearchNodesToolSummaryTest {
         AvailableMaps availableMaps = mock(AvailableMaps.class);
         NodeContentItemReader nodeContentItemReader = mock(NodeContentItemReader.class);
         TextController textController = mock(TextController.class);
-        SearchNodesTool uut = new SearchNodesTool(availableMaps, null, nodeContentItemReader, textController);
+        SearchNodesTool uut = new SearchNodesTool(availableMaps, null, nodeContentItemReader, new NodeTextPreviewFormatter(textController));
         SearchNodesRequest request = new SearchNodesRequest(
             "map-identifier",
             "alpha\nbeta",
@@ -48,7 +49,7 @@ public class SearchNodesToolSummaryTest {
         AvailableMaps availableMaps = mock(AvailableMaps.class);
         NodeContentItemReader nodeContentItemReader = mock(NodeContentItemReader.class);
         TextController textController = mock(TextController.class);
-        SearchNodesTool uut = new SearchNodesTool(availableMaps, null, nodeContentItemReader, textController);
+        SearchNodesTool uut = new SearchNodesTool(availableMaps, null, nodeContentItemReader, new NodeTextPreviewFormatter(textController));
 
         ToolCallSummary summary = uut.buildToolCallErrorSummary(null, new IllegalArgumentException("Bad\nquery"));
 

@@ -7,6 +7,7 @@ import java.util.UUID;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.text.TextController;
+import org.freeplane.plugin.ai.text.NodeTextPreviewFormatter;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.freeplane.plugin.ai.tools.content.IconsContentRequest;
 import org.freeplane.plugin.ai.tools.content.NodeContentItemReader;
@@ -57,7 +58,8 @@ public class SearchNodesToolTest {
         when(nodeContentItemReader.readNodeContent(rootNode, null, NodeContentPreset.BRIEF)).thenReturn(rootBriefContent);
         when(nodeContentItemReader.readNodeContent(childNode, null, NodeContentPreset.BRIEF)).thenReturn(childBriefContent);
         TextController textController = mock(TextController.class);
-        SearchNodesTool uut = new SearchNodesTool(availableMaps, null, nodeContentItemReader, textController,
+        when(textController.getShortPlainText(childNode, 20, "")).thenReturn("Alpha preview");
+        SearchNodesTool uut = new SearchNodesTool(availableMaps, null, nodeContentItemReader, new NodeTextPreviewFormatter(textController),
             objectMapper);
         SearchNodesRequest request = new SearchNodesRequest(
             mapIdentifier.toString(),
@@ -78,6 +80,7 @@ public class SearchNodesToolTest {
         assertThat(result.getNodeIdentifier()).isEqualTo("ID_child");
         assertThat(result.getBriefText()).isEqualTo("Alpha");
         assertThat(result.getBreadcrumbPath()).isEqualTo("Root/Alpha");
+        assertThat(response.getResultPreviewTexts()).containsExactly("Alpha preview");
     }
 
     @Test
@@ -88,7 +91,7 @@ public class SearchNodesToolTest {
         MapModel mapModel = mock(MapModel.class);
         when(availableMaps.findMapModel(eq(mapIdentifier), any())).thenReturn(mapModel);
         TextController textController = mock(TextController.class);
-        SearchNodesTool uut = new SearchNodesTool(availableMaps, null, nodeContentItemReader, textController);
+        SearchNodesTool uut = new SearchNodesTool(availableMaps, null, nodeContentItemReader, new NodeTextPreviewFormatter(textController));
         SearchNodesRequest request = new SearchNodesRequest(
             mapIdentifier.toString(),
             "alpha",
@@ -127,7 +130,7 @@ public class SearchNodesToolTest {
                 return matcher.matchesValue("Alpha");
             });
         TextController textController = mock(TextController.class);
-        SearchNodesTool uut = new SearchNodesTool(availableMaps, null, nodeContentItemReader, textController,
+        SearchNodesTool uut = new SearchNodesTool(availableMaps, null, nodeContentItemReader, new NodeTextPreviewFormatter(textController),
             objectMapper);
         SearchNodesRequest request = new SearchNodesRequest(
             mapIdentifier.toString(),
@@ -173,7 +176,7 @@ public class SearchNodesToolTest {
         when(nodeContentItemReader.readNodeContent(childNode, null, NodeContentPreset.BRIEF))
             .thenReturn(new NodeContentResponse("Alpha", null, null, null, null, null, null, null));
         TextController textController = mock(TextController.class);
-        SearchNodesTool uut = new SearchNodesTool(availableMaps, null, nodeContentItemReader, textController,
+        SearchNodesTool uut = new SearchNodesTool(availableMaps, null, nodeContentItemReader, new NodeTextPreviewFormatter(textController),
             objectMapper);
         SearchNodesRequest request = new SearchNodesRequest(
             mapIdentifier.toString(),

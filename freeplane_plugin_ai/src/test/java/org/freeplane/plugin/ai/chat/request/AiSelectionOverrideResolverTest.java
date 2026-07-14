@@ -10,6 +10,7 @@ import org.freeplane.api.ai.AiSelectionOverride;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.text.TextController;
+import org.freeplane.plugin.ai.text.NodeTextPreviewFormatter;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.freeplane.plugin.ai.maps.MapModelProvider;
 import org.freeplane.plugin.ai.tools.selection.SelectionIdentifiersResponse;
@@ -39,15 +40,15 @@ public class AiSelectionOverrideResolverTest {
         when(secondNode.getID()).thenReturn("ID_2");
         when(secondNode.isDescendantOf(firstNode)).thenReturn(true);
         TextController textController = mock(TextController.class);
-        when(textController.getShortPlainText(firstNode, 20, " ...")).thenReturn("Alpha");
-        when(textController.getShortPlainText(secondNode, 20, " ...")).thenReturn("Beta");
+        when(textController.getShortPlainText(firstNode, 40, " ...")).thenReturn("Alpha");
+        when(textController.getShortPlainText(secondNode, 40, " ...")).thenReturn("Beta");
         MindMap mindMap = mock(MindMap.class);
         Node rootNodeProxy = mock(Node.class);
         when(mindMap.getFile()).thenReturn(new File("/tmp/map.mm"));
         when(mindMap.getRoot()).thenReturn(rootNodeProxy);
         when(rootNodeProxy.getId()).thenReturn("ID_ROOT");
 
-        AiSelectionOverrideResolver uut = new AiSelectionOverrideResolver(availableMaps, textController);
+        AiSelectionOverrideResolver uut = new AiSelectionOverrideResolver(availableMaps, new NodeTextPreviewFormatter(textController));
 
         SelectionIdentifiersResponse result = uut.resolve(
             new AiSelectionOverride(mindMap, Arrays.asList("ID_1", "ID_2")));

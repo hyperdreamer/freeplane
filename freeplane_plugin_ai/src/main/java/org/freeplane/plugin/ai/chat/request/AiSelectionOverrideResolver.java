@@ -9,21 +9,18 @@ import org.freeplane.api.MindMap;
 import org.freeplane.api.ai.AiSelectionOverride;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
-import org.freeplane.features.text.TextController;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
+import org.freeplane.plugin.ai.text.NodeTextPreviewFormatter;
 import org.freeplane.plugin.ai.tools.selection.SelectedNodeSummary;
 import org.freeplane.plugin.ai.tools.selection.SelectionIdentifiersResponse;
 
 public class AiSelectionOverrideResolver {
-    private static final int DEFAULT_MAXIMUM_TEXT_CHARACTERS = 20;
-    private static final String DEFAULT_CONTINUATION_MARK = " ...";
-
     private final AvailableMaps availableMaps;
-    private final TextController textController;
+    private final NodeTextPreviewFormatter nodeTextPreviewFormatter;
 
-    public AiSelectionOverrideResolver(AvailableMaps availableMaps, TextController textController) {
+    public AiSelectionOverrideResolver(AvailableMaps availableMaps, NodeTextPreviewFormatter nodeTextPreviewFormatter) {
         this.availableMaps = Objects.requireNonNull(availableMaps, "availableMaps");
-        this.textController = Objects.requireNonNull(textController, "textController");
+        this.nodeTextPreviewFormatter = Objects.requireNonNull(nodeTextPreviewFormatter, "nodeTextPreviewFormatter");
     }
 
     public SelectionIdentifiersResponse resolve(AiSelectionOverride selectionOverride) {
@@ -87,8 +84,7 @@ public class AiSelectionOverrideResolver {
             if (nodeIdentifier == null) {
                 nodeIdentifier = node.createID();
             }
-            String shortText = textController.getShortPlainText(
-                node, DEFAULT_MAXIMUM_TEXT_CHARACTERS, DEFAULT_CONTINUATION_MARK);
+            String shortText = nodeTextPreviewFormatter.shortText(node);
             selectedNodeSummaries.add(new SelectedNodeSummary(nodeIdentifier, shortText));
         }
         return selectedNodeSummaries;

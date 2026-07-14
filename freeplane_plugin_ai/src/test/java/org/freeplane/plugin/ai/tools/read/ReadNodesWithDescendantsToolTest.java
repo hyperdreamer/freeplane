@@ -20,6 +20,7 @@ import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.map.SummaryNodeFlag;
 import org.freeplane.features.text.TextController;
+import org.freeplane.plugin.ai.text.NodeTextPreviewFormatter;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.freeplane.plugin.ai.tools.content.AttributeEntry;
 import org.freeplane.plugin.ai.tools.content.AttributesContent;
@@ -76,12 +77,13 @@ public class ReadNodesWithDescendantsToolTest {
             null, new TextualContent("Focus full", null, null), null, null, null, null, null, null);
         when(nodeContentItemReader.readNodeContent(eq(focusNode), any(), eq(NodeContentPreset.FULL))).thenReturn(focusContent);
         TextController textController = mock(TextController.class);
-        when(textController.getShortPlainText(focusNode)).thenReturn("Focus");
-        when(textController.getShortPlainText(parentNode)).thenReturn("Parent");
-        when(textController.getShortPlainText(firstChildNode)).thenReturn("Child 1");
-        when(textController.getShortPlainText(secondChildNode)).thenReturn("Child 2");
+        when(textController.getShortPlainText(focusNode, 40, " ...")).thenReturn("Focus");
+        when(textController.getShortPlainText(parentNode, 40, " ...")).thenReturn("Parent");
+        when(textController.getShortPlainText(firstChildNode, 40, " ...")).thenReturn("Child 1");
+        when(textController.getShortPlainText(secondChildNode, 40, " ...")).thenReturn("Child 2");
+        when(textController.getShortPlainText(focusNode, 20, "")).thenReturn("Focus preview");
         ReadNodesWithDescendantsTool readTool = new ReadNodesWithDescendantsTool(
-            availableMaps, null, nodeContentItemReader, textController, objectMapper);
+            availableMaps, null, nodeContentItemReader, new NodeTextPreviewFormatter(textController), objectMapper);
 
         ReadNodesWithDescendantsRequest request = new ReadNodesWithDescendantsRequest(
             mapIdentifier.toString(),
@@ -93,6 +95,7 @@ public class ReadNodesWithDescendantsToolTest {
         ReadNodesWithDescendantsResponse response = readTool.readNodesWithDescendants(request);
 
         assertThat(response.getMapIdentifier()).isEqualTo(mapIdentifier.toString());
+        assertThat(response.getFocusNodePreviewTexts()).containsExactly("Focus preview");
         assertThat(response.getItems()).hasSize(1);
         ReadNodesWithDescendantsItem item = response.getItems().get(0);
         assertThat(item.getBreadcrumbPath()).isEqualTo("Parent/Focus");
@@ -119,7 +122,7 @@ public class ReadNodesWithDescendantsToolTest {
         when(availableMaps.findMapModel(eq(mapIdentifier), any())).thenReturn(mapModel);
         TextController textController = mock(TextController.class);
         ReadNodesWithDescendantsTool readTool = new ReadNodesWithDescendantsTool(availableMaps, null,
-            nodeContentItemReader, textController);
+            nodeContentItemReader, new NodeTextPreviewFormatter(textController));
         ReadNodesWithDescendantsRequest request = new ReadNodesWithDescendantsRequest(
             mapIdentifier.toString(),
             Arrays.asList("ID_dup", "ID_dup"),
@@ -143,7 +146,7 @@ public class ReadNodesWithDescendantsToolTest {
         when(mapModel.getNodeForID("ID_missing")).thenReturn(null);
         TextController textController = mock(TextController.class);
         ReadNodesWithDescendantsTool readTool = new ReadNodesWithDescendantsTool(availableMaps, null,
-            nodeContentItemReader, textController);
+            nodeContentItemReader, new NodeTextPreviewFormatter(textController));
         ReadNodesWithDescendantsRequest request = new ReadNodesWithDescendantsRequest(
             mapIdentifier.toString(),
             Collections.singletonList("ID_missing"),
@@ -182,7 +185,7 @@ public class ReadNodesWithDescendantsToolTest {
                 null, new TextualContent("Focus 2", null, null), null, null, null, null, null, null));
         TextController textController = mock(TextController.class);
         ReadNodesWithDescendantsTool readTool = new ReadNodesWithDescendantsTool(
-            availableMaps, null, nodeContentItemReader, textController, objectMapper);
+            availableMaps, null, nodeContentItemReader, new NodeTextPreviewFormatter(textController), objectMapper);
         ReadNodesWithDescendantsRequest request = new ReadNodesWithDescendantsRequest(
             mapIdentifier.toString(),
             Arrays.asList("ID_focus", "ID_focus_2"),
@@ -224,9 +227,9 @@ public class ReadNodesWithDescendantsToolTest {
         when(nodeContentItemReader.readNodeContent(eq(focusNode), any(), eq(NodeContentPreset.FULL))).thenReturn(focusFullContent);
         when(nodeContentItemReader.readNodeContent(eq(childNode), any(), eq(NodeContentPreset.FULL))).thenReturn(childFullContent);
         TextController textController = mock(TextController.class);
-        when(textController.getShortPlainText(childNode)).thenReturn("Child");
+        when(textController.getShortPlainText(childNode, 40, " ...")).thenReturn("Child");
         ReadNodesWithDescendantsTool readTool = new ReadNodesWithDescendantsTool(
-            availableMaps, null, nodeContentItemReader, textController, objectMapper);
+            availableMaps, null, nodeContentItemReader, new NodeTextPreviewFormatter(textController), objectMapper);
         ReadNodesWithDescendantsRequest request = new ReadNodesWithDescendantsRequest(
             mapIdentifier.toString(),
             Collections.singletonList("ID_focus"),
@@ -271,10 +274,10 @@ public class ReadNodesWithDescendantsToolTest {
             .thenReturn(new NodeContentResponse(
                 null, new TextualContent("Child full", null, null), null, null, null, null, null, null));
         TextController textController = mock(TextController.class);
-        when(textController.getShortPlainText(grandchildNode)).thenReturn("Grandchild brief");
-        when(textController.getShortPlainText(greatGrandchildNode)).thenReturn("Great grandchild brief");
+        when(textController.getShortPlainText(grandchildNode, 40, " ...")).thenReturn("Grandchild brief");
+        when(textController.getShortPlainText(greatGrandchildNode, 40, " ...")).thenReturn("Great grandchild brief");
         ReadNodesWithDescendantsTool readTool = new ReadNodesWithDescendantsTool(
-            availableMaps, null, nodeContentItemReader, textController, objectMapper);
+            availableMaps, null, nodeContentItemReader, new NodeTextPreviewFormatter(textController), objectMapper);
         ReadNodesWithDescendantsRequest request = new ReadNodesWithDescendantsRequest(
             mapIdentifier.toString(),
             Collections.singletonList("ID_focus"),
@@ -317,7 +320,7 @@ public class ReadNodesWithDescendantsToolTest {
                 null, new TextualContent("Text: actual", null, null), null, null, null, null, null, null));
         TextController textController = mock(TextController.class);
         ReadNodesWithDescendantsTool readTool = new ReadNodesWithDescendantsTool(
-            availableMaps, null, nodeContentItemReader, textController, objectMapper);
+            availableMaps, null, nodeContentItemReader, new NodeTextPreviewFormatter(textController), objectMapper);
         ReadNodesWithDescendantsRequest request = new ReadNodesWithDescendantsRequest(
             mapIdentifier.toString(),
             Collections.singletonList("ID_focus"),
@@ -360,7 +363,7 @@ public class ReadNodesWithDescendantsToolTest {
             .thenReturn(focusFullContent);
         TextController textController = mock(TextController.class);
         ReadNodesWithDescendantsTool readTool = new ReadNodesWithDescendantsTool(
-            availableMaps, null, nodeContentItemReader, textController, objectMapper);
+            availableMaps, null, nodeContentItemReader, new NodeTextPreviewFormatter(textController), objectMapper);
         ReadNodesWithDescendantsRequest request = new ReadNodesWithDescendantsRequest(
             mapIdentifier.toString(),
             Collections.singletonList("ID_focus"),
@@ -405,7 +408,7 @@ public class ReadNodesWithDescendantsToolTest {
             .thenReturn(focusFullContent);
         TextController textController = mock(TextController.class);
         ReadNodesWithDescendantsTool readTool = new ReadNodesWithDescendantsTool(
-            availableMaps, null, nodeContentItemReader, textController, objectMapper);
+            availableMaps, null, nodeContentItemReader, new NodeTextPreviewFormatter(textController), objectMapper);
         ReadNodesWithDescendantsRequest request = new ReadNodesWithDescendantsRequest(
             mapIdentifier.toString(),
             Collections.singletonList("ID_focus"),
@@ -490,7 +493,7 @@ public class ReadNodesWithDescendantsToolTest {
         when(mapModel.getExtension(MapLinks.class)).thenReturn(mapLinks);
 
         ReadNodesWithDescendantsTool readTool = new ReadNodesWithDescendantsTool(
-            availableMaps, null, nodeContentItemReader, textController, objectMapper);
+            availableMaps, null, nodeContentItemReader, new NodeTextPreviewFormatter(textController), objectMapper);
         ReadNodesWithDescendantsRequest request = new ReadNodesWithDescendantsRequest(
             mapIdentifier.toString(),
             Collections.singletonList("ID_focus"),
@@ -545,9 +548,9 @@ public class ReadNodesWithDescendantsToolTest {
             .thenReturn(new NodeContentResponse(
                 null, new TextualContent("Root", "Details", null), null, null, null, null, null, null));
         TextController textController = mock(TextController.class);
-        when(textController.getShortPlainText(childNode)).thenReturn("Child");
+        when(textController.getShortPlainText(childNode, 40, " ...")).thenReturn("Child");
         ReadNodesWithDescendantsTool readTool = new ReadNodesWithDescendantsTool(
-            availableMaps, null, nodeContentItemReader, textController);
+            availableMaps, null, nodeContentItemReader, new NodeTextPreviewFormatter(textController));
         ReadNodesWithDescendantsRequest request = new ReadNodesWithDescendantsRequest(
             mapIdentifier.toString(),
             null,
@@ -587,7 +590,7 @@ public class ReadNodesWithDescendantsToolTest {
                 null, new TextualContent("Second", null, null), null, null, null, null, null, null));
         TextController textController = mock(TextController.class);
         ReadNodesWithDescendantsTool readTool = new ReadNodesWithDescendantsTool(
-            availableMaps, null, nodeContentItemReader, textController);
+            availableMaps, null, nodeContentItemReader, new NodeTextPreviewFormatter(textController));
         ReadNodesWithDescendantsRequest request = new ReadNodesWithDescendantsRequest(
             mapIdentifier.toString(),
             Arrays.asList("ID_first", "ID_second"),
@@ -635,8 +638,8 @@ public class ReadNodesWithDescendantsToolTest {
             .thenReturn(new NodeContentResponse(
                 null, new TextualContent("Focus full", null, null), null, null, null, null, null, null));
         TextController textController = mock(TextController.class);
-        when(textController.getShortPlainText(focusNode)).thenReturn("Focus");
-        when(textController.getShortPlainText(parentNode)).thenReturn("Parent");
+        when(textController.getShortPlainText(focusNode, 40, " ...")).thenReturn("Focus");
+        when(textController.getShortPlainText(parentNode, 40, " ...")).thenReturn("Parent");
 
         ConnectorModel outgoingConnector = mock(ConnectorModel.class);
         when(outgoingConnector.getSource()).thenReturn(focusNode);
@@ -660,7 +663,7 @@ public class ReadNodesWithDescendantsToolTest {
         when(mapModel.getExtension(MapLinks.class)).thenReturn(mapLinks);
 
         ReadNodesWithDescendantsTool readTool = new ReadNodesWithDescendantsTool(
-            availableMaps, null, nodeContentItemReader, textController);
+            availableMaps, null, nodeContentItemReader, new NodeTextPreviewFormatter(textController));
         ReadNodesWithDescendantsRequest request = new ReadNodesWithDescendantsRequest(
             mapIdentifier.toString(),
             Collections.singletonList("ID_focus"),
@@ -708,9 +711,9 @@ public class ReadNodesWithDescendantsToolTest {
             .thenReturn(new NodeContentResponse(
                 null, new TextualContent("A", null, null), null, null, null, null, null, null));
         TextController textController = mock(TextController.class);
-        when(textController.getShortPlainText(childNode)).thenReturn("B");
+        when(textController.getShortPlainText(childNode, 40, " ...")).thenReturn("B");
         ReadNodesWithDescendantsTool readTool = new ReadNodesWithDescendantsTool(
-            availableMaps, null, nodeContentItemReader, textController, objectMapper);
+            availableMaps, null, nodeContentItemReader, new NodeTextPreviewFormatter(textController), objectMapper);
         ReadNodesWithDescendantsRequest request = new ReadNodesWithDescendantsRequest(
             mapIdentifier.toString(),
             Collections.singletonList("ID_focus"),
@@ -758,10 +761,10 @@ public class ReadNodesWithDescendantsToolTest {
             .thenReturn(new NodeContentResponse(
                 null, new TextualContent("D", null, null), null, null, null, null, null, null));
         TextController textController = mock(TextController.class);
-        when(textController.getShortPlainText(firstChildNode)).thenReturn("B");
-        when(textController.getShortPlainText(secondChildNode)).thenReturn("C");
+        when(textController.getShortPlainText(firstChildNode, 40, " ...")).thenReturn("B");
+        when(textController.getShortPlainText(secondChildNode, 40, " ...")).thenReturn("C");
         ReadNodesWithDescendantsTool readTool = new ReadNodesWithDescendantsTool(
-            availableMaps, null, nodeContentItemReader, textController);
+            availableMaps, null, nodeContentItemReader, new NodeTextPreviewFormatter(textController));
         ReadNodesWithDescendantsRequest request = new ReadNodesWithDescendantsRequest(
             mapIdentifier.toString(),
             Arrays.asList("ID_first", "ID_second"),
@@ -798,9 +801,9 @@ public class ReadNodesWithDescendantsToolTest {
             .thenReturn(new NodeContentResponse(
                 null, new TextualContent("Root", null, null), null, null, null, null, null, null));
         TextController textController = mock(TextController.class);
-        when(textController.getShortPlainText(childNode)).thenReturn("Child");
+        when(textController.getShortPlainText(childNode, 40, " ...")).thenReturn("Child");
         ReadNodesWithDescendantsTool readTool = new ReadNodesWithDescendantsTool(
-            availableMaps, null, nodeContentItemReader, textController);
+            availableMaps, null, nodeContentItemReader, new NodeTextPreviewFormatter(textController));
         ReadNodesWithDescendantsRequest request = new ReadNodesWithDescendantsRequest(
             mapIdentifier.toString(),
             Collections.singletonList("ID_focus"),
@@ -839,7 +842,7 @@ public class ReadNodesWithDescendantsToolTest {
             .thenReturn(focusContent);
         TextController textController = mock(TextController.class);
         ReadNodesWithDescendantsTool readTool = new ReadNodesWithDescendantsTool(
-            availableMaps, null, nodeContentItemReader, textController);
+            availableMaps, null, nodeContentItemReader, new NodeTextPreviewFormatter(textController));
         ReadNodesWithDescendantsRequest request = new ReadNodesWithDescendantsRequest(
             mapIdentifier.toString(),
             Collections.singletonList("ID_focus"),
@@ -883,11 +886,11 @@ public class ReadNodesWithDescendantsToolTest {
             .thenReturn(new NodeContentResponse(
                 null, new TextualContent("Root", null, null), null, null, null, null, null, null));
         TextController textController = mock(TextController.class);
-        when(textController.getShortPlainText(emptyBefore)).thenReturn("");
-        when(textController.getShortPlainText(visibleNode)).thenReturn("Visible");
-        when(textController.getShortPlainText(emptyAfter)).thenReturn("");
+        when(textController.getShortPlainText(emptyBefore, 40, " ...")).thenReturn("");
+        when(textController.getShortPlainText(visibleNode, 40, " ...")).thenReturn("Visible");
+        when(textController.getShortPlainText(emptyAfter, 40, " ...")).thenReturn("");
         ReadNodesWithDescendantsTool readTool = new ReadNodesWithDescendantsTool(
-            availableMaps, null, nodeContentItemReader, textController);
+            availableMaps, null, nodeContentItemReader, new NodeTextPreviewFormatter(textController));
         ReadNodesWithDescendantsRequest request = new ReadNodesWithDescendantsRequest(
             mapIdentifier.toString(),
             Collections.singletonList("ID_focus"),
@@ -935,13 +938,13 @@ public class ReadNodesWithDescendantsToolTest {
             .thenReturn(new NodeContentResponse(
                 null, new TextualContent("Root", null, null), null, null, null, null, null, null));
         TextController textController = mock(TextController.class);
-        when(textController.getShortPlainText(firstGroupNode)).thenReturn("");
-        when(textController.getShortPlainText(visibleNode)).thenReturn("Visible");
-        when(textController.getShortPlainText(visibleChildNode)).thenReturn("Child");
-        when(textController.getShortPlainText(summaryNode)).thenReturn("");
-        when(textController.getShortPlainText(summaryContentNode)).thenReturn("Summary content");
+        when(textController.getShortPlainText(firstGroupNode, 40, " ...")).thenReturn("");
+        when(textController.getShortPlainText(visibleNode, 40, " ...")).thenReturn("Visible");
+        when(textController.getShortPlainText(visibleChildNode, 40, " ...")).thenReturn("Child");
+        when(textController.getShortPlainText(summaryNode, 40, " ...")).thenReturn("");
+        when(textController.getShortPlainText(summaryContentNode, 40, " ...")).thenReturn("Summary content");
         ReadNodesWithDescendantsTool readTool = new ReadNodesWithDescendantsTool(
-            availableMaps, null, nodeContentItemReader, textController);
+            availableMaps, null, nodeContentItemReader, new NodeTextPreviewFormatter(textController));
         ReadNodesWithDescendantsRequest request = new ReadNodesWithDescendantsRequest(
             mapIdentifier.toString(),
             Collections.singletonList("ID_focus"),
@@ -982,10 +985,10 @@ public class ReadNodesWithDescendantsToolTest {
             .thenReturn(new NodeContentResponse(
                 null, new TextualContent("Root", null, null), null, null, null, null, null, null));
         TextController textController = mock(TextController.class);
-        when(textController.getShortPlainText(emptyBranch)).thenReturn("");
-        when(textController.getShortPlainText(nestedNode)).thenReturn("Nested");
+        when(textController.getShortPlainText(emptyBranch, 40, " ...")).thenReturn("");
+        when(textController.getShortPlainText(nestedNode, 40, " ...")).thenReturn("Nested");
         ReadNodesWithDescendantsTool readTool = new ReadNodesWithDescendantsTool(
-            availableMaps, null, nodeContentItemReader, textController);
+            availableMaps, null, nodeContentItemReader, new NodeTextPreviewFormatter(textController));
         ReadNodesWithDescendantsRequest request = new ReadNodesWithDescendantsRequest(
             mapIdentifier.toString(),
             Collections.singletonList("ID_focus"),
@@ -1018,10 +1021,10 @@ public class ReadNodesWithDescendantsToolTest {
             .thenReturn(new NodeContentResponse(
                 null, new TextualContent("Root", null, null), null, null, null, null, null, null));
         TextController textController = mock(TextController.class);
-        when(textController.getShortPlainText(childNode))
+        when(textController.getShortPlainText(childNode, 40, " ..."))
             .thenReturn("This is a very long node text that has been ...");
         ReadNodesWithDescendantsTool readTool = new ReadNodesWithDescendantsTool(
-            availableMaps, null, nodeContentItemReader, textController);
+            availableMaps, null, nodeContentItemReader, new NodeTextPreviewFormatter(textController));
         ReadNodesWithDescendantsRequest request = new ReadNodesWithDescendantsRequest(
             mapIdentifier.toString(),
             Collections.singletonList("ID_focus"),
@@ -1058,10 +1061,10 @@ public class ReadNodesWithDescendantsToolTest {
             .thenReturn(new NodeContentResponse(
                 null, new TextualContent("A", null, null), null, null, null, null, null, null));
         TextController textController = mock(TextController.class);
-        when(textController.getShortPlainText(emptyNode)).thenReturn("");
-        when(textController.getShortPlainText(visibleNode)).thenReturn("B");
+        when(textController.getShortPlainText(emptyNode, 40, " ...")).thenReturn("");
+        when(textController.getShortPlainText(visibleNode, 40, " ...")).thenReturn("B");
         ReadNodesWithDescendantsTool readTool = new ReadNodesWithDescendantsTool(
-            availableMaps, null, nodeContentItemReader, textController);
+            availableMaps, null, nodeContentItemReader, new NodeTextPreviewFormatter(textController));
         ReadNodesWithDescendantsRequest request = new ReadNodesWithDescendantsRequest(
             mapIdentifier.toString(),
             Collections.singletonList("ID_focus"),
@@ -1095,7 +1098,7 @@ public class ReadNodesWithDescendantsToolTest {
         when(nodeContentItemReader.readNodeContentItem(focusNode, content, true, false)).thenReturn(item);
         TextController textController = mock(TextController.class);
         ReadNodesWithDescendantsTool readTool = new ReadNodesWithDescendantsTool(availableMaps, null,
-            nodeContentItemReader, textController);
+            nodeContentItemReader, new NodeTextPreviewFormatter(textController));
         FetchNodesForEditingRequest request = new FetchNodesForEditingRequest(
             mapIdentifier.toString(),
             Collections.singletonList("ID_focus"),
@@ -1113,7 +1116,7 @@ public class ReadNodesWithDescendantsToolTest {
         NodeContentItemReader nodeContentItemReader = mock(NodeContentItemReader.class);
         TextController textController = mock(TextController.class);
         ReadNodesWithDescendantsTool readTool = new ReadNodesWithDescendantsTool(availableMaps, null,
-            nodeContentItemReader, textController);
+            nodeContentItemReader, new NodeTextPreviewFormatter(textController));
         UUID mapIdentifier = UUID.fromString("58d1888f-151a-4b12-ac54-7f6ff94c876f");
         FetchNodesForEditingRequest request = new FetchNodesForEditingRequest(
             mapIdentifier.toString(),
@@ -1131,7 +1134,7 @@ public class ReadNodesWithDescendantsToolTest {
         NodeContentItemReader nodeContentItemReader = mock(NodeContentItemReader.class);
         TextController textController = mock(TextController.class);
         ReadNodesWithDescendantsTool readTool = new ReadNodesWithDescendantsTool(availableMaps, null,
-            nodeContentItemReader, textController);
+            nodeContentItemReader, new NodeTextPreviewFormatter(textController));
         UUID mapIdentifier = UUID.fromString("ebf35466-149f-472f-95f8-13b07bd634cb");
         FetchNodesForEditingRequest request = new FetchNodesForEditingRequest(
             mapIdentifier.toString(),

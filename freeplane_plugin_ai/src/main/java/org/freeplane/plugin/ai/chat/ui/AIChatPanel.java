@@ -132,6 +132,7 @@ import org.freeplane.plugin.ai.edits.ClearAiMarkersInMapAction;
 import org.freeplane.plugin.ai.edits.ClearAiMarkersInSelectionAction;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.freeplane.plugin.ai.model.AIChatModelFactory;
+import org.freeplane.plugin.ai.text.NodeTextPreviewFormatter;
 import org.freeplane.plugin.ai.model.AIModelCatalog;
 import org.freeplane.plugin.ai.model.AIModelConfiguration;
 import org.freeplane.plugin.ai.model.AIModelSelection;
@@ -304,7 +305,8 @@ public class AIChatPanel extends JPanel {
             promptReferenceResolver,
             this::refreshInstructionPreview);
         slashPromptCompletionController.install();
-        aiSelectionOverrideResolver = new AiSelectionOverrideResolver(availableMaps, textController);
+        aiSelectionOverrideResolver = new AiSelectionOverrideResolver(availableMaps,
+            new NodeTextPreviewFormatter(textController));
         chatNameFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
         liveChatController = new LiveChatController(
             this,

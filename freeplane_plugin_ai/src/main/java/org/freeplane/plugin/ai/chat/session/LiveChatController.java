@@ -23,6 +23,7 @@ import org.freeplane.plugin.ai.chat.memory.GeneralSystemMessage;
 import org.freeplane.plugin.ai.chat.memory.TranscriptHiddenSystemMessage;
 import org.freeplane.plugin.ai.chat.memory.ChatTokenUsageState;
 import org.freeplane.plugin.ai.model.AIModelConfiguration;
+import org.freeplane.plugin.ai.text.NodeTextPreviewFormatter;
 import org.freeplane.plugin.ai.tools.MessageBuilder;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.chat.ui.AIChatPanel;
@@ -96,7 +97,8 @@ public class LiveChatController {
         this.transcriptStore = transcriptStore;
         this.transcriptMemoryMapper = new TranscriptMemoryMapper();
         this.chatMemorySettings = chatMemorySettings;
-        this.mapRootShortTextFormatter = new MapRootShortTextFormatter(availableMaps, textController);
+        this.mapRootShortTextFormatter = new MapRootShortTextFormatter(availableMaps,
+            new NodeTextPreviewFormatter(textController));
         this.mapRootShortTextCountsMerger = new MapRootShortTextCountsMerger();
     }
 

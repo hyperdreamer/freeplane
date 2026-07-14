@@ -5,8 +5,8 @@ import java.util.UUID;
 import org.freeplane.features.map.IMapSelection;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.mode.Controller;
-import org.freeplane.features.text.TextController;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
+import org.freeplane.plugin.ai.text.NodeTextPreviewFormatter;
 import org.freeplane.plugin.ai.tools.utilities.ToolCallSummary;
 import org.freeplane.plugin.ai.tools.utilities.ToolCallSummaryFormatter;
 
@@ -17,10 +17,10 @@ public class SelectedMapAndNodeIdentifiersTool {
 
     public SelectedMapAndNodeIdentifiersTool(AvailableMaps availableMaps,
                                              AvailableMaps.MapAccessListener mapAccessListener,
-                                             TextController textController) {
+                                             NodeTextPreviewFormatter nodeTextPreviewFormatter) {
         this.availableMaps = Objects.requireNonNull(availableMaps, "availableMaps");
         this.mapAccessListener = mapAccessListener;
-        this.selectionIdentifiersBuilder = new SelectionIdentifiersBuilder(textController);
+        this.selectionIdentifiersBuilder = new SelectionIdentifiersBuilder(nodeTextPreviewFormatter);
     }
 
     public SelectionIdentifiersResponse getSelectedMapAndNodeIdentifiers(SelectionIdentifiersRequest request) {

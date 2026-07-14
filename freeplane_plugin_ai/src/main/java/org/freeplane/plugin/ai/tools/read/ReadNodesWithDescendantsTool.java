@@ -16,6 +16,7 @@ import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.map.SummaryNode;
 import org.freeplane.features.text.TextController;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
+import org.freeplane.plugin.ai.text.NodeTextPreviewFormatter;
 import org.freeplane.plugin.ai.tools.content.AttributeEntry;
 import org.freeplane.plugin.ai.tools.content.AttributesContentRequest;
 import org.freeplane.plugin.ai.tools.content.CloneMetadata;
@@ -36,7 +37,6 @@ import org.freeplane.plugin.ai.tools.utilities.ToolCallSummary;
 import org.freeplane.plugin.ai.tools.utilities.ToolCallSummaryFormatter;
 
 public class ReadNodesWithDescendantsTool {
-    private static final int SUMMARY_PREVIEW_TEXT_LIMIT = 20;
     private static final int SUMMARY_PREVIEW_COUNT_LIMIT = 3;
     private static final NodeContentRequest FULL_CONTENT_REQUEST = new NodeContentRequest(
         new TextualContentRequest(true, true, true),
@@ -82,28 +82,28 @@ public class ReadNodesWithDescendantsTool {
     private final AvailableMaps availableMaps;
     private final AvailableMaps.MapAccessListener mapAccessListener;
     private final NodeContentItemReader nodeContentItemReader;
-    private final TextController textController;
+    private final NodeTextPreviewFormatter nodeTextPreviewFormatter;
     private final ObjectMapper objectMapper;
 
     public ReadNodesWithDescendantsTool(AvailableMaps availableMaps, AvailableMaps.MapAccessListener mapAccessListener,
                                         NodeContentItemReader nodeContentItemReader) {
-        this(availableMaps, mapAccessListener, nodeContentItemReader, TextController.getController(),
-            new ObjectMapper());
+        this(availableMaps, mapAccessListener, nodeContentItemReader,
+            new NodeTextPreviewFormatter(TextController.getController()), new ObjectMapper());
     }
 
     public ReadNodesWithDescendantsTool(AvailableMaps availableMaps, AvailableMaps.MapAccessListener mapAccessListener,
                                         NodeContentItemReader nodeContentItemReader,
-                                        TextController textController) {
-        this(availableMaps, mapAccessListener, nodeContentItemReader, textController, new ObjectMapper());
+                                        NodeTextPreviewFormatter nodeTextPreviewFormatter) {
+        this(availableMaps, mapAccessListener, nodeContentItemReader, nodeTextPreviewFormatter, new ObjectMapper());
     }
 
     ReadNodesWithDescendantsTool(AvailableMaps availableMaps, AvailableMaps.MapAccessListener mapAccessListener,
                                  NodeContentItemReader nodeContentItemReader,
-                                 TextController textController, ObjectMapper objectMapper) {
+                                 NodeTextPreviewFormatter nodeTextPreviewFormatter, ObjectMapper objectMapper) {
         this.availableMaps = Objects.requireNonNull(availableMaps, "availableMaps");
         this.mapAccessListener = mapAccessListener;
         this.nodeContentItemReader = Objects.requireNonNull(nodeContentItemReader, "nodeContentItemReader");
-        this.textController = Objects.requireNonNull(textController, "textController");
+        this.nodeTextPreviewFormatter = Objects.requireNonNull(nodeTextPreviewFormatter, "nodeTextPreviewFormatter");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
     }
 
@@ -830,7 +830,7 @@ public class ReadNodesWithDescendantsTool {
         if (focusNode == null || previews == null || previews.size() >= SUMMARY_PREVIEW_COUNT_LIMIT) {
             return;
         }
-        String previewText = textController.getShortPlainText(focusNode, SUMMARY_PREVIEW_TEXT_LIMIT, "");
+        String previewText = nodeTextPreviewFormatter.toolCallPreviewText(focusNode);
         if (previewText != null && !previewText.isEmpty()) {
             previews.add(previewText);
         }
@@ -840,7 +840,7 @@ public class ReadNodesWithDescendantsTool {
         if (nodeModel == null) {
             return null;
         }
-        return textController.getShortPlainText(nodeModel);
+        return nodeTextPreviewFormatter.shortText(nodeModel);
     }
 
     public ToolCallSummary buildPlainTextToolCallSummary(ReadNodesWithDescendantsRequest request,

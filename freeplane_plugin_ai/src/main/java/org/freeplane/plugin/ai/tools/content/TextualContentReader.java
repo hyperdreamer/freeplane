@@ -6,19 +6,22 @@ import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.note.NoteModel;
 import org.freeplane.features.text.DetailModel;
 import org.freeplane.features.text.TextController;
+import org.freeplane.plugin.ai.text.NodeTextPreviewFormatter;
 
 public class TextualContentReader {
     private final TextController textController;
+    private final NodeTextPreviewFormatter nodeTextPreviewFormatter;
 
-    public TextualContentReader(TextController textController) {
+    public TextualContentReader(TextController textController, NodeTextPreviewFormatter nodeTextPreviewFormatter) {
         this.textController = Objects.requireNonNull(textController, "textController");
+        this.nodeTextPreviewFormatter = Objects.requireNonNull(nodeTextPreviewFormatter, "nodeTextPreviewFormatter");
     }
 
     public String readBriefText(NodeModel nodeModel) {
         if (nodeModel == null) {
             return null;
         }
-        return textController.getShortPlainText(nodeModel);
+        return nodeTextPreviewFormatter.shortText(nodeModel);
     }
 
     public TextualContent readTextualContent(NodeModel nodeModel, NodeContentPreset preset) {

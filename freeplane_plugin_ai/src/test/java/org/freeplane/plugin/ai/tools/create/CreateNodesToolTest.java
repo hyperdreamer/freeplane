@@ -7,6 +7,7 @@ import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.map.mindmapmode.OperationErrorHandler;
 import org.freeplane.features.text.TextController;
+import org.freeplane.plugin.ai.text.NodeTextPreviewFormatter;
 import org.freeplane.plugin.ai.edits.AIEdits;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.freeplane.plugin.ai.tools.content.ModifiedNodeSummaryBuilder;
@@ -27,7 +28,7 @@ public class CreateNodesToolTest {
         NodeCreationHierarchyBuilder nodeCreationHierarchyBuilder = mock(NodeCreationHierarchyBuilder.class);
         NodeInserter nodeInserter = mock(NodeInserter.class);
         TextController textController = mock(TextController.class);
-        ModifiedNodeSummaryBuilder modifiedNodeSummaryBuilder = new ModifiedNodeSummaryBuilder(textController);
+        ModifiedNodeSummaryBuilder modifiedNodeSummaryBuilder = new ModifiedNodeSummaryBuilder(new NodeTextPreviewFormatter(textController));
         CreateNodesPreferences createNodesPreferences = mock(CreateNodesPreferences.class);
         MapController mapController = mock(MapController.class);
         when(createNodesPreferences.unfoldsParentsOnCreate()).thenReturn(false);
@@ -78,7 +79,7 @@ public class CreateNodesToolTest {
         NodeCreationHierarchyBuilder nodeCreationHierarchyBuilder = mock(NodeCreationHierarchyBuilder.class);
         NodeInserter nodeInserter = mock(NodeInserter.class);
         TextController textController = mock(TextController.class);
-        ModifiedNodeSummaryBuilder modifiedNodeSummaryBuilder = new ModifiedNodeSummaryBuilder(textController);
+        ModifiedNodeSummaryBuilder modifiedNodeSummaryBuilder = new ModifiedNodeSummaryBuilder(new NodeTextPreviewFormatter(textController));
         CreateNodesPreferences createNodesPreferences = mock(CreateNodesPreferences.class);
         MapController mapController = mock(MapController.class);
         when(createNodesPreferences.unfoldsParentsOnCreate()).thenReturn(false);

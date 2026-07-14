@@ -7,6 +7,7 @@ import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.map.mindmapmode.OperationErrorHandler;
 import org.freeplane.features.text.TextController;
+import org.freeplane.plugin.ai.text.NodeTextPreviewFormatter;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.freeplane.plugin.ai.tools.content.ModifiedNodeSummaryBuilder;
 import org.freeplane.plugin.ai.tools.create.AnchorPlacementMode;
@@ -32,7 +33,7 @@ public class CreateSummaryToolTest {
         NodeInserter nodeInserter = mock(NodeInserter.class);
         SummaryNodeCreator summaryNodeCreator = mock(SummaryNodeCreator.class);
         TextController textController = mock(TextController.class);
-        ModifiedNodeSummaryBuilder modifiedNodeSummaryBuilder = new ModifiedNodeSummaryBuilder(textController);
+        ModifiedNodeSummaryBuilder modifiedNodeSummaryBuilder = new ModifiedNodeSummaryBuilder(new NodeTextPreviewFormatter(textController));
         CreateSummaryTool unitUnderTest = new CreateSummaryTool(availableMaps, null, nodeCreationHierarchyBuilder,
             nodeInserter, summaryNodeCreator, modifiedNodeSummaryBuilder);
         UUID mapIdentifier = UUID.fromString("2d872386-bb55-4c6c-9da0-d600b7400b10");

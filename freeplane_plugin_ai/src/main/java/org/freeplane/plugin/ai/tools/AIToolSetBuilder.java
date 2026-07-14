@@ -28,6 +28,7 @@ import org.freeplane.features.text.TextController;
 import org.freeplane.plugin.ai.tools.code.AiCodeOperationAuthorizer;
 import org.freeplane.plugin.ai.tools.code.AiCodeToolSet;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
+import org.freeplane.plugin.ai.text.NodeTextPreviewFormatter;
 import org.freeplane.plugin.ai.tools.content.AttributesContentReader;
 import org.freeplane.plugin.ai.tools.content.ContentTypeConverter;
 import org.freeplane.plugin.ai.tools.content.EditableContentReader;
@@ -320,7 +321,8 @@ public class AIToolSetBuilder {
                                                               IconDescriptionResolver iconDescriptionResolver,
                                                               java.util.function.Supplier<org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel> toolAvailabilitySupplier,
                                                               java.util.function.Supplier<Boolean> formulaEditingEnabledSupplier) {
-        TextualContentReader textualContentReader = new TextualContentReader(textController);
+        TextualContentReader textualContentReader = new TextualContentReader(textController,
+            new NodeTextPreviewFormatter(textController));
         AttributesContentReader attributesContentReader = new AttributesContentReader(attributeController, textController);
         TagsContentReader tagsContentReader = new TagsContentReader(iconController);
         IconsContentReader iconsContentReader = new IconsContentReader(iconDescriptionResolver, iconController);

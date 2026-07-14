@@ -4,23 +4,21 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
-import org.freeplane.features.text.TextController;
 import org.freeplane.plugin.ai.chat.history.MapRootShortTextCount;
+import org.freeplane.plugin.ai.text.NodeTextPreviewFormatter;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 
 class MapRootShortTextFormatter {
-    private static final int MAXIMUM_ROOT_TEXT_LENGTH = 40;
-    private static final String CONTINUATION_MARK = " ...";
-
     private final AvailableMaps availableMaps;
-    private final TextController textController;
+    private final NodeTextPreviewFormatter nodeTextPreviewFormatter;
 
-    MapRootShortTextFormatter(AvailableMaps availableMaps, TextController textController) {
-        this.availableMaps = availableMaps;
-        this.textController = textController;
+    MapRootShortTextFormatter(AvailableMaps availableMaps, NodeTextPreviewFormatter nodeTextPreviewFormatter) {
+        this.availableMaps = Objects.requireNonNull(availableMaps, "availableMaps");
+        this.nodeTextPreviewFormatter = Objects.requireNonNull(nodeTextPreviewFormatter, "nodeTextPreviewFormatter");
     }
 
     List<MapRootShortTextCount> buildCounts(List<String> mapIds) {
@@ -81,6 +79,6 @@ class MapRootShortTextFormatter {
         if (rootNode == null) {
             return null;
         }
-        return textController.getShortPlainText(rootNode, MAXIMUM_ROOT_TEXT_LENGTH, CONTINUATION_MARK);
+        return nodeTextPreviewFormatter.shortText(rootNode);
     }
 }

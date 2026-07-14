@@ -7,6 +7,7 @@ import org.freeplane.features.map.IMapSelection;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.text.TextController;
+import org.freeplane.plugin.ai.text.NodeTextPreviewFormatter;
 import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -29,9 +30,9 @@ public class SelectionIdentifiersBuilderTest {
         when(selection.getSelected()).thenReturn(firstNode);
         when(selection.getOrderedSelection()).thenReturn(Arrays.asList(firstNode, secondNode));
         when(selection.getSortedSelection(true)).thenReturn(Collections.singletonList(firstNode));
-        when(textController.getShortPlainText(firstNode, 20, " ...")).thenReturn("First");
-        when(textController.getShortPlainText(secondNode, 20, " ...")).thenReturn("Second");
-        SelectionIdentifiersBuilder uut = new SelectionIdentifiersBuilder(textController);
+        when(textController.getShortPlainText(firstNode, 40, " ...")).thenReturn("First");
+        when(textController.getShortPlainText(secondNode, 40, " ...")).thenReturn("Second");
+        SelectionIdentifiersBuilder uut = new SelectionIdentifiersBuilder(new NodeTextPreviewFormatter(textController));
 
         SelectionIdentifiersResponse response = uut.buildSelectionIdentifiersResponse("map-1", mapModel, selection, null);
 
@@ -52,8 +53,8 @@ public class SelectionIdentifiersBuilderTest {
         IMapSelection selection = mock(IMapSelection.class);
         when(selection.getSelected()).thenReturn(selectedNode);
         when(selectedNode.getID()).thenReturn("node-1");
-        when(textController.getShortPlainText(selectedNode, 20, " ...")).thenReturn("Selected");
-        SelectionIdentifiersBuilder uut = new SelectionIdentifiersBuilder(textController);
+        when(textController.getShortPlainText(selectedNode, 40, " ...")).thenReturn("Selected");
+        SelectionIdentifiersBuilder uut = new SelectionIdentifiersBuilder(new NodeTextPreviewFormatter(textController));
 
         SelectionIdentifiersResponse response = uut.buildSelectionIdentifiersResponse(
             "map-1", null, selection, SelectionCollectionMode.SINGLE);

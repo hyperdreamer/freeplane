@@ -8,6 +8,7 @@ import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.map.mindmapmode.MMapController;
 import org.freeplane.features.text.TextController;
+import org.freeplane.plugin.ai.text.NodeTextPreviewFormatter;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.freeplane.plugin.ai.tools.content.ModifiedNodeSummary;
 import org.freeplane.plugin.ai.tools.content.ModifiedNodeSummaryBuilder;
@@ -27,7 +28,7 @@ public class DeleteNodesToolTest {
         AvailableMaps availableMaps = mock(AvailableMaps.class);
         MMapController mapController = mock(MMapController.class);
         TextController textController = mock(TextController.class);
-        ModifiedNodeSummaryBuilder modifiedNodeSummaryBuilder = new ModifiedNodeSummaryBuilder(textController);
+        ModifiedNodeSummaryBuilder modifiedNodeSummaryBuilder = new ModifiedNodeSummaryBuilder(new NodeTextPreviewFormatter(textController));
         MapModel mapModel = mock(MapModel.class);
         NodeModel parentNode = mock(NodeModel.class);
         NodeModel childNode = mock(NodeModel.class);
@@ -65,7 +66,7 @@ public class DeleteNodesToolTest {
         AvailableMaps availableMaps = mock(AvailableMaps.class);
         MMapController mapController = mock(MMapController.class);
         TextController textController = mock(TextController.class);
-        ModifiedNodeSummaryBuilder modifiedNodeSummaryBuilder = new ModifiedNodeSummaryBuilder(textController);
+        ModifiedNodeSummaryBuilder modifiedNodeSummaryBuilder = new ModifiedNodeSummaryBuilder(new NodeTextPreviewFormatter(textController));
         MapModel mapModel = mock(MapModel.class);
         NodeModel rootNode = mock(NodeModel.class);
         UUID mapIdentifier = UUID.fromString("00000000-0000-0000-0000-000000000001");
@@ -85,7 +86,7 @@ public class DeleteNodesToolTest {
         AvailableMaps availableMaps = mock(AvailableMaps.class);
         MMapController mapController = mock(MMapController.class);
         TextController textController = mock(TextController.class);
-        ModifiedNodeSummaryBuilder modifiedNodeSummaryBuilder = new ModifiedNodeSummaryBuilder(textController);
+        ModifiedNodeSummaryBuilder modifiedNodeSummaryBuilder = new ModifiedNodeSummaryBuilder(new NodeTextPreviewFormatter(textController));
         MapModel mapModel = mock(MapModel.class);
         NodeModel firstNode = mock(NodeModel.class);
         NodeModel secondNode = mock(NodeModel.class);

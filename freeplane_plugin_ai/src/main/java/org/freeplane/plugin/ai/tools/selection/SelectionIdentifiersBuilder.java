@@ -7,16 +7,13 @@ import java.util.Objects;
 import org.freeplane.features.map.IMapSelection;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
-import org.freeplane.features.text.TextController;
+import org.freeplane.plugin.ai.text.NodeTextPreviewFormatter;
 
 public class SelectionIdentifiersBuilder {
-    private static final int DEFAULT_MAXIMUM_TEXT_CHARACTERS = 20;
-    private static final String DEFAULT_CONTINUATION_MARK = " ...";
+    private final NodeTextPreviewFormatter nodeTextPreviewFormatter;
 
-    private final TextController textController;
-
-    public SelectionIdentifiersBuilder(TextController textController) {
-        this.textController = Objects.requireNonNull(textController, "textController");
+    public SelectionIdentifiersBuilder(NodeTextPreviewFormatter nodeTextPreviewFormatter) {
+        this.nodeTextPreviewFormatter = Objects.requireNonNull(nodeTextPreviewFormatter, "nodeTextPreviewFormatter");
     }
 
     public SelectionIdentifiersResponse buildSelectionIdentifiersResponse(String mapIdentifierValue,
@@ -72,8 +69,7 @@ public class SelectionIdentifiersBuilder {
             if (nodeIdentifier == null) {
                 nodeIdentifier = node.createID();
             }
-            String shortText = textController.getShortPlainText(
-                node, DEFAULT_MAXIMUM_TEXT_CHARACTERS, DEFAULT_CONTINUATION_MARK);
+            String shortText = nodeTextPreviewFormatter.shortText(node);
             selectedNodeSummaries.add(new SelectedNodeSummary(nodeIdentifier, shortText));
         }
         return selectedNodeSummaries;

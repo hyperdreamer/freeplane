@@ -23,6 +23,7 @@ import org.freeplane.features.text.TextController;
 import org.freeplane.features.text.mindmapmode.MTextController;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
+import org.freeplane.plugin.ai.text.NodeTextPreviewFormatter;
 import org.freeplane.plugin.ai.tools.connectors.ConnectorEditRequest;
 import org.freeplane.plugin.ai.tools.connectors.ConnectorEditResponse;
 import org.freeplane.plugin.ai.tools.connectors.ConnectorEditTool;
@@ -136,7 +137,8 @@ public class AIToolSet {
         AnchorPlacementCalculator anchorPlacementCalculator = new AnchorPlacementCalculator();
         NodeInserter nodeInserter = new NodeInserter(mapController, anchorPlacementCalculator);
         SummaryNodeCreator summaryNodeCreator = new SummaryNodeCreator(mapController);
-        ModifiedNodeSummaryBuilder modifiedNodeSummaryBuilder = new ModifiedNodeSummaryBuilder(textController);
+        NodeTextPreviewFormatter nodeTextPreviewFormatter = new NodeTextPreviewFormatter(textController);
+        ModifiedNodeSummaryBuilder modifiedNodeSummaryBuilder = new ModifiedNodeSummaryBuilder(nodeTextPreviewFormatter);
         TextContentWriteController textContentWriteController = new TextContentWriteControllerAdapter(
             MTextController.getController());
         NoteContentWriteController noteContentWriteController = new NoteContentWriteControllerAdapter(
@@ -175,13 +177,13 @@ public class AIToolSet {
             formulaEditingEnabledSupplier);
         MessageBuilder messageBuilder = new MessageBuilder();
         ReadNodesWithDescendantsTool readNodesWithDescendantsTool = new ReadNodesWithDescendantsTool(
-            availableMaps, mapAccessListener, nodeContentFactories.nodeContentItemReader, textController);
+            availableMaps, mapAccessListener, nodeContentFactories.nodeContentItemReader, nodeTextPreviewFormatter);
         SelectedMapAndNodeIdentifiersTool selectedMapAndNodeIdentifiersTool = new SelectedMapAndNodeIdentifiersTool(
-            availableMaps, mapAccessListener, textController);
+            availableMaps, mapAccessListener, nodeTextPreviewFormatter);
         SelectSingleNodeTool selectSingleNodeTool = new SelectSingleNodeTool(
             availableMaps, mapAccessListener, mapController, selectedMapAndNodeIdentifiersTool);
         SearchNodesTool searchNodesTool = new SearchNodesTool(availableMaps, mapAccessListener,
-            nodeContentFactories.nodeContentItemReader, textController);
+            nodeContentFactories.nodeContentItemReader, nodeTextPreviewFormatter);
         CreateNodesPreferences createNodesPreferences = new CreateNodesPreferences();
         CreateNodesTool createNodesTool = new CreateNodesTool(availableMaps, mapAccessListener,
             nodeCreationHierarchyBuilder, nodeInserter, modifiedNodeSummaryBuilder, mapController,

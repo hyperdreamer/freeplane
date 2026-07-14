@@ -7,6 +7,7 @@ import java.util.UUID;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.text.TextController;
+import org.freeplane.plugin.ai.text.NodeTextPreviewFormatter;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.freeplane.plugin.ai.maps.MapModelProvider;
 import org.freeplane.plugin.ai.tools.content.NodeContentItemReader;
@@ -90,7 +91,7 @@ public class GetApiDocumentationToolTest {
         when(nodeContentItemReader.readNodeContent(eq(childNode), isNull(), eq(NodeContentPreset.BRIEF)))
             .thenReturn(new NodeContentResponse("Purpose", null, null, null, null, null, null, null));
         TextController textController = mock(TextController.class);
-        SearchNodesTool searchNodesTool = new SearchNodesTool(availableMaps, null, nodeContentItemReader, textController);
+        SearchNodesTool searchNodesTool = new SearchNodesTool(availableMaps, null, nodeContentItemReader, new NodeTextPreviewFormatter(textController));
 
         SearchNodesResponse searchResponse = searchNodesTool.searchNodes(new SearchNodesRequest(
             AvailableMaps.INTERNAL_API_DOCUMENTATION_MAP_IDENTIFIER.toString(),
