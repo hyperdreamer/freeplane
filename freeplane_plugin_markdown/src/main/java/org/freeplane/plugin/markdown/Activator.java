@@ -73,7 +73,7 @@ public class Activator implements BundleActivator {
 							markdown.addExtension(extension);
 						} catch (InstantiationException | IllegalAccessException
 								| IllegalArgumentException | InvocationTargetException
-								| NoSuchMethodException | SecurityException | ClassNotFoundException e) {
+								| NoSuchMethodException | SecurityException | ClassNotFoundException | UnsupportedClassVersionError e) {
 							LogUtils.warn(e);
 						}
 					}
