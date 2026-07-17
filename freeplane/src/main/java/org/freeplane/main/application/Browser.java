@@ -26,11 +26,16 @@ public class Browser {
 					    desktop.open(new File(uri));
 					    return;
 					}
+				} else {
+					if ("mailto".equalsIgnoreCase(uri.getScheme()) && desktop.isSupported(Desktop.Action.MAIL)) {
+					    desktop.mail(uri);
+					    return;
+					}
+					if (desktop.isSupported(Desktop.Action.BROWSE)) {
+					    desktop.browse(uri);
+					    return;
+					}
 				}
-                else if (desktop.isSupported(Desktop.Action.BROWSE)) {
-                    desktop.browse(uri);
-                    return;
-                }
             }
         } catch (Exception ignored) {
             LogUtils.warn(ignored);
