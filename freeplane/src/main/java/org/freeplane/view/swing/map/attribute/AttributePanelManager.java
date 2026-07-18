@@ -50,6 +50,7 @@ import org.freeplane.features.format.FormattedFormula;
 import org.freeplane.features.format.FormattedObject;
 import org.freeplane.features.format.IFormattedObject;
 import org.freeplane.features.format.PatternFormat;
+import org.freeplane.features.map.IMapSelection;
 import org.freeplane.features.map.INodeChangeListener;
 import org.freeplane.features.map.INodeSelectionListener;
 import org.freeplane.features.map.MapController;
@@ -81,7 +82,9 @@ public class AttributePanelManager{
         public void hierarchyChanged(HierarchyEvent e) {
             if ((e.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) != 0) {
                 if (tablePanel.isShowing()) {
-                    onSelect(Controller.getCurrentController().getSelection().getSelected());
+                    IMapSelection selection = Controller.getCurrentController().getSelection();
+                    if(selection != null)
+                        onSelect(selection.getSelected());
                 } else
                     removeOldView();
             }
