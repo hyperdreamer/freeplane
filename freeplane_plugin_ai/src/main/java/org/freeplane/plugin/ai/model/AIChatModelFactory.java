@@ -5,6 +5,8 @@ import dev.langchain4j.model.googleai.GeminiThinkingConfig;
 import dev.langchain4j.model.googleai.GoogleAiGeminiChatModel;
 import dev.langchain4j.model.ollama.OllamaChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
+
+import java.time.Duration;
 import java.util.Map;
 import org.freeplane.api.ai.AiTemperature;
 import org.freeplane.api.ai.AiThinkingEffort;
@@ -23,6 +25,7 @@ public class AIChatModelFactory {
     public static final String DEFAULT_GEMINI_SERVICE_ADDRESS =
         "https://generativelanguage.googleapis.com/v1beta";
     static final int CHAT_MODEL_MAX_RETRIES = 2;
+    private static final Duration CHAT_MODEL_MAX_TIMEOUT = Duration.ofMinutes(60);
 
     private AIChatModelFactory() {
     }
@@ -57,7 +60,8 @@ public class AIChatModelFactory {
             GoogleAiGeminiChatModel.GoogleAiGeminiChatModelBuilder builder = GoogleAiGeminiChatModel.builder()
                 .apiKey(configuration.getGeminiKey())
                 .modelName(modelName)
-                .maxRetries(CHAT_MODEL_MAX_RETRIES);
+                .maxRetries(CHAT_MODEL_MAX_RETRIES)
+                .timeout(CHAT_MODEL_MAX_TIMEOUT);
             String serviceAddress = configuration.getGeminiServiceAddress();
             if (serviceAddress != null && !serviceAddress.isEmpty()) {
                 builder.baseUrl(serviceAddress);
@@ -70,7 +74,8 @@ public class AIChatModelFactory {
             OllamaChatModel.OllamaChatModelBuilder builder = OllamaChatModel.builder()
                 .baseUrl(configuration.getOllamaServiceAddress())
                 .modelName(modelName)
-                .maxRetries(CHAT_MODEL_MAX_RETRIES);
+                .maxRetries(CHAT_MODEL_MAX_RETRIES)
+                .timeout(CHAT_MODEL_MAX_TIMEOUT);
             applyTemperature(builder::temperature, modelConfiguration.getTemperature());
             applyOllamaThinking(builder, modelConfiguration.getThinkingEffort());
             Map<String, String> requestHeaders = configuration.getOllamaRequestHeaders();
@@ -90,6 +95,7 @@ public class AIChatModelFactory {
             .baseUrl(providerConfiguration.getServiceAddress())
             .modelName(modelName)
             .maxRetries(CHAT_MODEL_MAX_RETRIES)
+            .timeout(CHAT_MODEL_MAX_TIMEOUT)
             .parallelToolCalls(false);
         if (!providerConfiguration.getApiKey().isEmpty()) {
             builder.apiKey(providerConfiguration.getApiKey());
