@@ -1575,7 +1575,7 @@ public class NodeView extends JComponent implements INodeView, EdgeColorContext 
                 if (components[i] instanceof NodeView) {
                     final NodeView view = (NodeView) components[i];
                     final MainView childMainView = view.getMainView();
-                    if(childMainView != null){
+                    if(childMainView != null && textController.getNodeNumbering(view.getNode())){
                         childMainView.updateText(view.getNode());
                         view.numberChanged(0);
                     }
