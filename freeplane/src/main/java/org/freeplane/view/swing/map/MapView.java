@@ -1943,44 +1943,43 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
             return false;
 
         final NodeView oldSelected = selection.getSelectionEnd();
-        if (! oldSelected.isRoot()) {
-            final NodeView newSelectedAncestor = suggestNewSelectedAncestor(direction, oldSelected);
-            final NodeView newSelectedSibling = suggestNewSelectedSibling(direction, oldSelected);
-            final NodeView newSelectedSummary = suggestNewSelectedSummary(direction, oldSelected);
+        if (oldSelected.isRoot())
+            return false;
+        final NodeView newSelectedAncestor = suggestNewSelectedAncestor(direction, oldSelected);
+        final NodeView newSelectedSibling = suggestNewSelectedSibling(direction, oldSelected);
+        final NodeView newSelectedSummary = suggestNewSelectedSummary(direction, oldSelected);
 
-            NodeView newSelected = newSelectedSibling;
+        NodeView newSelected = newSelectedSibling;
 
-            if (newSelectedSummary != null && (newSelectedSibling == null
-                    || newSelectedSummary.getNode().isDescendantOf(newSelectedSibling.getAncestorWithVisibleContent().getNode()))) {
-                newSelected = newSelectedSummary;
-            }
+        if (newSelectedSummary != null && (newSelectedSibling == null
+                || newSelectedSummary.getNode().isDescendantOf(newSelectedSibling.getAncestorWithVisibleContent().getNode()))) {
+            newSelected = newSelectedSummary;
+        }
 
-            if (newSelectedAncestor != null && (newSelected == null
-                    || oldSelected == newSelected
-                    || !newSelected.getNode().isDescendantOf(newSelectedAncestor.getNode()))) {
-                newSelected = newSelectedAncestor;
-            }
+        if (newSelectedAncestor != null && (newSelected == null
+                || oldSelected == newSelected
+                || !newSelected.getNode().isDescendantOf(newSelectedAncestor.getNode()))) {
+            newSelected = newSelectedAncestor;
+        }
 
-            if(newSelected != null && newSelected != oldSelected) {
-                NodeView parentView = oldSelected.getParentView();
-                if(newSelected.getParent() == parentView && parentView.layoutOrientation() == LayoutOrientation.TOP_TO_BOTTOM) {
-                    ChildNodesAlignment childNodesAlignment = parentView.getChildNodesAlignment();
-                    if (childNodesAlignment == ChildNodesAlignment.AFTER_PARENT && direction == SelectionDirection.UP) {
-                        selectDescendant(newSelected, continious, PreferredChild.LAST);
-                        return true;
-                    }
-                    if (childNodesAlignment == ChildNodesAlignment.BEFORE_PARENT && direction == SelectionDirection.DOWN) {
-                        selectDescendant(newSelected, continious, PreferredChild.FIRST);
-                        return true;
-                    }
+        if(newSelected != null && newSelected != oldSelected) {
+            NodeView parentView = oldSelected.getParentView();
+            if(newSelected.getParent() == parentView && parentView.layoutOrientation() == LayoutOrientation.TOP_TO_BOTTOM) {
+                ChildNodesAlignment childNodesAlignment = parentView.getChildNodesAlignment();
+                if (childNodesAlignment == ChildNodesAlignment.AFTER_PARENT && direction == SelectionDirection.UP) {
+                    selectDescendant(newSelected, continious, PreferredChild.LAST);
+                    return true;
                 }
-                if(newSelected == newSelectedAncestor)
-                    select(newSelected, continious);
-                else
-                    selectPreservingSiblingMaxLevel(newSelected, continious);
-                return true;
+                if (childNodesAlignment == ChildNodesAlignment.BEFORE_PARENT && direction == SelectionDirection.DOWN) {
+                    selectDescendant(newSelected, continious, PreferredChild.FIRST);
+                    return true;
+                }
             }
-
+            if(newSelected == newSelectedAncestor)
+                select(newSelected, continious);
+            else
+                selectPreservingSiblingMaxLevel(newSelected, continious);
+            return true;
         }
         return false;
     }
