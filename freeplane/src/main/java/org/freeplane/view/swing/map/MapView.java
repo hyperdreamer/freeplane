@@ -1991,9 +1991,12 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
         if(isOutlineLayoutSet)
             return false;
 
+        final NodeView oldSelected = selection.getSelectionEnd();
+        if (oldSelected.isRoot())
+            return false;
         int oldSiblingMaxLevel = siblingMaxLevel;
         siblingMaxLevel = -1;
-        for (NodeView oldSelectedParent = selection.getSelectionEnd().getParentNodeView();
+        for (NodeView oldSelectedParent = oldSelected.getParentNodeView();
         		oldSelectedParent != null && ! oldSelectedParent.isRoot();
         		oldSelectedParent = oldSelectedParent.getParentNodeView())
         {
