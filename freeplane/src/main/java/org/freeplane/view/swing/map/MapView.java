@@ -3268,7 +3268,11 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 	}
 
 	void restoreRootNodeTemporarily() {
-		restoreRootNode(-1, true);
+		restoreRootNodeTemporarily(false);
+	}
+
+	private void restoreRootNodeTemporarily(boolean preserveDetachedRoot) {
+		restoreRootNode(-1, true, preserveDetachedRoot);
 	}
 
 	void restoreRootNode(int index) {
@@ -3276,12 +3280,19 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 	}
 
 	private void restoreRootNode(int index, boolean temporarily) {
+		restoreRootNode(index, temporarily, false);
+	}
+
+	private void restoreRootNode(int index, boolean temporarily, boolean preserveDetachedRoot) {
 	    if(currentRootView == mapRootView)
 	        return;
 	    if(currentRootParentView != null) {
 	        remove(ROOT_NODE_COMPONENT_INDEX);
 	        currentRootParentView.add(currentRootView,
 	                index >= 0 ? index : calculateCurrentRootNodePosition());
+	    }
+	    else if(preserveDetachedRoot) {
+	        remove(ROOT_NODE_COMPONENT_INDEX);
 	    }
 	    else {
 	        currentRootView.remove();
@@ -3319,6 +3330,12 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 
     static enum RootChange{JUMP_IN, JUMP_OUT, ANY}
 
+	private boolean shouldPreserveDetachedRootForDescendantReuse(RootChange rootChange) {
+		return rootChange == RootChange.JUMP_IN
+		        && currentRootView != mapRootView
+		        && currentRootParentView == null;
+	}
+
 	private void setRootNode(NodeView newRootView, RootChange rootChange) {
 		if(currentRootView == newRootView)
 			return;
@@ -3335,7 +3352,7 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 		if(rootChange == RootChange.ANY)
 		    restoreRootNode();
 		else
-		    restoreRootNodeTemporarily();
+		    restoreRootNodeTemporarily(shouldPreserveDetachedRootForDescendantReuse(rootChange));
 		if(currentRootView != newRootView) {
 		    currentRootView.invalidate();
 			currentRootView = newRootView;
