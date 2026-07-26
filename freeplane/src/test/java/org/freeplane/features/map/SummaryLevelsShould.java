@@ -59,6 +59,27 @@ public class SummaryLevelsShould {
 			assertThat(summaryLevels.findSummaryNodeIndex(0), equalTo(summaryNode.getIndex()));
 
 		}
+
+		@Test
+		public void returnNodeNotFoundForEveryIndex_IfHighestSummaryLevelIsZero() throws Exception {
+			mapFake.addNode("1");
+			mapFake.addNode("2");
+			mapFake.addNode("3");
+			final SummaryLevels summaryLevels = new SummaryLevels(mapFake.getRoot(), mapFake.getRoot());
+			assertThat(summaryLevels.findSummaryNodeIndex(0), equalTo(-1));
+			assertThat(summaryLevels.findSummaryNodeIndex(1), equalTo(-1));
+			assertThat(summaryLevels.findSummaryNodeIndex(2), equalTo(-1));
+		}
+
+		@Test
+		public void returnSummaryNodeLevel1AfterTwoItems() throws Exception {
+			mapFake.addNode("1");
+			mapFake.addNode("2");
+			final NodeModel summaryNode = mapFake.addSummaryNode();
+			final SummaryLevels summaryLevels = new SummaryLevels(mapFake.getRoot(), mapFake.getRoot());
+			assertThat(summaryLevels.findSummaryNodeIndex(0), equalTo(summaryNode.getIndex()));
+			assertThat(summaryLevels.findSummaryNodeIndex(1), equalTo(summaryNode.getIndex()));
+		}
 	}
 	public static class FindSummaryNode extends SummaryLevelsShould{
 

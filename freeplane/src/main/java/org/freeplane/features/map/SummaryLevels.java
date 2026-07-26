@@ -106,6 +106,8 @@ public class SummaryLevels{
 	}
 
 	public int findSummaryNodeIndex(int index) {
+		if (highestSummaryLevel == 0)
+			return NODE_NOT_FOUND;
 		final int nodeLevel = summaryLevels[index];
 		final boolean leftSide = parentNode.getChildAt(index).isTopOrLeft(root);
 		for (int i = index + 1; i < parentNode.getChildCount(); i++){
