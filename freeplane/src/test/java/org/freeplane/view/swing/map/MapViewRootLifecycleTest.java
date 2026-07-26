@@ -116,9 +116,9 @@ public class MapViewRootLifecycleTest {
         assertTrue(detachedRootNode.getViewers().contains(detachedRootView));
 
         @SuppressWarnings("unchecked")
-        List<NodeView> rootsHistory = (List<NodeView>) getField(mapView, "rootsHistory");
+        List<NodeModel> rootsHistory = (List<NodeModel>) getField(mapView, "rootsHistory");
         assertEquals(1, rootsHistory.size());
-        assertSame(detachedRootView, rootsHistory.get(0));
+        assertSame(detachedRootNode, rootsHistory.get(0));
     }
 
     private static int countView(NodeModel node, NodeView expectedView) {

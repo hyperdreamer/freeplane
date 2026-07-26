@@ -215,7 +215,6 @@ public class FreeplaneGUIStarter implements FreeplaneStarter {
 					frameComponentMover = new FrameComponentMover(frame);
 					viewController = new ApplicationViewController(controller, mapViewController, frame, frameComponentMover);
 					splash = new FreeplaneSplashModern(frame);
-					mapViewController.addMapViewChangeListener(applicationResourceController.getLastOpenedList());
 				}
 			});
 
@@ -329,6 +328,7 @@ public class FreeplaneGUIStarter implements FreeplaneStarter {
 
 			private void finishStartup() {
 			    ExternalMapChangeMonitor.install(controller.getMapViewManager());
+				controller.getMapViewManager().addMapViewChangeListener(applicationResourceController.getLastOpenedList());
 				contentPane.setVisible(true);
 				startupFinished = true;
 				focusCurrentView(() -> {

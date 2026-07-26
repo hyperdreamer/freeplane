@@ -762,7 +762,7 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 	private NodeModel currentSearchRoot = null;
 	private NodeView currentRootParentView = null;
 	private NodeView mapRootView = null;
-	private List<NodeView> rootsHistory;
+	private List<NodeModel> rootsHistory;
 
 	private boolean selectedsValid = true;
 	final private Selection selection = new Selection();
@@ -3210,7 +3210,7 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
         NodeView nodeView = getNodeView(node);
         RootChange rootChange;
         if(nodeView == null) {
-            nodeView = NodeViewFactory.getInstance().newNodeView(node, this);
+            nodeView = newRootView(node);
             rootChange = RootChange.ANY;
         }
         else if(SwingUtilities.isDescendingFrom(nodeView, currentRootView)){
@@ -3219,7 +3219,7 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
         else
             rootChange = RootChange.ANY;
 		if(! currentRootNode.isRoot() && rootChange == RootChange.JUMP_IN) {
-			rootsHistory.add(currentRootView);
+			rootsHistory.add(currentRootNode);
 		}
         setRootNode(nodeView, rootChange);
         validateAndScroll();
@@ -3228,15 +3228,39 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 
 	public void usePreviousViewRoot() {
 	    NodeView lastRoot = currentRootView;
-		NodeView newRoot;
-		if(rootsHistory.size() == 0)
-			newRoot = mapRootView;
-		else {
-			newRoot = rootsHistory.remove(rootsHistory.size() - 1);
+	    NodeModel lastRootNode = lastRoot.getNode();
+	    NodeView previouslySelectedNode = selection.selectedNode;
+	    NodeModel previouslySelectedNodeModel = previouslySelectedNode != null ? previouslySelectedNode.getNode() : null;
+		NodeModel newRootNode = rootsHistory.size() == 0
+		        ? mapRootView.getNode()
+		        : rootsHistory.remove(rootsHistory.size() - 1);
+		NodeView newRoot = getNodeView(newRootNode);
+		if(newRoot == null) {
+			newRoot = newRootView(newRootNode);
 		}
 		setRootNode(newRoot, RootChange.JUMP_OUT);
 		if(lastRoot.isFolded()) {
 		    lastRoot.fireFoldingChanged();
+		}
+		if(lastRootNode.equals(newRootNode) || lastRootNode.isDescendantOf(newRootNode)) {
+			if(! lastRootNode.equals(newRootNode)) {
+				display(lastRootNode);
+			}
+			NodeView nextSelectedNode = previouslySelectedNodeModel != null
+			        ? getNodeView(previouslySelectedNodeModel)
+			        : null;
+			if(nextSelectedNode == null || ! nextSelectedNode.isContentVisible()) {
+				nextSelectedNode = getNodeView(lastRootNode);
+			}
+			if(nextSelectedNode != null && nextSelectedNode.isContentVisible()) {
+				selectAsTheOnlyOneSelected(nextSelectedNode);
+			}
+			else {
+				selectAsTheOnlyOneSelected(getRoot());
+			}
+		}
+		else {
+			selectAsTheOnlyOneSelected(getRoot());
 		}
         validateAndScroll();
 	}
@@ -3303,7 +3327,10 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 	    currentRootView = mapRootView;
 	    currentRootParentView = null;
 	    if(! temporarily) {
-		    rootsHistory.forEach(NodeView::keepUnfolded);
+		    rootsHistory.stream()
+		            .map(this::getNodeView)
+		            .filter(nodeView -> nodeView != null)
+		            .forEach(NodeView::keepUnfolded);
             rootsHistory.clear();
             mapRootView.resetLayoutPropertiesRecursively();
             updateSelectedNode();
@@ -3329,6 +3356,34 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
     }
 
     static enum RootChange{JUMP_IN, JUMP_OUT, ANY}
+
+	NodeView newRootView(NodeModel node) {
+		return NodeViewFactory.getInstance().newNodeView(node, this);
+	}
+
+	public List<String> getRootsHistoryNodeIds() {
+		List<String> nodeIds = new ArrayList<>(rootsHistory.size());
+		for (NodeModel rootNode : rootsHistory) {
+			String nodeId = rootNode.getID();
+			if(nodeId != null) {
+				nodeIds.add(nodeId);
+			}
+		}
+		return nodeIds;
+	}
+
+	public void setRootsHistoryNodeIds(List<String> nodeIds) {
+		rootsHistory.clear();
+		if(nodeIds == null) {
+			return;
+		}
+		for (String nodeId : nodeIds) {
+			NodeModel node = getMap().getNodeForID(nodeId);
+			if(node != null) {
+				rootsHistory.add(node);
+			}
+		}
+	}
 
 	private boolean shouldPreserveDetachedRootForDescendantReuse(RootChange rootChange) {
 		return rootChange == RootChange.JUMP_IN

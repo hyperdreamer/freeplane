@@ -4,18 +4,22 @@ import java.io.File;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.regex.Pattern;
 
 import org.apache.commons.lang.StringUtils;
 
 public class ConfigurationUtils {
 	private static final String CONFIG_LIST_VALUE_SEPARATOR_STRICT = File.pathSeparator + File.pathSeparator;
-	private static final String CONFIG_LIST_VALUE_SEPARATOR_ONE_OR_MORE = File.pathSeparator + '+';
+	private static final String CONFIG_LIST_VALUE_SEPARATOR = File.pathSeparator;
+	private static final String CONFIG_LIST_VALUE_SEPARATOR_STRICT_REGEX = Pattern.quote(CONFIG_LIST_VALUE_SEPARATOR_STRICT);
+	private static final String CONFIG_LIST_VALUE_SEPARATOR_ONE_OR_MORE_REGEX = Pattern.quote(CONFIG_LIST_VALUE_SEPARATOR) + "+";
 
     /** if not requireTwo one pathseparator suffices otherwise two are required. */
     public static List<String> decodeListValue(final String value, boolean requireTwo) {
         if (value.length() == 0)
             return Collections.emptyList();
-        final String sep = requireTwo ? CONFIG_LIST_VALUE_SEPARATOR_STRICT : CONFIG_LIST_VALUE_SEPARATOR_ONE_OR_MORE;
+        final String sep = requireTwo ? CONFIG_LIST_VALUE_SEPARATOR_STRICT_REGEX
+                : CONFIG_LIST_VALUE_SEPARATOR_ONE_OR_MORE_REGEX;
         // -1: don't discard trailing empty strings
         return Arrays.asList(value.split("\\s*" + sep + "\\s*", -1));
     }
@@ -23,7 +27,7 @@ public class ConfigurationUtils {
 	/** if not requireTwo one pathseparator suffices otherwise two are required. */
 	public static String encodeListValue(final List<String> list, boolean requireTwo) {
 		return StringUtils.join(list.iterator(), requireTwo ? CONFIG_LIST_VALUE_SEPARATOR_STRICT
-		        : CONFIG_LIST_VALUE_SEPARATOR_ONE_OR_MORE);
+		        : CONFIG_LIST_VALUE_SEPARATOR);
 	}
 
 	public static File getLocalizedFile(final File[] baseDirs, final String document, final String languageCode) {

@@ -30,6 +30,7 @@ import java.net.URL;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.StringTokenizer;
@@ -89,6 +90,7 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 			this.restorable = prototype.restorable;
 			this.lastVisitedNodeId = prototype.lastVisitedNodeId;
 			this.lastRootNodeId = prototype.lastRootNodeId;
+			this.lastRootHistoryNodeIds = new ArrayList<>(prototype.lastRootHistoryNodeIds);
 		}
 
 
@@ -97,7 +99,9 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
         String lastVisitedNodeId;
 
         String lastRootNodeId;
-@Override
+        List<String> lastRootHistoryNodeIds = Collections.emptyList();
+
+        @Override
         public int hashCode() {
             final int prime = 31;
             int result = 1;
@@ -123,7 +127,8 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
         }
 		@Override
         public String toString() {
-	        return "RecentFile(" + restorable + "@" + lastVisitedNodeId + "/" + lastRootNodeId + ")";
+	        return "RecentFile(" + restorable + "@" + lastVisitedNodeId + "/"
+	                + lastRootNodeId + "/" + lastRootHistoryNodeIds + ")";
         }
     }
 
@@ -131,6 +136,7 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 	private static final String LAST_OPENED = "lastOpened_1.0.20";
 	private static final String LAST_LOCATIONS = "lastLocations";
 	private static final String LAST_ROOTS = "lastRoots";
+	private static final String LAST_ROOTS_HISTORY = "lastRootsHistory";
     private static final String LAST_MODE = "lastMode";
 	private static boolean PORTABLE_APP = System.getProperty("portableapp", "false").equals("true");
 	private static String USER_DRIVE = System.getProperty("user.home", "").substring(0, 2);
@@ -161,6 +167,7 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 
 	@Override
 	public void afterViewChange(final Component oldView, final Component newView) {
+		updateLastVisitedNodeId(oldView);
 		if (newView == null) {
 			updateMenus();
 			return;
@@ -170,17 +177,13 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 		updateList(map, restoreString);
     }
 
-	@Override
-	public void afterViewClose(final Component oldView) {
-		updateLastVisitedNodeId(oldView);
-	}
-
 	private boolean selectLastVisitedNode(RecentFile recentFile) {
 		if (recentFile != null && recentFile.lastVisitedNodeId != null) {
 			final Controller controller = Controller.getCurrentController();
 			IMapSelection selection = controller.getSelection();
             final MapModel map = selection.getMap();
 			if (selection.isSelected(map.getRootNode())) {
+				restoreRootsHistory(recentFile);
 				if(recentFile.lastRootNodeId !=  null) {
 					final NodeModel root = map.getNodeForID(recentFile.lastRootNodeId);
 					if(root != null)
@@ -329,12 +332,15 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
         final List<String> lastOpened = getListPropertyNotNull(LAST_OPENED);
         final List<String> lastLocation = getListPropertyNotNull(LAST_LOCATIONS);
         final List<String> lastRoot = getListPropertyNotNull(LAST_ROOTS);
+        final List<String> lastRootHistory = getListPropertyNotNull(LAST_ROOTS_HISTORY);
         for (int i = 0; i < lastOpened.size(); i++) {
             final RecentFile recentFile = new RecentFile(lastOpened.get(i));
             if (lastLocation.size() == lastOpened.size())
                 recentFile.lastVisitedNodeId = lastLocation.get(i);
             if (lastRoot.size() == lastOpened.size())
                 recentFile.lastRootNodeId = lastRoot.get(i);
+            if (lastRootHistory.size() == lastOpened.size())
+                recentFile.lastRootHistoryNodeIds = ConfigurationUtils.decodeListValue(lastRootHistory.get(i), false);
             lastOpenedList.add(recentFile);
         }
         if (!lastOpenedList.isEmpty()) {
@@ -373,23 +379,17 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 	}
 
 	public void saveProperties() {
-	    updateLastVisitedNodeIds();
+	    updateLastVisitedNodeId(Controller.getCurrentController().getMapViewManager().getMapViewComponent());
 	    ResourceController.getResourceController().setProperty(LAST_OPENED,
 		    ConfigurationUtils.encodeListValue(getRestoreables(), true));
 	    ResourceController.getResourceController().setProperty(LAST_LOCATIONS,
 		        ConfigurationUtils.encodeListValue(getLastVisitedNodeIds(), true));
 	    ResourceController.getResourceController().setProperty(LAST_ROOTS,
 		        ConfigurationUtils.encodeListValue(getLastRootNodeIds(), true));
+	    ResourceController.getResourceController().setProperty(LAST_ROOTS_HISTORY,
+		        ConfigurationUtils.encodeListValue(getLastRootHistoryNodeIds(), true));
 	    ResourceController.getResourceController().setProperty(LAST_MODE,
 	            Controller.getCurrentController().getModeController().getModeName());
-	}
-
-	private void updateLastVisitedNodeIds() {
-		final List<? extends Component> mapViews = Controller.getCurrentController().getMapViewManager()
-		    .getMapViews();
-		for (Component component : mapViews) {
-			updateLastVisitedNodeId(component);
-		}
 	}
 
 	private void updateLastVisitedNodeId(final Component mapViewComponent) {
@@ -404,6 +404,7 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 			NodeModel selectedNode = selected.getNode();
 			recentFile.lastVisitedNodeId = selectedNode.getID();
 			recentFile.lastRootNodeId = mapView.getRoot().getNode().getID();
+			recentFile.lastRootHistoryNodeIds = mapView.getRootsHistoryNodeIds();
 		}
 	}
 
@@ -442,12 +443,27 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 	    return result;
 	}
 
+	private List<String> getLastRootHistoryNodeIds() {
+	    ArrayList<String> result = new ArrayList<String>(lastOpenedList.size());
+	    for (RecentFile recentFile : lastOpenedList) {
+	        result.add(ConfigurationUtils.encodeListValue(recentFile.lastRootHistoryNodeIds, false));
+	    }
+	    return result;
+	}
+
     private boolean tryToChangeToMapView(URL url) {
 		try {
 			return Controller.getCurrentController().getMapViewManager().tryToChangeToMapView(url);
 		} catch (MalformedURLException e) {
 			LogUtils.warn(e);
 			return false;
+		}
+	}
+
+	private void restoreRootsHistory(RecentFile recentFile) {
+		Component mapViewComponent = Controller.getCurrentController().getMapViewManager().getMapViewComponent();
+		if(mapViewComponent instanceof MapView) {
+			((MapView) mapViewComponent).setRootsHistoryNodeIds(recentFile.lastRootHistoryNodeIds);
 		}
 	}
 
