@@ -61,6 +61,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.Vector;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 import javax.swing.JComponent;
 import javax.swing.JOptionPane;
@@ -93,6 +94,8 @@ import org.freeplane.features.filter.FilterUpdateListener;
 import org.freeplane.features.highlight.NodeHighlighter;
 import org.freeplane.features.icon.Tag;
 import org.freeplane.features.icon.TagCategories;
+import org.freeplane.features.icon.TagReference;
+import org.freeplane.features.icon.Tags;
 import org.freeplane.features.link.ConnectorModel;
 import org.freeplane.features.link.ConnectorShape;
 import org.freeplane.features.link.Connectors;
@@ -1569,11 +1572,19 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 			updateAllNodeViews();
 			return;
 		}
-        if(property instanceof Tag || property.equals(TagCategories.class)) {
+        if(property instanceof Tag) {
+            final Tag changedTag = (Tag) property;
             if(TagLocation.BESIDE_NODES == getTagLocation())
-                updateIconsRecursively(getRoot());
-            else
-                updateAllNodeViews();
+                updateIconsRecursively(getRoot(), nodeView -> hasTag(nodeView.getNode(), changedTag));
+            else if(TagLocation.UNDER_NODES == getTagLocation())
+                updateNodeViewsRecursively(nodeView -> hasTag(nodeView.getNode(), changedTag));
+            return;
+        }
+        if(property.equals(TagCategories.class)) {
+            if(TagLocation.BESIDE_NODES == getTagLocation())
+                updateIconsRecursively(getRoot(), nodeView -> hasAnyTags(nodeView.getNode()));
+            else if(TagLocation.UNDER_NODES == getTagLocation())
+                updateNodeViewsRecursively(nodeView -> hasAnyTags(nodeView.getNode()));
             return;
         }
 		if(property.equals(AttributeController.SHOW_ICON_FOR_ATTRIBUTES)
@@ -1702,15 +1713,52 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
    }
 
     private void updateIconsRecursively(final NodeView node) {
+        updateIconsRecursively(node, updatedNode -> true);
+    }
+
+    private void updateIconsRecursively(final NodeView node, Predicate<NodeView> updateCondition) {
     	final MainView mainView = node.getMainView();
     	if(mainView == null)
     		return;
-		mainView.updateIcons(node);
+        if(updateCondition.test(node))
+			mainView.updateIcons(node);
     	for(int i = 0; i < node.getComponentCount(); i++){
     		final Component component = node.getComponent(i);
     		if(component instanceof NodeView)
-    		updateIconsRecursively((NodeView) component);
+    			updateIconsRecursively((NodeView) component, updateCondition);
     	}
+    }
+
+    private void updateNodeViewsRecursively(Predicate<NodeView> updateCondition) {
+        updateNodeViewsRecursively(currentRootView, updateCondition);
+        if(mapRootView != currentRootView)
+            updateNodeViewsRecursively(mapRootView, updateCondition);
+    }
+
+    private void updateNodeViewsRecursively(final NodeView node, Predicate<NodeView> updateCondition) {
+        if(updateCondition.test(node))
+            node.update();
+        for(int i = 0; i < node.getComponentCount(); i++) {
+            final Component component = node.getComponent(i);
+            if(component instanceof NodeView)
+                updateNodeViewsRecursively((NodeView) component, updateCondition);
+        }
+    }
+
+    private boolean hasAnyTags(NodeModel node) {
+        for (TagReference tagReference : Tags.getTagReferences(node)) {
+            if(tagReference != null && tagReference.exists())
+                return true;
+        }
+        return false;
+    }
+
+    private boolean hasTag(NodeModel node, Tag tag) {
+        for (TagReference tagReference : Tags.getTagReferences(node)) {
+            if(tagReference != null && tagReference.exists() && tag.equals(tagReference.getTag()))
+                return true;
+        }
+        return false;
     }
 
     void synchronizeSelection() {
