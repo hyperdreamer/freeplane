@@ -806,7 +806,7 @@ public class MIconController extends IconController {
                 iconRegistry.setTagCategories(oldCategories);
                 oldCategories.updateTagReferences();
                 Controller.getCurrentModeController().getMapController().fireMapChanged(
-                        new MapChangeEvent(MIconController.this, Controller.getCurrentController().getMap(), TagCategories.class,
+                        new MapChangeEvent(MIconController.this, map, TagCategories.class,
                                 newCategories, oldCategories));
             }
 
@@ -820,7 +820,7 @@ public class MIconController extends IconController {
                 iconRegistry.setTagCategories(newCategories);
                 newCategories.updateTagReferences();
                 Controller.getCurrentModeController().getMapController().fireMapChanged(
-                        new MapChangeEvent(MIconController.this, Controller.getCurrentController().getMap(), TagCategories.class,
+                        new MapChangeEvent(MIconController.this, map, TagCategories.class,
                                 oldCategories, newCategories));
             }
         };
