@@ -769,6 +769,8 @@ public class MIconController extends IconController {
 
     public void removeTags(NodeModel node, Set<Tag> removedTags) {
         final List<Tag> existingTags = getTags(node);
+        if(existingTags.isEmpty() || ! existingTags.stream().anyMatch(removedTags::contains))
+            return;
         final List<TagReference> newTags = new ArrayList<>(existingTags.size());
         Tags.getExistingTagReferences(node).stream()
         .filter(ref -> ! removedTags.contains(ref.getTag()))
