@@ -2030,8 +2030,8 @@ public class NodeView extends JComponent implements INodeView, EdgeColorContext 
             nodeViewFactory.updateNoteViewer(this, minNodeWidth, maxNodeWidth, cause);
         }
         if(cause != UpdateCause.SELECTION) {
-            updateShortener(textShortened);
             updateIcons();
+            updateShortener(textShortened);
             mainView.updateText(getNode());
         }
         if(cause == UpdateCause.ZOOM) {
@@ -2103,6 +2103,11 @@ public class NodeView extends JComponent implements INodeView, EdgeColorContext 
                 tagComponentAlignment == HorizontalTextAlignment.RIGHT ? 1f :
                 componentOrientation.isLeftToRight() ? 0f : componentOrientation.isHorizontal() ? 1f:0.5f);
             component.setSize(mainView.getMaximumWidth(), 0);
+            boolean isVisible = MapView.showsTagsOnMinimizedNodes() || ! isShortened();
+            if(component.isVisible() != isVisible) {
+                component.setVisible(isVisible);
+                revalidate();
+            }
         }
         else
             removeContent(NodeView.TAG_VIEWER_POSITION);
@@ -2267,7 +2272,7 @@ public class NodeView extends JComponent implements INodeView, EdgeColorContext 
                 component.revalidate();
             if (component == getMainView()
                     || component instanceof MapViewIconListComponent
-                    && MapView.showsTagsOnMinimizedNodes()) {
+                    && MapView.showsTagsOnMinimizedNodes() == component.isVisible()) {
                 continue;
             }
             if (component.isVisible() != componentsVisible) {

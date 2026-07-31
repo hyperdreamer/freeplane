@@ -1721,7 +1721,7 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
     	if(mainView == null)
     		return;
         if(updateCondition.test(node))
-			mainView.updateIcons(node);
+        	node.updateIcons();
     	for(int i = 0; i < node.getComponentCount(); i++){
     		final Component component = node.getComponent(i);
     		if(component instanceof NodeView)
