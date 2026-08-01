@@ -268,6 +268,7 @@
             <Entry builder="separator" />
             <Entry name="ShowAncestorsAction" />
             <Entry name="ShowDescendantsAction" />
+            <Entry name="ToggleUnfoldMatchingBranchesAction" />
             <Entry name="HideMatchingNodesAction" />
             <Entry builder="separator" />
             <Entry name="SelectFilteredElementAction.NODE" />

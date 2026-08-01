@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 24 24"
+   version="1.1"
+   id="svg3"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs3" />
+  <g
+     id="g5"
+     transform="translate(0,1.5)">
+    <rect
+       x="16.563921"
+       y="13"
+       width="3"
+       height="5.5"
+       style="fill:#333333"
+       id="rect2" />
+    <polyline
+       points="10.5 17 6.5 21 2.5 17"
+       style="fill:#333333"
+       id="polyline2"
+       transform="translate(11.563921)" />
+  </g>
+  <g
+     id="g4"
+     transform="translate(0,0.43948078)">
+    <rect
+       x="16.563921"
+       y="3.0605192"
+       width="3"
+       height="6"
+       style="fill:#333333"
+       id="rect3" />
+    <polyline
+       points="2.5 6 6.5 2 10.5 6"
+       style="fill:#333333"
+       id="polyline3"
+       transform="translate(11.563921,-0.93948078)" />
+  </g>
+  <rect
+     x="13.563921"
+     y="9.5"
+     width="9"
+     height="5"
+     rx="1.64"
+     style="fill:#0071bc"
+     id="rect1"
+     ry="1.64" />
+  <g
+     id="g3"
+     transform="translate(-2.989257,18.613833)">
+    <polygon
+       points="10,2 16,8.11 22,2 "
+       style="fill:#333333"
+       id="polygon1"
+       transform="translate(-5.7291066,-14.613833)" />
+    <polygon
+       points="15,14 15,7 17,7 17,12 "
+       style="fill:#333333"
+       id="polygon2"
+       transform="translate(-5.7291066,-14.613833)" />
+  </g>
+</svg>

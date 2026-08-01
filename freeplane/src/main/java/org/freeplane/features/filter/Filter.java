@@ -31,6 +31,7 @@ import org.freeplane.core.ui.components.MultipleImageIcon;
 import org.freeplane.core.ui.components.TextIcon;
 import org.freeplane.features.filter.condition.ASelectableCondition;
 import org.freeplane.features.filter.condition.ICondition;
+import org.freeplane.features.filter.condition.NoFilteringCondition;
 import org.freeplane.features.filter.hidden.NodeVisibility;
 import org.freeplane.features.link.ConnectorModel;
 import org.freeplane.features.map.MapModel;
@@ -269,6 +270,17 @@ public class Filter implements IExtension {
 	public FilterInfo getFilterInfo(final NodeModel node) {
 		return node !=  null ? accessor.getFilterInfo(node) : new FilterInfo();
 	}
+
+    public boolean isFilteredAsAncestor(final NodeModel node) {
+        if (condition == null || condition instanceof NoFilteringCondition
+                || filteredElement == FilteredElement.CONNECTOR || node == null) {
+            return false;
+        }
+        final FilterInfo filterInfo = getFilterInfo(node);
+        return hidesMatchingElements
+                ? filterInfo.matches(FilterInfo.SHOW_AS_HIDDEN_ANCESTOR)
+                : filterInfo.matches(FilterInfo.SHOW_AS_MATCHED_ANCESTOR);
+    }
 
     public void showAsMatched(NodeModel node) {
         FilterInfo filterInfo = getFilterInfo(node);

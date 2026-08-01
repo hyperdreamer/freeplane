@@ -90,7 +90,9 @@ import org.freeplane.features.bookmarks.mindmapmode.BookmarksController;
 import org.freeplane.features.edge.EdgeColorsConfigurationFactory;
 import org.freeplane.features.edge.EdgeController;
 import org.freeplane.features.filter.Filter;
+import org.freeplane.features.filter.FilterController;
 import org.freeplane.features.filter.FilterUpdateListener;
+import org.freeplane.features.filter.ToggleUnfoldMatchingBranchesAction;
 import org.freeplane.features.highlight.NodeHighlighter;
 import org.freeplane.features.icon.Tag;
 import org.freeplane.features.icon.TagCategories;
@@ -212,6 +214,47 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
         getRoot().updateAll(cause);
         if(mapRootView != currentRootView)
             mapRootView.updateAll(cause);
+    }
+
+    private void updateFilterNodeFolding() {
+        final FilterController filterController = FilterController.getCurrentFilterController();
+        if (filterController == null || currentRootView == null || filter == null
+                || !filterController.isUnfoldMatchingBranchesSelected()
+                || filter.getCondition() == null
+                || filter.getFilteredElement() == Filter.FilteredElement.CONNECTOR) {
+            filterNodeViewFolder.adjustFolding(Collections.emptySet());
+            return;
+        }
+        final Set<NodeView> unfoldNodeViews = collectAncestorViews(currentRootView);
+        filterNodeViewFolder.adjustFolding(unfoldNodeViews);
+    }
+
+    private Set<NodeView> collectAncestorViews(final NodeView rootView) {
+        final Set<NodeView> unfoldNodeViews = new HashSet<>();
+        boolean changed;
+        do {
+            changed = collectAncestorViews(rootView, rootView, unfoldNodeViews);
+            if (changed) {
+                filterNodeViewFolder.adjustFolding(new HashSet<>(unfoldNodeViews));
+            }
+        }
+        while (changed);
+        return unfoldNodeViews;
+    }
+
+    private boolean collectAncestorViews(final NodeView rootView, final NodeView nodeView,
+            final Set<NodeView> unfoldNodeViews) {
+        boolean changed = false;
+        if (nodeView != rootView && filter.isFilteredAsAncestor(nodeView.getNode())) {
+            changed |= unfoldNodeViews.add(nodeView);
+        }
+        if (nodeView.isFolded()) {
+            return changed;
+        }
+        for (final NodeView childView : nodeView.getChildrenViews()) {
+            changed |= collectAncestorViews(rootView, childView, unfoldNodeViews);
+        }
+        return changed;
     }
 
 	private boolean showNotes;
@@ -805,6 +848,7 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 
     public static final int SCROLL_VELOCITY_PX = (int) (UITools.FONT_SCALE_FACTOR  * 10);
     private final NodeViewFolder nodeViewFolder;
+    private final NodeViewFolder filterNodeViewFolder;
 	private final AntiAliasingConfigurator antiAliasingConfigurator;
 	private FilterUpdateListener filterUpdateListener;
 
@@ -877,6 +921,7 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 		if(ResourceController.getResourceController().getBooleanProperty("activateSpotlightByDefault"))
 		    putClientProperty(SPOTLIGHT_ENABLED, Boolean.TRUE);
 		nodeViewFolder = new NodeViewFolder(true);
+        filterNodeViewFolder = new NodeViewFolder(false);
 		setMap(viewedMap);
 		mapScroller = new MapScroller(this);
 	}
@@ -1551,6 +1596,10 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 	@Override
 	public void mapChanged(final MapChangeEvent event) {
 		final Object property = event.getProperty();
+        if (property.equals(ToggleUnfoldMatchingBranchesAction.class)) {
+            updateFilterNodeFolding();
+            return;
+        }
 		if (property.equals(MapStyle.RESOURCES_BACKGROUND_COLOR)) {
 			setBackground(requiredBackground());
 			return;
@@ -1570,6 +1619,9 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 		        || property.equals(UrlManager.MAP_URL)) {
 			setBackground(requiredBackground());
 			updateAllNodeViews();
+            if (property.equals(Filter.class)) {
+                updateFilterNodeFolding();
+            }
 			return;
 		}
         if(property instanceof Tag) {
@@ -3473,6 +3525,7 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 		}
 		newRootView.updateIcons();
 		newRootView.resetLayoutPropertiesRecursively();
+        updateFilterNodeFolding();
 		fireRootChanged();
 		if(nextSelectedNode.isDisplayable()) {
 		    if(nextSelectedNode == selection.selectedNode)
@@ -3499,6 +3552,7 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
     }
 
     void foldingWasSet(NodeView nodeView) {
+        filterNodeViewFolder.foldingWasSet(nodeView);
         selection.foldingWasSet(nodeView);
     }
 

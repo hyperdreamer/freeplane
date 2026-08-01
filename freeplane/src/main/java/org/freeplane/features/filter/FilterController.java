@@ -194,6 +194,7 @@ public class FilterController implements IExtension, IMapViewChangeListener {
 	            }
 	            if(oldFilteredElement != filteredElement)
 	                ResourceController.getResourceController().setProperty("filter.filteredElement", filteredElement.name());
+                updateUnfoldMatchingBranchesAvailability();
 	        }
 		    finally {
 		        changeInProgress = false;
@@ -288,6 +289,7 @@ public class FilterController implements IExtension, IMapViewChangeListener {
 	private final ButtonModel ignoreDiacriticsButtonModel;
 	private final ButtonModel caseSensitiveButtonModel;
 	private final ButtonModel showDescendants;
+	private final ButtonModel unfoldMatchingBranches;
 	private final ButtonModel highlightNodes;
 	private ASelectableCondition highlightCondition;
 	private ConditionalStyleModel highlightedConditionContext;
@@ -316,6 +318,9 @@ public class FilterController implements IExtension, IMapViewChangeListener {
 		showDescendants.setSelected(transparentFilter.areDescendantsShown());
 		showDescendants.addChangeListener(filterChangeListener);
 		showDescendants.addChangeListener(new ButtonModelStateChangeListenerForProperty("filter.showDescendants"));
+        unfoldMatchingBranches = new JToggleButton.ToggleButtonModel();
+        unfoldMatchingBranches.setSelected(ResourceController.getResourceController().getBooleanProperty("filter.unfoldMatchingBranches"));
+        unfoldMatchingBranches.addChangeListener(new ButtonModelStateChangeListenerForProperty("filter.unfoldMatchingBranches"));
 		highlightNodes = new JToggleButton.ToggleButtonModel();
 		highlightNodes.setSelected(false);
         applyToVisibleElementsOnly = new JToggleButton.ToggleButtonModel();
@@ -364,6 +369,7 @@ public class FilterController implements IExtension, IMapViewChangeListener {
 		controller.addAction(new HideMatchingNodesAction(this));
 		controller.addAction(new ShowAncestorsAction(this));
 		controller.addAction(new ShowDescendantsAction(this));
+        controller.addAction(new ToggleUnfoldMatchingBranchesAction(this));
         controller.addAction(new ApplyToVisibleAction(this));
         controller.addAction(new SelectFilteredElementAction(applyToNodes, FilteredElement.NODE));
         controller.addAction(new SelectFilteredElementAction(applyToNodesAndConnectors, FilteredElement.NODE_AND_CONNECTOR));
@@ -386,6 +392,7 @@ public class FilterController implements IExtension, IMapViewChangeListener {
 		controller.addAction(find);
 		controller.addAction(find.getFindNextAction());
 		controller.addAction(find.getFindPreviousAction());
+        updateUnfoldMatchingBranchesAvailability();
 		pathToFilterFile = ResourceController.getResourceController().getFreeplaneUserDirectory() + File.separator
 		        + "auto." + FilterController.FREEPLANE_FILTER_EXTENSION_WITHOUT_DOT;
 	}
@@ -447,6 +454,7 @@ public class FilterController implements IExtension, IMapViewChangeListener {
 			filterToolbar.setEnabled(false);
 			quickEditor.setEnabled(false);
 			activeFilterConditionComboBox.setEnabled(false);
+            updateUnfoldMatchingBranchesAvailability();
 		}
 	}
 
@@ -606,6 +614,9 @@ public class FilterController implements IExtension, IMapViewChangeListener {
         final AbstractButton showAncestorsBox = new JAutoToggleButton(controller.getAction("ShowAncestorsAction"), showAncestors);
 		showAncestorsBox.setSelected(showAncestors.isSelected());
 		final AbstractButton showDescendantsBox = new JAutoToggleButton(controller.getAction("ShowDescendantsAction"), showDescendants);
+        showDescendantsBox.setSelected(showDescendants.isSelected());
+        final AbstractButton unfoldMatchingBranchesBox = new JAutoToggleButton(controller.getAction("ToggleUnfoldMatchingBranchesAction"), unfoldMatchingBranches);
+        unfoldMatchingBranchesBox.setSelected(unfoldMatchingBranches.isSelected());
         final AbstractButton hideMatchingNodesBox = new JAutoToggleButton(controller.getAction("HideMatchingNodesAction"), hideMatchingNodes);
         hideMatchingNodesBox.setSelected(hideMatchingNodes.isSelected());
         final AbstractButton applyToVisibleBox = new JAutoToggleButton(controller.getAction("ApplyToVisibleAction"), applyToVisibleElementsOnly);
@@ -677,6 +688,7 @@ public class FilterController implements IExtension, IMapViewChangeListener {
 
 		filterOptionPanel.add(showAncestorsBox, constraints);
 		filterOptionPanel.add(showDescendantsBox, constraints);
+        filterOptionPanel.add(unfoldMatchingBranchesBox, constraints);
 		filterOptionPanel.add(hideMatchingNodesBox, constraints);
 		constraints.weightx = 1;
 		filterOptionPanel.add(new JUnitPanel(), constraints);
@@ -903,9 +915,26 @@ public class FilterController implements IExtension, IMapViewChangeListener {
 		return showDescendants;
 	}
 
+    public ButtonModel getUnfoldMatchingBranches() {
+        return unfoldMatchingBranches;
+    }
+
+    public boolean isUnfoldMatchingBranchesSelected() {
+        return unfoldMatchingBranches.isSelected();
+    }
+
 	public ButtonModel getHighlightNodes() {
 		return highlightNodes;
 	}
+
+    void applyUnfoldMatchingBranchesMode() {
+        final IMapSelection selection = Controller.getCurrentController().getSelection();
+        if (selection == null) {
+            return;
+        }
+        Controller.getCurrentModeController().getMapController().fireMapChanged(
+                new MapChangeEvent(this, selection.getMap(), ToggleUnfoldMatchingBranchesAction.class, null, this, false));
+    }
 
 	void setHighlightCondition(final ASelectableCondition condition, ConditionalStyleModel highlightedConditionContext) {
 		this.highlightedConditionContext = highlightedConditionContext;
@@ -1048,9 +1077,11 @@ public class FilterController implements IExtension, IMapViewChangeListener {
 	        showAncestors.setSelected(filter.areAncestorsShown());
 	        showDescendants.setSelected(filter.areDescendantsShown());
 	        applyToVisibleElementsOnly.setSelected(filter.appliesToVisibleElementsOnly());
+            filteredElement = filter.getFilteredElement();
 	        applyToNodes.setSelected(filter.getFilteredElement() == FilteredElement.NODE);
             applyToNodesAndConnectors.setSelected(filter.getFilteredElement() == FilteredElement.NODE_AND_CONNECTOR);
             applyToConnectors.setSelected(filter.getFilteredElement() == FilteredElement.CONNECTOR);
+            updateUnfoldMatchingBranchesAvailability();
 	        quickFilterAction.setSelected(isFilterActive());
 	    }
 	    finally {
@@ -1058,6 +1089,13 @@ public class FilterController implements IExtension, IMapViewChangeListener {
 	    }
 
 	}
+
+    private void updateUnfoldMatchingBranchesAvailability() {
+        final AFreeplaneAction action = Controller.getCurrentController().getAction("ToggleUnfoldMatchingBranchesAction");
+        if (action != null) {
+            action.setEnabled(filteredElement != FilteredElement.CONNECTOR);
+        }
+    }
 
 	private ICondition condition(final Filter filter) {
 	    final ICondition condition = filter.getCondition();
