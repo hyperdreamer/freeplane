@@ -660,6 +660,7 @@ public class FilterController implements IExtension, IMapViewChangeListener {
 		searchOptionPanel.add(applyQuickHighlightBtn, constraints);
 		searchOptionPanel.add(applyQuickSelectBtn, constraints);
 		searchOptionPanel.add(applyQuickFilterBtn, constraints);
+        searchOptionPanel.add(unfoldMatchingBranchesBox, constraints);
 		searchOptionPanel.add(applyAndFilterBtn, constraints);
         searchOptionPanel.add(applyOrFilterBtn, constraints);
         searchOptionPanel.add(selectSearchRootActionBtn, constraints);
@@ -688,7 +689,6 @@ public class FilterController implements IExtension, IMapViewChangeListener {
 
 		filterOptionPanel.add(showAncestorsBox, constraints);
 		filterOptionPanel.add(showDescendantsBox, constraints);
-        filterOptionPanel.add(unfoldMatchingBranchesBox, constraints);
 		filterOptionPanel.add(hideMatchingNodesBox, constraints);
 		constraints.weightx = 1;
 		filterOptionPanel.add(new JUnitPanel(), constraints);
