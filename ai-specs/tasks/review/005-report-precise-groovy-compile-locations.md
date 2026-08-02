@@ -1,5 +1,8 @@
 # Task: Report precise Groovy compile diagnostic locations
 - **Task Identifier:** 2026-07-17-compile-location
+
+## Subtask: Report precise Groovy compile diagnostic locations
+- **Status:** review
 - **Scope:**
   Populate line and column for each Groovy source compilation
   diagnostic wherever the compiler provides that information. Apply the
@@ -449,25 +452,195 @@
       validation dialog, and the AI repair state.
 
 ## Subtask: Align formula source coordinates with visible formula text
-- **Status:** backlog
+- **Status:** review
 - **Scope:**
-  Replace the stripped leading `=` with a space whenever Freeplane
-  converts formula text into Groovy source. Use that same conversion in
-  formula compile preflight, formula submit validation, formula
-  execution, and formula dependency or cache paths that currently use
-  stripped formula text. Leave raw Groovy sources unchanged, including
-  script filter conditions and other script contexts that do not start
-  with `=`.
+  Replace the leading formula marker `=` with one space in the Groovy
+  source returned by `FormulaUtils.scriptOf(String)`. Use that shared
+  conversion for attached-formula compile preflight, formula
+  submit-validation preflight, formula execution, and the formula
+  dependency and cache identity paths that currently use stripped
+  formula text. Leave raw Groovy sources unchanged, including script
+  filter conditions and other contexts that pass source directly to
+  `ScriptingEngine`.
 - **Motivation:**
   The current formula compile path reports first-line coordinates in
   stripped-script space, so attached-formula diagnostics can point one
-  column left of the visible editor text. Using one formula-specific
-  conversion for both compile and run keeps formula coordinate meaning
-  coherent instead of fixing compile only and leaving runtime on a
-  different source layout.
+  column left of the visible editor text. Replacing the marker instead
+  of removing it makes compiler coordinates match the visible formula
+  text while keeping compile, validation, execution, dependency
+  tracking, and cache identity on one source layout.
+- **Scenario:**
+  - For visible formula text beginning with `=`, the formula's Groovy
+    source has the same length and line breaks, with a space in place of
+    the visible marker.
+  - A first-line compiler diagnostic reports the column occupied by the
+    corresponding visible formula text. Later-line line and column
+    values remain unchanged.
+  - Attached-formula compile, submit validation, and execution use the
+    same converted source. Formula dependency and cache lookups use the
+    same converted source as formula execution.
+  - Raw Groovy contexts, including script filter conditions, retain
+    their original source and coordinate layout.
 - **Constraints:**
   - Change only formula-text-to-Groovy conversion, not raw Groovy
     script contexts.
-  - Preserve formula behavior apart from source-layout alignment.
-  - Verify the updated conversion does not break formula execution,
-    validation, dependency tracking, or cache matching.
+  - Preserve formula behavior, source fingerprints, and line breaks
+    apart from first-line source-column alignment.
+  - Keep one conversion point; do not shift diagnostic coordinates
+    after compilation or apply separate per-caller offsets.
+  - Verify formula execution, validation, dependency tracking, and
+    cache matching after the source-layout change.
+- **Briefing:**
+  `FormulaUtils.scriptOf(String)` is the current shared conversion
+  point. `FormulaEditor.compileFormulaCodeStateContent(...)` and
+  `FormulaValidationSupport.validateFormula(...)` call it before
+  compiler preflight. `FormulaUtils.evalIfScript(...)` and
+  `FormulaUtils.validateFormula(...)` use it before execution and
+  validation. `FormulaUtils.getRelatedElements(...)` and
+  `NodeScript.scriptIsContainedIn(...)` use the resulting script for
+  dependency and cache identity. `ScriptCondition` constructs a
+  `GroovyScript` directly from its raw filter source and does not use
+  `FormulaUtils.scriptOf(...)`. The existing sibling subtask already
+  provides structured compiler diagnostics; this subtask changes the
+  source coordinates supplied to that existing contract.
+- **Research:**
+  ```plantuml
+  @startuml
+  participant "Visible formula text" as Text
+  participant FormulaEditor as Editor
+  participant FormulaValidationSupport as Validation
+  participant FormulaUtils as Utils
+  participant ScriptingEngine as Engine
+  participant NodeScript as ScriptKey
+  participant FormulaCache as Cache
+  participant ScriptCondition as Filter
+  Text -> Editor : compileFormulaCodeStateContent(formulaText)
+  Editor -> Utils : scriptOf(formulaText)
+  Utils --> Editor : formulaText.substring(1)
+  Editor -> Engine : compile(stripped formula source)
+  Validation -> Utils : scriptOf(formulaText)
+  Utils --> Validation : formulaText.substring(1)
+  Validation -> Engine : compile(stripped formula source)
+  Utils -> Engine : execute(stripped formula source)
+  Utils -> ScriptKey : store stripped formula source
+  ScriptKey -> Cache : use stripped source as cache key
+  Filter -> Engine : compile raw Groovy source
+  @enduml
+  ```
+
+  - `FormulaUtils.scriptOf(String)` currently returns
+    `object.substring(1)`, so it removes the visible formula marker and
+    shifts every first-line column left by one.
+  - The identified formula paths already converge on that method:
+    `FormulaEditor.compileFormulaCodeStateContent(...)`,
+    `FormulaValidationSupport.validateFormula(...)`,
+    `FormulaUtils.evalIfScript(...)`,
+    `FormulaUtils.validateFormula(...)`, and
+    `FormulaUtils.getRelatedElements(...)`. `NodeScript` compares its
+    stored script with `FormulaUtils.scriptOf(...)`, while
+    `FormulaCache` uses the resulting `NodeScript.script` for cache
+    reads and writes.
+  - `ScriptingEngine` compiles and executes the source it receives; it
+    has no formula-prefix knowledge. `ScriptCondition` passes raw
+    filter source directly to `GroovyScript`, so it is outside the
+    formula conversion path.
+  - `FormulaValidationSupport` keeps the visible formula text for its
+    source fingerprint and only converts the formula source passed to
+    compile and validation. The fingerprint therefore does not need a
+    coordinate-related change.
+  - The existing `FormulaEditorTest.compileCodeReturnsGroovyDiagnosticLocations`
+    covers a multiline formula with unresolved imports and currently
+    expects first-line column `1`; the first-line expectation must become
+    column `2` while the second-line column remains `1`.
+- **Analysis:**
+  - Use `FormulaUtils.scriptOf(String)` as the single conversion point
+    because all in-scope formula paths already use it.
+  - Replace the marker in the source rather than shifting diagnostic
+    fields after compilation so compiler-authored text, structured
+    coordinates, and formula execution share one source layout.
+  - Keep `ScriptingEngine` formula-agnostic so normalization cannot
+    leak into raw Groovy callers.
+- **Design:**
+  ```plantuml
+  @startuml
+  participant "Visible formula text" as Text
+  participant FormulaEditor as Editor
+  participant FormulaValidationSupport as Validation
+  participant FormulaUtils as Utils
+  participant ScriptingEngine as Engine
+  participant NodeScript as ScriptKey
+  participant FormulaCache as Cache
+  participant ScriptCondition as Filter
+  Text -> Editor : compileFormulaCodeStateContent(formulaText)
+  Editor -> Utils : scriptOf(formulaText)
+  Utils --> Editor : same-length source with first char space
+  Editor -> Engine : compile(formula source)
+  Validation -> Utils : scriptOf(formulaText)
+  Utils --> Validation : same-length source with first char space
+  Validation -> Engine : compile(formula source)
+  Utils -> Engine : execute(formula source)
+  Utils -> ScriptKey : store same formula source
+  ScriptKey -> Cache : read and write same source key
+  Filter -> Engine : compile unchanged raw Groovy source
+  @enduml
+  ```
+
+  - Change only the implementation of
+    `FormulaUtils.scriptOf(String)`: for the inputs accepted by the
+    existing callers, return a string whose first character is a space
+    and whose remaining characters are unchanged. Preserve the source
+    length and all line breaks.
+  - Keep the existing callers on that method. Compile preflight in
+    `FormulaEditor` and `FormulaValidationSupport`, formula execution
+    and validation in `FormulaUtils`, and dependency/cache identity in
+    `FormulaUtils` and `NodeScript` will then receive the same source
+    layout without caller-specific coordinate arithmetic.
+  - Do not change `ScriptingEngine`, `GroovyScript`, or
+    `ScriptCondition` for formula normalization. They continue to
+    operate on the source supplied by their callers; raw Groovy callers
+    remain unchanged.
+  - Keep `FormulaValidationSupport` fingerprints based on visible
+    formula text. Keep formula results, validation side effects, and
+    dependency relationships unchanged; only the source character at
+    the former marker position changes.
+  - A first-line diagnostic column increases by one because Groovy now
+    sees the replacement space. Line numbers, later-line columns, and
+    diagnostics without a source position are unchanged.
+- **Test specification:**
+  - **Automated tests:**
+    - `FormulaUtilsTest`
+      - `scriptOfReplacesLeadingFormulaMarkerWithSpaceWithoutChangingLength`:
+        converting `=line1\nline2` produces ` line1\nline2`, preserving
+        source length, line breaks, and every character after the marker.
+      - `evalIfScriptPreservesFormulaResultAfterSourceLayoutChange`:
+        a valid formula still evaluates to the same value after the
+        marker is replaced by a space.
+      - `nodeScriptUsesReplacedMarkerForFormulaIdentity`:
+        a `NodeScript` created with the converted formula source matches
+        the visible formula text through `scriptIsContainedIn`, covering
+        the identity used by dependency and cache lookup paths.
+    - `FormulaEditorTest`
+      - `compileCodeReturnsGroovyDiagnosticLocationsAlignedWithVisibleFormulaText`:
+        for `=import a.A\nimport b.B\n1`, the first unresolved-import
+        diagnostic reports line `1`, column `2`, and the second reports
+        line `2`, column `1`.
+    - `FormulaValidationSupportTest`
+      - `validateFormulaReturnsCompilerDiagnosticsSummaryWithoutExecutingValidator`:
+        the submit preflight still returns the short compilation summary,
+        does not invoke the validator, and its compiler-authored
+        diagnostics report the visible coordinates (line `1`, column
+        `2`, and line `2`, column `1`).
+    - `FormulaUtilsValidationTest`
+      - `validateFormulaDoesNotPopulatePersistentCacheOrDependencyState`:
+        formula validation still returns the expected value without
+        populating persistent formula cache or dependency state after
+        the source conversion change.
+- **Implementation notes:**
+  - **Interpretations:**
+    - Treated `FormulaUtils.scriptOf(...)` as the complete formula-only
+      source-conversion boundary because every in-scope formula caller
+      already uses it, while raw Groovy callers pass source directly.
+  - **Tradeoffs:**
+    - Replaced the marker with a space at the shared conversion point
+      instead of adding caller-specific diagnostic offsets, preserving
+      source length and letting Groovy produce the aligned coordinates.

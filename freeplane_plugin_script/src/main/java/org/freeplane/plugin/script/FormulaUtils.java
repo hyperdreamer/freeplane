@@ -207,7 +207,7 @@ public class FormulaUtils {
     }
 
     public static String scriptOf(final String object) {
-        return object.substring(1);
+        return " " + object.substring(1);
     }
 
     public static void clearCache(final MapModel map) {

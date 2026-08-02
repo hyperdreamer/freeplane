@@ -87,6 +87,9 @@ public class FormulaValidationSupportTest {
             assertThat(result.getLineNumber()).isEqualTo(1);
             assertThat(result.getErrorMessage()).isEqualTo("Groovy compilation failed with 2 diagnostics.");
             assertThat(result.getCompilerDiagnostics()).hasSize(2);
+            assertThat(result.getCompilerDiagnostics())
+                .anySatisfy(diagnostic -> assertThat(diagnostic).contains("@ line 1, column 2"))
+                .anySatisfy(diagnostic -> assertThat(diagnostic).contains("@ line 2, column 1"));
             assertThat(validatorCalled.get()).isFalse();
         }
     }

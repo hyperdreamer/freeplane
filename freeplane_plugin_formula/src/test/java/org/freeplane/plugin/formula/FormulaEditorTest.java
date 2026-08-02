@@ -105,7 +105,7 @@ public class FormulaEditorTest {
     }
 
     @Test
-    public void compileCodeReturnsGroovyDiagnosticLocations() throws Exception {
+    public void compileCodeReturnsGroovyDiagnosticLocationsAlignedWithVisibleFormulaText() throws Exception {
         ensureScriptClasspath();
 
         try (MockedStatic<Controller> controller = mockCurrentController()) {
@@ -116,7 +116,7 @@ public class FormulaEditorTest {
             assertThat(response.getDiagnostics())
                 .extracting(CodeStateDiagnostic::getLine, CodeStateDiagnostic::getColumn)
                 .containsExactly(
-                    org.assertj.core.groups.Tuple.tuple(1, 1),
+                    org.assertj.core.groups.Tuple.tuple(1, 2),
                     org.assertj.core.groups.Tuple.tuple(2, 1));
             assertThat(response.getErrorMessage()).isEqualTo("Groovy compilation failed with 2 diagnostics.");
         }
