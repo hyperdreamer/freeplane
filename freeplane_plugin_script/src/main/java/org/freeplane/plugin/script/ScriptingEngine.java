@@ -21,8 +21,9 @@ package org.freeplane.plugin.script;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.PrintStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.io.UnsupportedEncodingException;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -31,11 +32,23 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 
 import org.apache.commons.lang.WordUtils;
+import org.codehaus.groovy.ast.ASTNode;
+import org.codehaus.groovy.ast.ModuleNode;
+import org.codehaus.groovy.control.ErrorCollector;
+import org.codehaus.groovy.control.Janitor;
+import org.codehaus.groovy.control.MultipleCompilationErrorsException;
+import org.codehaus.groovy.control.messages.LocatedMessage;
+import org.codehaus.groovy.control.messages.Message;
+import org.codehaus.groovy.control.messages.SyntaxErrorMessage;
+import org.codehaus.groovy.syntax.CSTNode;
+import org.codehaus.groovy.syntax.SyntaxException;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.ui.components.UITools;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.attribute.NodeAttributeTableModel;
 import org.freeplane.features.map.NodeModel;
+
+import groovy.lang.GroovyRuntimeException;
 
 /**
  * @author foltin
@@ -43,38 +56,55 @@ import org.freeplane.features.map.NodeModel;
 public class ScriptingEngine {
 	public static final String SCRIPT_PREFIX = "script";
 
+    public static class GroovyCompilerDiagnostic {
+        private final String message;
+        private final Integer line;
+        private final Integer column;
+
+        GroovyCompilerDiagnostic(String message, Integer line, Integer column) {
+            this.message = message;
+            this.line = line;
+            this.column = column;
+        }
+
+        public String getMessage() {
+            return message;
+        }
+
+        public Integer getLine() {
+            return line;
+        }
+
+        public Integer getColumn() {
+            return column;
+        }
+    }
+
     public static class GroovyCompileResult {
         private final boolean successful;
-        private final List<String> compilerDiagnostics;
+        private final List<GroovyCompilerDiagnostic> compilerDiagnostics;
         private final String errorMessage;
-        private final Integer lineNumber;
 
         GroovyCompileResult(boolean successful,
-                            List<String> compilerDiagnostics,
-                            String errorMessage,
-                            Integer lineNumber) {
+                            List<GroovyCompilerDiagnostic> compilerDiagnostics,
+                            String errorMessage) {
             this.successful = successful;
             this.compilerDiagnostics = compilerDiagnostics == null
-                ? Collections.<String>emptyList()
-                : Collections.unmodifiableList(new ArrayList<String>(compilerDiagnostics));
+                ? Collections.<GroovyCompilerDiagnostic>emptyList()
+                : Collections.unmodifiableList(new ArrayList<GroovyCompilerDiagnostic>(compilerDiagnostics));
             this.errorMessage = errorMessage;
-            this.lineNumber = lineNumber;
         }
 
         public boolean isSuccessful() {
             return successful;
         }
 
-        public List<String> getCompilerDiagnostics() {
+        public List<GroovyCompilerDiagnostic> getCompilerDiagnostics() {
             return compilerDiagnostics;
         }
 
         public String getErrorMessage() {
             return errorMessage;
-        }
-
-        public Integer getLineNumber() {
-            return lineNumber;
         }
     }
 	// need a File for caching! Scripts from String have to be cached elsewhere
@@ -153,9 +183,8 @@ public class ScriptingEngine {
 
     public static GroovyCompileResult compileGroovyScriptForDiagnostics(String script,
                                                                         ScriptingPermissions permissions) {
-        ByteArrayOutputStream outputBuffer = new ByteArrayOutputStream();
         final int[] lineNumber = new int[] { -1 };
-        try (PrintStream outStream = new PrintStream(outputBuffer, false, "UTF-8")) {
+        try (PrintStream outStream = new PrintStream(new ByteArrayOutputStream(), false, "UTF-8")) {
             GroovyScript groovyScript = (GroovyScript) createGroovyScript(script, permissions);
             groovyScript.compile(outStream, new IFreeplaneScriptErrorHandler() {
                 @Override
@@ -163,13 +192,15 @@ public class ScriptingEngine {
                     lineNumber[0] = pLineNumber;
                 }
             });
-            return new GroovyCompileResult(true, Collections.<String>emptyList(), null, null);
+            return new GroovyCompileResult(true, Collections.<GroovyCompilerDiagnostic>emptyList(), null);
         } catch (ExecuteScriptException error) {
+            List<GroovyCompilerDiagnostic> compilerDiagnostics = compilerDiagnostics(
+                error,
+                lineNumber[0] >= 0 ? Integer.valueOf(lineNumber[0]) : null);
             return new GroovyCompileResult(
                 false,
-                diagnostics(outputBuffer, error.getMessage()),
-                error.getMessage(),
-                lineNumber[0] >= 0 ? Integer.valueOf(lineNumber[0]) : null);
+                compilerDiagnostics,
+                compilerDiagnostics.isEmpty() ? trimToNull(error.getMessage()) : compilerFailureSummary(compilerDiagnostics.size()));
         } catch (UnsupportedEncodingException error) {
             throw new IllegalStateException("UTF-8 is not available.", error);
         }
@@ -242,21 +273,147 @@ public class ScriptingEngine {
         return ScriptResources.getUserScriptDir();
     }
 
-    private static List<String> diagnostics(ByteArrayOutputStream outputBuffer, String errorMessage) {
-        String output = new String(outputBuffer.toByteArray(), StandardCharsets.UTF_8).trim();
-        List<String> diagnostics = new ArrayList<String>();
-        if (!output.isEmpty()) {
-            for (String line : output.split("\\r?\\n")) {
-                String trimmed = line.trim();
-                if (!trimmed.isEmpty()) {
-                    diagnostics.add(trimmed);
-                }
+    private static List<GroovyCompilerDiagnostic> compilerDiagnostics(ExecuteScriptException error,
+                                                                   Integer fallbackLine) {
+        Throwable compilerFailure = deepestCompilerFailure(error);
+        if (compilerFailure instanceof MultipleCompilationErrorsException) {
+            List<GroovyCompilerDiagnostic> compilerDiagnostics = structuredDiagnostics(
+                (MultipleCompilationErrorsException) compilerFailure);
+            if (!compilerDiagnostics.isEmpty()) {
+                return compilerDiagnostics;
             }
         }
-        if (diagnostics.isEmpty() && errorMessage != null && !errorMessage.trim().isEmpty()) {
-            diagnostics.add(errorMessage.trim());
+        GroovyCompilerDiagnostic fallbackDiagnostic = fallbackDiagnostic(compilerFailure, error, fallbackLine);
+        if (fallbackDiagnostic == null) {
+            return Collections.emptyList();
         }
-        return diagnostics;
+        return Collections.singletonList(fallbackDiagnostic);
+    }
+
+    private static Throwable deepestCompilerFailure(Throwable throwable) {
+        Throwable current = throwable;
+        Throwable last = throwable;
+        Throwable multipleCompilationFailure = null;
+        Throwable groovyRuntimeFailure = null;
+        while (current != null) {
+            if (current instanceof MultipleCompilationErrorsException) {
+                multipleCompilationFailure = current;
+            }
+            else if (current instanceof GroovyRuntimeException) {
+                groovyRuntimeFailure = current;
+            }
+            last = current;
+            current = current.getCause() == current ? null : current.getCause();
+        }
+        if (multipleCompilationFailure != null) {
+            return multipleCompilationFailure;
+        }
+        if (groovyRuntimeFailure != null) {
+            return groovyRuntimeFailure;
+        }
+        return last;
+    }
+
+    private static List<GroovyCompilerDiagnostic> structuredDiagnostics(MultipleCompilationErrorsException error) {
+        ErrorCollector errorCollector = error.getErrorCollector();
+        if (errorCollector == null || !errorCollector.hasErrors()) {
+            return Collections.emptyList();
+        }
+        List<GroovyCompilerDiagnostic> compilerDiagnostics = new ArrayList<GroovyCompilerDiagnostic>();
+        for (Message message : errorCollector.getErrors()) {
+            GroovyCompilerDiagnostic diagnostic = toCompilerDiagnostic(message);
+            if (diagnostic != null) {
+                compilerDiagnostics.add(diagnostic);
+            }
+        }
+        return compilerDiagnostics;
+    }
+
+    private static GroovyCompilerDiagnostic toCompilerDiagnostic(Message message) {
+        if (message == null) {
+            return null;
+        }
+        String renderedMessage = trimToNull(renderCompilerMessage(message));
+        Integer line = null;
+        Integer column = null;
+        if (message instanceof SyntaxErrorMessage) {
+            SyntaxException cause = ((SyntaxErrorMessage) message).getCause();
+            line = positiveOrNull(cause == null ? -1 : cause.getStartLine());
+            column = positiveOrNull(cause == null ? -1 : cause.getStartColumn());
+        }
+        else if (message instanceof LocatedMessage) {
+            CSTNode context = ((LocatedMessage) message).getContext();
+            line = positiveOrNull(context == null ? -1 : context.getStartLine());
+            column = positiveOrNull(context == null ? -1 : context.getStartColumn());
+        }
+        if (renderedMessage == null && line == null && column == null) {
+            return null;
+        }
+        return new GroovyCompilerDiagnostic(renderedMessage, line, column);
+    }
+
+    private static String renderCompilerMessage(Message message) {
+        StringWriter writerBuffer = new StringWriter();
+        PrintWriter writer = new PrintWriter(writerBuffer);
+        Janitor janitor = new Janitor();
+        try {
+            message.write(writer, janitor);
+        }
+        finally {
+            janitor.cleanup();
+            writer.flush();
+        }
+        return writerBuffer.toString();
+    }
+
+    private static GroovyCompilerDiagnostic fallbackDiagnostic(Throwable compilerFailure,
+                                                               ExecuteScriptException error,
+                                                               Integer fallbackLine) {
+        String message = trimToNull(error == null ? null : error.getMessage());
+        if (message == null) {
+            return null;
+        }
+        Integer line = fallbackLine;
+        Integer column = null;
+        if (compilerFailure instanceof GroovyRuntimeException) {
+            ASTNode positionNode = positionNode((GroovyRuntimeException) compilerFailure);
+            line = positiveOrNull(positionNode == null ? -1 : positionNode.getLineNumber());
+            column = positiveOrNull(positionNode == null ? -1 : positionNode.getColumnNumber());
+            if (line == null) {
+                line = fallbackLine;
+            }
+        }
+        return new GroovyCompilerDiagnostic(message, line, column);
+    }
+
+    private static ASTNode positionNode(GroovyRuntimeException error) {
+        if (error == null) {
+            return null;
+        }
+        ModuleNode module = error.getModule();
+        if (module != null && positiveOrNull(module.getLineNumber()) != null) {
+            return module;
+        }
+        ASTNode node = error.getNode();
+        return node != null && positiveOrNull(node.getLineNumber()) != null ? node : null;
+    }
+
+    private static Integer positiveOrNull(int value) {
+        return value > 0 ? Integer.valueOf(value) : null;
+    }
+
+    private static String compilerFailureSummary(int diagnosticCount) {
+        return diagnosticCount == 1
+            ? "Groovy compilation failed with 1 diagnostic."
+            : "Groovy compilation failed with " + diagnosticCount + " diagnostics.";
+    }
+
+    private static String trimToNull(String text) {
+        if (text == null) {
+            return null;
+        }
+        String trimmed = text.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     static void showScriptExceptionErrorMessage(ExecuteScriptException ex) {

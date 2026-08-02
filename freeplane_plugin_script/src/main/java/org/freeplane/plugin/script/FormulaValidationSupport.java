@@ -7,6 +7,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Collections;
 import java.util.Formatter;
+import java.util.List;
 import java.util.function.Supplier;
 import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.map.NodeModel;
@@ -30,6 +31,25 @@ public class FormulaValidationSupport {
     }
 
     public AiChatCodeOperationResult validateFormula(NodeModel node, String formulaText) {
+        String sourceFingerprint = fingerprint(formulaText);
+        if (formulaText != null && formulaText.startsWith("=")) {
+            ScriptingEngine.GroovyCompileResult compileResult = ScriptingEngine.compileGroovyScriptForDiagnostics(
+                FormulaUtils.scriptOf(formulaText),
+                ScriptingPermissions.getFormulaPermissions());
+            if (!compileResult.isSuccessful()) {
+                return new AiChatCodeOperationResult(
+                    "SUBMIT_VALIDATION",
+                    "USER",
+                    false,
+                    compilerDiagnosticMessages(compileResult),
+                    null,
+                    null,
+                    "validation",
+                    compileResult.getErrorMessage(),
+                    firstDiagnosticLine(compileResult),
+                    sourceFingerprint);
+            }
+        }
         final int[] lineNumber = new int[] { -1 };
         ByteArrayOutputStream outputBuffer = new ByteArrayOutputStream();
         try (PrintStream outStream = new PrintStream(outputBuffer, false, "UTF-8")) {
@@ -52,7 +72,7 @@ public class FormulaValidationSupport {
                 null,
                 null,
                 null,
-                fingerprint(formulaText));
+                sourceFingerprint);
         } catch (Exception error) {
             String standardOutput = new String(outputBuffer.toByteArray(), StandardCharsets.UTF_8).trim();
             String errorMessage = error.getMessage();
@@ -68,8 +88,34 @@ public class FormulaValidationSupport {
                 "validation",
                 errorMessage,
                 lineNumber[0] >= 0 ? Integer.valueOf(lineNumber[0]) : null,
-                fingerprint(formulaText));
+                sourceFingerprint);
         }
+    }
+
+    private List<String> compilerDiagnosticMessages(ScriptingEngine.GroovyCompileResult compileResult) {
+        if (compileResult == null || compileResult.getCompilerDiagnostics().isEmpty()) {
+            return Collections.emptyList();
+        }
+        java.util.List<String> compilerDiagnostics = new java.util.ArrayList<String>();
+        for (ScriptingEngine.GroovyCompilerDiagnostic diagnostic : compileResult.getCompilerDiagnostics()) {
+            if (diagnostic == null || diagnostic.getMessage() == null || diagnostic.getMessage().trim().isEmpty()) {
+                continue;
+            }
+            compilerDiagnostics.add(diagnostic.getMessage());
+        }
+        return compilerDiagnostics.isEmpty() ? Collections.<String>emptyList() : Collections.unmodifiableList(compilerDiagnostics);
+    }
+
+    private Integer firstDiagnosticLine(ScriptingEngine.GroovyCompileResult compileResult) {
+        if (compileResult == null) {
+            return null;
+        }
+        for (ScriptingEngine.GroovyCompilerDiagnostic diagnostic : compileResult.getCompilerDiagnostics()) {
+            if (diagnostic != null && diagnostic.getLine() != null) {
+                return diagnostic.getLine();
+            }
+        }
+        return null;
     }
 
     private String fingerprint(String text) {

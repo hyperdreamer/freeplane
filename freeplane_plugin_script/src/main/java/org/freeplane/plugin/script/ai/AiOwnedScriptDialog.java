@@ -19,6 +19,7 @@ import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.ai.code.CodeState;
 import org.freeplane.features.ai.code.CodeStateContent;
+import org.freeplane.features.ai.code.CodeStateDiagnosticTextFormatter;
 import org.freeplane.features.ai.code.ReadCodeResponse;
 import org.freeplane.features.ai.code.RunCodeResponse;
 
@@ -29,6 +30,7 @@ public class AiOwnedScriptDialog extends JDialog implements AiOwnedScriptHostSer
     private final AiOwnedScriptHostService.DialogCallbacks callbacks;
     private final JTextArea codeTextArea;
     private final JTextArea argumentsJsonTextArea;
+    private final JTextArea resultTextArea;
     private final JButton runButton;
     private final JButton cancelButton;
     private boolean hasCode;
@@ -40,6 +42,7 @@ public class AiOwnedScriptDialog extends JDialog implements AiOwnedScriptHostSer
         this.callbacks = callbacks;
         this.codeTextArea = new JTextArea();
         this.argumentsJsonTextArea = new JTextArea();
+        this.resultTextArea = new JTextArea();
         this.runButton = new JButton(TextUtils.getText("plugins/ScriptEditor.run"));
         this.cancelButton = new JButton(TextUtils.getText("cancel"));
         setTitle(TextUtils.getText("ai_owned_script_dialog_title"));
@@ -60,6 +63,7 @@ public class AiOwnedScriptDialog extends JDialog implements AiOwnedScriptHostSer
         if (!hasCode) {
             codeTextArea.setText("");
             argumentsJsonTextArea.setText("");
+            resultTextArea.setText("");
             refreshExecutionAuthority();
             return;
         }
@@ -68,6 +72,8 @@ public class AiOwnedScriptDialog extends JDialog implements AiOwnedScriptHostSer
         argumentsJsonTextArea.setText(content == null || content.getArgumentsJsonText() == null ? "" : content.getArgumentsJsonText());
         codeTextArea.setCaretPosition(0);
         argumentsJsonTextArea.setCaretPosition(0);
+        resultTextArea.setText(resultText(state));
+        resultTextArea.setCaretPosition(0);
         refreshExecutionAuthority();
     }
 
@@ -98,6 +104,8 @@ public class AiOwnedScriptDialog extends JDialog implements AiOwnedScriptHostSer
     private void configureTextAreas() {
         codeTextArea.setLineWrap(false);
         argumentsJsonTextArea.setLineWrap(false);
+        resultTextArea.setEditable(false);
+        resultTextArea.setLineWrap(false);
         ResourceController resourceController = ResourceController.getResourceController();
         if (resourceController != null) {
             String fontName = resourceController.getProperty("groovy_editor_font", Font.MONOSPACED);
@@ -105,6 +113,7 @@ public class AiOwnedScriptDialog extends JDialog implements AiOwnedScriptHostSer
             Font font = new Font(fontName, Font.PLAIN, fontSize);
             codeTextArea.setFont(font);
             argumentsJsonTextArea.setFont(font);
+            resultTextArea.setFont(font);
         }
     }
 
@@ -116,11 +125,16 @@ public class AiOwnedScriptDialog extends JDialog implements AiOwnedScriptHostSer
         JSplitPane editorSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, codeScrollPane, inputScrollPane);
         editorSplitPane.setResizeWeight(0.75d);
         editorSplitPane.setContinuousLayout(true);
+        JScrollPane resultScrollPane = new JScrollPane(resultTextArea);
+        resultScrollPane.setBorder(BorderFactory.createTitledBorder(TextUtils.getText("plugins/ScriptEditor/window.Result")));
+        JSplitPane contentSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, editorSplitPane, resultScrollPane);
+        contentSplitPane.setResizeWeight(0.8d);
+        contentSplitPane.setContinuousLayout(true);
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         buttonPanel.add(runButton);
         buttonPanel.add(cancelButton);
         getContentPane().setLayout(new BorderLayout());
-        getContentPane().add(editorSplitPane, BorderLayout.CENTER);
+        getContentPane().add(contentSplitPane, BorderLayout.CENTER);
         getContentPane().add(buttonPanel, BorderLayout.SOUTH);
     }
 
@@ -179,5 +193,25 @@ public class AiOwnedScriptDialog extends JDialog implements AiOwnedScriptHostSer
         codeTextArea.setEditable(executionAvailable);
         argumentsJsonTextArea.setEditable(executionAvailable);
         runButton.setEnabled(executionAvailable && hasCode);
+    }
+
+    private String resultText(ReadCodeResponse state) {
+        if (state == null) {
+            return "";
+        }
+        String formattedDiagnostics = CodeStateDiagnosticTextFormatter.format(state.getDiagnostics());
+        if (formattedDiagnostics != null) {
+            return formattedDiagnostics;
+        }
+        if (state.getErrorMessage() != null) {
+            return state.getErrorMessage();
+        }
+        if (state.getStdout() != null) {
+            return state.getStdout();
+        }
+        if (state.getStructuredResult() != null) {
+            return String.valueOf(state.getStructuredResult());
+        }
+        return "";
     }
 }

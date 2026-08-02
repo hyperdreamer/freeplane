@@ -39,6 +39,7 @@ import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
 import org.freeplane.plugin.script.ExecuteScriptException;
 import org.freeplane.plugin.script.FormulaValidationSupport;
+import org.freeplane.plugin.script.GroovyCompilerDiagnosticsMapper;
 import org.freeplane.plugin.script.IFreeplaneScriptErrorHandler;
 import org.freeplane.plugin.script.ScriptContext;
 import org.freeplane.plugin.script.ScriptInputJsonSupport;
@@ -550,9 +551,8 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
             content.getSourceText(),
             permissions);
         if (!compileResult.isSuccessful()) {
-            List<CodeStateDiagnostic> diagnostics = CodeStateDiagnostics.sourceDiagnostics(
-                compileResult.getCompilerDiagnostics(),
-                compileResult.getLineNumber());
+            List<CodeStateDiagnostic> diagnostics = GroovyCompilerDiagnosticsMapper.toSourceDiagnostics(
+                compileResult.getCompilerDiagnostics());
             return new ValidationOutcome(CodeState.INVALID_SCRIPT, diagnostics, compileResult.getErrorMessage(), null);
         }
         return new ValidationOutcome(null, null, null, argumentsValidation.argsValue);

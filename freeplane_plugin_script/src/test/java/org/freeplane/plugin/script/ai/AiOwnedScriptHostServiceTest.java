@@ -5,8 +5,10 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.when;
 
+import java.lang.reflect.Method;
 import java.util.Collections;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.features.ai.code.AiChatCodeOperationResult;
@@ -25,9 +27,11 @@ import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeResponse;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
+import org.freeplane.features.mode.Controller;
 import org.freeplane.plugin.script.FormulaValidationSupport;
 import org.freeplane.plugin.script.ScriptingPermissions;
 import org.junit.Test;
+import org.mockito.MockedStatic;
 
 public class AiOwnedScriptHostServiceTest {
     @Test
@@ -169,6 +173,47 @@ public class AiOwnedScriptHostServiceTest {
     }
 
     @Test
+    public void compileCodeReturnsGroovyDiagnosticLocations() {
+        ensureScriptClasspath();
+        try (MockedStatic<Controller> controller = mockCurrentController()) {
+            AiOwnedScriptHostService uut = new AiOwnedScriptHostService(null);
+
+            WriteCodeResponse written = uut.doWriteCode(writeRequest("import a.A\nimport b.B\nprintln 'x'\n", null, null));
+            CompileCodeResponse compileResponse = uut.doCompileCode(new org.freeplane.features.ai.code.CompileCodeRequest(
+                ScriptHost.AI,
+                written.getStateToken()));
+
+            assertThat(compileResponse.getCodeState()).isEqualTo(CodeState.INVALID_SCRIPT);
+            assertThat(compileResponse.getDiagnostics())
+                .extracting(diagnostic -> diagnostic.getLine(), diagnostic -> diagnostic.getColumn())
+                .containsExactly(
+                    org.assertj.core.groups.Tuple.tuple(1, 1),
+                    org.assertj.core.groups.Tuple.tuple(2, 1));
+            assertThat(compileResponse.getErrorMessage()).isEqualTo("Groovy compilation failed with 2 diagnostics.");
+        }
+    }
+
+    @Test
+    public void runFromDialogReturnsGroovyDiagnosticLocationsForCompileFailure() {
+        ensureScriptClasspath();
+        try (MockedStatic<Controller> controller = mockCurrentController()) {
+            AiOwnedScriptHostService uut = new AiOwnedScriptHostService(null);
+            uut.doWriteCode(writeRequest("println 1", null, null));
+
+            RunCodeResponse response = uut.runFromDialog(new CodeStateContent("import a.A\nimport b.B\nprintln 'x'\n", null));
+
+            assertThat(response.getCodeState()).isEqualTo(CodeState.INVALID_SCRIPT);
+            assertThat(response.getRunInitiator()).isEqualTo(org.freeplane.features.ai.code.ScriptRunInitiator.USER);
+            assertThat(response.getDiagnostics())
+                .extracting(diagnostic -> diagnostic.getLine(), diagnostic -> diagnostic.getColumn())
+                .containsExactly(
+                    org.assertj.core.groups.Tuple.tuple(1, 1),
+                    org.assertj.core.groups.Tuple.tuple(2, 1));
+            assertThat(response.getErrorMessage()).isEqualTo("Groovy compilation failed with 2 diagnostics.");
+        }
+    }
+
+    @Test
     public void evaluateFormulaDelegatesToFormulaValidationSupport() {
         FormulaValidationSupport validationSupport = mock(FormulaValidationSupport.class);
         AiOwnedScriptHostService uut = new AiOwnedScriptHostService(null, new RecordingDialogFactory(), validationSupport);
@@ -235,6 +280,36 @@ public class AiOwnedScriptHostServiceTest {
 
     private WriteCodeRequest writeRequest(String sourceText, String argumentsJsonText, CodeStateToken expectedStateToken) {
         return new WriteCodeRequest(ScriptHost.AI, new CodeStateContent(sourceText, argumentsJsonText), expectedStateToken);
+    }
+
+    private MockedStatic<Controller> mockCurrentController() {
+        MockedStatic<Controller> controller = mockStatic(Controller.class);
+        Controller currentController = mock(Controller.class);
+        ResourceController resourceController = mock(ResourceController.class);
+        when(currentController.getResourceController()).thenReturn(resourceController);
+        when(resourceController.getIntProperty("compiled_script_cache_size", 200)).thenReturn(8);
+        controller.when(Controller::getCurrentController).thenReturn(currentController);
+        return controller;
+    }
+
+    private void ensureScriptClasspath() {
+        try {
+            Method getClasspath = Class.forName("org.freeplane.plugin.script.ScriptResources")
+                .getDeclaredMethod("getClasspath");
+            getClasspath.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            java.util.List<String> classpath = (java.util.List<String>) getClasspath.invoke(null);
+            if (classpath != null) {
+                return;
+            }
+            Method setClasspath = Class.forName("org.freeplane.plugin.script.ScriptResources")
+                .getDeclaredMethod("setClasspath", java.util.List.class);
+            setClasspath.setAccessible(true);
+            setClasspath.invoke(null, Collections.<String>emptyList());
+        }
+        catch (Exception error) {
+            throw new IllegalStateException(error);
+        }
     }
 
     private static class RecordingDialogFactory implements AiOwnedScriptHostService.DialogFactory {

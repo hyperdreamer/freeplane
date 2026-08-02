@@ -3,6 +3,7 @@ package org.freeplane.plugin.ai.chat.memory;
 import dev.langchain4j.data.message.UserMessage;
 import java.util.List;
 import org.freeplane.features.ai.code.CodeStateDiagnostic;
+import org.freeplane.features.ai.code.CodeStateDiagnosticTextFormatter;
 import org.freeplane.features.ai.code.ReadCodeResponse;
 import org.freeplane.features.ai.code.RunCodeResponse;
 
@@ -85,7 +86,9 @@ public class AutomaticCodeStatusMessage extends UserMessage {
         append(builder, "codeFingerprint", codeFingerprint);
         append(builder, "argumentsFingerprint", argumentsFingerprint);
         appendDiagnostics(builder, diagnostics);
-        append(builder, "errorMessage", errorMessage);
+        if (shouldAppendErrorMessage(diagnostics, errorMessage)) {
+            append(builder, "errorMessage", errorMessage);
+        }
         appendBlock(builder, "stdout", stdout);
         append(builder, "structuredResult", structuredResult);
     }
@@ -98,21 +101,27 @@ public class AutomaticCodeStatusMessage extends UserMessage {
     }
 
     private static void appendDiagnostics(StringBuilder builder, List<CodeStateDiagnostic> diagnostics) {
-        if (diagnostics == null || diagnostics.isEmpty()) {
+        String formattedDiagnostics = CodeStateDiagnosticTextFormatter.format(diagnostics);
+        if (formattedDiagnostics == null) {
             return;
         }
         builder.append("diagnostics:").append('\n');
-        for (CodeStateDiagnostic diagnostic : diagnostics) {
-            builder.append("- ").append(diagnostic.getField()).append(": ").append(diagnostic.getMessage());
-            if (diagnostic.getLine() != null) {
-                builder.append(" (line ").append(diagnostic.getLine());
-                if (diagnostic.getColumn() != null) {
-                    builder.append(", column ").append(diagnostic.getColumn());
-                }
-                builder.append(')');
-            }
-            builder.append('\n');
+        builder.append(formattedDiagnostics).append('\n');
+    }
+
+    private static boolean shouldAppendErrorMessage(List<CodeStateDiagnostic> diagnostics, String errorMessage) {
+        if (errorMessage == null) {
+            return false;
         }
+        if (diagnostics == null || diagnostics.isEmpty()) {
+            return true;
+        }
+        for (CodeStateDiagnostic diagnostic : diagnostics) {
+            if (diagnostic == null || diagnostic.getMessage() == null || diagnostic.getMessage().trim().isEmpty()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void appendBlock(StringBuilder builder, String key, String value) {
