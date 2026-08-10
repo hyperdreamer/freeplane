@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import javax.xml.XMLConstants;
 import javax.xml.namespace.QName;
 
 import org.freeplane.plugin.graph.workspace.model.DisplaySettings;
@@ -74,6 +75,51 @@ public class WorkspaceXmlCodecShould {
 
         Files.write(location, firstWrite);
         assertThat(codec.read(location)).isEqualTo(document);
+    }
+
+    @Test
+    public void preserveNamespaceBindingUsedOnlyByUnknownQNameAttribute() throws Exception {
+        Path source = temporaryFolder.newFile("qname-namespace.fpg").toPath();
+        String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+            + "<graph-workspace format-version=\"1\" id=\"" + WORKSPACE_ID + "\">"
+            + "<maps><map id=\"" + MAP_ONE + "\" sequence=\"1\" uri=\"maps/one.mm\" active=\"true\" "
+            + "color=\"#4E79A7\" xmlns:f=\"urn:field\" xmlns:t=\"urn:type\" f:type=\"t:Widget\"/>"
+            + "</maps><relationships></relationships><pins></pins>"
+            + "<viewport center-x=\"0\" center-y=\"0\" zoom=\"1\"/>"
+            + "<display-settings show-arrowheads=\"true\" canvas-theme=\"FOLLOW_FREEPLANE\" "
+            + "remember-viewport=\"true\" dim-unrelated-nodes=\"true\"/>"
+            + "</graph-workspace>";
+        Files.write(source, xml.getBytes(StandardCharsets.UTF_8));
+
+        WorkspaceDocument document = codec().read(source);
+        Path location = temporaryFolder.newFile("qname-namespace-written.fpg").toPath();
+        byte[] written = codec().write(document, location);
+        Files.write(location, written);
+
+        assertThat(document.maps().get(0).unknownXml()).contains(
+            namespaceDeclaration(UnknownXml.Owner.RECORD, "t", "urn:type"));
+        assertThat(new String(written, StandardCharsets.UTF_8))
+            .contains("xmlns:t=\"urn:type\"")
+            .contains("f:type=\"t:Widget\"");
+        assertThat(codec().read(location)).isEqualTo(document);
+    }
+
+    @Test
+    public void preserveInternationalRelativeAndAbsoluteUriEquality() throws Exception {
+        URI relative = URI.create("maps/\u00FCber.mm");
+        URI absolute = URI.create("file:///tmp/\u00FCber.mm");
+        WorkspaceDocument document = WorkspaceDocument.createVersion1(WORKSPACE_ID).toBuilder()
+            .maps(Arrays.asList(
+                MapReference.of(MAP_ONE, 1, relative, true, "#4E79A7", Collections.<UnknownXml>emptyList()),
+                MapReference.of(MAP_TWO, 2, absolute, false, "#F28E2B", Collections.<UnknownXml>emptyList())))
+            .build();
+        Path location = temporaryFolder.newFile("international-uri.fpg").toPath();
+
+        Files.write(location, codec().write(document, location));
+
+        WorkspaceDocument reread = codec().read(location);
+        assertThat(reread.maps().get(0).storedUri()).isEqualTo(relative);
+        assertThat(reread.maps().get(1).storedUri()).isEqualTo(absolute);
     }
 
     @Test
@@ -199,6 +245,7 @@ public class WorkspaceXmlCodecShould {
             .viewport(viewport)
             .displaySettings(settings)
             .unknownXml(Arrays.asList(
+                namespaceDeclaration(UnknownXml.Owner.WORKSPACE, "future", FUTURE_NAMESPACE),
                 unknownAttribute(UnknownXml.Owner.WORKSPACE, "root-attribute", "root"),
                 unknownElement(UnknownXml.Owner.WORKSPACE, 2, "root-element", "root"),
                 unknownAttribute(UnknownXml.Owner.MAPS, "maps-attribute", "maps"),
@@ -212,6 +259,10 @@ public class WorkspaceXmlCodecShould {
 
     private static UnknownXml unknownAttribute(UnknownXml.Owner owner, String name, String value) {
         return UnknownXml.attribute(owner, future(name), value + "-value");
+    }
+
+    private static UnknownXml namespaceDeclaration(UnknownXml.Owner owner, String prefix, String value) {
+        return UnknownXml.attribute(owner, new QName(XMLConstants.XMLNS_ATTRIBUTE_NS_URI, prefix, "xmlns"), value);
     }
 
     private static UnknownXml unknownElement(UnknownXml.Owner owner, int position, String name, String value) {
