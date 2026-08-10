@@ -139,21 +139,45 @@ public class WorkspaceDomainShould {
             .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> builder.maps(Arrays.asList(first, duplicateSequence)).build())
             .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> builder.relationships(Collections.singletonList(GraphRelationshipRecord.of(
-            RelationshipId.of(UUID.randomUUID()), 1,
+        GraphRelationshipRecord missingMapRelationship = GraphRelationshipRecord.of(
+            RelationshipId.of("00000000-0000-0000-0000-000000000011"), 1,
             NodeReference.of(MAP_ONE, PersistedNodeId.of("a")),
-            NodeReference.of(MAP_ONE, PersistedNodeId.of("b")),
-            RelationshipDirection.FORWARD, Collections.<UnknownXml>emptyList()))).build())
-            .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> builder.pins(Collections.singletonList(PinRecord.of(
+            NodeReference.of(MAP_TWO, PersistedNodeId.of("b")),
+            RelationshipDirection.FORWARD, Collections.<UnknownXml>emptyList());
+        assertThatThrownBy(() -> WorkspaceDocument.createVersion1(WorkspaceId.of(WORKSPACE_UUID)).toBuilder()
+            .maps(Collections.singletonList(first))
+            .relationships(Collections.singletonList(missingMapRelationship))
+            .build())
+            .hasMessage("Relationship endpoints must reference registered maps");
+
+        PinRecord missingMapPin = PinRecord.of(
             NodeReference.of(MAP_TWO, PersistedNodeId.of("missing")), 0, 0,
-            Collections.<UnknownXml>emptyList()))).build())
-            .isInstanceOf(IllegalArgumentException.class);
+            Collections.<UnknownXml>emptyList());
+        assertThatThrownBy(() -> WorkspaceDocument.createVersion1(WorkspaceId.of(WORKSPACE_UUID)).toBuilder()
+            .maps(Collections.singletonList(first))
+            .pins(Collections.singletonList(missingMapPin))
+            .build())
+            .hasMessage("Pinned nodes must reference registered maps");
         assertThatThrownBy(() -> WorkspaceDocument.createVersion1(WorkspaceId.of(WORKSPACE_UUID)).toBuilder()
             .sourceFormatVersion(2).compatibility(WorkspaceCompatibility.WRITABLE_VERSION_1).build())
             .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> WorkspaceDocument.createVersion1(WorkspaceId.of(WORKSPACE_UUID)).toBuilder()
             .sourceFormatVersion(1).compatibility(WorkspaceCompatibility.READ_ONLY_NEWER).build())
+            .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    public void acceptExactlyTheApprovedMapPalette() {
+        List<String> colors = Arrays.asList(
+            "#4E79A7", "#F28E2B", "#59A14F", "#E15759",
+            "#76B7B2", "#B07AA1", "#EDC948", "#9C755F");
+
+        for (final String color : colors) {
+            assertThat(MapReference.of(MAP_ONE, 1, URI.create("one.mm"), true, color,
+                Collections.<UnknownXml>emptyList()).color()).isEqualTo(color);
+        }
+        assertThatThrownBy(() -> MapReference.of(MAP_ONE, 1, URI.create("one.mm"), true,
+            "#FFFFFF", Collections.<UnknownXml>emptyList()))
             .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -208,7 +232,7 @@ public class WorkspaceDomainShould {
         UnknownXml firstAttribute = UnknownXml.attribute(UnknownXml.Owner.RECORD, name, "one");
         UnknownXml secondAttribute = UnknownXml.attribute(UnknownXml.Owner.RECORD, name, "two");
         assertThatThrownBy(() -> MapReference.of(MAP_ONE, 1, URI.create("one.mm"), true,
-            "#DF625D", Arrays.asList(firstAttribute, secondAttribute)))
+            "#4E79A7", Arrays.asList(firstAttribute, secondAttribute)))
             .isInstanceOf(IllegalArgumentException.class);
 
         UnknownXml firstElement = UnknownXml.element(UnknownXml.Owner.RECORD, 1,
@@ -223,7 +247,7 @@ public class WorkspaceDomainShould {
     }
 
     private static MapReference map(MapReferenceId id, long sequence, String uri) {
-        return MapReference.of(id, sequence, URI.create(uri), true, "#DF625D",
+        return MapReference.of(id, sequence, URI.create(uri), true, "#4E79A7",
             Collections.<UnknownXml>emptyList());
     }
 }
