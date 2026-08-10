@@ -12,7 +12,7 @@
 
 **Graph group** - A marked mind-map node whose complete subtree is treated as one graph node. The marked node is the group root and remains the stored endpoint of relationships involving the group. If its marker is removed, those relationships attach to the root's ancestor enclosure rather than being redirected to descendants. If graph groups are nested, only the outermost marked ancestor is active; inner markers remain and become active when no marked ancestor contains them. The marker belongs to shared clone content, so marking any clone marks every clone of that node.
 
-**Structural leaf** - A mind-map node with no children in the map model. Folding, filtering, view roots, and editor visibility do not change whether a node is a structural leaf. A locked encrypted node presents as a structural leaf because the model detaches its children.
+**Structural leaf** - A mind-map node with no children in the map model. Folding, filtering, view roots, and editor visibility do not change whether a node is a structural leaf. A locked encrypted node presents as a structural leaf because the model detaches its children. Persisted hidden nodes are excluded from projection because hiding is saved intent, not transient view state.
 
 **Reachable endpoint** - A relationship endpoint whose node can be reached from its map root by the same traversal that builds the projection. Reachability, not flat ID lookup, decides whether an endpoint resolves, so content hidden behind locked encryption is never projected or labelled.
 

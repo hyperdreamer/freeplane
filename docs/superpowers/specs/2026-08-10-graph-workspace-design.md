@@ -17,7 +17,7 @@ The feature is implemented in a new `freeplane_plugin_graph` module. A pure proj
 1. Open a Graph Workspace in a separate, modeless top-level window.
 2. Add and remove existing `.mm` files with a file chooser.
 3. Keep source-map hierarchy and content intact.
-4. Show structural leaves and active Graph Groups as graph vertices.
+4. Show structural leaves and active Graph Groups as graph vertices, excluding nodes the user has persistently hidden.
 5. Show ungrouped ancestors as labeled dynamic enclosures, with map identity visually emphasized above internal depth.
 6. Project native same-map connectors and workspace-owned cross-map relationships into one edge model.
 7. Create relationships directly by dragging between visible endpoints.
@@ -100,6 +100,17 @@ Because the marker lives in shared clone data, toggling it on any node also togg
 - The workspace restores its last viewport. An invalid restored viewport falls back to Fit Graph.
 - Search dims nonmatching nodes instead of removing them, preserving spatial context.
 - Labels use level of detail: selected, hovered, and matched labels remain visible; other labels fade as density increases.
+- Tab and arrow-key traversal move selection between projected nodes and enclosure endpoints, so the graph is operable without a pointer.
+- Every projected node carries an accessible name combining its label and owning map name, so map identity is never conveyed by color alone.
+
+### Undo Routing
+
+The graph window has two distinct histories, and the difference is visible because workspace commands auto-save while map commands do not.
+
+- `Ctrl+Z` and `Ctrl+Y` in the graph window always target the **workspace** history.
+- Map undo is never bound to the same keys in this window; it stays with the map's own editor view.
+- The Edit menu lists both explicitly, as `Undo Workspace Change` and `Undo In Source Map`, with the affected map named.
+- Each menu item is disabled when its history is empty, so the two are never confused.
 
 ### Relationship Creation
 
@@ -121,6 +132,11 @@ On release:
 - a validation failure creates nothing.
 
 A requested direction is already covered when existing contributors on the same exact source-node pair already supply that semantic relationship. For example, an existing bidirectional contributor covers a later directed request, and opposite directed contributors together cover a later bidirectional request. A directed contributor does not cover an undirected request.
+
+When a new contributor is created but the projected edge does not change appearance, the gesture would look like it failed. Two rules prevent that:
+
+- a projected edge carries a multiplicity cue when it has more than one contributor, so a genuine addition is visible;
+- a no-op request reports why nothing was created instead of failing silently.
 
 ### Edge Inspection And Deletion
 
@@ -295,6 +311,30 @@ For each active, resolved map, traverse from the map root:
 Nested Graph Group markers remain persisted but inactive beneath an active outer marker. Removing the outer marker reactivates the next marked descendants without changing those markers.
 
 The map root is the outermost ancestor enclosure unless it is an active Graph Group.
+
+#### Node Kinds Excluded From Projection
+
+Traversal skips these nodes and their subtrees, because including them would contradict persisted user intent or duplicate content:
+
+- **Hidden nodes.** `NodeVisibility.HIDDEN` is a persisted node property, not transient view filtering. A hidden node and its descendants are omitted. This is a deliberate exception to the rule that view state never affects projection: hiding is saved intent, whereas folding and filtering are not. When the map's `SHOW_HIDDEN_NODES` configuration is active, hidden nodes are projected normally.
+- **Hidden summary nodes.** A summary node that Freeplane itself treats as hidden is omitted.
+
+These nodes are included:
+
+- **Visible summary nodes.** Projected as ordinary nodes or enclosures by the normal rules. Their summarized children are also projected; a summary is additional structure, not a replacement for it.
+- **Free nodes.** Projected by the normal rules. Their free placement in the map view has no meaning in a force layout.
+
+An endpoint whose node is excluded from projection is `UNRESOLVED_RECOVERABLE`, because unhiding restores it.
+
+#### Node Labels
+
+Labels use Freeplane's own plain-text conversion so graph text matches what the editor shows:
+
+- HTML node text is converted with the same plain-text conversion Freeplane uses for node text;
+- LaTeX and other formula content uses its rendered or source text, never raw markup;
+- a node with no text falls back to a kind marker such as its icon or attachment description, never an empty label;
+- labels are truncated to a fixed length for layout, with the full text available on hover;
+- newlines are collapsed to single spaces.
 
 ### Unary Ancestor Chains
 
@@ -476,7 +516,7 @@ Workspace commands include map activation/removal, cross-map relationship create
 - Purge is undoable like any other workspace command.
 - Pan and zoom persist but are not undoable.
 - Save forces an immediate write.
-- Save As creates a distinct workspace identity.
+- Save As creates a distinct workspace identity and rewrites stored map URIs relative to the new location, so workspace-relative references keep resolving after the file moves.
 - Automatic writes use a temporary file and atomic replacement after a short debounce.
 
 ### Map-Owned Commands
@@ -491,6 +531,17 @@ When a graph drag creates a same-map connector:
 4. Call `MLinkController` to create one connector and set its arrow mode.
 5. Return focus to the graph window.
 6. Leave the source map modified for normal Freeplane saving.
+
+Step 2 is required, not incidental. `MMapModel` installs `IUndoHandler` in `beforeViewCreated`, and `addUndoableActor` silently skips maps without one. Editing a background-loaded map would therefore apply the change with no undo entry at all.
+
+Because opening views has a visible cost, view materialization is batched per map per session:
+
+- the first same-map command for a map materializes its view once;
+- subsequent commands for that map reuse the existing view without re-focusing it;
+- the user is told which maps were opened, so tabs never appear without explanation;
+- no map edit is ever executed against a map lacking `IUndoHandler`; such a command fails loudly instead of silently discarding undo.
+
+The accepted UX consequence: creating same-map relationships across several maps opens one editor tab per touched map.
 
 The Graph Workspace never auto-saves a source map. Its status bar reports source maps made dirty by graph commands.
 
@@ -563,6 +614,8 @@ The feature provides Reset Layout and Unpin All. Force sliders are deferred.
 
 Map colors are assigned from a fixed, accessible multi-hue palette and remain stable within the workspace. Per-map color editing is deferred.
 
+Color is never the only carrier of map identity. Emphatic stroke weight, enclosure labels, the map list, accessible names, and status-bar text all convey it as well.
+
 ## Testing Strategy
 
 ### Projection Tests
@@ -570,6 +623,8 @@ Map colors are assigned from a fixed, accessible multi-hue palette and remain st
 Table-driven JUnit tests cover:
 
 - structural leaves independent of fold/filter/view state;
+- exclusion of persisted hidden nodes and hidden summary nodes, and their restoration when unhidden;
+- inclusion of visible summary nodes and free nodes;
 - outermost Graph Group activation;
 - nested marker restoration;
 - group-root endpoint identity after ungrouping;
@@ -584,7 +639,9 @@ Table-driven JUnit tests cover:
 - status classification, including that an inaccessible map yields `UNRESOLVED_RECOVERABLE` and never `UNRESOLVED_MISSING_NODE`;
 - Graph Group marker sharing across clones, including collapse of every clone subtree from one marker.
 
-Randomized event sequences compare each recomputed projection against the same pure engine from a fresh snapshot.
+Randomized event sequences verify projection invariance under input permutation: structural changes (insert, move, delete, fold), grouping (mark, unmark, ungroup-under-active-ancestor), map addition/removal, connectors, and relationships applied in differing orders to the same initial maps must produce equivalent projections when commutative. Non-commutative operations (A depends on B existing) are ordered correctly.
+
+Equality between event-driven state and cold reload from the same files is verified: after a randomized sequence, the workspace is saved, closed, and reopened, and the resulting projection is compared against the live one.
 
 ### Persistence Tests
 
@@ -607,6 +664,8 @@ Real `.mm` fixtures verify:
 - Graph Group save/load/copy/clone/undo/redo;
 - Graph Group marking through one clone collapsing all clones, and unmarking restoring all of them;
 - locked encrypted branches: endpoints become recoverable, no decrypted text reaches labels, tooltips, search, or contributor details, and unlocking restores the endpoints;
+- plain-text conversion from HTML node text, LaTeX, and other formulas using the same rules as Freeplane's editor;
+- fallback labels for nodes without text content;
 - ordinary cloud and Graph Group coexistence;
 - native connector creation through `MLinkController`;
 - connector direction and labels entering projection;
@@ -633,7 +692,17 @@ Paint fixed projections into `BufferedImage` fixtures and assert:
 - fixed-format controls do not overlap;
 - selected, hovered, pinned, loading, empty, error, and high-density states render coherently.
 
-Synthetic input events cover selection, opening source nodes, panning, zooming, dragging to pin, connection preview, connection creation, and cancellation.
+Synthetic input events cover selection, opening source nodes, panning, zooming, dragging to pin, connection preview, connection creation, cancellation, keyboard traversal, and undo routing.
+
+### Integration Tests
+
+Cross-cutting scenarios verify that separate modules compose correctly:
+
+- batch view materialization for same-map connector creation across multiple maps;
+- no map edit is ever executed against a map lacking `IUndoHandler`;
+- workspace undo and map undo remain separate, with the correct history responding to each menu action;
+- relationship multiplicity cues and no-op rejection feedback when contributors duplicate;
+- Save As rewrites relative map URIs to stay valid from the new location.
 
 ### Verification Commands
 
@@ -647,6 +716,8 @@ gradle test
 ```
 
 Translation validation follows `AGENTS.md`, including ASCII checks after formatting.
+
+The test suite must never execute a map edit against a map lacking `IUndoHandler`, because that produces a silent unundoable change. This is an assertion, not a best-effort check.
 
 ## Acceptance Scenarios
 
@@ -673,6 +744,9 @@ Translation validation follows `AGENTS.md`, including ASCII checks after formatt
 21. Lock an encrypted branch holding a cross-map endpoint, then verify the relationship is recoverable, no decrypted text is exposed anywhere in the graph, purge cannot delete it, and unlocking restores it.
 22. Delete an endpoint node and save, then verify the relationship becomes `UNRESOLVED_MISSING_NODE`, purge lists it explicitly, and undo restores it.
 23. Clone a subtree, mark one clone as a Graph Group, and verify every clone collapses, the affected count is reported, and unmarking restores all of them.
+24. Create same-map relationships across three maps, verify one tab opens per map with explanation, and subsequent relationships in the same session reuse the existing views.
+25. Attempt a relationship that duplicates an existing contributor, verify the edge gains a multiplicity cue or the no-op is explained rather than failing silently.
+26. Save the workspace, move it to a different directory, and verify workspace-relative map references resolve correctly after reopening.
 
 ## Design Decisions Rejected
 
