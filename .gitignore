@@ -26,6 +26,9 @@
 #Ignore Claude Code configuration
 .claude/
 
+#Ignore Superpowers agent scratch output (brainstorm sessions, local preview server state and tokens)
+.superpowers/
+
 # e.g. hs_err_pid*.log
 *.log
 
