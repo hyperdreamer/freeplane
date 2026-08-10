@@ -77,7 +77,20 @@ The canvas follows the active Freeplane Look and Feel. The approved mockup uses 
 
 The Graph Group button is visually related to the existing cloud button but uses a separate action and model. Its color is a fixed coral accent and has no color picker or style menu.
 
-The marker is rendered as a cloud-like outer outline around the selected node and descendants. If the node also has an ordinary Freeplane cloud, the Graph Group outline is painted outside it with a fixed gap so both states remain legible.
+The marker is rendered as a cloud-like outer outline around the marked node and descendants. If the node also has an ordinary Freeplane cloud, the Graph Group outline is painted outside it with a fixed gap so both states remain legible.
+
+#### Marker Rendering
+
+The marker has one fixed appearance and its own geometry, so it can never be mistaken for cloud formatting:
+
+- **Extent.** The outline encloses the marked node together with its entire subtree, because that subtree is exactly what collapses to a single graph vertex. It does not enclose only the marked node.
+- **Fixed style.** A coral stroke with a faint fill, identical for every marker. There is no color picker, shape menu, or per-node style.
+- **Shape independence.** The marker looks the same regardless of which cloud shape the node uses, and regardless of the cloud's color. Only the inner cloud varies.
+- **Coexistence.** With an ordinary cloud present, the marker is offset outside the cloud by a fixed gap. Neither outline restyles the other.
+- **Inactive markers stay visible.** A nested marker beneath an active ancestor marker is drawn muted and dashed. It is persisted but not collapsing anything, and hiding it would make the user believe the marker was lost.
+- **Leaf markers.** Drawn in the same style around the single node. They cover no subtree until children are added.
+
+The marker never changes node geometry, text layout, or edge routing in the map view.
 
 The action follows Freeplane's multiple-node toggle convention. It applies the primary selected node's inverse marker state to all selected nodes. Marking a structural leaf is allowed but does not change its current vertex count or covered subtree; Graph Group styling still identifies the marker, and the marker becomes meaningful if children are later added.
 
@@ -281,6 +294,25 @@ Purge removes only `UNRESOLVED_MISSING_NODE` relationships. It never touches `UN
 ### Graph Group Marker
 
 The Graph Group marker is a map-owned node extension serialized as its own extension element, not as a `CloudModel` and not in the `.fpg` file. Persistence handlers are registered with the map read/write managers. Copy, clone, undo, redo, and clipboard behavior are covered by the same extension conventions used by existing node features.
+
+The marker element carries its own version attribute, independent of the map's `version` and of the workspace `format_version`. This lets the marker format evolve without touching map-level data. An unrecognized marker version is preserved untouched and treated as an inactive marker rather than being rewritten or dropped.
+
+#### Upstream Compatibility
+
+A mind map written by a Freeplane build containing this plugin must remain fully readable by a build without it. Freeplane already guarantees this if persistence stays additive: `NodeBuilder` and `MapReader` capture unrecognized attributes and elements as `UnknownElements`, and `UnknownElementWriter` is registered for both attributes and elements, so unknown content round-trips verbatim.
+
+This feature must therefore obey an additive-only rule:
+
+- introduce new elements and attributes only;
+- never change the meaning of an existing element or attribute;
+- never make the absence of our marker significant to map interpretation;
+- never require our reader to be present for the rest of the map to load.
+
+The resulting behavior in a build without the plugin: the map opens normally, the marker survives as unknown content, the node draws without a marker outline, and saving preserves the marker. Editing a marked map in stock Freeplane and reopening it here restores the marker.
+
+Because unknown content round-trips faithfully, no map-level provenance stamp or fingerprint is written. Such a stamp would record only which build last wrote a stamp, not which build last modified the map, so it cannot support the safety claim it appears to make. Map identity remains workspace-owned UUIDs with explicit Locate.
+
+Marker writes are ordinary map modifications and are protected by Freeplane's existing rotating backups in the `.backup` directory, governed by the `backup_file_number` preference. This feature adds no separate backup mechanism.
 
 #### Clone Semantics
 
@@ -663,6 +695,9 @@ Real `.mm` fixtures verify:
 - rejection of persistent pins and cross-map relationships for a legacy node without a file ID, without mutating the source map;
 - Graph Group save/load/copy/clone/undo/redo;
 - Graph Group marking through one clone collapsing all clones, and unmarking restoring all of them;
+- marker round trip through a reader without the plugin registered, proving the marker survives as unknown content and the map still loads;
+- unrecognized marker version preserved untouched and treated as inactive;
+- marker rendering: full-subtree extent, fixed style across all four cloud shapes, outside-offset when a cloud is present, muted styling for inactive nested markers, and leaf markers;
 - locked encrypted branches: endpoints become recoverable, no decrypted text reaches labels, tooltips, search, or contributor details, and unlocking restores the endpoints;
 - plain-text conversion from HTML node text, LaTeX, and other formulas using the same rules as Freeplane's editor;
 - fallback labels for nodes without text content;
@@ -747,6 +782,9 @@ The test suite must never execute a map edit against a map lacking `IUndoHandler
 24. Create same-map relationships across three maps, verify one tab opens per map with explanation, and subsequent relationships in the same session reuse the existing views.
 25. Attempt a relationship that duplicates an existing contributor, verify the edge gains a multiplicity cue or the no-op is explained rather than failing silently.
 26. Save the workspace, move it to a different directory, and verify workspace-relative map references resolve correctly after reopening.
+27. Mark a Graph Group, open the map with the plugin disabled, save it there, reopen it with the plugin enabled, and verify the marker survives and the map never fails to load.
+28. Render a marked node that also has each of the four cloud shapes and verify the marker keeps one fixed appearance offset outside the cloud.
+29. Nest a marker beneath an active marker and verify it renders muted and dashed rather than disappearing.
 
 ## Design Decisions Rejected
 
