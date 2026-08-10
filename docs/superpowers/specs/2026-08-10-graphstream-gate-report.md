@@ -6,7 +6,7 @@ Date: 2026-08-10
 
 Technical gate: PASS with implementation constraints.
 
-Policy gate still requires maintainer approval of LGPLv3+/CeCILL-C distribution notices.
+Policy gate: APPROVED on 2026-08-10. The maintainer selected the LGPLv3 distribution option for the three unchanged GraphStream jars, with the canonical LGPLv3 text, GraphStream attribution, artifact checksums, and source links included in the plugin distribution.
 
 ## Artifacts
 
@@ -84,7 +84,6 @@ The exploratory settle diagnostic ended at RMS movement 0.014392 layout units an
 
 ## Residual Work
 
-- Maintainer approval of license notices/distribution policy.
 - Canvas paint/pan timing is an implementation-phase Swing concern; this gate measured the dependency-owned/off-EDT full geometry publication path required by the design.
 - Full projection rebuild, stable-key diff, obsolete-generation discard, and batch-to-first-frame timing require the production projection/adapter and remain implementation-phase performance gates. The implementation target is batch p95 <= 150 ms and p99 <= 300 ms; the EDT immutable-state swap target is p95 <= 2 ms.
 - The synthetic workload uses uniform map sizes and random cross-map links. Implementation stress tests must cover skewed map sizes, two- and three-map workspaces, concentrated cross-map clusters, and pinned map pairs.
