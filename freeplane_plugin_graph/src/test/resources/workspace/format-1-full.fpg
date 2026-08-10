@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<graph-workspace format-version="1" id="00000000-0000-0000-0000-000000000100" xmlns:future="urn:freeplane:graph:future" future:root-attribute="root-value">
+    <maps future:maps-attribute="maps-value">
+        <map id="00000000-0000-0000-0000-000000000001" sequence="1" uri="maps/one.mm" active="true" color="#4E79A7" status="Loading" future:map-attribute="map-one-value">
+            <future:map-one-element future:attribute="map-one-value">map-one-text<future:child future:child-attribute="child-value">child-text</future:child></future:map-one-element>
+        </map>
+        <future:maps-element future:attribute="maps-value">maps-text<future:child future:child-attribute="child-value">child-text</future:child></future:maps-element>
+        <map id="00000000-0000-0000-0000-000000000002" sequence="2" uri="file:///tmp/two.mm" active="false" color="#F28E2B" future:map-attribute="map-two-value">
+            <future:map-two-element future:attribute="map-two-value">map-two-text<future:child future:child-attribute="child-value">child-text</future:child></future:map-two-element>
+        </map>
+    </maps>
+    <relationships future:relationships-attribute="relationships-value">
+        <relationship id="00000000-0000-0000-0000-000000000010" sequence="1" source-map="00000000-0000-0000-0000-000000000001" source-node="source node" target-map="00000000-0000-0000-0000-000000000002" target-node="target-node" direction="FORWARD" future:relationship-attribute="relationship-value">
+            <future:relationship-element future:attribute="relationship-value">relationship-text<future:child future:child-attribute="child-value">child-text</future:child></future:relationship-element>
+        </relationship>
+        <future:relationships-element future:attribute="relationships-value">relationships-text<future:child future:child-attribute="child-value">child-text</future:child></future:relationships-element>
+    </relationships>
+    <future:root-element future:attribute="root-value">root-text<future:child future:child-attribute="child-value">child-text</future:child></future:root-element>
+    <pins future:pins-attribute="pins-value">
+        <pin map="00000000-0000-0000-0000-000000000001" node="source node" x="12.5" y="-4.25" future:pin-attribute="pin-value">
+            <future:pin-element future:attribute="pin-value">pin-text<future:child future:child-attribute="child-value">child-text</future:child></future:pin-element>
+        </pin>
+        <future:pins-element future:attribute="pins-value">pins-text<future:child future:child-attribute="child-value">child-text</future:child></future:pins-element>
+    </pins>
+    <viewport center-x="1.5" center-y="-2.5" zoom="0.75" future:viewport-attribute="viewport-value">
+        <future:viewport-element future:attribute="viewport-value">viewport-text<future:child future:child-attribute="child-value">child-text</future:child></future:viewport-element>
+    </viewport>
+    <display-settings show-arrowheads="false" canvas-theme="DARK" remember-viewport="false" dim-unrelated-nodes="true" future:display-attribute="display-value">
+        <future:display-element future:attribute="display-value">display-text<future:child future:child-attribute="child-value">child-text</future:child></future:display-element>
+    </display-settings>
+</graph-workspace>

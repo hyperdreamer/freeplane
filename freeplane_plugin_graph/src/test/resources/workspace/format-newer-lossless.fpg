@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<graph-workspace format-version="2" id="00000000-0000-0000-0000-000000000100" xmlns:future="urn:freeplane:graph:future" future:root-attribute="newer-root-value">
+    <maps>
+        <map id="00000000-0000-0000-0000-000000000001" sequence="1" uri="maps/one.mm" active="true" color="#4E79A7" future:map-attribute="newer-map-value"/>
+    </maps>
+    <relationships/>
+    <future:future-section future:attribute="future-value">future-text<future:child future:child-attribute="child-value">child-text</future:child></future:future-section>
+    <pins/>
+    <viewport center-x="0" center-y="0" zoom="1"/>
+    <display-settings show-arrowheads="true" canvas-theme="FOLLOW_FREEPLANE" remember-viewport="true" dim-unrelated-nodes="true"/>
+</graph-workspace>

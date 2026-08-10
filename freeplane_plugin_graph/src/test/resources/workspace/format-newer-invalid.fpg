@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<graph-workspace format-version="2" id="00000000-0000-0000-0000-000000000100">
+    <maps>
+        <map id="00000000-0000-0000-0000-000000000001" sequence="0" uri="maps/one.mm" active="true" color="#4E79A7"/>
+    </maps>
+    <relationships/>
+    <pins/>
+    <viewport center-x="0" center-y="0" zoom="1"/>
+    <display-settings show-arrowheads="true" canvas-theme="FOLLOW_FREEPLANE" remember-viewport="true" dim-unrelated-nodes="true"/>
+</graph-workspace>
