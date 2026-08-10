@@ -14,7 +14,8 @@ public final class GraphProjection {
     private final List<PinProjection> pins;
 
     private GraphProjection(final long generation, final List<ProjectedNode> nodes,
-            final List<ProjectedEnclosure> enclosures) {
+            final List<ProjectedEnclosure> enclosures, final List<RelationshipResolution> relationshipResolutions,
+            final List<PinProjection> pins) {
         if (generation < 0) {
             throw new IllegalArgumentException("Generation must be nonnegative");
         }
@@ -22,13 +23,20 @@ public final class GraphProjection {
         this.nodes = copyValues(nodes, "nodes");
         this.enclosures = copyValues(enclosures, "enclosures");
         this.edges = Collections.emptyList();
-        this.relationshipResolutions = Collections.emptyList();
-        this.pins = Collections.emptyList();
+        this.relationshipResolutions = copyValues(relationshipResolutions, "relationshipResolutions");
+        this.pins = copyValues(pins, "pins");
     }
 
     public static GraphProjection structure(final long generation, final List<ProjectedNode> nodes,
             final List<ProjectedEnclosure> enclosures) {
-        return new GraphProjection(generation, nodes, enclosures);
+        return new GraphProjection(generation, nodes, enclosures, Collections.<RelationshipResolution>emptyList(),
+            Collections.<PinProjection>emptyList());
+    }
+
+    public static GraphProjection resolved(final long generation, final List<ProjectedNode> nodes,
+            final List<ProjectedEnclosure> enclosures, final List<RelationshipResolution> relationshipResolutions,
+            final List<PinProjection> pins) {
+        return new GraphProjection(generation, nodes, enclosures, relationshipResolutions, pins);
     }
 
     public long generation() {
@@ -101,17 +109,5 @@ public final class GraphProjection {
 // Removed when Task 9 creates public ProjectedEdge.java.
 final class ProjectedEdge {
     private ProjectedEdge() {
-    }
-}
-
-// Removed when Task 8 creates public RelationshipResolution.java.
-final class RelationshipResolution {
-    private RelationshipResolution() {
-    }
-}
-
-// Removed when Task 8 creates public PinProjection.java.
-final class PinProjection {
-    private PinProjection() {
     }
 }

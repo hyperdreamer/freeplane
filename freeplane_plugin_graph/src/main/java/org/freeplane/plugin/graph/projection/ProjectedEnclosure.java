@@ -20,11 +20,12 @@ public final class ProjectedEnclosure {
     private final List<ProjectedNodeKey> directNodes;
     private final List<EnclosureHullKey> directEnclosures;
     private final boolean mapRoot;
+    private final BoundaryTier boundaryTier;
 
     private ProjectedEnclosure(final EnclosureHullKey hullKey, final List<EnclosureKey> endpointKeys,
             final List<SafeNodeLabel> labels, final String mapName, final Optional<EnclosureHullKey> parentHull,
             final List<ProjectedNodeKey> directNodes, final List<EnclosureHullKey> directEnclosures,
-            final boolean mapRoot) {
+            final boolean mapRoot, final BoundaryTier boundaryTier) {
         this.hullKey = Objects.requireNonNull(hullKey, "hullKey");
         this.endpointKeys = copyValues(endpointKeys, "endpointKeys");
         if (!hullKey.endpointKeys().equals(this.endpointKeys)) {
@@ -40,14 +41,15 @@ public final class ProjectedEnclosure {
         this.directNodes = copyDirectNodes(directNodes, hullKey.mapReferenceId());
         this.directEnclosures = copyDirectEnclosures(directEnclosures, hullKey.mapReferenceId());
         this.mapRoot = mapRoot;
+        this.boundaryTier = Objects.requireNonNull(boundaryTier, "boundaryTier");
     }
 
     public static ProjectedEnclosure of(final EnclosureHullKey hullKey, final List<EnclosureKey> endpointKeys,
             final List<SafeNodeLabel> labels, final String mapName, final Optional<EnclosureHullKey> parentHull,
             final List<ProjectedNodeKey> directNodes, final List<EnclosureHullKey> directEnclosures,
-            final boolean mapRoot) {
+            final boolean mapRoot, final BoundaryTier boundaryTier) {
         return new ProjectedEnclosure(hullKey, endpointKeys, labels, mapName, parentHull, directNodes,
-            directEnclosures, mapRoot);
+            directEnclosures, mapRoot, boundaryTier);
     }
 
     public EnclosureHullKey hullKey() {
@@ -84,6 +86,10 @@ public final class ProjectedEnclosure {
 
     public boolean mapRoot() {
         return mapRoot;
+    }
+
+    public BoundaryTier boundaryTier() {
+        return boundaryTier;
     }
 
     private static String requireMapName(final String value) {
@@ -155,7 +161,8 @@ public final class ProjectedEnclosure {
             return false;
         }
         final ProjectedEnclosure that = (ProjectedEnclosure) other;
-        return mapRoot == that.mapRoot && hullKey.equals(that.hullKey) && endpointKeys.equals(that.endpointKeys)
+        return mapRoot == that.mapRoot && boundaryTier == that.boundaryTier && hullKey.equals(that.hullKey)
+            && endpointKeys.equals(that.endpointKeys)
             && labels.equals(that.labels) && mapName.equals(that.mapName) && parentHull.equals(that.parentHull)
             && directNodes.equals(that.directNodes) && directEnclosures.equals(that.directEnclosures);
     }
@@ -163,13 +170,13 @@ public final class ProjectedEnclosure {
     @Override
     public int hashCode() {
         return Objects.hash(hullKey, endpointKeys, labels, mapName, parentHull, directNodes, directEnclosures,
-            mapRoot);
+            mapRoot, boundaryTier);
     }
 
     @Override
     public String toString() {
         return "ProjectedEnclosure{" + "hullKey=" + hullKey + ", parentHull=" + parentHull
             + ", directNodes=" + directNodes + ", directEnclosures=" + directEnclosures
-            + ", mapRoot=" + mapRoot + '}';
+            + ", mapRoot=" + mapRoot + ", boundaryTier=" + boundaryTier + '}';
     }
 }
