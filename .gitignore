@@ -29,6 +29,9 @@
 # e.g. hs_err_pid*.log
 *.log
 
+# Local TODO notes
+TODO.md
+
 # TODO: needs cleanup
 *.diff
 */bin
