@@ -93,11 +93,11 @@ public final class WorkspaceXmlCodec {
         try {
             final StringBuilder output = new StringBuilder();
             output.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
-            appendKnownStart(output, ROOT_ELEMENT,
+            final NamespaceScope rootScope = appendKnownStart(output, ROOT_ELEMENT,
                 attributes("format-version", Integer.toString(CURRENT_FORMAT_VERSION), "id", document.id().toString()),
-                unknownAttributes(document.unknownXml(), UnknownXml.Owner.WORKSPACE));
-            appendChildren(output, rootChildren(document),
-                unknownElements(document.unknownXml(), UnknownXml.Owner.WORKSPACE));
+                unknownAttributes(document.unknownXml(), UnknownXml.Owner.WORKSPACE), new NamespaceScope());
+            appendChildren(output, rootChildren(document, rootScope),
+                unknownElements(document.unknownXml(), UnknownXml.Owner.WORKSPACE), rootScope);
             output.append("</").append(ROOT_ELEMENT).append('>');
             return output.toString().getBytes(StandardCharsets.UTF_8);
         }
@@ -355,6 +355,7 @@ public final class WorkspaceXmlCodec {
         for (int index = 0; index < attributes.getLength(); index++) {
             final Attr attribute = (Attr) attributes.item(index);
             if (isNamespaceDeclaration(attribute)) {
+                unknownXml.add(UnknownXml.attribute(owner, qName(attribute), attribute.getValue()));
                 continue;
             }
             final String name = localName(attribute);
@@ -390,9 +391,7 @@ public final class WorkspaceXmlCodec {
         final NamedNodeMap values = element.getAttributes();
         for (int index = 0; index < values.getLength(); index++) {
             final Attr attribute = (Attr) values.item(index);
-            if (!isNamespaceDeclaration(attribute)) {
-                attributes.put(qName(attribute), attribute.getValue());
-            }
+            attributes.put(qName(attribute), attribute.getValue());
         }
         return attributes;
     }
@@ -456,59 +455,60 @@ public final class WorkspaceXmlCodec {
         return builder;
     }
 
-    private static List<String> rootChildren(final WorkspaceDocument document) {
+    private static List<String> rootChildren(final WorkspaceDocument document, final NamespaceScope parent) {
         final List<String> children = new ArrayList<String>();
-        children.add(mapsXml(document));
-        children.add(relationshipsXml(document));
-        children.add(pinsXml(document));
-        children.add(viewportXml(document.viewport()));
-        children.add(displaySettingsXml(document.displaySettings()));
+        children.add(mapsXml(document, parent));
+        children.add(relationshipsXml(document, parent));
+        children.add(pinsXml(document, parent));
+        children.add(viewportXml(document.viewport(), parent));
+        children.add(displaySettingsXml(document.displaySettings(), parent));
         return children;
     }
 
-    private static String mapsXml(final WorkspaceDocument document) {
+    private static String mapsXml(final WorkspaceDocument document, final NamespaceScope parent) {
         final StringBuilder output = new StringBuilder();
-        appendKnownStart(output, "maps", attributes(), unknownAttributes(document.unknownXml(), UnknownXml.Owner.MAPS));
+        final NamespaceScope scope = appendKnownStart(output, "maps", attributes(),
+            unknownAttributes(document.unknownXml(), UnknownXml.Owner.MAPS), parent);
         final List<String> maps = new ArrayList<String>();
         for (final MapReference map : document.maps()) {
-            maps.add(mapXml(map));
+            maps.add(mapXml(map, scope));
         }
-        appendChildren(output, maps, unknownElements(document.unknownXml(), UnknownXml.Owner.MAPS));
+        appendChildren(output, maps, unknownElements(document.unknownXml(), UnknownXml.Owner.MAPS), scope);
         output.append("</maps>");
         return output.toString();
     }
 
-    private static String mapXml(final MapReference map) {
+    private static String mapXml(final MapReference map, final NamespaceScope parent) {
         final StringBuilder output = new StringBuilder();
-        appendKnownStart(output, "map", attributes(
+        final NamespaceScope scope = appendKnownStart(output, "map", attributes(
             "id", map.id().toString(),
             "sequence", Long.toString(map.sequence()),
-            "uri", map.storedUri().toASCIIString(),
+            "uri", map.storedUri().toString(),
             "active", Boolean.toString(map.active()),
-            "color", map.color()), unknownAttributes(map.unknownXml(), UnknownXml.Owner.RECORD));
+            "color", map.color()), unknownAttributes(map.unknownXml(), UnknownXml.Owner.RECORD), parent);
         appendChildren(output, Collections.<String>emptyList(),
-            unknownElements(map.unknownXml(), UnknownXml.Owner.RECORD));
+            unknownElements(map.unknownXml(), UnknownXml.Owner.RECORD), scope);
         output.append("</map>");
         return output.toString();
     }
 
-    private static String relationshipsXml(final WorkspaceDocument document) {
+    private static String relationshipsXml(final WorkspaceDocument document, final NamespaceScope parent) {
         final StringBuilder output = new StringBuilder();
-        appendKnownStart(output, "relationships", attributes(),
-            unknownAttributes(document.unknownXml(), UnknownXml.Owner.RELATIONSHIPS));
+        final NamespaceScope scope = appendKnownStart(output, "relationships", attributes(),
+            unknownAttributes(document.unknownXml(), UnknownXml.Owner.RELATIONSHIPS), parent);
         final List<String> relationships = new ArrayList<String>();
         for (final GraphRelationshipRecord relationship : document.relationships()) {
-            relationships.add(relationshipXml(relationship));
+            relationships.add(relationshipXml(relationship, scope));
         }
         appendChildren(output, relationships,
-            unknownElements(document.unknownXml(), UnknownXml.Owner.RELATIONSHIPS));
+            unknownElements(document.unknownXml(), UnknownXml.Owner.RELATIONSHIPS), scope);
         output.append("</relationships>");
         return output.toString();
     }
 
-    private static String relationshipXml(final GraphRelationshipRecord relationship) {
+    private static String relationshipXml(final GraphRelationshipRecord relationship, final NamespaceScope parent) {
         final StringBuilder output = new StringBuilder();
-        appendKnownStart(output, "relationship", attributes(
+        final NamespaceScope scope = appendKnownStart(output, "relationship", attributes(
             "id", relationship.id().toString(),
             "sequence", Long.toString(relationship.sequence()),
             "source-map", relationship.source().mapReferenceId().toString(),
@@ -516,67 +516,68 @@ public final class WorkspaceXmlCodec {
             "target-map", relationship.target().mapReferenceId().toString(),
             "target-node", relationship.target().nodeId().value(),
             "direction", relationship.direction().name()),
-            unknownAttributes(relationship.unknownXml(), UnknownXml.Owner.RECORD));
+            unknownAttributes(relationship.unknownXml(), UnknownXml.Owner.RECORD), parent);
         appendChildren(output, Collections.<String>emptyList(),
-            unknownElements(relationship.unknownXml(), UnknownXml.Owner.RECORD));
+            unknownElements(relationship.unknownXml(), UnknownXml.Owner.RECORD), scope);
         output.append("</relationship>");
         return output.toString();
     }
 
-    private static String pinsXml(final WorkspaceDocument document) {
+    private static String pinsXml(final WorkspaceDocument document, final NamespaceScope parent) {
         final StringBuilder output = new StringBuilder();
-        appendKnownStart(output, "pins", attributes(), unknownAttributes(document.unknownXml(), UnknownXml.Owner.PINS));
+        final NamespaceScope scope = appendKnownStart(output, "pins", attributes(),
+            unknownAttributes(document.unknownXml(), UnknownXml.Owner.PINS), parent);
         final List<String> pins = new ArrayList<String>();
         for (final PinRecord pin : document.pins()) {
-            pins.add(pinXml(pin));
+            pins.add(pinXml(pin, scope));
         }
-        appendChildren(output, pins, unknownElements(document.unknownXml(), UnknownXml.Owner.PINS));
+        appendChildren(output, pins, unknownElements(document.unknownXml(), UnknownXml.Owner.PINS), scope);
         output.append("</pins>");
         return output.toString();
     }
 
-    private static String pinXml(final PinRecord pin) {
+    private static String pinXml(final PinRecord pin, final NamespaceScope parent) {
         final StringBuilder output = new StringBuilder();
-        appendKnownStart(output, "pin", attributes(
+        final NamespaceScope scope = appendKnownStart(output, "pin", attributes(
             "map", pin.node().mapReferenceId().toString(),
             "node", pin.node().nodeId().value(),
             "x", Double.toString(pin.x()),
-            "y", Double.toString(pin.y())), unknownAttributes(pin.unknownXml(), UnknownXml.Owner.RECORD));
+            "y", Double.toString(pin.y())), unknownAttributes(pin.unknownXml(), UnknownXml.Owner.RECORD), parent);
         appendChildren(output, Collections.<String>emptyList(),
-            unknownElements(pin.unknownXml(), UnknownXml.Owner.RECORD));
+            unknownElements(pin.unknownXml(), UnknownXml.Owner.RECORD), scope);
         output.append("</pin>");
         return output.toString();
     }
 
-    private static String viewportXml(final Viewport viewport) {
+    private static String viewportXml(final Viewport viewport, final NamespaceScope parent) {
         final StringBuilder output = new StringBuilder();
-        appendKnownStart(output, "viewport", attributes(
+        final NamespaceScope scope = appendKnownStart(output, "viewport", attributes(
             "center-x", Double.toString(viewport.centerX()),
             "center-y", Double.toString(viewport.centerY()),
             "zoom", Double.toString(viewport.zoom())),
-            unknownAttributes(viewport.unknownXml(), UnknownXml.Owner.RECORD));
+            unknownAttributes(viewport.unknownXml(), UnknownXml.Owner.RECORD), parent);
         appendChildren(output, Collections.<String>emptyList(),
-            unknownElements(viewport.unknownXml(), UnknownXml.Owner.RECORD));
+            unknownElements(viewport.unknownXml(), UnknownXml.Owner.RECORD), scope);
         output.append("</viewport>");
         return output.toString();
     }
 
-    private static String displaySettingsXml(final DisplaySettings settings) {
+    private static String displaySettingsXml(final DisplaySettings settings, final NamespaceScope parent) {
         final StringBuilder output = new StringBuilder();
-        appendKnownStart(output, "display-settings", attributes(
+        final NamespaceScope scope = appendKnownStart(output, "display-settings", attributes(
             "show-arrowheads", Boolean.toString(settings.showArrowheads()),
             "canvas-theme", settings.canvasTheme().name(),
             "remember-viewport", Boolean.toString(settings.rememberViewport()),
             "dim-unrelated-nodes", Boolean.toString(settings.dimUnrelatedNodes())),
-            unknownAttributes(settings.unknownXml(), UnknownXml.Owner.RECORD));
+            unknownAttributes(settings.unknownXml(), UnknownXml.Owner.RECORD), parent);
         appendChildren(output, Collections.<String>emptyList(),
-            unknownElements(settings.unknownXml(), UnknownXml.Owner.RECORD));
+            unknownElements(settings.unknownXml(), UnknownXml.Owner.RECORD), scope);
         output.append("</display-settings>");
         return output.toString();
     }
 
     private static void appendChildren(final StringBuilder output, final List<String> knownChildren,
-            final List<UnknownXml> unknownChildren) {
+            final List<UnknownXml> unknownChildren, final NamespaceScope parent) {
         int knownIndex = 0;
         int nextPosition = 0;
         for (final UnknownXml child : unknownChildren) {
@@ -584,7 +585,7 @@ public final class WorkspaceXmlCodec {
                 output.append(knownChildren.get(knownIndex++));
                 nextPosition++;
             }
-            appendUnknownElement(output, child);
+            appendUnknownElement(output, child, parent);
             nextPosition = Math.max(nextPosition, child.position() + 1);
         }
         while (knownIndex < knownChildren.size()) {
@@ -592,33 +593,53 @@ public final class WorkspaceXmlCodec {
         }
     }
 
-    private static void appendKnownStart(final StringBuilder output, final String elementName,
-            final List<KnownAttribute> knownAttributes, final List<UnknownXml> unknownAttributes) {
-        final NamespaceScope parent = new NamespaceScope();
+    private static NamespaceScope appendKnownStart(final StringBuilder output, final String elementName,
+            final List<KnownAttribute> knownAttributes, final List<UnknownXml> unknownAttributes,
+            final NamespaceScope parent) {
         final NamespaceScope scope = parent.copy();
         final List<WrittenAttribute> attributes = new ArrayList<WrittenAttribute>();
         for (final UnknownXml attribute : unknownAttributes) {
-            attributes.add(new WrittenAttribute(scope.qualifiedName(attribute.name()), attribute.attributeValue().get()));
+            if (isNamespaceDeclaration(attribute.name())) {
+                scope.declareNamespace(namespacePrefix(attribute.name()), attribute.attributeValue().get());
+            }
         }
-        output.append('<').append(elementName);
+        for (final UnknownXml attribute : unknownAttributes) {
+            if (isNamespaceDeclaration(attribute.name())) {
+                continue;
+            }
+            attributes.add(new WrittenAttribute(scope.qualifiedAttributeName(attribute.name()),
+                attribute.attributeValue().get()));
+        }
+        output.append('<').append(scope.knownElementName(elementName));
         appendNamespaceDeclarations(output, scope.additions(parent));
         appendKnownAttributes(output, knownAttributes);
         appendWrittenAttributes(output, attributes);
         output.append('>');
+        return scope;
     }
 
-    private static void appendUnknownElement(final StringBuilder output, final UnknownXml element) {
-        appendUnknownElement(output, element.name(), element.attributes(), element.content(), new NamespaceScope());
+    private static void appendUnknownElement(final StringBuilder output, final UnknownXml element,
+            final NamespaceScope parent) {
+        appendUnknownElement(output, element.name(), element.attributes(), element.content(), parent);
     }
 
     private static void appendUnknownElement(final StringBuilder output, final QName name,
             final Map<QName, String> attributes, final List<UnknownXml.Content> content,
             final NamespaceScope parent) {
         final NamespaceScope scope = parent.copy();
-        final String elementName = scope.qualifiedName(name);
+        for (final Map.Entry<QName, String> attribute : attributes.entrySet()) {
+            if (isNamespaceDeclaration(attribute.getKey())) {
+                scope.declareNamespace(namespacePrefix(attribute.getKey()), attribute.getValue());
+            }
+        }
+        final String elementName = scope.qualifiedElementName(name);
         final List<WrittenAttribute> writtenAttributes = new ArrayList<WrittenAttribute>();
         for (final Map.Entry<QName, String> attribute : attributes.entrySet()) {
-            writtenAttributes.add(new WrittenAttribute(scope.qualifiedName(attribute.getKey()), attribute.getValue()));
+            if (isNamespaceDeclaration(attribute.getKey())) {
+                continue;
+            }
+            writtenAttributes.add(new WrittenAttribute(scope.qualifiedAttributeName(attribute.getKey()),
+                attribute.getValue()));
         }
         output.append('<').append(elementName);
         appendNamespaceDeclarations(output, scope.additions(parent));
@@ -637,7 +658,11 @@ public final class WorkspaceXmlCodec {
     private static void appendNamespaceDeclarations(final StringBuilder output,
             final List<NamespaceBinding> bindings) {
         for (final NamespaceBinding binding : bindings) {
-            output.append(" xmlns:").append(binding.prefix).append("=\"");
+            output.append(" xmlns");
+            if (!binding.prefix.isEmpty()) {
+                output.append(':').append(binding.prefix);
+            }
+            output.append("=\"");
             appendEscaped(output, binding.namespace, true);
             output.append('"');
         }
@@ -769,6 +794,23 @@ public final class WorkspaceXmlCodec {
     private static boolean isNamespaceDeclaration(final Attr attribute) {
         return XMLConstants.XMLNS_ATTRIBUTE_NS_URI.equals(attribute.getNamespaceURI())
             || "xmlns".equals(attribute.getName());
+    }
+
+    private static boolean isNamespaceDeclaration(final QName name) {
+        return XMLConstants.XMLNS_ATTRIBUTE_NS_URI.equals(name.getNamespaceURI());
+    }
+
+    private static String namespacePrefix(final QName name) {
+        if (!isNamespaceDeclaration(name)) {
+            throw malformed("Unknown XML namespace declaration is invalid");
+        }
+        if ("xmlns".equals(name.getPrefix())) {
+            return name.getLocalPart();
+        }
+        if (name.getPrefix().isEmpty() && "xmlns".equals(name.getLocalPart())) {
+            return "";
+        }
+        throw malformed("Unknown XML namespace declaration is invalid");
     }
 
     private static String requiredAttribute(final Element element, final String name) {
@@ -928,13 +970,41 @@ public final class WorkspaceXmlCodec {
             return new NamespaceScope(new TreeMap<String, String>(bindings), nextGeneratedPrefix);
         }
 
-        private String qualifiedName(final QName name) {
+        private void declareNamespace(final String prefix, final String namespace) {
+            if ("xmlns".equals(prefix) || XMLConstants.XMLNS_ATTRIBUTE_NS_URI.equals(namespace)
+                    || !prefix.isEmpty() && namespace.isEmpty()
+                    || "xml".equals(prefix) && !XMLConstants.XML_NS_URI.equals(namespace)
+                    || !"xml".equals(prefix) && XMLConstants.XML_NS_URI.equals(namespace)) {
+                throw malformed("Unknown XML namespace declaration is invalid");
+            }
+            bindings.put(prefix, namespace);
+        }
+
+        private String knownElementName(final String name) {
+            if (bindings.containsKey("") && !bindings.get("").isEmpty()) {
+                bindings.put("", "");
+            }
+            return name;
+        }
+
+        private String qualifiedElementName(final QName name) {
+            return qualifiedName(name, true);
+        }
+
+        private String qualifiedAttributeName(final QName name) {
+            return qualifiedName(name, false);
+        }
+
+        private String qualifiedName(final QName name, final boolean element) {
             final String localPart = name.getLocalPart();
             if (localPart == null || localPart.isEmpty()) {
                 throw malformed("Unknown XML names must have a local part");
             }
             final String namespace = name.getNamespaceURI();
             if (namespace == null || namespace.isEmpty()) {
+                if (element && bindings.containsKey("") && !bindings.get("").isEmpty()) {
+                    bindings.put("", "");
+                }
                 return localPart;
             }
             if (XMLConstants.XMLNS_ATTRIBUTE_NS_URI.equals(namespace)) {
@@ -945,6 +1015,10 @@ public final class WorkspaceXmlCodec {
             }
 
             String prefix = name.getPrefix();
+            if (element && (prefix == null || prefix.isEmpty())) {
+                bindings.put("", namespace);
+                return localPart;
+            }
             if (prefix == null || prefix.isEmpty() || "xml".equals(prefix) || "xmlns".equals(prefix)
                     || bindings.containsKey(prefix) && !namespace.equals(bindings.get(prefix))) {
                 prefix = generatedPrefix();
