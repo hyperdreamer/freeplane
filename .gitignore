@@ -29,6 +29,9 @@
 #Ignore Superpowers agent scratch output (brainstorm sessions, local preview server state and tokens)
 .superpowers/
 
+#Ignore local Git worktrees
+.worktrees/
+
 # e.g. hs_err_pid*.log
 *.log
 
