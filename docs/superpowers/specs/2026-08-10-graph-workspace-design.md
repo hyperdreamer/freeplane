@@ -18,7 +18,7 @@ The feature is implemented in a new `freeplane_plugin_graph` module. A pure proj
 2. Add and remove existing `.mm` files with a file chooser.
 3. Keep source-map hierarchy and content intact.
 4. Show structural leaves and active Graph Groups as graph vertices.
-5. Show ungrouped ancestors as labeled dynamic enclosures.
+5. Show ungrouped ancestors as labeled dynamic enclosures, with map identity visually emphasized above internal depth.
 6. Project native same-map connectors and workspace-owned cross-map relationships into one edge model.
 7. Create relationships directly by dragging between visible endpoints.
 8. Preserve native Freeplane undo and save behavior for source-map edits.
@@ -65,7 +65,7 @@ The window contains:
 1. A standard menu bar.
 2. A compact toolbar for workspace open/save, adding maps, selection mode, connection mode, relationship direction, search, and settings.
 3. A left map list with stable map colors, projected-node counts, Add, Remove, Retry, and Locate actions.
-4. A full-bleed graph canvas.
+4. A full-bleed graph canvas with emphatic map enclosures and subtle internal enclosures.
 5. A compact right settings drawer.
 6. A status bar for map state, projected counts, selected endpoints, layout state, unresolved counts, save errors, and unsaved source-map changes.
 
@@ -318,9 +318,19 @@ The layout graph contains:
 - invisible hierarchy anchors for enclosures;
 - relationship springs for projected edges;
 - weaker invisible containment springs from descendants to their nearest enclosure anchor;
-- anchor-to-anchor springs for nested hierarchy.
+- anchor-to-anchor springs for nested hierarchy;
+- strong repulsion between map-root anchors.
 
 Invisible hierarchy elements keep related map regions together even when they have no visible connector.
+
+Spatial constraint strength is deliberately unequal by tier:
+
+- **Map level is hard.** Map-root anchors repel each other with a force scaled by their current hull radii, so added maps occupy distinct canvas regions. Cross-map relationship springs are capped so a single relationship cannot pull two maps into each other.
+- **Internal level is soft.** Containment springs inside one map are weak. Descendant enclosures may overlap their siblings, because two-tier styling still communicates hierarchy when geometry is imperfect.
+
+This asymmetry is intentional. The readability problem worth solving with physics is *which map does this node belong to*; internal structure is communicated by styling and labels instead of by strict geometry.
+
+Map-root separation is a best-effort constraint, not a guarantee. Pins can make it unsatisfiable. When a pin prevents map separation, layout honors the pin, reports the condition in the status bar, and offers Unpin for the nodes involved. It never silently moves a pinned node.
 
 Pins freeze only visible projected graph nodes. A pin is keyed by exact map/node identity. If that node temporarily ceases to be a projected graph node, the pin remains dormant and reappears if the same node becomes projected again.
 
@@ -329,11 +339,49 @@ Pins freeze only visible projected graph nodes. A pin is keyed by exact map/node
 After each stable position update, the canvas computes a padded closed hull around each enclosure's direct child node shapes and child enclosure hulls.
 
 - Hulls use smooth closed curves derived from deterministic geometry.
-- Sibling collision handling separates unrelated enclosures.
-- Parent hulls contain complete child hulls.
+- Hulls are drawn from layout output; geometry is fitted, not constrained after the fact.
+- Parent hulls contain their child hulls whenever the soft internal springs allow it. Residual internal overlap is acceptable and is not an error.
 - Interior labels reserve collision space.
-- If no empty label area exists, enclosure padding expands rather than covering a node or edge endpoint.
 - Relationship lines attach to the nearest valid point on an enclosure boundary.
+
+#### Two Visual Tiers
+
+Enclosures render in exactly two styles. No third tier is introduced at any depth. Which boundaries occupy the emphatic tier is decided by the tier rules below, not by absolute depth.
+
+**Emphatic tier.** The topmost visible boundary of one added map:
+
+- thick solid stroke in the assigned map color at high opacity;
+- faint map-color fill;
+- bold, larger label that is always visible and never suppressed by level of detail.
+
+**Subtle tier.** Every boundary nested inside an emphatic one:
+
+- thin, lower-opacity stroke in the same map color;
+- minimal or no fill;
+- normal-weight, smaller label subject to level-of-detail fading.
+
+Tier rules:
+
+1. With two or more added maps, each map's outermost boundary is emphatic and everything nested inside it is subtle.
+2. With exactly one added map, the map-root boundary is suppressed entirely, its first-level children become emphatic, and everything nested inside those is subtle.
+3. When a map root collapses into a combined unary chain, the resulting single boundary stays emphatic. Map ownership takes precedence over internal depth.
+4. Depth below the emphatic tier never changes styling; every deeper level is identical to the first subtle level.
+5. Adding or removing a map can therefore restyle an existing map's boundaries, because the emphatic tier is relative to how many maps are loaded.
+
+Because map identity is carried by both stroke weight and color, an accessible palette is required but is not the only identity cue.
+
+The committed window mockup predates this rule and does not yet differentiate stroke weights between tiers.
+
+#### Label Placement
+
+Label placement follows a deterministic ladder with a hard padding cap, so label demand can never inflate a hull without bound:
+
+1. place the label in the largest interior gap;
+2. otherwise reserve a band on the hull's least-populated arc;
+3. otherwise anchor the label outside the boundary with a leader line;
+4. otherwise show the label only on hover or selection.
+
+Enclosure padding may grow only up to a fixed factor. Beyond that cap the label is demoted down this ladder rather than expanding the hull. Emphatic labels may use steps 1 through 3 but are never demoted to step 4.
 
 ### GraphStream Dependency Gate
 
@@ -347,6 +395,14 @@ Before the feature proceeds beyond the layout spike, maintainers must approve:
 4. Pinning.
 5. Worker shutdown without leaked timers or threads.
 6. Performance at 2,000 projected nodes and 5,000 projected edges.
+
+The accepted target is stated in projected nodes and projected edges, which is what a user perceives. The simulated graph is larger, because it also contains enclosure anchors, containment springs, and map-root repulsion. The spike must therefore measure the full pipeline at the accepted projected scale, including:
+
+- derived particle and spring counts for the same workload;
+- force-step cost with map-root repulsion active;
+- hull fitting and label-ladder cost per frame for the resulting enclosure count.
+
+The gate passes only if the complete pipeline sustains the accepted interaction target. Otherwise the target is renegotiated before implementation continues.
 
 GraphStream remains behind `LayoutEngine`; rejection of the dependency does not alter projection or canvas interfaces, but selecting a fallback may require revisiting the accepted performance guarantee.
 
@@ -507,7 +563,7 @@ Real `.mm` fixtures verify:
 
 ### Layout Spike And Performance
 
-The GraphStream gate verifies Java 8, OSGi packaging, add/remove, pinning, deterministic seeding, worker shutdown, and a generated 2,000-node/5,000-edge workload.
+The GraphStream gate verifies Java 8, OSGi packaging, add/remove, pinning, deterministic seeding, worker shutdown, and a generated 2,000-node/5,000-edge workload measured as a full pipeline: force steps including anchors, containment springs, and map-root repulsion, plus hull fitting and label placement for the resulting enclosure count.
 
 Performance assertions use generous regression bounds in automated tests and record tighter measurements as diagnostic output rather than relying on machine-specific frame-rate assertions.
 
@@ -516,9 +572,12 @@ Performance assertions use generous regression bounds in automated tests and rec
 Paint fixed projections into `BufferedImage` fixtures and assert:
 
 - nonblank output;
-- enclosure containment;
-- parent/child hull nesting;
+- map-root hull separation with two or more added maps;
+- emphatic versus subtle tier styling, including a collapsed map-root chain keeping emphatic style;
+- suppressed map-root hull with exactly one added map;
+- parent/child nesting reported as a measured quality metric rather than asserted absolutely;
 - endpoint attachment;
+- label ladder fallbacks, including external leader lines and hover-only demotion under the padding cap;
 - labels remain in bounds;
 - fixed-format controls do not overlap;
 - selected, hovered, pinned, loading, empty, error, and high-density states render coherently.
@@ -556,6 +615,10 @@ Translation validation follows `AGENTS.md`, including ASCII checks after formatt
 14. Exercise pan, zoom, fit, reset, search, hover, selection, double-click navigation, and contributor inspection.
 15. Load a 2,000-node/5,000-edge generated workspace and verify the accepted interaction target after the GraphStream gate passes.
 16. Load a legacy node without an ID and verify persistent endpoint commands request a normal map save without silently assigning an ID.
+17. Load three maps with dense cross-map relationships and verify map enclosures stay spatially distinct and emphatically styled while internal enclosures remain subtle.
+18. Load exactly one map and verify the map-root boundary is suppressed and first-level children carry the emphatic style.
+19. Add a second map to a single-map workspace and verify the first map's boundaries restyle so its root becomes emphatic and its first-level children become subtle.
+20. Pin two nodes so that map separation is unsatisfiable, then verify the pin is honored, the condition is reported, and Unpin is offered.
 
 ## Design Decisions Rejected
 
@@ -582,6 +645,12 @@ Rejected for the accepted scale: measured JUNG force steps were too slow for int
 ### Automatically Rebind Moved Maps By Fingerprint
 
 Rejected because a copied map can be mistaken for the original. Locate requires explicit user confirmation.
+
+### Enforce Strict Geometric Containment At Every Depth
+
+Rejected during design audit. Hulls are fitted from physics output, so strict containment at every depth would require constraints strong enough to fight relationship springs and user pins, and it would still fail whenever a pin makes containment unsatisfiable.
+
+The readability failure that matters is mistaking one map's node for another's. Hard separation at the map level plus two-tier styling addresses that directly, leaves internal layout free, and costs far less computation.
 
 ## Implementation Gate
 
