@@ -38,7 +38,11 @@ public final class WorkspaceUriResolver {
         if (stored.isAbsolute()) {
             return canonical(Paths.get(stored));
         }
-        return canonical(workspaceParent.resolve(stored.getPath()));
+        Path decodedRelativePath = workspaceParent.getFileSystem().getPath(stored.getPath());
+        if (decodedRelativePath.isAbsolute() || decodedRelativePath.getRoot() != null) {
+            throw new IllegalArgumentException("Relative stored URI must not decode to an absolute path");
+        }
+        return canonical(workspaceParent.resolve(decodedRelativePath));
     }
 
     public URI rewriteForSaveAs(Path oldWorkspace, Path newWorkspace, URI stored) {
@@ -118,8 +122,14 @@ public final class WorkspaceUriResolver {
             throw new IllegalArgumentException("Map path must not equal the workspace directory");
         }
         try {
-            URI relativeUri = new URI(null, null, path.toString(), null, null);
-            return URI.create(relativeUri.toASCIIString());
+            URI encodedUri = new URI(null, null, path.toString(), null, null);
+            String encodedPath = encodedUri.toASCIIString();
+            int firstSegmentEnd = encodedPath.indexOf('/');
+            if (firstSegmentEnd < 0) {
+                firstSegmentEnd = encodedPath.length();
+            }
+            String firstSegment = encodedPath.substring(0, firstSegmentEnd).replace(":", "%3A");
+            return URI.create(firstSegment + encodedPath.substring(firstSegmentEnd));
         }
         catch (URISyntaxException failure) {
             throw new IllegalArgumentException("Unable to encode map URI: " + target, failure);

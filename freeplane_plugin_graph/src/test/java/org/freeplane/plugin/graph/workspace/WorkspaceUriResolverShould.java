@@ -41,6 +41,60 @@ public class WorkspaceUriResolverShould {
     }
 
     @Test
+    public void relativeColonPathRoundTripsAsHierarchicalUri() throws Exception {
+        Path directory = temporaryFolder.newFolder("colon-same-directory").toPath();
+        Path workspace = directory.resolve("workspace.fpg");
+        Path map = directory.resolve("a:b.mm");
+        Files.write(workspace, bytes("workspace"));
+        Files.write(map, bytes("map"));
+
+        URI stored = resolver.toStoredUri(workspace, map);
+        URI reparsed = URI.create(stored.toString());
+
+        assertThat(reparsed.isAbsolute()).isFalse();
+        assertThat(reparsed.isOpaque()).isFalse();
+        assertThat(resolver.resolve(workspace, reparsed)).isEqualTo(resolver.canonical(map));
+    }
+
+    @Test
+    public void nestedRelativeColonPathRoundTripsAsHierarchicalUri() throws Exception {
+        Path directory = temporaryFolder.newFolder("colon-nested").toPath();
+        Path workspace = directory.resolve("workspace.fpg");
+        Path map = directory.resolve("a:b").resolve("nested").resolve("one.mm");
+        Files.createDirectories(map.getParent());
+        Files.write(workspace, bytes("workspace"));
+        Files.write(map, bytes("map"));
+
+        URI stored = resolver.toStoredUri(workspace, map);
+        URI reparsed = URI.create(stored.toString());
+
+        assertThat(reparsed.isAbsolute()).isFalse();
+        assertThat(reparsed.isOpaque()).isFalse();
+        assertThat(resolver.resolve(workspace, reparsed)).isEqualTo(resolver.canonical(map));
+    }
+
+    @Test
+    public void rejectEncodedLeadingSeparatorInRelativeUri() throws Exception {
+        Path directory = temporaryFolder.newFolder("encoded-leading-separator").toPath();
+        Path workspace = directory.resolve("workspace.fpg");
+        Files.write(workspace, bytes("workspace"));
+
+        assertThatThrownBy(() -> resolver.resolve(workspace, URI.create("%2Ftmp")))
+            .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    public void rejectEncodedLeadingBackslashInRelativeUriOnWindows() throws Exception {
+        Assume.assumeTrue("requires Windows path semantics", "\\".equals(FileSystems.getDefault().getSeparator()));
+        Path directory = temporaryFolder.newFolder("encoded-leading-backslash").toPath();
+        Path workspace = directory.resolve("workspace.fpg");
+        Files.write(workspace, bytes("workspace"));
+
+        assertThatThrownBy(() -> resolver.resolve(workspace, URI.create("%5Ctmp")))
+            .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     public void storeAbsoluteUriWhenRootsDiffer() throws Exception {
         List<Path> roots = existingRoots();
         Assume.assumeTrue("requires at least two existing file-system roots", roots.size() > 1);
