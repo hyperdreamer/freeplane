@@ -18,6 +18,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Delayed;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.RejectedExecutionException;
@@ -25,7 +26,9 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.freeplane.plugin.graph.workspace.io.WorkspaceMigration;
 import org.freeplane.plugin.graph.workspace.io.WorkspaceMigrationRegistry;
@@ -49,6 +52,7 @@ public class GraphWorkspaceStoreShould {
         MapReferenceId.of("00000000-0000-0000-0000-000000000001");
     private static final MapReferenceId MAP_TWO =
         MapReferenceId.of("00000000-0000-0000-0000-000000000002");
+    private static final long CROSS_THREAD_TIMEOUT_MILLIS = 1000L;
 
     @Rule
     public final TemporaryFolder temporaryFolder = new TemporaryFolder();
@@ -463,6 +467,73 @@ public class GraphWorkspaceStoreShould {
     }
 
     @Test
+    public void allowCrossThreadReadsToCompleteDuringDocumentChangedCallbacks() throws Exception {
+        Path workspace = workspacePath("cross-thread-events", "workspace.fpg");
+        GraphWorkspaceStore store = GraphWorkspaceStore.create(workspace, codec(), new RecordingWriter(),
+            new TestScheduler());
+        CountDownLatch workerStarted = new CountDownLatch(1);
+        CountDownLatch workerCompleted = new CountDownLatch(1);
+        AtomicBoolean completedBeforeCallbackReturned = new AtomicBoolean();
+        AtomicReference<Thread> readerThread = new AtomicReference<Thread>();
+        AtomicReference<Throwable> readerFailure = new AtomicReference<Throwable>();
+        store.addListener(new WorkspaceStoreListener() {
+            @Override
+            public void onWorkspaceStoreEvent(WorkspaceStoreEvent event) {
+                if (event.type() != WorkspaceStoreEvent.Type.DOCUMENT_CHANGED) {
+                    return;
+                }
+                Thread reader = new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        workerStarted.countDown();
+                        try {
+                            store.currentDocument();
+                        }
+                        catch (Throwable exception) {
+                            readerFailure.set(exception);
+                        }
+                        finally {
+                            workerCompleted.countDown();
+                        }
+                    }
+                }, "GraphWorkspaceStoreShould-cross-thread-reader");
+                readerThread.set(reader);
+                reader.start();
+                try {
+                    if (workerStarted.await(CROSS_THREAD_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) {
+                        completedBeforeCallbackReturned.set(workerCompleted.await(CROSS_THREAD_TIMEOUT_MILLIS,
+                            TimeUnit.MILLISECONDS));
+                    }
+                }
+                catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        });
+
+        GraphCommandResult result;
+        try {
+            result = store.execute(addMap(MAP_ONE));
+        }
+        finally {
+            Thread reader = readerThread.get();
+            if (reader != null) {
+                reader.join(CROSS_THREAD_TIMEOUT_MILLIS);
+            }
+        }
+
+        Thread reader = readerThread.get();
+        assertThat(result.status()).isEqualTo(GraphCommandResult.Status.APPLIED);
+        assertThat(workerStarted.getCount()).isZero();
+        assertThat(completedBeforeCallbackReturned.get()).isTrue();
+        assertThat(workerCompleted.getCount()).isZero();
+        assertThat(reader).isNotNull();
+        assertThat(reader.isDaemon()).isFalse();
+        assertThat(reader.isAlive()).isFalse();
+        assertThat(readerFailure.get()).isNull();
+    }
+
+    @Test
     public void dirtyCloseSavesSynchronouslyBeforeClosing() throws Exception {
         Path workspace = workspacePath("close", "workspace.fpg");
         RecordingWriter writer = new RecordingWriter();
@@ -506,6 +577,9 @@ public class GraphWorkspaceStoreShould {
         GraphWorkspaceStore store = GraphWorkspaceStore.create(workspace, codec(), writer, scheduler);
         byte[] beforeChanges = Files.readAllBytes(workspace);
         store.execute(addMap(MAP_ONE));
+        WorkspaceDocument dirtyDocument = store.currentDocument();
+        List<WorkspaceStoreEvent> events = new ArrayList<WorkspaceStoreEvent>();
+        store.addListener(events::add);
         RuntimeException failure = new IllegalStateException("injected close failure");
         writer.failNext(failure);
 
@@ -513,7 +587,19 @@ public class GraphWorkspaceStoreShould {
 
         assertThat(thrown).isSameAs(failure);
         assertThat(store.isDirty()).isTrue();
+        assertThat(store.currentDocument()).isSameAs(dirtyDocument);
         assertThat(store.currentDocument().maps()).extracting(MapReference::id).containsExactly(MAP_ONE);
+        assertThat(events).extracting(WorkspaceStoreEvent::type)
+            .containsExactly(WorkspaceStoreEvent.Type.SAVE_FAILED);
+        assertThat(events.get(0).document()).isSameAs(dirtyDocument);
+        assertThat(events.get(0).error()).containsSame(failure);
+
+        GraphCommandResult undo = store.undo();
+
+        assertThat(undo.status()).isEqualTo(GraphCommandResult.Status.APPLIED);
+        assertThat(events).extracting(WorkspaceStoreEvent::type)
+            .containsExactly(WorkspaceStoreEvent.Type.SAVE_FAILED, WorkspaceStoreEvent.Type.DOCUMENT_CHANGED);
+        assertThat(events.get(1).document()).isEqualTo(store.currentDocument());
         assertThat(store.updateViewport(viewport(3, 4, 1.5)).status()).isEqualTo(GraphCommandResult.Status.APPLIED);
         store.saveNow();
         store.close();
