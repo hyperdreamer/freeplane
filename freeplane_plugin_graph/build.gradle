@@ -1,0 +1,109 @@
+dependencies {
+    implementation project(':freeplane')
+    testImplementation 'com.tngtech.archunit:archunit:1.4.1'
+
+    lib('org.graphstream:gs-core:1.3') {
+        transitive = false
+    }
+    lib('org.graphstream:pherd:1.0') {
+        transitive = false
+    }
+    lib('org.graphstream:mbox2:1.0') {
+        transitive = false
+    }
+}
+
+ext.bundleImports = 'nothing.*'
+ext.bundleExports = ''
+
+def graphStreamChecksums = [
+    'gs-core-1.3.jar': '2d6a6f92f86c624fcbf468fc7e9cb9c8e3fb7e14c72ad578edb04cc36b0b66cd',
+    'pherd-1.0.jar': '9e74f3702d13756faece5987147c937c09b6837a38ed32199f59c26697b94230',
+    'mbox2-1.0.jar': '3c2db334867211f385a2d62d061818268443f361381f78bbc53f9e897e145983'
+]
+
+def sha256 = { File file ->
+    final java.security.MessageDigest digest = java.security.MessageDigest.getInstance('SHA-256')
+    file.withInputStream { input ->
+        final byte[] buffer = new byte[8192]
+        int read
+        while ((read = input.read(buffer)) != -1) {
+            digest.update(buffer, 0, read)
+        }
+    }
+    digest.digest().collect { String.format('%02x', it & 0xff) }.join()
+}
+
+def maximumClassMajor = { File jarFile ->
+    int maximum = 0
+    final java.util.jar.JarFile jar = new java.util.jar.JarFile(jarFile)
+    try {
+        jar.entries().each { entry ->
+            if (!entry.directory && entry.name.endsWith('.class')) {
+                final InputStream input = jar.getInputStream(entry)
+                try {
+                    final byte[] header = new byte[8]
+                    assert input.read(header) == header.length
+                    final int major = ((header[6] & 0xff) << 8) | (header[7] & 0xff)
+                    maximum = Math.max(maximum, major)
+                }
+                finally {
+                    input.close()
+                }
+            }
+        }
+    }
+    finally {
+        jar.close()
+    }
+    maximum
+}
+
+tasks.register('verifyGraphBundle') {
+    dependsOn tasks.named('jar')
+    doLast {
+        final Set<File> dependencyFiles = configurations.lib.files
+        assert dependencyFiles*.name.sort() == graphStreamChecksums.keySet().toList().sort()
+        graphStreamChecksums.each { fileName, expectedChecksum ->
+            final File dependency = dependencyFiles.find { it.name == fileName }
+            assert dependency != null
+            assert sha256(dependency) == expectedChecksum
+            assert maximumClassMajor(dependency) <= 52
+        }
+
+        final File classesDirectory = file("$buildDir/classes/java/main")
+        fileTree(classesDirectory).matching { include '**/*.class' }.files.each { classFile ->
+            final byte[] header = classFile.bytes
+            assert header.length >= 8
+            final int major = ((header[6] & 0xff) << 8) | (header[7] & 0xff)
+            assert major == 52
+        }
+
+        final File bundleFile = tasks.named('jar').get().archiveFile.get().asFile
+        final java.util.jar.JarFile bundle = new java.util.jar.JarFile(bundleFile)
+        try {
+            final java.util.jar.Attributes attributes = bundle.manifest.mainAttributes
+            assert attributes.getValue('Bundle-SymbolicName') == 'org.freeplane.plugin.graph'
+            assert attributes.getValue('Bundle-Activator') == 'org.freeplane.plugin.graph.Activator'
+            assert attributes.getValue('Bundle-ClassPath') ==
+                ".,lib/plugin-${project.version}.jar,lib/gs-core-1.3.jar,lib/pherd-1.0.jar,lib/mbox2-1.0.jar"
+            assert !attributes.getValue('Import-Package')
+            assert !attributes.getValue('Export-Package')
+            final String license = bundle.getInputStream(bundle.getEntry('META-INF/LICENSES/LGPL-3.0.txt'))
+                .getText('UTF-8')
+            assert license.contains('GNU LESSER GENERAL PUBLIC LICENSE')
+            assert license.contains('Version 3, 29 June 2007')
+            final String notice = bundle.getInputStream(bundle.getEntry('META-INF/NOTICE.graphstream.txt'))
+                .getText('US-ASCII')
+            graphStreamChecksums.values().each { checksum -> assert notice.contains(checksum) }
+            assert notice.contains('https://graphstream-project.org')
+            assert bundle.getEntry('META-INF/LICENSES/LGPL-3.0.txt') != null
+            assert bundle.getEntry('META-INF/NOTICE.graphstream.txt') != null
+        }
+        finally {
+            bundle.close()
+        }
+    }
+}
+
+check.dependsOn verifyGraphBundle

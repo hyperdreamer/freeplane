@@ -1,0 +1,28 @@
+GraphStream dependency notice
+
+This plugin distributes the following unchanged GraphStream 1.3 libraries under
+LGPL-3.0. The corresponding license text is included at
+META-INF/LICENSES/LGPL-3.0.txt.
+
+GraphStream is developed by the GraphStream Team. Project information and
+source code are available at https://graphstream-project.org.
+
+Artifacts:
+
+- org.graphstream:gs-core:1.3
+  SHA-256: 2d6a6f92f86c624fcbf468fc7e9cb9c8e3fb7e14c72ad578edb04cc36b0b66cd
+  Binary: https://repo1.maven.org/maven2/org/graphstream/gs-core/1.3/gs-core-1.3.jar
+  Source: https://github.com/graphstream/gs-core
+
+- org.graphstream:pherd:1.0
+  SHA-256: 9e74f3702d13756faece5987147c937c09b6837a38ed32199f59c26697b94230
+  Binary: https://repo1.maven.org/maven2/org/graphstream/pherd/1.0/pherd-1.0.jar
+  Source: https://github.com/graphstream/gs-deps/tree/1.0/pherd
+
+- org.graphstream:mbox2:1.0
+  SHA-256: 3c2db334867211f385a2d62d061818268443f361381f78bbc53f9e897e145983
+  Binary: https://repo1.maven.org/maven2/org/graphstream/mbox2/1.0/mbox2-1.0.jar
+  Source: https://github.com/graphstream/gs-deps/tree/1.0/mbox2
+
+No gs-ui, Scala runtime, or other GraphStream artifact is distributed by this
+plugin.
