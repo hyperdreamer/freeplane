@@ -137,10 +137,21 @@ public final class WorkspaceDocument {
     public List<GraphRelationshipRecord> relationships(); public List<PinRecord> pins();
     public Viewport viewport(); public DisplaySettings displaySettings();
     public List<UnknownXml> unknownXml(); public Builder toBuilder();
-    public static final class Builder { public WorkspaceDocument build(); }
+    public static final class Builder {
+        public Builder id(WorkspaceId id);
+        public Builder sourceFormatVersion(int version);
+        public Builder compatibility(WorkspaceCompatibility compatibility);
+        public Builder maps(List<MapReference> maps);
+        public Builder relationships(List<GraphRelationshipRecord> relationships);
+        public Builder pins(List<PinRecord> pins);
+        public Builder viewport(Viewport viewport);
+        public Builder displaySettings(DisplaySettings settings);
+        public Builder unknownXml(List<UnknownXml> unknownXml);
+        public WorkspaceDocument build();
+    }
 }
 ```
-All ID classes have `of(UUID/String)` and `value()`; all records expose typed getters and validating factories.
+All ID classes have `of(UUID/String)` and `value()`; all records expose typed getters and validating factories. Every `Builder` setter copies defensively and revalidates in `build()`, so Task 4 produces modified documents solely through `toBuilder()`.
 
 - [ ] **Step 1: Write immutability/invariant tests**
 Assert defensive copies/equality, finite values, unique IDs/sequences, valid references, deterministic order, and impossibility of transient keys/derived status.
@@ -364,10 +375,21 @@ public final class NodeSnapshot {
     public SourceNodeKey key(); public SafeNodeLabel label(); public boolean structuralLeaf();
     public boolean graphGroup(); public boolean excluded(); public List<NodeSnapshot> children();
 }
+public final class MapSnapshot {
+    public MapReferenceId mapReferenceId(); public int workspaceOrder(); public String mapName();
+    public NodeSnapshot root(); public Set<PersistedNodeId> attachedPersistentIds();
+    public boolean hasInaccessibleBranch(); public List<ConnectorSnapshot> connectors();
+}
+public final class GraphProjection {
+    public long generation(); public List<ProjectedNode> nodes(); public List<ProjectedEnclosure> enclosures();
+    public List<ProjectedEdge> edges(); public List<RelationshipResolution> relationshipResolutions();
+    public List<PinProjection> pins(); public int projectedNodeCount(); public int projectedEdgeCount();
+}
 public final class ProjectionEngine {
     public GraphProjection projectStructure(long generation, WorkspaceDocument workspace, List<MapSnapshot> maps);
 }
 ```
+Task 7 creates `MapSnapshot` with an empty `connectors()` list and `GraphProjection` with empty `edges()`/`relationshipResolutions()`/`pins()`; Task 8 populates resolutions/pins and Task 9 populates connectors/edges. `attachedPersistentIds()` carries identity only and never exposes label text.
 All output types are public immutable ordered values. Source key is persisted NodeReference or transient structural path.
 
 - [ ] **Step 1: Tests**
@@ -408,6 +430,11 @@ git commit -m "2026-08-10-graph-workspace: Project map structure and enclosures"
 public enum MapAvailability { INACTIVE, LOADING, AVAILABLE, MISSING, UNREADABLE, PASSWORD_REQUIRED, RELOAD_REQUIRED }
 public enum RelationshipStatus { ACTIVE, UNRESOLVED_RECOVERABLE, UNRESOLVED_MISSING_NODE }
 public enum BoundaryTier { EMPHATIC, SUBTLE, SUPPRESSED }
+public final class ProjectedEndpointKey {
+    public static ProjectedEndpointKey ofNode(ProjectedNodeKey node);
+    public static ProjectedEndpointKey ofEnclosure(EnclosureKey enclosure);
+    public MapReferenceId mapReferenceId();
+}
 public final class ProjectionInput { public long generation(); public WorkspaceDocument workspace(); public List<MapSnapshot> maps(); public Map<MapReferenceId, MapAvailability> availability(); }
 public final class ProjectionEngine { public GraphProjection project(ProjectionInput input); }
 ```
@@ -453,6 +480,10 @@ public final class ConnectorDescriptor {
     public String sourceLabel(); public String middleLabel(); public String targetLabel();
 }
 public final class ConnectorSnapshot { public ContributorKey key(); public int occurrence(); public ConnectorDescriptor descriptor(); }
+public final class ContributorKey {
+    public static ContributorKey nativeConnector(MapReferenceId map, SourceNodeKey source, int occurrence);
+    public static ContributorKey graphRelationship(RelationshipId relationship);
+}
 public final class DirectionCoverage {
     public static boolean covers(Collection<EdgeContributor> contributors, NodeReference source, NodeReference target, RelationshipDirection requested);
 }
@@ -549,12 +580,14 @@ git commit -m "2026-08-10-graph-workspace: Add Graph Group map markers"
 ```java
 public interface NodeViewDecorationPainter { void paint(NodeView nodeView, Graphics2D graphics); }
 public final class NodeViewDecorationRegistry implements IExtension {
+    public static NodeViewDecorationRegistry of(ModeController modeController);
     public void add(NodeViewDecorationPainter painter); public void remove(NodeViewDecorationPainter painter);
+    public boolean isEmpty();
 }
 ```
-These unsupported public classes live in an already-exported implementation package; no new package export is added.
+These unsupported public classes live in an already-exported implementation package; no new package export is added. `of(ModeController)` lazily creates and installs the registry as a `ModeController` extension and returns the same instance thereafter. `NodeView` reads it during the CLOUDS pass via its own `ModeController`, treating absent/empty as a no-op; the plugin registers and unregisters its painter through the same accessor.
 
-- [ ] **Step 1: Tests** no-registry unchanged; ordering/removal/duplicates; copied/disposed graphics isolation; whole visible subtree; coral/faint; four clouds; outer gap; inactive dashed; leaf; no geometry change.
+- [ ] **Step 1: Tests** no-registry unchanged; lazy `of(ModeController)` returns one installed instance; ordering/removal/duplicates; copied/disposed graphics isolation; whole visible subtree; coral/faint; four clouds; outer gap; inactive dashed; leaf; no geometry change.
 - [ ] **Step 2: Red** run core and plugin paint tests.
 - [ ] **Step 3: Add only CLOUDS-pass registry call; isolate each painter with `graphics.create()/dispose()`; teardown in extension close**
 - [ ] **Step 4: Commit after green exact seven-file allowlist**
@@ -695,10 +728,20 @@ git commit -m "2026-08-10-graph-workspace: Snapshot native graph connectors"
 
 **Interfaces:**
 ```java
+public final class LayoutPoint { public static LayoutPoint of(double x, double y); public double x(); public double y(); }
+public final class LayoutPositions {
+    public static LayoutPositions of(Map<ProjectedNodeKey, LayoutPoint> nodes, Map<EnclosureHullKey, LayoutPoint> anchors);
+    public Map<ProjectedNodeKey, LayoutPoint> nodes(); public Map<EnclosureHullKey, LayoutPoint> anchors();
+}
+public final class GraphGeometry {
+    public Map<ProjectedNodeKey, NodeGeometry> nodes(); public Map<EnclosureHullKey, HullGeometry> hulls();
+    public Map<EnclosureKey, LabelPlacement> labels();
+    public LayoutPoint edgeAttachment(ProjectedEndpointKey endpoint, LayoutPoint toward);
+}
 public final class GraphGeometryEngine { public GraphGeometry computeHulls(GraphProjection projection, LayoutPositions positions); }
 public final class HullIntersection { public static LayoutPoint minimumSeparatingTranslation(HullGeometry a, HullGeometry b); }
 ```
-All geometry public immutable ordered primitives; GraphGeometry exposes node/hull maps and boundary attachment.
+Task 17 leaves `labels()` empty; Task 18 populates it. All geometry public immutable ordered primitives.
 
 - [ ] **Step 1: Tests** bottom-up, child containment, smooth deterministic closed path, empty enclosure label anchor, exact intersection, nearest attachment, deep equality.
 - [ ] **Step 2: Red** run geometry tests.
@@ -756,9 +799,16 @@ git commit -m "2026-08-10-graph-workspace: Add bounded enclosure labels"
 ```java
 public interface LayoutEngine extends AutoCloseable { LayoutFrame apply(LayoutRequest request); LayoutFrame step(); void reset(); void close(); }
 public final class LayoutCalibration { public static LayoutCalibration spikeDefaults(); public double containment(); public double hierarchy(); public double sameMap(); }
+public final class LayoutRequest {
+    public static LayoutRequest of(WorkspaceId workspace, GraphProjection projection, ProjectionDiff diff, List<PinProjection> pins);
+    public WorkspaceId workspace(); public GraphProjection projection(); public ProjectionDiff diff(); public List<PinProjection> pins();
+}
+public final class LayoutFrame {
+    public long stepIndex(); public LayoutPositions positions(); public boolean failed();
+}
 public final class GraphStreamLayoutFactory { public static LayoutEngine create(LayoutCalibration calibration); }
 ```
-Factory is public internal/GraphStream-free; engine/typed subclasses package-private. Protected GraphStream overrides inside package-private classes are allowed; externally visible signatures are GraphStream-free.
+Task 20 extends `LayoutFrame` with conflicts and idle measurement. Factory is public internal/GraphStream-free; engine/typed subclasses package-private. Protected GraphStream overrides inside package-private classes are allowed; externally visible signatures are GraphStream-free.
 
 - [ ] **Step 1: Tests** boundary, no LayoutRunner, quality, seeds, particles/anchors/springs, ordered strengths, aggregate cap fanout, 100 churn.
 - [ ] **Step 2: Red** run layout tests.
@@ -799,6 +849,7 @@ public final class LayoutWorker implements AutoCloseable {
     public void pause(); public void restart(); public LayoutFrame lastValidFrame(); public void close();
 }
 ```
+`LayoutFrame` gains `public List<LayoutConflict> conflicts()` and `public PerceptualIdlePolicy.IdleMeasurement idle()` in this task.
 
 - [ ] **Step 1: Tests** serialization, pin/dormant/unpin, rigid uniform correction, one/two blocked, conflicts, worker failure/restart, 25 close, measured idle injectable defaults.
 - [ ] **Step 2: Red** run worker/correction/idle tests.
@@ -924,9 +975,23 @@ public final class GraphCanvas extends JComponent {
     public void setCanvasState(CanvasState state); public void setPaintState(GraphPaintState state);
     public void setViewport(GraphViewport viewport); public GraphViewport viewport(); public void fitGraph(); public void resetZoom();
 }
+public final class GraphViewport {
+    public static GraphViewport of(double centerX, double centerY, double zoom);
+    public static GraphViewport from(Viewport persisted);
+    public double centerX(); public double centerY(); public double zoom();
+    public Viewport toPersisted(); public boolean overlaps(double minX, double minY, double maxX, double maxY, Dimension size);
+}
+public final class GraphPaintState {
+    public static GraphPaintState empty();
+    public GraphPaintState withSelection(ProjectedEndpointKey selected);
+    public GraphPaintState withHover(ProjectedEndpointKey hovered);
+    public GraphPaintState withSearchMatches(Set<ProjectedEndpointKey> matches);
+    public Optional<ProjectedEndpointKey> selection(); public Optional<ProjectedEndpointKey> hover();
+    public Set<ProjectedEndpointKey> searchMatches();
+}
 public final class AdaptiveRenderingPolicy { public RenderingLevel forCounts(int nodes, int edges); public boolean exceedsEngineeringTarget(int nodes, int edges); }
 ```
-GraphPainter is package-private and paints normal JComponent/offscreen tests; no print/export API.
+Task 25 extends `GraphPaintState` with connection preview and dim state. GraphPainter is package-private and paints normal JComponent/offscreen tests; no print/export API.
 
 - [ ] **Step 1: Transform/policy/BufferedImage tests** layer order, tiers, arrows/multiplicity, labels, states/themes/bounds, node LOD exact, warning if nodes>2000 or edges>5000, above-target remains editable. `GraphViewportShould` asserts malformed non-finite/nonpositive persisted values are rejected by Task 2/3 before canvas construction, while a finite persisted viewport whose visible world rectangle does not overlap current graph bounds invokes Fit Graph.
 - [ ] **Step 2: Red** run canvas tests.
@@ -1016,6 +1081,7 @@ public final class FreeplaneMapCommandExecutor {
     public GraphCommandResult deleteConnector(ContributorKey key, ConnectorDescriptor expected);
     public GraphCommandResult undoCurrentSourceMap(); public Optional<MapUndoTarget> currentUndoTarget();
 }
+public final class MapUndoTarget { public MapReferenceId mapReferenceId(); public String mapName(); public boolean canUndo(); }
 public final class SourceNavigation { public GraphCommandResult open(SourceNodeKey source); }
 ```
 
@@ -1074,6 +1140,14 @@ git commit -m "2026-08-10-graph-workspace: Reserve live workspace paths"
 **Interfaces:**
 ```java
 public interface GraphCommand { }
+public final class GraphCommands {
+    public static final class Purge implements GraphCommand { public long displayedGeneration(); public Set<RelationshipId> relationships(); }
+    public static final class DeleteContributor implements GraphCommand { public long displayedGeneration(); public ContributorKey contributor(); public Optional<ConnectorDescriptor> expectedConnector(); }
+    public static final class DeleteAllContributors implements GraphCommand { public long displayedGeneration(); public ProjectedEdgeKey edge(); public List<ContributorKey> contributors(); public Map<ContributorKey, ConnectorDescriptor> expectedConnectors(); }
+    public static Purge purge(long displayedGeneration, Set<RelationshipId> relationships);
+    public static DeleteContributor deleteContributor(long displayedGeneration, ContributorKey contributor, ConnectorDescriptor expected);
+    public static DeleteAllContributors deleteAllContributors(long displayedGeneration, ProjectedEdgeKey edge, List<ContributorKey> contributors, Map<ContributorKey, ConnectorDescriptor> expected);
+}
 public interface PurgeCommandHandler { GraphCommandResult purge(GraphCommands.Purge command); }
 public interface ContributorDeletionHandler { GraphCommandResult deleteOne(GraphCommands.DeleteContributor command); GraphCommandResult deleteAll(GraphCommands.DeleteAllContributors command); }
 public final class GraphCommandRouter {
@@ -1261,7 +1335,8 @@ file freeplane/src/editor/resources/translations/Resources_*.properties freeplan
 test -z "$(git diff --name-only -- freeplane/src/editor/resources/translations)"
 test "$(git diff --name-only -- freeplane/src/viewer/resources/translations)" = "freeplane/src/viewer/resources/translations/Resources_en.properties"
 ```
-- [ ] **Step 5: Commit exact ten-file allowlist**
+- [ ] **Step 5: Commit exact nine-path allowlist**
+Stage the nine distinct paths from `Files` (`mindmapmodemenu.xml` is one path with two edited regions), verify staged names equal that list, then:
 ```bash
 git commit -m "2026-08-10-graph-workspace: Wire graph workspace entry points"
 ```
