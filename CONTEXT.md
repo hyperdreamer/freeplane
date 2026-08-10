@@ -8,11 +8,13 @@
 
 **Graph relationship** - A relationship between nodes in different mind maps. The Graph Workspace owns this relationship.
 
-**Unresolved graph relationship** - A dormant graph relationship whose map or node endpoint is unavailable. It becomes active again when both original endpoints resolve and is removed only by an explicit purge.
+**Unresolved graph relationship** - A dormant graph relationship whose endpoints cannot both resolve. Its status distinguishes whether the cause is recoverable (locked encryption, missing or inactive map, still loading) or permanent (node was deleted from an active, readable map). It becomes active again when both original endpoints resolve and is removed only by explicit deletion or by purge of missing-node records.
 
-**Graph group** - A marked mind-map node whose complete subtree is treated as one graph node. The marked node is the group root and remains the stored endpoint of relationships involving the group. If its marker is removed, those relationships attach to the root's ancestor enclosure rather than being redirected to descendants. If graph groups are nested, only the outermost marked ancestor is active; inner markers remain and become active when no marked ancestor contains them.
+**Graph group** - A marked mind-map node whose complete subtree is treated as one graph node. The marked node is the group root and remains the stored endpoint of relationships involving the group. If its marker is removed, those relationships attach to the root's ancestor enclosure rather than being redirected to descendants. If graph groups are nested, only the outermost marked ancestor is active; inner markers remain and become active when no marked ancestor contains them. The marker belongs to shared clone content, so marking any clone marks every clone of that node.
 
-**Structural leaf** - A mind-map node with no children in the map model. Folding, filtering, view roots, and editor visibility do not change whether a node is a structural leaf.
+**Structural leaf** - A mind-map node with no children in the map model. Folding, filtering, view roots, and editor visibility do not change whether a node is a structural leaf. A locked encrypted node presents as a structural leaf because the model detaches its children.
+
+**Reachable endpoint** - A relationship endpoint whose node can be reached from its map root by the same traversal that builds the projection. Reachability, not flat ID lookup, decides whether an endpoint resolves, so content hidden behind locked encryption is never projected or labelled.
 
 **Projected graph node** - A visible graph vertex representing either a structural leaf in an added mind map or an active graph group.
 

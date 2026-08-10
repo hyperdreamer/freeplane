@@ -81,6 +81,8 @@ The marker is rendered as a cloud-like outer outline around the selected node an
 
 The action follows Freeplane's multiple-node toggle convention. It applies the primary selected node's inverse marker state to all selected nodes. Marking a structural leaf is allowed but does not change its current vertex count or covered subtree; Graph Group styling still identifies the marker, and the marker becomes meaningful if children are later added.
 
+Because the marker lives in shared clone data, toggling it on any node also toggles it on every clone of that node, including clones that were not selected. The action's tooltip states this, and the status bar reports how many clone positions were affected.
+
 ![Graph Group toolbar control](images/2026-08-10-graph-group-toolbar.png)
 
 ### Canvas Interaction
@@ -236,19 +238,49 @@ Normal Freeplane file saves write an ID for every node. The adapter must neverth
 
 ### Graph Relationships
 
-Graph Relationships store exact map/node endpoints, direction, creation sequence, and versioned metadata. Their status is derived rather than authoritative:
+Graph Relationships store exact map/node endpoints, direction, creation sequence, and versioned metadata. Their status is derived rather than authoritative, and unresolved endpoints are separated by whether recovery is still possible:
 
-- active when both maps are active and both node IDs resolve;
-- unresolved when a map or node is unavailable;
-- omitted from the canvas while unresolved;
-- automatically active again when both original endpoints resolve;
-- deleted only by explicit relationship deletion or purge.
+- `ACTIVE` when both maps are active and both endpoints resolve;
+- `UNRESOLVED_RECOVERABLE` when an endpoint cannot resolve for a reversible reason: the map registration is inactive, the file is missing or unreadable, the map is still loading, or the endpoint lies inside a locked encrypted branch;
+- `UNRESOLVED_MISSING_NODE` when the map is active and readable but the endpoint node no longer exists in it;
+- omitted from the canvas while unresolved, in either state;
+- automatically `ACTIVE` again when both original endpoints resolve;
+- deleted only by explicit relationship deletion or by purge.
+
+The distinction exists to protect data. A locked encrypted branch and a moved file both make endpoints temporarily unresolvable, and neither means the user's relationship was wrong.
+
+A relationship is never promoted to `UNRESOLVED_MISSING_NODE` while any part of its endpoint's map is inaccessible. Ambiguity always resolves toward `UNRESOLVED_RECOVERABLE`.
 
 Unknown metadata schemas are preserved across read/write. A newer unsupported workspace schema opens read-only only when known fields can be interpreted without loss; otherwise loading fails without rewriting the file.
+
+### Purge
+
+Purge removes only `UNRESOLVED_MISSING_NODE` relationships. It never touches `UNRESOLVED_RECOVERABLE` ones.
+
+- Purge is presented as a confirmation that lists every relationship to be deleted, with both endpoint descriptions.
+- Purge is a workspace command on the normal undo history, so it can be reverted.
+- Purge is disabled when no relationship is in `UNRESOLVED_MISSING_NODE`.
+- The status bar reports recoverable and missing-node counts separately so a locked branch never looks like permanent loss.
 
 ### Graph Group Marker
 
 The Graph Group marker is a map-owned node extension serialized as its own extension element, not as a `CloudModel` and not in the `.fpg` file. Persistence handlers are registered with the map read/write managers. Copy, clone, undo, redo, and clipboard behavior are covered by the same extension conventions used by existing node features.
+
+#### Clone Semantics
+
+Freeplane clones share one `SharedNodeData`, and node extensions are stored there. The Graph Group marker is therefore **a property of shared content, not of one clone position**. Marking any clone marks every clone of that node, and unmarking any clone unmarks all of them.
+
+This is deliberate and matches how clouds and node styles already behave, so the marker stays consistent with the rest of Freeplane rather than inventing a second notion of node identity.
+
+The user-visible consequences must be surfaced rather than left implicit:
+
+- each clone remains a distinct projected graph node with its own node ID, so one marker collapses several subtrees at once;
+- collapsing removes each clone subtree's leaves as vertices, and their pins become dormant under the normal dormant-pin rule;
+- cloning an already-marked subtree produces another marked, collapsed group;
+- the action's tooltip and status text state that the marker applies to all clones;
+- an acceptance test pins this behavior so it cannot silently change.
+
+Relationship endpoints are unaffected by this sharing, because they are stored per node ID. Two clones of one marked group are two separate endpoints.
 
 ## Projection Semantics
 
@@ -272,7 +304,18 @@ Each ancestor in a combined chain remains an independently addressable relations
 
 ### Endpoint Projection
 
-For an exact source node endpoint:
+An endpoint resolves only if its node is **reachable from the map root through the same traversal that produces the projection**. A flat `getNodeForID` lookup is not sufficient and must not be used for resolution.
+
+This is a confidentiality requirement, not an optimization. `EncryptionModel` detaches a locked node's children by replacing its child list with an empty list, but those children are never unregistered from the map's ID index. After a branch has been decrypted once in a session and re-locked, `getNodeForID` still returns live nodes whose text is readable. Resolving by ID would therefore let the graph project and label content the user has explicitly re-locked.
+
+Consequences:
+
+- a locked encrypted node presents as a structural leaf, because that is what the model exposes;
+- endpoints beneath it are `UNRESOLVED_RECOVERABLE`, never `UNRESOLVED_MISSING_NODE`;
+- unlocking the branch restores those endpoints without user intervention;
+- no label, tooltip, search match, or contributor detail may expose text from an unreachable node.
+
+For a reachable exact source node endpoint:
 
 1. If it is inside an active Graph Group, project to the outermost active group root.
 2. Otherwise, if it is a structural leaf, project to that graph node.
@@ -430,6 +473,7 @@ Text-only changes repaint labels without resetting positions. Structural and rel
 Workspace commands include map activation/removal, cross-map relationship create/update/delete, purge, pin, and unpin. They use a workspace-local command history.
 
 - Undo and redo auto-save the resulting workspace state.
+- Purge is undoable like any other workspace command.
 - Pan and zoom persist but are not undoable.
 - Save forces an immediate write.
 - Save As creates a distinct workspace identity.
@@ -535,13 +579,18 @@ Table-driven JUnit tests cover:
 - endpoint-pair consolidation;
 - the complete arrow-union truth table;
 - deterministic ordering;
-- dormant relationship lifecycle.
+- dormant relationship lifecycle;
+- reachability-based resolution, including that a node detached by a locked encrypted parent never resolves and never contributes a label;
+- status classification, including that an inaccessible map yields `UNRESOLVED_RECOVERABLE` and never `UNRESOLVED_MISSING_NODE`;
+- Graph Group marker sharing across clones, including collapse of every clone subtree from one marker.
 
 Randomized event sequences compare each recomputed projection against the same pure engine from a fresh snapshot.
 
 ### Persistence Tests
 
 - `.fpg` round trips with active and unresolved relationships, inactive maps, viewport, pins, settings, and unknown metadata.
+- Both unresolved states round-trip and are recomputed on load rather than trusted from the file.
+- Purge deletes only `UNRESOLVED_MISSING_NODE` records, is undoable, and leaves recoverable records intact.
 - Supported migrations.
 - Newer-version read-only behavior.
 - Atomic-save failure behavior.
@@ -556,6 +605,8 @@ Real `.mm` fixtures verify:
 - already-open model reuse;
 - rejection of persistent pins and cross-map relationships for a legacy node without a file ID, without mutating the source map;
 - Graph Group save/load/copy/clone/undo/redo;
+- Graph Group marking through one clone collapsing all clones, and unmarking restoring all of them;
+- locked encrypted branches: endpoints become recoverable, no decrypted text reaches labels, tooltips, search, or contributor details, and unlocking restores the endpoints;
 - ordinary cloud and Graph Group coexistence;
 - native connector creation through `MLinkController`;
 - connector direction and labels entering projection;
@@ -619,6 +670,9 @@ Translation validation follows `AGENTS.md`, including ASCII checks after formatt
 18. Load exactly one map and verify the map-root boundary is suppressed and first-level children carry the emphatic style.
 19. Add a second map to a single-map workspace and verify the first map's boundaries restyle so its root becomes emphatic and its first-level children become subtle.
 20. Pin two nodes so that map separation is unsatisfiable, then verify the pin is honored, the condition is reported, and Unpin is offered.
+21. Lock an encrypted branch holding a cross-map endpoint, then verify the relationship is recoverable, no decrypted text is exposed anywhere in the graph, purge cannot delete it, and unlocking restores it.
+22. Delete an endpoint node and save, then verify the relationship becomes `UNRESOLVED_MISSING_NODE`, purge lists it explicitly, and undo restores it.
+23. Clone a subtree, mark one clone as a Graph Group, and verify every clone collapses, the affected count is reported, and unmarking restores all of them.
 
 ## Design Decisions Rejected
 
