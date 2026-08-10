@@ -23,7 +23,7 @@ The feature is implemented in a new `freeplane_plugin_graph` module. A pure proj
 7. Create relationships directly by dragging between visible endpoints.
 8. Preserve native Freeplane undo and save behavior for source-map edits.
 9. Update the graph live while source maps change.
-10. Keep pan, zoom, search, selection, pinning, and layout responsive at 2,000 projected nodes and 5,000 projected edges.
+10. Keep pan, zoom, search, selection, pinning, and layout responsive at 2,000 projected nodes and 5,000 projected edges. This is a fixed engineering commitment, not a user-selectable option.
 11. Leave a versioned metadata path for later AI-generated relationships without implementing AI in Feature 1.
 
 ## Non-Goals
@@ -626,23 +626,34 @@ If the layout worker fails:
 - keep navigation, inspection, editing, and saving available;
 - expose Restart Layout.
 
-### Large Workspaces
+### Adaptive Rendering
 
-Workspaces above 2,000 projected nodes or 5,000 projected edges still open. They display a performance warning, suppress more labels, and allow layout to be paused. The accepted responsiveness guarantee does not apply above those counts.
+Rendering behavior adapts automatically based on actual projected node and edge counts. Users never choose a performance tier - the system detects graph size and adjusts.
+
+**Engineering target:** 2,000 projected nodes and 5,000 projected edges. The spike proves this, tests enforce it, and it is the responsiveness guarantee. This target is fixed and non-negotiable for the gate.
+
+**Rendering tiers activate automatically:**
+
+- **Below 500 nodes:** full label visibility, smooth animation, no level-of-detail suppression.
+- **500 to 2,000 nodes:** level-of-detail label fading based on density, standard hull computation.
+- **Above 2,000 nodes:** aggressive label suppression (hover and selection only for most nodes), layout can be paused via a control, status bar shows projected counts and warns that the responsiveness guarantee does not apply.
+
+Workspaces above the engineering target still open and remain editable. Navigation, inspection, relationship creation, and saving stay available. The degradation is in rendering fluidity and automatic layout settling, not in correctness or data integrity.
+
+A future enhancement could add a user preference to bias thresholds toward detail or speed, but Feature 1 uses fixed automatic detection.
 
 ## Settings Included In Feature 1
 
 Workspace-persisted settings:
 
 - show arrowheads;
-- node size;
-- link thickness;
-- label visibility threshold;
 - canvas theme (`Follow Freeplane`, light, dark);
 - remember viewport;
 - dim unrelated nodes.
 
-The feature provides Reset Layout and Unpin All. Force sliders are deferred.
+The feature provides Reset Layout and Unpin All. Force sliders, per-map color editing, and user-adjustable performance tier preferences are deferred.
+
+Rendering tiers (label density, animation smoothness) activate automatically based on projected counts and are not user-configurable in Feature 1.
 
 Map colors are assigned from a fixed, accessible multi-hue palette and remain stable within the workspace. Per-map color editing is deferred.
 
