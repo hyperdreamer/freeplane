@@ -42,6 +42,7 @@ public class WorkspaceUriResolverShould {
 
     @Test
     public void relativeColonPathRoundTripsAsHierarchicalUri() throws Exception {
+        assumeNonWindowsPathSyntax();
         Path directory = temporaryFolder.newFolder("colon-same-directory").toPath();
         Path workspace = directory.resolve("workspace.fpg");
         Path map = directory.resolve("a:b.mm");
@@ -58,6 +59,7 @@ public class WorkspaceUriResolverShould {
 
     @Test
     public void nestedRelativeColonPathRoundTripsAsHierarchicalUri() throws Exception {
+        assumeNonWindowsPathSyntax();
         Path directory = temporaryFolder.newFolder("colon-nested").toPath();
         Path workspace = directory.resolve("workspace.fpg");
         Path map = directory.resolve("a:b").resolve("nested").resolve("one.mm");
@@ -262,6 +264,10 @@ public class WorkspaceUriResolverShould {
         assertThatThrownBy(() -> resolver.rewriteForSaveAs(workspace, workspace, null))
             .isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> resolver.canonical(null)).isInstanceOf(NullPointerException.class);
+    }
+
+    private static void assumeNonWindowsPathSyntax() {
+        Assume.assumeTrue("requires non-Windows path semantics", !"\\".equals(FileSystems.getDefault().getSeparator()));
     }
 
     private static byte[] bytes(String value) {
