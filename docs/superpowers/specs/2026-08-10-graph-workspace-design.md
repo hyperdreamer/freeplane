@@ -1,0 +1,592 @@
+# Graph Workspace Design
+
+- Date: 2026-08-10
+- Task: Feature 1
+- Status: Design approved in conversation; written specification awaiting review
+
+## Summary
+
+Freeplane will gain a bundled Graph Workspace feature for viewing selected mind maps as one interactive graph in a separate desktop window.
+
+Each workspace is saved as a versioned `.fpg` file. It references existing `.mm` files without merging or copying them. Structural leaves and explicitly marked Graph Groups become graph vertices. Ordinary non-leaf ancestors become labeled dynamic enclosures around their projected descendants. Native connectors supply relationships within one map, while the Graph Workspace owns relationships whose endpoints belong to different maps.
+
+The feature is implemented in a new `freeplane_plugin_graph` module. A pure projection module hides graph semantics behind an immutable `GraphProjection`. GraphStream 1.3 supplies Barnes-Hut force physics through a narrow adapter, while a Freeplane-owned Swing canvas renders and interacts with the graph.
+
+## Goals
+
+1. Open a Graph Workspace in a separate, modeless top-level window.
+2. Add and remove existing `.mm` files with a file chooser.
+3. Keep source-map hierarchy and content intact.
+4. Show structural leaves and active Graph Groups as graph vertices.
+5. Show ungrouped ancestors as labeled dynamic enclosures.
+6. Project native same-map connectors and workspace-owned cross-map relationships into one edge model.
+7. Create relationships directly by dragging between visible endpoints.
+8. Preserve native Freeplane undo and save behavior for source-map edits.
+9. Update the graph live while source maps change.
+10. Keep pan, zoom, search, selection, pinning, and layout responsive at 2,000 projected nodes and 5,000 projected edges.
+11. Leave a versioned metadata path for later AI-generated relationships without implementing AI in Feature 1.
+
+## Non-Goals
+
+Feature 1 does not include:
+
+- AI-generated relationships;
+- graph-based node creation or text editing;
+- local-depth graph mode;
+- advanced query filters;
+- user-adjustable force parameters;
+- time-lapse animation;
+- custom per-relationship colors, widths, or dash patterns;
+- graph export;
+- collaboration or concurrent editing of one workspace file.
+
+## Domain Model
+
+The canonical terminology is in [`CONTEXT.md`](../../../CONTEXT.md). The key ownership rule is:
+
+- A **map connector** joins nodes in one mind map and is owned by that `.mm` file.
+- A **Graph Relationship** joins nodes in different mind maps and is owned by the `.fpg` Graph Workspace.
+
+Both become contributors to a derived **projected edge**. The projection is never an additional source of truth.
+
+## User Experience
+
+### Entry Points
+
+- `View -> Open Graph Workspace` opens an existing `.fpg` file or creates a new workspace.
+- Opening an already-open workspace focuses its existing window.
+- Distinct workspace files may have distinct windows.
+- The Graph Group action appears in the main mind-map toolbar beside the existing cloud controls.
+
+### Graph Workspace Window
+
+The window contains:
+
+1. A standard menu bar.
+2. A compact toolbar for workspace open/save, adding maps, selection mode, connection mode, relationship direction, search, and settings.
+3. A left map list with stable map colors, projected-node counts, Add, Remove, Retry, and Locate actions.
+4. A full-bleed graph canvas.
+5. A compact right settings drawer.
+6. A status bar for map state, projected counts, selected endpoints, layout state, unresolved counts, save errors, and unsaved source-map changes.
+
+The canvas follows the active Freeplane Look and Feel. The approved mockup uses light application chrome and a dark canvas, with theme adaptation in the implementation.
+
+![Graph Workspace window](images/2026-08-10-graph-workspace-window.png)
+
+### Main Editor Graph Group Control
+
+The Graph Group button is visually related to the existing cloud button but uses a separate action and model. Its color is a fixed coral accent and has no color picker or style menu.
+
+The marker is rendered as a cloud-like outer outline around the selected node and descendants. If the node also has an ordinary Freeplane cloud, the Graph Group outline is painted outside it with a fixed gap so both states remain legible.
+
+The action follows Freeplane's multiple-node toggle convention. It applies the primary selected node's inverse marker state to all selected nodes. Marking a structural leaf is allowed but does not change its current vertex count or covered subtree; Graph Group styling still identifies the marker, and the marker becomes meaningful if children are later added.
+
+![Graph Group toolbar control](images/2026-08-10-graph-group-toolbar.png)
+
+### Canvas Interaction
+
+- Single-click selects a graph node or enclosure endpoint.
+- Hover highlights the endpoint and its incident projected edges while dimming unrelated content.
+- Double-click or Enter opens the source map and selects the represented leaf, Graph Group root, or ancestor node.
+- Right-click opens endpoint or edge actions.
+- Dragging an unpinned graph node moves and pins it in the current workspace.
+- Unpin and Unpin All return nodes to force layout.
+- Dragging empty canvas space pans.
+- Mouse wheel, trackpad zoom, `+`, and `-` zoom around the pointer or viewport center.
+- Arrow keys pan; Shift accelerates panning.
+- Zoom In, Zoom Out, Fit Graph, and Reset Zoom are available as icon controls.
+- The workspace restores its last viewport. An invalid restored viewport falls back to Fit Graph.
+- Search dims nonmatching nodes instead of removing them, preserving spatial context.
+- Labels use level of detail: selected, hovered, and matched labels remain visible; other labels fade as density increases.
+
+### Relationship Creation
+
+The toolbar provides persistent relationship modes:
+
+- Directed;
+- Bidirectional;
+- Undirected.
+
+The user activates the relationship tool and drags from a source projected endpoint to a target projected endpoint. Directed mode follows drag order, source to target. A preview line shows the pending direction.
+
+Visible endpoints include projected graph nodes and ancestor enclosure boundaries. Enclosure hit testing resolves to the exact represented ancestor node, including a specific label in a combined unary chain.
+
+On release:
+
+- same-map endpoints create one native Freeplane connector;
+- cross-map endpoints create one Graph Relationship;
+- a self-relationship or already-covered direction is a no-op;
+- a validation failure creates nothing.
+
+A requested direction is already covered when existing contributors on the same exact source-node pair already supply that semantic relationship. For example, an existing bidirectional contributor covers a later directed request, and opposite directed contributors together cover a later bidirectional request. A directed contributor does not cover an undirected request.
+
+### Edge Inspection And Deletion
+
+A projected edge retains all contributing map connectors and Graph Relationships.
+
+- One contributor: Delete removes that contributor from its owner.
+- Multiple contributors: Delete opens the contributor inspector.
+- The inspector supports deleting one contributor or explicitly deleting all.
+- Existing connector labels are visible in contributor details but are not painted on the graph by default.
+- Hiding or filtering a projected edge never deletes a contributor.
+
+## Architecture
+
+### Plugin Module
+
+The feature lives in a bundled `freeplane_plugin_graph` Gradle/OSGi module. It registers a MindMap mode extension, actions, persistence handlers, listeners, translations, icons, and preferences through existing Freeplane extension points.
+
+The plugin does not introduce a new Freeplane mode and does not extend `MapView`.
+
+### External Interface
+
+The module exposes one opening interface and one per-workspace handle to its window and tests:
+
+```java
+interface GraphWorkspaceController {
+    GraphWorkspaceHandle open(Path workspaceFile);
+}
+
+interface GraphWorkspaceHandle extends AutoCloseable {
+    GraphProjection currentProjection();
+    CommandResult execute(GraphCommand command);
+    ListenerRegistration addProjectionListener(GraphProjectionListener listener);
+    void close();
+}
+```
+
+The exact Java names may change during planning, but the interface must retain these properties:
+
+- callers submit intent rather than mutating stores directly;
+- callers receive immutable projections and ordered updates;
+- Freeplane model types do not cross into the projection, layout, or canvas modules;
+- GraphStream types do not cross the layout adapter.
+
+### Internal Modules
+
+#### Graph Workspace Store
+
+Owns parsed `.fpg` state, workspace commands, workspace undo/redo, atomic auto-save, schema migration, map registrations, cross-map Graph Relationships, viewport, pins, display settings, and future metadata.
+
+#### Map Lease And Adapter
+
+Reuses an already-loaded `MapModel` or background-loads a map without creating an editor view. It owns listener registration and immutable map snapshots.
+
+Each open workspace holds a lease on its active map models. Releasing a workspace removes its listeners and strong references but never closes an editor view. A map that was loaded only for graph use then becomes eligible for normal Freeplane cleanup.
+
+#### Graph Group Controller
+
+Persists the map-owned Graph Group marker, implements the toolbar action through normal map actors, supplies extension copy/clone behavior, and publishes node-change events.
+
+#### Projection Engine
+
+Pure deterministic computation from immutable map snapshots plus workspace state to an immutable `GraphProjection`.
+
+#### Layout Adapter
+
+Converts projection changes into GraphStream physics elements and returns stable positions. It is the only module that knows GraphStream.
+
+#### Swing Graph Canvas
+
+Paints enclosures, edges, arrowheads, graph nodes, labels, selection, previews, and controls. It performs canvas geometry, hit testing, and input translation but does not derive graph semantics.
+
+## Persistence
+
+### Graph Workspace File
+
+The `.fpg` format is versioned XML parsed with structured XML APIs, not string manipulation.
+
+Conceptual structure:
+
+```xml
+<graph_workspace format_version="1" id="...">
+  <maps>
+    <map_ref id="..." path="maps/research.mm" active="true" color="..." />
+  </maps>
+  <relationships>
+    <relationship id="..." sequence="1" direction="FORWARD">
+      <endpoint map_ref="..." node_id="ID_123" />
+      <endpoint map_ref="..." node_id="ID_456" />
+      <metadata schema="future.ai.v1">...</metadata>
+    </relationship>
+  </relationships>
+  <pins>
+    <pin map_ref="..." node_id="ID_123" x="..." y="..." />
+  </pins>
+  <viewport x="..." y="..." zoom="..." />
+  <display ... />
+</graph_workspace>
+```
+
+This is illustrative, not a frozen XML schema.
+
+### Map References
+
+Each added map receives a workspace-owned UUID. Node identity is `(map reference UUID, Freeplane node ID)`.
+
+- Store a workspace-relative URI when possible and an absolute file URI otherwise.
+- Re-adding the same known path reactivates the existing registration.
+- Adding a copied map creates a new registration.
+- A missing or moved file remains unresolved until the user explicitly selects Locate.
+- Locate rejects a file already bound to another registration in the same workspace.
+- No fingerprint or content heuristic silently rebinds a map reference.
+- Removing a map sets its registration inactive rather than deleting it while Graph Relationships still refer to it.
+
+Normal Freeplane file saves write an ID for every node. The adapter must nevertheless handle a legacy or hand-edited map containing a node without a persisted ID. It must not call `createID()` merely to satisfy workspace identity. Persistent cross-map relationship and pin commands for that node fail atomically and ask the user to open and save the map once; after that save, the node's normal file ID is used.
+
+### Graph Relationships
+
+Graph Relationships store exact map/node endpoints, direction, creation sequence, and versioned metadata. Their status is derived rather than authoritative:
+
+- active when both maps are active and both node IDs resolve;
+- unresolved when a map or node is unavailable;
+- omitted from the canvas while unresolved;
+- automatically active again when both original endpoints resolve;
+- deleted only by explicit relationship deletion or purge.
+
+Unknown metadata schemas are preserved across read/write. A newer unsupported workspace schema opens read-only only when known fields can be interpreted without loss; otherwise loading fails without rewriting the file.
+
+### Graph Group Marker
+
+The Graph Group marker is a map-owned node extension serialized as its own extension element, not as a `CloudModel` and not in the `.fpg` file. Persistence handlers are registered with the map read/write managers. Copy, clone, undo, redo, and clipboard behavior are covered by the same extension conventions used by existing node features.
+
+## Projection Semantics
+
+### Structural Traversal
+
+For each active, resolved map, traverse from the map root:
+
+1. If the current node is a marked Graph Group with no marked ancestor, emit one projected graph node for the group root and stop traversing its descendants.
+2. If the current node is a structural leaf, emit one projected graph node.
+3. Otherwise emit an ancestor enclosure and continue through its children.
+
+Nested Graph Group markers remain persisted but inactive beneath an active outer marker. Removing the outer marker reactivates the next marked descendants without changing those markers.
+
+The map root is the outermost ancestor enclosure unless it is an active Graph Group.
+
+### Unary Ancestor Chains
+
+A maximal consecutive chain of ancestor enclosures in which each ancestor has one projected child becomes one visible enclosure. The enclosure contains every ancestor label in hierarchy order. Branching ancestors retain separate nested enclosures.
+
+Each ancestor in a combined chain remains an independently addressable relationship endpoint even though several endpoints share one visible boundary.
+
+### Endpoint Projection
+
+For an exact source node endpoint:
+
+1. If it is inside an active Graph Group, project to the outermost active group root.
+2. Otherwise, if it is a structural leaf, project to that graph node.
+3. Otherwise project to its ancestor enclosure boundary.
+
+A relationship created against an active Graph Group stores the group-root node ID. If the marker is removed, the same relationship attaches to that root's ancestor enclosure. It is never redistributed to descendants.
+
+### Edge Projection
+
+Map connectors and active Graph Relationships become contributors.
+
+1. Resolve both exact endpoints.
+2. Project each endpoint.
+3. Omit contributors whose endpoints resolve to the same projected endpoint.
+4. Canonically order the remaining endpoint pair.
+5. Consolidate contributors with the same unordered projected pair into one projected edge.
+6. Add an arrowhead at each end if any contributor points toward that end.
+7. Retain every contributor for inspection and deletion routing.
+
+Consequences:
+
+- repeated `A -> B` contributors paint one arrow;
+- `A -> B` plus `B -> A` paints one line with two arrowheads;
+- nondirectional contributors alone paint no arrowheads;
+- nondirectional and directed contributors share one line while directed contributors determine visible arrowheads;
+- connections internal to one active Graph Group or one collapsed endpoint disappear without modifying their stores.
+
+Existing duplicate native connectors remain untouched in their map.
+
+### Determinism
+
+Projection ordering never depends on `HashMap` iteration. Maps use workspace sequence, map nodes use structural traversal order, relationships use persisted sequence, and edge pairs use canonical endpoint order.
+
+The same workspace and map snapshots produce the same projection keys and deterministic initial positions.
+
+## Layout And Geometry
+
+### Physics
+
+The layout graph contains:
+
+- visible particles for projected graph nodes;
+- invisible hierarchy anchors for enclosures;
+- relationship springs for projected edges;
+- weaker invisible containment springs from descendants to their nearest enclosure anchor;
+- anchor-to-anchor springs for nested hierarchy.
+
+Invisible hierarchy elements keep related map regions together even when they have no visible connector.
+
+Pins freeze only visible projected graph nodes. A pin is keyed by exact map/node identity. If that node temporarily ceases to be a projected graph node, the pin remains dormant and reappears if the same node becomes projected again.
+
+### Enclosures
+
+After each stable position update, the canvas computes a padded closed hull around each enclosure's direct child node shapes and child enclosure hulls.
+
+- Hulls use smooth closed curves derived from deterministic geometry.
+- Sibling collision handling separates unrelated enclosures.
+- Parent hulls contain complete child hulls.
+- Interior labels reserve collision space.
+- If no empty label area exists, enclosure padding expands rather than covering a node or edge endpoint.
+- Relationship lines attach to the nearest valid point on an enclosure boundary.
+
+### GraphStream Dependency Gate
+
+The preferred layout implementation uses only GraphStream 1.3 `gs-core` physics and its small `pherd` and `mbox2` dependencies. The Scala-based `gs-ui` layer is not used.
+
+Before the feature proceeds beyond the layout spike, maintainers must approve:
+
+1. LGPLv3+/CeCILL-C dependency policy and distribution notices.
+2. Java 8 and OSGi packaging.
+3. Dynamic add/remove behavior.
+4. Pinning.
+5. Worker shutdown without leaked timers or threads.
+6. Performance at 2,000 projected nodes and 5,000 projected edges.
+
+GraphStream remains behind `LayoutEngine`; rejection of the dependency does not alter projection or canvas interfaces, but selecting a fallback may require revisiting the accepted performance guarantee.
+
+## Threading And Live Updates
+
+Freeplane map models are mutable and are read only on the EDT.
+
+1. Map and node listeners capture plain immutable changes on the EDT.
+2. Changes are coalesced for approximately 150 ms.
+3. A complete pure projection is recomputed from immutable snapshots off the EDT.
+4. The new projection is diffed by stable keys against the prior projection.
+5. Layout elements are updated while retaining unaffected positions and pins.
+6. Canvas state is swapped on the EDT.
+
+The first implementation favors a complete O(N + E) projection rebuild after each coalesced batch because it is simpler and easier to prove correct at the accepted scale. Incremental projection is added only if the performance probe demonstrates a need.
+
+Every projection/layout generation has a sequence number. A result for an obsolete snapshot is discarded.
+
+Text-only changes repaint labels without resetting positions. Structural and relationship changes preserve every unaffected coordinate.
+
+## Commands, Undo, And Saving
+
+### Workspace-Owned Commands
+
+Workspace commands include map activation/removal, cross-map relationship create/update/delete, purge, pin, and unpin. They use a workspace-local command history.
+
+- Undo and redo auto-save the resulting workspace state.
+- Pan and zoom persist but are not undoable.
+- Save forces an immediate write.
+- Save As creates a distinct workspace identity.
+- Automatic writes use a temporary file and atomic replacement after a short debounce.
+
+### Map-Owned Commands
+
+Graph Group changes and native same-map connectors use normal Freeplane map actors and map undo.
+
+When a graph drag creates a same-map connector:
+
+1. Resolve both exact nodes.
+2. Open or focus a normal editor view for the map so it has normal edit/undo lifecycle.
+3. Reject read-only maps.
+4. Call `MLinkController` to create one connector and set its arrow mode.
+5. Return focus to the graph window.
+6. Leave the source map modified for normal Freeplane saving.
+
+The Graph Workspace never auto-saves a source map. Its status bar reports source maps made dirty by graph commands.
+
+## Map Lifecycle
+
+- Adding a map reuses an existing loaded model when its canonical URL matches.
+- Otherwise the adapter background-loads the map without opening an editor tab.
+- Opening that file later in the editor reuses the same model.
+- Closing an editor view does not remove the map from an active workspace; the adapter reacquires or retains a background lease.
+- Removing a map from the workspace releases its lease but never closes another editor view.
+- Closing a workspace releases its listeners and background leases.
+
+## Errors And Operational States
+
+### Workspace Loading
+
+Workspace loading is transactional. Malformed XML, an unsupported schema, or a failed migration never creates partial state and never rewrites the source file.
+
+### Map States
+
+An active registration is one of:
+
+- Loading;
+- Available;
+- Missing;
+- Unreadable;
+- Password required;
+- Reload required.
+
+Missing, unreadable, and cancelled encrypted maps remain registered. Their Graph Relationships become unresolved. Map rows expose Retry, Locate, and Remove.
+
+An open editor model is authoritative over disk, including unsaved changes. Background-loaded maps reload after external saves. Freeplane's existing conflict handling takes precedence whenever local changes exist.
+
+### Save Failure
+
+If workspace save fails:
+
+- retain in-memory state and command history;
+- retain the previous valid `.fpg` file;
+- expose Retry Save;
+- do not clear the dirty/error state.
+
+### Layout Failure
+
+If the layout worker fails:
+
+- stop the failed worker;
+- retain the last valid positions;
+- give new nodes deterministic initial positions;
+- keep navigation, inspection, editing, and saving available;
+- expose Restart Layout.
+
+### Large Workspaces
+
+Workspaces above 2,000 projected nodes or 5,000 projected edges still open. They display a performance warning, suppress more labels, and allow layout to be paused. The accepted responsiveness guarantee does not apply above those counts.
+
+## Settings Included In Feature 1
+
+Workspace-persisted settings:
+
+- show arrowheads;
+- node size;
+- link thickness;
+- label visibility threshold;
+- canvas theme (`Follow Freeplane`, light, dark);
+- remember viewport;
+- dim unrelated nodes.
+
+The feature provides Reset Layout and Unpin All. Force sliders are deferred.
+
+Map colors are assigned from a fixed, accessible multi-hue palette and remain stable within the workspace. Per-map color editing is deferred.
+
+## Testing Strategy
+
+### Projection Tests
+
+Table-driven JUnit tests cover:
+
+- structural leaves independent of fold/filter/view state;
+- outermost Graph Group activation;
+- nested marker restoration;
+- group-root endpoint identity after ungrouping;
+- ancestor enclosure endpoints;
+- unary-chain combination and branching;
+- internal-edge omission;
+- endpoint-pair consolidation;
+- the complete arrow-union truth table;
+- deterministic ordering;
+- dormant relationship lifecycle.
+
+Randomized event sequences compare each recomputed projection against the same pure engine from a fresh snapshot.
+
+### Persistence Tests
+
+- `.fpg` round trips with active and unresolved relationships, inactive maps, viewport, pins, settings, and unknown metadata.
+- Supported migrations.
+- Newer-version read-only behavior.
+- Atomic-save failure behavior.
+- Relative and absolute path handling.
+- Explicit Locate rebinding without heuristics.
+
+### Freeplane Adapter Tests
+
+Real `.mm` fixtures verify:
+
+- background loading;
+- already-open model reuse;
+- rejection of persistent pins and cross-map relationships for a legacy node without a file ID, without mutating the source map;
+- Graph Group save/load/copy/clone/undo/redo;
+- ordinary cloud and Graph Group coexistence;
+- native connector creation through `MLinkController`;
+- connector direction and labels entering projection;
+- source maps never being changed by workspace save.
+
+### Layout Spike And Performance
+
+The GraphStream gate verifies Java 8, OSGi packaging, add/remove, pinning, deterministic seeding, worker shutdown, and a generated 2,000-node/5,000-edge workload.
+
+Performance assertions use generous regression bounds in automated tests and record tighter measurements as diagnostic output rather than relying on machine-specific frame-rate assertions.
+
+### Canvas Tests
+
+Paint fixed projections into `BufferedImage` fixtures and assert:
+
+- nonblank output;
+- enclosure containment;
+- parent/child hull nesting;
+- endpoint attachment;
+- labels remain in bounds;
+- fixed-format controls do not overlap;
+- selected, hovered, pinned, loading, empty, error, and high-density states render coherently.
+
+Synthetic input events cover selection, opening source nodes, panning, zooming, dragging to pin, connection preview, connection creation, and cancellation.
+
+### Verification Commands
+
+Implementation verification will include:
+
+```text
+gradle :freeplane_plugin_graph:test
+gradle :freeplane:compileJava
+gradle format_translation
+gradle test
+```
+
+Translation validation follows `AGENTS.md`, including ASCII checks after formatting.
+
+## Acceptance Scenarios
+
+1. Create a workspace, add two existing maps, close it, and reopen it with maps, viewport, pins, colors, and settings restored.
+2. Confirm only structural leaves and active Graph Groups are vertices.
+3. Confirm all required ancestor and map-root enclosures render with interior labels.
+4. Mark nested Graph Groups and verify the outermost marker wins; remove it and verify the inner marker reactivates.
+5. Project repeated connectors into one edge without modifying the duplicates.
+6. Project opposite directed contributors into one edge with two arrowheads.
+7. Drop relationships whose endpoints project to the same endpoint.
+8. Draw a same-map relationship and verify a native connector, map undo, and unsaved map state.
+9. Draw a cross-map relationship and verify only the `.fpg` workspace changes.
+10. Remove one map and verify its cross-map relationships become hidden and unresolved, then re-add it and verify exact reactivation.
+11. Delete an endpoint node, undo the deletion, and verify the relationship becomes unresolved and then active again.
+12. Remove a Graph Group marker and verify group-root relationships attach to the resulting ancestor enclosure.
+13. Drag and pin a node, reopen the workspace, and verify its position is restored while neighboring nodes settle.
+14. Exercise pan, zoom, fit, reset, search, hover, selection, double-click navigation, and contributor inspection.
+15. Load a 2,000-node/5,000-edge generated workspace and verify the accepted interaction target after the GraphStream gate passes.
+16. Load a legacy node without an ID and verify persistent endpoint commands request a normal map save without silently assigning an ID.
+
+## Design Decisions Rejected
+
+### Use Obsidian Source Code
+
+Obsidian's core application and Graph View implementation are proprietary. Only public behavior documentation is used as a UX reference.
+
+### Extend Freeplane MapView
+
+Rejected because a multi-map derived graph has different identity, persistence, layout, and editing semantics from a map view.
+
+### Store The Workspace As A Hidden `.mm` Map
+
+Rejected because it conflates workspace and source-map ownership, creates misleading map lifecycle behavior, and weakens the projection seam.
+
+### Use Full GraphStream UI
+
+Rejected because it adds the obsolete Scala UI stack, makes Freeplane styling and enclosure interaction harder, and leaks renderer-specific behavior.
+
+### Use JUNG Or JGraphX Layout
+
+Rejected for the accepted scale: measured JUNG force steps were too slow for interactive settling, and JGraphX organic layouts were orders of magnitude slower.
+
+### Automatically Rebind Moved Maps By Fingerprint
+
+Rejected because a copied map can be mistaken for the original. Locate requires explicit user confirmation.
+
+## Implementation Gate
+
+No core logic implementation begins until:
+
+1. the written specification is reviewed;
+2. a task-level implementation plan is approved;
+3. the GraphStream license/package/lifecycle/performance spike passes or the performance target is explicitly renegotiated.
