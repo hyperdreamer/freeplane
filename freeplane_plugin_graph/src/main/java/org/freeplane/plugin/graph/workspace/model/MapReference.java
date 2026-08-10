@@ -1,13 +1,18 @@
 package org.freeplane.plugin.graph.workspace.model;
 
 import java.net.URI;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.regex.Pattern;
+import java.util.Set;
 
 public final class MapReference {
-    private static final Pattern CANONICAL_COLOR = Pattern.compile("#[0-9A-F]{6}");
+    private static final Set<String> APPROVED_COLORS = Collections.unmodifiableSet(
+        new HashSet<String>(Arrays.asList(
+            "#4E79A7", "#F28E2B", "#59A14F", "#E15759",
+            "#76B7B2", "#B07AA1", "#EDC948", "#9C755F")));
 
     private final MapReferenceId id;
     private final long sequence;
@@ -75,8 +80,8 @@ public final class MapReference {
 
     private static String validateColor(final String value) {
         Objects.requireNonNull(value, "color");
-        if (!CANONICAL_COLOR.matcher(value).matches()) {
-            throw new IllegalArgumentException("Map color must be an uppercase #RRGGBB value");
+        if (!APPROVED_COLORS.contains(value)) {
+            throw new IllegalArgumentException("Map color must be one of the approved map colors");
         }
         return value;
     }
