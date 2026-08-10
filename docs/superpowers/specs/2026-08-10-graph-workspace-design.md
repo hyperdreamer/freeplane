@@ -432,20 +432,20 @@ The layout graph contains:
 - visible particles for projected graph nodes;
 - invisible hierarchy anchors for enclosures;
 - relationship springs for projected edges;
-- weaker invisible containment springs from descendants to their nearest enclosure anchor;
+- weaker invisible containment springs from each visible projected node to its nearest structural ancestor enclosure anchor;
 - anchor-to-anchor springs for nested hierarchy;
-- strong repulsion between map-root anchors.
+- a radius-scaled map separation correction derived from map-root anchors.
 
 Invisible hierarchy elements keep related map regions together even when they have no visible connector.
 
 Spatial constraint strength is deliberately unequal by tier:
 
-- **Map level is hard.** Map-root anchors repel each other with a force scaled by their current hull radii, so added maps occupy distinct canvas regions. Cross-map relationship springs are capped so a single relationship cannot pull two maps into each other.
+- **Map level is hard.** Map-root anchors determine a correction scaled by their current hull radii. For a map with no pinned projected node, the correction is applied as a uniform translation to all its particles, preserving internal geometry while added maps move into distinct canvas regions. Moving only the root anchor was rejected by the dependency spike because soft containment did not propagate the correction strongly enough. Aggregate cross-map relationship displacement is capped per particle below containment attraction; the measured workload kept map regions distinct, while concentrated cross-map clusters remain an explicit implementation stress test.
 - **Internal level is soft.** Containment springs inside one map are weak. Descendant enclosures may overlap their siblings, because two-tier styling still communicates hierarchy when geometry is imperfect.
 
 This asymmetry is intentional. The readability problem worth solving with physics is *which map does this node belong to*; internal structure is communicated by styling and labels instead of by strict geometry.
 
-Map-root separation is a best-effort constraint, not a guarantee. Pins can make it unsatisfiable. When a pin prevents map separation, layout honors the pin, reports the condition in the status bar, and offers Unpin for the nodes involved. It never silently moves a pinned node.
+Map-root separation is a best-effort constraint, not a guarantee. A map containing any pinned projected node is immovable by the map-tier correction; the correction never translates only part of a pinned map. If one map in an overlapping pair is immovable, the movable map takes the full correction. If both are immovable or the post-correction hulls still overlap, layout honors the pins, reports the condition in the status bar, and offers Unpin for the nodes involved. This pin/correction interaction was not exercised by the dependency spike and is an implementation-phase acceptance test. A pinned node is never silently moved.
 
 Pins freeze only visible projected graph nodes. A pin is keyed by exact map/node identity. If that node temporarily ceases to be a projected graph node, the pin remains dormant and reappears if the same node becomes projected again.
 
@@ -511,15 +511,31 @@ Before the feature proceeds beyond the layout spike, maintainers must approve:
 5. Worker shutdown without leaked timers or threads.
 6. Performance at 2,000 projected nodes and 5,000 projected edges.
 
-The accepted target is stated in projected nodes and projected edges, which is what a user perceives. The simulated graph is larger, because it also contains enclosure anchors, containment springs, and map-root repulsion. The spike must therefore measure the full pipeline at the accepted projected scale, including:
+The accepted target is stated in projected nodes and projected edges, which is what a user perceives. The simulated graph is larger, because it also contains enclosure anchors, containment springs, and map-tier correction. The spike must therefore measure the full pipeline at the accepted projected scale, including:
 
 - derived particle and spring counts for the same workload;
-- force-step cost with map-root repulsion active;
+- force-step and separate map-tier-correction costs;
 - hull fitting and label-ladder cost per frame for the resulting enclosure count.
 
 The gate passes only if the complete pipeline sustains the accepted interaction target. Otherwise the target is renegotiated before implementation continues.
 
 GraphStream remains behind `LayoutEngine`; rejection of the dependency does not alter projection or canvas interfaces, but selecting a fallback may require revisiting the accepted performance guarantee.
+
+#### Gate Result (2026-08-10)
+
+The technical dependency gate passed. The complete evidence, workload ledger, checksums, negative controls, and runtime measurements are in the [GraphStream gate report](2026-08-10-graphstream-gate-report.md).
+
+- **Packaging:** three unchanged jars (`gs-core` 1.3, `pherd` 1.0, and `mbox2` 1.0) in the plugin's existing `lib`/`Bundle-ClassPath` layout passed bnd verification and became ACTIVE in Freeplane's Knopflerfish 8.0.11 framework. No wrapper bundle, `gs-ui`, Scala, launcher change, or exported GraphStream package is needed.
+- **Java:** the probes compile to Java 8 bytecode and passed on OpenJDK 11.0.32 and 21.0.12. The requested Zulu 21.0.8 installation was not present on the probe machine.
+- **Mutation and pins:** 100 add/remove cycles returned all particle, spring, and neighbor-reference counts to baseline. Frozen nodes had zero measured drift across 500 steps and moved again after unfreezing.
+- **Lifecycle:** GraphStream's `LayoutRunner` has a reproducible release race and is prohibited. A plugin-owned single-thread worker passed 25 start/stop cycles with no failures or surviving non-daemon threads.
+- **Typed physics:** GraphStream's `layout.weight` changes preferred spring length, not stiffness. A minimal `SpringBox` subclass supplies weak containment and hierarchy attraction plus a hard aggregate per-particle cross-map displacement cap. GraphStream types remain private behind `LayoutEngine`.
+- **Full workload:** 2,000 projected nodes, 5,000 projected edges, 1,200 enclosure anchors, 2,000 containment springs, and 1,180 hierarchy springs produce 3,200 particles and 8,180 springs. After 400 warm-up frames, 300 full frames were measured.
+- **Thresholds and result:** force-step p95 must be at most 50 ms and complete worker-pipeline p95 at most 100 ms. Java 11 measured 19.312 ms and 31.362 ms; Java 21 measured 22.980 ms and 34.530 ms. Both had zero exact intersections among the 190 unpinned map-hull pairs after the map-tier correction.
+- **Fixed quality:** production keeps SpringBox at its library default quality of 0.10. A recorded quality-1.0 control measured 134.80 ms per step on the smaller raw 2,000/approximately-5,000 graph and is outside the interaction budget.
+- **Idle detection:** external map correction invalidates GraphStream's energy-based stabilization history. Layout pause/idle detection uses measured perceptual displacement instead of `getStabilization()`.
+
+The technical result does not replace maintainer approval of LGPLv3+/CeCILL-C notices and distribution policy. Production projection rebuild, stable-key diff, obsolete-generation discard, pin/map-correction interaction, concentrated cross-map clusters, EDT state swap, and Swing paint timing remain implementation-phase performance gates because those code paths do not exist yet.
 
 ## Threading And Live Updates
 
@@ -537,6 +553,8 @@ The first implementation favors a complete O(N + E) projection rebuild after eac
 Every projection/layout generation has a sequence number. A result for an obsolete snapshot is discarded.
 
 Text-only changes repaint labels without resetting positions. Structural and relationship changes preserve every unaffected coordinate.
+
+All GraphStream graph mutations and `compute()` calls are serialized on the plugin-owned layout worker. The worker publishes immutable canvas state and never calls Swing. `LayoutRunner` is never instantiated.
 
 ## Commands, Undo, And Saving
 
@@ -719,7 +737,11 @@ Real `.mm` fixtures verify:
 
 ### Layout Spike And Performance
 
-The GraphStream gate verifies Java 8, OSGi packaging, add/remove, pinning, deterministic seeding, worker shutdown, and a generated 2,000-node/5,000-edge workload measured as a full pipeline: force steps including anchors, containment springs, and map-root repulsion, plus hull fitting and label placement for the resulting enclosure count.
+The GraphStream gate verifies Java 8 bytecode, OSGi packaging, add/remove, pinning, deterministic seeding, worker shutdown, and a generated 2,000-node/5,000-edge workload measured as a full pipeline: 3,200 particles and 8,180 springs, typed force steps, map-tier correction, position publication, hull fitting, and label placement for 1,200 enclosures. After 400 warm-up frames, at least 300 frames are sampled; force-step p95 must be at most 50 ms and complete-pipeline p95 at most 100 ms on the recorded reference machine.
+
+Implementation adds a separate performance task that generates maps and relationships, runs them through the production projection and stable-key diff, and measures batch-to-first-frame p95 at most 150 ms and p99 at most 300 ms. It also measures immutable-state EDT swap p95 at most 2 ms and Swing repaint separately. Machine-specific acceptance results are recorded as diagnostics; automated tests use generous regression tripwires rather than pretending frame timing is hardware-independent.
+
+Deterministic layout tests also assert that concentrated cross-map fan-out cannot exceed the aggregate per-particle displacement cap, and that map-tier correction treats any map containing a pinned projected node as rigid: one movable side takes the full correction, two blocked sides report the conflict, and no pinned node moves.
 
 Performance assertions use generous regression bounds in automated tests and record tighter measurements as diagnostic output rather than relying on machine-specific frame-rate assertions.
 
@@ -835,4 +857,5 @@ No core logic implementation begins until:
 
 1. the written specification is reviewed;
 2. a task-level implementation plan is approved;
-3. the GraphStream license/package/lifecycle/performance spike passes or the performance target is explicitly renegotiated.
+3. the recorded GraphStream technical spike remains accepted; and
+4. maintainers approve the LGPLv3+/CeCILL-C notices and distribution policy.
