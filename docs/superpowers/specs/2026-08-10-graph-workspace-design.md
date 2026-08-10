@@ -523,7 +523,9 @@ GraphStream remains behind `LayoutEngine`; rejection of the dependency does not 
 
 #### Gate Result (2026-08-10)
 
-The technical dependency gate passed. The complete evidence, workload ledger, checksums, negative controls, and runtime measurements are in the [GraphStream gate report](2026-08-10-graphstream-gate-report.md).
+The technical dependency gate and dependency-policy gate passed. The complete technical evidence, workload ledger, checksums, negative controls, and runtime measurements are in the [GraphStream gate report](2026-08-10-graphstream-gate-report.md).
+
+- **Policy:** On 2026-08-10 the maintainer selected the LGPLv3 distribution option for the three unchanged GraphStream jars. The plugin distribution includes the canonical LGPLv3 text, GraphStream attribution, artifact checksums, and source links.
 
 - **Packaging:** three unchanged jars (`gs-core` 1.3, `pherd` 1.0, and `mbox2` 1.0) in the plugin's existing `lib`/`Bundle-ClassPath` layout passed bnd verification and became ACTIVE in Freeplane's Knopflerfish 8.0.11 framework. No wrapper bundle, `gs-ui`, Scala, launcher change, or exported GraphStream package is needed.
 - **Java:** the probes compile to Java 8 bytecode and passed on OpenJDK 11.0.32 and 21.0.12. The requested Zulu 21.0.8 installation was not present on the probe machine.
@@ -535,7 +537,7 @@ The technical dependency gate passed. The complete evidence, workload ledger, ch
 - **Fixed quality:** production keeps SpringBox at its library default quality of 0.10. A recorded quality-1.0 control measured 134.80 ms per step on the smaller raw 2,000/approximately-5,000 graph and is outside the interaction budget.
 - **Idle detection:** external map correction invalidates GraphStream's energy-based stabilization history. Layout pause/idle detection uses measured perceptual displacement instead of `getStabilization()`.
 
-The technical result does not replace maintainer approval of LGPLv3+/CeCILL-C notices and distribution policy. Production projection rebuild, stable-key diff, obsolete-generation discard, pin/map-correction interaction, concentrated cross-map clusters, EDT state swap, and Swing paint timing remain implementation-phase performance gates because those code paths do not exist yet.
+Production projection rebuild, stable-key diff, obsolete-generation discard, pin/map-correction interaction, concentrated cross-map clusters, EDT state swap, and Swing paint timing remain implementation-phase performance gates because those code paths do not exist yet.
 
 ## Threading And Live Updates
 
@@ -858,4 +860,4 @@ No core logic implementation begins until:
 1. the written specification is reviewed;
 2. a task-level implementation plan is approved;
 3. the recorded GraphStream technical spike remains accepted; and
-4. maintainers approve the LGPLv3+/CeCILL-C notices and distribution policy.
+4. maintainers approve the LGPLv3+/CeCILL-C notices and distribution policy (approved 2026-08-10 under the LGPLv3 option).
