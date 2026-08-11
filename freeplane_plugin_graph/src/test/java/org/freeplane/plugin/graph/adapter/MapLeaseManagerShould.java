@@ -383,6 +383,50 @@ public class MapLeaseManagerShould {
     }
 
     @Test
+    public void completesAReentrantAcquireWhenTheLastLeaseIsReleasedDuringExternalReload() throws Exception {
+        TestEdt edt = new TestEdt();
+        TestEnvironment environment = environment(edt);
+        MapLeaseManager manager = manager(environment, edt, environment::newMap);
+        List<MapAdapterEvent> events = eventsFrom(manager);
+        MapLease initialLease = acquire(manager, environment, edt);
+        MapReference reference = environment.reference();
+        FakeMapModel oldModel = environment.model;
+        IMapChangeListener oldListener = oldModel.listeners.get(0);
+        AtomicReference<CompletionStage<MapLease>> reentrantAcquire = new AtomicReference<CompletionStage<MapLease>>();
+        manager.addListener(event -> {
+            if (event.state() == MapOperationalState.LOADING) {
+                reentrantAcquire.set(manager.acquire(reference));
+                initialLease.close();
+            }
+        });
+        oldModel.markExternalChange();
+
+        manager.checkExternalChanges();
+        edt.runAll();
+
+        CompletionStage<MapLease> reacquisition = reentrantAcquire.get();
+        assertThat(reacquisition).isNotNull();
+        assertThat(reacquisition.toCompletableFuture().isDone()).isTrue();
+        MapLease reacquiredLease = reacquisition.toCompletableFuture().get(1, TimeUnit.SECONDS);
+        assertThat(environment.closeCount).hasValue(0);
+        assertThat(environment.loadCount).hasValue(1);
+        assertThat(reacquiredLease.state()).isEqualTo(MapOperationalState.RELOAD_REQUIRED);
+        assertThat(environment.model).isSameAs(oldModel);
+        assertThat(oldModel.listeners).containsExactly(oldListener);
+        assertThat(events).extracting(MapAdapterEvent::state)
+            .containsExactly(MapOperationalState.LOADING, MapOperationalState.AVAILABLE,
+                MapOperationalState.LOADING, MapOperationalState.RELOAD_REQUIRED);
+
+        reacquiredLease.close();
+
+        assertThat(oldModel.listenerCount()).isZero();
+        int eventsAfterTeardown = events.size();
+        oldModel.fireChange();
+        edt.runAll();
+        assertThat(events).hasSize(eventsAfterTeardown);
+    }
+
+    @Test
     public void doesNotCloseTheModelWhenALoadingListenerClosesTheManagerDuringExternalReload()
             throws Exception {
         TestEdt edt = new TestEdt();
