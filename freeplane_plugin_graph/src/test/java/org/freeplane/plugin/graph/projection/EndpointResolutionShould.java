@@ -219,6 +219,49 @@ public class EndpointResolutionShould {
     }
 
     @Test
+    public void retainAResolvedSourceWhenTheTargetIsRecoverablyUnavailable() {
+        NodeSnapshot source = node(MAP_ONE, "source", true, false, false);
+        NodeSnapshot target = node(MAP_TWO, "target", true, false, false);
+        WorkspaceDocument workspace = workspace(
+            registrations(registration(MAP_ONE, 1, true), registration(MAP_TWO, 2, true)),
+            Collections.singletonList(
+                relationship(1, reference(MAP_ONE, "source"), reference(MAP_TWO, "target"))),
+            Collections.<PinRecord>emptyList());
+
+        GraphProjection projection = project(workspace, availability(workspace,
+            MapAvailability.AVAILABLE, MapAvailability.PASSWORD_REQUIRED),
+            map(MAP_ONE, 1, source), map(MAP_TWO, 2, target));
+
+        RelationshipResolution resolution = projection.relationshipResolutions().get(0);
+        assertThat(resolution.status()).isEqualTo(RelationshipStatus.UNRESOLVED_RECOVERABLE);
+        assertThat(resolution.source()).contains(ProjectedEndpointKey.ofNode(ProjectedNodeKey.of(source.key())));
+        assertThat(resolution.target()).isEmpty();
+        assertThat(resolution.recoverableReasons()).containsExactly(RecoverableReason.MAP_PASSWORD_REQUIRED);
+    }
+
+    @Test
+    public void aggregateDistinctSourceAndTargetRecoverableReasonsInDeclarationOrder() {
+        NodeSnapshot source = node(MAP_ONE, "source", true, false, false);
+        NodeSnapshot target = node(MAP_TWO, "target", true, false, false);
+        WorkspaceDocument workspace = workspace(
+            registrations(registration(MAP_ONE, 1, true), registration(MAP_TWO, 2, true)),
+            Collections.singletonList(
+                relationship(1, reference(MAP_ONE, "source"), reference(MAP_TWO, "target"))),
+            Collections.<PinRecord>emptyList());
+
+        GraphProjection projection = project(workspace, availability(workspace,
+            MapAvailability.LOADING, MapAvailability.PASSWORD_REQUIRED),
+            map(MAP_ONE, 1, source), map(MAP_TWO, 2, target));
+
+        RelationshipResolution resolution = projection.relationshipResolutions().get(0);
+        assertThat(resolution.status()).isEqualTo(RelationshipStatus.UNRESOLVED_RECOVERABLE);
+        assertThat(resolution.source()).isEmpty();
+        assertThat(resolution.target()).isEmpty();
+        assertThat(resolution.recoverableReasons()).containsExactly(
+            RecoverableReason.MAP_LOADING, RecoverableReason.MAP_PASSWORD_REQUIRED);
+    }
+
+    @Test
     public void activateOnlyPinsWhoseExactNodesAreProjectedAndReactivateThemOnLaterProjection() {
         NodeSnapshot visible = node(MAP_ONE, "visible", true, false, false);
         NodeSnapshot groupedDescendant = node(MAP_ONE, "grouped-descendant", true, false, false);
