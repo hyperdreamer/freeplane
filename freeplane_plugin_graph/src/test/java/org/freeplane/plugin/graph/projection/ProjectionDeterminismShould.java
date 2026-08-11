@@ -89,6 +89,12 @@ public class ProjectionDeterminismShould {
         final GraphProjection second = project(secondScenario.input(GENERATION, secondSnapshots, secondAvailability));
 
         assertThat(first).isEqualTo(second);
+        assertThat(ProjectionDiff.between(first, second).isEmpty())
+            .as("first snapshot/availability insertion order to second insertion order")
+            .isTrue();
+        assertThat(ProjectionDiff.between(second, first).isEmpty())
+            .as("second snapshot/availability insertion order to first insertion order")
+            .isTrue();
         assertThat(first.nodes()).extracting(ProjectedNode::mapReferenceId).containsExactly(
             MutableProjectionScenario.MAP_TWO, MutableProjectionScenario.MAP_THREE,
             MutableProjectionScenario.MAP_ONE, MutableProjectionScenario.MAP_ONE,
