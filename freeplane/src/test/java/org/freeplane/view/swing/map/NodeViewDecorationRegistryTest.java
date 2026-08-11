@@ -7,15 +7,22 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.awt.AlphaComposite;
+import java.awt.BasicStroke;
 import java.awt.Color;
+import java.awt.Composite;
 import java.awt.Graphics2D;
 import java.awt.Point;
+import java.awt.Shape;
+import java.awt.Stroke;
 import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
@@ -231,17 +238,64 @@ public class NodeViewDecorationRegistryTest {
         mapModel.setRoot(rootNode);
         TestMapView mapView = new TestMapView(mapModel, modeController);
         TestNodeView root = new TestNodeView(rootNode, mapView, true);
-        Graphics2D graphics = mock(Graphics2D.class);
 
         mapView.setTestPaintingMode(PaintingMode.CLOUDS);
-        root.paintComponent(graphics);
-        verify(graphics, never()).create();
+        assertCloudsPassIsANoOp(root);
 
         NodeViewDecorationRegistry registry = NodeViewDecorationRegistry.of(modeController);
+        final int[] callbacks = new int[1];
+        NodeViewDecorationPainter removedPainter = (nodeView, graphics) -> callbacks[0]++;
+        registry.add(removedPainter);
+        registry.remove(removedPainter);
         assertThat(registry.isEmpty()).isTrue();
+
+        assertCloudsPassIsANoOp(root);
+        assertThat(callbacks[0]).isZero();
+
         mapView.setTestPaintingMode(PaintingMode.SELECTED_NODES);
-        root.paintComponent(graphics);
-        verify(graphics, never()).create();
+        Graphics2D otherPassGraphics = mock(Graphics2D.class);
+        Graphics2D otherPassChild = mock(Graphics2D.class);
+        when(otherPassGraphics.create()).thenReturn(otherPassChild);
+        clearInvocations(otherPassGraphics, otherPassChild);
+        root.paintComponent(otherPassGraphics);
+        verifyNoInteractions(otherPassGraphics, otherPassChild);
+    }
+
+    private static void assertCloudsPassIsANoOp(TestNodeView root) {
+        BufferedImage image = new BufferedImage(96, 72, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = image.createGraphics();
+        graphics.translate(7, 9);
+        graphics.setColor(Color.MAGENTA);
+        graphics.setStroke(new BasicStroke(3.0f));
+        graphics.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.45f));
+        graphics.setClip(2, 3, 70, 50);
+        AffineTransform transform = graphics.getTransform();
+        Color color = graphics.getColor();
+        Stroke stroke = graphics.getStroke();
+        Composite composite = graphics.getComposite();
+        Shape clip = graphics.getClip();
+        int[] pixels = image.getRGB(0, 0, image.getWidth(), image.getHeight(), null, 0, image.getWidth());
+        try {
+            root.paintComponent(graphics);
+
+            assertThat(graphics.getTransform()).isEqualTo(transform);
+            assertThat(graphics.getColor()).isEqualTo(color);
+            assertThat(graphics.getStroke()).isEqualTo(stroke);
+            assertThat(graphics.getComposite()).isEqualTo(composite);
+            assertThat(graphics.getClip()).isEqualTo(clip);
+            assertThat(image.getRGB(0, 0, image.getWidth(), image.getHeight(), null, 0, image.getWidth()))
+                .containsExactly(pixels);
+        }
+        finally {
+            graphics.dispose();
+        }
+
+        Graphics2D recording = mock(Graphics2D.class);
+        Graphics2D child = mock(Graphics2D.class);
+        when(recording.create()).thenReturn(child);
+        clearInvocations(recording, child);
+        root.paintComponent(recording);
+        verifyNoInteractions(recording, child);
     }
 
     private void paint(NodeViewDecorationRegistry registry) {
