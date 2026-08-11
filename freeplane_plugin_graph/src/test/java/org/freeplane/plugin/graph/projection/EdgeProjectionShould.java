@@ -217,17 +217,31 @@ public class EdgeProjectionShould {
     public void reportPhysicalProjectionDiffsAndKeepItsCollectionsImmutable() {
         SourceNodeKey a = source(MAP_ONE, "a");
         SourceNodeKey b = source(MAP_ONE, "b");
+        SourceNodeKey c = source(MAP_ONE, "c");
+        SourceNodeKey added = source(MAP_ONE, "added");
         ProjectedNode beforeNode = projectedNode(a, "old");
+        ProjectedNode removedNodeOne = projectedNode(b, "removed one");
+        ProjectedNode removedNodeTwo = projectedNode(c, "removed two");
         ProjectedNode afterNode = projectedNode(a, "new");
-        ProjectedNode addedNode = projectedNode(b, "added");
+        ProjectedNode addedNode = projectedNode(added, "added");
         EdgeContributor beforeContributor = nativeContributor(0, a, reference(MAP_ONE, "b"), false, true);
         EdgeContributor afterContributor = nativeContributor(0, a, reference(MAP_ONE, "b"), true, false);
         ProjectedEdgeKey edgeKey = ProjectedEdgeKey.of(endpoint(a), endpoint(b));
+        ProjectedEdgeKey removedEdgeKeyOne = ProjectedEdgeKey.of(endpoint(b), endpoint(c));
+        ProjectedEdgeKey removedEdgeKeyTwo = ProjectedEdgeKey.of(endpoint(a), endpoint(c));
+        ProjectedEdge removedEdgeOne = ProjectedEdge.of(removedEdgeKeyOne,
+            Collections.singletonList(nativeContributor(1, b, reference(MAP_ONE, "c"), false, true)));
+        ProjectedEdge removedEdgeTwo = ProjectedEdge.of(removedEdgeKeyTwo,
+            Collections.singletonList(nativeContributor(2, a, reference(MAP_ONE, "c"), true, false)));
         ProjectedEnclosure beforeEnclosure = enclosure(MAP_ONE, "hull", "old enclosure");
+        ProjectedEnclosure removedEnclosureOne = enclosure(MAP_ONE, "hull-one", "removed enclosure one");
+        ProjectedEnclosure removedEnclosureTwo = enclosure(MAP_ONE, "hull-two", "removed enclosure two");
         ProjectedEnclosure afterEnclosure = enclosure(MAP_ONE, "hull", "new enclosure");
-        GraphProjection before = GraphProjection.projected(4, Collections.singletonList(beforeNode),
-            Collections.singletonList(beforeEnclosure),
-            Collections.singletonList(ProjectedEdge.of(edgeKey, Collections.singletonList(beforeContributor))),
+        GraphProjection before = GraphProjection.projected(4,
+            Arrays.asList(beforeNode, removedNodeOne, removedNodeTwo),
+            Arrays.asList(beforeEnclosure, removedEnclosureOne, removedEnclosureTwo),
+            Arrays.asList(ProjectedEdge.of(edgeKey, Collections.singletonList(beforeContributor)), removedEdgeOne,
+                removedEdgeTwo),
             Collections.<RelationshipResolution>emptyList(), Collections.<PinProjection>emptyList());
         GraphProjection after = GraphProjection.projected(5, Arrays.asList(afterNode, addedNode),
             Collections.singletonList(afterEnclosure),
@@ -239,9 +253,12 @@ public class EdgeProjectionShould {
         assertThat(diff.beforeGeneration()).isEqualTo(4);
         assertThat(diff.afterGeneration()).isEqualTo(5);
         assertThat(diff.addedNodes()).containsExactly(addedNode.key());
+        assertThat(diff.removedNodes()).containsExactly(removedNodeOne.key(), removedNodeTwo.key());
         assertThat(diff.changedNodes()).containsExactly(afterNode.key());
-        assertThat(diff.removedNodes()).isEmpty();
+        assertThat(diff.removedEnclosures()).containsExactly(removedEnclosureOne.hullKey(),
+            removedEnclosureTwo.hullKey());
         assertThat(diff.changedEnclosures()).containsExactly(afterEnclosure.hullKey());
+        assertThat(diff.removedEdges()).containsExactly(removedEdgeKeyOne, removedEdgeKeyTwo);
         assertThat(diff.changedEdges()).containsExactly(edgeKey);
         assertThat(diff.isEmpty()).isFalse();
         assertThatThrownBy(() -> diff.addedNodes().clear()).isInstanceOf(UnsupportedOperationException.class);
