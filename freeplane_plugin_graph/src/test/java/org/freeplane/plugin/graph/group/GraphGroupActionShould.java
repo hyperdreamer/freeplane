@@ -13,8 +13,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.awt.event.ActionEvent;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.freeplane.core.resources.ResourceController;
@@ -23,7 +25,11 @@ import org.freeplane.core.undo.IUndoHandler;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.map.MapController;
 import org.freeplane.features.map.MapModel;
+import org.freeplane.features.map.INodeChangeListener;
+import org.freeplane.features.map.NodeChangeEvent;
 import org.freeplane.features.map.NodeModel;
+import org.freeplane.features.map.clipboard.MapClipboardController;
+import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
 import org.freeplane.main.application.ApplicationResourceController;
 import org.freeplane.plugin.graph.GraphModeExtension;
@@ -70,8 +76,9 @@ public class GraphGroupActionShould {
         MapModel map = mapWithTwoLeaves();
         NodeModel primary = map.getRootNode().getChildAt(0);
         NodeModel secondary = map.getRootNode().getChildAt(1);
-        prepareEditableMap(map);
+        AtomicReference<IActor> actor = prepareEditableMap(map);
         primary.addExtension(new GraphGroupModel());
+        secondary.addExtension(new GraphGroupModel());
         when(mapController.getSelectedNode()).thenReturn(primary);
         when(mapController.getSelectedNodes()).thenReturn(Arrays.asList(primary, secondary));
         GraphGroupController controller = new GraphGroupController(modeController);
@@ -81,7 +88,8 @@ public class GraphGroupActionShould {
 
         assertThat(GraphGroupModel.isMarked(primary)).isFalse();
         assertThat(GraphGroupModel.isMarked(secondary)).isFalse();
-        verify(modeController).execute(any(IActor.class), eq(map));
+        assertThat(actor.get()).isNotNull();
+        verify(modeController, times(1)).execute(any(IActor.class), eq(map));
     }
 
     @Test
@@ -109,26 +117,34 @@ public class GraphGroupActionShould {
         MapModel map = mapWithTwoLeaves();
         NodeModel first = map.getRootNode().getChildAt(0);
         NodeModel second = map.getRootNode().getChildAt(1);
+        NodeModel alreadyUnmarked = new NodeModel("already unmarked", map);
+        map.getRootNode().insert(alreadyUnmarked);
         AtomicReference<IActor> actor = prepareEditableMap(map);
         first.addExtension(new GraphGroupModel());
+        second.addExtension(new GraphGroupModel());
         GraphGroupController controller = new GraphGroupController(modeController);
 
-        controller.setMarked(Arrays.asList(first, second), false);
+        controller.setMarked(Arrays.asList(first, second, alreadyUnmarked), false);
 
         assertThat(GraphGroupModel.isMarked(first)).isFalse();
         assertThat(GraphGroupModel.isMarked(second)).isFalse();
+        assertThat(GraphGroupModel.isMarked(alreadyUnmarked)).isFalse();
         verify(modeController, times(1)).execute(any(IActor.class), eq(map));
         verify(mapController).nodeChanged(first);
+        verify(mapController).nodeChanged(second);
+        verify(mapController, never()).nodeChanged(alreadyUnmarked);
 
         actor.get().undo();
 
         assertThat(GraphGroupModel.isMarked(first)).isTrue();
-        assertThat(GraphGroupModel.isMarked(second)).isFalse();
+        assertThat(GraphGroupModel.isMarked(second)).isTrue();
+        assertThat(GraphGroupModel.isMarked(alreadyUnmarked)).isFalse();
 
         actor.get().act();
 
         assertThat(GraphGroupModel.isMarked(first)).isFalse();
         assertThat(GraphGroupModel.isMarked(second)).isFalse();
+        assertThat(GraphGroupModel.isMarked(alreadyUnmarked)).isFalse();
     }
 
     @Test
@@ -148,6 +164,57 @@ public class GraphGroupActionShould {
         verify(modeController, times(1)).execute(any(IActor.class), eq(map));
         verify(mapController, times(1)).nodeChanged(original);
         verify(mapController, never()).nodeChanged(clone);
+    }
+
+    @Test
+    public void publishesEachAttachedClonePositionThroughMapControllerOnActUndoAndRedo() {
+        Controller previousController = Controller.getCurrentController();
+        Controller.setCurrentController(mock(Controller.class));
+        try {
+            MapModel map = mapWithTwoLeaves();
+            NodeModel original = map.getRootNode().getChildAt(0);
+            NodeModel clone = original.cloneContent();
+            map.getRootNode().insert(clone);
+            original.setHistoryInformation(null);
+            ModeController eventModeController = mock(ModeController.class);
+            EventPublishingMapController eventMapController = new EventPublishingMapController(eventModeController);
+            when(eventModeController.getMapController()).thenReturn(eventMapController);
+            AtomicReference<IActor> actor = prepareEditableMap(eventModeController, map);
+            List<NodeModel> deliveredEvents = new ArrayList<NodeModel>();
+            eventMapController.addNodeChangeListener(new INodeChangeListener() {
+                @Override
+                public void nodeChanged(NodeChangeEvent event) {
+                    deliveredEvents.add(event.getNode());
+                }
+            });
+            GraphGroupController controller = new GraphGroupController(eventModeController);
+
+            controller.setMarked(Arrays.asList(original, clone), true);
+
+            assertThat(GraphGroupModel.isMarked(original)).isTrue();
+            assertThat(GraphGroupModel.isMarked(clone)).isTrue();
+            assertThat(eventMapController.publishedNodes()).containsExactly(original);
+            assertThat(deliveredEvents).containsExactlyInAnyOrder(original, clone);
+            verify(eventModeController, times(1)).execute(any(IActor.class), eq(map));
+
+            deliveredEvents.clear();
+            actor.get().undo();
+
+            assertThat(GraphGroupModel.isMarked(original)).isFalse();
+            assertThat(GraphGroupModel.isMarked(clone)).isFalse();
+            assertThat(deliveredEvents).containsExactlyInAnyOrder(original, clone);
+
+            deliveredEvents.clear();
+            actor.get().act();
+
+            assertThat(GraphGroupModel.isMarked(original)).isTrue();
+            assertThat(GraphGroupModel.isMarked(clone)).isTrue();
+            assertThat(eventMapController.publishedNodes()).containsExactly(original, original, original);
+            assertThat(deliveredEvents).containsExactlyInAnyOrder(original, clone);
+        }
+        finally {
+            Controller.setCurrentController(previousController);
+        }
     }
 
     @Test
@@ -231,15 +298,19 @@ public class GraphGroupActionShould {
     }
 
     private AtomicReference<IActor> prepareEditableMap(MapModel map) {
+        return prepareEditableMap(modeController, map);
+    }
+
+    private AtomicReference<IActor> prepareEditableMap(ModeController controller, MapModel map) {
         AtomicReference<IActor> actor = new AtomicReference<IActor>();
         map.addExtension(IUndoHandler.class, mock(IUndoHandler.class));
-        when(modeController.canEdit(map)).thenReturn(true);
+        when(controller.canEdit(map)).thenReturn(true);
         doAnswer(invocation -> {
             IActor captured = invocation.getArgument(0);
             actor.set(captured);
             captured.act();
             return null;
-        }).when(modeController).execute(any(IActor.class), eq(map));
+        }).when(controller).execute(any(IActor.class), eq(map));
         return actor;
     }
 
@@ -250,5 +321,28 @@ public class GraphGroupActionShould {
         root.insert(new NodeModel("first", map));
         root.insert(new NodeModel("second", map));
         return map;
+    }
+
+    private static final class EventPublishingMapController extends MapController {
+        private final List<NodeModel> publishedNodes = new ArrayList<NodeModel>();
+
+        private EventPublishingMapController(ModeController modeController) {
+            super(modeController);
+        }
+
+        @Override
+        protected MapClipboardController createMapClipboardController() {
+            return null;
+        }
+
+        @Override
+        public void nodeChanged(NodeModel node) {
+            publishedNodes.add(node);
+            super.nodeChanged(node);
+        }
+
+        private List<NodeModel> publishedNodes() {
+            return publishedNodes;
+        }
     }
 }
