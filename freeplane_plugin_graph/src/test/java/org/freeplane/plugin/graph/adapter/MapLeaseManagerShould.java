@@ -27,6 +27,7 @@ import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -424,6 +425,146 @@ public class MapLeaseManagerShould {
         oldModel.fireChange();
         edt.runAll();
         assertThat(events).hasSize(eventsAfterTeardown);
+    }
+
+    @Test
+    public void rejectsAReentrantAcquireWhenManagerCloseWinsDuringSettlement() throws Exception {
+        TestEdt edt = new TestEdt();
+        TestEnvironment environment = environment(edt);
+        AtomicBoolean closeDuringSettlement = new AtomicBoolean();
+        AtomicReference<MapLeaseManager> managerReference = new AtomicReference<MapLeaseManager>();
+        MapLeaseManager manager = manager(environment, edt, environment::newMap, future -> {
+            if (closeDuringSettlement.get()) {
+                managerReference.get().close();
+            }
+        });
+        managerReference.set(manager);
+        List<MapAdapterEvent> events = eventsFrom(manager);
+        MapLease initialLease = acquire(manager, environment, edt);
+        MapReference reference = environment.reference();
+        FakeMapModel oldModel = environment.model;
+        AtomicReference<CompletionStage<MapLease>> reentrantAcquire = new AtomicReference<CompletionStage<MapLease>>();
+        manager.addListener(event -> {
+            if (event.state() == MapOperationalState.LOADING) {
+                reentrantAcquire.set(manager.acquire(reference));
+                initialLease.close();
+                closeDuringSettlement.set(true);
+            }
+        });
+        oldModel.markExternalChange();
+
+        manager.checkExternalChanges();
+        edt.runAll();
+
+        CompletableFuture<MapLease> reentrantFuture = reentrantAcquire.get().toCompletableFuture();
+        assertThat(manager.acquire(reference).toCompletableFuture().isCompletedExceptionally()).isTrue();
+        assertThat(reentrantFuture.isDone()).isTrue();
+        assertThat(reentrantFuture.isCompletedExceptionally()).isTrue();
+        assertThat(environment.closeCount).hasValue(0);
+        assertThat(environment.loadCount).hasValue(1);
+        assertThat(environment.lifecycleListeners).isEmpty();
+        assertThat(oldModel.listenerCount()).isZero();
+        int eventCountAfterClose = events.size();
+        oldModel.fireChange();
+        edt.runAll();
+        assertThat(events).hasSize(eventCountAfterClose);
+    }
+
+    @Test
+    public void completesPendingFutureCallbacksOutsideTheManagerMonitor() throws Exception {
+        TestEdt edt = new TestEdt();
+        TestEnvironment environment = environment(edt);
+        MapLeaseManager manager = manager(environment, edt, environment::newMap);
+        CompletableFuture<MapLease> pending = manager.acquire(environment.reference()).toCompletableFuture();
+        CountDownLatch monitorOperationCompleted = new CountDownLatch(1);
+        AtomicReference<Thread> monitorOperation = new AtomicReference<Thread>();
+        AtomicReference<Throwable> monitorOperationFailure = new AtomicReference<Throwable>();
+        CompletableFuture<Void> callback = pending.handle((lease, failure) -> {
+            Thread operation = new Thread(() -> {
+                try {
+                    ListenerRegistration registration = manager.addListener(event -> {
+                    });
+                    registration.close();
+                }
+                catch (Throwable exception) {
+                    monitorOperationFailure.set(exception);
+                }
+                finally {
+                    monitorOperationCompleted.countDown();
+                }
+            }, "map-lease-monitor-probe");
+            monitorOperation.set(operation);
+            operation.start();
+            try {
+                if (!monitorOperationCompleted.await(1, TimeUnit.SECONDS)) {
+                    throw new AssertionError("Future completion callback ran while holding the manager monitor");
+                }
+            }
+            catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError("Interrupted while waiting for the manager monitor probe", exception);
+            }
+            return null;
+        });
+
+        edt.runAll();
+
+        callback.get(1, TimeUnit.SECONDS);
+        Thread operation = monitorOperation.get();
+        assertThat(operation).isNotNull();
+        operation.join(1_000L);
+        assertThat(operation.isAlive()).isFalse();
+        assertThat(monitorOperationFailure.get()).isNull();
+        MapLease lease = pending.get(1, TimeUnit.SECONDS);
+        lease.close();
+    }
+
+    @Test
+    public void completesExceptionalPendingFutureCallbacksOutsideTheManagerMonitor() throws Exception {
+        TestEdt edt = new TestEdt();
+        TestEnvironment environment = environment(edt);
+        MapLeaseManager manager = manager(environment, edt, environment::newMap);
+        CompletableFuture<MapLease> pending = manager.acquire(environment.reference()).toCompletableFuture();
+        CountDownLatch monitorOperationCompleted = new CountDownLatch(1);
+        AtomicReference<Thread> monitorOperation = new AtomicReference<Thread>();
+        AtomicReference<Throwable> monitorOperationFailure = new AtomicReference<Throwable>();
+        CompletableFuture<Void> callback = pending.handle((lease, failure) -> {
+            Thread operation = new Thread(() -> {
+                try {
+                    ListenerRegistration registration = manager.addListener(event -> {
+                    });
+                    registration.close();
+                }
+                catch (Throwable exception) {
+                    monitorOperationFailure.set(exception);
+                }
+                finally {
+                    monitorOperationCompleted.countDown();
+                }
+            }, "map-lease-exceptional-monitor-probe");
+            monitorOperation.set(operation);
+            operation.start();
+            try {
+                if (!monitorOperationCompleted.await(1, TimeUnit.SECONDS)) {
+                    throw new AssertionError("Future completion callback ran while holding the manager monitor");
+                }
+            }
+            catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError("Interrupted while waiting for the manager monitor probe", exception);
+            }
+            return null;
+        });
+
+        manager.close();
+
+        callback.get(1, TimeUnit.SECONDS);
+        Thread operation = monitorOperation.get();
+        assertThat(operation).isNotNull();
+        operation.join(1_000L);
+        assertThat(operation.isAlive()).isFalse();
+        assertThat(monitorOperationFailure.get()).isNull();
+        assertThat(pending.isCompletedExceptionally()).isTrue();
     }
 
     @Test
