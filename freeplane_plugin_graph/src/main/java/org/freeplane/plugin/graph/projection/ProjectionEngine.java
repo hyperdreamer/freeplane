@@ -11,7 +11,10 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 
+import org.freeplane.plugin.graph.projection.input.ConnectorDescriptor;
+import org.freeplane.plugin.graph.projection.input.ConnectorSnapshot;
 import org.freeplane.plugin.graph.projection.input.MapAvailability;
 import org.freeplane.plugin.graph.projection.input.MapSnapshot;
 import org.freeplane.plugin.graph.projection.input.NodeSnapshot;
@@ -71,7 +74,60 @@ public final class ProjectionEngine {
             indexEndpointTraversals(selectedMaps, exactEndpoints);
         final List<RelationshipResolution> resolutions = resolveRelationships(value, endpointTraversals);
         final List<PinProjection> pins = projectPins(value.workspace(), projectedNodes);
-        return GraphProjection.resolved(value.generation(), projectedNodes, projectedEnclosures, resolutions, pins);
+        final List<ProjectedEdge> edges = projectEdges(selectedMaps, endpointTraversals, resolutions);
+        return GraphProjection.projected(value.generation(), projectedNodes, projectedEnclosures, edges, resolutions, pins);
+    }
+
+    private static List<ProjectedEdge> projectEdges(final List<MapSnapshot> maps,
+            final Map<MapReferenceId, EndpointTraversal> endpointTraversals,
+            final List<RelationshipResolution> resolutions) {
+        final Map<ProjectedEdgeKey, List<EdgeContributor>> grouped =
+            new TreeMap<ProjectedEdgeKey, List<EdgeContributor>>();
+        for (final MapSnapshot map : maps) {
+            final EndpointTraversal traversal = endpointTraversals.get(map.mapReferenceId());
+            if (traversal == null) {
+                throw new IllegalArgumentException("Available maps must have endpoint traversals");
+            }
+            for (final ConnectorSnapshot connector : map.connectors()) {
+                final ConnectorDescriptor descriptor = connector.descriptor();
+                final EndpointOutcome source = traversal.outcomeFor(descriptor.source());
+                final EndpointOutcome target = traversal.outcomeFor(SourceNodeKey.persisted(descriptor.target()));
+                if (source == null || target == null || source.endpoint == null || target.endpoint == null
+                        || source.endpoint.equals(target.endpoint)) {
+                    continue;
+                }
+                final EdgeContributor contributor = EdgeContributor.nativeConnector(connector, source.endpoint,
+                    target.endpoint);
+                addContributor(grouped, contributor);
+            }
+        }
+        for (final RelationshipResolution resolution : resolutions) {
+            if (resolution.status() != RelationshipStatus.ACTIVE || !resolution.source().isPresent()
+                    || !resolution.target().isPresent()
+                    || resolution.source().get().equals(resolution.target().get())) {
+                continue;
+            }
+            final EdgeContributor contributor = EdgeContributor.graphRelationship(resolution.relationship(),
+                resolution.source().get(), resolution.target().get());
+            addContributor(grouped, contributor);
+        }
+        final List<ProjectedEdge> edges = new ArrayList<ProjectedEdge>(grouped.size());
+        for (final Map.Entry<ProjectedEdgeKey, List<EdgeContributor>> entry : grouped.entrySet()) {
+            edges.add(ProjectedEdge.of(entry.getKey(), entry.getValue()));
+        }
+        return edges;
+    }
+
+    private static void addContributor(final Map<ProjectedEdgeKey, List<EdgeContributor>> grouped,
+            final EdgeContributor contributor) {
+        final ProjectedEdgeKey key = ProjectedEdgeKey.of(contributor.projectedSource(),
+            contributor.projectedTarget());
+        List<EdgeContributor> contributors = grouped.get(key);
+        if (contributors == null) {
+            contributors = new ArrayList<EdgeContributor>();
+            grouped.put(key, contributors);
+        }
+        contributors.add(contributor);
     }
 
     private static Map<MapReferenceId, MapAvailability> availabilityForStructure(final WorkspaceDocument workspace,
@@ -463,7 +519,11 @@ public final class ProjectionEngine {
         }
 
         private EndpointOutcome outcomeFor(final NodeReference source) {
-            return outcomes.get(SourceNodeKey.persisted(source));
+            return outcomeFor(SourceNodeKey.persisted(source));
+        }
+
+        private EndpointOutcome outcomeFor(final SourceNodeKey source) {
+            return outcomes.get(Objects.requireNonNull(source, "source"));
         }
 
         private void put(final SourceNodeKey source, final EndpointOutcome outcome) {

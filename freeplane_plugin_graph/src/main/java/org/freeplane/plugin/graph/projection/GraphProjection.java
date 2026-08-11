@@ -14,29 +14,36 @@ public final class GraphProjection {
     private final List<PinProjection> pins;
 
     private GraphProjection(final long generation, final List<ProjectedNode> nodes,
-            final List<ProjectedEnclosure> enclosures, final List<RelationshipResolution> relationshipResolutions,
-            final List<PinProjection> pins) {
+            final List<ProjectedEnclosure> enclosures, final List<ProjectedEdge> edges,
+            final List<RelationshipResolution> relationshipResolutions, final List<PinProjection> pins) {
         if (generation < 0) {
             throw new IllegalArgumentException("Generation must be nonnegative");
         }
         this.generation = generation;
         this.nodes = copyValues(nodes, "nodes");
         this.enclosures = copyValues(enclosures, "enclosures");
-        this.edges = Collections.emptyList();
+        this.edges = copyValues(edges, "edges");
         this.relationshipResolutions = copyValues(relationshipResolutions, "relationshipResolutions");
         this.pins = copyValues(pins, "pins");
     }
 
     public static GraphProjection structure(final long generation, final List<ProjectedNode> nodes,
             final List<ProjectedEnclosure> enclosures) {
-        return new GraphProjection(generation, nodes, enclosures, Collections.<RelationshipResolution>emptyList(),
-            Collections.<PinProjection>emptyList());
+        return new GraphProjection(generation, nodes, enclosures, Collections.<ProjectedEdge>emptyList(),
+            Collections.<RelationshipResolution>emptyList(), Collections.<PinProjection>emptyList());
     }
 
     public static GraphProjection resolved(final long generation, final List<ProjectedNode> nodes,
             final List<ProjectedEnclosure> enclosures, final List<RelationshipResolution> relationshipResolutions,
             final List<PinProjection> pins) {
-        return new GraphProjection(generation, nodes, enclosures, relationshipResolutions, pins);
+        return new GraphProjection(generation, nodes, enclosures, Collections.<ProjectedEdge>emptyList(),
+            relationshipResolutions, pins);
+    }
+
+    public static GraphProjection projected(final long generation, final List<ProjectedNode> nodes,
+            final List<ProjectedEnclosure> enclosures, final List<ProjectedEdge> edges,
+            final List<RelationshipResolution> relationshipResolutions, final List<PinProjection> pins) {
+        return new GraphProjection(generation, nodes, enclosures, edges, relationshipResolutions, pins);
     }
 
     public long generation() {
@@ -103,11 +110,5 @@ public final class GraphProjection {
     public String toString() {
         return "GraphProjection{" + "generation=" + generation + ", nodeCount=" + nodes.size()
             + ", enclosureCount=" + enclosures.size() + ", edgeCount=" + edges.size() + '}';
-    }
-}
-
-// Removed when Task 9 creates public ProjectedEdge.java.
-final class ProjectedEdge {
-    private ProjectedEdge() {
     }
 }
