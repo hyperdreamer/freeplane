@@ -22,6 +22,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantLock;
 
 import javax.swing.SwingUtilities;
 
@@ -60,6 +61,8 @@ public final class MapLeaseManager implements AutoCloseable {
     }
 
     private final Object monitor = new Object();
+    // Keeps close invalidation atomic with future delivery without holding monitor across callbacks.
+    private final ReentrantLock settlementLock = new ReentrantLock();
     private final Path workspaceFile;
     private final WorkspaceUriResolver uriResolver;
     private final ModeController modeController;
@@ -188,30 +191,32 @@ public final class MapLeaseManager implements AutoCloseable {
     public CompletionStage<MapLease> acquire(final MapReference reference) {
         Objects.requireNonNull(reference, "reference");
         final CompletableFuture<MapLease> future = new CompletableFuture<MapLease>();
-        Entry entry;
-        final long generation;
+        Entry entry = null;
+        long generation = 0L;
         MapAdapterEvent loadingEvent = null;
+        MapLease immediateLease = null;
+        Throwable immediateFailure = null;
         boolean scheduleLoad = false;
         try {
             final Path mapPath = uriResolver.resolve(workspaceFile, reference.storedUri());
             final URL canonicalUrl = mapPath.toUri().toURL();
             synchronized (monitor) {
                 if (closed) {
-                    future.completeExceptionally(new IllegalStateException("Map lease manager is closed"));
-                    return future;
+                    immediateFailure = new IllegalStateException("Map lease manager is closed");
                 }
-                entry = entries.get(reference.id());
-                if (entry != null) {
+                else {
+                    entry = entries.get(reference.id());
+                }
+                if (immediateFailure == null && entry != null) {
                     if (!entry.mapPath.equals(mapPath)) {
-                        future.completeExceptionally(new IllegalArgumentException(
-                            "A map reference cannot be rebound without Locate"));
-                        return future;
+                        immediateFailure = new IllegalArgumentException(
+                            "A map reference cannot be rebound without Locate");
                     }
-                    if (entry.loading) {
+                    else if (entry.loading) {
                         addPendingAcquire(entry, future);
                         return future;
                     }
-                    if (entry.model == null) {
+                    else if (entry.model == null) {
                         entry.loading = true;
                         entry.generation++;
                         generation = entry.generation;
@@ -221,11 +226,11 @@ public final class MapLeaseManager implements AutoCloseable {
                     }
                     else {
                         entry.leaseCount++;
-                        future.complete(new LeaseImpl(this, entry));
-                        return future;
+                        generation = entry.generation;
+                        immediateLease = new LeaseImpl(this, entry);
                     }
                 }
-                else {
+                else if (immediateFailure == null) {
                     final Entry created = new Entry(reference, mapPath, canonicalUrl);
                     created.loading = true;
                     created.generation = 1L;
@@ -239,7 +244,15 @@ public final class MapLeaseManager implements AutoCloseable {
             }
         }
         catch (Exception failure) {
-            future.completeExceptionally(failure);
+            immediateFailure = failure;
+        }
+
+        if (immediateFailure != null) {
+            future.completeExceptionally(immediateFailure);
+            return future;
+        }
+        if (immediateLease != null) {
+            completeImmediateAcquire(entry, generation, future, immediateLease);
             return future;
         }
 
@@ -250,6 +263,26 @@ public final class MapLeaseManager implements AutoCloseable {
             scheduleLoad(entry, generation, null);
         }
         return future;
+    }
+
+    private void completeImmediateAcquire(final Entry entry, final long generation,
+            final CompletableFuture<MapLease> future, final MapLease lease) {
+        final boolean current;
+        settlementLock.lock();
+        try {
+            synchronized (monitor) {
+                current = !closed && entries.get(entry.id) == entry && entry.generation == generation;
+            }
+            if (current) {
+                future.complete(lease);
+            }
+            else {
+                future.completeExceptionally(new IllegalStateException("Map lease acquisition was invalidated"));
+            }
+        }
+        finally {
+            settlementLock.unlock();
+        }
     }
 
     public void release(final MapReferenceId id) {
@@ -282,33 +315,46 @@ public final class MapLeaseManager implements AutoCloseable {
     @Override
     public void close() {
         final List<Detachment> detachments = new ArrayList<Detachment>();
-        final List<CompletableFuture<MapLease>> pending = new ArrayList<CompletableFuture<MapLease>>();
+        final List<PendingAcquire> pending = new ArrayList<PendingAcquire>();
         ScheduledFuture<?> scheduledCheck;
         boolean removeLifecycle;
-        synchronized (monitor) {
-            if (closed) {
-                return;
-            }
-            closed = true;
-            scheduledCheck = externalCheck;
-            externalCheck = null;
-            removeLifecycle = lifecycleListenerRegistered;
-            lifecycleListenerRegistered = false;
-            for (Entry entry : entries.values()) {
-                entry.generation++;
-                entry.loading = false;
-                for (PendingAcquire request : entry.pending) {
-                    pending.add(request.future);
+        settlementLock.lock();
+        try {
+            synchronized (monitor) {
+                if (closed) {
+                    return;
                 }
-                entry.pending.clear();
-                final Detachment detachment = detachmentFor(entry);
-                if (detachment != null) {
-                    detachments.add(detachment);
+                closed = true;
+                scheduledCheck = externalCheck;
+                externalCheck = null;
+                removeLifecycle = lifecycleListenerRegistered;
+                lifecycleListenerRegistered = false;
+                for (Entry entry : entries.values()) {
+                    entry.generation++;
+                    entry.loading = false;
+                    for (PendingAcquire request : entry.pending) {
+                        request.leaseReserved = false;
+                        pending.add(request);
+                    }
+                    for (PendingAcquire request : entry.settling) {
+                        request.leaseReserved = false;
+                        pending.add(request);
+                    }
+                    entry.pending.clear();
+                    entry.settling.clear();
+                    entry.leaseCount = 0;
+                    final Detachment detachment = detachmentFor(entry);
+                    if (detachment != null) {
+                        detachments.add(detachment);
+                    }
                 }
+                entries.clear();
+                listeners.clear();
+                suppressedRemovals.clear();
             }
-            entries.clear();
-            listeners.clear();
-            suppressedRemovals.clear();
+        }
+        finally {
+            settlementLock.unlock();
         }
         if (scheduledCheck != null) {
             scheduledCheck.cancel(false);
@@ -326,9 +372,7 @@ public final class MapLeaseManager implements AutoCloseable {
                 }
             });
         }
-        for (CompletableFuture<MapLease> future : pending) {
-            future.completeExceptionally(new IllegalStateException("Map lease manager is closed"));
-        }
+        completeExceptionally(pending, new IllegalStateException("Map lease manager is closed"));
         shutdownOwnedScheduler();
     }
 
@@ -713,6 +757,7 @@ public final class MapLeaseManager implements AutoCloseable {
                 if (!request.future.isCancelled()) {
                     entry.leaseCount++;
                     request.leaseReserved = true;
+                    entry.settling.add(request);
                 }
             }
             detachment = removeEntryIfUnused(entry);
@@ -722,10 +767,73 @@ public final class MapLeaseManager implements AutoCloseable {
             if (!request.leaseReserved) {
                 continue;
             }
-            completionInterceptor.beforeComplete(request.future);
-            if (!request.future.complete(new LeaseImpl(this, entry))) {
-                rollbackLeaseReservation(entry, generation);
+            completeReservedRequest(entry, generation, request);
+        }
+    }
+
+    private void completeReservedRequest(final Entry entry, final long generation, final PendingAcquire request) {
+        if (!isCurrentSettlement(entry, generation, request)) {
+            invalidateReservedRequestWhenOpen(entry, request);
+            return;
+        }
+        completionInterceptor.beforeComplete(request.future);
+        final boolean attempted;
+        final boolean delivered;
+        settlementLock.lock();
+        try {
+            attempted = isCurrentSettlement(entry, generation, request);
+            delivered = attempted && request.future.complete(new LeaseImpl(this, entry));
+        }
+        finally {
+            settlementLock.unlock();
+        }
+        if (attempted) {
+            settleReservedRequest(entry, request, delivered);
+        }
+        else {
+            invalidateReservedRequestWhenOpen(entry, request);
+        }
+    }
+
+    private void invalidateReservedRequestWhenOpen(final Entry entry, final PendingAcquire request) {
+        synchronized (monitor) {
+            if (closed) {
+                return;
             }
+        }
+        invalidateReservedRequest(entry, request);
+    }
+
+    private boolean isCurrentSettlement(final Entry entry, final long generation,
+            final PendingAcquire request) {
+        synchronized (monitor) {
+            return !closed && entries.get(entry.id) == entry && entry.generation == generation
+                && request.leaseReserved && entry.settling.contains(request);
+        }
+    }
+
+    private void invalidateReservedRequest(final Entry entry, final PendingAcquire request) {
+        final boolean delivered;
+        settlementLock.lock();
+        try {
+            request.future.completeExceptionally(new IllegalStateException("Map lease acquisition was invalidated"));
+            delivered = !request.future.isCompletedExceptionally();
+        }
+        finally {
+            settlementLock.unlock();
+        }
+        settleReservedRequest(entry, request, delivered);
+    }
+
+    private void completeExceptionally(final List<PendingAcquire> requests, final Throwable failure) {
+        settlementLock.lock();
+        try {
+            for (PendingAcquire request : requests) {
+                request.future.completeExceptionally(failure);
+            }
+        }
+        finally {
+            settlementLock.unlock();
         }
     }
 
@@ -749,14 +857,18 @@ public final class MapLeaseManager implements AutoCloseable {
         detach(detachment);
     }
 
-    private void rollbackLeaseReservation(final Entry entry, final long generation) {
+    private void settleReservedRequest(final Entry entry, final PendingAcquire request,
+            final boolean delivered) {
         Detachment detachment = null;
         synchronized (monitor) {
-            if (closed || entries.get(entry.id) != entry || entry.generation != generation
-                    || entry.leaseCount == 0) {
+            if (!request.leaseReserved) {
                 return;
             }
-            entry.leaseCount--;
+            request.leaseReserved = false;
+            entry.settling.remove(request);
+            if (!delivered) {
+                entry.leaseCount--;
+            }
             detachment = removeEntryIfUnused(entry);
         }
         detach(detachment);
@@ -904,7 +1016,8 @@ public final class MapLeaseManager implements AutoCloseable {
     }
 
     private Detachment removeEntryIfUnused(final Entry entry) {
-        if (entry.leaseCount != 0 || !entry.pending.isEmpty() || entries.get(entry.id) != entry) {
+        if (entry.leaseCount != 0 || !entry.pending.isEmpty() || !entry.settling.isEmpty()
+                || entries.get(entry.id) != entry) {
             return null;
         }
         entries.remove(entry.id);
@@ -992,6 +1105,7 @@ public final class MapLeaseManager implements AutoCloseable {
         private final Path mapPath;
         private final URL canonicalUrl;
         private final List<PendingAcquire> pending = new ArrayList<PendingAcquire>();
+        private final List<PendingAcquire> settling = new ArrayList<PendingAcquire>();
         private MapOperationalState state = MapOperationalState.LOADING;
         private MapModel model;
         private IMapChangeListener modelListener;
