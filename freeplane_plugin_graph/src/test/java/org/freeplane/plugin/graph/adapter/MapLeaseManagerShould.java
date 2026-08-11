@@ -15,7 +15,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
@@ -27,6 +26,7 @@ import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -512,7 +512,7 @@ public class MapLeaseManagerShould {
                 Thread.currentThread().interrupt();
                 throw new AssertionError("Interrupted while starting the immediate acquire probe", exception);
             }
-            awaitAcquireReturnOrLockWait(operation, acquireReturned);
+            awaitOperationReturnOrLockWait(operation, acquireReturned);
             assertThat(acquireReturned).isFalse();
             environment.removeExternally(oldModel);
         });
@@ -540,6 +540,157 @@ public class MapLeaseManagerShould {
         int eventCountAfterTeardown = events.size();
         oldModel.fireChange();
         replacement.fireChange();
+        edt.runAll();
+        assertThat(events).hasSize(eventCountAfterTeardown);
+    }
+
+    @Test
+    public void serializesLifecycleInvalidationWithImmediateLeaseDelivery() throws Exception {
+        TestEdt edt = new TestEdt();
+        TestEnvironment environment = environment(edt);
+        DeliveryRaceProbe probe = new DeliveryRaceProbe();
+        MapLeaseManager manager = manager(environment, edt, environment::newMap, probe);
+        List<MapAdapterEvent> events = eventsFrom(manager);
+        MapReference reference = environment.reference();
+        MapLease firstLease = acquire(manager, reference, edt);
+        FakeMapModel oldModel = environment.model;
+
+        probe.arm(() -> {
+            environment.removeExternally(oldModel);
+            edt.runAll();
+        }, "Lifecycle invalidation");
+        CompletionStage<MapLease> immediateAcquire = manager.acquire(reference);
+
+        assertThat(probe.observedFuture()).isSameAs(immediateAcquire.toCompletableFuture());
+        probe.awaitCompletionAndOperation();
+        MapLease immediateLease = immediateAcquire.toCompletableFuture().get(1, TimeUnit.SECONDS);
+        FakeMapModel replacement = environment.model;
+        assertThat(replacement).isNotSameAs(oldModel);
+        assertThat(firstLease.state()).isEqualTo(MapOperationalState.AVAILABLE);
+        assertThat(immediateLease.state()).isEqualTo(MapOperationalState.AVAILABLE);
+        assertThat(immediateLease.mapReferenceId()).isEqualTo(reference.id());
+        assertThat(oldModel.listenerCount()).isZero();
+        assertThat(replacement.listenerCount()).isEqualTo(1);
+        assertThat(events).extracting(MapAdapterEvent::state)
+            .containsExactly(MapOperationalState.LOADING, MapOperationalState.AVAILABLE,
+                MapOperationalState.LOADING, MapOperationalState.AVAILABLE);
+
+        int eventCount = events.size();
+        oldModel.fireChange();
+        edt.runAll();
+        assertThat(events).hasSize(eventCount);
+
+        firstLease.close();
+        assertThat(replacement.listenerCount()).isEqualTo(1);
+        immediateLease.close();
+        assertThat(replacement.listenerCount()).isZero();
+        replacement.fireChange();
+        edt.runAll();
+        assertThat(events).hasSize(eventCount);
+    }
+
+    @Test
+    public void serializesExternalReloadWithImmediateLeaseDelivery() throws Exception {
+        TestEdt edt = new TestEdt();
+        TestEnvironment environment = environment(edt);
+        DeliveryRaceProbe probe = new DeliveryRaceProbe();
+        MapLeaseManager manager = manager(environment, edt, environment::newMap, probe);
+        List<MapAdapterEvent> events = eventsFrom(manager);
+        MapReference reference = environment.reference();
+        MapLease firstLease = acquire(manager, reference, edt);
+        FakeMapModel oldModel = environment.model;
+
+        probe.arm(() -> {
+            oldModel.markExternalChange();
+            manager.checkExternalChanges();
+            edt.runAll();
+        }, "External reload", () -> assertThat(environment.closeCount)
+            .as("External reload reached close before lease delivery left the settlement boundary")
+            .hasValue(0));
+        CompletionStage<MapLease> immediateAcquire = manager.acquire(reference);
+
+        assertThat(probe.observedFuture()).isSameAs(immediateAcquire.toCompletableFuture());
+        probe.awaitCompletionAndOperation();
+        MapLease immediateLease = immediateAcquire.toCompletableFuture().get(1, TimeUnit.SECONDS);
+        FakeMapModel replacement = environment.model;
+        assertThat(replacement).isNotSameAs(oldModel);
+        assertThat(firstLease.state()).isEqualTo(MapOperationalState.AVAILABLE);
+        assertThat(immediateLease.state()).isEqualTo(MapOperationalState.AVAILABLE);
+        assertThat(environment.closeCount).hasValue(1);
+        assertThat(environment.loadCount).hasValue(2);
+        assertThat(oldModel.listenerCount()).isZero();
+        assertThat(replacement.listenerCount()).isEqualTo(1);
+
+        int eventCount = events.size();
+        oldModel.fireChange();
+        edt.runAll();
+        assertThat(events).hasSize(eventCount);
+        replacement.fireChange();
+        edt.runAll();
+        assertThat(events).hasSize(eventCount + 1);
+
+        firstLease.close();
+        assertThat(replacement.listenerCount()).isEqualTo(1);
+        immediateLease.close();
+        assertThat(replacement.listenerCount()).isZero();
+        int eventCountAfterTeardown = events.size();
+        replacement.fireChange();
+        edt.runAll();
+        assertThat(events).hasSize(eventCountAfterTeardown);
+    }
+
+    @Test
+    public void serializesModelNullRetryWithLeaseDelivery() throws Exception {
+        TestEdt edt = new TestEdt();
+        TestEnvironment environment = environment(edt);
+        AtomicInteger loadAttempts = new AtomicInteger();
+        MapLeaseManager manager = manager(environment, edt, url -> {
+            if (loadAttempts.incrementAndGet() == 1) {
+                return null;
+            }
+            return environment.newMap(url);
+        });
+        List<MapAdapterEvent> events = eventsFrom(manager);
+        MapReference reference = environment.reference();
+        CompletableFuture<MapLease> firstAcquire = manager.acquire(reference).toCompletableFuture();
+        CompletableFuture<MapLease> secondAcquire = manager.acquire(reference).toCompletableFuture();
+        AtomicReference<CompletableFuture<MapLease>> retryAcquire =
+            new AtomicReference<CompletableFuture<MapLease>>();
+        DeliveryRaceProbe probe = new DeliveryRaceProbe();
+        probe.arm(() -> retryAcquire.set(manager.acquire(reference).toCompletableFuture()), "Model-null retry");
+        probe.attachTo(firstAcquire);
+
+        edt.runAll();
+
+        probe.awaitCompletionAndOperation();
+        edt.runAll();
+        MapLease firstLease = firstAcquire.get(1, TimeUnit.SECONDS);
+        CompletableFuture<MapLease> retryFuture = retryAcquire.get();
+        assertThat(retryFuture).isNotNull();
+        MapLease retryLease = retryFuture.get(1, TimeUnit.SECONDS);
+        assertThat(secondAcquire.isDone()).isTrue();
+        MapLease secondLease = secondAcquire.isCompletedExceptionally()
+            ? null : secondAcquire.get(1, TimeUnit.SECONDS);
+        assertThat(loadAttempts).hasValue(2);
+        assertThat(firstLease.state()).isEqualTo(MapOperationalState.AVAILABLE);
+        assertThat(retryLease.state()).isEqualTo(MapOperationalState.AVAILABLE);
+        if (secondLease != null) {
+            assertThat(secondLease.state()).isEqualTo(MapOperationalState.AVAILABLE);
+        }
+        assertThat(environment.model.listenerCount()).isEqualTo(1);
+        assertThat(events).extracting(MapAdapterEvent::state)
+            .containsExactly(MapOperationalState.LOADING, MapOperationalState.UNREADABLE,
+                MapOperationalState.LOADING, MapOperationalState.AVAILABLE);
+
+        firstLease.close();
+        if (secondLease != null) {
+            secondLease.close();
+        }
+        assertThat(environment.model.listenerCount()).isEqualTo(1);
+        retryLease.close();
+        assertThat(environment.model.listenerCount()).isZero();
+        int eventCountAfterTeardown = events.size();
+        environment.model.fireChange();
         edt.runAll();
         assertThat(events).hasSize(eventCountAfterTeardown);
     }
@@ -941,12 +1092,103 @@ public class MapLeaseManagerShould {
         }
     }
 
-    private static void awaitAcquireReturnOrLockWait(final Thread operation,
-            final AtomicBoolean acquireReturned) {
+    private static final class DeliveryRaceProbe implements MapLeaseManager.LeaseCompletionInterceptor {
+        private final AtomicBoolean armed = new AtomicBoolean();
+        private final AtomicReference<CompletableFuture<MapLease>> observedFuture =
+            new AtomicReference<CompletableFuture<MapLease>>();
+        private final AtomicReference<CompletableFuture<MapLease>> completion =
+            new AtomicReference<CompletableFuture<MapLease>>();
+        private final AtomicReference<Thread> operationThread = new AtomicReference<Thread>();
+        private final AtomicReference<Throwable> operationFailure = new AtomicReference<Throwable>();
+        private final AtomicBoolean operationReturned = new AtomicBoolean();
+        private Runnable concurrentOperation;
+        private Runnable boundaryAssertion;
+        private String operationName;
+        private CountDownLatch operationStarted;
+
+        private void arm(final Runnable operation, final String name) {
+            arm(operation, name, new Runnable() {
+                @Override
+                public void run() {
+                }
+            });
+        }
+
+        private void arm(final Runnable operation, final String name, final Runnable assertion) {
+            concurrentOperation = operation;
+            boundaryAssertion = assertion;
+            operationName = name;
+            operationStarted = new CountDownLatch(1);
+            operationReturned.set(false);
+            operationFailure.set(null);
+            operationThread.set(null);
+            observedFuture.set(null);
+            completion.set(null);
+            armed.set(true);
+        }
+
+        @Override
+        public void beforeComplete(final CompletableFuture<MapLease> future) {
+            attachTo(future);
+        }
+
+        private void attachTo(final CompletableFuture<MapLease> future) {
+            if (!armed.compareAndSet(true, false)) {
+                return;
+            }
+            observedFuture.set(future);
+            completion.set(future.whenComplete((lease, failure) -> {
+                Thread operation = new Thread(() -> {
+                    operationStarted.countDown();
+                    try {
+                        concurrentOperation.run();
+                    }
+                    catch (Throwable exception) {
+                        operationFailure.set(exception);
+                    }
+                    finally {
+                        operationReturned.set(true);
+                    }
+                }, "map-lease-" + operationName.toLowerCase().replace(' ', '-') + "-probe");
+                operationThread.set(operation);
+                operation.start();
+                try {
+                    assertThat(operationStarted.await(1, TimeUnit.SECONDS)).isTrue();
+                }
+                catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    throw new AssertionError("Interrupted while starting " + operationName, exception);
+                }
+                awaitOperationReturnOrLockWait(operation, operationReturned);
+                assertThat(operationReturned.get())
+                    .as(operationName + " returned before lease delivery left the settlement boundary")
+                    .isFalse();
+                boundaryAssertion.run();
+            }));
+        }
+
+        private CompletableFuture<MapLease> observedFuture() {
+            return observedFuture.get();
+        }
+
+        private void awaitCompletionAndOperation() throws Exception {
+            CompletableFuture<MapLease> completionFuture = completion.get();
+            assertThat(completionFuture).isNotNull();
+            completionFuture.get(1, TimeUnit.SECONDS);
+            Thread operation = operationThread.get();
+            assertThat(operation).isNotNull();
+            operation.join(1_000L);
+            assertThat(operation.isAlive()).isFalse();
+            assertThat(operationFailure.get()).isNull();
+        }
+    }
+
+    private static void awaitOperationReturnOrLockWait(final Thread operation,
+            final AtomicBoolean operationReturned) {
         final long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1L);
-        while (!acquireReturned.get() && operation.getState() != Thread.State.WAITING) {
+        while (!operationReturned.get() && operation.getState() != Thread.State.WAITING) {
             if (System.nanoTime() >= deadline) {
-                throw new AssertionError("Immediate acquire did not return or wait for settlement");
+                throw new AssertionError("Operation did not return or wait for lease settlement");
             }
             Thread.yield();
         }
@@ -1237,7 +1479,7 @@ public class MapLeaseManagerShould {
     }
 
     private static final class TestEdt implements EdtExecutor {
-        private final Deque<Runnable> queued = new ArrayDeque<Runnable>();
+        private final Deque<Runnable> queued = new ConcurrentLinkedDeque<Runnable>();
         private boolean onEdt;
         private int boundaryCalls;
 
