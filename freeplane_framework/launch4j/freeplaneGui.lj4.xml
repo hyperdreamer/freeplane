@@ -21,6 +21,7 @@
     <opt>-XX:+IgnoreUnrecognizedVMOptions</opt>
     <opt>-Dorg.freeplane.userfpdir=&quot;%APPDATA%\\Freeplane&quot;</opt>
     <opt>-Djava.security.manager=allow</opt>
+    <opt>-Djbr.java.io.use.nio=false</opt>
     <opt>--add-exports=java.desktop/sun.awt.shell=ALL-UNNAMED</opt>
     <opt>--add-exports=java.desktop/com.sun.java.swing.plaf.windows=ALL-UNNAMED</opt>
   </jre>
