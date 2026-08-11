@@ -50,17 +50,18 @@ public final class ProjectionDiff {
         final Map<ProjectedEdgeKey, ProjectedEdge> afterEdges = indexEdges(current);
 
         final List<ProjectedNodeKey> addedNodes = new ArrayList<ProjectedNodeKey>();
+        final List<ProjectedNodeKey> removedNodes = new ArrayList<ProjectedNodeKey>();
         final List<ProjectedNodeKey> changedNodes = new ArrayList<ProjectedNodeKey>();
         for (final ProjectedNode node : current.nodes()) {
             final ProjectedNode previousNode = beforeNodes.get(node.key());
             if (previousNode == null) {
                 addedNodes.add(node.key());
             }
+            // Stable-key value changes stay in changedNodes so layout positions survive label/style updates.
             else if (!previousNode.equals(node)) {
                 changedNodes.add(node.key());
             }
         }
-        final List<ProjectedNodeKey> removedNodes = new ArrayList<ProjectedNodeKey>();
         for (final ProjectedNode node : previous.nodes()) {
             if (!afterNodes.containsKey(node.key())) {
                 removedNodes.add(node.key());
