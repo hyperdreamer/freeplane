@@ -414,6 +414,7 @@ public final class MapLeaseManager implements AutoCloseable {
             generation);
         if (reloadRequiredEvent != null) {
             publish(reloadRequiredEvent);
+            completePending(entry, generation, null);
             return;
         }
         if (!isCurrentReload(entry, oldModel, oldListener, generation)) {
@@ -452,7 +453,15 @@ public final class MapLeaseManager implements AutoCloseable {
     private MapAdapterEvent revalidateReloadAfterLoading(final Entry entry, final MapModel oldModel,
             final IMapChangeListener oldListener, final long generation) {
         synchronized (monitor) {
-            if (!isCurrentReloadLocked(entry, oldModel, oldListener, generation)) {
+            if (!isCurrentReloadEntryLocked(entry, oldModel, oldListener, generation)) {
+                return null;
+            }
+            if (entry.leaseCount == 0) {
+                if (!entry.pending.isEmpty()) {
+                    entry.loading = false;
+                    entry.state = MapOperationalState.RELOAD_REQUIRED;
+                    return new MapAdapterEvent(entry.id, MapOperationalState.RELOAD_REQUIRED);
+                }
                 return null;
             }
             final boolean canReload;
@@ -492,9 +501,14 @@ public final class MapLeaseManager implements AutoCloseable {
 
     private boolean isCurrentReloadLocked(final Entry entry, final MapModel oldModel,
             final IMapChangeListener oldListener, final long generation) {
+        return isCurrentReloadEntryLocked(entry, oldModel, oldListener, generation) && entry.leaseCount > 0;
+    }
+
+    private boolean isCurrentReloadEntryLocked(final Entry entry, final MapModel oldModel,
+            final IMapChangeListener oldListener, final long generation) {
         return !closed && entries.get(entry.id) == entry && entry.generation == generation
             && entry.model == oldModel && entry.modelListener == oldListener && entry.managerOwned
-            && entry.leaseCount > 0 && entry.loading;
+            && entry.loading;
     }
 
     private void restoreAfterFailedClose(final Entry entry, final MapModel oldModel,
