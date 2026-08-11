@@ -767,7 +767,7 @@ public class MFileManager extends UrlManager implements IMapViewChangeListener {
 			    TextUtils.format("locking_failed_by_save_as", file.getName()));
 			return false;
 		}
-		if (file.exists() && !Files.isWritable(file.toPath())) {
+		if (file.exists() && Files.isWritable(file.toPath())) {
 			JOptionPane.showMessageDialog(Controller.getCurrentController()
 			    .getMapViewManager().getMapViewComponent(),
 			    TextUtils.format("SaveAs_toReadonlyMsg", file),
