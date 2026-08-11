@@ -32,7 +32,6 @@ import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
-import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Collections;
 import java.util.Map;
@@ -632,7 +631,7 @@ public class MapStyle extends PersistentNodeHook implements IExtension, IMapLife
 
         }
         File target = templateManager.writeableTemplateFile(templateLocationPropertyValue);
-        if(target != null && (!target.isDirectory() && Files.isWritable(target.toPath()) || ! target.exists())) {
+        if(target != null && (!target.isDirectory() && target.canWrite() || ! target.exists())) {
         	if(areDifferent(map.getFile(), target)) {
         		try {
         			undoableCopyStyleToExternalMap(map, styleKey, source, target);

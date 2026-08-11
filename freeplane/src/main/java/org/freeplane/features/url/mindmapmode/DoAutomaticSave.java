@@ -23,7 +23,6 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.File;
 import java.net.URL;
-import java.nio.file.Files;
 
 import javax.swing.Timer;
 
@@ -93,7 +92,7 @@ public class DoAutomaticSave implements ActionListener {
                 tempFile.deleteOnExit();
             }
             if(ResourceController.getResourceController().getBooleanProperty("automatically_overwrite_mindmap_files")) {
-                if(tempFile.isFile() && Files.isWritable(tempFile.toPath())) {
+                if(tempFile.isFile() && tempFile.canWrite()) {
                     tempFile.delete();
                 }
                 if (file.renameTo(tempFile)) {
@@ -103,8 +102,8 @@ public class DoAutomaticSave implements ActionListener {
                 else
                 	LogUtils.severe("Can't create automatic backup for " + file);
             }
-            else if(tempFile.isFile() && Files.isWritable(tempFile.toPath())
-                    || ! tempFile.exists() && Files.isWritable(tempFile.getParentFile().toPath())) {
+            else if(tempFile.isFile() && tempFile.canWrite()
+                    || ! tempFile.exists() && tempFile.getParentFile().canWrite()) {
                 ((MFileManager) fileManager)
                 .saveInternal((MMapModel) model, tempFile, true /*=internal call*/);
                 outputStatusMessageAfterAutomaticSave(modeController, tempFile);
