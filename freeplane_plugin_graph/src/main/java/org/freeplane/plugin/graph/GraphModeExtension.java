@@ -6,10 +6,14 @@ import org.freeplane.main.application.ApplicationResourceController;
 import org.freeplane.main.application.CommandLineOptions;
 import org.freeplane.main.osgi.IModeControllerExtensionProvider;
 import org.freeplane.plugin.graph.group.GraphGroupController;
+import org.freeplane.plugin.graph.group.GraphGroupMarkerPainter;
+import org.freeplane.view.swing.map.NodeViewDecorationRegistry;
 
 public final class GraphModeExtension implements IModeControllerExtensionProvider, AutoCloseable {
     private GraphGroupController graphGroupController;
+    private GraphGroupMarkerPainter graphGroupMarkerPainter;
     private ModeController modeController;
+    private NodeViewDecorationRegistry nodeViewDecorationRegistry;
 
     @Override
     public synchronized void installExtension(final ModeController modeController, final CommandLineOptions options) {
@@ -23,6 +27,9 @@ public final class GraphModeExtension implements IModeControllerExtensionProvide
         this.modeController = modeController;
         graphGroupController = new GraphGroupController(modeController);
         modeController.addExtension(GraphGroupController.class, graphGroupController);
+        nodeViewDecorationRegistry = NodeViewDecorationRegistry.of(modeController);
+        graphGroupMarkerPainter = new GraphGroupMarkerPainter();
+        nodeViewDecorationRegistry.add(graphGroupMarkerPainter);
     }
 
     @Override
@@ -31,12 +38,19 @@ public final class GraphModeExtension implements IModeControllerExtensionProvide
             return;
         }
         try {
-            graphGroupController.close();
+            try {
+                nodeViewDecorationRegistry.remove(graphGroupMarkerPainter);
+            }
+            finally {
+                graphGroupController.close();
+            }
         }
         finally {
             modeController.removeExtension(GraphGroupController.class);
             graphGroupController = null;
+            graphGroupMarkerPainter = null;
             modeController = null;
+            nodeViewDecorationRegistry = null;
         }
     }
 }

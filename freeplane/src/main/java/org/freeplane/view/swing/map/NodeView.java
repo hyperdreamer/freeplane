@@ -1608,6 +1608,7 @@ public class NodeView extends JComponent implements INodeView, EdgeColorContext 
             if (isSubtreeVisible()) {
                 final boolean isRoot = isRoot();
                 if (isRoot) {
+                    paintRegisteredDecorations(g2);
                     paintCloud(g);
                 }
                 paintClouds(g2);
@@ -1664,12 +1665,20 @@ public class NodeView extends JComponent implements INodeView, EdgeColorContext 
             UITools.convertPointToAncestor(nodeView, p, this);
             g.translate(p.x, p.y);
             if (nodeView.isSubtreeVisible()) {
+                nodeView.paintRegisteredDecorations(g);
                 nodeView.paintCloud(g);
             }
             else {
                 nodeView.paintClouds(g);
             }
             g.translate(-p.x, -p.y);
+        }
+    }
+
+    private void paintRegisteredDecorations(final Graphics2D graphics) {
+        final NodeViewDecorationRegistry registry = getModeController().getExtension(NodeViewDecorationRegistry.class);
+        if (registry != null && !registry.isEmpty()) {
+            registry.paint(this, graphics);
         }
     }
 
