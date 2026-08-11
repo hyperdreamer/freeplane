@@ -471,6 +471,80 @@ public class MapLeaseManagerShould {
     }
 
     @Test
+    public void rollsBackAnImmediateAcquireInvalidatedWhileWaitingForSettlement() throws Exception {
+        TestEdt edt = new TestEdt();
+        TestEnvironment environment = environment(edt);
+        MapLeaseManager manager = manager(environment, edt, environment::newMap);
+        List<MapAdapterEvent> events = eventsFrom(manager);
+        MapReference firstReference = environment.reference();
+        MapLease firstLease = acquire(manager, firstReference, edt);
+        FakeMapModel oldModel = environment.model;
+        Path secondMap = environment.workspace.resolveSibling("map-" + UUID.randomUUID() + ".mm");
+        Files.write(secondMap, Collections.singletonList("fixture"));
+        MapReference secondReference = reference(environment.workspace, secondMap);
+        AtomicReference<CompletableFuture<MapLease>> immediateAcquire =
+            new AtomicReference<CompletableFuture<MapLease>>();
+        AtomicReference<Thread> acquireThread = new AtomicReference<Thread>();
+        AtomicReference<Throwable> acquireFailure = new AtomicReference<Throwable>();
+        AtomicBoolean acquireReturned = new AtomicBoolean();
+        CountDownLatch acquireStarted = new CountDownLatch(1);
+
+        CompletableFuture<MapLease> secondAcquire = manager.acquire(secondReference).toCompletableFuture();
+        CompletableFuture<MapLease> settlementProbe = secondAcquire.whenComplete((lease, failure) -> {
+            Thread operation = new Thread(() -> {
+                acquireStarted.countDown();
+                try {
+                    immediateAcquire.set(manager.acquire(firstReference).toCompletableFuture());
+                }
+                catch (Throwable exception) {
+                    acquireFailure.set(exception);
+                }
+                finally {
+                    acquireReturned.set(true);
+                }
+            }, "map-lease-immediate-settlement-probe");
+            acquireThread.set(operation);
+            operation.start();
+            try {
+                assertThat(acquireStarted.await(1, TimeUnit.SECONDS)).isTrue();
+            }
+            catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError("Interrupted while starting the immediate acquire probe", exception);
+            }
+            awaitAcquireReturnOrLockWait(operation, acquireReturned);
+            assertThat(acquireReturned).isFalse();
+            environment.removeExternally(oldModel);
+        });
+
+        edt.runAll();
+
+        MapLease secondLease = secondAcquire.get(1, TimeUnit.SECONDS);
+        settlementProbe.get(1, TimeUnit.SECONDS);
+        Thread operation = acquireThread.get();
+        assertThat(operation).isNotNull();
+        operation.join(1_000L);
+        assertThat(operation.isAlive()).isFalse();
+        assertThat(acquireFailure.get()).isNull();
+        CompletableFuture<MapLease> invalidated = immediateAcquire.get();
+        assertThat(invalidated).isNotNull();
+        assertThat(invalidated.isCompletedExceptionally()).isTrue();
+        FakeMapModel replacement = environment.model;
+        assertThat(replacement).isNotSameAs(oldModel);
+
+        firstLease.close();
+        secondLease.close();
+
+        assertThat(oldModel.listenerCount()).isZero();
+        assertThat(replacement.listenerCount()).isZero();
+        int eventCountAfterTeardown = events.size();
+        oldModel.fireChange();
+        replacement.fireChange();
+        edt.runAll();
+        assertThat(events).hasSize(eventCountAfterTeardown);
+    }
+
+    @Test
     public void completesPendingFutureCallbacksOutsideTheManagerMonitor() throws Exception {
         TestEdt edt = new TestEdt();
         TestEnvironment environment = environment(edt);
@@ -864,6 +938,17 @@ public class MapLeaseManagerShould {
                 }
                 starter.stop();
             }
+        }
+    }
+
+    private static void awaitAcquireReturnOrLockWait(final Thread operation,
+            final AtomicBoolean acquireReturned) {
+        final long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1L);
+        while (!acquireReturned.get() && operation.getState() != Thread.State.WAITING) {
+            if (System.nanoTime() >= deadline) {
+                throw new AssertionError("Immediate acquire did not return or wait for settlement");
+            }
+            Thread.yield();
         }
     }
 
