@@ -30,6 +30,7 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -299,6 +300,119 @@ public class MapLeaseManagerShould {
     }
 
     @Test
+    public void keepsTheDirtyModelWhenALoadingListenerDirtiesItDuringExternalReload() throws Exception {
+        TestEdt edt = new TestEdt();
+        TestEnvironment environment = environment(edt);
+        MapLeaseManager manager = manager(environment, edt, environment::newMap);
+        List<MapAdapterEvent> events = eventsFrom(manager);
+        MapLease lease = acquire(manager, environment, edt);
+        FakeMapModel oldModel = environment.model;
+        manager.addListener(event -> {
+            if (event.state() == MapOperationalState.LOADING) {
+                oldModel.markDirty();
+            }
+        });
+        oldModel.markExternalChange();
+
+        manager.checkExternalChanges();
+        edt.runAll();
+
+        assertThat(lease.state()).isEqualTo(MapOperationalState.RELOAD_REQUIRED);
+        assertThat(environment.closeCount).hasValue(0);
+        assertThat(environment.loadCount).hasValue(1);
+        assertThat(environment.model).isSameAs(oldModel);
+        assertThat(oldModel.listenerCount()).isEqualTo(1);
+        assertThat(events).extracting(MapAdapterEvent::state)
+            .containsExactly(MapOperationalState.LOADING, MapOperationalState.AVAILABLE,
+                MapOperationalState.LOADING, MapOperationalState.RELOAD_REQUIRED);
+    }
+
+    @Test
+    public void keepsTheEditorVisibleModelWhenALoadingListenerOpensItDuringExternalReload() throws Exception {
+        TestEdt edt = new TestEdt();
+        TestEnvironment environment = environment(edt);
+        MapLeaseManager manager = manager(environment, edt, environment::newMap);
+        List<MapAdapterEvent> events = eventsFrom(manager);
+        MapLease lease = acquire(manager, environment, edt);
+        FakeMapModel oldModel = environment.model;
+        manager.addListener(event -> {
+            if (event.state() == MapOperationalState.LOADING) {
+                environment.visibleModels.add(oldModel);
+            }
+        });
+        oldModel.markExternalChange();
+
+        manager.checkExternalChanges();
+        edt.runAll();
+
+        assertThat(lease.state()).isEqualTo(MapOperationalState.RELOAD_REQUIRED);
+        assertThat(environment.closeCount).hasValue(0);
+        assertThat(environment.loadCount).hasValue(1);
+        assertThat(environment.model).isSameAs(oldModel);
+        assertThat(oldModel.listenerCount()).isEqualTo(1);
+        assertThat(events).extracting(MapAdapterEvent::state)
+            .containsExactly(MapOperationalState.LOADING, MapOperationalState.AVAILABLE,
+                MapOperationalState.LOADING, MapOperationalState.RELOAD_REQUIRED);
+    }
+
+    @Test
+    public void doesNotCloseTheModelWhenALoadingListenerReleasesTheLastLeaseDuringExternalReload()
+            throws Exception {
+        TestEdt edt = new TestEdt();
+        TestEnvironment environment = environment(edt);
+        MapLeaseManager manager = manager(environment, edt, environment::newMap);
+        List<MapAdapterEvent> events = eventsFrom(manager);
+        MapLease lease = acquire(manager, environment, edt);
+        FakeMapModel oldModel = environment.model;
+        manager.addListener(event -> {
+            if (event.state() == MapOperationalState.LOADING) {
+                lease.close();
+            }
+        });
+        oldModel.markExternalChange();
+
+        manager.checkExternalChanges();
+        edt.runAll();
+
+        assertThat(environment.closeCount).hasValue(0);
+        assertThat(environment.loadCount).hasValue(1);
+        assertThat(oldModel.listenerCount()).isZero();
+        assertThat(events).extracting(MapAdapterEvent::state)
+            .containsExactly(MapOperationalState.LOADING, MapOperationalState.AVAILABLE,
+                MapOperationalState.LOADING);
+    }
+
+    @Test
+    public void doesNotCloseTheModelWhenALoadingListenerClosesTheManagerDuringExternalReload()
+            throws Exception {
+        TestEdt edt = new TestEdt();
+        TestEnvironment environment = environment(edt);
+        MapLeaseManager manager = manager(environment, edt, environment::newMap);
+        List<MapAdapterEvent> events = eventsFrom(manager);
+        MapLease lease = acquire(manager, environment, edt);
+        FakeMapModel oldModel = environment.model;
+        manager.addListener(event -> {
+            if (event.state() == MapOperationalState.LOADING) {
+                manager.close();
+            }
+        });
+        oldModel.markExternalChange();
+
+        manager.checkExternalChanges();
+        edt.runAll();
+
+        assertThat(environment.closeCount).hasValue(0);
+        assertThat(environment.loadCount).hasValue(1);
+        assertThat(oldModel.listenerCount()).isZero();
+        assertThat(environment.lifecycleListeners).isEmpty();
+        assertThat(events).extracting(MapAdapterEvent::state)
+            .containsExactly(MapOperationalState.LOADING, MapOperationalState.AVAILABLE,
+                MapOperationalState.LOADING);
+        assertThat(manager.acquire(environment.reference()).toCompletableFuture().isCompletedExceptionally()).isTrue();
+        lease.close();
+    }
+
+    @Test
     public void checksExternalChangesThroughTheScheduledPath() throws Exception {
         TestEdt edt = new TestEdt();
         TestEnvironment environment = environment(edt);
@@ -426,6 +540,94 @@ public class MapLeaseManagerShould {
     }
 
     @Test
+    public void doesNotCancelAPendingAcquireWhenReleaseIsCalledBeforeItsLeaseIsReturned() throws Exception {
+        TestEdt edt = new TestEdt();
+        TestEnvironment environment = environment(edt);
+        MapLeaseManager manager = manager(environment, edt, environment::newMap);
+
+        CompletionStage<MapLease> pending = manager.acquire(environment.reference());
+        manager.release(environment.reference().id());
+
+        assertThat(pending.toCompletableFuture().isCancelled()).isFalse();
+        edt.runAll();
+
+        MapLease lease = pending.toCompletableFuture().get(1, TimeUnit.SECONDS);
+        assertThat(lease.state()).isEqualTo(MapOperationalState.AVAILABLE);
+        assertThat(environment.model.listenerCount()).isEqualTo(1);
+        lease.close();
+        assertThat(environment.model.listenerCount()).isZero();
+    }
+
+    @Test
+    public void discardsTheQueuedLoadWhenItsOnlyPendingAcquireIsCancelled() throws Exception {
+        TestEdt edt = new TestEdt();
+        TestEnvironment environment = environment(edt);
+        MapLeaseManager manager = manager(environment, edt, environment::newMap);
+        List<MapAdapterEvent> events = eventsFrom(manager);
+
+        CompletionStage<MapLease> pending = manager.acquire(environment.reference());
+        assertThat(pending.toCompletableFuture().cancel(false)).isTrue();
+        int eventsAtCancellation = events.size();
+        edt.runAll();
+
+        assertThat(pending.toCompletableFuture().isCancelled()).isTrue();
+        assertThat(environment.loadCount).hasValue(0);
+        assertThat(environment.totalModelListenerCount()).isZero();
+        assertThat(events).hasSize(eventsAtCancellation);
+    }
+
+    @Test
+    public void keepsTheOtherCoalescedAcquireWhenOnePendingAcquireIsCancelled() throws Exception {
+        TestEdt edt = new TestEdt();
+        TestEnvironment environment = environment(edt);
+        MapLeaseManager manager = manager(environment, edt, environment::newMap);
+
+        CompletionStage<MapLease> cancelled = manager.acquire(environment.reference());
+        CompletionStage<MapLease> surviving = manager.acquire(environment.reference());
+        assertThat(cancelled.toCompletableFuture().cancel(false)).isTrue();
+        edt.runAll();
+
+        assertThat(cancelled.toCompletableFuture().isCancelled()).isTrue();
+        MapLease lease = surviving.toCompletableFuture().get(1, TimeUnit.SECONDS);
+        assertThat(lease.state()).isEqualTo(MapOperationalState.AVAILABLE);
+        assertThat(environment.loadCount).hasValue(1);
+        lease.close();
+        assertThat(environment.model.listenerCount()).isZero();
+    }
+
+    @Test
+    public void rollsBackTheReservedLeaseCountWhenCompletionLosesToCancellation() throws Exception {
+        TestEdt edt = new TestEdt();
+        TestEnvironment environment = environment(edt);
+        AtomicBoolean cancelFirstCompletion = new AtomicBoolean(true);
+        MapLeaseManager manager = manager(environment, edt, environment::newMap, future -> {
+            if (cancelFirstCompletion.compareAndSet(true, false)) {
+                future.cancel(false);
+            }
+        });
+        List<MapAdapterEvent> events = eventsFrom(manager);
+
+        CompletionStage<MapLease> cancelled = manager.acquire(environment.reference());
+        edt.runAll();
+
+        assertThat(cancelled.toCompletableFuture().isCancelled()).isTrue();
+        assertThat(environment.model.listenerCount()).isZero();
+
+        CompletionStage<MapLease> fresh = manager.acquire(environment.reference());
+        assertThat(fresh.toCompletableFuture().isDone()).isFalse();
+        edt.runAll();
+
+        MapLease lease = fresh.toCompletableFuture().get(1, TimeUnit.SECONDS);
+        assertThat(lease.state()).isEqualTo(MapOperationalState.AVAILABLE);
+        assertThat(environment.model.listenerCount()).isEqualTo(1);
+        assertThat(events).extracting(MapAdapterEvent::state)
+            .containsExactly(MapOperationalState.LOADING, MapOperationalState.AVAILABLE,
+                MapOperationalState.LOADING, MapOperationalState.AVAILABLE);
+        lease.close();
+        assertThat(environment.model.listenerCount()).isZero();
+    }
+
+    @Test
     public void loadsTheRealFixtureThroughMapLoaderOnTheSuppliedEdtWithoutCreatingAView() throws Exception {
         try (HeadlessResourceScope resources = new HeadlessResourceScope()) {
             FreeplaneHeadlessStarter starter = new FreeplaneHeadlessStarter(CommandLineParser.parse());
@@ -498,6 +700,15 @@ public class MapLeaseManagerShould {
         return manager;
     }
 
+    private MapLeaseManager manager(TestEnvironment environment, TestEdt edt,
+            MapLeaseManager.MapLoaderOperation loader, MapLeaseManager.LeaseCompletionInterceptor completionInterceptor) {
+        MapLeaseManager manager = new MapLeaseManager(environment.workspace, environment.modeController, edt,
+            (ScheduledExecutorService) null, loader, environment::containsView, environment::lookup,
+            completionInterceptor);
+        managers.add(manager);
+        return manager;
+    }
+
     private static List<MapAdapterEvent> eventsFrom(MapLeaseManager manager) {
         List<MapAdapterEvent> events = new ArrayList<MapAdapterEvent>();
         manager.addListener(events::add);
@@ -525,6 +736,7 @@ public class MapLeaseManagerShould {
         private final IMapViewManager viewManager = mock(IMapViewManager.class);
         private final Map<URL, MapModel> loaded = new java.util.HashMap<URL, MapModel>();
         private final List<IMapLifeCycleListener> lifecycleListeners = new ArrayList<IMapLifeCycleListener>();
+        private final List<FakeMapModel> createdModels = new ArrayList<FakeMapModel>();
         private final Set<MapModel> visibleModels = Collections.newSetFromMap(new IdentityHashMap<MapModel, Boolean>());
         private final AtomicInteger loadCount = new AtomicInteger();
         private final AtomicInteger closeCount = new AtomicInteger();
@@ -568,6 +780,7 @@ public class MapLeaseManagerShould {
         private FakeMapModel newMap(URL url) {
             loadCount.incrementAndGet();
             FakeMapModel result = new FakeMapModel(url);
+            createdModels.add(result);
             model = result;
             loaded.put(url, result);
             return result;
@@ -595,6 +808,14 @@ public class MapLeaseManagerShould {
             for (IMapLifeCycleListener listener : new ArrayList<IMapLifeCycleListener>(lifecycleListeners)) {
                 listener.onRemove(map);
             }
+        }
+
+        private int totalModelListenerCount() {
+            int count = 0;
+            for (FakeMapModel model : createdModels) {
+                count += model.listenerCount();
+            }
+            return count;
         }
 
         private final List<MapAdapterEvent> events = new ArrayList<MapAdapterEvent>();

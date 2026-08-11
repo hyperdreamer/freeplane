@@ -55,6 +55,10 @@ public final class MapLeaseManager implements AutoCloseable {
         MapModel get(URL canonicalUrl);
     }
 
+    interface LeaseCompletionInterceptor {
+        void beforeComplete(CompletableFuture<MapLease> future);
+    }
+
     private final Object monitor = new Object();
     private final Path workspaceFile;
     private final WorkspaceUriResolver uriResolver;
@@ -64,6 +68,7 @@ public final class MapLeaseManager implements AutoCloseable {
     private final MapLoaderOperation loader;
     private final MapViewLookup viewLookup;
     private final MapLookup mapLookup;
+    private final LeaseCompletionInterceptor completionInterceptor;
     private final ScheduledExecutorService scheduler;
     private final boolean ownsScheduler;
     private final Map<MapReferenceId, Entry> entries = new HashMap<MapReferenceId, Entry>();
@@ -75,37 +80,54 @@ public final class MapLeaseManager implements AutoCloseable {
     private boolean lifecycleListenerRegistered;
     private boolean closed;
 
+    private static final LeaseCompletionInterceptor NO_OP_COMPLETION_INTERCEPTOR = new LeaseCompletionInterceptor() {
+        @Override
+        public void beforeComplete(final CompletableFuture<MapLease> future) {
+        }
+    };
+
     public MapLeaseManager(final Path workspaceFile, final ModeController modeController) {
-        this(workspaceFile, modeController, new SwingEdtExecutor(), newDefaultScheduler(), null, null, null, true);
+        this(workspaceFile, modeController, new SwingEdtExecutor(), newDefaultScheduler(), null, null, null, null,
+            true);
     }
 
     public MapLeaseManager(final Path workspaceFile, final ModeController modeController,
             final EdtExecutor edt) {
-        this(workspaceFile, modeController, edt, newDefaultScheduler(), null, null, null, true);
+        this(workspaceFile, modeController, edt, newDefaultScheduler(), null, null, null, null, true);
     }
 
     MapLeaseManager(final Path workspaceFile, final ModeController modeController,
             final EdtExecutor edt, final ScheduledExecutorService scheduler,
             final MapLoaderOperation loader, final MapViewLookup viewLookup) {
-        this(workspaceFile, modeController, edt, scheduler, loader, viewLookup, null, false);
+        this(workspaceFile, modeController, edt, scheduler, loader, viewLookup, null, null, false);
     }
 
     MapLeaseManager(final Path workspaceFile, final ModeController modeController,
             final EdtExecutor edt, final ScheduledExecutorService scheduler,
             final MapLoaderOperation loader, final MapViewLookup viewLookup, final MapLookup mapLookup) {
-        this(workspaceFile, modeController, edt, scheduler, loader, viewLookup, mapLookup, false);
+        this(workspaceFile, modeController, edt, scheduler, loader, viewLookup, mapLookup, null, false);
+    }
+
+    MapLeaseManager(final Path workspaceFile, final ModeController modeController,
+            final EdtExecutor edt, final ScheduledExecutorService scheduler,
+            final MapLoaderOperation loader, final MapViewLookup viewLookup, final MapLookup mapLookup,
+            final LeaseCompletionInterceptor completionInterceptor) {
+        this(workspaceFile, modeController, edt, scheduler, loader, viewLookup, mapLookup, completionInterceptor,
+            false);
     }
 
     private MapLeaseManager(final Path workspaceFile, final ModeController modeController,
             final EdtExecutor edt, final ScheduledExecutorService scheduler,
             final MapLoaderOperation loader, final MapViewLookup viewLookup, final MapLookup mapLookup,
-            final boolean ownsScheduler) {
+            final LeaseCompletionInterceptor completionInterceptor, final boolean ownsScheduler) {
         this.uriResolver = new WorkspaceUriResolver();
         this.workspaceFile = uriResolver.canonical(Objects.requireNonNull(workspaceFile, "workspaceFile"));
         this.modeController = Objects.requireNonNull(modeController, "modeController");
         this.edt = Objects.requireNonNull(edt, "edt");
         this.scheduler = scheduler;
         this.ownsScheduler = ownsScheduler;
+        this.completionInterceptor = completionInterceptor != null ? completionInterceptor
+            : NO_OP_COMPLETION_INTERCEPTOR;
         this.loader = loader != null ? loader : new MapLoaderOperation() {
             @Override
             public MapModel load(final URL canonicalUrl) {
@@ -235,32 +257,13 @@ public final class MapLeaseManager implements AutoCloseable {
             return;
         }
         Detachment detachment = null;
-        PendingAcquire cancelled = null;
         synchronized (monitor) {
             final Entry entry = entries.get(id);
-            if (entry == null) {
+            if (entry == null || entry.leaseCount == 0) {
                 return;
             }
-            if (entry.leaseCount > 0) {
-                entry.leaseCount--;
-            }
-            else if (!entry.pending.isEmpty()) {
-                cancelled = entry.pending.remove(0);
-            }
-            if (entry.leaseCount == 0 && entry.pending.isEmpty() && !entry.loading) {
-                entries.remove(id);
-                entry.generation++;
-                detachment = detachmentFor(entry);
-            }
-            else if (entry.leaseCount == 0 && entry.pending.isEmpty() && entry.loading) {
-                entries.remove(id);
-                entry.generation++;
-                entry.loading = false;
-                detachment = detachmentFor(entry);
-            }
-        }
-        if (cancelled != null) {
-            cancelled.future.cancel(false);
+            entry.leaseCount--;
+            detachment = removeEntryIfUnused(entry);
         }
         detach(detachment);
     }
@@ -401,15 +404,24 @@ public final class MapLeaseManager implements AutoCloseable {
             entry.generation++;
             generation = entry.generation;
             entry.loading = true;
-            entry.model = null;
-            entry.managerOwned = false;
             oldListener = entry.modelListener;
-            entry.modelListener = null;
             entry.state = MapOperationalState.LOADING;
-            suppressedRemovals.add(oldModel);
             loadingEvent = new MapAdapterEvent(entry.id, MapOperationalState.LOADING);
         }
         publish(loadingEvent);
+
+        final MapAdapterEvent reloadRequiredEvent = revalidateReloadAfterLoading(entry, oldModel, oldListener,
+            generation);
+        if (reloadRequiredEvent != null) {
+            publish(reloadRequiredEvent);
+            return;
+        }
+        if (!isCurrentReload(entry, oldModel, oldListener, generation)) {
+            synchronized (monitor) {
+                suppressedRemovals.remove(oldModel);
+            }
+            return;
+        }
         detachOnEdt(new Detachment(oldModel, oldListener));
         try {
             mapController.closeWithoutSaving(oldModel);
@@ -418,7 +430,7 @@ public final class MapLeaseManager implements AutoCloseable {
             synchronized (monitor) {
                 suppressedRemovals.remove(oldModel);
             }
-            restoreAfterFailedClose(entry, oldModel, generation);
+            restoreAfterFailedClose(entry, oldModel, oldListener, generation);
             return;
         }
         finally {
@@ -426,24 +438,81 @@ public final class MapLeaseManager implements AutoCloseable {
                 suppressedRemovals.remove(oldModel);
             }
         }
+        synchronized (monitor) {
+            if (!isCurrentReloadLocked(entry, oldModel, oldListener, generation)) {
+                return;
+            }
+            entry.model = null;
+            entry.modelListener = null;
+            entry.managerOwned = false;
+        }
         loadOnEdt(entry, generation, oldModel);
     }
 
-    private void restoreAfterFailedClose(final Entry entry, final MapModel oldModel, final long generation) {
-        if (closed || entries.get(entry.id) != entry) {
-            return;
+    private MapAdapterEvent revalidateReloadAfterLoading(final Entry entry, final MapModel oldModel,
+            final IMapChangeListener oldListener, final long generation) {
+        synchronized (monitor) {
+            if (!isCurrentReloadLocked(entry, oldModel, oldListener, generation)) {
+                return null;
+            }
+            final boolean canReload;
+            try {
+                canReload = !viewLookup.containsView(oldModel) && oldModel.isSaved();
+            }
+            catch (RuntimeException failure) {
+                return markReloadRequiredLocked(entry, oldModel, oldListener, generation);
+            }
+            if (!isCurrentReloadLocked(entry, oldModel, oldListener, generation)) {
+                return null;
+            }
+            if (canReload) {
+                suppressedRemovals.add(oldModel);
+                return null;
+            }
+            return markReloadRequiredLocked(entry, oldModel, oldListener, generation);
         }
-        final IMapChangeListener listener = listenerFor(entry, oldModel, generation);
-        oldModel.addMapChangeListener(listener);
+    }
+
+    private MapAdapterEvent markReloadRequiredLocked(final Entry entry, final MapModel oldModel,
+            final IMapChangeListener oldListener, final long generation) {
+        if (!isCurrentReloadLocked(entry, oldModel, oldListener, generation)) {
+            return null;
+        }
+        entry.loading = false;
+        entry.state = MapOperationalState.RELOAD_REQUIRED;
+        return new MapAdapterEvent(entry.id, MapOperationalState.RELOAD_REQUIRED);
+    }
+
+    private boolean isCurrentReload(final Entry entry, final MapModel oldModel,
+            final IMapChangeListener oldListener, final long generation) {
+        synchronized (monitor) {
+            return isCurrentReloadLocked(entry, oldModel, oldListener, generation);
+        }
+    }
+
+    private boolean isCurrentReloadLocked(final Entry entry, final MapModel oldModel,
+            final IMapChangeListener oldListener, final long generation) {
+        return !closed && entries.get(entry.id) == entry && entry.generation == generation
+            && entry.model == oldModel && entry.modelListener == oldListener && entry.managerOwned
+            && entry.leaseCount > 0 && entry.loading;
+    }
+
+    private void restoreAfterFailedClose(final Entry entry, final MapModel oldModel,
+            final IMapChangeListener oldListener, final long generation) {
         final MapAdapterEvent event;
         synchronized (monitor) {
-            if (closed || entries.get(entry.id) != entry || entry.generation != generation) {
-                oldModel.removeMapChangeListener(listener);
+            if (!isCurrentReloadLocked(entry, oldModel, oldListener, generation)) {
                 return;
             }
-            entry.model = oldModel;
-            entry.modelListener = listener;
-            entry.managerOwned = true;
+            if (oldListener != null) {
+                oldModel.addMapChangeListener(oldListener);
+            }
+            if (!isCurrentReloadLocked(entry, oldModel, oldListener, generation)) {
+                if (oldListener != null) {
+                    oldModel.removeMapChangeListener(oldListener);
+                }
+                return;
+            }
             entry.loading = false;
             entry.state = MapOperationalState.RELOAD_REQUIRED;
             event = new MapAdapterEvent(entry.id, MapOperationalState.RELOAD_REQUIRED);
@@ -563,8 +632,10 @@ public final class MapLeaseManager implements AutoCloseable {
             }
             else {
                 listener = listenerFor(entry, model, generation);
-                model.addMapChangeListener(listener);
                 state = stateForModel(model);
+                if (!attachListenerForCurrentLoad(entry, generation, model, listener)) {
+                    return;
+                }
             }
         }
         catch (RuntimeException exception) {
@@ -576,6 +647,17 @@ public final class MapLeaseManager implements AutoCloseable {
             state = stateForLoadFailure(entry.mapPath, exception);
         }
         finishLoad(entry, generation, model, listener, managerOwned, state, failure);
+    }
+
+    private boolean attachListenerForCurrentLoad(final Entry entry, final long generation, final MapModel model,
+            final IMapChangeListener listener) {
+        synchronized (monitor) {
+            if (closed || entries.get(entry.id) != entry || entry.generation != generation || !entry.loading) {
+                return false;
+            }
+            model.addMapChangeListener(listener);
+            return true;
+        }
     }
 
     private void finishLoad(final Entry entry, final long generation, final MapModel model,
@@ -606,6 +688,7 @@ public final class MapLeaseManager implements AutoCloseable {
 
     private void completePending(final Entry entry, final long generation, final Throwable failure) {
         final List<PendingAcquire> requests;
+        Detachment detachment = null;
         synchronized (monitor) {
             if (closed || entries.get(entry.id) != entry || entry.generation != generation) {
                 return;
@@ -615,14 +698,20 @@ public final class MapLeaseManager implements AutoCloseable {
             for (PendingAcquire request : requests) {
                 if (!request.future.isCancelled()) {
                     entry.leaseCount++;
+                    request.leaseReserved = true;
                 }
             }
+            detachment = removeEntryIfUnused(entry);
         }
+        detach(detachment);
         for (PendingAcquire request : requests) {
-            if (request.future.isCancelled()) {
+            if (!request.leaseReserved) {
                 continue;
             }
-            request.future.complete(new LeaseImpl(this, entry));
+            completionInterceptor.beforeComplete(request.future);
+            if (!request.future.complete(new LeaseImpl(this, entry))) {
+                rollbackLeaseReservation(entry, generation);
+            }
         }
     }
 
@@ -639,12 +728,22 @@ public final class MapLeaseManager implements AutoCloseable {
     private void cancelPending(final Entry entry, final PendingAcquire request) {
         Detachment detachment = null;
         synchronized (monitor) {
-            if (entry.pending.remove(request) && entry.leaseCount == 0 && !entry.loading
-                    && entries.get(entry.id) == entry) {
-                entries.remove(entry.id);
-                entry.generation++;
-                detachment = detachmentFor(entry);
+            if (entry.pending.remove(request) && entry.leaseCount == 0 && entries.get(entry.id) == entry) {
+                detachment = removeEntryIfUnused(entry);
             }
+        }
+        detach(detachment);
+    }
+
+    private void rollbackLeaseReservation(final Entry entry, final long generation) {
+        Detachment detachment = null;
+        synchronized (monitor) {
+            if (closed || entries.get(entry.id) != entry || entry.generation != generation
+                    || entry.leaseCount == 0) {
+                return;
+            }
+            entry.leaseCount--;
+            detachment = removeEntryIfUnused(entry);
         }
         detach(detachment);
     }
@@ -790,6 +889,16 @@ public final class MapLeaseManager implements AutoCloseable {
         return detachment;
     }
 
+    private Detachment removeEntryIfUnused(final Entry entry) {
+        if (entry.leaseCount != 0 || !entry.pending.isEmpty() || entries.get(entry.id) != entry) {
+            return null;
+        }
+        entries.remove(entry.id);
+        entry.generation++;
+        entry.loading = false;
+        return detachmentFor(entry);
+    }
+
     private void detach(final Detachment detachment) {
         if (detachment == null) {
             return;
@@ -887,6 +996,7 @@ public final class MapLeaseManager implements AutoCloseable {
 
     private static final class PendingAcquire {
         private final CompletableFuture<MapLease> future;
+        private boolean leaseReserved;
 
         private PendingAcquire(final CompletableFuture<MapLease> future) {
             this.future = future;
