@@ -24,13 +24,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Delayed;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -831,6 +835,123 @@ public class MapLeaseManagerShould {
     }
 
     @Test
+    public void retriesDeferredLifecycleRemovalAfterATransientEdtDrainRejection() throws Exception {
+        TestEdt edt = new TestEdt();
+        ControlledRetryScheduler retryScheduler = new ControlledRetryScheduler();
+        TestEnvironment environment = environment(edt);
+        DeliveryRaceProbe probe = new DeliveryRaceProbe();
+        MapLeaseManager manager = manager(environment, edt, retryScheduler, environment::newMap, probe);
+        MapReference reference = environment.reference();
+        MapLease initialLease = acquire(manager, reference, edt);
+        FakeMapModel oldModel = environment.model;
+
+        probe.arm(() -> {
+            environment.removeExternally(oldModel);
+            edt.runAll();
+        }, "Deferred lifecycle removal", () -> edt.rejectNextExecute(), true);
+        CompletableFuture<MapLease> immediate = manager.acquire(reference).toCompletableFuture();
+
+        probe.awaitCompletionAndOperation();
+        assertThat(edt.rejectedSubmissionCount()).isEqualTo(1);
+        assertThat(environment.model).isSameAs(oldModel);
+        assertThat(oldModel.listenerCount()).isEqualTo(1);
+        retryScheduler.runNextRetry();
+        edt.runAll();
+
+        MapLease immediateLease = immediate.get(1, TimeUnit.SECONDS);
+        FakeMapModel replacement = environment.model;
+        assertThat(replacement).isNotSameAs(oldModel);
+        assertThat(environment.loadCount).hasValue(2);
+        assertThat(oldModel.listenerCount()).isZero();
+        assertThat(replacement.listenerCount()).isEqualTo(1);
+        assertThat(immediateLease.state()).isEqualTo(MapOperationalState.AVAILABLE);
+
+        initialLease.close();
+        immediateLease.close();
+        assertThat(replacement.listenerCount()).isZero();
+    }
+
+    @Test
+    public void retriesDeferredExternalReloadAfterATransientEdtDrainRejection() throws Exception {
+        TestEdt edt = new TestEdt();
+        ControlledRetryScheduler retryScheduler = new ControlledRetryScheduler();
+        TestEnvironment environment = environment(edt);
+        DeliveryRaceProbe probe = new DeliveryRaceProbe();
+        MapLeaseManager manager = manager(environment, edt, retryScheduler, environment::newMap, probe);
+        MapReference reference = environment.reference();
+        MapLease initialLease = acquire(manager, reference, edt);
+        FakeMapModel oldModel = environment.model;
+
+        probe.arm(() -> {
+            oldModel.markExternalChange();
+            manager.checkExternalChanges();
+            edt.runAll();
+        }, "Deferred external reload", () -> edt.rejectNextExecute(), true);
+        CompletableFuture<MapLease> immediate = manager.acquire(reference).toCompletableFuture();
+
+        probe.awaitCompletionAndOperation();
+        assertThat(edt.rejectedSubmissionCount()).isEqualTo(1);
+        assertThat(environment.closeCount).hasValue(0);
+        assertThat(environment.model).isSameAs(oldModel);
+        assertThat(oldModel.listenerCount()).isEqualTo(1);
+        retryScheduler.runNextRetry();
+        edt.runAll();
+
+        MapLease immediateLease = immediate.get(1, TimeUnit.SECONDS);
+        FakeMapModel replacement = environment.model;
+        assertThat(replacement).isNotSameAs(oldModel);
+        assertThat(environment.closeCount).hasValue(1);
+        assertThat(environment.loadCount).hasValue(2);
+        assertThat(oldModel.listenerCount()).isZero();
+        assertThat(replacement.listenerCount()).isEqualTo(1);
+        assertThat(immediateLease.state()).isEqualTo(MapOperationalState.AVAILABLE);
+
+        initialLease.close();
+        immediateLease.close();
+        assertThat(replacement.listenerCount()).isZero();
+    }
+
+    @Test
+    public void ignoresDeferredExternalReloadWhenCloseFollowsARejectedDrainSubmission() throws Exception {
+        TestEdt edt = new TestEdt();
+        ControlledRetryScheduler retryScheduler = new ControlledRetryScheduler();
+        TestEnvironment environment = environment(edt);
+        DeliveryRaceProbe probe = new DeliveryRaceProbe();
+        MapLeaseManager manager = manager(environment, edt, retryScheduler, environment::newMap, probe);
+        MapReference reference = environment.reference();
+        MapLease initialLease = acquire(manager, reference, edt);
+        FakeMapModel oldModel = environment.model;
+
+        probe.arm(() -> {
+            oldModel.markExternalChange();
+            manager.checkExternalChanges();
+            edt.runAll();
+        }, "Deferred external reload", () -> edt.rejectNextExecute(), true);
+        CompletableFuture<MapLease> immediate = manager.acquire(reference).toCompletableFuture();
+
+        probe.awaitCompletionAndOperation();
+        assertThat(edt.rejectedSubmissionCount()).isEqualTo(1);
+        assertThat(environment.closeCount).hasValue(0);
+        manager.close();
+        assertThat((List<?>) privateField(manager, "deferredOperations")).isEmpty();
+        assertThat(privateField(manager, "deferredDrainRetry")).isNull();
+        assertThat(privateField(manager, "deferredDrainRetryFuture")).isNull();
+        assertThat(privateField(manager, "deferredDrainScheduled")).isEqualTo(false);
+        assertThat(privateField(manager, "deferredDrainRunning")).isEqualTo(false);
+        retryScheduler.runNextRetry();
+        edt.runAll();
+
+        assertThat(immediate.isDone()).isTrue();
+        assertThat(immediate.isCompletedExceptionally()).isFalse();
+        assertThat(environment.closeCount).hasValue(0);
+        assertThat(environment.loadCount).hasValue(1);
+        assertThat(oldModel.listenerCount()).isZero();
+        assertThat(environment.lifecycleListeners).isEmpty();
+        assertThat(manager.acquire(reference).toCompletableFuture().isCompletedExceptionally()).isTrue();
+        initialLease.close();
+    }
+
+    @Test
     public void serializesModelNullRetryWithLeaseDelivery() throws Exception {
         TestEdt edt = new TestEdt();
         TestEnvironment environment = environment(edt);
@@ -1279,6 +1400,123 @@ public class MapLeaseManagerShould {
                     manager.close();
                 }
                 starter.stop();
+            }
+        }
+    }
+
+    private static final class ControlledRetryScheduler extends AbstractExecutorService
+            implements ScheduledExecutorService {
+        private final Deque<ControlledScheduledFuture<?>> retries =
+            new ConcurrentLinkedDeque<ControlledScheduledFuture<?>>();
+        private final AtomicBoolean shutdown = new AtomicBoolean();
+
+        @Override
+        public ScheduledFuture<?> schedule(final Runnable command, final long delay, final TimeUnit unit) {
+            return schedule(new Callable<Object>() {
+                @Override
+                public Object call() {
+                    command.run();
+                    return null;
+                }
+            }, delay, unit);
+        }
+
+        @Override
+        public <V> ScheduledFuture<V> schedule(final Callable<V> command, final long delay, final TimeUnit unit) {
+            if (shutdown.get()) {
+                throw new RejectedExecutionException("Controlled retry scheduler is closed");
+            }
+            ControlledScheduledFuture<V> retry = new ControlledScheduledFuture<V>(command);
+            retries.add(retry);
+            return retry;
+        }
+
+        @Override
+        public ScheduledFuture<?> scheduleAtFixedRate(final Runnable command, final long initialDelay,
+                final long period, final TimeUnit unit) {
+            return periodic(command);
+        }
+
+        @Override
+        public ScheduledFuture<?> scheduleWithFixedDelay(final Runnable command, final long initialDelay,
+                final long delay, final TimeUnit unit) {
+            return periodic(command);
+        }
+
+        @Override
+        public void execute(final Runnable command) {
+            schedule(command, 0L, TimeUnit.MILLISECONDS);
+        }
+
+        @Override
+        public void shutdown() {
+            shutdown.set(true);
+        }
+
+        @Override
+        public List<Runnable> shutdownNow() {
+            shutdown();
+            return Collections.emptyList();
+        }
+
+        @Override
+        public boolean isShutdown() {
+            return shutdown.get();
+        }
+
+        @Override
+        public boolean isTerminated() {
+            return shutdown.get();
+        }
+
+        @Override
+        public boolean awaitTermination(final long timeout, final TimeUnit unit) {
+            return shutdown.get();
+        }
+
+        private ScheduledFuture<?> periodic(final Runnable command) {
+            return new ControlledScheduledFuture<Object>(new Callable<Object>() {
+                @Override
+                public Object call() {
+                    command.run();
+                    return null;
+                }
+            });
+        }
+
+        private void runNextRetry() {
+            ControlledScheduledFuture<?> retry = retries.pollFirst();
+            if (retry == null) {
+                throw new AssertionError("No autonomous deferred-drain retry was scheduled");
+            }
+            retry.runEvenIfCancelled();
+        }
+    }
+
+    private static final class ControlledScheduledFuture<V> extends FutureTask<V> implements ScheduledFuture<V> {
+        private final Callable<V> callable;
+
+        private ControlledScheduledFuture(final Callable<V> callable) {
+            super(callable);
+            this.callable = callable;
+        }
+
+        @Override
+        public long getDelay(final TimeUnit unit) {
+            return 0L;
+        }
+
+        @Override
+        public int compareTo(final Delayed other) {
+            return 0;
+        }
+
+        private void runEvenIfCancelled() {
+            try {
+                callable.call();
+            }
+            catch (Exception failure) {
+                throw new AssertionError("Controlled retry failed", failure);
             }
         }
     }
@@ -1884,9 +2122,14 @@ public class MapLeaseManagerShould {
 
     private MapLeaseManager manager(TestEnvironment environment, EdtExecutor edt,
             MapLeaseManager.MapLoaderOperation loader, MapLeaseManager.LeaseCompletionInterceptor completionInterceptor) {
+        return manager(environment, edt, null, loader, completionInterceptor);
+    }
+
+    private MapLeaseManager manager(TestEnvironment environment, EdtExecutor edt,
+            ScheduledExecutorService scheduler, MapLeaseManager.MapLoaderOperation loader,
+            MapLeaseManager.LeaseCompletionInterceptor completionInterceptor) {
         MapLeaseManager manager = new MapLeaseManager(environment.workspace, environment.modeController, edt,
-            (ScheduledExecutorService) null, loader, environment::containsView, environment::lookup,
-            completionInterceptor);
+            scheduler, loader, environment::containsView, environment::lookup, completionInterceptor);
         managers.add(manager);
         return manager;
     }
@@ -2211,6 +2454,8 @@ public class MapLeaseManagerShould {
 
     private static final class TestEdt implements EdtExecutor {
         private final Deque<Runnable> queued = new ConcurrentLinkedDeque<Runnable>();
+        private final AtomicBoolean rejectNextExecute = new AtomicBoolean();
+        private final AtomicInteger rejectedSubmissions = new AtomicInteger();
         private boolean onEdt;
         private int boundaryCalls;
 
@@ -2232,12 +2477,26 @@ public class MapLeaseManagerShould {
 
         @Override
         public void execute(Runnable task) {
+            if (rejectNextExecute.compareAndSet(true, false)) {
+                rejectedSubmissions.incrementAndGet();
+                throw new RejectedExecutionException("Controlled EDT rejected a deferred drain");
+            }
             queued.add(task);
         }
 
         @Override
         public boolean isEdt() {
             return onEdt;
+        }
+
+        private void rejectNextExecute() {
+            if (!rejectNextExecute.compareAndSet(false, true)) {
+                throw new AssertionError("A controlled EDT rejection is already armed");
+            }
+        }
+
+        private int rejectedSubmissionCount() {
+            return rejectedSubmissions.get();
         }
 
         private void runAll() {
