@@ -43,6 +43,7 @@ import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 
 public final class MapLeaseManager implements AutoCloseable {
     private static final long EXTERNAL_CHECK_PERIOD_MILLIS = 500L;
+    private static final long DEFERRED_DRAIN_RETRY_DELAY_MILLIS = 100L;
 
     interface MapLoaderOperation {
         MapModel load(URL canonicalUrl) throws Exception;
@@ -92,6 +93,8 @@ public final class MapLeaseManager implements AutoCloseable {
     private final List<DeferredOperation> deferredOperations = new ArrayList<DeferredOperation>();
     private final IMapLifeCycleListener lifecycleListener = new LifecycleListener();
     private ScheduledFuture<?> externalCheck;
+    private DeferredDrainRetry deferredDrainRetry;
+    private ScheduledFuture<?> deferredDrainRetryFuture;
     private boolean lifecycleListenerRegistered;
     private boolean deferredDrainScheduled;
     private boolean deferredDrainRunning;
@@ -355,6 +358,7 @@ public final class MapLeaseManager implements AutoCloseable {
         final List<Detachment> detachments = new ArrayList<Detachment>();
         final List<PendingAcquire> pending = new ArrayList<PendingAcquire>();
         ScheduledFuture<?> scheduledCheck;
+        ScheduledFuture<?> scheduledDeferredDrainRetry;
         boolean removeLifecycle;
         settlementLock.lock();
         try {
@@ -365,6 +369,9 @@ public final class MapLeaseManager implements AutoCloseable {
                 closed = true;
                 scheduledCheck = externalCheck;
                 externalCheck = null;
+                scheduledDeferredDrainRetry = deferredDrainRetryFuture;
+                deferredDrainRetryFuture = null;
+                deferredDrainRetry = null;
                 removeLifecycle = lifecycleListenerRegistered;
                 lifecycleListenerRegistered = false;
                 for (Entry entry : entries.values()) {
@@ -398,6 +405,9 @@ public final class MapLeaseManager implements AutoCloseable {
         }
         if (scheduledCheck != null) {
             scheduledCheck.cancel(false);
+        }
+        if (scheduledDeferredDrainRetry != null) {
+            scheduledDeferredDrainRetry.cancel(false);
         }
         if (removeLifecycle || !detachments.isEmpty()) {
             runOnEdtAndWait(new Runnable() {
@@ -691,7 +701,8 @@ public final class MapLeaseManager implements AutoCloseable {
 
     private void scheduleDeferredDrainIfNeeded() {
         synchronized (monitor) {
-            if (closed || deferredOperations.isEmpty() || deferredDrainScheduled || deferredDrainRunning) {
+            if (closed || deferredOperations.isEmpty() || deferredDrainScheduled || deferredDrainRunning
+                    || deferredDrainRetry != null) {
                 return;
             }
             deferredDrainScheduled = true;
@@ -705,13 +716,66 @@ public final class MapLeaseManager implements AutoCloseable {
             });
         }
         catch (RuntimeException failure) {
+            final DeferredDrainRetry retry;
             synchronized (monitor) {
                 deferredDrainScheduled = false;
                 if (closed) {
                     deferredOperations.clear();
+                    return;
+                }
+                if (deferredOperations.isEmpty() || deferredDrainRetry != null || scheduler == null) {
+                    return;
+                }
+                retry = new DeferredDrainRetry();
+                deferredDrainRetry = retry;
+            }
+            scheduleDeferredDrainRetry(retry);
+        }
+    }
+
+    private void scheduleDeferredDrainRetry(final DeferredDrainRetry retry) {
+        final ScheduledFuture<?> future;
+        try {
+            future = scheduler.schedule(retry, DEFERRED_DRAIN_RETRY_DELAY_MILLIS, TimeUnit.MILLISECONDS);
+        }
+        catch (RuntimeException failure) {
+            synchronized (monitor) {
+                if (deferredDrainRetry == retry) {
+                    deferredDrainRetry = null;
+                }
+                if (closed) {
+                    deferredOperations.clear();
                 }
             }
+            return;
         }
+        boolean cancel = false;
+        synchronized (monitor) {
+            if (deferredDrainRetry == retry) {
+                deferredDrainRetryFuture = future;
+            }
+            else {
+                cancel = true;
+            }
+        }
+        if (cancel) {
+            future.cancel(false);
+        }
+    }
+
+    private void runDeferredDrainRetry(final DeferredDrainRetry retry) {
+        synchronized (monitor) {
+            if (deferredDrainRetry != retry) {
+                return;
+            }
+            deferredDrainRetry = null;
+            deferredDrainRetryFuture = null;
+            if (closed) {
+                deferredOperations.clear();
+                return;
+            }
+        }
+        scheduleDeferredDrainIfNeeded();
     }
 
     private void drainDeferredOperationsOnEdt() {
@@ -1228,6 +1292,13 @@ public final class MapLeaseManager implements AutoCloseable {
                 return thread;
             }
         });
+    }
+
+    private final class DeferredDrainRetry implements Runnable {
+        @Override
+        public void run() {
+            runDeferredDrainRetry(this);
+        }
     }
 
     private final class LifecycleListener implements IMapLifeCycleListener {
