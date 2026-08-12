@@ -85,6 +85,7 @@ public final class MapLeaseManager implements AutoCloseable {
     private final LeaseCompletionInterceptor completionInterceptor;
     private final SettlementTestHook settlementTestHook;
     private final ScheduledExecutorService scheduler;
+    private final ScheduledExecutorService deferredDrainFallbackScheduler;
     private final boolean ownsScheduler;
     private final Map<MapReferenceId, Entry> entries = new HashMap<MapReferenceId, Entry>();
     private final List<MapAdapterListener> listeners = new ArrayList<MapAdapterListener>();
@@ -147,16 +148,36 @@ public final class MapLeaseManager implements AutoCloseable {
             settlementTestHook, false);
     }
 
+    MapLeaseManager(final Path workspaceFile, final ModeController modeController,
+            final EdtExecutor edt, final ScheduledExecutorService scheduler,
+            final MapLoaderOperation loader, final MapViewLookup viewLookup, final MapLookup mapLookup,
+            final LeaseCompletionInterceptor completionInterceptor, final SettlementTestHook settlementTestHook,
+            final ScheduledExecutorService deferredDrainFallbackScheduler) {
+        this(workspaceFile, modeController, edt, scheduler, loader, viewLookup, mapLookup, completionInterceptor,
+            settlementTestHook, false, deferredDrainFallbackScheduler);
+    }
+
     private MapLeaseManager(final Path workspaceFile, final ModeController modeController,
             final EdtExecutor edt, final ScheduledExecutorService scheduler,
             final MapLoaderOperation loader, final MapViewLookup viewLookup, final MapLookup mapLookup,
             final LeaseCompletionInterceptor completionInterceptor, final SettlementTestHook settlementTestHook,
             final boolean ownsScheduler) {
+        this(workspaceFile, modeController, edt, scheduler, loader, viewLookup, mapLookup, completionInterceptor,
+            settlementTestHook, ownsScheduler, null);
+    }
+
+    private MapLeaseManager(final Path workspaceFile, final ModeController modeController,
+            final EdtExecutor edt, final ScheduledExecutorService scheduler,
+            final MapLoaderOperation loader, final MapViewLookup viewLookup, final MapLookup mapLookup,
+            final LeaseCompletionInterceptor completionInterceptor, final SettlementTestHook settlementTestHook,
+            final boolean ownsScheduler, final ScheduledExecutorService deferredDrainFallbackScheduler) {
         this.uriResolver = new WorkspaceUriResolver();
         this.workspaceFile = uriResolver.canonical(Objects.requireNonNull(workspaceFile, "workspaceFile"));
         this.modeController = Objects.requireNonNull(modeController, "modeController");
         this.edt = Objects.requireNonNull(edt, "edt");
         this.scheduler = scheduler;
+        this.deferredDrainFallbackScheduler = deferredDrainFallbackScheduler != null
+            ? deferredDrainFallbackScheduler : newDeferredDrainFallbackScheduler();
         this.ownsScheduler = ownsScheduler;
         this.completionInterceptor = completionInterceptor != null ? completionInterceptor
             : NO_OP_COMPLETION_INTERCEPTOR;
@@ -176,13 +197,22 @@ public final class MapLeaseManager implements AutoCloseable {
             }
         };
 
-        final MapController controller = edt.call(new Callable<MapController>() {
-            @Override
-            public MapController call() {
-                return MapLeaseManager.this.modeController.getMapController();
-            }
-        });
+        final MapController controller;
+        try {
+            controller = edt.call(new Callable<MapController>() {
+                @Override
+                public MapController call() {
+                    return MapLeaseManager.this.modeController.getMapController();
+                }
+            });
+        }
+        catch (RuntimeException failure) {
+            shutdownDeferredDrainFallbackScheduler();
+            shutdownOwnedScheduler();
+            throw failure;
+        }
         if (!(controller instanceof MMapController)) {
+            shutdownDeferredDrainFallbackScheduler();
             shutdownOwnedScheduler();
             throw new IllegalArgumentException("Graph map leases require the MindMap map controller");
         }
@@ -213,6 +243,7 @@ public final class MapLeaseManager implements AutoCloseable {
             }
         }
         catch (RuntimeException failure) {
+            shutdownDeferredDrainFallbackScheduler();
             shutdownOwnedScheduler();
             throw failure;
         }
@@ -398,32 +429,38 @@ public final class MapLeaseManager implements AutoCloseable {
                 suppressedRemovals.clear();
                 deferredOperations.clear();
                 deferredDrainScheduled = false;
+                deferredDrainRunning = false;
             }
         }
         finally {
             releaseSettlementLock();
         }
-        if (scheduledCheck != null) {
-            scheduledCheck.cancel(false);
-        }
-        if (scheduledDeferredDrainRetry != null) {
-            scheduledDeferredDrainRetry.cancel(false);
-        }
-        if (removeLifecycle || !detachments.isEmpty()) {
-            runOnEdtAndWait(new Runnable() {
-                @Override
-                public void run() {
-                    if (removeLifecycle) {
-                        mapController.removeMapLifeCycleListener(lifecycleListener);
+        try {
+            if (scheduledCheck != null) {
+                scheduledCheck.cancel(false);
+            }
+            if (scheduledDeferredDrainRetry != null) {
+                scheduledDeferredDrainRetry.cancel(false);
+            }
+            if (removeLifecycle || !detachments.isEmpty()) {
+                runOnEdtAndWait(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (removeLifecycle) {
+                            mapController.removeMapLifeCycleListener(lifecycleListener);
+                        }
+                        for (Detachment detachment : detachments) {
+                            detachOnEdt(detachment);
+                        }
                     }
-                    for (Detachment detachment : detachments) {
-                        detachOnEdt(detachment);
-                    }
-                }
-            });
+                });
+            }
+            completeExceptionally(pending, new IllegalStateException("Map lease manager is closed"));
         }
-        completeExceptionally(pending, new IllegalStateException("Map lease manager is closed"));
-        shutdownOwnedScheduler();
+        finally {
+            shutdownDeferredDrainFallbackScheduler();
+            shutdownOwnedScheduler();
+        }
     }
 
     void checkExternalChanges() {
@@ -723,7 +760,7 @@ public final class MapLeaseManager implements AutoCloseable {
                     deferredOperations.clear();
                     return;
                 }
-                if (deferredOperations.isEmpty() || deferredDrainRetry != null || scheduler == null) {
+                if (deferredOperations.isEmpty() || deferredDrainRetry != null) {
                     return;
                 }
                 retry = new DeferredDrainRetry();
@@ -734,18 +771,50 @@ public final class MapLeaseManager implements AutoCloseable {
     }
 
     private void scheduleDeferredDrainRetry(final DeferredDrainRetry retry) {
+        if (scheduler == null) {
+            scheduleDeferredDrainFallback(retry);
+            return;
+        }
         final ScheduledFuture<?> future;
         try {
             future = scheduler.schedule(retry, DEFERRED_DRAIN_RETRY_DELAY_MILLIS, TimeUnit.MILLISECONDS);
         }
         catch (RuntimeException failure) {
+            scheduleDeferredDrainFallback(retry);
+            return;
+        }
+        boolean cancel = false;
+        synchronized (monitor) {
+            if (deferredDrainRetry == retry) {
+                deferredDrainRetryFuture = future;
+            }
+            else {
+                cancel = true;
+            }
+        }
+        if (cancel) {
+            future.cancel(false);
+        }
+    }
+
+    private void scheduleDeferredDrainFallback(final DeferredDrainRetry retry) {
+        final ScheduledFuture<?> future;
+        try {
+            future = deferredDrainFallbackScheduler.schedule(retry, DEFERRED_DRAIN_RETRY_DELAY_MILLIS,
+                TimeUnit.MILLISECONDS);
+        }
+        catch (RuntimeException failure) {
+            boolean closing;
             synchronized (monitor) {
-                if (deferredDrainRetry == retry) {
+                closing = closed || deferredDrainRetry != retry;
+                if (closing && deferredDrainRetry == retry) {
                     deferredDrainRetry = null;
-                }
-                if (closed) {
+                    deferredDrainRetryFuture = null;
                     deferredOperations.clear();
                 }
+            }
+            if (!closing) {
+                throw new IllegalStateException("Deferred drain fallback is unavailable", failure);
             }
             return;
         }
@@ -1283,11 +1352,26 @@ public final class MapLeaseManager implements AutoCloseable {
         }
     }
 
+    private void shutdownDeferredDrainFallbackScheduler() {
+        deferredDrainFallbackScheduler.shutdownNow();
+    }
+
     private static ScheduledExecutorService newDefaultScheduler() {
         return Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
             @Override
             public Thread newThread(final Runnable runnable) {
                 final Thread thread = new Thread(runnable, "freeplane-graph-map-lease-check");
+                thread.setDaemon(true);
+                return thread;
+            }
+        });
+    }
+
+    private static ScheduledExecutorService newDeferredDrainFallbackScheduler() {
+        return Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
+            @Override
+            public Thread newThread(final Runnable runnable) {
+                final Thread thread = new Thread(runnable, "freeplane-graph-map-lease-deferred-drain");
                 thread.setDaemon(true);
                 return thread;
             }
