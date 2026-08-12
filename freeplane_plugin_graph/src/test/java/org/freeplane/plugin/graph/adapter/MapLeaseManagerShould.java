@@ -912,6 +912,132 @@ public class MapLeaseManagerShould {
     }
 
     @Test
+    public void preservesMixedDeferredOperationsWhenRetriedDrainMeetsRenewedSettlementContention()
+            throws Exception {
+        TestEdt edt = new TestEdt();
+        ControlledRetryScheduler retryScheduler = new ControlledRetryScheduler();
+        TestEnvironment environment = environment(edt);
+        SettlementOwnerProbe settlementOwners = new SettlementOwnerProbe();
+        List<URL> replacementLoadOrder = new ArrayList<URL>();
+        MapLeaseManager manager = manager(environment, edt, retryScheduler, url -> {
+            replacementLoadOrder.add(url);
+            return environment.newMap(url);
+        }, settlementOwners);
+        List<MapAdapterEvent> events = eventsFrom(manager);
+        MapReference lifecycleReference = environment.reference();
+        URL lifecycleUrl = environment.url();
+        Path reloadMap = environment.workspace.resolveSibling("map-" + UUID.randomUUID() + ".mm");
+        Files.write(reloadMap, Collections.singletonList("fixture"));
+        MapReference reloadReference = reference(environment.workspace, reloadMap);
+        URL reloadUrl = reloadMap.toRealPath().toUri().toURL();
+        MapLease lifecycleLease = acquire(manager, lifecycleReference, edt);
+        FakeMapModel lifecycleOldModel = (FakeMapModel) environment.lookup(lifecycleUrl);
+        MapLease reloadLease = acquire(manager, reloadReference, edt);
+        FakeMapModel reloadOldModel = (FakeMapModel) environment.lookup(reloadUrl);
+        int eventsBeforeInvalidation = events.size();
+        replacementLoadOrder.clear();
+
+        SettlementOwnerProbe.Gate firstOwnerGate = settlementOwners.arm();
+        AtomicReference<CompletableFuture<MapLease>> firstOwner =
+            new AtomicReference<CompletableFuture<MapLease>>();
+        AtomicReference<Throwable> firstOwnerFailure = new AtomicReference<Throwable>();
+        Thread firstOwnerThread = new Thread(() -> {
+            try {
+                firstOwner.set(manager.acquire(lifecycleReference).toCompletableFuture());
+            }
+            catch (Throwable failure) {
+                firstOwnerFailure.set(failure);
+            }
+        }, "map-lease-first-deferred-drain-owner");
+        firstOwnerThread.start();
+        firstOwnerGate.awaitHeld();
+
+        try {
+            environment.removeExternally(lifecycleOldModel);
+            reloadOldModel.markExternalChange();
+            manager.checkExternalChanges();
+            edt.runAll();
+            assertThat((List<?>) privateField(manager, "deferredOperations")).hasSize(2);
+            edt.rejectNextExecute();
+        }
+        finally {
+            firstOwnerGate.release();
+            firstOwnerThread.join(1_000L);
+        }
+        assertThat(firstOwnerThread.isAlive()).isFalse();
+        assertThat(firstOwnerFailure.get()).isNull();
+        assertThat(firstOwnerGate.failure()).isNull();
+        assertThat(edt.rejectedSubmissionCount()).isEqualTo(1);
+        assertThat(retryScheduler.queuedRetryCount()).isEqualTo(1);
+        assertThat(replacementLoadOrder).isEmpty();
+        assertThat(lifecycleOldModel.listenerCount()).isEqualTo(1);
+        assertThat(reloadOldModel.listenerCount()).isEqualTo(1);
+        retryScheduler.runNextRetry();
+
+        SettlementOwnerProbe.Gate renewedOwnerGate = settlementOwners.arm();
+        AtomicReference<CompletableFuture<MapLease>> renewedOwner =
+            new AtomicReference<CompletableFuture<MapLease>>();
+        AtomicReference<Throwable> renewedOwnerFailure = new AtomicReference<Throwable>();
+        Thread renewedOwnerThread = new Thread(() -> {
+            try {
+                renewedOwner.set(manager.acquire(lifecycleReference).toCompletableFuture());
+            }
+            catch (Throwable failure) {
+                renewedOwnerFailure.set(failure);
+            }
+        }, "map-lease-renewed-deferred-drain-owner");
+        renewedOwnerThread.start();
+        renewedOwnerGate.awaitHeld();
+
+        try {
+            edt.runAll();
+            assertThat((List<?>) privateField(manager, "deferredOperations"))
+                .as("The current operation and unprocessed tail must remain manager-owned")
+                .hasSize(2);
+        }
+        finally {
+            renewedOwnerGate.release();
+            renewedOwnerThread.join(1_000L);
+        }
+        assertThat(renewedOwnerThread.isAlive()).isFalse();
+        assertThat(renewedOwnerFailure.get()).isNull();
+        assertThat(renewedOwnerGate.failure()).isNull();
+        edt.runAll();
+
+        MapLease firstOwnerLease = firstOwner.get().get(1, TimeUnit.SECONDS);
+        MapLease renewedOwnerLease = renewedOwner.get().get(1, TimeUnit.SECONDS);
+        FakeMapModel lifecycleReplacement = (FakeMapModel) environment.lookup(lifecycleUrl);
+        FakeMapModel reloadReplacement = (FakeMapModel) environment.lookup(reloadUrl);
+        assertThat(replacementLoadOrder).containsExactly(lifecycleUrl, reloadUrl);
+        assertThat(environment.loadCount).hasValue(4);
+        assertThat(environment.closeCount).hasValue(1);
+        assertThat(lifecycleReplacement).isNotSameAs(lifecycleOldModel);
+        assertThat(reloadReplacement).isNotSameAs(reloadOldModel);
+        assertThat(lifecycleOldModel.listenerCount()).isZero();
+        assertThat(reloadOldModel.listenerCount()).isZero();
+        assertThat(lifecycleReplacement.listenerCount()).isEqualTo(1);
+        assertThat(reloadReplacement.listenerCount()).isEqualTo(1);
+        assertThat(events.subList(eventsBeforeInvalidation, events.size()))
+            .extracting(MapAdapterEvent::state)
+            .containsExactly(MapOperationalState.LOADING, MapOperationalState.AVAILABLE,
+                MapOperationalState.LOADING, MapOperationalState.AVAILABLE);
+        int eventsAfterRecovery = events.size();
+        lifecycleOldModel.fireChange();
+        reloadOldModel.fireChange();
+        lifecycleReplacement.fireChange();
+        reloadReplacement.fireChange();
+        edt.runAll();
+        assertThat(events).hasSize(eventsAfterRecovery + 2);
+
+        lifecycleLease.close();
+        firstOwnerLease.close();
+        renewedOwnerLease.close();
+        reloadLease.close();
+        assertThat(lifecycleReplacement.listenerCount()).isZero();
+        assertThat(reloadReplacement.listenerCount()).isZero();
+    }
+
+    @Test
     public void retriesDeferredLifecycleRemovalWhenRetrySchedulerRejects() throws Exception {
         TestEdt edt = new TestEdt();
         ControlledRetryScheduler retryScheduler = new ControlledRetryScheduler();
@@ -1602,6 +1728,60 @@ public class MapLeaseManagerShould {
                     manager.close();
                 }
                 starter.stop();
+            }
+        }
+    }
+
+    private static final class SettlementOwnerProbe implements MapLeaseManager.LeaseCompletionInterceptor {
+        private final AtomicReference<Gate> nextGate = new AtomicReference<Gate>();
+
+        private Gate arm() {
+            Gate gate = new Gate();
+            if (!nextGate.compareAndSet(null, gate)) {
+                throw new AssertionError("A settlement owner gate is already armed");
+            }
+            return gate;
+        }
+
+        @Override
+        public void beforeComplete(final CompletableFuture<MapLease> future) {
+            final Gate gate = nextGate.getAndSet(null);
+            if (gate == null) {
+                return;
+            }
+            future.whenComplete((lease, failure) -> gate.hold());
+        }
+
+        private static final class Gate {
+            private final CountDownLatch held = new CountDownLatch(1);
+            private final CountDownLatch released = new CountDownLatch(1);
+            private final AtomicReference<Throwable> failure = new AtomicReference<Throwable>();
+
+            private void hold() {
+                held.countDown();
+                try {
+                    if (!released.await(2, TimeUnit.SECONDS)) {
+                        failure.set(new AssertionError("Settlement owner was not released"));
+                    }
+                }
+                catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    failure.set(new AssertionError("Settlement owner was interrupted", interrupted));
+                }
+            }
+
+            private void awaitHeld() throws Exception {
+                if (!held.await(1, TimeUnit.SECONDS)) {
+                    throw new AssertionError("Lease delivery did not acquire settlement");
+                }
+            }
+
+            private void release() {
+                released.countDown();
+            }
+
+            private Throwable failure() {
+                return failure.get();
             }
         }
     }

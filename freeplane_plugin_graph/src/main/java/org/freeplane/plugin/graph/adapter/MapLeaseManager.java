@@ -694,6 +694,11 @@ public final class MapLeaseManager implements AutoCloseable {
 
 
     private boolean tryOrDeferSettlementOnEdt(final DeferredOperation operation) {
+        return tryOrDeferSettlementOnEdt(operation, false);
+    }
+
+    private boolean tryOrDeferSettlementOnEdt(final DeferredOperation operation,
+            final boolean alreadyDeferred) {
         if (settlementLock.tryLock()) {
             final Runnable[] continuation = new Runnable[1];
             try {
@@ -709,7 +714,9 @@ public final class MapLeaseManager implements AutoCloseable {
             if (closed) {
                 return true;
             }
-            deferredOperations.add(operation);
+            if (!alreadyDeferred) {
+                deferredOperations.add(operation);
+            }
         }
         if (settlementLock.tryLock()) {
             releaseSettlementLock();
@@ -861,17 +868,19 @@ public final class MapLeaseManager implements AutoCloseable {
         }
         try {
             while (true) {
-                final List<DeferredOperation> operations;
+                final DeferredOperation operation;
                 synchronized (monitor) {
                     if (deferredOperations.isEmpty()) {
                         break;
                     }
-                    operations = new ArrayList<DeferredOperation>(deferredOperations);
-                    deferredOperations.clear();
+                    operation = deferredOperations.get(0);
                 }
-                for (DeferredOperation operation : operations) {
-                    if (!tryOrDeferSettlementOnEdt(operation)) {
-                        return;
+                if (!tryOrDeferSettlementOnEdt(operation, true)) {
+                    return;
+                }
+                synchronized (monitor) {
+                    if (!deferredOperations.isEmpty() && deferredOperations.get(0) == operation) {
+                        deferredOperations.remove(0);
                     }
                 }
             }
