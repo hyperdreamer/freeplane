@@ -60,6 +60,16 @@ public final class MapLeaseManager implements AutoCloseable {
         void beforeComplete(CompletableFuture<MapLease> future);
     }
 
+    interface SettlementTestHook {
+        void afterFailedSettlementTryLock();
+    }
+
+    private static final SettlementTestHook NO_OP_SETTLEMENT_TEST_HOOK = new SettlementTestHook() {
+        @Override
+        public void afterFailedSettlementTryLock() {
+        }
+    };
+
     private final Object monitor = new Object();
     // Serializes future delivery with every mutation that can invalidate a reserved request.
     private final ReentrantLock settlementLock = new ReentrantLock();
@@ -72,15 +82,19 @@ public final class MapLeaseManager implements AutoCloseable {
     private final MapViewLookup viewLookup;
     private final MapLookup mapLookup;
     private final LeaseCompletionInterceptor completionInterceptor;
+    private final SettlementTestHook settlementTestHook;
     private final ScheduledExecutorService scheduler;
     private final boolean ownsScheduler;
     private final Map<MapReferenceId, Entry> entries = new HashMap<MapReferenceId, Entry>();
     private final List<MapAdapterListener> listeners = new ArrayList<MapAdapterListener>();
     private final Set<MapModel> suppressedRemovals = Collections.newSetFromMap(
         new IdentityHashMap<MapModel, Boolean>());
+    private final List<DeferredOperation> deferredOperations = new ArrayList<DeferredOperation>();
     private final IMapLifeCycleListener lifecycleListener = new LifecycleListener();
     private ScheduledFuture<?> externalCheck;
     private boolean lifecycleListenerRegistered;
+    private boolean deferredDrainScheduled;
+    private boolean deferredDrainRunning;
     private boolean closed;
 
     private static final LeaseCompletionInterceptor NO_OP_COMPLETION_INTERCEPTOR = new LeaseCompletionInterceptor() {
@@ -91,24 +105,27 @@ public final class MapLeaseManager implements AutoCloseable {
 
     public MapLeaseManager(final Path workspaceFile, final ModeController modeController) {
         this(workspaceFile, modeController, new SwingEdtExecutor(), newDefaultScheduler(), null, null, null, null,
-            true);
+            NO_OP_SETTLEMENT_TEST_HOOK, true);
     }
 
     public MapLeaseManager(final Path workspaceFile, final ModeController modeController,
             final EdtExecutor edt) {
-        this(workspaceFile, modeController, edt, newDefaultScheduler(), null, null, null, null, true);
+        this(workspaceFile, modeController, edt, newDefaultScheduler(), null, null, null, null,
+            NO_OP_SETTLEMENT_TEST_HOOK, true);
     }
 
     MapLeaseManager(final Path workspaceFile, final ModeController modeController,
             final EdtExecutor edt, final ScheduledExecutorService scheduler,
             final MapLoaderOperation loader, final MapViewLookup viewLookup) {
-        this(workspaceFile, modeController, edt, scheduler, loader, viewLookup, null, null, false);
+        this(workspaceFile, modeController, edt, scheduler, loader, viewLookup, null, null,
+            NO_OP_SETTLEMENT_TEST_HOOK, false);
     }
 
     MapLeaseManager(final Path workspaceFile, final ModeController modeController,
             final EdtExecutor edt, final ScheduledExecutorService scheduler,
             final MapLoaderOperation loader, final MapViewLookup viewLookup, final MapLookup mapLookup) {
-        this(workspaceFile, modeController, edt, scheduler, loader, viewLookup, mapLookup, null, false);
+        this(workspaceFile, modeController, edt, scheduler, loader, viewLookup, mapLookup, null,
+            NO_OP_SETTLEMENT_TEST_HOOK, false);
     }
 
     MapLeaseManager(final Path workspaceFile, final ModeController modeController,
@@ -116,13 +133,22 @@ public final class MapLeaseManager implements AutoCloseable {
             final MapLoaderOperation loader, final MapViewLookup viewLookup, final MapLookup mapLookup,
             final LeaseCompletionInterceptor completionInterceptor) {
         this(workspaceFile, modeController, edt, scheduler, loader, viewLookup, mapLookup, completionInterceptor,
-            false);
+            NO_OP_SETTLEMENT_TEST_HOOK, false);
+    }
+
+    MapLeaseManager(final Path workspaceFile, final ModeController modeController,
+            final EdtExecutor edt, final ScheduledExecutorService scheduler,
+            final MapLoaderOperation loader, final MapViewLookup viewLookup, final MapLookup mapLookup,
+            final LeaseCompletionInterceptor completionInterceptor, final SettlementTestHook settlementTestHook) {
+        this(workspaceFile, modeController, edt, scheduler, loader, viewLookup, mapLookup, completionInterceptor,
+            settlementTestHook, false);
     }
 
     private MapLeaseManager(final Path workspaceFile, final ModeController modeController,
             final EdtExecutor edt, final ScheduledExecutorService scheduler,
             final MapLoaderOperation loader, final MapViewLookup viewLookup, final MapLookup mapLookup,
-            final LeaseCompletionInterceptor completionInterceptor, final boolean ownsScheduler) {
+            final LeaseCompletionInterceptor completionInterceptor, final SettlementTestHook settlementTestHook,
+            final boolean ownsScheduler) {
         this.uriResolver = new WorkspaceUriResolver();
         this.workspaceFile = uriResolver.canonical(Objects.requireNonNull(workspaceFile, "workspaceFile"));
         this.modeController = Objects.requireNonNull(modeController, "modeController");
@@ -131,6 +157,7 @@ public final class MapLeaseManager implements AutoCloseable {
         this.ownsScheduler = ownsScheduler;
         this.completionInterceptor = completionInterceptor != null ? completionInterceptor
             : NO_OP_COMPLETION_INTERCEPTOR;
+        this.settlementTestHook = settlementTestHook != null ? settlementTestHook : NO_OP_SETTLEMENT_TEST_HOOK;
         this.loader = loader != null ? loader : new MapLoaderOperation() {
             @Override
             public MapModel load(final URL canonicalUrl) {
@@ -268,7 +295,7 @@ public final class MapLeaseManager implements AutoCloseable {
                         }
                     }
                     finally {
-                        settlementLock.unlock();
+                        releaseSettlementLock();
                     }
                 }
             }
@@ -362,10 +389,12 @@ public final class MapLeaseManager implements AutoCloseable {
                 entries.clear();
                 listeners.clear();
                 suppressedRemovals.clear();
+                deferredOperations.clear();
+                deferredDrainScheduled = false;
             }
         }
         finally {
-            settlementLock.unlock();
+            releaseSettlementLock();
         }
         if (scheduledCheck != null) {
             scheduledCheck.cancel(false);
@@ -448,28 +477,44 @@ public final class MapLeaseManager implements AutoCloseable {
     }
 
     private void reloadManagerOwnedModelOnEdt(final Entry entry, final MapModel oldModel) {
-        final IMapChangeListener oldListener;
-        final long generation;
-        final MapAdapterEvent loadingEvent;
-        settlementLock.lock();
-        try {
-            synchronized (monitor) {
-                if (closed || entries.get(entry.id) != entry || entry.model != oldModel
-                        || entry.leaseCount == 0 || entry.loading || !entry.managerOwned) {
-                    return;
-                }
-                entry.generation++;
-                generation = entry.generation;
-                entry.loading = true;
-                oldListener = entry.modelListener;
-                entry.state = MapOperationalState.LOADING;
-                loadingEvent = new MapAdapterEvent(entry.id, MapOperationalState.LOADING);
+        tryOrDeferSettlementOnEdt(new ExternalReloadOperation(entry, oldModel));
+    }
+
+    private ReloadPlan beginManagerOwnedReloadOnEdtLocked(final Entry entry, final MapModel oldModel) {
+        synchronized (monitor) {
+            if (closed || entries.get(entry.id) != entry || entry.model != oldModel
+                    || entry.leaseCount == 0 || entry.loading || !entry.managerOwned) {
+                return null;
             }
+            final boolean canReload;
+            try {
+                canReload = !viewLookup.containsView(oldModel) && oldModel.isSaved();
+            }
+            catch (RuntimeException failure) {
+                entry.state = MapOperationalState.RELOAD_REQUIRED;
+                return ReloadPlan.reloadRequired(entry);
+            }
+            if (!canReload) {
+                entry.state = MapOperationalState.RELOAD_REQUIRED;
+                return ReloadPlan.reloadRequired(entry);
+            }
+            entry.generation++;
+            entry.loading = true;
+            entry.state = MapOperationalState.LOADING;
+            return new ReloadPlan(entry, oldModel, entry.modelListener, entry.generation);
         }
-        finally {
-            settlementLock.unlock();
+    }
+
+    private void continueManagerOwnedReloadOnEdt(final ReloadPlan plan) {
+        final Entry entry = plan.entry;
+        if (plan.reloadRequired) {
+            publish(new MapAdapterEvent(entry.id, MapOperationalState.RELOAD_REQUIRED));
+            return;
         }
-        publish(loadingEvent);
+        final MapModel oldModel = plan.oldModel;
+        final IMapChangeListener oldListener = plan.oldListener;
+        final long generation = plan.generation;
+        publish(new MapAdapterEvent(entry.id, MapOperationalState.LOADING));
 
         final MapAdapterEvent reloadRequiredEvent = revalidateReloadAfterLoading(entry, oldModel, oldListener,
             generation);
@@ -510,6 +555,7 @@ public final class MapLeaseManager implements AutoCloseable {
         }
         loadOnEdt(entry, generation, oldModel);
     }
+
 
     private MapAdapterEvent revalidateReloadAfterLoading(final Entry entry, final MapModel oldModel,
             final IMapChangeListener oldListener, final long generation) {
@@ -596,37 +642,114 @@ public final class MapLeaseManager implements AutoCloseable {
     }
 
     private void handleMapRemovedOnEdt(final MapModel map) {
-        final List<Reacquisition> reacquisitions = new ArrayList<Reacquisition>();
-        settlementLock.lock();
+        tryOrDeferSettlementOnEdt(new LifecycleRemovalOperation(map));
+    }
+
+
+    private boolean tryOrDeferSettlementOnEdt(final DeferredOperation operation) {
+        if (settlementLock.tryLock()) {
+            final Runnable[] continuation = new Runnable[1];
+            try {
+                continuation[0] = operation.applyOnSettlement();
+            }
+            finally {
+                releaseSettlementLock(continuation[0]);
+            }
+            return true;
+        }
+        settlementTestHook.afterFailedSettlementTryLock();
+        synchronized (monitor) {
+            if (closed) {
+                return true;
+            }
+            deferredOperations.add(operation);
+        }
+        if (settlementLock.tryLock()) {
+            releaseSettlementLock();
+        }
+        return false;
+    }
+
+    private void releaseSettlementLock() {
+        releaseSettlementLock(null);
+    }
+
+    private void releaseSettlementLock(final Runnable afterRelease) {
+        final boolean outermost = settlementLock.getHoldCount() == 1;
+        settlementLock.unlock();
         try {
+            if (afterRelease != null) {
+                afterRelease.run();
+            }
+        }
+        finally {
+            if (outermost && !settlementLock.isHeldByCurrentThread()) {
+                scheduleDeferredDrainIfNeeded();
+            }
+        }
+    }
+
+    private void scheduleDeferredDrainIfNeeded() {
+        synchronized (monitor) {
+            if (closed || deferredOperations.isEmpty() || deferredDrainScheduled || deferredDrainRunning) {
+                return;
+            }
+            deferredDrainScheduled = true;
+        }
+        try {
+            edt.execute(new Runnable() {
+                @Override
+                public void run() {
+                    drainDeferredOperationsOnEdt();
+                }
+            });
+        }
+        catch (RuntimeException failure) {
             synchronized (monitor) {
+                deferredDrainScheduled = false;
                 if (closed) {
-                    return;
+                    deferredOperations.clear();
                 }
-                if (suppressedRemovals.remove(map)) {
-                    return;
+            }
+        }
+    }
+
+    private void drainDeferredOperationsOnEdt() {
+        if (!edt.isEdt()) {
+            return;
+        }
+        synchronized (monitor) {
+            deferredDrainScheduled = false;
+            if (closed) {
+                deferredOperations.clear();
+                return;
+            }
+            deferredDrainRunning = true;
+        }
+        try {
+            while (true) {
+                final List<DeferredOperation> operations;
+                synchronized (monitor) {
+                    if (deferredOperations.isEmpty()) {
+                        break;
+                    }
+                    operations = new ArrayList<DeferredOperation>(deferredOperations);
+                    deferredOperations.clear();
                 }
-                for (Entry entry : entries.values()) {
-                    if (entry.model == map && entry.leaseCount > 0 && !entry.loading) {
-                        final IMapChangeListener listener = entry.modelListener;
-                        entry.model = null;
-                        entry.modelListener = null;
-                        entry.managerOwned = false;
-                        entry.loading = true;
-                        entry.generation++;
-                        entry.state = MapOperationalState.LOADING;
-                        reacquisitions.add(new Reacquisition(entry, entry.generation, map, listener));
+                for (DeferredOperation operation : operations) {
+                    if (!tryOrDeferSettlementOnEdt(operation)) {
+                        return;
                     }
                 }
             }
         }
         finally {
-            settlementLock.unlock();
-        }
-        for (Reacquisition reacquisition : reacquisitions) {
-            detachOnEdt(new Detachment(map, reacquisition.listener));
-            publish(new MapAdapterEvent(reacquisition.entry.id, MapOperationalState.LOADING));
-            loadOnEdt(reacquisition.entry, reacquisition.generation, map);
+            synchronized (monitor) {
+                deferredDrainRunning = false;
+            }
+            if (!settlementLock.isLocked()) {
+                scheduleDeferredDrainIfNeeded();
+            }
         }
     }
 
@@ -803,7 +926,7 @@ public final class MapLeaseManager implements AutoCloseable {
             delivered = attempted && request.future.complete(new LeaseImpl(this, entry));
         }
         finally {
-            settlementLock.unlock();
+            releaseSettlementLock();
         }
         if (attempted) {
             settleReservedRequest(entry, request, delivered);
@@ -837,7 +960,7 @@ public final class MapLeaseManager implements AutoCloseable {
             delivered = !request.future.isCompletedExceptionally();
         }
         finally {
-            settlementLock.unlock();
+            releaseSettlementLock();
         }
         settleReservedRequest(entry, request, delivered);
     }
@@ -850,7 +973,7 @@ public final class MapLeaseManager implements AutoCloseable {
             }
         }
         finally {
-            settlementLock.unlock();
+            releaseSettlementLock();
         }
     }
 
@@ -1129,6 +1252,99 @@ public final class MapLeaseManager implements AutoCloseable {
         }
     }
 
+    private interface DeferredOperation {
+        Runnable applyOnSettlement();
+    }
+
+    private final class LifecycleRemovalOperation implements DeferredOperation {
+        private final MapModel map;
+
+        private LifecycleRemovalOperation(final MapModel map) {
+            this.map = map;
+        }
+
+        @Override
+        public Runnable applyOnSettlement() {
+            final List<Reacquisition> reacquisitions = new ArrayList<Reacquisition>();
+            synchronized (monitor) {
+                if (closed || suppressedRemovals.remove(map)) {
+                    return null;
+                }
+                for (Entry entry : entries.values()) {
+                    if (entry.model == map && entry.leaseCount > 0 && !entry.loading) {
+                        final IMapChangeListener listener = entry.modelListener;
+                        entry.model = null;
+                        entry.modelListener = null;
+                        entry.managerOwned = false;
+                        entry.loading = true;
+                        entry.generation++;
+                        entry.state = MapOperationalState.LOADING;
+                        reacquisitions.add(new Reacquisition(entry, entry.generation, map, listener));
+                    }
+                }
+            }
+            return new Runnable() {
+                @Override
+                public void run() {
+                    for (Reacquisition reacquisition : reacquisitions) {
+                        detachOnEdt(new Detachment(map, reacquisition.listener));
+                        publish(new MapAdapterEvent(reacquisition.entry.id, MapOperationalState.LOADING));
+                        loadOnEdt(reacquisition.entry, reacquisition.generation, map);
+                    }
+                }
+            };
+        }
+    }
+
+    private final class ExternalReloadOperation implements DeferredOperation {
+        private final Entry entry;
+        private final MapModel oldModel;
+
+        private ExternalReloadOperation(final Entry entry, final MapModel oldModel) {
+            this.entry = entry;
+            this.oldModel = oldModel;
+        }
+
+        @Override
+        public Runnable applyOnSettlement() {
+            final ReloadPlan plan = beginManagerOwnedReloadOnEdtLocked(entry, oldModel);
+            return plan == null ? null : new Runnable() {
+                @Override
+                public void run() {
+                    continueManagerOwnedReloadOnEdt(plan);
+                }
+            };
+        }
+    }
+
+    private static final class ReloadPlan {
+        private final Entry entry;
+        private final MapModel oldModel;
+        private final IMapChangeListener oldListener;
+        private final long generation;
+        private final boolean reloadRequired;
+
+        private ReloadPlan(final Entry entry, final MapModel oldModel,
+                final IMapChangeListener oldListener, final long generation) {
+            this.entry = entry;
+            this.oldModel = oldModel;
+            this.oldListener = oldListener;
+            this.generation = generation;
+            this.reloadRequired = false;
+        }
+
+        private static ReloadPlan reloadRequired(final Entry entry) {
+            return new ReloadPlan(entry, true);
+        }
+
+        private ReloadPlan(final Entry entry, final boolean reloadRequired) {
+            this.entry = entry;
+            this.oldModel = null;
+            this.oldListener = null;
+            this.generation = 0L;
+            this.reloadRequired = reloadRequired;
+        }
+    }
     private static final class Entry {
         private final MapReferenceId id;
         private final MapReference reference;
