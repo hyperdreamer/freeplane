@@ -702,6 +702,18 @@ public class HullGeometryShould {
     }
 
     @Test
+    public void preservesDominantBoundaryCorrectionAcrossExtremeExponents() {
+        double radius = Math.scalb(1.0, 1001);
+        NodeGeometry node = NodeGeometry.of(LayoutPoint.of(-radius, 0.0), radius);
+
+        LayoutPoint boundary = node.boundaryToward(
+            LayoutPoint.of(0.0, Math.scalb(1.0, 466)));
+
+        assertThat(boundary.x()).isEqualTo(Math.scalb(-1.0, -70));
+        assertThat(boundary.y()).isEqualTo(Math.scalb(1.0, 466));
+    }
+
+    @Test
     public void limitsEverySmoothPathTangentToFourWorldUnits() {
         HullGeometry rectangle = HullGeometry.of(Arrays.asList(
             LayoutPoint.of(0.0, 0.0),

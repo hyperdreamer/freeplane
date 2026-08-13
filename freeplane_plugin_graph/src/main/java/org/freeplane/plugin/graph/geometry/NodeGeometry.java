@@ -3,8 +3,6 @@ package org.freeplane.plugin.graph.geometry;
 import java.util.Objects;
 
 public final class NodeGeometry {
-    private static final double SPLIT_SAFE_LIMIT = 1.3e301;
-
     private final LayoutPoint center;
     private final double radius;
     private final double minX;
@@ -113,20 +111,19 @@ public final class NodeGeometry {
         final Product normProduct = exactProduct(lengthLead, tail.sum);
         final double productTail = normProduct.low + lengthLead * normSum + lengthTail * tail.sum
             + lengthTail * normSum;
-        final Product otherSquare = exactProduct(otherUnit, otherUnit);
+        final Product scaledOther = exactProduct(radius, otherUnit);
+        final Product scaledSquare = exactProduct(scaledOther.high, otherUnit);
         final double otherTail = 2.0 * otherUnit * otherResidual + otherResidual * otherResidual;
-        final double quotient = otherSquare.high / normProduct.high;
+        final double quotient = scaledSquare.high / normProduct.high;
         final Product quotientProduct = exactProduct(quotient, normProduct.high);
-        final double quotientResidual = ((otherSquare.high - quotientProduct.high) - quotientProduct.low
-            + otherSquare.low + otherTail) - quotient * productTail;
+        final double quotientResidual = ((scaledSquare.high - quotientProduct.high) - quotientProduct.low
+            + scaledSquare.low + scaledOther.low * otherUnit + radius * otherTail) - quotient * productTail;
         final double quotientTail = quotientResidual / normProduct.high;
         final double quotientRemainder = quotientResidual - quotientTail * normProduct.high;
         final double quotientTail2 = quotientRemainder / normProduct.high;
-        final Product radiusQuotient = exactProduct(radius, quotient);
         final double main = sign * radius;
-        final Sum first = exactSum(main, -sign * radiusQuotient.high);
-        final double smallTerms = -sign * radiusQuotient.low - sign * radius * quotientTail
-            - sign * radius * quotientTail2;
+        final Sum first = exactSum(main, -sign * quotient);
+        final double smallTerms = -sign * quotientTail - sign * quotientTail2;
         final Sum second = exactSum(first.sum, smallTerms);
         return addExact(centerCoordinate, second.sum, first.error + second.error);
     }
@@ -165,11 +162,13 @@ public final class NodeGeometry {
     }
 
     private static Product exactProduct(final double first, final double second) {
-        if (Math.abs(first) <= SPLIT_SAFE_LIMIT && Math.abs(second) <= SPLIT_SAFE_LIMIT) {
-            return exactProductUnscaled(first, second);
-        }
-        final Product scaled = exactProductUnscaled(Math.scalb(first, -54), Math.scalb(second, -54));
-        return new Product(Math.scalb(scaled.high, 108), Math.scalb(scaled.low, 108));
+        final int firstExponent = Math.getExponent(first);
+        final int secondExponent = Math.getExponent(second);
+        final Product normalized = exactProductUnscaled(Math.scalb(first, -firstExponent),
+            Math.scalb(second, -secondExponent));
+        final int productExponent = firstExponent + secondExponent;
+        return new Product(Math.scalb(normalized.high, productExponent),
+            Math.scalb(normalized.low, productExponent));
     }
 
     private static Product exactProductUnscaled(final double first, final double second) {
