@@ -12,6 +12,7 @@ import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.map.SummaryNode;
 import org.freeplane.plugin.graph.group.GraphGroupModel;
+import org.freeplane.plugin.graph.projection.input.ConnectorSnapshot;
 import org.freeplane.plugin.graph.projection.input.MapSnapshot;
 import org.freeplane.plugin.graph.projection.input.NodeSnapshot;
 import org.freeplane.plugin.graph.projection.input.SafeNodeLabel;
@@ -24,6 +25,7 @@ public final class MapSnapshotFactory {
     private static final SafeNodeLabel EXCLUDED_LABEL = SafeNodeLabel.of("Node", "Node");
 
     private final SafeNodeLabelExtractor labelExtractor = new SafeNodeLabelExtractor();
+    private final ConnectorSnapshotFactory connectorFactory = new ConnectorSnapshotFactory();
 
     public MapSnapshot snapshot(final MapLease lease) {
         final MapLeaseAccess access = accessFor(lease);
@@ -38,8 +40,11 @@ public final class MapSnapshotFactory {
                 final TraversalAccumulator accumulator = new TraversalAccumulator();
                 final NodeSnapshot rootSnapshot = snapshotNode(root, lease.mapReferenceId(),
                     new ArrayList<Integer>(), false, accumulator);
-                return MapSnapshot.of(lease.mapReferenceId(), workspaceOrder, mapTitle, rootSnapshot,
-                    accumulator.attachedPersistentIds, accumulator.hasInaccessibleBranch);
+                final MapSnapshot safeNodes = MapSnapshot.of(lease.mapReferenceId(), workspaceOrder, mapTitle,
+                    rootSnapshot, accumulator.attachedPersistentIds, accumulator.hasInaccessibleBranch);
+                final List<ConnectorSnapshot> connectors = connectorFactory
+                    .snapshotReachableConnectors(model, workspaceOrder, safeNodes);
+                return safeNodes.withConnectors(connectors);
             }
         });
     }
