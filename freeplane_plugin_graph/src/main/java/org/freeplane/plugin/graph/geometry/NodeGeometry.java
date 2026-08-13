@@ -66,26 +66,56 @@ public final class NodeGeometry {
 
     public LayoutPoint boundaryToward(final LayoutPoint toward) {
         Objects.requireNonNull(toward, "toward");
-        final double dx;
-        final double dy;
-        if (subtractionIsFinite(toward.x(), center.x()) && subtractionIsFinite(toward.y(), center.y())) {
-            dx = toward.x() - center.x();
-            dy = toward.y() - center.y();
-        }
-        else {
-            final double scale = Math.max(Math.max(Math.abs(center.x()), Math.abs(center.y())),
-                Math.max(Math.abs(toward.x()), Math.abs(toward.y())));
-            dx = toward.x() / scale - center.x() / scale;
-            dy = toward.y() / scale - center.y() / scale;
-        }
-        if (dx == 0.0 && dy == 0.0) {
+        final Difference dx = difference(toward.x(), center.x());
+        final Difference dy = difference(toward.y(), center.y());
+        if (dx.significand == 0.0 && dy.significand == 0.0) {
             return LayoutPoint.of(center.x() + radius, center.y());
         }
-        final double largest = Math.max(Math.abs(dx), Math.abs(dy));
-        final double ux = dx / largest;
-        final double uy = dy / largest;
-        final double length = Math.hypot(ux, uy);
-        return LayoutPoint.of(center.x() + ux / length * radius, center.y() + uy / length * radius);
+        final int dominantExponent = Math.max(dx.exponent, dy.exponent);
+        final double unitX = Math.scalb(dx.significand, dx.exponent - dominantExponent);
+        final double unitY = Math.scalb(dy.significand, dy.exponent - dominantExponent);
+        final double length = Math.hypot(unitX, unitY);
+        final int radiusExponent = Math.getExponent(radius);
+        final double radiusSignificand = Math.scalb(radius, -radiusExponent);
+        final double offsetX = boundaryOffset(dx, radiusSignificand, radiusExponent, unitX, length,
+            dominantExponent);
+        final double offsetY = boundaryOffset(dy, radiusSignificand, radiusExponent, unitY, length,
+            dominantExponent);
+        return LayoutPoint.of(center.x() + offsetX, center.y() + offsetY);
+    }
+
+    private static double boundaryOffset(final Difference difference, final double radiusSignificand,
+            final int radiusExponent, final double unit, final double length, final int dominantExponent) {
+        if (difference.significand == 0.0) {
+            return 0.0;
+        }
+        if (Math.abs(unit) >= Double.MIN_NORMAL) {
+            return Math.scalb(radiusSignificand * (unit / length), radiusExponent);
+        }
+        return Math.scalb(radiusSignificand * (difference.significand / length),
+            radiusExponent + difference.exponent - dominantExponent);
+    }
+
+    private static Difference difference(final double first, final double second) {
+        if (subtractionIsFinite(first, second)) {
+            final double delta = first - second;
+            if (delta == 0.0) {
+                return new Difference(0.0, 0);
+            }
+            return new Difference(Math.scalb(delta, -Math.getExponent(delta)), Math.getExponent(delta));
+        }
+        final double half = first * 0.5 - second * 0.5;
+        return new Difference(Math.scalb(half, -Math.getExponent(half)), Math.getExponent(half) + 1);
+    }
+
+    private static final class Difference {
+        private final double significand;
+        private final int exponent;
+
+        Difference(final double significand, final int exponent) {
+            this.significand = significand;
+            this.exponent = exponent;
+        }
     }
 
     private static boolean subtractionIsFinite(final double first, final double second) {
