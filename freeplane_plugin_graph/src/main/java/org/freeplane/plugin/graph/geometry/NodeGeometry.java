@@ -3,6 +3,8 @@ package org.freeplane.plugin.graph.geometry;
 import java.util.Objects;
 
 public final class NodeGeometry {
+    private static final double SPLIT_SAFE_LIMIT = 1.3e301;
+
     private final LayoutPoint center;
     private final double radius;
     private final double minX;
@@ -74,49 +76,142 @@ public final class NodeGeometry {
         final int dominantExponent = Math.max(dx.exponent, dy.exponent);
         final double unitX = Math.scalb(dx.significand, dx.exponent - dominantExponent);
         final double unitY = Math.scalb(dy.significand, dy.exponent - dominantExponent);
-        final double length = Math.hypot(unitX, unitY);
+        final double residualX = Math.scalb(dx.residual, -dominantExponent);
+        final double residualY = Math.scalb(dy.residual, -dominantExponent);
+        final Product xSquare = exactProduct(unitX, unitX);
+        final Product ySquare = exactProduct(unitY, unitY);
+        final Sum squareSum = exactSum(xSquare.high, ySquare.high);
+        final double lengthLead = Math.sqrt(squareSum.sum);
+        final Product lengthSquare = exactProduct(lengthLead, lengthLead);
+        final double squareTail = ((squareSum.sum - lengthSquare.high) - lengthSquare.low + squareSum.error
+            + xSquare.low + ySquare.low)
+            + (2.0 * (unitX * residualX + unitY * residualY) + residualX * residualX + residualY * residualY);
+        final double lengthTail = squareTail / (2.0 * lengthLead);
+        if (Math.abs(unitX) >= Math.abs(unitY)) {
+            final double boundaryX = dominantCoordinate(center.x(), radius, unitX, residualX, unitY, residualY,
+                lengthLead, lengthTail);
+            final double boundaryY = minorCoordinate(center.y(), radius, dy, dominantExponent, lengthLead,
+                lengthTail);
+            return LayoutPoint.of(boundaryX, boundaryY);
+        }
+        final double boundaryX = minorCoordinate(center.x(), radius, dx, dominantExponent, lengthLead,
+            lengthTail);
+        final double boundaryY = dominantCoordinate(center.y(), radius, unitY, residualY, unitX, residualX,
+            lengthLead, lengthTail);
+        return LayoutPoint.of(boundaryX, boundaryY);
+    }
+
+    private static double dominantCoordinate(final double centerCoordinate, final double radius, final double unit,
+            final double residual, final double otherUnit, final double otherResidual, final double lengthLead,
+            final double lengthTail) {
+        final double sign = unit < 0.0 ? -1.0 : 1.0;
+        final Sum magnitude = exactSum(sign * unit, sign * residual);
+        final Sum head = exactSum(lengthLead, magnitude.sum);
+        final Sum middle = exactSum(head.sum, lengthTail);
+        final Sum tail = exactSum(middle.sum, magnitude.error);
+        final double normSum = tail.error + middle.error + head.error;
+        final Product normProduct = exactProduct(lengthLead, tail.sum);
+        final double productTail = normProduct.low + lengthLead * normSum + lengthTail * tail.sum
+            + lengthTail * normSum;
+        final Product otherSquare = exactProduct(otherUnit, otherUnit);
+        final double otherTail = 2.0 * otherUnit * otherResidual + otherResidual * otherResidual;
+        final double quotient = otherSquare.high / normProduct.high;
+        final Product quotientProduct = exactProduct(quotient, normProduct.high);
+        final double quotientResidual = ((otherSquare.high - quotientProduct.high) - quotientProduct.low
+            + otherSquare.low + otherTail) - quotient * productTail;
+        final double quotientTail = quotientResidual / normProduct.high;
+        final double quotientRemainder = quotientResidual - quotientTail * normProduct.high;
+        final double quotientTail2 = quotientRemainder / normProduct.high;
+        final Product radiusQuotient = exactProduct(radius, quotient);
+        final double main = sign * radius;
+        final Sum first = exactSum(main, -sign * radiusQuotient.high);
+        final double smallTerms = -sign * radiusQuotient.low - sign * radius * quotientTail
+            - sign * radius * quotientTail2;
+        final Sum second = exactSum(first.sum, smallTerms);
+        return addExact(centerCoordinate, second.sum, first.error + second.error);
+    }
+
+    private static double minorCoordinate(final double centerCoordinate, final double radius,
+            final Difference difference, final int dominantExponent, final double lengthLead,
+            final double lengthTail) {
+        final double scaledRadius = Math.scalb(radius, difference.exponent - dominantExponent);
+        final double quotient = difference.significand / lengthLead;
+        final Product quotientProduct = exactProduct(quotient, lengthLead);
+        final double quotientResidual = ((difference.significand - quotientProduct.high) - quotientProduct.low)
+            - quotient * lengthTail;
+        final double quotientTail = quotientResidual / lengthLead;
+        final double quotientRemainder = quotientResidual - quotientTail * lengthLead;
+        final double quotientTail2 = quotientRemainder / lengthLead;
+        final Product scaledProduct = exactProduct(scaledRadius, quotient);
+        final double residualRatio = residualRatioTerm(radius, difference.residual, dominantExponent,
+            lengthLead + lengthTail);
+        final double smallTerms = scaledRadius * quotientTail + scaledRadius * quotientTail2 + residualRatio;
+        final Sum first = exactSum(scaledProduct.high, scaledProduct.low);
+        final Sum second = exactSum(first.sum, smallTerms);
+        return addExact(centerCoordinate, second.sum, first.error + second.error);
+    }
+
+    private static double residualRatioTerm(final double radius, final double residual, final int dominantExponent,
+            final double length) {
+        if (residual == 0.0) {
+            return 0.0;
+        }
         final int radiusExponent = Math.getExponent(radius);
-        final double radiusSignificand = Math.scalb(radius, -radiusExponent);
-        final double offsetX = boundaryOffset(dx, radiusSignificand, radiusExponent, unitX, length,
-            dominantExponent);
-        final double offsetY = boundaryOffset(dy, radiusSignificand, radiusExponent, unitY, length,
-            dominantExponent);
-        final int scaleExponent = radiusExponent - dominantExponent;
-        final double residualX = residualDisplacement(dx.residual, dy.residual, unitX, unitY, length,
-            radiusSignificand, scaleExponent);
-        final double residualY = residualDisplacement(dy.residual, dx.residual, unitY, unitX, length,
-            radiusSignificand, scaleExponent);
-        return LayoutPoint.of(center.x() + offsetX + residualX, center.y() + offsetY + residualY);
+        final int residualExponent = Math.getExponent(residual);
+        final int lengthExponent = Math.getExponent(length);
+        final double product = Math.scalb(radius, -radiusExponent) * Math.scalb(residual, -residualExponent);
+        final double quotient = product / Math.scalb(length, -lengthExponent);
+        return Math.scalb(quotient, radiusExponent + residualExponent - dominantExponent - lengthExponent);
     }
 
-    private static double boundaryOffset(final Difference difference, final double radiusSignificand,
-            final int radiusExponent, final double unit, final double length, final int dominantExponent) {
-        if (difference.significand == 0.0) {
-            return 0.0;
+    private static Product exactProduct(final double first, final double second) {
+        if (Math.abs(first) <= SPLIT_SAFE_LIMIT && Math.abs(second) <= SPLIT_SAFE_LIMIT) {
+            return exactProductUnscaled(first, second);
         }
-        if (Math.abs(unit) >= Double.MIN_NORMAL) {
-            return Math.scalb(radiusSignificand * (unit / length), radiusExponent);
-        }
-        return Math.scalb(radiusSignificand * (difference.significand / length),
-            radiusExponent + difference.exponent - dominantExponent);
+        final Product scaled = exactProductUnscaled(Math.scalb(first, -54), Math.scalb(second, -54));
+        return new Product(Math.scalb(scaled.high, 108), Math.scalb(scaled.low, 108));
     }
 
-    private static double residualDisplacement(final double ownResidual, final double otherResidual,
-            final double ownUnit, final double otherUnit, final double length, final double radiusSignificand,
-            final int scaleExponent) {
-        if (ownResidual == 0.0 && otherResidual == 0.0) {
-            return 0.0;
+    private static Product exactProductUnscaled(final double first, final double second) {
+        final double product = first * second;
+        final double firstHigh = split(first);
+        final double firstLow = first - firstHigh;
+        final double secondHigh = split(second);
+        final double secondLow = second - secondHigh;
+        final double error = ((firstHigh * secondHigh - product) + firstHigh * secondLow + firstLow * secondHigh)
+            + firstLow * secondLow;
+        return new Product(product, error);
+    }
+
+    private static double split(final double value) {
+        final double scaled = value * 134217729.0;
+        return scaled - (scaled - value);
+    }
+
+    private static Sum exactSum(final double first, final double second) {
+        final double sum = first + second;
+        if (Double.isInfinite(sum)) {
+            return null;
         }
-        final double lengthSquared = length * length;
-        final double ownFactor = 1.0 - ownUnit * ownUnit / lengthSquared;
-        final double crossFactor = ownUnit * otherUnit / lengthSquared;
-        final double net = ownResidual * ownFactor - otherResidual * crossFactor;
-        if (net == 0.0) {
-            return 0.0;
+        final double secondVirtual = sum - first;
+        final double firstVirtual = sum - secondVirtual;
+        final double firstRound = first - firstVirtual;
+        final double secondRound = second - secondVirtual;
+        return new Sum(sum, firstRound + secondRound);
+    }
+
+    private static double addExact(final double first, final double second, final double third) {
+        final Sum head = exactSum(first, second);
+        if (head != null) {
+            final Sum tail = exactSum(head.sum, third);
+            if (tail != null) {
+                return tail.sum + (tail.error + head.error);
+            }
         }
-        final int netExponent = Math.getExponent(net);
-        final double netSignificand = Math.scalb(net, -netExponent);
-        return Math.scalb(radiusSignificand * (netSignificand / length), scaleExponent + netExponent);
+        final Sum halfHead = exactSum(first * 0.5, second * 0.5);
+        final Sum halfMiddle = exactSum(halfHead.sum, third * 0.5);
+        final Sum halfTail = exactSum(halfMiddle.sum, halfHead.error);
+        return 2.0 * (halfTail.sum + (halfTail.error + halfMiddle.error));
     }
 
     private static Difference difference(final double first, final double second) {
@@ -164,6 +259,26 @@ public final class NodeGeometry {
             this.significand = significand;
             this.exponent = exponent;
             this.residual = residual;
+        }
+    }
+
+    private static final class Product {
+        private final double high;
+        private final double low;
+
+        Product(final double high, final double low) {
+            this.high = high;
+            this.low = low;
+        }
+    }
+
+    private static final class Sum {
+        private final double sum;
+        private final double error;
+
+        Sum(final double sum, final double error) {
+            this.sum = sum;
+            this.error = error;
         }
     }
 

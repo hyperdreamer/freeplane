@@ -690,6 +690,18 @@ public class HullGeometryShould {
     }
 
     @Test
+    public void preservesDominantAxisLengthResidualAfterBoundaryCancellation() {
+        double u = Math.scalb(1.0, -100);
+        NodeGeometry node = NodeGeometry.of(LayoutPoint.of(0.0, u), u);
+
+        LayoutPoint boundary = node.boundaryToward(
+            LayoutPoint.of(Math.scalb(1.0, -200), -1.0));
+
+        assertThat(boundary.x()).isEqualTo(Math.scalb(1.0, -300));
+        assertThat(boundary.y()).isEqualTo(Math.scalb(1.0, -501));
+    }
+
+    @Test
     public void limitsEverySmoothPathTangentToFourWorldUnits() {
         HullGeometry rectangle = HullGeometry.of(Arrays.asList(
             LayoutPoint.of(0.0, 0.0),
