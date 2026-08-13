@@ -114,15 +114,22 @@ If an outgoing relationship targets a group boundary, it still counts as one vis
 
 Enlargement can bring a node closer to a neighbor that cannot move. Existing rules win:
 
-- a pinned node is never silently moved to make room for an enlarged neighbor;
-- residual overlap involving pinned nodes is accepted and reported through the existing conflict path rather than resolved by shrinking a node;
+- collision spacing around an enlarged node is best effort, exactly like existing internal layout;
+- a pinned node is never moved to make room for an enlarged neighbor, and a node is never shrunk below its computed scale to avoid contact;
+- residual visual overlap involving a pinned node is accepted silently. It is normal internal geometry, not a conflict, so it does not use the map-tier overlap report or the Unpin offer, which stay reserved for map-level hull overlap;
 - prominence never overrides the hard map-level separation tier or the per-particle displacement cap.
 
 When `d` changes, the next immutable projection and geometry generation carries the new scale. Unaffected node positions and pins are retained under the existing stable-key and pin rules, and a prominence-only change must not reset the layout.
 
 ### Accessibility
 
-Size alone must not be the only carrier of prominence, following the base specification's rule that meaning is never conveyed by one visual channel. The distinct visible outgoing target count is included in the node's accessible description alongside its label and owning map name, and it is available in hover or inspection text. Screen-reader users therefore receive the same information sighted users read from node size.
+Size alone must not be the only carrier of prominence, following the base specification's rule that meaning is never conveyed by one visual channel.
+
+The node's accessible description states the **count** of distinct visible outgoing targets, after its label and owning map name, and only when that count is nonzero. Zero-reach nodes stay silent, so the common case adds no verbosity to keyboard traversal.
+
+The scale factor is deliberately **not** announced. It is a rendering artifact of the curve, it is lossy above the cap because every node from 14 targets upward shares `1.75x`, and placing it in accessible text would make a later change to the curve silently change what users hear. Node extent already reaches assistive technology through normal accessible bounds. The same count is available in hover and inspection text.
+
+This adds one requirement to the planned keyboard and accessibility work, whose virtual children already carry label, owning map, state, and available actions.
 
 ### Rejected alternatives
 
@@ -164,9 +171,9 @@ Deterministic tests must cover:
 - world-space scaling that survives zoom and applies at every rendering tier;
 - propagation into node bounds, collision extent, hull extent, edge attachment, hit testing, and accessible bounds;
 - an enlarged child remaining inside its directly containing refitted boundary with unchanged padding;
-- no pinned node moving because a neighbor grew, with the existing conflict report used instead;
+- no pinned node moving and no node shrinking because a neighbor grew, with residual overlap accepted and no map-tier conflict reported;
 - unaffected node positions and pins staying stable across a prominence-only update;
-- the target count appearing in the accessible description;
+- the nonzero target count appearing in the accessible description, the zero case staying silent, and the scale factor never appearing in accessible text;
 - identical output for identical snapshots regardless of collection iteration order.
 
 The existing engineering workload of 2,000 projected nodes and 5,000 projected edges must include prominence calculation, geometry recomputation, hit-index updates, and the first rendered frame, measured against the existing batch-to-first-frame budget. No separate pass may push the pipeline past that budget.
