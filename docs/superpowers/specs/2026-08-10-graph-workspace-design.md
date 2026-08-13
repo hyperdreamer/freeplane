@@ -3,6 +3,7 @@
 - Date: 2026-08-10
 - Task: Feature 1
 - Status: Design approved in conversation; written specification awaiting review
+- Amendments: `2026-08-13-graph-node-prominence-design.md` sizes projected graph nodes by their distinct visible outgoing reach
 
 ## Summary
 
@@ -457,6 +458,7 @@ After each stable position update, the canvas computes a padded closed hull arou
 - Hulls are drawn from layout output; geometry is fitted, not constrained after the fact.
 - Parent hulls contain their child hulls whenever the soft internal springs allow it. Residual internal overlap is acceptable and is not an error.
 - Interior labels reserve collision space.
+- Hull extent grows with prominence-scaled child node shapes; padding is unchanged (see `2026-08-13-graph-node-prominence-design.md`).
 - Relationship lines attach to the nearest valid point on an enclosure boundary.
 
 #### Two Visual Tiers
@@ -820,6 +822,7 @@ The test suite must never execute a map edit against a map lacking `IUndoHandler
 27. Mark a Graph Group, open the map with the plugin disabled, save it there, reopen it with the plugin enabled, and verify the marker survives and the map never fails to load.
 28. Render a marked node that also has each of the four cloud shapes and verify the marker keeps one fixed appearance offset outside the cloud.
 29. Nest a marker beneath an active marker and verify it renders muted and dashed rather than disappearing.
+30. Verify node prominence per `2026-08-13-graph-node-prominence-design.md`: outgoing reach enlarges a node up to the cap, one visible group boundary counts once, and no pinned node is moved to make room.
 
 ## Design Decisions Rejected
 
