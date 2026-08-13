@@ -667,6 +667,16 @@ public class HullGeometryShould {
     }
 
     @Test
+    public void preservesRepresentableMinorBoundaryDisplacementOnANearLimitRay() {
+        NodeGeometry node = NodeGeometry.of(LayoutPoint.of(-1.0e308, 0.0), 1.0e307);
+
+        LayoutPoint boundary = node.boundaryToward(LayoutPoint.of(1.0e308, 1.0e-100));
+
+        assertThat(boundary.x()).isEqualTo(-9.0e307);
+        assertThat(boundary.y()).isCloseTo(5.0e-102, within(1.0e-116));
+    }
+
+    @Test
     public void limitsEverySmoothPathTangentToFourWorldUnits() {
         HullGeometry rectangle = HullGeometry.of(Arrays.asList(
             LayoutPoint.of(0.0, 0.0),
