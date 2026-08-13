@@ -16,7 +16,7 @@
 ## Global Constraints
 
 - Follow `AGENTS.md`: Java source and target compatibility are 8, encoding is UTF-8, indentation is 4 spaces, tests use JUnit 4/AssertJ/Mockito, and build commands use escalated `gradle`, not Maven or the Gradle wrapper.
-- Implementation builds require Java at `~/.sdkman/candidates/java/21.0.8-zulu`. That path is absent on the current host, so implementation preflight must stop until it is installed or the maintainer gives an explicit written waiver naming an exact `JAVA_HOME`; never silently substitute another JDK.
+- Implementation builds require Java at `~/.sdkman/candidates/java/21.0.8-zulu`. The required JDK is present on the current host; implementation preflight must verify that exact path and must never silently substitute another JDK.
 - The bundled module is `freeplane_plugin_graph` with symbolic name `org.freeplane.plugin.graph`; it extends MindMap mode only, adds no mode, changes no `freeplane_api` surface, and neither subclasses nor replaces `MapView`.
 - Plan approval explicitly authorizes one narrow repository-policy exception: two public-in-Java, unsupported internal SPI classes in the already exported implementation package `org.freeplane.view.swing.map`. This adds no newly exported package and no `freeplane_api` contract, but existing OSGi consumers of that package can see the classes. No other core behavior change is authorized.
 - Every cross-package type named in an `Interfaces` block is public with the exact signature shown. Implementation classes used only within one package remain package-private. The graph bundle exports no package.
