@@ -41,7 +41,7 @@ public final class HullIntersection {
                 return Double.compare(right.y(), left.y());
             }
         });
-        double bestSquared = Double.POSITIVE_INFINITY;
+        double bestMagnitude = Double.POSITIVE_INFINITY;
         LayoutPoint bestTranslation = null;
         for (final LayoutPoint axis : uniqueAxes) {
             final double[] firstInterval = project(first.exactPolygon(), axis);
@@ -63,9 +63,8 @@ public final class HullIntersection {
                 magnitude = negative;
                 direction = -1.0;
             }
-            final double squared = magnitude * magnitude;
-            if (squared + EPSILON < bestSquared) {
-                bestSquared = squared;
+            if (magnitude + EPSILON < bestMagnitude) {
+                bestMagnitude = magnitude;
                 bestTranslation = LayoutPoint.of(axis.x() * direction * magnitude,
                     axis.y() * direction * magnitude);
             }
@@ -78,9 +77,19 @@ public final class HullIntersection {
         for (int index = 0; index < count; index++) {
             final LayoutPoint current = polygon.get(index);
             final LayoutPoint next = polygon.get((index + 1) % count);
-            final double dx = next.x() - current.x();
-            final double dy = next.y() - current.y();
-            final double length = Math.sqrt(dx * dx + dy * dy);
+            final double dx;
+            final double dy;
+            if (subtractionIsFinite(next.x(), current.x()) && subtractionIsFinite(next.y(), current.y())) {
+                dx = next.x() - current.x();
+                dy = next.y() - current.y();
+            }
+            else {
+                final double scale = Math.max(Math.max(Math.abs(current.x()), Math.abs(current.y())),
+                    Math.max(Math.abs(next.x()), Math.abs(next.y())));
+                dx = next.x() / scale - current.x() / scale;
+                dy = next.y() / scale - current.y() / scale;
+            }
+            final double length = Math.hypot(dx, dy);
             if (length == 0.0) {
                 continue;
             }
@@ -103,6 +112,11 @@ public final class HullIntersection {
             maximum = Math.max(maximum, projection);
         }
         return new double[] {minimum, maximum};
+    }
+
+    private static boolean subtractionIsFinite(final double first, final double second) {
+        return (first >= 0.0 && second >= 0.0) || (first <= 0.0 && second <= 0.0)
+            || Math.abs(first) <= Double.MAX_VALUE - Math.abs(second);
     }
 
     @Override

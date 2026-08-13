@@ -522,6 +522,25 @@ public class HullGeometryShould {
     }
 
     @Test
+    public void rejectsAdjacentCollinearBacktrackingBeforeCanonicalization() {
+        assertThatThrownBy(() -> HullGeometry.of(Arrays.asList(
+            LayoutPoint.of(0.0, 0.0),
+            LayoutPoint.of(10.0, 0.0),
+            LayoutPoint.of(5.0, 0.0),
+            LayoutPoint.of(10.0, 10.0),
+            LayoutPoint.of(0.0, 10.0)), LayoutPoint.of(0.0, 0.0)))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        HullGeometry canonical = HullGeometry.of(Arrays.asList(
+            LayoutPoint.of(0.0, 0.0),
+            LayoutPoint.of(5.0, 0.0),
+            LayoutPoint.of(10.0, 0.0),
+            LayoutPoint.of(10.0, 10.0),
+            LayoutPoint.of(0.0, 10.0)), LayoutPoint.of(0.0, 0.0));
+        assertThat(canonical.exactPolygon()).containsExactlyElementsOf(square());
+    }
+
+    @Test
     public void rejectsDuplicateProjectedNodeAndEnclosureKeys() {
         ProjectedNode first = node("n1");
         ProjectedNode duplicate = node("n1");
@@ -556,10 +575,78 @@ public class HullGeometryShould {
     }
 
     @Test
+    public void keepsBoundaryTowardFiniteForOppositeSignNearLimitCoordinates() {
+        NodeGeometry left = NodeGeometry.of(LayoutPoint.of(-1e308, 0.0), 1e307);
+        assertThat(left.boundaryToward(LayoutPoint.of(1e308, 0.0)))
+            .isEqualTo(LayoutPoint.of(-9e307, 0.0));
+
+        NodeGeometry right = NodeGeometry.of(LayoutPoint.of(1e308, 0.0), 1e307);
+        assertThat(right.boundaryToward(LayoutPoint.of(-1e308, 0.0)))
+            .isEqualTo(LayoutPoint.of(9e307, 0.0));
+    }
+
+    @Test
+    public void limitsEverySmoothPathTangentToFourWorldUnits() {
+        HullGeometry rectangle = HullGeometry.of(Arrays.asList(
+            LayoutPoint.of(0.0, 0.0),
+            LayoutPoint.of(100.0, 0.0),
+            LayoutPoint.of(100.0, 20.0),
+            LayoutPoint.of(0.0, 20.0)), LayoutPoint.of(0.0, 0.0));
+        assertTangentsWithinFourWorldUnits(rectangle);
+
+        HullGeometry huge = HullGeometry.of(Arrays.asList(
+            LayoutPoint.of(0.0, 0.0),
+            LayoutPoint.of(1e160, 0.0),
+            LayoutPoint.of(1e160, 1e160),
+            LayoutPoint.of(0.0, 1e160)), LayoutPoint.of(0.0, 0.0));
+        assertTangentsWithinFourWorldUnits(huge);
+        PathIterator hugeIterator = huge.smoothPath().getPathIterator(null);
+        double[] hugeCoords = new double[6];
+        assertThat(hugeIterator.currentSegment(hugeCoords)).isEqualTo(PathIterator.SEG_MOVETO);
+        assertThat(LayoutPoint.of(hugeCoords[0], hugeCoords[1])).isEqualTo(LayoutPoint.of(0.0, 4.0));
+        hugeIterator.next();
+        assertThat(hugeIterator.currentSegment(hugeCoords)).isEqualTo(PathIterator.SEG_QUADTO);
+        assertThat(LayoutPoint.of(hugeCoords[2], hugeCoords[3])).isEqualTo(LayoutPoint.of(4.0, 0.0));
+    }
+
+    @Test
+    public void findsNearestBoundaryForFarFiniteTargets() {
+        HullGeometry squareHull = HullGeometry.of(square(), LayoutPoint.of(0.0, 0.0));
+        assertThat(squareHull.nearestBoundaryPoint(LayoutPoint.of(1e200, 1e200)))
+            .isEqualTo(LayoutPoint.of(10.0, 10.0));
+    }
+
+    @Test
     public void resolvesNearestBoundaryNearTiesToTheEarlierCanonicalEdge() {
         HullGeometry squareHull = HullGeometry.of(square(), LayoutPoint.of(0.0, 0.0));
         assertThat(squareHull.nearestBoundaryPoint(LayoutPoint.of(5.0, 5.00000000001)))
             .isEqualTo(LayoutPoint.of(5.0, 0.0));
+    }
+
+    private static void assertTangentsWithinFourWorldUnits(final HullGeometry hull) {
+        PathIterator iterator = hull.smoothPath().getPathIterator(null);
+        double[] coords = new double[6];
+        double currentX = 0.0;
+        double currentY = 0.0;
+        int quadraticCount = 0;
+        while (!iterator.isDone()) {
+            int type = iterator.currentSegment(coords);
+            if (type == PathIterator.SEG_MOVETO || type == PathIterator.SEG_LINETO) {
+                currentX = coords[0];
+                currentY = coords[1];
+            }
+            else if (type == PathIterator.SEG_QUADTO) {
+                assertThat(Math.hypot(currentX - coords[0], currentY - coords[1]))
+                    .isLessThanOrEqualTo(4.0);
+                assertThat(Math.hypot(coords[2] - coords[0], coords[3] - coords[1]))
+                    .isLessThanOrEqualTo(4.0);
+                currentX = coords[2];
+                currentY = coords[3];
+                quadraticCount++;
+            }
+            iterator.next();
+        }
+        assertThat(quadraticCount).isEqualTo(hull.exactPolygon().size());
     }
 
     private static GraphGeometry compute(final GraphProjection projection, final LayoutPositions positions) {

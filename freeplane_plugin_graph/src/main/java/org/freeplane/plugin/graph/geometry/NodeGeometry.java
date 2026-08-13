@@ -66,16 +66,31 @@ public final class NodeGeometry {
 
     public LayoutPoint boundaryToward(final LayoutPoint toward) {
         Objects.requireNonNull(toward, "toward");
-        final double dx = toward.x() - center.x();
-        final double dy = toward.y() - center.y();
+        final double dx;
+        final double dy;
+        if (subtractionIsFinite(toward.x(), center.x()) && subtractionIsFinite(toward.y(), center.y())) {
+            dx = toward.x() - center.x();
+            dy = toward.y() - center.y();
+        }
+        else {
+            final double scale = Math.max(Math.max(Math.abs(center.x()), Math.abs(center.y())),
+                Math.max(Math.abs(toward.x()), Math.abs(toward.y())));
+            dx = toward.x() / scale - center.x() / scale;
+            dy = toward.y() / scale - center.y() / scale;
+        }
         if (dx == 0.0 && dy == 0.0) {
             return LayoutPoint.of(center.x() + radius, center.y());
         }
         final double largest = Math.max(Math.abs(dx), Math.abs(dy));
         final double ux = dx / largest;
         final double uy = dy / largest;
-        final double length = Math.sqrt(ux * ux + uy * uy);
+        final double length = Math.hypot(ux, uy);
         return LayoutPoint.of(center.x() + ux / length * radius, center.y() + uy / length * radius);
+    }
+
+    private static boolean subtractionIsFinite(final double first, final double second) {
+        return (first >= 0.0 && second >= 0.0) || (first <= 0.0 && second <= 0.0)
+            || Math.abs(first) <= Double.MAX_VALUE - Math.abs(second);
     }
 
     @Override

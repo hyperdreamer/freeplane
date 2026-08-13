@@ -2,6 +2,8 @@ package org.freeplane.plugin.graph.geometry;
 
 import java.awt.Shape;
 import java.awt.geom.Path2D;
+import java.math.BigDecimal;
+import java.math.MathContext;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -9,6 +11,7 @@ import java.util.Objects;
 
 public final class HullGeometry {
     private static final double EPSILON = 1e-9;
+    private static final double SAFE_PRODUCT_COMPONENT = Math.sqrt(Double.MAX_VALUE) * 0.5;
     private static final double CORNER_SMOOTHING_TANGENT = 4.0;
 
     private final List<LayoutPoint> exactPolygon;
@@ -89,30 +92,87 @@ public final class HullGeometry {
     public LayoutPoint nearestBoundaryPoint(final LayoutPoint toward) {
         Objects.requireNonNull(toward, "toward");
         LayoutPoint bestPoint = null;
-        double bestSquared = Double.POSITIVE_INFINITY;
         final int count = exactPolygon.size();
         for (int index = 0; index < count; index++) {
             final LayoutPoint start = exactPolygon.get(index);
             final LayoutPoint end = exactPolygon.get((index + 1) % count);
-            final double dx = end.x() - start.x();
-            final double dy = end.y() - start.y();
-            final double lengthSquared = dx * dx + dy * dy;
-            double t = 0.0;
-            if (lengthSquared > 0.0) {
-                t = ((toward.x() - start.x()) * dx + (toward.y() - start.y()) * dy) / lengthSquared;
-                t = Math.max(0.0, Math.min(1.0, t));
-            }
-            final double px = start.x() + t * dx;
-            final double py = start.y() + t * dy;
-            final double deltaX = toward.x() - px;
-            final double deltaY = toward.y() - py;
-            final double squared = deltaX * deltaX + deltaY * deltaY;
-            if (squared < bestSquared - EPSILON) {
-                bestSquared = squared;
-                bestPoint = LayoutPoint.of(px, py);
+            final LayoutPoint candidate = nearestPointOnSegment(start, end, toward);
+            if (bestPoint == null || improvesSquaredDistance(candidate, bestPoint, toward)) {
+                bestPoint = candidate;
             }
         }
         return bestPoint;
+    }
+
+    private static LayoutPoint nearestPointOnSegment(final LayoutPoint start, final LayoutPoint end,
+            final LayoutPoint toward) {
+        if (subtractionIsFinite(end.x(), start.x()) && subtractionIsFinite(end.y(), start.y())
+                && subtractionIsFinite(toward.x(), start.x()) && subtractionIsFinite(toward.y(), start.y())) {
+            final double dx = end.x() - start.x();
+            final double dy = end.y() - start.y();
+            final double towardX = toward.x() - start.x();
+            final double towardY = toward.y() - start.y();
+            if (productsAreFinite(dx, dy, towardX, towardY)) {
+                final double lengthSquared = dx * dx + dy * dy;
+                final double projection = towardX * dx + towardY * dy;
+                if (lengthSquared > 0.0) {
+                    final double t = Math.max(0.0, Math.min(1.0, projection / lengthSquared));
+                    return LayoutPoint.of(start.x() + t * dx, start.y() + t * dy);
+                }
+            }
+        }
+
+        final BigDecimal decimalDx = decimal(end.x()).subtract(decimal(start.x()));
+        final BigDecimal decimalDy = decimal(end.y()).subtract(decimal(start.y()));
+        final BigDecimal decimalTowardX = decimal(toward.x()).subtract(decimal(start.x()));
+        final BigDecimal decimalTowardY = decimal(toward.y()).subtract(decimal(start.y()));
+        final BigDecimal decimalLengthSquared = decimalDx.multiply(decimalDx).add(decimalDy.multiply(decimalDy));
+        final BigDecimal decimalProjection = decimalTowardX.multiply(decimalDx)
+            .add(decimalTowardY.multiply(decimalDy));
+        if (decimalProjection.signum() <= 0) {
+            return start;
+        }
+        if (decimalProjection.compareTo(decimalLengthSquared) >= 0) {
+            return end;
+        }
+        final BigDecimal t = decimalProjection.divide(decimalLengthSquared, MathContext.DECIMAL128);
+        final double px = decimal(start.x()).add(t.multiply(decimalDx)).doubleValue();
+        final double py = decimal(start.y()).add(t.multiply(decimalDy)).doubleValue();
+        return LayoutPoint.of(px, py);
+    }
+
+    private static boolean improvesSquaredDistance(final LayoutPoint candidate, final LayoutPoint best,
+            final LayoutPoint toward) {
+        if (subtractionIsFinite(candidate.x(), toward.x()) && subtractionIsFinite(candidate.y(), toward.y())
+                && subtractionIsFinite(best.x(), toward.x()) && subtractionIsFinite(best.y(), toward.y())) {
+            final double candidateX = candidate.x() - toward.x();
+            final double candidateY = candidate.y() - toward.y();
+            final double bestX = best.x() - toward.x();
+            final double bestY = best.y() - toward.y();
+            if (productsAreFinite(candidateX, candidateY, bestX, bestY)) {
+                final double candidateSquared = candidateX * candidateX + candidateY * candidateY;
+                final double bestSquared = bestX * bestX + bestY * bestY;
+                return candidateSquared < bestSquared - EPSILON;
+            }
+        }
+        return decimalSquaredDistance(candidate, toward).add(decimal(EPSILON))
+            .compareTo(decimalSquaredDistance(best, toward)) < 0;
+    }
+
+    private static boolean productsAreFinite(final double firstX, final double firstY,
+            final double secondX, final double secondY) {
+        return Math.abs(firstX) <= SAFE_PRODUCT_COMPONENT && Math.abs(firstY) <= SAFE_PRODUCT_COMPONENT
+            && Math.abs(secondX) <= SAFE_PRODUCT_COMPONENT && Math.abs(secondY) <= SAFE_PRODUCT_COMPONENT;
+    }
+
+    private static BigDecimal decimalSquaredDistance(final LayoutPoint first, final LayoutPoint second) {
+        final BigDecimal dx = decimal(first.x()).subtract(decimal(second.x()));
+        final BigDecimal dy = decimal(first.y()).subtract(decimal(second.y()));
+        return dx.multiply(dx).add(dy.multiply(dy));
+    }
+
+    private static BigDecimal decimal(final double value) {
+        return BigDecimal.valueOf(value);
     }
 
     private static List<LayoutPoint> canonicalize(final List<LayoutPoint> polygon) {
@@ -174,7 +234,14 @@ public final class HullGeometry {
             final LayoutPoint previous = vertices.get((index + vertices.size() - 1) % vertices.size());
             final LayoutPoint current = vertices.get(index);
             final LayoutPoint next = vertices.get((index + 1) % vertices.size());
-            if (current.equals(previous) || Math.abs(cross(previous, current, next)) <= EPSILON) {
+            if (current.equals(previous)) {
+                vertices.remove(index);
+                changed = true;
+            }
+            else if (Math.abs(cross(previous, current, next)) <= EPSILON) {
+                if (!isBetween(previous, current, next)) {
+                    throw new IllegalArgumentException("A hull polygon must not backtrack along an edge");
+                }
                 vertices.remove(index);
                 changed = true;
             }
@@ -215,8 +282,12 @@ public final class HullGeometry {
     }
 
     private static boolean onSegment(final LayoutPoint a, final LayoutPoint b, final LayoutPoint point) {
-        return point.x() <= Math.max(a.x(), b.x()) + EPSILON && point.x() >= Math.min(a.x(), b.x()) - EPSILON
-            && point.y() <= Math.max(a.y(), b.y()) + EPSILON && point.y() >= Math.min(a.y(), b.y()) - EPSILON;
+        return isBetween(a, point, b);
+    }
+
+    private static boolean isBetween(final LayoutPoint first, final LayoutPoint point, final LayoutPoint second) {
+        return point.x() <= Math.max(first.x(), second.x()) && point.x() >= Math.min(first.x(), second.x())
+            && point.y() <= Math.max(first.y(), second.y()) && point.y() >= Math.min(first.y(), second.y());
     }
 
     private static Path2D.Double buildSmoothPath(final List<LayoutPoint> polygon) {
@@ -234,7 +305,7 @@ public final class HullGeometry {
         for (int index = 0; index < count; index++) {
             final LayoutPoint current = polygon.get(index);
             final LayoutPoint next = polygon.get((index + 1) % count);
-            final LayoutPoint start = pointAlong(polygon.get((index + count - 1) % count), current, cuts[index]);
+            final LayoutPoint start = pointAlong(current, polygon.get((index + count - 1) % count), cuts[index]);
             final LayoutPoint end = pointAlong(current, next, cuts[index]);
             if (index == 0) {
                 path.moveTo(start.x(), start.y());
@@ -249,16 +320,35 @@ public final class HullGeometry {
     }
 
     private static double distance(final LayoutPoint first, final LayoutPoint second) {
-        final double dx = second.x() - first.x();
-        final double dy = second.y() - first.y();
-        return Math.sqrt(dx * dx + dy * dy);
+        if (!subtractionIsFinite(second.x(), first.x()) || !subtractionIsFinite(second.y(), first.y())) {
+            return Double.POSITIVE_INFINITY;
+        }
+        return Math.hypot(second.x() - first.x(), second.y() - first.y());
     }
 
     private static LayoutPoint pointAlong(final LayoutPoint from, final LayoutPoint to, final double distance) {
-        final double dx = to.x() - from.x();
-        final double dy = to.y() - from.y();
-        final double length = Math.sqrt(dx * dx + dy * dy);
-        return LayoutPoint.of(from.x() + dx / length * distance, from.y() + dy / length * distance);
+        final double dx;
+        final double dy;
+        if (subtractionIsFinite(to.x(), from.x()) && subtractionIsFinite(to.y(), from.y())) {
+            dx = to.x() - from.x();
+            dy = to.y() - from.y();
+        }
+        else {
+            final double scale = Math.max(Math.max(Math.abs(from.x()), Math.abs(from.y())),
+                Math.max(Math.abs(to.x()), Math.abs(to.y())));
+            dx = to.x() / scale - from.x() / scale;
+            dy = to.y() / scale - from.y() / scale;
+        }
+        final double largest = Math.max(Math.abs(dx), Math.abs(dy));
+        final double ux = dx / largest;
+        final double uy = dy / largest;
+        final double length = Math.hypot(ux, uy);
+        return LayoutPoint.of(from.x() + ux / length * distance, from.y() + uy / length * distance);
+    }
+
+    private static boolean subtractionIsFinite(final double first, final double second) {
+        return (first >= 0.0 && second >= 0.0) || (first <= 0.0 && second <= 0.0)
+            || Math.abs(first) <= Double.MAX_VALUE - Math.abs(second);
     }
 
     private static double cross(final LayoutPoint previous, final LayoutPoint current, final LayoutPoint next) {
