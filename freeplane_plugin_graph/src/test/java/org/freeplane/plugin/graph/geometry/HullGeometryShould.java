@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.within;
 import java.awt.Shape;
 import java.awt.geom.Path2D;
 import java.awt.geom.PathIterator;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -566,6 +567,40 @@ public class HullGeometryShould {
             assertThat(diamond.contains(vertex)).isTrue();
         }
         assertThat(diamond.contains(LayoutPoint.of(9.0e307, 0.0))).isFalse();
+    }
+
+    @Test
+    public void acceptsMixedMagnitudeFiniteTriangleWithoutLosingOrientation() {
+        double huge = Math.scalb(1.0, 996);
+        double tiny = Math.scalb(1.0, -85);
+        HullGeometry hull = HullGeometry.of(Arrays.asList(
+            LayoutPoint.of(0.0, 0.0),
+            LayoutPoint.of(huge, 0.0),
+            LayoutPoint.of(tiny, tiny)), LayoutPoint.of(0.0, 0.0));
+
+        assertThat(hull.exactPolygon()).hasSize(3);
+        for (LayoutPoint vertex : hull.exactPolygon()) {
+            assertThat(hull.contains(vertex)).isTrue();
+        }
+    }
+
+    @Test
+    public void doesNotTreatBoundsOnlyEndpointAsSegmentIntersection() throws Exception {
+        Method segmentsIntersect = HullGeometry.class.getDeclaredMethod("segmentsIntersect",
+            LayoutPoint.class, LayoutPoint.class, LayoutPoint.class, LayoutPoint.class);
+        segmentsIntersect.setAccessible(true);
+        boolean disjoint = (Boolean) segmentsIntersect.invoke(null,
+            LayoutPoint.of(0.0, 0.0), LayoutPoint.of(2.0, 0.0),
+            LayoutPoint.of(3.0, 0.0), LayoutPoint.of(1.0, 1.0));
+        assertThat(disjoint).isFalse();
+        boolean crossing = (Boolean) segmentsIntersect.invoke(null,
+            LayoutPoint.of(0.0, 0.0), LayoutPoint.of(4.0, 0.0),
+            LayoutPoint.of(2.0, -1.0), LayoutPoint.of(2.0, 1.0));
+        assertThat(crossing).isTrue();
+        boolean touching = (Boolean) segmentsIntersect.invoke(null,
+            LayoutPoint.of(0.0, 0.0), LayoutPoint.of(2.0, 0.0),
+            LayoutPoint.of(2.0, 0.0), LayoutPoint.of(3.0, 1.0));
+        assertThat(touching).isTrue();
     }
 
     @Test
