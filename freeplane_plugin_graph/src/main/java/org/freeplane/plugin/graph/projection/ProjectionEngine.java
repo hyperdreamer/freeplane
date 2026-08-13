@@ -75,7 +75,10 @@ public final class ProjectionEngine {
         final List<RelationshipResolution> resolutions = resolveRelationships(value, endpointTraversals);
         final List<PinProjection> pins = projectPins(value.workspace(), projectedNodes);
         final List<ProjectedEdge> edges = projectEdges(selectedMaps, endpointTraversals, resolutions);
-        return GraphProjection.projected(value.generation(), projectedNodes, projectedEnclosures, edges, resolutions, pins);
+        final Map<ProjectedNodeKey, NodeProminence> prominence =
+            ProminenceCalculator.calculate(projectedNodes, projectedEnclosures, edges);
+        return GraphProjection.projected(value.generation(), projectedNodes, projectedEnclosures, edges, resolutions,
+            pins, prominence);
     }
 
     private static List<ProjectedEdge> projectEdges(final List<MapSnapshot> maps,
