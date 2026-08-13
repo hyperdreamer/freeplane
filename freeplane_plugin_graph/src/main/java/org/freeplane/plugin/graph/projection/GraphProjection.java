@@ -2,7 +2,9 @@ package org.freeplane.plugin.graph.projection;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public final class GraphProjection {
@@ -12,10 +14,12 @@ public final class GraphProjection {
     private final List<ProjectedEdge> edges;
     private final List<RelationshipResolution> relationshipResolutions;
     private final List<PinProjection> pins;
+    private final Map<ProjectedNodeKey, NodeProminence> prominence;
 
     private GraphProjection(final long generation, final List<ProjectedNode> nodes,
             final List<ProjectedEnclosure> enclosures, final List<ProjectedEdge> edges,
-            final List<RelationshipResolution> relationshipResolutions, final List<PinProjection> pins) {
+            final List<RelationshipResolution> relationshipResolutions, final List<PinProjection> pins,
+            final Map<ProjectedNodeKey, NodeProminence> prominence) {
         if (generation < 0) {
             throw new IllegalArgumentException("Generation must be nonnegative");
         }
@@ -25,25 +29,35 @@ public final class GraphProjection {
         this.edges = copyValues(edges, "edges");
         this.relationshipResolutions = copyValues(relationshipResolutions, "relationshipResolutions");
         this.pins = copyValues(pins, "pins");
+        this.prominence = copyProminence(prominence);
     }
 
     public static GraphProjection structure(final long generation, final List<ProjectedNode> nodes,
             final List<ProjectedEnclosure> enclosures) {
         return new GraphProjection(generation, nodes, enclosures, Collections.<ProjectedEdge>emptyList(),
-            Collections.<RelationshipResolution>emptyList(), Collections.<PinProjection>emptyList());
+            Collections.<RelationshipResolution>emptyList(), Collections.<PinProjection>emptyList(),
+            Collections.<ProjectedNodeKey, NodeProminence>emptyMap());
     }
 
     public static GraphProjection resolved(final long generation, final List<ProjectedNode> nodes,
             final List<ProjectedEnclosure> enclosures, final List<RelationshipResolution> relationshipResolutions,
             final List<PinProjection> pins) {
         return new GraphProjection(generation, nodes, enclosures, Collections.<ProjectedEdge>emptyList(),
-            relationshipResolutions, pins);
+            relationshipResolutions, pins, Collections.<ProjectedNodeKey, NodeProminence>emptyMap());
     }
 
     public static GraphProjection projected(final long generation, final List<ProjectedNode> nodes,
             final List<ProjectedEnclosure> enclosures, final List<ProjectedEdge> edges,
             final List<RelationshipResolution> relationshipResolutions, final List<PinProjection> pins) {
-        return new GraphProjection(generation, nodes, enclosures, edges, relationshipResolutions, pins);
+        return projected(generation, nodes, enclosures, edges, relationshipResolutions, pins,
+            ProminenceCalculator.calculate(nodes, enclosures, edges));
+    }
+
+    public static GraphProjection projected(final long generation, final List<ProjectedNode> nodes,
+            final List<ProjectedEnclosure> enclosures, final List<ProjectedEdge> edges,
+            final List<RelationshipResolution> relationshipResolutions, final List<PinProjection> pins,
+            final Map<ProjectedNodeKey, NodeProminence> prominence) {
+        return new GraphProjection(generation, nodes, enclosures, edges, relationshipResolutions, pins, prominence);
     }
 
     public long generation() {
@@ -70,6 +84,10 @@ public final class GraphProjection {
         return pins;
     }
 
+    public Map<ProjectedNodeKey, NodeProminence> prominence() {
+        return prominence;
+    }
+
     public int projectedNodeCount() {
         return nodes.size();
     }
@@ -87,6 +105,18 @@ public final class GraphProjection {
         return Collections.unmodifiableList(copy);
     }
 
+    private static Map<ProjectedNodeKey, NodeProminence> copyProminence(
+            final Map<ProjectedNodeKey, NodeProminence> values) {
+        Objects.requireNonNull(values, "prominence");
+        final Map<ProjectedNodeKey, NodeProminence> copy =
+            new LinkedHashMap<ProjectedNodeKey, NodeProminence>();
+        for (final Map.Entry<ProjectedNodeKey, NodeProminence> entry : values.entrySet()) {
+            copy.put(Objects.requireNonNull(entry.getKey(), "prominence key"),
+                Objects.requireNonNull(entry.getValue(), "prominence value"));
+        }
+        return Collections.unmodifiableMap(copy);
+    }
+
     @Override
     public boolean equals(final Object other) {
         if (this == other) {
@@ -98,12 +128,12 @@ public final class GraphProjection {
         final GraphProjection that = (GraphProjection) other;
         return generation == that.generation && nodes.equals(that.nodes) && enclosures.equals(that.enclosures)
             && edges.equals(that.edges) && relationshipResolutions.equals(that.relationshipResolutions)
-            && pins.equals(that.pins);
+            && pins.equals(that.pins) && prominence.equals(that.prominence);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(generation, nodes, enclosures, edges, relationshipResolutions, pins);
+        return Objects.hash(generation, nodes, enclosures, edges, relationshipResolutions, pins, prominence);
     }
 
     @Override
