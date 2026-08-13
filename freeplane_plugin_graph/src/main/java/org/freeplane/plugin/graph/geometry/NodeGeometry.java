@@ -81,7 +81,12 @@ public final class NodeGeometry {
             dominantExponent);
         final double offsetY = boundaryOffset(dy, radiusSignificand, radiusExponent, unitY, length,
             dominantExponent);
-        return LayoutPoint.of(center.x() + offsetX, center.y() + offsetY);
+        final int scaleExponent = radiusExponent - dominantExponent;
+        final double residualX = residualDisplacement(dx.residual, dy.residual, unitX, unitY, length,
+            radiusSignificand, scaleExponent);
+        final double residualY = residualDisplacement(dy.residual, dx.residual, unitY, unitX, length,
+            radiusSignificand, scaleExponent);
+        return LayoutPoint.of(center.x() + offsetX + residualX, center.y() + offsetY + residualY);
     }
 
     private static double boundaryOffset(final Difference difference, final double radiusSignificand,
@@ -96,25 +101,69 @@ public final class NodeGeometry {
             radiusExponent + difference.exponent - dominantExponent);
     }
 
+    private static double residualDisplacement(final double ownResidual, final double otherResidual,
+            final double ownUnit, final double otherUnit, final double length, final double radiusSignificand,
+            final int scaleExponent) {
+        if (ownResidual == 0.0 && otherResidual == 0.0) {
+            return 0.0;
+        }
+        final double lengthSquared = length * length;
+        final double ownFactor = 1.0 - ownUnit * ownUnit / lengthSquared;
+        final double crossFactor = ownUnit * otherUnit / lengthSquared;
+        final double net = ownResidual * ownFactor - otherResidual * crossFactor;
+        if (net == 0.0) {
+            return 0.0;
+        }
+        final int netExponent = Math.getExponent(net);
+        final double netSignificand = Math.scalb(net, -netExponent);
+        return Math.scalb(radiusSignificand * (netSignificand / length), scaleExponent + netExponent);
+    }
+
     private static Difference difference(final double first, final double second) {
         if (subtractionIsFinite(first, second)) {
             final double delta = first - second;
             if (delta == 0.0) {
-                return new Difference(0.0, 0);
+                return new Difference(0.0, 0, 0.0);
             }
-            return new Difference(Math.scalb(delta, -Math.getExponent(delta)), Math.getExponent(delta));
+            final double residual;
+            if (Math.abs(first) >= Math.abs(second)) {
+                residual = subtractionResidual(first, second, delta);
+            }
+            else {
+                residual = -subtractionResidual(second, first, -delta);
+            }
+            return new Difference(Math.scalb(delta, -Math.getExponent(delta)), Math.getExponent(delta), residual);
         }
-        final double half = first * 0.5 - second * 0.5;
-        return new Difference(Math.scalb(half, -Math.getExponent(half)), Math.getExponent(half) + 1);
+        final double halfFirst = first * 0.5;
+        final double halfSecond = second * 0.5;
+        final double half = halfFirst - halfSecond;
+        final double residual;
+        if (Math.abs(halfFirst) >= Math.abs(halfSecond)) {
+            residual = subtractionResidual(halfFirst, halfSecond, half) * 2.0;
+        }
+        else {
+            residual = -subtractionResidual(halfSecond, halfFirst, -half) * 2.0;
+        }
+        return new Difference(Math.scalb(half, -Math.getExponent(half)), Math.getExponent(half) + 1, residual);
+    }
+
+    private static double subtractionResidual(final double first, final double second, final double difference) {
+        final double secondVirtual = first - difference;
+        final double firstVirtual = difference + secondVirtual;
+        final double secondRound = secondVirtual - second;
+        final double firstRound = first - firstVirtual;
+        return firstRound + secondRound;
     }
 
     private static final class Difference {
         private final double significand;
         private final int exponent;
+        private final double residual;
 
-        Difference(final double significand, final int exponent) {
+        Difference(final double significand, final int exponent, final double residual) {
             this.significand = significand;
             this.exponent = exponent;
+            this.residual = residual;
         }
     }
 

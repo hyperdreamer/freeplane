@@ -677,6 +677,19 @@ public class HullGeometryShould {
     }
 
     @Test
+    public void preservesSubtractionResidualAfterBoundaryCenterCancellation() {
+        double centerY = Math.scalb(1.0, -100);
+        double radius = Math.scalb(1.0, 900);
+        double towardX = Math.scalb(1.0, 1000);
+        NodeGeometry node = NodeGeometry.of(LayoutPoint.of(0.0, centerY), radius);
+
+        LayoutPoint boundary = node.boundaryToward(LayoutPoint.of(towardX, -1.0));
+
+        assertThat(boundary.x()).isEqualTo(Math.scalb(1.0, 900));
+        assertThat(boundary.y()).isEqualTo(Math.scalb(-1.0, -200));
+    }
+
+    @Test
     public void limitsEverySmoothPathTangentToFourWorldUnits() {
         HullGeometry rectangle = HullGeometry.of(Arrays.asList(
             LayoutPoint.of(0.0, 0.0),
