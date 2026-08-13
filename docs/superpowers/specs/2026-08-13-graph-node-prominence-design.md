@@ -7,39 +7,53 @@
 
 ## Goal
 
-Make a node with many visible outgoing relationships visually recognizable as a source or foundation, without allowing a dense hub to dominate the canvas or exposing hidden graph content.
+Make a node with many visible outgoing relationships visually recognizable as a source or foundation, without allowing a dense hub to dominate the canvas and without exposing hidden graph content.
 
-This amendment changes node geometry only. It does not change projection membership, relationship persistence, endpoint resolution, relationship direction semantics, labels, or the confidentiality boundary defined by the base specification.
+This amendment changes projected node size and the geometry derived from it. It does not change projection membership, relationship persistence, endpoint resolution, direction semantics, labels, enclosure tiers, or the confidentiality boundary defined by the base specification.
 
 ## 1. Prominence Metric
 
-For each currently visible projected graph node, compute `d` as the number of distinct visible outgoing projected endpoints.
+For each visible projected graph node, `d` is the number of distinct **visible prominence targets** it reaches through outgoing relationships.
 
-Direction rules:
+### Visible prominence target
 
-- A directed contributor `A -> B` increments `A` once for endpoint `B`.
+A prominence target is what the user can actually see and click, not an internal identity:
+
+- an outgoing endpoint that projects to a graph node is identified by its `ProjectedNodeKey`;
+- an outgoing endpoint that projects to an ancestor enclosure is identified by its **visible boundary** (`EnclosureHullKey`), not by the addressable ancestor (`EnclosureKey`).
+
+Because a maximal unary ancestor chain collapses into one visible boundary, several separately addressable ancestors can share one prominence target. Reaching two collapsed ancestors inside one visible boundary is `d = 1`. Prominence is a visual metric: two canvases that look identical must produce identical node sizes, so counting hidden addressable identities is explicitly rejected. Relationship creation, inspection, and deletion continue to use exact endpoint identity and are unaffected.
+
+### Direction rules
+
+- A directed contributor `A -> B` increments `A` once for target `B`.
 - A bidirectional contributor `A <-> B` increments both `A` and `B` once.
-- An undirected contributor `A - B` increments neither endpoint.
-- Duplicate or parallel contributors to the same source/target endpoint pair count once for prominence.
-- Self-relationships contribute zero.
-- A visible group boundary is one endpoint, regardless of how many descendants it contains.
-- If an endpoint disappears from the current projection through filtering, collapsing, hiding, or map removal, it contributes zero until it becomes visible again.
+- An undirected contributor increments neither endpoint. The base specification also calls these nondirectional contributors; both names mean the same thing.
+- Duplicate or parallel contributors reaching the same target count once, matching the existing rule that they paint one line.
+- A contributor whose endpoints resolve to the same projected endpoint contributes nothing, consistent with the existing omission rule for self-resolving contributors.
+- A visible group boundary counts once, regardless of how many descendants or collapsed ancestors it represents.
+- A target that leaves the current projection through filtering, collapsing, hiding, or map removal contributes zero until it becomes visible again.
 
-The calculation uses projected endpoint identity, not raw node IDs and not descendants hidden inside a group boundary. A relationship is never redistributed to those descendants. A visible group boundary is therefore treated as one distinct target when a line visibly terminates at that boundary.
+Descendants hidden inside a group boundary are never inspected, counted, or given a share of the relationship. Unreachable and hidden content must not influence `d`.
 
-The metric is based on the graph currently visible to the user. A projection update may consequently resize an affected source when a map, endpoint, filter, collapse state, or group marker changes. Unaffected nodes do not resize merely because an unrelated node changes.
+The metric is derived from the graph currently visible to the user, so a projection change can resize the affected source. Unaffected nodes never resize because an unrelated node changed.
 
-### Endpoint examples
+### Target examples
 
 | Relationship | Prominence contribution |
 |---|---|
 | `A -> B` | `A + 1` |
 | `A <-> B` | `A + 1`, `B + 1` |
-| `A - B` | none |
+| undirected `A - B` | none |
 | two `A -> B` contributors | `A + 1` total |
 | `A -> A` | none |
 | `A ->` visible group boundary | `A + 1` |
-| `A ->` hidden descendants behind that boundary | never counted separately |
+| `A ->` two collapsed ancestors sharing one visible boundary | `A + 1` |
+| `A ->` hidden descendants behind a boundary | never counted separately |
+
+### Terminology
+
+The user-facing term for an ancestor enclosure boundary is **group boundary**. `EnclosureKey`, `EnclosureHullKey`, and *ancestor enclosure* remain the internal implementation terms.
 
 ## 2. Scaling And Geometry
 
@@ -49,95 +63,124 @@ Use one absolute, deterministic, capped logarithmic scale:
 scale(d) = min(1.75, 1 + 0.20 * log2(max(1, d)))
 ```
 
-The resulting values include:
-
-| Distinct visible outgoing endpoints | Scale |
+| Distinct visible outgoing targets | Scale |
 |---:|---:|
 | 0–1 | `1.00x` |
 | 2 | `1.20x` |
 | 4 | `1.40x` |
 | 8 | `1.60x` |
+| 13 | `1.7401x` |
 | 14 or more | `1.75x` maximum |
 
-The multiplier is applied to a projected node's base geometry before downstream geometry is computed. It affects:
+The scale multiplies the projected node's own base shape extent in world space, so prominence is preserved across zoom and is not a screen-space decoration. Values are finite, monotonic, and capped.
 
-- the node shape bounds and collision radius;
-- layout separation involving that node;
-- hull padding and containment around the enlarged node;
-- relationship attachment points, so arrows terminate on the updated node boundary;
+Derived geometry consumes the scaled extent:
+
+- node shape bounds and the node's effective collision extent;
+- layout separation around that node;
+- the fitted hull extent of the enclosure that directly contains it;
+- relationship attachment points, so lines terminate on the updated shape;
 - hit-testing and pointer-target bounds;
-- accessibility bounds and virtual-child geometry.
+- accessible bounds and virtual-child geometry.
 
-The multiplier does **not** change:
+Padding values are unchanged. Hull and label padding stay constant; only the enclosed extent grows.
 
-- label text or label font size;
+The scale does **not** change:
+
+- label text, label font size, or label suppression thresholds;
 - edge stroke thickness or multiplicity cues;
-- enclosure-boundary size directly;
+- enclosure stroke tiers, map colors, or the two visual tiers;
+- group boundary size directly;
 - projected node or edge counts;
 - persistence formats or source-map data.
 
+An active Graph Group root is projected as an ordinary graph node and is enlarged by its own outgoing reach like any other node. Only enclosure boundaries are exempt.
+
+Prominence applies at every adaptive rendering tier, including above the engineering target, because it is geometry rather than optional detail.
+
 ### Boundary propagation
 
-A group boundary is not enlarged directly by the prominence metric. It is recomputed from its child geometry after child node scaling:
+A group boundary is never enlarged by its own relationship count. It grows only because the child geometry it is fitted around grew:
 
-1. scale the projected node's own shape;
-2. recompute the immediate group boundary with its normal clearance;
-3. propagate the resulting extent through any containing parent boundaries;
-4. recompute edge attachment points and hit bounds from the new geometry.
+1. apply the node's prominence scale to its own shape;
+2. refit the directly containing boundary around its child node shapes and child hulls with unchanged clearance;
+3. recompute relationship attachment points and hit bounds from the resulting geometry.
 
-A boundary must never clip an enlarged child. Existing label-placement padding caps remain in force: labels cannot inflate a boundary without limit, but child-shape containment takes precedence. If an outgoing edge targets a group boundary, it still counts as one visible endpoint and attaches to the updated boundary.
+The directly containing boundary always encloses its enlarged direct children, because hulls are fitted around actual child shapes. Containment by **parent** boundaries remains best effort: the base specification rejects strict geometric containment at every depth, and residual internal overlap stays acceptable and is not an error. Enlargement does not change that contract.
 
-When `d` changes, the next immutable projection/geometry generation carries the new scale. Unaffected node positions and pins are retained under the existing stable-key and pin rules. A prominence-only update must not reset the whole layout.
+If an outgoing relationship targets a group boundary, it still counts as one visible target and attaches to the refitted boundary.
+
+### Interaction with pins and map separation
+
+Enlargement can bring a node closer to a neighbor that cannot move. Existing rules win:
+
+- a pinned node is never silently moved to make room for an enlarged neighbor;
+- residual overlap involving pinned nodes is accepted and reported through the existing conflict path rather than resolved by shrinking a node;
+- prominence never overrides the hard map-level separation tier or the per-particle displacement cap.
+
+When `d` changes, the next immutable projection and geometry generation carries the new scale. Unaffected node positions and pins are retained under the existing stable-key and pin rules, and a prominence-only change must not reset the layout.
+
+### Accessibility
+
+Size alone must not be the only carrier of prominence, following the base specification's rule that meaning is never conveyed by one visual channel. The distinct visible outgoing target count is included in the node's accessible description alongside its label and owning map name, and it is available in hover or inspection text. Screen-reader users therefore receive the same information sighted users read from node size.
 
 ### Rejected alternatives
 
 - **Percentile-relative sizing** was rejected because adding or removing an unrelated node would resize existing nodes and make size semantically unstable.
-- **Fixed size tiers** were rejected because threshold crossings create abrupt jumps and discard information between thresholds.
+- **Fixed size tiers** were rejected because threshold crossings jump visibly and discard information between thresholds.
+- **Counting addressable ancestors instead of visible boundaries** was rejected because identical-looking canvases would render different node sizes.
+
+### Accepted limitation
+
+An ancestor enclosure that is itself a relationship source receives no prominence, because boundaries are sized by fitting rather than by reach. Prominence describes projected graph nodes only. This is a deliberate limitation, not an oversight.
 
 ## 3. Data Flow And Component Responsibilities
 
-The prominence count is derived from the already-built projected edges and projected endpoints. It must not perform a second traversal of Freeplane models, inspect hidden descendants, resolve map IDs, or invoke any content transformer.
+Prominence is a pure function of the immutable `GraphProjection`. It is computed from already-consolidated projected edges, directional coverage, and projected endpoint identity. It must not traverse Freeplane models again, inspect hidden descendants, resolve map IDs, or invoke any content transformer.
 
-The intended flow is:
+Because geometry is computed from layout output while layout needs node extent, prominence must not sit between them. It is published once by projection and consumed independently:
 
-1. projection consolidation determines visible projected endpoints and directional coverage;
-2. a pure prominence calculation derives one count and scale per visible projected node;
-3. layout receives the scaled node geometry/radius for separation and collision behavior;
-4. hull geometry recomputes group boundaries from scaled child shapes;
-5. edge geometry attaches lines to the resulting node or group-boundary shape;
-6. canvas hit testing and accessibility consume the same immutable geometry rather than recomputing size independently.
+1. projection consolidation determines visible targets, visible boundary identity, and directional coverage;
+2. a pure calculation derives one count and one scale per visible projected node, keyed by `ProjectedNodeKey`, and publishes it as part of the immutable projection;
+3. the layout adapter reads that size hint for separation behavior, expressed entirely behind `LayoutEngine` with no engine-specific type leaking out;
+4. the geometry engine applies the scale to node shapes and refits hulls from the scaled shapes;
+5. edge geometry attaches lines to the resulting node or boundary shape;
+6. canvas painting, hit testing, search, keyboard traversal, and accessibility consume that one published geometry and never recompute size independently.
 
-The calculation is `O(V + E)` in the projected graph and uses deterministic ordered collections. It is a derived view property, never a new source of truth.
+The calculation is `O(V + E)` over the projected graph, adds no particles or springs, and therefore does not invalidate the recorded GraphStream spike. It uses deterministic ordered collections and is a derived view property, never a new source of truth.
 
 ## 4. Testing And Performance Gates
 
 Deterministic tests must cover:
 
-- `A -> B` counting only `A`;
-- `A <-> B` counting both endpoints;
-- undirected relationships and self-relationships contributing zero;
-- duplicate and parallel contributors to one projected endpoint counting once;
-- a visible group boundary counting once without inspecting or counting descendants;
+- `A -> B` counting only `A`, and `A <-> B` counting both endpoints;
+- undirected contributors and self-resolving contributors contributing zero;
+- duplicate and parallel contributors to one target counting once;
+- a visible group boundary counting once without inspecting descendants;
+- two collapsed ancestors sharing one visible boundary counting once, while both remain independently addressable for relationship creation and deletion;
+- an active Graph Group root being enlarged by its own outgoing reach;
 - filtering, collapsing, hiding, and map removal resizing only affected sources;
-- exact scale values at `d = 0, 1, 2, 4, 8, 13, 14+`;
-- monotonicity, finite output, and the `1.75x` cap;
-- scale propagation to node geometry, collision bounds, hulls, edge attachments, hit testing, and accessibility bounds;
-- enlarged children remaining inside their recomputed boundaries and parent boundaries;
-- unaffected node positions and pins remaining stable across a prominence-only update;
-- deterministic output for identical snapshots regardless of collection iteration order.
+- exact scale values at `d = 0, 1, 2, 4, 8, 13, 14+`, with monotonicity, finite output, and the `1.75x` cap;
+- world-space scaling that survives zoom and applies at every rendering tier;
+- propagation into node bounds, collision extent, hull extent, edge attachment, hit testing, and accessible bounds;
+- an enlarged child remaining inside its directly containing refitted boundary with unchanged padding;
+- no pinned node moving because a neighbor grew, with the existing conflict report used instead;
+- unaffected node positions and pins staying stable across a prominence-only update;
+- the target count appearing in the accessible description;
+- identical output for identical snapshots regardless of collection iteration order.
 
-The existing engineering workload of 2,000 projected nodes and 5,000 projected edges must include prominence calculation, geometry recomputation, hit-index updates, and the first rendered frame. No separate expensive pass may cause the graph to exceed the existing interaction budget.
+The existing engineering workload of 2,000 projected nodes and 5,000 projected edges must include prominence calculation, geometry recomputation, hit-index updates, and the first rendered frame, measured against the existing batch-to-first-frame budget. No separate pass may push the pipeline past that budget.
 
-Tests must include a dense outgoing fan, a mixed directed/bidirectional/undirected graph, duplicate contributors, a target represented by a group boundary, and an update that removes that boundary. The dense fan must reach the cap without producing non-finite geometry or clipping.
+Test graphs must include a dense outgoing fan that reaches the cap, a mixed directed/bidirectional/undirected graph, duplicate contributors, a unary chain collapsed into one boundary, a target represented by a group boundary, and an update that removes that boundary. The dense fan must produce finite geometry with no boundary clipping of direct children.
 
 ## 5. Implementation Boundaries And Sequencing
 
-This amendment is consumed by the existing planned projection, geometry, layout, canvas, interaction, and accessibility work. The implementation plan must assign responsibilities without introducing a parallel sizing system:
+This amendment is consumed by the already-planned projection, geometry, layout, canvas, interaction, and accessibility tasks. The implementation plan must assign responsibility without creating a parallel sizing system:
 
-- projection owns visible endpoint identity and directional coverage;
-- geometry owns scale application and boundary propagation;
-- layout consumes the resulting geometry/radius and preserves stable positions;
-- canvas, hit testing, and accessibility consume the same published immutable geometry;
-- no component may infer prominence from raw Freeplane links independently.
+- projection owns visible target identity, directional coverage, and the published count and scale;
+- geometry owns scale application to node shapes and hull refitting;
+- layout consumes the size hint and preserves stable positions and pins;
+- canvas, hit testing, search, keyboard traversal, and accessibility consume the one published geometry;
+- no component may infer prominence from raw Freeplane links.
 
-The implementation remains subject to the base specification's confidentiality requirements: unreachable nodes and hidden descendants must not affect labels, counts, geometry, or accessibility output.
+The implementation remains subject to the base specification's confidentiality requirements: unreachable nodes and hidden descendants must not affect labels, counts, geometry, accessible output, or inspection text.
