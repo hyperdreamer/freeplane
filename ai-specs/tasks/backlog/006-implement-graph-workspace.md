@@ -711,7 +711,43 @@ Each connector receives per-source occurrence plus full immutable `ConnectorDesc
 git commit -m "2026-08-10-graph-workspace: Snapshot native graph connectors"
 ```
 
-## Task 17: Compute deterministic hull and attachment geometry
+## Task 17: Compute node prominence from visible outgoing reach
+
+**Implementer tier:** Advanced
+
+**Files:**
+- Create: `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/projection/NodeProminence.java`
+- Create: `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/projection/ProminenceCalculator.java`
+- Modify: `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/projection/GraphProjection.java:1-end`
+- Modify: `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/projection/ProjectionEngine.java:1-end`
+- Create: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/projection/ProminenceCalculatorShould.java`
+
+**Interfaces:**
+```java
+public final class NodeProminence {
+    public static NodeProminence of(int visibleOutgoingTargets);
+    public int visibleOutgoingTargets(); public double scale();
+}
+public final class ProminenceCalculator {
+    public static Map<ProjectedNodeKey, NodeProminence> calculate(List<ProjectedNode> nodes,
+        List<ProjectedEnclosure> enclosures, List<ProjectedEdge> edges);
+}
+```
+Implements `docs/superpowers/specs/2026-08-13-graph-node-prominence-design.md`. `GraphProjection` gains `prominence()` as an ordered immutable `Map<ProjectedNodeKey, NodeProminence>` covering every projected node, and `ProjectionEngine.project` populates it after edge consolidation. `scale()` is `min(1.75, 1 + 0.20 * log2(max(1, d)))`.
+
+Outgoing targets come from consolidated `ProjectedEdge` arrow flags: an arrow at the far end makes that end outgoing for the near node, arrowheads at both ends count for both, and an edge with no arrowhead counts for neither. Enclosure endpoints fold from `EnclosureKey` to their visible `EnclosureHullKey` through `ProjectedEnclosure.endpointKeys()`, so collapsed ancestors sharing one visible boundary are one target; node endpoints dedupe by `ProjectedNodeKey`. Enclosures receive no prominence. Descendants behind a boundary are never inspected.
+
+- [ ] **Step 1: Tests** directed counts source only; bidirectional counts both; undirected and self-resolving count zero; duplicate contributors count once; two collapsed ancestors in one visible boundary count once while both stay addressable; Graph Group root nodes counted normally; enclosure-only endpoints absent from the map; exact scale at `d = 0, 1, 2, 4, 8, 13, 14+`; monotonic finite capped output; deterministic ordering independent of input collection order.
+- [ ] **Step 2: Red** run prominence tests.
+- [ ] **Step 3: Implement the pure `O(V + E)` calculation over consolidated edges**
+- [ ] **Step 4: Boundary-fold mutant**
+Temporarily dedupe enclosure targets by `EnclosureKey` instead of `EnclosureHullKey`; `twoCollapsedAncestorsInOneVisibleBoundaryCountOnce` must fail. Restore exact SHA-256 and rerun green.
+- [ ] **Step 5: Commit after green exact five-file allowlist**
+```bash
+git commit -m "2026-08-10-graph-workspace: Compute node prominence"
+```
+
+## Task 18: Compute deterministic hull and attachment geometry
 
 **Implementer tier:** Advanced
 
@@ -741,7 +777,7 @@ public final class GraphGeometry {
 public final class GraphGeometryEngine { public GraphGeometry computeHulls(GraphProjection projection, LayoutPositions positions); }
 public final class HullIntersection { public static LayoutPoint minimumSeparatingTranslation(HullGeometry a, HullGeometry b); }
 ```
-Task 17 leaves `labels()` empty; Task 18 populates it. All geometry public immutable ordered primitives.
+Task 18 leaves `labels()` empty; Task 19 populates it. All geometry public immutable ordered primitives.
 
 - [ ] **Step 1: Tests** bottom-up, child containment, smooth deterministic closed path, empty enclosure label anchor, exact intersection, nearest attachment, deep equality.
 - [ ] **Step 2: Red** run geometry tests.
@@ -751,7 +787,7 @@ Task 17 leaves `labels()` empty; Task 18 populates it. All geometry public immut
 git commit -m "2026-08-10-graph-workspace: Add graph hull geometry"
 ```
 
-## Task 18: Place enclosure labels with bounded padding
+## Task 19: Place enclosure labels with bounded padding
 
 **Implementer tier:** Advanced
 
@@ -779,7 +815,7 @@ public final class LabelPlacementEngine { public GraphGeometry place(GraphProjec
 git commit -m "2026-08-10-graph-workspace: Add bounded enclosure labels"
 ```
 
-## Task 19: Implement private GraphStream typed physics
+## Task 20: Implement private GraphStream typed physics
 
 **Implementer tier:** Capable
 
@@ -808,7 +844,7 @@ public final class LayoutFrame {
 }
 public final class GraphStreamLayoutFactory { public static LayoutEngine create(LayoutCalibration calibration); }
 ```
-Task 20 extends `LayoutFrame` with conflicts and idle measurement. Factory is public internal/GraphStream-free; engine/typed subclasses package-private. Protected GraphStream overrides inside package-private classes are allowed; externally visible signatures are GraphStream-free.
+Task 21 extends `LayoutFrame` with conflicts and idle measurement. Factory is public internal/GraphStream-free; engine/typed subclasses package-private. Protected GraphStream overrides inside package-private classes are allowed; externally visible signatures are GraphStream-free.
 
 - [ ] **Step 1: Tests** boundary, no LayoutRunner, quality, seeds, particles/anchors/springs, ordered strengths, aggregate cap fanout, 100 churn.
 - [ ] **Step 2: Red** run layout tests.
@@ -819,7 +855,7 @@ Task 20 extends `LayoutFrame` with conflicts and idle measurement. Factory is pu
 git commit -m "2026-08-10-graph-workspace: Add private GraphStream physics"
 ```
 
-## Task 20: Serialize layout work, pins, correction, and idle measurement
+## Task 21: Serialize layout work, pins, correction, and idle measurement
 
 **Implementer tier:** Capable
 
@@ -860,7 +896,7 @@ public final class LayoutWorker implements AutoCloseable {
 git commit -m "2026-08-10-graph-workspace: Add the owned layout worker"
 ```
 
-## Task 21: Batch changes and capture projection input
+## Task 22: Batch changes and capture projection input
 
 **Implementer tier:** Capable
 
@@ -892,7 +928,7 @@ Temporarily accept every request immediately; `burstCoalescesOnceAndTimestampsAf
 git commit -m "2026-08-10-graph-workspace: Batch live map changes"
 ```
 
-## Task 22: Publish repeated settling frames
+## Task 23: Publish repeated settling frames
 
 **Implementer tier:** Capable
 
@@ -922,7 +958,7 @@ public final class LayoutSettleLoop implements AutoCloseable {
 git commit -m "2026-08-10-graph-workspace: Publish settling layout frames"
 ```
 
-## Task 23: Integrate live coordinator and immutable observation
+## Task 24: Integrate live coordinator and immutable observation
 
 **Implementer tier:** Capable
 
@@ -953,7 +989,7 @@ Temporarily leave `hasPendingChanges()` false after a queued event; `queuedChang
 git commit -m "2026-08-10-graph-workspace: Publish live immutable graph state"
 ```
 
-## Task 24: Paint viewport, themes, and adaptive detail
+## Task 25: Paint viewport, themes, and adaptive detail
 
 **Implementer tier:** Capable
 
@@ -991,7 +1027,7 @@ public final class GraphPaintState {
 }
 public final class AdaptiveRenderingPolicy { public RenderingLevel forCounts(int nodes, int edges); public boolean exceedsEngineeringTarget(int nodes, int edges); }
 ```
-Task 25 extends `GraphPaintState` with connection preview and dim state. GraphPainter is package-private and paints normal JComponent/offscreen tests; no print/export API.
+Task 26 extends `GraphPaintState` with connection preview and dim state. GraphPainter is package-private and paints normal JComponent/offscreen tests; no print/export API.
 
 - [ ] **Step 1: Transform/policy/BufferedImage tests** layer order, tiers, arrows/multiplicity, labels, states/themes/bounds, node LOD exact, warning if nodes>2000 or edges>5000, above-target remains editable. `GraphViewportShould` asserts malformed non-finite/nonpositive persisted values are rejected by Task 2/3 before canvas construction, while a finite persisted viewport whose visible world rectangle does not overlap current graph bounds invokes Fit Graph.
 - [ ] **Step 2: Red** run canvas tests.
@@ -1001,7 +1037,7 @@ Task 25 extends `GraphPaintState` with connection preview and dim state. GraphPa
 git commit -m "2026-08-10-graph-workspace: Paint the graph canvas"
 ```
 
-## Task 25: Add hit testing, search, and interaction intents
+## Task 26: Add hit testing, search, and interaction intents
 
 **Implementer tier:** Capable
 
@@ -1032,7 +1068,7 @@ GraphIntent concrete public nested types: OpenSourceNode, Pin, Unpin, UnpinAll, 
 git commit -m "2026-08-10-graph-workspace: Add graph interaction intents"
 ```
 
-## Task 26: Expose keyboard traversal and accessible virtual children
+## Task 27: Expose keyboard traversal and accessible virtual children
 
 **Implementer tier:** Advanced
 
@@ -1062,7 +1098,7 @@ public final class GraphTraversalOrder {
 git commit -m "2026-08-10-graph-workspace: Make the graph keyboard accessible"
 ```
 
-## Task 27: Execute native connector edits and source navigation safely
+## Task 28: Execute native connector edits and source navigation safely
 
 **Implementer tier:** Capable
 
@@ -1094,7 +1130,7 @@ public final class SourceNavigation { public GraphCommandResult open(SourceNodeK
 git commit -m "2026-08-10-graph-workspace: Execute source-map graph commands safely"
 ```
 
-## Task 28: Reserve workspace paths for live sessions
+## Task 29: Reserve workspace paths for live sessions
 
 **Implementer tier:** Advanced
 
@@ -1125,7 +1161,7 @@ Temporarily remove old-path ownership before installing new-path ownership; `com
 git commit -m "2026-08-10-graph-workspace: Reserve live workspace paths"
 ```
 
-## Task 29: Route workspace and relationship commands
+## Task 30: Route workspace and relationship commands
 
 **Implementer tier:** Capable
 
@@ -1166,7 +1202,7 @@ Temporarily call `store.saveAs` before acquiring `WorkspacePathReservation`; `sa
 git commit -m "2026-08-10-graph-workspace: Route graph session commands"
 ```
 
-## Task 30: Revalidate and execute purge safely
+## Task 31: Revalidate and execute purge safely
 
 **Implementer tier:** Capable
 
@@ -1192,7 +1228,7 @@ Purge command carries displayed generation and relationship IDs.
 git commit -m "2026-08-10-graph-workspace: Protect purge from stale state"
 ```
 
-## Task 31: Revalidate contributor deletion and owner-local undo
+## Task 32: Revalidate contributor deletion and owner-local undo
 
 **Implementer tier:** Capable
 
@@ -1220,7 +1256,7 @@ Delete commands carry displayed generation, contributor key(s), and exact Connec
 git commit -m "2026-08-10-graph-workspace: Delete exact graph contributors"
 ```
 
-## Task 32: Implement workspace controller, handle, and close lifecycle
+## Task 33: Implement workspace controller, handle, and close lifecycle
 
 **Implementer tier:** Capable
 
@@ -1261,7 +1297,7 @@ WorkspaceCloseController has `saveAndClose`, `retrySaveAndClose`, `discardAndClo
 git commit -m "2026-08-10-graph-workspace: Own workspace session lifecycle"
 ```
 
-## Task 33: Build the modeless Swing workspace shell and panels
+## Task 34: Build the modeless Swing workspace shell and panels
 
 **Implementer tier:** Capable
 
@@ -1283,7 +1319,7 @@ git commit -m "2026-08-10-graph-workspace: Own workspace session lifecycle"
 git commit -m "2026-08-10-graph-workspace: Build the graph workspace shell"
 ```
 
-## Task 34: Add status, contributor, purge, and close dialogs
+## Task 35: Add status, contributor, purge, and close dialogs
 
 **Implementer tier:** Capable
 
@@ -1305,7 +1341,7 @@ git commit -m "2026-08-10-graph-workspace: Build the graph workspace shell"
 git commit -m "2026-08-10-graph-workspace: Add graph workspace operational UI"
 ```
 
-## Task 35: Wire plugin actions, menus, icons, i18n, and undo keys
+## Task 36: Wire plugin actions, menus, icons, i18n, and undo keys
 
 **Implementer tier:** Capable
 
@@ -1341,7 +1377,7 @@ Stage the nine distinct paths from `Files` (`mindmapmodemenu.xml` is one path wi
 git commit -m "2026-08-10-graph-workspace: Wire graph workspace entry points"
 ```
 
-## Task 36: Add generated production performance diagnostics
+## Task 37: Add generated production performance diagnostics
 
 **Implementer tier:** Capable
 
@@ -1372,7 +1408,7 @@ gradle :freeplane_plugin_graph:graphPerformanceDiagnostic -PTestLoggingFull
 git commit -m "2026-08-10-graph-workspace: Add graph performance diagnostics"
 ```
 
-## Task 37: Calibrate and pass strict production targets
+## Task 38: Calibrate and pass strict production targets
 
 **Implementer tier:** Capable
 
@@ -1401,14 +1437,14 @@ Keep O(N+E) rebuild unless proven; fixed quality/cap/rigid pins/determinism/immu
 git commit -m "2026-08-10-graph-workspace: Calibrate graph performance"
 ```
 
-## Task 38: Verify persistence, projection, geometry, and marker acceptance
+## Task 39: Verify persistence, projection, geometry, and marker acceptance
 
 **Implementer tier:** Capable
 
 **Files:**
 - Create: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/integration/GraphWorkspaceModelAcceptanceShould.java`
 
-**Interfaces:** consumes design scenarios and production Tasks 1-37.
+**Interfaces:** consumes design scenarios and production Tasks 1-38.
 
 - [ ] **Step 1: Implement named scenarios**
 01 reopen restores maps/viewport/pins/colors/settings; 02 only structural leaves/groups including hidden-only-child enclosure; 03 required enclosures/interior fixture labels; 04 outer marker/inner reactivate; 05 duplicate connectors; 06 opposite arrows; 07 collapsed internal omitted; 10 removed map dormant/reactivate; 12 ungroup attaches ancestor; 13 persisted pin/settling; 18 single root suppressed; 19 second active restyles/loading missing no flicker; 23 clone marker composition; 26 save workspace then externally move entire `.fpg` plus relative `maps/` directory tree and reopen resolving paths; 27 stock reader marker; 28 four clouds; 29 inactive nested visible.
@@ -1422,14 +1458,14 @@ gradle :freeplane_plugin_graph:test --tests '*GraphWorkspaceModelAcceptanceShoul
 git commit -m "2026-08-10-graph-workspace: Verify graph model acceptance"
 ```
 
-## Task 39: Verify command, security, and UI acceptance
+## Task 40: Verify command, security, and UI acceptance
 
 **Implementer tier:** Capable
 
 **Files:**
 - Create: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/integration/GraphWorkspaceCommandAcceptanceShould.java`
 
-**Interfaces:** consumes production command/window Tasks 25-35 and performance report Task37.
+**Interfaces:** consumes production command/window Tasks 26-36 and performance report Task 38.
 
 - [ ] **Step 1: Implement named scenarios**
 08 same-map native connector/map undo/dirty; 09 cross-map only `.fpg`; 11 delete endpoint/map undo/reactivate; 14 full pan/zoom/fit/reset/search/hover/select/open/inspect; 16 ID-less persistent command rejects atomically and displays explicit normal "open and save the map once" request, then a normal map save assigns the ordinary file ID and the reissued command succeeds with that ID; 17 dense three-map distinction; 20 pinned conflict/Unpin; 21 locked no leak/purge; 22 missing purge list/undo; 24 one tab per map/reuse; 25 multiplicity cue or no-op reason. Also Save As live-target rejection and separate histories.
@@ -1442,7 +1478,7 @@ gradle :freeplane_plugin_graph:test --tests '*GraphWorkspaceCommandAcceptanceSho
 git commit -m "2026-08-10-graph-workspace: Verify graph command acceptance"
 ```
 
-## Task 40: Prove production cold reload and lifecycle cleanup
+## Task 41: Prove production cold reload and lifecycle cleanup
 
 **Implementer tier:** Capable
 
@@ -1464,7 +1500,7 @@ gradle :freeplane_plugin_graph:test --tests '*GraphWorkspaceColdReloadShould' --
 git commit -m "2026-08-10-graph-workspace: Prove graph reload and cleanup"
 ```
 
-## Task 41: Automate OSGi smoke, UI evidence, and final verification
+## Task 42: Automate OSGi smoke, UI evidence, and final verification
 
 **Implementer tier:** Capable
 
