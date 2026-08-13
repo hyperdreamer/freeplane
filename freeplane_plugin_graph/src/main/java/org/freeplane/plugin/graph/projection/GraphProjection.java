@@ -49,15 +49,8 @@ public final class GraphProjection {
     public static GraphProjection projected(final long generation, final List<ProjectedNode> nodes,
             final List<ProjectedEnclosure> enclosures, final List<ProjectedEdge> edges,
             final List<RelationshipResolution> relationshipResolutions, final List<PinProjection> pins) {
-        return projected(generation, nodes, enclosures, edges, relationshipResolutions, pins,
+        return new GraphProjection(generation, nodes, enclosures, edges, relationshipResolutions, pins,
             ProminenceCalculator.calculate(nodes, enclosures, edges));
-    }
-
-    public static GraphProjection projected(final long generation, final List<ProjectedNode> nodes,
-            final List<ProjectedEnclosure> enclosures, final List<ProjectedEdge> edges,
-            final List<RelationshipResolution> relationshipResolutions, final List<PinProjection> pins,
-            final Map<ProjectedNodeKey, NodeProminence> prominence) {
-        return new GraphProjection(generation, nodes, enclosures, edges, relationshipResolutions, pins, prominence);
     }
 
     public long generation() {

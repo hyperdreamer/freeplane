@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
 
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -137,6 +139,47 @@ public class ProminenceCalculatorShould {
         assertThat(new ArrayList<ProjectedNodeKey>(prominence.keySet())).containsExactlyElementsOf(expectedKeys);
         assertThat(prominence.get(groupNode.key()).visibleOutgoingTargets()).isEqualTo(1);
         assertThat(prominence.get(nodeKey("target")).visibleOutgoingTargets()).isZero();
+    }
+
+    @Test
+    public void exposeNoPublicCallerSuppliedProminenceFactory() {
+        List<String> callerSuppliedSignatures = new ArrayList<String>();
+        for (Method method : GraphProjection.class.getDeclaredMethods()) {
+            if (!method.getName().equals("projected")
+                    || !Modifier.isPublic(method.getModifiers())
+                    || !Modifier.isStatic(method.getModifiers())) {
+                continue;
+            }
+            for (Class<?> parameterType : method.getParameterTypes()) {
+                if (Map.class.isAssignableFrom(parameterType)) {
+                    callerSuppliedSignatures.add(method.getName() + Arrays.toString(method.getParameterTypes()));
+                }
+            }
+        }
+        assertThat(callerSuppliedSignatures)
+            .as("no public projected(...) overload may accept a caller-supplied prominence map").isEmpty();
+    }
+
+    @Test
+    public void fullyProjectedProjectionDerivesProminenceCoveringNodesInProjectedOrder() {
+        List<ProjectedNode> nodes = Arrays.asList(node("a"), node("b"), node("c"));
+        List<ProjectedEdge> edges = Arrays.asList(directedEdge("a", "b"), directedEdge("a", "c"));
+
+        GraphProjection projection = GraphProjection.projected(1, nodes,
+            Collections.<ProjectedEnclosure>emptyList(), edges, Collections.<RelationshipResolution>emptyList(),
+            Collections.<PinProjection>emptyList());
+
+        List<ProjectedNodeKey> expectedKeys = new ArrayList<ProjectedNodeKey>();
+        for (ProjectedNode value : nodes) {
+            expectedKeys.add(value.key());
+        }
+        assertThat(new ArrayList<ProjectedNodeKey>(projection.prominence().keySet()))
+            .as("prominence covers every projected node in projected-node order")
+            .containsExactlyElementsOf(expectedKeys);
+        assertThat(projection.prominence()).isEqualTo(ProminenceCalculator.calculate(nodes,
+            Collections.<ProjectedEnclosure>emptyList(), edges));
+        assertThat(projection.prominence().get(nodeKey("a")).visibleOutgoingTargets()).isEqualTo(2);
+        assertThat(projection.prominence().get(nodeKey("b")).visibleOutgoingTargets()).isZero();
     }
 
     @Test
