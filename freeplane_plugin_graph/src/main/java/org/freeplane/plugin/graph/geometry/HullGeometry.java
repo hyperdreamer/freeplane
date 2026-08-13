@@ -356,23 +356,21 @@ public final class HullGeometry {
         final double[] firstY = scaledDifference(current.y(), previous.y());
         final double[] secondX = scaledDifference(next.x(), current.x());
         final double[] secondY = scaledDifference(next.y(), current.y());
-        final double[] terms = new double[16];
-        final int[] exponents = new int[16];
+        final double[] terms = new double[17];
+        final int[] exponents = new int[17];
         int termCount = 0;
         termCount = addProductTerms(terms, exponents, termCount, firstX, secondY, 1.0);
         termCount = addProductTerms(terms, exponents, termCount, firstY, secondX, -1.0);
-        int maximumScale = 0;
-        for (int index = 0; index < termCount; index++) {
-            maximumScale = Math.max(maximumScale, exponents[index]);
-        }
-        for (int index = 0; index < termCount; index++) {
-            terms[index] = scaleTerm(terms[index], maximumScale - exponents[index]);
-        }
-        final double threshold = Math.scalb(EPSILON, -maximumScale);
-        if (signOfSumWith(terms, termCount, -threshold) > 0) {
+        final double[] components = new double[256];
+        final int[] componentExponents = new int[256];
+        terms[termCount] = -EPSILON;
+        exponents[termCount] = 0;
+        if (signOfSum(terms, exponents, termCount + 1, components, componentExponents) > 0) {
             return 1;
         }
-        if (signOfSumWith(terms, termCount, threshold) < 0) {
+        terms[termCount] = EPSILON;
+        exponents[termCount] = 0;
+        if (signOfSum(terms, exponents, termCount + 1, components, componentExponents) < 0) {
             return -1;
         }
         return 0;
@@ -420,58 +418,116 @@ public final class HullGeometry {
     private static int addProductTerm(final double[] terms, final int[] exponents, int termCount,
             final double first, final int firstScale, final double second, final int secondScale,
             final double sign) {
-        final double[] product = twoProduct(first, second);
+        double firstFactor = first;
+        int firstFactorScale = firstScale;
+        double secondFactor = second;
+        int secondFactorScale = secondScale;
+        if (Math.abs(firstFactor) < 0x1.0p-500) {
+            firstFactor = Math.scalb(firstFactor, 700);
+            firstFactorScale -= 700;
+        }
+        if (Math.abs(secondFactor) < 0x1.0p-500) {
+            secondFactor = Math.scalb(secondFactor, 700);
+            secondFactorScale -= 700;
+        }
+        final double[] product = twoProduct(firstFactor, secondFactor);
         terms[termCount] = sign * product[0];
-        exponents[termCount] = firstScale + secondScale;
+        exponents[termCount] = firstFactorScale + secondFactorScale;
         termCount++;
         terms[termCount] = sign * product[1];
-        exponents[termCount] = firstScale + secondScale;
+        exponents[termCount] = firstFactorScale + secondFactorScale;
         termCount++;
         return termCount;
     }
 
-    private static double scaleTerm(final double value, final int downScale) {
-        if (value == 0.0 || downScale == 0) {
-            return value;
+    private static int signOfSum(final double[] terms, final int[] exponents, final int count,
+            final double[] components, final int[] componentExponents) {
+        int componentCount = 0;
+        for (int index = 0; index < count; index++) {
+            componentCount = mergeComponent(components, componentExponents, componentCount,
+                terms[index], exponents[index]);
         }
-        return Math.scalb(value, -downScale);
-    }
-
-    private static int signOfSumWith(final double[] terms, final int count, final double extra) {
-        final double[] sorted = new double[count + 1];
-        System.arraycopy(terms, 0, sorted, 0, count);
-        sorted[count] = extra;
-        sortByMagnitude(sorted, count + 1);
-        final double[] expansion = new double[count + 2];
-        int expansionLength = 0;
-        for (int index = 0; index < sorted.length; index++) {
-            expansionLength = growExpansion(expansion, expansionLength, sorted[index]);
-        }
-        double largestMagnitude = 0.0;
-        double largest = 0.0;
-        for (int index = 0; index < expansionLength; index++) {
-            final double magnitude = Math.abs(expansion[index]);
-            if (magnitude > largestMagnitude) {
-                largestMagnitude = magnitude;
-                largest = expansion[index];
+        for (int index = 0; index < componentCount; index++) {
+            if (components[index] > 0.0) {
+                return 1;
+            }
+            if (components[index] < 0.0) {
+                return -1;
             }
         }
-        if (largest == 0.0) {
-            return 0;
-        }
-        return largest > 0.0 ? 1 : -1;
+        return 0;
     }
 
-    private static void sortByMagnitude(final double[] values, final int count) {
-        for (int index = 1; index < count; index++) {
-            final double value = values[index];
-            int position = index;
-            while (position > 0 && Math.abs(value) < Math.abs(values[position - 1])) {
-                values[position] = values[position - 1];
-                position--;
+    private static int mergeComponent(final double[] components, final int[] componentExponents,
+            int componentCount, double value, int exponent) {
+        while (value != 0.0) {
+            if (Math.abs(value) < 0x1.0p-1022) {
+                value = Math.scalb(value, 1074);
+                exponent -= 1074;
             }
-            values[position] = value;
+            final int scale = Math.getExponent(value);
+            if (scale != 0) {
+                value = Math.scalb(value, -scale);
+                exponent += scale;
+            }
+            int partner = -1;
+            for (int index = 0; index < componentCount; index++) {
+                if (Math.abs(componentExponents[index] - exponent) <= 52) {
+                    partner = index;
+                    break;
+                }
+            }
+            if (partner < 0) {
+                int position = componentCount;
+                while (position > 0 && componentExponents[position - 1] < exponent) {
+                    position--;
+                }
+                for (int index = componentCount; index > position; index--) {
+                    components[index] = components[index - 1];
+                    componentExponents[index] = componentExponents[index - 1];
+                }
+                components[position] = value;
+                componentExponents[position] = exponent;
+                return componentCount + 1;
+            }
+            final double partnerValue = components[partner];
+            final int partnerExponent = componentExponents[partner];
+            double first = value;
+            double second = partnerValue;
+            int firstExponent = exponent;
+            int secondExponent = partnerExponent;
+            if (secondExponent > firstExponent) {
+                first = partnerValue;
+                second = value;
+                firstExponent = partnerExponent;
+                secondExponent = exponent;
+            }
+            final double aligned = Math.scalb(second, secondExponent - firstExponent);
+            final double[] sum = twoSum(first, aligned);
+            for (int index = partner; index < componentCount - 1; index++) {
+                components[index] = components[index + 1];
+                componentExponents[index] = componentExponents[index + 1];
+            }
+            componentCount--;
+            if (sum[0] == 0.0) {
+                value = 0.0;
+            }
+            else {
+                componentCount = mergeComponent(components, componentExponents, componentCount,
+                    sum[1], firstExponent);
+                value = sum[0];
+                exponent = firstExponent;
+            }
         }
+        return componentCount;
+    }
+
+    private static double[] twoSum(final double first, final double second) {
+        final double sum = first + second;
+        final double secondVirtual = sum - first;
+        final double firstResidual = first - (sum - secondVirtual);
+        final double secondResidual = second - secondVirtual;
+        return new double[] { sum, firstResidual + secondResidual };
     }
 
     private static double[] twoDiff(final double first, final double second) {
@@ -493,22 +549,6 @@ public final class HullGeometry {
         final double error = (firstHigh * secondHigh - product) + firstHigh * secondLow
             + firstLow * secondHigh + firstLow * secondLow;
         return new double[] { product, error };
-    }
-
-    private static int growExpansion(final double[] expansion, final int length, final double value) {
-        double carry = value;
-        for (int index = 0; index < length; index++) {
-            final double term = expansion[index];
-            final double sum = term + carry;
-            final double virtualSecond = sum - term;
-            final double virtualFirst = sum - virtualSecond;
-            final double secondResidual = carry - virtualSecond;
-            final double firstResidual = term - virtualFirst;
-            expansion[index] = sum;
-            carry = firstResidual + secondResidual;
-        }
-        expansion[length] = carry;
-        return length + 1;
     }
 
     private static int compare(final LayoutPoint first, final LayoutPoint second) {
