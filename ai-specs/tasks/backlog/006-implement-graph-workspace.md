@@ -779,7 +779,9 @@ public final class HullIntersection { public static LayoutPoint minimumSeparatin
 ```
 Task 18 leaves `labels()` empty; Task 19 populates it. All geometry public immutable ordered primitives.
 
-- [ ] **Step 1: Tests** bottom-up, child containment, smooth deterministic closed path, empty enclosure label anchor, exact intersection, nearest attachment, deep equality.
+`NodeGeometry` extent for each projected node is its base shape scaled by that node's `GraphProjection.prominence()` entry, per `docs/superpowers/specs/2026-08-13-graph-node-prominence-design.md`. Hull and label padding values are unchanged; only the enclosed extent grows. Enclosure hulls are never scaled by their own relationship count, and `edgeAttachment` resolves against the scaled shape. A hull always contains its direct children; containment by ancestor hulls stays best effort, and residual internal overlap is not an error.
+
+- [ ] **Step 1: Tests** bottom-up, child containment, smooth deterministic closed path, empty enclosure label anchor, exact intersection, nearest attachment, deep equality, prominence-scaled node extent with unchanged padding, a capped-scale node still contained by its direct hull, and attachment on the scaled boundary.
 - [ ] **Step 2: Red** run geometry tests.
 - [ ] **Step 3: Implement convex padded exact polygon plus smooth paint path that does not cut inside child shapes**
 - [ ] **Step 4: Commit after green exact nine-file allowlist**
@@ -846,7 +848,9 @@ public final class GraphStreamLayoutFactory { public static LayoutEngine create(
 ```
 Task 21 extends `LayoutFrame` with conflicts and idle measurement. Factory is public internal/GraphStream-free; engine/typed subclasses package-private. Protected GraphStream overrides inside package-private classes are allowed; externally visible signatures are GraphStream-free.
 
-- [ ] **Step 1: Tests** boundary, no LayoutRunner, quality, seeds, particles/anchors/springs, ordered strengths, aggregate cap fanout, 100 churn.
+`LayoutRequest` already carries the projection, so the typed solver reads `GraphProjection.prominence()` as a per-particle size hint for separation only; no signature changes and no GraphStream type leaks. Prominence never overrides the aggregate per-particle cap or rigid map correction, an enlarged node never moves a pinned neighbour, and no node is shrunk to avoid contact. Residual same-map overlap stays acceptable.
+
+- [ ] **Step 1: Tests** boundary, no LayoutRunner, quality, seeds, particles/anchors/springs, ordered strengths, aggregate cap fanout, 100 churn, prominence size hint widens separation without exceeding the aggregate cap, and a pinned neighbour of a capped-scale node stays exactly fixed.
 - [ ] **Step 2: Red** run layout tests.
 - [ ] **Step 3: Implement typed solver; use `MultiGraph` so distinct edges never trip simple-graph parallel-edge rejection; attach the layout sink before populating nodes/edges so every particle is created; cap aggregate once/particle; do not use layout.weight stiffness**
 - [ ] **Step 4: Per-edge-cap mutant fails; restore**
@@ -1060,7 +1064,9 @@ public final class GraphInteractionController { public void install(GraphCanvas 
 ```
 GraphIntent concrete public nested types: OpenSourceNode, Pin, Unpin, UnpinAll, Connect, InspectEdge, DeleteContributor, DeleteAllContributors, ChangeSelection.
 
-- [ ] **Step 1: Synthetic tests** exact hits, select/hover/dim, open, pointer zoom, pan when no selection, selected arrows reserved for traversal, Shift arrows accelerated pan always, pin/unpin semantics, preview/Esc, inspection, search full safe text, hover tooltip full safe text, uninstall.
+`GraphHitIndex` uses the prominence-scaled node bounds published by Task 18, so an enlarged node's clickable area matches what is painted.
+
+- [ ] **Step 1: Synthetic tests** exact hits, select/hover/dim, open, pointer zoom, pan when no selection, selected arrows reserved for traversal, Shift arrows accelerated pan always, pin/unpin semantics, preview/Esc, inspection, search full safe text, hover tooltip full safe text, uninstall, and a hit inside an enlarged node's scaled bounds that would miss its unscaled bounds.
 - [ ] **Step 2: Red** run interaction/search tests.
 - [ ] **Step 3: Implement transient state and intents only**
 - [ ] **Step 4: Commit after green exact ten-file allowlist**
@@ -1090,7 +1096,9 @@ public final class GraphTraversalOrder {
 ```
 `nearest` filters to the requested screen-space half-plane, then chooses minimum squared distance with deterministic endpoint order as the tie-breaker. AccessibleGraphCanvas is package-private context implementation.
 
-- [ ] **Step 1: Tests** Tab order; selected unmodified arrows traverse; none-selected arrows pan; Shift arrows pan regardless; Enter/Esc; virtual children role/name/full safe label+map/state/action; no color-only/excluded text.
+Per `docs/superpowers/specs/2026-08-13-graph-node-prominence-design.md`, a node's accessible description appends its distinct visible outgoing target count after label and owning map name, and only when that count is nonzero. The scale factor is never announced, because it is a rendering artifact and is lossy at the cap.
+
+- [ ] **Step 1: Tests** Tab order; selected unmodified arrows traverse; none-selected arrows pan; Shift arrows pan regardless; Enter/Esc; virtual children role/name/full safe label+map/state/action; no color-only/excluded text; nonzero outgoing count present in the description; zero-reach node silent; scale factor absent from all accessible text.
 - [ ] **Step 2: Red** run accessibility test.
 - [ ] **Step 3: Implement context rule and virtual children without per-node Swing components**
 - [ ] **Step 4: Commit after green exact six-file allowlist**
