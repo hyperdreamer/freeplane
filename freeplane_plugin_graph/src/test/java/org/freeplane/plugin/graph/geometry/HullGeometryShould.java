@@ -585,6 +585,24 @@ public class HullGeometryShould {
     }
 
     @Test
+    public void acceptsFiniteTriangleJustAboveAbsoluteOrientationThreshold() {
+        double huge = Math.scalb(1.0, 1023);
+        double tiny = Double.longBitsToDouble(2251800L);
+        List<LayoutPoint> triangle = Arrays.asList(
+            LayoutPoint.of(tiny, 0.0),
+            LayoutPoint.of(huge, huge),
+            LayoutPoint.of(0.0, 0.0));
+
+        assertThat(huge * tiny).isGreaterThan(1e-9);
+        HullGeometry hull = HullGeometry.of(triangle, LayoutPoint.of(0.0, 0.0));
+
+        assertThat(hull.exactPolygon()).hasSize(3);
+        for (LayoutPoint vertex : triangle) {
+            assertThat(hull.contains(vertex)).isTrue();
+        }
+    }
+
+    @Test
     public void doesNotTreatBoundsOnlyEndpointAsSegmentIntersection() throws Exception {
         Method segmentsIntersect = HullGeometry.class.getDeclaredMethod("segmentsIntersect",
             LayoutPoint.class, LayoutPoint.class, LayoutPoint.class, LayoutPoint.class);
