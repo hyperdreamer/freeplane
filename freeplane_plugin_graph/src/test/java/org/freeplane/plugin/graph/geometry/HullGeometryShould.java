@@ -541,6 +541,34 @@ public class HullGeometryShould {
     }
 
     @Test
+    public void rejectsAScaledSelfIntersectingStarPolygon() {
+        List<LayoutPoint> scaledStar = Arrays.asList(
+            LayoutPoint.of(0.0, 1.0e308),
+            LayoutPoint.of(5.877852522924732e307, -8.090169943749475e307),
+            LayoutPoint.of(-9.510565162951535e307, 3.090169943749474e307),
+            LayoutPoint.of(9.510565162951535e307, 3.090169943749474e307),
+            LayoutPoint.of(-5.877852522924732e307, -8.090169943749475e307));
+
+        assertThatThrownBy(() -> HullGeometry.of(scaledStar, LayoutPoint.of(0.0, 0.0)))
+            .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    public void containsVerticesOfANearLimitConvexHull() {
+        HullGeometry diamond = HullGeometry.of(Arrays.asList(
+            LayoutPoint.of(0.0, 8.0e307),
+            LayoutPoint.of(8.0e307, 0.0),
+            LayoutPoint.of(0.0, -8.0e307),
+            LayoutPoint.of(-8.0e307, 0.0)), LayoutPoint.of(0.0, 0.0));
+
+        assertThat(diamond.contains(LayoutPoint.of(0.0, 0.0))).isTrue();
+        for (LayoutPoint vertex : diamond.exactPolygon()) {
+            assertThat(diamond.contains(vertex)).isTrue();
+        }
+        assertThat(diamond.contains(LayoutPoint.of(9.0e307, 0.0))).isFalse();
+    }
+
+    @Test
     public void rejectsDuplicateProjectedNodeAndEnclosureKeys() {
         ProjectedNode first = node("n1");
         ProjectedNode duplicate = node("n1");
