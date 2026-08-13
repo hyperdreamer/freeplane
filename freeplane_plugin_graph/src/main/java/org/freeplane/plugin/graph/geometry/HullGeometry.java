@@ -274,7 +274,8 @@ public final class HullGeometry {
         final int cdA = classifyOrientation(c, d, a);
         final int cdB = classifyOrientation(c, d, b);
         if (abC == 0 || abD == 0 || cdA == 0 || cdB == 0) {
-            return onSegment(a, b, c) || onSegment(a, b, d) || onSegment(c, d, a) || onSegment(c, d, b);
+            return (abC == 0 && onSegment(a, b, c)) || (abD == 0 && onSegment(a, b, d))
+                || (cdA == 0 && onSegment(c, d, a)) || (cdB == 0 && onSegment(c, d, b));
         }
         return abC * abD < 0 && cdA * cdB < 0;
     }
@@ -351,91 +352,114 @@ public final class HullGeometry {
 
     private static int classifyOrientation(final LayoutPoint previous, final LayoutPoint current,
             final LayoutPoint next) {
-        final double maximum = Math.max(
-            Math.max(Math.max(Math.abs(previous.x()), Math.abs(previous.y())),
-                Math.max(Math.abs(current.x()), Math.abs(current.y()))),
-            Math.max(Math.abs(next.x()), Math.abs(next.y())));
-        if (maximum == 0.0) {
-            return 0;
-        }
-        final int exponent = Math.getExponent(maximum);
-        if (exponent < -512) {
-            return 0;
-        }
-        final double scale = Math.scalb(1.0, exponent);
-        final double threshold = Math.scalb(EPSILON, -2 * exponent);
-        final double previousX = previous.x() / scale;
-        final double previousY = previous.y() / scale;
-        final double currentX = current.x() / scale;
-        final double currentY = current.y() / scale;
-        final double nextX = next.x() / scale;
-        final double nextY = next.y() / scale;
-        final double[] differenceX = twoDiff(currentX, previousX);
-        final double[] differenceY = twoDiff(nextY, currentY);
-        final double[] previousDifferenceY = twoDiff(currentY, previousY);
-        final double[] previousDifferenceX = twoDiff(nextX, currentX);
+        final double[] firstX = scaledDifference(current.x(), previous.x());
+        final double[] firstY = scaledDifference(current.y(), previous.y());
+        final double[] secondX = scaledDifference(next.x(), current.x());
+        final double[] secondY = scaledDifference(next.y(), current.y());
         final double[] terms = new double[16];
+        final int[] exponents = new int[16];
         int termCount = 0;
-        for (int first = 0; first < 2; first++) {
-            for (int second = 0; second < 2; second++) {
-                final double[] product = twoProduct(differenceX[first], differenceY[second]);
-                terms[termCount++] = product[0];
-                terms[termCount++] = product[1];
-            }
-        }
-        for (int first = 0; first < 2; first++) {
-            for (int second = 0; second < 2; second++) {
-                final double[] product = twoProduct(previousDifferenceY[first], previousDifferenceX[second]);
-                terms[termCount++] = -product[0];
-                terms[termCount++] = -product[1];
-            }
-        }
-        sortByMagnitude(terms, termCount);
-        final double[] expansion = new double[termCount + 1];
-        int expansionLength = 0;
+        termCount = addProductTerms(terms, exponents, termCount, firstX, secondY, 1.0);
+        termCount = addProductTerms(terms, exponents, termCount, firstY, secondX, -1.0);
+        int maximumScale = 0;
         for (int index = 0; index < termCount; index++) {
-            expansionLength = growExpansion(expansion, expansionLength, terms[index]);
+            maximumScale = Math.max(maximumScale, exponents[index]);
         }
-        double smallSum = 0.0;
-        for (int index = 0; index + 1 < expansionLength; index++) {
-            smallSum += expansion[index];
+        for (int index = 0; index < termCount; index++) {
+            terms[index] = scaleTerm(terms[index], maximumScale - exponents[index]);
         }
-        final double[] total = twoSum(expansion[expansionLength - 1], smallSum);
-        final double totalSum = total[0];
-        final double totalError = total[1];
-        if (totalError > threshold - totalSum) {
+        final double threshold = Math.scalb(EPSILON, -maximumScale);
+        if (signOfSumWith(terms, termCount, -threshold) > 0) {
             return 1;
         }
-        if (totalError < -threshold - totalSum) {
+        if (signOfSumWith(terms, termCount, threshold) < 0) {
             return -1;
         }
         return 0;
     }
 
-    private static double[] twoDiff(final double first, final double second) {
+    private static double[] scaledDifference(final double first, final double second) {
         final double difference = first - second;
-        return new double[] { difference, (first - difference) - second };
+        final double[] exact;
+        final double extraScale;
+        if (Double.isFinite(difference)) {
+            exact = twoDiff(first, second);
+            extraScale = 0.0;
+        }
+        else {
+            exact = twoDiff(first * 0.5, second * 0.5);
+            extraScale = 1.0;
+        }
+        final double major = exact[0];
+        if (major == 0.0) {
+            return new double[] { 0.0, 0.0, 0.0, 0.0 };
+        }
+        final double minor = exact[1];
+        final int majorScale = Math.max(0, Math.getExponent(major) - 508);
+        int minorScale = 0;
+        if (minor != 0.0) {
+            minorScale = Math.max(0, Math.getExponent(minor) - 508);
+        }
+        return new double[] { Math.scalb(major, -majorScale), majorScale + extraScale,
+            Math.scalb(minor, -minorScale), minorScale + extraScale };
     }
 
-    private static double[] twoSum(final double first, final double second) {
-        final double sum = first + second;
-        final double virtualSecond = sum - first;
-        final double virtualFirst = sum - virtualSecond;
-        final double secondResidual = second - virtualSecond;
-        final double firstResidual = first - virtualFirst;
-        return new double[] { sum, firstResidual + secondResidual };
+    private static int addProductTerms(final double[] terms, final int[] exponents, int termCount,
+            final double[] first, final double[] second, final double sign) {
+        termCount = addProductTerm(terms, exponents, termCount, first[0], (int) first[1],
+            second[0], (int) second[1], sign);
+        termCount = addProductTerm(terms, exponents, termCount, first[0], (int) first[1],
+            second[2], (int) second[3], sign);
+        termCount = addProductTerm(terms, exponents, termCount, first[2], (int) first[3],
+            second[0], (int) second[1], sign);
+        termCount = addProductTerm(terms, exponents, termCount, first[2], (int) first[3],
+            second[2], (int) second[3], sign);
+        return termCount;
     }
 
-    private static double[] twoProduct(final double first, final double second) {
-        final double splitter = 134217729.0;
-        final double firstHigh = splitter * first - (splitter * first - first);
-        final double firstLow = first - firstHigh;
-        final double secondHigh = splitter * second - (splitter * second - second);
-        final double secondLow = second - secondHigh;
-        final double product = first * second;
-        final double error = (firstHigh * secondHigh - product) + firstHigh * secondLow
-            + firstLow * secondHigh + firstLow * secondLow;
-        return new double[] { product, error };
+    private static int addProductTerm(final double[] terms, final int[] exponents, int termCount,
+            final double first, final int firstScale, final double second, final int secondScale,
+            final double sign) {
+        final double[] product = twoProduct(first, second);
+        terms[termCount] = sign * product[0];
+        exponents[termCount] = firstScale + secondScale;
+        termCount++;
+        terms[termCount] = sign * product[1];
+        exponents[termCount] = firstScale + secondScale;
+        termCount++;
+        return termCount;
+    }
+
+    private static double scaleTerm(final double value, final int downScale) {
+        if (value == 0.0 || downScale == 0) {
+            return value;
+        }
+        return Math.scalb(value, -downScale);
+    }
+
+    private static int signOfSumWith(final double[] terms, final int count, final double extra) {
+        final double[] sorted = new double[count + 1];
+        System.arraycopy(terms, 0, sorted, 0, count);
+        sorted[count] = extra;
+        sortByMagnitude(sorted, count + 1);
+        final double[] expansion = new double[count + 2];
+        int expansionLength = 0;
+        for (int index = 0; index < sorted.length; index++) {
+            expansionLength = growExpansion(expansion, expansionLength, sorted[index]);
+        }
+        double largestMagnitude = 0.0;
+        double largest = 0.0;
+        for (int index = 0; index < expansionLength; index++) {
+            final double magnitude = Math.abs(expansion[index]);
+            if (magnitude > largestMagnitude) {
+                largestMagnitude = magnitude;
+                largest = expansion[index];
+            }
+        }
+        if (largest == 0.0) {
+            return 0;
+        }
+        return largest > 0.0 ? 1 : -1;
     }
 
     private static void sortByMagnitude(final double[] values, final int count) {
@@ -448,6 +472,27 @@ public final class HullGeometry {
             }
             values[position] = value;
         }
+    }
+
+    private static double[] twoDiff(final double first, final double second) {
+        if (Math.abs(first) >= Math.abs(second)) {
+            final double difference = first - second;
+            return new double[] { difference, (first - difference) - second };
+        }
+        final double difference = second - first;
+        return new double[] { -difference, -((second - difference) - first) };
+    }
+
+    private static double[] twoProduct(final double first, final double second) {
+        final double splitter = 134217729.0;
+        final double firstHigh = splitter * first - (splitter * first - first);
+        final double firstLow = first - firstHigh;
+        final double secondHigh = splitter * second - (splitter * second - second);
+        final double secondLow = second - secondHigh;
+        final double product = first * second;
+        final double error = (firstHigh * secondHigh - product) + firstHigh * secondLow
+            + firstLow * secondHigh + firstLow * secondLow;
+        return new double[] { product, error };
     }
 
     private static int growExpansion(final double[] expansion, final int length, final double value) {
