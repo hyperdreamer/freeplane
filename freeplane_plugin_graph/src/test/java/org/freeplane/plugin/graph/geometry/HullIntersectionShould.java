@@ -53,6 +53,20 @@ public class HullIntersectionShould {
     }
 
     @Test
+    public void separatesHugeFiniteOverlappingHulls() {
+        HullGeometry first = hull(Arrays.asList(
+            point(0.0, 0.0), point(1e160, 0.0), point(1e160, 1e160), point(0.0, 1e160)));
+        HullGeometry second = hull(Arrays.asList(
+            point(5e159, 0.0), point(1.5e160, 0.0), point(1.5e160, 1e160), point(5e159, 1e160)));
+
+        LayoutPoint translation = HullIntersection.minimumSeparatingTranslation(first, second);
+
+        assertThat(translation.x()).isCloseTo(5e159, within(1e145));
+        assertThat(translation.y()).isEqualTo(0.0);
+        assertPositiveZero(HullIntersection.minimumSeparatingTranslation(first, translate(second, translation)));
+    }
+
+    @Test
     public void translatedHullHasNoPositiveAreaIntersectionAndReverseOrderNegatesTheVector() {
         HullGeometry first = square(0, 0);
         HullGeometry second = square(8, 0);
