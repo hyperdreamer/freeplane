@@ -666,6 +666,7 @@ git commit -m "2026-08-10-graph-workspace: Add safe graph labels"
 - Create: `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/adapter/MapSnapshotFactory.java`
 - Create: `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/adapter/TraversalNodeResolver.java`
 - Modify: `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/adapter/MapLease.java:1-end`
+- Modify: `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/adapter/MapLeaseManager.java:1-end`
 - Create: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/adapter/MapSnapshotFactoryShould.java`
 - Create: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/adapter/TraversalNodeResolverShould.java`
 - Create: `freeplane_plugin_graph/src/test/resources/maps/graph-locked-branch.mm`
@@ -676,15 +677,15 @@ git commit -m "2026-08-10-graph-workspace: Add safe graph labels"
 public final class MapSnapshotFactory { public MapSnapshot snapshot(MapLease lease); }
 public final class TraversalNodeResolver { public Optional<NodeModel> resolve(MapLease lease, SourceNodeKey key); }
 ```
-`MapLease` gains package integration method `MapModel modelOnEdt()` guarded by EdtExecutor; no other package gets direct model.
+The public `MapLease` interface remains unchanged. `MapLease.java` gains a package-private callback contract implemented by `MapLeaseManager.LeaseImpl`; it runs callbacks through the lease's `EdtExecutor` and supplies the live `MapModel` plus the validated `int` workspace order. No public caller receives the map model.
 
-- [ ] **Step 1: Tests** structuralLeaf before pruning; hidden/summary identity-only no label; show-hidden; group descendants; visible summary/free; locked leaf/inaccessible; idless transient/no mutation; resolver traversal; unlock restore.
+- [ ] **Step 1: Tests** structuralLeaf before pruning; hidden/Freeplane-hidden-summary identity-only with a fixed non-content label; show-hidden; group descendants; visible summary/free; locked leaf/inaccessible after a real unlock/relock cycle; idless transient/no mutation; resolver traversal; unlock restore; sequence overflow.
 - [ ] **Step 2: Red** run snapshot/resolver tests.
 - [ ] **Step 3: Implement identity-only and label-safe passes on EDT**
 - [ ] **Step 4: Flat-lookup mutant fails locked sentinel; restore**
-- [ ] **Step 5: Commit after green exact seven-file allowlist**
+- [ ] **Step 5: Commit after green exact eight-file allowlist**
 ```bash
-git commit -m "2026-08-10-graph-workspace: Publish safe map snapshots"
+git commit -m "2026-08-10-graph-workspace: Build safe map snapshots and traversal resolution"
 ```
 
 ## Task 16: Snapshot native connectors and enforce adapter boundaries
