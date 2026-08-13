@@ -1568,7 +1568,7 @@ public final class MapLeaseManager implements AutoCloseable {
         }
     }
 
-    private static final class LeaseImpl implements MapLease {
+    private static final class LeaseImpl implements MapLease, MapLeaseAccess {
         private final MapLeaseManager manager;
         private final Entry entry;
         private final AtomicBoolean closed = new AtomicBoolean();
@@ -1595,6 +1595,32 @@ public final class MapLeaseManager implements AutoCloseable {
             if (closed.compareAndSet(false, true)) {
                 manager.release(entry.id);
             }
+        }
+
+        @Override
+        public <T> T withModelOnEdt(final MapModelCallback<T> callback) {
+            Objects.requireNonNull(callback, "callback");
+            return manager.edt.call(new Callable<T>() {
+                @Override
+                public T call() {
+                    final MapModel model;
+                    final long sequence;
+                    synchronized (manager.monitor) {
+                        if (closed.get()) {
+                            throw new IllegalStateException("Map lease is closed");
+                        }
+                        model = entry.model;
+                        if (model == null) {
+                            throw new IllegalStateException("Map lease has no model");
+                        }
+                        sequence = entry.reference.sequence();
+                    }
+                    if (sequence > Integer.MAX_VALUE) {
+                        throw new IllegalArgumentException("Map sequence exceeds snapshot order range");
+                    }
+                    return callback.apply(model, (int) sequence);
+                }
+            });
         }
     }
 
