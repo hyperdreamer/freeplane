@@ -80,9 +80,7 @@ public final class HullGeometry {
         for (int index = 0; index < count; index++) {
             final LayoutPoint start = exactPolygon.get(index);
             final LayoutPoint end = exactPolygon.get((index + 1) % count);
-            final double cross = (end.x() - start.x()) * (point.y() - start.y())
-                - (end.y() - start.y()) * (point.x() - start.x());
-            if (cross < -EPSILON) {
+            if (classifyOrientation(start, end, point) < 0) {
                 return false;
             }
         }
@@ -195,12 +193,13 @@ public final class HullGeometry {
         boolean hasPositive = false;
         boolean hasNegative = false;
         for (int index = 0; index < vertices.size(); index++) {
-            final double cross = cross(vertices.get(index), vertices.get((index + 1) % vertices.size()),
+            final int orientation = classifyOrientation(vertices.get(index),
+                vertices.get((index + 1) % vertices.size()),
                 vertices.get((index + 2) % vertices.size()));
-            if (cross > EPSILON) {
+            if (orientation > 0) {
                 hasPositive = true;
             }
-            else if (cross < -EPSILON) {
+            else if (orientation < 0) {
                 hasNegative = true;
             }
         }
@@ -238,7 +237,7 @@ public final class HullGeometry {
                 vertices.remove(index);
                 changed = true;
             }
-            else if (Math.abs(cross(previous, current, next)) <= EPSILON) {
+            else if (classifyOrientation(previous, current, next) == 0) {
                 if (!isBetween(previous, current, next)) {
                     throw new IllegalArgumentException("A hull polygon must not backtrack along an edge");
                 }
@@ -270,15 +269,14 @@ public final class HullGeometry {
 
     private static boolean segmentsIntersect(final LayoutPoint a, final LayoutPoint b,
             final LayoutPoint c, final LayoutPoint d) {
-        final double abC = cross(a, b, c);
-        final double abD = cross(a, b, d);
-        final double cdA = cross(c, d, a);
-        final double cdB = cross(c, d, b);
-        if (Math.abs(abC) <= EPSILON || Math.abs(abD) <= EPSILON || Math.abs(cdA) <= EPSILON
-                || Math.abs(cdB) <= EPSILON) {
+        final int abC = classifyOrientation(a, b, c);
+        final int abD = classifyOrientation(a, b, d);
+        final int cdA = classifyOrientation(c, d, a);
+        final int cdB = classifyOrientation(c, d, b);
+        if (abC == 0 || abD == 0 || cdA == 0 || cdB == 0) {
             return onSegment(a, b, c) || onSegment(a, b, d) || onSegment(c, d, a) || onSegment(c, d, b);
         }
-        return abC * abD < 0.0 && cdA * cdB < 0.0;
+        return abC * abD < 0 && cdA * cdB < 0;
     }
 
     private static boolean onSegment(final LayoutPoint a, final LayoutPoint b, final LayoutPoint point) {
@@ -351,9 +349,121 @@ public final class HullGeometry {
             || Math.abs(first) <= Double.MAX_VALUE - Math.abs(second);
     }
 
-    private static double cross(final LayoutPoint previous, final LayoutPoint current, final LayoutPoint next) {
-        return (current.x() - previous.x()) * (next.y() - current.y())
-            - (current.y() - previous.y()) * (next.x() - current.x());
+    private static int classifyOrientation(final LayoutPoint previous, final LayoutPoint current,
+            final LayoutPoint next) {
+        final double maximum = Math.max(
+            Math.max(Math.max(Math.abs(previous.x()), Math.abs(previous.y())),
+                Math.max(Math.abs(current.x()), Math.abs(current.y()))),
+            Math.max(Math.abs(next.x()), Math.abs(next.y())));
+        if (maximum == 0.0) {
+            return 0;
+        }
+        final int exponent = Math.getExponent(maximum);
+        if (exponent < -512) {
+            return 0;
+        }
+        final double scale = Math.scalb(1.0, exponent);
+        final double threshold = Math.scalb(EPSILON, -2 * exponent);
+        final double previousX = previous.x() / scale;
+        final double previousY = previous.y() / scale;
+        final double currentX = current.x() / scale;
+        final double currentY = current.y() / scale;
+        final double nextX = next.x() / scale;
+        final double nextY = next.y() / scale;
+        final double[] differenceX = twoDiff(currentX, previousX);
+        final double[] differenceY = twoDiff(nextY, currentY);
+        final double[] previousDifferenceY = twoDiff(currentY, previousY);
+        final double[] previousDifferenceX = twoDiff(nextX, currentX);
+        final double[] terms = new double[16];
+        int termCount = 0;
+        for (int first = 0; first < 2; first++) {
+            for (int second = 0; second < 2; second++) {
+                final double[] product = twoProduct(differenceX[first], differenceY[second]);
+                terms[termCount++] = product[0];
+                terms[termCount++] = product[1];
+            }
+        }
+        for (int first = 0; first < 2; first++) {
+            for (int second = 0; second < 2; second++) {
+                final double[] product = twoProduct(previousDifferenceY[first], previousDifferenceX[second]);
+                terms[termCount++] = -product[0];
+                terms[termCount++] = -product[1];
+            }
+        }
+        sortByMagnitude(terms, termCount);
+        final double[] expansion = new double[termCount + 1];
+        int expansionLength = 0;
+        for (int index = 0; index < termCount; index++) {
+            expansionLength = growExpansion(expansion, expansionLength, terms[index]);
+        }
+        double smallSum = 0.0;
+        for (int index = 0; index + 1 < expansionLength; index++) {
+            smallSum += expansion[index];
+        }
+        final double[] total = twoSum(expansion[expansionLength - 1], smallSum);
+        final double totalSum = total[0];
+        final double totalError = total[1];
+        if (totalError > threshold - totalSum) {
+            return 1;
+        }
+        if (totalError < -threshold - totalSum) {
+            return -1;
+        }
+        return 0;
+    }
+
+    private static double[] twoDiff(final double first, final double second) {
+        final double difference = first - second;
+        return new double[] { difference, (first - difference) - second };
+    }
+
+    private static double[] twoSum(final double first, final double second) {
+        final double sum = first + second;
+        final double virtualSecond = sum - first;
+        final double virtualFirst = sum - virtualSecond;
+        final double secondResidual = second - virtualSecond;
+        final double firstResidual = first - virtualFirst;
+        return new double[] { sum, firstResidual + secondResidual };
+    }
+
+    private static double[] twoProduct(final double first, final double second) {
+        final double splitter = 134217729.0;
+        final double firstHigh = splitter * first - (splitter * first - first);
+        final double firstLow = first - firstHigh;
+        final double secondHigh = splitter * second - (splitter * second - second);
+        final double secondLow = second - secondHigh;
+        final double product = first * second;
+        final double error = (firstHigh * secondHigh - product) + firstHigh * secondLow
+            + firstLow * secondHigh + firstLow * secondLow;
+        return new double[] { product, error };
+    }
+
+    private static void sortByMagnitude(final double[] values, final int count) {
+        for (int index = 1; index < count; index++) {
+            final double value = values[index];
+            int position = index;
+            while (position > 0 && Math.abs(value) < Math.abs(values[position - 1])) {
+                values[position] = values[position - 1];
+                position--;
+            }
+            values[position] = value;
+        }
+    }
+
+    private static int growExpansion(final double[] expansion, final int length, final double value) {
+        double carry = value;
+        for (int index = 0; index < length; index++) {
+            final double term = expansion[index];
+            final double sum = term + carry;
+            final double virtualSecond = sum - term;
+            final double virtualFirst = sum - virtualSecond;
+            final double secondResidual = carry - virtualSecond;
+            final double firstResidual = term - virtualFirst;
+            expansion[index] = sum;
+            carry = firstResidual + secondResidual;
+        }
+        expansion[length] = carry;
+        return length + 1;
     }
 
     private static int compare(final LayoutPoint first, final LayoutPoint second) {
