@@ -814,6 +814,40 @@ public class HullGeometryShould {
     }
 
     @Test
+    public void preservesSubnormalSmoothingTangentAtExtremeCoordinates() {
+        HullGeometry hull = HullGeometry.of(Arrays.asList(
+            LayoutPoint.of(-1.0e308, 0.0),
+            LayoutPoint.of(1.0e308, Math.scalb(1.0, -52)),
+            LayoutPoint.of(1.0e308, 1.0e100),
+            LayoutPoint.of(-1.0e308, 1.0e100)), LayoutPoint.of(0.0, 0.0));
+        PathIterator iterator = hull.smoothPath().getPathIterator(null);
+        double[] coordinates = new double[6];
+
+        assertThat(iterator.currentSegment(coordinates)).isEqualTo(PathIterator.SEG_MOVETO);
+        iterator.next();
+        assertThat(iterator.currentSegment(coordinates)).isEqualTo(PathIterator.SEG_QUADTO);
+        assertThat(coordinates[2]).isEqualTo(-1.0e308);
+        assertThat(Double.doubleToRawLongBits(coordinates[3])).isEqualTo(1L);
+    }
+
+    @Test
+    public void preservesFourUnitTangentWithRepresentableMinorComponent() {
+        HullGeometry hull = HullGeometry.of(Arrays.asList(
+            LayoutPoint.of(0.0, 0.0),
+            LayoutPoint.of(8.0, 4.0 * Double.MIN_VALUE),
+            LayoutPoint.of(8.0, 20.0),
+            LayoutPoint.of(0.0, 20.0)), LayoutPoint.of(0.0, 0.0));
+        PathIterator iterator = hull.smoothPath().getPathIterator(null);
+        double[] coordinates = new double[6];
+
+        assertThat(iterator.currentSegment(coordinates)).isEqualTo(PathIterator.SEG_MOVETO);
+        iterator.next();
+        assertThat(iterator.currentSegment(coordinates)).isEqualTo(PathIterator.SEG_QUADTO);
+        assertThat(coordinates[2]).isEqualTo(4.0);
+        assertThat(Double.doubleToRawLongBits(coordinates[3])).isEqualTo(2L);
+    }
+
+    @Test
     public void keepsSmoothTangentsWithinFourWhenOneUlpExceedsFour() {
         double offset = Math.nextUp(Math.scalb(1.0, 55));
         assertThat(Math.ulp(offset)).isEqualTo(8.0);

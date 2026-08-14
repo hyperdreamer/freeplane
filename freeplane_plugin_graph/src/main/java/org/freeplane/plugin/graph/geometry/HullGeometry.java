@@ -176,6 +176,12 @@ public final class HullGeometry {
             return of(first).add(of(-second));
         }
 
+        private static ScaledExpansion scaled(final double value, final int exponent) {
+            final ScaledExpansion expansion = new ScaledExpansion();
+            expansion.addComponent(value, exponent);
+            return expansion;
+        }
+
         ScaledExpansion add(final ScaledExpansion other) {
             final ScaledExpansion sum = copy();
             for (int index = 0; index < other.count; index++) {
@@ -220,6 +226,14 @@ public final class HullGeometry {
             return quotient;
         }
 
+        ScaledExpansion inverseSquareRoot() {
+            final int scale = Math.floorDiv(exponents[0], 2);
+            final ScaledExpansion inverse = scaled(1.0 / Math.sqrt(scaledAtExponent(2 * scale)), -scale);
+            final ScaledExpansion adjustment = ScaledExpansion.of(3.0)
+                .subtract(product(inverse.product(inverse)));
+            return inverse.product(adjustment).product(ScaledExpansion.of(0.5));
+        }
+
         int signum() {
             return count == 0 ? 0 : components[0] > 0.0 ? 1 : -1;
         }
@@ -252,12 +266,15 @@ public final class HullGeometry {
         }
 
         private double scaledAtLeadingExponent() {
-            final int leadingExponent = exponents[0];
+            return scaledAtExponent(exponents[0]);
+        }
+
+        private double scaledAtExponent(final int targetExponent) {
             double value = 0.0;
             double residual = 0.0;
             for (int index = 0; index < count; index++) {
                 final double[] sum = twoSum(value,
-                    Math.scalb(components[index], exponents[index] - leadingExponent));
+                    Math.scalb(components[index], exponents[index] - targetExponent));
                 value = sum[0];
                 residual += sum[1];
             }
@@ -554,26 +571,52 @@ public final class HullGeometry {
     }
 
     private static LayoutPoint pointAlong(final LayoutPoint from, final LayoutPoint to, final double distance) {
-        final double dx;
-        final double dy;
-        if (subtractionIsFinite(to.x(), from.x()) && subtractionIsFinite(to.y(), from.y())) {
-            dx = to.x() - from.x();
-            dy = to.y() - from.y();
+        if (!(distance > 0.0)) {
+            return from;
         }
-        else {
-            final double scale = Math.max(Math.max(Math.abs(from.x()), Math.abs(from.y())),
-                Math.max(Math.abs(to.x()), Math.abs(to.y())));
-            dx = to.x() / scale - from.x() / scale;
-            dy = to.y() / scale - from.y() / scale;
+        final ScaledExpansion edgeX = ScaledExpansion.difference(to.x(), from.x());
+        final ScaledExpansion edgeY = ScaledExpansion.difference(to.y(), from.y());
+        final ScaledExpansion squaredLength = edgeX.product(edgeX).add(edgeY.product(edgeY));
+        if (squaredLength.signum() <= 0) {
+            return from;
         }
-        final double largest = Math.max(Math.abs(dx), Math.abs(dy));
-        final double ux = dx / largest;
-        final double uy = dy / largest;
-        final double length = Math.hypot(ux, uy);
-        final LayoutPoint candidate = LayoutPoint.of(from.x() + ux / length * distance,
-            from.y() + uy / length * distance);
-        return Math.hypot(candidate.x() - from.x(), candidate.y() - from.y()) <= CORNER_SMOOTHING_TANGENT
-            ? candidate : from;
+        final ScaledExpansion cut = ScaledExpansion.of(distance);
+        final ScaledExpansion inverseLength = squaredLength.inverseSquareRoot();
+        final ScaledExpansion displacementX = edgeX.product(cut).product(inverseLength);
+        final ScaledExpansion displacementY = edgeY.product(cut).product(inverseLength);
+        final ScaledExpansion displacementSquared = displacementX.product(displacementX)
+            .add(displacementY.product(displacementY));
+        final ScaledExpansion maximumSquared = ScaledExpansion.of(CORNER_SMOOTHING_TANGENT)
+            .product(ScaledExpansion.of(CORNER_SMOOTHING_TANGENT));
+        if (displacementSquared.compareTo(maximumSquared) > 0) {
+            return from;
+        }
+        final double x = ScaledExpansion.of(from.x()).add(displacementX).finiteValue();
+        final double y = ScaledExpansion.of(from.y()).add(displacementY).finiteValue();
+        if (!Double.isFinite(x) || !Double.isFinite(y)) {
+            return from;
+        }
+        if (!roundedDisplacementWithinSmoothingTangent(from, displacementX, displacementY, x, y)) {
+            return from;
+        }
+        return LayoutPoint.of(x, y);
+    }
+
+    private static boolean roundedDisplacementWithinSmoothingTangent(final LayoutPoint from,
+            final ScaledExpansion displacementX, final ScaledExpansion displacementY,
+            final double roundedX, final double roundedY) {
+        final ScaledExpansion unroundedX = ScaledExpansion.of(from.x()).add(displacementX);
+        final ScaledExpansion unroundedY = ScaledExpansion.of(from.y()).add(displacementY);
+        // Preserve the tagged displacement and account for final coordinate rounding separately.
+        final ScaledExpansion roundingErrorX = ScaledExpansion.of(roundedX).subtract(unroundedX);
+        final ScaledExpansion roundingErrorY = ScaledExpansion.of(roundedY).subtract(unroundedY);
+        final ScaledExpansion roundedDisplacementX = displacementX.add(roundingErrorX);
+        final ScaledExpansion roundedDisplacementY = displacementY.add(roundingErrorY);
+        final ScaledExpansion roundedSquared = roundedDisplacementX.product(roundedDisplacementX)
+            .add(roundedDisplacementY.product(roundedDisplacementY));
+        final ScaledExpansion roundingLimit = ScaledExpansion.of(CORNER_SMOOTHING_TANGENT)
+            .add(ScaledExpansion.of(Math.scalb(Math.ulp(CORNER_SMOOTHING_TANGENT), -1)));
+        return roundedSquared.compareTo(roundingLimit.product(roundingLimit)) <= 0;
     }
 
     private static boolean subtractionIsFinite(final double first, final double second) {
