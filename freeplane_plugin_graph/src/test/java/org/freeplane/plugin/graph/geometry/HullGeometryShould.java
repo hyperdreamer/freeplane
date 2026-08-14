@@ -763,6 +763,19 @@ public class HullGeometryShould {
     }
 
     @Test
+    public void keepsSmoothTangentsWithinFourWhenOneUlpExceedsFour() {
+        double offset = Math.nextUp(Math.scalb(1.0, 55));
+        assertThat(Math.ulp(offset)).isEqualTo(8.0);
+        HullGeometry rectangle = HullGeometry.of(Arrays.asList(
+            LayoutPoint.of(offset, 0.0),
+            LayoutPoint.of(offset + 80.0, 0.0),
+            LayoutPoint.of(offset + 80.0, 20.0),
+            LayoutPoint.of(offset, 20.0)), LayoutPoint.of(offset, 10.0));
+
+        assertTangentsWithinFourWorldUnits(rectangle);
+    }
+
+    @Test
     public void findsNearestBoundaryForFarFiniteTargets() {
         HullGeometry squareHull = HullGeometry.of(square(), LayoutPoint.of(0.0, 0.0));
         assertThat(squareHull.nearestBoundaryPoint(LayoutPoint.of(1e200, 1e200)))

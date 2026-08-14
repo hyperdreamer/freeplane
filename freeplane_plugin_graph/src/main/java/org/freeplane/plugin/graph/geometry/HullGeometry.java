@@ -342,7 +342,10 @@ public final class HullGeometry {
         final double ux = dx / largest;
         final double uy = dy / largest;
         final double length = Math.hypot(ux, uy);
-        return LayoutPoint.of(from.x() + ux / length * distance, from.y() + uy / length * distance);
+        final LayoutPoint candidate = LayoutPoint.of(from.x() + ux / length * distance,
+            from.y() + uy / length * distance);
+        return Math.hypot(candidate.x() - from.x(), candidate.y() - from.y()) <= CORNER_SMOOTHING_TANGENT
+            ? candidate : from;
     }
 
     private static boolean subtractionIsFinite(final double first, final double second) {
