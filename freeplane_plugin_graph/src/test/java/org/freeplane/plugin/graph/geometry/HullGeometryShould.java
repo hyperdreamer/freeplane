@@ -752,6 +752,31 @@ public class HullGeometryShould {
     }
 
     @Test
+    public void preservesFiniteMinorBoundaryResidual() {
+        NodeGeometry node = NodeGeometry.of(
+            LayoutPoint.of(-0x1.d2516524174eep-145, 0x1.0p-416),
+            0x1.d2516524174eep-145);
+
+        LayoutPoint boundary = node.boundaryToward(LayoutPoint.of(0.0, -0x1.0p-849));
+
+        assertThat(Double.doubleToRawLongBits(boundary.x())).isEqualTo(0x94e19141fa24b1f8L);
+        assertThat(Double.doubleToRawLongBits(boundary.y())).isEqualTo(0x8ae0000000000000L);
+    }
+
+    @Test
+    public void handlesFiniteAdjacentSubnormalRayWithoutIntermediateOverflow() {
+        NodeGeometry node = NodeGeometry.of(
+            LayoutPoint.of(0x1.c561221864497p-1016, 0x1.4ffe5976c80a8p-1016),
+            0x1.75a4afe3a24fep1007);
+
+        LayoutPoint boundary = node.boundaryToward(
+            LayoutPoint.of(0x1.c561221864496p-1016, 0x1.4ffe5976c80a9p-1016));
+
+        assertThat(Double.doubleToRawLongBits(boundary.x())).isEqualTo(0xfee0834a9e5e0c6eL);
+        assertThat(Double.doubleToRawLongBits(boundary.y())).isEqualTo(0x7ee0834a9e5e0c6eL);
+    }
+
+    @Test
     public void limitsEverySmoothPathTangentToFourWorldUnits() {
         HullGeometry rectangle = HullGeometry.of(Arrays.asList(
             LayoutPoint.of(0.0, 0.0),
