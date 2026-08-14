@@ -814,6 +814,23 @@ public class HullGeometryShould {
     }
 
     @Test
+    public void preservesDiagonalSmoothingTangentAfterFinalRounding() {
+        HullGeometry hull = HullGeometry.of(Arrays.asList(
+            LayoutPoint.of(8.0, 8.0),
+            LayoutPoint.of(16.0, 32.0),
+            LayoutPoint.of(16.0, 52.0),
+            LayoutPoint.of(8.0, 28.0)), LayoutPoint.of(0.0, 0.0));
+        PathIterator iterator = hull.smoothPath().getPathIterator(null);
+        double[] coordinates = new double[6];
+
+        assertThat(iterator.currentSegment(coordinates)).isEqualTo(PathIterator.SEG_MOVETO);
+        iterator.next();
+        assertThat(iterator.currentSegment(coordinates)).isEqualTo(PathIterator.SEG_QUADTO);
+        assertThat(Double.doubleToRawLongBits(coordinates[2])).isEqualTo(0x402287a26c490922L);
+        assertThat(Double.doubleToRawLongBits(coordinates[3])).isEqualTo(0x402796e744db1b66L);
+    }
+
+    @Test
     public void preservesSubnormalSmoothingTangentAtExtremeCoordinates() {
         HullGeometry hull = HullGeometry.of(Arrays.asList(
             LayoutPoint.of(-1.0e308, 0.0),
