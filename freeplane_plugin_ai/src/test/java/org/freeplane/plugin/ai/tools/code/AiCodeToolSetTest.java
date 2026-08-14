@@ -124,9 +124,65 @@ public class AiCodeToolSetTest {
         String message = uut.systemMessageForChat("request");
 
         assertThat(message).contains("Use readCode, writeCode, and compileCode.");
-        assertThat(message).contains("The attached content is a formula.");
-        assertThat(message).contains("argumentsJsonText stays blank or null for formulas");
-        assertThat(message).contains("Keep it value-computing.");
+        assertThat(message).contains("The attached content is a content formula.");
+        assertThat(message).contains("argument-free");
+        assertThat(message).contains("runCode is not supported");
+    }
+
+    @Test
+    public void filterConditionSystemMessageExplainsConditionSemantics() {
+        AiCodeHostService codeHostService = new AiCodeHostService() {
+            @Override
+            public ReadCodeResponse readCode(ReadCodeRequest request) {
+                return new ReadCodeResponse(
+                    ScriptHost.ATTACHED_EDITOR,
+                    "text/x-freeplane-formula-condition-groovy",
+                    CodeState.EDITED,
+                    null,
+                    token("fingerprint"),
+                    new CodeStateContent("node.text == 'x'", null),
+                    null,
+                    null,
+                    null,
+                    null);
+            }
+
+            @Override
+            public WriteCodeResponse writeCode(WriteCodeRequest request) {
+                throw new IllegalStateException("not needed");
+            }
+
+            @Override
+            public CompileCodeResponse compileCode(CompileCodeRequest request) {
+                throw new IllegalStateException("not needed");
+            }
+
+            @Override
+            public RunCodeResponse runCode(RunCodeRequest request) {
+                throw new IllegalStateException("not runnable");
+            }
+
+            @Override
+            public AiChatCodeOperationResult evaluateFormula(EvaluateFormulaRequest request) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public void addRunListener(AiCodeRunListener listener) {
+            }
+
+            @Override
+            public void removeRunListener(AiCodeRunListener listener) {
+            }
+        };
+        AiCodeToolSet uut = new AiCodeToolSet(codeHostService, null, null, ToolCaller.CHAT);
+
+        String message = uut.systemMessageForChat("request");
+
+        assertThat(message).contains("The attached content is a condition formula.");
+        assertThat(message).contains("argument-free");
+        assertThat(message).contains("Boolean or Number");
+        assertThat(message).contains("runCode is not supported");
     }
 
     @Test

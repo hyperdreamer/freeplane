@@ -105,12 +105,22 @@ public class FormulaUtils {
                                          final String formulaText,
                                          final java.io.PrintStream outStream,
                                          final IFreeplaneScriptErrorHandler errorHandler) {
-        final NodeScript nodeScript = new NodeScript(nodeModel, scriptOf(formulaText));
+        return validateScript(
+            nodeModel,
+            scriptOf(formulaText),
+            outStream,
+            errorHandler);
+    }
+
+    public static Object validateScript(final NodeModel nodeModel,
+                                        final String script,
+                                        final java.io.PrintStream outStream,
+                                        final IFreeplaneScriptErrorHandler errorHandler) {
+        final NodeScript nodeScript = new NodeScript(nodeModel, script);
         final ScriptContext scriptContext = new ScriptContext(nodeScript).withDependencyTracking(false);
-        final ScriptingPermissions restrictedPermissions = ScriptingPermissions.getFormulaPermissions();
         return callWithExecuteBlockedIfEnabled(() -> evaluateLoggingExceptions(
             scriptContext,
-            restrictedPermissions,
+            ScriptingPermissions.getFormulaPermissions(),
             outStream == null ? System.out : outStream,
             errorHandler == null ? ScriptResources.IGNORING_SCRIPT_ERROR_HANDLER : errorHandler));
     }

@@ -30,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 public class AiCodeOperationAuthorizerTest {
     private static final String SCRIPT_CONTENT_TYPE = "text/x-freeplane-script-groovy";
     private static final String FORMULA_CONTENT_TYPE = "text/x-freeplane-formula-groovy";
+    private static final String FORMULA_CONDITION_CONTENT_TYPE = "text/x-freeplane-formula-condition-groovy";
 
     @Test
     public void attachedScriptEditorOverrideKeepsReadWriteAndCompileAuthorizedAtReading() {
@@ -95,6 +96,40 @@ public class AiCodeOperationAuthorizerTest {
     }
 
     @Test
+    public void attachedFilterConditionWriteAndCompileRequireFormulaEditingPermission() {
+        FakeCodeHostService codeHostService = new FakeCodeHostService()
+            .withState(ScriptHost.ATTACHED_EDITOR, FORMULA_CONDITION_CONTENT_TYPE, CodeState.EDITED);
+        AiCodeOperationAuthorizer uut = authorizer(
+            () -> ToolAvailabilityLevel.EDITING,
+            () -> null,
+            false,
+            codeHostService);
+
+        assertThat(uut.authorizedToolNames()).containsExactly("readCode");
+        assertThatThrownBy(() -> uut.assertAuthorized("writeCode", ScriptHost.ATTACHED_EDITOR))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("The requested code host is not writable at the current availability level.");
+        assertThatThrownBy(() -> uut.assertAuthorized("compileCode", ScriptHost.ATTACHED_EDITOR))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("The requested code host is not writable at the current availability level.");
+    }
+
+    @Test
+    public void editingAvailabilityAllowsAttachedFilterConditionWriteAndCompileWhenFormulaEditingIsEnabled() {
+        FakeCodeHostService codeHostService = new FakeCodeHostService()
+            .withState(ScriptHost.ATTACHED_EDITOR, FORMULA_CONDITION_CONTENT_TYPE, CodeState.EDITED);
+        AiCodeOperationAuthorizer uut = authorizer(
+            () -> ToolAvailabilityLevel.EDITING,
+            () -> null,
+            true,
+            codeHostService);
+
+        assertThat(uut.authorizedToolNames()).contains("readCode", "writeCode", "compileCode");
+        uut.assertAuthorized("writeCode", ScriptHost.ATTACHED_EDITOR);
+        uut.assertAuthorized("compileCode", ScriptHost.ATTACHED_EDITOR);
+    }
+
+    @Test
     public void editingAvailabilityAllowsAttachedFormulaWriteAndCompileWhenFormulaEditingIsEnabled() {
         FakeCodeHostService codeHostService = new FakeCodeHostService()
             .withState(ScriptHost.ATTACHED_EDITOR, FORMULA_CONTENT_TYPE, CodeState.EDITED);
@@ -107,6 +142,21 @@ public class AiCodeOperationAuthorizerTest {
         assertThat(uut.authorizedToolNames()).contains("readCode", "writeCode", "compileCode");
         uut.assertAuthorized("writeCode", ScriptHost.ATTACHED_EDITOR);
         uut.assertAuthorized("compileCode", ScriptHost.ATTACHED_EDITOR);
+    }
+
+    @Test
+    public void runCodeRejectsFilterConditionContent() {
+        FakeCodeHostService codeHostService = new FakeCodeHostService()
+            .withState(ScriptHost.ATTACHED_EDITOR, FORMULA_CONDITION_CONTENT_TYPE, CodeState.EDITED);
+        AiCodeOperationAuthorizer uut = authorizer(
+            () -> ToolAvailabilityLevel.SCRIPT_EXECUTION,
+            () -> null,
+            true,
+            codeHostService);
+
+        assertThatThrownBy(() -> uut.assertAuthorized("runCode", ScriptHost.ATTACHED_EDITOR))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("Only script content is runnable.");
     }
 
     @Test

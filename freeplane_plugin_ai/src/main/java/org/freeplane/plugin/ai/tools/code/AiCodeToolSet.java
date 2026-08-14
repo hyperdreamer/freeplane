@@ -30,6 +30,7 @@ public class AiCodeToolSet {
         "runCode")));
     private static final String SCRIPT_CONTENT_TYPE = "text/x-freeplane-script-groovy";
     private static final String FORMULA_CONTENT_TYPE = "text/x-freeplane-formula-groovy";
+    private static final String FORMULA_CONDITION_CONTENT_TYPE = "text/x-freeplane-formula-condition-groovy";
 
     private final AiCodeHostService codeHostService;
     private final AiCodeOperationAuthorizer aiCodeOperationAuthorizer;
@@ -72,7 +73,7 @@ public class AiCodeToolSet {
         }
     }
 
-    @Tool("Create or replace the current code state in the requested host by storing the provided content there. Use host AI for AI-owned code or ATTACHED_EDITOR for an attached editor. content contains sourceText and argumentsJsonText. For new AI-owned code, call this first without expectedStateToken only when no current AI-owned code exists. Otherwise expectedStateToken must match the current full state. For the attached editor this updates only the current draft content. Attached formula editing is available only when the current tool availability exposes writeCode and compileCode and AI formula editing is enabled. Current attached formula editing capability: enabled when the attached editor content is a formula.")
+    @Tool("Create or replace the current code state in the requested host by storing the provided content there. Use host AI for AI-owned code or ATTACHED_EDITOR for an attached editor. content contains sourceText and argumentsJsonText. For new AI-owned code, call this first without expectedStateToken only when no current AI-owned code exists. Otherwise expectedStateToken must match the current full state. For the attached editor this updates only the current draft content. Attached formula editing for content and condition formulas is available only when the current tool availability exposes writeCode and compileCode and AI formula editing is enabled. Current attached formula editing: enabled for content or condition formulas.")
     public WriteCodeResponse writeCode(WriteCodeToolRequest request) {
         try {
             WriteCodeRequest codeRequest = toWriteCodeRequest(request);
@@ -94,7 +95,7 @@ public class AiCodeToolSet {
         }
     }
 
-    @Tool("Compile the current code state for the requested host without executing it. This compiles code already present in the target host; it does not accept source text directly. expectedStateToken is required and must match the current full state, so readCode first when needed. For new AI-owned code, call writeCode first. Attached formula compilation is available only when the current tool availability exposes writeCode and compileCode and AI formula editing is enabled. Current attached formula editing capability: enabled when the attached editor content is a formula.")
+    @Tool("Compile the current code state for the requested host without executing it. This compiles code already present in the target host; it does not accept source text directly. expectedStateToken is required and must match the current full state, so readCode first when needed. For new AI-owned code, call writeCode first. Attached formula compilation for content and condition formulas is available only when the current tool availability exposes writeCode and compileCode and AI formula editing is enabled. Current attached formula editing: enabled for content or condition formulas.")
     public CompileCodeResponse compileCode(CompileCodeToolRequest request) {
         try {
             CompileCodeRequest codeRequest = toCompileCodeRequest(request);
@@ -116,7 +117,7 @@ public class AiCodeToolSet {
         }
     }
 
-    @Tool("Run the current code state for the requested host using the current Freeplane selection. This runs code already present in the target host; it does not accept source text directly. expectedStateToken is required and must match the current full state, so readCode first when needed. For new AI-owned code, call writeCode first. Only script content is runnable. Running code may trigger UI side effects. Avoid scripts that show dialogs, notifications, or alter visible UI state unless explicitly requested by the user. Prefer return values or stdout over UI output.")
+    @Tool("Run the current code state for the requested host using the current Freeplane selection. This runs code already present in the target host; it does not accept source text directly. expectedStateToken is required and must match the current full state, so readCode first when needed. For new AI-owned code, call writeCode first. Content and condition formulas are not runnable. Running code may trigger UI side effects. Avoid scripts that show dialogs, notifications, or alter visible UI state unless explicitly requested by the user. Prefer return values or stdout over UI output.")
     public RunCodeResponse runCode(RunCodeToolRequest request) {
         try {
             RunCodeRequest codeRequest = toRunCodeRequest(request);
@@ -171,16 +172,21 @@ public class AiCodeToolSet {
         if (response == null || response.getCodeState() == CodeState.NO_CODE) {
             return genericAiHostGuidance(writeAuthorized, compileAuthorized, runAuthorized);
         }
-        if (FORMULA_CONTENT_TYPE.equals(response.getContentType())) {
+        if (FORMULA_CONTENT_TYPE.equals(response.getContentType())
+            || FORMULA_CONDITION_CONTENT_TYPE.equals(response.getContentType())) {
+            boolean conditionFormula = FORMULA_CONDITION_CONTENT_TYPE.equals(response.getContentType());
             String toolGuidance = writeAuthorized && compileAuthorized
                 ? "Use readCode, writeCode, and compileCode. "
-                : "Use readCode. Formula authoring is available only when the current tool availability exposes writeCode and compileCode and AI formula editing is enabled. ";
+                : "Use readCode. Authoring requires writeCode, compileCode, and AI formula editing. ";
+            String contentType = conditionFormula ? "condition formula" : "content formula";
+            String resultRule = conditionFormula ? " Condition formulas return Boolean or Number." : "";
             return "An editor is attached to this chat. " + toolGuidance
-                + "Target host ATTACHED_EDITOR. The attached content is a formula. "
-                + "Keep it value-computing. Avoid state-changing Freeplane API calls and avoid obviously UI-driving calls. "
-                + "Use the available Freeplane API documentation for API surface and semantics, but do not assume it explicitly marks which methods are UI-related. "
-                + "writeCode changes only the current draft content. compileCode acts on the attached editor's current code state and requires the current stateToken from readCode. argumentsJsonText stays blank or null for formulas. "
-                + "Do not assume submit or execution while the editor stays open. Submit-failure repair requests require user approval.";
+                + "Target host ATTACHED_EDITOR. The attached content is a " + contentType + ". "
+                + "Keep it argument-free and value-computing; runCode is not supported. "
+                + "Avoid state-changing or UI calls. "
+                + "writeCode edits the draft; compileCode needs readCode's stateToken."
+                + resultRule
+                + " Do not assume submit; repair requires user approval.";
         }
         if (SCRIPT_CONTENT_TYPE.equals(response.getContentType())) {
             return runAuthorized

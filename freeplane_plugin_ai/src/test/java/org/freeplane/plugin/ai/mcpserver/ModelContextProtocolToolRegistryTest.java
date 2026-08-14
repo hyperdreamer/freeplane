@@ -24,7 +24,7 @@ public class ModelContextProtocolToolRegistryTest {
         assertThat(findTool(tools, "previewFormulaUpdates").getDescription())
             .contains("Current formula authoring capability: disabled");
         assertThat(findTool(tools, "writeCode").getDescription())
-            .contains("Current attached formula editing capability: disabled");
+            .contains("Attached formula editing: disabled");
     }
 
     @Test
@@ -40,7 +40,7 @@ public class ModelContextProtocolToolRegistryTest {
         assertThat(findTool(tools, "previewFormulaUpdates").getDescription())
             .contains("Current formula authoring capability: enabled");
         assertThat(findTool(tools, "compileCode").getDescription())
-            .contains("Current attached formula editing capability: enabled");
+            .contains("Attached formula editing: enabled for content and condition formulas.");
     }
 
     private ModelContextProtocolTool findTool(java.util.List<ModelContextProtocolTool> tools, String name) {

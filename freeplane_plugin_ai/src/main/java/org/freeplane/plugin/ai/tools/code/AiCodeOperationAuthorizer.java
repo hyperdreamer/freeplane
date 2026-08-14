@@ -16,6 +16,7 @@ import org.freeplane.plugin.ai.tools.utilities.ToolCaller;
 public class AiCodeOperationAuthorizer {
     private static final String SCRIPT_CONTENT_TYPE = "text/x-freeplane-script-groovy";
     private static final String FORMULA_CONTENT_TYPE = "text/x-freeplane-formula-groovy";
+    private static final String FORMULA_CONDITION_CONTENT_TYPE = "text/x-freeplane-formula-condition-groovy";
 
     @SuppressWarnings("unused")
     private final ToolCaller toolCaller;
@@ -118,12 +119,16 @@ public class AiCodeOperationAuthorizer {
         if (state == null || state.getCodeState() == CodeState.NO_CODE) {
             return false;
         }
-        if (FORMULA_CONTENT_TYPE.equals(state.getContentType())) {
+        if (isFormulaLikeContentType(state.getContentType())) {
             return FormulaEditingAccess.isFormulaEditingAllowed(
                 currentToolAvailability(),
                 formulaEditingEnabledSupplier != null && formulaEditingEnabledSupplier.get().booleanValue());
         }
         return hasSessionOverride() || globalAvailability().includesEditing();
+    }
+
+    private boolean isFormulaLikeContentType(String contentType) {
+        return FORMULA_CONTENT_TYPE.equals(contentType) || FORMULA_CONDITION_CONTENT_TYPE.equals(contentType);
     }
 
     private boolean canReadAiHost() {
