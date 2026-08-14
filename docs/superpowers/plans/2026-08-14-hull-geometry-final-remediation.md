@@ -31,16 +31,21 @@
 - Carry fixed canonical findings F-1, F-9, and F-10 unchanged into the final ledger. The final report's report-local F-10 was remapped to canonical F-13; do not overwrite or reopen canonical F-10.
 - Each task is strict TDD. Add only its named regression before production edits, run exactly that regression at the inherited HEAD, and prove the specified behavioral RED. If the named test passes, fails to compile, or fails for a different mechanism, return `BLOCKED` before editing production code.
 - Each task modifies only its two listed files and creates exactly one new, non-amended commit with the specified subject. Inspect `git diff --check`, the staged diff, commit parent, and worktree status before reporting.
-- After each correction, run this exact fresh gate:
+- After each correction, run this exact fresh gate as two invocations because Gradle's `--tests` option belongs only to the `Test` task and is rejected by `verifyGraphBundle`:
 
 ```bash
 env JAVA_HOME=/home/henry/.sdkman/candidates/java/21.0.8-zulu \
   PATH=/home/henry/.sdkman/candidates/java/21.0.8-zulu/bin:$PATH \
   gradle -p /data/home/guest/Development/freeplane/.worktrees/graph-workspace-task-18-hull-geometry \
-  :freeplane_plugin_graph:test :freeplane_plugin_graph:verifyGraphBundle \
+  :freeplane_plugin_graph:test \
   --tests '*HullGeometryShould' \
   --tests '*HullIntersectionShould' \
   -PTestLoggingFull --rerun-tasks
+
+env JAVA_HOME=/home/henry/.sdkman/candidates/java/21.0.8-zulu \
+  PATH=/home/henry/.sdkman/candidates/java/21.0.8-zulu/bin:$PATH \
+  gradle -p /data/home/guest/Development/freeplane/.worktrees/graph-workspace-task-18-hull-geometry \
+  :freeplane_plugin_graph:verifyGraphBundle --rerun-tasks
 ```
 
 - Aggregate every XML suite under `freeplane_plugin_graph/build/test-results/test`; require zero failures and zero errors. Record suites, tests, skips, failures, and errors rather than trusting Gradle's summary alone.
