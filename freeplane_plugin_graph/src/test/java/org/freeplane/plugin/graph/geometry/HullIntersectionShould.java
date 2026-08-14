@@ -90,6 +90,33 @@ public class HullIntersectionShould {
         assertThat(diagonalReversed.y()).isCloseTo(-22.0, within(1e-9));
     }
 
+    @Test
+    public void keepsMinimumTranslationInvariantUnderACommonLargeOffset() {
+        double offset = 1.3e308;
+        double radius = 1.0e300;
+        double shift = 5.0e299;
+        HullGeometry first = hull(Arrays.asList(
+            point(offset - radius, offset), point(offset, offset - radius),
+            point(offset + radius, offset), point(offset, offset + radius)));
+        HullGeometry second = hull(Arrays.asList(
+            point(offset - radius + shift, offset + shift),
+            point(offset + shift, offset - radius + shift),
+            point(offset + radius + shift, offset + shift),
+            point(offset + shift, offset + radius + shift)));
+        HullGeometry firstRelative = translate(first, point(-offset, -offset));
+        HullGeometry secondRelative = translate(second, point(-offset, -offset));
+
+        LayoutPoint offsetTranslation = HullIntersection.minimumSeparatingTranslation(first, second);
+        LayoutPoint relativeTranslation = HullIntersection.minimumSeparatingTranslation(firstRelative, secondRelative);
+
+        assertThat(offsetTranslation.x()).isCloseTo(relativeTranslation.x(), within(1.0e285));
+        assertThat(offsetTranslation.y()).isCloseTo(relativeTranslation.y(), within(1.0e285));
+        assertThat(offsetTranslation.x()).isCloseTo(4.9999999001856e299, within(1.0e285));
+        assertThat(offsetTranslation.y()).isCloseTo(4.9999999001856e299, within(1.0e285));
+        assertPositiveZero(HullIntersection.minimumSeparatingTranslation(first,
+            translate(second, offsetTranslation)));
+    }
+
     private static HullGeometry square(final double x, final double y) {
         return hull(Arrays.asList(point(x, y), point(x + 10.0, y), point(x + 10.0, y + 10.0), point(x, y + 10.0)));
     }
