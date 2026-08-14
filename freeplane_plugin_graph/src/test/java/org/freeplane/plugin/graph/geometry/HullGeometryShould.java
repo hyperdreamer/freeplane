@@ -752,6 +752,19 @@ public class HullGeometryShould {
     }
 
     @Test
+    public void preservesDominantTieWhenMinorDirectionUnderflowsBeforeScaling() {
+        NodeGeometry node = NodeGeometry.of(
+            LayoutPoint.of(0x1.fd0319fe0a92ep-759, 0x1.e30c64236fa44p-826),
+            0x1.56d80cdaea8bp-758);
+
+        LayoutPoint boundary = node.boundaryToward(
+            LayoutPoint.of(0x1.f004f5fdbd583p908, 0x1.1ac4b9748e63bp-972));
+
+        assertThat(Double.doubleToRawLongBits(boundary.x())).isEqualTo(0x10a2aacccecf7ea3L);
+        assertThat(Double.doubleToRawLongBits(boundary.y())).isEqualTo(0x0c5e30c64236fa44L);
+    }
+
+    @Test
     public void preservesFiniteMinorBoundaryResidual() {
         NodeGeometry node = NodeGeometry.of(
             LayoutPoint.of(-0x1.d2516524174eep-145, 0x1.0p-416),
