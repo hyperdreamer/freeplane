@@ -106,11 +106,11 @@ public final class NodeGeometry {
             final double boundaryX = dominantCoordinate(center.x(), radius, unitX, residualX, unitY, residualY,
                 lengthLead, lengthTailSignificand, lengthTailExponent);
             final double boundaryY = minorCoordinate(center.y(), radius, dy, dominantExponent, lengthLead,
-                lengthTail, lengthTailSignificand, lengthTailExponent);
+                lengthTailSignificand, lengthTailExponent);
             return LayoutPoint.of(boundaryX, boundaryY);
         }
         final double boundaryX = minorCoordinate(center.x(), radius, dx, dominantExponent, lengthLead,
-            lengthTail, lengthTailSignificand, lengthTailExponent);
+            lengthTailSignificand, lengthTailExponent);
         final double boundaryY = dominantCoordinate(center.y(), radius, unitY, residualY, unitX, residualX,
             lengthLead, lengthTailSignificand, lengthTailExponent);
         return LayoutPoint.of(boundaryX, boundaryY);
@@ -137,37 +137,15 @@ public final class NodeGeometry {
 
     private static double minorCoordinate(final double centerCoordinate, final double radius,
             final Difference difference, final int dominantExponent, final double lengthLead,
-            final double lengthTail, final double lengthTailSignificand, final int lengthTailExponent) {
-        final double scaledRadius = Math.scalb(radius, difference.exponent - dominantExponent);
-        final double quotient = difference.significand / lengthLead;
-        final Product quotientProduct = exactProduct(quotient, lengthLead);
-        final double quotientResidual = ((difference.significand - quotientProduct.high) - quotientProduct.low);
-        final double quotientTail = quotientResidual / lengthLead;
-        final double quotientRemainder = quotientResidual - quotientTail * lengthLead;
-        final double quotientTail2 = quotientRemainder / lengthLead;
-        final Product scaledProduct = exactProduct(scaledRadius, quotient);
-        final double residualRatio = residualRatioTerm(radius, difference.residual, dominantExponent,
-            lengthLead + lengthTail);
-        final double lengthCorrection = -(scaledProduct.high + scaledProduct.low)
-            * (lengthTailSignificand / lengthLead) * Math.scalb(1.0, lengthTailExponent);
-        final double smallTerms = scaledRadius * quotientTail + scaledRadius * quotientTail2 + residualRatio
-            + lengthCorrection;
-        final Sum first = exactSum(scaledProduct.high, scaledProduct.low);
-        final Sum second = exactSum(first.sum, smallTerms);
-        return addExact(centerCoordinate, second.sum, first.error + second.error);
-    }
-
-    private static double residualRatioTerm(final double radius, final double residual, final int dominantExponent,
-            final double length) {
-        if (residual == 0.0) {
-            return 0.0;
-        }
-        final int radiusExponent = Math.getExponent(radius);
-        final int residualExponent = Math.getExponent(residual);
-        final int lengthExponent = Math.getExponent(length);
-        final double product = Math.scalb(radius, -radiusExponent) * Math.scalb(residual, -residualExponent);
-        final double quotient = product / Math.scalb(length, -lengthExponent);
-        return Math.scalb(quotient, radiusExponent + residualExponent - dominantExponent - lengthExponent);
+            final double lengthTailSignificand, final int lengthTailExponent) {
+        final TaggedExpansion length = singleTermExpansion(lengthLead);
+        length.addTerm(lengthTailSignificand, lengthTailExponent);
+        final TaggedExpansion normalizedDifference = new TaggedExpansion();
+        normalizedDifference.addTerm(difference.significand, difference.exponent - dominantExponent);
+        normalizedDifference.addTerm(difference.residual, -dominantExponent);
+        final TaggedExpansion numerator = multiplyExpansions(singleTermExpansion(radius), normalizedDifference);
+        final TaggedQuotient displacement = new TaggedQuotient(numerator, length);
+        return finalSum(centerCoordinate, 0.0, displacement, 1);
     }
 
     private static double finalSum(final double first, final double second, final TaggedQuotient correction,
