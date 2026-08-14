@@ -19,6 +19,7 @@ import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.ai.code.CodeState;
 import org.freeplane.features.ai.code.CodeStateContent;
+import org.freeplane.features.ai.code.CodeStateDiagnostic;
 import org.freeplane.features.ai.code.CodeStateDiagnosticTextFormatter;
 import org.freeplane.features.ai.code.ReadCodeResponse;
 import org.freeplane.features.ai.code.RunCodeResponse;
@@ -195,23 +196,54 @@ public class AiOwnedScriptDialog extends JDialog implements AiOwnedScriptHostSer
         runButton.setEnabled(executionAvailable && hasCode);
     }
 
-    private String resultText(ReadCodeResponse state) {
+    static String resultText(ReadCodeResponse state) {
         if (state == null) {
             return "";
         }
-        String formattedDiagnostics = CodeStateDiagnosticTextFormatter.format(state.getDiagnostics());
-        if (formattedDiagnostics != null) {
-            return formattedDiagnostics;
-        }
-        if (state.getErrorMessage() != null) {
-            return state.getErrorMessage();
-        }
-        if (state.getStdout() != null) {
-            return state.getStdout();
-        }
+        StringBuilder result = new StringBuilder();
+        appendBlock(result, state.getStdout());
         if (state.getStructuredResult() != null) {
-            return String.valueOf(state.getStructuredResult());
+            appendBlock(result, String.valueOf(state.getStructuredResult()));
         }
-        return "";
+        String formattedDiagnostics = CodeStateDiagnosticTextFormatter.format(state.getDiagnostics());
+        appendBlock(result, formattedDiagnostics);
+        appendBlock(result, distinctErrorMessage(state, formattedDiagnostics));
+        return result.toString();
+    }
+
+    private static void appendBlock(StringBuilder result, String value) {
+        if (value == null || value.isEmpty()) {
+            return;
+        }
+        if (result.length() > 0) {
+            result.append("\n\n");
+        }
+        result.append(value);
+    }
+
+    private static String distinctErrorMessage(ReadCodeResponse state, String formattedDiagnostics) {
+        String errorMessage = trimToNull(state.getErrorMessage());
+        if (errorMessage == null) {
+            return null;
+        }
+        if (errorMessage.equals(formattedDiagnostics)) {
+            return null;
+        }
+        if (state.getDiagnostics() != null) {
+            for (CodeStateDiagnostic diagnostic : state.getDiagnostics()) {
+                if (diagnostic != null && errorMessage.equals(trimToNull(diagnostic.getMessage()))) {
+                    return null;
+                }
+            }
+        }
+        return errorMessage;
+    }
+
+    private static String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 }

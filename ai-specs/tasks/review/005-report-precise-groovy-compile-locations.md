@@ -9,10 +9,11 @@
   result consistently to `compileCode` and compile-before-run
   responses for AI-owned and attached-editor scripts. In the same
   increment, expose compiler failures directly in the AI-owned script
-  dialog and avoid presenting the same compiler-detail payload to AI
-  twice through separate response or summary channels. Preserve
-  diagnostics that genuinely have no source location. In the approved
-  follow-up on this task, also reuse structured formula compile
+  dialog, preserve every non-empty run-result channel when a response
+  contains more than one, and avoid presenting the same compiler-detail
+  payload to AI twice through separate response or summary channels.
+  Preserve diagnostics that genuinely have no source location. The
+  approved follow-up on this task also reuses structured formula compile
   diagnostics for attached-formula `compileCode`, formula
   submit-validation compile failures, and formula AI-repair state so
   compile failures are not duplicated there either. In a separate
@@ -24,7 +25,10 @@
   lost and large scripts return `"line":null,"column":null`.
   Second, AI-owned user runs can fail compilation without showing the
   user a direct result in the dialog, while AI-facing summaries can
-  receive the same compiler detail twice. Third, attached-formula
+  receive the same compiler detail twice. The dialog result view also
+  selects only one channel: it drops stdout when diagnostics or an
+  error are present, and drops a structured result when stdout is
+  present. Third, attached-formula
   compile diagnostics on line 1 currently refer to the stripped Groovy
   body rather than the visible formula text, so first-line columns are
   off by one in the editor.
@@ -39,6 +43,11 @@
   - If an AI-owned dialog run fails during compilation, the dialog
     shows the compiler failure directly without requiring AI chat
     follow-up.
+  - If a failed user run produces both stdout and diagnostics or an
+    error message, the dialog shows the script output and the failure
+    detail instead of dropping either channel.
+  - If a successful user run produces both stdout and a structured
+    result, the dialog shows both values with a visible separation.
   - AI-facing summaries include the detailed compiler diagnostics once,
     not repeated as the same full text through another field.
 - **Constraints:**
@@ -221,6 +230,10 @@
     validation results, not execution output.
   - Render AI-owned dialog compile failures locally from the response
     instead of relying on later AI chat summaries.
+  - Treat `ReadCodeResponse` run fields as independent channels in the
+    dialog: render every present channel, use structured diagnostics as
+    the detailed failure text, and include `errorMessage` only when it
+    contributes information not already present in those diagnostics.
 - **Design:**
   ```plantuml
   @startuml
@@ -312,7 +325,7 @@
   Host --> Dialog : RunCodeResponse(INVALID_SCRIPT, diagnostics, short errorMessage, stdout=null)
   Dialog -> Formatter : format(diagnostics)
   Formatter --> Dialog : plain-text diagnostics for display
-  Dialog --> User : direct compile failure output
+  Dialog --> User : compose stdout, failure detail, and structured result\nwithout dropping present channels
   Host -> ChatSummary : later user-run follow-up may format response
   ChatSummary --> User : diagnostics once\nerrorMessage only if non-duplicate fallback
   @enduml
@@ -358,9 +371,13 @@
     `FormulaEditor.compileCode(...)` to use the mapper instead of
     `CodeStateDiagnostics.sourceDiagnostics(...)` for
     `ScriptingEngine.GroovyCompileResult`.
-  - Update `AiOwnedScriptDialog` to show compile failures directly from
-    response diagnostics and summary text after `runFromDialog(...)`
-    returns a non-success result.
+  - Update `AiOwnedScriptDialog` result rendering to compose every
+    present channel instead of using exclusive fallback selection.
+    Preserve stdout alongside diagnostics or a distinct error message on
+    failure, preserve stdout alongside `structuredResult` on success,
+    and use visible separators between blocks. Treat structured
+    diagnostics as the detailed failure text and omit only an
+    `errorMessage` that duplicates information already present there.
   - Update `AutomaticCodeStatusMessage` so when structured diagnostics
     are present it does not append the same full compiler-detail text a
     second time through `errorMessage`. Render `errorMessage` only when
@@ -401,6 +418,15 @@
       - `runFromDialogReturnsGroovyDiagnosticLocationsForCompileFailure`:
         AI-owned user-run compile-before-run returns the same
         per-diagnostic locations.
+    - `AiOwnedScriptDialogTest`
+      - `resultTextPreservesStdoutAlongsideFailureDiagnostics`: a
+        response containing stdout and diagnostics renders both.
+      - `resultTextPreservesStdoutAlongsideStructuredResult`: a
+        successful response containing stdout and a structured result
+        renders both with a separator.
+      - `resultTextOmitsDuplicateErrorMessageWhenDiagnosticsContainIt`:
+        the detailed diagnostic is rendered once when `errorMessage`
+        repeats it.
     - `ScriptEditorPanelTest`
       - `compileCodeReturnsGroovyDiagnosticLocations`: attached-editor
         `compileCode` returns the same per-diagnostic locations.
@@ -432,6 +458,10 @@
       `org.freeplane.features.ai.code` instead of the script plugin so
       both the script plugin and the AI plugin can share one formatter
       without introducing a plugin dependency from AI to script.
+    - Kept the run-result composition local to `AiOwnedScriptDialog`
+      instead of introducing a shared result abstraction because the
+      response already preserves the independent channels and only this
+      dialog had the exclusive presentation bug.
     - Kept formula compile diagnostics in Groovy compiler coordinate
       space instead of shifting first-line columns to count the leading
       `=`. The structured fields and the compiler-authored message body
@@ -450,6 +480,9 @@
       validation so compile failures now feed the same structured
       diagnostics into attached-editor `compileCode`, the formula
       validation dialog, and the AI repair state.
+    - Kept `AiOwnedScriptDialog.resultText(...)` package-visible and
+      side-effect free so the channel-composition contract is testable
+      without constructing a Swing dialog.
 
 ## Subtask: Align formula source coordinates with visible formula text
 - **Status:** review
