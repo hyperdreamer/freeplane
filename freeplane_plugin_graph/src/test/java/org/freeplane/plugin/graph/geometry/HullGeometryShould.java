@@ -776,6 +776,20 @@ public class HullGeometryShould {
     }
 
     @Test
+    public void findsRepresentableInteriorProjectionAfterLargeProductCancellation() {
+        double a = 3.6519210675856295e120;
+        double targetY = Math.nextUp(-a);
+        HullGeometry triangle = HullGeometry.of(Arrays.asList(
+            LayoutPoint.of(0.0, 0.0),
+            LayoutPoint.of(a, a),
+            LayoutPoint.of(-a, a)), LayoutPoint.of(0.0, 0.0));
+        double expectedCoordinate = (a + targetY) / 2.0;
+
+        assertThat(triangle.nearestBoundaryPoint(LayoutPoint.of(a, targetY)))
+            .isEqualTo(LayoutPoint.of(expectedCoordinate, expectedCoordinate));
+    }
+
+    @Test
     public void findsNearestBoundaryForFarFiniteTargets() {
         HullGeometry squareHull = HullGeometry.of(square(), LayoutPoint.of(0.0, 0.0));
         assertThat(squareHull.nearestBoundaryPoint(LayoutPoint.of(1e200, 1e200)))

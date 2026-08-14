@@ -2,8 +2,6 @@ package org.freeplane.plugin.graph.geometry;
 
 import java.awt.Shape;
 import java.awt.geom.Path2D;
-import java.math.BigDecimal;
-import java.math.MathContext;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -11,7 +9,6 @@ import java.util.Objects;
 
 public final class HullGeometry {
     private static final double EPSILON = 1e-9;
-    private static final double SAFE_PRODUCT_COMPONENT = Math.sqrt(Double.MAX_VALUE) * 0.5;
     private static final double CORNER_SMOOTHING_TANGENT = 4.0;
 
     private final List<LayoutPoint> exactPolygon;
@@ -104,73 +101,304 @@ public final class HullGeometry {
 
     private static LayoutPoint nearestPointOnSegment(final LayoutPoint start, final LayoutPoint end,
             final LayoutPoint toward) {
-        if (subtractionIsFinite(end.x(), start.x()) && subtractionIsFinite(end.y(), start.y())
-                && subtractionIsFinite(toward.x(), start.x()) && subtractionIsFinite(toward.y(), start.y())) {
-            final double dx = end.x() - start.x();
-            final double dy = end.y() - start.y();
-            final double towardX = toward.x() - start.x();
-            final double towardY = toward.y() - start.y();
-            if (productsAreFinite(dx, dy, towardX, towardY)) {
-                final double lengthSquared = dx * dx + dy * dy;
-                final double projection = towardX * dx + towardY * dy;
-                if (lengthSquared > 0.0) {
-                    final double t = Math.max(0.0, Math.min(1.0, projection / lengthSquared));
-                    return LayoutPoint.of(start.x() + t * dx, start.y() + t * dy);
-                }
-            }
-        }
-
-        final BigDecimal decimalDx = decimal(end.x()).subtract(decimal(start.x()));
-        final BigDecimal decimalDy = decimal(end.y()).subtract(decimal(start.y()));
-        final BigDecimal decimalTowardX = decimal(toward.x()).subtract(decimal(start.x()));
-        final BigDecimal decimalTowardY = decimal(toward.y()).subtract(decimal(start.y()));
-        final BigDecimal decimalLengthSquared = decimalDx.multiply(decimalDx).add(decimalDy.multiply(decimalDy));
-        final BigDecimal decimalProjection = decimalTowardX.multiply(decimalDx)
-            .add(decimalTowardY.multiply(decimalDy));
-        if (decimalProjection.signum() <= 0) {
+        final ScaledExpansion edgeX = ScaledExpansion.difference(end.x(), start.x());
+        final ScaledExpansion edgeY = ScaledExpansion.difference(end.y(), start.y());
+        final ScaledExpansion lengthSquared = edgeX.product(edgeX).add(edgeY.product(edgeY));
+        if (lengthSquared.signum() <= 0) {
             return start;
         }
-        if (decimalProjection.compareTo(decimalLengthSquared) >= 0) {
+        final ScaledExpansion towardX = ScaledExpansion.difference(toward.x(), start.x());
+        final ScaledExpansion towardY = ScaledExpansion.difference(toward.y(), start.y());
+        final ScaledExpansion projection = towardX.product(edgeX).add(towardY.product(edgeY));
+        if (projection.signum() <= 0) {
+            return start;
+        }
+        if (projection.compareTo(lengthSquared) >= 0) {
             return end;
         }
-        final BigDecimal t = decimalProjection.divide(decimalLengthSquared, MathContext.DECIMAL128);
-        final double px = decimal(start.x()).add(t.multiply(decimalDx)).doubleValue();
-        final double py = decimal(start.y()).add(t.multiply(decimalDy)).doubleValue();
+        final double px = projectedCoordinate(start.x(), edgeX, projection, lengthSquared);
+        final double py = projectedCoordinate(start.y(), edgeY, projection, lengthSquared);
+        if (!Double.isFinite(px) || !Double.isFinite(py)) {
+            return start;
+        }
         return LayoutPoint.of(px, py);
+    }
+
+    private static double projectedCoordinate(final double start, final ScaledExpansion edge,
+            final ScaledExpansion projection, final ScaledExpansion lengthSquared) {
+        // Keep cancellation in start + edge * (projection / lengthSquared) until final rounding.
+        return ScaledExpansion.of(start).product(lengthSquared).add(edge.product(projection))
+            .quotient(lengthSquared).finiteValue();
     }
 
     private static boolean improvesSquaredDistance(final LayoutPoint candidate, final LayoutPoint best,
             final LayoutPoint toward) {
-        if (subtractionIsFinite(candidate.x(), toward.x()) && subtractionIsFinite(candidate.y(), toward.y())
-                && subtractionIsFinite(best.x(), toward.x()) && subtractionIsFinite(best.y(), toward.y())) {
-            final double candidateX = candidate.x() - toward.x();
-            final double candidateY = candidate.y() - toward.y();
-            final double bestX = best.x() - toward.x();
-            final double bestY = best.y() - toward.y();
-            if (productsAreFinite(candidateX, candidateY, bestX, bestY)) {
-                final double candidateSquared = candidateX * candidateX + candidateY * candidateY;
-                final double bestSquared = bestX * bestX + bestY * bestY;
-                return candidateSquared < bestSquared - EPSILON;
+        final ScaledMagnitude candidateDistance = ScaledMagnitude.between(candidate, toward);
+        final ScaledMagnitude bestDistance = ScaledMagnitude.between(best, toward);
+        return candidateDistance.improves(bestDistance);
+    }
+
+    private static final class ScaledMagnitude {
+        private final ScaledExpansion squared;
+
+        private ScaledMagnitude(final ScaledExpansion squared) {
+            this.squared = squared;
+        }
+
+        static ScaledMagnitude between(final LayoutPoint first, final LayoutPoint second) {
+            final ScaledExpansion dx = ScaledExpansion.difference(first.x(), second.x());
+            final ScaledExpansion dy = ScaledExpansion.difference(first.y(), second.y());
+            return new ScaledMagnitude(dx.product(dx).add(dy.product(dy)));
+        }
+
+        boolean improves(final ScaledMagnitude best) {
+            return best.squared.subtract(squared).compareTo(ScaledExpansion.of(EPSILON)) > 0;
+        }
+    }
+
+    private static final class ScaledExpansion {
+        private double[] components;
+        private int[] exponents;
+        private int count;
+
+        private ScaledExpansion() {
+            components = new double[32];
+            exponents = new int[32];
+        }
+
+        static ScaledExpansion of(final double value) {
+            final ScaledExpansion expansion = new ScaledExpansion();
+            expansion.addComponent(value, 0);
+            return expansion;
+        }
+
+        static ScaledExpansion difference(final double first, final double second) {
+            return of(first).add(of(-second));
+        }
+
+        ScaledExpansion add(final ScaledExpansion other) {
+            final ScaledExpansion sum = copy();
+            for (int index = 0; index < other.count; index++) {
+                sum.addComponent(other.components[index], other.exponents[index]);
+            }
+            return sum;
+        }
+
+        ScaledExpansion subtract(final ScaledExpansion other) {
+            final ScaledExpansion difference = copy();
+            for (int index = 0; index < other.count; index++) {
+                difference.addComponent(-other.components[index], other.exponents[index]);
+            }
+            return difference;
+        }
+
+        ScaledExpansion product(final ScaledExpansion other) {
+            final ScaledExpansion product = new ScaledExpansion();
+            for (int first = 0; first < count; first++) {
+                for (int second = 0; second < other.count; second++) {
+                    final double[] factors = twoProduct(components[first], other.components[second]);
+                    final int exponent = exponents[first] + other.exponents[second];
+                    product.addComponent(factors[0], exponent);
+                    product.addComponent(factors[1], exponent);
+                }
+            }
+            return product;
+        }
+
+        ScaledExpansion quotient(final ScaledExpansion denominator) {
+            final ScaledExpansion quotient = new ScaledExpansion();
+            for (int correction = 0; correction < 4; correction++) {
+                final ScaledExpansion remainder = subtract(denominator.product(quotient));
+                if (remainder.count == 0) {
+                    break;
+                }
+                final int exponent = remainder.exponents[0] - denominator.exponents[0];
+                final double factor = remainder.scaledAtLeadingExponent()
+                    / denominator.scaledAtLeadingExponent();
+                quotient.addComponent(factor, exponent);
+            }
+            return quotient;
+        }
+
+        int signum() {
+            return count == 0 ? 0 : components[0] > 0.0 ? 1 : -1;
+        }
+
+        int compareTo(final ScaledExpansion other) {
+            return subtract(other).signum();
+        }
+
+        double finiteValue() {
+            if (count == 0) {
+                return 0.0;
+            }
+            if (exponents[0] > Double.MAX_EXPONENT) {
+                return Math.copySign(Double.POSITIVE_INFINITY, components[0]);
+            }
+            if (exponents[0] <= -1022) {
+                return subnormalValue();
+            }
+            final double value = Math.scalb(components[0], exponents[0]);
+            return roundWithTail(value, tailInUnits(roundingScaleExponent(value)), roundingScaleExponent(value));
+        }
+
+        private ScaledExpansion copy() {
+            final ScaledExpansion copy = new ScaledExpansion();
+            copy.ensureCapacity(count);
+            System.arraycopy(components, 0, copy.components, 0, count);
+            System.arraycopy(exponents, 0, copy.exponents, 0, count);
+            copy.count = count;
+            return copy;
+        }
+
+        private double scaledAtLeadingExponent() {
+            final int leadingExponent = exponents[0];
+            double value = 0.0;
+            double residual = 0.0;
+            for (int index = 0; index < count; index++) {
+                final double[] sum = twoSum(value,
+                    Math.scalb(components[index], exponents[index] - leadingExponent));
+                value = sum[0];
+                residual += sum[1];
+            }
+            return value + residual;
+        }
+
+        private double subnormalValue() {
+            final double leadingInMinimumSubnormals = Math.scalb(components[0], exponents[0] + 1074);
+            final double grid = Math.floor(leadingInMinimumSubnormals);
+            double units = leadingInMinimumSubnormals - grid;
+            for (int index = 1; index < count; index++) {
+                units += Math.scalb(components[index], exponents[index] + 1074);
+            }
+            return roundWithTail(grid * Double.MIN_VALUE, units, -1074);
+        }
+
+        private double tailInUnits(final int scale) {
+            double units = 0.0;
+            for (int index = 1; index < count; index++) {
+                units += Math.scalb(components[index], exponents[index] - scale);
+            }
+            return units;
+        }
+
+        private void addComponent(double value, int exponent) {
+            while (value != 0.0) {
+                if (Math.abs(value) < 0x1.0p-1022) {
+                    value = Math.scalb(value, 1074);
+                    exponent -= 1074;
+                }
+                final int scale = Math.getExponent(value);
+                if (scale != 0) {
+                    value = Math.scalb(value, -scale);
+                    exponent += scale;
+                }
+                int partner = -1;
+                for (int index = 0; index < count; index++) {
+                    if (Math.abs(exponents[index] - exponent) <= 52) {
+                        partner = index;
+                        break;
+                    }
+                }
+                if (partner < 0) {
+                    insert(value, exponent);
+                    return;
+                }
+                final double partnerValue = components[partner];
+                final int partnerExponent = exponents[partner];
+                double first = value;
+                double second = partnerValue;
+                int firstExponent = exponent;
+                int secondExponent = partnerExponent;
+                if (secondExponent > firstExponent) {
+                    first = partnerValue;
+                    second = value;
+                    firstExponent = partnerExponent;
+                    secondExponent = exponent;
+                }
+                final double[] sum = twoSum(first, Math.scalb(second, secondExponent - firstExponent));
+                remove(partner);
+                if (sum[0] == 0.0) {
+                    value = sum[1];
+                    exponent = firstExponent;
+                }
+                else {
+                    addComponent(sum[1], firstExponent);
+                    value = sum[0];
+                    exponent = firstExponent;
+                }
             }
         }
-        return decimalSquaredDistance(candidate, toward).add(decimal(EPSILON))
-            .compareTo(decimalSquaredDistance(best, toward)) < 0;
+
+        private void insert(final double value, final int exponent) {
+            ensureCapacity(count + 1);
+            int position = count;
+            while (position > 0 && exponents[position - 1] < exponent) {
+                components[position] = components[position - 1];
+                exponents[position] = exponents[position - 1];
+                position--;
+            }
+            components[position] = value;
+            exponents[position] = exponent;
+            count++;
+        }
+
+        private void ensureCapacity(final int required) {
+            if (required <= components.length) {
+                return;
+            }
+            final int capacity = Math.max(required, components.length * 2);
+            final double[] expandedComponents = new double[capacity];
+            final int[] expandedExponents = new int[capacity];
+            System.arraycopy(components, 0, expandedComponents, 0, count);
+            System.arraycopy(exponents, 0, expandedExponents, 0, count);
+            components = expandedComponents;
+            exponents = expandedExponents;
+        }
+
+        private void remove(final int index) {
+            for (int position = index; position < count - 1; position++) {
+                components[position] = components[position + 1];
+                exponents[position] = exponents[position + 1];
+            }
+            count--;
+        }
     }
 
-    private static boolean productsAreFinite(final double firstX, final double firstY,
-            final double secondX, final double secondY) {
-        return Math.abs(firstX) <= SAFE_PRODUCT_COMPONENT && Math.abs(firstY) <= SAFE_PRODUCT_COMPONENT
-            && Math.abs(secondX) <= SAFE_PRODUCT_COMPONENT && Math.abs(secondY) <= SAFE_PRODUCT_COMPONENT;
+    private static int roundingScaleExponent(final double value) {
+        final int exponent = Math.getExponent(value);
+        return exponent >= -1022 ? exponent - 52 : -1074;
     }
 
-    private static BigDecimal decimalSquaredDistance(final LayoutPoint first, final LayoutPoint second) {
-        final BigDecimal dx = decimal(first.x()).subtract(decimal(second.x()));
-        final BigDecimal dy = decimal(first.y()).subtract(decimal(second.y()));
-        return dx.multiply(dx).add(dy.multiply(dy));
+    private static double roundWithTail(double value, double units, final int scaleExponent) {
+        for (int step = 0; step < 32; step++) {
+            if (units == 0.0) {
+                return value;
+            }
+            final boolean upward = units > 0.0;
+            final double gap = Math.scalb(1.0, neighborGapExponent(value, upward) - scaleExponent);
+            final double halfGap = gap * 0.5;
+            if (Math.abs(units) < halfGap || Math.abs(units) == halfGap
+                    && (Double.doubleToRawLongBits(value) & 1L) == 0L) {
+                return value;
+            }
+            value = Math.nextAfter(value, upward ? Double.POSITIVE_INFINITY : Double.NEGATIVE_INFINITY);
+            units += upward ? -gap : gap;
+        }
+        return value + Math.scalb(units, scaleExponent);
     }
 
-    private static BigDecimal decimal(final double value) {
-        return BigDecimal.valueOf(value);
+    private static int neighborGapExponent(final double value, final boolean upward) {
+        final int exponent = Math.getExponent(value);
+        if (exponent < -1022) {
+            return -1074;
+        }
+        final long fraction = Double.doubleToRawLongBits(Math.abs(value)) & 0x000fffffffffffffL;
+        final boolean towardZero = upward == (value < 0.0);
+        if (towardZero && fraction == 0L && exponent > -1022) {
+            return exponent - 53;
+        }
+        return exponent - 52;
     }
 
     private static List<LayoutPoint> canonicalize(final List<LayoutPoint> polygon) {
