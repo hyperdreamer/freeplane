@@ -714,6 +714,31 @@ public class HullGeometryShould {
     }
 
     @Test
+    public void preservesSubnormalDominantBoundaryCorrectionAfterCancellation() {
+        double radius = Math.scalb(1.0, 1000);
+        NodeGeometry node = NodeGeometry.of(LayoutPoint.of(-radius, 0.0), radius);
+
+        LayoutPoint boundary = node.boundaryToward(
+            LayoutPoint.of(0.0, Math.scalb(19.0 / 16.0, -37)));
+
+        assertThat(boundary.x()).isEqualTo(-Double.MIN_VALUE);
+        assertThat(boundary.y()).isEqualTo(Math.scalb(19.0 / 16.0, -37));
+    }
+
+    @Test
+    public void preservesNormalBoundaryCoordinateWhileRetainingSubnormalCorrection() {
+        NodeGeometry node = NodeGeometry.of(
+            LayoutPoint.of(-0x1.e9e1806d3baccp-17, -0x1.5e1c60bc36cd6p-192),
+            0x1.e9e1806d3baccp-17);
+
+        LayoutPoint boundary = node.boundaryToward(
+            LayoutPoint.of(0x1.0p1000, -0x1.6a80009d77199p498));
+
+        assertThat(boundary.x()).isEqualTo(-0x1.eb21516ee14e9p-1021);
+        assertThat(boundary.y()).isEqualTo(-0x1.5e1c60bc36cd6p-192);
+    }
+
+    @Test
     public void limitsEverySmoothPathTangentToFourWorldUnits() {
         HullGeometry rectangle = HullGeometry.of(Arrays.asList(
             LayoutPoint.of(0.0, 0.0),
