@@ -739,6 +739,19 @@ public class HullGeometryShould {
     }
 
     @Test
+    public void roundsFiniteBoundaryRayToNearestEvenCoordinate() {
+        NodeGeometry node = NodeGeometry.of(
+            LayoutPoint.of(-2.30665597377219E56, -2.2117294275241294E-19),
+            1.0283265339240514E57);
+
+        LayoutPoint boundary = node.boundaryToward(
+            LayoutPoint.of(7.09268585234678E-75, -2.3275574432766924E12));
+
+        assertThat(Double.doubleToRawLongBits(boundary.x())).isEqualTo(0x4bc043fc003baf8bL);
+        assertThat(Double.doubleToRawLongBits(boundary.y())).isEqualTo(0xc2a2dfe8bc8ed4feL);
+    }
+
+    @Test
     public void limitsEverySmoothPathTangentToFourWorldUnits() {
         HullGeometry rectangle = HullGeometry.of(Arrays.asList(
             LayoutPoint.of(0.0, 0.0),
