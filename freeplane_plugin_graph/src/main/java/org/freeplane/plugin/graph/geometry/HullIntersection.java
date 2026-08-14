@@ -8,6 +8,7 @@ import java.util.Objects;
 
 public final class HullIntersection {
     private static final double EPSILON = 1e-9;
+    private static final int TARGET_EXPONENT = 500;
 
     private HullIntersection() {
     }
@@ -41,21 +42,29 @@ public final class HullIntersection {
                 return Double.compare(right.y(), left.y());
             }
         });
+        final LayoutPoint origin = first.exactPolygon().get(0);
+        final RelativeCoordinates firstRelative = RelativeCoordinates.of(first.exactPolygon(), origin);
+        final RelativeCoordinates secondRelative = RelativeCoordinates.of(second.exactPolygon(), origin);
+        final int scaleExponent = TARGET_EXPONENT
+            - Math.max(firstRelative.maxExponent(), secondRelative.maxExponent());
+        firstRelative.normalize(scaleExponent);
+        secondRelative.normalize(scaleExponent);
+        final double epsilon = EPSILON * Math.scalb(1.0, scaleExponent);
         double bestMagnitude = Double.POSITIVE_INFINITY;
         LayoutPoint bestTranslation = null;
         for (final LayoutPoint axis : uniqueAxes) {
-            final double[] firstInterval = project(first.exactPolygon(), axis);
-            final double[] secondInterval = project(second.exactPolygon(), axis);
+            final double[] firstInterval = project(firstRelative, axis);
+            final double[] secondInterval = project(secondRelative, axis);
             final double overlap = Math.min(firstInterval[1], secondInterval[1])
                 - Math.max(firstInterval[0], secondInterval[0]);
-            if (overlap <= EPSILON) {
+            if (overlap <= epsilon) {
                 return LayoutPoint.of(0.0, 0.0);
             }
             final double positive = firstInterval[1] - secondInterval[0];
             final double negative = secondInterval[1] - firstInterval[0];
             final double magnitude;
             final double direction;
-            if (positive <= negative + EPSILON) {
+            if (positive <= negative + epsilon) {
                 magnitude = positive;
                 direction = 1.0;
             }
@@ -63,13 +72,14 @@ public final class HullIntersection {
                 magnitude = negative;
                 direction = -1.0;
             }
-            if (magnitude + EPSILON < bestMagnitude) {
+            if (magnitude + epsilon < bestMagnitude) {
                 bestMagnitude = magnitude;
-                bestTranslation = LayoutPoint.of(axis.x() * direction * magnitude,
-                    axis.y() * direction * magnitude);
+                final double unscaledMagnitude = Math.scalb(magnitude, -scaleExponent);
+                bestTranslation = LayoutPoint.of(axis.x() * direction * unscaledMagnitude,
+                    axis.y() * direction * unscaledMagnitude);
             }
         }
-        return bestTranslation;
+        return bestTranslation == null ? LayoutPoint.of(0.0, 0.0) : bestTranslation;
     }
 
     private static void collectAxes(final List<LayoutPoint> polygon, final List<LayoutPoint> axes) {
@@ -103,15 +113,94 @@ public final class HullIntersection {
         }
     }
 
-    private static double[] project(final List<LayoutPoint> polygon, final LayoutPoint axis) {
+    private static double[] project(final RelativeCoordinates polygon, final LayoutPoint axis) {
         double minimum = Double.POSITIVE_INFINITY;
         double maximum = Double.NEGATIVE_INFINITY;
-        for (final LayoutPoint point : polygon) {
-            final double projection = axis.x() * point.x() + axis.y() * point.y();
+        for (int index = 0; index < polygon.x.length; index++) {
+            final double projection = dotProduct(axis, polygon.x[index], polygon.y[index]);
             minimum = Math.min(minimum, projection);
             maximum = Math.max(maximum, projection);
         }
         return new double[] {minimum, maximum};
+    }
+
+    private static double dotProduct(final LayoutPoint axis, final double x, final double y) {
+        final double[] xTerm = twoProduct(axis.x(), x);
+        final double[] yTerm = twoProduct(axis.y(), y);
+        final double[] sum = twoSum(xTerm[0], yTerm[0]);
+        final double residual = (xTerm[1] + yTerm[1]) + sum[1];
+        return sum[0] + residual;
+    }
+
+    private static final class RelativeCoordinates {
+        private final double[] x;
+        private final double[] y;
+        private final int[] xScale;
+        private final int[] yScale;
+
+        private RelativeCoordinates(final int count) {
+            x = new double[count];
+            y = new double[count];
+            xScale = new int[count];
+            yScale = new int[count];
+        }
+
+        static RelativeCoordinates of(final List<LayoutPoint> polygon, final LayoutPoint origin) {
+            final RelativeCoordinates coordinates = new RelativeCoordinates(polygon.size());
+            for (int index = 0; index < polygon.size(); index++) {
+                final LayoutPoint point = polygon.get(index);
+                final double[] xDifference = scaledDifference(point.x(), origin.x());
+                final double[] yDifference = scaledDifference(point.y(), origin.y());
+                coordinates.x[index] = xDifference[0];
+                coordinates.y[index] = yDifference[0];
+                coordinates.xScale[index] = (int) xDifference[1];
+                coordinates.yScale[index] = (int) yDifference[1];
+            }
+            return coordinates;
+        }
+
+        int maxExponent() {
+            int maximum = Integer.MIN_VALUE;
+            for (int index = 0; index < x.length; index++) {
+                maximum = Math.max(maximum, Math.getExponent(x[index]) + xScale[index]);
+                maximum = Math.max(maximum, Math.getExponent(y[index]) + yScale[index]);
+            }
+            return maximum;
+        }
+
+        void normalize(final int exponent) {
+            for (int index = 0; index < x.length; index++) {
+                x[index] = Math.scalb(x[index], xScale[index] + exponent);
+                y[index] = Math.scalb(y[index], yScale[index] + exponent);
+            }
+        }
+    }
+
+    private static double[] scaledDifference(final double coordinate, final double origin) {
+        if (subtractionIsFinite(coordinate, origin)) {
+            return new double[] {coordinate - origin, 0.0};
+        }
+        return new double[] {coordinate * 0.5 - origin * 0.5, 1.0};
+    }
+
+    private static double[] twoSum(final double first, final double second) {
+        final double sum = first + second;
+        final double secondVirtual = sum - first;
+        final double firstResidual = first - (sum - secondVirtual);
+        final double secondResidual = second - secondVirtual;
+        return new double[] {sum, firstResidual + secondResidual};
+    }
+
+    private static double[] twoProduct(final double first, final double second) {
+        final double splitter = 134217729.0;
+        final double firstHigh = splitter * first - (splitter * first - first);
+        final double firstLow = first - firstHigh;
+        final double secondHigh = splitter * second - (splitter * second - second);
+        final double secondLow = second - secondHigh;
+        final double product = first * second;
+        final double error = (firstHigh * secondHigh - product) + firstHigh * secondLow
+            + firstLow * secondHigh + firstLow * secondLow;
+        return new double[] {product, error};
     }
 
     private static boolean subtractionIsFinite(final double first, final double second) {
