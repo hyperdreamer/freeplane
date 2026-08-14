@@ -103,7 +103,7 @@ public final class NodeGeometry {
             + Math.getExponent(lengthTailValue);
         final double lengthTailSignificand = Math.scalb(lengthTailValue, -Math.getExponent(lengthTailValue));
         if (Math.abs(unitX) >= Math.abs(unitY)) {
-            final double boundaryX = dominantCoordinate(center.x(), radius, unitX, residualX, unitY, residualY,
+            final double boundaryX = dominantCoordinate(center.x(), radius, unitX, residualX, dy, dominantExponent,
                 lengthLead, lengthTailSignificand, lengthTailExponent);
             final double boundaryY = minorCoordinate(center.y(), radius, dy, dominantExponent, lengthLead,
                 lengthTailSignificand, lengthTailExponent);
@@ -111,14 +111,14 @@ public final class NodeGeometry {
         }
         final double boundaryX = minorCoordinate(center.x(), radius, dx, dominantExponent, lengthLead,
             lengthTailSignificand, lengthTailExponent);
-        final double boundaryY = dominantCoordinate(center.y(), radius, unitY, residualY, unitX, residualX,
+        final double boundaryY = dominantCoordinate(center.y(), radius, unitY, residualY, dx, dominantExponent,
             lengthLead, lengthTailSignificand, lengthTailExponent);
         return LayoutPoint.of(boundaryX, boundaryY);
     }
 
     private static double dominantCoordinate(final double centerCoordinate, final double radius, final double unit,
-            final double residual, final double otherUnit, final double otherResidual, final double lengthLead,
-            final double lengthTailSignificand, final int lengthTailExponent) {
+            final double residual, final Difference otherDifference, final int dominantExponent,
+            final double lengthLead, final double lengthTailSignificand, final int lengthTailExponent) {
         final double sign = unit < 0.0 ? -1.0 : 1.0;
         final TaggedExpansion length = singleTermExpansion(lengthLead);
         length.addTerm(lengthTailSignificand, lengthTailExponent);
@@ -127,8 +127,7 @@ public final class NodeGeometry {
         final TaggedExpansion normSum = length.copy();
         normSum.addExpansion(magnitude, 1.0);
         final TaggedExpansion normProduct = multiplyExpansions(length, normSum);
-        final TaggedExpansion other = singleTermExpansion(otherUnit);
-        other.addTerm(otherResidual, 0);
+        final TaggedExpansion other = normalizedDifference(otherDifference, dominantExponent);
         final TaggedExpansion scaledOther = multiplyExpansions(singleTermExpansion(radius), other);
         final TaggedExpansion scaledSquare = multiplyExpansions(scaledOther, other);
         final TaggedQuotient correction = new TaggedQuotient(scaledSquare, normProduct);
@@ -256,6 +255,13 @@ public final class NodeGeometry {
         final TaggedExpansion expansion = new TaggedExpansion();
         expansion.addTerm(value, 0);
         return expansion;
+    }
+
+    private static TaggedExpansion normalizedDifference(final Difference difference, final int dominantExponent) {
+        final TaggedExpansion normalized = new TaggedExpansion();
+        normalized.addTerm(difference.significand, difference.exponent - dominantExponent);
+        normalized.addTerm(difference.residual, -dominantExponent);
+        return normalized;
     }
 
     private static TaggedExpansion multiplyExpansions(final TaggedExpansion first, final TaggedExpansion second) {
