@@ -40,15 +40,47 @@ public class PerceptualIdlePolicyShould {
     }
 
     @Test
-    public void resetTheStableStreakWhenAKeySetChanges() {
+    public void resetTheStableStreakWhenANodeOrAnchorKeySetChanges() {
         LayoutPositions before = positions(0.0, 0.0, 0.0);
         LayoutPositions after = positions(0.0, 0.0, 0.0);
-        LayoutPositions changed = LayoutPositions.of(Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(),
-            after.anchors());
-        PerceptualIdlePolicy policy = new PerceptualIdlePolicy(2, 0.1, 0.1);
+        PerceptualIdlePolicy nodePolicy = new PerceptualIdlePolicy(2, 0.1, 0.1);
+        LayoutPositions changedNodes = LayoutPositions.of(
+            Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(), after.anchors());
 
-        assertThat(policy.observe(before, after).consecutiveStableFrames()).isEqualTo(1);
-        assertThat(policy.observe(after, changed).consecutiveStableFrames()).isZero();
+        assertThat(nodePolicy.observe(before, after).consecutiveStableFrames()).isEqualTo(1);
+        assertThat(nodePolicy.observe(after, changedNodes).consecutiveStableFrames()).isZero();
+
+        PerceptualIdlePolicy anchorPolicy = new PerceptualIdlePolicy(2, 0.1, 0.1);
+        LayoutPositions changedAnchors = LayoutPositions.of(after.nodes(),
+            Collections.<EnclosureHullKey, LayoutPoint>emptyMap());
+        assertThat(anchorPolicy.observe(before, after).consecutiveStableFrames()).isEqualTo(1);
+        assertThat(anchorPolicy.observe(after, changedAnchors).consecutiveStableFrames()).isZero();
+    }
+
+    @Test
+    public void acceptExactSpikeRmsAndMaximumBoundaries() {
+        LayoutPositions zero = boundaryPositions(0.0, 0);
+        LayoutPositions rmsBoundary = boundaryPositions(0.02, 0);
+        PerceptualIdlePolicy rmsPolicy = PerceptualIdlePolicy.spikeDefaults();
+        PerceptualIdlePolicy.IdleMeasurement rmsMeasurement = null;
+        for (int frame = 0; frame < 8; frame++) {
+            rmsMeasurement = rmsPolicy.observe(zero, rmsBoundary);
+        }
+        assertThat(rmsMeasurement.rms()).isEqualTo(0.02);
+        assertThat(rmsMeasurement.max()).isEqualTo(0.02);
+        assertThat(rmsMeasurement.consecutiveStableFrames()).isEqualTo(8);
+        assertThat(rmsMeasurement.idle()).isTrue();
+
+        LayoutPositions maxBoundary = boundaryPositions(0.05, 8);
+        PerceptualIdlePolicy maxPolicy = PerceptualIdlePolicy.spikeDefaults();
+        PerceptualIdlePolicy.IdleMeasurement maxMeasurement = null;
+        for (int frame = 0; frame < 8; frame++) {
+            maxMeasurement = maxPolicy.observe(zeroWithZeros(8), maxBoundary);
+        }
+        assertThat(maxMeasurement.rms()).isLessThanOrEqualTo(0.02);
+        assertThat(maxMeasurement.max()).isEqualTo(0.05);
+        assertThat(maxMeasurement.consecutiveStableFrames()).isEqualTo(8);
+        assertThat(maxMeasurement.idle()).isTrue();
     }
 
     @Test
@@ -75,6 +107,23 @@ public class PerceptualIdlePolicyShould {
             .isInstanceOf(IllegalArgumentException.class);
     }
 
+    private static LayoutPositions boundaryPositions(double moved, int zeroCount) {
+        Map<ProjectedNodeKey, LayoutPoint> nodes = new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        nodes.put(NODE, LayoutPoint.of(moved, 0.0));
+        for (int index = 0; index < zeroCount; index++) {
+            nodes.put(nodeKey("zero-" + index), LayoutPoint.of(0.0, 0.0));
+        }
+        return LayoutPositions.of(nodes, Collections.<EnclosureHullKey, LayoutPoint>emptyMap());
+    }
+
+    private static LayoutPositions zeroWithZeros(int zeroCount) {
+        return boundaryPositions(0.0, zeroCount);
+    }
+
+    private static ProjectedNodeKey nodeKey(String id) {
+        return ProjectedNodeKey.of(SourceNodeKey.persisted(
+            NodeReference.of(MAP, PersistedNodeId.of(id))));
+    }
     private static LayoutPositions positions(double nodeX, double nodeY, double anchorY) {
         Map<ProjectedNodeKey, LayoutPoint> nodes = new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
         nodes.put(NODE, LayoutPoint.of(nodeX, nodeY));
