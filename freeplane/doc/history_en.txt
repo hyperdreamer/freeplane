@@ -2,6 +2,9 @@
 1.13.4
 ==============================
 Automatically unfold branches on filtering
+Automatically unfold branches on selecting matching nodes
+Improve logging and messages for scripts / formulas
+Added writeAndRunCode AI tool
 Bug fixes
 
 ==============================
