@@ -38,6 +38,7 @@ public final class ProjectionBatcher implements AutoCloseable {
     private ScheduledFuture<?> pendingFuture;
     private long scheduledGeneration;
     private long acceptedGeneration;
+    private int activeCallbacks;
     private boolean closed;
 
     public ProjectionBatcher() {
@@ -86,14 +87,25 @@ public final class ProjectionBatcher implements AutoCloseable {
 
     @Override
     public void close() {
+        boolean interrupted = false;
         synchronized (monitor) {
-            if (closed) {
-                return;
+            if (!closed) {
+                closed = true;
+                scheduledGeneration++;
+                pendingKinds.clear();
+                cancelPendingLocked();
             }
-            closed = true;
-            scheduledGeneration++;
-            pendingKinds.clear();
-            cancelPendingLocked();
+            while (activeCallbacks > 0) {
+                try {
+                    monitor.wait();
+                }
+                catch (InterruptedException interruption) {
+                    interrupted = true;
+                }
+            }
+        }
+        if (interrupted) {
+            Thread.currentThread().interrupt();
         }
         if (ownsScheduler) {
             scheduler.shutdownNow();
@@ -157,12 +169,19 @@ public final class ProjectionBatcher implements AutoCloseable {
             final long generation = ++acceptedGeneration;
             final long acceptedAtNanos = clock.nanoTime();
             accepted = new AcceptedBatch(generation, acceptedAtNanos, kinds);
+            activeCallbacks++;
         }
         try {
             acceptedCallback.accept(accepted);
         }
         catch (RuntimeException ignored) {
             // The accepted state is already committed before client code runs.
+        }
+        finally {
+            synchronized (monitor) {
+                activeCallbacks--;
+                monitor.notifyAll();
+            }
         }
     }
 
