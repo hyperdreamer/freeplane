@@ -210,10 +210,9 @@ public final class GraphGeometryEngine {
             firstMomentY.add(TaggedSum.multiply(ySum, cross));
         }
         final TaggedSum denominator = TaggedSum.multiply(twiceArea, TaggedSum.of(3.0));
-        final TaggedSum localX = TaggedSum.divide(firstMomentX, denominator);
-        final TaggedSum localY = TaggedSum.divide(firstMomentY, denominator);
-        return LayoutPoint.of(TaggedSum.addAndRound(origin.x(), localX),
-            TaggedSum.addAndRound(origin.y(), localY));
+        final double centroidX = TaggedSum.divideAndRound(origin.x(), firstMomentX, denominator);
+        final double centroidY = TaggedSum.divideAndRound(origin.y(), firstMomentY, denominator);
+        return LayoutPoint.of(centroidX, centroidY);
     }
 
     private static final class TaggedPoint {
@@ -292,29 +291,58 @@ public final class GraphGeometryEngine {
             return result;
         }
 
-        private static TaggedSum divide(final TaggedSum numerator, final TaggedSum denominator) {
+        private static double divideAndRound(final double origin, final TaggedSum numerator,
+                final TaggedSum denominator) {
             final TaggedSum result = new TaggedSum();
             TaggedSum remainder = numerator.copy();
             final TaggedTerm denominatorEstimate = denominator.normalized();
             if (denominatorEstimate == null) {
                 throw new IllegalArgumentException("Zero polygon area");
             }
-            for (int iteration = 0; iteration < 4 && remainder.size != 0; iteration++) {
+            final TaggedSum absoluteDenominator = denominator.sign() < 0
+                ? denominator.negated() : denominator.copy();
+            while (true) {
+                final double candidate = addAndRound(origin, result);
+                final int direction = roundingDirection(origin, candidate, numerator, denominator,
+                    absoluteDenominator);
+                if (direction == 0) {
+                    return candidate;
+                }
                 final TaggedTerm remainderEstimate = remainder.normalized();
                 if (remainderEstimate == null) {
-                    break;
+                    return candidate;
                 }
                 final double quotientValue = remainderEstimate.value / denominatorEstimate.value;
                 final int quotientExponent = remainderEstimate.exponent - denominatorEstimate.exponent;
                 final TaggedTerm quotient = normalize(quotientValue, quotientExponent);
                 if (quotient == null) {
-                    break;
+                    return candidate;
                 }
                 result.addTerm(quotient.value, quotient.exponent);
                 final TaggedSum product = multiplyByTerm(denominator, quotient.value, quotient.exponent);
                 remainder = subtract(remainder, product);
             }
-            return result;
+        }
+
+        private static int roundingDirection(final double origin, final double candidate,
+                final TaggedSum numerator, final TaggedSum denominator,
+                final TaggedSum absoluteDenominator) {
+            final TaggedSum offset = difference(candidate, origin);
+            final TaggedSum residual = subtract(numerator, multiply(denominator, offset));
+            final int residualSign = residual.sign();
+            if (residualSign == 0) {
+                return 0;
+            }
+            final int direction = residualSign * denominator.sign();
+            final double neighbor = direction > 0 ? Math.nextUp(candidate) : Math.nextDown(candidate);
+            final TaggedSum halfGap = difference(neighbor, candidate).scaled(0.5);
+            final TaggedSum threshold = multiply(absoluteDenominator, halfGap);
+            final int comparison = residual.compareMagnitude(threshold);
+            if (comparison < 0
+                    || (comparison == 0 && (Double.doubleToRawLongBits(candidate) & 1L) == 0L)) {
+                return 0;
+            }
+            return direction;
         }
 
         private static TaggedSum multiplyByTerm(final TaggedSum sum, final double value,
@@ -490,14 +518,23 @@ public final class GraphGeometryEngine {
         }
 
         private int compareMagnitude(final TaggedSum other) {
-            final TaggedSum left = sign() < 0 ? negated() : copy();
-            final TaggedSum right = other.sign() < 0 ? other.negated() : other.copy();
-            return subtract(left, right).sign();
+            final TaggedTerm left = normalized();
+            final TaggedTerm right = other.normalized();
+            if (left == null) {
+                return right == null ? 0 : -1;
+            }
+            if (right == null) {
+                return 1;
+            }
+            if (left.exponent != right.exponent) {
+                return left.exponent < right.exponent ? -1 : 1;
+            }
+            return Double.compare(Math.abs(left.value), Math.abs(right.value));
         }
 
         private double roundedDouble() {
             double candidate = approximateDouble();
-            for (int iteration = 0; iteration < 64; iteration++) {
+            while (true) {
                 final TaggedSum residual = subtract(this, of(candidate));
                 final int residualSign = residual.sign();
                 if (residualSign == 0) {
@@ -512,7 +549,6 @@ public final class GraphGeometryEngine {
                 }
                 candidate = neighbor;
             }
-            throw new IllegalArgumentException("Unable to round finite tagged sum");
         }
 
         private TaggedSum scaled(final double factor) {
