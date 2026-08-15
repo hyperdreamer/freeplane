@@ -374,7 +374,7 @@ public final class WorkspaceMapCoordinator implements AutoCloseable {
                 }
                 availability.put(reference.id(), state);
                 if (state == MapAvailability.AVAILABLE) {
-                    snapshotRequests.add(new SnapshotRequest(reference, registration, lease));
+                    snapshotRequests.add(new SnapshotRequest(reference, lease));
                 }
             }
         }
@@ -390,7 +390,6 @@ public final class WorkspaceMapCoordinator implements AutoCloseable {
             }
             catch (RuntimeException failure) {
                 availability.put(request.reference.id(), MapAvailability.UNREADABLE);
-                markSnapshotUnreadable(request);
             }
         }
         Collections.sort(snapshots, new Comparator<MapSnapshot>() {
@@ -403,16 +402,6 @@ public final class WorkspaceMapCoordinator implements AutoCloseable {
             requireOpenLocked();
         }
         return ProjectionInput.of(batch.generation(), document, snapshots, availability);
-    }
-
-    private void markSnapshotUnreadable(final SnapshotRequest request) {
-        synchronized (monitor) {
-            if (closed || registrations.get(request.reference.id()) != request.registration
-                    || request.registration == null || request.registration.lease != request.lease) {
-                return;
-            }
-            request.registration.availability = MapAvailability.UNREADABLE;
-        }
     }
 
     private void executeOnEdt(final Runnable task) {
@@ -520,12 +509,10 @@ public final class WorkspaceMapCoordinator implements AutoCloseable {
 
     private static final class SnapshotRequest {
         private final MapReference reference;
-        private final Registration registration;
         private final MapLease lease;
 
-        private SnapshotRequest(final MapReference reference, final Registration registration, final MapLease lease) {
+        private SnapshotRequest(final MapReference reference, final MapLease lease) {
             this.reference = reference;
-            this.registration = registration;
             this.lease = lease;
         }
     }
