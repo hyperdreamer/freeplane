@@ -179,6 +179,88 @@ public class FreeplaneMapCommandExecutorShould {
     }
 
     @Test
+    public void deletesASnapshotCompatibleRawConnectorThroughATreeCloneWithoutAssigningCloneTargetIds() {
+        // Catches clone-expanded deletion enumeration that manufactures a clone target ID before transaction preflight.
+        Fixture fixture = new Fixture(true);
+        MapNodes nodes = fixture.addMap("tree clone");
+        NodeModel root = nodes.source.getParentNode();
+        NodeModel originalBranch = node(nodes.map, "original branch", "ID_CLONE_BRANCH");
+        NodeModel originalSource = node(nodes.map, "original source", "ID_CLONE_SOURCE");
+        NodeModel originalTarget = node(nodes.map, "original target", "ID_CLONE_TARGET");
+        originalBranch.insert(originalSource);
+        originalBranch.insert(originalTarget);
+        root.insert(originalBranch);
+        NodeLinks.createLinkExtension(originalSource)
+            .addArrowlink(connector(originalSource, "ID_CLONE_TARGET", ConnectorArrows.BOTH, "source", "middle", "target"));
+        NodeModel cloneBranch = originalBranch.cloneTree();
+        root.insert(cloneBranch);
+        NodeModel cloneSource = cloneBranch.getChildren().get(0);
+        NodeModel cloneTarget = cloneBranch.getChildren().get(1);
+        SourceNodeKey cloneSourceKey = SourceNodeKey.transientPath(nodes.mapId, Arrays.asList(
+            Integer.valueOf(root.getIndex(cloneBranch)), Integer.valueOf(cloneBranch.getIndex(cloneSource))));
+        fixture.resolvedNodes.put(cloneSourceKey, cloneSource);
+        ConnectorDescriptor expected = descriptor(cloneSourceKey, nodes.mapId, "ID_CLONE_TARGET", true, true,
+            "source", "middle", "target");
+        int registryCallsBeforeDelete = nodes.map.registryCalls();
+
+        assertThat(cloneTarget.getID()).isNull();
+        GraphCommandResult result = fixture.executor.deleteConnector(
+            ContributorKey.nativeConnector(nodes.mapId, cloneSourceKey, 0), expected);
+
+        assertApplied(result);
+        assertThat(connectors(originalSource)).isEmpty();
+        assertThat(cloneTarget.getID()).isNull();
+        assertThat(nodes.map.registryCalls()).isEqualTo(registryCallsBeforeDelete);
+    }
+
+    @Test
+    public void rollsBackCreateMutationAndPreservesThePriorUndoTarget() {
+        // Catches a native create failure that leaves its real connector mutation outside the undo rollback.
+        Fixture fixture = new Fixture(true);
+        MapNodes prior = fixture.addMap("prior create undo target");
+        MapNodes failing = fixture.addMap("failed create");
+        assertApplied(fixture.executor.createConnector(prior.sourceKey, prior.targetKey, RelationshipDirection.FORWARD));
+        List<String> connectorsBeforeFailure = connectorFingerprint(failing.source);
+        fixture.nativeController.throwAfterCreateMutation = true;
+
+        GraphCommandResult result = fixture.executor.createConnector(failing.sourceKey, failing.targetKey,
+            RelationshipDirection.FORWARD);
+
+        assertRejected(result, "graph_workspace.source_map.unavailable");
+        assertThat(connectorFingerprint(failing.source)).isEqualTo(connectorsBeforeFailure);
+        assertThat(failing.undo.startCalls).isEqualTo(1);
+        assertThat(failing.undo.commitCalls).isZero();
+        assertThat(failing.undo.rollbackCalls).isEqualTo(1);
+        assertThat(fixture.executor.currentUndoTarget())
+            .contains(new MapUndoTarget(prior.mapId, "prior create undo target", false));
+    }
+
+    @Test
+    public void rollsBackDeleteMutationAndPreservesThePriorUndoTarget() {
+        // Catches a native delete failure that leaves its real connector removal outside the undo rollback.
+        Fixture fixture = new Fixture(true);
+        MapNodes prior = fixture.addMap("prior delete undo target");
+        MapNodes failing = fixture.addMap("failed delete");
+        assertApplied(fixture.executor.createConnector(prior.sourceKey, prior.targetKey, RelationshipDirection.FORWARD));
+        NodeLinks.createLinkExtension(failing.source)
+            .addArrowlink(connector(failing.source, "ID_TARGET", ConnectorArrows.FORWARD, "", "", ""));
+        ConnectorDescriptor expected = descriptor(failing.sourceKey, failing.mapId, "ID_TARGET", false, true, "", "", "");
+        List<String> connectorsBeforeFailure = connectorFingerprint(failing.source);
+        fixture.nativeController.throwAfterDeleteMutation = true;
+
+        GraphCommandResult result = fixture.executor.deleteConnector(
+            ContributorKey.nativeConnector(failing.mapId, failing.sourceKey, 0), expected);
+
+        assertRejected(result, "graph_workspace.connector.changed");
+        assertThat(connectorFingerprint(failing.source)).isEqualTo(connectorsBeforeFailure);
+        assertThat(failing.undo.startCalls).isEqualTo(1);
+        assertThat(failing.undo.commitCalls).isZero();
+        assertThat(failing.undo.rollbackCalls).isEqualTo(1);
+        assertThat(fixture.executor.currentUndoTarget())
+            .contains(new MapUndoTarget(prior.mapId, "prior delete undo target", false));
+    }
+
+    @Test
     public void deletesOnlyTheCurrentOccurrenceWhoseFullDescriptorStillMatches() {
         // Catches deletion that removes the first connector or a non-connector link instead of the requested occurrence.
         Fixture fixture = new Fixture(true);
@@ -247,6 +329,36 @@ public class FreeplaneMapCommandExecutorShould {
         assertThat(undone.dirtySourceMaps()).containsExactly(second.mapId);
         assertThat(first.undo.undoCalls).isZero();
         assertThat(second.undo.undoCalls).isEqualTo(1);
+    }
+
+    @Test
+    public void makesTheLastSuccessfulDeleteOwnTheUndoTarget() {
+        // Catches successful deletion that fails to replace the source map remembered for a later undo.
+        Fixture fixture = new Fixture(true);
+        MapNodes created = fixture.addMap("create undo target");
+        MapNodes deleted = fixture.addMap("delete undo target");
+        assertApplied(fixture.executor.createConnector(created.sourceKey, created.targetKey, RelationshipDirection.FORWARD));
+        NodeLinks.createLinkExtension(deleted.source)
+            .addArrowlink(connector(deleted.source, "ID_TARGET", ConnectorArrows.FORWARD, "", "", ""));
+        ConnectorDescriptor expected = descriptor(deleted.sourceKey, deleted.mapId, "ID_TARGET", false, true, "", "", "");
+        ContributorKey key = ContributorKey.nativeConnector(deleted.mapId, deleted.sourceKey, 0);
+
+        assertApplied(fixture.executor.deleteConnector(key, expected));
+        assertThat(fixture.executor.currentUndoTarget())
+            .contains(new MapUndoTarget(deleted.mapId, "delete undo target", false));
+
+        GraphCommandResult rejected = fixture.executor.deleteConnector(key, expected);
+        assertRejected(rejected, "graph_workspace.connector.changed");
+        assertThat(fixture.executor.currentUndoTarget())
+            .contains(new MapUndoTarget(deleted.mapId, "delete undo target", false));
+
+        deleted.undo.canUndo = true;
+        GraphCommandResult undone = fixture.executor.undoCurrentSourceMap();
+
+        assertApplied(undone);
+        assertThat(undone.dirtySourceMaps()).containsExactly(deleted.mapId);
+        assertThat(created.undo.undoCalls).isZero();
+        assertThat(deleted.undo.undoCalls).isEqualTo(1);
     }
 
     @Test
@@ -359,7 +471,11 @@ public class FreeplaneMapCommandExecutorShould {
 
     private static List<ConnectorModel> connectors(NodeModel source) {
         List<ConnectorModel> result = new ArrayList<ConnectorModel>();
-        for (NodeLinkModel link : NodeLinks.getLinks(source)) {
+        NodeLinks links = NodeLinks.getLinkExtension(source);
+        if (links == null) {
+            return result;
+        }
+        for (NodeLinkModel link : links.getLinks()) {
             if (link instanceof ConnectorModel) {
                 result.add((ConnectorModel) link);
             }
@@ -569,6 +685,8 @@ public class FreeplaneMapCommandExecutorShould {
         private int nodeAddCalls;
         private int removeCalls;
         private String lastTargetId;
+        private boolean throwAfterCreateMutation;
+        private boolean throwAfterDeleteMutation;
 
         private RecordingLinkController(ModeController modeController, InlineEdt edt) {
             super(modeController);
@@ -583,13 +701,23 @@ public class FreeplaneMapCommandExecutorShould {
         }
 
         @Override
-        public ConnectorModel addConnector(NodeModel source, String targetId) {
+        public ConnectorModel addConnector(final NodeModel source, String targetId) {
             edt.requireOnEdt("native ID-target overload");
             idAddCalls++;
             lastTargetId = targetId;
-            ConnectorModel connector = new ConnectorModel(source, targetId);
-            NodeLinks.createLinkExtension(source).addArrowlink(connector);
+            final ConnectorModel connector = new ConnectorModel(source, targetId);
+            final NodeLinks links = NodeLinks.createLinkExtension(source);
+            links.addArrowlink(connector);
             source.getMap().setSaved(false);
+            if (throwAfterCreateMutation) {
+                restoreOnRollback(source, new Runnable() {
+                    @Override
+                    public void run() {
+                        links.removeArrowlink(connector);
+                    }
+                });
+                throw new IllegalStateException("native create failure");
+            }
             return connector;
         }
 
@@ -600,11 +728,29 @@ public class FreeplaneMapCommandExecutorShould {
         }
 
         @Override
-        public void removeArrowLink(ConnectorModel connector) {
+        public void removeArrowLink(final ConnectorModel connector) {
             edt.requireOnEdt("native connector removal");
             removeCalls++;
-            NodeLinks.getLinkExtension(connector.getSource()).removeArrowlink(connector);
+            final NodeLinks links = NodeLinks.getLinkExtension(connector.getSource());
+            links.removeArrowlink(connector);
             connector.getSource().getMap().setSaved(false);
+            if (throwAfterDeleteMutation) {
+                restoreOnRollback(connector.getSource(), new Runnable() {
+                    @Override
+                    public void run() {
+                        links.addArrowlink(connector);
+                    }
+                });
+                throw new IllegalStateException("native delete failure");
+            }
+        }
+
+        private void restoreOnRollback(NodeModel source, Runnable restoration) {
+            IUndoHandler handler = source.getMap().getExtension(IUndoHandler.class);
+            if (!(handler instanceof RecordingUndoHandler)) {
+                throw new AssertionError("The test native mutation requires a recording undo handler");
+            }
+            ((RecordingUndoHandler) handler).restoreOnRollback(restoration);
         }
     }
 
@@ -756,6 +902,7 @@ public class FreeplaneMapCommandExecutorShould {
         private int rollbackCalls;
         private int undoCalls;
         private boolean canUndo;
+        private Runnable rollbackRestoration;
 
         private RecordingUndoHandler(InlineEdt edt) {
             this.edt = edt;
@@ -822,6 +969,15 @@ public class FreeplaneMapCommandExecutorShould {
         public void rollback() {
             edt.requireOnEdt("undo rollback");
             rollbackCalls++;
+            if (rollbackRestoration != null) {
+                Runnable restoration = rollbackRestoration;
+                rollbackRestoration = null;
+                restoration.run();
+            }
+        }
+
+        private void restoreOnRollback(Runnable restoration) {
+            rollbackRestoration = restoration;
         }
 
         @Override
