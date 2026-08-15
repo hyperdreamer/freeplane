@@ -27,6 +27,11 @@ import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
 
 public final class LayoutWorker implements AutoCloseable {
     private static final AtomicInteger WORKER_IDS = new AtomicInteger();
+    private static final LayoutFrame EMPTY_FAILED_FRAME = LayoutFrame.withDiagnostics(
+        LayoutFrame.of(0L, LayoutPositions.of(
+            Collections.<ProjectedNodeKey, org.freeplane.plugin.graph.geometry.LayoutPoint>emptyMap(),
+            Collections.<EnclosureHullKey, org.freeplane.plugin.graph.geometry.LayoutPoint>emptyMap()), true),
+        Collections.<LayoutConflict>emptyList(), PerceptualIdlePolicy.IdleMeasurement.initial());
 
     private final Supplier<LayoutEngine> engineFactory;
     private final PerceptualIdlePolicy idlePolicy;
@@ -37,7 +42,7 @@ public final class LayoutWorker implements AutoCloseable {
     private final GraphGeometryEngine geometryEngine = new GraphGeometryEngine();
     private final MapTierCorrection mapCorrection = new MapTierCorrection();
 
-    private volatile LayoutFrame lastValidFrame;
+    private volatile LayoutFrame lastValidFrame = EMPTY_FAILED_FRAME;
     private volatile boolean paused;
     private volatile boolean closed;
     private volatile boolean hasRequest;
@@ -324,15 +329,12 @@ public final class LayoutWorker implements AutoCloseable {
 
     private LayoutFrame failedFrame(final long requestedIndex) {
         final LayoutFrame retained = lastValidFrame;
-        final long index = requestedIndex >= 0L ? requestedIndex : retained == null ? 0L : retained.stepIndex();
-        final LayoutPositions positions = retained == null
-            ? LayoutPositions.of(Collections.<ProjectedNodeKey, org.freeplane.plugin.graph.geometry.LayoutPoint>emptyMap(),
-                Collections.<EnclosureHullKey, org.freeplane.plugin.graph.geometry.LayoutPoint>emptyMap())
-            : retained.positions();
-        final PerceptualIdlePolicy.IdleMeasurement idle = retained == null
-            ? PerceptualIdlePolicy.IdleMeasurement.initial() : retained.idle();
-        return LayoutFrame.withDiagnostics(LayoutFrame.of(index, positions, true),
-            Collections.<LayoutConflict>emptyList(), idle);
+        if (retained == EMPTY_FAILED_FRAME) {
+            return EMPTY_FAILED_FRAME;
+        }
+        final long index = requestedIndex >= 0L ? requestedIndex : retained.stepIndex();
+        return LayoutFrame.withDiagnostics(LayoutFrame.of(index, retained.positions(), true),
+            retained.conflicts(), retained.idle());
     }
 
     private void closeEngine() {

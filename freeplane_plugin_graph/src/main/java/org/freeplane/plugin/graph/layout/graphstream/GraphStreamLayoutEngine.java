@@ -45,7 +45,6 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
 
     private MultiGraph graph;
     private TypedSpringBox springBox;
-    private List<ForceLink> links = Collections.emptyList();
     private LayoutRequest lastRequest;
     private WorkspaceId graphWorkspace;
     private long nextStepIndex;
@@ -81,7 +80,6 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
         final long frameIndex = nextStepIndex++;
         try {
             springBox.compute();
-            springBox.applyTypedForces(particles, links);
             synchronizeGraphPositions();
             return frame(frameIndex, false);
         }
@@ -125,16 +123,17 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
             if (state == null) {
                 state = new ParticleState(desired, initialPosition(request.workspace(), desired));
                 graph.addNode(desired.id);
+                springBox.setParticlePosition(desired.id, state.x, state.y);
             }
             state.radius = desired.radius;
             final PinProjection pin = desired.nodeKey == null ? null : activePins.get(desired.nodeKey);
             state.pinned = pin != null;
+            springBox.configureParticle(desired.id, state.radius, state.pinned);
             if (pin != null) {
                 state.x = pin.x();
                 state.y = pin.y();
+                springBox.setParticlePosition(desired.id, state.x, state.y);
             }
-            springBox.configureParticle(desired.id, state.radius, state.pinned);
-            springBox.setParticlePosition(desired.id, state.x, state.y);
             ordered.put(desired.id, state);
         }
         particles.clear();
@@ -163,6 +162,7 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
             }
         }
         graphEdgeIds.clear();
+        springBox.clearLinks();
         int index = 0;
         for (final ForceLink link : desiredLinks) {
             if (!particles.containsKey(link.firstId) || !particles.containsKey(link.secondId)
@@ -172,8 +172,8 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
             final String edgeId = "layout-" + index++;
             graph.addEdge(edgeId, link.firstId, link.secondId, false);
             graphEdgeIds.add(edgeId);
+            springBox.registerLink(edgeId, link);
         }
-        links = Collections.unmodifiableList(new ArrayList<ForceLink>(desiredLinks));
     }
 
     private Topology topology(final GraphProjection projection) {
@@ -255,10 +255,12 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
 
     private void synchronizeGraphPositions() {
         for (final ParticleState state : particles.values()) {
-            if (!Double.isFinite(state.x) || !Double.isFinite(state.y)) {
+            final LayoutPoint position = springBox.positionOf(state.id);
+            if (!Double.isFinite(position.x()) || !Double.isFinite(position.y())) {
                 throw new IllegalStateException("Layout force produced non-finite coordinates");
             }
-            springBox.setParticlePosition(state.id, state.x, state.y);
+            state.x = position.x();
+            state.y = position.y();
         }
     }
 
@@ -301,7 +303,6 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
         graphWorkspace = null;
         particles.clear();
         graphEdgeIds.clear();
-        links = Collections.emptyList();
     }
 
     private static Position initialPosition(final WorkspaceId workspace, final DesiredParticle particle) {

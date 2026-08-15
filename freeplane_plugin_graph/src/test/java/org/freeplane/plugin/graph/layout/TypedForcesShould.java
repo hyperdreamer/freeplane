@@ -81,6 +81,24 @@ public class TypedForcesShould {
     }
 
     @Test
+    public void moveAnUnpinnedParticleThroughTheGraphStreamSolver() {
+        ProjectedNode firstNode = node(MAP_ONE, "solver-one");
+        ProjectedNode secondNode = node(MAP_TWO, "solver-two");
+        GraphProjection projection = projection(1, Arrays.asList(firstNode, secondNode),
+            Collections.<ProjectedEnclosure>emptyList(), Collections.<ProjectedEdge>emptyList());
+
+        try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
+            LayoutFrame before = engine.apply(request(WORKSPACE_ONE, projection, projection,
+                Collections.<PinProjection>emptyList()));
+            LayoutFrame after = engine.step();
+
+            assertThat(after.failed()).isFalse();
+            assertThat(distance(before.positions().nodes().get(firstNode.key()),
+                after.positions().nodes().get(firstNode.key()))).isGreaterThan(0.0);
+        }
+    }
+
+    @Test
     public void acceptRelationshipAndContainmentEdgesBetweenTheSameParticles() {
         GraphProjection projection = withParallelGraphEdges(1);
 
