@@ -8,9 +8,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.awt.Color;
+import java.awt.EventQueue;
 import java.awt.event.MouseAdapter;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.util.IdentityHashMap;
 import java.util.Map;
 
@@ -162,6 +161,167 @@ public class MapViewFilterAutoUnfoldModeTest {
     }
 
     @Test
+    public void unfoldsQuickSelectionMatchesWithinTheEffectiveSearchRoot() throws Exception {
+        TestEnvironment environment = new TestEnvironment();
+        NodeModel foldedParent = environment.addChild(environment.rootNode, "folded-parent", true);
+        environment.addChild(foldedParent, "quick-match", false);
+        NodeModel otherParent = environment.addChild(environment.rootNode, "other-parent", true);
+        environment.addChild(otherParent, "other-match", false);
+        environment.attach();
+
+        TestNodeView foldedParentView = environment.viewFor(foldedParent);
+        TestNodeView otherParentView = environment.viewFor(otherParent);
+        Filter activeFilter = new Filter(null, false, false, false, false,
+                Filter.FilteredElement.NODE, null);
+        environment.setFilter(activeFilter);
+        Filter quickSelectionFilter = Filter.createFilter(
+                node -> node.toString().contains("quick-match"), true, false, true, activeFilter);
+        quickSelectionFilter.calculateFilterResults(environment.rootNode);
+
+        environment.mapView.unfoldMatchingBranches(quickSelectionFilter, environment.rootNode);
+
+        assertThat(foldedParentView.isFolded()).isFalse();
+        assertThat(foldedParentView.getChildrenViews()).hasSize(1);
+        assertThat(otherParentView.isFolded()).isTrue();
+    }
+
+    @Test
+    public void doesNotUnfoldTheEffectiveSearchRootWhenItHasNoQuickSelectionMatch() throws Exception {
+        TestEnvironment environment = new TestEnvironment();
+        NodeModel searchRoot = environment.addChild(environment.rootNode, "search-root", true);
+        environment.addChild(searchRoot, "plain-leaf", false);
+        environment.attach();
+
+        TestNodeView searchRootView = environment.viewFor(searchRoot);
+        Filter activeFilter = new Filter(null, false, false, false, false,
+                Filter.FilteredElement.NODE, null);
+        environment.setFilter(activeFilter);
+        Filter quickSelectionFilter = Filter.createFilter(
+                node -> node.toString().contains("missing"), true, false, true, activeFilter);
+        quickSelectionFilter.calculateFilterResults(searchRoot);
+
+        environment.mapView.unfoldMatchingBranches(quickSelectionFilter, searchRoot);
+
+        assertThat(searchRootView.isFolded()).isTrue();
+        assertThat(searchRootView.getChildrenViews()).isEmpty();
+    }
+
+    @Test
+    public void doesNotUnfoldQuickSelectionMatchesHiddenByTheActiveFilter() throws Exception {
+        TestEnvironment environment = new TestEnvironment();
+        NodeModel foldedParent = environment.addChild(environment.rootNode, "folded-parent", true);
+        environment.addChild(foldedParent, "quick-match", false);
+        environment.attach();
+
+        TestNodeView foldedParentView = environment.viewFor(foldedParent);
+        Filter activeFilter = filterFor(environment.mapModel, "visible", false, false,
+                Filter.FilteredElement.NODE);
+        environment.setFilter(activeFilter);
+        Filter quickSelectionFilter = Filter.createFilter(
+                node -> node.toString().contains("quick-match"), true, false, true, activeFilter);
+        quickSelectionFilter.calculateFilterResults(environment.rootNode);
+
+        environment.mapView.unfoldMatchingBranches(quickSelectionFilter, environment.rootNode);
+
+        assertThat(foldedParentView.isFolded()).isTrue();
+        assertThat(foldedParentView.getChildrenViews()).isEmpty();
+    }
+
+    @Test
+    public void preservesActiveFilterUnfoldingWhileQuickSelectionAddsBranches() throws Exception {
+        TestEnvironment environment = new TestEnvironment();
+        NodeModel activeParent = environment.addChild(environment.rootNode, "active-parent", true);
+        NodeModel activeMatch = environment.addChild(activeParent, "active-match", false);
+        NodeModel quickParent = environment.addChild(activeMatch, "quick-parent", true);
+        NodeModel quickMatch = environment.addChild(quickParent, "quick-match", false);
+        environment.attach();
+
+        TestNodeView activeParentView = environment.viewFor(activeParent);
+        TestNodeView quickParentView = environment.viewFor(quickParent);
+        unfoldMatchingBranchesSelected = true;
+        Filter activeFilter = filterFor(environment.mapModel, "active-match", false, true,
+                Filter.FilteredElement.NODE);
+        environment.setFilter(activeFilter);
+        environment.updateFilterNodeFolding();
+        Filter quickSelectionFilter = Filter.createFilter(
+                node -> node.toString().contains("quick-match"), true, false, true, activeFilter);
+        quickSelectionFilter.calculateFilterResults(quickParent);
+
+        environment.mapView.unfoldMatchingBranches(quickSelectionFilter, quickParent);
+        environment.selectNodes(quickMatch);
+
+        assertThat(activeParentView.isFolded()).isFalse();
+        assertThat(quickParentView.isFolded()).isFalse();
+
+        environment.setFilter(activeFilter);
+        environment.updateFilterNodeFolding();
+
+        assertThat(activeParentView.isFolded()).isFalse();
+        assertThat(quickParentView.isFolded()).isFalse();
+    }
+
+    @Test
+    public void selectionChangeRefoldsQuickSelectionBranchesThatAreNoLongerSelected() throws Exception {
+        TestEnvironment environment = new TestEnvironment();
+        NodeModel firstParent = environment.addChild(environment.rootNode, "first-parent", true);
+        NodeModel firstMatch = environment.addChild(firstParent, "match-one", false);
+        NodeModel secondParent = environment.addChild(environment.rootNode, "second-parent", true);
+        NodeModel secondMatch = environment.addChild(secondParent, "match-two", false);
+        environment.attach();
+
+        TestNodeView firstParentView = environment.viewFor(firstParent);
+        TestNodeView secondParentView = environment.viewFor(secondParent);
+        Filter activeFilter = new Filter(null, false, false, false, false,
+                Filter.FilteredElement.NODE, null);
+        environment.setFilter(activeFilter);
+        Filter quickSelectionFilter = Filter.createFilter(
+                node -> node.toString().contains("match"), true, false, true, activeFilter);
+        quickSelectionFilter.calculateFilterResults(environment.rootNode);
+
+        environment.mapView.unfoldMatchingBranches(quickSelectionFilter, environment.rootNode);
+        environment.selectNodes(firstMatch, secondMatch);
+
+        assertThat(firstParentView.isFolded()).isFalse();
+        assertThat(secondParentView.isFolded()).isFalse();
+
+        environment.selectNodes(firstMatch);
+
+        assertThat(firstParentView.isFolded()).isFalse();
+        assertThat(secondParentView.isFolded()).isTrue();
+    }
+
+    @Test
+    public void filterRecomputationDoesNotHideTheCurrentSelectionAfterQuickSelectionDrivenUnfolding() throws Exception {
+        TestEnvironment environment = new TestEnvironment();
+        NodeModel firstParent = environment.addChild(environment.rootNode, "first-parent", true);
+        NodeModel firstMatch = environment.addChild(firstParent, "match-one", false);
+        NodeModel secondParent = environment.addChild(environment.rootNode, "second-parent", true);
+        NodeModel secondMatch = environment.addChild(secondParent, "match-two", false);
+        environment.attach();
+
+        TestNodeView firstParentView = environment.viewFor(firstParent);
+        TestNodeView secondParentView = environment.viewFor(secondParent);
+        Filter activeFilter = new Filter(null, false, false, false, false,
+                Filter.FilteredElement.NODE, null);
+        environment.setFilter(activeFilter);
+        Filter quickSelectionFilter = Filter.createFilter(
+                node -> node.toString().contains("match"), true, false, true, activeFilter);
+        quickSelectionFilter.calculateFilterResults(environment.rootNode);
+
+        environment.mapView.unfoldMatchingBranches(quickSelectionFilter, environment.rootNode);
+        environment.selectNodes(firstMatch, secondMatch);
+        environment.selectNodes(firstMatch);
+
+        unfoldMatchingBranchesSelected = true;
+        environment.setFilter(filterFor(environment.mapModel, "missing", false, false,
+                Filter.FilteredElement.NODE));
+        environment.updateFilterNodeFolding();
+
+        assertThat(firstParentView.isFolded()).isFalse();
+        assertThat(secondParentView.isFolded()).isTrue();
+    }
+
+    @Test
     public void clearsTrackedBranchesWhenConnectorFilteringIsSelected() throws Exception {
         TestEnvironment environment = new TestEnvironment();
         NodeModel autoParent = environment.addChild(environment.rootNode, "auto-parent", true);
@@ -224,10 +384,9 @@ public class MapViewFilterAutoUnfoldModeTest {
         private final TestMapView mapView = new TestMapView(mapModel, Controller.getCurrentController().getModeController());
         private final Map<NodeModel, TestNodeView> nodeViews = new IdentityHashMap<>();
 
-        private TestEnvironment() throws Exception {
+        private TestEnvironment() {
             mapModel.setRoot(rootNode);
-            setField(mapView, "siblingMaxLevel", -1);
-            setField(mapView, "layoutType", MapViewLayout.MAP);
+            mapView.initializeForTest(MapViewLayout.MAP, -1);
         }
 
         private NodeModel addChild(NodeModel parent, String text, boolean folded) {
@@ -241,36 +400,41 @@ public class MapViewFilterAutoUnfoldModeTest {
             return nodeViews.computeIfAbsent(node, key -> new TestNodeView(key, mapView, this));
         }
 
-        private void attach() throws Exception {
+        private void attach() {
             TestNodeView rootView = viewFor(rootNode);
             rootNode.addViewer(rootView);
-            setField(mapView, "mapRootView", rootView);
-            setField(mapView, "currentRootView", rootView);
-            setField(mapView, "currentRootParentView", null);
-            mapView.add(rootView);
+            mapView.attachRootViewForTest(rootView);
             rootView.syncDisplayedChildrenRecursively();
+            when(Controller.getCurrentController().getMapViewManager().getMapViewComponent()).thenReturn(mapView);
         }
 
-        private void setFilter(Filter filter) throws Exception {
-            setField(mapView, "filter", filter);
+        private void setFilter(Filter filter) {
+            mapView.getMapSelection().setFilter(filter);
         }
 
-        private void setCurrentRootView(NodeView currentRootView) throws Exception {
-            setField(mapView, "currentRootView", currentRootView);
-            setField(mapView, "currentRootParentView", currentRootView.getParent());
+        private void setCurrentRootView(NodeView currentRootView) {
+            mapView.setCurrentRootViewForTest(currentRootView);
         }
 
-        private void updateFilterNodeFolding() throws Exception {
-            Method method = MapView.class.getDeclaredMethod("updateFilterNodeFolding");
-            method.setAccessible(true);
-            method.invoke(mapView);
+        private void updateFilterNodeFolding() {
+            mapView.updateFilterNodeFolding();
+        }
+
+        private void selectNodes(NodeModel... nodes) throws Exception {
+            NodeView[] selectionViews = new NodeView[nodes.length];
+            for (int i = 0; i < nodes.length; i++) {
+                selectionViews[i] = viewFor(nodes[i]);
+            }
+            mapView.replaceSelection(selectionViews);
+            mapView.fireSelectionChanged();
+            mapView.updateSelectionDrivenFolding();
+            flushSwingEvents();
         }
     }
 
-    private static void setField(Object target, String fieldName, Object value) throws Exception {
-        Field field = MapView.class.getDeclaredField(fieldName);
-        field.setAccessible(true);
-        field.set(target, value);
+    private static void flushSwingEvents() throws Exception {
+        EventQueue.invokeAndWait(() -> {
+        });
     }
 
     private static class TestMapView extends MapView {
@@ -281,6 +445,7 @@ public class MapViewFilterAutoUnfoldModeTest {
         @Override
         public void setMap(final MapModel viewedMap) {
         }
+
     }
 
     private static class TestNodeView extends NodeView {

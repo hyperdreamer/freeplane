@@ -42,6 +42,7 @@ import java.io.Writer;
 import java.security.AccessControlException;
 import java.util.Collection;
 import java.util.Vector;
+import java.util.function.Predicate;
 import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
 import javax.swing.ButtonModel;
@@ -105,6 +106,7 @@ import org.freeplane.n3.nanoxml.IXMLReader;
 import org.freeplane.n3.nanoxml.StdXMLReader;
 import org.freeplane.n3.nanoxml.XMLElement;
 import org.freeplane.n3.nanoxml.XMLWriter;
+import org.freeplane.view.swing.map.MapView;
 import org.freeplane.view.swing.map.NodeTooltipManager;
 
 /**
@@ -923,6 +925,32 @@ public class FilterController implements IExtension, IMapViewChangeListener {
         return unfoldMatchingBranches.isSelected();
     }
 
+    Filter createQuickSelectionFilter(final ASelectableCondition condition,
+            final IMapSelection selection) {
+        if (condition == null || selection == null || !isUnfoldMatchingBranchesSelected()) {
+            return null;
+        }
+        final Filter activeFilter = selection.getFilter();
+        if (activeFilter == null || activeFilter.getFilteredElement() == FilteredElement.CONNECTOR) {
+            return null;
+        }
+        return Filter.createFilter(condition, true, false, true, activeFilter);
+    }
+
+    void unfoldMatchingBranchesForQuickSelection(final Filter quickSelectionFilter,
+            final IMapSelection selection) {
+        if (quickSelectionFilter == null || selection == null) {
+            return;
+        }
+        final NodeModel searchRoot = selection.getEffectiveSearchRoot();
+        final Component mapViewComponent = Controller.getCurrentController().getMapViewManager()
+                .getMapViewComponent();
+        if (searchRoot == null || !(mapViewComponent instanceof MapView)) {
+            return;
+        }
+        ((MapView) mapViewComponent).unfoldMatchingBranches(quickSelectionFilter, searchRoot);
+    }
+
 	public ButtonModel getHighlightNodes() {
 		return highlightNodes;
 	}
@@ -1124,7 +1152,13 @@ public class FilterController implements IExtension, IMapViewChangeListener {
 	}
 
 	NodeModel findNext(final NodeModel from, final NodeModel end, final Direction direction,
-	                   final ICondition condition, Filter filter) {
+	                   final ICondition condition, final Filter filter) {
+        return findNextMatching(from, end, direction,
+                condition == null ? node -> true : condition::checkNode, filter);
+	}
+
+	NodeModel findNextMatching(final NodeModel from, final NodeModel end, final Direction direction,
+	                   final Predicate<NodeModel> matches, final Filter filter) {
 		NodeModel next = from;
 		for (;;) {
 		    do {
@@ -1139,7 +1173,7 @@ public class FilterController implements IExtension, IMapViewChangeListener {
 			if (next == from) {
 				break;
 			}
-			if (condition == null || condition.checkNode(next)) {
+			if (matches.test(next)) {
 				return next;
 			}
 		}

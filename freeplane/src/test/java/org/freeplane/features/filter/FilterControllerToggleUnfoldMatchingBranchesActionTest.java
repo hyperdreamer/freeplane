@@ -5,9 +5,12 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import java.awt.Color;
@@ -20,6 +23,9 @@ import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.core.ui.IMouseListener;
 import org.freeplane.core.ui.IUserInputListenerFactory;
+import org.freeplane.features.filter.condition.ASelectableCondition;
+import org.freeplane.features.filter.condition.NoFilteringCondition;
+import org.freeplane.features.map.IMapSelection;
 import org.freeplane.features.map.MapController;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.mode.Controller;
@@ -27,6 +33,7 @@ import org.freeplane.features.mode.ModeController;
 import org.freeplane.features.text.TextController;
 import org.freeplane.features.ui.IMapViewManager;
 import org.freeplane.core.util.TextUtils;
+import org.freeplane.view.swing.map.MapView;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -36,6 +43,7 @@ public class FilterControllerToggleUnfoldMatchingBranchesActionTest {
     private Controller previousController;
     private Controller controller;
     private MockedStatic<TextUtils> textUtils;
+    private IMapViewManager mapViewManager;
     private final Map<String, AFreeplaneAction> actions = new HashMap<>();
 
     @Before
@@ -43,7 +51,7 @@ public class FilterControllerToggleUnfoldMatchingBranchesActionTest {
         previousController = Controller.getCurrentController();
         controller = mock(Controller.class);
         ResourceController resourceController = mock(ResourceController.class);
-        IMapViewManager mapViewManager = mock(IMapViewManager.class);
+        mapViewManager = mock(IMapViewManager.class);
         ModeController modeController = mock(ModeController.class);
         MapController mapController = mock(MapController.class);
         IUserInputListenerFactory userInputListenerFactory = mock(IUserInputListenerFactory.class);
@@ -96,6 +104,42 @@ public class FilterControllerToggleUnfoldMatchingBranchesActionTest {
     public void tearDown() {
         textUtils.close();
         Controller.setCurrentController(previousController);
+    }
+
+    @Test
+    public void quickSelectionFilterIsCreatedOnlyWhenModeIsActive() {
+        FilterController filterController = new FilterController();
+        IMapSelection selection = mock(IMapSelection.class);
+        Filter activeFilter = new Filter(null, false, false, false, false,
+                Filter.FilteredElement.NODE, null);
+        ASelectableCondition condition = NoFilteringCondition.createCondition();
+        when(selection.getFilter()).thenReturn(activeFilter);
+
+        assertThat(filterController.createQuickSelectionFilter(condition, selection)).isNull();
+
+        filterController.getUnfoldMatchingBranches().setSelected(true);
+        assertThat(filterController.createQuickSelectionFilter(condition, selection)).isNotNull();
+
+        when(selection.getFilter()).thenReturn(new Filter(null, false, false, false, false,
+                Filter.FilteredElement.CONNECTOR, null));
+        assertThat(filterController.createQuickSelectionFilter(condition, selection)).isNull();
+    }
+
+    @Test
+    public void quickSelectionUnfoldingDelegatesToMapView() {
+        FilterController filterController = new FilterController();
+        IMapSelection selection = mock(IMapSelection.class);
+        NodeModel searchRoot = mock(NodeModel.class);
+        Filter quickSelectionFilter = new Filter(null, false, false, false, false,
+                Filter.FilteredElement.NODE, null);
+        MapView mapView = mock(MapView.class);
+        when(mapViewManager.getMapViewComponent()).thenReturn(mapView);
+        when(selection.getEffectiveSearchRoot()).thenReturn(searchRoot);
+
+        filterController.unfoldMatchingBranchesForQuickSelection(quickSelectionFilter, selection);
+
+        verify(mapView).unfoldMatchingBranches(same(quickSelectionFilter), same(searchRoot));
+        verifyNoMoreInteractions(mapView);
     }
 
     @Test
