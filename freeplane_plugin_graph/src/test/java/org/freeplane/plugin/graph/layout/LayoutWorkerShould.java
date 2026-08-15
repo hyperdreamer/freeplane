@@ -1,6 +1,7 @@
 package org.freeplane.plugin.graph.layout;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -213,14 +214,25 @@ public class LayoutWorkerShould {
         FailingEngine engine = new FailingEngine();
         LayoutWorker worker = new LayoutWorker(new FixedEngineSupplier(engine),
             new PerceptualIdlePolicy(2, 0.1, 0.1));
+        PinProjection firstPin = PinProjection.active(pinRecord(MAP_ONE, "one"), NODE_ONE);
+        PinProjection secondPin = PinProjection.active(pinRecord(MAP_TWO, "two"), NODE_TWO);
         try {
-            LayoutFrame valid = await(worker.submit(request()));
+            LayoutFrame valid = await(worker.submit(request(Arrays.asList(firstPin, secondPin))));
             LayoutFrame failed = await(worker.step());
 
             assertThat(valid.failed()).isFalse();
+            assertThat(valid.conflicts()).hasSize(1);
             assertThat(failed.failed()).isTrue();
             assertThat(failed.positions()).isEqualTo(valid.positions());
-            assertThat(worker.lastValidFrame()).isEqualTo(valid);
+            assertThat(failed.conflicts()).hasSize(1);
+            assertThat(failed.conflicts().get(0).firstMap()).isEqualTo(valid.conflicts().get(0).firstMap());
+            assertThat(failed.conflicts().get(0).secondMap()).isEqualTo(valid.conflicts().get(0).secondMap());
+            assertThat(failed.conflicts().get(0).blockingPins())
+                .containsExactlyElementsOf(valid.conflicts().get(0).blockingPins());
+            assertThat(failed.idle().rms()).isEqualTo(valid.idle().rms());
+            assertThat(failed.idle().max()).isEqualTo(valid.idle().max());
+            assertThat(failed.idle().consecutiveStableFrames())
+                .isEqualTo(valid.idle().consecutiveStableFrames());
         }
         finally {
             worker.close();
@@ -232,9 +244,26 @@ public class LayoutWorkerShould {
         LayoutWorker worker = new LayoutWorker(new FixedEngineSupplier(new CountingEngine(new AtomicInteger(),
             new AtomicInteger())), PerceptualIdlePolicy.spikeDefaults());
         try {
-            assertThat(await(worker.step())).isNull();
+            LayoutFrame sentinel = worker.lastValidFrame();
+            assertThat(sentinel).isNotNull();
+            assertThat(sentinel.failed()).isTrue();
+            assertThat(sentinel.stepIndex()).isZero();
+            assertThat(sentinel.positions().nodes()).isEmpty();
+            assertThat(sentinel.positions().anchors()).isEmpty();
+            assertThat(sentinel.conflicts()).isEmpty();
+            assertThat(sentinel.idle().rms()).isZero();
+            assertThat(sentinel.idle().max()).isZero();
+            assertThat(sentinel.idle().consecutiveStableFrames()).isZero();
+            assertThat(sentinel.idle().idle()).isFalse();
+            assertThat(await(worker.step())).isSameAs(sentinel);
             worker.pause();
-            assertThat(await(worker.step())).isNull();
+            assertThat(await(worker.step())).isSameAs(sentinel);
+            assertThatThrownBy(() -> sentinel.positions().nodes().clear())
+                .isInstanceOf(UnsupportedOperationException.class);
+            assertThatThrownBy(() -> sentinel.positions().anchors().clear())
+                .isInstanceOf(UnsupportedOperationException.class);
+            assertThatThrownBy(() -> sentinel.conflicts().clear())
+                .isInstanceOf(UnsupportedOperationException.class);
             worker.restart();
             LayoutFrame frame = await(worker.submit(request()));
             worker.pause();
