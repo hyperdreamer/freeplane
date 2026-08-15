@@ -13,6 +13,7 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Delayed;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -102,6 +103,48 @@ public class ProjectionBatcherShould {
         task.runEvenIfCancelled();
         assertThat(accepted).isEmpty();
         assertThat(batcher.hasPendingChanges()).isFalse();
+    }
+
+    @Test
+    public void closeWaitsForAcceptedCallbackToFinishBeforeReturning() throws Exception {
+        TestEdt edt = new TestEdt();
+        TestScheduler scheduler = new TestScheduler();
+        CountDownLatch callbackStarted = new CountDownLatch(1);
+        CountDownLatch releaseCallback = new CountDownLatch(1);
+        CountDownLatch closeReturned = new CountDownLatch(1);
+        ProjectionBatcher batcher = new ProjectionBatcher(edt, scheduler, new TestClock(4L), batch -> {
+            callbackStarted.countDown();
+            try {
+                releaseCallback.await();
+            }
+            catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError(interrupted);
+            }
+        });
+        edt.runOnEdt(() -> batcher.request(ChangeKind.TEXT));
+
+        Thread callbackThread = new Thread(() -> scheduler.tasks().get(0).runEvenIfCancelled());
+        Thread closeThread = new Thread(() -> {
+            batcher.close();
+            closeReturned.countDown();
+        });
+        try {
+            callbackThread.start();
+            assertThat(callbackStarted.await(5L, TimeUnit.SECONDS)).isTrue();
+            closeThread.start();
+            assertThat(closeReturned.await(1L, TimeUnit.SECONDS)).isFalse();
+            releaseCallback.countDown();
+            callbackThread.join(5_000L);
+            closeThread.join(5_000L);
+            assertThat(callbackThread.isAlive()).isFalse();
+            assertThat(closeThread.isAlive()).isFalse();
+        }
+        finally {
+            releaseCallback.countDown();
+            callbackThread.join(5_000L);
+            closeThread.join(5_000L);
+        }
     }
 
     @Test

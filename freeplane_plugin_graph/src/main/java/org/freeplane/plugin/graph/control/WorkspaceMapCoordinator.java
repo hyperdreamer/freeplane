@@ -217,6 +217,8 @@ public final class WorkspaceMapCoordinator implements AutoCloseable {
                     next.put(reference.id(), previous);
                 }
                 else {
+                    final boolean deferAcquisition = previous != null && previous.reference.active()
+                        && (previous.acquisitionInFlight || previous.deferredAcquisition);
                     if (previous != null) {
                         final MapLease lease = detachLeaseLocked(previous);
                         if (lease != null) {
@@ -224,8 +226,11 @@ public final class WorkspaceMapCoordinator implements AutoCloseable {
                         }
                     }
                     final Registration registration = new Registration(reference, MapAvailability.LOADING);
+                    registration.deferredAcquisition = deferAcquisition;
                     next.put(reference.id(), registration);
-                    acquisitions.add(registration);
+                    if (!deferAcquisition) {
+                        acquisitions.add(registration);
+                    }
                 }
             }
             for (Registration removed : remaining.values()) {
@@ -249,10 +254,12 @@ public final class WorkspaceMapCoordinator implements AutoCloseable {
         final long acquisitionGeneration;
         synchronized (monitor) {
             if (closed || registrations.get(registration.reference.id()) != registration
-                    || !registration.reference.active()) {
+                    || !registration.reference.active() || registration.deferredAcquisition) {
                 return;
             }
             registration.availability = MapAvailability.LOADING;
+            registration.deferredAcquisition = false;
+            registration.acquisitionInFlight = true;
             acquisitionGeneration = ++registration.acquisitionGeneration;
         }
         final CompletionStage<MapLease> acquisition;
@@ -327,10 +334,17 @@ public final class WorkspaceMapCoordinator implements AutoCloseable {
             validLease = false;
         }
         MapLease staleLease = null;
+        Registration retry = null;
         synchronized (monitor) {
+            registration.acquisitionInFlight = false;
             if (closed || registrations.get(registration.reference.id()) != registration
                     || registration.acquisitionGeneration != acquisitionGeneration) {
                 staleLease = lease;
+                final Registration current = registrations.get(registration.reference.id());
+                if (current != null && current.reference.active() && current.deferredAcquisition) {
+                    current.deferredAcquisition = false;
+                    retry = current;
+                }
             }
             else if (failure != null || !validLease) {
                 registration.availability = MapAvailability.UNREADABLE;
@@ -342,6 +356,9 @@ public final class WorkspaceMapCoordinator implements AutoCloseable {
             }
         }
         closeLease(staleLease);
+        if (retry != null) {
+            beginAcquireOnEdt(retry);
+        }
     }
 
     private ProjectionInput captureOnEdt(final AcceptedBatch batch) {
@@ -500,6 +517,8 @@ public final class WorkspaceMapCoordinator implements AutoCloseable {
         private MapLease lease;
         private MapAvailability availability;
         private long acquisitionGeneration;
+        private boolean acquisitionInFlight;
+        private boolean deferredAcquisition;
 
         private Registration(final MapReference reference, final MapAvailability availability) {
             this.reference = reference;
