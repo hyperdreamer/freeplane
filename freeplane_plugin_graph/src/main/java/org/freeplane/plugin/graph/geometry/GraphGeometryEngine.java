@@ -75,6 +75,7 @@ public final class GraphGeometryEngine {
         for (final ProjectedEnclosure enclosure : projection.enclosures()) {
             hulls.put(enclosure.hullKey(), computed.get(enclosure.hullKey()));
         }
+        // Structural hull computation intentionally leaves labels to the ordered placement pass.
         return GraphGeometry.of(nodeGeometry, hulls);
     }
 
