@@ -814,6 +814,25 @@ public class HullGeometryShould {
     }
 
     @Test
+    public void rejectsFiveUnitPublishedTangentAtBinadeTransition() {
+        double binade = Math.scalb(1.0, 53);
+        double startX = binade - 1.0;
+        HullGeometry hull = HullGeometry.of(Arrays.asList(
+            LayoutPoint.of(startX, 0.0),
+            LayoutPoint.of(binade + 16.0, 0.0),
+            LayoutPoint.of(binade + 16.0, 20.0),
+            LayoutPoint.of(startX, 20.0)), LayoutPoint.of(startX, 0.0));
+        PathIterator iterator = hull.smoothPath().getPathIterator(null);
+        double[] coordinates = new double[6];
+
+        assertThat(iterator.currentSegment(coordinates)).isEqualTo(PathIterator.SEG_MOVETO);
+        iterator.next();
+        assertThat(iterator.currentSegment(coordinates)).isEqualTo(PathIterator.SEG_QUADTO);
+        assertThat(Double.doubleToRawLongBits(coordinates[2])).isEqualTo(0x433fffffffffffffL);
+        assertThat(Double.doubleToRawLongBits(coordinates[3])).isEqualTo(0L);
+    }
+
+    @Test
     public void preservesDiagonalSmoothingTangentAfterFinalRounding() {
         HullGeometry hull = HullGeometry.of(Arrays.asList(
             LayoutPoint.of(8.0, 8.0),
