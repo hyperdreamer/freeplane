@@ -1,6 +1,5 @@
 package org.freeplane.plugin.graph.command;
 
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Objects;
 import java.util.Optional;
@@ -306,9 +305,12 @@ public final class FreeplaneMapCommandExecutor {
     }
 
     private Optional<ConnectorModel> connectorAt(final NodeModel source, final int requestedOccurrence) {
+        final NodeLinks links = NodeLinks.getLinkExtension(source);
+        if (links == null) {
+            return Optional.empty();
+        }
         int occurrence = 0;
-        final Collection<NodeLinkModel> links = NodeLinks.getLinks(source);
-        for (final NodeLinkModel link : links) {
+        for (final NodeLinkModel link : links.getLinks()) {
             if (link instanceof ConnectorModel) {
                 if (occurrence == requestedOccurrence) {
                     return Optional.of((ConnectorModel) link);
