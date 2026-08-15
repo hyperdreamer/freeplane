@@ -229,16 +229,22 @@ public class WorkspaceMapCoordinatorShould {
             registration(firstId, 1L, true), registration(secondId, 2L, true));
         FakeLease firstLease = new FakeLease(firstId, MapOperationalState.AVAILABLE);
         FakeLease secondLease = new FakeLease(secondId, MapOperationalState.AVAILABLE);
-        MapSnapshot firstSnapshot = snapshot(firstId, 2);
-        MapSnapshot secondSnapshot = snapshot(secondId, 1);
+        MapSnapshot firstSnapshot = mock(MapSnapshot.class);
+        MapSnapshot secondSnapshot = mock(MapSnapshot.class);
+        // Stage the IDs so the factory can return valid snapshots in reverse order while
+        // the production identity guard still validates each requested lease.
+        when(firstSnapshot.mapReferenceId()).thenReturn(secondId, firstId, firstId);
+        when(firstSnapshot.workspaceOrder()).thenReturn(2);
+        when(secondSnapshot.mapReferenceId()).thenReturn(firstId, secondId, secondId);
+        when(secondSnapshot.workspaceOrder()).thenReturn(1);
         TestEdt edt = new TestEdt();
         GraphWorkspaceStore store = mock(GraphWorkspaceStore.class);
         MapLeaseManager leaseManager = mock(MapLeaseManager.class);
         MapSnapshotFactory snapshotFactory = mock(MapSnapshotFactory.class);
         stubStoreAndListeners(store, leaseManager, document, new ListenerRegistrationStub(),
             new ListenerRegistrationStub());
-        when(snapshotFactory.snapshot(same(firstLease))).thenReturn(firstSnapshot);
-        when(snapshotFactory.snapshot(same(secondLease))).thenReturn(secondSnapshot);
+        when(snapshotFactory.snapshot(same(firstLease))).thenReturn(secondSnapshot);
+        when(snapshotFactory.snapshot(same(secondLease))).thenReturn(firstSnapshot);
         WorkspaceMapCoordinator coordinator = coordinator(document, edt, store, leaseManager, snapshotFactory,
             mapOf(firstId, CompletableFuture.completedFuture(firstLease),
                 secondId, CompletableFuture.completedFuture(secondLease)));
