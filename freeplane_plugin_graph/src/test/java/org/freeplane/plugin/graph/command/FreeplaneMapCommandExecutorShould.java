@@ -143,10 +143,10 @@ public class FreeplaneMapCommandExecutorShould {
         GraphCommandResult result = fixture.executor.createConnector(nodes.sourceKey, nodes.targetKey,
             RelationshipDirection.FORWARD);
 
-        assertRejected(result, "graph_workspace.source_map.undo_unavailable");
         assertThat(connectors(nodes.source)).isEmpty();
         assertThat(fixture.nativeController.idAddCalls).isZero();
         assertThat(nodes.undo.startCalls).isZero();
+        assertRejected(result, "graph_workspace.source_map.undo_unavailable");
     }
 
     @Test
@@ -215,7 +215,7 @@ public class FreeplaneMapCommandExecutorShould {
 
     @Test
     public void exposesAndUndoesOnlyTheLastSuccessfulSourceMapUndoTarget() {
-        // Catches undo targeting a map that was never successfully changed or ignoring the handler's availability.
+        // Catches undo targeting an older successful map or replacing the target after a rejected command.
         Fixture fixture = new Fixture(true);
         MapNodes first = fixture.addMap("first undo target");
         MapNodes second = fixture.addMap("second undo target");
@@ -224,20 +224,51 @@ public class FreeplaneMapCommandExecutorShould {
         assertApplied(fixture.executor.createConnector(first.sourceKey, first.targetKey, RelationshipDirection.FORWARD));
         assertThat(fixture.executor.currentUndoTarget()).contains(new MapUndoTarget(first.mapId, "first undo target", false));
 
+        assertApplied(fixture.executor.createConnector(second.sourceKey, second.targetKey, RelationshipDirection.FORWARD));
+        assertThat(fixture.executor.currentUndoTarget()).contains(new MapUndoTarget(second.mapId, "second undo target", false));
+
         GraphCommandResult noUndo = fixture.executor.undoCurrentSourceMap();
         assertThat(noUndo.status()).isEqualTo(GraphCommandResult.Status.NO_OP);
         assertThat(noUndo.messageKey()).isEqualTo("graph_workspace.source_map.nothing_to_undo");
         assertThat(first.undo.undoCalls).isZero();
         assertThat(second.undo.undoCalls).isZero();
 
-        first.undo.canUndo = true;
+        first.map.setReadOnly(true);
+        GraphCommandResult rejected = fixture.executor.createConnector(first.sourceKey, first.targetKey,
+            RelationshipDirection.FORWARD);
+        assertRejected(rejected, "graph_workspace.source_map.read_only");
+        assertThat(fixture.executor.currentUndoTarget()).contains(new MapUndoTarget(second.mapId, "second undo target", false));
+
+        second.undo.canUndo = true;
         GraphCommandResult undone = fixture.executor.undoCurrentSourceMap();
 
         assertApplied(undone);
         assertThat(undone.messageKey()).isEqualTo("graph_workspace.source_map.undone");
-        assertThat(undone.dirtySourceMaps()).containsExactly(first.mapId);
-        assertThat(first.undo.undoCalls).isEqualTo(1);
-        assertThat(second.undo.undoCalls).isZero();
+        assertThat(undone.dirtySourceMaps()).containsExactly(second.mapId);
+        assertThat(first.undo.undoCalls).isZero();
+        assertThat(second.undo.undoCalls).isEqualTo(1);
+    }
+
+    @Test
+    public void entersTheEdtForEveryPublicCommand() {
+        // Catches public command methods that invoke model, native, or result work outside EdtExecutor.call.
+        Fixture fixture = new Fixture(true);
+        MapNodes nodes = fixture.addMap("EDT commands");
+
+        fixture.executor.currentUndoTarget();
+        assertThat(fixture.edt.callCount()).isEqualTo(1);
+
+        assertApplied(fixture.executor.createConnector(nodes.sourceKey, nodes.targetKey, RelationshipDirection.FORWARD));
+        assertThat(fixture.edt.callCount()).isEqualTo(2);
+
+        ConnectorDescriptor expected = descriptor(nodes.sourceKey, nodes.mapId, "ID_TARGET", false, true, "", "", "");
+        assertApplied(fixture.executor.deleteConnector(ContributorKey.nativeConnector(nodes.mapId, nodes.sourceKey, 0),
+            expected));
+        assertThat(fixture.edt.callCount()).isEqualTo(3);
+
+        nodes.undo.canUndo = true;
+        assertApplied(fixture.executor.undoCurrentSourceMap());
+        assertThat(fixture.edt.callCount()).isEqualTo(4);
     }
 
     @Test
@@ -370,19 +401,25 @@ public class FreeplaneMapCommandExecutorShould {
         private final MapController mapController = mock(MapController.class);
         private final Controller controller = mock(Controller.class);
         private final IMapViewManager viewManager = mock(IMapViewManager.class);
-        private final ReadOnlyResultEnvelope results = new ReadOnlyResultEnvelope();
-        private final RecordingLinkController nativeController = new RecordingLinkController(modeController);
+        private final ReadOnlyResultEnvelope results = new ReadOnlyResultEnvelope(edt);
+        private final RecordingLinkController nativeController = new RecordingLinkController(modeController, edt);
         private final FreeplaneMapCommandExecutor executor;
         private int viewCreations;
 
         Fixture(boolean installsUndoOnViewCreation) {
             when(modeController.getMapController()).thenReturn(mapController);
             when(modeController.getController()).thenReturn(controller);
-            when(modeController.canEdit(any(MapModel.class))).thenReturn(true);
+            when(modeController.canEdit(any(MapModel.class))).thenAnswer(invocation -> {
+                edt.requireOnEdt("map editability access");
+                return true;
+            });
             when(controller.getMapViewManager()).thenReturn(viewManager);
-            when(viewManager.containsView(any(MapModel.class))).thenAnswer(invocation ->
-                openViews.contains(invocation.getArgument(0)));
+            when(viewManager.containsView(any(MapModel.class))).thenAnswer(invocation -> {
+                edt.requireOnEdt("view-manager lookup");
+                return openViews.contains(invocation.getArgument(0));
+            });
             doAnswer(invocation -> {
+                edt.requireOnEdt("map-view materialization");
                 MapModel map = invocation.getArgument(0);
                 map.beforeViewCreated();
                 openViews.add(map);
@@ -390,8 +427,8 @@ public class FreeplaneMapCommandExecutorShould {
                 return null;
             }).when(mapController).createMapView(any(MapModel.class));
             ViewMaterializationTracker views = new ViewMaterializationTracker(modeController);
-            executor = new FreeplaneMapCommandExecutor(new LeaseLookup(leases), modeController, edt, views,
-                new Resolver(resolvedNodes), results, new NativeConnectorAdapter(nativeController));
+            executor = new FreeplaneMapCommandExecutor(new LeaseLookup(leases, edt), modeController, edt, views,
+                new Resolver(resolvedNodes, edt), results, new NativeConnectorAdapter(nativeController, edt));
             this.installsUndoOnViewCreation = installsUndoOnViewCreation;
         }
 
@@ -407,7 +444,7 @@ public class FreeplaneMapCommandExecutorShould {
         }
 
         private MapNodes addMap(MapReferenceId mapId, String title) {
-            TrackingMapModel map = new TrackingMapModel(title, installsUndoOnViewCreation);
+            TrackingMapModel map = new TrackingMapModel(title, installsUndoOnViewCreation, edt);
             NodeModel root = node(map, "root", "ID_ROOT");
             map.setRoot(root);
             NodeModel source = node(map, "source", "ID_SOURCE");
@@ -418,7 +455,7 @@ public class FreeplaneMapCommandExecutorShould {
             root.insert(replacementTarget);
             SourceNodeKey sourceKey = sourceKey(mapId, "ID_SOURCE");
             SourceNodeKey targetKey = sourceKey(mapId, "ID_TARGET");
-            leases.put(mapId, new TestLease(mapId, MapOperationalState.AVAILABLE));
+            leases.put(mapId, new TestLease(mapId, MapOperationalState.AVAILABLE, edt));
             resolvedNodes.put(sourceKey, source);
             resolvedNodes.put(targetKey, target);
             return new MapNodes(mapId, map, source, target, sourceKey, targetKey, map.undo);
@@ -448,36 +485,48 @@ public class FreeplaneMapCommandExecutorShould {
 
     private static final class LeaseLookup implements FreeplaneMapCommandExecutor.MapLeaseLookup {
         private final Map<MapReferenceId, TestLease> leases;
+        private final InlineEdt edt;
 
-        private LeaseLookup(Map<MapReferenceId, TestLease> leases) {
+        private LeaseLookup(Map<MapReferenceId, TestLease> leases, InlineEdt edt) {
             this.leases = leases;
+            this.edt = edt;
         }
 
         @Override
         public Optional<MapLease> find(MapReferenceId mapReferenceId) {
+            edt.requireOnEdt("lease lookup");
             return Optional.<MapLease>ofNullable(leases.get(mapReferenceId));
         }
     }
 
     private static final class Resolver implements FreeplaneMapCommandExecutor.TraversalResolver {
         private final Map<SourceNodeKey, NodeModel> nodes;
+        private final InlineEdt edt;
 
-        private Resolver(Map<SourceNodeKey, NodeModel> nodes) {
+        private Resolver(Map<SourceNodeKey, NodeModel> nodes, InlineEdt edt) {
             this.nodes = nodes;
+            this.edt = edt;
         }
 
         @Override
         public Optional<NodeModel> resolve(MapLease lease, SourceNodeKey key) {
+            edt.requireOnEdt("traversal resolution");
             return Optional.ofNullable(nodes.get(key));
         }
     }
 
     private static final class ReadOnlyResultEnvelope implements FreeplaneMapCommandExecutor.ResultEnvelope {
         private final WorkspaceDocument document = WorkspaceDocument.createVersion1(WorkspaceId.of(UUID.randomUUID()));
+        private final InlineEdt edt;
         private int saveHookCalls;
+
+        private ReadOnlyResultEnvelope(InlineEdt edt) {
+            this.edt = edt;
+        }
 
         @Override
         public WorkspaceDocument currentDocument() {
+            edt.requireOnEdt("result envelope access");
             return document;
         }
 
@@ -488,45 +537,54 @@ public class FreeplaneMapCommandExecutorShould {
 
     private static final class NativeConnectorAdapter implements FreeplaneMapCommandExecutor.NativeConnector {
         private final RecordingLinkController controller;
+        private final InlineEdt edt;
 
-        private NativeConnectorAdapter(RecordingLinkController controller) {
+        private NativeConnectorAdapter(RecordingLinkController controller, InlineEdt edt) {
             this.controller = controller;
+            this.edt = edt;
         }
 
         @Override
         public ConnectorModel addConnector(NodeModel source, String targetId) {
+            edt.requireOnEdt("native connector creation");
             return controller.addConnector(source, targetId);
         }
 
         @Override
         public void changeArrows(ConnectorModel connector, ConnectorArrows arrows) {
+            edt.requireOnEdt("native connector arrow update");
             controller.changeArrowsOfArrowLink(connector, Optional.of(arrows));
         }
 
         @Override
         public void removeArrowLink(ConnectorModel connector) {
+            edt.requireOnEdt("native connector deletion");
             controller.removeArrowLink(connector);
         }
     }
 
     private static final class RecordingLinkController extends MLinkController {
+        private final InlineEdt edt;
         private int idAddCalls;
         private int nodeAddCalls;
         private int removeCalls;
         private String lastTargetId;
 
-        private RecordingLinkController(ModeController modeController) {
+        private RecordingLinkController(ModeController modeController, InlineEdt edt) {
             super(modeController);
+            this.edt = edt;
         }
 
         @Override
         public ConnectorModel addConnector(NodeModel source, NodeModel target) {
+            edt.requireOnEdt("native node-target overload");
             nodeAddCalls++;
             throw new AssertionError("The executor must call the saved target-ID overload");
         }
 
         @Override
         public ConnectorModel addConnector(NodeModel source, String targetId) {
+            edt.requireOnEdt("native ID-target overload");
             idAddCalls++;
             lastTargetId = targetId;
             ConnectorModel connector = new ConnectorModel(source, targetId);
@@ -537,11 +595,13 @@ public class FreeplaneMapCommandExecutorShould {
 
         @Override
         public void changeArrowsOfArrowLink(ConnectorModel connector, Optional<ConnectorArrows> arrows) {
+            edt.requireOnEdt("native arrow mutation");
             connector.setArrows(arrows);
         }
 
         @Override
         public void removeArrowLink(ConnectorModel connector) {
+            edt.requireOnEdt("native connector removal");
             removeCalls++;
             NodeLinks.getLinkExtension(connector.getSource()).removeArrowlink(connector);
             connector.getSource().getMap().setSaved(false);
@@ -551,19 +611,23 @@ public class FreeplaneMapCommandExecutorShould {
     private static final class TestLease implements MapLease {
         private final MapReferenceId mapId;
         private final MapOperationalState state;
+        private final InlineEdt edt;
 
-        private TestLease(MapReferenceId mapId, MapOperationalState state) {
+        private TestLease(MapReferenceId mapId, MapOperationalState state, InlineEdt edt) {
             this.mapId = mapId;
             this.state = state;
+            this.edt = edt;
         }
 
         @Override
         public MapReferenceId mapReferenceId() {
+            edt.requireOnEdt("lease map identity");
             return mapId;
         }
 
         @Override
         public MapOperationalState state() {
+            edt.requireOnEdt("lease state");
             return state;
         }
 
@@ -574,9 +638,11 @@ public class FreeplaneMapCommandExecutorShould {
 
     private static final class InlineEdt implements EdtExecutor {
         private boolean onEdt;
+        private int callCount;
 
         @Override
         public <T> T call(Callable<T> task) {
+            callCount++;
             boolean previous = onEdt;
             onEdt = true;
             try {
@@ -602,16 +668,25 @@ public class FreeplaneMapCommandExecutorShould {
         public boolean isEdt() {
             return onEdt;
         }
+
+        private void requireOnEdt(String operation) {
+            assertThat(onEdt).as(operation + " must run on the EDT").isTrue();
+        }
+
+        private int callCount() {
+            return callCount;
+        }
     }
 
     private static final class TrackingMapModel extends MapModel {
         private final String title;
         private final boolean installsUndoOnViewCreation;
-        private final RecordingUndoHandler undo = new RecordingUndoHandler();
+        private final InlineEdt edt;
+        private final RecordingUndoHandler undo;
         private int registryCalls;
         private int saveHookCalls;
 
-        private TrackingMapModel(String title, boolean installsUndoOnViewCreation) {
+        private TrackingMapModel(String title, boolean installsUndoOnViewCreation, InlineEdt edt) {
             super(new INodeDuplicator() {
                 @Override
                 public NodeModel duplicate(NodeModel source, MapModel targetMap, boolean withChildren) {
@@ -620,10 +695,27 @@ public class FreeplaneMapCommandExecutorShould {
             }, null, null);
             this.title = title;
             this.installsUndoOnViewCreation = installsUndoOnViewCreation;
+            this.edt = edt;
+            this.undo = new RecordingUndoHandler(edt);
+        }
+
+        @Override
+        public <T extends org.freeplane.core.extension.IExtension> T getExtension(Class<T> clazz) {
+            if (clazz == IUndoHandler.class) {
+                edt.requireOnEdt("map undo-extension access");
+            }
+            return super.getExtension(clazz);
+        }
+
+        @Override
+        public NodeModel getRootNode() {
+            edt.requireOnEdt("map root access");
+            return super.getRootNode();
         }
 
         @Override
         public void beforeViewCreated() {
+            edt.requireOnEdt("map before-view hook");
             if (installsUndoOnViewCreation && getExtension(IUndoHandler.class) == null) {
                 addExtension(IUndoHandler.class, undo);
             }
@@ -658,11 +750,16 @@ public class FreeplaneMapCommandExecutorShould {
     }
 
     private static final class RecordingUndoHandler implements IUndoHandler {
+        private final InlineEdt edt;
         private int startCalls;
         private int commitCalls;
         private int rollbackCalls;
         private int undoCalls;
         private boolean canUndo;
+
+        private RecordingUndoHandler(InlineEdt edt) {
+            this.edt = edt;
+        }
 
         @Override
         public void addActor(IActor actor) {
@@ -675,6 +772,7 @@ public class FreeplaneMapCommandExecutorShould {
 
         @Override
         public boolean canUndo() {
+            edt.requireOnEdt("undo availability check");
             return canUndo;
         }
 
@@ -688,6 +786,7 @@ public class FreeplaneMapCommandExecutorShould {
 
         @Override
         public void commit() {
+            edt.requireOnEdt("undo commit");
             commitCalls++;
         }
 
@@ -721,11 +820,13 @@ public class FreeplaneMapCommandExecutorShould {
 
         @Override
         public void rollback() {
+            edt.requireOnEdt("undo rollback");
             rollbackCalls++;
         }
 
         @Override
         public void startTransaction() {
+            edt.requireOnEdt("undo transaction start");
             startCalls++;
         }
 
@@ -735,6 +836,7 @@ public class FreeplaneMapCommandExecutorShould {
 
         @Override
         public void undo() {
+            edt.requireOnEdt("undo operation");
             undoCalls++;
         }
 
