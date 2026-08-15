@@ -143,7 +143,7 @@ public class AiCodeToolSet {
         }
     }
 
-    @Tool("Store content in the AI host, then compile and run it. No prior readCode or expectedStateToken is required. content contains sourceText and optional argumentsJsonText. The usual approval dialog appears when required. Content and condition formulas are not runnable. Scripts may affect the UI; prefer return values or stdout and avoid UI or state-changing calls unless requested.")
+    @Tool("Store content in the AI-owned Groovy script host, then compile and run it against the current Freeplane selection. No prior readCode or expectedStateToken is required. content contains sourceText and optional argumentsJsonText. argumentsJsonText is parsed as JSON and exposed to the script as args. The usual approval dialog appears when required. Content and condition formulas are not runnable. Scripts may affect the UI; prefer return values or stdout and avoid UI or state-changing calls unless requested.")
     public RunCodeResponse writeAndRunCode(WriteAndRunCodeToolRequest request) {
         try {
             WriteAndRunCodeRequest codeRequest = toWriteAndRunCodeRequest(request);
@@ -261,7 +261,10 @@ public class AiCodeToolSet {
         if (request == null) {
             return null;
         }
-        return new WriteCodeRequest(request.getHost(), request.getContent(), request.getExpectedStateToken());
+        return new WriteCodeRequest(
+            request.getHost(),
+            request.getContent() == null ? null : request.getContent().toCodeStateContent(),
+            request.getExpectedStateToken());
     }
 
     private CompileCodeRequest toCompileCodeRequest(CompileCodeToolRequest request) {
@@ -282,7 +285,8 @@ public class AiCodeToolSet {
         if (request == null) {
             return null;
         }
-        return new WriteAndRunCodeRequest(request.getContent());
+        return new WriteAndRunCodeRequest(
+            request.getContent() == null ? null : request.getContent().toCodeStateContent());
     }
 
     private boolean isFailureState(CodeState codeState) {

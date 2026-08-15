@@ -207,7 +207,7 @@ public class AiCodeToolSetTest {
 
         WriteCodeResponse response = uut.writeCode(new WriteCodeToolRequest(
             ScriptHost.ATTACHED_EDITOR,
-            new CodeStateContent("after", null),
+            new CodeStateContentPayload("after", null),
             uut.readCode(new ReadCodeToolRequest(ScriptHost.ATTACHED_EDITOR)).getStateToken()));
 
         assertThat(editor.getCodeStateContent().getSourceText()).isEqualTo("after");
@@ -274,7 +274,7 @@ public class AiCodeToolSetTest {
         AiCodeToolSet uut = new AiCodeToolSet(codeHostService, null, summaries::add, ToolCaller.CHAT);
 
         RunCodeResponse response = uut.writeAndRunCode(new WriteAndRunCodeToolRequest(
-            new CodeStateContent("return 7", "{}")));
+            new CodeStateContentPayload("return 7", "{}")));
 
         assertThat(response).isSameAs(expectedResponse);
         assertThat(receivedRequest.get().getContent()).isEqualTo(new CodeStateContent("return 7", "{}"));
@@ -303,7 +303,7 @@ public class AiCodeToolSetTest {
             ToolCaller.MCP);
 
         RunCodeResponse response = uut.writeAndRunCode(new WriteAndRunCodeToolRequest(
-            new CodeStateContent("println 1", null)));
+            new CodeStateContentPayload("println 1", null)));
 
         assertThat(response.getCodeState()).isEqualTo(CodeState.WAITING_FOR_USER_RUN);
         assertThat(summaries).isEmpty();
@@ -346,7 +346,7 @@ public class AiCodeToolSetTest {
 
         assertThatThrownBy(() -> uut.writeCode(new WriteCodeToolRequest(
             ScriptHost.ATTACHED_EDITOR,
-            new CodeStateContent("x", null),
+            new CodeStateContentPayload("x", null),
             null)))
             .isInstanceOf(IllegalStateException.class)
             .hasMessage("No editor is attached.");

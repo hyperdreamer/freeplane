@@ -3,18 +3,17 @@ package org.freeplane.plugin.ai.tools.code;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import dev.langchain4j.model.output.structured.Description;
-import org.freeplane.features.ai.code.CodeStateContent;
 
 public class WriteAndRunCodeToolRequest {
-    @Description("Script source and optional JSON arguments.")
-    private final CodeStateContent content;
+    @Description("Groovy script source and optional JSON arguments.")
+    private final CodeStateContentPayload content;
 
     @JsonCreator
-    public WriteAndRunCodeToolRequest(@JsonProperty("content") CodeStateContent content) {
+    public WriteAndRunCodeToolRequest(@JsonProperty("content") CodeStateContentPayload content) {
         this.content = content;
     }
 
-    public CodeStateContent getContent() {
+    public CodeStateContentPayload getContent() {
         return content;
     }
 }
