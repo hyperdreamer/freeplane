@@ -313,7 +313,7 @@ public final class WorkspaceMapCoordinator implements AutoCloseable {
             return;
         }
         try {
-            edt.execute(new Runnable() {
+            handoffAcquireCompletionOnEdt(new Runnable() {
                 @Override
                 public void run() {
                     if (!claimPendingCompletion(lease)) {
@@ -327,6 +327,16 @@ public final class WorkspaceMapCoordinator implements AutoCloseable {
             if (claimPendingCompletion(lease)) {
                 closeLease(lease);
             }
+        }
+    }
+
+    private void handoffAcquireCompletionOnEdt(final Runnable task) {
+        // MapLeaseManager settles a request after completing its future, so this must be a later EDT turn.
+        if (edt instanceof SwingEdtExecutor) {
+            ((SwingEdtExecutor) edt).executeLater(task);
+        }
+        else {
+            edt.execute(task);
         }
     }
 
@@ -616,6 +626,10 @@ public final class WorkspaceMapCoordinator implements AutoCloseable {
             else {
                 SwingUtilities.invokeLater(task);
             }
+        }
+
+        private void executeLater(final Runnable task) {
+            SwingUtilities.invokeLater(Objects.requireNonNull(task, "task"));
         }
 
         @Override
