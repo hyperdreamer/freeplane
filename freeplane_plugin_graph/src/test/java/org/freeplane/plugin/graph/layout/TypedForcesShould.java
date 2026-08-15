@@ -81,12 +81,18 @@ public class TypedForcesShould {
     }
 
     @Test
-    public void acceptParallelProjectedEdgesWithoutLosingPositionCoverage() {
-        GraphProjection projection = withParallelProjectedEdges(1);
+    public void acceptRelationshipAndContainmentEdgesBetweenTheSameParticles() {
+        GraphProjection projection = withParallelGraphEdges(1);
 
-        LayoutFrame frame = frameAfterOneStep(WORKSPACE_ONE, projection, Collections.<PinProjection>emptyList());
+        try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
+            LayoutFrame applied = engine.apply(request(WORKSPACE_ONE, projection, projection,
+                Collections.<PinProjection>emptyList()));
+            LayoutFrame stepped = engine.step();
 
-        assertCoverage(frame, projection);
+            assertThat(applied.failed()).isFalse();
+            assertThat(stepped.failed()).isFalse();
+            assertCoverage(stepped, projection);
+        }
     }
 
     @Test
@@ -102,6 +108,35 @@ public class TypedForcesShould {
             assertCoverage(second, projection);
             assertThat(second.positions().anchors()).containsKeys(rootHull(), childHull());
         }
+    }
+
+    @Test
+    public void moveAContainmentAnchorCloserToItsPinnedDirectNode() {
+        GraphProjection contained = containmentProjection(1, true);
+        GraphProjection detached = containmentProjection(1, false);
+        ProjectedNodeKey directNode = key(MAP_ONE, "contained-node");
+        LayoutPoint pinPosition = LayoutPoint.of(100.0, 0.0);
+        List<PinProjection> pins = Collections.singletonList(pin(directNode, pinPosition.x(), pinPosition.y()));
+
+        LayoutFrame containedFrame = frameAfterOneStep(WORKSPACE_ONE, contained, pins);
+        LayoutFrame detachedFrame = frameAfterOneStep(WORKSPACE_ONE, detached, pins);
+
+        assertThat(distance(containedFrame.positions().anchors().get(containmentHull()), pinPosition))
+            .isLessThan(distance(detachedFrame.positions().anchors().get(containmentHull()), pinPosition));
+    }
+
+    @Test
+    public void increaseAnchorSeparationWhenEnclosuresHaveAHierarchyLink() {
+        GraphProjection nested = hierarchyProjection(1, true);
+        GraphProjection peers = hierarchyProjection(1, false);
+
+        LayoutFrame nestedFrame = frameAfterOneStep(WORKSPACE_ONE, nested, Collections.<PinProjection>emptyList());
+        LayoutFrame peerFrame = frameAfterOneStep(WORKSPACE_ONE, peers, Collections.<PinProjection>emptyList());
+
+        assertThat(distance(nestedFrame.positions().anchors().get(hierarchyParentHull()),
+            nestedFrame.positions().anchors().get(hierarchyChildHull())))
+                .isGreaterThan(distance(peerFrame.positions().anchors().get(hierarchyParentHull()),
+                    peerFrame.positions().anchors().get(hierarchyChildHull())));
     }
 
     @Test
@@ -226,22 +261,33 @@ public class TypedForcesShould {
                 edge(1, aExtra.key(), bOne.key())));
     }
 
-    private static GraphProjection withParallelProjectedEdges(long generation) {
-        ProjectedNode aOne = node(MAP_ONE, "a-one");
-        ProjectedNode bOne = node(MAP_TWO, "b-one");
-        ProjectedEnclosure root = enclosure(MAP_ONE, "root", Optional.<EnclosureHullKey>empty(),
-            Collections.singletonList(aOne.key()), Collections.<EnclosureHullKey>emptyList(), true);
-        ProjectedEnclosure otherRoot = enclosure(MAP_TWO, "other-root", Optional.<EnclosureHullKey>empty(),
-            Collections.singletonList(bOne.key()), Collections.<EnclosureHullKey>emptyList(), true);
-        return projection(generation, Arrays.asList(aOne, bOne), Arrays.asList(root, otherRoot),
-            Collections.singletonList(parallelEdge(0, 1, aOne.key(), bOne.key())));
+    private static GraphProjection withParallelGraphEdges(long generation) {
+        ProjectedNode directNode = node(MAP_ONE, "parallel-node");
+        ProjectedEnclosure enclosure = enclosure(MAP_ONE, "parallel-root", Optional.<EnclosureHullKey>empty(),
+            Collections.singletonList(directNode.key()), Collections.<EnclosureHullKey>emptyList(), true);
+        ProjectedEndpointKey anchor = ProjectedEndpointKey.ofEnclosure(enclosure.endpointKeys().get(0));
+        ProjectedEndpointKey node = ProjectedEndpointKey.ofNode(directNode.key());
+        return projection(generation, Collections.singletonList(directNode), Collections.singletonList(enclosure),
+            Collections.singletonList(connectorEdge(0, anchor, node)));
     }
 
-    private static ProjectedEdge parallelEdge(int firstOccurrence, int secondOccurrence,
-            ProjectedNodeKey source, ProjectedNodeKey target) {
-        ProjectedEdge first = edge(firstOccurrence, source, target);
-        ProjectedEdge second = edge(secondOccurrence, source, target);
-        return ProjectedEdge.of(first.key(), Arrays.asList(first.contributors().get(0), second.contributors().get(0)));
+    private static GraphProjection containmentProjection(long generation, boolean includeContainment) {
+        ProjectedNode directNode = node(MAP_ONE, "contained-node");
+        ProjectedEnclosure enclosure = enclosure(MAP_ONE, "containment-root",
+            Optional.<EnclosureHullKey>empty(), includeContainment ? Collections.singletonList(directNode.key())
+                : Collections.<ProjectedNodeKey>emptyList(), Collections.<EnclosureHullKey>emptyList(), true);
+        return projection(generation, Collections.singletonList(directNode), Collections.singletonList(enclosure),
+            Collections.<ProjectedEdge>emptyList());
+    }
+
+    private static GraphProjection hierarchyProjection(long generation, boolean includeHierarchy) {
+        ProjectedEnclosure parent = enclosure(MAP_ONE, "hierarchy-parent", Optional.<EnclosureHullKey>empty(),
+            Collections.<ProjectedNodeKey>emptyList(), Collections.<EnclosureHullKey>emptyList(), true);
+        ProjectedEnclosure child = enclosure(MAP_ONE, "hierarchy-child",
+            includeHierarchy ? Optional.of(parent.hullKey()) : Optional.<EnclosureHullKey>empty(),
+            Collections.<ProjectedNodeKey>emptyList(), Collections.<EnclosureHullKey>emptyList(), false);
+        return projection(generation, Collections.<ProjectedNode>emptyList(), Arrays.asList(parent, child),
+            Collections.<ProjectedEdge>emptyList());
     }
 
     private static GraphProjection crossMapFanOut(long generation) {
@@ -295,6 +341,27 @@ public class TypedForcesShould {
             directEnclosures, mapRoot, BoundaryTier.SUBTLE);
     }
 
+    private static ProjectedEdge connectorEdge(int occurrence, ProjectedEndpointKey source,
+            ProjectedEndpointKey target) {
+        SourceNodeKey sourceKey = endpointSource(source);
+        ConnectorDescriptor descriptor = ConnectorDescriptor.of(sourceKey, endpointReference(target), false, true,
+            "source", "middle", "target");
+        ConnectorSnapshot snapshot = ConnectorSnapshot.of(occurrence, descriptor);
+        return ProjectedEdge.of(ProjectedEdgeKey.of(source, target),
+            Collections.singletonList(EdgeContributor.nativeConnector(snapshot, source, target)));
+    }
+
+    private static SourceNodeKey endpointSource(ProjectedEndpointKey endpoint) {
+        if (endpoint.isNode()) {
+            return endpoint.node().get().source();
+        }
+        return endpoint.enclosure().get().source();
+    }
+
+    private static NodeReference endpointReference(ProjectedEndpointKey endpoint) {
+        return endpointSource(endpoint).persistedReference().get();
+    }
+
     private static ProjectedEdge edge(int occurrence, ProjectedNodeKey source, ProjectedNodeKey target) {
         ProjectedEndpointKey sourceEndpoint = ProjectedEndpointKey.ofNode(source);
         ProjectedEndpointKey targetEndpoint = ProjectedEndpointKey.ofNode(target);
@@ -321,6 +388,18 @@ public class TypedForcesShould {
         PinRecord record = PinRecord.of(node.source().persistedReference().get(), x, y,
             Collections.<UnknownXml>emptyList());
         return PinProjection.active(record, node);
+    }
+
+    private static EnclosureHullKey containmentHull() {
+        return hull(MAP_ONE, "containment-root");
+    }
+
+    private static EnclosureHullKey hierarchyParentHull() {
+        return hull(MAP_ONE, "hierarchy-parent");
+    }
+
+    private static EnclosureHullKey hierarchyChildHull() {
+        return hull(MAP_ONE, "hierarchy-child");
     }
 
     private static EnclosureHullKey rootHull() {
