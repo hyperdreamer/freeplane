@@ -42,6 +42,7 @@ public final class LayoutWorker implements AutoCloseable {
     private volatile boolean closed;
     private volatile boolean hasRequest;
     private volatile boolean failedEngine;
+    private int pendingSubmits;
     private volatile Thread ownerThread;
 
     private LayoutEngine engine;
@@ -73,22 +74,24 @@ public final class LayoutWorker implements AutoCloseable {
             public LayoutFrame run() {
                 return runSubmit(value);
             }
-        });
+        }, true);
     }
 
     public CompletionStage<LayoutFrame> step() {
-        if (closed) {
-            return rejectedStage();
-        }
-        if (paused || (!hasRequest && !failedEngine)) {
-            return CompletableFuture.completedFuture(lastValidFrame);
-        }
-        return enqueue(new Work() {
-            @Override
-            public LayoutFrame run() {
-                return runStep();
+        synchronized (lifecycleLock) {
+            if (closed) {
+                return rejectedStage();
             }
-        });
+            if (paused || (!hasRequest && pendingSubmits == 0 && !failedEngine)) {
+                return CompletableFuture.completedFuture(lastValidFrame);
+            }
+            return enqueue(new Work() {
+                @Override
+                public LayoutFrame run() {
+                    return runStep();
+                }
+            }, false);
+        }
     }
 
     public void pause() {
@@ -162,40 +165,54 @@ public final class LayoutWorker implements AutoCloseable {
         });
     }
 
-    private CompletionStage<LayoutFrame> enqueue(final Work work) {
+    private CompletionStage<LayoutFrame> enqueue(final Work work, final boolean submit) {
         final CompletableFuture<LayoutFrame> result = new CompletableFuture<LayoutFrame>();
         synchronized (lifecycleLock) {
             if (closed) {
                 result.completeExceptionally(new IllegalStateException("Layout worker is closed"));
                 return result;
             }
+            if (submit) {
+                pendingSubmits++;
+            }
             pending.add(result);
-        }
-        try {
-            executor.execute(new Runnable() {
-                @Override
-                public void run() {
-                    if (result.isCancelled()) {
-                        pending.remove(result);
-                        return;
+            try {
+                executor.execute(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (result.isCancelled()) {
+                            pending.remove(result);
+                            finishSubmit(submit);
+                            return;
+                        }
+                        try {
+                            result.complete(work.run());
+                        }
+                        catch (final RuntimeException exception) {
+                            result.completeExceptionally(exception);
+                        }
+                        finally {
+                            pending.remove(result);
+                            finishSubmit(submit);
+                        }
                     }
-                    try {
-                        result.complete(work.run());
-                    }
-                    catch (final RuntimeException exception) {
-                        result.completeExceptionally(exception);
-                    }
-                    finally {
-                        pending.remove(result);
-                    }
-                }
-            });
-        }
-        catch (final RejectedExecutionException exception) {
-            pending.remove(result);
-            result.completeExceptionally(new IllegalStateException("Layout worker is closed", exception));
+                });
+            }
+            catch (final RejectedExecutionException exception) {
+                pending.remove(result);
+                finishSubmit(submit);
+                result.completeExceptionally(new IllegalStateException("Layout worker is closed", exception));
+            }
         }
         return result;
+    }
+
+    private void finishSubmit(final boolean submit) {
+        if (submit) {
+            synchronized (lifecycleLock) {
+                pendingSubmits--;
+            }
+        }
     }
 
     private void enqueueControl(final Runnable command) {
