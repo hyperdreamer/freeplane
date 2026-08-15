@@ -254,6 +254,41 @@ public class HullGeometryShould {
         assertThat(Double.doubleToRawLongBits(geometry.hulls().get(hullKey).labelAnchor().y()))
             .isEqualTo(0x40325e018e582688L);
     }
+
+    @Test
+    public void roundsNearbyPublicExpandedHullCentroidWithFullRemainder() {
+        List<ProjectedNode> nodes = Arrays.asList(node("n1"), node("n2"), node("n3"), node("n4"));
+        EnclosureHullKey hullKey = hullKey("nearby-public-expanded-quotient-hull");
+        List<ProjectedNodeKey> directNodes = Arrays.asList(
+            nodes.get(0).key(), nodes.get(1).key(), nodes.get(2).key(), nodes.get(3).key());
+        ProjectedEnclosure enclosure = enclosure(hullKey, Optional.<EnclosureHullKey>empty(),
+            directNodes, Collections.<EnclosureHullKey>emptyList());
+        double x0 = -0x1.57c5db1deabccp999;
+        double x1 = 0x1.307029465492p3;
+        double y0 = 0x1.81dcbefed8782p3;
+        double y1 = 0x1.8ad1d24b9894fp4;
+        for (int offset = 0; offset < 4; offset++) {
+            x0 = Math.nextDown(x0);
+            x1 = Math.nextDown(x1);
+        }
+        for (int offset = 0; offset < 16; offset++) {
+            y0 = Math.nextDown(y0);
+            y1 = Math.nextDown(y1);
+        }
+        Map<ProjectedNodeKey, LayoutPoint> nodePositions = new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        nodePositions.put(nodes.get(0).key(), LayoutPoint.of(x0, y0));
+        nodePositions.put(nodes.get(1).key(), LayoutPoint.of(x1, y0));
+        nodePositions.put(nodes.get(2).key(), LayoutPoint.of(x1, y1));
+        nodePositions.put(nodes.get(3).key(), LayoutPoint.of(x0, y1));
+
+        GraphGeometry geometry = compute(
+            projection(nodes, Collections.singletonList(enclosure), Collections.<ProjectedEdge>emptyList()),
+            LayoutPositions.of(nodePositions, Collections.singletonMap(hullKey, LayoutPoint.of(0.0, 0.0))));
+
+        assertThat(Double.doubleToRawLongBits(geometry.hulls().get(hullKey).labelAnchor().y()))
+            .isEqualTo(0x40325e018e58267dL);
+    }
+
     @Test
     public void createsASmoothDeterministicClosedPathWithoutCuttingDirectChildren() {
         ProjectedNode originNode = node("origin");
