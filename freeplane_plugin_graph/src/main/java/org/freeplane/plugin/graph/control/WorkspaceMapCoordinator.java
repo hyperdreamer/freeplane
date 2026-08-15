@@ -42,6 +42,8 @@ public final class WorkspaceMapCoordinator implements AutoCloseable {
     private final LeaseAcquirer leaseAcquirer;
     private final LinkedHashMap<MapReferenceId, Registration> registrations =
         new LinkedHashMap<MapReferenceId, Registration>();
+    private final LinkedHashMap<MapReferenceId, AcquisitionBarrier> acquisitionBarriers =
+        new LinkedHashMap<MapReferenceId, AcquisitionBarrier>();
     private final Set<MapLease> pendingCompletions = Collections.newSetFromMap(
         new IdentityHashMap<MapLease, Boolean>());
     private final WorkspaceStoreListener workspaceListener;
@@ -137,6 +139,7 @@ public final class WorkspaceMapCoordinator implements AutoCloseable {
                 }
             }
             pendingCompletions.clear();
+            acquisitionBarriers.clear();
             for (Registration registration : registrations.values()) {
                 final MapLease lease = detachLeaseLocked(registration);
                 if (lease != null && leasesToClose.add(lease)) {
@@ -203,7 +206,9 @@ public final class WorkspaceMapCoordinator implements AutoCloseable {
             final LinkedHashMap<MapReferenceId, Registration> next =
                 new LinkedHashMap<MapReferenceId, Registration>();
             for (MapReference reference : value.maps()) {
-                final Registration previous = remaining.remove(reference.id());
+                final MapReferenceId id = reference.id();
+                final Registration previous = remaining.remove(id);
+                final AcquisitionBarrier barrier = acquisitionBarriers.get(id);
                 if (!reference.active()) {
                     if (previous != null) {
                         final MapLease lease = detachLeaseLocked(previous);
@@ -211,14 +216,18 @@ public final class WorkspaceMapCoordinator implements AutoCloseable {
                             staleLeases.add(lease);
                         }
                     }
-                    next.put(reference.id(), new Registration(reference, MapAvailability.INACTIVE));
+                    if (barrier != null) {
+                        barrier.latestRegistration = null;
+                    }
+                    next.put(id, new Registration(reference, MapAvailability.INACTIVE));
                 }
                 else if (previous != null && previous.reference.active() && previous.reference.equals(reference)) {
-                    next.put(reference.id(), previous);
+                    next.put(id, previous);
+                    if (barrier != null) {
+                        barrier.latestRegistration = previous;
+                    }
                 }
                 else {
-                    final boolean deferAcquisition = previous != null && previous.reference.active()
-                        && (previous.acquisitionInFlight || previous.deferredAcquisition);
                     if (previous != null) {
                         final MapLease lease = detachLeaseLocked(previous);
                         if (lease != null) {
@@ -226,9 +235,11 @@ public final class WorkspaceMapCoordinator implements AutoCloseable {
                         }
                     }
                     final Registration registration = new Registration(reference, MapAvailability.LOADING);
-                    registration.deferredAcquisition = deferAcquisition;
-                    next.put(reference.id(), registration);
-                    if (!deferAcquisition) {
+                    next.put(id, registration);
+                    if (barrier != null) {
+                        barrier.latestRegistration = registration;
+                    }
+                    else {
                         acquisitions.add(registration);
                     }
                 }
@@ -237,6 +248,10 @@ public final class WorkspaceMapCoordinator implements AutoCloseable {
                 final MapLease lease = detachLeaseLocked(removed);
                 if (lease != null) {
                     staleLeases.add(lease);
+                }
+                final AcquisitionBarrier barrier = acquisitionBarriers.get(removed.reference.id());
+                if (barrier != null) {
+                    barrier.latestRegistration = null;
                 }
             }
             registrations.clear();
@@ -253,25 +268,25 @@ public final class WorkspaceMapCoordinator implements AutoCloseable {
     private void beginAcquireOnEdt(final Registration registration) {
         final long acquisitionGeneration;
         synchronized (monitor) {
-            if (closed || registrations.get(registration.reference.id()) != registration
-                    || !registration.reference.active() || registration.deferredAcquisition) {
+            final MapReferenceId id = registration.reference.id();
+            if (closed || registrations.get(id) != registration
+                    || !registration.reference.active() || acquisitionBarriers.containsKey(id)) {
                 return;
             }
             registration.availability = MapAvailability.LOADING;
-            registration.deferredAcquisition = false;
-            registration.acquisitionInFlight = true;
             acquisitionGeneration = ++registration.acquisitionGeneration;
+            acquisitionBarriers.put(id, new AcquisitionBarrier(registration, acquisitionGeneration, registration));
         }
         final CompletionStage<MapLease> acquisition;
         try {
             acquisition = leaseAcquirer.acquire(registration.reference);
         }
         catch (RuntimeException failure) {
-            receiveAcquireCompletion(registration, acquisitionGeneration, null, failure);
+            finishAcquireOnEdt(registration, acquisitionGeneration, null, failure);
             return;
         }
         if (acquisition == null) {
-            receiveAcquireCompletion(registration, acquisitionGeneration, null,
+            finishAcquireOnEdt(registration, acquisitionGeneration, null,
                 new IllegalStateException("Map lease acquisition returned no completion stage"));
             return;
         }
@@ -280,7 +295,7 @@ public final class WorkspaceMapCoordinator implements AutoCloseable {
                 lease, failure));
         }
         catch (RuntimeException failure) {
-            receiveAcquireCompletion(registration, acquisitionGeneration, null, failure);
+            finishAcquireOnEdt(registration, acquisitionGeneration, null, failure);
         }
     }
 
@@ -336,23 +351,33 @@ public final class WorkspaceMapCoordinator implements AutoCloseable {
         MapLease staleLease = null;
         Registration retry = null;
         synchronized (monitor) {
-            registration.acquisitionInFlight = false;
-            if (closed || registrations.get(registration.reference.id()) != registration
-                    || registration.acquisitionGeneration != acquisitionGeneration) {
-                staleLease = lease;
-                final Registration current = registrations.get(registration.reference.id());
-                if (current != null && current.reference.active() && current.deferredAcquisition) {
-                    current.deferredAcquisition = false;
-                    retry = current;
-                }
-            }
-            else if (failure != null || !validLease) {
-                registration.availability = MapAvailability.UNREADABLE;
+            final MapReferenceId id = registration.reference.id();
+            final AcquisitionBarrier barrier = acquisitionBarriers.get(id);
+            if (barrier == null || barrier.source != registration
+                    || barrier.sourceGeneration != acquisitionGeneration) {
                 staleLease = lease;
             }
             else {
-                registration.lease = lease;
-                registration.availability = availabilityFor(lease);
+                acquisitionBarriers.remove(id);
+                final Registration current = registrations.get(id);
+                final boolean currentSource = !closed && current == registration
+                    && registration.acquisitionGeneration == acquisitionGeneration
+                    && registration.reference.active();
+                if (currentSource && failure == null && validLease) {
+                    registration.lease = lease;
+                    registration.availability = availabilityFor(lease);
+                }
+                else {
+                    staleLease = lease;
+                    if (currentSource) {
+                        registration.availability = MapAvailability.UNREADABLE;
+                    }
+                    else if (!closed && current != null && current.reference.active()
+                            && barrier.latestRegistration == current
+                            && current.reference.equals(barrier.latestRegistration.reference)) {
+                        retry = current;
+                    }
+                }
             }
         }
         closeLease(staleLease);
@@ -512,13 +537,24 @@ public final class WorkspaceMapCoordinator implements AutoCloseable {
         CompletionStage<MapLease> acquire(MapReference reference);
     }
 
+    private static final class AcquisitionBarrier {
+        private final Registration source;
+        private final long sourceGeneration;
+        private Registration latestRegistration;
+
+        private AcquisitionBarrier(final Registration source, final long sourceGeneration,
+                final Registration latestRegistration) {
+            this.source = source;
+            this.sourceGeneration = sourceGeneration;
+            this.latestRegistration = latestRegistration;
+        }
+    }
+
     private static final class Registration {
         private final MapReference reference;
         private MapLease lease;
         private MapAvailability availability;
         private long acquisitionGeneration;
-        private boolean acquisitionInFlight;
-        private boolean deferredAcquisition;
 
         private Registration(final MapReference reference, final MapAvailability availability) {
             this.reference = reference;
