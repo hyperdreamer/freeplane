@@ -596,27 +596,52 @@ public final class HullGeometry {
         if (!Double.isFinite(x) || !Double.isFinite(y)) {
             return from;
         }
-        if (outwardRoundingStepExceedsSmoothingTangent(from.x(), displacementX, x)
-                || outwardRoundingStepExceedsSmoothingTangent(from.y(), displacementY, y)) {
+        if (finalRoundingExceedsSmoothingTangent(from, displacementX, displacementY,
+                displacementSquared, x, y)) {
             return from;
         }
         return LayoutPoint.of(x, y);
     }
 
-    private static boolean outwardRoundingStepExceedsSmoothingTangent(final double from,
+    private static boolean finalRoundingExceedsSmoothingTangent(final LayoutPoint from,
+            final ScaledExpansion displacementX, final ScaledExpansion displacementY,
+            final ScaledExpansion displacementSquared,
+            final double roundedX, final double roundedY) {
+        final ScaledExpansion outwardX = outwardRoundingError(from.x(), displacementX, roundedX);
+        final ScaledExpansion outwardY = outwardRoundingError(from.y(), displacementY, roundedY);
+        final ScaledExpansion outwardSquared = outwardX.product(outwardX).add(outwardY.product(outwardY));
+        if (outwardSquared.signum() <= 0) {
+            return false;
+        }
+        // Bound the represented distance with only coordinate errors that move away from the corner.
+        final ScaledExpansion displacementMagnitudeX = magnitude(displacementX);
+        final ScaledExpansion displacementMagnitudeY = magnitude(displacementY);
+        final ScaledExpansion radialCorrection = displacementMagnitudeX.product(outwardX)
+            .add(displacementMagnitudeY.product(outwardY)).product(ScaledExpansion.of(2.0))
+            .add(outwardSquared);
+        final ScaledExpansion roundedUpperSquared = displacementSquared.add(radialCorrection);
+        // One final binary64 ULP is the observable cap-rounding envelope; larger steps are geometric.
+        final ScaledExpansion roundingLimit = ScaledExpansion.of(CORNER_SMOOTHING_TANGENT)
+            .add(ScaledExpansion.of(Math.ulp(CORNER_SMOOTHING_TANGENT)));
+        return roundedUpperSquared.compareTo(roundingLimit.product(roundingLimit)) > 0;
+    }
+
+    private static ScaledExpansion magnitude(final ScaledExpansion value) {
+        return value.signum() < 0 ? ScaledExpansion.of(0.0).subtract(value) : value;
+    }
+
+    private static ScaledExpansion outwardRoundingError(final double from,
             final ScaledExpansion displacement, final double rounded) {
         final int direction = displacement.signum();
         if (direction == 0) {
-            return false;
+            return new ScaledExpansion();
         }
         final ScaledExpansion unrounded = ScaledExpansion.of(from).add(displacement);
         final ScaledExpansion roundingError = ScaledExpansion.of(rounded).subtract(unrounded);
         if (roundingError.signum() != direction) {
-            return false;
+            return new ScaledExpansion();
         }
-        // An outward rounding step crosses the adjacent binary64 coordinate. If
-        // that step exceeds four, the published coordinate alone is overlong.
-        return neighborGapExponent(from, direction > 0) > Math.getExponent(CORNER_SMOOTHING_TANGENT);
+        return direction > 0 ? roundingError : ScaledExpansion.of(0.0).subtract(roundingError);
     }
 
     private static boolean subtractionIsFinite(final double first, final double second) {
