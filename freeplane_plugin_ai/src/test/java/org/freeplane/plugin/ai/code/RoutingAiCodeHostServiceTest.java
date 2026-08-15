@@ -11,6 +11,7 @@ import org.freeplane.features.ai.code.ReadCodeRequest;
 import org.freeplane.features.ai.code.ReadCodeResponse;
 import org.freeplane.features.ai.code.RunCodeResponse;
 import org.freeplane.features.ai.code.ScriptHost;
+import org.freeplane.features.ai.code.WriteAndRunCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeResponse;
 import org.junit.Test;
@@ -53,6 +54,31 @@ public class RoutingAiCodeHostServiceTest {
 
         assertThat(response).isSameAs(expectedResponse);
         verify(aiHost).writeCode(org.mockito.ArgumentMatchers.any(WriteCodeRequest.class));
+    }
+
+    @Test
+    public void writeAndRunCodeRoutesRequestsToAiHost() {
+        AiCodeHostService attachedEditorHost = mock(AiCodeHostService.class);
+        AiCodeHostService aiHost = mock(AiCodeHostService.class);
+        RunCodeResponse expectedResponse = new RunCodeResponse(
+            ScriptHost.AI,
+            "text/x-freeplane-script-groovy",
+            CodeState.RUN_SUCCEEDED,
+            org.freeplane.features.ai.code.ScriptRunInitiator.AI,
+            token("args"),
+            null,
+            null,
+            null,
+            null);
+        when(aiHost.writeAndRunCode(org.mockito.ArgumentMatchers.any(WriteAndRunCodeRequest.class)))
+            .thenReturn(expectedResponse);
+        RoutingAiCodeHostService uut = new RoutingAiCodeHostService(attachedEditorHost, () -> aiHost);
+
+        RunCodeResponse response = uut.writeAndRunCode(new WriteAndRunCodeRequest(
+            new CodeStateContent("println 1", null)));
+
+        assertThat(response).isSameAs(expectedResponse);
+        verify(aiHost).writeAndRunCode(org.mockito.ArgumentMatchers.any(WriteAndRunCodeRequest.class));
     }
 
     @Test

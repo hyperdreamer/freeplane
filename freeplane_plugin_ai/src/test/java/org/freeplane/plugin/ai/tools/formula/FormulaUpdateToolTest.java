@@ -12,6 +12,7 @@ import org.freeplane.features.ai.code.ReadCodeResponse;
 import org.freeplane.features.ai.code.RunCodeRequest;
 import org.freeplane.features.ai.code.RunCodeResponse;
 import org.freeplane.features.ai.code.ScriptHost;
+import org.freeplane.features.ai.code.WriteAndRunCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeResponse;
 import org.freeplane.features.attribute.Attribute;
@@ -315,6 +316,11 @@ public class FormulaUpdateToolTest {
 
             @Override
             public RunCodeResponse runCode(RunCodeRequest request) {
+                return null;
+            }
+
+            @Override
+            public RunCodeResponse writeAndRunCode(WriteAndRunCodeRequest request) {
                 return null;
             }
 

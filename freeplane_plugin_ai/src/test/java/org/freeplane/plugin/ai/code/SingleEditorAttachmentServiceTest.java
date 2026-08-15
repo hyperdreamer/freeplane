@@ -17,6 +17,7 @@ import org.freeplane.features.ai.code.RunCodeRequest;
 import org.freeplane.features.ai.code.RunCodeResponse;
 import org.freeplane.features.ai.code.ScriptHost;
 import org.freeplane.features.ai.code.ScriptRunInitiator;
+import org.freeplane.features.ai.code.WriteAndRunCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.plugin.ai.chat.session.LiveChatSessionId;
 import org.freeplane.plugin.ai.chat.ui.AIChatPanel;
@@ -24,6 +25,7 @@ import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
 import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -327,6 +329,18 @@ public class SingleEditorAttachmentServiceTest {
 
         assertThat(editor.getCodeStateContent().getSourceText()).isEqualTo("after");
         assertThat(readCurrentState(uut).getContentType()).isEqualTo("text/x-freeplane-formula-groovy");
+    }
+
+    @Test
+    public void writeAndRunCodeRejectsAttachedEditors() {
+        AIChatPanel aiChatPanel = mock(AIChatPanel.class);
+        AttachedEditorChatModeSettings settings = mock(AttachedEditorChatModeSettings.class);
+        SingleEditorAttachmentService uut = new SingleEditorAttachmentService(aiChatPanel, settings);
+
+        assertThatThrownBy(() -> uut.writeAndRunCode(new WriteAndRunCodeRequest(
+            new CodeStateContent("println 1", null))))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("One-call AI-owned script execution is not supported for attached editors.");
     }
 
     @Test

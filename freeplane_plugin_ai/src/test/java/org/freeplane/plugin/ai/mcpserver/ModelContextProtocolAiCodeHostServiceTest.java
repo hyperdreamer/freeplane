@@ -18,6 +18,7 @@ import org.freeplane.features.ai.code.RunCodeRequest;
 import org.freeplane.features.ai.code.RunCodeResponse;
 import org.freeplane.features.ai.code.ScriptHost;
 import org.freeplane.features.ai.code.ScriptRunInitiator;
+import org.freeplane.features.ai.code.WriteAndRunCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeResponse;
 import org.junit.Test;
@@ -52,6 +53,37 @@ public class ModelContextProtocolAiCodeHostServiceTest {
 
         assertThat(cleared.get()).isTrue();
         assertThat(delegate.listenerCountWhenRunCodeStarted).isEqualTo(1);
+        assertThat(waitingResponse.getCodeState()).isEqualTo(CodeState.WAITING_FOR_USER_RUN);
+        assertThat(finalResponse.getCodeState()).isEqualTo(CodeState.RUN_SUCCEEDED);
+        assertThat(finalResponse.getStdout()).isEqualTo("done");
+        assertThat(delegate.listenerCount()).isEqualTo(0);
+    }
+
+    @Test
+    public void writeAndRunCodeReturnsWaitingAndAwaitReturnsFinalUserRunResponseWithinTimeout() {
+        WaitingCodeHostService delegate = new WaitingCodeHostService();
+        AtomicBoolean cleared = new AtomicBoolean(false);
+        ModelContextProtocolAiCodeHostService uut = new ModelContextProtocolAiCodeHostService(
+            delegate,
+            () -> cleared.set(true),
+            () -> Long.valueOf(1000L));
+        delegate.setFinalResponse(new RunCodeResponse(
+            ScriptHost.AI,
+            "text/x-freeplane-script-groovy",
+            CodeState.RUN_SUCCEEDED,
+            ScriptRunInitiator.USER,
+            token(),
+            null,
+            null,
+            "done",
+            null),
+            50L);
+
+        RunCodeResponse waitingResponse = uut.writeAndRunCode(new WriteAndRunCodeRequest(
+            new org.freeplane.features.ai.code.CodeStateContent("println 1", null)));
+        RunCodeResponse finalResponse = uut.awaitFinalRunResponse(waitingResponse);
+
+        assertThat(cleared.get()).isTrue();
         assertThat(waitingResponse.getCodeState()).isEqualTo(CodeState.WAITING_FOR_USER_RUN);
         assertThat(finalResponse.getCodeState()).isEqualTo(CodeState.RUN_SUCCEEDED);
         assertThat(finalResponse.getStdout()).isEqualTo("done");
@@ -232,6 +264,11 @@ public class ModelContextProtocolAiCodeHostServiceTest {
                 }).start();
             }
             return response;
+        }
+
+        @Override
+        public RunCodeResponse writeAndRunCode(WriteAndRunCodeRequest request) {
+            return runCode(new RunCodeRequest(ScriptHost.AI, token()));
         }
 
         @Override

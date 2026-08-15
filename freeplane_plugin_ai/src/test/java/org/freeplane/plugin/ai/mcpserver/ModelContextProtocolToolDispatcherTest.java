@@ -25,6 +25,7 @@ import org.freeplane.features.ai.code.RunCodeRequest;
 import org.freeplane.features.ai.code.RunCodeResponse;
 import org.freeplane.features.ai.code.ScriptHost;
 import org.freeplane.features.ai.code.ScriptRunInitiator;
+import org.freeplane.features.ai.code.WriteAndRunCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeResponse;
 import org.freeplane.plugin.ai.tools.code.AiCodeToolSet;
@@ -81,6 +82,26 @@ public class ModelContextProtocolToolDispatcherTest {
         assertThat(codeHostService.lastWriteRequest.getContent().getSourceText()).isEqualTo("println 1");
         assertThat(codeHostService.lastWriteRequest.getExpectedStateToken().getArgumentsFingerprint()).isEqualTo("args-fp");
         assertThat(result.get().resultText()).contains("EDITED");
+    }
+
+    @Test
+    public void dispatchBindsWriteAndRunCodeRequestFieldsForAiCodeTools() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        RecordingCodeHostService codeHostService = new RecordingCodeHostService();
+        AiCodeToolSet toolSet = new AiCodeToolSet(codeHostService, null, null, null);
+        ModelContextProtocolToolDispatcher dispatcher = new ModelContextProtocolToolDispatcher(
+            Arrays.<Object>asList(toolSet),
+            objectMapper);
+
+        AtomicReference<ToolExecutionResult> result = new AtomicReference<ToolExecutionResult>();
+        final JsonNode argumentsNode = objectMapper.readTree(
+            "{\"request\":{\"content\":{\"sourceText\":\"println 1\",\"argumentsJsonText\":\"{}\"}}}");
+        SwingUtilities.invokeAndWait(() -> result.set(dispatcher.dispatch("writeAndRunCode", argumentsNode)));
+
+        assertThat(codeHostService.lastWriteAndRunRequest).isNotNull();
+        assertThat(codeHostService.lastWriteAndRunRequest.getContent())
+            .isEqualTo(new CodeStateContent("println 1", "{}"));
+        assertThat(result.get().resultText()).contains("RUN_SUCCEEDED");
     }
 
     @Test
@@ -150,6 +171,35 @@ public class ModelContextProtocolToolDispatcherTest {
         assertThat(result.get().resultText()).contains("USER_RUN_CANCELLED");
         assertThat(summaries).extracting(ToolCallSummary::getSummaryText)
             .containsExactly("runCode: codeState=USER_RUN_CANCELLED, host=AI");
+    }
+
+    @Test
+    public void dispatchCompletesWaitingWriteAndRunCodeWithTerminalResponse() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        WaitingAiCodeHostService delegate = new WaitingAiCodeHostService();
+        CompletingAiCodeHostService codeHostService = new CompletingAiCodeHostService(delegate);
+        List<ToolCallSummary> summaries = new ArrayList<ToolCallSummary>();
+        AiCodeToolSet toolSet = new AiCodeToolSet(codeHostService, null, null, null);
+        ModelContextProtocolToolDispatcher dispatcher = new ModelContextProtocolToolDispatcher(
+            Arrays.<Object>asList(toolSet),
+            objectMapper,
+            null,
+            codeHostService,
+            summaries::add);
+
+        AtomicReference<ToolExecutionResult> result = new AtomicReference<ToolExecutionResult>();
+        final JsonNode argumentsNode = objectMapper.readTree(
+            "{\"request\":{\"content\":{\"sourceText\":\"println 1\"}}}");
+        SwingUtilities.invokeAndWait(() -> result.set(dispatcher.dispatch("writeAndRunCode", argumentsNode)));
+
+        assertThat(delegate.lastRunRequest).isNotNull();
+        assertThat(codeHostService.awaited).isTrue();
+        assertThat(result.get().result()).isInstanceOf(RunCodeResponse.class);
+        RunCodeResponse response = (RunCodeResponse) result.get().result();
+        assertThat(response.getCodeState()).isEqualTo(CodeState.USER_RUN_CANCELLED);
+        assertThat(result.get().resultText()).contains("USER_RUN_CANCELLED");
+        assertThat(summaries).extracting(ToolCallSummary::getSummaryText)
+            .containsExactly("writeAndRunCode: codeState=USER_RUN_CANCELLED, host=AI");
     }
 
     @Test
@@ -295,6 +345,11 @@ public class ModelContextProtocolToolDispatcherTest {
         }
 
         @Override
+        public RunCodeResponse writeAndRunCode(WriteAndRunCodeRequest request) {
+            return runCode(new RunCodeRequest(ScriptHost.AI, token("args-fp")));
+        }
+
+        @Override
         public AiChatCodeOperationResult evaluateFormula(EvaluateFormulaRequest request) {
             throw new UnsupportedOperationException();
         }
@@ -313,6 +368,7 @@ public class ModelContextProtocolToolDispatcherTest {
         private WriteCodeRequest lastWriteRequest;
         private CompileCodeRequest lastCompileRequest;
         private RunCodeRequest lastRunRequest;
+        private WriteAndRunCodeRequest lastWriteAndRunRequest;
 
         @Override
         public ReadCodeResponse readCode(ReadCodeRequest request) {
@@ -355,6 +411,21 @@ public class ModelContextProtocolToolDispatcherTest {
         @Override
         public RunCodeResponse runCode(RunCodeRequest request) {
             lastRunRequest = request;
+            return new RunCodeResponse(
+                ScriptHost.AI,
+                "text/x-freeplane-script-groovy",
+                CodeState.RUN_SUCCEEDED,
+                ScriptRunInitiator.AI,
+                token("fp"),
+                null,
+                null,
+                null,
+                null);
+        }
+
+        @Override
+        public RunCodeResponse writeAndRunCode(WriteAndRunCodeRequest request) {
+            lastWriteAndRunRequest = request;
             return new RunCodeResponse(
                 ScriptHost.AI,
                 "text/x-freeplane-script-groovy",

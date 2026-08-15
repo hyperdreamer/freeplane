@@ -32,6 +32,24 @@ public class ModelContextProtocolToolCallAuthorizerTest {
     }
 
     @Test
+    public void writeAndRunCodeDelegatesToAiCodeOperationAuthorizerForAiHost() throws Exception {
+        AiCodeOperationAuthorizer aiCodeOperationAuthorizer = mock(AiCodeOperationAuthorizer.class);
+        ModelContextProtocolToolCallAuthorizer uut = authorizer(
+            ToolAvailabilityLevel.SCRIPT_EXECUTION,
+            false,
+            aiCodeOperationAuthorizer,
+            mock(MapTargetToolCallAuthorizer.class));
+
+        uut.assertAuthorized(
+            "writeAndRunCode",
+            objectMapper.readTree("{\"request\":{\"content\":{\"sourceText\":\"println 1\"}}}"));
+
+        verify(aiCodeOperationAuthorizer).assertAuthorized(
+            eq("writeAndRunCode"),
+            eq(org.freeplane.features.ai.code.ScriptHost.AI));
+    }
+
+    @Test
     public void delegatesDocumentationMapTargetRestrictionToMapTargetToolCallAuthorizer() throws Exception {
         MapTargetToolCallAuthorizer mapTargetToolCallAuthorizer = mock(MapTargetToolCallAuthorizer.class);
         ModelContextProtocolToolCallAuthorizer uut = authorizer(

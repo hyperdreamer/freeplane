@@ -20,6 +20,7 @@ import org.freeplane.features.ai.code.ReadCodeResponse;
 import org.freeplane.features.ai.code.RunCodeRequest;
 import org.freeplane.features.ai.code.RunCodeResponse;
 import org.freeplane.features.ai.code.ScriptHost;
+import org.freeplane.features.ai.code.WriteAndRunCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeResponse;
 
@@ -69,25 +70,12 @@ public class ModelContextProtocolAiCodeHostService implements AiCodeHostService 
     @Override
     public RunCodeResponse runCode(RunCodeRequest request) {
         ScriptHost host = request == null ? null : request.getHost();
-        clearPendingAiOwnedUserRunFollowup(host);
-        PendingRunCompletion completion = host == ScriptHost.AI ? startPendingRunCompletion() : null;
-        try {
-            RunCodeResponse response = delegate.runCode(request);
-            if (completion == null) {
-                return response;
-            }
-            if (shouldWaitForFinalUserRunResponse(response)) {
-                completion.waitingResponse(response);
-                return response;
-            }
-            cancelPendingRunCompletion(completion);
-            return response;
-        } catch (RuntimeException error) {
-            if (completion != null) {
-                cancelPendingRunCompletion(completion);
-            }
-            throw error;
-        }
+        return executeWithPendingRunCompletion(host, () -> delegate.runCode(request));
+    }
+
+    @Override
+    public RunCodeResponse writeAndRunCode(WriteAndRunCodeRequest request) {
+        return executeWithPendingRunCompletion(ScriptHost.AI, () -> delegate.writeAndRunCode(request));
     }
 
     @Override
@@ -108,6 +96,29 @@ public class ModelContextProtocolAiCodeHostService implements AiCodeHostService 
     private void clearPendingAiOwnedUserRunFollowup(ScriptHost host) {
         if (host == ScriptHost.AI) {
             pendingAiOwnedUserRunFollowupResetter.run();
+        }
+    }
+
+    private RunCodeResponse executeWithPendingRunCompletion(ScriptHost host,
+                                                             Supplier<RunCodeResponse> operation) {
+        clearPendingAiOwnedUserRunFollowup(host);
+        PendingRunCompletion completion = host == ScriptHost.AI ? startPendingRunCompletion() : null;
+        try {
+            RunCodeResponse response = operation.get();
+            if (completion == null) {
+                return response;
+            }
+            if (shouldWaitForFinalUserRunResponse(response)) {
+                completion.waitingResponse(response);
+                return response;
+            }
+            cancelPendingRunCompletion(completion);
+            return response;
+        } catch (RuntimeException error) {
+            if (completion != null) {
+                cancelPendingRunCompletion(completion);
+            }
+            throw error;
         }
     }
 

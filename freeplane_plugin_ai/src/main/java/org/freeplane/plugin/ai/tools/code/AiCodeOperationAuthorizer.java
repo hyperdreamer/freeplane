@@ -53,6 +53,7 @@ public class AiCodeOperationAuthorizer {
         }
         if (scriptExecutionAvailable) {
             toolNames.add("runCode");
+            toolNames.add("writeAndRunCode");
         }
         return Collections.unmodifiableSet(toolNames);
     }
@@ -76,6 +77,15 @@ public class AiCodeOperationAuthorizer {
                 return;
             }
             throw new IllegalStateException("The requested code host is not writable at the current availability level.");
+        }
+        if ("writeAndRunCode".equals(operation)) {
+            if (resolvedHost != ScriptHost.AI) {
+                throw new IllegalStateException("writeAndRunCode requires the AI code host.");
+            }
+            if (!globalAvailability().includesScriptExecution()) {
+                throw new IllegalStateException("Script execution is not available at the current availability level.");
+            }
+            return;
         }
         if ("runCode".equals(operation)) {
             if (!globalAvailability().includesScriptExecution()) {

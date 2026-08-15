@@ -18,6 +18,7 @@ import org.freeplane.features.ai.code.ReadCodeResponse;
 import org.freeplane.features.ai.code.RunCodeRequest;
 import org.freeplane.features.ai.code.RunCodeResponse;
 import org.freeplane.features.ai.code.ScriptHost;
+import org.freeplane.features.ai.code.WriteAndRunCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeResponse;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
@@ -70,7 +71,7 @@ public class AiCodeOperationAuthorizerTest {
     }
 
     @Test
-    public void scriptExecutionAvailabilityAddsRunCodeForScriptContent() {
+    public void scriptExecutionAvailabilityAddsWriteAndRunCode() {
         FakeCodeHostService codeHostService = new FakeCodeHostService()
             .withState(ScriptHost.ATTACHED_EDITOR, SCRIPT_CONTENT_TYPE, CodeState.EDITED);
         AiCodeOperationAuthorizer uut = authorizer(
@@ -79,8 +80,33 @@ public class AiCodeOperationAuthorizerTest {
             false,
             codeHostService);
 
-        assertThat(uut.authorizedToolNames()).contains("runCode");
+        assertThat(uut.authorizedToolNames()).contains("runCode", "writeAndRunCode");
         uut.assertAuthorized("runCode", ScriptHost.ATTACHED_EDITOR);
+    }
+
+    @Test
+    public void writeAndRunCodeDoesNotRequireExistingStoredAiCode() {
+        FakeCodeHostService codeHostService = new FakeCodeHostService();
+        AiCodeOperationAuthorizer uut = authorizer(
+            () -> ToolAvailabilityLevel.SCRIPT_EXECUTION,
+            () -> null,
+            false,
+            codeHostService);
+
+        uut.assertAuthorized("writeAndRunCode", ScriptHost.AI);
+    }
+
+    @Test
+    public void writeAndRunCodeRejectsWhenScriptExecutionIsUnavailable() {
+        AiCodeOperationAuthorizer uut = authorizer(
+            () -> ToolAvailabilityLevel.EDITING,
+            () -> null,
+            false,
+            new FakeCodeHostService());
+
+        assertThatThrownBy(() -> uut.assertAuthorized("writeAndRunCode", ScriptHost.AI))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("Script execution is not available at the current availability level.");
     }
 
     @Test
@@ -92,7 +118,8 @@ public class AiCodeOperationAuthorizerTest {
             false,
             codeHostService);
 
-        assertThat(uut.authorizedToolNames()).containsExactly("readCode", "writeCode", "compileCode", "runCode");
+        assertThat(uut.authorizedToolNames()).containsExactly(
+            "readCode", "writeCode", "compileCode", "runCode", "writeAndRunCode");
     }
 
     @Test
@@ -251,6 +278,11 @@ public class AiCodeOperationAuthorizerTest {
 
         @Override
         public RunCodeResponse runCode(RunCodeRequest request) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public RunCodeResponse writeAndRunCode(WriteAndRunCodeRequest request) {
             throw new UnsupportedOperationException();
         }
 
