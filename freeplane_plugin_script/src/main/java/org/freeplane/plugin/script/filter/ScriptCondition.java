@@ -79,8 +79,8 @@ public class ScriptCondition extends ASelectableCondition {
 	@Override
 	public boolean checkNode(NodeModel node){
         try {
-            FilterScriptConditionValidationSupport.ConditionExecutionResult execution =
-                FilterScriptConditionValidationSupport.executeCondition(node, source, scriptRunner);
+            ScriptConditionExecution.ConditionExecutionResult execution =
+                ScriptConditionExecution.execute(node, source, scriptRunner);
             if (execution.isCycleDetected()) {
                 return false;
             }

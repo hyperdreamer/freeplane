@@ -1,14 +1,7 @@
 package org.freeplane.plugin.script;
 
-import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.Collections;
-import java.util.Formatter;
-import java.util.List;
-import java.util.function.Supplier;
+
 import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.text.TextController;
@@ -18,121 +11,46 @@ public class FormulaValidationSupport {
         Object validate(NodeModel node, String formulaText, PrintStream outStream, IFreeplaneScriptErrorHandler errorHandler);
     }
 
-    private final TextController textController;
-    private final FormulaValidator formulaValidator;
+    private static final GroovyScriptValidation.ResultPolicy FORMULA_RESULT_POLICY =
+        new GroovyScriptValidation.ResultPolicy() {
+            @Override
+            public boolean accepts(Object result) {
+                return true;
+            }
+
+            @Override
+            public String resultText(Object result) {
+                return result == null ? null : String.valueOf(result);
+            }
+
+            @Override
+            public String invalidResultMessage(Object result) {
+                return null;
+            }
+        };
+
+    private final GroovyScriptValidation groovyScriptValidation;
 
     public FormulaValidationSupport() {
         this(TextController.getController(), FormulaUtils::validateFormula);
     }
 
     public FormulaValidationSupport(TextController textController, FormulaValidator formulaValidator) {
-        this.textController = textController;
-        this.formulaValidator = formulaValidator;
+        this.groovyScriptValidation = new GroovyScriptValidation(
+            textController,
+            formulaValidator::validate,
+            FORMULA_RESULT_POLICY,
+            false,
+            GroovyScriptValidation::sha256Fingerprint);
     }
 
     public AiChatCodeOperationResult validateFormula(NodeModel node, String formulaText) {
-        String sourceFingerprint = fingerprint(formulaText);
-        if (formulaText != null && formulaText.startsWith("=")) {
-            ScriptingEngine.GroovyCompileResult compileResult = ScriptingEngine.compileGroovyScriptForDiagnostics(
-                FormulaUtils.scriptOf(formulaText),
-                ScriptingPermissions.getFormulaPermissions());
-            if (!compileResult.isSuccessful()) {
-                return new AiChatCodeOperationResult(
-                    "SUBMIT_VALIDATION",
-                    "USER",
-                    false,
-                    compilerDiagnosticMessages(compileResult),
-                    null,
-                    null,
-                    "validation",
-                    compileResult.getErrorMessage(),
-                    firstDiagnosticLine(compileResult),
-                    sourceFingerprint);
-            }
-        }
-        final int[] lineNumber = new int[] { -1 };
-        ByteArrayOutputStream outputBuffer = new ByteArrayOutputStream();
-        try (PrintStream outStream = new PrintStream(outputBuffer, false, "UTF-8")) {
-            Supplier<Object> validation = () -> formulaValidator.validate(node, formulaText, outStream,
-                new IFreeplaneScriptErrorHandler() {
-                    @Override
-                    public void gotoLine(int pLineNumber) {
-                        lineNumber[0] = pLineNumber;
-                    }
-                });
-            Object result = textController.withNodeNumbering(true, validation);
-            String standardOutput = new String(outputBuffer.toByteArray(), StandardCharsets.UTF_8);
-            return new AiChatCodeOperationResult(
-                "SUBMIT_VALIDATION",
-                "USER",
-                true,
-                Collections.<String>emptyList(),
-                standardOutput.isEmpty() ? null : standardOutput,
-                result == null ? null : String.valueOf(result),
-                null,
-                null,
-                null,
-                sourceFingerprint);
-        } catch (Exception error) {
-            String standardOutput = new String(outputBuffer.toByteArray(), StandardCharsets.UTF_8).trim();
-            String errorMessage = error.getMessage();
-            return new AiChatCodeOperationResult(
-                "SUBMIT_VALIDATION",
-                "USER",
-                false,
-                standardOutput.isEmpty() && errorMessage != null
-                    ? Collections.singletonList(errorMessage)
-                    : standardOutput.isEmpty() ? Collections.<String>emptyList() : Collections.singletonList(standardOutput),
-                standardOutput.isEmpty() ? null : standardOutput,
-                null,
-                "validation",
-                errorMessage,
-                lineNumber[0] >= 0 ? Integer.valueOf(lineNumber[0]) : null,
-                sourceFingerprint);
-        }
-    }
-
-    private List<String> compilerDiagnosticMessages(ScriptingEngine.GroovyCompileResult compileResult) {
-        if (compileResult == null || compileResult.getCompilerDiagnostics().isEmpty()) {
-            return Collections.emptyList();
-        }
-        java.util.List<String> compilerDiagnostics = new java.util.ArrayList<String>();
-        for (ScriptingEngine.GroovyCompilerDiagnostic diagnostic : compileResult.getCompilerDiagnostics()) {
-            if (diagnostic == null || diagnostic.getMessage() == null || diagnostic.getMessage().trim().isEmpty()) {
-                continue;
-            }
-            compilerDiagnostics.add(diagnostic.getMessage());
-        }
-        return compilerDiagnostics.isEmpty() ? Collections.<String>emptyList() : Collections.unmodifiableList(compilerDiagnostics);
-    }
-
-    private Integer firstDiagnosticLine(ScriptingEngine.GroovyCompileResult compileResult) {
-        if (compileResult == null) {
-            return null;
-        }
-        for (ScriptingEngine.GroovyCompilerDiagnostic diagnostic : compileResult.getCompilerDiagnostics()) {
-            if (diagnostic != null && diagnostic.getLine() != null) {
-                return diagnostic.getLine();
-            }
-        }
-        return null;
-    }
-
-    private String fingerprint(String text) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest((text == null ? "" : text).getBytes(StandardCharsets.UTF_8));
-            Formatter formatter = new Formatter();
-            try {
-                for (byte value : hash) {
-                    formatter.format("%02x", value);
-                }
-                return formatter.toString();
-            } finally {
-                formatter.close();
-            }
-        } catch (NoSuchAlgorithmException error) {
-            throw new IllegalStateException("SHA-256 is not available.", error);
-        }
+        String compilationSource = formulaText != null && formulaText.startsWith("=")
+            ? FormulaUtils.scriptOf(formulaText)
+            : null;
+        return groovyScriptValidation.validate(
+            node,
+            formulaText,
+            compilationSource);
     }
 }

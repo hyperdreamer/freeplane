@@ -29,11 +29,10 @@ import org.freeplane.core.ui.components.JRestrictedSizeScrollPane;
 import org.freeplane.core.ui.components.UITools;
 import org.freeplane.core.ui.textchanger.TranslatedElementFactory;
 import org.freeplane.core.util.TextUtils;
-import org.freeplane.features.ai.code.AiChatAttachment;
 import org.freeplane.features.ai.code.AiChatAttachmentService;
 import org.freeplane.features.ai.code.AiChatCodeOperationResult;
-import org.freeplane.features.ai.code.AiChatRepairRequest;
 import org.freeplane.features.ai.code.AiCodeEditor;
+import org.freeplane.features.ai.code.AiEditingSession;
 import org.freeplane.features.ai.code.CodeState;
 import org.freeplane.features.ai.code.CodeStateContent;
 import org.freeplane.features.ai.code.CodeStateDiagnostic;
@@ -67,8 +66,7 @@ public class FilterScriptConditionEditor extends JDialog implements AiCodeEditor
     private final JEditorPane textEditor;
     private final Consumer<String> submitHandler;
     private final FilterScriptConditionValidationSupport validationSupport;
-    private AiChatAttachment aiChatAttachment;
-    private JToggleButton aiAttachButton;
+    private AiEditingSession aiEditingSession;
 
     FilterScriptConditionEditor(Component owner,
                                 String script,
@@ -144,12 +142,15 @@ public class FilterScriptConditionEditor extends JDialog implements AiCodeEditor
         });
         buttonPane.add(okButton);
         buttonPane.add(cancelButton);
-        aiAttachButton = TranslatedElementFactory.createToggleButton("plugins/ScriptEditor.ai");
+        JToggleButton aiAttachButton = TranslatedElementFactory.createToggleButton("plugins/ScriptEditor.ai");
         aiAttachButton.setIcon(ResourceController.getResourceController().getImageIcon(AI_TAB_ICON_RESOURCE));
-        aiAttachButton.addActionListener(new AttachToAiAction());
+        aiEditingSession = new AiEditingSession(
+            this,
+            FilterScriptConditionValidationSupport.FORMULA_CONDITION_CONTENT_TYPE,
+            aiAttachButton,
+            this::lookupAiChatAttachmentService);
         buttonPane.add(aiAttachButton);
         getContentPane().add(buttonPane, BorderLayout.SOUTH);
-        updateAiAttachButtonState();
         setMinimumSize(new Dimension(600, 400));
         setPreferredSize(new Dimension(760, 520));
         SwingUtilities.invokeLater(() -> textEditor.requestFocusInWindow());
@@ -184,41 +185,6 @@ public class FilterScriptConditionEditor extends JDialog implements AiCodeEditor
         throw new IllegalStateException("Only script content is runnable.");
     }
 
-    static boolean shouldEnableAiAttachButton(AiChatAttachment attachment, boolean canAttachToAi) {
-        return attachment != null || canAttachToAi;
-    }
-
-    static void requestRepairIfConfirmed(AiChatAttachment attachment,
-                                         ReadCodeResponse validationFailureState,
-                                         int confirmationAnswer) {
-        requestRepairIfAvailable(attachment, validationFailureState, confirmationAnswer, true, null);
-    }
-
-    static void requestRepairIfAvailable(AiChatAttachment attachment,
-                                         ReadCodeResponse validationFailureState,
-                                         int confirmationAnswer,
-                                         boolean canRequestAiRepair,
-                                         AttachmentSupplier attachmentSupplier) {
-        if (!canRequestAiRepair
-            || validationFailureState == null
-            || confirmationAnswer != JOptionPane.YES_OPTION) {
-            return;
-        }
-        AiChatAttachment repairAttachment = attachment;
-        if (repairAttachment == null && attachmentSupplier != null) {
-            repairAttachment = attachmentSupplier.attach();
-        }
-        if (repairAttachment == null) {
-            return;
-        }
-        repairAttachment.recordCodeState(validationFailureState);
-        repairAttachment.requestRepair(new AiChatRepairRequest(REPAIR_PROMPT, validationFailureState));
-    }
-
-    interface AttachmentSupplier {
-        AiChatAttachment attach();
-    }
-
     private void submit() {
         String editedText = textEditor.getText();
         CompileCodeResponse compileResponse = validationSupport.compile(editedText);
@@ -234,9 +200,7 @@ public class FilterScriptConditionEditor extends JDialog implements AiCodeEditor
             handleValidationFailure(failureState, buildValidationFailureMessage(validationResult));
             return;
         }
-        if (aiChatAttachment != null) {
-            aiChatAttachment.clearCodeState();
-        }
+        aiEditingSession.forgetFailure();
         if (submitHandler != null) {
             submitHandler.accept(editedText);
         }
@@ -244,10 +208,8 @@ public class FilterScriptConditionEditor extends JDialog implements AiCodeEditor
     }
 
     private void handleValidationFailure(ReadCodeResponse failureState, String failureMessage) {
-        if (aiChatAttachment != null) {
-            aiChatAttachment.recordCodeState(failureState);
-        }
-        if (!canAttachToAi()) {
+        aiEditingSession.rememberFailure(failureState);
+        if (!aiEditingSession.canStart()) {
             showValidationFailureMessage(failureMessage);
             return;
         }
@@ -257,7 +219,9 @@ public class FilterScriptConditionEditor extends JDialog implements AiCodeEditor
             TextUtils.getText("plugins/script_filter_editor.execution_failed.title"),
             JOptionPane.YES_NO_OPTION,
             JOptionPane.ERROR_MESSAGE);
-        requestRepairIfAvailable(aiChatAttachment, failureState, answer, true, this::attachToAi);
+        if (answer == JOptionPane.YES_OPTION) {
+            aiEditingSession.askForRepair(failureState, REPAIR_PROMPT);
+        }
     }
 
     private NodeModel selectedNode() {
@@ -360,24 +324,6 @@ public class FilterScriptConditionEditor extends JDialog implements AiCodeEditor
             JOptionPane.ERROR_MESSAGE);
     }
 
-    private AiChatAttachment attachToAi() {
-        AiChatAttachmentService attachmentService = lookupAiChatAttachmentService();
-        if (attachmentService == null || !attachmentService.isAiConfigured()) {
-            updateAiAttachButtonState();
-            return null;
-        }
-        AiChatAttachment attachment = attachmentService.attachEditor(
-            this,
-            FilterScriptConditionValidationSupport.FORMULA_CONDITION_CONTENT_TYPE);
-        setAiChatAttachment(attachment);
-        return attachment;
-    }
-
-    private boolean canAttachToAi() {
-        AiChatAttachmentService attachmentService = lookupAiChatAttachmentService();
-        return attachmentService != null && attachmentService.isAiConfigured();
-    }
-
     private AiChatAttachmentService lookupAiChatAttachmentService() {
         BundleContext bundleContext = Activator.getBundleContext();
         if (bundleContext == null) {
@@ -391,46 +337,9 @@ public class FilterScriptConditionEditor extends JDialog implements AiCodeEditor
         return bundleContext.getService(serviceReference);
     }
 
-    private void setAiChatAttachment(AiChatAttachment attachment) {
-        aiChatAttachment = attachment;
-        if (aiChatAttachment != null) {
-            aiChatAttachment.setDetachHandler(new Runnable() {
-                @Override
-                public void run() {
-                    aiChatAttachment = null;
-                    updateAiAttachButtonState();
-                }
-            });
-        }
-        updateAiAttachButtonState();
-    }
-
-    private void updateAiAttachButtonState() {
-        if (aiAttachButton != null) {
-            aiAttachButton.setSelected(aiChatAttachment != null);
-            aiAttachButton.setEnabled(shouldEnableAiAttachButton(aiChatAttachment, canAttachToAi()));
-        }
-    }
-
     private void cleanupAttachment() {
-        AiChatAttachment attachment = aiChatAttachment;
-        aiChatAttachment = null;
-        if (attachment != null) {
-            attachment.detach();
-        }
-    }
-
-    private final class AttachToAiAction extends AbstractAction {
-        private static final long serialVersionUID = 1L;
-
-        @Override
-        public void actionPerformed(ActionEvent event) {
-            if (aiChatAttachment != null) {
-                aiChatAttachment.detach();
-                updateAiAttachButtonState();
-                return;
-            }
-            attachToAi();
+        if (aiEditingSession != null) {
+            aiEditingSession.close();
         }
     }
 }
