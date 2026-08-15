@@ -3,6 +3,7 @@ package org.freeplane.plugin.script.filter;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Rectangle;
+import java.awt.event.ActionListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 
@@ -82,12 +83,12 @@ public class FilterScriptConditionComboBoxEditor implements ComboBoxEditor {
     }
 
     @Override
-    public void addActionListener(java.awt.event.ActionListener listener) {
+    public void addActionListener(ActionListener listener) {
         scriptEditorButton.addActionListener(listener);
     }
 
     @Override
-    public void removeActionListener(java.awt.event.ActionListener listener) {
+    public void removeActionListener(ActionListener listener) {
         scriptEditorButton.removeActionListener(listener);
     }
 

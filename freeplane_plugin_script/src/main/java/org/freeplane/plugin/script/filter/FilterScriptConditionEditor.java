@@ -19,6 +19,7 @@ import javax.swing.JEditorPane;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
 import javax.swing.JToggleButton;
 import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
@@ -275,7 +276,7 @@ public class FilterScriptConditionEditor extends JDialog implements AiCodeEditor
     }
 
     private Object buildValidationFailureDialogMessage(String failureMessage) {
-        javax.swing.JTextArea messageArea = new javax.swing.JTextArea(failureMessage == null ? "" : failureMessage);
+        JTextArea messageArea = new JTextArea(failureMessage == null ? "" : failureMessage);
         messageArea.setEditable(false);
         messageArea.setLineWrap(false);
         messageArea.setWrapStyleWord(false);

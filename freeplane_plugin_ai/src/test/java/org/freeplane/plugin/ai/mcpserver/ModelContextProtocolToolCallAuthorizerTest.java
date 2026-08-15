@@ -2,6 +2,7 @@ package org.freeplane.plugin.ai.mcpserver;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.function.Supplier;
+import org.freeplane.features.ai.code.ScriptHost;
 import org.freeplane.plugin.ai.maps.AvailableMaps;
 import org.freeplane.plugin.ai.tools.MapTargetToolCallAuthorizer;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
@@ -28,7 +29,7 @@ public class ModelContextProtocolToolCallAuthorizerTest {
 
         uut.assertAuthorized("runCode", objectMapper.readTree("{\"request\":{\"host\":\"AI\"}}"));
 
-        verify(aiCodeOperationAuthorizer).assertAuthorized(eq("runCode"), eq(org.freeplane.features.ai.code.ScriptHost.AI));
+        verify(aiCodeOperationAuthorizer).assertAuthorized(eq("runCode"), eq(ScriptHost.AI));
     }
 
     @Test
@@ -46,7 +47,7 @@ public class ModelContextProtocolToolCallAuthorizerTest {
 
         verify(aiCodeOperationAuthorizer).assertAuthorized(
             eq("writeAndRunCode"),
-            eq(org.freeplane.features.ai.code.ScriptHost.AI));
+            eq(ScriptHost.AI));
     }
 
     @Test
@@ -171,7 +172,7 @@ public class ModelContextProtocolToolCallAuthorizerTest {
 
         uut.assertAuthorized("writeCode", objectMapper.readTree("{\"request\":{\"host\":\"AI\"}}"));
 
-        verify(aiCodeOperationAuthorizer).assertAuthorized(eq("writeCode"), eq(org.freeplane.features.ai.code.ScriptHost.AI));
+        verify(aiCodeOperationAuthorizer).assertAuthorized(eq("writeCode"), eq(ScriptHost.AI));
     }
 
     @Test

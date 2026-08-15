@@ -3,6 +3,7 @@ package org.freeplane.plugin.script.ai;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
@@ -10,12 +11,14 @@ import static org.mockito.Mockito.when;
 
 import java.lang.reflect.Method;
 import java.util.Collections;
+import java.util.List;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.ai.code.CodeState;
 import org.freeplane.features.ai.code.CodeStateContent;
 import org.freeplane.features.ai.code.CodeStateField;
 import org.freeplane.features.ai.code.CodeStateToken;
+import org.freeplane.features.ai.code.CompileCodeRequest;
 import org.freeplane.features.ai.code.CompileCodeResponse;
 import org.freeplane.features.ai.code.EvaluateFormulaRequest;
 import org.freeplane.features.ai.code.ReadCodeRequest;
@@ -23,6 +26,7 @@ import org.freeplane.features.ai.code.ReadCodeResponse;
 import org.freeplane.features.ai.code.RunCodeRequest;
 import org.freeplane.features.ai.code.RunCodeResponse;
 import org.freeplane.features.ai.code.ScriptHost;
+import org.freeplane.features.ai.code.ScriptRunInitiator;
 import org.freeplane.features.ai.code.WriteAndRunCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeResponse;
@@ -126,8 +130,8 @@ public class AiOwnedScriptHostServiceTest {
             assertThat(response.getDiagnostics())
                 .extracting(diagnostic -> diagnostic.getLine(), diagnostic -> diagnostic.getColumn())
                 .containsExactly(
-                    org.assertj.core.groups.Tuple.tuple(1, 1),
-                    org.assertj.core.groups.Tuple.tuple(2, 1));
+                    tuple(1, 1),
+                    tuple(2, 1));
         }
     }
 
@@ -261,7 +265,7 @@ public class AiOwnedScriptHostServiceTest {
         AiOwnedScriptHostService uut = new AiOwnedScriptHostService(null);
 
         WriteCodeResponse written = uut.doWriteCode(writeRequest("return args", "{", null));
-        CompileCodeResponse compileResponse = uut.doCompileCode(new org.freeplane.features.ai.code.CompileCodeRequest(
+        CompileCodeResponse compileResponse = uut.doCompileCode(new CompileCodeRequest(
             ScriptHost.AI,
             written.getStateToken()));
 
@@ -277,7 +281,7 @@ public class AiOwnedScriptHostServiceTest {
             AiOwnedScriptHostService uut = new AiOwnedScriptHostService(null);
 
             WriteCodeResponse written = uut.doWriteCode(writeRequest("import a.A\nimport b.B\nprintln 'x'\n", null, null));
-            CompileCodeResponse compileResponse = uut.doCompileCode(new org.freeplane.features.ai.code.CompileCodeRequest(
+            CompileCodeResponse compileResponse = uut.doCompileCode(new CompileCodeRequest(
                 ScriptHost.AI,
                 written.getStateToken()));
 
@@ -285,8 +289,8 @@ public class AiOwnedScriptHostServiceTest {
             assertThat(compileResponse.getDiagnostics())
                 .extracting(diagnostic -> diagnostic.getLine(), diagnostic -> diagnostic.getColumn())
                 .containsExactly(
-                    org.assertj.core.groups.Tuple.tuple(1, 1),
-                    org.assertj.core.groups.Tuple.tuple(2, 1));
+                    tuple(1, 1),
+                    tuple(2, 1));
             assertThat(compileResponse.getErrorMessage()).isEqualTo("Groovy compilation failed with 2 diagnostics.");
         }
     }
@@ -301,12 +305,12 @@ public class AiOwnedScriptHostServiceTest {
             RunCodeResponse response = uut.runFromDialog(new CodeStateContent("import a.A\nimport b.B\nprintln 'x'\n", null));
 
             assertThat(response.getCodeState()).isEqualTo(CodeState.INVALID_SCRIPT);
-            assertThat(response.getRunInitiator()).isEqualTo(org.freeplane.features.ai.code.ScriptRunInitiator.USER);
+            assertThat(response.getRunInitiator()).isEqualTo(ScriptRunInitiator.USER);
             assertThat(response.getDiagnostics())
                 .extracting(diagnostic -> diagnostic.getLine(), diagnostic -> diagnostic.getColumn())
                 .containsExactly(
-                    org.assertj.core.groups.Tuple.tuple(1, 1),
-                    org.assertj.core.groups.Tuple.tuple(2, 1));
+                    tuple(1, 1),
+                    tuple(2, 1));
             assertThat(response.getErrorMessage()).isEqualTo("Groovy compilation failed with 2 diagnostics.");
         }
     }
@@ -396,12 +400,12 @@ public class AiOwnedScriptHostServiceTest {
                 .getDeclaredMethod("getClasspath");
             getClasspath.setAccessible(true);
             @SuppressWarnings("unchecked")
-            java.util.List<String> classpath = (java.util.List<String>) getClasspath.invoke(null);
+            List<String> classpath = (List<String>) getClasspath.invoke(null);
             if (classpath != null) {
                 return;
             }
             Method setClasspath = Class.forName("org.freeplane.plugin.script.ScriptResources")
-                .getDeclaredMethod("setClasspath", java.util.List.class);
+                .getDeclaredMethod("setClasspath", List.class);
             setClasspath.setAccessible(true);
             setClasspath.invoke(null, Collections.<String>emptyList());
         }

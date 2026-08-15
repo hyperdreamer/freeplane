@@ -23,6 +23,7 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Rectangle;
+import java.awt.event.ActionListener;
 
 import javax.swing.ComboBoxEditor;
 import javax.swing.JDialog;
@@ -111,12 +112,12 @@ public class ScriptComboBoxEditor implements ComboBoxEditor {
     }
 
     @Override
-    public void addActionListener(java.awt.event.ActionListener listener) {
+    public void addActionListener(ActionListener listener) {
         scriptEditorButton.addActionListener(listener);
     }
 
     @Override
-    public void removeActionListener(java.awt.event.ActionListener listener) {
+    public void removeActionListener(ActionListener listener) {
         scriptEditorButton.removeActionListener(listener);
     }
 

@@ -6,6 +6,8 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.util.function.Supplier;
+
 import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.text.TextController;
@@ -16,7 +18,7 @@ public class GroovyScriptValidationTest {
     public void validateCapturesOutputLineAndPolicyResult() {
         TextController textController = mock(TextController.class);
         when(textController.withNodeNumbering(eq(true), any()))
-            .thenAnswer(invocation -> ((java.util.function.Supplier<?>) invocation.getArgument(1)).get());
+            .thenAnswer(invocation -> ((Supplier<?>) invocation.getArgument(1)).get());
         NodeModel node = mock(NodeModel.class);
         GroovyScriptValidation.ResultPolicy resultPolicy = new GroovyScriptValidation.ResultPolicy() {
             @Override

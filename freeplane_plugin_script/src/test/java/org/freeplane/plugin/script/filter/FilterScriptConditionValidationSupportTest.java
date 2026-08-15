@@ -1,6 +1,7 @@
 package org.freeplane.plugin.script.filter;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -9,6 +10,8 @@ import static org.mockito.Mockito.when;
 
 import java.lang.reflect.Method;
 import java.util.Collections;
+import java.util.List;
+import java.util.function.Supplier;
 
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.features.ai.code.AiChatCodeOperationResult;
@@ -38,8 +41,8 @@ public class FilterScriptConditionValidationSupportTest {
             assertThat(response.getDiagnostics())
                 .extracting(diagnostic -> diagnostic.getLine(), diagnostic -> diagnostic.getColumn())
                 .containsExactly(
-                    org.assertj.core.groups.Tuple.tuple(1, 1),
-                    org.assertj.core.groups.Tuple.tuple(2, 1));
+                    tuple(1, 1),
+                    tuple(2, 1));
         }
     }
 
@@ -90,7 +93,7 @@ public class FilterScriptConditionValidationSupportTest {
     private TextController mockTextController() {
         TextController textController = mock(TextController.class);
         when(textController.withNodeNumbering(eq(true), any()))
-            .thenAnswer(invocation -> ((java.util.function.Supplier<?>) invocation.getArgument(1)).get());
+            .thenAnswer(invocation -> ((Supplier<?>) invocation.getArgument(1)).get());
         return textController;
     }
 
@@ -111,12 +114,12 @@ public class FilterScriptConditionValidationSupportTest {
             .getDeclaredMethod("getClasspath");
         getClasspath.setAccessible(true);
         @SuppressWarnings("unchecked")
-        java.util.List<String> classpath = (java.util.List<String>) getClasspath.invoke(null);
+        List<String> classpath = (List<String>) getClasspath.invoke(null);
         if (classpath != null) {
             return;
         }
         Method setClasspath = Class.forName("org.freeplane.plugin.script.ScriptResources")
-            .getDeclaredMethod("setClasspath", java.util.List.class);
+            .getDeclaredMethod("setClasspath", List.class);
         setClasspath.setAccessible(true);
         setClasspath.invoke(null, Collections.<String>emptyList());
     }

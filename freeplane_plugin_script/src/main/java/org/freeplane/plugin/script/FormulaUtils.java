@@ -1,5 +1,6 @@
 package org.freeplane.plugin.script;
 
+import java.io.PrintStream;
 import java.net.URL;
 import java.util.List;
 import java.util.function.Supplier;
@@ -103,7 +104,7 @@ public class FormulaUtils {
 
     public static Object validateFormula(final NodeModel nodeModel,
                                          final String formulaText,
-                                         final java.io.PrintStream outStream,
+                                         final PrintStream outStream,
                                          final IFreeplaneScriptErrorHandler errorHandler) {
         return validateScript(
             nodeModel,
@@ -114,7 +115,7 @@ public class FormulaUtils {
 
     public static Object validateScript(final NodeModel nodeModel,
                                         final String script,
-                                        final java.io.PrintStream outStream,
+                                        final PrintStream outStream,
                                         final IFreeplaneScriptErrorHandler errorHandler) {
         final NodeScript nodeScript = new NodeScript(nodeModel, script);
         final ScriptContext scriptContext = new ScriptContext(nodeScript).withDependencyTracking(false);
@@ -140,7 +141,7 @@ public class FormulaUtils {
 
     private static Object evaluateLoggingExceptions(final ScriptContext scriptContext,
                                                     final ScriptingPermissions restrictedPermissions,
-                                                    final java.io.PrintStream outStream,
+                                                    final PrintStream outStream,
                                                     final IFreeplaneScriptErrorHandler errorHandler) {
         try {
             return evaluateCheckingForCyclesAndNonNullResult(
@@ -163,7 +164,7 @@ public class FormulaUtils {
 
     private static Object evaluateCheckingForCyclesAndNonNullResult(final ScriptContext scriptContext,
                                                                     final ScriptingPermissions restrictedPermissions,
-                                                                    final java.io.PrintStream outStream,
+                                                                    final PrintStream outStream,
                                                                     final IFreeplaneScriptErrorHandler errorHandler) {
         final NodeScript nodeScript = scriptContext.getNodeScript();
         if (!FormulaThreadLocalStacks.INSTANCE.push(scriptContext)) {

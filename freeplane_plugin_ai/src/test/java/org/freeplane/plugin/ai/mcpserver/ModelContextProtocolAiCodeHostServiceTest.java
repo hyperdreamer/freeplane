@@ -8,6 +8,7 @@ import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.ai.code.AiCodeHostService;
 import org.freeplane.features.ai.code.AiCodeRunListener;
 import org.freeplane.features.ai.code.CodeState;
+import org.freeplane.features.ai.code.CodeStateContent;
 import org.freeplane.features.ai.code.CodeStateToken;
 import org.freeplane.features.ai.code.CompileCodeRequest;
 import org.freeplane.features.ai.code.CompileCodeResponse;
@@ -80,7 +81,7 @@ public class ModelContextProtocolAiCodeHostServiceTest {
             50L);
 
         RunCodeResponse waitingResponse = uut.writeAndRunCode(new WriteAndRunCodeRequest(
-            new org.freeplane.features.ai.code.CodeStateContent("println 1", null)));
+            new CodeStateContent("println 1", null)));
         RunCodeResponse finalResponse = uut.awaitFinalRunResponse(waitingResponse);
 
         assertThat(cleared.get()).isTrue();
