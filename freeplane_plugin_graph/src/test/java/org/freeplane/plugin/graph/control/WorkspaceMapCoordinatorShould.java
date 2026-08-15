@@ -221,6 +221,162 @@ public class WorkspaceMapCoordinatorShould {
         verify(snapshotFactory, never()).snapshot(any(MapLease.class));
     }
 
+    @Test
+    public void captureOrdersMultipleSnapshotsByWorkspaceRegistration() {
+        MapReferenceId firstId = id(1);
+        MapReferenceId secondId = id(2);
+        WorkspaceDocument document = workspace(
+            registration(firstId, 1L, true), registration(secondId, 2L, true));
+        FakeLease firstLease = new FakeLease(firstId, MapOperationalState.AVAILABLE);
+        FakeLease secondLease = new FakeLease(secondId, MapOperationalState.AVAILABLE);
+        MapSnapshot firstSnapshot = snapshot(firstId, 2);
+        MapSnapshot secondSnapshot = snapshot(secondId, 1);
+        TestEdt edt = new TestEdt();
+        GraphWorkspaceStore store = mock(GraphWorkspaceStore.class);
+        MapLeaseManager leaseManager = mock(MapLeaseManager.class);
+        MapSnapshotFactory snapshotFactory = mock(MapSnapshotFactory.class);
+        stubStoreAndListeners(store, leaseManager, document, new ListenerRegistrationStub(),
+            new ListenerRegistrationStub());
+        when(snapshotFactory.snapshot(same(firstLease))).thenReturn(firstSnapshot);
+        when(snapshotFactory.snapshot(same(secondLease))).thenReturn(secondSnapshot);
+        WorkspaceMapCoordinator coordinator = coordinator(document, edt, store, leaseManager, snapshotFactory,
+            mapOf(firstId, CompletableFuture.completedFuture(firstLease),
+                secondId, CompletableFuture.completedFuture(secondLease)));
+
+        ProjectionInput input = coordinator.capture(batch(11L));
+
+        assertThat(input.maps()).containsExactly(firstSnapshot, secondSnapshot);
+        assertThat(input.maps()).extracting(MapSnapshot::mapReferenceId).containsExactly(firstId, secondId);
+    }
+
+    @Test
+    public void captureRetriesSnapshotAfterTransientFailure() {
+        MapReferenceId availableId = id(1);
+        WorkspaceDocument document = workspace(registration(availableId, 1L, true));
+        FakeLease available = new FakeLease(availableId, MapOperationalState.AVAILABLE);
+        MapSnapshot recoveredSnapshot = snapshot(availableId, 1);
+        AtomicInteger attempts = new AtomicInteger();
+        TestEdt edt = new TestEdt();
+        GraphWorkspaceStore store = mock(GraphWorkspaceStore.class);
+        MapLeaseManager leaseManager = mock(MapLeaseManager.class);
+        MapSnapshotFactory snapshotFactory = mock(MapSnapshotFactory.class);
+        stubStoreAndListeners(store, leaseManager, document, new ListenerRegistrationStub(),
+            new ListenerRegistrationStub());
+        when(snapshotFactory.snapshot(same(available))).thenAnswer(invocation -> {
+            if (attempts.getAndIncrement() == 0) {
+                throw new IllegalStateException("transient snapshot failure");
+            }
+            return recoveredSnapshot;
+        });
+        WorkspaceMapCoordinator coordinator = coordinator(document, edt, store, leaseManager, snapshotFactory,
+            mapOf(availableId, CompletableFuture.completedFuture(available)));
+
+        ProjectionInput failedCapture = coordinator.capture(batch(12L));
+        ProjectionInput recoveredCapture = coordinator.capture(batch(13L));
+
+        assertThat(failedCapture.availability().get(availableId)).isEqualTo(MapAvailability.UNREADABLE);
+        assertThat(failedCapture.maps()).isEmpty();
+        assertThat(recoveredCapture.availability().get(availableId)).isEqualTo(MapAvailability.AVAILABLE);
+        assertThat(recoveredCapture.maps()).containsExactly(recoveredSnapshot);
+        assertThat(attempts.get()).isEqualTo(2);
+    }
+
+    @Test
+    public void adapterEventUpdatesOnlyTheMatchingRegistrationBeforeCapture() {
+        MapReferenceId firstId = id(1);
+        MapReferenceId secondId = id(2);
+        WorkspaceDocument document = workspace(
+            registration(firstId, 1L, true), registration(secondId, 2L, true));
+        FakeLease firstLease = new FakeLease(firstId, MapOperationalState.AVAILABLE);
+        FakeLease secondLease = new FakeLease(secondId, MapOperationalState.AVAILABLE);
+        TestEdt edt = new TestEdt();
+        GraphWorkspaceStore store = mock(GraphWorkspaceStore.class);
+        MapLeaseManager leaseManager = mock(MapLeaseManager.class);
+        MapSnapshotFactory snapshotFactory = mock(MapSnapshotFactory.class);
+        AtomicReference<MapAdapterListener> adapterListener = new AtomicReference<MapAdapterListener>();
+        when(store.currentDocument()).thenReturn(document);
+        when(store.addListener(any(WorkspaceStoreListener.class))).thenReturn(new ListenerRegistrationStub());
+        when(leaseManager.addListener(any(MapAdapterListener.class))).thenAnswer(invocation -> {
+            adapterListener.set(invocation.getArgument(0));
+            return new ListenerRegistrationStub();
+        });
+        when(snapshotFactory.snapshot(same(secondLease))).thenReturn(snapshot(secondId, 2));
+        WorkspaceMapCoordinator coordinator = coordinator(document, edt, store, leaseManager, snapshotFactory,
+            mapOf(firstId, CompletableFuture.completedFuture(firstLease),
+                secondId, CompletableFuture.completedFuture(secondLease)));
+
+        adapterListener.get().onMapAdapterEvent(new MapAdapterEvent(firstId, MapOperationalState.RELOAD_REQUIRED));
+        edt.runQueued();
+        ProjectionInput input = coordinator.capture(batch(14L));
+
+        assertThat(input.availability().get(firstId)).isEqualTo(MapAvailability.RELOAD_REQUIRED);
+        assertThat(input.availability().get(secondId)).isEqualTo(MapAvailability.AVAILABLE);
+        assertThat(input.maps()).extracting(MapSnapshot::mapReferenceId).containsExactly(secondId);
+        verify(snapshotFactory, never()).snapshot(same(firstLease));
+    }
+
+    @Test
+    public void documentChangeClosesStaleLeasesIgnoresOldCompletionsAndRetainsUnchangedLease() {
+        MapReferenceId retainedId = id(1);
+        MapReferenceId changedId = id(2);
+        MapReferenceId deactivatedId = id(3);
+        MapReference retained = registration(retainedId, 1L, true);
+        MapReference initialChanged = registration(changedId, 2L, true);
+        MapReference initialDeactivated = registration(deactivatedId, 3L, true);
+        WorkspaceDocument initialDocument = workspace(retained, initialChanged, initialDeactivated);
+        MapReference replacementChanged = MapReference.of(changedId, 2L, URI.create("maps/replaced.mm"), true,
+            MAP_COLOR, Collections.<UnknownXml>emptyList());
+        MapReference replacementDeactivated = registration(deactivatedId, 3L, false);
+        WorkspaceDocument replacementDocument = workspace(retained, replacementChanged, replacementDeactivated);
+        FakeLease retainedLease = new FakeLease(retainedId, MapOperationalState.AVAILABLE);
+        FakeLease deactivatedLease = new FakeLease(deactivatedId, MapOperationalState.AVAILABLE);
+        FakeLease replacementLease = new FakeLease(changedId, MapOperationalState.AVAILABLE);
+        FakeLease staleLease = new FakeLease(changedId, MapOperationalState.AVAILABLE);
+        CompletableFuture<MapLease> staleAcquisition = new CompletableFuture<MapLease>();
+        AtomicInteger retainedAcquisitions = new AtomicInteger();
+        AtomicReference<WorkspaceDocument> currentDocument = new AtomicReference<WorkspaceDocument>(initialDocument);
+        AtomicReference<WorkspaceStoreListener> workspaceListener = new AtomicReference<WorkspaceStoreListener>();
+        TestEdt edt = new TestEdt();
+        GraphWorkspaceStore store = mock(GraphWorkspaceStore.class);
+        MapLeaseManager leaseManager = mock(MapLeaseManager.class);
+        MapSnapshotFactory snapshotFactory = mock(MapSnapshotFactory.class);
+        when(store.currentDocument()).thenAnswer(invocation -> currentDocument.get());
+        when(store.addListener(any(WorkspaceStoreListener.class))).thenAnswer(invocation -> {
+            workspaceListener.set(invocation.getArgument(0));
+            return new ListenerRegistrationStub();
+        });
+        when(leaseManager.addListener(any(MapAdapterListener.class))).thenReturn(new ListenerRegistrationStub());
+        WorkspaceMapCoordinator coordinator = new WorkspaceMapCoordinator(snapshotFactory, leaseManager, store, edt,
+            reference -> {
+                if (reference.equals(retained)) {
+                    retainedAcquisitions.incrementAndGet();
+                    return CompletableFuture.completedFuture(retainedLease);
+                }
+                if (reference.equals(initialChanged)) {
+                    return staleAcquisition;
+                }
+                if (reference.equals(initialDeactivated)) {
+                    return CompletableFuture.completedFuture(deactivatedLease);
+                }
+                if (reference.equals(replacementChanged)) {
+                    return CompletableFuture.completedFuture(replacementLease);
+                }
+                throw new AssertionError("Unexpected registration: " + reference);
+            });
+
+        currentDocument.set(replacementDocument);
+        workspaceListener.get().onWorkspaceStoreEvent(mockDocumentChangedEvent(replacementDocument));
+        edt.runQueued();
+        staleAcquisition.complete(staleLease);
+        edt.runQueued();
+
+        assertThat(retainedAcquisitions.get()).isEqualTo(1);
+        assertThat(retainedLease.closeCount()).isEqualTo(0);
+        assertThat(deactivatedLease.closeCount()).isEqualTo(1);
+        assertThat(replacementLease.closeCount()).isEqualTo(0);
+        assertThat(staleLease.closeCount()).isEqualTo(1);
+    }
+
     private static WorkspaceMapCoordinator coordinator(WorkspaceDocument document, TestEdt edt,
             GraphWorkspaceStore store, MapLeaseManager leaseManager, MapSnapshotFactory snapshots,
             Map<MapReferenceId, CompletionStage<MapLease>> acquisitions) {
