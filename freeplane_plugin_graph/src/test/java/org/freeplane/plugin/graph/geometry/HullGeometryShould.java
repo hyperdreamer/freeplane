@@ -234,7 +234,7 @@ public class HullGeometryShould {
     }
 
     @Test
-    public void roundsPublicExpandedHullCentroidQuotientToNearestEven() {
+    public void roundsPublicExpandedHullCentroidToCorrectAdjacentValue() {
         List<ProjectedNode> nodes = Arrays.asList(node("n1"), node("n2"), node("n3"), node("n4"));
         EnclosureHullKey hullKey = hullKey("public-expanded-quotient-hull");
         List<ProjectedNodeKey> directNodes = Arrays.asList(
@@ -252,7 +252,7 @@ public class HullGeometryShould {
             LayoutPositions.of(nodePositions, Collections.singletonMap(hullKey, LayoutPoint.of(0.0, 0.0))));
 
         assertThat(Double.doubleToRawLongBits(geometry.hulls().get(hullKey).labelAnchor().y()))
-            .isEqualTo(0x40325e018e582688L);
+            .isEqualTo(0x40325e018e582689L);
     }
 
     @Test
