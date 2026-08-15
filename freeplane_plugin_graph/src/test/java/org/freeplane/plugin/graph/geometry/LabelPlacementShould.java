@@ -62,6 +62,39 @@ public class LabelPlacementShould {
         assertThat(metrics.tiers()).containsExactly(BoundaryTier.SUBTLE);
     }
 
+    // Mutation: allowing rounded bounds to collapse lets both labels occupy the same interior anchor.
+    @Test
+    public void keepsCoarseUlpBoundsPositiveAndPreventsCoLocatedInteriorLabels() {
+        double anchorX = Math.nextUp(Math.scalb(1.0, 55));
+        assertThat(Math.ulp(anchorX)).isEqualTo(8.0);
+        EnclosureKey firstEndpoint = enclosureKey("coarse-ulp-first");
+        EnclosureKey secondEndpoint = enclosureKey("coarse-ulp-second");
+        EnclosureHullKey key = EnclosureHullKey.of(Arrays.asList(firstEndpoint, secondEndpoint));
+        ProjectedEnclosure enclosure = enclosure(key, BoundaryTier.SUBTLE,
+            SafeNodeLabel.of("first full", "first"), SafeNodeLabel.of("second full", "second"));
+        LayoutPoint sharedAnchor = LayoutPoint.of(anchorX, 20.0);
+        GraphGeometry source = geometry(Collections.singletonMap(key,
+            rectangle(anchorX - 80.0, 0.0, anchorX + 80.0, 40.0, sharedAnchor)));
+
+        GraphGeometry placed = place(projection(Collections.singletonList(enclosure)), source,
+            new RecordingMetrics(dimension(4.0, 4.0)));
+
+        LabelPlacement first = placed.labels().get(firstEndpoint);
+        LabelPlacement second = placed.labels().get(secondEndpoint);
+        assertThat(first.mode()).isEqualTo(LabelPlacement.Mode.INTERIOR);
+        assertThat(first.anchor()).isEqualTo(sharedAnchor);
+        assertThat(second.mode()).isNotEqualTo(LabelPlacement.Mode.INTERIOR);
+        assertThat(second.anchor()).isNotEqualTo(sharedAnchor);
+        assertThat(first.minX()).isLessThan(first.maxX());
+        assertThat(first.minY()).isLessThan(first.maxY());
+        assertNoVisiblePlacementCollisions(placed.labels());
+
+        LabelPlacement publicValue = LabelPlacement.of("public", LabelPlacement.Mode.INTERIOR,
+            sharedAnchor, 4.0, 4.0, Optional.<LayoutPoint>empty());
+        assertThat(publicValue.minX()).isLessThan(publicValue.maxX());
+        assertThat(publicValue.minY()).isLessThan(publicValue.maxY());
+    }
+
     // Mutation: reserving a stale suppressed placement would force the visible label out of its interior.
     @Test
     public void ignoresStaleSuppressedPlacementsWhenReservingVisibleCandidates() {
