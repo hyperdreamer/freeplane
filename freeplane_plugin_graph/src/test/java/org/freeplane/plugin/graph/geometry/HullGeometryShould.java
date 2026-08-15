@@ -210,6 +210,29 @@ public class HullGeometryShould {
     }
 
     @Test
+    public void computesRepresentableCentroidForLargeOffsetHull() {
+        List<ProjectedNode> nodes = Arrays.asList(node("n1"), node("n2"), node("n3"), node("n4"));
+        EnclosureHullKey hullKey = hullKey("large-offset-hull");
+        List<ProjectedNodeKey> directNodes = Arrays.asList(
+            nodes.get(0).key(), nodes.get(1).key(), nodes.get(2).key(), nodes.get(3).key());
+        ProjectedEnclosure enclosure = enclosure(hullKey, Optional.<EnclosureHullKey>empty(),
+            directNodes, Collections.<EnclosureHullKey>emptyList());
+        double base = 1.0e200;
+        double delta = Math.scalb(1.0, 620);
+        Map<ProjectedNodeKey, LayoutPoint> nodePositions = new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        nodePositions.put(nodes.get(0).key(), LayoutPoint.of(base, base));
+        nodePositions.put(nodes.get(1).key(), LayoutPoint.of(base + delta, base));
+        nodePositions.put(nodes.get(2).key(), LayoutPoint.of(base + delta, base + delta));
+        nodePositions.put(nodes.get(3).key(), LayoutPoint.of(base, base + delta));
+
+        GraphGeometry geometry = compute(
+            projection(nodes, Collections.singletonList(enclosure), Collections.<ProjectedEdge>emptyList()),
+            LayoutPositions.of(nodePositions, Collections.singletonMap(hullKey, LayoutPoint.of(base, base))));
+
+        assertThat(geometry.hulls().get(hullKey).labelAnchor())
+            .isEqualTo(LayoutPoint.of(base + delta * 0.5, base + delta * 0.5));
+    }
+    @Test
     public void createsASmoothDeterministicClosedPathWithoutCuttingDirectChildren() {
         ProjectedNode originNode = node("origin");
         EnclosureHullKey childKey = hullKey("child");

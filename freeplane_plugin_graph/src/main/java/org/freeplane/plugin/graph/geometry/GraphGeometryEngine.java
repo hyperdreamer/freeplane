@@ -189,17 +189,396 @@ public final class GraphGeometryEngine {
     }
 
     private static LayoutPoint centroid(final List<LayoutPoint> polygon) {
-        double twiceArea = 0.0;
-        double sumX = 0.0;
-        double sumY = 0.0;
-        for (int index = 0; index < polygon.size(); index++) {
-            final LayoutPoint first = polygon.get(index);
-            final LayoutPoint second = polygon.get((index + 1) % polygon.size());
-            final double cross = first.x() * second.y() - second.x() * first.y();
-            twiceArea += cross;
-            sumX += (first.x() + second.x()) * cross;
-            sumY += (first.y() + second.y()) * cross;
+        final LayoutPoint origin = polygon.get(0);
+        final List<TaggedPoint> relative = new ArrayList<TaggedPoint>();
+        for (final LayoutPoint point : polygon) {
+            relative.add(new TaggedPoint(TaggedSum.difference(point.x(), origin.x()),
+                TaggedSum.difference(point.y(), origin.y())));
         }
-        return LayoutPoint.of(sumX / (3.0 * twiceArea), sumY / (3.0 * twiceArea));
+        final TaggedSum twiceArea = new TaggedSum();
+        final TaggedSum firstMomentX = new TaggedSum();
+        final TaggedSum firstMomentY = new TaggedSum();
+        for (int index = 0; index < relative.size(); index++) {
+            final TaggedPoint first = relative.get(index);
+            final TaggedPoint second = relative.get((index + 1) % relative.size());
+            final TaggedSum cross = TaggedSum.subtract(
+                TaggedSum.multiply(first.x, second.y), TaggedSum.multiply(second.x, first.y));
+            twiceArea.add(cross);
+            final TaggedSum xSum = TaggedSum.added(first.x, second.x);
+            final TaggedSum ySum = TaggedSum.added(first.y, second.y);
+            firstMomentX.add(TaggedSum.multiply(xSum, cross));
+            firstMomentY.add(TaggedSum.multiply(ySum, cross));
+        }
+        final TaggedSum denominator = TaggedSum.multiply(twiceArea, TaggedSum.of(3.0));
+        final TaggedSum localX = TaggedSum.divide(firstMomentX, denominator);
+        final TaggedSum localY = TaggedSum.divide(firstMomentY, denominator);
+        return LayoutPoint.of(TaggedSum.addAndRound(origin.x(), localX),
+            TaggedSum.addAndRound(origin.y(), localY));
+    }
+
+    private static final class TaggedPoint {
+        private final TaggedSum x;
+        private final TaggedSum y;
+
+        private TaggedPoint(final TaggedSum x, final TaggedSum y) {
+            this.x = x;
+            this.y = y;
+        }
+    }
+
+    private static final class TaggedTerm {
+        private final double value;
+        private final int exponent;
+
+        private TaggedTerm(final double value, final int exponent) {
+            this.value = value;
+            this.exponent = exponent;
+        }
+    }
+
+    private static final class ScaledPair {
+        private final double sum;
+        private final double error;
+        private final int exponent;
+
+        private ScaledPair(final double sum, final double error, final int exponent) {
+            this.sum = sum;
+            this.error = error;
+            this.exponent = exponent;
+        }
+    }
+
+    private static final class TaggedSum {
+        private static final double SPLITTER = 134217729.0;
+        private double[] values = new double[16];
+        private int[] exponents = new int[16];
+        private double[] scratchValues = new double[16];
+        private int[] scratchExponents = new int[16];
+        private int size;
+
+        private static TaggedSum of(final double value) {
+            final TaggedSum result = new TaggedSum();
+            result.addDouble(value);
+            return result;
+        }
+
+        private static TaggedSum difference(final double value, final double origin) {
+            final TaggedSum result = new TaggedSum();
+            result.addDouble(value);
+            result.addDouble(-origin);
+            return result;
+        }
+
+        private static TaggedSum added(final TaggedSum first, final TaggedSum second) {
+            final TaggedSum result = first.copy();
+            result.add(second);
+            return result;
+        }
+
+        private static TaggedSum subtract(final TaggedSum first, final TaggedSum second) {
+            final TaggedSum result = first.copy();
+            result.add(second, -1.0);
+            return result;
+        }
+
+        private static TaggedSum multiply(final TaggedSum first, final TaggedSum second) {
+            final TaggedSum result = new TaggedSum();
+            for (int firstIndex = 0; firstIndex < first.size; firstIndex++) {
+                for (int secondIndex = 0; secondIndex < second.size; secondIndex++) {
+                    addProduct(result, first.values[firstIndex], first.exponents[firstIndex],
+                        second.values[secondIndex], second.exponents[secondIndex]);
+                }
+            }
+            return result;
+        }
+
+        private static TaggedSum divide(final TaggedSum numerator, final TaggedSum denominator) {
+            final TaggedSum result = new TaggedSum();
+            TaggedSum remainder = numerator.copy();
+            final TaggedTerm denominatorEstimate = denominator.normalized();
+            if (denominatorEstimate == null) {
+                throw new IllegalArgumentException("Zero polygon area");
+            }
+            for (int iteration = 0; iteration < 4 && remainder.size != 0; iteration++) {
+                final TaggedTerm remainderEstimate = remainder.normalized();
+                if (remainderEstimate == null) {
+                    break;
+                }
+                final double quotientValue = remainderEstimate.value / denominatorEstimate.value;
+                final int quotientExponent = remainderEstimate.exponent - denominatorEstimate.exponent;
+                final TaggedTerm quotient = normalize(quotientValue, quotientExponent);
+                if (quotient == null) {
+                    break;
+                }
+                result.addTerm(quotient.value, quotient.exponent);
+                final TaggedSum product = multiplyByTerm(denominator, quotient.value, quotient.exponent);
+                remainder = subtract(remainder, product);
+            }
+            return result;
+        }
+
+        private static TaggedSum multiplyByTerm(final TaggedSum sum, final double value,
+                final int exponent) {
+            final TaggedSum result = new TaggedSum();
+            for (int index = 0; index < sum.size; index++) {
+                addProduct(result, sum.values[index], sum.exponents[index], value, exponent);
+            }
+            return result;
+        }
+
+        private static double addAndRound(final double origin, final TaggedSum offset) {
+            final TaggedSum result = of(origin);
+            result.add(offset);
+            return result.roundedDouble();
+        }
+
+        private static void addProduct(final TaggedSum result, final double first, final int firstExponent,
+                final double second, final int secondExponent) {
+            final double product = first * second;
+            final double firstSplit = SPLITTER * first;
+            final double firstHigh = firstSplit - (firstSplit - first);
+            final double firstLow = first - firstHigh;
+            final double secondSplit = SPLITTER * second;
+            final double secondHigh = secondSplit - (secondSplit - second);
+            final double secondLow = second - secondHigh;
+            final double error = ((firstHigh * secondHigh - product) + firstHigh * secondLow
+                + firstLow * secondHigh) + firstLow * secondLow;
+            final int exponent = firstExponent + secondExponent;
+            result.addTerm(product, exponent);
+            result.addTerm(error, exponent);
+        }
+
+        private void add(final TaggedSum other) {
+            add(other, 1.0);
+        }
+
+        private void add(final TaggedSum other, final double sign) {
+            for (int index = 0; index < other.size; index++) {
+                addTerm(sign * other.values[index], other.exponents[index]);
+            }
+        }
+
+        private void addDouble(final double value) {
+            if (value == 0.0) {
+                return;
+            }
+            final long bits = Double.doubleToRawLongBits(value);
+            final long fraction = bits & 0x000fffffffffffffL;
+            final int biasedExponent = (int) ((bits >>> 52) & 0x7ffL);
+            final long significand;
+            final int exponent;
+            if (biasedExponent == 0) {
+                significand = fraction;
+                exponent = -1074;
+            }
+            else {
+                significand = fraction | 0x0010000000000000L;
+                exponent = biasedExponent - 1023 - 52;
+            }
+            addTerm((bits < 0 ? -1.0 : 1.0) * (double) significand, exponent);
+        }
+
+        private void addTerm(final double value, final int exponent) {
+            final TaggedTerm term = normalize(value, exponent);
+            if (term == null) {
+                return;
+            }
+            ensureCapacity(size + 1);
+            int outputSize = 0;
+            TaggedTerm carry = term;
+            for (int index = 0; index < size; index++) {
+                final TaggedTerm current = new TaggedTerm(values[index], exponents[index]);
+                if (carry == null) {
+                    scratchValues[outputSize] = current.value;
+                    scratchExponents[outputSize++] = current.exponent;
+                }
+                else if (Math.abs(carry.exponent - current.exponent) > 1073) {
+                    if (carry.exponent < current.exponent) {
+                        scratchValues[outputSize] = carry.value;
+                        scratchExponents[outputSize++] = carry.exponent;
+                        carry = current;
+                    }
+                    else {
+                        scratchValues[outputSize] = current.value;
+                        scratchExponents[outputSize++] = current.exponent;
+                    }
+                }
+                else {
+                    final ScaledPair pair = twoSum(carry.value, carry.exponent,
+                        current.value, current.exponent);
+                    final TaggedTerm error = normalize(pair.error, pair.exponent);
+                    if (error != null) {
+                        scratchValues[outputSize] = error.value;
+                        scratchExponents[outputSize++] = error.exponent;
+                    }
+                    carry = normalize(pair.sum, pair.exponent);
+                }
+            }
+            if (carry != null) {
+                scratchValues[outputSize] = carry.value;
+                scratchExponents[outputSize++] = carry.exponent;
+            }
+            size = outputSize;
+            final double[] oldValues = values;
+            values = scratchValues;
+            scratchValues = oldValues;
+            final int[] oldExponents = exponents;
+            exponents = scratchExponents;
+            scratchExponents = oldExponents;
+            sortByExponent();
+        }
+
+        private void ensureCapacity(final int required) {
+            if (required <= values.length) {
+                return;
+            }
+            int capacity = values.length * 2;
+            while (capacity < required) {
+                capacity *= 2;
+            }
+            final double[] newValues = new double[capacity];
+            final int[] newExponents = new int[capacity];
+            final double[] newScratchValues = new double[capacity];
+            final int[] newScratchExponents = new int[capacity];
+            for (int index = 0; index < size; index++) {
+                newValues[index] = values[index];
+                newExponents[index] = exponents[index];
+            }
+            values = newValues;
+            exponents = newExponents;
+            scratchValues = newScratchValues;
+            scratchExponents = newScratchExponents;
+        }
+
+        private void sortByExponent() {
+            for (int index = 1; index < size; index++) {
+                final double value = values[index];
+                final int exponent = exponents[index];
+                int insertion = index;
+                while (insertion > 0 && exponents[insertion - 1] > exponent) {
+                    values[insertion] = values[insertion - 1];
+                    exponents[insertion] = exponents[insertion - 1];
+                    insertion--;
+                }
+                values[insertion] = value;
+                exponents[insertion] = exponent;
+            }
+        }
+
+        private TaggedSum copy() {
+            final TaggedSum result = new TaggedSum();
+            result.ensureCapacity(size);
+            for (int index = 0; index < size; index++) {
+                result.values[index] = values[index];
+                result.exponents[index] = exponents[index];
+            }
+            result.size = size;
+            return result;
+        }
+
+        private TaggedSum negated() {
+            final TaggedSum result = copy();
+            for (int index = 0; index < result.size; index++) {
+                result.values[index] = -result.values[index];
+            }
+            return result;
+        }
+
+        private int sign() {
+            final TaggedTerm term = normalized();
+            return term == null ? 0 : (term.value < 0.0 ? -1 : 1);
+        }
+
+        private int compareMagnitude(final TaggedSum other) {
+            final TaggedSum left = sign() < 0 ? negated() : copy();
+            final TaggedSum right = other.sign() < 0 ? other.negated() : other.copy();
+            return subtract(left, right).sign();
+        }
+
+        private double roundedDouble() {
+            double candidate = approximateDouble();
+            for (int iteration = 0; iteration < 64; iteration++) {
+                final TaggedSum residual = subtract(this, of(candidate));
+                final int residualSign = residual.sign();
+                if (residualSign == 0) {
+                    return candidate;
+                }
+                final double neighbor = residualSign > 0 ? Math.nextUp(candidate) : Math.nextDown(candidate);
+                final TaggedSum gap = residualSign > 0
+                    ? difference(neighbor, candidate) : difference(candidate, neighbor);
+                final int comparison = residual.compareMagnitude(gap.scaled(0.5));
+                if (comparison < 0 || (comparison == 0 && (Double.doubleToRawLongBits(candidate) & 1L) == 0L)) {
+                    return candidate;
+                }
+                candidate = neighbor;
+            }
+            throw new IllegalArgumentException("Unable to round finite tagged sum");
+        }
+
+        private TaggedSum scaled(final double factor) {
+            final TaggedSum result = new TaggedSum();
+            for (int index = 0; index < size; index++) {
+                result.addTerm(values[index] * factor, exponents[index]);
+            }
+            return result;
+        }
+
+        private double approximateDouble() {
+            final TaggedTerm term = normalized();
+            if (term == null) {
+                return 0.0;
+            }
+            return Math.scalb(term.value, term.exponent);
+        }
+
+        private TaggedTerm normalized() {
+            if (size == 0) {
+                return null;
+            }
+            final int largestExponent = exponents[size - 1];
+            double sum = 0.0;
+            double compensation = 0.0;
+            for (int index = size - 1; index >= 0; index--) {
+                final int difference = exponents[index] - largestExponent;
+                if (difference < -1074) {
+                    continue;
+                }
+                final double term = Math.scalb(values[index], difference);
+                final double corrected = term - compensation;
+                final double next = sum + corrected;
+                compensation = (next - sum) - corrected;
+                sum = next;
+            }
+            final double estimate = sum - compensation;
+            return normalize(estimate, largestExponent);
+        }
+
+        private static TaggedTerm normalize(final double value, final int exponent) {
+            if (value == 0.0) {
+                return null;
+            }
+            final double absolute = Math.abs(value);
+            final int floorExponent = Math.getExponent(absolute);
+            if (floorExponent == -1023) {
+                final long fraction = Double.doubleToRawLongBits(absolute) & 0x000fffffffffffffL;
+                final int highestBit = 63 - Long.numberOfLeadingZeros(fraction);
+                return new TaggedTerm(Math.scalb(value, 1073 - highestBit),
+                    exponent - 1073 + highestBit);
+            }
+            return new TaggedTerm(Math.scalb(value, -floorExponent - 1), exponent + floorExponent + 1);
+        }
+
+        private static ScaledPair twoSum(final double first, final int firstExponent,
+                final double second, final int secondExponent) {
+            final int exponent = Math.max(firstExponent, secondExponent);
+            final double scaledFirst = Math.scalb(first, firstExponent - exponent);
+            final double scaledSecond = Math.scalb(second, secondExponent - exponent);
+            final double sum = scaledFirst + scaledSecond;
+            final double secondVirtual = sum - scaledFirst;
+            final double firstVirtual = sum - secondVirtual;
+            final double secondRoundoff = scaledSecond - secondVirtual;
+            final double firstRoundoff = scaledFirst - firstVirtual;
+            return new ScaledPair(sum, firstRoundoff + secondRoundoff, exponent);
+        }
     }
 }
