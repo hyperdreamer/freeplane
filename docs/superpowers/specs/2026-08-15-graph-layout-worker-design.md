@@ -20,7 +20,7 @@ The alternatives were rejected for the following reasons:
 
 ## Task 20: Private Physics Adapter
 
-`LayoutRequest` carries the workspace, current projection, stable-key diff, and pins. `GraphStreamLayoutEngine` retains particles for unaffected keys across requests, removes obsolete graph elements, and deterministically seeds new nodes and enclosure anchors from their stable keys. Active pins set an exact particle position and freeze it; dormant pins do not create a particle or force.
+`LayoutRequest` carries the workspace ID (used for diagnostic labelling and scoping deterministic node seeds), current projection, stable-key diff, and pins. `GraphStreamLayoutEngine` retains particles for unaffected keys across requests, removes obsolete graph elements, and deterministically seeds new nodes and enclosure anchors from their stable keys. Active pins set an exact particle position and freeze it; dormant pins do not create a particle or force.
 
 The solver represents:
 
@@ -30,13 +30,13 @@ The solver represents:
 - weak containment springs from direct nodes to their enclosing anchor;
 - weak hierarchy springs between nested enclosure anchors.
 
-`TypedSpringBox` implements the required force classes without using `layout.weight` as stiffness. The calibration starts with containment `0.15` and hierarchy `0.30`; both remain below same-map relationship attraction. Cross-map relationship displacement is accumulated once per particle per step and clamped by vector magnitude to the fixed `0.005` cap. Prominence is used only as a particle-size separation hint. It never changes a pin, exceeds the aggregate cap, or shrinks a node to avoid contact.
+`TypedSpringBox` implements the required force classes without using `layout.weight` as stiffness. The calibration starts with containment `0.15`, hierarchy `0.30`, and same-map relationship attraction `1.0`; the ordering invariant `containment < hierarchy < sameMap` must hold. `LayoutCalibration.spikeDefaults()` returns these three values. Cross-map relationship displacement is accumulated once per particle per step and clamped by vector magnitude to the fixed `0.005` cap. Prominence is used only as a particle-size separation hint: each visible node particle receives a repulsion radius proportional to its prominence scale, implemented in `TypedNodeParticle`, so enlarged nodes push neighbours further away without receiving extra spring force. It never changes a pin, exceeds the aggregate cap, or shrinks a node to avoid contact.
 
 Every public value is immutable and GraphStream-free. `LayoutFrame` contains its monotonically increasing step index, immutable `LayoutPositions`, and a failure flag. `apply`, `step`, `reset`, and `close` are the only public engine operations.
 
 ## Task 21: Serialized Worker and Correction
 
-`LayoutWorker` owns one single-thread executor. All calls to its engine occur on that executor, so GraphStream mutation and `compute()` cannot overlap. `submit` applies the request; `step` advances the same accepted request. The worker retains the last valid frame and returns it with `failed=true` if the engine raises an exception. `restart` discards the failed engine state and permits a subsequent accepted request to create a clean engine. `close` is idempotent, rejects later work, and leaves no live worker thread.
+`LayoutWorker` owns one single-thread executor. All calls to its engine occur on that executor, so GraphStream mutation and `compute()` cannot overlap. `submit` applies the request; `step` advances the same accepted request. `pause()` suspends stepping while leaving engine state intact. `restart()` resumes a paused worker without touching engine state; if the engine is in a failed state, `restart()` also creates a fresh engine instance so the next `submit()` can proceed cleanly. The worker retains the last valid frame and returns it with `failed=true` if the engine raises an exception. `close` is idempotent, rejects later work, and leaves no live worker thread.
 
 `MapTierCorrection` is a pure operation over a projection, immutable positions, and hull geometry. It considers only map-root hull pairs in deterministic order. A map is rigid if any active pin belongs to it. For an overlap:
 
@@ -44,18 +44,20 @@ Every public value is immutable and GraphStream-free. `LayoutFrame` contains its
 - when exactly one map is rigid, give the complete translation to the movable map;
 - when both are rigid, preserve every position and emit an immutable `LayoutConflict` identifying the blocked map pair and active blocking pins.
 
-The correction translates all node particles and enclosure anchors belonging to a moved map by the same vector. It never translates only a root anchor or a subset of a pinned map. It is intentionally a transformation of each returned immutable frame: the Task 20 `LayoutEngine` boundary has no position-writeback operation, so Task 21 does not add one or leak GraphStream types. The later settle loop recomputes geometry from each corrected frame before label placement and publication.
+The correction translates all node particles and enclosure anchors belonging to a moved map by the same vector. It never translates only a root anchor or a subset of a pinned map. It is intentionally a transformation of each returned immutable frame: the Task 20 `LayoutEngine` boundary has no position-writeback operation, so Task 21 does not add one or leak GraphStream types. Because the engine has no writeback path, it always steps from its own internal uncorrected positions; correction is recomputed from scratch on every published frame, continuously nudging maps toward separation without disturbing the physics solver's internal energy bookkeeping. The later settle loop recomputes geometry from each corrected frame before label placement and publication. On the first frame of a settle loop, no prior hull geometry is available; the caller passes an empty `GraphGeometry` (no hulls), which produces no correction and no conflicts. Task 23 must initialise its retained geometry reference to an empty `GraphGeometry` before entering the loop body.
 
 ## Idle Policy
 
-Idle status derives from observed displacement rather than GraphStream stabilization, which becomes invalid after map correction. `PerceptualIdlePolicy` compares matching node and anchor positions in consecutive frames. A topology mismatch resets the stable-frame streak and is never idle.
+Idle status derives from observed displacement rather than GraphStream stabilization, which becomes invalid after map correction. `PerceptualIdlePolicy` compares matching node and anchor positions in consecutive frames. A topology mismatch resets the stable-frame streak and is never idle. An empty projection (zero nodes and zero anchors in both frames) is treated as immediately idle: `consecutiveStableFrames` is set to the required threshold and `idle()` returns true.
 
 The provisional production default is eight consecutive frames with RMS displacement at most `0.02` and maximum displacement at most `0.05`. These values are deliberately isolated behind policy construction and injectable in worker tests. They are supported by the accepted spike's final observation (RMS `0.014392`, maximum `0.044531`) after its stricter provisional RMS `0.01` failed to settle. Task 38 owns final calibration; no later caller should depend on these values as a permanent product contract.
 
 ## Error and Lifecycle Semantics
 
 - Layout failures preserve the last valid positions and conflicts, never call Swing, and are observable through a failed frame.
+- `lastValidFrame()` returns the most recent non-failed frame, or an empty failed frame with step index 0 if no frame has been successfully published; Task 23 uses it to retain valid positions when the worker fails mid-settle.
 - A paused worker preserves its last valid frame and does not advance physics until restarted.
+- `step()` called before any successful `submit()`, or while the worker is paused, returns the last valid frame immediately without advancing physics; if no frame exists it returns the same empty failed frame as `lastValidFrame()`.
 - Empty projections and dormant pins are valid inputs.
 - All frame maps, conflict lists, and idle measurements are immutable snapshots suitable for off-EDT publication.
 
