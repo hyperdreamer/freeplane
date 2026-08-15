@@ -338,8 +338,17 @@ public final class GraphGeometryEngine {
             final TaggedSum halfGap = difference(neighbor, candidate).scaled(0.5);
             final TaggedSum threshold = multiply(absoluteDenominator, halfGap);
             final int comparison = residual.compareMagnitude(threshold);
+            // Preserve the even candidate when the represented leading terms are identical;
+            // lower terms still decide cases whose leading terms differ.
+            final int residualLast = residual.size - 1;
+            final int thresholdLast = threshold.size - 1;
+            final boolean sameLeadingMagnitude = residual.exponents[residualLast] == threshold.exponents[thresholdLast]
+                && Double.compare(Math.abs(residual.values[residualLast]),
+                    Math.abs(threshold.values[thresholdLast])) == 0;
+            final boolean evenCandidate = (Double.doubleToRawLongBits(candidate) & 1L) == 0L;
             if (comparison < 0
-                    || (comparison == 0 && (Double.doubleToRawLongBits(candidate) & 1L) == 0L)) {
+                    || (evenCandidate && (comparison == 0
+                        || (comparison > 0 && sameLeadingMagnitude)))) {
                 return 0;
             }
             return direction;
@@ -518,18 +527,9 @@ public final class GraphGeometryEngine {
         }
 
         private int compareMagnitude(final TaggedSum other) {
-            final TaggedTerm left = normalized();
-            final TaggedTerm right = other.normalized();
-            if (left == null) {
-                return right == null ? 0 : -1;
-            }
-            if (right == null) {
-                return 1;
-            }
-            if (left.exponent != right.exponent) {
-                return left.exponent < right.exponent ? -1 : 1;
-            }
-            return Double.compare(Math.abs(left.value), Math.abs(right.value));
+            final TaggedSum left = sign() < 0 ? negated() : copy();
+            final TaggedSum right = other.sign() < 0 ? other.negated() : other.copy();
+            return subtract(left, right).sign();
         }
 
         private double roundedDouble() {
