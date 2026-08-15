@@ -518,15 +518,25 @@ public final class LabelPlacementEngine {
             }
             final double halfWidth = width * 0.5;
             final double halfHeight = height * 0.5;
-            final double minX = anchor.x() - halfWidth;
-            final double minY = anchor.y() - halfHeight;
-            final double maxX = anchor.x() + halfWidth;
-            final double maxY = anchor.y() + halfHeight;
+            final double minX = lowerBound(anchor.x(), halfWidth);
+            final double minY = lowerBound(anchor.y(), halfHeight);
+            final double maxX = upperBound(anchor.x(), halfWidth);
+            final double maxY = upperBound(anchor.y(), halfHeight);
             if (!finite(minX) || !finite(minY) || !finite(maxX) || !finite(maxY)
-                    || minX > maxX || minY > maxY) {
+                    || !(minX < maxX) || !(minY < maxY)) {
                 return null;
             }
             return new Rectangle(minX, minY, maxX, maxY);
+        }
+
+        private static double lowerBound(final double center, final double halfExtent) {
+            final double bound = center - halfExtent;
+            return bound < center ? bound : Math.nextDown(center);
+        }
+
+        private static double upperBound(final double center, final double halfExtent) {
+            final double bound = center + halfExtent;
+            return bound > center ? bound : Math.nextUp(center);
         }
 
         private static Rectangle of(final LabelPlacement placement) {

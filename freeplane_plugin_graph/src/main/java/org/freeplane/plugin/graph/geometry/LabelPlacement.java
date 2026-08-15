@@ -41,14 +41,14 @@ public final class LabelPlacement {
         }
         final double halfWidth = width * 0.5;
         final double halfHeight = height * 0.5;
-        this.minX = anchor.x() - halfWidth;
-        this.maxX = anchor.x() + halfWidth;
-        this.minY = anchor.y() - halfHeight;
-        this.maxY = anchor.y() + halfHeight;
+        this.minX = lowerBound(anchor.x(), halfWidth);
+        this.maxX = upperBound(anchor.x(), halfWidth);
+        this.minY = lowerBound(anchor.y(), halfHeight);
+        this.maxY = upperBound(anchor.y(), halfHeight);
         if (!Double.isFinite(minX) || !Double.isFinite(minY)
                 || !Double.isFinite(maxX) || !Double.isFinite(maxY)
-                || minX > maxX || minY > maxY) {
-            throw new IllegalArgumentException("Label bounds must be finite");
+                || !(minX < maxX) || !(minY < maxY)) {
+            throw new IllegalArgumentException("Label bounds must be finite and positive");
         }
     }
 
@@ -95,6 +95,16 @@ public final class LabelPlacement {
 
     public double maxY() {
         return maxY;
+    }
+
+    private static double lowerBound(final double center, final double halfExtent) {
+        final double bound = center - halfExtent;
+        return bound < center ? bound : Math.nextDown(center);
+    }
+
+    private static double upperBound(final double center, final double halfExtent) {
+        final double bound = center + halfExtent;
+        return bound > center ? bound : Math.nextUp(center);
     }
 
     private static String requireDisplayText(final String value) {
