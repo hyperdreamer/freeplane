@@ -871,6 +871,7 @@ final class GraphAdapterTestSupport {
             previousVersionProperties = Files.exists(testVersionProperties) ? Files.readAllBytes(testVersionProperties) : null;
             Files.copy(viewerVersionProperties, testVersionProperties, StandardCopyOption.REPLACE_EXISTING);
             testMapVersions = testResourceDirectory.resolve("xml/mapVersions.xml");
+            Files.createDirectories(testMapVersions.getParent());
             previousMapVersions = Files.exists(testMapVersions) ? Files.readAllBytes(testMapVersions) : null;
             Files.copy(editorMapVersions, testMapVersions, StandardCopyOption.REPLACE_EXISTING);
             testPreferences = testResourceDirectory.resolve("xml/preferences.xml");
