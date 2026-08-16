@@ -296,7 +296,7 @@ public class LayoutSettleLoopShould {
                 });
 
             await(CompletableFuture.anyOf(stepper.pausedStepBlocked, newerIdlePublished));
-            assertThat(stepper.pausedStepBlocked.isDone()).isFalse();
+            assertThat(stepper.pausedStepBlocked.isDone()).as("pausedStepBlocked").isFalse();
             await(newerIdlePublished);
             await(completion);
             assertThat(stepper.restartAfterPause).isTrue();
@@ -323,7 +323,8 @@ public class LayoutSettleLoopShould {
             CompletionStage<Void> newerCompletion = loop.start(batch(412L), newer,
                 ProjectionDiff.between(first, newer), state -> { });
 
-            assertThat(stepper.newerSubmittedBeforeResetRelease).isFalse();
+            assertThat(stepper.newerSubmittedBeforeResetRelease)
+                .as("newerSubmittedBeforeResetRelease").isFalse();
             stepper.releaseReset();
             await(resetCall);
             await(newerCompletion);
@@ -540,10 +541,17 @@ public class LayoutSettleLoopShould {
             new GraphGeometryEngine(), new ImmediateEdt(), dispatcher);
         GraphProjection projection = populatedProjection(414L);
         CompletableFuture<Void> blockedReset = null;
+        List<CanvasState> states = new ArrayList<CanvasState>();
+        CompletableFuture<CanvasState> resetPublication = new CompletableFuture<CanvasState>();
 
         try {
             CompletionStage<Void> initial = loop.start(batch(414L), projection,
-                ProjectionDiff.between(emptyProjection(413L), projection), state -> { });
+                ProjectionDiff.between(emptyProjection(413L), projection), state -> {
+                    states.add(state);
+                    if (states.size() == 2) {
+                        resetPublication.complete(state);
+                    }
+                });
             dispatcher.runAll();
             await(initial);
 
@@ -562,8 +570,16 @@ public class LayoutSettleLoopShould {
 
             loop.restart();
             dispatcher.runAll();
-            assertThat(stepper.submitCount()).isEqualTo(1);
-            assertThat(stepper.stepCount()).isEqualTo(1);
+            CanvasState state = await(resetPublication);
+
+            assertThat(state.generation()).isEqualTo(414L);
+            assertThat(state.projection()).isSameAs(projection);
+            assertThat(state.status()).isEqualTo(OperationalStatus.IDLE);
+            assertThat(states).extracting(CanvasState::status)
+                .containsExactly(OperationalStatus.IDLE, OperationalStatus.IDLE);
+            assertThat(stepper.submitCount()).isEqualTo(2);
+            assertThat(stepper.stepCount()).isZero();
+            assertThat(submissionGenerations(stepper)).containsExactly(414L, 414L);
         }
         finally {
             stepper.releaseReset();
@@ -629,16 +645,21 @@ public class LayoutSettleLoopShould {
     }
 
     @Test
-    public void releasesAClaimWhenPauseSupersedesQueuedStartDispatch() {
+    public void submitsTheCurrentRequestWhenRestartingAfterPauseSupersedesQueuedStartDispatch() {
         ManualLifecycleDispatcher dispatcher = new ManualLifecycleDispatcher();
         RecordingStepper stepper = new RecordingStepper(dispatcher);
         LayoutSettleLoop loop = new LayoutSettleLoop(WORKSPACE, stepper,
             new GraphGeometryEngine(), new ImmediateEdt(), dispatcher);
         GraphProjection projection = populatedProjection(423L);
+        List<CanvasState> states = new ArrayList<CanvasState>();
+        CompletableFuture<CanvasState> publication = new CompletableFuture<CanvasState>();
 
         try {
             CompletionStage<Void> completion = loop.start(batch(423L), projection,
-                ProjectionDiff.between(emptyProjection(422L), projection), state -> { });
+                ProjectionDiff.between(emptyProjection(422L), projection), state -> {
+                    states.add(state);
+                    publication.complete(state);
+                });
             assertThat(stepper.submitCount()).isZero();
             loop.pause();
             assertThat(stepper.pauseCount()).isZero();
@@ -646,19 +667,21 @@ public class LayoutSettleLoopShould {
             assertThat(stepper.submitCount()).isZero();
             assertThat(stepper.pauseCount()).isEqualTo(1);
 
-            stepper.prepareProjection(projection);
-            stepper.blockStep();
             loop.restart();
             dispatcher.runAll();
-            assertThat(stepper.stepCount()).isEqualTo(1);
-            assertThat(stepper.operations()).containsExactly("pause", "restart", "step");
-
-            stepper.releaseStep();
-            dispatcher.runAll();
+            CanvasState state = await(publication);
             await(completion);
+
+            assertThat(state.generation()).isEqualTo(423L);
+            assertThat(state.projection()).isSameAs(projection);
+            assertThat(state.status()).isEqualTo(OperationalStatus.IDLE);
+            assertThat(states).extracting(CanvasState::status).containsExactly(OperationalStatus.IDLE);
+            assertThat(stepper.submitCount()).isEqualTo(1);
+            assertThat(stepper.stepCount()).isZero();
+            assertThat(submissionGenerations(stepper)).containsExactly(423L);
+            assertThat(stepper.operations()).containsExactly("pause", "restart", "submit");
         }
         finally {
-            stepper.releaseStep();
             closeFromExternalThread(loop, dispatcher, stepper);
         }
     }
@@ -1476,11 +1499,9 @@ public class LayoutSettleLoopShould {
         private final CompletableFuture<Void> closeEntered = new CompletableFuture<Void>();
         private final CompletableFuture<Void> resetRelease = new CompletableFuture<Void>();
         private final CompletableFuture<Void> closeRelease = new CompletableFuture<Void>();
-        private final CompletableFuture<LayoutFrame> heldStep = new CompletableFuture<LayoutFrame>();
         private boolean physicalOperationInProgress;
         private boolean resetBlocked;
         private boolean closeBlocked;
-        private boolean stepBlocked;
         private IllegalStateException resetFailure;
         private IllegalStateException closeFailure;
         private GraphProjection lastProjection;
@@ -1518,10 +1539,9 @@ public class LayoutSettleLoopShould {
             begin("step");
             try {
                 ++stepCount;
-                if (stepBlocked) {
-                    return heldStep;
-                }
-                LayoutFrame frame = frame(lastProjection, stepCount, true);
+                LayoutFrame frame = lastProjection == null
+                    ? noRequestFrame()
+                    : frame(lastProjection, stepCount, true);
                 retainedFrame = frame;
                 return CompletableFuture.completedFuture(frame);
             }
@@ -1557,6 +1577,10 @@ public class LayoutSettleLoopShould {
             begin("reset");
             try {
                 ++resetCount;
+                if (resetFailure == null) {
+                    lastProjection = null;
+                    retainedFrame = noRequestFrame();
+                }
                 resetEntered.complete(null);
                 if (resetBlocked) {
                     await(resetRelease);
@@ -1575,7 +1599,7 @@ public class LayoutSettleLoopShould {
             begin("lastValidFrame");
             try {
                 ++lastValidFrameCount;
-                return retainedFrame == null ? frame(0L, true) : retainedFrame;
+                return retainedFrame == null ? noRequestFrame() : retainedFrame;
             }
             finally {
                 end();
@@ -1598,18 +1622,6 @@ public class LayoutSettleLoopShould {
             finally {
                 end();
             }
-        }
-
-        synchronized void blockStep() {
-            stepBlocked = true;
-        }
-
-        void releaseStep() {
-            final GraphProjection projection;
-            synchronized (this) {
-                projection = lastProjection;
-            }
-            heldStep.complete(frame(projection, stepCount, true));
         }
 
         synchronized void blockReset() {
@@ -1638,10 +1650,6 @@ public class LayoutSettleLoopShould {
 
         synchronized void retain(final LayoutFrame frame) {
             retainedFrame = frame;
-        }
-
-        synchronized void prepareProjection(final GraphProjection projection) {
-            lastProjection = projection;
         }
 
         synchronized List<String> operations() {
@@ -1686,6 +1694,11 @@ public class LayoutSettleLoopShould {
 
         CompletableFuture<Void> closeEntered() {
             return closeEntered;
+        }
+
+        private static LayoutFrame noRequestFrame() {
+            return frame(0L, LayoutPositions.of(Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(),
+                Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), true, false);
         }
 
         private void begin(final String operation) {

@@ -294,7 +294,12 @@ public final class LayoutSettleLoop implements AutoCloseable {
                     return;
                 }
                 if (shouldStep) {
-                    stepClaimed(run, revision);
+                    if (hasSubmittedRequest(run)) {
+                        stepClaimed(run, revision);
+                    }
+                    else {
+                        submitClaimed(run, revision);
+                    }
                 }
             }
         });
@@ -339,6 +344,7 @@ public final class LayoutSettleLoop implements AutoCloseable {
         try {
             final CompletionStage<LayoutFrame> submitted = Objects.requireNonNull(worker.submit(run.request),
                 "worker submit result");
+            recordSubmittedRequest(run);
             submitted.whenCompleteAsync((frame, failure) -> handleFrame(run, frame, failure), lifecycle);
         }
         catch (RuntimeException failure) {
@@ -615,6 +621,18 @@ public final class LayoutSettleLoop implements AutoCloseable {
         }
     }
 
+    private boolean hasSubmittedRequest(final Run run) {
+        synchronized (monitor) {
+            return run.requestSubmitted;
+        }
+    }
+
+    private void recordSubmittedRequest(final Run run) {
+        synchronized (monitor) {
+            run.requestSubmitted = true;
+        }
+    }
+
     private boolean isCurrentAndRunningLocked(final Run run, final long revision) {
         return isCurrentRevisionLocked(run, revision) && !paused;
     }
@@ -806,6 +824,7 @@ public final class LayoutSettleLoop implements AutoCloseable {
         private boolean publicationInFlight;
         private boolean discardOnPause;
         private boolean restartRequested;
+        private boolean requestSubmitted;
         private boolean terminal;
 
         private Run(final long token, final AcceptedBatch batch, final GraphProjection projection,
