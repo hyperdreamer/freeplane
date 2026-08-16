@@ -180,9 +180,9 @@ public class LayoutSettleLoopShould {
     }
 
     @Test
-    public void resetsAnIdleRunBySubmittingTheCurrentProjectionAgain() {
+    public void resetsAnIdleRunWithAFreshWorkerSeed() {
         GraphProjection projection = populatedProjection(11L);
-        TestStepper stepper = new TestStepper(frame(projection, 0L, true), frame(projection, 1L, true));
+        ResettableStepper stepper = new ResettableStepper();
         LayoutSettleLoop loop = new LayoutSettleLoop(WORKSPACE, stepper, new GraphGeometryEngine(), new ImmediateEdt());
         List<CanvasState> states = new ArrayList<CanvasState>();
         CompletableFuture<CanvasState> resetPublication = new CompletableFuture<CanvasState>();
@@ -196,11 +196,10 @@ public class LayoutSettleLoopShould {
         reset(loop);
         await(resetPublication);
 
-        assertThat(stepper.restartCount).isEqualTo(1);
-        assertThat(stepper.submitCount).isEqualTo(2);
-        assertThat(stepper.requests.get(1)).isNotSameAs(stepper.requests.get(0));
-        assertThat(stepper.requests.get(1).projection()).isSameAs(projection);
+        ProjectedNodeKey nodeKey = projection.nodes().get(0).key();
         assertThat(states).extracting(CanvasState::generation).containsExactly(11L, 11L);
+        assertThat(states.get(0).layout().positions().nodes().get(nodeKey).x()).isEqualTo(0.0);
+        assertThat(states.get(1).layout().positions().nodes().get(nodeKey).x()).isEqualTo(0.0);
         loop.close();
     }
 
@@ -313,15 +312,19 @@ public class LayoutSettleLoopShould {
     }
 
     private static LayoutPositions positions(GraphProjection projection) {
+        return positions(projection, 0.0);
+    }
+
+    private static LayoutPositions positions(GraphProjection projection, double xOffset) {
         Map<ProjectedNodeKey, LayoutPoint> nodes = new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
         int nodeIndex = 0;
         for (ProjectedNode node : projection.nodes()) {
-            nodes.put(node.key(), LayoutPoint.of(nodeIndex++ * 32.0, 0.0));
+            nodes.put(node.key(), LayoutPoint.of(xOffset + nodeIndex++ * 32.0, 0.0));
         }
         Map<EnclosureHullKey, LayoutPoint> anchors = new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
         int enclosureIndex = 0;
         for (ProjectedEnclosure enclosure : projection.enclosures()) {
-            anchors.put(enclosure.hullKey(), LayoutPoint.of(enclosureIndex++ * 32.0, 0.0));
+            anchors.put(enclosure.hullKey(), LayoutPoint.of(xOffset + enclosureIndex++ * 32.0, 0.0));
         }
         return LayoutPositions.of(nodes, anchors);
     }
@@ -374,11 +377,8 @@ public class LayoutSettleLoopShould {
 
     private static final class TestStepper implements LayoutSettleLoop.FrameStepper {
         private final Deque<LayoutFrame> frames = new ArrayDeque<LayoutFrame>();
-        private final List<org.freeplane.plugin.graph.layout.LayoutRequest> requests =
-            new ArrayList<org.freeplane.plugin.graph.layout.LayoutRequest>();
         private int submitCount;
         private int stepCount;
-        private int restartCount;
 
         private TestStepper(LayoutFrame... values) {
             Collections.addAll(frames, values);
@@ -387,7 +387,6 @@ public class LayoutSettleLoopShould {
         @Override
         public CompletionStage<LayoutFrame> submit(org.freeplane.plugin.graph.layout.LayoutRequest request) {
             submitCount++;
-            requests.add(request);
             return CompletableFuture.completedFuture(frames.removeFirst());
         }
 
@@ -403,7 +402,44 @@ public class LayoutSettleLoopShould {
 
         @Override
         public void restart() {
-            restartCount++;
+        }
+
+        @Override
+        public LayoutFrame lastValidFrame() {
+            return frame(0L, true);
+        }
+
+        @Override
+        public void close() {
+        }
+    }
+
+    private static final class ResettableStepper implements LayoutSettleLoop.FrameStepper {
+        private int seed;
+
+        @Override
+        public CompletionStage<LayoutFrame> submit(org.freeplane.plugin.graph.layout.LayoutRequest request) {
+            LayoutFrame frame = frame(0L, positions(request.projection(), seed++ * 64.0), false, true);
+            return CompletableFuture.completedFuture(frame);
+        }
+
+        @Override
+        public CompletionStage<LayoutFrame> step() {
+            throw new AssertionError("Idle reset run must not request another frame");
+        }
+
+        @Override
+        public void pause() {
+        }
+
+        @Override
+        public void restart() {
+            // A healthy worker retains its existing engine state on restart.
+        }
+
+        @Override
+        public void reset() {
+            seed = 0;
         }
 
         @Override
