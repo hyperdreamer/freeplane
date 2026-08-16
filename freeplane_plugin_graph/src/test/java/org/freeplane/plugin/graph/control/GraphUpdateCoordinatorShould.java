@@ -1,6 +1,9 @@
 package org.freeplane.plugin.graph.control;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -12,12 +15,18 @@ import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Delayed;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.freeplane.plugin.graph.adapter.EdtExecutor;
+import org.freeplane.plugin.graph.adapter.MapAdapterEvent;
+import org.freeplane.plugin.graph.adapter.MapAdapterListener;
+import org.freeplane.plugin.graph.adapter.MapLeaseManager;
+import org.freeplane.plugin.graph.adapter.MapOperationalState;
 import org.freeplane.plugin.graph.geometry.GraphGeometryEngine;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.layout.LayoutFrame;
@@ -25,17 +34,23 @@ import org.freeplane.plugin.graph.layout.LayoutRequest;
 import org.freeplane.plugin.graph.layout.PerceptualIdlePolicy;
 import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.projection.ProjectionDiff;
+import org.freeplane.plugin.graph.workspace.GraphWorkspaceStore;
 import org.freeplane.plugin.graph.workspace.ListenerRegistration;
+import org.freeplane.plugin.graph.workspace.WorkspaceStoreEvent;
+import org.freeplane.plugin.graph.workspace.WorkspaceStoreListener;
+import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 import org.freeplane.plugin.graph.workspace.model.WorkspaceId;
 import org.junit.Test;
 
 public class GraphUpdateCoordinatorShould {
     private static final WorkspaceId WORKSPACE =
         WorkspaceId.of("00000000-0000-0000-0000-000000000201");
+    private static final MapReferenceId MAP =
+        MapReferenceId.of("00000000-0000-0000-0000-000000000202");
 
     @Test
     public void publishesLoadingThenProjectionAndCanvasInOrder() {
-        TestEdt edt = new TestEdt();
+        ImmediateEdt edt = new ImmediateEdt();
         TestScheduler scheduler = new TestScheduler();
         final GraphUpdateCoordinator[] holder = new GraphUpdateCoordinator[1];
         ProjectionBatcher batcher = new ProjectionBatcher(edt, scheduler, () -> 10L, batch -> {
@@ -44,17 +59,22 @@ public class GraphUpdateCoordinatorShould {
         TestPipeline pipeline = new TestPipeline();
         LayoutSettleLoop loop = new LayoutSettleLoop(WORKSPACE, new ImmediateStepper(),
             new GraphGeometryEngine(), edt);
-        GraphUpdateCoordinator coordinator = new GraphUpdateCoordinator(pipeline, batcher, loop, edt);
+        GraphUpdateCoordinator coordinator = coordinator(pipeline, batcher, loop, edt);
         holder[0] = coordinator;
         List<String> events = new ArrayList<String>();
+        CompletableFuture<CanvasState> acceptedCanvas = new CompletableFuture<CanvasState>();
         coordinator.addProjectionListener(projection -> events.add("projection-" + projection.generation()));
-        coordinator.addCanvasStateListener(state -> events.add("canvas-" + state.generation()));
+        coordinator.addCanvasStateListener(state -> {
+            events.add("canvas-" + state.generation());
+            if (state.generation() == 1L) {
+                acceptedCanvas.complete(state);
+            }
+        });
 
         coordinator.start();
         assertThat(coordinator.currentState().status()).isEqualTo(OperationalStatus.LOADING);
-        edt.runQueued();
         scheduler.runAllIncludingCancelled();
-        edt.runQueued();
+        await(acceptedCanvas);
 
         assertThat(events).containsExactly("canvas-0", "projection-1", "canvas-1");
         assertThat(coordinator.currentProjection().generation()).isEqualTo(1L);
@@ -70,7 +90,7 @@ public class GraphUpdateCoordinatorShould {
         ProjectionBatcher batcher = new ProjectionBatcher(edt, scheduler, () -> 20L, batch -> {
             holder[0].acceptBatch(batch);
         });
-        GraphUpdateCoordinator coordinator = new GraphUpdateCoordinator(new TestPipeline(), batcher,
+        GraphUpdateCoordinator coordinator = coordinator(new TestPipeline(), batcher,
             new LayoutSettleLoop(WORKSPACE, new ImmediateStepper(), new GraphGeometryEngine(), edt), edt);
         holder[0] = coordinator;
 
@@ -89,7 +109,7 @@ public class GraphUpdateCoordinatorShould {
         ProjectionBatcher batcher = new ProjectionBatcher(edt, scheduler, () -> 30L, batch -> {
             holder[0].acceptBatch(batch);
         });
-        GraphUpdateCoordinator coordinator = new GraphUpdateCoordinator(new TestPipeline(), batcher,
+        GraphUpdateCoordinator coordinator = coordinator(new TestPipeline(), batcher,
             new LayoutSettleLoop(WORKSPACE, new ImmediateStepper(), new GraphGeometryEngine(), edt), edt);
         holder[0] = coordinator;
         List<String> callbacks = new ArrayList<String>();
@@ -105,6 +125,538 @@ public class GraphUpdateCoordinatorShould {
         edt.runQueued();
 
         assertThat(callbacks).containsExactly("first", "second");
+    }
+
+    @Test
+    public void queuesRebuildForDocumentStoreEvent() {
+        SourceFixture source = sourceCoordinator();
+        try {
+            source.storeListener.get().onWorkspaceStoreEvent(
+                workspaceEvent(WorkspaceStoreEvent.Type.DOCUMENT_CHANGED));
+
+            assertThat(source.coordinator.hasPendingChanges()).isTrue();
+            source.edt.runQueued();
+            assertThat(source.batcher.pendingKinds()).isNotEmpty();
+        }
+        finally {
+            source.coordinator.close();
+        }
+    }
+
+    @Test
+    public void queuesRebuildForIdentityStoreEvent() {
+        SourceFixture source = sourceCoordinator();
+        try {
+            source.storeListener.get().onWorkspaceStoreEvent(
+                workspaceEvent(WorkspaceStoreEvent.Type.IDENTITY_CHANGED));
+
+            assertThat(source.coordinator.hasPendingChanges()).isTrue();
+            source.edt.runQueued();
+            assertThat(source.batcher.pendingKinds()).isNotEmpty();
+        }
+        finally {
+            source.coordinator.close();
+        }
+    }
+
+    @Test
+    public void queuesMapStateRebuildForAdapterEvent() {
+        SourceFixture source = sourceCoordinator();
+        try {
+            source.adapterListener.get().onMapAdapterEvent(
+                new MapAdapterEvent(MAP, MapOperationalState.RELOAD_REQUIRED));
+
+            assertThat(source.coordinator.hasPendingChanges()).isTrue();
+            source.edt.runQueued();
+            assertThat(source.batcher.pendingKinds()).containsExactly(ChangeKind.MAP_STATE);
+        }
+        finally {
+            source.coordinator.close();
+        }
+    }
+
+    @Test
+    public void releasesCoordinatorOwnedSourceRegistrationsOnClose() {
+        SourceFixture source = sourceCoordinator();
+
+        source.coordinator.close();
+
+        assertThat(source.storeRegistration.closeCount()).isEqualTo(1);
+        assertThat(source.adapterRegistration.closeCount()).isEqualTo(1);
+        source.storeListener.get().onWorkspaceStoreEvent(workspaceEvent(WorkspaceStoreEvent.Type.DOCUMENT_CHANGED));
+        source.adapterListener.get().onMapAdapterEvent(new MapAdapterEvent(MAP, MapOperationalState.AVAILABLE));
+        assertThat(source.coordinator.hasPendingChanges()).isFalse();
+    }
+
+    @Test
+    public void retainsTheCurrentProjectionGenerationWhenRebuildFails() {
+        ImmediateEdt edt = new ImmediateEdt();
+        BlockingStepper stepper = new BlockingStepper();
+        GraphUpdateCoordinator coordinator = coordinator(new GraphUpdateCoordinator.RebuildPipeline() {
+            @Override
+            public GraphProjection rebuild(final AcceptedBatch batch, final GraphProjection previous) {
+                if (batch.generation() == 2L) {
+                    throw new IllegalStateException("rebuild failure");
+                }
+                return emptyProjection(batch.generation());
+            }
+        }, unusedBatcher(edt), new LayoutSettleLoop(WORKSPACE, stepper, new GraphGeometryEngine(), edt), edt);
+        try {
+            coordinator.acceptBatch(batch(1L));
+            coordinator.acceptBatch(batch(2L));
+
+            assertThat(coordinator.currentProjection().generation()).isEqualTo(1L);
+            assertThat(coordinator.currentState().generation()).isEqualTo(1L);
+            assertThat(coordinator.currentState().status()).isEqualTo(OperationalStatus.FAILED);
+        }
+        finally {
+            coordinator.close();
+        }
+    }
+
+    @Test
+    public void publishesEmptyForAnAcceptedEmptyProjection() {
+        ImmediateEdt edt = new ImmediateEdt();
+        CompletableFuture<CanvasState> published = new CompletableFuture<CanvasState>();
+        GraphUpdateCoordinator coordinator = coordinator(new TestPipeline(), unusedBatcher(edt),
+            new LayoutSettleLoop(WORKSPACE, new ImmediateStepper(), new GraphGeometryEngine(), edt), edt);
+        try {
+            coordinator.addCanvasStateListener(published::complete);
+            coordinator.acceptBatch(batch(3L));
+
+            CanvasState state = await(published);
+            assertThat(state.generation()).isEqualTo(3L);
+            assertThat(state.status()).isEqualTo(OperationalStatus.EMPTY);
+        }
+        finally {
+            coordinator.close();
+        }
+    }
+
+    @Test
+    public void ignoresLowerAcceptedGenerationsForProjectionAndCanvasState() {
+        ImmediateEdt edt = new ImmediateEdt();
+        CompletableFuture<CanvasState> published = new CompletableFuture<CanvasState>();
+        GraphUpdateCoordinator coordinator = coordinator(new TestPipeline(), unusedBatcher(edt),
+            new LayoutSettleLoop(WORKSPACE, new ImmediateStepper(), new GraphGeometryEngine(), edt), edt);
+        try {
+            coordinator.addCanvasStateListener(published::complete);
+            coordinator.acceptBatch(batch(9L));
+            CanvasState higher = await(published);
+
+            coordinator.acceptBatch(batch(8L));
+
+            assertThat(coordinator.currentProjection().generation()).isEqualTo(9L);
+            assertThat(coordinator.currentState()).isSameAs(higher);
+            assertThat(coordinator.currentState().generation()).isEqualTo(9L);
+        }
+        finally {
+            coordinator.close();
+        }
+    }
+
+    @Test
+    public void resetsAnIdleRunWithANewCurrentProjectionSubmission() {
+        ImmediateEdt edt = new ImmediateEdt();
+        RecordingStepper stepper = new RecordingStepper();
+        CompletableFuture<CanvasState> firstPublication = new CompletableFuture<CanvasState>();
+        GraphUpdateCoordinator coordinator = coordinator(new TestPipeline(), unusedBatcher(edt),
+            new LayoutSettleLoop(WORKSPACE, stepper, new GraphGeometryEngine(), edt), edt);
+        try {
+            coordinator.addCanvasStateListener(firstPublication::complete);
+            coordinator.acceptBatch(batch(10L));
+            await(firstPublication);
+
+            coordinator.resetLayout();
+
+            assertThat(stepper.resetCount).isEqualTo(1);
+            assertThat(stepper.submitCount).isEqualTo(2);
+            assertThat(stepper.submissions.get(1).projection()).isSameAs(coordinator.currentProjection());
+        }
+        finally {
+            coordinator.close();
+        }
+    }
+
+    @Test
+    public void continuesOrderedObservationAfterTheFirstObserverThrows() {
+        ImmediateEdt edt = new ImmediateEdt();
+        List<String> projectionCallbacks = new ArrayList<String>();
+        List<String> canvasCallbacks = Collections.synchronizedList(new ArrayList<String>());
+        CompletableFuture<Void> secondCanvasCallback = new CompletableFuture<Void>();
+        GraphUpdateCoordinator coordinator = coordinator(new TestPipeline(), unusedBatcher(edt),
+            new LayoutSettleLoop(WORKSPACE, new ImmediateStepper(), new GraphGeometryEngine(), edt), edt);
+        try {
+            coordinator.addProjectionListener(projection -> {
+                projectionCallbacks.add("first");
+                throw new IllegalStateException("first projection observer");
+            });
+            coordinator.addProjectionListener(projection -> projectionCallbacks.add("second"));
+            coordinator.addCanvasStateListener(state -> {
+                canvasCallbacks.add("first");
+                throw new IllegalStateException("first canvas observer");
+            });
+            coordinator.addCanvasStateListener(state -> {
+                canvasCallbacks.add("second");
+                secondCanvasCallback.complete(null);
+            });
+
+            coordinator.acceptBatch(batch(11L));
+
+            assertThat(projectionCallbacks).containsExactly("first", "second");
+            await(secondCanvasCallback);
+            assertThat(canvasCallbacks).containsExactly("first", "second");
+        }
+        finally {
+            coordinator.close();
+        }
+    }
+
+    @Test
+    public void closesFromTheEdtWithoutWaitingForABlockedAcceptedBatch() throws Exception {
+        ThreadAwareEdt edt = new ThreadAwareEdt();
+        TestScheduler scheduler = new TestScheduler();
+        CountDownLatch rebuildStarted = new CountDownLatch(1);
+        CountDownLatch releaseRebuild = new CountDownLatch(1);
+        CountDownLatch closeReturned = new CountDownLatch(1);
+        AtomicReference<Throwable> closeFailure = new AtomicReference<Throwable>();
+        final GraphUpdateCoordinator[] holder = new GraphUpdateCoordinator[1];
+        ProjectionBatcher batcher = new ProjectionBatcher(edt, scheduler, () -> 40L, batch -> {
+            holder[0].acceptBatch(batch);
+        });
+        GraphUpdateCoordinator coordinator = coordinator(new GraphUpdateCoordinator.RebuildPipeline() {
+            @Override
+            public GraphProjection rebuild(final AcceptedBatch batch, final GraphProjection previous) {
+                rebuildStarted.countDown();
+                try {
+                    releaseRebuild.await();
+                }
+                catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new AssertionError(interrupted);
+                }
+                return emptyProjection(batch.generation());
+            }
+        }, batcher, new LayoutSettleLoop(WORKSPACE, new ImmediateStepper(), new GraphGeometryEngine(), edt), edt);
+        holder[0] = coordinator;
+        List<String> callbacks = Collections.synchronizedList(new ArrayList<String>());
+        coordinator.addProjectionListener(projection -> callbacks.add("projection"));
+        coordinator.addCanvasStateListener(state -> callbacks.add("canvas"));
+        coordinator.requestRebuild(ChangeKind.TEXT);
+
+        Thread callbackThread = new Thread(() -> scheduler.runAllIncludingCancelled(),
+            "graph-update-coordinator-accepted-batch");
+        Thread closeThread = new Thread(() -> edt.runOnEdt(() -> {
+            try {
+                coordinator.close();
+            }
+            catch (Throwable failure) {
+                closeFailure.set(failure);
+            }
+            finally {
+                closeReturned.countDown();
+            }
+        }), "graph-update-coordinator-edt-close");
+        try {
+            callbackThread.start();
+            assertThat(rebuildStarted.await(5L, TimeUnit.SECONDS)).isTrue();
+            closeThread.start();
+            assertThat(closeReturned.await(1L, TimeUnit.SECONDS)).isTrue();
+
+            releaseRebuild.countDown();
+            callbackThread.join(5_000L);
+            closeThread.join(5_000L);
+            assertThat(callbackThread.isAlive()).isFalse();
+            assertThat(closeThread.isAlive()).isFalse();
+            assertThat(closeFailure.get()).isNull();
+            assertThat(callbacks).isEmpty();
+        }
+        finally {
+            releaseRebuild.countDown();
+            callbackThread.join(5_000L);
+            closeThread.join(5_000L);
+            coordinator.close();
+        }
+    }
+
+    private static GraphUpdateCoordinator coordinator(final GraphUpdateCoordinator.RebuildPipeline pipeline,
+            final ProjectionBatcher batcher, final LayoutSettleLoop loop, final EdtExecutor edt) {
+        GraphWorkspaceStore store = mock(GraphWorkspaceStore.class);
+        MapLeaseManager leaseManager = mock(MapLeaseManager.class);
+        when(store.addListener(any(WorkspaceStoreListener.class))).thenReturn(new ListenerRegistrationStub());
+        when(leaseManager.addListener(any(MapAdapterListener.class))).thenReturn(new ListenerRegistrationStub());
+        return new GraphUpdateCoordinator(pipeline, batcher, loop, edt, store, leaseManager);
+    }
+
+    private static SourceFixture sourceCoordinator() {
+        TestEdt edt = new TestEdt();
+        TestScheduler scheduler = new TestScheduler();
+        final GraphUpdateCoordinator[] holder = new GraphUpdateCoordinator[1];
+        ProjectionBatcher batcher = new ProjectionBatcher(edt, scheduler, () -> 50L, batch -> {
+            holder[0].acceptBatch(batch);
+        });
+        GraphWorkspaceStore store = mock(GraphWorkspaceStore.class);
+        MapLeaseManager leaseManager = mock(MapLeaseManager.class);
+        ListenerRegistrationStub storeRegistration = new ListenerRegistrationStub();
+        ListenerRegistrationStub adapterRegistration = new ListenerRegistrationStub();
+        AtomicReference<WorkspaceStoreListener> storeListener = new AtomicReference<WorkspaceStoreListener>();
+        AtomicReference<MapAdapterListener> adapterListener = new AtomicReference<MapAdapterListener>();
+        when(store.addListener(any(WorkspaceStoreListener.class))).thenAnswer(invocation -> {
+            storeListener.set(invocation.getArgument(0));
+            return storeRegistration;
+        });
+        when(leaseManager.addListener(any(MapAdapterListener.class))).thenAnswer(invocation -> {
+            adapterListener.set(invocation.getArgument(0));
+            return adapterRegistration;
+        });
+        GraphUpdateCoordinator coordinator = sourceCoordinator(new TestPipeline(), batcher,
+            new LayoutSettleLoop(WORKSPACE, new ImmediateStepper(), new GraphGeometryEngine(), edt), edt,
+            store, leaseManager);
+        holder[0] = coordinator;
+        return new SourceFixture(coordinator, batcher, edt, storeListener, adapterListener, storeRegistration,
+            adapterRegistration);
+    }
+
+    private static GraphUpdateCoordinator sourceCoordinator(final GraphUpdateCoordinator.RebuildPipeline pipeline,
+            final ProjectionBatcher batcher, final LayoutSettleLoop loop, final EdtExecutor edt,
+            final GraphWorkspaceStore store, final MapLeaseManager leaseManager) {
+        return new GraphUpdateCoordinator(pipeline, batcher, loop, edt, store, leaseManager);
+    }
+
+    private static ProjectionBatcher unusedBatcher(final EdtExecutor edt) {
+        return new ProjectionBatcher(edt, new TestScheduler(), () -> 0L, batch -> { });
+    }
+
+    private static AcceptedBatch batch(final long generation) {
+        return new AcceptedBatch(generation, generation, EnumSet.of(ChangeKind.STRUCTURE));
+    }
+
+    private static GraphProjection emptyProjection(final long generation) {
+        return GraphProjection.projected(generation, Collections.emptyList(), Collections.emptyList(),
+            Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+    }
+
+    private static WorkspaceStoreEvent workspaceEvent(final WorkspaceStoreEvent.Type type) {
+        WorkspaceStoreEvent event = mock(WorkspaceStoreEvent.class);
+        when(event.type()).thenReturn(type);
+        return event;
+    }
+
+    private static <T> T await(final CompletableFuture<T> result) {
+        try {
+            return result.get(5L, TimeUnit.SECONDS);
+        }
+        catch (Exception failure) {
+            throw new AssertionError("Timed out waiting for coordinator publication", failure);
+        }
+    }
+
+    private static LayoutFrame idleFrame(final long index) {
+        return LayoutFrame.withDiagnostics(LayoutFrame.of(index,
+            LayoutPositions.of(Collections.emptyMap(), Collections.emptyMap()), false),
+            Collections.emptyList(), new PerceptualIdlePolicy.IdleMeasurement(0.0, 0.0, 8, true));
+    }
+
+    private static final class SourceFixture {
+        private final GraphUpdateCoordinator coordinator;
+        private final ProjectionBatcher batcher;
+        private final TestEdt edt;
+        private final AtomicReference<WorkspaceStoreListener> storeListener;
+        private final AtomicReference<MapAdapterListener> adapterListener;
+        private final ListenerRegistrationStub storeRegistration;
+        private final ListenerRegistrationStub adapterRegistration;
+
+        private SourceFixture(final GraphUpdateCoordinator coordinator, final ProjectionBatcher batcher,
+                final TestEdt edt, final AtomicReference<WorkspaceStoreListener> storeListener,
+                final AtomicReference<MapAdapterListener> adapterListener,
+                final ListenerRegistrationStub storeRegistration,
+                final ListenerRegistrationStub adapterRegistration) {
+            this.coordinator = coordinator;
+            this.batcher = batcher;
+            this.edt = edt;
+            this.storeListener = storeListener;
+            this.adapterListener = adapterListener;
+            this.storeRegistration = storeRegistration;
+            this.adapterRegistration = adapterRegistration;
+        }
+    }
+
+    private static final class ListenerRegistrationStub implements ListenerRegistration {
+        private int closeCount;
+
+        @Override
+        public void close() {
+            closeCount++;
+        }
+
+        private int closeCount() {
+            return closeCount;
+        }
+    }
+
+    private static final class BlockingStepper implements LayoutSettleLoop.FrameStepper {
+        private final CompletableFuture<LayoutFrame> submitted = new CompletableFuture<LayoutFrame>();
+
+        @Override
+        public CompletionStage<LayoutFrame> submit(final LayoutRequest request) {
+            return submitted;
+        }
+
+        @Override
+        public CompletionStage<LayoutFrame> step() {
+            return CompletableFuture.completedFuture(idleFrame(0L));
+        }
+
+        @Override
+        public void pause() {
+        }
+
+        @Override
+        public void restart() {
+        }
+
+        @Override
+        public LayoutFrame lastValidFrame() {
+            return idleFrame(0L);
+        }
+
+        @Override
+        public void close() {
+        }
+    }
+
+    private static final class RecordingStepper implements LayoutSettleLoop.FrameStepper {
+        private final List<LayoutRequest> submissions = new ArrayList<LayoutRequest>();
+        private int submitCount;
+        private int resetCount;
+
+        @Override
+        public CompletionStage<LayoutFrame> submit(final LayoutRequest request) {
+            submitCount++;
+            submissions.add(request);
+            return CompletableFuture.completedFuture(idleFrame(request.projection().generation()));
+        }
+
+        @Override
+        public CompletionStage<LayoutFrame> step() {
+            return CompletableFuture.completedFuture(idleFrame(0L));
+        }
+
+        @Override
+        public void pause() {
+        }
+
+        @Override
+        public void restart() {
+        }
+
+        @Override
+        public void reset() {
+            resetCount++;
+        }
+
+        @Override
+        public LayoutFrame lastValidFrame() {
+            return idleFrame(0L);
+        }
+
+        @Override
+        public void close() {
+        }
+    }
+
+    private static final class ImmediateEdt implements EdtExecutor {
+        private final ThreadLocal<Boolean> active = new ThreadLocal<Boolean>();
+
+        @Override
+        public <T> T call(final Callable<T> task) {
+            final Boolean previous = active.get();
+            active.set(Boolean.TRUE);
+            try {
+                return task.call();
+            }
+            catch (Exception failure) {
+                throw new IllegalStateException(failure);
+            }
+            finally {
+                restore(previous);
+            }
+        }
+
+        @Override
+        public void execute(final Runnable task) {
+            final Boolean previous = active.get();
+            active.set(Boolean.TRUE);
+            try {
+                task.run();
+            }
+            finally {
+                restore(previous);
+            }
+        }
+
+        @Override
+        public boolean isEdt() {
+            return Boolean.TRUE.equals(active.get());
+        }
+
+        private void restore(final Boolean previous) {
+            if (previous == null) {
+                active.remove();
+            }
+            else {
+                active.set(previous);
+            }
+        }
+    }
+
+    private static final class ThreadAwareEdt implements EdtExecutor {
+        private final ThreadLocal<Boolean> active = new ThreadLocal<Boolean>();
+
+        @Override
+        public <T> T call(final Callable<T> task) {
+            final Boolean previous = active.get();
+            active.set(Boolean.TRUE);
+            try {
+                return task.call();
+            }
+            catch (Exception failure) {
+                throw new IllegalStateException(failure);
+            }
+            finally {
+                restore(previous);
+            }
+        }
+
+        @Override
+        public void execute(final Runnable task) {
+            runOnEdt(task);
+        }
+
+        @Override
+        public boolean isEdt() {
+            return Boolean.TRUE.equals(active.get());
+        }
+
+        private void runOnEdt(final Runnable task) {
+            final Boolean previous = active.get();
+            active.set(Boolean.TRUE);
+            try {
+                task.run();
+            }
+            finally {
+                restore(previous);
+            }
+        }
+
+        private void restore(final Boolean previous) {
+            if (previous == null) {
+                active.remove();
+            }
+            else {
+                active.set(previous);
+            }
+        }
     }
 
     private static final class TestPipeline implements GraphUpdateCoordinator.RebuildPipeline {
