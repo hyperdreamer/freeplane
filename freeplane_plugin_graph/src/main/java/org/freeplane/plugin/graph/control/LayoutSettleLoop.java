@@ -55,7 +55,7 @@ public final class LayoutSettleLoop implements AutoCloseable {
     private boolean closed;
 
     public LayoutSettleLoop(final WorkspaceId workspace) {
-        this(workspace, new WorkerStepper(new LayoutWorker(LayoutCalibration.spikeDefaults())),
+        this(workspace, new WorkerStepper(LayoutCalibration.spikeDefaults()),
             new GraphGeometryEngine(), defaultMetrics(), new SwingEdtExecutor());
     }
 
@@ -165,7 +165,7 @@ public final class LayoutSettleLoop implements AutoCloseable {
             currentRun = run;
         }
         try {
-            worker.restart();
+            worker.reset();
         }
         catch (RuntimeException failure) {
             dispatchFrameFailure(run, failure);
@@ -554,6 +554,9 @@ public final class LayoutSettleLoop implements AutoCloseable {
         CompletionStage<LayoutFrame> step();
         void pause();
         void restart();
+        default void reset() {
+            throw new UnsupportedOperationException("Frame stepper does not support reset");
+        }
         LayoutFrame lastValidFrame();
         void close();
     }
@@ -595,39 +598,47 @@ public final class LayoutSettleLoop implements AutoCloseable {
     }
 
     private static final class WorkerStepper implements FrameStepper {
-        private final LayoutWorker worker;
+        private final LayoutCalibration calibration;
+        private LayoutWorker worker;
 
-        private WorkerStepper(final LayoutWorker worker) {
-            this.worker = worker;
+        private WorkerStepper(final LayoutCalibration calibration) {
+            this.calibration = Objects.requireNonNull(calibration, "calibration");
+            this.worker = new LayoutWorker(calibration);
         }
 
         @Override
-        public CompletionStage<LayoutFrame> submit(final LayoutRequest request) {
+        public synchronized CompletionStage<LayoutFrame> submit(final LayoutRequest request) {
             return worker.submit(request);
         }
 
         @Override
-        public CompletionStage<LayoutFrame> step() {
+        public synchronized CompletionStage<LayoutFrame> step() {
             return worker.step();
         }
 
         @Override
-        public void pause() {
+        public synchronized void pause() {
             worker.pause();
         }
 
         @Override
-        public void restart() {
+        public synchronized void restart() {
             worker.restart();
         }
 
         @Override
-        public LayoutFrame lastValidFrame() {
+        public synchronized void reset() {
+            worker.close();
+            worker = new LayoutWorker(calibration);
+        }
+
+        @Override
+        public synchronized LayoutFrame lastValidFrame() {
             return worker.lastValidFrame();
         }
 
         @Override
-        public void close() {
+        public synchronized void close() {
             worker.close();
         }
     }
