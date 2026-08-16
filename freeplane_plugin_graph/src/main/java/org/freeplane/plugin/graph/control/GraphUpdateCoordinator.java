@@ -6,6 +6,9 @@ import java.util.List;
 import java.util.Objects;
 
 import org.freeplane.plugin.graph.adapter.EdtExecutor;
+import org.freeplane.plugin.graph.adapter.MapAdapterEvent;
+import org.freeplane.plugin.graph.adapter.MapAdapterListener;
+import org.freeplane.plugin.graph.adapter.MapLeaseManager;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.layout.LayoutFrame;
@@ -13,7 +16,10 @@ import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.projection.ProjectionDiff;
 import org.freeplane.plugin.graph.projection.ProjectionEngine;
 import org.freeplane.plugin.graph.projection.input.ProjectionInput;
+import org.freeplane.plugin.graph.workspace.GraphWorkspaceStore;
 import org.freeplane.plugin.graph.workspace.ListenerRegistration;
+import org.freeplane.plugin.graph.workspace.WorkspaceStoreEvent;
+import org.freeplane.plugin.graph.workspace.WorkspaceStoreListener;
 
 public final class GraphUpdateCoordinator implements AutoCloseable {
     private final Object monitor = new Object();
@@ -21,9 +27,13 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
     private final ProjectionBatcher batcher;
     private final LayoutSettleLoop settleLoop;
     private final EdtExecutor edt;
+    private final WorkspaceMapCoordinator ownedMaps;
+    private final ThreadLocal<Boolean> acceptingBatch = new ThreadLocal<Boolean>();
     private final List<CanvasStateListener> canvasListeners = new ArrayList<CanvasStateListener>();
     private final List<GraphProjectionListener> projectionListeners = new ArrayList<GraphProjectionListener>();
 
+    private ListenerRegistration storeListenerRegistration;
+    private ListenerRegistration adapterListenerRegistration;
     private GraphProjection projection;
     private CanvasState state;
     private long acceptedGeneration = -1L;
@@ -33,21 +43,36 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
 
     public GraphUpdateCoordinator(final WorkspaceMapCoordinator maps, final ProjectionEngine projectionEngine,
             final LayoutSettleLoop settleLoop) {
-        this.pipeline = new LivePipeline(Objects.requireNonNull(maps, "maps"),
-            Objects.requireNonNull(projectionEngine, "projectionEngine"));
+        this(maps, null, null, projectionEngine, settleLoop);
+    }
+
+    public GraphUpdateCoordinator(final WorkspaceMapCoordinator maps, final GraphWorkspaceStore store,
+            final MapLeaseManager leaseManager, final ProjectionEngine projectionEngine,
+            final LayoutSettleLoop settleLoop) {
+        final WorkspaceMapCoordinator value = Objects.requireNonNull(maps, "maps");
+        this.pipeline = new LivePipeline(value, Objects.requireNonNull(projectionEngine, "projectionEngine"));
         this.batcher = new ProjectionBatcher(this::acceptBatch);
         this.settleLoop = Objects.requireNonNull(settleLoop, "settleLoop");
         this.edt = new SwingEdtExecutor();
+        this.ownedMaps = value;
         initializeState();
+        if (store != null || leaseManager != null) {
+            registerSourceListeners(Objects.requireNonNull(store, "store"),
+                Objects.requireNonNull(leaseManager, "leaseManager"));
+        }
     }
 
     GraphUpdateCoordinator(final RebuildPipeline pipeline, final ProjectionBatcher batcher,
-            final LayoutSettleLoop settleLoop, final EdtExecutor edt) {
+            final LayoutSettleLoop settleLoop, final EdtExecutor edt, final GraphWorkspaceStore store,
+            final MapLeaseManager leaseManager) {
         this.pipeline = Objects.requireNonNull(pipeline, "pipeline");
         this.batcher = Objects.requireNonNull(batcher, "batcher");
         this.settleLoop = Objects.requireNonNull(settleLoop, "settleLoop");
         this.edt = Objects.requireNonNull(edt, "edt");
+        this.ownedMaps = null;
         initializeState();
+        registerSourceListeners(Objects.requireNonNull(store, "store"),
+            Objects.requireNonNull(leaseManager, "leaseManager"));
     }
 
     private void initializeState() {
@@ -57,7 +82,65 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
         this.state = CanvasState.of(0L, projection, initialLayout,
             GraphGeometry.of(Collections.emptyMap(), Collections.emptyMap()), OperationalStatus.LOADING);
     }
+    private void registerSourceListeners(final GraphWorkspaceStore store, final MapLeaseManager leaseManager) {
+        final WorkspaceStoreListener storeListener = new WorkspaceStoreListener() {
+            @Override
+            public void onWorkspaceStoreEvent(final WorkspaceStoreEvent event) {
+                handleWorkspaceStoreEvent(event);
+            }
+        };
+        final MapAdapterListener adapterListener = new MapAdapterListener() {
+            @Override
+            public void onMapAdapterEvent(final MapAdapterEvent event) {
+                handleMapAdapterEvent(event);
+            }
+        };
+        ListenerRegistration storeRegistration = null;
+        ListenerRegistration adapterRegistration = null;
+        try {
+            storeRegistration = Objects.requireNonNull(store.addListener(storeListener), "store listener registration");
+            adapterRegistration = Objects.requireNonNull(leaseManager.addListener(adapterListener),
+                "adapter listener registration");
+            storeListenerRegistration = storeRegistration;
+            adapterListenerRegistration = adapterRegistration;
+        }
+        catch (RuntimeException failure) {
+            closeRegistration(adapterRegistration);
+            closeRegistration(storeRegistration);
+            throw failure;
+        }
+    }
 
+    private void handleWorkspaceStoreEvent(final WorkspaceStoreEvent event) {
+        if (event == null) {
+            return;
+        }
+        final WorkspaceStoreEvent.Type type = event.type();
+        if (type == WorkspaceStoreEvent.Type.DOCUMENT_CHANGED || type == WorkspaceStoreEvent.Type.IDENTITY_CHANGED) {
+            requestSourceRebuild(ChangeKind.STRUCTURE);
+        }
+    }
+
+    private void handleMapAdapterEvent(final MapAdapterEvent event) {
+        if (event != null) {
+            requestSourceRebuild(ChangeKind.MAP_STATE);
+        }
+    }
+
+    private void requestSourceRebuild(final ChangeKind kind) {
+        try {
+            requestRebuild(kind);
+        }
+        catch (IllegalStateException ignored) {
+            // A source can race coordinator shutdown after it has delivered its last event.
+        }
+    }
+
+    private static void closeRegistration(final ListenerRegistration registration) {
+        if (registration != null) {
+            registration.close();
+        }
+    }
 
     public void start() {
         synchronized (monitor) {
@@ -153,11 +236,18 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
     }
 
     public void resetLayout() {
-        restartLayout();
+        synchronized (monitor) {
+            if (closed) {
+                return;
+            }
+        }
+        settleLoop.reset();
     }
 
     @Override
     public void close() {
+        final ListenerRegistration storeRegistration;
+        final ListenerRegistration adapterRegistration;
         synchronized (monitor) {
             if (closed) {
                 return;
@@ -166,13 +256,100 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
             pending = false;
             canvasListeners.clear();
             projectionListeners.clear();
+            storeRegistration = storeListenerRegistration;
+            adapterRegistration = adapterListenerRegistration;
+            storeListenerRegistration = null;
+            adapterListenerRegistration = null;
         }
-        batcher.close();
-        settleLoop.close();
+        if (edt.isEdt() || Boolean.TRUE.equals(acceptingBatch.get())) {
+            deferShutdown(storeRegistration, adapterRegistration);
+        }
+        else {
+            shutdownResources(storeRegistration, adapterRegistration);
+        }
     }
 
     void acceptBatch(final AcceptedBatch batch) {
-        acceptBatchInternal(Objects.requireNonNull(batch, "batch"));
+        final AcceptedBatch value = Objects.requireNonNull(batch, "batch");
+        final Boolean previous = acceptingBatch.get();
+        acceptingBatch.set(Boolean.TRUE);
+        try {
+            acceptBatchInternal(value);
+        }
+        finally {
+            if (previous == null) {
+                acceptingBatch.remove();
+            }
+            else {
+                acceptingBatch.set(previous);
+            }
+        }
+    }
+
+    private void deferShutdown(final ListenerRegistration storeRegistration,
+            final ListenerRegistration adapterRegistration) {
+        final Thread shutdownThread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    shutdownResources(storeRegistration, adapterRegistration);
+                }
+                catch (RuntimeException ignored) {
+                    // An asynchronous close cannot report a shutdown failure to its caller.
+                }
+            }
+        }, "freeplane-graph-update-coordinator-shutdown");
+        shutdownThread.setDaemon(true);
+        shutdownThread.start();
+    }
+
+    private void shutdownResources(final ListenerRegistration storeRegistration,
+            final ListenerRegistration adapterRegistration) {
+        RuntimeException failure = null;
+        try {
+            closeRegistration(storeRegistration);
+        }
+        catch (RuntimeException exception) {
+            failure = recordShutdownFailure(failure, exception);
+        }
+        try {
+            closeRegistration(adapterRegistration);
+        }
+        catch (RuntimeException exception) {
+            failure = recordShutdownFailure(failure, exception);
+        }
+        try {
+            if (ownedMaps != null) {
+                ownedMaps.close();
+            }
+        }
+        catch (RuntimeException exception) {
+            failure = recordShutdownFailure(failure, exception);
+        }
+        try {
+            batcher.close();
+        }
+        catch (RuntimeException exception) {
+            failure = recordShutdownFailure(failure, exception);
+        }
+        try {
+            settleLoop.close();
+        }
+        catch (RuntimeException exception) {
+            failure = recordShutdownFailure(failure, exception);
+        }
+        if (failure != null) {
+            throw failure;
+        }
+    }
+
+    private static RuntimeException recordShutdownFailure(final RuntimeException prior,
+            final RuntimeException next) {
+        if (prior == null) {
+            return next;
+        }
+        prior.addSuppressed(next);
+        return prior;
     }
 
     private void acceptBatchInternal(final AcceptedBatch batch) {
@@ -218,16 +395,24 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
             edt.execute(new Runnable() {
                 @Override
                 public void run() {
+                    final List<GraphProjectionListener> listeners;
                     synchronized (monitor) {
                         if (closed || projection != next) {
                             return;
                         }
-                        for (GraphProjectionListener listener
-                                : new ArrayList<GraphProjectionListener>(projectionListeners)) {
-                            if (closed) {
+                        listeners = new ArrayList<GraphProjectionListener>(projectionListeners);
+                    }
+                    for (GraphProjectionListener listener : listeners) {
+                        synchronized (monitor) {
+                            if (closed || projection != next) {
                                 return;
                             }
+                        }
+                        try {
                             listener.onGraphProjection(next);
+                        }
+                        catch (RuntimeException ignored) {
+                            // One observer must not suppress later ordered observers.
                         }
                     }
                 }
@@ -244,18 +429,27 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
             edt.execute(new Runnable() {
                 @Override
                 public void run() {
+                    final List<CanvasStateListener> listeners;
                     synchronized (monitor) {
                         if (closed || next.generation() != projection.generation()
                                 || next.generation() < state.generation()) {
                             return;
                         }
                         state = next;
-                        for (CanvasStateListener listener
-                                : new ArrayList<CanvasStateListener>(canvasListeners)) {
-                            if (closed) {
+                        listeners = new ArrayList<CanvasStateListener>(canvasListeners);
+                    }
+                    for (CanvasStateListener listener : listeners) {
+                        synchronized (monitor) {
+                            if (closed || next.generation() != projection.generation()
+                                    || next.generation() < state.generation()) {
                                 return;
                             }
+                        }
+                        try {
                             listener.onCanvasState(next);
+                        }
+                        catch (RuntimeException ignored) {
+                            // One observer must not suppress later ordered observers.
                         }
                     }
                 }
@@ -267,14 +461,20 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
     }
 
     private void publishFailure() {
-        final CanvasState retained;
+        final CanvasState failed;
         synchronized (monitor) {
             if (closed) {
                 return;
             }
-            retained = state.withStatus(OperationalStatus.FAILED);
+            if (state.generation() == projection.generation() && state.projection() == projection) {
+                failed = state.withStatus(OperationalStatus.FAILED);
+            }
+            else {
+                failed = CanvasState.of(projection.generation(), projection, state.layout(), state.geometry(),
+                    OperationalStatus.FAILED);
+            }
         }
-        publishCanvasState(retained);
+        publishCanvasState(failed);
     }
 
     private void removeCanvasListener(final CanvasStateListener listener) {
