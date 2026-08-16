@@ -234,6 +234,105 @@ public class GraphUpdateCoordinatorShould {
     }
 
     @Test
+    public void retainsFailedStateAndSuppressesDelayedCanvasFromAnOlderAcceptedGeneration() {
+        QueuedEdt edt = new QueuedEdt();
+        HeldStepper stepper = new HeldStepper();
+        List<CanvasState> callbacks = new ArrayList<CanvasState>();
+        GraphUpdateCoordinator coordinator = coordinator(new GraphUpdateCoordinator.RebuildPipeline() {
+            @Override
+            public GraphProjection rebuild(final AcceptedBatch batch, final GraphProjection previous) {
+                if (batch.generation() == 2L) {
+                    throw new IllegalStateException("newer rebuild failure");
+                }
+                return emptyProjection(batch.generation());
+            }
+        }, unusedBatcher(edt), new LayoutSettleLoop(WORKSPACE, stepper, new GraphGeometryEngine(), edt), edt);
+        try {
+            coordinator.addCanvasStateListener(callbacks::add);
+            coordinator.acceptBatch(batch(1L));
+            stepper.awaitSubmission();
+
+            coordinator.acceptBatch(batch(2L));
+            edt.runQueued();
+            CanvasState failed = coordinator.currentState();
+            assertThat(failed.status()).isEqualTo(OperationalStatus.FAILED);
+            assertThat(failed.generation()).isEqualTo(1L);
+            assertThat(failed.projection()).isSameAs(coordinator.currentProjection());
+            callbacks.clear();
+
+            stepper.release(1L);
+            edt.awaitQueuedTask();
+            edt.runQueued();
+
+            assertThat(coordinator.currentState()).isSameAs(failed);
+            assertThat(callbacks).isEmpty();
+        }
+        finally {
+            stepper.release(1L);
+            coordinator.close();
+        }
+    }
+
+    @Test
+    public void stopsRemainingProjectionObserversWhenANewerGenerationIsAcceptedDuringDelivery() {
+        ImmediateEdt edt = new ImmediateEdt();
+        HeldStepper stepper = new HeldStepper();
+        List<String> callbacks = new ArrayList<String>();
+        GraphUpdateCoordinator coordinator = coordinator(new GraphUpdateCoordinator.RebuildPipeline() {
+            @Override
+            public GraphProjection rebuild(final AcceptedBatch batch, final GraphProjection previous) {
+                if (batch.generation() == 2L) {
+                    throw new IllegalStateException("newer rebuild failure");
+                }
+                return emptyProjection(batch.generation());
+            }
+        }, unusedBatcher(edt), new LayoutSettleLoop(WORKSPACE, stepper, new GraphGeometryEngine(), edt), edt);
+        try {
+            coordinator.addProjectionListener(projection -> {
+                callbacks.add("first-" + projection.generation());
+                coordinator.acceptBatch(batch(2L));
+            });
+            coordinator.addProjectionListener(projection -> callbacks.add("second-" + projection.generation()));
+
+            coordinator.acceptBatch(batch(1L));
+
+            assertThat(callbacks).containsExactly("first-1");
+        }
+        finally {
+            coordinator.close();
+        }
+    }
+
+    @Test
+    public void suppressesQueuedProjectionObserversAfterNewerGenerationIsAccepted() {
+        QueuedEdt edt = new QueuedEdt();
+        HeldStepper stepper = new HeldStepper();
+        List<Long> callbacks = new ArrayList<Long>();
+        GraphUpdateCoordinator coordinator = coordinator(new GraphUpdateCoordinator.RebuildPipeline() {
+            @Override
+            public GraphProjection rebuild(final AcceptedBatch batch, final GraphProjection previous) {
+                if (batch.generation() == 2L) {
+                    throw new IllegalStateException("newer rebuild failure");
+                }
+                return emptyProjection(batch.generation());
+            }
+        }, unusedBatcher(edt), new LayoutSettleLoop(WORKSPACE, stepper, new GraphGeometryEngine(), edt), edt);
+        try {
+            coordinator.addProjectionListener(projection -> callbacks.add(projection.generation()));
+            coordinator.acceptBatch(batch(1L));
+            stepper.awaitSubmission();
+
+            coordinator.acceptBatch(batch(2L));
+            edt.runQueued();
+
+            assertThat(callbacks).isEmpty();
+        }
+        finally {
+            coordinator.close();
+        }
+    }
+
+    @Test
     public void ignoresLowerAcceptedGenerationsForProjectionAndCanvasState() {
         ImmediateEdt edt = new ImmediateEdt();
         CompletableFuture<CanvasState> published = new CompletableFuture<CanvasState>();
@@ -491,6 +590,147 @@ public class GraphUpdateCoordinatorShould {
 
         private int closeCount() {
             return closeCount;
+        }
+    }
+
+    private static final class HeldStepper implements LayoutSettleLoop.FrameStepper {
+        private final CountDownLatch submission = new CountDownLatch(1);
+        private final CompletableFuture<LayoutFrame> submitted = new CompletableFuture<LayoutFrame>();
+
+        @Override
+        public CompletionStage<LayoutFrame> submit(final LayoutRequest request) {
+            submission.countDown();
+            return submitted;
+        }
+
+        @Override
+        public CompletionStage<LayoutFrame> step() {
+            return CompletableFuture.completedFuture(idleFrame(0L));
+        }
+
+        @Override
+        public void pause() {
+        }
+
+        @Override
+        public void restart() {
+        }
+
+        @Override
+        public LayoutFrame lastValidFrame() {
+            return idleFrame(0L);
+        }
+
+        @Override
+        public void close() {
+        }
+
+        private void awaitSubmission() {
+            try {
+                assertThat(submission.await(5L, TimeUnit.SECONDS)).isTrue();
+            }
+            catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError("Interrupted while waiting for layout submission", interrupted);
+            }
+        }
+
+        private void release(final long generation) {
+            submitted.complete(idleFrame(generation));
+        }
+    }
+
+    private static final class QueuedEdt implements EdtExecutor {
+        private final Object monitor = new Object();
+        private final Deque<Runnable> queued = new ArrayDeque<Runnable>();
+        private final ThreadLocal<Boolean> active = new ThreadLocal<Boolean>();
+
+        @Override
+        public <T> T call(final Callable<T> task) {
+            if (isEdt()) {
+                return callNow(task);
+            }
+            final Holder<T> result = new Holder<T>();
+            runOnEdt(() -> result.value = callNow(task));
+            return result.value;
+        }
+
+        @Override
+        public void execute(final Runnable task) {
+            if (isEdt()) {
+                task.run();
+                return;
+            }
+            synchronized (monitor) {
+                queued.add(task);
+                monitor.notifyAll();
+            }
+        }
+
+        @Override
+        public boolean isEdt() {
+            return Boolean.TRUE.equals(active.get());
+        }
+
+        private void awaitQueuedTask() {
+            final long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5L);
+            synchronized (monitor) {
+                while (queued.isEmpty()) {
+                    final long remaining = deadline - System.nanoTime();
+                    if (remaining <= 0L) {
+                        throw new AssertionError("Timed out waiting for queued EDT task");
+                    }
+                    try {
+                        monitor.wait(Math.max(1L, TimeUnit.NANOSECONDS.toMillis(remaining)));
+                    }
+                    catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                        throw new AssertionError("Interrupted while waiting for queued EDT task", interrupted);
+                    }
+                }
+            }
+        }
+
+        private void runQueued() {
+            while (true) {
+                final Runnable task;
+                synchronized (monitor) {
+                    task = queued.poll();
+                }
+                if (task == null) {
+                    return;
+                }
+                runOnEdt(task);
+            }
+        }
+
+        private void runOnEdt(final Runnable task) {
+            final Boolean previous = active.get();
+            active.set(Boolean.TRUE);
+            try {
+                task.run();
+            }
+            finally {
+                restore(previous);
+            }
+        }
+
+        private static <T> T callNow(final Callable<T> task) {
+            try {
+                return task.call();
+            }
+            catch (Exception failure) {
+                throw new IllegalStateException(failure);
+            }
+        }
+
+        private void restore(final Boolean previous) {
+            if (previous == null) {
+                active.remove();
+            }
+            else {
+                active.set(previous);
+            }
         }
     }
 
