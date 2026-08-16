@@ -441,21 +441,95 @@ public class GraphUpdateCoordinatorShould {
         ImmediateEdt edt = new ImmediateEdt();
         RecordingStepper stepper = new RecordingStepper();
         CompletableFuture<CanvasState> firstPublication = new CompletableFuture<CanvasState>();
+        CompletableFuture<CanvasState> resetPublication = new CompletableFuture<CanvasState>();
         GraphUpdateCoordinator coordinator = coordinator(new TestPipeline(), unusedBatcher(edt),
             new LayoutSettleLoop(WORKSPACE, stepper, new GraphGeometryEngine(), edt), edt);
         try {
-            coordinator.addCanvasStateListener(firstPublication::complete);
+            coordinator.addCanvasStateListener(state -> {
+                if (firstPublication.complete(state)) {
+                    return;
+                }
+                resetPublication.complete(state);
+            });
             coordinator.acceptBatch(batch(10L));
             await(firstPublication);
 
             coordinator.resetLayout();
+            CanvasState resetState = await(resetPublication);
 
+            assertThat(resetState.generation()).isEqualTo(10L);
+            assertThat(resetState.projection()).isSameAs(coordinator.currentProjection());
             assertThat(stepper.resetCount).isEqualTo(1);
             assertThat(stepper.submitCount).isEqualTo(2);
             assertThat(stepper.submissions.get(1).projection()).isSameAs(coordinator.currentProjection());
         }
         finally {
             coordinator.close();
+        }
+    }
+
+    @Test
+    public void doesNotBlockTheCoordinatorEdtOnPhysicalReset() {
+        ThreadAwareEdt edt = new ThreadAwareEdt();
+        LayoutSettleLoopShould.ManualLifecycleDispatcher dispatcher =
+            new LayoutSettleLoopShould.ManualLifecycleDispatcher();
+        LayoutSettleLoopShould.RecordingStepper stepper =
+            new LayoutSettleLoopShould.RecordingStepper(dispatcher);
+        CompletableFuture<CanvasState> firstPublication = new CompletableFuture<CanvasState>();
+        CompletableFuture<CanvasState> resetPublication = new CompletableFuture<CanvasState>();
+        GraphUpdateCoordinator coordinator = coordinator(new TestPipeline(), unusedBatcher(edt),
+            new LayoutSettleLoop(WORKSPACE, stepper, new GraphGeometryEngine(), edt, dispatcher), edt);
+        CompletableFuture<Void> physicalReset = null;
+
+        try {
+            coordinator.addCanvasStateListener(state -> {
+                if (firstPublication.complete(state)) {
+                    return;
+                }
+                resetPublication.complete(state);
+            });
+            coordinator.acceptBatch(batch(10L));
+            dispatcher.runAll();
+            await(firstPublication);
+
+            stepper.blockReset();
+            CompletableFuture<Void> edtReturned = new CompletableFuture<Void>();
+            CompletableFuture<Void> resetCall = CompletableFuture.runAsync(() -> edt.runOnEdt(() -> {
+                coordinator.resetLayout();
+                edtReturned.complete(null);
+            }));
+            await(edtReturned);
+            assertThat(stepper.resetEntered().isDone()).isFalse();
+
+            physicalReset = LayoutSettleLoopShould.runBlockedNext(dispatcher);
+            await(stepper.resetEntered());
+            assertThat(edtReturned.isDone()).isTrue();
+            stepper.releaseReset();
+            await(physicalReset);
+            await(resetCall);
+            dispatcher.runAll();
+
+            CanvasState resetState = await(resetPublication);
+            assertThat(resetState.generation()).isEqualTo(10L);
+            assertThat(resetState.projection()).isSameAs(coordinator.currentProjection());
+            assertThat(stepper.resetCount()).isEqualTo(1);
+            assertThat(stepper.submitCount()).isEqualTo(2);
+        }
+        finally {
+            stepper.releaseReset();
+            if (physicalReset != null) {
+                await(physicalReset);
+            }
+            stepper.blockClose();
+            int closeCommand = dispatcher.enqueueCount() + 1;
+            CompletableFuture<Void> closeCall = CompletableFuture.runAsync(coordinator::close);
+            await(dispatcher.enqueuedAt(closeCommand));
+            dispatcher.runUntilExecuted(closeCommand - 1);
+            CompletableFuture<Void> physicalClose = LayoutSettleLoopShould.runBlockedNext(dispatcher);
+            await(stepper.closeEntered());
+            stepper.releaseClose();
+            await(physicalClose);
+            await(closeCall);
         }
     }
 
