@@ -20,6 +20,7 @@ import java.util.concurrent.Delayed;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.freeplane.plugin.graph.adapter.EdtExecutor;
@@ -304,6 +305,87 @@ public class GraphUpdateCoordinatorShould {
     }
 
     @Test
+    public void stopsRemainingCanvasObserversWhenANewerGenerationIsAcceptedDuringDelivery() throws Exception {
+        AtomicBoolean firstCanvasListenerStarted = new AtomicBoolean();
+        CountDownLatch firstCanvasPublicationFinished = new CountDownLatch(1);
+        ImmediateEdt edt = new ImmediateEdt(() -> {
+            if (firstCanvasListenerStarted.get()) {
+                firstCanvasPublicationFinished.countDown();
+            }
+        });
+        CountDownLatch firstCanvasListenerEntered = new CountDownLatch(1);
+        CountDownLatch releaseFirstCanvasListener = new CountDownLatch(1);
+        CountDownLatch secondGenerationRebuildEntered = new CountDownLatch(1);
+        CountDownLatch releaseSecondGenerationRebuild = new CountDownLatch(1);
+        AtomicReference<Throwable> firstBatchFailure = new AtomicReference<Throwable>();
+        AtomicReference<Throwable> secondBatchFailure = new AtomicReference<Throwable>();
+        List<String> callbacks = Collections.synchronizedList(new ArrayList<String>());
+        GraphUpdateCoordinator coordinator = coordinator(new GraphUpdateCoordinator.RebuildPipeline() {
+            @Override
+            public GraphProjection rebuild(final AcceptedBatch batch, final GraphProjection previous) {
+                if (batch.generation() == 2L) {
+                    secondGenerationRebuildEntered.countDown();
+                    awaitLatch(releaseSecondGenerationRebuild);
+                }
+                return emptyProjection(batch.generation());
+            }
+        }, unusedBatcher(edt), new LayoutSettleLoop(WORKSPACE, new ImmediateStepper(), new GraphGeometryEngine(), edt), edt);
+        Thread firstBatch = new Thread(() -> {
+            try {
+                coordinator.acceptBatch(batch(1L));
+            }
+            catch (Throwable failure) {
+                firstBatchFailure.set(failure);
+            }
+        }, "graph-update-coordinator-first-canvas-batch");
+        Thread secondBatch = new Thread(() -> {
+            try {
+                coordinator.acceptBatch(batch(2L));
+            }
+            catch (Throwable failure) {
+                secondBatchFailure.set(failure);
+            }
+        }, "graph-update-coordinator-second-canvas-batch");
+        try {
+            coordinator.addCanvasStateListener(state -> {
+                callbacks.add("first-" + state.generation());
+                if (state.generation() == 1L) {
+                    firstCanvasListenerStarted.set(true);
+                    firstCanvasListenerEntered.countDown();
+                    awaitLatch(releaseFirstCanvasListener);
+                }
+            });
+            coordinator.addCanvasStateListener(state -> callbacks.add("second-" + state.generation()));
+
+            firstBatch.start();
+            assertThat(firstCanvasListenerEntered.await(5L, TimeUnit.SECONDS)).isTrue();
+            GraphProjection firstProjection = coordinator.currentProjection();
+            CanvasState firstState = coordinator.currentState();
+
+            secondBatch.start();
+            assertThat(secondGenerationRebuildEntered.await(5L, TimeUnit.SECONDS)).isTrue();
+            assertThat(secondBatch.isAlive()).isTrue();
+            assertThat(coordinator.currentProjection()).isSameAs(firstProjection);
+            assertThat(coordinator.currentState()).isSameAs(firstState);
+
+            releaseFirstCanvasListener.countDown();
+            assertThat(firstCanvasPublicationFinished.await(5L, TimeUnit.SECONDS)).isTrue();
+            firstBatch.join(5_000L);
+            assertThat(firstBatch.isAlive()).isFalse();
+            assertThat(firstBatchFailure.get()).isNull();
+            assertThat(callbacks).containsExactly("first-1");
+        }
+        finally {
+            releaseFirstCanvasListener.countDown();
+            releaseSecondGenerationRebuild.countDown();
+            firstBatch.join(5_000L);
+            secondBatch.join(5_000L);
+            coordinator.close();
+        }
+        assertThat(secondBatchFailure.get()).isNull();
+    }
+
+    @Test
     public void suppressesQueuedProjectionObserversAfterNewerGenerationIsAccepted() {
         QueuedEdt edt = new QueuedEdt();
         HeldStepper stepper = new HeldStepper();
@@ -547,6 +629,16 @@ public class GraphUpdateCoordinatorShould {
         }
         catch (Exception failure) {
             throw new AssertionError("Timed out waiting for coordinator publication", failure);
+        }
+    }
+
+    private static void awaitLatch(final CountDownLatch latch) {
+        try {
+            latch.await();
+        }
+        catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError("Interrupted while waiting for synchronization checkpoint", interrupted);
         }
     }
 
@@ -807,6 +899,15 @@ public class GraphUpdateCoordinatorShould {
 
     private static final class ImmediateEdt implements EdtExecutor {
         private final ThreadLocal<Boolean> active = new ThreadLocal<Boolean>();
+        private final Runnable afterExecution;
+
+        private ImmediateEdt() {
+            this(null);
+        }
+
+        private ImmediateEdt(final Runnable afterExecution) {
+            this.afterExecution = afterExecution;
+        }
 
         @Override
         public <T> T call(final Callable<T> task) {
@@ -820,6 +921,9 @@ public class GraphUpdateCoordinatorShould {
             }
             finally {
                 restore(previous);
+                if (afterExecution != null) {
+                    afterExecution.run();
+                }
             }
         }
 
@@ -832,6 +936,9 @@ public class GraphUpdateCoordinatorShould {
             }
             finally {
                 restore(previous);
+                if (afterExecution != null) {
+                    afterExecution.run();
+                }
             }
         }
 
