@@ -143,14 +143,18 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
     }
 
     public void start() {
+        final CanvasState initial;
+        final long generation;
         synchronized (monitor) {
             requireOpenLocked();
             if (started) {
                 return;
             }
             started = true;
+            initial = state;
+            generation = acceptedGeneration;
         }
-        publishCanvasState(state);
+        publishCanvasState(initial, generation);
         requestRebuild(ChangeKind.MAP_STATE);
     }
 
@@ -370,7 +374,7 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
             }
         }
         catch (RuntimeException failure) {
-            publishFailure();
+            publishFailure(batch.generation());
             return;
         }
         final ProjectionDiff diff;
@@ -381,30 +385,30 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
             projection = next;
             diff = ProjectionDiff.between(previous, next);
         }
-        publishProjection(next);
+        publishProjection(next, batch.generation());
         try {
-            settleLoop.start(batch, next, diff, this::publishCanvasState);
+            settleLoop.start(batch, next, diff, state -> publishCanvasState(state, batch.generation()));
         }
         catch (RuntimeException failure) {
-            publishFailure();
+            publishFailure(batch.generation());
         }
     }
 
-    private void publishProjection(final GraphProjection next) {
+    private void publishProjection(final GraphProjection next, final long generation) {
         try {
             edt.execute(new Runnable() {
                 @Override
                 public void run() {
                     final List<GraphProjectionListener> listeners;
                     synchronized (monitor) {
-                        if (closed || projection != next) {
+                        if (closed || generation != acceptedGeneration || projection != next) {
                             return;
                         }
                         listeners = new ArrayList<GraphProjectionListener>(projectionListeners);
                     }
                     for (GraphProjectionListener listener : listeners) {
                         synchronized (monitor) {
-                            if (closed || projection != next) {
+                            if (closed || generation != acceptedGeneration || projection != next) {
                                 return;
                             }
                         }
@@ -423,7 +427,7 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
         }
     }
 
-    private void publishCanvasState(final CanvasState next) {
+    private void publishCanvasState(final CanvasState next, final long generation) {
         Objects.requireNonNull(next, "state");
         try {
             edt.execute(new Runnable() {
@@ -431,7 +435,7 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
                 public void run() {
                     final List<CanvasStateListener> listeners;
                     synchronized (monitor) {
-                        if (closed || next.generation() != projection.generation()
+                        if (closed || generation != acceptedGeneration || next.generation() != projection.generation()
                                 || next.generation() < state.generation()) {
                             return;
                         }
@@ -440,7 +444,8 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
                     }
                     for (CanvasStateListener listener : listeners) {
                         synchronized (monitor) {
-                            if (closed || next.generation() != projection.generation()
+                            if (closed || generation != acceptedGeneration || state != next
+                                    || projection != next.projection() || next.generation() != projection.generation()
                                     || next.generation() < state.generation()) {
                                 return;
                             }
@@ -460,10 +465,10 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
         }
     }
 
-    private void publishFailure() {
+    private void publishFailure(final long generation) {
         final CanvasState failed;
         synchronized (monitor) {
-            if (closed) {
+            if (closed || generation != acceptedGeneration) {
                 return;
             }
             if (state.generation() == projection.generation() && state.projection() == projection) {
@@ -474,7 +479,7 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
                     OperationalStatus.FAILED);
             }
         }
-        publishCanvasState(failed);
+        publishCanvasState(failed, generation);
     }
 
     private void removeCanvasListener(final CanvasStateListener listener) {
