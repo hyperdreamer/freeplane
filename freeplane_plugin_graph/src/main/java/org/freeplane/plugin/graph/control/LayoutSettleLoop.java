@@ -3,9 +3,17 @@ package org.freeplane.plugin.graph.control;
 import java.awt.Font;
 import java.awt.font.FontRenderContext;
 import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.swing.SwingUtilities;
 
@@ -14,15 +22,23 @@ import org.freeplane.plugin.graph.geometry.AwtGeometryTextMetrics;
 import org.freeplane.plugin.graph.geometry.GeometryTextMetrics;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.GraphGeometryEngine;
+import org.freeplane.plugin.graph.geometry.LayoutPoint;
+import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.layout.LayoutCalibration;
+import org.freeplane.plugin.graph.layout.LayoutConflict;
 import org.freeplane.plugin.graph.layout.LayoutFrame;
 import org.freeplane.plugin.graph.layout.LayoutRequest;
 import org.freeplane.plugin.graph.layout.LayoutWorker;
+import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.GraphProjection;
+import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
+import org.freeplane.plugin.graph.projection.ProjectedNode;
+import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
 import org.freeplane.plugin.graph.projection.ProjectionDiff;
 import org.freeplane.plugin.graph.workspace.model.WorkspaceId;
 
 public final class LayoutSettleLoop implements AutoCloseable {
+    private static final AtomicInteger CONTINUATION_IDS = new AtomicInteger();
     private final Object monitor = new Object();
     private final WorkspaceId workspace;
     private final FrameStepper worker;
@@ -30,10 +46,11 @@ public final class LayoutSettleLoop implements AutoCloseable {
     private final GeometryTextMetrics metrics;
     private final EdtExecutor edt;
     private final LabelAssembler labels;
+    private final ExecutorService continuationExecutor = createContinuationExecutor();
 
     private Run currentRun;
-    private CanvasState lastState;
     private long token;
+    private long highestAcceptedGeneration = Long.MIN_VALUE;
     private boolean paused;
     private boolean closed;
 
@@ -70,23 +87,17 @@ public final class LayoutSettleLoop implements AutoCloseable {
         final Run run;
         synchronized (monitor) {
             requireOpenLocked();
-            token++;
-            if (currentRun != null) {
-                currentRun.result.complete(null);
+            if (accepted.generation() <= highestAcceptedGeneration) {
+                return currentRun == null ? CompletableFuture.completedFuture(null) : currentRun.result;
             }
+            highestAcceptedGeneration = accepted.generation();
+            invalidateCurrentLocked();
             paused = false;
-            run = new Run(token, accepted, value, callback, request);
+            run = new Run(++token, accepted, value, callback, request);
+            run.frameInFlight = true;
             currentRun = run;
         }
-        CompletionStage<LayoutFrame> submitted;
-        try {
-            submitted = worker.submit(request);
-        }
-        catch (RuntimeException failure) {
-            fail(run);
-            return run.result;
-        }
-        submitted.whenComplete((frame, failure) -> handleFrame(run, frame, failure));
+        submit(run);
         return run.result;
     }
 
@@ -96,23 +107,71 @@ public final class LayoutSettleLoop implements AutoCloseable {
                 return;
             }
             paused = true;
+            if (currentRun != null && (currentRun.frameInFlight || currentRun.publicationInFlight)) {
+                currentRun.discardOnPause = true;
+            }
         }
         worker.pause();
     }
 
     public void restart() {
         final Run run;
+        final boolean shouldStep;
         synchronized (monitor) {
             if (closed) {
                 return;
             }
+            final boolean wasPaused = paused;
             paused = false;
             run = currentRun;
+            shouldStep = run != null && isCurrentLocked(run) && !run.result.isDone()
+                && !run.frameInFlight && !run.publicationInFlight;
+            if (shouldStep) {
+                run.restartRequested = false;
+                run.frameInFlight = true;
+            }
+            else if (wasPaused && run != null && isCurrentLocked(run) && !run.result.isDone()) {
+                run.restartRequested = true;
+            }
         }
-        worker.restart();
-        if (run != null && !run.result.isDone()) {
-            requestStep(run);
+        try {
+            worker.restart();
         }
+        catch (RuntimeException failure) {
+            if (shouldStep) {
+                dispatchFrameFailure(run, failure);
+                return;
+            }
+            throw failure;
+        }
+        if (shouldStep) {
+            requestClaimedStep(run);
+        }
+    }
+
+    void reset() {
+        final Run run;
+        synchronized (monitor) {
+            if (closed || currentRun == null) {
+                return;
+            }
+            final Run previous = currentRun;
+            final LayoutRequest request = LayoutRequest.of(workspace, previous.projection,
+                previous.request.diff(), previous.request.pins());
+            invalidateCurrentLocked();
+            paused = false;
+            run = new Run(++token, previous.batch, previous.projection, previous.listener, request);
+            run.frameInFlight = true;
+            currentRun = run;
+        }
+        try {
+            worker.restart();
+        }
+        catch (RuntimeException failure) {
+            dispatchFrameFailure(run, failure);
+            return;
+        }
+        submit(run);
     }
 
     @Override
@@ -128,118 +187,342 @@ public final class LayoutSettleLoop implements AutoCloseable {
                 currentRun = null;
             }
         }
-        worker.close();
+        try {
+            worker.close();
+        }
+        finally {
+            continuationExecutor.shutdown();
+        }
     }
 
     private void handleFrame(final Run run, final LayoutFrame frame, final Throwable failure) {
-        if (!isCurrent(run)) {
-            run.result.complete(null);
+        final boolean resume;
+        final boolean discarded;
+        synchronized (monitor) {
+            if (!isCurrentLocked(run)) {
+                run.frameInFlight = false;
+                run.result.complete(null);
+                return;
+            }
+            if (run.discardOnPause || paused) {
+                run.frameInFlight = false;
+                run.discardOnPause = false;
+                resume = resumeAfterDiscardLocked(run);
+                discarded = true;
+            }
+            else {
+                resume = false;
+                discarded = false;
+            }
+        }
+        if (resume) {
+            requestClaimedStep(run);
+            return;
+        }
+        if (discarded) {
             return;
         }
         if (failure != null || frame == null || frame.failed()) {
-            fail(run);
+            fail(run, frame);
             return;
         }
-        final GraphGeometry geometry;
         try {
-            geometry = labels.place(run.projection, geometryEngine.computeHulls(run.projection, frame.positions()), metrics);
+            final GraphGeometry geometry = labels.place(run.projection,
+                geometryEngine.computeHulls(run.projection, frame.positions()), metrics);
+            final OperationalStatus status = isEmpty(run.projection)
+                ? OperationalStatus.EMPTY
+                : frame.idle().idle() ? OperationalStatus.IDLE : OperationalStatus.SETTLING;
+            final CanvasState state = CanvasState.of(run.batch.generation(), run.projection, frame, geometry, status);
+            publish(run, state, frame.idle().idle());
         }
         catch (RuntimeException exception) {
-            fail(run);
-            return;
+            fail(run, frame);
         }
-        final OperationalStatus status = frame.idle().idle() ? OperationalStatus.IDLE : OperationalStatus.SETTLING;
-        final CanvasState state = CanvasState.of(run.batch.generation(), run.projection, frame, geometry, status);
-        publish(run, state, frame.idle().idle());
     }
 
     private void publish(final Run run, final CanvasState state, final boolean idle) {
         final CompletableFuture<Void> published = new CompletableFuture<Void>();
+        final boolean resume;
+        final boolean publishOnEdt;
+        synchronized (monitor) {
+            if (!isCurrentLocked(run)) {
+                run.frameInFlight = false;
+                run.result.complete(null);
+                resume = false;
+                publishOnEdt = false;
+            }
+            else if (paused || run.discardOnPause) {
+                run.frameInFlight = false;
+                run.discardOnPause = false;
+                resume = resumeAfterDiscardLocked(run);
+                publishOnEdt = false;
+            }
+            else {
+                resume = false;
+                run.frameInFlight = false;
+                run.publicationInFlight = true;
+                publishOnEdt = true;
+            }
+        }
+        if (resume) {
+            requestClaimedStep(run);
+            return;
+        }
+        if (!publishOnEdt) {
+            return;
+        }
+        try {
+            published.whenCompleteAsync((ignored, failure) -> finishPublication(run, idle, failure),
+                continuationExecutor);
+        }
+        catch (RejectedExecutionException rejected) {
+            synchronized (monitor) {
+                run.publicationInFlight = false;
+                run.result.complete(null);
+            }
+            return;
+        }
         try {
             edt.execute(new Runnable() {
                 @Override
                 public void run() {
-                    if (!isCurrent(run)) {
-                        published.complete(null);
-                        return;
+                    synchronized (monitor) {
+                        if (!isCurrentLocked(run) || paused || run.discardOnPause) {
+                            published.complete(null);
+                            return;
+                        }
                     }
                     try {
-                        synchronized (monitor) {
-                            if (closed || currentRun != run || token != run.token) {
-                                published.complete(null);
-                                return;
-                            }
-                            lastState = state;
-                            run.listener.onCanvasState(state);
-                        }
-                        published.complete(null);
+                        run.listener.onCanvasState(state);
                     }
-                    catch (RuntimeException failure) {
-                        published.completeExceptionally(failure);
+                    catch (RuntimeException ignored) {
+                        // Listener failures must not terminate the settling loop.
                     }
+                    published.complete(null);
                 }
             });
         }
         catch (RuntimeException failure) {
             published.completeExceptionally(failure);
         }
-        published.whenComplete((ignored, failure) -> {
-            if (!isCurrent(run)) {
+    }
+
+    private void finishPublication(final Run run, final boolean idle, final Throwable failure) {
+        final boolean shouldStep;
+        synchronized (monitor) {
+            run.publicationInFlight = false;
+            if (!isCurrentLocked(run)) {
                 run.result.complete(null);
+                return;
             }
-            else if (failure != null) {
-                fail(run);
+            if (failure != null) {
+                run.result.complete(null);
+                return;
+            }
+            if (run.discardOnPause) {
+                run.discardOnPause = false;
+                shouldStep = resumeAfterDiscardLocked(run);
+                if (!shouldStep) {
+                    return;
+                }
+            }
+            else if (paused) {
+                return;
             }
             else if (idle) {
                 run.result.complete(null);
+                return;
             }
             else {
-                boolean shouldStep;
-                synchronized (monitor) {
-                    shouldStep = !paused && !closed;
-                }
+                shouldStep = !run.frameInFlight;
                 if (shouldStep) {
-                    requestStep(run);
+                    run.frameInFlight = true;
                 }
             }
-        });
+        }
+        if (shouldStep) {
+            requestClaimedStep(run);
+        }
     }
 
-    private void requestStep(final Run run) {
-        if (!isCurrent(run)) {
-            run.result.complete(null);
-            return;
+    private void submit(final Run run) {
+        synchronized (monitor) {
+            if (!isCurrentLocked(run)) {
+                run.frameInFlight = false;
+                run.result.complete(null);
+                return;
+            }
         }
-        CompletionStage<LayoutFrame> next;
         try {
-            next = worker.step();
+            final CompletionStage<LayoutFrame> submitted = Objects.requireNonNull(worker.submit(run.request),
+                "worker submit result");
+            submitted.whenCompleteAsync((frame, failure) -> handleFrame(run, frame, failure),
+                continuationExecutor);
         }
         catch (RuntimeException failure) {
-            fail(run);
-            return;
+            dispatchFrameFailure(run, failure);
         }
-        next.whenComplete((frame, failure) -> handleFrame(run, frame, failure));
     }
 
-    private void fail(final Run run) {
-        if (!isCurrent(run)) {
+    private void requestClaimedStep(final Run run) {
+        synchronized (monitor) {
+            if (!isCurrentLocked(run) || paused || run.discardOnPause) {
+                run.frameInFlight = false;
+                if (isCurrentLocked(run) && (paused || run.discardOnPause)) {
+                    run.restartRequested = true;
+                }
+                run.discardOnPause = false;
+                if (!isCurrentLocked(run)) {
+                    run.result.complete(null);
+                }
+                return;
+            }
+        }
+        try {
+            final CompletionStage<LayoutFrame> next = Objects.requireNonNull(worker.step(),
+                "worker step result");
+            next.whenCompleteAsync((frame, failure) -> handleFrame(run, frame, failure),
+                continuationExecutor);
+        }
+        catch (RuntimeException failure) {
+            dispatchFrameFailure(run, failure);
+        }
+    }
+
+    private void dispatchFrameFailure(final Run run, final Throwable failure) {
+        try {
+            continuationExecutor.execute(new Runnable() {
+                @Override
+                public void run() {
+                    handleFrame(run, null, failure);
+                }
+            });
+        }
+        catch (RejectedExecutionException rejected) {
             run.result.complete(null);
+        }
+    }
+
+    private void fail(final Run run, final LayoutFrame source) {
+        final boolean resume;
+        final boolean discarded;
+        synchronized (monitor) {
+            if (!isCurrentLocked(run)) {
+                run.frameInFlight = false;
+                run.result.complete(null);
+                return;
+            }
+            if (paused || run.discardOnPause) {
+                run.frameInFlight = false;
+                run.discardOnPause = false;
+                resume = resumeAfterDiscardLocked(run);
+                discarded = true;
+            }
+            else {
+                resume = false;
+                discarded = false;
+            }
+        }
+        if (resume) {
+            requestClaimedStep(run);
             return;
         }
-        final CanvasState retained;
-        synchronized (monitor) {
-            retained = lastState;
+        if (discarded) {
+            return;
         }
+        final LayoutFrame failed = failedFrame(run, source);
+        try {
+            final GraphGeometry geometry = labels.place(run.projection,
+                geometryEngine.computeHulls(run.projection, failed.positions()), metrics);
+            final CanvasState state = CanvasState.of(run.batch.generation(), run.projection, failed, geometry,
+                OperationalStatus.FAILED);
+            publish(run, state, true);
+        }
+        catch (RuntimeException exception) {
+            synchronized (monitor) {
+                run.frameInFlight = false;
+                run.result.complete(null);
+            }
+        }
+    }
+
+    private LayoutFrame failedFrame(final Run run, final LayoutFrame source) {
+        LayoutFrame retained = null;
+        try {
+            retained = worker.lastValidFrame();
+        }
+        catch (RuntimeException ignored) {
+            // A failed worker may not have a readable retained frame.
+        }
+        final boolean retainedUsable = retained != null && covers(run.projection, retained.positions());
+        final LayoutPositions positions = retainedUsable ? retained.positions() : fallbackPositions(run.projection);
+        final long index = source != null ? source.stepIndex() : retained == null ? 0L : retained.stepIndex();
         if (retained == null) {
-            run.result.complete(null);
-            return;
+            return LayoutFrame.of(index, positions, true);
         }
-        publish(run, retained.withStatus(OperationalStatus.FAILED), true);
+        final List<LayoutConflict> conflicts = retained.conflicts();
+        return LayoutFrame.withDiagnostics(LayoutFrame.of(index, positions, true), conflicts, retained.idle());
     }
 
-    private boolean isCurrent(final Run run) {
-        synchronized (monitor) {
-            return !closed && currentRun == run && token == run.token;
+    private static boolean covers(final GraphProjection projection, final LayoutPositions positions) {
+        if (positions == null || positions.nodes().size() != projection.nodes().size()
+                || positions.anchors().size() != projection.enclosures().size()) {
+            return false;
+        }
+        for (ProjectedNode node : projection.nodes()) {
+            if (!positions.nodes().containsKey(node.key())) {
+                return false;
+            }
+        }
+        for (ProjectedEnclosure enclosure : projection.enclosures()) {
+            if (!positions.anchors().containsKey(enclosure.hullKey())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static LayoutPositions fallbackPositions(final GraphProjection projection) {
+        final Map<ProjectedNodeKey, LayoutPoint> nodes = new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        long slot = 0L;
+        for (ProjectedNode node : projection.nodes()) {
+            nodes.put(node.key(), fallbackPoint(slot++));
+        }
+        final Map<EnclosureHullKey, LayoutPoint> anchors = new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
+        for (ProjectedEnclosure enclosure : projection.enclosures()) {
+            anchors.put(enclosure.hullKey(), fallbackPoint(slot++));
+        }
+        return LayoutPositions.of(nodes, anchors);
+    }
+
+    private static LayoutPoint fallbackPoint(final long slot) {
+        final double x = (slot % 32L) * 64.0;
+        final double y = (slot / 32L) * 64.0;
+        return LayoutPoint.of(x, y);
+    }
+
+    private static boolean isEmpty(final GraphProjection projection) {
+        return projection.nodes().isEmpty() && projection.enclosures().isEmpty() && projection.edges().isEmpty();
+    }
+
+    private boolean isCurrentLocked(final Run run) {
+        return !closed && currentRun == run && token == run.token;
+    }
+
+    private boolean resumeAfterDiscardLocked(final Run run) {
+        if (!isCurrentLocked(run) || paused || run.result.isDone() || !run.restartRequested
+                || run.frameInFlight || run.publicationInFlight) {
+            return false;
+        }
+        run.restartRequested = false;
+        run.frameInFlight = true;
+        return true;
+    }
+
+    private void invalidateCurrentLocked() {
+        if (currentRun != null) {
+            currentRun.result.complete(null);
+            currentRun = null;
         }
     }
 
@@ -247,6 +530,18 @@ public final class LayoutSettleLoop implements AutoCloseable {
         if (closed) {
             throw new IllegalStateException("Layout settle loop is closed");
         }
+    }
+
+    private static ExecutorService createContinuationExecutor() {
+        final int id = CONTINUATION_IDS.incrementAndGet();
+        return Executors.newSingleThreadExecutor(new ThreadFactory() {
+            @Override
+            public Thread newThread(final Runnable command) {
+                final Thread thread = new Thread(command, "freeplane-graph-layout-continuation-" + id);
+                thread.setDaemon(true);
+                return thread;
+            }
+        });
     }
 
     private static GeometryTextMetrics defaultMetrics() {
@@ -284,6 +579,10 @@ public final class LayoutSettleLoop implements AutoCloseable {
         private final CanvasStateListener listener;
         private final LayoutRequest request;
         private final CompletableFuture<Void> result = new CompletableFuture<Void>();
+        private boolean frameInFlight;
+        private boolean publicationInFlight;
+        private boolean discardOnPause;
+        private boolean restartRequested;
 
         private Run(final long token, final AcceptedBatch batch, final GraphProjection projection,
                 final CanvasStateListener listener, final LayoutRequest request) {
