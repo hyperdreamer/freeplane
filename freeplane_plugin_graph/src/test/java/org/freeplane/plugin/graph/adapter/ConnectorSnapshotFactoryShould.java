@@ -39,7 +39,9 @@ public class ConnectorSnapshotFactoryShould {
 
     @org.junit.AfterClass
     public static void tearDownHeadlessResources() throws Exception {
-        headless.close();
+        if (headless != null) {
+            headless.close();
+        }
     }
 
     private final MapSnapshotFactory factory = new MapSnapshotFactory();
