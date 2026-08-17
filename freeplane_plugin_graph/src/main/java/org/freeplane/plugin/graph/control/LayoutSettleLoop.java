@@ -41,6 +41,11 @@ import org.freeplane.plugin.graph.projection.ProjectionDiff;
 import org.freeplane.plugin.graph.workspace.model.WorkspaceId;
 
 public final class LayoutSettleLoop implements AutoCloseable {
+    private static final Runnable NO_OP = new Runnable() {
+        @Override
+        public void run() {
+        }
+    };
     private static final AtomicInteger LIFECYCLE_IDS = new AtomicInteger();
 
     private final Object monitor = new Object();
@@ -51,6 +56,7 @@ public final class LayoutSettleLoop implements AutoCloseable {
     private final EdtExecutor edt;
     private final LabelAssembler labels;
     private final LifecycleDispatcher lifecycle;
+    private final Runnable afterRestartRecoveryClaim;
 
     private Run currentRun;
     private CompletableFuture<Void> physicalClose;
@@ -77,18 +83,32 @@ public final class LayoutSettleLoop implements AutoCloseable {
 
     LayoutSettleLoop(final WorkspaceId workspace, final FrameStepper worker,
             final GraphGeometryEngine geometryEngine, final EdtExecutor edt, final LifecycleDispatcher lifecycle) {
-        this(workspace, worker, geometryEngine, defaultMetrics(), edt, lifecycle);
+        this(workspace, worker, geometryEngine, defaultMetrics(), edt, lifecycle, NO_OP);
+    }
+
+    LayoutSettleLoop(final WorkspaceId workspace, final FrameStepper worker,
+            final GraphGeometryEngine geometryEngine, final EdtExecutor edt, final LifecycleDispatcher lifecycle,
+            final Runnable afterRestartRecoveryClaim) {
+        this(workspace, worker, geometryEngine, defaultMetrics(), edt, lifecycle, afterRestartRecoveryClaim);
     }
 
     LayoutSettleLoop(final WorkspaceId workspace, final FrameStepper worker,
             final GraphGeometryEngine geometryEngine, final GeometryTextMetrics metrics, final EdtExecutor edt,
             final LifecycleDispatcher lifecycle) {
+        this(workspace, worker, geometryEngine, metrics, edt, lifecycle, NO_OP);
+    }
+
+    LayoutSettleLoop(final WorkspaceId workspace, final FrameStepper worker,
+            final GraphGeometryEngine geometryEngine, final GeometryTextMetrics metrics, final EdtExecutor edt,
+            final LifecycleDispatcher lifecycle, final Runnable afterRestartRecoveryClaim) {
         this.workspace = Objects.requireNonNull(workspace, "workspace");
         this.worker = Objects.requireNonNull(worker, "worker");
         this.geometryEngine = Objects.requireNonNull(geometryEngine, "geometryEngine");
         this.metrics = Objects.requireNonNull(metrics, "metrics");
         this.edt = Objects.requireNonNull(edt, "edt");
         this.lifecycle = Objects.requireNonNull(lifecycle, "lifecycle");
+        this.afterRestartRecoveryClaim = Objects.requireNonNull(afterRestartRecoveryClaim,
+            "afterRestartRecoveryClaim");
         this.labels = new LabelAssembler();
     }
 
@@ -316,15 +336,15 @@ public final class LayoutSettleLoop implements AutoCloseable {
                 return;
             }
             run.discardOnPause = false;
-            run.restartRequested = false;
             claimFrameLocked(run, revision);
             submit = !run.requestSubmitted;
         }
+        afterRestartRecoveryClaim.run();
         if (submit) {
-            submitClaimed(run, revision);
+            submitClaimed(run, revision, true);
         }
         else {
-            stepClaimed(run, revision);
+            stepClaimed(run, revision, true);
         }
     }
 
@@ -361,7 +381,11 @@ public final class LayoutSettleLoop implements AutoCloseable {
     }
 
     private void submitClaimed(final Run run, final long revision) {
-        if (!claimIsCurrentAndRunning(run, revision)) {
+        submitClaimed(run, revision, false);
+    }
+
+    private void submitClaimed(final Run run, final long revision, final boolean consumeRestartRequest) {
+        if (!claimIsCurrentAndRunning(run, revision, consumeRestartRequest)) {
             return;
         }
         try {
@@ -376,7 +400,11 @@ public final class LayoutSettleLoop implements AutoCloseable {
     }
 
     private void stepClaimed(final Run run, final long revision) {
-        if (!claimIsCurrentAndRunning(run, revision)) {
+        stepClaimed(run, revision, false);
+    }
+
+    private void stepClaimed(final Run run, final long revision, final boolean consumeRestartRequest) {
+        if (!claimIsCurrentAndRunning(run, revision, consumeRestartRequest)) {
             return;
         }
         try {
@@ -628,9 +656,17 @@ public final class LayoutSettleLoop implements AutoCloseable {
     }
 
     private boolean claimIsCurrentAndRunning(final Run run, final long revision) {
+        return claimIsCurrentAndRunning(run, revision, false);
+    }
+
+    private boolean claimIsCurrentAndRunning(final Run run, final long revision,
+            final boolean consumeRestartRequest) {
         synchronized (monitor) {
             if (isCurrentAndRunningLocked(run, revision) && run.frameInFlight
                     && run.claimRevision == revision) {
+                if (consumeRestartRequest) {
+                    run.restartRequested = false;
+                }
                 return true;
             }
             releaseClaimLocked(run);
