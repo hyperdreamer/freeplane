@@ -785,6 +785,44 @@ public class LayoutSettleLoopShould {
     }
 
     @Test
+    public void recoversADeferredRestartClaimWhenASecondRestartSupersedesIt() {
+        ManualLifecycleDispatcher dispatcher = new ManualLifecycleDispatcher();
+        RecordingStepper stepper = new RecordingStepper(dispatcher);
+        CompletableFuture<Void> secondRestartIssued = new CompletableFuture<Void>();
+        final LayoutSettleLoop[] loopReference = new LayoutSettleLoop[1];
+        LayoutSettleLoop loop = new LayoutSettleLoop(WORKSPACE, stepper,
+            new GraphGeometryEngine(), new ImmediateEdt(), dispatcher, new Runnable() {
+                @Override
+                public void run() {
+                    if (secondRestartIssued.complete(null)) {
+                        loopReference[0].restart();
+                    }
+                }
+            });
+        loopReference[0] = loop;
+        GraphProjection projection = populatedProjection(484L);
+        CompletableFuture<CanvasState> publication = new CompletableFuture<CanvasState>();
+
+        try {
+            CompletionStage<Void> completion = loop.start(batch(484L), projection,
+                ProjectionDiff.between(emptyProjection(483L), projection), publication::complete);
+            loop.pause();
+            loop.restart();
+            dispatcher.runAll();
+
+            await(secondRestartIssued);
+            assertThat(stepper.submitCount()).isEqualTo(1);
+            assertThat(stepper.stepCount()).isZero();
+            assertThat(stepper.operations()).containsExactly("restart", "restart", "submit");
+            assertThat(await(publication).status()).isEqualTo(OperationalStatus.IDLE);
+            await(completion);
+        }
+        finally {
+            closeFromExternalThread(loop, dispatcher, stepper);
+        }
+    }
+
+    @Test
     public void doesNotClobberAReentrantStartWhenSupersedingCompletionRuns() {
         ManualLifecycleDispatcher dispatcher = new ManualLifecycleDispatcher();
         RecordingStepper stepper = new RecordingStepper(dispatcher);
