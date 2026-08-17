@@ -687,6 +687,104 @@ public class LayoutSettleLoopShould {
     }
 
     @Test
+    public void submitsAfterRestartWhenPauseSupersedesQueuedStartDispatch() {
+        ManualLifecycleDispatcher dispatcher = new ManualLifecycleDispatcher();
+        RecordingStepper stepper = new RecordingStepper(dispatcher);
+        LayoutSettleLoop loop = new LayoutSettleLoop(WORKSPACE, stepper,
+            new GraphGeometryEngine(), new ImmediateEdt(), dispatcher);
+        GraphProjection projection = populatedProjection(481L);
+        CompletableFuture<CanvasState> publication = new CompletableFuture<CanvasState>();
+
+        try {
+            CompletionStage<Void> completion = loop.start(batch(481L), projection,
+                ProjectionDiff.between(emptyProjection(480L), projection), publication::complete);
+            loop.pause();
+            loop.restart();
+            dispatcher.runAll();
+
+            assertThat(stepper.submitCount()).isEqualTo(1);
+            assertThat(stepper.stepCount()).isZero();
+            assertThat(stepper.operations()).containsExactly("restart", "submit");
+            assertThat(await(publication).status()).isEqualTo(OperationalStatus.IDLE);
+            await(completion);
+        }
+        finally {
+            closeFromExternalThread(loop, dispatcher, stepper);
+        }
+    }
+
+    @Test
+    public void submitsAfterRestartWhenPauseSupersedesQueuedResetDispatch() {
+        ManualLifecycleDispatcher dispatcher = new ManualLifecycleDispatcher();
+        RecordingStepper stepper = new RecordingStepper(dispatcher);
+        LayoutSettleLoop loop = new LayoutSettleLoop(WORKSPACE, stepper,
+            new GraphGeometryEngine(), new ImmediateEdt(), dispatcher);
+        GraphProjection projection = populatedProjection(482L);
+        List<CanvasState> states = new ArrayList<CanvasState>();
+        CompletableFuture<CanvasState> secondPublication = new CompletableFuture<CanvasState>();
+
+        try {
+            CompletionStage<Void> initial = loop.start(batch(482L), projection,
+                ProjectionDiff.between(emptyProjection(481L), projection), state -> {
+                    states.add(state);
+                    if (states.size() == 2) {
+                        secondPublication.complete(state);
+                    }
+                });
+            dispatcher.runAll();
+            await(initial);
+
+            reset(loop);
+            loop.pause();
+            loop.restart();
+            dispatcher.runAll();
+
+            assertThat(stepper.submitCount()).isEqualTo(2);
+            assertThat(stepper.stepCount()).isZero();
+            assertThat(stepper.operations()).containsExactly("restart", "submit", "restart", "submit");
+            assertThat(await(secondPublication).status()).isEqualTo(OperationalStatus.IDLE);
+        }
+        finally {
+            closeFromExternalThread(loop, dispatcher, stepper);
+        }
+    }
+
+    @Test
+    public void stepsAfterRestartWhenPauseSupersedesQueuedStepDispatch() {
+        ManualLifecycleDispatcher dispatcher = new ManualLifecycleDispatcher();
+        RecordingStepper stepper = new RecordingStepper(dispatcher);
+        stepper.returnNonIdleFirstSubmit();
+        LayoutSettleLoop loop = new LayoutSettleLoop(WORKSPACE, stepper,
+            new GraphGeometryEngine(), new ImmediateEdt(), dispatcher);
+        GraphProjection projection = populatedProjection(483L);
+        CompletableFuture<CanvasState> idlePublication = new CompletableFuture<CanvasState>();
+
+        try {
+            CompletionStage<Void> completion = loop.start(batch(483L), projection,
+                ProjectionDiff.between(emptyProjection(482L), projection), state -> {
+                    if (state.status() == OperationalStatus.IDLE) {
+                        idlePublication.complete(state);
+                    }
+                });
+            dispatcher.runNext();
+            dispatcher.runNext();
+            dispatcher.runNext();
+            loop.pause();
+            loop.restart();
+            dispatcher.runAll();
+
+            assertThat(stepper.submitCount()).isEqualTo(1);
+            assertThat(stepper.stepCount()).isEqualTo(1);
+            assertThat(stepper.operations()).containsExactly("restart", "submit", "restart", "step");
+            assertThat(await(idlePublication).status()).isEqualTo(OperationalStatus.IDLE);
+            await(completion);
+        }
+        finally {
+            closeFromExternalThread(loop, dispatcher, stepper);
+        }
+    }
+
+    @Test
     public void doesNotClobberAReentrantStartWhenSupersedingCompletionRuns() {
         ManualLifecycleDispatcher dispatcher = new ManualLifecycleDispatcher();
         RecordingStepper stepper = new RecordingStepper(dispatcher);
@@ -1504,6 +1602,7 @@ public class LayoutSettleLoopShould {
         private boolean closeBlocked;
         private IllegalStateException resetFailure;
         private IllegalStateException closeFailure;
+        private boolean returnNonIdleFirstSubmit;
         private GraphProjection lastProjection;
         private LayoutFrame retainedFrame;
         private int submitCount;
@@ -1523,10 +1622,11 @@ public class LayoutSettleLoopShould {
             begin("submit");
             try {
                 ++submitCount;
+                final boolean idle = !(returnNonIdleFirstSubmit && submitCount == 1);
                 submissions.add(request);
                 lastProjection = request.projection();
                 submitEntered.complete(null);
-                retainedFrame = frame(lastProjection, submitCount, true);
+                retainedFrame = frame(lastProjection, submitCount, idle);
                 return CompletableFuture.completedFuture(retainedFrame);
             }
             finally {
@@ -1622,6 +1722,10 @@ public class LayoutSettleLoopShould {
             finally {
                 end();
             }
+        }
+
+        synchronized void returnNonIdleFirstSubmit() {
+            returnNonIdleFirstSubmit = true;
         }
 
         synchronized void blockReset() {

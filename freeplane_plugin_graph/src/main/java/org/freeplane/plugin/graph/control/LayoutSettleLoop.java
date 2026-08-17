@@ -301,8 +301,31 @@ public final class LayoutSettleLoop implements AutoCloseable {
                         submitClaimed(run, revision);
                     }
                 }
+                else {
+                    resumeAfterRestart(run, revision);
+                }
             }
         });
+    }
+
+    private void resumeAfterRestart(final Run run, final long revision) {
+        final boolean submit;
+        synchronized (monitor) {
+            if (!isCurrentAndRunningLocked(run, revision) || !run.restartRequested
+                    || run.frameInFlight || run.publicationInFlight) {
+                return;
+            }
+            run.discardOnPause = false;
+            run.restartRequested = false;
+            claimFrameLocked(run, revision);
+            submit = !run.requestSubmitted;
+        }
+        if (submit) {
+            submitClaimed(run, revision);
+        }
+        else {
+            stepClaimed(run, revision);
+        }
     }
 
     private void queueReset(final Run run, final long revision) {
