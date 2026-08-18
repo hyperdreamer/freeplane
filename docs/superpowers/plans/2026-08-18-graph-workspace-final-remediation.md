@@ -47,7 +47,7 @@
 **Step 1: Establish a parent-compiling behavioral RED test first.**
 
 - Before referencing any new method, add a `WorkspaceHistoryShould.compensationMustNotUseGlobalUndoHead` test using only the existing `execute`, `undo`, and `redo` methods. Execute a purge-like command, execute an unrelated applied command, call generic `undo`, and assert the purge is restored while the unrelated command remains applied. The current implementation must fail this assertion because generic undo targets the global head. This is the required behavioral red evidence; a missing-symbol compilation failure is not acceptable.
-- Add a second parent-compiling history test for command -> undo -> redo ABA ordering and record the exact observed failure.
+- After the new token API exists, add `rejectsCompensationAfterCommandUndoRedoABA`: apply the target mutation, interpose a command, undo and redo it, then require `compensate` to reject because the token revision/redo identity changed. Record the pre-fix behavioral failure against the document-only predicate.
 
 Run this parent-compiling red test alone before adding any test reference to the new compensation API:
 
@@ -95,6 +95,7 @@ JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.8-zulu" PATH="$JAVA_HOME/bin:$PATH
 JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.8-zulu" PATH="$JAVA_HOME/bin:$PATH" gradle :freeplane_plugin_graph:test --tests '*FreeplaneMapCommandExecutorShould' --tests '*GraphCommandRouterShould' --tests '*WorkspaceMapCoordinatorShould' --tests '*DefaultPurgeCommandHandlerShould' -PTestLoggingFull --rerun-tasks
 ```
 
+```bash
 failures=$(rg -o 'failures="[0-9]+"' freeplane_plugin_graph/build/test-results/test | awk -F'"' '{sum += $2} END {print sum + 0}')
 errors=$(rg -o 'errors="[0-9]+"' freeplane_plugin_graph/build/test-results/test | awk -F'"' '{sum += $2} END {print sum + 0}')
 test "$failures" -eq 0 && test "$errors" -eq 0
@@ -171,7 +172,7 @@ The new failed-frame -> restart and reentrant-listener tests must fail because t
 
 - Test restart failure leaves the run failed and permits a later retry without duplicate submissions.
 - Test a second restart reentrant from the failed EDT listener, reset superseding deferred recovery, and close superseding deferred recovery; each must release stale claims and prevent obsolete submit.
-- Mutate only the new failed-run restart branch to skip replacement submit; the direct regression test must fail. Restore the inverse byte-for-byte, verify the production hash, and retain the JUnit XML failure/error totals.
+- Before mutation, record `sha256sum freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/control/LayoutSettleLoop.java` to a bounded file outside the repository. Mutate only the new failed-run restart branch to skip replacement submit; the direct regression test must fail. Restore the inverse immediately, recompute the SHA-256 and require an exact match, and assert `git diff -- freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/control/LayoutSettleLoop.java` has no mutant residue. Retain the JUnit XML failure/error totals.
 
 **Step 5: Run focused and full verification.**
 
