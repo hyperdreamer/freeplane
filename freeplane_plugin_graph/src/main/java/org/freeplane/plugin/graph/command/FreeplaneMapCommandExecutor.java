@@ -1,8 +1,13 @@
 package org.freeplane.plugin.graph.command;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.Callable;
 
 import org.freeplane.core.undo.IUndoHandler;
@@ -56,6 +61,14 @@ public final class FreeplaneMapCommandExecutor {
 
     interface ResultEnvelope {
         WorkspaceDocument currentDocument();
+    }
+
+    interface ContributorDeletionTransaction {
+        GraphCommandResult outcome();
+        Set<MapReferenceId> dirtySourceMaps();
+        boolean editorViewActivated();
+        void commit();
+        void rollback();
     }
 
     interface NativeConnector {
@@ -116,6 +129,14 @@ public final class FreeplaneMapCommandExecutor {
         });
     }
 
+    ContributorDeletionTransaction beginContributorDeletion(final ContributorDeletionPlan plan) {
+        final ContributorDeletionPlan requested = Objects.requireNonNull(plan, "plan");
+        if (!edt.isEdt()) {
+            throw new IllegalStateException("Contributor deletion transactions must run on the EDT");
+        }
+        return beginContributorDeletionOnEdt(requested);
+    }
+
     public GraphCommandResult undoCurrentSourceMap() {
         return edt.call(new Callable<GraphCommandResult>() {
             @Override
@@ -163,6 +184,302 @@ public final class FreeplaneMapCommandExecutor {
 
     static ResultEnvelope resultEnvelope(final GraphWorkspaceStore workspace) {
         return new WorkspaceResultEnvelope(workspace);
+    }
+
+    private void requireEdt() {
+        if (!edt.isEdt()) {
+            throw new IllegalStateException("Contributor deletion transactions must run on the EDT");
+        }
+    }
+
+    private ContributorDeletionTransaction beginContributorDeletionOnEdt(final ContributorDeletionPlan plan) {
+        final SourceNodeKey previousUndoSource = undoSource;
+        final List<PrevalidatedMap> prevalidatedMaps = new ArrayList<PrevalidatedMap>();
+        final List<PreparedMap> preparedMaps = new ArrayList<PreparedMap>();
+        final Set<MapReferenceId> dirtyMaps = new LinkedHashSet<MapReferenceId>();
+        boolean editorViewActivated = false;
+        if (!plan.hasNativeEdits()) {
+            return new NativeDeletionTransaction(Collections.<PreparedMap>emptyList(),
+                appliedForMaps(CONNECTOR_DELETED, Collections.<MapReferenceId>emptySet(), false),
+                Collections.<MapReferenceId>emptySet(), previousUndoSource, null);
+        }
+        try {
+            final List<MapReferenceId> mapIds = new ArrayList<MapReferenceId>(plan.nativeEditsByMap().keySet());
+            Collections.sort(mapIds, MAP_ID_ORDER);
+            for (final MapReferenceId mapId : mapIds) {
+                prevalidatedMaps.add(prevalidateMap(mapId, plan.nativeEditsFor(mapId)));
+                dirtyMaps.add(mapId);
+            }
+            for (final PrevalidatedMap prevalidated : prevalidatedMaps) {
+                final PreparedMap prepared = materializeMap(prevalidated);
+                preparedMaps.add(prepared);
+                editorViewActivated = editorViewActivated || prepared.editorViewActivated;
+            }
+
+            final List<PreparedMap> startedMaps = new ArrayList<PreparedMap>();
+            try {
+                for (final PreparedMap prepared : preparedMaps) {
+                    prepared.undoHandler.startTransaction();
+                    prepared.transactionStarted = true;
+                    startedMaps.add(prepared);
+                }
+                for (final PreparedMap prepared : preparedMaps) {
+                    for (final ConnectorModel connector : prepared.connectors) {
+                        connectors.removeArrowLink(connector);
+                    }
+                }
+            }
+            catch (final RuntimeException failure) {
+                rollbackStarted(startedMaps, previousUndoSource);
+                return new NativeDeletionTransaction(Collections.<PreparedMap>emptyList(),
+                    rejectedTransaction(CONNECTOR_CHANGED), Collections.<MapReferenceId>emptySet(),
+                    previousUndoSource, null);
+            }
+            final PreparedMap owner = preparedMaps.get(preparedMaps.size() - 1);
+            final Set<MapReferenceId> immutableDirtyMaps =
+                Collections.unmodifiableSet(new LinkedHashSet<MapReferenceId>(dirtyMaps));
+            return new NativeDeletionTransaction(preparedMaps,
+                appliedForMaps(CONNECTOR_DELETED, immutableDirtyMaps, editorViewActivated), immutableDirtyMaps,
+                previousUndoSource, owner.undoSource);
+        }
+        catch (final BatchFailure failure) {
+            rollbackStarted(preparedMaps, previousUndoSource);
+            return new NativeDeletionTransaction(Collections.<PreparedMap>emptyList(),
+                rejectedTransaction(failure.messageKey), Collections.<MapReferenceId>emptySet(),
+                previousUndoSource, null);
+        }
+        catch (final RuntimeException failure) {
+            rollbackStarted(preparedMaps, previousUndoSource);
+            return new NativeDeletionTransaction(Collections.<PreparedMap>emptyList(),
+                rejectedTransaction(SOURCE_MAP_UNAVAILABLE), Collections.<MapReferenceId>emptySet(),
+                previousUndoSource, null);
+        }
+    }
+
+    private PrevalidatedMap prevalidateMap(final MapReferenceId mapId,
+            final List<ContributorDeletionPlan.NativeEdit> edits) {
+        final Optional<MapLease> lease = activeLease(mapId);
+        if (!lease.isPresent()) {
+            throw new BatchFailure(SOURCE_MAP_UNAVAILABLE);
+        }
+        MapModel map = null;
+        final List<PreparedSource> sources = new ArrayList<PreparedSource>(edits.size());
+        for (final ContributorDeletionPlan.NativeEdit edit : edits) {
+            final ContributorKey key = edit.key();
+            final ConnectorDescriptor expected = edit.descriptor();
+            if (!key.isNativeConnector() || !key.mapReferenceId().isPresent() || !key.source().isPresent()
+                    || !mapId.equals(key.mapReferenceId().get())
+                    || !mapId.equals(expected.source().mapReferenceId())
+                    || !key.source().get().equals(expected.source())) {
+                throw new BatchFailure(CONNECTOR_CHANGED);
+            }
+            final Optional<NodeModel> source = resolveAttached(lease.get(), key.source().get());
+            if (!source.isPresent()) {
+                throw new BatchFailure(SOURCE_NODE_NOT_FOUND);
+            }
+            final MapModel sourceMap = source.get().getMap();
+            if (sourceMap == null) {
+                throw new BatchFailure(SOURCE_MAP_UNAVAILABLE);
+            }
+            if (map == null) {
+                map = sourceMap;
+            }
+            else if (map != sourceMap) {
+                throw new BatchFailure(CONNECTOR_CHANGED);
+            }
+            if (!editable(sourceMap)) {
+                throw new BatchFailure(SOURCE_MAP_READ_ONLY);
+            }
+            sources.add(new PreparedSource(key.source().get(), source.get(), expected,
+                key.occurrence().getAsInt()));
+        }
+        if (map == null) {
+            throw new BatchFailure(CONNECTOR_CHANGED);
+        }
+        final List<ConnectorModel> retained = new ArrayList<ConnectorModel>(sources.size());
+        for (final PreparedSource source : sources) {
+            final Optional<ConnectorModel> connector = connectorAt(source.node, source.occurrence);
+            if (!connector.isPresent() || !matches(source.sourceKey, mapId, connector.get(), source.expected)) {
+                throw new BatchFailure(CONNECTOR_CHANGED);
+            }
+            retained.add(connector.get());
+        }
+        return new PrevalidatedMap(mapId, map, retained, sources.get(sources.size() - 1).sourceKey);
+    }
+
+    private PreparedMap materializeMap(final PrevalidatedMap prevalidated) {
+        final boolean createdView;
+        try {
+            createdView = views.materialize(prevalidated.mapId, prevalidated.map);
+        }
+        catch (final RuntimeException failure) {
+            throw new BatchFailure(SOURCE_MAP_UNAVAILABLE);
+        }
+        final IUndoHandler undoHandler = prevalidated.map.getExtension(IUndoHandler.class);
+        if (undoHandler == null) {
+            throw new BatchFailure(SOURCE_MAP_UNDO_UNAVAILABLE);
+        }
+        return new PreparedMap(prevalidated.mapId, prevalidated.map, undoHandler, prevalidated.connectors,
+            createdView, prevalidated.undoSource);
+    }
+
+    private void rollbackStarted(final List<PreparedMap> maps, final SourceNodeKey previousUndoSource) {
+        for (int index = maps.size() - 1; index >= 0; index--) {
+            final PreparedMap prepared = maps.get(index);
+            if (prepared.transactionStarted) {
+                try {
+                    prepared.undoHandler.rollback();
+                }
+                catch (final RuntimeException ignored) {
+                    // Continue restoring every other map transaction.
+                }
+                prepared.transactionStarted = false;
+            }
+        }
+        undoSource = previousUndoSource;
+    }
+
+    private GraphCommandResult appliedForMaps(final String messageKey, final Set<MapReferenceId> maps,
+            final boolean editorViewActivated) {
+        GraphCommandResult result = GraphCommandResult.from(WorkspaceTransition.applied(results.currentDocument(),
+            messageKey)).withDirtySourceMaps(maps);
+        return editorViewActivated ? result.withEditorViewActivated(true) : result;
+    }
+
+    private GraphCommandResult rejectedTransaction(final String messageKey) {
+        return GraphCommandResult.from(WorkspaceTransition.rejected(results.currentDocument(), messageKey));
+    }
+
+    private static final Comparator<MapReferenceId> MAP_ID_ORDER = new Comparator<MapReferenceId>() {
+        @Override
+        public int compare(final MapReferenceId first, final MapReferenceId second) {
+            return first.value().toString().compareTo(second.value().toString());
+        }
+    };
+
+    private static final class BatchFailure extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+        private final String messageKey;
+
+        private BatchFailure(final String messageKey) {
+            this.messageKey = messageKey;
+        }
+    }
+
+    private static final class PreparedSource {
+        private final SourceNodeKey sourceKey;
+        private final NodeModel node;
+        private final ConnectorDescriptor expected;
+        private final int occurrence;
+
+        private PreparedSource(final SourceNodeKey sourceKey, final NodeModel node,
+                final ConnectorDescriptor expected, final int occurrence) {
+            this.sourceKey = sourceKey;
+            this.node = node;
+            this.expected = expected;
+            this.occurrence = occurrence;
+        }
+    }
+
+    private static final class PrevalidatedMap {
+        private final MapReferenceId mapId;
+        private final MapModel map;
+        private final List<ConnectorModel> connectors;
+        private final SourceNodeKey undoSource;
+
+        private PrevalidatedMap(final MapReferenceId mapId, final MapModel map,
+                final List<ConnectorModel> connectors, final SourceNodeKey undoSource) {
+            this.mapId = mapId;
+            this.map = map;
+            this.connectors = connectors;
+            this.undoSource = undoSource;
+        }
+    }
+
+    private static final class PreparedMap {
+        private final MapReferenceId mapId;
+        private final MapModel map;
+        private final IUndoHandler undoHandler;
+        private final List<ConnectorModel> connectors;
+        private final boolean editorViewActivated;
+        private final SourceNodeKey undoSource;
+        private boolean transactionStarted;
+
+        private PreparedMap(final MapReferenceId mapId, final MapModel map, final IUndoHandler undoHandler,
+                final List<ConnectorModel> connectors, final boolean editorViewActivated,
+                final SourceNodeKey undoSource) {
+            this.mapId = mapId;
+            this.map = map;
+            this.undoHandler = undoHandler;
+            this.connectors = connectors;
+            this.editorViewActivated = editorViewActivated;
+            this.undoSource = undoSource;
+        }
+    }
+
+    private final class NativeDeletionTransaction implements ContributorDeletionTransaction {
+        private final List<PreparedMap> maps;
+        private final GraphCommandResult outcome;
+        private final Set<MapReferenceId> dirtyMaps;
+        private final SourceNodeKey previousUndoSource;
+        private final SourceNodeKey ownerUndoSource;
+        private boolean open;
+
+        private NativeDeletionTransaction(final List<PreparedMap> maps, final GraphCommandResult outcome,
+                final Set<MapReferenceId> dirtyMaps, final SourceNodeKey previousUndoSource,
+                final SourceNodeKey ownerUndoSource) {
+            this.maps = maps;
+            this.outcome = outcome;
+            this.dirtyMaps = Collections.unmodifiableSet(new LinkedHashSet<MapReferenceId>(dirtyMaps));
+            this.previousUndoSource = previousUndoSource;
+            this.ownerUndoSource = ownerUndoSource;
+            this.open = !maps.isEmpty();
+        }
+
+        @Override
+        public GraphCommandResult outcome() {
+            return outcome;
+        }
+
+        @Override
+        public Set<MapReferenceId> dirtySourceMaps() {
+            return dirtyMaps;
+        }
+
+        @Override
+        public boolean editorViewActivated() {
+            return outcome.editorViewActivated();
+        }
+
+        @Override
+        public void commit() {
+            requireEdt();
+            if (!open) {
+                return;
+            }
+            try {
+                for (final PreparedMap map : maps) {
+                    map.undoHandler.commit();
+                    map.transactionStarted = false;
+                }
+                open = false;
+                undoSource = ownerUndoSource;
+            }
+            catch (final RuntimeException failure) {
+                rollback();
+                throw failure;
+            }
+        }
+
+        @Override
+        public void rollback() {
+            requireEdt();
+            if (!open) {
+                return;
+            }
+            rollbackStarted(maps, previousUndoSource);
+            open = false;
+        }
     }
 
     private GraphCommandResult createConnectorOnEdt(final SourceNodeKey sourceKey, final SourceNodeKey targetKey,
