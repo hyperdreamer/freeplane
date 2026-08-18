@@ -3,6 +3,8 @@ package org.freeplane.plugin.graph.command;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -88,6 +90,28 @@ public class ContributorDeletionPlanShould {
         relationships.clear();
         assertThat(plan.nativeEditsByMap().get(MAP_ONE)).containsExactly(edit);
         assertThat(plan.relationshipIds()).containsExactly(RELATIONSHIP);
+    }
+
+    @Test
+    public void returnsNativeMapIdsInDeterministicOrder() {
+        SourceNodeKey firstSource = source(MAP_ONE, "first-source");
+        SourceNodeKey secondSource = source(MAP_TWO, "second-source");
+        ContributorDeletionPlan.NativeEdit first = ContributorDeletionPlan.NativeEdit.of(
+            ContributorKey.nativeConnector(MAP_ONE, firstSource, 0),
+            descriptor(firstSource, MAP_ONE, "first-target"));
+        ContributorDeletionPlan.NativeEdit second = ContributorDeletionPlan.NativeEdit.of(
+            ContributorKey.nativeConnector(MAP_TWO, secondSource, 0),
+            descriptor(secondSource, MAP_TWO, "second-target"));
+        Map<MapReferenceId, List<ContributorDeletionPlan.NativeEdit>> grouped =
+            new LinkedHashMap<MapReferenceId, List<ContributorDeletionPlan.NativeEdit>>();
+        grouped.put(MAP_TWO, Collections.singletonList(second));
+        grouped.put(MAP_ONE, Collections.singletonList(first));
+
+        ContributorDeletionPlan plan = ContributorDeletionPlan.of(grouped, Collections.<RelationshipId>emptySet());
+
+        assertThat(plan.nativeMapIds()).containsExactly(MAP_ONE, MAP_TWO);
+        assertThatThrownBy(() -> plan.nativeMapIds().clear())
+            .isInstanceOf(UnsupportedOperationException.class);
     }
 
     @Test
@@ -323,6 +347,51 @@ public class ContributorDeletionPlanShould {
     }
 
     @Test
+    public void requiresDeleteAllToPrevalidateEveryNonemptyContributorBeforeBeginningTheTransaction() {
+        SourceNodeKey source = source(MAP_ONE, "source");
+        NodeReference firstTarget = node(MAP_ONE, "first-target");
+        NodeReference secondTarget = firstTarget;
+        ConnectorDescriptor firstDescriptor = descriptor(source, MAP_ONE, "first-target");
+        ConnectorDescriptor secondDescriptor = descriptor(source, MAP_ONE, "first-target");
+        ConnectorDescriptor changedSecondDescriptor = ConnectorDescriptor.of(source, secondTarget, true, false,
+            "changed", "", "");
+        EdgeContributor first = EdgeContributor.nativeConnector(
+            org.freeplane.plugin.graph.projection.input.ConnectorSnapshot.of(0, firstDescriptor), endpoint(source),
+            endpoint(firstTarget));
+        EdgeContributor secondBefore = EdgeContributor.nativeConnector(
+            org.freeplane.plugin.graph.projection.input.ConnectorSnapshot.of(1, secondDescriptor), endpoint(source),
+            endpoint(secondTarget));
+        EdgeContributor secondAfter = EdgeContributor.nativeConnector(
+            org.freeplane.plugin.graph.projection.input.ConnectorSnapshot.of(1, changedSecondDescriptor), endpoint(source),
+            endpoint(secondTarget));
+        ProjectedEdgeKey edgeKey = ProjectedEdgeKey.of(endpoint(source), endpoint(firstTarget));
+        GraphProjection before = edgeProjection(9L, ProjectedEdge.of(edgeKey, Arrays.asList(first, secondBefore)));
+        GraphProjection after = edgeProjection(9L, ProjectedEdge.of(edgeKey, Arrays.asList(first, secondAfter)));
+        GraphUpdateCoordinator updates = mock(GraphUpdateCoordinator.class);
+        GraphWorkspaceStore store = mock(GraphWorkspaceStore.class);
+        FreeplaneMapCommandExecutor maps = mock(FreeplaneMapCommandExecutor.class);
+        InlineEdt edt = new InlineEdt();
+        when(updates.currentProjection()).thenReturn(before, after);
+        when(updates.currentState()).thenReturn(availableState());
+        when(updates.hasPendingChanges()).thenReturn(false);
+        when(store.currentDocument()).thenReturn(document());
+        DefaultContributorDeletionHandler handler =
+            new DefaultContributorDeletionHandler(updates, store, maps, edt);
+        List<ContributorKey> requested = Arrays.asList(first.key(), secondBefore.key());
+        Map<ContributorKey, ConnectorDescriptor> expected = new LinkedHashMap<ContributorKey, ConnectorDescriptor>();
+        expected.put(first.key(), firstDescriptor);
+        expected.put(secondBefore.key(), secondDescriptor);
+
+        GraphCommandResult result = handler.deleteAll(GraphCommands.deleteAllContributors(9L, edgeKey, requested,
+            expected));
+
+        assertThat(result.status()).isEqualTo(GraphCommandResult.Status.REJECTED);
+        assertThat(result.messageKey()).isEqualTo("graph_workspace.contributor.changed");
+        verify(maps, never()).beginContributorDeletion(any(ContributorDeletionPlan.class));
+        verify(store, never()).execute(any(WorkspaceCommand.class));
+    }
+
+    @Test
     public void requiresDeleteAllToPrevalidateEveryContributorBeforeBeginningTheTransaction() {
         SourceNodeKey source = source(MAP_ONE, "source");
         NodeReference target = node(MAP_TWO, "target");
@@ -350,6 +419,155 @@ public class ContributorDeletionPlanShould {
         assertThat(result.status()).isEqualTo(GraphCommandResult.Status.REJECTED);
         verify(maps, never()).beginContributorDeletion(any(ContributorDeletionPlan.class));
         verify(store, never()).execute(any(WorkspaceCommand.class));
+    }
+
+    @Test
+    public void reportsIncompleteRecoveryWhenNativeRollbackFailsAfterWorkspaceRejection() {
+        MixedFixture fixture = mixedFixture();
+        when(fixture.store.execute(any(WorkspaceCommand.class))).thenReturn(
+            GraphCommandResult.from(WorkspaceTransition.rejected(document(fixture.record), "workspace.rejected")));
+        doThrow(new IllegalStateException("rollback failure")).when(fixture.transaction).rollback();
+
+        DefaultContributorDeletionHandler handler = fixture.handler();
+        GraphCommandResult result = handler.deleteAll(fixture.command());
+
+        assertThat(result.status()).isEqualTo(GraphCommandResult.Status.REJECTED);
+        assertThat(result.messageKey()).isEqualTo("graph_workspace.contributor.undo_incomplete");
+        assertThat(result.dirtySourceMaps()).containsExactly(MAP_ONE);
+        verify(fixture.store).execute(any(WorkspaceCommand.class));
+        verify(fixture.transaction).rollback();
+        verify(fixture.transaction, never()).commit();
+    }
+
+    @Test
+    public void compensatesPublishedWorkspaceTransitionWhenNativeCommitFails() {
+        MixedFixture fixture = mixedFixture();
+        when(fixture.store.execute(any(WorkspaceCommand.class))).thenReturn(
+            GraphCommandResult.from(WorkspaceTransition.applied(document(fixture.record), "relationships.purged")));
+        when(fixture.store.undo()).thenReturn(
+            GraphCommandResult.from(WorkspaceTransition.applied(document(fixture.record), "history.undone")));
+        doThrow(new IllegalStateException("native commit failure")).when(fixture.transaction).commit();
+
+        DefaultContributorDeletionHandler handler = fixture.handler();
+        GraphCommandResult result = handler.deleteAll(fixture.command());
+
+        assertThat(result.status()).isEqualTo(GraphCommandResult.Status.REJECTED);
+        assertThat(result.messageKey()).isEqualTo("graph_workspace.contributor.undo_incomplete");
+        assertThat(result.messageArguments()).contains("native");
+        verify(fixture.store).execute(any(WorkspaceCommand.class));
+        verify(fixture.store).undo();
+        verify(fixture.transaction).commit();
+        verify(fixture.transaction).rollback();
+    }
+
+    @Test
+    public void reportsNativeCommitFailureAfterBothPhasesAreCompensated() {
+        MixedFixture fixture = mixedFixture();
+        when(fixture.store.execute(any(WorkspaceCommand.class))).thenReturn(
+            GraphCommandResult.from(WorkspaceTransition.applied(document(fixture.record), "relationships.purged")));
+        when(fixture.store.undo()).thenReturn(
+            GraphCommandResult.from(WorkspaceTransition.applied(document(fixture.record), "history.undone")));
+        final boolean[] nativeRecoveryComplete = new boolean[] { false };
+        when(fixture.transaction.outcome()).thenAnswer(invocation -> nativeRecoveryComplete[0]
+            ? GraphCommandResult.from(WorkspaceTransition.rejected(document(fixture.record),
+                "graph_workspace.contributor.native_commit_failed"))
+            : applied("native"));
+        doThrow(new IllegalStateException("native commit failure")).when(fixture.transaction).commit();
+        doAnswer(invocation -> {
+            nativeRecoveryComplete[0] = true;
+            return null;
+        }).when(fixture.transaction).rollback();
+
+        DefaultContributorDeletionHandler handler = fixture.handler();
+        GraphCommandResult result = handler.deleteAll(fixture.command());
+
+        assertThat(result.status()).isEqualTo(GraphCommandResult.Status.REJECTED);
+        assertThat(result.messageKey()).isEqualTo("graph_workspace.contributor.native_commit_failed");
+        verify(fixture.store).undo();
+        verify(fixture.transaction).commit();
+        verify(fixture.transaction).rollback();
+    }
+
+    @Test
+    public void reportsIncompleteRecoveryWhenWorkspaceCompensationFails() {
+        MixedFixture fixture = mixedFixture();
+        when(fixture.store.execute(any(WorkspaceCommand.class))).thenReturn(
+            GraphCommandResult.from(WorkspaceTransition.applied(document(fixture.record), "relationships.purged")));
+        when(fixture.store.undo()).thenReturn(
+            GraphCommandResult.from(WorkspaceTransition.rejected(document(fixture.record), "workspace.undo.rejected")));
+        doThrow(new IllegalStateException("native commit failure")).when(fixture.transaction).commit();
+
+        DefaultContributorDeletionHandler handler = fixture.handler();
+        GraphCommandResult result = handler.deleteAll(fixture.command());
+
+        assertThat(result.status()).isEqualTo(GraphCommandResult.Status.REJECTED);
+        assertThat(result.messageKey()).isEqualTo("graph_workspace.contributor.undo_incomplete");
+        assertThat(result.messageArguments()).contains("native_and_workspace");
+        assertThat(result.dirtySourceMaps()).containsExactly(MAP_ONE);
+        verify(fixture.store).undo();
+        verify(fixture.transaction).commit();
+        verify(fixture.transaction).rollback();
+    }
+
+    @Test
+    public void completesMixedDeletionWithOneWorkspacePurgeAndOneNativeCommit() {
+        MixedFixture fixture = mixedFixture();
+        when(fixture.store.execute(any(WorkspaceCommand.class))).thenReturn(
+            GraphCommandResult.from(WorkspaceTransition.applied(document(fixture.record), "relationships.purged")));
+
+        DefaultContributorDeletionHandler handler = fixture.handler();
+        GraphCommandResult result = handler.deleteAll(fixture.command());
+
+        assertThat(result.status()).isEqualTo(GraphCommandResult.Status.APPLIED);
+        verify(fixture.store).execute(any(WorkspaceCommand.class));
+        verify(fixture.store, never()).undo();
+        verify(fixture.transaction).commit();
+        verify(fixture.transaction, never()).rollback();
+    }
+
+    private static MixedFixture mixedFixture() {
+        SourceNodeKey source = source(MAP_ONE, "source");
+        NodeReference nativeTarget = node(MAP_ONE, "target");
+        GraphRelationshipRecord record = GraphRelationshipRecord.of(RELATIONSHIP, 1L,
+            node(MAP_ONE, "source"), node(MAP_TWO, "target"), RelationshipDirection.FORWARD,
+            Collections.<UnknownXml>emptyList());
+        ProjectedEndpointKey sourceEndpoint = endpoint(source);
+        ProjectedEndpointKey nativeTargetEndpoint = endpoint(nativeTarget);
+        ConnectorDescriptor nativeDescriptor = descriptor(source, MAP_ONE, "target");
+        ContributorKey nativeKey = ContributorKey.nativeConnector(MAP_ONE, source, 0);
+        EdgeContributor nativeContributor = mock(EdgeContributor.class);
+        when(nativeContributor.key()).thenReturn(nativeKey);
+        when(nativeContributor.projectedSource()).thenReturn(sourceEndpoint);
+        when(nativeContributor.projectedTarget()).thenReturn(nativeTargetEndpoint);
+        when(nativeContributor.connectorDescriptor()).thenReturn(Optional.of(nativeDescriptor));
+        when(nativeContributor.graphRelationship()).thenReturn(Optional.<GraphRelationshipRecord>empty());
+        EdgeContributor relationshipContributor = mock(EdgeContributor.class);
+        ContributorKey relationshipKey = ContributorKey.graphRelationship(RELATIONSHIP);
+        when(relationshipContributor.key()).thenReturn(relationshipKey);
+        when(relationshipContributor.projectedSource()).thenReturn(sourceEndpoint);
+        when(relationshipContributor.projectedTarget()).thenReturn(nativeTargetEndpoint);
+        when(relationshipContributor.connectorDescriptor()).thenReturn(Optional.<ConnectorDescriptor>empty());
+        when(relationshipContributor.graphRelationship()).thenReturn(Optional.of(record));
+        ProjectedEdge edge = ProjectedEdge.of(ProjectedEdgeKey.of(sourceEndpoint, nativeTargetEndpoint),
+            Arrays.asList(nativeContributor, relationshipContributor));
+        GraphProjection projection = GraphProjection.projected(9L, Collections.emptyList(), Collections.emptyList(),
+            Collections.singletonList(edge), Collections.<RelationshipResolution>emptyList(), Collections.emptyList());
+        GraphUpdateCoordinator updates = mock(GraphUpdateCoordinator.class);
+        GraphWorkspaceStore store = mock(GraphWorkspaceStore.class);
+        FreeplaneMapCommandExecutor maps = mock(FreeplaneMapCommandExecutor.class);
+        InlineEdt edt = new InlineEdt();
+        when(updates.currentProjection()).thenReturn(projection);
+        when(updates.currentState()).thenReturn(availableState());
+        when(updates.hasPendingChanges()).thenReturn(false);
+        when(store.currentDocument()).thenReturn(document(record));
+        FreeplaneMapCommandExecutor.ContributorDeletionTransaction transaction =
+            mock(FreeplaneMapCommandExecutor.ContributorDeletionTransaction.class);
+        when(transaction.outcome()).thenReturn(applied("native"));
+        when(transaction.dirtySourceMaps()).thenReturn(Collections.singleton(MAP_ONE));
+        when(transaction.editorViewActivated()).thenReturn(false);
+        when(maps.beginContributorDeletion(any(ContributorDeletionPlan.class))).thenReturn(transaction);
+        return new MixedFixture(updates, store, maps, edt, transaction, record, edge,
+            nativeContributor, relationshipContributor);
     }
 
     private static GraphCommandResult applied(String key) {
@@ -401,6 +619,45 @@ public class ContributorDeletionPlanShould {
 
     private static ProjectedEndpointKey endpoint(NodeReference node) {
         return endpoint(SourceNodeKey.persisted(node));
+    }
+
+    private static final class MixedFixture {
+        private final GraphUpdateCoordinator updates;
+        private final GraphWorkspaceStore store;
+        private final FreeplaneMapCommandExecutor maps;
+        private final InlineEdt edt;
+        private final FreeplaneMapCommandExecutor.ContributorDeletionTransaction transaction;
+        private final GraphRelationshipRecord record;
+        private final ProjectedEdge edge;
+        private final EdgeContributor nativeContributor;
+        private final EdgeContributor relationshipContributor;
+
+        private MixedFixture(final GraphUpdateCoordinator updates, final GraphWorkspaceStore store,
+                final FreeplaneMapCommandExecutor maps, final InlineEdt edt,
+                final FreeplaneMapCommandExecutor.ContributorDeletionTransaction transaction,
+                final GraphRelationshipRecord record, final ProjectedEdge edge,
+                final EdgeContributor nativeContributor, final EdgeContributor relationshipContributor) {
+            this.updates = updates;
+            this.store = store;
+            this.maps = maps;
+            this.edt = edt;
+            this.transaction = transaction;
+            this.record = record;
+            this.edge = edge;
+            this.nativeContributor = nativeContributor;
+            this.relationshipContributor = relationshipContributor;
+        }
+
+        private DefaultContributorDeletionHandler handler() {
+            return new DefaultContributorDeletionHandler(updates, store, maps, edt);
+        }
+
+        private GraphCommands.DeleteAllContributors command() {
+            List<ContributorKey> requested = Arrays.asList(nativeContributor.key(), relationshipContributor.key());
+            Map<ContributorKey, ConnectorDescriptor> expected =
+                Collections.singletonMap(nativeContributor.key(), nativeContributor.connectorDescriptor().get());
+            return GraphCommands.deleteAllContributors(9L, edge.key(), requested, expected);
+        }
     }
 
     private static final class InlineEdt implements EdtExecutor {

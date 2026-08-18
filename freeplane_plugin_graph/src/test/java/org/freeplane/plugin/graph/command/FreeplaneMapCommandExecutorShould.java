@@ -1,6 +1,7 @@
 package org.freeplane.plugin.graph.command;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
@@ -432,6 +433,94 @@ public class FreeplaneMapCommandExecutorShould {
         assertThat(second.undo.rollbackCalls).isEqualTo(1);
         assertThat(connectors(first.source)).hasSize(1);
         assertThat(connectors(second.source)).hasSize(1);
+        assertThat(fixture.executor.currentUndoTarget()).isEmpty();
+    }
+
+    @Test
+    public void exposesIncompleteRecoveryAndRetainsRetryStateWhenNativeRollbackFails() {
+        Fixture fixture = new Fixture(true);
+        MapNodes nodes = fixture.addMap(MapReferenceId.of("00000000-0000-0000-0000-000000000536"),
+            "rollback failure");
+        NodeLinks.createLinkExtension(nodes.source).addArrowlink(
+            connector(nodes.source, "ID_TARGET", ConnectorArrows.FORWARD, "", "", ""));
+        fixture.nativeController.throwAfterDeleteMutation = true;
+        nodes.undo.throwOnRollback = true;
+        ContributorDeletionPlan plan = plan(edit(nodes.mapId, nodes.sourceKey, 0,
+            descriptor(nodes.sourceKey, nodes.mapId, "ID_TARGET", false, true, "", "", "")));
+
+        FreeplaneMapCommandExecutor.ContributorDeletionTransaction transaction =
+            fixture.edt.call(new Callable<FreeplaneMapCommandExecutor.ContributorDeletionTransaction>() {
+                @Override
+                public FreeplaneMapCommandExecutor.ContributorDeletionTransaction call() {
+                    return fixture.executor.beginContributorDeletion(plan);
+                }
+            });
+
+        assertRejected(transaction.outcome(), "graph_workspace.contributor.undo_incomplete");
+        assertThat(transaction.dirtySourceMaps()).containsExactly(nodes.mapId);
+        assertThat(connectors(nodes.source)).isEmpty();
+        assertThat(fixture.executor.currentUndoTarget()).isEmpty();
+
+        nodes.undo.throwOnRollback = false;
+        fixture.edt.call(new Callable<Void>() {
+            @Override
+            public Void call() {
+                transaction.rollback();
+                return null;
+            }
+        });
+
+        assertThat(connectors(nodes.source)).hasSize(1);
+        assertRejected(transaction.outcome(), "graph_workspace.connector.changed");
+        assertThat(fixture.executor.currentUndoTarget()).isEmpty();
+    }
+
+    @Test
+    public void compensatesCommittedMapsWhenALaterNativeCommitFails() {
+        Fixture fixture = new Fixture(true);
+        MapNodes first = fixture.addMap(MapReferenceId.of("00000000-0000-0000-0000-000000000537"),
+            "committed first");
+        MapNodes second = fixture.addMap(MapReferenceId.of("00000000-0000-0000-0000-000000000538"),
+            "failed second");
+        NodeLinks.createLinkExtension(first.source).addArrowlink(
+            connector(first.source, "ID_TARGET", ConnectorArrows.FORWARD, "", "", ""));
+        NodeLinks.createLinkExtension(second.source).addArrowlink(
+            connector(second.source, "ID_TARGET", ConnectorArrows.FORWARD, "", "", ""));
+        first.undo.canUndo = true;
+        second.undo.throwOnCommit = true;
+        ContributorDeletionPlan plan = plan(
+            edit(first.mapId, first.sourceKey, 0,
+                descriptor(first.sourceKey, first.mapId, "ID_TARGET", false, true, "", "", "")),
+            edit(second.mapId, second.sourceKey, 0,
+                descriptor(second.sourceKey, second.mapId, "ID_TARGET", false, true, "", "", "")));
+        FreeplaneMapCommandExecutor.ContributorDeletionTransaction transaction =
+            fixture.edt.call(new Callable<FreeplaneMapCommandExecutor.ContributorDeletionTransaction>() {
+                @Override
+                public FreeplaneMapCommandExecutor.ContributorDeletionTransaction call() {
+                    return fixture.executor.beginContributorDeletion(plan);
+                }
+            });
+
+        assertThatThrownBy(new org.assertj.core.api.ThrowableAssert.ThrowingCallable() {
+            @Override
+            public void call() {
+                fixture.edt.call(new Callable<Void>() {
+                    @Override
+                    public Void call() {
+                        transaction.commit();
+                        return null;
+                    }
+                });
+            }
+        }).isInstanceOf(RuntimeException.class);
+
+        assertThat(connectors(first.source)).hasSize(1);
+        assertThat(connectors(second.source)).hasSize(1);
+        assertThat(first.undo.commitCalls).isEqualTo(1);
+        assertThat(second.undo.commitCalls).isEqualTo(1);
+        assertThat(first.undo.undoCalls).isEqualTo(1);
+        assertThat(second.undo.rollbackCalls).isEqualTo(1);
+        assertRejected(transaction.outcome(), "graph_workspace.contributor.native_commit_failed");
         assertThat(fixture.executor.currentUndoTarget()).isEmpty();
     }
 
@@ -1095,6 +1184,8 @@ public class FreeplaneMapCommandExecutorShould {
         private int rollbackCalls;
         private int undoCalls;
         private boolean canUndo;
+        private boolean throwOnCommit;
+        private boolean throwOnRollback;
         private Runnable rollbackRestoration;
 
         private RecordingUndoHandler(InlineEdt edt) {
@@ -1128,6 +1219,9 @@ public class FreeplaneMapCommandExecutorShould {
         public void commit() {
             edt.requireOnEdt("undo commit");
             commitCalls++;
+            if (throwOnCommit) {
+                throw new IllegalStateException("undo commit failure");
+            }
         }
 
         @Override
@@ -1162,6 +1256,9 @@ public class FreeplaneMapCommandExecutorShould {
         public void rollback() {
             edt.requireOnEdt("undo rollback");
             rollbackCalls++;
+            if (throwOnRollback) {
+                throw new IllegalStateException("undo rollback failure");
+            }
             if (rollbackRestoration != null) {
                 Runnable restoration = rollbackRestoration;
                 rollbackRestoration = null;
@@ -1187,6 +1284,11 @@ public class FreeplaneMapCommandExecutorShould {
         public void undo() {
             edt.requireOnEdt("undo operation");
             undoCalls++;
+            if (rollbackRestoration != null) {
+                Runnable restoration = rollbackRestoration;
+                rollbackRestoration = null;
+                restoration.run();
+            }
         }
 
         @Override

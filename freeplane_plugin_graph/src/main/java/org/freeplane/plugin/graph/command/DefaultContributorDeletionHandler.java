@@ -1,6 +1,7 @@
 package org.freeplane.plugin.graph.command;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -40,6 +41,9 @@ public final class DefaultContributorDeletionHandler implements ContributorDelet
         "graph_workspace.contributor.unexpected_descriptor";
     private static final String CONTRIBUTOR_WORKSPACE_FAILED = "graph_workspace.contributor.workspace_failed";
     private static final String CONTRIBUTOR_UNDO_PARTIAL = "graph_workspace.contributors.undo_partial";
+    private static final String CONTRIBUTOR_UNDO_INCOMPLETE = "graph_workspace.contributor.undo_incomplete";
+    private static final String CONTRIBUTOR_NATIVE_COMMIT_FAILED =
+        "graph_workspace.contributor.native_commit_failed";
 
     private final GraphUpdateCoordinator updates;
     private final GraphWorkspaceStore store;
@@ -289,7 +293,7 @@ public final class DefaultContributorDeletionHandler implements ContributorDelet
                 transaction.commit();
             }
             catch (final RuntimeException failure) {
-                return rejected(CONTRIBUTOR_UNAVAILABLE);
+                return recoverNativeCommitFailure(transaction);
             }
             if (plan.nativeEditsByMap().size() > 1) {
                 return enrichNativeResult(rejectedApplied(CONTRIBUTOR_UNDO_PARTIAL,
@@ -303,33 +307,97 @@ public final class DefaultContributorDeletionHandler implements ContributorDelet
             workspaceResult = store.execute(WorkspaceCommands.purgeRelationships(plan.relationshipIds()));
         }
         catch (final RuntimeException failure) {
-            transaction.rollback();
-            return rejected(CONTRIBUTOR_WORKSPACE_FAILED);
+            return rollbackAfterWorkspaceFailure(transaction, rejected(CONTRIBUTOR_WORKSPACE_FAILED));
         }
         if (workspaceResult == null || workspaceResult.status() != GraphCommandResult.Status.APPLIED) {
-            transaction.rollback();
-            return workspaceResult == null ? rejected(CONTRIBUTOR_WORKSPACE_FAILED) : workspaceResult;
+            return rollbackAfterWorkspaceFailure(transaction,
+                workspaceResult == null ? rejected(CONTRIBUTOR_WORKSPACE_FAILED) : workspaceResult);
         }
         try {
             transaction.commit();
         }
         catch (final RuntimeException failure) {
-            return rejected(CONTRIBUTOR_UNAVAILABLE);
+            final GraphCommandResult nativeFailure = recoverNativeCommitFailure(transaction);
+            if (!compensatePublishedWorkspace()) {
+                final String resource = nativeFailure != null
+                        && CONTRIBUTOR_UNDO_INCOMPLETE.equals(nativeFailure.messageKey())
+                    ? "native_and_workspace" : "workspace";
+                return incompleteRecovery(transaction, resource);
+            }
+            return nativeFailure;
         }
         return enrichWorkspaceResult(workspaceResult, transaction);
     }
 
+    private GraphCommandResult rollbackAfterWorkspaceFailure(
+            final FreeplaneMapCommandExecutor.ContributorDeletionTransaction transaction,
+            final GraphCommandResult fallback) {
+        try {
+            transaction.rollback();
+        }
+        catch (final RuntimeException failure) {
+            return incompleteRecovery(transaction, "native");
+        }
+        final GraphCommandResult outcome = transaction.outcome();
+        if (outcome != null && CONTRIBUTOR_UNDO_INCOMPLETE.equals(outcome.messageKey())) {
+            return enrichNativeResult(outcome, transaction);
+        }
+        return fallback;
+    }
+
+    private GraphCommandResult recoverNativeCommitFailure(
+            final FreeplaneMapCommandExecutor.ContributorDeletionTransaction transaction) {
+        try {
+            transaction.rollback();
+        }
+        catch (final RuntimeException failure) {
+            return incompleteRecovery(transaction, "native");
+        }
+        final GraphCommandResult outcome = transaction.outcome();
+        if (outcome != null && outcome.status() == GraphCommandResult.Status.REJECTED) {
+            if (CONTRIBUTOR_UNDO_INCOMPLETE.equals(outcome.messageKey())
+                    || CONTRIBUTOR_NATIVE_COMMIT_FAILED.equals(outcome.messageKey())) {
+                return enrichNativeResult(outcome, transaction);
+            }
+        }
+        return incompleteRecovery(transaction, "native");
+    }
+
+    private boolean compensatePublishedWorkspace() {
+        try {
+            final GraphCommandResult result = store.undo();
+            return result != null && result.status() == GraphCommandResult.Status.APPLIED;
+        }
+        catch (final RuntimeException failure) {
+            return false;
+        }
+    }
+
+    private GraphCommandResult incompleteRecovery(
+            final FreeplaneMapCommandExecutor.ContributorDeletionTransaction transaction,
+            final String resource) {
+        GraphCommandResult result = rejected(CONTRIBUTOR_UNDO_INCOMPLETE, resource)
+            .withDirtySourceMaps(dirtySourceMaps(transaction));
+        return result.withEditorViewActivated(transaction.editorViewActivated());
+    }
+
+    private Set<MapReferenceId> dirtySourceMaps(
+            final FreeplaneMapCommandExecutor.ContributorDeletionTransaction transaction) {
+        final Set<MapReferenceId> dirty = transaction.dirtySourceMaps();
+        return dirty == null ? Collections.<MapReferenceId>emptySet() : dirty;
+    }
+
     private GraphCommandResult enrichNativeResult(final GraphCommandResult result,
             final FreeplaneMapCommandExecutor.ContributorDeletionTransaction transaction) {
-        return result.withDirtySourceMaps(transaction.dirtySourceMaps())
-            .withEditorViewActivated(transaction.editorViewActivated());
+        return result.withDirtySourceMaps(dirtySourceMaps(transaction))
+            .withEditorViewActivated(transaction.editorViewActivated() || result.editorViewActivated());
     }
 
     private GraphCommandResult enrichWorkspaceResult(final GraphCommandResult result,
             final FreeplaneMapCommandExecutor.ContributorDeletionTransaction transaction) {
         final Set<org.freeplane.plugin.graph.workspace.model.MapReferenceId> dirty =
             new LinkedHashSet<org.freeplane.plugin.graph.workspace.model.MapReferenceId>(result.dirtySourceMaps());
-        dirty.addAll(transaction.dirtySourceMaps());
+        dirty.addAll(dirtySourceMaps(transaction));
         return result.withDirtySourceMaps(dirty)
             .withEditorViewActivated(result.editorViewActivated() || transaction.editorViewActivated());
     }
