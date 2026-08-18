@@ -441,6 +441,7 @@ public final class GraphWorkspaceStore implements AutoCloseable {
                         && !Arrays.equals(currentBytes, mutation.afterBytes)) {
                     result = compensationRejectedLocked();
                 } else if (Arrays.equals(currentBytes, mutation.beforeBytes)
+                        && !mutation.restoreBeforeBytesVerified()
                         && (dirty != mutation.dirtyAfter || saveGeneration != mutation.saveGeneration
                             || debounceGeneration < mutation.debounceAfter)) {
                     result = compensationRejectedLocked();
@@ -450,9 +451,16 @@ public final class GraphWorkspaceStore implements AutoCloseable {
                     result = compensationRejectedLocked();
                 } else {
                     final boolean rewrite = !Arrays.equals(currentBytes, mutation.beforeBytes);
+                    boolean restoreWriteFailed = false;
                     try {
                         if (rewrite) {
-                            writeAndVerifyLocked(mutation.beforeBytes);
+                            try {
+                                writeAndVerifyLocked(mutation.beforeBytes);
+                            }
+                            catch (final RuntimeException exception) {
+                                restoreWriteFailed = true;
+                                throw exception;
+                            }
                         }
                         final WorkspaceTransition transition = history.compensate(mutation.historyMutation, document);
                         if (transition.status() != WorkspaceTransition.Status.APPLIED) {
@@ -478,6 +486,9 @@ public final class GraphWorkspaceStore implements AutoCloseable {
                         }
                     }
                     catch (final RuntimeException exception) {
+                        if (restoreWriteFailed) {
+                            mutation.recordVerifiedRestoreProgress(readPersistedBytesIfAvailableLocked());
+                        }
                         result = compensationIncompleteLocked();
                     }
                 }
@@ -503,6 +514,15 @@ public final class GraphWorkspaceStore implements AutoCloseable {
         }
         catch (final Exception exception) {
             throw new WorkspaceSaveException(file, exception);
+        }
+    }
+
+    private byte[] readPersistedBytesIfAvailableLocked() {
+        try {
+            return readPersistedBytesLocked();
+        }
+        catch (final RuntimeException exception) {
+            return null;
         }
     }
 
@@ -569,6 +589,7 @@ public final class GraphWorkspaceStore implements AutoCloseable {
         private final byte[] beforeBytes;
         private final byte[] afterBytes;
         private GraphCommandResult successfulCompensation;
+        private boolean restoreBeforeBytesVerified;
 
         private WorkspaceMutation(final GraphWorkspaceStore store, final GraphCommandResult result,
                 final WorkspaceHistory.HistoryMutation historyMutation, final Path file, final long saveGeneration,
@@ -585,6 +606,16 @@ public final class GraphWorkspaceStore implements AutoCloseable {
             this.debounceAfter = debounceAfter;
             this.beforeBytes = Arrays.copyOf(beforeBytes, beforeBytes.length);
             this.afterBytes = Arrays.copyOf(afterBytes, afterBytes.length);
+        }
+
+        private void recordVerifiedRestoreProgress(final byte[] persistedBytes) {
+            if (persistedBytes != null && Arrays.equals(persistedBytes, beforeBytes)) {
+                restoreBeforeBytesVerified = true;
+            }
+        }
+
+        private boolean restoreBeforeBytesVerified() {
+            return restoreBeforeBytesVerified;
         }
 
         public GraphCommandResult result() {

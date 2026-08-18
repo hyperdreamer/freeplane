@@ -718,6 +718,41 @@ public class GraphWorkspaceStoreShould {
     }
 
     @Test
+    public void retriesCompensationAfterRestorePersistsBeforeBytesThenThrows() throws Exception {
+        Path workspace = workspacePath("compensation-write-before-throw", "workspace.fpg");
+        RecordingWriter writer = new RecordingWriter();
+        TestScheduler scheduler = new TestScheduler();
+        GraphWorkspaceStore store = GraphWorkspaceStore.create(workspace, codec(), writer, scheduler);
+        byte[] beforeBytes = Files.readAllBytes(workspace);
+        GraphWorkspaceStore.WorkspaceMutation mutation = store.executeWithCompensation(addMap(MAP_ONE));
+        scheduler.run(0);
+        byte[] afterBytes = Files.readAllBytes(workspace);
+        assertThat(afterBytes).isNotEqualTo(beforeBytes);
+        assertThat(writer.writes().get(1).bytes()).isEqualTo(afterBytes);
+        assertThat(store.isDirty()).isFalse();
+
+        RuntimeException failure = new IllegalStateException("injected write-before-throw compensation failure");
+        writer.persistThenFailNext(failure);
+        GraphCommandResult first = mutation.compensateIfCurrent();
+
+        assertThat(first.status()).isEqualTo(GraphCommandResult.Status.REJECTED);
+        assertThat(first.messageKey()).isEqualTo("graph_workspace.history.compensation_incomplete");
+        assertThat(Files.readAllBytes(workspace)).isEqualTo(beforeBytes);
+        assertThat(store.currentDocument().maps()).extracting(MapReference::id).containsExactly(MAP_ONE);
+        assertThat(store.isDirty()).isFalse();
+
+        GraphCommandResult second = mutation.compensateIfCurrent();
+
+        assertThat(second.status()).isEqualTo(GraphCommandResult.Status.APPLIED);
+        assertThat(Files.readAllBytes(workspace)).isEqualTo(beforeBytes);
+        assertThat(store.currentDocument().maps()).isEmpty();
+        assertThat(store.isDirty()).isFalse();
+        assertThat(store.undo().status()).isEqualTo(GraphCommandResult.Status.NO_OP);
+        assertThat(store.redo().status()).isEqualTo(GraphCommandResult.Status.NO_OP);
+        assertThat(writer.writes()).hasSize(3);
+    }
+
+    @Test
     public void keepsCompensationRetryableAfterATransientRestoreWriteFailure() throws Exception {
         Path workspace = workspacePath("compensation-retry", "workspace.fpg");
         RecordingWriter writer = new RecordingWriter();
@@ -769,6 +804,7 @@ public class GraphWorkspaceStoreShould {
     private static final class RecordingWriter implements AtomicWorkspaceWriter {
         private final List<Write> writes = new ArrayList<Write>();
         private RuntimeException nextFailure;
+        private RuntimeException nextFailureAfterWrite;
 
         @Override
         public void write(Path target, byte[] bytes) {
@@ -785,10 +821,19 @@ public class GraphWorkspaceStoreShould {
             catch (IOException exception) {
                 throw new AssertionError(exception);
             }
+            if (nextFailureAfterWrite != null) {
+                RuntimeException failure = nextFailureAfterWrite;
+                nextFailureAfterWrite = null;
+                throw failure;
+            }
         }
 
         void failNext(RuntimeException failure) {
             nextFailure = failure;
+        }
+
+        void persistThenFailNext(RuntimeException failure) {
+            nextFailureAfterWrite = failure;
         }
 
         List<Write> writes() {
