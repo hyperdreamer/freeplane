@@ -299,7 +299,7 @@ public final class DefaultContributorDeletionHandler implements ContributorDelet
         final GraphCommandResult nativeOutcome = transaction.outcome();
         if (nativeOutcome == null || nativeOutcome.status() == GraphCommandResult.Status.REJECTED) {
             if (isIncompleteRecovery(nativeOutcome)) {
-                return retainRecovery(transaction, RECOVERY_NATIVE);
+                return retainRecovery(transaction, RECOVERY_NATIVE, null);
             }
             return nativeOutcome == null ? rejected(CONTRIBUTOR_UNAVAILABLE) : nativeOutcome;
         }
@@ -308,7 +308,8 @@ public final class DefaultContributorDeletionHandler implements ContributorDelet
                 transaction.commit();
             }
             catch (final RuntimeException failure) {
-                return recoverNativeCommitFailure(transaction);
+                final GraphCommandResult recovery = recoverNativeCommitFailure(transaction);
+                return recovery == null ? retainRecovery(transaction, RECOVERY_NATIVE, null) : recovery;
             }
             if (plan.nativeEditsByMap().size() > 1) {
                 return enrichNativeResult(rejectedApplied(CONTRIBUTOR_UNDO_PARTIAL,
@@ -317,9 +318,12 @@ public final class DefaultContributorDeletionHandler implements ContributorDelet
             return enrichNativeResult(nativeOutcome, transaction);
         }
 
+        final GraphWorkspaceStore.WorkspaceMutation workspaceMutation;
         final GraphCommandResult workspaceResult;
         try {
-            workspaceResult = store.execute(WorkspaceCommands.purgeRelationships(plan.relationshipIds()));
+            workspaceMutation = store.executeWithCompensation(
+                WorkspaceCommands.purgeRelationships(plan.relationshipIds()));
+            workspaceResult = workspaceMutation.result();
         }
         catch (final RuntimeException failure) {
             return rollbackAfterWorkspaceFailure(transaction, rejected(CONTRIBUTOR_WORKSPACE_FAILED));
@@ -332,12 +336,19 @@ public final class DefaultContributorDeletionHandler implements ContributorDelet
             transaction.commit();
         }
         catch (final RuntimeException failure) {
+            final boolean workspaceRecovered = compensatePublishedWorkspace(workspaceMutation);
             final GraphCommandResult nativeFailure = recoverNativeCommitFailure(transaction);
-            if (!compensatePublishedWorkspace()) {
-                final String resource = nativeFailure != null
-                        && CONTRIBUTOR_UNDO_INCOMPLETE.equals(nativeFailure.messageKey())
-                    ? RECOVERY_NATIVE_AND_WORKSPACE : RECOVERY_WORKSPACE;
-                return incompleteRecovery(transaction, resource);
+            final boolean nativeRecovered = nativeFailure != null;
+            if (!workspaceRecovered || !nativeRecovered) {
+                final String resource;
+                if (!workspaceRecovered && !nativeRecovered) {
+                    resource = RECOVERY_NATIVE_AND_WORKSPACE;
+                } else if (!workspaceRecovered) {
+                    resource = RECOVERY_WORKSPACE;
+                } else {
+                    resource = RECOVERY_NATIVE;
+                }
+                return incompleteRecovery(transaction, resource, workspaceMutation);
             }
             return nativeFailure;
         }
@@ -351,11 +362,11 @@ public final class DefaultContributorDeletionHandler implements ContributorDelet
             transaction.rollback();
         }
         catch (final RuntimeException failure) {
-            return incompleteRecovery(transaction, RECOVERY_NATIVE);
+            return incompleteRecovery(transaction, RECOVERY_NATIVE, null);
         }
         final GraphCommandResult outcome = transaction.outcome();
         if (isIncompleteRecovery(outcome)) {
-            return retainRecovery(transaction, RECOVERY_NATIVE);
+            return retainRecovery(transaction, RECOVERY_NATIVE, null);
         }
         return fallback;
     }
@@ -366,23 +377,28 @@ public final class DefaultContributorDeletionHandler implements ContributorDelet
             transaction.rollback();
         }
         catch (final RuntimeException failure) {
-            return incompleteRecovery(transaction, RECOVERY_NATIVE);
+            return null;
         }
         final GraphCommandResult outcome = transaction.outcome();
-        if (isIncompleteRecovery(outcome)) {
-            return retainRecovery(transaction, RECOVERY_NATIVE);
+        if (!nativeCommitRecoveryComplete(outcome)) {
+            return null;
         }
-        if (outcome != null && outcome.status() == GraphCommandResult.Status.REJECTED) {
-            if (CONTRIBUTOR_NATIVE_COMMIT_FAILED.equals(outcome.messageKey())) {
-                return enrichNativeResult(outcome, transaction);
-            }
-        }
-        return incompleteRecovery(transaction, RECOVERY_NATIVE);
+        return enrichNativeResult(outcome, transaction);
     }
 
-    private boolean compensatePublishedWorkspace() {
+    private boolean nativeCommitRecoveryComplete(final GraphCommandResult outcome) {
+        return outcome != null && CONTRIBUTOR_NATIVE_COMMIT_FAILED.equals(outcome.messageKey());
+    }
+
+    private boolean nativeRecoveryComplete(final GraphCommandResult outcome) {
+        return outcome != null && !isIncompleteRecovery(outcome)
+            && (outcome.status() == GraphCommandResult.Status.APPLIED
+                || CONTRIBUTOR_NATIVE_COMMIT_FAILED.equals(outcome.messageKey()));
+    }
+
+    private boolean compensatePublishedWorkspace(final GraphWorkspaceStore.WorkspaceMutation mutation) {
         try {
-            final GraphCommandResult result = store.undo();
+            final GraphCommandResult result = mutation.compensateIfCurrent();
             return result != null && result.status() == GraphCommandResult.Status.APPLIED;
         }
         catch (final RuntimeException failure) {
@@ -392,14 +408,14 @@ public final class DefaultContributorDeletionHandler implements ContributorDelet
 
     private GraphCommandResult incompleteRecovery(
             final FreeplaneMapCommandExecutor.ContributorDeletionTransaction transaction,
-            final String resource) {
-        return retainRecovery(transaction, resource);
+            final String resource, final GraphWorkspaceStore.WorkspaceMutation workspaceMutation) {
+        return retainRecovery(transaction, resource, workspaceMutation);
     }
 
     private GraphCommandResult retainRecovery(
             final FreeplaneMapCommandExecutor.ContributorDeletionTransaction transaction,
-            final String resource) {
-        pendingRecovery = new PendingRecovery(transaction, resource);
+            final String resource, final GraphWorkspaceStore.WorkspaceMutation workspaceMutation) {
+        pendingRecovery = new PendingRecovery(transaction, workspaceMutation, resource);
         return pendingRecovery.result(this);
     }
 
@@ -409,7 +425,7 @@ public final class DefaultContributorDeletionHandler implements ContributorDelet
         }
         final PendingRecovery recovery = pendingRecovery;
         if (recovery.workspaceUnresolved()) {
-            if (compensatePublishedWorkspace()) {
+            if (compensatePublishedWorkspace(recovery.workspaceMutation())) {
                 recovery.workspaceRecovered();
             }
         }
@@ -417,7 +433,7 @@ public final class DefaultContributorDeletionHandler implements ContributorDelet
             try {
                 recovery.transaction.rollback();
                 final GraphCommandResult nativeOutcome = recovery.transaction.outcome();
-                if (nativeOutcome != null && !isIncompleteRecovery(nativeOutcome)) {
+                if (nativeRecoveryComplete(nativeOutcome)) {
                     recovery.nativeRecovered();
                 }
             }
@@ -501,12 +517,14 @@ public final class DefaultContributorDeletionHandler implements ContributorDelet
 
     private static final class PendingRecovery {
         private final FreeplaneMapCommandExecutor.ContributorDeletionTransaction transaction;
+        private final GraphWorkspaceStore.WorkspaceMutation workspaceMutation;
         private boolean nativeUnresolved;
         private boolean workspaceUnresolved;
 
         private PendingRecovery(final FreeplaneMapCommandExecutor.ContributorDeletionTransaction transaction,
-                final String resource) {
+                final GraphWorkspaceStore.WorkspaceMutation workspaceMutation, final String resource) {
             this.transaction = Objects.requireNonNull(transaction, "transaction");
+            this.workspaceMutation = workspaceMutation;
             if (RECOVERY_NATIVE.equals(resource)) {
                 nativeUnresolved = true;
             }
@@ -520,6 +538,9 @@ public final class DefaultContributorDeletionHandler implements ContributorDelet
             else {
                 throw new IllegalArgumentException("Unknown recovery resource: " + resource);
             }
+            if (workspaceUnresolved && workspaceMutation == null) {
+                throw new IllegalArgumentException("Workspace recovery requires a mutation handle");
+            }
         }
 
         private boolean nativeUnresolved() {
@@ -528,6 +549,10 @@ public final class DefaultContributorDeletionHandler implements ContributorDelet
 
         private boolean workspaceUnresolved() {
             return workspaceUnresolved;
+        }
+
+        private GraphWorkspaceStore.WorkspaceMutation workspaceMutation() {
+            return workspaceMutation;
         }
 
         private void nativeRecovered() {
@@ -550,9 +575,16 @@ public final class DefaultContributorDeletionHandler implements ContributorDelet
         }
 
         private GraphCommandResult result(final DefaultContributorDeletionHandler handler) {
-            GraphCommandResult result = handler.rejected(CONTRIBUTOR_UNDO_INCOMPLETE, resource())
-                .withDirtySourceMaps(handler.dirtySourceMaps(transaction));
-            return result.withEditorViewActivated(transaction.editorViewActivated());
+            final Set<MapReferenceId> dirty =
+                new LinkedHashSet<MapReferenceId>(handler.dirtySourceMaps(transaction));
+            boolean editorViewActivated = transaction.editorViewActivated();
+            if (workspaceMutation != null) {
+                dirty.addAll(workspaceMutation.result().dirtySourceMaps());
+                editorViewActivated = editorViewActivated || workspaceMutation.result().editorViewActivated();
+            }
+            return handler.rejected(CONTRIBUTOR_UNDO_INCOMPLETE, resource())
+                .withDirtySourceMaps(dirty)
+                .withEditorViewActivated(editorViewActivated);
         }
     }
 

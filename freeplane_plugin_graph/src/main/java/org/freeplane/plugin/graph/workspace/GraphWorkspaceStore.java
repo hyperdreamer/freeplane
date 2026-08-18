@@ -5,6 +5,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.List;
@@ -39,6 +40,7 @@ public final class GraphWorkspaceStore implements AutoCloseable {
     private boolean dirty;
     private boolean closed;
     private long debounceGeneration;
+    private long saveGeneration;
     private ScheduledFuture<?> pendingSave;
     private boolean drainingEvents;
 
@@ -102,6 +104,38 @@ public final class GraphWorkspaceStore implements AutoCloseable {
         }
         drainEvents();
         return result;
+    }
+
+    public WorkspaceMutation executeWithCompensation(final WorkspaceCommand command) {
+        final WorkspaceMutation mutation;
+        synchronized (monitor) {
+            requireOpenLocked();
+            if (isReadOnlyLocked()) {
+                final GraphCommandResult result = readOnlyResultLocked();
+                mutation = new WorkspaceMutation(this, result, null, file, saveGeneration, dirty, dirty,
+                    debounceGeneration, debounceGeneration, new byte[0], new byte[0]);
+            } else {
+                final WorkspaceCommand checkedCommand = Objects.requireNonNull(command, "command");
+                final Path mutationFile = file;
+                final long mutationSaveGeneration = saveGeneration;
+                final boolean mutationDirtyBefore = dirty;
+                final long mutationDebounceBefore = debounceGeneration;
+                final byte[] beforeBytes = readPersistedBytesLocked();
+                final WorkspaceHistory.HistoryMutation historyMutation =
+                    history.executeWithToken(checkedCommand, document);
+                final GraphCommandResult result = installTransitionLocked(historyMutation.transition());
+                final boolean mutationDirty = dirty;
+                final long mutationDebounceGeneration = debounceGeneration;
+                final byte[] afterBytes = historyMutation.applied()
+                    ? codec.write(historyMutation.after(), mutationFile) : beforeBytes;
+                mutation = new WorkspaceMutation(this, result,
+                    historyMutation.applied() ? historyMutation : null, mutationFile, mutationSaveGeneration,
+                    mutationDirtyBefore, mutationDirty, mutationDebounceBefore, mutationDebounceGeneration,
+                    beforeBytes, afterBytes);
+            }
+        }
+        drainEvents();
+        return mutation;
     }
 
     public GraphCommandResult updateViewport(final Viewport viewport) {
@@ -202,6 +236,7 @@ public final class GraphWorkspaceStore implements AutoCloseable {
                 file = targetFile;
                 document = candidate;
                 dirty = false;
+                saveGeneration++;
                 history.clear();
                 identityChange = new WorkspaceIdentityChange(oldFile, targetFile, oldId, newId);
                 publishLocked(WorkspaceStoreEvent.identityChanged(candidate, identityChange));
@@ -327,6 +362,7 @@ public final class GraphWorkspaceStore implements AutoCloseable {
         final byte[] bytes = codec.write(document, file);
         writer.write(file, bytes);
         dirty = false;
+        saveGeneration++;
         publishLocked(WorkspaceStoreEvent.saved(document));
     }
 
@@ -382,6 +418,101 @@ public final class GraphWorkspaceStore implements AutoCloseable {
         }
     }
 
+    private GraphCommandResult compensate(final WorkspaceMutation mutation) {
+        GraphCommandResult result;
+        synchronized (monitor) {
+            if (mutation.successfulCompensation != null) {
+                return mutation.successfulCompensation;
+            }
+            if (closed || mutation.historyMutation == null || !mutation.file.equals(file)
+                    || document != mutation.historyMutation.after()) {
+                result = compensationRejectedLocked();
+            } else {
+                byte[] currentBytes = null;
+                try {
+                    currentBytes = readPersistedBytesLocked();
+                }
+                catch (final RuntimeException exception) {
+                    // Keep the mutation retryable when the persisted evidence is temporarily unavailable.
+                }
+                if (currentBytes == null) {
+                    result = compensationIncompleteLocked();
+                } else if (!Arrays.equals(currentBytes, mutation.beforeBytes)
+                        && !Arrays.equals(currentBytes, mutation.afterBytes)) {
+                    result = compensationRejectedLocked();
+                } else if (Arrays.equals(currentBytes, mutation.beforeBytes)
+                        && (dirty != mutation.dirtyAfter || saveGeneration != mutation.saveGeneration
+                            || debounceGeneration < mutation.debounceAfter)) {
+                    result = compensationRejectedLocked();
+                } else if (Arrays.equals(currentBytes, mutation.afterBytes)
+                        && (saveGeneration < mutation.saveGeneration || debounceGeneration < mutation.debounceAfter
+                            || (dirty && !mutation.dirtyAfter))) {
+                    result = compensationRejectedLocked();
+                } else {
+                    final boolean rewrite = !Arrays.equals(currentBytes, mutation.beforeBytes);
+                    try {
+                        if (rewrite) {
+                            writeAndVerifyLocked(mutation.beforeBytes);
+                        }
+                        final WorkspaceTransition transition = history.compensate(mutation.historyMutation, document);
+                        if (transition.status() != WorkspaceTransition.Status.APPLIED) {
+                            if (rewrite) {
+                                writeAndVerifyLocked(mutation.afterBytes);
+                            }
+                            result = GraphCommandResult.from(transition);
+                        } else {
+                            document = transition.after();
+                            if (rewrite) {
+                                saveGeneration++;
+                            }
+                            invalidateDebounceLocked();
+                            dirty = mutation.dirtyBefore;
+                            publishLocked(WorkspaceStoreEvent.documentChanged(document));
+                            if (dirty) {
+                                resetDebounceLocked();
+                            } else {
+                                publishLocked(WorkspaceStoreEvent.saved(document));
+                            }
+                            result = GraphCommandResult.from(transition);
+                            mutation.successfulCompensation = result;
+                        }
+                    }
+                    catch (final RuntimeException exception) {
+                        result = compensationIncompleteLocked();
+                    }
+                }
+            }
+        }
+        drainEvents();
+        return result;
+    }
+
+    private GraphCommandResult compensationRejectedLocked() {
+        return GraphCommandResult.from(WorkspaceTransition.rejected(document,
+            "graph_workspace.history.compensation_conflict"));
+    }
+
+    private GraphCommandResult compensationIncompleteLocked() {
+        return GraphCommandResult.from(WorkspaceTransition.rejected(document,
+            "graph_workspace.history.compensation_incomplete"));
+    }
+
+    private byte[] readPersistedBytesLocked() {
+        try {
+            return Files.readAllBytes(file);
+        }
+        catch (final Exception exception) {
+            throw new WorkspaceSaveException(file, exception);
+        }
+    }
+
+    private void writeAndVerifyLocked(final byte[] bytes) {
+        writer.write(file, Arrays.copyOf(bytes, bytes.length));
+        if (!Arrays.equals(readPersistedBytesLocked(), bytes)) {
+            throw new WorkspaceSaveException(file, new IllegalStateException("Persisted workspace bytes mismatch"));
+        }
+    }
+
     private void removeListener(final ListenerEntry entry) {
         synchronized (monitor) {
             listeners.remove(entry);
@@ -423,6 +554,46 @@ public final class GraphWorkspaceStore implements AutoCloseable {
             candidate = newWorkspaceId();
         } while (candidate.equals(oldId));
         return candidate;
+    }
+
+    public static final class WorkspaceMutation {
+        private final GraphWorkspaceStore store;
+        private final GraphCommandResult result;
+        private final WorkspaceHistory.HistoryMutation historyMutation;
+        private final Path file;
+        private final long saveGeneration;
+        private final boolean dirtyBefore;
+        private final boolean dirtyAfter;
+        private final long debounceBefore;
+        private final long debounceAfter;
+        private final byte[] beforeBytes;
+        private final byte[] afterBytes;
+        private GraphCommandResult successfulCompensation;
+
+        private WorkspaceMutation(final GraphWorkspaceStore store, final GraphCommandResult result,
+                final WorkspaceHistory.HistoryMutation historyMutation, final Path file, final long saveGeneration,
+                final boolean dirtyBefore, final boolean dirtyAfter, final long debounceBefore,
+                final long debounceAfter, final byte[] beforeBytes, final byte[] afterBytes) {
+            this.store = Objects.requireNonNull(store, "store");
+            this.result = Objects.requireNonNull(result, "result");
+            this.historyMutation = historyMutation;
+            this.file = Objects.requireNonNull(file, "file");
+            this.saveGeneration = saveGeneration;
+            this.dirtyBefore = dirtyBefore;
+            this.dirtyAfter = dirtyAfter;
+            this.debounceBefore = debounceBefore;
+            this.debounceAfter = debounceAfter;
+            this.beforeBytes = Arrays.copyOf(beforeBytes, beforeBytes.length);
+            this.afterBytes = Arrays.copyOf(afterBytes, afterBytes.length);
+        }
+
+        public GraphCommandResult result() {
+            return result;
+        }
+
+        public GraphCommandResult compensateIfCurrent() {
+            return store.compensate(this);
+        }
     }
 
     private static final class ListenerEntry {

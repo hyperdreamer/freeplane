@@ -12,6 +12,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -21,6 +23,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.freeplane.plugin.graph.adapter.EdtExecutor;
 import org.freeplane.plugin.graph.control.CanvasState;
@@ -40,10 +45,15 @@ import org.freeplane.plugin.graph.projection.RelationshipResolution;
 import org.freeplane.plugin.graph.projection.RelationshipStatus;
 import org.freeplane.plugin.graph.projection.input.ConnectorDescriptor;
 import org.freeplane.plugin.graph.projection.input.SourceNodeKey;
+import org.freeplane.plugin.graph.workspace.AtomicWorkspaceWriter;
 import org.freeplane.plugin.graph.workspace.GraphCommandResult;
 import org.freeplane.plugin.graph.workspace.GraphWorkspaceStore;
 import org.freeplane.plugin.graph.workspace.WorkspaceCommand;
+import org.freeplane.plugin.graph.workspace.WorkspaceCommands;
 import org.freeplane.plugin.graph.workspace.WorkspaceTransition;
+import org.freeplane.plugin.graph.workspace.io.WorkspaceMigration;
+import org.freeplane.plugin.graph.workspace.io.WorkspaceMigrationRegistry;
+import org.freeplane.plugin.graph.workspace.io.WorkspaceXmlCodec;
 import org.freeplane.plugin.graph.workspace.model.GraphRelationshipRecord;
 import org.freeplane.plugin.graph.workspace.model.MapReference;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
@@ -64,6 +74,8 @@ public class ContributorDeletionPlanShould {
         MapReferenceId.of("00000000-0000-0000-0000-000000000402");
     private static final RelationshipId RELATIONSHIP =
         RelationshipId.of("00000000-0000-0000-0000-000000000403");
+    private static final MapReferenceId MAP_THREE =
+        MapReferenceId.of("00000000-0000-0000-0000-000000000404");
 
     @Test
     public void keepsNativeGroupsAndWorkspaceIdsImmutable() {
@@ -159,7 +171,7 @@ public class ContributorDeletionPlanShould {
         assertThat(result.status()).isEqualTo(GraphCommandResult.Status.REJECTED);
         assertThat(result.messageKey()).isEqualTo("graph_workspace.contributor.stale");
         verify(maps, never()).beginContributorDeletion(any(ContributorDeletionPlan.class));
-        verify(store, never()).execute(any(WorkspaceCommand.class));
+        verify(store, never()).executeWithCompensation(any(WorkspaceCommand.class));
         assertThat(edt.callCount).isEqualTo(1);
     }
 
@@ -182,7 +194,7 @@ public class ContributorDeletionPlanShould {
         assertThat(result.status()).isEqualTo(GraphCommandResult.Status.REJECTED);
         assertThat(result.messageKey()).isEqualTo("graph_workspace.contributor.pending");
         verify(maps, never()).beginContributorDeletion(any(ContributorDeletionPlan.class));
-        verify(store, never()).execute(any(WorkspaceCommand.class));
+        verify(store, never()).executeWithCompensation(any(WorkspaceCommand.class));
     }
 
     @Test
@@ -204,7 +216,7 @@ public class ContributorDeletionPlanShould {
         assertThat(result.status()).isEqualTo(GraphCommandResult.Status.REJECTED);
         assertThat(result.messageKey()).isEqualTo("graph_workspace.contributor.unavailable");
         verify(maps, never()).beginContributorDeletion(any(ContributorDeletionPlan.class));
-        verify(store, never()).execute(any(WorkspaceCommand.class));
+        verify(store, never()).executeWithCompensation(any(WorkspaceCommand.class));
     }
 
     @Test
@@ -241,7 +253,7 @@ public class ContributorDeletionPlanShould {
         assertThat(result.status()).isEqualTo(GraphCommandResult.Status.REJECTED);
         assertThat(result.messageKey()).isEqualTo("graph_workspace.contributor.changed");
         verify(maps, never()).beginContributorDeletion(any(ContributorDeletionPlan.class));
-        verify(store, never()).execute(any(WorkspaceCommand.class));
+        verify(store, never()).executeWithCompensation(any(WorkspaceCommand.class));
     }
 
     @Test
@@ -269,8 +281,9 @@ public class ContributorDeletionPlanShould {
             WorkspaceTransition.applied(document, "native.prevalidated")));
         when(transaction.dirtySourceMaps()).thenReturn(Collections.<MapReferenceId>emptySet());
         when(transaction.editorViewActivated()).thenReturn(false);
-        when(store.execute(any(WorkspaceCommand.class))).thenAnswer(invocation ->
+        GraphWorkspaceStore.WorkspaceMutation workspaceMutation = workspaceMutation(
             GraphCommandResult.from(WorkspaceTransition.applied(document, "graph_workspace.relationships.purged")));
+        when(store.executeWithCompensation(any(WorkspaceCommand.class))).thenReturn(workspaceMutation);
         when(maps.beginContributorDeletion(any(ContributorDeletionPlan.class))).thenReturn(transaction);
         DefaultContributorDeletionHandler handler =
             new DefaultContributorDeletionHandler(updates, store, maps, edt);
@@ -280,7 +293,7 @@ public class ContributorDeletionPlanShould {
 
         assertThat(result.status()).isEqualTo(GraphCommandResult.Status.APPLIED);
         ArgumentCaptor<WorkspaceCommand> command = ArgumentCaptor.forClass(WorkspaceCommand.class);
-        verify(store).execute(command.capture());
+        verify(store).executeWithCompensation(command.capture());
         WorkspaceTransition transition = command.getValue().apply(document);
         assertThat(transition.after().relationships()).isEmpty();
         verify(transaction).commit();
@@ -328,8 +341,9 @@ public class ContributorDeletionPlanShould {
         when(transaction.outcome()).thenReturn(applied("native"));
         when(transaction.dirtySourceMaps()).thenReturn(Collections.singleton(MAP_ONE));
         when(transaction.editorViewActivated()).thenReturn(false);
-        when(store.execute(any(WorkspaceCommand.class))).thenReturn(
+        GraphWorkspaceStore.WorkspaceMutation rejectedMutation = workspaceMutation(
             GraphCommandResult.from(WorkspaceTransition.rejected(document(record), "workspace.rejected")));
+        when(store.executeWithCompensation(any(WorkspaceCommand.class))).thenReturn(rejectedMutation);
         when(maps.beginContributorDeletion(any(ContributorDeletionPlan.class))).thenReturn(transaction);
 
         DefaultContributorDeletionHandler handler =
@@ -344,7 +358,7 @@ public class ContributorDeletionPlanShould {
         assertThat(result.status()).isEqualTo(GraphCommandResult.Status.REJECTED);
         verify(transaction).rollback();
         verify(transaction, never()).commit();
-        verify(store).execute(any(WorkspaceCommand.class));
+        verify(store).executeWithCompensation(any(WorkspaceCommand.class));
     }
 
     @Test
@@ -419,13 +433,13 @@ public class ContributorDeletionPlanShould {
 
         assertThat(result.status()).isEqualTo(GraphCommandResult.Status.REJECTED);
         verify(maps, never()).beginContributorDeletion(any(ContributorDeletionPlan.class));
-        verify(store, never()).execute(any(WorkspaceCommand.class));
+        verify(store, never()).executeWithCompensation(any(WorkspaceCommand.class));
     }
 
     @Test
     public void retainsIncompleteRecoveryAcrossHandlerInvocationsBeforeStartingNewWork() {
         MixedFixture fixture = mixedFixture();
-        when(fixture.store.execute(any(WorkspaceCommand.class))).thenReturn(
+        when(fixture.workspaceMutation.result()).thenReturn(
             GraphCommandResult.from(WorkspaceTransition.rejected(document(fixture.record), "workspace.rejected")));
         doThrow(new IllegalStateException("rollback failure")).when(fixture.transaction).rollback();
 
@@ -444,7 +458,7 @@ public class ContributorDeletionPlanShould {
         assertThat(second.dirtySourceMaps()).containsExactly(MAP_ONE);
         verify(fixture.transaction, times(2)).rollback();
         verify(fixture.maps, times(1)).beginContributorDeletion(any(ContributorDeletionPlan.class));
-        verify(fixture.store, times(1)).execute(any(WorkspaceCommand.class));
+        verify(fixture.store, times(1)).executeWithCompensation(any(WorkspaceCommand.class));
     }
 
     @Test
@@ -473,12 +487,14 @@ public class ContributorDeletionPlanShould {
                 return beginCalls[0] == 1 ? fixture.transaction : recovered;
             });
         final int[] workspaceCalls = new int[] { 0 };
-        when(fixture.store.execute(any(WorkspaceCommand.class))).thenAnswer(invocation -> {
+        when(fixture.store.executeWithCompensation(any(WorkspaceCommand.class))).thenAnswer(invocation -> {
             events.add("workspace");
             workspaceCalls[0]++;
-            return workspaceCalls[0] == 1
-                ? GraphCommandResult.from(WorkspaceTransition.rejected(document(fixture.record), "workspace.rejected"))
-                : GraphCommandResult.from(WorkspaceTransition.applied(document(fixture.record), "relationships.purged"));
+            return workspaceMutation(workspaceCalls[0] == 1
+                ? GraphCommandResult.from(WorkspaceTransition.rejected(document(fixture.record),
+                    "workspace.rejected"))
+                : GraphCommandResult.from(WorkspaceTransition.applied(document(fixture.record),
+                    "relationships.purged")));
         });
         doAnswer(invocation -> {
             events.add("commit");
@@ -500,13 +516,13 @@ public class ContributorDeletionPlanShould {
         verify(fixture.transaction, never()).commit();
         verify(recovered).commit();
         verify(fixture.maps, times(2)).beginContributorDeletion(any(ContributorDeletionPlan.class));
-        verify(fixture.store, times(2)).execute(any(WorkspaceCommand.class));
+        verify(fixture.store, times(2)).executeWithCompensation(any(WorkspaceCommand.class));
     }
 
     @Test
     public void reportsIncompleteRecoveryWhenNativeRollbackFailsAfterWorkspaceRejection() {
         MixedFixture fixture = mixedFixture();
-        when(fixture.store.execute(any(WorkspaceCommand.class))).thenReturn(
+        when(fixture.workspaceMutation.result()).thenReturn(
             GraphCommandResult.from(WorkspaceTransition.rejected(document(fixture.record), "workspace.rejected")));
         doThrow(new IllegalStateException("rollback failure")).when(fixture.transaction).rollback();
 
@@ -516,7 +532,7 @@ public class ContributorDeletionPlanShould {
         assertThat(result.status()).isEqualTo(GraphCommandResult.Status.REJECTED);
         assertThat(result.messageKey()).isEqualTo("graph_workspace.contributor.undo_incomplete");
         assertThat(result.dirtySourceMaps()).containsExactly(MAP_ONE);
-        verify(fixture.store).execute(any(WorkspaceCommand.class));
+        verify(fixture.store).executeWithCompensation(any(WorkspaceCommand.class));
         verify(fixture.transaction).rollback();
         verify(fixture.transaction, never()).commit();
     }
@@ -524,10 +540,11 @@ public class ContributorDeletionPlanShould {
     @Test
     public void compensatesPublishedWorkspaceTransitionWhenNativeCommitFails() {
         MixedFixture fixture = mixedFixture();
-        when(fixture.store.execute(any(WorkspaceCommand.class))).thenReturn(
+        when(fixture.workspaceMutation.result()).thenReturn(
             GraphCommandResult.from(WorkspaceTransition.applied(document(fixture.record), "relationships.purged")));
-        when(fixture.store.undo()).thenReturn(
-            GraphCommandResult.from(WorkspaceTransition.applied(document(fixture.record), "history.undone")));
+        when(fixture.workspaceMutation.compensateIfCurrent()).thenReturn(
+            GraphCommandResult.from(WorkspaceTransition.rejected(document(fixture.record),
+                "graph_workspace.history.compensation_conflict")));
         doThrow(new IllegalStateException("native commit failure")).when(fixture.transaction).commit();
 
         DefaultContributorDeletionHandler handler = fixture.handler();
@@ -535,9 +552,9 @@ public class ContributorDeletionPlanShould {
 
         assertThat(result.status()).isEqualTo(GraphCommandResult.Status.REJECTED);
         assertThat(result.messageKey()).isEqualTo("graph_workspace.contributor.undo_incomplete");
-        assertThat(result.messageArguments()).contains("native");
-        verify(fixture.store).execute(any(WorkspaceCommand.class));
-        verify(fixture.store).undo();
+        assertThat(result.messageArguments()).containsExactly("native_and_workspace");
+        verify(fixture.store).executeWithCompensation(any(WorkspaceCommand.class));
+        verify(fixture.workspaceMutation).compensateIfCurrent();
         verify(fixture.transaction).commit();
         verify(fixture.transaction).rollback();
     }
@@ -545,10 +562,11 @@ public class ContributorDeletionPlanShould {
     @Test
     public void reportsNativeCommitFailureAfterBothPhasesAreCompensated() {
         MixedFixture fixture = mixedFixture();
-        when(fixture.store.execute(any(WorkspaceCommand.class))).thenReturn(
+        when(fixture.workspaceMutation.result()).thenReturn(
             GraphCommandResult.from(WorkspaceTransition.applied(document(fixture.record), "relationships.purged")));
-        when(fixture.store.undo()).thenReturn(
-            GraphCommandResult.from(WorkspaceTransition.applied(document(fixture.record), "history.undone")));
+        when(fixture.workspaceMutation.compensateIfCurrent()).thenReturn(
+            GraphCommandResult.from(WorkspaceTransition.applied(document(fixture.record),
+                "graph_workspace.history.compensated")));
         final boolean[] nativeRecoveryComplete = new boolean[] { false };
         when(fixture.transaction.outcome()).thenAnswer(invocation -> nativeRecoveryComplete[0]
             ? GraphCommandResult.from(WorkspaceTransition.rejected(document(fixture.record),
@@ -565,7 +583,7 @@ public class ContributorDeletionPlanShould {
 
         assertThat(result.status()).isEqualTo(GraphCommandResult.Status.REJECTED);
         assertThat(result.messageKey()).isEqualTo("graph_workspace.contributor.native_commit_failed");
-        verify(fixture.store).undo();
+        verify(fixture.workspaceMutation).compensateIfCurrent();
         verify(fixture.transaction).commit();
         verify(fixture.transaction).rollback();
     }
@@ -573,10 +591,11 @@ public class ContributorDeletionPlanShould {
     @Test
     public void reportsIncompleteRecoveryWhenWorkspaceCompensationFails() {
         MixedFixture fixture = mixedFixture();
-        when(fixture.store.execute(any(WorkspaceCommand.class))).thenReturn(
+        when(fixture.workspaceMutation.result()).thenReturn(
             GraphCommandResult.from(WorkspaceTransition.applied(document(fixture.record), "relationships.purged")));
-        when(fixture.store.undo()).thenReturn(
-            GraphCommandResult.from(WorkspaceTransition.rejected(document(fixture.record), "workspace.undo.rejected")));
+        when(fixture.workspaceMutation.compensateIfCurrent()).thenReturn(
+            GraphCommandResult.from(WorkspaceTransition.rejected(document(fixture.record),
+                "graph_workspace.history.compensation_incomplete")));
         doThrow(new IllegalStateException("native commit failure")).when(fixture.transaction).commit();
 
         DefaultContributorDeletionHandler handler = fixture.handler();
@@ -584,9 +603,9 @@ public class ContributorDeletionPlanShould {
 
         assertThat(result.status()).isEqualTo(GraphCommandResult.Status.REJECTED);
         assertThat(result.messageKey()).isEqualTo("graph_workspace.contributor.undo_incomplete");
-        assertThat(result.messageArguments()).contains("native_and_workspace");
+        assertThat(result.messageArguments()).containsExactly("native_and_workspace");
         assertThat(result.dirtySourceMaps()).containsExactly(MAP_ONE);
-        verify(fixture.store).undo();
+        verify(fixture.workspaceMutation).compensateIfCurrent();
         verify(fixture.transaction).commit();
         verify(fixture.transaction).rollback();
     }
@@ -598,17 +617,30 @@ public class ContributorDeletionPlanShould {
         final boolean[] nativeRolledBack = new boolean[] { false };
         final int[] beginCalls = new int[] { 0 };
         final int[] workspaceCalls = new int[] { 0 };
-        final int[] undoCalls = new int[] { 0 };
-        doAnswer(invocation -> {
-            events.add("begin");
-            beginCalls[0]++;
-            return beginCalls[0] == 1 ? fixture.transaction : recoveredTransaction(events);
-        }).when(fixture.maps).beginContributorDeletion(any(ContributorDeletionPlan.class));
-        when(fixture.store.execute(any(WorkspaceCommand.class))).thenAnswer(invocation -> {
+        final int[] compensationCalls = new int[] { 0 };
+        when(fixture.maps.beginContributorDeletion(any(ContributorDeletionPlan.class)))
+            .thenAnswer(invocation -> {
+                events.add("begin");
+                beginCalls[0]++;
+                return beginCalls[0] == 1 ? fixture.transaction : recoveredTransaction(events);
+            });
+        when(fixture.store.executeWithCompensation(any(WorkspaceCommand.class))).thenAnswer(invocation -> {
             events.add("workspace");
             workspaceCalls[0]++;
-            return GraphCommandResult.from(WorkspaceTransition.applied(document(fixture.record),
-                "relationships.purged"));
+            GraphWorkspaceStore.WorkspaceMutation mutation = workspaceMutation(
+                GraphCommandResult.from(WorkspaceTransition.applied(document(fixture.record),
+                    "relationships.purged")));
+            when(mutation.compensateIfCurrent()).thenAnswer(compensation -> {
+                events.add("workspace-compensate");
+                compensationCalls[0]++;
+                if (compensationCalls[0] == 3) {
+                    return GraphCommandResult.from(WorkspaceTransition.applied(document(fixture.record),
+                        "history.compensated"));
+                }
+                return GraphCommandResult.from(WorkspaceTransition.rejected(document(fixture.record),
+                    "graph_workspace.history.compensation_conflict"));
+            });
+            return mutation;
         });
         doAnswer(invocation -> {
             events.add("native-commit");
@@ -623,19 +655,6 @@ public class ContributorDeletionPlanShould {
             ? GraphCommandResult.from(WorkspaceTransition.rejected(document(fixture.record),
                 "graph_workspace.contributor.native_commit_failed"))
             : applied("native"));
-        doAnswer(invocation -> {
-            events.add("workspace-undo");
-            undoCalls[0]++;
-            if (undoCalls[0] == 1) {
-                throw new IllegalStateException("workspace undo failure");
-            }
-            if (undoCalls[0] == 2) {
-                return GraphCommandResult.from(WorkspaceTransition.rejected(document(fixture.record),
-                    "workspace.undo.rejected"));
-            }
-            return GraphCommandResult.from(WorkspaceTransition.applied(document(fixture.record),
-                "history.undone"));
-        }).when(fixture.store).undo();
 
         DefaultContributorDeletionHandler handler = fixture.handler();
         GraphCommandResult first = handler.deleteAll(fixture.command());
@@ -647,15 +666,15 @@ public class ContributorDeletionPlanShould {
         assertThat(repeatedFailure.messageKey()).isEqualTo("graph_workspace.contributor.undo_incomplete");
         assertThat(repeatedFailure.messageArguments()).containsExactly("workspace");
         assertThat(recovered.status()).isEqualTo(GraphCommandResult.Status.APPLIED);
-        assertThat(events).containsExactly("begin", "workspace", "native-commit", "native-rollback",
-            "workspace-undo", "workspace-undo", "workspace-undo", "begin", "workspace",
+        assertThat(events).containsExactly("begin", "workspace", "native-commit", "workspace-compensate",
+            "native-rollback", "workspace-compensate", "workspace-compensate", "begin", "workspace",
             "native-recovered-commit");
-        assertThat(undoCalls[0]).isEqualTo(3);
+        assertThat(compensationCalls[0]).isEqualTo(3);
         assertThat(beginCalls[0]).isEqualTo(2);
         assertThat(workspaceCalls[0]).isEqualTo(2);
         verify(fixture.transaction, times(1)).rollback();
         verify(fixture.maps, times(2)).beginContributorDeletion(any(ContributorDeletionPlan.class));
-        verify(fixture.store, times(2)).execute(any(WorkspaceCommand.class));
+        verify(fixture.store, times(2)).executeWithCompensation(any(WorkspaceCommand.class));
     }
 
     private static FreeplaneMapCommandExecutor.ContributorDeletionTransaction recoveredTransaction(
@@ -675,17 +694,94 @@ public class ContributorDeletionPlanShould {
     @Test
     public void completesMixedDeletionWithOneWorkspacePurgeAndOneNativeCommit() {
         MixedFixture fixture = mixedFixture();
-        when(fixture.store.execute(any(WorkspaceCommand.class))).thenReturn(
-            GraphCommandResult.from(WorkspaceTransition.applied(document(fixture.record), "relationships.purged")));
 
         DefaultContributorDeletionHandler handler = fixture.handler();
         GraphCommandResult result = handler.deleteAll(fixture.command());
 
         assertThat(result.status()).isEqualTo(GraphCommandResult.Status.APPLIED);
-        verify(fixture.store).execute(any(WorkspaceCommand.class));
-        verify(fixture.store, never()).undo();
+        verify(fixture.store).executeWithCompensation(any(WorkspaceCommand.class));
         verify(fixture.transaction).commit();
         verify(fixture.transaction, never()).rollback();
+    }
+
+    @Test
+    public void retainsExactWorkspaceCompensationWhenRealStoreCommitInterposesUnrelatedCommand() throws Exception {
+        Path workspace = Files.createTempFile("graph-workspace-compensation", ".fpg");
+        Files.deleteIfExists(workspace);
+        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+        AtomicWorkspaceWriter writer = new AtomicWorkspaceWriter() {
+            @Override
+            public void write(final Path target, final byte[] bytes) {
+                try {
+                    Files.write(target, bytes);
+                }
+                catch (final java.io.IOException failure) {
+                    throw new AssertionError(failure);
+                }
+            }
+        };
+        GraphWorkspaceStore store = GraphWorkspaceStore.create(workspace,
+            new WorkspaceXmlCodec(new WorkspaceMigrationRegistry(Collections.<WorkspaceMigration>emptyList())),
+            writer, scheduler);
+        try {
+            store.execute(WorkspaceCommands.addMap(MAP_ONE, URI.create("one.mm")));
+            store.execute(WorkspaceCommands.addMap(MAP_TWO, URI.create("two.mm")));
+            store.execute(WorkspaceCommands.createRelationship(RELATIONSHIP,
+                node(MAP_ONE, "source"), node(MAP_TWO, "target"), RelationshipDirection.FORWARD));
+            store.saveNow();
+            final GraphRelationshipRecord record = store.currentDocument().relationships().get(0);
+            final EdgeContributor contributor = EdgeContributor.graphRelationship(record,
+                endpoint(SourceNodeKey.persisted(record.source())), endpoint(record.target()));
+            final ProjectedEdge edge = ProjectedEdge.of(ProjectedEdgeKey.of(contributor.projectedSource(),
+                contributor.projectedTarget()), Collections.singletonList(contributor));
+            final GraphProjection projection = edgeProjection(9L, edge);
+            GraphUpdateCoordinator updates = mock(GraphUpdateCoordinator.class);
+            when(updates.currentProjection()).thenReturn(projection);
+            when(updates.currentState()).thenReturn(availableState());
+            when(updates.hasPendingChanges()).thenReturn(false);
+            FreeplaneMapCommandExecutor maps = mock(FreeplaneMapCommandExecutor.class);
+            InlineEdt edt = new InlineEdt();
+            FreeplaneMapCommandExecutor.ContributorDeletionTransaction transaction =
+                mock(FreeplaneMapCommandExecutor.ContributorDeletionTransaction.class);
+            AtomicBoolean rolledBack = new AtomicBoolean();
+            when(transaction.outcome()).thenAnswer(invocation -> rolledBack.get()
+                ? GraphCommandResult.from(WorkspaceTransition.rejected(store.currentDocument(),
+                    "graph_workspace.contributor.native_commit_failed"))
+                : GraphCommandResult.from(WorkspaceTransition.applied(store.currentDocument(), "native")));
+            when(transaction.dirtySourceMaps()).thenReturn(Collections.<MapReferenceId>emptySet());
+            when(transaction.editorViewActivated()).thenReturn(false);
+            doAnswer(invocation -> {
+                store.execute(WorkspaceCommands.addMap(MAP_THREE, URI.create("three.mm")));
+                throw new IllegalStateException("native commit failure");
+            }).when(transaction).commit();
+            doAnswer(invocation -> {
+                rolledBack.set(true);
+                return null;
+            }).when(transaction).rollback();
+            when(maps.beginContributorDeletion(any(ContributorDeletionPlan.class))).thenReturn(transaction);
+
+            DefaultContributorDeletionHandler handler =
+                new DefaultContributorDeletionHandler(updates, store, maps, edt);
+            GraphCommandResult first = handler.deleteOne(GraphCommands.deleteContributor(9L,
+                contributor.key(), null));
+            GraphCommandResult second = handler.deleteOne(GraphCommands.deleteContributor(9L,
+                contributor.key(), null));
+
+            assertThat(first.status()).isEqualTo(GraphCommandResult.Status.REJECTED);
+            assertThat(first.messageKey()).isEqualTo("graph_workspace.contributor.undo_incomplete");
+            assertThat(first.messageArguments()).containsExactly("workspace");
+            assertThat(second.messageKey()).isEqualTo("graph_workspace.contributor.undo_incomplete");
+            assertThat(store.currentDocument().maps()).extracting(MapReference::id)
+                .containsExactly(MAP_ONE, MAP_TWO, MAP_THREE);
+            assertThat(store.currentDocument().relationships()).isEmpty();
+            verify(transaction).rollback();
+            verify(maps, times(1)).beginContributorDeletion(any(ContributorDeletionPlan.class));
+        }
+        finally {
+            store.discardAndClose();
+            scheduler.shutdownNow();
+            Files.deleteIfExists(workspace);
+        }
     }
 
     private static MixedFixture mixedFixture() {
@@ -729,8 +825,17 @@ public class ContributorDeletionPlanShould {
         when(transaction.dirtySourceMaps()).thenReturn(Collections.singleton(MAP_ONE));
         when(transaction.editorViewActivated()).thenReturn(false);
         when(maps.beginContributorDeletion(any(ContributorDeletionPlan.class))).thenReturn(transaction);
-        return new MixedFixture(updates, store, maps, edt, transaction, record, edge,
+        GraphWorkspaceStore.WorkspaceMutation workspaceMutation = workspaceMutation(
+            applied("relationships.purged"));
+        when(store.executeWithCompensation(any(WorkspaceCommand.class))).thenReturn(workspaceMutation);
+        return new MixedFixture(updates, store, maps, edt, transaction, workspaceMutation, record, edge,
             nativeContributor, relationshipContributor);
+    }
+
+    private static GraphWorkspaceStore.WorkspaceMutation workspaceMutation(final GraphCommandResult result) {
+        GraphWorkspaceStore.WorkspaceMutation mutation = mock(GraphWorkspaceStore.WorkspaceMutation.class);
+        when(mutation.result()).thenReturn(result);
+        return mutation;
     }
 
     private static GraphCommandResult applied(String key) {
@@ -790,6 +895,7 @@ public class ContributorDeletionPlanShould {
         private final FreeplaneMapCommandExecutor maps;
         private final InlineEdt edt;
         private final FreeplaneMapCommandExecutor.ContributorDeletionTransaction transaction;
+        private final GraphWorkspaceStore.WorkspaceMutation workspaceMutation;
         private final GraphRelationshipRecord record;
         private final ProjectedEdge edge;
         private final EdgeContributor nativeContributor;
@@ -798,6 +904,7 @@ public class ContributorDeletionPlanShould {
         private MixedFixture(final GraphUpdateCoordinator updates, final GraphWorkspaceStore store,
                 final FreeplaneMapCommandExecutor maps, final InlineEdt edt,
                 final FreeplaneMapCommandExecutor.ContributorDeletionTransaction transaction,
+                final GraphWorkspaceStore.WorkspaceMutation workspaceMutation,
                 final GraphRelationshipRecord record, final ProjectedEdge edge,
                 final EdgeContributor nativeContributor, final EdgeContributor relationshipContributor) {
             this.updates = updates;
@@ -805,6 +912,7 @@ public class ContributorDeletionPlanShould {
             this.maps = maps;
             this.edt = edt;
             this.transaction = transaction;
+            this.workspaceMutation = workspaceMutation;
             this.record = record;
             this.edge = edge;
             this.nativeContributor = nativeContributor;

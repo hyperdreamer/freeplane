@@ -10,6 +10,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import javax.xml.namespace.QName;
 
 import org.freeplane.plugin.graph.workspace.model.DisplaySettings;
+import org.freeplane.plugin.graph.workspace.model.MapReference;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 import org.freeplane.plugin.graph.workspace.model.UnknownXml;
 import org.freeplane.plugin.graph.workspace.model.Viewport;
@@ -21,10 +22,86 @@ import org.junit.Test;
 public class WorkspaceHistoryShould {
     private static final WorkspaceId ORIGINAL_ID =
         WorkspaceId.of("00000000-0000-0000-0000-000000000100");
+
+    @Test
+    public void compensationMustNotUseGlobalUndoHead() {
+        WorkspaceDocument before = document().toBuilder()
+            .maps(Collections.singletonList(MapReference.of(MAP_ONE, 1L, URI.create("maps/purged.mm"), true,
+                "#4E79A7", Collections.<UnknownXml>emptyList())))
+            .build();
+        WorkspaceHistory history = new WorkspaceHistory();
+
+        WorkspaceHistory.HistoryMutation purge = history.executeWithToken(WorkspaceCommands.removeMap(MAP_ONE), before);
+        WorkspaceTransition unrelated = history.execute(new WorkspaceCommand() {
+            @Override
+            public WorkspaceTransition apply(final WorkspaceDocument current) {
+                return WorkspaceTransition.applied(current.toBuilder().build(), "test.equal_interposition");
+            }
+        }, purge.after());
+        WorkspaceTransition undone = history.undo(unrelated.after());
+        WorkspaceTransition redone = history.redo(undone.after());
+
+        WorkspaceTransition compensation = history.compensate(purge, redone.after());
+
+        assertThat(compensation.status()).isEqualTo(WorkspaceTransition.Status.REJECTED);
+        assertThat(compensation.after()).isSameAs(redone.after());
+        assertThat(history.canUndo()).isTrue();
+        assertThat(history.canRedo()).isFalse();
+    }
+
     private static final WorkspaceId CURRENT_ID =
         WorkspaceId.of("00000000-0000-0000-0000-000000000200");
     private static final MapReferenceId MAP_ONE =
         MapReferenceId.of("00000000-0000-0000-0000-000000000001");
+    private static final MapReferenceId MAP_TWO =
+        MapReferenceId.of("00000000-0000-0000-0000-000000000002");
+
+    @Test
+    public void rejectsCompensationAfterCommandUndoRedoABA() {
+        WorkspaceDocument before = document();
+        WorkspaceHistory history = new WorkspaceHistory();
+
+        WorkspaceHistory.HistoryMutation mutation = history.executeWithToken(
+            WorkspaceCommands.addMap(MAP_ONE, URI.create("maps/one.mm")), before);
+        WorkspaceTransition unrelated = history.execute(new WorkspaceCommand() {
+            @Override
+            public WorkspaceTransition apply(final WorkspaceDocument current) {
+                return WorkspaceTransition.applied(current.toBuilder().build(), "test.equal_interposition");
+            }
+        }, mutation.after());
+        WorkspaceTransition undone = history.undo(unrelated.after());
+        WorkspaceTransition redone = history.redo(undone.after());
+
+        WorkspaceTransition compensation = history.compensate(mutation, redone.after());
+
+        assertThat(compensation.status()).isEqualTo(WorkspaceTransition.Status.REJECTED);
+        assertThat(compensation.after()).isSameAs(redone.after());
+        assertThat(history.canUndo()).isTrue();
+        assertThat(history.canRedo()).isFalse();
+    }
+
+    @Test
+    public void compensateMatchingTokenOnceAndRestorePriorRedoStack() {
+        WorkspaceDocument before = document();
+        WorkspaceHistory history = new WorkspaceHistory();
+        WorkspaceTransition first = history.execute(
+            WorkspaceCommands.addMap(MAP_ONE, URI.create("maps/one.mm")), before);
+        WorkspaceTransition undone = history.undo(first.after());
+
+        WorkspaceHistory.HistoryMutation mutation = history.executeWithToken(
+            WorkspaceCommands.addMap(MAP_TWO, URI.create("maps/two.mm")), undone.after());
+        WorkspaceTransition compensation = history.compensate(mutation, mutation.after());
+
+        assertThat(compensation.status()).isEqualTo(WorkspaceTransition.Status.APPLIED);
+        assertThat(compensation.after().maps()).isEmpty();
+        assertThat(history.canUndo()).isFalse();
+        assertThat(history.canRedo()).isTrue();
+        WorkspaceTransition repeated = history.compensate(mutation, compensation.after());
+        assertThat(repeated.status()).isEqualTo(WorkspaceTransition.Status.REJECTED);
+        WorkspaceTransition restored = history.redo(compensation.after());
+        assertThat(restored.status()).isEqualTo(WorkspaceTransition.Status.APPLIED);
+        assertThat(restored.after().maps()).extracting(MapReference::id).containsExactly(MAP_ONE);
+    }
 
     @Test
     public void executeAppliedCommandsOnceAndLeaveHistoryUntouchedForNoOpOrRejectedCommands() {

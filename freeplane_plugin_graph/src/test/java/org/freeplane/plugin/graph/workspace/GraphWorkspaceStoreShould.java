@@ -627,6 +627,117 @@ public class GraphWorkspaceStoreShould {
         assertThat(beforeChanges).isNotEmpty();
     }
 
+    @Test
+    public void executeWithCompensationRestoresCleanPersistedBytesAndIsIdempotent() throws Exception {
+        Path workspace = workspacePath("compensation-clean", "workspace.fpg");
+        RecordingWriter writer = new RecordingWriter();
+        TestScheduler scheduler = new TestScheduler();
+        GraphWorkspaceStore store = GraphWorkspaceStore.create(workspace, codec(), writer, scheduler);
+        byte[] beforeBytes = Files.readAllBytes(workspace);
+
+        GraphWorkspaceStore.WorkspaceMutation mutation = store.executeWithCompensation(addMap(MAP_ONE));
+
+        assertThat(mutation.result().status()).isEqualTo(GraphCommandResult.Status.APPLIED);
+        assertThat(store.isDirty()).isTrue();
+        assertThat(Files.readAllBytes(workspace)).isEqualTo(beforeBytes);
+
+        GraphCommandResult compensation = mutation.compensateIfCurrent();
+
+        assertThat(compensation.status()).isEqualTo(GraphCommandResult.Status.APPLIED);
+        assertThat(store.currentDocument().maps()).isEmpty();
+        assertThat(store.isDirty()).isFalse();
+        assertThat(Files.readAllBytes(workspace)).isEqualTo(beforeBytes);
+        assertThat(mutation.compensateIfCurrent()).isEqualTo(compensation);
+    }
+
+    @Test
+    public void compensatesAfterAutosaveAndRestoresTheCapturedPersistedBytes() throws Exception {
+        Path workspace = workspacePath("compensation-autosave", "workspace.fpg");
+        RecordingWriter writer = new RecordingWriter();
+        TestScheduler scheduler = new TestScheduler();
+        GraphWorkspaceStore store = GraphWorkspaceStore.create(workspace, codec(), writer, scheduler);
+        byte[] beforeBytes = Files.readAllBytes(workspace);
+
+        GraphWorkspaceStore.WorkspaceMutation mutation = store.executeWithCompensation(addMap(MAP_ONE));
+        scheduler.run(0);
+        byte[] afterBytes = Files.readAllBytes(workspace);
+        assertThat(afterBytes).isNotEqualTo(beforeBytes);
+        assertThat(store.isDirty()).isFalse();
+
+        GraphCommandResult compensation = mutation.compensateIfCurrent();
+
+        assertThat(compensation.status()).isEqualTo(GraphCommandResult.Status.APPLIED);
+        assertThat(Files.readAllBytes(workspace)).isEqualTo(beforeBytes);
+        assertThat(store.currentDocument().maps()).isEmpty();
+        assertThat(store.isDirty()).isFalse();
+    }
+
+    @Test
+    public void rejectsCompensationAfterInterpositionOrSaveAsWithoutChangingCurrentState() throws Exception {
+        Path workspace = workspacePath("compensation-interposition", "workspace.fpg");
+        Path target = workspacePath("compensation-interposition-target", "renamed.fpg");
+        GraphWorkspaceStore store = GraphWorkspaceStore.create(workspace, codec(), new RecordingWriter(),
+            new TestScheduler());
+        GraphWorkspaceStore.WorkspaceMutation mutation = store.executeWithCompensation(
+            addMap(MAP_ONE, URI.create("maps/one.mm")));
+        store.execute(new WorkspaceCommand() {
+            @Override
+            public WorkspaceTransition apply(final WorkspaceDocument current) {
+                return WorkspaceTransition.applied(current.toBuilder().build(), "test.equal_interposition");
+            }
+        });
+
+        GraphCommandResult interposed = mutation.compensateIfCurrent();
+
+        assertThat(interposed.status()).isEqualTo(GraphCommandResult.Status.REJECTED);
+        assertThat(store.currentDocument().maps()).extracting(MapReference::id).containsExactly(MAP_ONE);
+        store.saveAs(target);
+        GraphCommandResult replaced = mutation.compensateIfCurrent();
+        assertThat(replaced.status()).isEqualTo(GraphCommandResult.Status.REJECTED);
+        assertThat(store.currentDocument().id()).isEqualTo(codec().read(target).id());
+    }
+
+    @Test
+    public void restoresAnAlreadyDirtyEnvelopeWhenCompensationSucceeds() throws Exception {
+        Path workspace = workspacePath("compensation-dirty", "workspace.fpg");
+        RecordingWriter writer = new RecordingWriter();
+        TestScheduler scheduler = new TestScheduler();
+        GraphWorkspaceStore store = GraphWorkspaceStore.create(workspace, codec(), writer, scheduler);
+
+        store.execute(addMap(MAP_ONE, URI.create("maps/one.mm")));
+        GraphWorkspaceStore.WorkspaceMutation mutation = store.executeWithCompensation(
+            addMap(MAP_TWO, URI.create("maps/two.mm")));
+        GraphCommandResult compensation = mutation.compensateIfCurrent();
+
+        assertThat(compensation.status()).isEqualTo(GraphCommandResult.Status.APPLIED);
+        assertThat(store.currentDocument().maps()).extracting(MapReference::id).containsExactly(MAP_ONE);
+        assertThat(store.isDirty()).isTrue();
+        scheduler.run(scheduler.tasks().size() - 1);
+        assertThat(store.isDirty()).isFalse();
+        assertThat(codec().read(workspace)).isEqualTo(store.currentDocument());
+    }
+
+    @Test
+    public void keepsCompensationRetryableAfterATransientRestoreWriteFailure() throws Exception {
+        Path workspace = workspacePath("compensation-retry", "workspace.fpg");
+        RecordingWriter writer = new RecordingWriter();
+        TestScheduler scheduler = new TestScheduler();
+        GraphWorkspaceStore store = GraphWorkspaceStore.create(workspace, codec(), writer, scheduler);
+        byte[] beforeBytes = Files.readAllBytes(workspace);
+        GraphWorkspaceStore.WorkspaceMutation mutation = store.executeWithCompensation(addMap(MAP_ONE));
+        scheduler.run(0);
+        writer.failNext(new IllegalStateException("injected compensation failure"));
+
+        GraphCommandResult first = mutation.compensateIfCurrent();
+        GraphCommandResult second = mutation.compensateIfCurrent();
+
+        assertThat(first.status()).isEqualTo(GraphCommandResult.Status.REJECTED);
+        assertThat(first.messageKey()).isEqualTo("graph_workspace.history.compensation_incomplete");
+        assertThat(second.status()).isEqualTo(GraphCommandResult.Status.APPLIED);
+        assertThat(Files.readAllBytes(workspace)).isEqualTo(beforeBytes);
+        assertThat(store.currentDocument().maps()).isEmpty();
+    }
+
     private WorkspaceXmlCodec codec() {
         return new WorkspaceXmlCodec(new WorkspaceMigrationRegistry(Collections.<WorkspaceMigration>emptyList()));
     }
