@@ -10,6 +10,7 @@ import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
 
+import javax.accessibility.AccessibleContext;
 import javax.swing.JComponent;
 import javax.swing.SwingUtilities;
 
@@ -33,6 +34,7 @@ public final class GraphCanvas extends JComponent {
     private volatile GraphPaintState paintState;
     private volatile GraphViewport viewport;
     private volatile GraphTheme theme;
+    private volatile GraphInteractionController interactionController;
 
     public GraphCanvas() {
         paintState = GraphPaintState.empty();
@@ -80,6 +82,20 @@ public final class GraphCanvas extends JComponent {
         return viewport;
     }
 
+    @Override
+    public synchronized AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleGraphCanvas(this);
+        }
+        return accessibleContext;
+    }
+
+    boolean activateAccessible(final org.freeplane.plugin.graph.projection.ProjectedEndpointKey endpoint,
+            final boolean open) {
+        final GraphInteractionController controller = interactionController;
+        return controller != null && controller.activateAccessible(endpoint, open);
+    }
+
     public void fitGraph() {
         onEdt(new Runnable() {
             @Override
@@ -125,6 +141,10 @@ public final class GraphCanvas extends JComponent {
                 repaint();
             }
         });
+    }
+
+    void setInteractionController(final GraphInteractionController controller) {
+        interactionController = controller;
     }
 
     CanvasState canvasState() {

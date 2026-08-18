@@ -101,6 +101,7 @@ public final class GraphInteractionController {
             throw new IllegalStateException("GraphInteractionController is already installed");
         }
         canvas = next;
+        next.setInteractionController(this);
         next.addMouseListener(mouseListener);
         next.addMouseMotionListener(mouseMotionListener);
         next.addMouseWheelListener(mouseWheelListener);
@@ -117,6 +118,7 @@ public final class GraphInteractionController {
         oldCanvas.removeMouseMotionListener(mouseMotionListener);
         oldCanvas.removeMouseWheelListener(mouseWheelListener);
         oldCanvas.removeKeyListener(keyListener);
+        oldCanvas.setInteractionController(null);
         drag = null;
         previewSource = null;
         previewFrom = null;
@@ -153,6 +155,20 @@ public final class GraphInteractionController {
 
     void deleteAllContributors(final ProjectedEdgeKey edge, final List<ContributorKey> contributors) {
         emit(new GraphIntent.DeleteAllContributors(edge, contributors));
+    }
+
+    boolean activateAccessible(final ProjectedEndpointKey endpoint, final boolean open) {
+        final ProjectedEndpointKey value = Objects.requireNonNull(endpoint, "endpoint");
+        final CanvasState state = canvas == null ? null : canvas.canvasState();
+        if (state == null || !GraphTraversalOrder.tabOrder(state).contains(value)) {
+            return false;
+        }
+        setSelectionVisual(value);
+        emit(new GraphIntent.ChangeSelection(Optional.of(value)));
+        if (open) {
+            emit(new GraphIntent.OpenSourceNode(value));
+        }
+        return true;
     }
 
     private void handleMousePressed(final MouseEvent event) {
@@ -330,17 +346,39 @@ public final class GraphInteractionController {
             event.consume();
             return;
         }
-        if (!isArrow(event.getKeyCode())) {
-            return;
-        }
         final int modifiers = event.getModifiersEx();
-        final boolean shift = (modifiers & InputEvent.SHIFT_DOWN_MASK) != 0;
         final int navigationModifiers = InputEvent.CTRL_DOWN_MASK | InputEvent.ALT_DOWN_MASK
             | InputEvent.META_DOWN_MASK;
         if ((modifiers & navigationModifiers) != 0) {
             return;
         }
+        if (event.getKeyCode() == KeyEvent.VK_TAB) {
+            cycleSelection((modifiers & InputEvent.SHIFT_DOWN_MASK) != 0);
+            event.consume();
+            return;
+        }
+        if (event.getKeyCode() == KeyEvent.VK_ENTER) {
+            final Optional<ProjectedEndpointKey> selection = canvas.paintState().selection();
+            if (selection.isPresent()) {
+                setSelectionVisual(selection.get());
+                emit(new GraphIntent.OpenSourceNode(selection.get()));
+                event.consume();
+            }
+            return;
+        }
+        if (!isArrow(event.getKeyCode())) {
+            return;
+        }
+        final boolean shift = (modifiers & InputEvent.SHIFT_DOWN_MASK) != 0;
         if (!shift && canvas.paintState().selection().isPresent()) {
+            final CanvasState state = canvas.canvasState();
+            if (state != null) {
+                final Optional<ProjectedEndpointKey> next = GraphTraversalOrder.nearest(
+                    state, canvas.paintState().selection().get(), directionFor(event.getKeyCode()));
+                if (next.isPresent()) {
+                    selectEndpoint(next.get());
+                }
+            }
             event.consume();
             return;
         }
@@ -481,6 +519,50 @@ public final class GraphInteractionController {
             }
         }
         return false;
+    }
+
+    private void selectEndpoint(final ProjectedEndpointKey endpoint) {
+        setSelectionVisual(endpoint);
+        emit(new GraphIntent.ChangeSelection(Optional.of(endpoint)));
+    }
+
+    private void cycleSelection(final boolean reverse) {
+        final CanvasState state = canvas.canvasState();
+        if (state == null) {
+            return;
+        }
+        final List<ProjectedEndpointKey> order = GraphTraversalOrder.tabOrder(state);
+        if (order.isEmpty()) {
+            return;
+        }
+        final Optional<ProjectedEndpointKey> selection = canvas.paintState().selection();
+        final int current = selection.isPresent() ? order.indexOf(selection.get()) : -1;
+        final int next;
+        if (current < 0) {
+            next = reverse ? order.size() - 1 : 0;
+        }
+        else if (reverse) {
+            next = (current + order.size() - 1) % order.size();
+        }
+        else {
+            next = (current + 1) % order.size();
+        }
+        selectEndpoint(order.get(next));
+    }
+
+    private static TraversalDirection directionFor(final int keyCode) {
+        switch (keyCode) {
+            case KeyEvent.VK_LEFT:
+                return TraversalDirection.LEFT;
+            case KeyEvent.VK_RIGHT:
+                return TraversalDirection.RIGHT;
+            case KeyEvent.VK_UP:
+                return TraversalDirection.UP;
+            case KeyEvent.VK_DOWN:
+                return TraversalDirection.DOWN;
+            default:
+                throw new IllegalArgumentException("Not an arrow key");
+        }
     }
 
     private void panForArrow(final int keyCode, final double pixels) {
