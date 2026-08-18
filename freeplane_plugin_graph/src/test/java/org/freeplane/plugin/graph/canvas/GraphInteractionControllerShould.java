@@ -85,6 +85,56 @@ public class GraphInteractionControllerShould {
     }
 
     @Test
+    public void hitAnOnSegmentQueryWithMixedMagnitudeCoordinates() {
+        final CoordinateSegmentFixture fixture = CoordinateSegmentFixture.create(
+            10.0, 1.0e308, 1.0e100, 1.0e308,
+            "00000000-0000-0000-0000-000000000031",
+            "00000000-0000-0000-0000-000000000032",
+            "00000000-0000-0000-0000-000000000033");
+
+        assertThat(GraphHitIndex.from(fixture.state).edgeAt(
+            LayoutPoint.of(5.0e99, 1.0e308), 1.0)).contains(fixture.edgeKey);
+    }
+
+    @Test
+    public void rejectATinyOffsetFromAnExtremeSpanEdge() {
+        final CoordinateSegmentFixture fixture = CoordinateSegmentFixture.create(
+            -8.0e307, 0.0, 8.0e307, 0.0,
+            "00000000-0000-0000-0000-000000000034",
+            "00000000-0000-0000-0000-000000000035",
+            "00000000-0000-0000-0000-000000000036");
+
+        assertThat(GraphHitIndex.from(fixture.state).edgeAt(
+            LayoutPoint.of(0.0, 1.0e-20), 1.0e-100)).isEmpty();
+    }
+
+    @Test
+    public void keepAFiniteInteriorProjectionNearTheLargeEndpoint() {
+        final CoordinateSegmentFixture fixture = CoordinateSegmentFixture.create(
+            -6.501096137849319e289, -5.744732131082845e-185,
+            9.80045536779535e-123, -2.363358943315723e-104,
+            "00000000-0000-0000-0000-000000000040",
+            "00000000-0000-0000-0000-000000000041",
+            "00000000-0000-0000-0000-000000000042", Double.MIN_VALUE);
+
+        assertThat(GraphHitIndex.from(fixture.state).edgeAt(
+            LayoutPoint.of(-1.5791917055093233e129, 1.335444456746397e-106),
+            1.0e100)).contains(fixture.edgeKey);
+    }
+
+    @Test
+    public void rejectPositiveSubnormalDistanceAtZeroTolerance() {
+        final CoordinateSegmentFixture fixture = CoordinateSegmentFixture.create(
+            0.0, 0.0, 1.0e308, 1.0e308,
+            "00000000-0000-0000-0000-000000000037",
+            "00000000-0000-0000-0000-000000000038",
+            "00000000-0000-0000-0000-000000000039", Double.MIN_VALUE);
+
+        assertThat(GraphHitIndex.from(fixture.state).edgeAt(
+            LayoutPoint.of(0.0, Double.MIN_VALUE), 0.0)).isEmpty();
+    }
+
+    @Test
     public void openAHitEndpointOnDoubleClickAndRejectSecondInstallation() {
         final Fixture fixture = Fixture.create();
         final GraphCanvas canvas = fixture.canvas();
@@ -442,6 +492,70 @@ public class GraphInteractionControllerShould {
             return new AnchorFixture(state, edgeKey, LayoutPoint.of(
                 (firstAttachment.x() + secondAttachment.x()) * 0.5,
                 (firstAttachment.y() + secondAttachment.y()) * 0.5));
+        }
+    }
+
+    private static final class CoordinateSegmentFixture {
+        private final CanvasState state;
+        private final ProjectedEdgeKey edgeKey;
+
+        private CoordinateSegmentFixture(final CanvasState state, final ProjectedEdgeKey edgeKey) {
+            this.state = state;
+            this.edgeKey = edgeKey;
+        }
+
+        private static CoordinateSegmentFixture create(final double firstX, final double firstY,
+                final double secondX, final double secondY, final String firstMapId,
+                final String secondMapId, final String relationshipId) {
+            return create(firstX, firstY, secondX, secondY, firstMapId, secondMapId,
+                relationshipId, 10.0);
+        }
+
+        private static CoordinateSegmentFixture create(final double firstX, final double firstY,
+                final double secondX, final double secondY, final String firstMapId,
+                final String secondMapId, final String relationshipId, final double radius) {
+            final MapReferenceId firstMap = MapReferenceId.of(UUID.fromString(firstMapId));
+            final MapReferenceId secondMap = MapReferenceId.of(UUID.fromString(secondMapId));
+            final NodeReference firstReference = NodeReference.of(firstMap,
+                PersistedNodeId.of("coordinate-first"));
+            final NodeReference secondReference = NodeReference.of(secondMap,
+                PersistedNodeId.of("coordinate-second"));
+            final ProjectedNodeKey first = ProjectedNodeKey.of(
+                SourceNodeKey.persisted(firstReference));
+            final ProjectedNodeKey second = ProjectedNodeKey.of(
+                SourceNodeKey.persisted(secondReference));
+            final ProjectedEndpointKey firstEndpoint = ProjectedEndpointKey.ofNode(first);
+            final ProjectedEndpointKey secondEndpoint = ProjectedEndpointKey.ofNode(second);
+            final ProjectedNode firstNode = ProjectedNode.of(first,
+                SafeNodeLabel.of("Coordinate first", "Coordinate first"), "Map", false);
+            final ProjectedNode secondNode = ProjectedNode.of(second,
+                SafeNodeLabel.of("Coordinate second", "Coordinate second"), "Map", false);
+            final GraphRelationshipRecord relationship = GraphRelationshipRecord.of(
+                RelationshipId.of(UUID.fromString(relationshipId)), 1L, firstReference,
+                secondReference, RelationshipDirection.FORWARD, Collections.emptyList());
+            final EdgeContributor contributor = EdgeContributor.graphRelationship(relationship,
+                firstEndpoint, secondEndpoint);
+            final ProjectedEdgeKey edgeKey = ProjectedEdgeKey.of(firstEndpoint, secondEndpoint);
+            final ProjectedEdge edge = ProjectedEdge.of(edgeKey,
+                Collections.singletonList(contributor));
+            final GraphProjection projection = GraphProjection.projected(1L,
+                Arrays.asList(firstNode, secondNode), Collections.emptyList(),
+                Collections.singletonList(edge), Collections.emptyList(), Collections.emptyList());
+
+            final Map<ProjectedNodeKey, NodeGeometry> nodes =
+                new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
+            nodes.put(first, NodeGeometry.of(LayoutPoint.of(firstX, firstY), radius));
+            nodes.put(second, NodeGeometry.of(LayoutPoint.of(secondX, secondY), radius));
+            final GraphGeometry geometry = GraphGeometry.of(nodes,
+                Collections.<EnclosureHullKey, org.freeplane.plugin.graph.geometry.HullGeometry>emptyMap());
+            final Map<ProjectedNodeKey, LayoutPoint> positions =
+                new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+            positions.put(first, LayoutPoint.of(firstX, firstY));
+            positions.put(second, LayoutPoint.of(secondX, secondY));
+            final LayoutFrame frame = LayoutFrame.of(1L,
+                LayoutPositions.of(positions, Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false);
+            return new CoordinateSegmentFixture(CanvasState.of(1L, projection, frame, geometry,
+                OperationalStatus.IDLE), edgeKey);
         }
     }
 
