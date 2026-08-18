@@ -443,6 +443,100 @@ public class WorkspaceMapCoordinatorShould {
     }
 
     @Test
+    public void retriesPendingAcquireOnceAfterStaleLeaseSettlesAndInstallsReplacement() {
+        MapReferenceId mapId = id(1);
+        MapReference active = registration(mapId, 1L, true);
+        WorkspaceDocument document = workspace(active);
+        FakeLease staleLease = new FakeLease(mapId, MapOperationalState.AVAILABLE);
+        FakeLease replacementLease = new FakeLease(mapId, MapOperationalState.AVAILABLE);
+        CompletableFuture<MapLease> firstAcquire = new CompletableFuture<MapLease>();
+        CompletableFuture<MapLease> secondAcquire = new CompletableFuture<MapLease>();
+        List<MapReference> acquisitions = new ArrayList<MapReference>();
+        MapSnapshot expectedSnapshot = snapshot(mapId, 1);
+        TestEdt edt = new TestEdt();
+        GraphWorkspaceStore store = mock(GraphWorkspaceStore.class);
+        MapLeaseManager leaseManager = mock(MapLeaseManager.class);
+        MapSnapshotFactory snapshotFactory = mock(MapSnapshotFactory.class);
+        stubStoreAndListeners(store, leaseManager, document, new ListenerRegistrationStub(),
+            new ListenerRegistrationStub());
+        when(snapshotFactory.snapshot(same(replacementLease))).thenReturn(expectedSnapshot);
+        WorkspaceMapCoordinator coordinator = new WorkspaceMapCoordinator(snapshotFactory, leaseManager, store, edt,
+            reference -> {
+                acquisitions.add(reference);
+                if (acquisitions.size() == 1) {
+                    return firstAcquire;
+                }
+                if (acquisitions.size() == 2) {
+                    return secondAcquire;
+                }
+                throw new AssertionError("Unexpected third acquisition");
+            });
+        coordinators.add(coordinator);
+
+        assertThat(acquisitions).containsExactly(active);
+        coordinator.retry(active);
+        assertThat(acquisitions).containsExactly(active);
+        assertThat(store.currentDocument()).isSameAs(document);
+
+        firstAcquire.complete(staleLease);
+        edt.runQueued();
+
+        assertThat(staleLease.closeCount()).isEqualTo(1);
+        assertThat(acquisitions).hasSize(2);
+        assertThat(acquisitions.get(1)).isSameAs(active);
+        assertThat(acquisitions.get(1).id()).isEqualTo(mapId);
+        assertThat(acquisitions.get(1).storedUri()).isEqualTo(active.storedUri());
+        assertThat(secondAcquire.isDone()).isFalse();
+
+        secondAcquire.complete(replacementLease);
+        edt.runQueued();
+
+        ProjectionInput input = coordinator.capture(batch(19L));
+        assertThat(input.availability().get(mapId)).isEqualTo(MapAvailability.AVAILABLE);
+        assertThat(input.maps()).containsExactly(expectedSnapshot);
+        assertThat(replacementLease.closeCount()).isEqualTo(0);
+        assertThat(acquisitions).hasSize(2);
+    }
+
+    @Test
+    public void rejectsStaleOrInactiveRetryReferencesWithoutChangingTheInstalledRegistration() {
+        MapReferenceId activeId = id(1);
+        MapReferenceId inactiveId = id(2);
+        MapReference active = registration(activeId, 1L, true);
+        MapReference inactive = registration(inactiveId, 2L, false);
+        MapReference stale = MapReference.of(activeId, 1L, URI.create("maps/stale.mm"), true,
+            MAP_COLOR, Collections.<UnknownXml>emptyList());
+        WorkspaceDocument document = workspace(active, inactive);
+        FakeLease activeLease = new FakeLease(activeId, MapOperationalState.AVAILABLE);
+        MapSnapshot expectedSnapshot = snapshot(activeId, 1);
+        List<MapReference> acquisitions = new ArrayList<MapReference>();
+        TestEdt edt = new TestEdt();
+        GraphWorkspaceStore store = mock(GraphWorkspaceStore.class);
+        MapLeaseManager leaseManager = mock(MapLeaseManager.class);
+        MapSnapshotFactory snapshotFactory = mock(MapSnapshotFactory.class);
+        stubStoreAndListeners(store, leaseManager, document, new ListenerRegistrationStub(),
+            new ListenerRegistrationStub());
+        when(snapshotFactory.snapshot(same(activeLease))).thenReturn(expectedSnapshot);
+        WorkspaceMapCoordinator coordinator = new WorkspaceMapCoordinator(snapshotFactory, leaseManager, store, edt,
+            reference -> {
+                acquisitions.add(reference);
+                return CompletableFuture.completedFuture(activeLease);
+            });
+        coordinators.add(coordinator);
+
+        assertThatThrownBy(() -> coordinator.retry(stale)).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> coordinator.retry(inactive)).isInstanceOf(IllegalStateException.class);
+
+        ProjectionInput input = coordinator.capture(batch(20L));
+        assertThat(acquisitions).containsExactly(active);
+        assertThat(input.availability().get(activeId)).isEqualTo(MapAvailability.AVAILABLE);
+        assertThat(input.availability().get(inactiveId)).isEqualTo(MapAvailability.INACTIVE);
+        assertThat(input.maps()).containsExactly(expectedSnapshot);
+        assertThat(activeLease.closeCount()).isEqualTo(0);
+        assertThat(store.currentDocument()).isSameAs(document);
+    }
+
+    @Test
     public void replacementAfterRemovalWaitsForOlderLoadToSettle() {
         MapReferenceId mapId = id(1);
         MapReference initial = registration(mapId, 1L, true);
