@@ -44,6 +44,9 @@ public final class DefaultContributorDeletionHandler implements ContributorDelet
     private static final String CONTRIBUTOR_UNDO_INCOMPLETE = "graph_workspace.contributor.undo_incomplete";
     private static final String CONTRIBUTOR_NATIVE_COMMIT_FAILED =
         "graph_workspace.contributor.native_commit_failed";
+    private static final String RECOVERY_NATIVE = "native";
+    private static final String RECOVERY_WORKSPACE = "workspace";
+    private static final String RECOVERY_NATIVE_AND_WORKSPACE = "native_and_workspace";
 
     private final GraphUpdateCoordinator updates;
     private final GraphWorkspaceStore store;
@@ -296,7 +299,7 @@ public final class DefaultContributorDeletionHandler implements ContributorDelet
         final GraphCommandResult nativeOutcome = transaction.outcome();
         if (nativeOutcome == null || nativeOutcome.status() == GraphCommandResult.Status.REJECTED) {
             if (isIncompleteRecovery(nativeOutcome)) {
-                return retainRecovery(transaction, "native");
+                return retainRecovery(transaction, RECOVERY_NATIVE);
             }
             return nativeOutcome == null ? rejected(CONTRIBUTOR_UNAVAILABLE) : nativeOutcome;
         }
@@ -333,7 +336,7 @@ public final class DefaultContributorDeletionHandler implements ContributorDelet
             if (!compensatePublishedWorkspace()) {
                 final String resource = nativeFailure != null
                         && CONTRIBUTOR_UNDO_INCOMPLETE.equals(nativeFailure.messageKey())
-                    ? "native_and_workspace" : "workspace";
+                    ? RECOVERY_NATIVE_AND_WORKSPACE : RECOVERY_WORKSPACE;
                 return incompleteRecovery(transaction, resource);
             }
             return nativeFailure;
@@ -348,11 +351,11 @@ public final class DefaultContributorDeletionHandler implements ContributorDelet
             transaction.rollback();
         }
         catch (final RuntimeException failure) {
-            return incompleteRecovery(transaction, "native");
+            return incompleteRecovery(transaction, RECOVERY_NATIVE);
         }
         final GraphCommandResult outcome = transaction.outcome();
         if (isIncompleteRecovery(outcome)) {
-            return retainRecovery(transaction, "native");
+            return retainRecovery(transaction, RECOVERY_NATIVE);
         }
         return fallback;
     }
@@ -363,18 +366,18 @@ public final class DefaultContributorDeletionHandler implements ContributorDelet
             transaction.rollback();
         }
         catch (final RuntimeException failure) {
-            return incompleteRecovery(transaction, "native");
+            return incompleteRecovery(transaction, RECOVERY_NATIVE);
         }
         final GraphCommandResult outcome = transaction.outcome();
         if (isIncompleteRecovery(outcome)) {
-            return retainRecovery(transaction, "native");
+            return retainRecovery(transaction, RECOVERY_NATIVE);
         }
         if (outcome != null && outcome.status() == GraphCommandResult.Status.REJECTED) {
             if (CONTRIBUTOR_NATIVE_COMMIT_FAILED.equals(outcome.messageKey())) {
                 return enrichNativeResult(outcome, transaction);
             }
         }
-        return incompleteRecovery(transaction, "native");
+        return incompleteRecovery(transaction, RECOVERY_NATIVE);
     }
 
     private boolean compensatePublishedWorkspace() {
@@ -405,17 +408,28 @@ public final class DefaultContributorDeletionHandler implements ContributorDelet
             return null;
         }
         final PendingRecovery recovery = pendingRecovery;
-        try {
-            recovery.transaction.rollback();
+        if (recovery.workspaceUnresolved()) {
+            if (compensatePublishedWorkspace()) {
+                recovery.workspaceRecovered();
+            }
         }
-        catch (final RuntimeException failure) {
-            return recovery.result(this);
+        if (recovery.nativeUnresolved()) {
+            try {
+                recovery.transaction.rollback();
+                final GraphCommandResult nativeOutcome = recovery.transaction.outcome();
+                if (nativeOutcome != null && !isIncompleteRecovery(nativeOutcome)) {
+                    recovery.nativeRecovered();
+                }
+            }
+            catch (final RuntimeException failure) {
+                // Keep the native resource pending for the next command.
+            }
         }
-        if (isIncompleteRecovery(recovery.transaction.outcome())) {
-            return recovery.result(this);
+        if (recovery.complete()) {
+            pendingRecovery = null;
+            return null;
         }
-        pendingRecovery = null;
-        return null;
+        return recovery.result(this);
     }
 
     private boolean isIncompleteRecovery(final GraphCommandResult result) {
@@ -487,16 +501,56 @@ public final class DefaultContributorDeletionHandler implements ContributorDelet
 
     private static final class PendingRecovery {
         private final FreeplaneMapCommandExecutor.ContributorDeletionTransaction transaction;
-        private final String resource;
+        private boolean nativeUnresolved;
+        private boolean workspaceUnresolved;
 
         private PendingRecovery(final FreeplaneMapCommandExecutor.ContributorDeletionTransaction transaction,
                 final String resource) {
             this.transaction = Objects.requireNonNull(transaction, "transaction");
-            this.resource = Objects.requireNonNull(resource, "resource");
+            if (RECOVERY_NATIVE.equals(resource)) {
+                nativeUnresolved = true;
+            }
+            else if (RECOVERY_WORKSPACE.equals(resource)) {
+                workspaceUnresolved = true;
+            }
+            else if (RECOVERY_NATIVE_AND_WORKSPACE.equals(resource)) {
+                nativeUnresolved = true;
+                workspaceUnresolved = true;
+            }
+            else {
+                throw new IllegalArgumentException("Unknown recovery resource: " + resource);
+            }
+        }
+
+        private boolean nativeUnresolved() {
+            return nativeUnresolved;
+        }
+
+        private boolean workspaceUnresolved() {
+            return workspaceUnresolved;
+        }
+
+        private void nativeRecovered() {
+            nativeUnresolved = false;
+        }
+
+        private void workspaceRecovered() {
+            workspaceUnresolved = false;
+        }
+
+        private boolean complete() {
+            return !nativeUnresolved && !workspaceUnresolved;
+        }
+
+        private String resource() {
+            if (nativeUnresolved && workspaceUnresolved) {
+                return RECOVERY_NATIVE_AND_WORKSPACE;
+            }
+            return nativeUnresolved ? RECOVERY_NATIVE : RECOVERY_WORKSPACE;
         }
 
         private GraphCommandResult result(final DefaultContributorDeletionHandler handler) {
-            GraphCommandResult result = handler.rejected(CONTRIBUTOR_UNDO_INCOMPLETE, resource)
+            GraphCommandResult result = handler.rejected(CONTRIBUTOR_UNDO_INCOMPLETE, resource())
                 .withDirtySourceMaps(handler.dirtySourceMaps(transaction));
             return result.withEditorViewActivated(transaction.editorViewActivated());
         }
