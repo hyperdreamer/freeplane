@@ -2,7 +2,6 @@ package org.freeplane.plugin.graph.command;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
@@ -50,6 +49,9 @@ public final class FreeplaneMapCommandExecutor {
     private static final String CONNECTOR_TARGET_REQUIRES_SAVED_ID = "graph_workspace.connector.target_requires_saved_id";
     private static final String CONNECTOR_CHANGED = "graph_workspace.connector.changed";
     private static final String SOURCE_MAP_NOTHING_TO_UNDO = "graph_workspace.source_map.nothing_to_undo";
+    private static final String CONTRIBUTOR_UNDO_INCOMPLETE = "graph_workspace.contributor.undo_incomplete";
+    private static final String CONTRIBUTOR_NATIVE_COMMIT_FAILED =
+        "graph_workspace.contributor.native_commit_failed";
 
     public interface MapLeaseLookup {
         Optional<MapLease> find(MapReferenceId mapReferenceId);
@@ -196,7 +198,6 @@ public final class FreeplaneMapCommandExecutor {
         final SourceNodeKey previousUndoSource = undoSource;
         final List<PrevalidatedMap> prevalidatedMaps = new ArrayList<PrevalidatedMap>();
         final List<PreparedMap> preparedMaps = new ArrayList<PreparedMap>();
-        final Set<MapReferenceId> dirtyMaps = new LinkedHashSet<MapReferenceId>();
         boolean editorViewActivated = false;
         if (!plan.hasNativeEdits()) {
             return new NativeDeletionTransaction(Collections.<PreparedMap>emptyList(),
@@ -204,55 +205,51 @@ public final class FreeplaneMapCommandExecutor {
                 Collections.<MapReferenceId>emptySet(), previousUndoSource, null);
         }
         try {
-            final List<MapReferenceId> mapIds = new ArrayList<MapReferenceId>(plan.nativeEditsByMap().keySet());
-            Collections.sort(mapIds, MAP_ID_ORDER);
+            final List<MapReferenceId> mapIds = plan.nativeMapIds();
             for (final MapReferenceId mapId : mapIds) {
                 prevalidatedMaps.add(prevalidateMap(mapId, plan.nativeEditsFor(mapId)));
-                dirtyMaps.add(mapId);
             }
             for (final PrevalidatedMap prevalidated : prevalidatedMaps) {
                 final PreparedMap prepared = materializeMap(prevalidated);
                 preparedMaps.add(prepared);
                 editorViewActivated = editorViewActivated || prepared.editorViewActivated;
             }
-
-            final List<PreparedMap> startedMaps = new ArrayList<PreparedMap>();
-            try {
-                for (final PreparedMap prepared : preparedMaps) {
-                    prepared.undoHandler.startTransaction();
-                    prepared.transactionStarted = true;
-                    startedMaps.add(prepared);
-                }
-                for (final PreparedMap prepared : preparedMaps) {
-                    for (final ConnectorModel connector : prepared.connectors) {
-                        connectors.removeArrowLink(connector);
-                    }
-                }
-            }
-            catch (final RuntimeException failure) {
-                rollbackStarted(startedMaps, previousUndoSource);
-                return new NativeDeletionTransaction(Collections.<PreparedMap>emptyList(),
-                    rejectedTransaction(CONNECTOR_CHANGED), Collections.<MapReferenceId>emptySet(),
-                    previousUndoSource, null);
-            }
-            final PreparedMap owner = preparedMaps.get(preparedMaps.size() - 1);
-            final Set<MapReferenceId> immutableDirtyMaps =
-                Collections.unmodifiableSet(new LinkedHashSet<MapReferenceId>(dirtyMaps));
-            return new NativeDeletionTransaction(preparedMaps,
-                appliedForMaps(CONNECTOR_DELETED, immutableDirtyMaps, editorViewActivated), immutableDirtyMaps,
-                previousUndoSource, owner.undoSource);
         }
         catch (final BatchFailure failure) {
-            rollbackStarted(preparedMaps, previousUndoSource);
             return new NativeDeletionTransaction(Collections.<PreparedMap>emptyList(),
                 rejectedTransaction(failure.messageKey), Collections.<MapReferenceId>emptySet(),
                 previousUndoSource, null);
         }
         catch (final RuntimeException failure) {
-            rollbackStarted(preparedMaps, previousUndoSource);
             return new NativeDeletionTransaction(Collections.<PreparedMap>emptyList(),
                 rejectedTransaction(SOURCE_MAP_UNAVAILABLE), Collections.<MapReferenceId>emptySet(),
                 previousUndoSource, null);
+        }
+
+        final List<MapReferenceId> mapIds = plan.nativeMapIds();
+        final Set<MapReferenceId> immutableDirtyMaps =
+            Collections.unmodifiableSet(new LinkedHashSet<MapReferenceId>(mapIds));
+        final PreparedMap owner = preparedMaps.get(preparedMaps.size() - 1);
+        final NativeDeletionTransaction transaction = new NativeDeletionTransaction(preparedMaps,
+            appliedForMaps(CONNECTOR_DELETED, immutableDirtyMaps, editorViewActivated), immutableDirtyMaps,
+            previousUndoSource, owner.undoSource);
+        try {
+            for (final PreparedMap prepared : preparedMaps) {
+                prepared.affected = true;
+                prepared.undoHandler.startTransaction();
+                prepared.transactionStarted = true;
+            }
+            for (final PreparedMap prepared : preparedMaps) {
+                for (final ConnectorModel connector : prepared.connectors) {
+                    connectors.removeArrowLink(connector);
+                }
+            }
+            return transaction;
+        }
+        catch (final RuntimeException failure) {
+            transaction.replaceOutcome(rejectedTransaction(CONNECTOR_CHANGED));
+            transaction.rollback();
+            return transaction;
         }
     }
 
@@ -323,20 +320,38 @@ public final class FreeplaneMapCommandExecutor {
             createdView, prevalidated.undoSource);
     }
 
-    private void rollbackStarted(final List<PreparedMap> maps, final SourceNodeKey previousUndoSource) {
+    private boolean recoverMaps(final List<PreparedMap> maps) {
+        boolean complete = true;
         for (int index = maps.size() - 1; index >= 0; index--) {
             final PreparedMap prepared = maps.get(index);
-            if (prepared.transactionStarted) {
+            if (prepared.recoveryComplete || (!prepared.transactionStarted && !prepared.transactionCommitted)) {
+                continue;
+            }
+            if (prepared.transactionCommitted) {
+                try {
+                    if (!prepared.undoHandler.canUndo()) {
+                        throw new IllegalStateException("Committed native transaction cannot be undone");
+                    }
+                    prepared.undoHandler.undo();
+                    prepared.transactionCommitted = false;
+                    prepared.recoveryComplete = true;
+                }
+                catch (final RuntimeException failure) {
+                    complete = false;
+                }
+            }
+            else if (prepared.transactionStarted) {
                 try {
                     prepared.undoHandler.rollback();
+                    prepared.transactionStarted = false;
+                    prepared.recoveryComplete = true;
                 }
-                catch (final RuntimeException ignored) {
-                    // Continue restoring every other map transaction.
+                catch (final RuntimeException failure) {
+                    complete = false;
                 }
-                prepared.transactionStarted = false;
             }
         }
-        undoSource = previousUndoSource;
+        return complete;
     }
 
     private GraphCommandResult appliedForMaps(final String messageKey, final Set<MapReferenceId> maps,
@@ -349,13 +364,6 @@ public final class FreeplaneMapCommandExecutor {
     private GraphCommandResult rejectedTransaction(final String messageKey) {
         return GraphCommandResult.from(WorkspaceTransition.rejected(results.currentDocument(), messageKey));
     }
-
-    private static final Comparator<MapReferenceId> MAP_ID_ORDER = new Comparator<MapReferenceId>() {
-        @Override
-        public int compare(final MapReferenceId first, final MapReferenceId second) {
-            return first.value().toString().compareTo(second.value().toString());
-        }
-    };
 
     private static final class BatchFailure extends RuntimeException {
         private static final long serialVersionUID = 1L;
@@ -403,7 +411,10 @@ public final class FreeplaneMapCommandExecutor {
         private final List<ConnectorModel> connectors;
         private final boolean editorViewActivated;
         private final SourceNodeKey undoSource;
+        private boolean affected;
         private boolean transactionStarted;
+        private boolean transactionCommitted;
+        private boolean recoveryComplete;
 
         private PreparedMap(final MapReferenceId mapId, final MapModel map, final IUndoHandler undoHandler,
                 final List<ConnectorModel> connectors, final boolean editorViewActivated,
@@ -419,10 +430,12 @@ public final class FreeplaneMapCommandExecutor {
 
     private final class NativeDeletionTransaction implements ContributorDeletionTransaction {
         private final List<PreparedMap> maps;
-        private final GraphCommandResult outcome;
+        private GraphCommandResult outcome;
         private final Set<MapReferenceId> dirtyMaps;
         private final SourceNodeKey previousUndoSource;
         private final SourceNodeKey ownerUndoSource;
+        private GraphCommandResult recoveryOutcome;
+        private boolean recoveryIncomplete;
         private boolean open;
 
         private NativeDeletionTransaction(final List<PreparedMap> maps, final GraphCommandResult outcome,
@@ -430,9 +443,10 @@ public final class FreeplaneMapCommandExecutor {
                 final SourceNodeKey ownerUndoSource) {
             this.maps = maps;
             this.outcome = outcome;
-            this.dirtyMaps = Collections.unmodifiableSet(new LinkedHashSet<MapReferenceId>(dirtyMaps));
+            this.dirtyMaps = new LinkedHashSet<MapReferenceId>(dirtyMaps);
             this.previousUndoSource = previousUndoSource;
             this.ownerUndoSource = ownerUndoSource;
+            this.recoveryOutcome = outcome;
             this.open = !maps.isEmpty();
         }
 
@@ -443,12 +457,16 @@ public final class FreeplaneMapCommandExecutor {
 
         @Override
         public Set<MapReferenceId> dirtySourceMaps() {
-            return dirtyMaps;
+            return Collections.unmodifiableSet(new LinkedHashSet<MapReferenceId>(dirtyMaps));
         }
 
         @Override
         public boolean editorViewActivated() {
             return outcome.editorViewActivated();
+        }
+
+        private void replaceOutcome(final GraphCommandResult replacement) {
+            outcome = Objects.requireNonNull(replacement, "replacement");
         }
 
         @Override
@@ -457,16 +475,34 @@ public final class FreeplaneMapCommandExecutor {
             if (!open) {
                 return;
             }
+            if (recoveryIncomplete) {
+                if (recoverMaps(maps)) {
+                    finishRecovery();
+                    return;
+                }
+                throw new IllegalStateException("Native contributor recovery remains incomplete");
+            }
             try {
                 for (final PreparedMap map : maps) {
+                    if (!map.transactionStarted) {
+                        continue;
+                    }
                     map.undoHandler.commit();
                     map.transactionStarted = false;
+                    map.transactionCommitted = true;
                 }
                 open = false;
                 undoSource = ownerUndoSource;
             }
             catch (final RuntimeException failure) {
-                rollback();
+                recoveryOutcome = rejectedTransaction(CONTRIBUTOR_NATIVE_COMMIT_FAILED);
+                replaceOutcome(recoveryOutcome);
+                if (recoverMaps(maps)) {
+                    finishRecovery();
+                }
+                else {
+                    markIncomplete();
+                }
                 throw failure;
             }
         }
@@ -477,8 +513,41 @@ public final class FreeplaneMapCommandExecutor {
             if (!open) {
                 return;
             }
-            rollbackStarted(maps, previousUndoSource);
+            if (!recoveryIncomplete) {
+                recoveryOutcome = outcome;
+            }
+            if (recoverMaps(maps)) {
+                finishRecovery();
+            }
+            else {
+                markIncomplete();
+            }
+        }
+
+        private void markIncomplete() {
+            recoveryIncomplete = true;
+            dirtyMaps.clear();
+            for (final PreparedMap map : maps) {
+                if (!map.recoveryComplete && (map.affected || map.transactionStarted || map.transactionCommitted)) {
+                    dirtyMaps.add(map.mapId);
+                }
+            }
+            GraphCommandResult incomplete = rejectedTransaction(CONTRIBUTOR_UNDO_INCOMPLETE)
+                .withDirtySourceMaps(dirtySourceMaps());
+            if (outcome.editorViewActivated()) {
+                incomplete = incomplete.withEditorViewActivated(true);
+            }
+            replaceOutcome(incomplete);
+            undoSource = null;
+            open = true;
+        }
+
+        private void finishRecovery() {
+            recoveryIncomplete = false;
             open = false;
+            dirtyMaps.clear();
+            replaceOutcome(recoveryOutcome);
+            undoSource = previousUndoSource;
         }
     }
 

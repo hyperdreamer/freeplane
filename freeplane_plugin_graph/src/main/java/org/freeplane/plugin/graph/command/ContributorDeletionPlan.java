@@ -2,6 +2,7 @@ package org.freeplane.plugin.graph.command;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -16,6 +17,13 @@ import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 import org.freeplane.plugin.graph.workspace.model.RelationshipId;
 
 final class ContributorDeletionPlan {
+    private static final Comparator<MapReferenceId> MAP_ID_ORDER = new Comparator<MapReferenceId>() {
+        @Override
+        public int compare(final MapReferenceId first, final MapReferenceId second) {
+            return first.value().toString().compareTo(second.value().toString());
+        }
+    };
+
     static final class NativeEdit {
         private final ContributorKey key;
         private final ConnectorDescriptor descriptor;
@@ -97,6 +105,12 @@ final class ContributorDeletionPlan {
 
     Map<MapReferenceId, List<NativeEdit>> nativeEditsByMap() {
         return nativeEditsByMap;
+    }
+
+    List<MapReferenceId> nativeMapIds() {
+        final List<MapReferenceId> mapIds = new ArrayList<MapReferenceId>(nativeEditsByMap.keySet());
+        Collections.sort(mapIds, MAP_ID_ORDER);
+        return Collections.unmodifiableList(mapIds);
     }
 
     Map<MapReferenceId, List<NativeEdit>> nativeEdits() {
