@@ -206,8 +206,9 @@ final class AccessibleGraphCanvas extends AccessibleContext implements Accessibl
     @Override
     public Accessible getAccessibleAt(final Point point) {
         final Point value = Objects.requireNonNull(point, "point");
-        for (int index = 0; index < getAccessibleChildrenCount(); index++) {
-            final Accessible child = getAccessibleChild(index);
+        final List<ProjectedEndpointKey> order = currentOrder();
+        for (final ProjectedEndpointKey endpoint : order) {
+            final Accessible child = new EndpointAccessible(canvas, endpoint);
             final AccessibleComponent component = child.getAccessibleContext().getAccessibleComponent();
             if (component != null && component.contains(value)) {
                 return child;
@@ -251,7 +252,7 @@ final class AccessibleGraphCanvas extends AccessibleContext implements Accessibl
             this.canvas = Objects.requireNonNull(canvas, "canvas");
             this.endpoint = Objects.requireNonNull(endpoint, "endpoint");
             context = new EndpointAccessibleContext(this);
-            context.setAccessibleParent(null);
+            context.setAccessibleParent(canvas);
         }
 
         ProjectedEndpointKey endpoint() {

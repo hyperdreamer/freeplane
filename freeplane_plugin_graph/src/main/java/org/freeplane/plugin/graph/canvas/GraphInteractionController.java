@@ -1,5 +1,7 @@
 package org.freeplane.plugin.graph.canvas;
 
+import java.awt.AWTKeyStroke;
+import java.awt.KeyboardFocusManager;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
@@ -12,6 +14,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 import javax.swing.SwingUtilities;
 
@@ -38,6 +41,9 @@ public final class GraphInteractionController {
     private final MouseMotionAdapter mouseMotionListener;
     private final MouseWheelListener mouseWheelListener;
     private final KeyAdapter keyListener;
+    private Set<AWTKeyStroke> previousForwardTraversalKeys;
+    private Set<AWTKeyStroke> previousBackwardTraversalKeys;
+    private boolean previousFocusTraversalKeysEnabled;
     private InteractionTool tool = InteractionTool.SELECT;
     private RelationshipDirection relationshipDirection = RelationshipDirection.FORWARD;
     private GraphCanvas canvas;
@@ -100,6 +106,12 @@ public final class GraphInteractionController {
         if (canvas != null) {
             throw new IllegalStateException("GraphInteractionController is already installed");
         }
+        previousForwardTraversalKeys = next.getFocusTraversalKeys(
+            KeyboardFocusManager.FORWARD_TRAVERSAL_KEYS);
+        previousBackwardTraversalKeys = next.getFocusTraversalKeys(
+            KeyboardFocusManager.BACKWARD_TRAVERSAL_KEYS);
+        previousFocusTraversalKeysEnabled = next.getFocusTraversalKeysEnabled();
+        next.setFocusTraversalKeysEnabled(false);
         canvas = next;
         next.setInteractionController(this);
         next.addMouseListener(mouseListener);
@@ -130,6 +142,13 @@ public final class GraphInteractionController {
         oldCanvas.updateTooltip(null);
         oldCanvas.resetInteractionCursor();
         oldCanvas.repaintCanvas();
+        oldCanvas.setFocusTraversalKeys(KeyboardFocusManager.FORWARD_TRAVERSAL_KEYS,
+            previousForwardTraversalKeys);
+        oldCanvas.setFocusTraversalKeys(KeyboardFocusManager.BACKWARD_TRAVERSAL_KEYS,
+            previousBackwardTraversalKeys);
+        oldCanvas.setFocusTraversalKeysEnabled(previousFocusTraversalKeysEnabled);
+        previousForwardTraversalKeys = null;
+        previousBackwardTraversalKeys = null;
         canvas = null;
     }
 
@@ -353,13 +372,25 @@ public final class GraphInteractionController {
             return;
         }
         if (event.getKeyCode() == KeyEvent.VK_TAB) {
-            cycleSelection((modifiers & InputEvent.SHIFT_DOWN_MASK) != 0);
-            event.consume();
+            final boolean reverse = (modifiers & InputEvent.SHIFT_DOWN_MASK) != 0;
+            if (cycleSelection(reverse)) {
+                event.consume();
+            }
+            else if (previousFocusTraversalKeysEnabled) {
+                if (reverse) {
+                    canvas.transferFocusBackward();
+                }
+                else {
+                    canvas.transferFocus();
+                }
+            }
             return;
         }
         if (event.getKeyCode() == KeyEvent.VK_ENTER) {
             final Optional<ProjectedEndpointKey> selection = canvas.paintState().selection();
-            if (selection.isPresent()) {
+            final CanvasState state = canvas.canvasState();
+            if (selection.isPresent() && state != null
+                    && GraphTraversalOrder.tabOrder(state).contains(selection.get())) {
                 setSelectionVisual(selection.get());
                 emit(new GraphIntent.OpenSourceNode(selection.get()));
                 event.consume();
@@ -526,14 +557,14 @@ public final class GraphInteractionController {
         emit(new GraphIntent.ChangeSelection(Optional.of(endpoint)));
     }
 
-    private void cycleSelection(final boolean reverse) {
+    private boolean cycleSelection(final boolean reverse) {
         final CanvasState state = canvas.canvasState();
         if (state == null) {
-            return;
+            return false;
         }
         final List<ProjectedEndpointKey> order = GraphTraversalOrder.tabOrder(state);
         if (order.isEmpty()) {
-            return;
+            return false;
         }
         final Optional<ProjectedEndpointKey> selection = canvas.paintState().selection();
         final int current = selection.isPresent() ? order.indexOf(selection.get()) : -1;
@@ -548,6 +579,7 @@ public final class GraphInteractionController {
             next = (current + 1) % order.size();
         }
         selectEndpoint(order.get(next));
+        return true;
     }
 
     private static TraversalDirection directionFor(final int keyCode) {
