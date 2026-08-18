@@ -146,6 +146,17 @@ public class GraphCommandRouterShould {
     }
 
     @Test
+    public void appliesRestartLayoutAndDelegatesItExactlyOnce() {
+        Fixture fixture = new Fixture();
+
+        GraphCommandResult result = fixture.router.execute(GraphCommands.restartLayout());
+
+        assertThat(result.status()).isEqualTo(GraphCommandResult.Status.APPLIED);
+        assertThat(result.messageKey()).isEqualTo("graph_workspace.layout.restarted");
+        verify(fixture.updates, times(1)).restartLayout();
+    }
+
+    @Test
     public void preservesExactWorkspaceCommandPayloads() {
         Fixture fixture = new Fixture();
         NodeReference relationshipSource = node(MAP_ONE, "source");

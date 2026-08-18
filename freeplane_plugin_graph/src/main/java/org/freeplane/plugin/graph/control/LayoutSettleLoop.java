@@ -165,7 +165,9 @@ public final class LayoutSettleLoop implements AutoCloseable {
     public void restart() {
         final Run run;
         final long revision;
-        final boolean shouldStep;
+        boolean shouldStep = false;
+        boolean queueNormalRestart = false;
+        boolean queueFailedRecovery = false;
         synchronized (monitor) {
             if (closed) {
                 return;
@@ -174,18 +176,41 @@ public final class LayoutSettleLoop implements AutoCloseable {
             final boolean wasPaused = paused;
             paused = false;
             run = currentRun;
-            shouldStep = isLiveLocked(run) && !run.frameInFlight && !run.publicationInFlight;
-            if (shouldStep) {
-                run.discardOnPause = false;
-                run.restartRequested = false;
-                claimFrameLocked(run, revision);
+            if (isLiveLocked(run) && run.failedPublication) {
+                run.failedRecoveryRequested = true;
+                if (!run.publicationInFlight) {
+                    if (!run.frameInFlight) {
+                        run.discardOnPause = false;
+                        run.failedRecoveryClaimed = true;
+                        claimFrameLocked(run, revision);
+                        queueFailedRecovery = true;
+                    }
+                    else if (run.failedRecoveryClaimed) {
+                        run.claimRevision = revision;
+                        queueFailedRecovery = true;
+                    }
+                }
             }
-            else if (wasPaused && isLiveLocked(run)) {
-                run.restartRequested = true;
+            else {
+                queueNormalRestart = run != null;
+                shouldStep = isLiveLocked(run) && !run.frameInFlight && !run.publicationInFlight;
+                if (shouldStep) {
+                    run.discardOnPause = false;
+                    run.restartRequested = false;
+                    claimFrameLocked(run, revision);
+                }
+                else if (wasPaused && isLiveLocked(run)) {
+                    run.restartRequested = true;
+                }
             }
         }
         if (run != null) {
-            queueRestart(run, revision, shouldStep);
+            if (queueFailedRecovery) {
+                queueFailedRecovery(run, revision);
+            }
+            else if (queueNormalRestart) {
+                queueRestart(run, revision, shouldStep);
+            }
         }
     }
 
@@ -348,6 +373,72 @@ public final class LayoutSettleLoop implements AutoCloseable {
         }
     }
 
+    private void queueFailedRecovery(final Run run, final long revision) {
+        queueLifecycle(new Runnable() {
+            @Override
+            public void run() {
+                if (!isFailedRecoveryCurrent(run, revision)) {
+                    return;
+                }
+                afterRestartRecoveryClaim.run();
+                if (!isFailedRecoveryCurrent(run, revision)) {
+                    return;
+                }
+                try {
+                    worker.restart();
+                }
+                catch (RuntimeException failure) {
+                    clearFailedRecoveryClaim(run, revision);
+                    handleFrame(run, null, failure);
+                    return;
+                }
+                submitFailedRecovery(run, revision);
+            }
+        });
+    }
+
+    private void submitFailedRecovery(final Run run, final long revision) {
+        if (!isFailedRecoveryCurrent(run, revision)) {
+            return;
+        }
+        try {
+            final CompletionStage<LayoutFrame> submitted = Objects.requireNonNull(worker.submit(run.request),
+                "worker submit result");
+            synchronized (monitor) {
+                if (isFailedRecoveryCurrentLocked(run, revision)) {
+                    run.failedRecoveryClaimed = false;
+                    run.failedRecoveryRequested = false;
+                    run.requestSubmitted = true;
+                }
+            }
+            submitted.whenCompleteAsync((frame, failure) -> handleFrame(run, frame, failure), lifecycle);
+        }
+        catch (RuntimeException failure) {
+            clearFailedRecoveryClaim(run, revision);
+            handleFrame(run, null, failure);
+        }
+    }
+
+    private boolean isFailedRecoveryCurrent(final Run run, final long revision) {
+        synchronized (monitor) {
+            return isFailedRecoveryCurrentLocked(run, revision);
+        }
+    }
+
+    private boolean isFailedRecoveryCurrentLocked(final Run run, final long revision) {
+        return isCurrentAndRunningLocked(run, revision) && run.frameInFlight
+            && run.failedRecoveryClaimed && run.claimRevision == revision;
+    }
+
+    private void clearFailedRecoveryClaim(final Run run, final long revision) {
+        synchronized (monitor) {
+            if (run.failedRecoveryClaimed && run.claimRevision == revision) {
+                run.failedRecoveryClaimed = false;
+                run.failedRecoveryRequested = false;
+            }
+        }
+    }
+
     private void queueReset(final Run run, final long revision) {
         queueLifecycle(new Runnable() {
             @Override
@@ -484,6 +575,11 @@ public final class LayoutSettleLoop implements AutoCloseable {
             else {
                 run.frameInFlight = false;
                 run.publicationInFlight = true;
+                run.failedPublication = state.status() == OperationalStatus.FAILED;
+                if (run.failedPublication) {
+                    run.failedRecoveryClaimed = false;
+                    run.failedRecoveryRequested = false;
+                }
                 publishOnEdt = true;
             }
         }
@@ -530,7 +626,9 @@ public final class LayoutSettleLoop implements AutoCloseable {
     private void finishPublication(final Run run, final boolean idle, final Throwable failure) {
         final List<CompletableFuture<Void>> completed = new ArrayList<CompletableFuture<Void>>();
         boolean shouldStep = false;
+        boolean shouldRecover = false;
         long stepRevision = 0L;
+        long recoveryRevision = 0L;
         synchronized (monitor) {
             run.publicationInFlight = false;
             if (!isLiveLocked(run)) {
@@ -541,9 +639,18 @@ public final class LayoutSettleLoop implements AutoCloseable {
             }
             else if (run.discardOnPause) {
                 run.discardOnPause = false;
+                run.failedRecoveryRequested = false;
                 shouldStep = resumeAfterDiscardLocked(run);
                 if (shouldStep) {
                     stepRevision = run.claimRevision;
+                }
+            }
+            else if (run.failedPublication) {
+                if (!paused && run.failedRecoveryRequested && !run.frameInFlight) {
+                    run.failedRecoveryClaimed = true;
+                    claimFrameLocked(run, controlRevision);
+                    shouldRecover = true;
+                    recoveryRevision = run.claimRevision;
                 }
             }
             else if (!paused && idle) {
@@ -556,7 +663,10 @@ public final class LayoutSettleLoop implements AutoCloseable {
             }
         }
         completeRuns(completed);
-        if (shouldStep) {
+        if (shouldRecover) {
+            queueFailedRecovery(run, recoveryRevision);
+        }
+        else if (shouldStep) {
             queueStep(run, stepRevision);
         }
     }
@@ -884,6 +994,9 @@ public final class LayoutSettleLoop implements AutoCloseable {
         private boolean discardOnPause;
         private boolean restartRequested;
         private boolean requestSubmitted;
+        private boolean failedPublication;
+        private boolean failedRecoveryRequested;
+        private boolean failedRecoveryClaimed;
         private boolean terminal;
 
         private Run(final long token, final AcceptedBatch batch, final GraphProjection projection,

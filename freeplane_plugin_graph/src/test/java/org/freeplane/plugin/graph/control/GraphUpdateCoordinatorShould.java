@@ -34,12 +34,17 @@ import org.freeplane.plugin.graph.layout.LayoutFrame;
 import org.freeplane.plugin.graph.layout.LayoutRequest;
 import org.freeplane.plugin.graph.layout.PerceptualIdlePolicy;
 import org.freeplane.plugin.graph.projection.GraphProjection;
-import org.freeplane.plugin.graph.projection.ProjectionDiff;
+import org.freeplane.plugin.graph.projection.ProjectedNode;
+import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
+import org.freeplane.plugin.graph.projection.input.SafeNodeLabel;
+import org.freeplane.plugin.graph.projection.input.SourceNodeKey;
 import org.freeplane.plugin.graph.workspace.GraphWorkspaceStore;
 import org.freeplane.plugin.graph.workspace.ListenerRegistration;
 import org.freeplane.plugin.graph.workspace.WorkspaceStoreEvent;
 import org.freeplane.plugin.graph.workspace.WorkspaceStoreListener;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
+import org.freeplane.plugin.graph.workspace.model.NodeReference;
+import org.freeplane.plugin.graph.workspace.model.PersistedNodeId;
 import org.freeplane.plugin.graph.workspace.model.WorkspaceId;
 import org.junit.Test;
 
@@ -187,6 +192,43 @@ public class GraphUpdateCoordinatorShould {
         source.storeListener.get().onWorkspaceStoreEvent(workspaceEvent(WorkspaceStoreEvent.Type.DOCUMENT_CHANGED));
         source.adapterListener.get().onMapAdapterEvent(new MapAdapterEvent(MAP, MapOperationalState.AVAILABLE));
         assertThat(source.coordinator.hasPendingChanges()).isFalse();
+    }
+
+    @Test
+    public void recoversFailedLayoutThroughTheCoordinatorRestartCommand() {
+        ImmediateEdt edt = new ImmediateEdt();
+        LayoutSettleLoopShould.ManualLifecycleDispatcher dispatcher =
+            new LayoutSettleLoopShould.ManualLifecycleDispatcher();
+        LayoutSettleLoopShould.FailedThenIdleStepper stepper =
+            new LayoutSettleLoopShould.FailedThenIdleStepper();
+        LayoutSettleLoop loop = new LayoutSettleLoop(WORKSPACE, stepper, new GraphGeometryEngine(), edt, dispatcher);
+        GraphUpdateCoordinator coordinator = coordinator(new GraphUpdateCoordinator.RebuildPipeline() {
+            @Override
+            public GraphProjection rebuild(final AcceptedBatch batch, final GraphProjection previous) {
+                return nonEmptyProjection(batch.generation());
+            }
+        }, unusedBatcher(edt), loop, edt);
+        List<CanvasState> states = new ArrayList<CanvasState>();
+        try {
+            coordinator.addCanvasStateListener(states::add);
+            coordinator.acceptBatch(batch(12L));
+            dispatcher.runAll();
+
+            assertThat(coordinator.currentState().status()).isEqualTo(OperationalStatus.FAILED);
+            coordinator.restartLayout();
+            dispatcher.runAll();
+
+            assertThat(coordinator.currentState().status()).isEqualTo(OperationalStatus.IDLE);
+            assertThat(states).extracting(CanvasState::status)
+                .containsExactly(OperationalStatus.FAILED, OperationalStatus.IDLE);
+            assertThat(stepper.restartCount()).isEqualTo(2);
+            assertThat(stepper.submitCount()).isEqualTo(2);
+            assertThat(stepper.stepCount()).isZero();
+        }
+        finally {
+            edt.execute(coordinator::close);
+            dispatcher.runAll();
+        }
     }
 
     @Test
@@ -688,6 +730,14 @@ public class GraphUpdateCoordinatorShould {
 
     private static GraphProjection emptyProjection(final long generation) {
         return GraphProjection.projected(generation, Collections.emptyList(), Collections.emptyList(),
+            Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+    }
+
+    private static GraphProjection nonEmptyProjection(final long generation) {
+        ProjectedNodeKey key = ProjectedNodeKey.of(SourceNodeKey.persisted(
+            NodeReference.of(MAP, PersistedNodeId.of("node-" + generation))));
+        ProjectedNode node = ProjectedNode.of(key, SafeNodeLabel.of("Node", "Node"), "Map", false);
+        return GraphProjection.projected(generation, Collections.singletonList(node), Collections.emptyList(),
             Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
     }
 
