@@ -68,7 +68,10 @@ final class GraphHitIndex {
             for (final EnclosureKey endpointKey : enclosure.endpointKeys()) {
                 final ProjectedEndpointKey endpoint = ProjectedEndpointKey.ofEnclosure(endpointKey);
                 hullEntries.add(EndpointEntry.forHull(endpoint, hull));
-                centers.put(endpoint, hull.labelAnchor());
+                final LayoutPoint anchor = enclosureAnchor(state, enclosure, hull);
+                if (anchor != null) {
+                    centers.put(endpoint, anchor);
+                }
             }
         }
 
@@ -138,6 +141,16 @@ final class GraphHitIndex {
             }
         }
         return match;
+    }
+
+    private static LayoutPoint enclosureAnchor(final CanvasState state,
+            final ProjectedEnclosure enclosure, final HullGeometry hull) {
+        final LayoutPoint layoutAnchor = state.layout().positions().anchors().get(enclosure.hullKey());
+        if (isFinite(layoutAnchor)) {
+            return layoutAnchor;
+        }
+        final LayoutPoint labelAnchor = hull.labelAnchor();
+        return isFinite(labelAnchor) ? labelAnchor : null;
     }
 
     private static boolean isFinite(final LayoutPoint point) {
