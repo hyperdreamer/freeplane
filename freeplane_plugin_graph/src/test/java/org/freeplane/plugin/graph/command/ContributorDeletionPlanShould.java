@@ -7,6 +7,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -419,6 +420,87 @@ public class ContributorDeletionPlanShould {
         assertThat(result.status()).isEqualTo(GraphCommandResult.Status.REJECTED);
         verify(maps, never()).beginContributorDeletion(any(ContributorDeletionPlan.class));
         verify(store, never()).execute(any(WorkspaceCommand.class));
+    }
+
+    @Test
+    public void retainsIncompleteRecoveryAcrossHandlerInvocationsBeforeStartingNewWork() {
+        MixedFixture fixture = mixedFixture();
+        when(fixture.store.execute(any(WorkspaceCommand.class))).thenReturn(
+            GraphCommandResult.from(WorkspaceTransition.rejected(document(fixture.record), "workspace.rejected")));
+        doThrow(new IllegalStateException("rollback failure")).when(fixture.transaction).rollback();
+
+        DefaultContributorDeletionHandler handler = fixture.handler();
+        GraphCommandResult first = handler.deleteAll(fixture.command());
+        GraphCommandResult second = handler.deleteAll(fixture.command());
+
+        assertThat(first.status()).isEqualTo(GraphCommandResult.Status.REJECTED);
+        assertThat(first.messageKey()).isEqualTo("graph_workspace.contributor.undo_incomplete");
+        assertThat(first.messageArguments()).containsExactly("native");
+        assertThat(first.dirtySourceMaps()).containsExactly(MAP_ONE);
+        assertThat(first.editorViewActivated()).isFalse();
+        assertThat(second.status()).isEqualTo(GraphCommandResult.Status.REJECTED);
+        assertThat(second.messageKey()).isEqualTo("graph_workspace.contributor.undo_incomplete");
+        assertThat(second.messageArguments()).containsExactly("native");
+        assertThat(second.dirtySourceMaps()).containsExactly(MAP_ONE);
+        verify(fixture.transaction, times(2)).rollback();
+        verify(fixture.maps, times(1)).beginContributorDeletion(any(ContributorDeletionPlan.class));
+        verify(fixture.store, times(1)).execute(any(WorkspaceCommand.class));
+    }
+
+    @Test
+    public void retriesRecoveryBeforeASecondCommandAndClearsItAfterSuccess() {
+        MixedFixture fixture = mixedFixture();
+        List<String> events = new java.util.ArrayList<String>();
+        final boolean[] firstRollbackFailure = new boolean[] { true };
+        doAnswer(invocation -> {
+            events.add("recovery");
+            if (firstRollbackFailure[0]) {
+                firstRollbackFailure[0] = false;
+                throw new IllegalStateException("rollback failure");
+            }
+            return null;
+        }).when(fixture.transaction).rollback();
+        FreeplaneMapCommandExecutor.ContributorDeletionTransaction recovered =
+            mock(FreeplaneMapCommandExecutor.ContributorDeletionTransaction.class);
+        when(recovered.outcome()).thenReturn(applied("native.recovered"));
+        when(recovered.dirtySourceMaps()).thenReturn(Collections.singleton(MAP_ONE));
+        when(recovered.editorViewActivated()).thenReturn(false);
+        final int[] beginCalls = new int[] { 0 };
+        when(fixture.maps.beginContributorDeletion(any(ContributorDeletionPlan.class)))
+            .thenAnswer(invocation -> {
+                beginCalls[0]++;
+                events.add("begin");
+                return beginCalls[0] == 1 ? fixture.transaction : recovered;
+            });
+        final int[] workspaceCalls = new int[] { 0 };
+        when(fixture.store.execute(any(WorkspaceCommand.class))).thenAnswer(invocation -> {
+            events.add("workspace");
+            workspaceCalls[0]++;
+            return workspaceCalls[0] == 1
+                ? GraphCommandResult.from(WorkspaceTransition.rejected(document(fixture.record), "workspace.rejected"))
+                : GraphCommandResult.from(WorkspaceTransition.applied(document(fixture.record), "relationships.purged"));
+        });
+        doAnswer(invocation -> {
+            events.add("commit");
+            return null;
+        }).when(recovered).commit();
+
+        DefaultContributorDeletionHandler handler = fixture.handler();
+        GraphCommandResult first = handler.deleteAll(fixture.command());
+        GraphCommandResult second = handler.deleteAll(fixture.command());
+
+        assertThat(first.messageKey()).isEqualTo("graph_workspace.contributor.undo_incomplete");
+        assertThat(first.dirtySourceMaps()).containsExactly(MAP_ONE);
+        assertThat(second.status()).isEqualTo(GraphCommandResult.Status.APPLIED);
+        assertThat(second.dirtySourceMaps()).containsExactly(MAP_ONE);
+        assertThat(second.editorViewActivated()).isFalse();
+        assertThat(events).containsExactly("begin", "workspace", "recovery", "recovery", "begin", "workspace",
+            "commit");
+        verify(fixture.transaction, times(2)).rollback();
+        verify(fixture.transaction, never()).commit();
+        verify(recovered).commit();
+        verify(fixture.maps, times(2)).beginContributorDeletion(any(ContributorDeletionPlan.class));
+        verify(fixture.store, times(2)).execute(any(WorkspaceCommand.class));
     }
 
     @Test

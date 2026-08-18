@@ -49,6 +49,7 @@ public final class DefaultContributorDeletionHandler implements ContributorDelet
     private final GraphWorkspaceStore store;
     private final FreeplaneMapCommandExecutor maps;
     private final EdtExecutor edt;
+    private PendingRecovery pendingRecovery;
 
     public DefaultContributorDeletionHandler(final GraphUpdateCoordinator updates,
             final GraphWorkspaceStore store, final FreeplaneMapCommandExecutor maps, final EdtExecutor edt) {
@@ -79,6 +80,10 @@ public final class DefaultContributorDeletionHandler implements ContributorDelet
     }
 
     private GraphCommandResult deleteOneOnEdt(final GraphCommands.DeleteContributor command) {
+        final GraphCommandResult recovery = retryPendingRecovery();
+        if (recovery != null) {
+            return recovery;
+        }
         GraphProjection displayed = updates.currentProjection();
         GraphCommandResult rejection = validateDisplayedState(displayed, command.displayedGeneration());
         if (rejection != null) {
@@ -102,6 +107,10 @@ public final class DefaultContributorDeletionHandler implements ContributorDelet
     }
 
     private GraphCommandResult deleteAllOnEdt(final GraphCommands.DeleteAllContributors command) {
+        final GraphCommandResult recovery = retryPendingRecovery();
+        if (recovery != null) {
+            return recovery;
+        }
         if (command.contributors().isEmpty()) {
             return rejected(CONTRIBUTOR_EMPTY);
         }
@@ -286,6 +295,9 @@ public final class DefaultContributorDeletionHandler implements ContributorDelet
         }
         final GraphCommandResult nativeOutcome = transaction.outcome();
         if (nativeOutcome == null || nativeOutcome.status() == GraphCommandResult.Status.REJECTED) {
+            if (isIncompleteRecovery(nativeOutcome)) {
+                return retainRecovery(transaction, "native");
+            }
             return nativeOutcome == null ? rejected(CONTRIBUTOR_UNAVAILABLE) : nativeOutcome;
         }
         if (plan.relationshipIds().isEmpty()) {
@@ -339,8 +351,8 @@ public final class DefaultContributorDeletionHandler implements ContributorDelet
             return incompleteRecovery(transaction, "native");
         }
         final GraphCommandResult outcome = transaction.outcome();
-        if (outcome != null && CONTRIBUTOR_UNDO_INCOMPLETE.equals(outcome.messageKey())) {
-            return enrichNativeResult(outcome, transaction);
+        if (isIncompleteRecovery(outcome)) {
+            return retainRecovery(transaction, "native");
         }
         return fallback;
     }
@@ -354,9 +366,11 @@ public final class DefaultContributorDeletionHandler implements ContributorDelet
             return incompleteRecovery(transaction, "native");
         }
         final GraphCommandResult outcome = transaction.outcome();
+        if (isIncompleteRecovery(outcome)) {
+            return retainRecovery(transaction, "native");
+        }
         if (outcome != null && outcome.status() == GraphCommandResult.Status.REJECTED) {
-            if (CONTRIBUTOR_UNDO_INCOMPLETE.equals(outcome.messageKey())
-                    || CONTRIBUTOR_NATIVE_COMMIT_FAILED.equals(outcome.messageKey())) {
+            if (CONTRIBUTOR_NATIVE_COMMIT_FAILED.equals(outcome.messageKey())) {
                 return enrichNativeResult(outcome, transaction);
             }
         }
@@ -376,9 +390,36 @@ public final class DefaultContributorDeletionHandler implements ContributorDelet
     private GraphCommandResult incompleteRecovery(
             final FreeplaneMapCommandExecutor.ContributorDeletionTransaction transaction,
             final String resource) {
-        GraphCommandResult result = rejected(CONTRIBUTOR_UNDO_INCOMPLETE, resource)
-            .withDirtySourceMaps(dirtySourceMaps(transaction));
-        return result.withEditorViewActivated(transaction.editorViewActivated());
+        return retainRecovery(transaction, resource);
+    }
+
+    private GraphCommandResult retainRecovery(
+            final FreeplaneMapCommandExecutor.ContributorDeletionTransaction transaction,
+            final String resource) {
+        pendingRecovery = new PendingRecovery(transaction, resource);
+        return pendingRecovery.result(this);
+    }
+
+    private GraphCommandResult retryPendingRecovery() {
+        if (pendingRecovery == null) {
+            return null;
+        }
+        final PendingRecovery recovery = pendingRecovery;
+        try {
+            recovery.transaction.rollback();
+        }
+        catch (final RuntimeException failure) {
+            return recovery.result(this);
+        }
+        if (isIncompleteRecovery(recovery.transaction.outcome())) {
+            return recovery.result(this);
+        }
+        pendingRecovery = null;
+        return null;
+    }
+
+    private boolean isIncompleteRecovery(final GraphCommandResult result) {
+        return result != null && CONTRIBUTOR_UNDO_INCOMPLETE.equals(result.messageKey());
     }
 
     private Set<MapReferenceId> dirtySourceMaps(
@@ -442,6 +483,23 @@ public final class DefaultContributorDeletionHandler implements ContributorDelet
 
     private GraphCommandResult rejectedApplied(final String messageKey, final Object... arguments) {
         return GraphCommandResult.from(WorkspaceTransition.applied(store.currentDocument(), messageKey, arguments));
+    }
+
+    private static final class PendingRecovery {
+        private final FreeplaneMapCommandExecutor.ContributorDeletionTransaction transaction;
+        private final String resource;
+
+        private PendingRecovery(final FreeplaneMapCommandExecutor.ContributorDeletionTransaction transaction,
+                final String resource) {
+            this.transaction = Objects.requireNonNull(transaction, "transaction");
+            this.resource = Objects.requireNonNull(resource, "resource");
+        }
+
+        private GraphCommandResult result(final DefaultContributorDeletionHandler handler) {
+            GraphCommandResult result = handler.rejected(CONTRIBUTOR_UNDO_INCOMPLETE, resource)
+                .withDirtySourceMaps(handler.dirtySourceMaps(transaction));
+            return result.withEditorViewActivated(transaction.editorViewActivated());
+        }
     }
 
     private static final class PlanResult {
