@@ -1,6 +1,7 @@
 package org.freeplane.plugin.graph.canvas;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.awt.AWTEvent;
 import java.awt.Dimension;
@@ -63,6 +64,95 @@ public class GraphInteractionControllerShould {
         assertThat(index.edgeAt(LayoutPoint.of(0.0, 3.0), 4.0))
             .contains(fixture.edgeKey);
         assertThat(index.edgeAt(LayoutPoint.of(0.0, 10.0), 4.0)).isEmpty();
+    }
+
+    @Test
+    public void hitAnEnclosureEdgeAtItsLayoutAnchoredPaintedSegment() {
+        final AnchorFixture fixture = AnchorFixture.create();
+
+        assertThat(GraphHitIndex.from(fixture.state).edgeAt(fixture.paintedSegmentPoint, 0.1))
+            .contains(fixture.edgeKey);
+    }
+
+    @Test
+    public void openAHitEndpointOnDoubleClickAndRejectSecondInstallation() {
+        final Fixture fixture = Fixture.create();
+        final GraphCanvas canvas = fixture.canvas();
+        final RecordingListener listener = new RecordingListener();
+        final GraphInteractionController controller = new GraphInteractionController(listener);
+        controller.install(canvas);
+
+        assertThatThrownBy(() -> controller.install(fixture.canvas()))
+            .isInstanceOf(IllegalStateException.class);
+        dispatch(canvas, click(canvas, MouseEvent.MOUSE_CLICKED, -40.0, 0.0, 2,
+            MouseEvent.BUTTON1));
+        assertThat(listener.intents).containsExactly(new GraphIntent.OpenSourceNode(
+            fixture.firstEndpoint));
+        controller.uninstall();
+    }
+
+    @Test
+    public void panWhenDraggingEmptyCanvas() {
+        final Fixture fixture = Fixture.create();
+        final GraphCanvas canvas = fixture.canvas();
+        final RecordingListener listener = new RecordingListener();
+        final GraphInteractionController controller = new GraphInteractionController(listener);
+        controller.install(canvas);
+
+        final double beforeCenterX = canvas.viewport().centerX();
+        dispatch(canvas, press(canvas, 150.0, 80.0));
+        dispatch(canvas, drag(canvas, 180.0, 80.0));
+        dispatch(canvas, release(canvas, 180.0, 80.0));
+        assertThat(canvas.viewport().centerX()).isNotEqualTo(beforeCenterX);
+        assertThat(listener.intents).isEmpty();
+        controller.uninstall();
+    }
+
+    @Test
+    public void cancelSelfConnectWithoutEmittingAConnectIntent() {
+        final Fixture fixture = Fixture.create();
+        final GraphCanvas canvas = fixture.canvas();
+        final RecordingListener listener = new RecordingListener();
+        final GraphInteractionController controller = new GraphInteractionController(listener);
+        controller.install(canvas);
+        controller.setTool(InteractionTool.CONNECT);
+
+        dispatch(canvas, press(canvas, -40.0, 0.0));
+        dispatch(canvas, drag(canvas, -40.0, 0.0));
+        assertThat(canvas.paintState().connectionPreview()).isPresent();
+        dispatch(canvas, release(canvas, -40.0, 0.0));
+        assertThat(canvas.paintState().connectionPreview()).isEmpty();
+        assertThat(listener.intents).isEmpty();
+        controller.uninstall();
+    }
+
+    @Test
+    public void emitTheConfiguredRelationshipDirectionForConnections() {
+        final Fixture fixture = Fixture.create();
+        final GraphCanvas canvas = fixture.canvas();
+        final RecordingListener listener = new RecordingListener();
+        final GraphInteractionController controller = new GraphInteractionController(listener);
+        controller.install(canvas);
+        controller.setTool(InteractionTool.CONNECT);
+        controller.setRelationshipDirection(RelationshipDirection.BIDIRECTIONAL);
+
+        dispatch(canvas, press(canvas, -40.0, 0.0));
+        dispatch(canvas, drag(canvas, 40.0, 0.0));
+        dispatch(canvas, release(canvas, 40.0, 0.0));
+        assertThat(listener.intents).containsExactly(new GraphIntent.Connect(fixture.firstEndpoint,
+            fixture.secondEndpoint, RelationshipDirection.BIDIRECTIONAL));
+        controller.uninstall();
+    }
+
+    @Test
+    public void useStableSharedHullEndpointOrderAndExcludeSuppressedHulls() {
+        final Fixture fixture = Fixture.create();
+        final GraphHitIndex index = GraphHitIndex.from(fixture.state);
+
+        assertThat(fixture.firstHullEndpoint.compareTo(fixture.secondHullEndpoint)).isLessThan(0);
+        assertThat(index.endpointAt(LayoutPoint.of(-65.0, 0.0)))
+            .contains(fixture.firstHullEndpoint);
+        assertThat(index.endpointAt(LayoutPoint.of(95.0, 0.0))).isEmpty();
     }
 
     @Test
@@ -264,24 +354,110 @@ public class GraphInteractionControllerShould {
         }
     }
 
+    private static final class AnchorFixture {
+        private final CanvasState state;
+        private final ProjectedEdgeKey edgeKey;
+        private final LayoutPoint paintedSegmentPoint;
+
+        private AnchorFixture(CanvasState state, ProjectedEdgeKey edgeKey,
+                LayoutPoint paintedSegmentPoint) {
+            this.state = state;
+            this.edgeKey = edgeKey;
+            this.paintedSegmentPoint = paintedSegmentPoint;
+        }
+
+        private static AnchorFixture create() {
+            final MapReferenceId nodeMap = MapReferenceId.of(
+                UUID.fromString("00000000-0000-0000-0000-000000000014"));
+            final MapReferenceId enclosureMap = MapReferenceId.of(
+                UUID.fromString("00000000-0000-0000-0000-000000000016"));
+            final NodeReference nodeReference = NodeReference.of(nodeMap, PersistedNodeId.of("node"));
+            final NodeReference enclosureReference = NodeReference.of(enclosureMap,
+                PersistedNodeId.of("enclosure"));
+            final ProjectedNodeKey nodeKey = ProjectedNodeKey.of(
+                SourceNodeKey.persisted(nodeReference));
+            final EnclosureKey enclosureKey = EnclosureKey.of(
+                SourceNodeKey.persisted(enclosureReference));
+            final EnclosureHullKey hullKey = EnclosureHullKey.of(
+                Collections.singletonList(enclosureKey));
+            final ProjectedEndpointKey nodeEndpoint = ProjectedEndpointKey.ofNode(nodeKey);
+            final ProjectedEndpointKey enclosureEndpoint = ProjectedEndpointKey.ofEnclosure(
+                enclosureKey);
+            final ProjectedNode node = ProjectedNode.of(nodeKey,
+                SafeNodeLabel.of("Node label", "Node"), "Map", false);
+            final org.freeplane.plugin.graph.projection.ProjectedEnclosure enclosure =
+                org.freeplane.plugin.graph.projection.ProjectedEnclosure.of(hullKey,
+                    Collections.singletonList(enclosureKey), Collections.singletonList(
+                        SafeNodeLabel.of("Enclosure label", "Enclosure")), "Map",
+                    Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(),
+                    Collections.<EnclosureHullKey>emptyList(), false, BoundaryTier.SUBTLE);
+            final GraphRelationshipRecord relationship = GraphRelationshipRecord.of(
+                RelationshipId.of(UUID.fromString("00000000-0000-0000-0000-000000000015")),
+                1L, nodeReference, enclosureReference, RelationshipDirection.FORWARD,
+                Collections.emptyList());
+            final ProjectedEdgeKey edgeKey = ProjectedEdgeKey.of(nodeEndpoint, enclosureEndpoint);
+            final EdgeContributor contributor = EdgeContributor.graphRelationship(relationship,
+                nodeEndpoint, enclosureEndpoint);
+            final ProjectedEdge edge = ProjectedEdge.of(edgeKey,
+                Collections.singletonList(contributor));
+            final GraphProjection projection = GraphProjection.projected(1L,
+                Collections.singletonList(node), Collections.singletonList(enclosure),
+                Collections.singletonList(edge), Collections.emptyList(), Collections.emptyList());
+
+            final LayoutPoint nodeCenter = LayoutPoint.of(100.0, 0.0);
+            final LayoutPoint layoutAnchor = LayoutPoint.of(0.0, 60.0);
+            final Map<ProjectedNodeKey, NodeGeometry> nodes =
+                new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
+            nodes.put(nodeKey, NodeGeometry.of(nodeCenter, 10.0));
+            final Map<EnclosureHullKey, org.freeplane.plugin.graph.geometry.HullGeometry> hulls =
+                new LinkedHashMap<EnclosureHullKey, org.freeplane.plugin.graph.geometry.HullGeometry>();
+            hulls.put(hullKey, org.freeplane.plugin.graph.geometry.HullGeometry.of(
+                Arrays.asList(LayoutPoint.of(-10.0, -10.0), LayoutPoint.of(10.0, -10.0),
+                    LayoutPoint.of(10.0, 10.0), LayoutPoint.of(-10.0, 10.0)),
+                LayoutPoint.of(0.0, 0.0)));
+            final GraphGeometry geometry = GraphGeometry.of(nodes, hulls);
+            final Map<ProjectedNodeKey, LayoutPoint> nodePositions =
+                new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+            nodePositions.put(nodeKey, nodeCenter);
+            final Map<EnclosureHullKey, LayoutPoint> anchors =
+                new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
+            anchors.put(hullKey, layoutAnchor);
+            final LayoutFrame frame = LayoutFrame.of(1L, LayoutPositions.of(nodePositions, anchors),
+                false);
+            final CanvasState state = CanvasState.of(1L, projection, frame, geometry,
+                OperationalStatus.IDLE);
+            final LayoutPoint firstAttachment = geometry.edgeAttachment(nodeEndpoint, layoutAnchor);
+            final LayoutPoint secondAttachment = geometry.edgeAttachment(enclosureEndpoint,
+                nodeCenter);
+            return new AnchorFixture(state, edgeKey, LayoutPoint.of(
+                (firstAttachment.x() + secondAttachment.x()) * 0.5,
+                (firstAttachment.y() + secondAttachment.y()) * 0.5));
+        }
+    }
+
     private static final class Fixture {
         private final CanvasState state;
         private final ProjectedNodeKey firstNodeKey;
         private final ProjectedEndpointKey firstEndpoint;
         private final ProjectedNodeKey secondNodeKey;
         private final ProjectedEndpointKey secondEndpoint;
+        private final ProjectedEndpointKey firstHullEndpoint;
+        private final ProjectedEndpointKey secondHullEndpoint;
         private final ProjectedEdgeKey edgeKey;
         private final ContributorKey contributorKey;
 
         private Fixture(CanvasState state, ProjectedNodeKey firstNodeKey,
                 ProjectedNodeKey secondNodeKey, ProjectedEndpointKey firstEndpoint,
-                ProjectedEndpointKey secondEndpoint, ProjectedEdgeKey edgeKey,
+                ProjectedEndpointKey secondEndpoint, ProjectedEndpointKey firstHullEndpoint,
+                ProjectedEndpointKey secondHullEndpoint, ProjectedEdgeKey edgeKey,
                 ContributorKey contributorKey) {
             this.state = state;
             this.firstNodeKey = firstNodeKey;
             this.secondNodeKey = secondNodeKey;
             this.firstEndpoint = firstEndpoint;
             this.secondEndpoint = secondEndpoint;
+            this.firstHullEndpoint = firstHullEndpoint;
+            this.secondHullEndpoint = secondHullEndpoint;
             this.edgeKey = edgeKey;
             this.contributorKey = contributorKey;
         }
@@ -314,15 +490,29 @@ public class GraphInteractionControllerShould {
                 SafeNodeLabel.of("Second full label", "Second"), "Map", false);
             final EnclosureKey enclosureKey = EnclosureKey.of(
                 SourceNodeKey.transientPath(firstMap, Arrays.asList(9)));
+            final EnclosureKey secondEnclosureKey = EnclosureKey.of(
+                SourceNodeKey.transientPath(firstMap, Arrays.asList(10)));
             final EnclosureHullKey hullKey = EnclosureHullKey.of(
-                Collections.singletonList(enclosureKey));
+                Arrays.asList(secondEnclosureKey, enclosureKey));
+            final EnclosureKey suppressedKey = EnclosureKey.of(
+                SourceNodeKey.transientPath(firstMap, Arrays.asList(11)));
+            final EnclosureHullKey suppressedHullKey = EnclosureHullKey.of(
+                Collections.singletonList(suppressedKey));
             final org.freeplane.plugin.graph.projection.ProjectedEnclosure enclosure =
                 org.freeplane.plugin.graph.projection.ProjectedEnclosure.of(hullKey,
-                    Collections.singletonList(enclosureKey), Collections.singletonList(
+                    Arrays.asList(secondEnclosureKey, enclosureKey), Arrays.asList(
+                        SafeNodeLabel.of("Second hull label", "Second hull"),
                         SafeNodeLabel.of("Hull label", "Hull")), "Map",
                     Optional.<EnclosureHullKey>empty(),
                     Collections.<ProjectedNodeKey>emptyList(),
                     Collections.<EnclosureHullKey>emptyList(), false, BoundaryTier.SUBTLE);
+            final org.freeplane.plugin.graph.projection.ProjectedEnclosure suppressed =
+                org.freeplane.plugin.graph.projection.ProjectedEnclosure.of(suppressedHullKey,
+                    Collections.singletonList(suppressedKey), Collections.singletonList(
+                        SafeNodeLabel.of("Suppressed hull label", "Suppressed hull")), "Map",
+                    Optional.<EnclosureHullKey>empty(),
+                    Collections.<ProjectedNodeKey>emptyList(),
+                    Collections.<EnclosureHullKey>emptyList(), false, BoundaryTier.SUPPRESSED);
             final ProjectedEdgeKey edgeKey = ProjectedEdgeKey.of(firstEndpoint, secondEndpoint);
             final GraphRelationshipRecord relationship = GraphRelationshipRecord.of(
                 RelationshipId.of(UUID.fromString("00000000-0000-0000-0000-000000000012")), 1L,
@@ -335,7 +525,7 @@ public class GraphInteractionControllerShould {
             final PinRecord pinRecord = PinRecord.of(secondReference, 40.0, 0.0,
                 Collections.emptyList());
             final GraphProjection projection = GraphProjection.projected(1L,
-                Arrays.asList(firstNode, secondNode), Collections.singletonList(enclosure),
+                Arrays.asList(firstNode, secondNode), Arrays.asList(enclosure, suppressed),
                 Collections.singletonList(edge), Collections.emptyList(),
                 Collections.singletonList(PinProjection.active(pinRecord, second)));
 
@@ -349,14 +539,22 @@ public class GraphInteractionControllerShould {
                 Arrays.asList(LayoutPoint.of(-70.0, -30.0), LayoutPoint.of(-10.0, -30.0),
                     LayoutPoint.of(-10.0, 30.0), LayoutPoint.of(-70.0, 30.0)),
                 LayoutPoint.of(-40.0, 0.0)));
+            hulls.put(suppressedHullKey, org.freeplane.plugin.graph.geometry.HullGeometry.of(
+                Arrays.asList(LayoutPoint.of(80.0, -20.0), LayoutPoint.of(110.0, -20.0),
+                    LayoutPoint.of(110.0, 20.0), LayoutPoint.of(80.0, 20.0)),
+                LayoutPoint.of(95.0, 0.0)));
             final GraphGeometry geometry = GraphGeometry.of(nodes, hulls);
-            final LayoutPositions positions = LayoutPositions.of(nodePoints(nodes),
-                Collections.singletonMap(hullKey, LayoutPoint.of(-40.0, 0.0)));
+            final Map<EnclosureHullKey, LayoutPoint> anchors =
+                new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
+            anchors.put(hullKey, LayoutPoint.of(-40.0, 0.0));
+            anchors.put(suppressedHullKey, LayoutPoint.of(95.0, 0.0));
+            final LayoutPositions positions = LayoutPositions.of(nodePoints(nodes), anchors);
             final LayoutFrame frame = LayoutFrame.of(1L, positions, false);
             final CanvasState state = CanvasState.of(1L, projection, frame, geometry,
                 OperationalStatus.IDLE);
-            return new Fixture(state, first, second, firstEndpoint, secondEndpoint, edgeKey,
-                contributor.key());
+            return new Fixture(state, first, second, firstEndpoint, secondEndpoint,
+                ProjectedEndpointKey.ofEnclosure(enclosureKey),
+                ProjectedEndpointKey.ofEnclosure(secondEnclosureKey), edgeKey, contributor.key());
         }
 
         private static Map<ProjectedNodeKey, LayoutPoint> nodePoints(

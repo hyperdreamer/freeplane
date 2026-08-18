@@ -57,11 +57,24 @@ public class GraphSearchModelShould {
     }
 
     @Test
+    public void excludeAnUnprojectedRawSourceSentinelWhileFindingProjectedSafeText() {
+        final Fixture fixture = Fixture.create();
+
+        assertThat(fixture.state.projection().nodes()).extracting(ProjectedNode::key)
+            .doesNotContain(fixture.excludedSource.projectedNodeKey());
+        assertThat(GraphSearchModel.search(fixture.state, fixture.excludedSource.rawText()))
+            .isEmpty();
+        assertThat(GraphSearchModel.search(fixture.state, "A very long safe label"))
+            .containsExactly(fixture.nodeEndpoint);
+    }
+
+    @Test
     public void returnAnEmptyUnmodifiableSetForBlankOrUnprojectedText() {
         final Fixture fixture = Fixture.create();
 
         assertThat(GraphSearchModel.search(fixture.state, " \t\n")).isEmpty();
-        assertThat(GraphSearchModel.search(fixture.state, "excluded source text")).isEmpty();
+        assertThat(GraphSearchModel.search(fixture.state, fixture.excludedSource.rawText()))
+            .isEmpty();
         assertThat(GraphSearchModel.search(fixture.state, "suppressed label")).isEmpty();
         assertThat(GraphSearchModel.tooltip(fixture.state, fixture.suppressedEndpoint)).isNull();
         assertThatThrownBy(() -> GraphSearchModel.search(fixture.state, "long")
@@ -90,17 +103,20 @@ public class GraphSearchModelShould {
         private final ProjectedEndpointKey secondEnclosureEndpoint;
         private final ProjectedEndpointKey suppressedEndpoint;
         private final ProjectedNodeKey otherNodeKey;
+        private final SourceSideFixture excludedSource;
 
         private Fixture(CanvasState state, ProjectedEndpointKey nodeEndpoint,
                 ProjectedEndpointKey enclosureEndpoint,
                 ProjectedEndpointKey secondEnclosureEndpoint,
-                ProjectedEndpointKey suppressedEndpoint, ProjectedNodeKey otherNodeKey) {
+                ProjectedEndpointKey suppressedEndpoint, ProjectedNodeKey otherNodeKey,
+                SourceSideFixture excludedSource) {
             this.state = state;
             this.nodeEndpoint = nodeEndpoint;
             this.enclosureEndpoint = enclosureEndpoint;
             this.secondEnclosureEndpoint = secondEnclosureEndpoint;
             this.suppressedEndpoint = suppressedEndpoint;
             this.otherNodeKey = otherNodeKey;
+            this.excludedSource = excludedSource;
         }
 
         private static Fixture create() {
@@ -123,6 +139,9 @@ public class GraphSearchModelShould {
             final EnclosureHullKey suppressedHullKey = EnclosureHullKey.of(
                 Collections.singletonList(suppressedKey));
 
+            final SourceSideFixture excludedSource = new SourceSideFixture(
+                SourceNodeKey.transientPath(north, Arrays.asList(99)),
+                "Raw excluded source sentinel");
             final ProjectedNode node = ProjectedNode.of(nodeKey,
                 SafeNodeLabel.of("A very long safe label", "A very..."), "North Map", false);
             final ProjectedEnclosure enclosure = ProjectedEnclosure.of(hullKey,
@@ -158,7 +177,7 @@ public class GraphSearchModelShould {
             return new Fixture(state, ProjectedEndpointKey.ofNode(nodeKey),
                 ProjectedEndpointKey.ofEnclosure(enclosureKey),
                 ProjectedEndpointKey.ofEnclosure(secondEnclosureKey),
-                ProjectedEndpointKey.ofEnclosure(suppressedKey), otherNodeKey);
+                ProjectedEndpointKey.ofEnclosure(suppressedKey), otherNodeKey, excludedSource);
         }
 
         private static Map<ProjectedNodeKey, LayoutPoint> nodeGeometryAsPoints(
@@ -169,6 +188,24 @@ public class GraphSearchModelShould {
                 points.put(entry.getKey(), entry.getValue().center());
             }
             return points;
+        }
+    }
+
+    private static final class SourceSideFixture {
+        private final SourceNodeKey key;
+        private final String rawText;
+
+        private SourceSideFixture(SourceNodeKey key, String rawText) {
+            this.key = key;
+            this.rawText = rawText;
+        }
+
+        private ProjectedNodeKey projectedNodeKey() {
+            return ProjectedNodeKey.of(key);
+        }
+
+        private String rawText() {
+            return rawText;
         }
     }
 }
