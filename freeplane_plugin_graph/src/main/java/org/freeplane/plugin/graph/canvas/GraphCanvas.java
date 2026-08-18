@@ -10,6 +10,7 @@ import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
 
+import javax.accessibility.Accessible;
 import javax.accessibility.AccessibleContext;
 import javax.swing.JComponent;
 import javax.swing.SwingUtilities;
@@ -25,7 +26,7 @@ import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.workspace.model.DisplaySettings.CanvasTheme;
 
-public final class GraphCanvas extends JComponent {
+public final class GraphCanvas extends JComponent implements Accessible {
     private static final long serialVersionUID = 1L;
 
     private final AdaptiveRenderingPolicy renderingPolicy = new AdaptiveRenderingPolicy();

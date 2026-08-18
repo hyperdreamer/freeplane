@@ -1,21 +1,29 @@
 package org.freeplane.plugin.graph.canvas;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import java.awt.AWTKeyStroke;
+import java.awt.BorderLayout;
 import java.awt.Dimension;
+import java.awt.KeyboardFocusManager;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.awt.event.KeyListener;
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import javax.accessibility.Accessible;
@@ -23,7 +31,10 @@ import javax.accessibility.AccessibleAction;
 import javax.accessibility.AccessibleComponent;
 import javax.accessibility.AccessibleContext;
 import javax.accessibility.AccessibleRole;
+import javax.swing.JButton;
 import javax.swing.JComponent;
+import javax.swing.JFrame;
+import javax.swing.SwingUtilities;
 
 import org.freeplane.plugin.graph.control.CanvasState;
 import org.freeplane.plugin.graph.control.OperationalStatus;
@@ -81,13 +92,66 @@ public class AccessibleGraphCanvasShould {
     }
 
     @Test
+    public void receiveTabThroughSwingDispatchAndRestoreFocusTraversalConfiguration() {
+        final Fixture fixture = Fixture.create();
+        final GraphCanvas canvas = fixture.canvas();
+        final RecordingListener listener = new RecordingListener();
+        final Set<AWTKeyStroke> forwardKeys = new LinkedHashSet<AWTKeyStroke>(Arrays.asList(
+            AWTKeyStroke.getAWTKeyStroke(KeyEvent.VK_TAB, 0),
+            AWTKeyStroke.getAWTKeyStroke(KeyEvent.VK_F1, 0)));
+        final Set<AWTKeyStroke> backwardKeys = new LinkedHashSet<AWTKeyStroke>(Arrays.asList(
+            AWTKeyStroke.getAWTKeyStroke(KeyEvent.VK_TAB, InputEvent.SHIFT_DOWN_MASK),
+            AWTKeyStroke.getAWTKeyStroke(KeyEvent.VK_F2, InputEvent.SHIFT_DOWN_MASK)));
+        canvas.setFocusTraversalKeys(KeyboardFocusManager.FORWARD_TRAVERSAL_KEYS, forwardKeys);
+        canvas.setFocusTraversalKeys(KeyboardFocusManager.BACKWARD_TRAVERSAL_KEYS, backwardKeys);
+        final Set<AWTKeyStroke> previousForwardKeys = canvas.getFocusTraversalKeys(
+            KeyboardFocusManager.FORWARD_TRAVERSAL_KEYS);
+        final Set<AWTKeyStroke> previousBackwardKeys = canvas.getFocusTraversalKeys(
+            KeyboardFocusManager.BACKWARD_TRAVERSAL_KEYS);
+        final GraphInteractionController controller = new GraphInteractionController(listener);
+        controller.install(canvas);
+        try {
+            withFocusedCanvas(canvas, new Runnable() {
+                @Override
+                public void run() {
+                    canvas.setPaintState(GraphPaintState.empty().withSelection(fixture.sourceEndpoint));
+                    final KeyEvent tab = dispatchKeyEvent(canvas, KeyEvent.VK_TAB, 0);
+                    assertThat(tab.isConsumed()).isTrue();
+                    assertThat(canvas.paintState().selection()).contains(fixture.nextTabEndpoint());
+                    final KeyEvent reverseTab = dispatchKeyEvent(canvas, KeyEvent.VK_TAB,
+                        InputEvent.SHIFT_DOWN_MASK);
+                    assertThat(reverseTab.isConsumed()).isTrue();
+                    assertThat(canvas.paintState().selection()).contains(fixture.sourceEndpoint);
+                    assertThat(canvas.getFocusTraversalKeysEnabled()).isFalse();
+                    assertThat(canvas.getFocusTraversalKeys(KeyboardFocusManager.FORWARD_TRAVERSAL_KEYS))
+                        .isEqualTo(previousForwardKeys);
+                    assertThat(canvas.getFocusTraversalKeys(KeyboardFocusManager.BACKWARD_TRAVERSAL_KEYS))
+                        .isEqualTo(previousBackwardKeys);
+
+                    canvas.setCanvasState(fixture.emptyState());
+                    final KeyEvent tabWithoutVisibleEndpoint = dispatchKeyEvent(canvas,
+                        KeyEvent.VK_TAB, 0);
+                    assertThat(tabWithoutVisibleEndpoint.isConsumed()).isFalse();
+                }
+            });
+        }
+        finally {
+            controller.uninstall();
+        }
+        assertThat(canvas.getFocusTraversalKeysEnabled()).isTrue();
+        assertThat(canvas.getFocusTraversalKeys(KeyboardFocusManager.FORWARD_TRAVERSAL_KEYS))
+            .isEqualTo(previousForwardKeys);
+        assertThat(canvas.getFocusTraversalKeys(KeyboardFocusManager.BACKWARD_TRAVERSAL_KEYS))
+            .isEqualTo(previousBackwardKeys);
+    }
+
+    @Test
     public void traverseSelectionAndPreservePanAndEscapeKeyboardSemantics() {
         final Fixture fixture = Fixture.create();
         final GraphCanvas canvas = fixture.canvas();
         final RecordingListener listener = new RecordingListener();
         final GraphInteractionController controller = new GraphInteractionController(listener);
         controller.install(canvas);
-
         canvas.setPaintState(GraphPaintState.empty().withSelection(fixture.sourceEndpoint));
         dispatchKey(canvas, key(canvas, KeyEvent.VK_RIGHT, 0));
         assertThat(listener.last()).isEqualTo(new GraphIntent.ChangeSelection(
@@ -121,16 +185,75 @@ public class AccessibleGraphCanvasShould {
     }
 
     @Test
+    public void ignoreEnterForSelectionsAbsentFromCurrentVisibleOrderAfterStateReplacement() {
+        final Fixture fixture = Fixture.create();
+        final GraphCanvas canvas = fixture.canvas();
+        final RecordingListener listener = new RecordingListener();
+        final GraphInteractionController controller = new GraphInteractionController(listener);
+        controller.install(canvas);
+        try {
+            withFocusedCanvas(canvas, new Runnable() {
+                @Override
+                public void run() {
+                    canvas.setPaintState(GraphPaintState.empty().withSelection(fixture.sourceEndpoint));
+                    canvas.setCanvasState(fixture.emptyState());
+                    dispatchKeyEvent(canvas, KeyEvent.VK_ENTER, 0);
+                    assertThat(listener.intents()).isEmpty();
+
+                    listener.clear();
+                    canvas.setPaintState(GraphPaintState.empty().withSelection(fixture.suppressedEndpoint));
+                    canvas.setCanvasState(fixture.state);
+                    dispatchKeyEvent(canvas, KeyEvent.VK_ENTER, 0);
+                    assertThat(listener.intents()).isEmpty();
+
+                    listener.clear();
+                    canvas.setCanvasState(fixture.emptyState());
+                    canvas.setPaintState(GraphPaintState.empty().withSelection(fixture.geometrylessEndpoint));
+                    canvas.setCanvasState(fixture.state);
+                    dispatchKeyEvent(canvas, KeyEvent.VK_ENTER, 0);
+                    assertThat(listener.intents()).isEmpty();
+                }
+            });
+        }
+        finally {
+            controller.uninstall();
+        }
+    }
+
+    @Test
+    public void tolerateStateReplacementBetweenAccessibleOrderAndChildLookup() {
+        final Fixture fixture = Fixture.create();
+        final GraphCanvas canvas = fixture.canvas();
+        final AccessibleContext root = canvas.getAccessibleContext();
+        final CanvasState replacement = fixture.emptyState();
+        final CanvasState transitioning = mock(CanvasState.class);
+        when(transitioning.geometry()).thenReturn(fixture.state.geometry());
+        when(transitioning.projection()).thenAnswer(invocation -> {
+            canvas.setCanvasState(replacement);
+            return fixture.state.projection();
+        });
+        canvas.setCanvasState(transitioning);
+
+        assertThat(root.getAccessibleComponent().getAccessibleAt(new Point(200, 150))).isNull();
+        assertThat(root.getAccessibleChildrenCount()).isZero();
+    }
+
+    @Test
     public void exposeCurrentVirtualChildrenWithSafeTextBoundsAndActions() {
         final Fixture fixture = Fixture.create();
         final GraphCanvas canvas = fixture.canvas();
         final RecordingListener listener = new RecordingListener();
         final GraphInteractionController controller = new GraphInteractionController(listener);
         controller.install(canvas);
-
         final AccessibleContext root = canvas.getAccessibleContext();
         assertThat(root.getAccessibleRole()).isEqualTo(AccessibleRole.CANVAS);
         assertThat(root.getAccessibleChildrenCount()).isEqualTo(fixture.visibleEndpointsSorted().size());
+        for (int index = 0; index < root.getAccessibleChildrenCount(); index++) {
+            final Accessible currentChild = root.getAccessibleChild(index);
+            assertThat(currentChild.getAccessibleContext().getAccessibleParent()).isSameAs(canvas);
+            assertThat(currentChild.getAccessibleContext().getAccessibleIndexInParent())
+                .isEqualTo(index);
+        }
         final Accessible child = childFor(root, fixture.prominentEndpoint);
         assertThat(child).isNotInstanceOf(JComponent.class);
         final AccessibleContext childContext = child.getAccessibleContext();
@@ -195,6 +318,99 @@ public class AccessibleGraphCanvasShould {
         }
     }
 
+    private static void withFocusedCanvas(final GraphCanvas canvas, final Runnable action) {
+        final JFrame[] frame = new JFrame[1];
+        try {
+            invokeOnEdt(new Runnable() {
+                @Override
+                public void run() {
+                    final JFrame value = new JFrame();
+                    value.setLayout(new BorderLayout());
+                    value.add(canvas, BorderLayout.CENTER);
+                    value.add(new JButton("Next"), BorderLayout.SOUTH);
+                    value.setSize(500, 400);
+                    value.setVisible(true);
+                    canvas.requestFocusInWindow();
+                    frame[0] = value;
+                }
+            });
+            waitForFocus(canvas);
+            invokeOnEdt(action);
+        }
+        finally {
+            if (frame[0] != null) {
+                invokeOnEdt(new Runnable() {
+                    @Override
+                    public void run() {
+                        frame[0].dispose();
+                    }
+                });
+            }
+        }
+    }
+
+    private static void waitForFocus(final GraphCanvas canvas) {
+        for (int attempt = 0; attempt < 100; attempt++) {
+            final boolean[] focused = new boolean[1];
+            invokeOnEdt(new Runnable() {
+                @Override
+                public void run() {
+                    canvas.requestFocusInWindow();
+                    focused[0] = canvas.isFocusOwner();
+                }
+            });
+            if (focused[0]) {
+                return;
+            }
+            try {
+                Thread.sleep(10L);
+            }
+            catch (final InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError(exception);
+            }
+        }
+        throw new AssertionError("Graph canvas did not receive focus");
+    }
+
+    private static void invokeOnEdt(final Runnable action) {
+        if (SwingUtilities.isEventDispatchThread()) {
+            action.run();
+            return;
+        }
+        try {
+            SwingUtilities.invokeAndWait(action);
+        }
+        catch (final InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(exception);
+        }
+        catch (final InvocationTargetException exception) {
+            final Throwable cause = exception.getCause();
+            if (cause instanceof Error) {
+                throw (Error) cause;
+            }
+            if (cause instanceof RuntimeException) {
+                throw (RuntimeException) cause;
+            }
+            throw new AssertionError(cause);
+        }
+    }
+
+    private static KeyEvent dispatchKeyEvent(final GraphCanvas canvas, final int code,
+            final int modifiers) {
+        final KeyEvent[] result = new KeyEvent[1];
+        final Runnable dispatch = new Runnable() {
+            @Override
+            public void run() {
+                result[0] = key(canvas, code, modifiers);
+                canvas.dispatchEvent(result[0]);
+            }
+        };
+        invokeOnEdt(dispatch);
+        return result[0];
+    }
+
     private static void dispatchMousePressed(final GraphCanvas canvas, final int x, final int y) {
         final MouseEvent event = new MouseEvent(canvas, MouseEvent.MOUSE_PRESSED,
             System.currentTimeMillis(), 0, x, y, 1, false, MouseEvent.BUTTON1);
@@ -218,6 +434,14 @@ public class AccessibleGraphCanvasShould {
 
         private GraphIntent last() {
             return intents.get(intents.size() - 1);
+        }
+
+        private void clear() {
+            intents.clear();
+        }
+
+        private List<GraphIntent> intents() {
+            return intents;
         }
     }
 
@@ -253,6 +477,23 @@ public class AccessibleGraphCanvasShould {
             canvas.setSize(400, 300);
             canvas.setCanvasState(state);
             return canvas;
+        }
+
+        private CanvasState emptyState() {
+            final GraphProjection projection = GraphProjection.projected(state.generation() + 1L,
+                Collections.<ProjectedNode>emptyList(),
+                Collections.<ProjectedEnclosure>emptyList(),
+                Collections.<ProjectedEdge>emptyList(),
+                Collections.emptyList(),
+                Collections.<PinProjection>emptyList());
+            final GraphGeometry geometry = GraphGeometry.of(
+                Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(),
+                Collections.<EnclosureHullKey, HullGeometry>emptyMap());
+            final LayoutFrame frame = LayoutFrame.of(state.generation() + 1L,
+                LayoutPositions.of(Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(),
+                    Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false);
+            return CanvasState.of(state.generation() + 1L, projection, frame, geometry,
+                OperationalStatus.IDLE);
         }
 
         private List<ProjectedEndpointKey> visibleEndpointsSorted() {
