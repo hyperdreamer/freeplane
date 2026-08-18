@@ -57,12 +57,10 @@ public class GraphSearchModelShould {
     }
 
     @Test
-    public void excludeAnUnprojectedRawSourceSentinelWhileFindingProjectedSafeText() {
+    public void excludeAProjectedSourceIdentityWhileFindingProjectedSafeText() {
         final Fixture fixture = Fixture.create();
 
-        assertThat(fixture.state.projection().nodes()).extracting(ProjectedNode::key)
-            .doesNotContain(fixture.excludedSource.projectedNodeKey());
-        assertThat(GraphSearchModel.search(fixture.state, fixture.excludedSource.rawText()))
+        assertThat(GraphSearchModel.search(fixture.state, fixture.sourceIdentitySentinel))
             .isEmpty();
         assertThat(GraphSearchModel.search(fixture.state, "A very long safe label"))
             .containsExactly(fixture.nodeEndpoint);
@@ -73,7 +71,7 @@ public class GraphSearchModelShould {
         final Fixture fixture = Fixture.create();
 
         assertThat(GraphSearchModel.search(fixture.state, " \t\n")).isEmpty();
-        assertThat(GraphSearchModel.search(fixture.state, fixture.excludedSource.rawText()))
+        assertThat(GraphSearchModel.search(fixture.state, fixture.sourceIdentitySentinel))
             .isEmpty();
         assertThat(GraphSearchModel.search(fixture.state, "suppressed label")).isEmpty();
         assertThat(GraphSearchModel.tooltip(fixture.state, fixture.suppressedEndpoint)).isNull();
@@ -103,20 +101,20 @@ public class GraphSearchModelShould {
         private final ProjectedEndpointKey secondEnclosureEndpoint;
         private final ProjectedEndpointKey suppressedEndpoint;
         private final ProjectedNodeKey otherNodeKey;
-        private final SourceSideFixture excludedSource;
+        private final String sourceIdentitySentinel;
 
         private Fixture(CanvasState state, ProjectedEndpointKey nodeEndpoint,
                 ProjectedEndpointKey enclosureEndpoint,
                 ProjectedEndpointKey secondEnclosureEndpoint,
                 ProjectedEndpointKey suppressedEndpoint, ProjectedNodeKey otherNodeKey,
-                SourceSideFixture excludedSource) {
+                String sourceIdentitySentinel) {
             this.state = state;
             this.nodeEndpoint = nodeEndpoint;
             this.enclosureEndpoint = enclosureEndpoint;
             this.secondEnclosureEndpoint = secondEnclosureEndpoint;
             this.suppressedEndpoint = suppressedEndpoint;
             this.otherNodeKey = otherNodeKey;
-            this.excludedSource = excludedSource;
+            this.sourceIdentitySentinel = sourceIdentitySentinel;
         }
 
         private static Fixture create() {
@@ -139,11 +137,9 @@ public class GraphSearchModelShould {
             final EnclosureHullKey suppressedHullKey = EnclosureHullKey.of(
                 Collections.singletonList(suppressedKey));
 
-            final SourceSideFixture excludedSource = new SourceSideFixture(
-                SourceNodeKey.transientPath(north, Arrays.asList(99)),
-                "Raw excluded source sentinel");
             final ProjectedNode node = ProjectedNode.of(nodeKey,
                 SafeNodeLabel.of("A very long safe label", "A very..."), "North Map", false);
+            final String sourceIdentitySentinel = node.source().toString();
             final ProjectedEnclosure enclosure = ProjectedEnclosure.of(hullKey,
                 Arrays.asList(enclosureKey, secondEnclosureKey), Arrays.asList(
                     SafeNodeLabel.of("Enclosure Safe Label", "Enclosure"),
@@ -177,7 +173,7 @@ public class GraphSearchModelShould {
             return new Fixture(state, ProjectedEndpointKey.ofNode(nodeKey),
                 ProjectedEndpointKey.ofEnclosure(enclosureKey),
                 ProjectedEndpointKey.ofEnclosure(secondEnclosureKey),
-                ProjectedEndpointKey.ofEnclosure(suppressedKey), otherNodeKey, excludedSource);
+                ProjectedEndpointKey.ofEnclosure(suppressedKey), otherNodeKey, sourceIdentitySentinel);
         }
 
         private static Map<ProjectedNodeKey, LayoutPoint> nodeGeometryAsPoints(
@@ -191,21 +187,4 @@ public class GraphSearchModelShould {
         }
     }
 
-    private static final class SourceSideFixture {
-        private final SourceNodeKey key;
-        private final String rawText;
-
-        private SourceSideFixture(SourceNodeKey key, String rawText) {
-            this.key = key;
-            this.rawText = rawText;
-        }
-
-        private ProjectedNodeKey projectedNodeKey() {
-            return ProjectedNodeKey.of(key);
-        }
-
-        private String rawText() {
-            return rawText;
-        }
-    }
 }
