@@ -75,6 +75,16 @@ public class GraphInteractionControllerShould {
     }
 
     @Test
+    public void resolveFiniteExtremeSpanEdgesWithoutAcceptingAnOffSegmentPoint() {
+        final ExtremeSpanFixture fixture = ExtremeSpanFixture.create();
+        final GraphHitIndex index = GraphHitIndex.from(fixture.state);
+
+        assertThat(index.edgeAt(LayoutPoint.of(0.0, 0.0), 1.0))
+            .contains(fixture.edgeKey);
+        assertThat(index.edgeAt(LayoutPoint.of(0.0, 100.0), 1.0)).isEmpty();
+    }
+
+    @Test
     public void openAHitEndpointOnDoubleClickAndRejectSecondInstallation() {
         final Fixture fixture = Fixture.create();
         final GraphCanvas canvas = fixture.canvas();
@@ -432,6 +442,64 @@ public class GraphInteractionControllerShould {
             return new AnchorFixture(state, edgeKey, LayoutPoint.of(
                 (firstAttachment.x() + secondAttachment.x()) * 0.5,
                 (firstAttachment.y() + secondAttachment.y()) * 0.5));
+        }
+    }
+
+    private static final class ExtremeSpanFixture {
+        private final CanvasState state;
+        private final ProjectedEdgeKey edgeKey;
+
+        private ExtremeSpanFixture(CanvasState state, ProjectedEdgeKey edgeKey) {
+            this.state = state;
+            this.edgeKey = edgeKey;
+        }
+
+        private static ExtremeSpanFixture create() {
+            final MapReferenceId firstMap = MapReferenceId.of(
+                UUID.fromString("00000000-0000-0000-0000-000000000021"));
+            final MapReferenceId secondMap = MapReferenceId.of(
+                UUID.fromString("00000000-0000-0000-0000-000000000022"));
+            final NodeReference firstReference = NodeReference.of(firstMap,
+                PersistedNodeId.of("extreme-first"));
+            final NodeReference secondReference = NodeReference.of(secondMap,
+                PersistedNodeId.of("extreme-second"));
+            final ProjectedNodeKey first = ProjectedNodeKey.of(
+                SourceNodeKey.persisted(firstReference));
+            final ProjectedNodeKey second = ProjectedNodeKey.of(
+                SourceNodeKey.persisted(secondReference));
+            final ProjectedEndpointKey firstEndpoint = ProjectedEndpointKey.ofNode(first);
+            final ProjectedEndpointKey secondEndpoint = ProjectedEndpointKey.ofNode(second);
+            final ProjectedNode firstNode = ProjectedNode.of(first,
+                SafeNodeLabel.of("Extreme first", "Extreme first"), "Map", false);
+            final ProjectedNode secondNode = ProjectedNode.of(second,
+                SafeNodeLabel.of("Extreme second", "Extreme second"), "Map", false);
+            final GraphRelationshipRecord relationship = GraphRelationshipRecord.of(
+                RelationshipId.of(UUID.fromString("00000000-0000-0000-0000-000000000023")),
+                1L, firstReference, secondReference, RelationshipDirection.FORWARD,
+                Collections.emptyList());
+            final EdgeContributor contributor = EdgeContributor.graphRelationship(relationship,
+                firstEndpoint, secondEndpoint);
+            final ProjectedEdgeKey edgeKey = ProjectedEdgeKey.of(firstEndpoint, secondEndpoint);
+            final ProjectedEdge edge = ProjectedEdge.of(edgeKey,
+                Collections.singletonList(contributor));
+            final GraphProjection projection = GraphProjection.projected(1L,
+                Arrays.asList(firstNode, secondNode), Collections.emptyList(),
+                Collections.singletonList(edge), Collections.emptyList(), Collections.emptyList());
+
+            final Map<ProjectedNodeKey, NodeGeometry> nodes =
+                new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
+            nodes.put(first, NodeGeometry.of(LayoutPoint.of(-8.0e307, 0.0), 10.0));
+            nodes.put(second, NodeGeometry.of(LayoutPoint.of(8.0e307, 0.0), 10.0));
+            final GraphGeometry geometry = GraphGeometry.of(nodes,
+                Collections.<EnclosureHullKey, org.freeplane.plugin.graph.geometry.HullGeometry>emptyMap());
+            final Map<ProjectedNodeKey, LayoutPoint> positions =
+                new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+            positions.put(first, LayoutPoint.of(-8.0e307, 0.0));
+            positions.put(second, LayoutPoint.of(8.0e307, 0.0));
+            final LayoutFrame frame = LayoutFrame.of(1L,
+                LayoutPositions.of(positions, Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false);
+            return new ExtremeSpanFixture(CanvasState.of(1L, projection, frame, geometry,
+                OperationalStatus.IDLE), edgeKey);
         }
     }
 
