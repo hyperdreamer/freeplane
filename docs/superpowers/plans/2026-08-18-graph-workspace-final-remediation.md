@@ -17,8 +17,9 @@
 - Carried final-review findings are canonical IDs `FINAL-F2` and `FINAL-F4`; original task findings `F-1`, `F-2`, and `F-3` are fixed evidence and must remain fixed.
 - Change only the paths listed in the current task. Do not modify `freeplane_api`, GraphStream dependencies, `LayoutWorker.java`, translations, resources, launchers, or unrelated production code.
 - Do not add public OSGi/API exports or new graph command types. Existing public command signatures and normal workspace `GraphWorkspaceStore.execute(WorkspaceCommand)` behavior remain compatible.
-- Every cross-resource compensation operation must be atomic under its owning store/lifecycle lock, exact to the resource it published, retryable when incomplete, and fail closed when ownership cannot be proven.
-- All layout worker operations remain on the existing serialized lifecycle dispatcher; all Swing/canvas publication remains on the EDT; stale, superseded, paused, and closed runs must not issue physical work.
+- Every cross-resource compensation operation must be atomic under its owning store/lifecycle lock, exact to the resource it published, retryable when incomplete, and fail closed when ownership cannot be proven; history tokens must reject ABA, save, autosave, save-as, and document-replacement interpositions and preserve verified persisted bytes/envelopes.
+- Pending contributor recovery gates only new work initiated by `DefaultContributorDeletionHandler`; unrelated workspace commands remain allowed but invalidate the exact compensation token.
+- All layout worker operations remain on the existing serialized lifecycle dispatcher; all Swing/canvas publication remains on the EDT; stale, superseded, paused, and closed runs must not issue physical work; failed-publication restart requests must be deferred and revision-checked.
 - Before each task commit, assert an empty index, stage only that task's explicit allowlist, run `git diff --check`, and use an imperative subject beginning `2026-08-10-graph-workspace:`.
 - Do not stage or commit the generated `.codegraph/` directory or any controller artifacts outside the task allowlists.
 
@@ -30,7 +31,7 @@
 
 - Modify: `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/workspace/GraphWorkspaceStore.java:28-105,278-315`
 - Modify: `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/workspace/WorkspaceHistory.java:9-69`
-- Modify: `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/command/DefaultContributorDeletionHandler.java:275-445`
+- Modify: `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/command/DefaultContributorDeletionHandler.java:275-548`
 - Modify: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/workspace/GraphWorkspaceStoreShould.java`
 - Modify: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/workspace/WorkspaceHistoryShould.java`
 - Modify: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/command/ContributorDeletionPlanShould.java`
@@ -39,40 +40,43 @@
 
 - Consumes the existing `WorkspaceCommand`, `WorkspaceTransition`, `GraphCommandResult`, `WorkspaceDocument`, `GraphWorkspaceStore.execute(WorkspaceCommand)`, `GraphWorkspaceStore.undo()`, `DefaultContributorDeletionHandler`, and `FreeplaneMapCommandExecutor.ContributorDeletionTransaction` contracts.
 - Produces `public GraphWorkspaceStore.WorkspaceMutation executeWithCompensation(WorkspaceCommand command)`.
-- Produces `public static final class GraphWorkspaceStore.WorkspaceMutation` with `GraphCommandResult result()` and `GraphCommandResult compensateIfCurrent()`. It owns no exposed mutable document or history collection. `compensateIfCurrent()` returns an applied result only when the exact captured history entry is still current; otherwise it returns a deterministic rejected conflict result and leaves the current document/history unchanged. Repeated successful calls are idempotent.
-- Produces package-private `WorkspaceHistory.HistoryMutation executeWithToken(WorkspaceCommand command, WorkspaceDocument current)` and `WorkspaceTransition compensate(HistoryMutation mutation, WorkspaceDocument current)`. The token identifies entry identity, before/after documents, and the redo state that existed before publication. Existing `execute`, `undo`, `redo`, `canUndo`, `canRedo`, and `clear` behavior remains unchanged for normal callers.
+- Produces `public static final class GraphWorkspaceStore.WorkspaceMutation` with `GraphCommandResult result()` and `GraphCommandResult compensateIfCurrent()`. It owns no exposed mutable document or history collection. The opaque token includes entry identity, a monotonic history/store revision, redo-stack identity, workspace file identity, dirty/debounce/save generation, and before/after persisted-byte evidence. `compensateIfCurrent()` returns an applied result only when the full token matches; command -> undo/redo, save, save-as, autosave, and document replacement ABA states are rejected or safely restored with verified bytes. Repeated successful calls are idempotent and transient write failures remain retryable.
+- Produces package-private `WorkspaceHistory.HistoryMutation executeWithToken(WorkspaceCommand command, WorkspaceDocument current)` and `WorkspaceTransition compensate(HistoryMutation mutation, WorkspaceDocument current)`. The token identifies entry identity, monotonic revision, before/after documents, redo-stack identity and contents, and the persistence envelope. Conditional compensation cannot be satisfied by equal documents alone. Existing `execute`, `undo`, `redo`, `canUndo`, `canRedo`, and `clear` behavior remains unchanged for normal callers.
 - `DefaultContributorDeletionHandler` consumes the new mutation handle for the mixed `WorkspaceCommands.purgeRelationships(Set<RelationshipId>)` call. Its existing `PendingRecovery` retains unresolved native and workspace resources independently; workspace recovery invokes the exact mutation handle, native recovery invokes the transaction, and the handle is cleared only after both resources report complete.
 
-**Step 1: Write falsifiable failing tests first.**
+**Step 1: Establish a parent-compiling behavioral RED test first.**
 
-- Add a `WorkspaceHistoryShould` test that executes a purge-like command, retains its `HistoryMutation`, applies an unrelated second command, and proves `compensate` rejects without popping the unrelated command or changing the current document.
+- Before referencing any new method, add a `WorkspaceHistoryShould` test using only the existing `execute`, `undo`, and `redo` methods. Execute a purge-like command, execute an unrelated applied command, call generic `undo`, and assert the purge state remains while the unrelated command is undone. The current implementation must fail this assertion because generic undo targets the global head. This is the required behavioral red evidence; a missing-symbol compilation failure is not acceptable.
+- Add a second parent-compiling history test for command -> undo -> redo ABA ordering and record the exact observed failure.
+
+**Step 2: Add the desired contract tests and run RED.**
+
+- Add a `WorkspaceHistoryShould` token test that applies an unrelated command, undo/redo interposition, and proves `compensate` rejects without popping the unrelated command or changing the current document.
 - Add a matching-token history test that compensates exactly once, removes only the target entry, restores the prior redo stack, and preserves the existing envelope rules used by undo/redo.
-- Add a `GraphWorkspaceStoreShould` real-store test that uses `executeWithCompensation`, interposes an applied command, and proves `compensateIfCurrent()` returns a conflict while the interposed document remains current.
-- Add a handler regression that makes native commit fail after the purge, interposes an unrelated workspace command before compensation, and asserts the handler returns `undo_incomplete`, retains the exact mutation handle, and does not consume the unrelated command on later recovery.
-- Keep the existing successful mixed path and round-3 resource-aware retry tests as regression coverage.
-
-**Step 2: Run RED and verify the failure mechanism.**
+- Add a `GraphWorkspaceStoreShould` real-store test for `executeWithCompensation`, clean/dirty autosave state, save-as/document replacement, persisted bytes, and interposed command conflict.
+- Add a handler regression with a deterministic real-store/fake-transaction seam that makes native commit fail after purge, interposes an unrelated workspace command, and asserts exact compensation is retained without consuming the unrelated command. Include both initial workspace-first recovery ordering and later pending recovery ordering.
+- Run the parent-compiling behavioral tests first and then the full desired focused set. The first command must show behavioral assertion failures, not missing-symbol errors; fixture errors must be corrected before production edits.
 
 Run:
 
 ```bash
-JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.8-zulu" PATH="$JAVA_HOME/bin:$PATH" gradle :freeplane_plugin_graph:test --tests '*WorkspaceHistoryShould' --tests '*GraphWorkspaceStoreShould' --tests '*ContributorDeletionPlanShould' -PTestLoggingFull
+JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.8-zulu" PATH="$JAVA_HOME/bin:$PATH" gradle :freeplane_plugin_graph:test --tests '*WorkspaceHistoryShould' --tests '*GraphWorkspaceStoreShould' --tests '*ContributorDeletionPlanShould' -PTestLoggingFull --rerun-tasks
 ```
 
-The new tests must fail because no token-bound compensation exists or because the handler still calls generic global undo. Correct fixture/setup errors until the failure is behavioral and specifically demonstrates unrelated-history consumption or missing exact recovery ownership.
+The parent-compiling tests must fail because generic global undo consumes the current history head and ABA/save interposition is not guarded. The new contract tests may initially require the new package-private seam, but the recorded red evidence must include the behavioral parent failure before implementation.
 
 **Step 3: Implement token-bound history without changing normal undo/redo.**
 
 - Replace document-only internal undo entries with immutable identity-bearing history entries while retaining the existing public normal-history methods.
-- Implement `executeWithToken` so an applied command captures the before document, after document, prior redo stack, and entry identity before normal publication clears redo.
-- Implement `compensate` to require the exact entry at the undo head and an equal current after document. On success, remove only that entry, restore the captured redo state and current document envelope, and return an applied compensation result. On mismatch, return a rejected conflict result without mutation.
+- Implement `executeWithToken` so an applied command captures the before document, after document, prior redo stack identity/contents, entry identity, monotonic state revision, file identity, dirty/debounce/save generation, and before/after persisted bytes before normal publication clears redo.
+- Implement `compensate` to require the exact entry identity/revision, redo identity, current after document, file identity, and expected current bytes. On success, remove only that entry, restore the captured redo and persistence envelope, synchronously rewrite/verify captured before bytes when the file was persisted, and return an applied compensation result. On command/undo/redo/save/save-as/document mismatch or write failure, return a rejected conflict/incomplete result without claiming recovery.
 - Keep no-op/rejected/read-only commands uncompensatable and preserve normal `undo()`/`redo()` result keys and envelope behavior.
 
 **Step 4: Add the store-owned compensation handle and wire the handler.**
 
 - Implement `GraphWorkspaceStore.executeWithCompensation` using the same monitor, read-only checks, transition installation, dirty/autosave/event semantics, and `WorkspaceHistory.executeWithToken` path as normal execution.
 - Change only the mixed contributor deletion path to use the new mutation handle for its one purge command. Do not call generic `store.undo()` for compensation.
-- Extend `PendingRecovery` to retain the mutation handle and independently track native/workspace unresolved resources. Retry the exact workspace mutation first, then native transaction recovery, and retain any resource still incomplete. Block new projection/native/store work while pending recovery remains.
+- Extend `PendingRecovery` to retain the mutation handle and independently track native/workspace unresolved resources. On both initial failure handling and later pending retries, attempt exact workspace compensation first, then native transaction recovery, and retain any resource still incomplete. The handler-local pending gate blocks only this handler's new projection/native/store work; unrelated workspace commands remain allowed but make the exact token conflict.
 - Return `graph_workspace.contributor.undo_incomplete` with current resource and dirty-map/editor metadata whenever exact compensation cannot be proven. Clear the handle only after exact compensation succeeds for every resource.
 
 **Step 5: Run GREEN and compatibility verification.**
@@ -80,15 +84,15 @@ The new tests must fail because no token-bound compensation exists or because th
 Run:
 
 ```bash
-JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.8-zulu" PATH="$JAVA_HOME/bin:$PATH" gradle :freeplane_plugin_graph:test --tests '*WorkspaceHistoryShould' --tests '*GraphWorkspaceStoreShould' --tests '*ContributorDeletionPlanShould' -PTestLoggingFull
-JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.8-zulu" PATH="$JAVA_HOME/bin:$PATH" gradle :freeplane_plugin_graph:test --tests '*FreeplaneMapCommandExecutorShould' --tests '*GraphCommandRouterShould' --tests '*WorkspaceMapCoordinatorShould' --tests '*DefaultPurgeCommandHandlerShould' -PTestLoggingFull
+JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.8-zulu" PATH="$JAVA_HOME/bin:$PATH" gradle :freeplane_plugin_graph:test --tests '*WorkspaceHistoryShould' --tests '*GraphWorkspaceStoreShould' --tests '*ContributorDeletionPlanShould' -PTestLoggingFull --rerun-tasks
+JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.8-zulu" PATH="$JAVA_HOME/bin:$PATH" gradle :freeplane_plugin_graph:test --tests '*FreeplaneMapCommandExecutorShould' --tests '*GraphCommandRouterShould' --tests '*WorkspaceMapCoordinatorShould' --tests '*DefaultPurgeCommandHandlerShould' -PTestLoggingFull --rerun-tasks
 ```
 
-Assert the real-store interposition test fails against the pre-fix parent and passes now, normal workspace undo/redo tests remain green, native Task 32 transaction tests remain green, and no generic compensation call remains in the handler.
+Assert the real-store interposition, command -> undo/redo ABA, clean/dirty persistence, and save-as tests fail against the pre-fix parent and pass now. Record JUnit XML failure/error totals, confirm normal workspace undo/redo and native Task 32 transaction tests remain green, and confirm no generic compensation call remains in the handler.
 
 **Step 6: Verify exact scope and commit.**
 
-Assert the index is empty, stage exactly the six listed paths, compare sorted staged names to that allowlist, run `git diff --check`, and commit:
+Assert the index is empty, stage exactly the six listed paths, compare sorted staged names to that allowlist, run both `git diff --cached --check` and `git diff --check`, inspect JUnit XML totals, and commit:
 
 ```bash
 git commit -m "2026-08-10-graph-workspace: Make purge compensation conditional"
@@ -104,19 +108,21 @@ The report must include RED/GREEN evidence, exact-history conflict and successfu
 
 - Modify: `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/control/LayoutSettleLoop.java:165-190,297-349,530-611, Run state`
 - Modify: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/control/LayoutSettleLoopShould.java`
+- Modify: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/control/GraphUpdateCoordinatorShould.java`
 - Modify: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/command/GraphCommandRouterShould.java`
 
 **Interfaces:**
 
 - Consumes the existing `LayoutSettleLoop.start`, `pause`, `restart`, `close`, `FrameStepper.restart`, `FrameStepper.submit`, `FrameStepper.step`, `CanvasState`, `OperationalStatus`, `LayoutFrame`, `GraphCommandRouter.execute(GraphCommand)`, and `GraphUpdateCoordinator.restartLayout()` contracts.
 - Preserves the public `LayoutSettleLoop` API and produces no new command type. The internal `Run` gains only state needed to distinguish a failed-but-restartable current request from terminal/superseded/closed state.
-- A restart of a failed current run calls `FrameStepper.restart()` once and then submits the retained immutable `LayoutRequest`; it never advances with `step()` until a replacement submit has succeeded.
+- A restart of a failed current run calls `FrameStepper.restart()` once and then submits the retained immutable `LayoutRequest`; it never advances with `step()` until a replacement submit has succeeded. A restart invoked while failed publication is in flight records a deferred recovery claim and is handed off only after publication releases its claim.
 
 **Step 1: Write the failed-frame restart regression first.**
 
 - Add a deterministic `LayoutSettleLoopShould` fixture whose first submit returns a failed frame, whose second submit returns an idle frame, and whose lifecycle dispatcher runs synchronously under test control.
 - Assert the first publication is `OperationalStatus.FAILED`, the settlement future completes without detaching the current run, `restart()` calls the worker restart and a second submit, and the recovered publication is the same accepted generation with `OperationalStatus.IDLE`.
-- Add a command-path assertion in `GraphCommandRouterShould` that the Restart Layout command reaches the coordinator and returns the existing applied result while the loop recovers.
+- Add an EDT-listener regression that invokes a second restart during failed-state delivery, asserts the first claim is released, the newest revision owns exactly one replacement submit, and no stale operation runs.
+- Add reset-wins and close-wins tests for a deferred failed-recovery claim. Add the live coordinator assertion in `GraphUpdateCoordinatorShould`; keep the mocked public delegation/result assertion in `GraphCommandRouterShould`.
 
 **Step 2: Run RED and verify the terminal-run cause.**
 
@@ -126,36 +132,36 @@ Run:
 JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.8-zulu" PATH="$JAVA_HOME/bin:$PATH" gradle :freeplane_plugin_graph:test --tests '*LayoutSettleLoopShould' --tests '*GraphCommandRouterShould' -PTestLoggingFull
 ```
 
-The new failed-frame -> restart test must fail because the current failed publication terminalizes the run and produces no second submit. Fix only test fixture errors before production edits.
+The new failed-frame -> restart and reentrant-listener tests must fail because the current failed publication terminalizes the run, holds the publication claim, and produces no second submit. Fix only test fixture errors before production edits.
 
 **Step 3: Keep failed runs restartable and resubmit after worker restart.**
 
-- Mark the current run failed/restartable before publishing its failed state. When the failed publication completes, complete the settlement future but do not call `terminalizeLocked` or detach `currentRun` solely because the failed frame is idle.
-- Make `restart()` claim one recovery frame for a failed current run even though its prior settlement future is complete. Preserve all token/control-revision checks and release claims for stale/superseded/closed runs.
+- Mark the current run failed/restartable before publishing its failed state. When the failed publication completes, complete the settlement future after releasing `monitor` but do not call `terminalizeLocked` or detach `currentRun` solely because the failed frame is idle.
+- Make `restart()` claim one recovery frame for a failed current run even though its prior settlement future is complete. If publication is still in flight, set a deferred recovery flag and do not call the worker; publication completion consumes the newest control revision and claims the recovery frame exactly once. Preserve all token/control-revision checks and release claims for stale/superseded/closed runs.
 - In the lifecycle queue, call `FrameStepper.restart()` first. If the run has a failed or unsubmitted request, call `submitClaimed` with the retained request; otherwise preserve normal step behavior. Clear the failed marker only after a successful non-failed frame is handled.
-- If restart or replacement submit fails, retain a restartable failed state without issuing a stale follow-up operation. Existing pause/reset/close and lifecycle serialization invariants remain unchanged.
+- If restart or replacement submit fails, retain a restartable failed state without issuing a stale follow-up operation. Reset, newer start, and close cancel deferred recovery and release claims. Existing pause/reset/close and lifecycle serialization invariants remain unchanged.
 
 **Step 4: Add lifecycle edge tests and mutation proof.**
 
 - Test restart failure leaves the run failed and permits a later retry without duplicate submissions.
-- Test reset or close superseding a failed-run restart prevents the obsolete submit and releases its claim.
-- Mutate only the new failed-run restart branch to skip replacement submit; the direct regression test must fail. Restore the inverse byte-for-byte and verify the production hash.
+- Test a second restart reentrant from the failed EDT listener, reset superseding deferred recovery, and close superseding deferred recovery; each must release stale claims and prevent obsolete submit.
+- Mutate only the new failed-run restart branch to skip replacement submit; the direct regression test must fail. Restore the inverse byte-for-byte, verify the production hash, and retain the JUnit XML failure/error totals.
 
 **Step 5: Run focused and full verification.**
 
 Run:
 
 ```bash
-JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.8-zulu" PATH="$JAVA_HOME/bin:$PATH" gradle :freeplane_plugin_graph:test --tests '*LayoutSettleLoopShould' --tests '*GraphCommandRouterShould' -PTestLoggingFull
-JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.8-zulu" PATH="$JAVA_HOME/bin:$PATH" gradle :freeplane_plugin_graph:test --tests '*LayoutWorkerShould' --tests '*GraphUpdateCoordinatorShould' -PTestLoggingFull
-JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.8-zulu" PATH="$JAVA_HOME/bin:$PATH" gradle :freeplane_plugin_graph:test -PTestLoggingFull
+JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.8-zulu" PATH="$JAVA_HOME/bin:$PATH" gradle :freeplane_plugin_graph:test --tests '*LayoutSettleLoopShould' --tests '*GraphCommandRouterShould' --tests '*GraphUpdateCoordinatorShould' -PTestLoggingFull --rerun-tasks
+JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.8-zulu" PATH="$JAVA_HOME/bin:$PATH" gradle :freeplane_plugin_graph:test --tests '*LayoutWorkerShould' --tests '*GraphUpdateCoordinatorShould' -PTestLoggingFull --rerun-tasks
+JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.8-zulu" PATH="$JAVA_HOME/bin:$PATH" gradle :freeplane_plugin_graph:test -PTestLoggingFull --rerun-tasks
 ```
 
-Confirm the full graph-plugin suite is fresh and green, the failed-run restart probe is mutation-sensitive, and `git diff --check` passes.
+Confirm the full graph-plugin suite is fresh and green, record JUnit XML failure/error totals, the failed-run restart probe is mutation-sensitive, and `git diff --check` passes.
 
 **Step 6: Verify exact scope and commit.**
 
-Assert an empty index, stage exactly the three listed paths, compare sorted staged names to that allowlist, run `git diff --check`, and commit:
+Assert an empty index, stage exactly the four listed paths, compare sorted staged names to that allowlist, run both `git diff --cached --check` and `git diff --check`, inspect JUnit XML totals, and commit:
 
 ```bash
 git commit -m "2026-08-10-graph-workspace: Recover failed layout restart"
