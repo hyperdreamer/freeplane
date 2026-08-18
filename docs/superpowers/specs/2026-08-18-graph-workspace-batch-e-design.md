@@ -26,6 +26,60 @@ change `freeplane_api`, expose GraphStream types, change source-map ownership,
 or add a second sizing, search, geometry, or accessibility model. Existing
 unrelated work in the checkout is preserved.
 
+## Task Contracts And Allowlists
+
+The backlog's `Interfaces` blocks are normative for exact Java signatures. The
+implementation paths are limited to these lists:
+
+- **Task 25:** Create `GraphCanvas.java`, `GraphPainter.java`,
+  `GraphViewport.java`, `GraphTheme.java`, `RenderingLevel.java`,
+  `AdaptiveRenderingPolicy.java`, and `GraphPaintState.java`; create
+  `GraphViewportShould.java`, `GraphCanvasPaintShould.java`, and
+  `AdaptiveRenderingPolicyShould.java`.
+- **Task 26:** Create `InteractionTool.java`, `GraphHitIndex.java`,
+  `GraphIntent.java`, `GraphInteractionListener.java`, `GraphSearchModel.java`,
+  and `GraphInteractionController.java`; modify `GraphCanvas.java` and
+  `GraphPaintState.java`; create `GraphInteractionControllerShould.java` and
+  `GraphSearchModelShould.java`.
+- **Task 27:** Create `TraversalDirection.java`, `GraphTraversalOrder.java`,
+  and `AccessibleGraphCanvas.java`; modify `GraphCanvas.java` and
+  `GraphInteractionController.java`; create
+  `AccessibleGraphCanvasShould.java`.
+
+The required public contracts are:
+
+```java
+public final class GraphCanvas extends JComponent {
+    public void setCanvasState(CanvasState state); public void setPaintState(GraphPaintState state);
+    public void setViewport(GraphViewport viewport); public GraphViewport viewport(); public void fitGraph(); public void resetZoom();
+}
+public final class GraphViewport {
+    public static GraphViewport of(double centerX, double centerY, double zoom);
+    public static GraphViewport from(Viewport persisted);
+    public double centerX(); public double centerY(); public double zoom();
+    public Viewport toPersisted();
+    public boolean overlaps(double minX, double minY, double maxX, double maxY, Dimension size);
+}
+public interface GraphInteractionListener { void onGraphIntent(GraphIntent intent); }
+public final class GraphInteractionController {
+    public void install(GraphCanvas canvas); public void uninstall();
+    public void setTool(InteractionTool tool);
+    public void setRelationshipDirection(RelationshipDirection direction);
+}
+public enum TraversalDirection { UP, DOWN, LEFT, RIGHT }
+public final class GraphTraversalOrder {
+    public List<ProjectedEndpointKey> tabOrder(CanvasState state);
+    public Optional<ProjectedEndpointKey> nearest(CanvasState state,
+        ProjectedEndpointKey from, TraversalDirection direction);
+}
+```
+
+`GraphIntent` exposes exactly the backlog's concrete nested types:
+`OpenSourceNode`, `Pin`, `Unpin`, `UnpinAll`, `Connect`, `InspectEdge`,
+`DeleteContributor`, `DeleteAllContributors`, and `ChangeSelection`. Connection
+preview and Escape-cancel are transient controller/paint-state changes, not
+additional intent types; a completed gesture emits `Connect`.
+
 ## Architecture
 
 ### Existing Immutable Inputs
@@ -57,10 +111,12 @@ levels from projected node and edge counts. Counts above 2,000 nodes or 5,000
 edges produce a warning/detail reduction but do not disable editing or remove
 content from the projection.
 
-`GraphPainter` remains package-private. It paints to a normal `JComponent` or
-an offscreen `BufferedImage` in a stable order: enclosures and labels, projected
-edges and direction/multiplicity cues, projected nodes, then transient states
-and labels. Node and enclosure shapes, attachment points, and bounds come from
+`GraphCanvas` is a full-bleed component in the workspace view. `GraphPainter`
+paints only the on-screen Swing component or an offscreen test image; it has no
+print or export API. It paints to a normal `JComponent` or an offscreen
+`BufferedImage` in a stable order: enclosures and labels, projected edges and
+direction/multiplicity cues, projected nodes, then transient states and labels.
+Node and enclosure shapes, attachment points, and bounds come from
 `GraphGeometry`, so prominence-scaled bounds are the same bounds later used by
 hit testing and accessibility. Rendering levels suppress only optional detail;
 selected, hovered, and matched labels remain visible as required by the task.
@@ -82,8 +138,10 @@ edges where the task contract requires inspection.
 maintains only transient interaction state, and emits `GraphIntent` values to
 registered `GraphInteractionListener` instances. It supports source opening,
 pinning and unpinning, connection preview/cancel/commit, edge inspection and
-deletion requests, and selection changes. It never executes commands or mutates
-the workspace store, map models, or coordinator.
+deletion requests, and selection changes. Preview and Escape-cancel update
+transient paint/controller state only; the completed connection gesture emits
+`GraphIntent.Connect`. The controller never executes commands or mutates the
+workspace store, map models, or coordinator.
 
 Pointer zoom is centered on the pointer. Empty-canvas dragging pans. When no
 endpoint is selected, unmodified arrow keys pan; selected unmodified arrows are
@@ -127,8 +185,9 @@ color alone is never the only carrier of map identity or state.
 2. `GraphCanvas` replaces its current state and repaints on the EDT.
 3. `GraphPainter`, `GraphHitIndex`, traversal, and accessibility read the same
    immutable projection, layout, and geometry snapshot.
-4. User input changes only transient `GraphPaintState` or controller state and
-   produces immutable `GraphIntent` notifications.
+4. User input changes only transient `GraphPaintState`, viewport, or
+   controller state. Viewport changes remain local view updates; semantic
+   actions produce immutable `GraphIntent` notifications.
 5. Higher-level command routing, workspace history, source-map actors, and
    layout control remain outside the canvas package.
 
