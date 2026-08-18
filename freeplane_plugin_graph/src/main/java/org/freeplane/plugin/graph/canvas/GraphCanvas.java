@@ -3,6 +3,7 @@ package org.freeplane.plugin.graph.canvas;
 import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.Point;
 import java.awt.geom.Point2D;
 import java.lang.reflect.InvocationTargetException;
 import java.util.HashSet;
@@ -15,6 +16,7 @@ import javax.swing.SwingUtilities;
 import org.freeplane.plugin.graph.control.CanvasState;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.HullGeometry;
+import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.NodeGeometry;
 import org.freeplane.plugin.graph.projection.BoundaryTier;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
@@ -131,6 +133,41 @@ public final class GraphCanvas extends JComponent {
 
     GraphPaintState paintState() {
         return paintState;
+    }
+
+    GraphHitIndex hitIndex() {
+        final CanvasState state = canvasState;
+        return state == null ? GraphHitIndex.empty() : GraphHitIndex.from(state);
+    }
+
+    LayoutPoint worldAt(final Point point) {
+        return viewport.toWorld(Objects.requireNonNull(point, "point"),
+            new Dimension(getWidth(), getHeight()));
+    }
+
+    void updateTooltip(final org.freeplane.plugin.graph.projection.ProjectedEndpointKey endpoint) {
+        final CanvasState state = canvasState;
+        final String text = state == null || endpoint == null
+            ? null : GraphSearchModel.tooltip(state, endpoint);
+        onEdt(new Runnable() {
+            @Override
+            public void run() {
+                setToolTipText(text);
+            }
+        });
+    }
+
+    void resetInteractionCursor() {
+        onEdt(new Runnable() {
+            @Override
+            public void run() {
+                setCursor(java.awt.Cursor.getDefaultCursor());
+            }
+        });
+    }
+
+    void repaintCanvas() {
+        repaint();
     }
 
     public void setTheme(final GraphTheme value) {

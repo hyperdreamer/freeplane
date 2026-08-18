@@ -46,6 +46,30 @@ public final class GraphPaintState {
         return new GraphPaintState(selection, hover, matches, connectionPreview, dimUnrelated);
     }
 
+    GraphPaintState withConnectionPreview(final ConnectionPreview preview) {
+        return new GraphPaintState(selection, hover, searchMatches,
+            Optional.of(Objects.requireNonNull(preview, "preview")), dimUnrelated);
+    }
+
+    GraphPaintState withoutConnectionPreview() {
+        return new GraphPaintState(selection, hover, searchMatches,
+            Optional.<ConnectionPreview>empty(), dimUnrelated);
+    }
+
+    GraphPaintState withDimUnrelated(final boolean dim) {
+        return new GraphPaintState(selection, hover, searchMatches, connectionPreview, dim);
+    }
+
+    GraphPaintState withoutSelection() {
+        return new GraphPaintState(Optional.<ProjectedEndpointKey>empty(), hover, searchMatches,
+            connectionPreview, dimUnrelated);
+    }
+
+    GraphPaintState withoutHover() {
+        return new GraphPaintState(selection, Optional.<ProjectedEndpointKey>empty(), searchMatches,
+            connectionPreview, dimUnrelated);
+    }
+
     public Optional<ProjectedEndpointKey> selection() {
         return selection;
     }
@@ -80,8 +104,8 @@ public final class GraphPaintState {
         private final LayoutPoint to;
 
         private ConnectionPreview(final LayoutPoint from, final LayoutPoint to) {
-            this.from = Objects.requireNonNull(from, "from");
-            this.to = Objects.requireNonNull(to, "to");
+            this.from = requireFinitePoint(from, "from");
+            this.to = requireFinitePoint(to, "to");
         }
 
         static ConnectionPreview of(final LayoutPoint from, final LayoutPoint to) {
@@ -94,6 +118,14 @@ public final class GraphPaintState {
 
         LayoutPoint to() {
             return to;
+        }
+
+        private static LayoutPoint requireFinitePoint(final LayoutPoint point, final String name) {
+            final LayoutPoint value = Objects.requireNonNull(point, name);
+            if (!Double.isFinite(value.x()) || !Double.isFinite(value.y())) {
+                throw new IllegalArgumentException(name + " must be finite");
+            }
+            return value;
         }
     }
 }
