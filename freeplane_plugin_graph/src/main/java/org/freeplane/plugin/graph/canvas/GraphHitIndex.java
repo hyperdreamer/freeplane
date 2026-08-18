@@ -1,6 +1,5 @@
 package org.freeplane.plugin.graph.canvas;
 
-import java.awt.geom.Line2D;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -111,24 +110,50 @@ final class GraphHitIndex {
         if (!Double.isFinite(worldTolerance) || worldTolerance < 0.0) {
             throw new IllegalArgumentException("worldTolerance must be finite and non-negative");
         }
-        final double toleranceSquared = worldTolerance > Math.sqrt(Double.MAX_VALUE)
-            ? Double.POSITIVE_INFINITY : worldTolerance * worldTolerance;
-        double bestDistanceSquared = Double.POSITIVE_INFINITY;
+        double bestDistance = Double.POSITIVE_INFINITY;
         ProjectedEdgeKey best = null;
         for (final EdgeEntry edge : edges) {
-            final double distanceSquared = Line2D.ptSegDistSq(edge.first.x(), edge.first.y(),
-                edge.second.x(), edge.second.y(), point.x(), point.y());
-            if (distanceSquared > toleranceSquared) {
+            final double distance = pointToSegmentDistance(point, edge.first, edge.second);
+            if (!Double.isFinite(distance) || distance > worldTolerance) {
                 continue;
             }
-            if (best == null || distanceSquared < bestDistanceSquared
-                    || (Double.compare(distanceSquared, bestDistanceSquared) == 0
+            if (best == null || distance < bestDistance
+                    || (Double.compare(distance, bestDistance) == 0
                         && edge.key.compareTo(best) < 0)) {
                 best = edge.key;
-                bestDistanceSquared = distanceSquared;
+                bestDistance = distance;
             }
         }
         return best == null ? Optional.<ProjectedEdgeKey>empty() : Optional.of(best);
+    }
+
+    private static double pointToSegmentDistance(final LayoutPoint point,
+            final LayoutPoint first, final LayoutPoint second) {
+        final double scale = Math.max(Math.max(Math.abs(first.x()), Math.abs(first.y())),
+            Math.max(Math.max(Math.abs(second.x()), Math.abs(second.y())),
+                Math.max(Math.abs(point.x()), Math.abs(point.y()))));
+        if (scale == 0.0) {
+            return 0.0;
+        }
+        final double firstX = first.x() / scale;
+        final double firstY = first.y() / scale;
+        final double secondX = second.x() / scale;
+        final double secondY = second.y() / scale;
+        final double pointX = point.x() / scale;
+        final double pointY = point.y() / scale;
+        final double deltaX = secondX - firstX;
+        final double deltaY = secondY - firstY;
+        final double offsetX = pointX - firstX;
+        final double offsetY = pointY - firstY;
+        final double lengthSquared = deltaX * deltaX + deltaY * deltaY;
+        if (lengthSquared == 0.0) {
+            return scale * Math.hypot(offsetX, offsetY);
+        }
+        final double projection = (offsetX * deltaX + offsetY * deltaY) / lengthSquared;
+        final double position = Math.max(0.0, Math.min(1.0, projection));
+        final double closestX = firstX + position * deltaX;
+        final double closestY = firstY + position * deltaY;
+        return scale * Math.hypot(pointX - closestX, pointY - closestY);
     }
 
     private static ProjectedEndpointKey matchingEndpoint(final List<EndpointEntry> entries,
