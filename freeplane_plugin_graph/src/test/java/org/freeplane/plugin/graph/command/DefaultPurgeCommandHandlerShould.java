@@ -19,17 +19,27 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import org.freeplane.plugin.graph.adapter.EdtExecutor;
+import org.freeplane.plugin.graph.control.AcceptedBatch;
+import org.freeplane.plugin.graph.control.CanvasState;
+import org.freeplane.plugin.graph.control.ChangeKind;
 import org.freeplane.plugin.graph.control.GraphUpdateCoordinator;
+import org.freeplane.plugin.graph.control.LayoutSettleLoop;
+import org.freeplane.plugin.graph.control.OperationalStatus;
+import org.freeplane.plugin.graph.control.WorkspaceMapCoordinator;
 import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
+import org.freeplane.plugin.graph.projection.ProjectionEngine;
 import org.freeplane.plugin.graph.projection.RecoverableReason;
 import org.freeplane.plugin.graph.projection.RelationshipResolution;
 import org.freeplane.plugin.graph.projection.RelationshipStatus;
+import org.freeplane.plugin.graph.projection.input.ProjectionInput;
 import org.freeplane.plugin.graph.projection.input.SourceNodeKey;
 import org.freeplane.plugin.graph.workspace.AtomicWorkspaceWriter;
 import org.freeplane.plugin.graph.workspace.GraphCommandResult;
@@ -137,6 +147,52 @@ public class DefaultPurgeCommandHandlerShould {
     }
 
     @Test
+    public void rejectsWhenARealCoordinatorReportsARebuildFailure() throws Exception {
+        WorkspaceMapCoordinator maps = mock(WorkspaceMapCoordinator.class);
+        ProjectionEngine engine = mock(ProjectionEngine.class);
+        LayoutSettleLoop loop = mock(LayoutSettleLoop.class);
+        when(maps.capture(any(AcceptedBatch.class))).thenReturn(mock(ProjectionInput.class));
+        when(engine.project(any(ProjectionInput.class))).thenReturn(projection(1L, missing(MISSING_ONE)))
+            .thenThrow(new IllegalStateException("rebuild failure"));
+
+        GraphUpdateCoordinator updates = new GraphUpdateCoordinator(maps, engine, loop);
+        GraphWorkspaceStore store = mock(GraphWorkspaceStore.class);
+        WorkspaceDocument document = document(record(MISSING_ONE, 1L));
+        when(store.currentDocument()).thenReturn(document);
+        when(store.execute(any(WorkspaceCommand.class))).thenReturn(
+            GraphCommandResult.from(WorkspaceTransition.applied(document, "test.purged")));
+        RecordingEdt edt = new RecordingEdt();
+        DefaultPurgeCommandHandler handler = new DefaultPurgeCommandHandler(updates, store, edt);
+        CountDownLatch failed = new CountDownLatch(1);
+        updates.addProjectionListener(value -> {
+            if (value.generation() == 1L) {
+                updates.requestRebuild(ChangeKind.MAP_STATE);
+            }
+        });
+        updates.addCanvasStateListener(state -> {
+            if (state.status() == OperationalStatus.FAILED) {
+                failed.countDown();
+            }
+        });
+
+        try {
+            updates.start();
+            assertThat(failed.await(5L, TimeUnit.SECONDS)).isTrue();
+            assertThat(updates.currentProjection().generation()).isEqualTo(1L);
+            assertThat(updates.currentState().status()).isEqualTo(OperationalStatus.FAILED);
+
+            GraphCommandResult result = handler.purge(GraphCommands.purge(1L,
+                Collections.singleton(MISSING_ONE)));
+
+            assertRejected(result);
+            verify(store, never()).execute(any(WorkspaceCommand.class));
+        }
+        finally {
+            updates.close();
+        }
+    }
+
+    @Test
     public void rejectsWhenARequestedRelationshipHasNoCurrentRecord() {
         Fixture fixture = fixture(projection(7L, missing(MISSING_ONE)), false);
 
@@ -209,6 +265,8 @@ public class DefaultPurgeCommandHandlerShould {
 
             GraphUpdateCoordinator updates = mock(GraphUpdateCoordinator.class);
             when(updates.currentProjection()).thenReturn(projection(11L, missing(MISSING_ONE), missing(MISSING_TWO)));
+            CanvasState state = availableState();
+            when(updates.currentState()).thenReturn(state);
             when(updates.hasPendingChanges()).thenReturn(false);
             RecordingEdt edt = new RecordingEdt();
             DefaultPurgeCommandHandler handler = new DefaultPurgeCommandHandler(updates, store, edt);
@@ -250,8 +308,16 @@ public class DefaultPurgeCommandHandlerShould {
         when(store.execute(any(WorkspaceCommand.class))).thenReturn(
             GraphCommandResult.from(WorkspaceTransition.applied(document, "test.purged")));
         when(updates.currentProjection()).thenReturn(projection);
+        CanvasState state = availableState();
+        when(updates.currentState()).thenReturn(state);
         when(updates.hasPendingChanges()).thenReturn(pending);
         return new Fixture(new DefaultPurgeCommandHandler(updates, store, edt), updates, store, edt);
+    }
+
+    private static CanvasState availableState() {
+        CanvasState state = mock(CanvasState.class);
+        when(state.status()).thenReturn(OperationalStatus.IDLE);
+        return state;
     }
 
     private static void assertNoStoreMutation(Fixture fixture) {

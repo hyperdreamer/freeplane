@@ -7,7 +7,9 @@ import java.util.Set;
 import java.util.concurrent.Callable;
 
 import org.freeplane.plugin.graph.adapter.EdtExecutor;
+import org.freeplane.plugin.graph.control.CanvasState;
 import org.freeplane.plugin.graph.control.GraphUpdateCoordinator;
+import org.freeplane.plugin.graph.control.OperationalStatus;
 import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.projection.RelationshipResolution;
 import org.freeplane.plugin.graph.projection.RelationshipStatus;
@@ -77,7 +79,9 @@ public final class DefaultPurgeCommandHandler implements PurgeCommandHandler {
     }
 
     private GraphCommandResult validateDisplayedState(final GraphProjection projection, final long displayedGeneration) {
-        if (projection == null) {
+        final CanvasState state = updates.currentState();
+        if (projection == null || state == null || state.status() == OperationalStatus.FAILED
+                || state.status() == OperationalStatus.CLOSED) {
             return rejected(PURGE_UNAVAILABLE);
         }
         if (projection.generation() != displayedGeneration) {
