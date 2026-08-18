@@ -135,6 +135,22 @@ public class GraphInteractionControllerShould {
     }
 
     @Test
+    public void rejectFiniteDistanceWhenRoundedCrossProductsCancel() {
+        final CoordinateSegmentFixture fixture = CoordinateSegmentFixture.create(
+            0.0, 0.0, 0x1.3bd3b7940e82fp500, 0x1.06a910103d249p500,
+            "00000000-0000-0000-0000-000000000043",
+            "00000000-0000-0000-0000-000000000044",
+            "00000000-0000-0000-0000-000000000045", Double.MIN_VALUE);
+        final GraphHitIndex index = GraphHitIndex.from(fixture.state);
+        final LayoutPoint query = LayoutPoint.of(
+            0x1.e6e58d07c40a9p499, 0x1.94ee99ea998b4p499);
+
+        assertThat(index.edgeAt(query, 0.0)).isEmpty();
+        assertThat(index.edgeAt(query, 1.0e133)).isEmpty();
+        assertThat(index.edgeAt(query, 1.0e134)).contains(fixture.edgeKey);
+    }
+
+    @Test
     public void openAHitEndpointOnDoubleClickAndRejectSecondInstallation() {
         final Fixture fixture = Fixture.create();
         final GraphCanvas canvas = fixture.canvas();

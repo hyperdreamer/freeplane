@@ -1,5 +1,6 @@
 package org.freeplane.plugin.graph.canvas;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -110,12 +111,12 @@ final class GraphHitIndex {
         if (!Double.isFinite(worldTolerance) || worldTolerance < 0.0) {
             throw new IllegalArgumentException("worldTolerance must be finite and non-negative");
         }
-        final ScaledValue tolerance = ScaledValue.of(worldTolerance);
-        ScaledValue bestDistance = null;
+        final ExactValue toleranceSquared = ExactValue.of(worldTolerance).square();
+        DistanceValue bestDistance = null;
         ProjectedEdgeKey best = null;
         for (final EdgeEntry edge : edges) {
-            final ScaledValue distance = pointToSegmentDistance(point, edge.first, edge.second);
-            if (!distance.isFinite() || distance.compareTo(tolerance) > 0) {
+            final DistanceValue distance = pointToSegmentDistance(point, edge.first, edge.second);
+            if (!distance.isFinite() || distance.compareToSquared(toleranceSquared) > 0) {
                 continue;
             }
             if (best == null || distance.compareTo(bestDistance) < 0
@@ -128,134 +129,163 @@ final class GraphHitIndex {
         return best == null ? Optional.<ProjectedEdgeKey>empty() : Optional.of(best);
     }
 
-    private static ScaledValue pointToSegmentDistance(final LayoutPoint point,
+    private static DistanceValue pointToSegmentDistance(final LayoutPoint point,
             final LayoutPoint first, final LayoutPoint second) {
-        final ScaledValue deltaX = ScaledValue.difference(second.x(), first.x());
-        final ScaledValue deltaY = ScaledValue.difference(second.y(), first.y());
-        final ScaledValue offsetX = ScaledValue.difference(point.x(), first.x());
-        final ScaledValue offsetY = ScaledValue.difference(point.y(), first.y());
-        final ScaledValue lengthSquared = deltaX.multiply(deltaX).add(deltaY.multiply(deltaY));
-        if (lengthSquared.isZero()) {
-            return ScaledValue.hypot(offsetX, offsetY);
+        if (!isFinite(point)) {
+            return DistanceValue.nonFinite();
+        }
+        final ExactValue deltaX = ExactValue.difference(second.x(), first.x());
+        final ExactValue deltaY = ExactValue.difference(second.y(), first.y());
+        final ExactValue offsetX = ExactValue.difference(point.x(), first.x());
+        final ExactValue offsetY = ExactValue.difference(point.y(), first.y());
+        final ExactValue lengthSquared = deltaX.square().add(deltaY.square());
+        if (lengthSquared.signum() == 0) {
+            return DistanceValue.squared(offsetX.square().add(offsetY.square()));
         }
 
-        final ScaledValue projectionNumerator = offsetX.multiply(deltaX)
+        final ExactValue projectionNumerator = offsetX.multiply(deltaX)
             .add(offsetY.multiply(deltaY));
         if (projectionNumerator.signum() <= 0) {
-            return ScaledValue.hypot(offsetX, offsetY);
+            return DistanceValue.squared(offsetX.square().add(offsetY.square()));
         }
-        final ScaledValue endOffsetX = ScaledValue.difference(point.x(), second.x());
-        final ScaledValue endOffsetY = ScaledValue.difference(point.y(), second.y());
-        final ScaledValue endProjectionNumerator = endOffsetX.multiply(deltaX)
+        final ExactValue endOffsetX = ExactValue.difference(point.x(), second.x());
+        final ExactValue endOffsetY = ExactValue.difference(point.y(), second.y());
+        final ExactValue endProjectionNumerator = endOffsetX.multiply(deltaX)
             .add(endOffsetY.multiply(deltaY));
         if (endProjectionNumerator.signum() >= 0) {
-            return ScaledValue.hypot(endOffsetX, endOffsetY);
+            return DistanceValue.squared(endOffsetX.square().add(endOffsetY.square()));
         }
 
-        final ScaledValue crossProduct = offsetX.multiply(deltaY)
+        final ExactValue crossProduct = offsetX.multiply(deltaY)
             .subtract(offsetY.multiply(deltaX));
-        return crossProduct.abs().divide(lengthSquared.squareRoot());
+        return DistanceValue.ratio(crossProduct.square(), lengthSquared);
     }
 
-    private static final class ScaledValue {
-        private final double significand;
-        private final int exponent;
+    private static final class DistanceValue {
+        private static final ExactValue ONE = ExactValue.of(1.0);
+        private static final ExactValue MAX_DISTANCE_SQUARED = ExactValue.of(Double.MAX_VALUE).square();
 
-        private ScaledValue(final double significand, final int exponent) {
-            this.significand = significand;
-            this.exponent = exponent;
+        private final ExactValue numerator;
+        private final ExactValue denominator;
+        private final boolean finite;
+
+        private DistanceValue(final ExactValue numerator, final ExactValue denominator,
+                final boolean finite) {
+            this.numerator = numerator;
+            this.denominator = denominator;
+            this.finite = finite;
         }
 
-        private static ScaledValue difference(final double first, final double second) {
+        private static DistanceValue nonFinite() {
+            return new DistanceValue(null, null, false);
+        }
+
+        private static DistanceValue squared(final ExactValue value) {
+            return new DistanceValue(value, ONE, true);
+        }
+
+        private static DistanceValue ratio(final ExactValue numerator, final ExactValue denominator) {
+            return new DistanceValue(numerator, denominator, true);
+        }
+
+        private boolean isFinite() {
+            return finite && compareToSquared(MAX_DISTANCE_SQUARED) <= 0;
+        }
+
+        private int compareToSquared(final ExactValue value) {
+            return numerator.compareTo(value.multiply(denominator));
+        }
+
+        private int compareTo(final DistanceValue other) {
+            return numerator.multiply(other.denominator)
+                .compareTo(other.numerator.multiply(denominator));
+        }
+    }
+
+    private static final class ExactValue {
+        private final BigInteger significand;
+        private final int exponent;
+
+        private ExactValue(final BigInteger significand, final int exponent) {
+            if (significand.signum() == 0) {
+                this.significand = BigInteger.ZERO;
+                this.exponent = 0;
+                return;
+            }
+            final int trailingZeros = significand.abs().getLowestSetBit();
+            this.significand = trailingZeros == 0 ? significand : significand.shiftRight(trailingZeros);
+            this.exponent = exponent + trailingZeros;
+        }
+
+        private static ExactValue of(final double value) {
+            if (!Double.isFinite(value)) {
+                throw new IllegalArgumentException("ExactValue requires a finite value");
+            }
+            if (value == 0.0) {
+                return new ExactValue(BigInteger.ZERO, 0);
+            }
+            final long bits = Double.doubleToRawLongBits(value);
+            final boolean negative = (bits & Long.MIN_VALUE) != 0L;
+            final int biasedExponent = (int) ((bits >>> 52) & 0x7ffL);
+            final long fraction = bits & 0x000fffffffffffffL;
+            final BigInteger magnitude;
+            final int exponent;
+            if (biasedExponent == 0) {
+                magnitude = BigInteger.valueOf(fraction);
+                exponent = -1074;
+            }
+            else {
+                magnitude = BigInteger.valueOf((1L << 52) | fraction);
+                exponent = biasedExponent - 1023 - 52;
+            }
+            return new ExactValue(negative ? magnitude.negate() : magnitude, exponent);
+        }
+
+        private static ExactValue difference(final double first, final double second) {
             return of(first).subtract(of(second));
         }
 
-        private static ScaledValue of(final double value) {
-            if (value == 0.0) {
-                return new ScaledValue(0.0, 0);
-            }
-            final int exponent = binaryExponent(value);
-            return new ScaledValue(Math.scalb(value, -exponent), exponent);
-        }
-
-        private static ScaledValue normalize(final double value, final int exponent) {
-            if (value == 0.0) {
-                return new ScaledValue(0.0, 0);
-            }
-            final int valueExponent = binaryExponent(value);
-            return new ScaledValue(Math.scalb(value, -valueExponent), exponent + valueExponent);
-        }
-
-        private static ScaledValue hypot(final ScaledValue first, final ScaledValue second) {
-            final int scale = Math.max(first.exponent, second.exponent);
-            final double firstValue = first.isZero() ? 0.0
-                : Math.scalb(first.significand, first.exponent - scale);
-            final double secondValue = second.isZero() ? 0.0
-                : Math.scalb(second.significand, second.exponent - scale);
-            return normalize(Math.hypot(firstValue, secondValue), scale);
-        }
-
-        private ScaledValue add(final ScaledValue other) {
-            if (isZero()) {
+        private ExactValue add(final ExactValue other) {
+            if (significand.signum() == 0) {
                 return other;
             }
-            if (other.isZero()) {
+            if (other.significand.signum() == 0) {
                 return this;
             }
-            final int scale = Math.max(exponent, other.exponent);
-            final double value = Math.scalb(significand, exponent - scale)
-                + Math.scalb(other.significand, other.exponent - scale);
-            return normalize(value, scale);
+            final int commonExponent = Math.min(exponent, other.exponent);
+            final BigInteger first = significand.shiftLeft(exponent - commonExponent);
+            final BigInteger second = other.significand.shiftLeft(other.exponent - commonExponent);
+            return new ExactValue(first.add(second), commonExponent);
         }
 
-        private ScaledValue subtract(final ScaledValue other) {
+        private ExactValue subtract(final ExactValue other) {
             return add(other.negate());
         }
 
-        private ScaledValue multiply(final ScaledValue other) {
-            if (isZero() || other.isZero()) {
-                return new ScaledValue(0.0, 0);
+        private ExactValue multiply(final ExactValue other) {
+            if (significand.signum() == 0 || other.significand.signum() == 0) {
+                return new ExactValue(BigInteger.ZERO, 0);
             }
-            return normalize(significand * other.significand, exponent + other.exponent);
+            return new ExactValue(significand.multiply(other.significand), exponent + other.exponent);
         }
 
-        private ScaledValue divide(final ScaledValue other) {
-            if (isZero()) {
-                return new ScaledValue(0.0, 0);
-            }
-            return normalize(significand / other.significand, exponent - other.exponent);
+        private ExactValue square() {
+            return multiply(this);
         }
 
-        private ScaledValue squareRoot() {
-            if (isZero()) {
-                return this;
-            }
-            int adjustedExponent = exponent;
-            double adjustedSignificand = significand;
-            if ((adjustedExponent & 1) != 0) {
-                adjustedSignificand *= 2.0;
-                adjustedExponent--;
-            }
-            return normalize(Math.sqrt(adjustedSignificand), adjustedExponent / 2);
+        private ExactValue abs() {
+            return significand.signum() < 0 ? negate() : this;
         }
 
-        private ScaledValue abs() {
-            return significand < 0.0 ? negate() : this;
-        }
-
-        private ScaledValue negate() {
-            return new ScaledValue(-significand, exponent);
-        }
-
-        private boolean isZero() {
-            return significand == 0.0;
+        private ExactValue negate() {
+            return new ExactValue(significand.negate(), exponent);
         }
 
         private int signum() {
-            return significand < 0.0 ? -1 : isZero() ? 0 : 1;
+            return significand.signum();
         }
 
-        private int compareTo(final ScaledValue other) {
+        private int compareTo(final ExactValue other) {
             final int firstSign = signum();
             final int secondSign = other.signum();
             if (firstSign != secondSign) {
@@ -264,29 +294,22 @@ final class GraphHitIndex {
             if (firstSign == 0) {
                 return 0;
             }
-            final int magnitude = exponent != other.exponent
-                ? Integer.compare(exponent, other.exponent)
-                : Double.compare(Math.abs(significand), Math.abs(other.significand));
-            return firstSign * magnitude;
+            final int magnitude = compareMagnitude(other);
+            return firstSign < 0 ? -magnitude : magnitude;
         }
 
-        private boolean isFinite() {
-            return Double.isFinite(finiteValue());
-        }
-
-        private double finiteValue() {
-            return Math.scalb(significand, exponent);
-        }
-
-        private static int binaryExponent(final double value) {
-            final double magnitude = Math.abs(value);
-            final int exponent = Math.getExponent(magnitude);
-            if (exponent != Double.MIN_EXPONENT - 1) {
-                return exponent;
+        private int compareMagnitude(final ExactValue other) {
+            final BigInteger firstMagnitude = significand.abs();
+            final BigInteger secondMagnitude = other.significand.abs();
+            final int firstTopExponent = exponent + firstMagnitude.bitLength();
+            final int secondTopExponent = other.exponent + secondMagnitude.bitLength();
+            if (firstTopExponent != secondTopExponent) {
+                return Integer.compare(firstTopExponent, secondTopExponent);
             }
-            final long fraction = Double.doubleToRawLongBits(magnitude)
-                & 0x000fffffffffffffL;
-            return 63 - Long.numberOfLeadingZeros(fraction) - 1074;
+            final int commonExponent = Math.min(exponent, other.exponent);
+            final BigInteger first = firstMagnitude.shiftLeft(exponent - commonExponent);
+            final BigInteger second = secondMagnitude.shiftLeft(other.exponent - commonExponent);
+            return first.compareTo(second);
         }
     }
 
