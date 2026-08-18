@@ -12,6 +12,7 @@ import java.util.Objects;
 import javax.swing.UIManager;
 
 import org.freeplane.plugin.graph.projection.BoundaryTier;
+import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 import org.freeplane.plugin.graph.workspace.model.DisplaySettings.CanvasTheme;
 
 public final class GraphTheme {
@@ -28,10 +29,6 @@ public final class GraphTheme {
     private final Color edgeColor;
     private final Color nodeFill;
     private final Color nodeStroke;
-    private final Color emphaticHullFill;
-    private final Color emphaticHullStroke;
-    private final Color subtleHullFill;
-    private final Color subtleHullStroke;
     private final Color selectionColor;
     private final Color hoverColor;
     private final Color searchColor;
@@ -51,20 +48,14 @@ public final class GraphTheme {
     private final List<Color> mapPalette;
 
     private GraphTheme(final Color background, final Color labelColor, final Color edgeColor,
-            final Color nodeFill, final Color nodeStroke, final Color emphaticHullFill,
-            final Color emphaticHullStroke, final Color subtleHullFill, final Color subtleHullStroke,
-            final Color selectionColor, final Color hoverColor, final Color searchColor,
-            final Color warningColor, final Color pinColor, final Color mutedColor, final Color previewColor,
-            final List<Color> mapPalette) {
+            final Color nodeFill, final Color nodeStroke, final Color selectionColor, final Color hoverColor,
+            final Color searchColor, final Color warningColor, final Color pinColor, final Color mutedColor,
+            final Color previewColor, final List<Color> mapPalette) {
         this.background = requireColor(background, "background");
         this.labelColor = requireColor(labelColor, "labelColor");
         this.edgeColor = requireColor(edgeColor, "edgeColor");
         this.nodeFill = requireColor(nodeFill, "nodeFill");
         this.nodeStroke = requireColor(nodeStroke, "nodeStroke");
-        this.emphaticHullFill = requireColor(emphaticHullFill, "emphaticHullFill");
-        this.emphaticHullStroke = requireColor(emphaticHullStroke, "emphaticHullStroke");
-        this.subtleHullFill = requireColor(subtleHullFill, "subtleHullFill");
-        this.subtleHullStroke = requireColor(subtleHullStroke, "subtleHullStroke");
         this.selectionColor = requireColor(selectionColor, "selectionColor");
         this.hoverColor = requireColor(hoverColor, "hoverColor");
         this.searchColor = requireColor(searchColor, "searchColor");
@@ -131,8 +122,6 @@ public final class GraphTheme {
             final List<Color> palette) {
         return new GraphTheme(background, foreground, new Color(73, 84, 100),
             new Color(229, 239, 249), new Color(38, 91, 137),
-            new Color(255, 231, 190), new Color(173, 97, 25),
-            new Color(221, 241, 235), new Color(31, 111, 100),
             new Color(37, 91, 205), new Color(202, 112, 18), new Color(24, 135, 76),
             new Color(180, 48, 46), new Color(98, 88, 190), new Color(120, 130, 142),
             new Color(64, 113, 184), palette);
@@ -142,8 +131,6 @@ public final class GraphTheme {
             final List<Color> palette) {
         return new GraphTheme(background, foreground, new Color(190, 202, 217),
             new Color(57, 76, 98), new Color(142, 194, 239),
-            new Color(103, 73, 42), new Color(255, 181, 92),
-            new Color(35, 84, 79), new Color(104, 205, 188),
             new Color(112, 164, 255), new Color(255, 190, 93), new Color(103, 211, 146),
             new Color(255, 117, 117), new Color(190, 177, 255), new Color(151, 163, 178),
             new Color(135, 181, 255), palette);
@@ -181,22 +168,6 @@ public final class GraphTheme {
         return nodeStroke;
     }
 
-    public Color emphaticHullFill() {
-        return emphaticHullFill;
-    }
-
-    public Color emphaticHullStroke() {
-        return emphaticHullStroke;
-    }
-
-    public Color subtleHullFill() {
-        return subtleHullFill;
-    }
-
-    public Color subtleHullStroke() {
-        return subtleHullStroke;
-    }
-
     public Color selectionColor() {
         return selectionColor;
     }
@@ -225,24 +196,24 @@ public final class GraphTheme {
         return previewColor;
     }
 
-    public Color hullFill(final BoundaryTier tier) {
+    public Color hullFill(final MapReferenceId mapReferenceId, final BoundaryTier tier) {
         final BoundaryTier value = Objects.requireNonNull(tier, "tier");
         if (value == BoundaryTier.EMPHATIC) {
-            return emphaticHullFill;
+            return treatment(mapReferenceId, 0.25);
         }
         if (value == BoundaryTier.SUBTLE) {
-            return subtleHullFill;
+            return treatment(mapReferenceId, 0.125);
         }
         return mutedColor;
     }
 
-    public Color hullStroke(final BoundaryTier tier) {
+    public Color hullStroke(final MapReferenceId mapReferenceId, final BoundaryTier tier) {
         final BoundaryTier value = Objects.requireNonNull(tier, "tier");
         if (value == BoundaryTier.EMPHATIC) {
-            return emphaticHullStroke;
+            return treatment(mapReferenceId, 0.85);
         }
         if (value == BoundaryTier.SUBTLE) {
-            return subtleHullStroke;
+            return treatment(mapReferenceId, 0.55);
         }
         return mutedColor;
     }
@@ -293,6 +264,23 @@ public final class GraphTheme {
 
     public List<Color> mapPalette() {
         return mapPalette;
+    }
+
+    private Color treatment(final MapReferenceId mapReferenceId, final double baseWeight) {
+        final Color base = mapColor(mapReferenceId);
+        return new Color(blend(background.getRed(), base.getRed(), baseWeight),
+            blend(background.getGreen(), base.getGreen(), baseWeight),
+            blend(background.getBlue(), base.getBlue(), baseWeight));
+    }
+
+    private Color mapColor(final MapReferenceId mapReferenceId) {
+        final MapReferenceId value = Objects.requireNonNull(mapReferenceId, "mapReferenceId");
+        final List<Color> palette = mapPalette();
+        return palette.get(Math.floorMod(value.value().hashCode(), palette.size()));
+    }
+
+    private static int blend(final int backgroundChannel, final int baseChannel, final double baseWeight) {
+        return (int) Math.round(backgroundChannel * (1.0 - baseWeight) + baseChannel * baseWeight);
     }
 
     private static List<Color> copyPalette(final List<Color> values) {

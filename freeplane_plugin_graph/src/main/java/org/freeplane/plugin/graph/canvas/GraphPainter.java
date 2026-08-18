@@ -92,9 +92,9 @@ final class GraphPainter {
             final Shape path = hull.smoothPath();
             final boolean dim = dimUnrelated && !isEnclosureRelated(enclosure, paintState);
             final AlphaComposite oldComposite = setOpacity(graphics, dim);
-            graphics.setColor(theme.hullFill(enclosure.boundaryTier()));
+            graphics.setColor(theme.hullFill(enclosure.mapReferenceId(), enclosure.boundaryTier()));
             graphics.fill(path);
-            graphics.setColor(theme.hullStroke(enclosure.boundaryTier()));
+            graphics.setColor(theme.hullStroke(enclosure.mapReferenceId(), enclosure.boundaryTier()));
             graphics.setStroke(theme.hullStrokeStyle(enclosure.boundaryTier()));
             graphics.draw(path);
             graphics.setComposite(oldComposite);
@@ -193,8 +193,11 @@ final class GraphPainter {
     private static void paintPins(final Graphics2D graphics, final CanvasState state,
             final GraphPaintState paintState, final GraphTheme theme, final boolean dimUnrelated) {
         for (final PinProjection pin : state.projection().pins()) {
-            final boolean dim = dimUnrelated && (!pin.active()
-                || !isRelated(ProjectedEndpointKey.ofNode(pin.projectedNode().get()), paintState));
+            if (!pin.active()) {
+                continue;
+            }
+            final boolean dim = dimUnrelated
+                && !isRelated(ProjectedEndpointKey.ofNode(pin.projectedNode().get()), paintState);
             final AlphaComposite oldComposite = setOpacity(graphics, dim);
             graphics.setColor(theme.pinColor());
             graphics.setStroke(theme.edgeStroke());
@@ -216,7 +219,7 @@ final class GraphPainter {
             }
             final ProjectedEndpointKey endpoint = ProjectedEndpointKey.ofNode(node.key());
             final boolean forced = isRelated(endpoint, paintState);
-            if (!shouldPaintLabel(LabelPlacement.Mode.INTERIOR, forced)) {
+            if (!shouldPaintLabel(LabelPlacement.Mode.INTERIOR, forced, level, false)) {
                 continue;
             }
             final boolean dim = dimUnrelated && !forced;
@@ -239,7 +242,8 @@ final class GraphPainter {
                 }
                 final ProjectedEndpointKey endpoint = ProjectedEndpointKey.ofEnclosure(endpointKey);
                 final boolean forced = isRelated(endpoint, paintState);
-                if (!shouldPaintLabel(placement.mode(), forced)) {
+                final boolean required = enclosure.boundaryTier() == BoundaryTier.EMPHATIC;
+                if (!shouldPaintLabel(placement.mode(), forced, level, required)) {
                     continue;
                 }
                 final boolean dim = dimUnrelated && !forced;
@@ -264,8 +268,10 @@ final class GraphPainter {
         return base.deriveFont(Math.max(1.0f, base.getSize2D() / (float) zoom));
     }
 
-    private static boolean shouldPaintLabel(final LabelPlacement.Mode mode, final boolean forced) {
-        return mode != LabelPlacement.Mode.HOVER_ONLY || forced;
+    private static boolean shouldPaintLabel(final LabelPlacement.Mode mode, final boolean forced,
+            final RenderingLevel level, final boolean required) {
+        return forced || required || (level != RenderingLevel.OVER_TARGET
+            && mode != LabelPlacement.Mode.HOVER_ONLY);
     }
 
     private static void drawCentered(final Graphics2D graphics, final String text, final double x,

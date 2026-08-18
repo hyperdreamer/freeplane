@@ -46,6 +46,7 @@ import org.freeplane.plugin.graph.projection.input.SourceNodeKey;
 import org.freeplane.plugin.graph.workspace.model.GraphRelationshipRecord;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 import org.freeplane.plugin.graph.workspace.model.NodeReference;
+import org.freeplane.plugin.graph.workspace.model.PinRecord;
 import org.freeplane.plugin.graph.workspace.model.PersistedNodeId;
 import org.freeplane.plugin.graph.workspace.model.RelationshipDirection;
 import org.freeplane.plugin.graph.workspace.model.RelationshipId;
@@ -70,14 +71,15 @@ public class GraphCanvasPaintShould {
         assertThat(nonBackgroundPixels(image, theme.background())).isGreaterThan(100);
         assertThat(image.getRGB(120, 70)).isEqualTo(theme.edgeColor().getRGB());
         assertThat(image.getRGB(75, 70)).isEqualTo(theme.nodeFill().getRGB());
-        assertThat(image.getRGB(55, 70)).isEqualTo(theme.emphaticHullFill().getRGB());
-        assertThat(image.getRGB(185, 70)).isEqualTo(theme.subtleHullFill().getRGB());
+        assertThat(image.getRGB(55, 70)).isNotEqualTo(theme.background().getRGB());
+        assertThat(image.getRGB(185, 70)).isNotEqualTo(theme.background().getRGB());
 
         LayoutPoint attachment = fixture.state.geometry().edgeAttachment(fixture.edge.first(),
             fixture.state.geometry().nodes().get(fixture.first.key()).center());
         Point2D attachmentScreen = GraphViewport.of(0.0, 0.0, 1.0).toScreen(attachment, SIZE);
         assertThat(hasColorNear(image, attachmentScreen, theme.edgeColor(), 4)).isTrue();
-        assertThat(hasInkNear(image, new Point2D.Double(153.0, 66.0), theme.edgeColor(), 8)).isTrue();
+        assertThat(nearColorPixelsIn(image, theme.edgeColor(), 147, 60, 155, 69, 80)).isGreaterThan(0);
+        assertThat(nearColorPixelsIn(image, theme.edgeColor(), 92, 60, 100, 69, 80)).isEqualTo(0);
     }
 
     @Test
@@ -92,29 +94,151 @@ public class GraphCanvasPaintShould {
     }
 
     @Test
-    public void reduceUnselectedLabelsAtDenseLevelsButKeepHighlightedLabels() {
-        Fixture fixture = fixture(16.0);
+    public void suppressOrdinaryLabelsOnlyAboveTheExactNodeBoundary() {
         GraphTheme theme = GraphTheme.resolve(CanvasTheme.LIGHT);
-        BufferedImage full = paint(fixture.state, GraphPaintState.empty(), theme, RenderingLevel.FULL);
-        BufferedImage dense = paint(fixture.state, GraphPaintState.empty(), theme, RenderingLevel.DENSE);
-        BufferedImage overTarget = paint(fixture.state, GraphPaintState.empty(), theme,
-            RenderingLevel.OVER_TARGET);
-        GraphPaintState highlighted = GraphPaintState.empty()
-            .withSelection(fixture.firstEndpoint)
-            .withHover(fixture.secondEndpoint)
-            .withSearchMatches(Collections.singleton(fixture.firstEndpoint));
-        BufferedImage denseHighlighted = paint(fixture.state, highlighted, theme, RenderingLevel.DENSE);
-        BufferedImage overTargetHighlighted = paint(fixture.state, highlighted, theme,
-            RenderingLevel.OVER_TARGET);
+        BufferedImage full = paintLabelFixture(labelFixture(499), theme);
+        BufferedImage dense = paintLabelFixture(labelFixture(2000), theme);
+        BufferedImage overTarget = paintLabelFixture(labelFixture(2001), theme);
 
-        assertThat(differentPixels(full, dense)).isGreaterThan(0);
-        assertThat(differentPixels(full, overTarget)).isGreaterThan(0);
-        assertThat(differentPixels(dense, denseHighlighted)).isGreaterThan(0);
-        assertThat(differentPixels(overTarget, overTargetHighlighted)).isGreaterThan(0);
-        assertThat(nonBackgroundPixelsIn(denseHighlighted, theme.background(), 55, 40, 95, 65))
-            .isGreaterThan(0);
-        assertThat(nonBackgroundPixelsIn(overTargetHighlighted, theme.background(), 165, 40, 205, 65))
-            .isGreaterThan(0);
+        assertThat(labelPixels(full, theme, 0, 0, 75, 36)).isGreaterThan(0);
+        assertThat(labelPixels(dense, theme, 0, 0, 75, 36)).isGreaterThan(0);
+        assertThat(labelPixels(overTarget, theme, 0, 0, 75, 36)).isEqualTo(0);
+        assertThat(labelPixels(overTarget, theme, 160, 95, 240, 136)).isEqualTo(0);
+        assertRequiredLabelsVisible(full, theme);
+        assertRequiredLabelsVisible(dense, theme);
+        assertRequiredLabelsVisible(overTarget, theme);
+    }
+
+    @Test
+    public void paintOnlyActivePins() {
+        Fixture fixture = fixture(16.0);
+        PinProjection active = PinProjection.active(PinRecord.of(reference(FIRST_MAP, "first"), -10.0, -40.0,
+            Collections.<UnknownXml>emptyList()), fixture.first.key());
+        PinProjection dormant = PinProjection.dormant(PinRecord.of(reference(SECOND_MAP, "dormant"), 60.0,
+            -40.0, Collections.<UnknownXml>emptyList()));
+        GraphProjection projection = GraphProjection.projected(1L, fixture.state.projection().nodes(),
+            fixture.state.projection().enclosures(), fixture.state.projection().edges(),
+            fixture.state.projection().relationshipResolutions(), Arrays.asList(active, dormant));
+        CanvasState state = CanvasState.of(1L, projection, fixture.state.layout(), fixture.state.geometry(),
+            OperationalStatus.IDLE);
+        GraphTheme theme = GraphTheme.resolve(CanvasTheme.LIGHT);
+        BufferedImage image = paint(state, GraphPaintState.empty(), theme, RenderingLevel.FULL);
+
+        assertThat(colorPixelsIn(image, theme.pinColor(), 104, 24, 117, 37)).isGreaterThan(0);
+        assertThat(colorPixelsIn(image, theme.pinColor(), 174, 24, 187, 37)).isEqualTo(0);
+    }
+
+    @Test
+    public void resolveHullColorsFromMapPaletteAndTierTreatment() {
+        GraphTheme theme = GraphTheme.resolve(CanvasTheme.LIGHT, Arrays.asList(Color.RED, Color.BLUE));
+        BufferedImage image = paint(paletteState(), GraphPaintState.empty(), theme, RenderingLevel.FULL);
+
+        assertThat(image.getRGB(30, 70)).isEqualTo(new Color(188, 188, 254).getRGB());
+        assertThat(image.getRGB(120, 70)).isEqualTo(new Color(251, 188, 190).getRGB());
+        assertThat(image.getRGB(210, 70)).isEqualTo(new Color(219, 220, 253).getRGB());
+        assertThat(theme.mapPalette()).containsExactly(Color.RED, Color.BLUE);
+    }
+
+    private static void assertRequiredLabelsVisible(final BufferedImage image, final GraphTheme theme) {
+        assertThat(labelPixels(image, theme, 80, 0, 160, 36)).isGreaterThan(0);
+        assertThat(labelPixels(image, theme, 165, 0, 240, 36)).isGreaterThan(0);
+        assertThat(labelPixels(image, theme, 0, 80, 75, 111)).isGreaterThan(0);
+        assertThat(labelPixels(image, theme, 75, 95, 165, 136)).isGreaterThan(0);
+    }
+
+    private static int labelPixels(final BufferedImage image, final GraphTheme theme, final int minX,
+            final int minY, final int maxX, final int maxY) {
+        return nearColorPixelsIn(image, theme.labelColor(), minX, minY, maxX, maxY, 100);
+    }
+
+    private static BufferedImage paintLabelFixture(final LabelFixture fixture, final GraphTheme theme) {
+        GraphCanvas canvas = new GraphCanvas();
+        canvas.setSize(SIZE);
+        canvas.setTheme(theme);
+        canvas.setCanvasState(fixture.state);
+        canvas.setPaintState(GraphPaintState.empty().withSelection(fixture.selected)
+            .withHover(fixture.hovered).withSearchMatches(Collections.singleton(fixture.searchMatched)));
+        canvas.setViewport(GraphViewport.of(0.0, 0.0, 1.0));
+        return paintCanvas(canvas);
+    }
+
+    private static CanvasState paletteState() {
+        EnclosureKey firstRootKey = EnclosureKey.of(source(FIRST_MAP, "palette-first-root"));
+        EnclosureKey secondRootKey = EnclosureKey.of(source(SECOND_MAP, "palette-second-root"));
+        EnclosureKey firstChildKey = EnclosureKey.of(source(FIRST_MAP, "palette-first-child"));
+        EnclosureHullKey firstRootHull = EnclosureHullKey.of(Collections.singletonList(firstRootKey));
+        EnclosureHullKey secondRootHull = EnclosureHullKey.of(Collections.singletonList(secondRootKey));
+        EnclosureHullKey firstChildHull = EnclosureHullKey.of(Collections.singletonList(firstChildKey));
+        ProjectedEnclosure firstRoot = enclosure(firstRootHull, firstRootKey, "First root", "First root",
+            BoundaryTier.EMPHATIC);
+        ProjectedEnclosure secondRoot = enclosure(secondRootHull, secondRootKey, "Second root", "Second root",
+            BoundaryTier.EMPHATIC);
+        ProjectedEnclosure firstChild = enclosure(firstChildHull, firstChildKey, "First child", "First child",
+            BoundaryTier.SUBTLE);
+        Map<EnclosureHullKey, HullGeometry> hulls = new LinkedHashMap<EnclosureHullKey, HullGeometry>();
+        hulls.put(firstRootHull, rectangle(-110.0, -20.0, -70.0, 20.0, LayoutPoint.of(-90.0, 0.0)));
+        hulls.put(secondRootHull, rectangle(-20.0, -20.0, 20.0, 20.0, LayoutPoint.of(0.0, 0.0)));
+        hulls.put(firstChildHull, rectangle(70.0, -20.0, 110.0, 20.0, LayoutPoint.of(90.0, 0.0)));
+        GraphProjection projection = GraphProjection.projected(1L, Collections.<ProjectedNode>emptyList(),
+            Arrays.asList(firstRoot, secondRoot, firstChild), Collections.<ProjectedEdge>emptyList(),
+            Collections.<RelationshipResolution>emptyList(), Collections.<PinProjection>emptyList());
+        LayoutFrame layout = LayoutFrame.of(1L, LayoutPositions.of(Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(),
+            Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false);
+        return CanvasState.of(1L, projection, layout,
+            GraphGeometry.of(Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(), hulls,
+                Collections.<EnclosureKey, LabelPlacement>emptyMap()), OperationalStatus.IDLE);
+    }
+
+    private static LabelFixture labelFixture(final int nodeCount) {
+        ProjectedNode ordinary = node(FIRST_MAP, "ORDINARY", LayoutPoint.of(-85.0, -25.0));
+        ProjectedNode selected = node(FIRST_MAP, "SELECTED", LayoutPoint.of(0.0, -25.0));
+        ProjectedNode hovered = node(FIRST_MAP, "HOVERED", LayoutPoint.of(85.0, -25.0));
+        ProjectedNode searchMatched = node(FIRST_MAP, "SEARCH", LayoutPoint.of(-85.0, 45.0));
+        List<ProjectedNode> nodes = new ArrayList<ProjectedNode>(nodeCount);
+        nodes.add(ordinary);
+        nodes.add(selected);
+        nodes.add(hovered);
+        nodes.add(searchMatched);
+        for (int index = nodes.size(); index < nodeCount; index++) {
+            nodes.add(node(FIRST_MAP, "label-extra-" + index, LayoutPoint.of(500.0 + index, 500.0)));
+        }
+        EnclosureKey emphaticKey = EnclosureKey.of(source(FIRST_MAP, "emphatic-label"));
+        EnclosureKey subtleKey = EnclosureKey.of(source(SECOND_MAP, "subtle-label"));
+        EnclosureHullKey emphaticHull = EnclosureHullKey.of(Collections.singletonList(emphaticKey));
+        EnclosureHullKey subtleHull = EnclosureHullKey.of(Collections.singletonList(subtleKey));
+        ProjectedEnclosure emphatic = enclosure(emphaticHull, emphaticKey, "EMPHATIC", "EMPHATIC",
+            BoundaryTier.EMPHATIC);
+        ProjectedEnclosure subtle = enclosure(subtleHull, subtleKey, "SUBTLE", "SUBTLE",
+            BoundaryTier.SUBTLE);
+        Map<ProjectedNodeKey, NodeGeometry> geometries = new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
+        geometries.put(ordinary.key(), NodeGeometry.of(LayoutPoint.of(-85.0, -25.0), 8.0));
+        geometries.put(selected.key(), NodeGeometry.of(LayoutPoint.of(0.0, -25.0), 8.0));
+        geometries.put(hovered.key(), NodeGeometry.of(LayoutPoint.of(85.0, -25.0), 8.0));
+        geometries.put(searchMatched.key(), NodeGeometry.of(LayoutPoint.of(-85.0, 45.0), 8.0));
+        Map<EnclosureHullKey, HullGeometry> hulls = new LinkedHashMap<EnclosureHullKey, HullGeometry>();
+        hulls.put(emphaticHull, rectangle(-20.0, 25.0, 20.0, 65.0, LayoutPoint.of(0.0, 45.0)));
+        hulls.put(subtleHull, rectangle(65.0, 25.0, 105.0, 65.0, LayoutPoint.of(85.0, 45.0)));
+        Map<EnclosureKey, LabelPlacement> labels = new LinkedHashMap<EnclosureKey, LabelPlacement>();
+        labels.put(emphaticKey, LabelPlacement.of("EMPHATIC", LabelPlacement.Mode.INTERIOR,
+            LayoutPoint.of(0.0, 45.0), 60.0, 10.0, Optional.<LayoutPoint>empty()));
+        labels.put(subtleKey, LabelPlacement.of("SUBTLE", LabelPlacement.Mode.INTERIOR,
+            LayoutPoint.of(85.0, 45.0), 45.0, 10.0, Optional.<LayoutPoint>empty()));
+        Map<ProjectedNodeKey, LayoutPoint> positions = new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        positions.put(ordinary.key(), LayoutPoint.of(-85.0, -25.0));
+        positions.put(selected.key(), LayoutPoint.of(0.0, -25.0));
+        positions.put(hovered.key(), LayoutPoint.of(85.0, -25.0));
+        positions.put(searchMatched.key(), LayoutPoint.of(-85.0, 45.0));
+        Map<EnclosureHullKey, LayoutPoint> anchors = new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
+        anchors.put(emphaticHull, LayoutPoint.of(0.0, 45.0));
+        anchors.put(subtleHull, LayoutPoint.of(85.0, 45.0));
+        GraphProjection projection = GraphProjection.projected(1L, nodes, Arrays.asList(emphatic, subtle),
+            Collections.<ProjectedEdge>emptyList(), Collections.<RelationshipResolution>emptyList(),
+            Collections.<PinProjection>emptyList());
+        CanvasState state = CanvasState.of(1L, projection,
+            LayoutFrame.of(1L, LayoutPositions.of(positions, anchors), false),
+            GraphGeometry.of(geometries, hulls, labels), OperationalStatus.IDLE);
+        return new LabelFixture(state, ProjectedEndpointKey.ofNode(selected.key()),
+            ProjectedEndpointKey.ofNode(hovered.key()), ProjectedEndpointKey.ofNode(searchMatched.key()));
     }
 
     @Test
@@ -383,6 +507,24 @@ public class GraphCanvasPaintShould {
         return count;
     }
 
+    private static int nearColorPixelsIn(final BufferedImage image, final Color color,
+            final int minX, final int minY, final int maxX, final int maxY, final int maximumDistance) {
+        int count = 0;
+        final int maximumDistanceSquared = maximumDistance * maximumDistance;
+        for (int y = Math.max(0, minY); y < Math.min(image.getHeight(), maxY); y++) {
+            for (int x = Math.max(0, minX); x < Math.min(image.getWidth(), maxX); x++) {
+                final int pixel = image.getRGB(x, y);
+                final int red = ((pixel >>> 16) & 0xff) - color.getRed();
+                final int green = ((pixel >>> 8) & 0xff) - color.getGreen();
+                final int blue = (pixel & 0xff) - color.getBlue();
+                if (red * red + green * green + blue * blue <= maximumDistanceSquared) {
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+
     private static int differentPixels(final BufferedImage first, final BufferedImage second) {
         int count = 0;
         for (int y = 0; y < first.getHeight(); y++) {
@@ -413,6 +555,21 @@ public class GraphCanvasPaintShould {
         return nonBackgroundPixelsIn(image, background, (int) point.getX() - radius,
             (int) point.getY() - radius, (int) point.getX() + radius + 1,
             (int) point.getY() + radius + 1) > 0;
+    }
+
+    private static final class LabelFixture {
+        private final CanvasState state;
+        private final ProjectedEndpointKey selected;
+        private final ProjectedEndpointKey hovered;
+        private final ProjectedEndpointKey searchMatched;
+
+        private LabelFixture(final CanvasState state, final ProjectedEndpointKey selected,
+                final ProjectedEndpointKey hovered, final ProjectedEndpointKey searchMatched) {
+            this.state = state;
+            this.selected = selected;
+            this.hovered = hovered;
+            this.searchMatched = searchMatched;
+        }
     }
 
     private static final class Fixture {
