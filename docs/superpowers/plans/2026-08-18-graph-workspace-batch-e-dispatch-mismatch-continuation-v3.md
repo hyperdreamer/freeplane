@@ -56,7 +56,7 @@
 
 - [ ] **Step 1: Establish the immutable carry-forward baseline**
 
-From the active worktree, record `git rev-parse HEAD`, `git status --porcelain=v1 --untracked-files=all`, `git diff --name-status 8d54ecda2157c06baa9b765cc92eb2a82e834506 54cab57876bb73bde13945bbbb8493ed7d34ab66`, and `git diff --name-status 54cab57876bb73bde13945bbbb8493ed7d34ab66 HEAD`. Confirm `HEAD` is `8ef6d2e88043ae406a49e07aa2b0608c40c62f76`, the Task 26 range changes exactly the three original paths, the endpoint-to-HEAD correction changes exactly `GraphSearchModelShould.java`, and every involved commit uses the required `2026-08-10-graph-workspace:` prefix. Do not stage, edit, checkout, reset, or commit anything.
+From the active worktree, record `git rev-parse HEAD`, `git status --porcelain=v1 --untracked-files=all`, `git merge-base --is-ancestor 8ef6d2e88043ae406a49e07aa2b0608c40c62f76 HEAD`, `git diff --name-status 8d54ecda2157c06baa9b765cc92eb2a82e834506 54cab57876bb73bde13945bbbb8493ed7d34ab66`, `git diff --name-status 54cab57876bb73bde13945bbbb8493ed7d34ab66 8ef6d2e88043ae406a49e07aa2b0608c40c62f76`, and `git diff --name-status 8ef6d2e88043ae406a49e07aa2b0608c40c62f76 HEAD`. Confirm the fixed endpoint is an ancestor of `HEAD`, the Task 26 range changes exactly the three original paths, the bounded correction changes exactly `GraphSearchModelShould.java`, and all later changes are controller documentation only with no source/test path. Confirm every involved implementation commit uses the required `2026-08-10-graph-workspace:` prefix. Do not stage, edit, checkout, reset, or commit anything.
 
 - [ ] **Step 2: Run the fresh focused and compatibility gates**
 
