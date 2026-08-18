@@ -592,6 +592,87 @@ public class ContributorDeletionPlanShould {
     }
 
     @Test
+    public void retriesWorkspaceCompensationBeforeStartingLaterDeletionAndRetainsItUntilSuccess() {
+        MixedFixture fixture = mixedFixture();
+        final List<String> events = new java.util.ArrayList<String>();
+        final boolean[] nativeRolledBack = new boolean[] { false };
+        final int[] beginCalls = new int[] { 0 };
+        final int[] workspaceCalls = new int[] { 0 };
+        final int[] undoCalls = new int[] { 0 };
+        doAnswer(invocation -> {
+            events.add("begin");
+            beginCalls[0]++;
+            return beginCalls[0] == 1 ? fixture.transaction : recoveredTransaction(events);
+        }).when(fixture.maps).beginContributorDeletion(any(ContributorDeletionPlan.class));
+        when(fixture.store.execute(any(WorkspaceCommand.class))).thenAnswer(invocation -> {
+            events.add("workspace");
+            workspaceCalls[0]++;
+            return GraphCommandResult.from(WorkspaceTransition.applied(document(fixture.record),
+                "relationships.purged"));
+        });
+        doAnswer(invocation -> {
+            events.add("native-commit");
+            throw new IllegalStateException("native commit failure");
+        }).when(fixture.transaction).commit();
+        doAnswer(invocation -> {
+            events.add("native-rollback");
+            nativeRolledBack[0] = true;
+            return null;
+        }).when(fixture.transaction).rollback();
+        when(fixture.transaction.outcome()).thenAnswer(invocation -> nativeRolledBack[0]
+            ? GraphCommandResult.from(WorkspaceTransition.rejected(document(fixture.record),
+                "graph_workspace.contributor.native_commit_failed"))
+            : applied("native"));
+        doAnswer(invocation -> {
+            events.add("workspace-undo");
+            undoCalls[0]++;
+            if (undoCalls[0] == 1) {
+                throw new IllegalStateException("workspace undo failure");
+            }
+            if (undoCalls[0] == 2) {
+                return GraphCommandResult.from(WorkspaceTransition.rejected(document(fixture.record),
+                    "workspace.undo.rejected"));
+            }
+            return GraphCommandResult.from(WorkspaceTransition.applied(document(fixture.record),
+                "history.undone"));
+        }).when(fixture.store).undo();
+
+        DefaultContributorDeletionHandler handler = fixture.handler();
+        GraphCommandResult first = handler.deleteAll(fixture.command());
+        GraphCommandResult repeatedFailure = handler.deleteAll(fixture.command());
+        GraphCommandResult recovered = handler.deleteAll(fixture.command());
+
+        assertThat(first.messageKey()).isEqualTo("graph_workspace.contributor.undo_incomplete");
+        assertThat(first.messageArguments()).containsExactly("workspace");
+        assertThat(repeatedFailure.messageKey()).isEqualTo("graph_workspace.contributor.undo_incomplete");
+        assertThat(repeatedFailure.messageArguments()).containsExactly("workspace");
+        assertThat(recovered.status()).isEqualTo(GraphCommandResult.Status.APPLIED);
+        assertThat(events).containsExactly("begin", "workspace", "native-commit", "native-rollback",
+            "workspace-undo", "workspace-undo", "workspace-undo", "begin", "workspace",
+            "native-recovered-commit");
+        assertThat(undoCalls[0]).isEqualTo(3);
+        assertThat(beginCalls[0]).isEqualTo(2);
+        assertThat(workspaceCalls[0]).isEqualTo(2);
+        verify(fixture.transaction, times(1)).rollback();
+        verify(fixture.maps, times(2)).beginContributorDeletion(any(ContributorDeletionPlan.class));
+        verify(fixture.store, times(2)).execute(any(WorkspaceCommand.class));
+    }
+
+    private static FreeplaneMapCommandExecutor.ContributorDeletionTransaction recoveredTransaction(
+            final List<String> events) {
+        FreeplaneMapCommandExecutor.ContributorDeletionTransaction transaction =
+            mock(FreeplaneMapCommandExecutor.ContributorDeletionTransaction.class);
+        when(transaction.outcome()).thenReturn(applied("native.recovered"));
+        when(transaction.dirtySourceMaps()).thenReturn(Collections.singleton(MAP_ONE));
+        when(transaction.editorViewActivated()).thenReturn(false);
+        doAnswer(invocation -> {
+            events.add("native-recovered-commit");
+            return null;
+        }).when(transaction).commit();
+        return transaction;
+    }
+
+    @Test
     public void completesMixedDeletionWithOneWorkspacePurgeAndOneNativeCommit() {
         MixedFixture fixture = mixedFixture();
         when(fixture.store.execute(any(WorkspaceCommand.class))).thenReturn(
