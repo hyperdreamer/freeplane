@@ -47,21 +47,21 @@ public static final class WorkspaceMutation {
 The exact nested naming may follow local conventions, but these invariants are fixed:
 
 - `executeWithCompensation` applies exactly one supplied `WorkspaceCommand` through the existing `WorkspaceHistory` path.
-- An applied mutation captures an opaque history token identifying its own before/after entry and the redo state that existed before publication.
-- `compensateIfCurrent()` executes under the store monitor and succeeds only when that token is still the current history head and the current document is the token's after document. It restores the exact prior document, removes only that history entry, restores the prior redo state and dirty/debounce envelope, and publishes the appropriate document-changed event.
-- If another command, undo, redo, save-as, or document replacement has interposed, compensation returns a deterministic rejected conflict result and leaves all history and document bytes untouched. It never calls generic `undo()`.
-- Repeated calls are idempotent after successful compensation and remain retryable after a conflict or transient failure according to the returned result. The mutation object does not expose mutable documents or history collections.
+- An applied mutation captures an opaque history token identifying the entry object, a monotonic store/history publication revision, the before/after documents, the redo-stack identity and contents, the workspace file identity, the dirty/debounce envelope, and the persisted bytes/digests before and after publication.
+- `compensateIfCurrent()` executes under the store monitor and succeeds only when the exact entry object, publication revision, redo identity, current file identity, current document, and expected persisted bytes still match. Equal documents alone are insufficient: command -> undo, undo -> redo, and other ABA sequences are conflicts.
+- If another command, undo, redo, save, autosave, save-as, or document replacement has interposed, compensation either restores the captured before bytes synchronously after verifying the current bytes are exactly the captured after bytes, or returns a deterministic rejected conflict/incomplete result without changing history. It never calls generic `undo()` and never reports recovery complete after an unverified disk state.
+- Successful compensation removes only the target history entry, restores the exact prior redo stack and dirty/debounce envelope, verifies any restored persisted bytes, and publishes the appropriate document-changed event. Repeated calls are idempotent after success and retryable after a transient write failure.
 - Read-only, rejected, and no-op commands return a result with no compensatable token.
 
-`WorkspaceHistory` will replace the unqualified document-only undo entries with an internal opaque entry/token representation while preserving its existing public `execute`, `undo`, `redo`, `canUndo`, `canRedo`, and `clear` behavior. A conditional compensation method will check entry identity and current document before popping only the matching entry. Existing undo/redo tests must remain green.
+`WorkspaceHistory` will replace the unqualified document-only undo entries with internal identity-bearing entries and a monotonic state revision while preserving its existing public `execute`, `undo`, `redo`, `canUndo`, `canRedo`, and `clear` behavior. A conditional compensation method will check entry identity, revision, redo identity, and current document before popping only the matching entry. `GraphWorkspaceStore` will include persistence/save generation and file-byte checks so a clean autosave or save-as cannot make an in-memory-only compensation claim. Existing undo/redo tests must remain green.
 
-`DefaultContributorDeletionHandler` will use `executeWithCompensation(WorkspaceCommands.purgeRelationships(...))` for the mixed path. Its `PendingRecovery` will retain the mutation handle when native recovery or workspace compensation is incomplete. Recovery attempts workspace compensation through that handle before native rollback, retains the handle on a conflict, and clears it only after both resources are proven restored. The existing one-purge success path and `undo_incomplete` metadata remain unchanged.
+`DefaultContributorDeletionHandler` will use `executeWithCompensation(WorkspaceCommands.purgeRelationships(...))` for the mixed path. Its `PendingRecovery` will retain the mutation handle when native recovery or workspace compensation is incomplete. Both initial failure handling and later retries use the same deterministic workspace-first, then native order; recovery attempts workspace compensation through the exact mutation handle, retains the handle on a conflict, and clears it only after both resources are proven restored. The pending gate applies only to work initiated by this handler, not unrelated workspace commands. The existing one-purge success path and `undo_incomplete` metadata remain unchanged.
 
 ### Task 1 verification model
 
-- Real `WorkspaceHistory` tests prove an old token cannot undo an interposed command and a matching token compensates exactly once.
-- Real `GraphWorkspaceStore` tests prove conditional compensation restores the purge and refuses after an interposed command without changing the interposed document.
-- Handler tests use a real or deterministic store seam to model native commit failure, an interposed workspace command, rejected exact compensation, later retry, and eventual success. They assert no new deletion begins while recovery is unresolved.
+- Real `WorkspaceHistory` tests prove an old token cannot undo an interposed command, an interposed command followed by undo/redo cannot satisfy an ABA predicate, and a matching token compensates exactly once while restoring redo.
+- Real `GraphWorkspaceStore` tests prove conditional compensation restores the purge, refuses after an interposed command, handles clean/dirty autosave states, rejects or safely restores a save-as/document replacement, and verifies reopened file bytes.
+- Handler tests use a real or deterministic store seam to model native commit failure, an interposed workspace command, rejected exact compensation, later retry, and eventual success. They assert workspace compensation is attempted before native recovery on both initial and pending paths, and no new deletion begins while recovery is unresolved.
 - Existing Task 32 native transaction, descriptor mutant, mixed-success, and compatibility suites remain green.
 
 ## Task 2 Design: Restart After Layout Failure
@@ -70,18 +70,18 @@ The exact nested naming may follow local conventions, but these invariants are f
 
 On `restart()` for a failed current run:
 
-1. Under `monitor`, clear pause intent, increment the control revision, claim exactly one recovery frame, and mark that a fresh submit is required.
-2. On the existing lifecycle executor, validate the run token/revision, call `FrameStepper.restart()` once, validate again, and call `FrameStepper.submit(currentRequest)` rather than `step()` when the run's previous submit failed.
+1. Under `monitor`, clear pause intent and increment the control revision. If failed publication is still in flight, record a `restartRequested` recovery intent without claiming a second frame; the publication completion owns the handoff. Otherwise claim exactly one recovery frame and mark that a fresh submit is required.
+2. On the existing lifecycle executor, validate the run token/revision. After the failed publication releases its claim, the newest restart revision alone claims recovery, calls `FrameStepper.restart()` once, validates again, and calls `FrameStepper.submit(currentRequest)` rather than `step()` when the run's previous submit failed.
 3. Only a successful replacement frame can publish `SETTLING` or `IDLE` and clear the failed marker. A restart or submit failure leaves the run restartable and publishes/retains `FAILED` without issuing stale follow-up work.
-4. Superseding start/reset/pause/close transitions retain their existing claim release and cancellation rules; no obsolete run may submit after replacement or close.
+4. Reset, a newer start, and close cancel any deferred failed-recovery intent and release its claim. A second reentrant restart supersedes the older revision but cannot strand the newer recovery request. Completion of settlement futures occurs after releasing `monitor` while the current failed run remains live.
 
-The implementation will use existing `LayoutWorker.restart()` behavior, which replaces a failed engine before its next submit. `GraphUpdateCoordinator.restartLayout()` and the router's applied result remain compatible; the end-to-end test will prove that the applied command now causes a real replacement submission and recovered current-generation state. No new public command is needed.
+The implementation will use existing `LayoutWorker.restart()` behavior, which replaces a failed engine before its next submit. `GraphUpdateCoordinator.restartLayout()` and the router's applied result remain compatible; a real coordinator/lifecycle test will prove that the applied command now causes a replacement submission and recovered current-generation state. No new public command is needed.
 
 ### Task 2 verification model
 
 - A deterministic `LayoutSettleLoopShould` regression uses a frame stepper whose first submit returns a failed frame and whose second submit returns an idle frame. It asserts failure publication, two restart calls, two submits, current generation preservation, and recovered `IDLE` publication.
-- Tests cover restart failure, superseding reset/close, and no stale submission after a failed run.
-- `GraphCommandRouterShould` or `GraphUpdateCoordinatorShould` adds a command-path assertion that `Restart Layout` invokes the live loop and returns the existing result after recovery.
+- Tests cover restart failure, a second restart during failed EDT publication, reset/close superseding deferred recovery, and no stale submission after a failed run.
+- `GraphUpdateCoordinatorShould` adds the live failed-frame -> Restart Layout -> recovered-IDLE command-chain assertion using the package-private lifecycle/stepper seam. `GraphCommandRouterShould` retains the public routing/result contract assertion.
 - Existing lifecycle, worker, coordinator, and full graph-plugin tests remain green.
 
 ## Allowlist
@@ -96,6 +96,7 @@ The successor plan must authorize exactly the paths needed by the two seams and 
 - `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/command/ContributorDeletionPlanShould.java`
 - `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/control/LayoutSettleLoop.java`
 - `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/control/LayoutSettleLoopShould.java`
+- `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/control/GraphUpdateCoordinatorShould.java`
 - `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/command/GraphCommandRouterShould.java`
 
 No other tracked path is permitted. If implementation proves a path outside this list is load-bearing, the successor run must block rather than silently widening itself.
