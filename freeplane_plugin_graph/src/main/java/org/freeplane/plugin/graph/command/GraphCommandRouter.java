@@ -5,6 +5,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 import org.freeplane.plugin.graph.control.GraphUpdateCoordinator;
+import org.freeplane.plugin.graph.control.WorkspaceMapCoordinator;
 import org.freeplane.plugin.graph.control.WorkspacePathReservation;
 import org.freeplane.plugin.graph.control.WorkspaceSessionId;
 import org.freeplane.plugin.graph.control.WorkspaceSessionRegistry;
@@ -20,6 +21,7 @@ import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 
 public final class GraphCommandRouter {
     private static final String MAP_NOT_FOUND = "graph_workspace.map.not_found";
+    private static final String MAP_RETRY_STARTED = "graph_workspace.map.retry.started";
     private static final String MAP_RETRY_INACTIVE = "graph_workspace.map.retry.inactive";
     private static final String MAP_RETRY_FAILED = "graph_workspace.map.retry.failed";
     private static final String SAVE_COMPLETED = "graph_workspace.workspace.saved";
@@ -30,12 +32,8 @@ public final class GraphCommandRouter {
     private static final String LAYOUT_RESTARTED = "graph_workspace.layout.restarted";
     private static final String LAYOUT_RESET = "graph_workspace.layout.reset";
 
-    public interface MapRetryHandler {
-        GraphCommandResult retry(MapReference reference);
-    }
-
     private final GraphWorkspaceStore store;
-    private final MapRetryHandler mapRetry;
+    private final WorkspaceMapCoordinator maps;
     private final FreeplaneMapCommandExecutor mapCommands;
     private final SourceNavigation navigation;
     private final GraphUpdateCoordinator updates;
@@ -44,13 +42,13 @@ public final class GraphCommandRouter {
     private final PurgeCommandHandler purgeHandler;
     private final ContributorDeletionHandler deletionHandler;
 
-    public GraphCommandRouter(final GraphWorkspaceStore store, final MapRetryHandler mapRetry,
+    public GraphCommandRouter(final GraphWorkspaceStore store, final WorkspaceMapCoordinator maps,
             final FreeplaneMapCommandExecutor mapCommands, final SourceNavigation navigation,
             final GraphUpdateCoordinator updates, final WorkspaceSessionRegistry sessions,
             final WorkspaceSessionId sessionId, final PurgeCommandHandler purgeHandler,
             final ContributorDeletionHandler deletionHandler) {
         this.store = Objects.requireNonNull(store, "store");
-        this.mapRetry = Objects.requireNonNull(mapRetry, "mapRetry");
+        this.maps = Objects.requireNonNull(maps, "maps");
         this.mapCommands = Objects.requireNonNull(mapCommands, "mapCommands");
         this.navigation = Objects.requireNonNull(navigation, "navigation");
         this.updates = Objects.requireNonNull(updates, "updates");
@@ -164,7 +162,8 @@ public final class GraphCommandRouter {
             return rejected(MAP_RETRY_INACTIVE, command.mapReferenceId());
         }
         try {
-            return requireResult(mapRetry.retry(reference));
+            maps.retry(reference);
+            return applied(MAP_RETRY_STARTED);
         }
         catch (final RuntimeException failure) {
             return rejected(MAP_RETRY_FAILED, command.mapReferenceId());
