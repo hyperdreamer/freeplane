@@ -45,7 +45,7 @@
 - Read-only: `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/GraphInteractionController.java:1-end`
 - Read-only: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/GraphInteractionControllerShould.java:1-end`
 - Read-only: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/GraphSearchModelShould.java:1-end`
-- Read-only: `docs/superpowers/specs/2026-08-18-graph-workspace-batch-e-dispatch-mismatch-continuation-design.md:1-end`
+- Read-only: `docs/superpowers/specs/2026-08-18-graph-workspace-batch-e-dispatch-mismatch-v3-continuation-design.md:1-end`
 - No source deliverable or Git commit is permitted; write only the normal implementer report under the dispatched run root. Use targeted `rg`/line reads; do not invoke CodeGraph or read predecessor run artifacts.
 
 **Interfaces:**
