@@ -14,16 +14,18 @@ import org.junit.Test;
 
 public class GraphViewportShould {
     @Test
-    public void roundTripWorldAndScreenCoordinates() {
+    public void transformIndependentAbsoluteWorldAndScreenCoordinates() {
         GraphViewport viewport = GraphViewport.of(20.0, -10.0, 2.0);
         Dimension size = new Dimension(200, 100);
         LayoutPoint world = LayoutPoint.of(23.25, -4.5);
 
         Point2D screen = viewport.toScreen(world, size);
-        LayoutPoint roundTrip = viewport.toWorld(screen, size);
+        LayoutPoint convertedWorld = viewport.toWorld(new Point2D.Double(144.0, 34.0), size);
 
-        assertThat(roundTrip.x()).isCloseTo(world.x(), within(1e-9));
-        assertThat(roundTrip.y()).isCloseTo(world.y(), within(1e-9));
+        assertThat(screen.getX()).isCloseTo(106.5, within(1e-9));
+        assertThat(screen.getY()).isCloseTo(61.0, within(1e-9));
+        assertThat(convertedWorld.x()).isCloseTo(42.0, within(1e-9));
+        assertThat(convertedWorld.y()).isCloseTo(-18.0, within(1e-9));
     }
 
     @Test
