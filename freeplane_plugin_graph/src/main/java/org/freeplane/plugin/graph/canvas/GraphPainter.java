@@ -224,7 +224,7 @@ final class GraphPainter {
             }
             final boolean dim = dimUnrelated && !forced;
             final AlphaComposite oldComposite = setOpacity(graphics, dim);
-            final Font font = labelFont(theme, level, forced, viewport.zoom());
+            final Font font = labelFont(theme, level, forced, false, viewport.zoom());
             graphics.setFont(font);
             graphics.setColor(theme.labelColor());
             final double labelY = nodeGeometry.center().y() - nodeGeometry.radius() - 8.0 / viewport.zoom();
@@ -242,13 +242,14 @@ final class GraphPainter {
                 }
                 final ProjectedEndpointKey endpoint = ProjectedEndpointKey.ofEnclosure(endpointKey);
                 final boolean forced = isRelated(endpoint, paintState);
-                final boolean required = enclosure.boundaryTier() == BoundaryTier.EMPHATIC;
+                final boolean emphatic = enclosure.boundaryTier() == BoundaryTier.EMPHATIC;
+                final boolean required = emphatic;
                 if (!shouldPaintLabel(placement.mode(), forced, level, required)) {
                     continue;
                 }
                 final boolean dim = dimUnrelated && !forced;
                 final AlphaComposite oldComposite = setOpacity(graphics, dim);
-                final Font font = labelFont(theme, level, forced, viewport.zoom());
+                final Font font = labelFont(theme, level, forced, emphatic, viewport.zoom());
                 graphics.setFont(font);
                 graphics.setColor(theme.labelColor());
                 if (placement.leaderStart().isPresent()) {
@@ -263,8 +264,14 @@ final class GraphPainter {
     }
 
     private static Font labelFont(final GraphTheme theme, final RenderingLevel level, final boolean forced,
-            final double zoom) {
-        final Font base = forced ? theme.labelFont() : theme.labelFont(level);
+            final boolean emphatic, final double zoom) {
+        final Font base;
+        if (emphatic) {
+            base = theme.emphaticLabelFont();
+        }
+        else {
+            base = forced ? theme.labelFont() : theme.labelFont(level);
+        }
         return base.deriveFont(Math.max(1.0f, base.getSize2D() / (float) zoom));
     }
 

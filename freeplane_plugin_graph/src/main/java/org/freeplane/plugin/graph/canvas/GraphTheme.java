@@ -3,27 +3,20 @@ package org.freeplane.plugin.graph.canvas;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Font;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 import javax.swing.UIManager;
 
 import org.freeplane.plugin.graph.projection.BoundaryTier;
+import org.freeplane.plugin.graph.workspace.model.MapReference;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 import org.freeplane.plugin.graph.workspace.model.DisplaySettings.CanvasTheme;
 
 public final class GraphTheme {
-    private static final List<Color> APPROVED_PALETTE = Collections.unmodifiableList(Arrays.asList(
-        new Color(48, 104, 189),
-        new Color(20, 135, 122),
-        new Color(210, 122, 44),
-        new Color(174, 76, 104),
-        new Color(103, 83, 170),
-        new Color(82, 139, 72)));
-
     private final Color background;
     private final Color labelColor;
     private final Color edgeColor;
@@ -43,14 +36,15 @@ public final class GraphTheme {
     private final BasicStroke hoverStroke;
     private final BasicStroke searchStroke;
     private final Font labelFont;
+    private final Font emphaticLabelFont;
     private final Font denseLabelFont;
     private final Font overTargetLabelFont;
-    private final List<Color> mapPalette;
+    private final Map<MapReferenceId, Color> mapColors;
 
     private GraphTheme(final Color background, final Color labelColor, final Color edgeColor,
             final Color nodeFill, final Color nodeStroke, final Color selectionColor, final Color hoverColor,
             final Color searchColor, final Color warningColor, final Color pinColor, final Color mutedColor,
-            final Color previewColor, final List<Color> mapPalette) {
+            final Color previewColor, final Map<MapReferenceId, Color> mapColors) {
         this.background = requireColor(background, "background");
         this.labelColor = requireColor(labelColor, "labelColor");
         this.edgeColor = requireColor(edgeColor, "edgeColor");
@@ -71,19 +65,20 @@ public final class GraphTheme {
         this.searchStroke = new BasicStroke(1.8f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND,
             10.0f, new float[] { 5.0f, 4.0f }, 0.0f);
         this.labelFont = new Font(Font.SANS_SERIF, Font.PLAIN, 12);
+        this.emphaticLabelFont = new Font(Font.SANS_SERIF, Font.BOLD, 15);
         this.denseLabelFont = new Font(Font.SANS_SERIF, Font.PLAIN, 9);
         this.overTargetLabelFont = new Font(Font.SANS_SERIF, Font.PLAIN, 7);
-        this.mapPalette = copyPalette(mapPalette);
+        this.mapColors = copyMapColors(mapColors);
     }
 
     public static GraphTheme resolve(final CanvasTheme requested) {
-        return resolve(requested, APPROVED_PALETTE);
+        return resolve(requested, Collections.<MapReference>emptyList());
     }
 
-    public static GraphTheme resolve(final CanvasTheme requested, final List<Color> callerPalette) {
+    public static GraphTheme resolve(final CanvasTheme requested,
+            final List<MapReference> registeredMaps) {
         final CanvasTheme theme = Objects.requireNonNull(requested, "requested");
-        final List<Color> palette = callerPalette == null || callerPalette.isEmpty()
-            ? APPROVED_PALETTE : callerPalette;
+        final Map<MapReferenceId, Color> mapColors = resolveMapColors(registeredMaps);
         final Color uiBackground = UIManager.getColor("Panel.background");
         final Color uiForeground = UIManager.getColor("Label.foreground");
         final boolean dark;
@@ -101,13 +96,13 @@ public final class GraphTheme {
                 ? uiBackground : new Color(31, 35, 42);
             Color foreground = theme == CanvasTheme.FOLLOW_FREEPLANE && uiForeground != null
                 ? uiForeground : new Color(240, 244, 248);
-            return darkTheme(background, foreground, palette);
+            return darkTheme(background, foreground, mapColors);
         }
         Color background = theme == CanvasTheme.FOLLOW_FREEPLANE && uiBackground != null
             ? uiBackground : new Color(250, 251, 253);
         Color foreground = theme == CanvasTheme.FOLLOW_FREEPLANE && uiForeground != null
             ? uiForeground : new Color(31, 38, 48);
-        return lightTheme(background, foreground, palette);
+        return lightTheme(background, foreground, mapColors);
     }
 
     public static GraphTheme from(final CanvasTheme requested) {
@@ -119,21 +114,21 @@ public final class GraphTheme {
     }
 
     private static GraphTheme lightTheme(final Color background, final Color foreground,
-            final List<Color> palette) {
+            final Map<MapReferenceId, Color> mapColors) {
         return new GraphTheme(background, foreground, new Color(73, 84, 100),
             new Color(229, 239, 249), new Color(38, 91, 137),
             new Color(37, 91, 205), new Color(202, 112, 18), new Color(24, 135, 76),
             new Color(180, 48, 46), new Color(98, 88, 190), new Color(120, 130, 142),
-            new Color(64, 113, 184), palette);
+            new Color(64, 113, 184), mapColors);
     }
 
     private static GraphTheme darkTheme(final Color background, final Color foreground,
-            final List<Color> palette) {
+            final Map<MapReferenceId, Color> mapColors) {
         return new GraphTheme(background, foreground, new Color(190, 202, 217),
             new Color(57, 76, 98), new Color(142, 194, 239),
             new Color(112, 164, 255), new Color(255, 190, 93), new Color(103, 211, 146),
             new Color(255, 117, 117), new Color(190, 177, 255), new Color(151, 163, 178),
-            new Color(135, 181, 255), palette);
+            new Color(135, 181, 255), mapColors);
     }
 
     public Color background() {
@@ -243,6 +238,10 @@ public final class GraphTheme {
         return labelFont;
     }
 
+    public Font emphaticLabelFont() {
+        return emphaticLabelFont;
+    }
+
     public Font denseLabelFont() {
         return denseLabelFont;
     }
@@ -262,10 +261,6 @@ public final class GraphTheme {
         return labelFont;
     }
 
-    public List<Color> mapPalette() {
-        return mapPalette;
-    }
-
     private Color treatment(final MapReferenceId mapReferenceId, final double baseWeight) {
         final Color base = mapColor(mapReferenceId);
         return new Color(blend(background.getRed(), base.getRed(), baseWeight),
@@ -275,24 +270,42 @@ public final class GraphTheme {
 
     private Color mapColor(final MapReferenceId mapReferenceId) {
         final MapReferenceId value = Objects.requireNonNull(mapReferenceId, "mapReferenceId");
-        final List<Color> palette = mapPalette();
-        return palette.get(Math.floorMod(value.value().hashCode(), palette.size()));
+        final Color color = mapColors.get(value);
+        if (color == null) {
+            throw new IllegalStateException("No persisted color registered for map " + value.value());
+        }
+        return color;
     }
 
     private static int blend(final int backgroundChannel, final int baseChannel, final double baseWeight) {
         return (int) Math.round(backgroundChannel * (1.0 - baseWeight) + baseChannel * baseWeight);
     }
 
-    private static List<Color> copyPalette(final List<Color> values) {
-        Objects.requireNonNull(values, "mapPalette");
-        if (values.isEmpty()) {
-            throw new IllegalArgumentException("mapPalette must not be empty");
+    private static Map<MapReferenceId, Color> resolveMapColors(final List<MapReference> registeredMaps) {
+        Objects.requireNonNull(registeredMaps, "registeredMaps");
+        final Map<MapReferenceId, Color> assignments = new LinkedHashMap<MapReferenceId, Color>();
+        for (final MapReference registeredMap : registeredMaps) {
+            final MapReference reference = Objects.requireNonNull(registeredMap, "registeredMap");
+            final MapReferenceId id = Objects.requireNonNull(reference.id(), "registeredMap.id");
+            if (assignments.containsKey(id)) {
+                throw new IllegalArgumentException("Duplicate registered map ID " + id.value());
+            }
+            assignments.put(id, Color.decode(reference.color()));
         }
-        final List<Color> copy = new ArrayList<Color>(values.size());
-        for (final Color value : values) {
-            copy.add(requireColor(value, "mapPalette entry"));
+        return assignments;
+    }
+
+    private static Map<MapReferenceId, Color> copyMapColors(final Map<MapReferenceId, Color> values) {
+        Objects.requireNonNull(values, "mapColors");
+        final Map<MapReferenceId, Color> copy = new LinkedHashMap<MapReferenceId, Color>();
+        for (final Map.Entry<MapReferenceId, Color> entry : values.entrySet()) {
+            final MapReferenceId id = Objects.requireNonNull(entry.getKey(), "mapColors key");
+            if (copy.containsKey(id)) {
+                throw new IllegalArgumentException("Duplicate map color for " + id.value());
+            }
+            copy.put(id, requireColor(entry.getValue(), "mapColors value"));
         }
-        return Collections.unmodifiableList(copy);
+        return Collections.unmodifiableMap(copy);
     }
 
     private static Color requireColor(final Color value, final String name) {

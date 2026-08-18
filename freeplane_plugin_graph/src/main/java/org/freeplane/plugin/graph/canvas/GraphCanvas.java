@@ -133,7 +133,7 @@ public final class GraphCanvas extends JComponent {
         return paintState;
     }
 
-    void setTheme(final GraphTheme value) {
+    public void setTheme(final GraphTheme value) {
         final GraphTheme next = Objects.requireNonNull(value, "theme");
         onEdt(new Runnable() {
             @Override
