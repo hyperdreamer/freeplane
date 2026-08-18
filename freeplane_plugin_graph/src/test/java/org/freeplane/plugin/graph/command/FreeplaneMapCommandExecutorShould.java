@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -288,12 +289,203 @@ public class FreeplaneMapCommandExecutorShould {
     }
 
     @Test
+    public void batchesTwoNativeDeletionsOnOneSourceMapIntoOneOpenUndoTransaction() {
+        Fixture fixture = new Fixture(true);
+        MapNodes nodes = fixture.addMap(MapReferenceId.of("00000000-0000-0000-0000-000000000501"), "same map");
+        NodeLinks links = NodeLinks.createLinkExtension(nodes.source);
+        ConnectorModel first = connector(nodes.source, "ID_TARGET", ConnectorArrows.FORWARD, "first", "", "");
+        ConnectorModel second = connector(nodes.source, "ID_TARGET_REPLACED", ConnectorArrows.BOTH, "second", "", "");
+        links.addArrowlink(first);
+        links.addArrowlink(second);
+        ContributorDeletionPlan plan = plan(
+            edit(nodes.mapId, nodes.sourceKey, 0, descriptor(nodes.sourceKey, nodes.mapId, "ID_TARGET", false,
+                true, "first", "", "")),
+            edit(nodes.mapId, nodes.sourceKey, 1,
+                descriptor(nodes.sourceKey, nodes.mapId, "ID_TARGET_REPLACED", true, true, "second", "", "")));
+
+        FreeplaneMapCommandExecutor.ContributorDeletionTransaction transaction =
+            fixture.edt.call(new Callable<FreeplaneMapCommandExecutor.ContributorDeletionTransaction>() {
+                @Override
+                public FreeplaneMapCommandExecutor.ContributorDeletionTransaction call() {
+                    return fixture.executor.beginContributorDeletion(plan);
+                }
+            });
+
+        assertApplied(transaction.outcome());
+        assertThat(nodes.undo.startCalls).isEqualTo(1);
+        assertThat(nodes.undo.commitCalls).isZero();
+        assertThat(fixture.nativeController.removeCalls).isEqualTo(2);
+        fixture.edt.call(new Callable<Void>() {
+            @Override
+            public Void call() {
+                transaction.commit();
+                return null;
+            }
+        });
+        assertThat(nodes.undo.commitCalls).isEqualTo(1);
+        assertThat(nodes.undo.rollbackCalls).isZero();
+        assertThat(connectors(nodes.source)).isEmpty();
+        assertThat(fixture.executor.currentUndoTarget())
+            .contains(new MapUndoTarget(nodes.mapId, "same map", false));
+    }
+
+    @Test
+    public void startsOneTransactionPerTouchedMapAndUsesTheDeterministicLastMapAsUndoOwner() {
+        Fixture fixture = new Fixture(true);
+        MapNodes first = fixture.addMap(MapReferenceId.of("00000000-0000-0000-0000-000000000511"), "first map");
+        MapNodes second = fixture.addMap(MapReferenceId.of("00000000-0000-0000-0000-000000000512"), "second map");
+        NodeLinks.createLinkExtension(first.source).addArrowlink(
+            connector(first.source, "ID_TARGET", ConnectorArrows.FORWARD, "", "", ""));
+        NodeLinks.createLinkExtension(second.source).addArrowlink(
+            connector(second.source, "ID_TARGET", ConnectorArrows.FORWARD, "", "", ""));
+        ContributorDeletionPlan plan = plan(
+            edit(second.mapId, second.sourceKey, 0,
+                descriptor(second.sourceKey, second.mapId, "ID_TARGET", false, true, "", "", "")),
+            edit(first.mapId, first.sourceKey, 0,
+                descriptor(first.sourceKey, first.mapId, "ID_TARGET", false, true, "", "", "")));
+
+        FreeplaneMapCommandExecutor.ContributorDeletionTransaction transaction =
+            fixture.edt.call(new Callable<FreeplaneMapCommandExecutor.ContributorDeletionTransaction>() {
+                @Override
+                public FreeplaneMapCommandExecutor.ContributorDeletionTransaction call() {
+                    return fixture.executor.beginContributorDeletion(plan);
+                }
+            });
+        fixture.edt.call(new Callable<Void>() {
+            @Override
+            public Void call() {
+                transaction.commit();
+                return null;
+            }
+        });
+
+        assertApplied(transaction.outcome());
+        assertThat(first.undo.startCalls).isEqualTo(1);
+        assertThat(second.undo.startCalls).isEqualTo(1);
+        assertThat(first.undo.commitCalls).isEqualTo(1);
+        assertThat(second.undo.commitCalls).isEqualTo(1);
+        assertThat(transaction.dirtySourceMaps()).containsExactly(first.mapId, second.mapId);
+        assertThat(fixture.executor.currentUndoTarget())
+            .contains(new MapUndoTarget(second.mapId, "second map", false));
+    }
+
+    @Test
+    public void resolvesEveryConnectorBeforeStartingAnyMapTransaction() {
+        Fixture fixture = new Fixture(true);
+        MapNodes first = fixture.addMap(MapReferenceId.of("00000000-0000-0000-0000-000000000521"), "valid map");
+        MapNodes second = fixture.addMap(MapReferenceId.of("00000000-0000-0000-0000-000000000522"), "changed map");
+        NodeLinks.createLinkExtension(first.source).addArrowlink(
+            connector(first.source, "ID_TARGET", ConnectorArrows.FORWARD, "", "", ""));
+        NodeLinks.createLinkExtension(second.source).addArrowlink(
+            connector(second.source, "ID_TARGET", ConnectorArrows.FORWARD, "changed", "", ""));
+        ContributorDeletionPlan plan = plan(
+            edit(first.mapId, first.sourceKey, 0,
+                descriptor(first.sourceKey, first.mapId, "ID_TARGET", false, true, "", "", "")),
+            edit(second.mapId, second.sourceKey, 0,
+                descriptor(second.sourceKey, second.mapId, "ID_TARGET", false, true, "", "", "")));
+
+        FreeplaneMapCommandExecutor.ContributorDeletionTransaction transaction =
+            fixture.edt.call(new Callable<FreeplaneMapCommandExecutor.ContributorDeletionTransaction>() {
+                @Override
+                public FreeplaneMapCommandExecutor.ContributorDeletionTransaction call() {
+                    return fixture.executor.beginContributorDeletion(plan);
+                }
+            });
+
+        assertRejected(transaction.outcome(), "graph_workspace.connector.changed");
+        assertThat(first.undo.startCalls).isZero();
+        assertThat(second.undo.startCalls).isZero();
+        assertThat(fixture.nativeController.removeCalls).isZero();
+        assertThat(fixture.viewCreations).isZero();
+        assertThat(connectors(first.source)).hasSize(1);
+        assertThat(connectors(second.source)).hasSize(1);
+    }
+
+    @Test
+    public void rollsBackAllStartedMapTransactionsInReverseOrderAfterALaterNativeFailure() {
+        Fixture fixture = new Fixture(true);
+        MapNodes first = fixture.addMap(MapReferenceId.of("00000000-0000-0000-0000-000000000531"), "first map");
+        MapNodes second = fixture.addMap(MapReferenceId.of("00000000-0000-0000-0000-000000000532"), "second map");
+        NodeLinks.createLinkExtension(first.source).addArrowlink(
+            connector(first.source, "ID_TARGET", ConnectorArrows.FORWARD, "", "", ""));
+        NodeLinks.createLinkExtension(second.source).addArrowlink(
+            connector(second.source, "ID_TARGET", ConnectorArrows.FORWARD, "", "", ""));
+        fixture.nativeController.throwOnDeleteCall = 2;
+        ContributorDeletionPlan plan = plan(
+            edit(first.mapId, first.sourceKey, 0,
+                descriptor(first.sourceKey, first.mapId, "ID_TARGET", false, true, "", "", "")),
+            edit(second.mapId, second.sourceKey, 0,
+                descriptor(second.sourceKey, second.mapId, "ID_TARGET", false, true, "", "", "")));
+
+        FreeplaneMapCommandExecutor.ContributorDeletionTransaction transaction =
+            fixture.edt.call(new Callable<FreeplaneMapCommandExecutor.ContributorDeletionTransaction>() {
+                @Override
+                public FreeplaneMapCommandExecutor.ContributorDeletionTransaction call() {
+                    return fixture.executor.beginContributorDeletion(plan);
+                }
+            });
+
+        assertRejected(transaction.outcome(), "graph_workspace.connector.changed");
+        assertThat(first.undo.startCalls).isEqualTo(1);
+        assertThat(second.undo.startCalls).isEqualTo(1);
+        assertThat(first.undo.rollbackCalls).isEqualTo(1);
+        assertThat(second.undo.rollbackCalls).isEqualTo(1);
+        assertThat(connectors(first.source)).hasSize(1);
+        assertThat(connectors(second.source)).hasSize(1);
+        assertThat(fixture.executor.currentUndoTarget()).isEmpty();
+    }
+
+    @Test
+    public void keepsTheFullDescriptorGuardForAReorderedBatchOccurrence() {
+        Fixture fixture = new Fixture(true);
+        MapNodes nodes = fixture.addMap(MapReferenceId.of("00000000-0000-0000-0000-000000000541"), "reordered");
+        NodeLinks links = NodeLinks.createLinkExtension(nodes.source);
+        links.addArrowlink(connector(nodes.source, "ID_TARGET", ConnectorArrows.FORWARD, "wrong", "", ""));
+        links.addArrowlink(connector(nodes.source, "ID_TARGET", ConnectorArrows.BOTH, "right", "", ""));
+        ContributorDeletionPlan plan = plan(edit(nodes.mapId, nodes.sourceKey, 1,
+            descriptor(nodes.sourceKey, nodes.mapId, "ID_TARGET", true, true, "expected", "", "")));
+
+        FreeplaneMapCommandExecutor.ContributorDeletionTransaction transaction =
+            fixture.edt.call(new Callable<FreeplaneMapCommandExecutor.ContributorDeletionTransaction>() {
+                @Override
+                public FreeplaneMapCommandExecutor.ContributorDeletionTransaction call() {
+                    return fixture.executor.beginContributorDeletion(plan);
+                }
+            });
+
+        assertRejected(transaction.outcome(), "graph_workspace.connector.changed");
+        assertThat(fixture.nativeController.removeCalls).isZero();
+        assertThat(connectors(nodes.source)).hasSize(2);
+    }
+
+    private static ContributorDeletionPlan plan(ContributorDeletionPlan.NativeEdit... edits) {
+        Map<MapReferenceId, List<ContributorDeletionPlan.NativeEdit>> grouped =
+            new LinkedHashMap<MapReferenceId, List<ContributorDeletionPlan.NativeEdit>>();
+        for (ContributorDeletionPlan.NativeEdit edit : edits) {
+            List<ContributorDeletionPlan.NativeEdit> values = grouped.get(edit.key().mapReferenceId().get());
+            if (values == null) {
+                values = new java.util.ArrayList<ContributorDeletionPlan.NativeEdit>();
+                grouped.put(edit.key().mapReferenceId().get(), values);
+            }
+            values.add(edit);
+        }
+        return ContributorDeletionPlan.of(grouped, Collections.emptySet());
+    }
+
+    private static ContributorDeletionPlan.NativeEdit edit(MapReferenceId map, SourceNodeKey source, int occurrence,
+            ConnectorDescriptor descriptor) {
+        return ContributorDeletionPlan.NativeEdit.of(ContributorKey.nativeConnector(map, source, occurrence),
+            descriptor);
+    }
+
+    @Test
     public void rejectsAStaleOccurrenceOrDescriptorWithoutDeletingAnotherConnector() {
         // Catches deletion that trusts an old occurrence or descriptor after the source links have changed.
         assertStaleDeletionRejected(StaleConnectorMutation.TARGET);
         assertStaleDeletionRejected(StaleConnectorMutation.ARROWS);
         assertStaleDeletionRejected(StaleConnectorMutation.LABEL);
     }
+
 
     @Test
     public void exposesAndUndoesOnlyTheLastSuccessfulSourceMapUndoTarget() {
@@ -687,6 +879,7 @@ public class FreeplaneMapCommandExecutorShould {
         private String lastTargetId;
         private boolean throwAfterCreateMutation;
         private boolean throwAfterDeleteMutation;
+        private int throwOnDeleteCall = -1;
 
         private RecordingLinkController(ModeController modeController, InlineEdt edt) {
             super(modeController);
@@ -734,13 +927,13 @@ public class FreeplaneMapCommandExecutorShould {
             final NodeLinks links = NodeLinks.getLinkExtension(connector.getSource());
             links.removeArrowlink(connector);
             connector.getSource().getMap().setSaved(false);
-            if (throwAfterDeleteMutation) {
-                restoreOnRollback(connector.getSource(), new Runnable() {
-                    @Override
-                    public void run() {
-                        links.addArrowlink(connector);
-                    }
-                });
+            restoreOnRollback(connector.getSource(), new Runnable() {
+                @Override
+                public void run() {
+                    links.addArrowlink(connector);
+                }
+            });
+            if (throwAfterDeleteMutation || removeCalls == throwOnDeleteCall) {
                 throw new IllegalStateException("native delete failure");
             }
         }
