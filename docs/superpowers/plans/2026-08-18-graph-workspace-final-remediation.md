@@ -29,8 +29,8 @@
 
 **Files:**
 
-- Modify: `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/workspace/GraphWorkspaceStore.java:28-105,278-315`
-- Modify: `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/workspace/WorkspaceHistory.java:9-69`
+- Modify: `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/workspace/GraphWorkspaceStore.java:28-420`
+- Modify: `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/workspace/WorkspaceHistory.java:9-100`
 - Modify: `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/command/DefaultContributorDeletionHandler.java:275-548`
 - Modify: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/workspace/GraphWorkspaceStoreShould.java`
 - Modify: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/workspace/WorkspaceHistoryShould.java`
@@ -41,13 +41,19 @@
 - Consumes the existing `WorkspaceCommand`, `WorkspaceTransition`, `GraphCommandResult`, `WorkspaceDocument`, `GraphWorkspaceStore.execute(WorkspaceCommand)`, `GraphWorkspaceStore.undo()`, `DefaultContributorDeletionHandler`, and `FreeplaneMapCommandExecutor.ContributorDeletionTransaction` contracts.
 - Produces `public GraphWorkspaceStore.WorkspaceMutation executeWithCompensation(WorkspaceCommand command)`.
 - Produces `public static final class GraphWorkspaceStore.WorkspaceMutation` with `GraphCommandResult result()` and `GraphCommandResult compensateIfCurrent()`. It owns no exposed mutable document or history collection. The opaque token includes entry identity, a monotonic history/store revision, redo-stack identity, workspace file identity, dirty/debounce/save generation, and before/after persisted-byte evidence. `compensateIfCurrent()` returns an applied result only when the full token matches; command -> undo/redo, save, save-as, autosave, and document replacement ABA states are rejected or safely restored with verified bytes. Repeated successful calls are idempotent and transient write failures remain retryable.
-- Produces package-private `WorkspaceHistory.HistoryMutation executeWithToken(WorkspaceCommand command, WorkspaceDocument current)` and `WorkspaceTransition compensate(HistoryMutation mutation, WorkspaceDocument current)`. The token identifies entry identity, monotonic revision, before/after documents, redo-stack identity and contents, and the persistence envelope. Conditional compensation cannot be satisfied by equal documents alone. Existing `execute`, `undo`, `redo`, `canUndo`, `canRedo`, and `clear` behavior remains unchanged for normal callers.
+- Produces package-private `WorkspaceHistory.HistoryMutation executeWithToken(WorkspaceCommand command, WorkspaceDocument current)` and `WorkspaceTransition compensate(HistoryMutation mutation, WorkspaceDocument current)`. The history token identifies only entry identity, monotonic history revision, before/after documents, and redo-stack identity/contents; `GraphWorkspaceStore.WorkspaceMutation` adds file identity, persistence/save generation, dirty/debounce envelope, and persisted-byte evidence. Conditional compensation cannot be satisfied by equal documents alone. Existing `execute`, `undo`, `redo`, `canUndo`, `canRedo`, and `clear` behavior remains unchanged for normal callers.
 - `DefaultContributorDeletionHandler` consumes the new mutation handle for the mixed `WorkspaceCommands.purgeRelationships(Set<RelationshipId>)` call. Its existing `PendingRecovery` retains unresolved native and workspace resources independently; workspace recovery invokes the exact mutation handle, native recovery invokes the transaction, and the handle is cleared only after both resources report complete.
 
 **Step 1: Establish a parent-compiling behavioral RED test first.**
 
-- Before referencing any new method, add a `WorkspaceHistoryShould` test using only the existing `execute`, `undo`, and `redo` methods. Execute a purge-like command, execute an unrelated applied command, call generic `undo`, and assert the purge state remains while the unrelated command is undone. The current implementation must fail this assertion because generic undo targets the global head. This is the required behavioral red evidence; a missing-symbol compilation failure is not acceptable.
+- Before referencing any new method, add a `WorkspaceHistoryShould.compensationMustNotUseGlobalUndoHead` test using only the existing `execute`, `undo`, and `redo` methods. Execute a purge-like command, execute an unrelated applied command, call generic `undo`, and assert the purge is restored while the unrelated command remains applied. The current implementation must fail this assertion because generic undo targets the global head. This is the required behavioral red evidence; a missing-symbol compilation failure is not acceptable.
 - Add a second parent-compiling history test for command -> undo -> redo ABA ordering and record the exact observed failure.
+
+Run this parent-compiling red test alone before adding any test reference to the new compensation API:
+
+```bash
+JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.8-zulu" PATH="$JAVA_HOME/bin:$PATH" gradle :freeplane_plugin_graph:test --tests 'org.freeplane.plugin.graph.workspace.WorkspaceHistoryShould.compensationMustNotUseGlobalUndoHead' -PTestLoggingFull --rerun-tasks
+```
 
 **Step 2: Add the desired contract tests and run RED.**
 
@@ -68,8 +74,9 @@ The parent-compiling tests must fail because generic global undo consumes the cu
 **Step 3: Implement token-bound history without changing normal undo/redo.**
 
 - Replace document-only internal undo entries with immutable identity-bearing history entries while retaining the existing public normal-history methods.
-- Implement `executeWithToken` so an applied command captures the before document, after document, prior redo stack identity/contents, entry identity, monotonic state revision, file identity, dirty/debounce/save generation, and before/after persisted bytes before normal publication clears redo.
-- Implement `compensate` to require the exact entry identity/revision, redo identity, current after document, file identity, and expected current bytes. On success, remove only that entry, restore the captured redo and persistence envelope, synchronously rewrite/verify captured before bytes when the file was persisted, and return an applied compensation result. On command/undo/redo/save/save-as/document mismatch or write failure, return a rejected conflict/incomplete result without claiming recovery.
+- Implement `executeWithToken` so an applied command captures the before document, after document, prior redo stack identity/contents, entry identity, and monotonic history revision before normal publication clears redo.
+- Implement `compensate` to require the exact history entry/revision, redo identity, and current after document. On success, remove only that entry, restore the captured redo state, and return an applied compensation transition. On command/undo/redo interposition or history mismatch, return a rejected conflict transition without mutation.
+- In `GraphWorkspaceStore`, capture file identity, a monotonic persistence/save generation, dirty/debounce state, and before/after persisted bytes around the token execution. Advance the save generation in `saveDirtyLocked()` and identity-changing paths. `WorkspaceMutation.compensateIfCurrent()` must require both the history token and the persistence envelope; when current bytes equal the captured after bytes it may synchronously rewrite and verify captured before bytes, otherwise it returns conflict/incomplete without claiming recovery.
 - Keep no-op/rejected/read-only commands uncompensatable and preserve normal `undo()`/`redo()` result keys and envelope behavior.
 
 **Step 4: Add the store-owned compensation handle and wire the handler.**
@@ -88,17 +95,36 @@ JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.8-zulu" PATH="$JAVA_HOME/bin:$PATH
 JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.8-zulu" PATH="$JAVA_HOME/bin:$PATH" gradle :freeplane_plugin_graph:test --tests '*FreeplaneMapCommandExecutorShould' --tests '*GraphCommandRouterShould' --tests '*WorkspaceMapCoordinatorShould' --tests '*DefaultPurgeCommandHandlerShould' -PTestLoggingFull --rerun-tasks
 ```
 
+failures=$(rg -o 'failures="[0-9]+"' freeplane_plugin_graph/build/test-results/test | awk -F'"' '{sum += $2} END {print sum + 0}')
+errors=$(rg -o 'errors="[0-9]+"' freeplane_plugin_graph/build/test-results/test | awk -F'"' '{sum += $2} END {print sum + 0}')
+test "$failures" -eq 0 && test "$errors" -eq 0
+```
+
 Assert the real-store interposition, command -> undo/redo ABA, clean/dirty persistence, and save-as tests fail against the pre-fix parent and pass now. Record JUnit XML failure/error totals, confirm normal workspace undo/redo and native Task 32 transaction tests remain green, and confirm no generic compensation call remains in the handler.
 
-**Step 6: Verify exact scope and commit.**
+**Step 6: Run the named mutation and verify exact scope.**
 
-Assert the index is empty, stage exactly the six listed paths, compare sorted staged names to that allowlist, run both `git diff --cached --check` and `git diff --check`, inspect JUnit XML totals, and commit:
+Save production hashes before mutation, use `apply_patch` to replace only the history-token comparison with a weaker document-only comparison, run the ABA/interposition tests and require behavioral failure, apply the inverse immediately, compare both SHA-256 values exactly, and assert no mutant residue with `git diff`.
+
+Assert the index is empty, stage exactly the six listed paths, and compare sorted staged names exactly with:
+
+```text
+freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/workspace/GraphWorkspaceStore.java
+freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/workspace/WorkspaceHistory.java
+freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/command/DefaultContributorDeletionHandler.java
+freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/workspace/GraphWorkspaceStoreShould.java
+freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/workspace/WorkspaceHistoryShould.java
+freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/command/ContributorDeletionPlanShould.java
+```
+
+Run `git diff --cached --check`, `git diff --check`, inspect JUnit XML totals again, commit, and verify the resulting commit:
 
 ```bash
 git commit -m "2026-08-10-graph-workspace: Make purge compensation conditional"
+git show --format='%H%n%s' --name-only HEAD
 ```
 
-The report must include RED/GREEN evidence, exact-history conflict and successful-compensation evidence, resource-recovery behavior, scope, and commit SHA.
+The report must include RED/GREEN evidence, exact-history conflict and successful-compensation evidence, resource-recovery behavior, mutation hashes, scope, and commit SHA.
 
 ## Task 2: Restart failed layout runs through the command chain
 
@@ -129,7 +155,7 @@ The report must include RED/GREEN evidence, exact-history conflict and successfu
 Run:
 
 ```bash
-JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.8-zulu" PATH="$JAVA_HOME/bin:$PATH" gradle :freeplane_plugin_graph:test --tests '*LayoutSettleLoopShould' --tests '*GraphCommandRouterShould' -PTestLoggingFull
+JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.8-zulu" PATH="$JAVA_HOME/bin:$PATH" gradle :freeplane_plugin_graph:test --tests '*LayoutSettleLoopShould' --tests '*GraphCommandRouterShould' --tests '*GraphUpdateCoordinatorShould' -PTestLoggingFull --rerun-tasks
 ```
 
 The new failed-frame -> restart and reentrant-listener tests must fail because the current failed publication terminalizes the run, holds the publication claim, and produces no second submit. Fix only test fixture errors before production edits.
@@ -157,14 +183,32 @@ JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.8-zulu" PATH="$JAVA_HOME/bin:$PATH
 JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.8-zulu" PATH="$JAVA_HOME/bin:$PATH" gradle :freeplane_plugin_graph:test -PTestLoggingFull --rerun-tasks
 ```
 
-Confirm the full graph-plugin suite is fresh and green, record JUnit XML failure/error totals, the failed-run restart probe is mutation-sensitive, and `git diff --check` passes.
+Confirm the full graph-plugin suite is fresh and green, then run:
+
+```bash
+failures=$(rg -o 'failures="[0-9]+"' freeplane_plugin_graph/build/test-results/test | awk -F'"' '{sum += $2} END {print sum + 0}')
+errors=$(rg -o 'errors="[0-9]+"' freeplane_plugin_graph/build/test-results/test | awk -F'"' '{sum += $2} END {print sum + 0}')
+test "$failures" -eq 0 && test "$errors" -eq 0
+```
+
+The failed-run restart probe must be mutation-sensitive, and `git diff --check` must pass.
 
 **Step 6: Verify exact scope and commit.**
 
-Assert an empty index, stage exactly the four listed paths, compare sorted staged names to that allowlist, run both `git diff --cached --check` and `git diff --check`, inspect JUnit XML totals, and commit:
+Assert an empty index, stage exactly these four paths, and compare sorted staged names exactly with:
+
+```text
+freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/control/LayoutSettleLoop.java
+freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/control/LayoutSettleLoopShould.java
+freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/control/GraphUpdateCoordinatorShould.java
+freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/command/GraphCommandRouterShould.java
+```
+
+Run both `git diff --cached --check` and `git diff --check`, inspect JUnit XML failure/error totals, and commit/verify:
 
 ```bash
 git commit -m "2026-08-10-graph-workspace: Recover failed layout restart"
+git show --format='%H%n%s' --name-only HEAD
 ```
 
 The report must include RED/GREEN results, failed/recovered state evidence, lifecycle supersession evidence, mutation proof, exact scope, and commit SHA.
