@@ -1,6 +1,7 @@
 package org.freeplane.plugin.graph.canvas;
 
 import java.awt.Color;
+import java.awt.Container;
 import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.Font;
@@ -13,6 +14,7 @@ import java.awt.geom.Point2D;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
 
 import javax.accessibility.Accessible;
 import javax.accessibility.AccessibleAction;
@@ -32,6 +34,7 @@ import org.freeplane.plugin.graph.projection.NodeProminence;
 import org.freeplane.plugin.graph.projection.PinProjection;
 import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
+import org.freeplane.plugin.graph.projection.ProjectedEndpointVisibility;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 
 final class AccessibleGraphCanvas extends AccessibleContext implements AccessibleComponent {
@@ -65,7 +68,27 @@ final class AccessibleGraphCanvas extends AccessibleContext implements Accessibl
     }
 
     @Override
+    public Accessible getAccessibleParent() {
+        final Container parent = canvas.getParent();
+        return parent instanceof Accessible ? (Accessible) parent : null;
+    }
+
+    @Override
     public int getAccessibleIndexInParent() {
+        final Accessible parent = getAccessibleParent();
+        if (parent == null) {
+            return -1;
+        }
+        final AccessibleContext parentContext = parent.getAccessibleContext();
+        if (parentContext == null) {
+            return -1;
+        }
+        for (int index = 0; index < parentContext.getAccessibleChildrenCount(); index++) {
+            final Accessible child = parentContext.getAccessibleChild(index);
+            if (child == canvas || child != null && child.getAccessibleContext() == this) {
+                return index;
+            }
+        }
         return -1;
     }
 
@@ -429,6 +452,12 @@ final class AccessibleGraphCanvas extends AccessibleContext implements Accessibl
                 return EndpointInfo.unavailable();
             }
             final GraphGeometry geometry = state.geometry();
+            final Set<ProjectedEndpointKey> visibleEndpoints =
+                ProjectedEndpointVisibility.visibleEndpoints(state.projection().nodes(),
+                    state.projection().enclosures());
+            if (!visibleEndpoints.contains(endpoint)) {
+                return EndpointInfo.unavailable();
+            }
             if (endpoint.isNode()) {
                 for (ProjectedNode node : state.projection().nodes()) {
                     if (!endpoint.node().get().equals(node.key())) {

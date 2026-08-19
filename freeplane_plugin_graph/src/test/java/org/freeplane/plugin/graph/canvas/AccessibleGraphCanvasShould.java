@@ -34,6 +34,7 @@ import javax.accessibility.AccessibleRole;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
+import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 
 import org.freeplane.plugin.graph.control.CanvasState;
@@ -69,6 +70,91 @@ import org.freeplane.plugin.graph.workspace.model.RelationshipId;
 import org.junit.Test;
 
 public class AccessibleGraphCanvasShould {
+    @Test
+    public void resolveAccessibleParentAndIndexFromTheLiveSwingHierarchy() {
+        final Fixture fixture = Fixture.create();
+        final GraphCanvas canvas = fixture.canvas();
+        final JPanel panel = new JPanel();
+        final AccessibleContext root = canvas.getAccessibleContext();
+        assertThat(root.getAccessibleParent()).isNull();
+        assertThat(root.getAccessibleIndexInParent()).isEqualTo(-1);
+
+        panel.add(new JButton("Before graph"));
+        panel.add(canvas);
+
+        assertThat(root.getAccessibleParent()).isSameAs(panel);
+        final AccessibleContext panelContext = panel.getAccessibleContext();
+        int canvasIndex = -1;
+        for (int index = 0; index < panelContext.getAccessibleChildrenCount(); index++) {
+            final Accessible child = panelContext.getAccessibleChild(index);
+            if (child == canvas || child != null && child.getAccessibleContext() == root) {
+                canvasIndex = index;
+                break;
+            }
+        }
+        assertThat(canvasIndex).isNotEqualTo(-1);
+        assertThat(root.getAccessibleIndexInParent()).isEqualTo(canvasIndex);
+
+        panel.remove(canvas);
+        assertThat(root.getAccessibleParent()).isNull();
+        assertThat(root.getAccessibleIndexInParent()).isEqualTo(-1);
+    }
+
+    @Test
+    public void panNormallyAndClearStaleVisualSelectionForUnmodifiedArrows() {
+        final Fixture fixture = Fixture.create();
+        final GraphCanvas canvas = fixture.canvas();
+        final RecordingListener listener = new RecordingListener();
+        final GraphInteractionController controller = new GraphInteractionController(listener);
+        controller.install(canvas);
+        try {
+            canvas.setPaintState(GraphPaintState.empty().withSelection(fixture.sourceEndpoint));
+            canvas.setCanvasState(fixture.emptyState());
+            assertThatUnmodifiedRightArrowPansAndClears(canvas, listener);
+
+            listener.clear();
+            canvas.setCanvasState(fixture.state);
+            canvas.setPaintState(GraphPaintState.empty().withSelection(fixture.suppressedEndpoint));
+            assertThatUnmodifiedRightArrowPansAndClears(canvas, listener);
+
+            listener.clear();
+            canvas.setPaintState(GraphPaintState.empty().withSelection(fixture.geometrylessEndpoint));
+            assertThatUnmodifiedRightArrowPansAndClears(canvas, listener);
+        }
+        finally {
+            controller.uninstall();
+        }
+    }
+
+    @Test
+    public void keepRetainedGeometrylessVirtualChildrenUnavailable() {
+        final Fixture fixture = Fixture.create();
+        final GraphCanvas canvas = fixture.canvas();
+        final AccessibleContext root = canvas.getAccessibleContext();
+        assertThat(childForOrNull(root, fixture.geometrylessEndpoint)).isNull();
+
+        final AccessibleGraphCanvas.EndpointAccessible retained =
+            new AccessibleGraphCanvas.EndpointAccessible(canvas, fixture.geometrylessEndpoint);
+        final AccessibleContext retainedContext = retained.getAccessibleContext();
+        assertThat(retainedContext.getAccessibleName()).isEqualTo("Unavailable graph endpoint");
+        assertThat(retainedContext.getAccessibleDescription())
+            .isEqualTo("Unavailable graph endpoint");
+        assertThat(retained.getAccessibleActionCount()).isZero();
+        assertThat(retainedContext.getAccessibleComponent().isVisible()).isFalse();
+        assertThat(retainedContext.getAccessibleComponent().getBounds())
+            .isEqualTo(new Rectangle());
+    }
+
+    private static void assertThatUnmodifiedRightArrowPansAndClears(final GraphCanvas canvas,
+            final RecordingListener listener) {
+        canvas.setViewport(GraphViewport.of(0.0, 0.0, 1.0));
+        final double beforePan = canvas.viewport().centerX();
+        dispatchKey(canvas, key(canvas, KeyEvent.VK_RIGHT, 0));
+        assertThat(canvas.viewport().centerX()).isNotEqualTo(beforePan);
+        assertThat(canvas.paintState().selection()).isEmpty();
+        assertThat(listener.intents()).isEmpty();
+    }
+
     @Test
     public void orderVisibleGeometryAndChooseStrictNearestTieByEndpointKey() {
         final Fixture fixture = Fixture.create();
