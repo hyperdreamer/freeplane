@@ -50,15 +50,20 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
             final MapLeaseManager leaseManager, final ProjectionEngine projectionEngine,
             final LayoutSettleLoop settleLoop) {
         final WorkspaceMapCoordinator value = Objects.requireNonNull(maps, "maps");
-        this.pipeline = new LivePipeline(value, Objects.requireNonNull(projectionEngine, "projectionEngine"));
+        final ProjectionEngine engine = Objects.requireNonNull(projectionEngine, "projectionEngine");
+        final LayoutSettleLoop loop = Objects.requireNonNull(settleLoop, "settleLoop");
+        if (store != null || leaseManager != null) {
+            Objects.requireNonNull(store, "store");
+            Objects.requireNonNull(leaseManager, "leaseManager");
+        }
+        this.pipeline = new LivePipeline(value, engine);
         this.batcher = new ProjectionBatcher(this::acceptBatch);
-        this.settleLoop = Objects.requireNonNull(settleLoop, "settleLoop");
+        this.settleLoop = loop;
         this.edt = new SwingEdtExecutor();
         this.ownedMaps = value;
         initializeState();
-        if (store != null || leaseManager != null) {
-            registerSourceListeners(Objects.requireNonNull(store, "store"),
-                Objects.requireNonNull(leaseManager, "leaseManager"));
+        if (store != null) {
+            registerSourceListeners(store, leaseManager);
         }
     }
 
@@ -71,8 +76,21 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
         this.edt = Objects.requireNonNull(edt, "edt");
         this.ownedMaps = null;
         initializeState();
-        registerSourceListeners(Objects.requireNonNull(store, "store"),
-            Objects.requireNonNull(leaseManager, "leaseManager"));
+        try {
+            registerSourceListeners(Objects.requireNonNull(store, "store"),
+                Objects.requireNonNull(leaseManager, "leaseManager"));
+        }
+        catch (RuntimeException failure) {
+            if (store == null || leaseManager == null) {
+                try {
+                    shutdownResources(null, null);
+                }
+                catch (RuntimeException cleanupFailure) {
+                    failure = recordShutdownFailure(failure, cleanupFailure);
+                }
+            }
+            throw failure;
+        }
     }
 
     private void initializeState() {
@@ -106,25 +124,7 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
         }
         catch (RuntimeException failure) {
             try {
-                closeRegistration(adapterRegistration);
-            }
-            catch (RuntimeException cleanupFailure) {
-                failure = recordShutdownFailure(failure, cleanupFailure);
-            }
-            try {
-                closeRegistration(storeRegistration);
-            }
-            catch (RuntimeException cleanupFailure) {
-                failure = recordShutdownFailure(failure, cleanupFailure);
-            }
-            try {
-                batcher.close();
-            }
-            catch (RuntimeException cleanupFailure) {
-                failure = recordShutdownFailure(failure, cleanupFailure);
-            }
-            try {
-                settleLoop.close();
+                shutdownResources(storeRegistration, adapterRegistration);
             }
             catch (RuntimeException cleanupFailure) {
                 failure = recordShutdownFailure(failure, cleanupFailure);

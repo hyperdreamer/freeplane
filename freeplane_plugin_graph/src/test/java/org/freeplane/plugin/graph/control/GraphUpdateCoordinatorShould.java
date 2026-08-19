@@ -3,6 +3,7 @@ package org.freeplane.plugin.graph.control;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.ArrayDeque;
@@ -34,6 +35,7 @@ import org.freeplane.plugin.graph.layout.LayoutFrame;
 import org.freeplane.plugin.graph.layout.LayoutRequest;
 import org.freeplane.plugin.graph.layout.PerceptualIdlePolicy;
 import org.freeplane.plugin.graph.projection.GraphProjection;
+import org.freeplane.plugin.graph.projection.ProjectionEngine;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
 import org.freeplane.plugin.graph.projection.input.SafeNodeLabel;
@@ -192,6 +194,66 @@ public class GraphUpdateCoordinatorShould {
         source.storeListener.get().onWorkspaceStoreEvent(workspaceEvent(WorkspaceStoreEvent.Type.DOCUMENT_CHANGED));
         source.adapterListener.get().onMapAdapterEvent(new MapAdapterEvent(MAP, MapOperationalState.AVAILABLE));
         assertThat(source.coordinator.hasPendingChanges()).isFalse();
+    }
+
+    @Test
+    public void closesOwnedResourcesWhenSourceRegistrationFailsDuringConstruction() {
+        ProjectionBatcher batcher = mock(ProjectionBatcher.class);
+        LayoutSettleLoop loop = mock(LayoutSettleLoop.class);
+        EdtExecutor edt = mock(EdtExecutor.class);
+        GraphWorkspaceStore store = mock(GraphWorkspaceStore.class);
+        MapLeaseManager leaseManager = mock(MapLeaseManager.class);
+        when(store.addListener(any())).thenThrow(new IllegalStateException("registration failed"));
+
+        try {
+            new GraphUpdateCoordinator(new TestPipeline(), batcher, loop, edt, store, leaseManager);
+            throw new AssertionError("construction should fail");
+        }
+        catch (IllegalStateException expected) {
+            assertThat(expected).hasMessage("registration failed");
+        }
+
+        verify(batcher).close();
+        verify(loop).close();
+    }
+
+    @Test
+    public void closesCoordinatorOwnedMapsWhenPublicConstructionFails() {
+        WorkspaceMapCoordinator maps = mock(WorkspaceMapCoordinator.class);
+        LayoutSettleLoop loop = mock(LayoutSettleLoop.class);
+        GraphWorkspaceStore store = mock(GraphWorkspaceStore.class);
+        MapLeaseManager leaseManager = mock(MapLeaseManager.class);
+        when(store.addListener(any())).thenThrow(new IllegalStateException("registration failed"));
+
+        try {
+            new GraphUpdateCoordinator(maps, store, leaseManager, new ProjectionEngine(), loop);
+            throw new AssertionError("construction should fail");
+        }
+        catch (IllegalStateException expected) {
+            assertThat(expected).hasMessage("registration failed");
+        }
+
+        verify(maps).close();
+        verify(loop).close();
+    }
+
+    @Test
+    public void closesSuppliedResourcesWhenAConstructionSourceIsMissing() {
+        ProjectionBatcher batcher = mock(ProjectionBatcher.class);
+        LayoutSettleLoop loop = mock(LayoutSettleLoop.class);
+        EdtExecutor edt = mock(EdtExecutor.class);
+        MapLeaseManager leaseManager = mock(MapLeaseManager.class);
+
+        try {
+            new GraphUpdateCoordinator(new TestPipeline(), batcher, loop, edt, null, leaseManager);
+            throw new AssertionError("construction should fail");
+        }
+        catch (NullPointerException expected) {
+            assertThat(expected).hasMessage("store");
+        }
+
+        verify(batcher).close();
+        verify(loop).close();
     }
 
     @Test
