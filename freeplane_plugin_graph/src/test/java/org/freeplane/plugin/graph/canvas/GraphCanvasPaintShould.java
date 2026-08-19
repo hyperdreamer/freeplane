@@ -194,6 +194,53 @@ public class GraphCanvasPaintShould {
     }
 
     @Test
+    public void skipActivePinsForNodesWithoutCurrentGeometry() {
+        Fixture fixture = fixture(16.0);
+        PinProjection active = PinProjection.active(PinRecord.of(reference(FIRST_MAP, "first"), -10.0, -40.0,
+            Collections.<UnknownXml>emptyList()), fixture.first.key());
+        CanvasState withPin = stateWithPins(fixture.state, Collections.singletonList(active));
+        Map<ProjectedNodeKey, NodeGeometry> currentGeometry =
+            new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
+        currentGeometry.put(fixture.second.key(), fixture.state.geometry().nodes().get(fixture.second.key()));
+        CanvasState withoutFirstNodeGeometry = CanvasState.of(withPin.generation(), withPin.projection(),
+            withPin.layout(), GraphGeometry.of(currentGeometry, withPin.geometry().hulls(),
+                withPin.geometry().labels()), withPin.status());
+        CanvasState withoutPin = stateWithPins(withoutFirstNodeGeometry,
+            Collections.<PinProjection>emptyList());
+        GraphTheme theme = lightTheme();
+
+        BufferedImage painted = paint(withoutFirstNodeGeometry, GraphPaintState.empty(), theme,
+            RenderingLevel.FULL);
+        BufferedImage unpinned = paint(withoutPin, GraphPaintState.empty(), theme, RenderingLevel.FULL);
+
+        assertThat(differentPixels(painted, unpinned)).isZero();
+        assertThat(colorPixelsIn(painted, theme.pinColor(), 104, 24, 117, 37)).isZero();
+    }
+
+    @Test
+    public void doNotPaintConnectionPreviewForUnavailableSources() {
+        Fixture fixture = fixture(16.0);
+        GraphTheme theme = lightTheme();
+        LayoutPoint from = LayoutPoint.of(-35.0, -35.0);
+        LayoutPoint to = LayoutPoint.of(35.0, -35.0);
+
+        GraphPaintState currentPreview = GraphPaintState.empty().withConnectionPreview(
+            GraphPaintState.ConnectionPreview.of(fixture.firstEndpoint, from, to));
+        BufferedImage currentImage = paint(fixture.state, currentPreview, theme, RenderingLevel.FULL);
+        assertThat(colorPixelsIn(currentImage, theme.previewColor(), 80, 25, 160, 45))
+            .isGreaterThan(0);
+
+        assertPreviewColorAbsent(withoutProjectedNode(fixture.state, fixture.first.key()),
+            fixture.firstEndpoint, from, to, theme);
+        ProjectedEndpointKey enclosureSource = ProjectedEndpointKey.ofEnclosure(
+            fixture.state.projection().enclosures().get(0).endpointKeys().get(0));
+        assertPreviewColorAbsent(withSuppressedEnclosure(fixture.state, enclosureSource),
+            enclosureSource, from, to, theme);
+        assertPreviewColorAbsent(withoutNodeGeometry(fixture.state, fixture.first.key()),
+            fixture.firstEndpoint, from, to, theme);
+    }
+
+    @Test
     public void resolveHullColorsFromRegisteredMapsAndTierTreatment() {
         GraphTheme theme = lightTheme();
         GraphTheme reconstructed = GraphTheme.resolve(CanvasTheme.LIGHT, registeredMaps());
@@ -245,6 +292,67 @@ public class GraphCanvasPaintShould {
             base.projection().enclosures(), edges, base.projection().relationshipResolutions(),
             base.projection().pins());
         return CanvasState.of(base.generation(), projection, base.layout(), base.geometry(), base.status());
+    }
+
+    private static CanvasState stateWithPins(final CanvasState base, final List<PinProjection> pins) {
+        GraphProjection projection = GraphProjection.projected(base.generation(), base.projection().nodes(),
+            base.projection().enclosures(), base.projection().edges(), base.projection().relationshipResolutions(),
+            pins);
+        return CanvasState.of(base.generation(), projection, base.layout(), base.geometry(), base.status());
+    }
+
+    private static void assertPreviewColorAbsent(final CanvasState state,
+            final ProjectedEndpointKey source, final LayoutPoint from, final LayoutPoint to,
+            final GraphTheme theme) {
+        GraphPaintState preview = GraphPaintState.empty().withConnectionPreview(
+            GraphPaintState.ConnectionPreview.of(source, from, to));
+        BufferedImage image = paint(state, preview, theme, RenderingLevel.FULL);
+
+        assertThat(colorPixelsIn(image, theme.previewColor(), 80, 25, 160, 45)).isZero();
+    }
+
+    private static CanvasState withoutProjectedNode(final CanvasState base,
+            final ProjectedNodeKey removed) {
+        final List<ProjectedNode> nodes = new ArrayList<ProjectedNode>();
+        for (final ProjectedNode node : base.projection().nodes()) {
+            if (!removed.equals(node.key())) {
+                nodes.add(node);
+            }
+        }
+        return replacementState(base, nodes, base.projection().enclosures(), base.geometry());
+    }
+
+    private static CanvasState withSuppressedEnclosure(final CanvasState base,
+            final ProjectedEndpointKey source) {
+        final List<ProjectedEnclosure> enclosures = new ArrayList<ProjectedEnclosure>();
+        for (final ProjectedEnclosure enclosure : base.projection().enclosures()) {
+            if (enclosure.endpointKeys().contains(source.enclosure().get())) {
+                enclosures.add(ProjectedEnclosure.of(enclosure.hullKey(), enclosure.endpointKeys(),
+                    enclosure.labels(), enclosure.mapName(), enclosure.parentHull(), enclosure.directNodes(),
+                    enclosure.directEnclosures(), enclosure.mapRoot(), BoundaryTier.SUPPRESSED));
+            }
+            else {
+                enclosures.add(enclosure);
+            }
+        }
+        return replacementState(base, base.projection().nodes(), enclosures, base.geometry());
+    }
+
+    private static CanvasState withoutNodeGeometry(final CanvasState base,
+            final ProjectedNodeKey removed) {
+        final Map<ProjectedNodeKey, NodeGeometry> nodes =
+            new LinkedHashMap<ProjectedNodeKey, NodeGeometry>(base.geometry().nodes());
+        nodes.remove(removed);
+        return replacementState(base, base.projection().nodes(), base.projection().enclosures(),
+            GraphGeometry.of(nodes, base.geometry().hulls(), base.geometry().labels()));
+    }
+
+    private static CanvasState replacementState(final CanvasState base, final List<ProjectedNode> nodes,
+            final List<ProjectedEnclosure> enclosures, final GraphGeometry geometry) {
+        final GraphProjection projection = GraphProjection.projected(base.generation(), nodes, enclosures,
+            Collections.<ProjectedEdge>emptyList(), base.projection().relationshipResolutions(),
+            Collections.<PinProjection>emptyList());
+        return CanvasState.of(base.generation(), projection, base.layout(), geometry, base.status());
     }
 
     private static ProjectedEdge directedEdge(final ProjectedEndpointKey source,

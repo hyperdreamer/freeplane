@@ -100,16 +100,24 @@ public final class GraphPaintState {
     }
 
     static final class ConnectionPreview {
+        private final ProjectedEndpointKey source;
         private final LayoutPoint from;
         private final LayoutPoint to;
 
-        private ConnectionPreview(final LayoutPoint from, final LayoutPoint to) {
+        private ConnectionPreview(final ProjectedEndpointKey source, final LayoutPoint from,
+                final LayoutPoint to) {
+            this.source = Objects.requireNonNull(source, "source");
             this.from = requireFinitePoint(from, "from");
             this.to = requireFinitePoint(to, "to");
         }
 
-        static ConnectionPreview of(final LayoutPoint from, final LayoutPoint to) {
-            return new ConnectionPreview(from, to);
+        static ConnectionPreview of(final ProjectedEndpointKey source, final LayoutPoint from,
+                final LayoutPoint to) {
+            return new ConnectionPreview(source, from, to);
+        }
+
+        ProjectedEndpointKey source() {
+            return source;
         }
 
         LayoutPoint from() {

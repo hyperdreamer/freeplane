@@ -64,7 +64,7 @@ final class GraphPainter {
             paintPins(copy, state, paintState, currentTheme, dimUnrelated);
             paintLabels(copy, state, paintState, currentTheme, renderingLevel, currentViewport, dimUnrelated);
             paintHighlights(copy, state, paintState, currentTheme);
-            paintConnectionPreview(copy, paintState, currentTheme);
+            paintConnectionPreview(copy, state, paintState, currentTheme);
         }
         finally {
             copy.dispose();
@@ -200,12 +200,20 @@ final class GraphPainter {
 
     private static void paintPins(final Graphics2D graphics, final CanvasState state,
             final GraphPaintState paintState, final GraphTheme theme, final boolean dimUnrelated) {
+        final Set<ProjectedEndpointKey> visibleEndpoints =
+            ProjectedEndpointVisibility.visibleEndpoints(state.projection().nodes(),
+                state.projection().enclosures());
         for (final PinProjection pin : state.projection().pins()) {
-            if (!pin.active()) {
+            if (!pin.active() || !pin.projectedNode().isPresent()) {
                 continue;
             }
-            final boolean dim = dimUnrelated
-                && !isRelated(ProjectedEndpointKey.ofNode(pin.projectedNode().get()), paintState);
+            final ProjectedEndpointKey endpoint =
+                ProjectedEndpointKey.ofNode(pin.projectedNode().get());
+            if (!visibleEndpoints.contains(endpoint)
+                    || state.geometry().nodes().get(pin.projectedNode().get()) == null) {
+                continue;
+            }
+            final boolean dim = dimUnrelated && !isRelated(endpoint, paintState);
             final AlphaComposite oldComposite = setOpacity(graphics, dim);
             graphics.setColor(theme.pinColor());
             graphics.setStroke(theme.edgeStroke());
@@ -355,13 +363,20 @@ final class GraphPainter {
         }
     }
 
-    private static void paintConnectionPreview(final Graphics2D graphics, final GraphPaintState paintState,
-            final GraphTheme theme) {
+    private static void paintConnectionPreview(final Graphics2D graphics, final CanvasState state,
+            final GraphPaintState paintState, final GraphTheme theme) {
         final Optional<GraphPaintState.ConnectionPreview> preview = paintState.connectionPreview();
         if (!preview.isPresent()) {
             return;
         }
         final GraphPaintState.ConnectionPreview value = preview.get();
+        final Set<ProjectedEndpointKey> visibleEndpoints =
+            ProjectedEndpointVisibility.visibleEndpoints(state.projection().nodes(),
+                state.projection().enclosures());
+        if (!visibleEndpoints.contains(value.source())
+                || endpointAnchor(value.source(), state.geometry(), state.layout().positions()) == null) {
+            return;
+        }
         graphics.setColor(theme.previewColor());
         graphics.setStroke(theme.hoverStroke());
         graphics.draw(new Line2D.Double(value.from().x(), value.from().y(), value.to().x(), value.to().y()));

@@ -52,6 +52,10 @@ public final class GraphCanvas extends JComponent implements Accessible {
             @Override
             public void run() {
                 canvasState = value;
+                final GraphInteractionController controller = interactionController;
+                if (controller != null) {
+                    controller.canvasStateChanged(value);
+                }
                 repaint();
             }
         });
