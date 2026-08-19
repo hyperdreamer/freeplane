@@ -238,6 +238,24 @@ public class GraphUpdateCoordinatorShould {
     }
 
     @Test
+    public void closesOwnedResourcesWhenPublicConstructionSourceIsMissing() {
+        WorkspaceMapCoordinator maps = mock(WorkspaceMapCoordinator.class);
+        LayoutSettleLoop loop = mock(LayoutSettleLoop.class);
+        GraphWorkspaceStore store = mock(GraphWorkspaceStore.class);
+
+        try {
+            new GraphUpdateCoordinator(maps, store, null, new ProjectionEngine(), loop);
+            throw new AssertionError("construction should fail");
+        }
+        catch (NullPointerException expected) {
+            assertThat(expected).hasMessage("leaseManager");
+        }
+
+        verify(maps).close();
+        verify(loop).close();
+    }
+
+    @Test
     public void closesSuppliedResourcesWhenAConstructionSourceIsMissing() {
         ProjectionBatcher batcher = mock(ProjectionBatcher.class);
         LayoutSettleLoop loop = mock(LayoutSettleLoop.class);

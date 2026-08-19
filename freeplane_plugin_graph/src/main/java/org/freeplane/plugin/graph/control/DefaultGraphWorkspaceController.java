@@ -100,7 +100,7 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
                 }
                 return new WorkspaceCreationOwnership(path, attributes.fileKey(), digest(Files.readAllBytes(path)));
             }
-            catch (IOException failure) {
+            catch (IOException | SecurityException failure) {
                 return null;
             }
         }
@@ -297,8 +297,10 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
                         new IllegalStateException("Workspace is still being opened or closed"));
                 }
                 if (existing.awaitOpen()) {
-                    existing.focus();
-                    return existing.handle;
+                    if (existing.focus()) {
+                        return existing.handle;
+                    }
+                    continue;
                 }
                 continue;
             }
@@ -429,7 +431,7 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
                 failure = recordFailure(failure, exception);
             }
         }
-        if (maps != null) {
+        else if (maps != null) {
             try {
                 maps.close();
             }
@@ -476,8 +478,11 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
     }
 
     private static RuntimeException deleteNewWorkspace(final ResourceSet resources) {
-        if (resources == null || !resources.newlyCreated || resources.creationOwnership == null) {
+        if (resources == null || !resources.newlyCreated) {
             return null;
+        }
+        if (resources.creationOwnership == null) {
+            return new IllegalStateException("Unable to verify ownership of newly-created graph workspace");
         }
         return resources.creationOwnership.removeIfOwned();
     }
@@ -644,11 +649,13 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
             }
         }
 
-        private void focus() {
+        private boolean focus() {
             synchronized (monitor) {
-                if (view != null) {
-                    view.focus();
+                if (state != State.OPEN || view == null) {
+                    return false;
                 }
+                view.focus();
+                return true;
             }
         }
 

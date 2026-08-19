@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -646,8 +647,13 @@ public class DefaultGraphWorkspaceControllerShould {
 
         assertThat(failure.get()).isInstanceOf(GraphWorkspaceOpenException.class);
         assertThat(cleanupEntered.await(1, TimeUnit.SECONDS)).isTrue();
+        BasicFileAttributes originalAttributes = Files.readAttributes(workspace, BasicFileAttributes.class);
         Path replacement = workspace.resolveSibling("replacement-during-rollback.replacement");
         Files.write(replacement, new byte[] { 9, 8, 7 });
+        BasicFileAttributes replacementAttributes = Files.readAttributes(replacement, BasicFileAttributes.class);
+        assertThat(originalAttributes.fileKey()).isNotNull();
+        assertThat(replacementAttributes.fileKey()).isNotEqualTo(originalAttributes.fileKey());
+
         Files.move(replacement, workspace, java.nio.file.StandardCopyOption.ATOMIC_MOVE,
             java.nio.file.StandardCopyOption.REPLACE_EXISTING);
         allowCleanup.countDown();
