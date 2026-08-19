@@ -568,17 +568,63 @@ public class DefaultGraphWorkspaceControllerShould {
     }
 
     @Test
+    public void doesNotDeleteAReplacementFileDuringDelayedRollback() throws Exception {
+        Path workspace = temporaryFolder.getRoot().toPath().resolve("replacement-during-rollback.fpg");
+        WorkspaceSessionRegistry sessions = new WorkspaceSessionRegistry();
+        DefaultGraphWorkspaceController.SessionResources resources = resources(true);
+        CountDownLatch cleanupEntered = new CountDownLatch(1);
+        CountDownLatch allowCleanup = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            cleanupEntered.countDown();
+            allowCleanup.await(1, TimeUnit.SECONDS);
+            return null;
+        }).when(resources.updates).close();
+        DefaultGraphWorkspaceController controller = new DefaultGraphWorkspaceController(sessions,
+            (path, id, create) -> {
+                try {
+                    Files.write(path, new byte[] { 1, 2, 3 });
+                }
+                catch (java.io.IOException failure) {
+                    throw new IllegalStateException(failure);
+                }
+                return resources;
+            }, (handle, binding, close) -> {
+                throw new IllegalStateException("view assembly failed");
+            });
+        AtomicReference<Throwable> failure = new AtomicReference<Throwable>();
+        SwingUtilities.invokeAndWait(() -> {
+            try {
+                controller.open(workspace);
+            }
+            catch (Throwable exception) {
+                failure.set(exception);
+            }
+        });
+
+        assertThat(failure.get()).isInstanceOf(GraphWorkspaceOpenException.class);
+        assertThat(cleanupEntered.await(1, TimeUnit.SECONDS)).isTrue();
+        Files.write(workspace, new byte[] { 9, 8, 7 });
+        allowCleanup.countDown();
+        awaitPathPresent(workspace);
+        assertThat(Files.readAllBytes(workspace)).containsExactly(9, 8, 7);
+        awaitOwnerAbsent(sessions, workspace);
+    }
+
+    @Test
     public void keepsAProductionCreatedFileUntilEdtAssemblyRollbackFinishes() throws Exception {
         Path workspace = temporaryFolder.getRoot().toPath().resolve("production-rollback.fpg");
         ModeController modeController = mock(ModeController.class);
         MMapController mapController = mock(MMapController.class);
         Controller applicationController = mock(Controller.class);
         IMapViewManager viewManager = mock(IMapViewManager.class);
+        MLinkController linkController = mock(MLinkController.class);
         CountDownLatch listenerRemovalEntered = new CountDownLatch(1);
         CountDownLatch allowListenerRemoval = new CountDownLatch(1);
         when(modeController.getMapController()).thenReturn(mapController);
         when(modeController.getController()).thenReturn(applicationController);
         when(applicationController.getMapViewManager()).thenReturn(viewManager);
+        when(modeController.getExtension(org.freeplane.features.link.LinkController.class))
+            .thenReturn(linkController);
         org.mockito.Mockito.doAnswer(invocation -> {
             listenerRemovalEntered.countDown();
             allowListenerRemoval.await(1, TimeUnit.SECONDS);
@@ -586,7 +632,9 @@ public class DefaultGraphWorkspaceControllerShould {
         }).when(mapController).removeMapLifeCycleListener(any());
 
         DefaultGraphWorkspaceController controller = new DefaultGraphWorkspaceController(modeController,
-            (handle, binding, close) -> mock(GraphWorkspaceView.class));
+            (handle, binding, close) -> {
+                throw new IllegalStateException("view assembly failed");
+            });
         AtomicReference<Throwable> failure = new AtomicReference<Throwable>();
         SwingUtilities.invokeAndWait(() -> {
             try {
@@ -631,6 +679,14 @@ public class DefaultGraphWorkspaceControllerShould {
         verify(mapController).removeMapLifeCycleListener(any());
         verify(view).show();
         verify(view).close();
+    }
+
+    private static void awaitPathPresent(final Path workspace) throws InterruptedException {
+        final long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
+        while (!Files.exists(workspace) && System.nanoTime() < deadline) {
+            Thread.sleep(5L);
+        }
+        assertThat(Files.exists(workspace)).isTrue();
     }
 
     private static void awaitPathAbsent(final Path workspace) throws InterruptedException {

@@ -105,8 +105,30 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
             adapterListenerRegistration = adapterRegistration;
         }
         catch (RuntimeException failure) {
-            closeRegistration(adapterRegistration);
-            closeRegistration(storeRegistration);
+            try {
+                closeRegistration(adapterRegistration);
+            }
+            catch (RuntimeException cleanupFailure) {
+                failure = recordShutdownFailure(failure, cleanupFailure);
+            }
+            try {
+                closeRegistration(storeRegistration);
+            }
+            catch (RuntimeException cleanupFailure) {
+                failure = recordShutdownFailure(failure, cleanupFailure);
+            }
+            try {
+                batcher.close();
+            }
+            catch (RuntimeException cleanupFailure) {
+                failure = recordShutdownFailure(failure, cleanupFailure);
+            }
+            try {
+                settleLoop.close();
+            }
+            catch (RuntimeException cleanupFailure) {
+                failure = recordShutdownFailure(failure, cleanupFailure);
+            }
             throw failure;
         }
     }

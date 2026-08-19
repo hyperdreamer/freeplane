@@ -85,10 +85,15 @@ public final class DefaultGraphWorkspaceHandle implements GraphWorkspaceHandle {
             if (closed || closing) {
                 return;
             }
-            if (!closeController.saveAndClose()) {
-                throw new IllegalStateException("Unable to save graph workspace while closing");
-            }
             closing = true;
+        }
+        if (!closeController.saveAndClose()) {
+            synchronized (monitor) {
+                if (!closed) {
+                    closing = false;
+                }
+            }
+            throw new IllegalStateException("Unable to save graph workspace while closing");
         }
     }
 }

@@ -3,6 +3,10 @@ package org.freeplane.plugin.graph.control;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -47,17 +51,25 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
         final GraphCommandRouter router;
         final ScheduledExecutorService scheduler;
         final boolean newlyCreated;
+        final WorkspaceCreationOwnership creationOwnership;
 
         SessionResources(final GraphWorkspaceStore store, final GraphUpdateCoordinator updates,
                 final MapLeaseManager leaseManager, final GraphCommandRouter router,
                 final ScheduledExecutorService scheduler, final boolean newlyCreated) {
-            this(store, null, updates, leaseManager, router, scheduler, newlyCreated);
+            this(store, null, updates, leaseManager, router, scheduler, newlyCreated, null);
         }
 
         SessionResources(final GraphWorkspaceStore store, final WorkspaceMapCoordinator maps,
                 final GraphUpdateCoordinator updates, final MapLeaseManager leaseManager,
                 final GraphCommandRouter router, final ScheduledExecutorService scheduler,
                 final boolean newlyCreated) {
+            this(store, maps, updates, leaseManager, router, scheduler, newlyCreated, null);
+        }
+
+        SessionResources(final GraphWorkspaceStore store, final WorkspaceMapCoordinator maps,
+                final GraphUpdateCoordinator updates, final MapLeaseManager leaseManager,
+                final GraphCommandRouter router, final ScheduledExecutorService scheduler,
+                final boolean newlyCreated, final WorkspaceCreationOwnership creationOwnership) {
             this.store = Objects.requireNonNull(store, "store");
             this.maps = maps;
             this.updates = Objects.requireNonNull(updates, "updates");
@@ -65,6 +77,57 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
             this.router = Objects.requireNonNull(router, "router");
             this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
             this.newlyCreated = newlyCreated;
+            this.creationOwnership = creationOwnership;
+        }
+    }
+
+    private static final class WorkspaceCreationOwnership {
+        private final Path path;
+        private final Object fileKey;
+        private final byte[] contentDigest;
+
+        private WorkspaceCreationOwnership(final Path path, final Object fileKey, final byte[] contentDigest) {
+            this.path = path;
+            this.fileKey = fileKey;
+            this.contentDigest = contentDigest;
+        }
+
+        private static WorkspaceCreationOwnership capture(final Path path) {
+            try {
+                final BasicFileAttributes attributes = Files.readAttributes(path, BasicFileAttributes.class);
+                if (!attributes.isRegularFile() || attributes.fileKey() == null) {
+                    return null;
+                }
+                return new WorkspaceCreationOwnership(path, attributes.fileKey(), digest(Files.readAllBytes(path)));
+            }
+            catch (IOException failure) {
+                return null;
+            }
+        }
+
+        private boolean stillOwnsPath() {
+            try {
+                final BasicFileAttributes attributes = Files.readAttributes(path, BasicFileAttributes.class);
+                if (!attributes.isRegularFile()) {
+                    return false;
+                }
+                if (fileKey != null && !fileKey.equals(attributes.fileKey())) {
+                    return false;
+                }
+                return Arrays.equals(contentDigest, digest(Files.readAllBytes(path)));
+            }
+            catch (IOException failure) {
+                return false;
+            }
+        }
+
+        private static byte[] digest(final byte[] content) {
+            try {
+                return MessageDigest.getInstance("SHA-256").digest(content);
+            }
+            catch (NoSuchAlgorithmException failure) {
+                throw new IllegalStateException("SHA-256 is unavailable", failure);
+            }
         }
     }
 
@@ -75,21 +138,31 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
         private final MapLeaseManager leaseManager;
         private final ScheduledExecutorService scheduler;
         private final boolean newlyCreated;
+        private final WorkspaceCreationOwnership creationOwnership;
 
         private ResourceSet(final GraphWorkspaceStore store, final WorkspaceMapCoordinator maps,
                 final GraphUpdateCoordinator updates, final MapLeaseManager leaseManager,
-                final ScheduledExecutorService scheduler, final boolean newlyCreated) {
+                final ScheduledExecutorService scheduler, final boolean newlyCreated,
+                final WorkspaceCreationOwnership creationOwnership) {
             this.store = store;
             this.maps = maps;
             this.updates = updates;
             this.leaseManager = leaseManager;
             this.scheduler = scheduler;
             this.newlyCreated = newlyCreated;
+            this.creationOwnership = creationOwnership;
+        }
+
+        private static ResourceSet from(final SessionResources resources, final Path path) {
+            return new ResourceSet(resources.store, resources.maps, resources.updates, resources.leaseManager,
+                resources.scheduler, resources.newlyCreated,
+                resources.creationOwnership != null ? resources.creationOwnership
+                    : resources.newlyCreated ? WorkspaceCreationOwnership.capture(path) : null);
         }
 
         private static ResourceSet from(final SessionResources resources) {
             return new ResourceSet(resources.store, resources.maps, resources.updates, resources.leaseManager,
-                resources.scheduler, resources.newlyCreated);
+                resources.scheduler, resources.newlyCreated, resources.creationOwnership);
         }
     }
 
@@ -175,7 +248,7 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
             final SessionResources openedResources = Objects.requireNonNull(
                 sessionFactory.open(path, session.id, create), "session resources");
             resources = openedResources;
-            cleanup = ResourceSet.from(openedResources);
+            cleanup = ResourceSet.from(openedResources, path);
             session.resources = openedResources;
             final WorkspaceCloseController closeController = new SessionCloseController(session);
             final DefaultGraphWorkspaceHandle handle = new DefaultGraphWorkspaceHandle(openedResources.router,
@@ -200,53 +273,58 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
         }
         catch (SessionConstructionException failure) {
             final RuntimeException cause = (RuntimeException) failure.getCause();
-            rollbackSession(session, failure.resources, create, cause);
+            rollbackSession(session, failure.resources, cause);
             throw new GraphWorkspaceOpenException(path, cause);
         }
         catch (RuntimeException failure) {
             rollbackSession(session, cleanup != null ? cleanup : resources == null ? null : ResourceSet.from(resources),
-                create, failure);
+                failure);
             throw new GraphWorkspaceOpenException(path, failure);
         }
     }
 
     private void rollbackSession(final Session session, final ResourceSet resources,
-            final boolean create, final RuntimeException original) {
+            final RuntimeException original) {
         if (resources != null && SwingUtilities.isEventDispatchThread()) {
             final ResourceSet cleanup = resources;
             final Thread thread = new Thread(() -> {
-                RuntimeException failure = original;
-                failure = recordFailure(failure, cleanupResources(cleanup));
-                final RuntimeException completedFailure = failure;
-                SwingUtilities.invokeLater(() -> finishRollback(session, cleanup, create, completedFailure));
+                final RuntimeException cleanupFailure = cleanupResources(cleanup);
+                SwingUtilities.invokeLater(() -> finishRollback(session, cleanup, original, true, cleanupFailure));
             }, "freeplane-graph-workspace-open-rollback");
             thread.setDaemon(true);
             thread.start();
             return;
         }
-        RuntimeException failure = original;
+        RuntimeException cleanupFailure = null;
         if (resources != null) {
-            failure = recordFailure(failure, cleanupResources(resources));
+            cleanupFailure = cleanupResources(resources);
         }
-        finishRollback(session, resources, create, failure);
+        finishRollback(session, resources, original, false, cleanupFailure);
     }
 
     private void finishRollback(final Session session, final ResourceSet resources,
-            final boolean create, final RuntimeException original) {
-        RuntimeException failure = original;
+            final RuntimeException original, final boolean reportCleanupFailure,
+            final RuntimeException initialCleanupFailure) {
+        RuntimeException cleanupFailure = initialCleanupFailure;
         try {
             if (session.view != null) {
                 session.view.close();
             }
         }
         catch (RuntimeException viewFailure) {
-            failure = recordFailure(failure, viewFailure);
+            cleanupFailure = recordFailure(cleanupFailure, viewFailure);
         }
-        deleteNewWorkspace(session.path, resources != null ? resources.newlyCreated : create, failure);
+        cleanupFailure = recordFailure(cleanupFailure, deleteNewWorkspace(resources));
         session.failOpen();
         synchronized (monitor) {
             openSessions.remove(session.id);
             sessions.unregister(session.id);
+        }
+        if (cleanupFailure != null) {
+            if (reportCleanupFailure) {
+                throw cleanupFailure;
+            }
+            original.addSuppressed(cleanupFailure);
         }
     }
 
@@ -332,16 +410,17 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
         void complete(RuntimeException failure);
     }
 
-    private static void deleteNewWorkspace(final Path path, final boolean newlyCreated,
-            final RuntimeException failure) {
-        if (!newlyCreated) {
-            return;
+    private static RuntimeException deleteNewWorkspace(final ResourceSet resources) {
+        if (resources == null || !resources.newlyCreated || resources.creationOwnership == null
+                || !resources.creationOwnership.stillOwnsPath()) {
+            return null;
         }
         try {
-            Files.deleteIfExists(path);
+            Files.deleteIfExists(resources.creationOwnership.path);
+            return null;
         }
         catch (IOException deleteFailure) {
-            failure.addSuppressed(deleteFailure);
+            return new IllegalStateException("Unable to delete newly-created graph workspace", deleteFailure);
         }
     }
 
@@ -594,12 +673,16 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
             MapLeaseManager leaseManager = null;
             WorkspaceMapCoordinator maps = null;
             GraphUpdateCoordinator updates = null;
+            WorkspaceCreationOwnership creationOwnership = null;
             try {
                 final WorkspaceXmlCodec codec = new WorkspaceXmlCodec(
                     new WorkspaceMigrationRegistry(Collections.emptyList()));
                 final AtomicWorkspaceWriter writer = AtomicWorkspaceWriter.standard();
                 store = create ? GraphWorkspaceStore.create(path, codec, writer, scheduler)
                     : GraphWorkspaceStore.open(path, codec, writer, scheduler);
+                if (create) {
+                    creationOwnership = WorkspaceCreationOwnership.capture(path);
+                }
                 leaseManager = new MapLeaseManager(path, modeController);
                 maps = new WorkspaceMapCoordinator(store, leaseManager);
                 updates = new GraphUpdateCoordinator(maps, store, leaseManager, new ProjectionEngine(),
@@ -614,11 +697,12 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
                 final GraphCommandRouter router = new GraphCommandRouter(store, maps, mapCommands, navigation,
                     updates, sessions, sessionId, purge, deletion);
                 updates.start();
-                return new SessionResources(store, maps, updates, leaseManager, router, scheduler, create);
+                return new SessionResources(store, maps, updates, leaseManager, router, scheduler, create,
+                    creationOwnership);
             }
             catch (RuntimeException failure) {
                 throw new SessionConstructionException(failure,
-                    new ResourceSet(store, maps, updates, leaseManager, scheduler, create));
+                    new ResourceSet(store, maps, updates, leaseManager, scheduler, create, creationOwnership));
             }
         }
     }
