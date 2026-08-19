@@ -19,6 +19,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
+import javax.swing.SwingUtilities;
+
 import org.freeplane.plugin.graph.adapter.MapLeaseManager;
 import org.freeplane.plugin.graph.command.GraphCommand;
 import org.freeplane.plugin.graph.command.GraphCommandRouter;
@@ -429,6 +431,99 @@ public class DefaultGraphWorkspaceControllerShould {
         order.verify(view).close();
     }
 
+    @Test
+    public void reservesTheWorkspacePathBeforeCreatingItsStore() throws Exception {
+        Path workspace = temporaryFolder.getRoot().toPath().resolve("reserved-before-open.fpg");
+        WorkspaceSessionRegistry sessions = new WorkspaceSessionRegistry();
+        DefaultGraphWorkspaceController.SessionResources resources = resources(false);
+        CountDownLatch factoryEntered = new CountDownLatch(1);
+        CountDownLatch allowFactory = new CountDownLatch(1);
+        AtomicReference<GraphWorkspaceHandle> opened = new AtomicReference<GraphWorkspaceHandle>();
+        AtomicReference<Throwable> failure = new AtomicReference<Throwable>();
+        DefaultGraphWorkspaceController controller = new DefaultGraphWorkspaceController(sessions,
+            (path, id, create) -> {
+                assertThat(sessions.owner(path)).contains(id);
+                factoryEntered.countDown();
+                try {
+                    allowFactory.await(1, TimeUnit.SECONDS);
+                }
+                catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(interrupted);
+                }
+                return resources;
+            }, (handle, binding, close) -> new RecordingView());
+        Thread opening = new Thread(() -> {
+            try {
+                opened.set(controller.open(workspace));
+            }
+            catch (Throwable exception) {
+                failure.set(exception);
+            }
+        }, "graph-workspace-opening-reservation-test");
+        opening.start();
+
+        assertThat(factoryEntered.await(1, TimeUnit.SECONDS)).isTrue();
+        assertThat(sessions.owner(workspace)).isPresent();
+        allowFactory.countDown();
+        opening.join(1000);
+
+        assertThat(failure.get()).isNull();
+        assertThat(opened.get()).isNotNull();
+    }
+
+    @Test
+    public void doesNotBlockTheEdtWhileCoordinatorShutdownNeedsTheEdt() throws Exception {
+        Path workspace = temporaryFolder.getRoot().toPath().resolve("edt-close.fpg");
+        Files.createFile(workspace);
+        WorkspaceSessionRegistry sessions = new WorkspaceSessionRegistry();
+        DefaultGraphWorkspaceController.SessionResources resources = resources(false);
+        GraphWorkspaceView view = mock(GraphWorkspaceView.class);
+        CountDownLatch viewClosed = new CountDownLatch(1);
+        AtomicReference<WorkspaceCloseController> close = new AtomicReference<WorkspaceCloseController>();
+        AtomicReference<Boolean> result = new AtomicReference<Boolean>();
+        CountDownLatch closeReturned = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            SwingUtilities.invokeAndWait(() -> {
+            });
+            return null;
+        }).when(resources.updates).close();
+        doAnswer(invocation -> {
+            assertThat(SwingUtilities.isEventDispatchThread()).isTrue();
+            viewClosed.countDown();
+            return null;
+        }).when(view).close();
+        DefaultGraphWorkspaceController controller = new DefaultGraphWorkspaceController(sessions,
+            (path, id, create) -> resources, (handle, binding, closeController) -> {
+                close.set(closeController);
+                return view;
+            });
+        controller.open(workspace);
+
+        Thread caller = new Thread(() -> {
+            try {
+                SwingUtilities.invokeAndWait(() -> result.set(close.get().saveAndClose()));
+            }
+            catch (Exception failure) {
+                throw new AssertionError(failure);
+            }
+            finally {
+                closeReturned.countDown();
+            }
+        }, "graph-workspace-edt-close-test");
+        caller.setDaemon(true);
+        caller.start();
+
+        assertThat(closeReturned.await(1, TimeUnit.SECONDS)).isTrue();
+        assertThat(result.get()).isTrue();
+        assertThat(viewClosed.await(1, TimeUnit.SECONDS)).isTrue();
+        caller.join(1000);
+        assertThat(sessions.owner(workspace)).isEmpty();
+        verify(resources.updates).close();
+        verify(resources.leaseManager).close();
+        verify(resources.scheduler).shutdownNow();
+        verify(view).close();
+    }
     private DefaultGraphWorkspaceController.SessionResources resources(boolean newlyCreated) {
         return new DefaultGraphWorkspaceController.SessionResources(mock(GraphWorkspaceStore.class),
             mock(GraphUpdateCoordinator.class), mock(MapLeaseManager.class), mock(GraphCommandRouter.class),

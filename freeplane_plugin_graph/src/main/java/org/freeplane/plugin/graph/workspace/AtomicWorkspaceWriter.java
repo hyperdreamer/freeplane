@@ -10,6 +10,10 @@ import java.util.Objects;
 
 public interface AtomicWorkspaceWriter {
     void write(Path target, byte[] bytes) throws WorkspaceSaveException;
+
+    static AtomicWorkspaceWriter standard() {
+        return new DefaultAtomicWorkspaceWriter();
+    }
 }
 
 interface MoveOperation {
