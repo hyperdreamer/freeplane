@@ -31,6 +31,7 @@ import javax.accessibility.AccessibleAction;
 import javax.accessibility.AccessibleComponent;
 import javax.accessibility.AccessibleContext;
 import javax.accessibility.AccessibleRole;
+import javax.accessibility.AccessibleState;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
@@ -127,22 +128,58 @@ public class AccessibleGraphCanvasShould {
     }
 
     @Test
-    public void keepRetainedGeometrylessVirtualChildrenUnavailable() {
+    public void makeRetainedVirtualChildUnavailableAfterCurrentProjectionRemovesEndpoint() {
         final Fixture fixture = Fixture.create();
         final GraphCanvas canvas = fixture.canvas();
         final AccessibleContext root = canvas.getAccessibleContext();
-        assertThat(childForOrNull(root, fixture.geometrylessEndpoint)).isNull();
-
-        final AccessibleGraphCanvas.EndpointAccessible retained =
-            new AccessibleGraphCanvas.EndpointAccessible(canvas, fixture.geometrylessEndpoint);
+        final Accessible retained = childFor(root, fixture.enclosureEndpoint);
         final AccessibleContext retainedContext = retained.getAccessibleContext();
-        assertThat(retainedContext.getAccessibleName()).isEqualTo("Unavailable graph endpoint");
+        final AccessibleAction actions = retainedContext.getAccessibleAction();
+        final AccessibleComponent component = retainedContext.getAccessibleComponent();
+
+        assertThat(retainedContext.getAccessibleName())
+            .contains("Visible enclosure label");
         assertThat(retainedContext.getAccessibleDescription())
-            .isEqualTo("Unavailable graph endpoint");
-        assertThat(retained.getAccessibleActionCount()).isZero();
-        assertThat(retainedContext.getAccessibleComponent().isVisible()).isFalse();
-        assertThat(retainedContext.getAccessibleComponent().getBounds())
-            .isEqualTo(new Rectangle());
+            .contains("Map Enclosure");
+        assertThat(actions.getAccessibleActionCount()).isEqualTo(2);
+        assertThat(component.isVisible()).isTrue();
+        assertThat(component.getBounds()).isNotEqualTo(new Rectangle());
+
+        final CanvasState replacement = fixture.emptyState();
+        final CanvasState transitioning = mock(CanvasState.class);
+        when(transitioning.geometry()).thenReturn(fixture.state.geometry());
+        // Publish removal between visibility and detail reads to expose stale endpoint resolution.
+        final int[] projectionCalls = new int[1];
+        when(transitioning.projection()).thenAnswer(invocation -> {
+            if (projectionCalls[0]++ == 1) {
+                canvas.setCanvasState(replacement);
+                return replacement.projection();
+            }
+            return fixture.state.projection();
+        });
+        canvas.setCanvasState(transitioning);
+
+        assertUnavailableAccessibleSurface(retainedContext, actions, component);
+        assertThat(canvas.canvasState()).isSameAs(replacement);
+    }
+
+    @Test
+    public void keepRetainedVirtualChildUnavailableWhenCurrentGeometryDisappears() {
+        final Fixture fixture = Fixture.create();
+        final GraphCanvas canvas = fixture.canvas();
+        final AccessibleContext root = canvas.getAccessibleContext();
+        final Accessible retained = childFor(root, fixture.enclosureEndpoint);
+        final AccessibleContext retainedContext = retained.getAccessibleContext();
+        final AccessibleAction actions = retainedContext.getAccessibleAction();
+        final AccessibleComponent component = retainedContext.getAccessibleComponent();
+
+        assertThat(retainedContext.getAccessibleName())
+            .contains("Visible enclosure label");
+        assertThat(actions.getAccessibleActionCount()).isEqualTo(2);
+        assertThat(component.getBounds()).isNotEqualTo(new Rectangle());
+
+        canvas.setCanvasState(fixture.geometrylessState());
+        assertUnavailableAccessibleSurface(retainedContext, actions, component);
     }
 
     private static void assertThatUnmodifiedRightArrowPansAndClears(final GraphCanvas canvas,
@@ -153,6 +190,20 @@ public class AccessibleGraphCanvasShould {
         assertThat(canvas.viewport().centerX()).isNotEqualTo(beforePan);
         assertThat(canvas.paintState().selection()).isEmpty();
         assertThat(listener.intents()).isEmpty();
+    }
+
+    private static void assertUnavailableAccessibleSurface(final AccessibleContext context,
+            final AccessibleAction actions, final AccessibleComponent component) {
+        assertThat(context.getAccessibleName()).isEqualTo("Unavailable graph endpoint");
+        assertThat(context.getAccessibleDescription()).isEqualTo("Unavailable graph endpoint");
+        assertThat(actions.getAccessibleActionCount()).isZero();
+        assertThat(actions.getAccessibleActionDescription(0)).isNull();
+        assertThat(actions.doAccessibleAction(0)).isFalse();
+        assertThat(component.isEnabled()).isFalse();
+        assertThat(component.isVisible()).isFalse();
+        assertThat(component.getBounds()).isEqualTo(new Rectangle());
+        assertThat(context.getAccessibleStateSet().contains(AccessibleState.ENABLED)).isFalse();
+        assertThat(context.getAccessibleStateSet().contains(AccessibleState.VISIBLE)).isFalse();
     }
 
     @Test
@@ -580,6 +631,13 @@ public class AccessibleGraphCanvasShould {
                     Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false);
             return CanvasState.of(state.generation() + 1L, projection, frame, geometry,
                 OperationalStatus.IDLE);
+        }
+
+        private CanvasState geometrylessState() {
+            final GraphGeometry geometry = GraphGeometry.of(state.geometry().nodes(),
+                Collections.<EnclosureHullKey, HullGeometry>emptyMap());
+            return CanvasState.of(state.generation() + 1L, state.projection(), state.layout(),
+                geometry, OperationalStatus.IDLE);
         }
 
         private List<ProjectedEndpointKey> visibleEndpointsSorted() {
