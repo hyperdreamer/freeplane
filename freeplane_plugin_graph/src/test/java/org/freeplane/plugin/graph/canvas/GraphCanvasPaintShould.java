@@ -241,6 +241,33 @@ public class GraphCanvasPaintShould {
     }
 
     @Test
+    public void skipConnectionPreviewForEnclosureWhoseCurrentHullIsMissing() {
+        Fixture fixture = fixture(16.0);
+        GraphTheme theme = lightTheme();
+        LayoutPoint from = LayoutPoint.of(-35.0, -35.0);
+        LayoutPoint to = LayoutPoint.of(35.0, -35.0);
+        ProjectedEnclosure previousEnclosure = fixture.state.projection().enclosures().get(0);
+        ProjectedEndpointKey source = ProjectedEndpointKey.ofEnclosure(
+            previousEnclosure.endpointKeys().get(0));
+        GraphPaintState preview = GraphPaintState.empty().withConnectionPreview(
+            GraphPaintState.ConnectionPreview.of(source, from, to));
+
+        BufferedImage currentImage = paint(fixture.state, preview, theme, RenderingLevel.FULL);
+        assertThat(colorPixelsIn(currentImage, theme.previewColor(), 80, 25, 160, 45))
+            .isGreaterThan(0);
+
+        CanvasState replacement = replacementWithMissingCurrentEnclosureHull(fixture.state, previousEnclosure);
+        ProjectedEnclosure currentEnclosure = replacement.projection().enclosures().get(0);
+        assertThat(currentEnclosure.endpointKeys()).contains(source.enclosure().get());
+        assertThat(currentEnclosure.hullKey()).isNotEqualTo(previousEnclosure.hullKey());
+        assertThat(replacement.geometry().hulls()).containsKey(previousEnclosure.hullKey());
+        assertThat(replacement.geometry().hulls()).doesNotContainKey(currentEnclosure.hullKey());
+
+        BufferedImage staleImage = paint(replacement, preview, theme, RenderingLevel.FULL);
+        assertThat(colorPixelsIn(staleImage, theme.previewColor(), 80, 25, 160, 45)).isZero();
+    }
+
+    @Test
     public void resolveHullColorsFromRegisteredMapsAndTierTreatment() {
         GraphTheme theme = lightTheme();
         GraphTheme reconstructed = GraphTheme.resolve(CanvasTheme.LIGHT, registeredMaps());
@@ -334,6 +361,22 @@ public class GraphCanvasPaintShould {
             else {
                 enclosures.add(enclosure);
             }
+        }
+        return replacementState(base, base.projection().nodes(), enclosures, base.geometry());
+    }
+
+    private static CanvasState replacementWithMissingCurrentEnclosureHull(final CanvasState base,
+            final ProjectedEnclosure previous) {
+        EnclosureKey addedEndpoint = EnclosureKey.of(source(FIRST_MAP, "replacement-hull"));
+        List<EnclosureKey> endpointKeys = Arrays.asList(previous.endpointKeys().get(0), addedEndpoint);
+        EnclosureHullKey currentHullKey = EnclosureHullKey.of(endpointKeys);
+        ProjectedEnclosure current = ProjectedEnclosure.of(currentHullKey, endpointKeys,
+            Arrays.asList(previous.labels().get(0), SafeNodeLabel.of("Replacement", "Replacement")),
+            previous.mapName(), previous.parentHull(), previous.directNodes(), previous.directEnclosures(),
+            previous.mapRoot(), previous.boundaryTier());
+        List<ProjectedEnclosure> enclosures = new ArrayList<ProjectedEnclosure>();
+        for (final ProjectedEnclosure enclosure : base.projection().enclosures()) {
+            enclosures.add(enclosure.equals(previous) ? current : enclosure);
         }
         return replacementState(base, base.projection().nodes(), enclosures, base.geometry());
     }
