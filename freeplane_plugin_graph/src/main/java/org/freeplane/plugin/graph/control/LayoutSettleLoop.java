@@ -639,10 +639,18 @@ public final class LayoutSettleLoop implements AutoCloseable {
             }
             else if (run.discardOnPause) {
                 run.discardOnPause = false;
-                run.failedRecoveryRequested = false;
-                shouldStep = resumeAfterDiscardLocked(run);
-                if (shouldStep) {
-                    stepRevision = run.claimRevision;
+                if (run.failedPublication && run.failedRecoveryRequested && !paused && !run.frameInFlight) {
+                    run.failedRecoveryClaimed = true;
+                    claimFrameLocked(run, controlRevision);
+                    shouldRecover = true;
+                    recoveryRevision = run.claimRevision;
+                }
+                else {
+                    run.failedRecoveryRequested = false;
+                    shouldStep = resumeAfterDiscardLocked(run);
+                    if (shouldStep) {
+                        stepRevision = run.claimRevision;
+                    }
                 }
             }
             else if (run.failedPublication) {

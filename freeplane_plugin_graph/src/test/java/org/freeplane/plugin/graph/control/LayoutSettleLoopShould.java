@@ -154,6 +154,42 @@ public class LayoutSettleLoopShould {
     }
 
     @Test
+    public void recoversWhenRestartSupersedesPauseDuringFailedPublication() {
+        ManualLifecycleDispatcher dispatcher = new ManualLifecycleDispatcher();
+        QueuedEdt edt = new QueuedEdt();
+        FailedThenIdleStepper stepper = new FailedThenIdleStepper();
+        LayoutSettleLoop loop = new LayoutSettleLoop(WORKSPACE, stepper, new GraphGeometryEngine(), edt, dispatcher);
+        GraphProjection projection = populatedProjection(605L);
+        List<CanvasState> states = new ArrayList<CanvasState>();
+
+        try {
+            CompletionStage<Void> completion = loop.start(batch(605L), projection,
+                ProjectionDiff.between(emptyProjection(604L), projection), states::add);
+            dispatcher.runNext();
+            dispatcher.runNext();
+            assertThat(states).isEmpty();
+            assertThat(stepper.restartCount()).isEqualTo(1);
+
+            loop.pause();
+            loop.restart();
+            edt.runQueued();
+            dispatcher.runAll();
+            edt.runQueued();
+            dispatcher.runAll();
+
+            assertThat(states).isNotEmpty();
+            assertThat(states.get(states.size() - 1).status()).isEqualTo(OperationalStatus.IDLE);
+            assertThat(stepper.restartCount()).isEqualTo(2);
+            assertThat(stepper.submitCount()).isEqualTo(2);
+            assertThat(stepper.stepCount()).isZero();
+            assertThat(completion.toCompletableFuture().isDone()).isTrue();
+        }
+        finally {
+            closeFromExternalThread(loop, dispatcher, stepper);
+        }
+    }
+
+    @Test
     public void coalescesReentrantDoubleRestartForAFailedPublication() {
         ManualLifecycleDispatcher dispatcher = new ManualLifecycleDispatcher();
         FailedThenIdleStepper stepper = new FailedThenIdleStepper();
