@@ -568,6 +568,49 @@ public class DefaultGraphWorkspaceControllerShould {
     }
 
     @Test
+    public void reportsAsyncRollbackFailureAfterTheSessionIsReleased() throws Exception {
+        Path workspace = temporaryFolder.getRoot().toPath().resolve("async-rollback-failure.fpg");
+        Files.createFile(workspace);
+        WorkspaceSessionRegistry sessions = new WorkspaceSessionRegistry();
+        DefaultGraphWorkspaceController.SessionResources resources = resources(false);
+        CountDownLatch reported = new CountDownLatch(1);
+        AtomicReference<Throwable> reportedFailure = new AtomicReference<Throwable>();
+        AtomicReference<Boolean> ownerPresentAtReport = new AtomicReference<Boolean>();
+        Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
+        Thread.setDefaultUncaughtExceptionHandler((thread, failure) -> {
+            reportedFailure.set(failure);
+            ownerPresentAtReport.set(sessions.owner(workspace).isPresent());
+            reported.countDown();
+        });
+        doThrow(new IllegalStateException("lease teardown failed")).when(resources.leaseManager).close();
+        try {
+            DefaultGraphWorkspaceController controller = new DefaultGraphWorkspaceController(sessions,
+                (path, id, create) -> resources, (handle, binding, closeController) -> {
+                    throw new IllegalStateException("view assembly failed");
+                });
+            AtomicReference<Throwable> openFailure = new AtomicReference<Throwable>();
+            SwingUtilities.invokeAndWait(() -> {
+                try {
+                    controller.open(workspace);
+                }
+                catch (Throwable failure) {
+                    openFailure.set(failure);
+                }
+            });
+
+            assertThat(openFailure.get()).isInstanceOf(GraphWorkspaceOpenException.class);
+            assertThat(reported.await(1, TimeUnit.SECONDS)).isTrue();
+            awaitOwnerAbsent(sessions, workspace);
+            assertThat(ownerPresentAtReport).hasValue(false);
+            assertThat(reportedFailure.get()).isInstanceOf(IllegalStateException.class)
+                .hasMessage("lease teardown failed");
+        }
+        finally {
+            Thread.setDefaultUncaughtExceptionHandler(previous);
+        }
+    }
+
+    @Test
     public void doesNotDeleteAReplacementFileDuringDelayedRollback() throws Exception {
         Path workspace = temporaryFolder.getRoot().toPath().resolve("replacement-during-rollback.fpg");
         WorkspaceSessionRegistry sessions = new WorkspaceSessionRegistry();
@@ -603,11 +646,14 @@ public class DefaultGraphWorkspaceControllerShould {
 
         assertThat(failure.get()).isInstanceOf(GraphWorkspaceOpenException.class);
         assertThat(cleanupEntered.await(1, TimeUnit.SECONDS)).isTrue();
-        Files.write(workspace, new byte[] { 9, 8, 7 });
+        Path replacement = workspace.resolveSibling("replacement-during-rollback.replacement");
+        Files.write(replacement, new byte[] { 9, 8, 7 });
+        Files.move(replacement, workspace, java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+            java.nio.file.StandardCopyOption.REPLACE_EXISTING);
         allowCleanup.countDown();
         awaitPathPresent(workspace);
-        assertThat(Files.readAllBytes(workspace)).containsExactly(9, 8, 7);
         awaitOwnerAbsent(sessions, workspace);
+        assertThat(Files.readAllBytes(workspace)).containsExactly(9, 8, 7);
     }
 
     @Test

@@ -105,20 +105,85 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
             }
         }
 
-        private boolean stillOwnsPath() {
+        private boolean matches(final Path candidate) {
             try {
-                final BasicFileAttributes attributes = Files.readAttributes(path, BasicFileAttributes.class);
+                final BasicFileAttributes attributes = Files.readAttributes(candidate, BasicFileAttributes.class);
                 if (!attributes.isRegularFile()) {
                     return false;
                 }
                 if (fileKey != null && !fileKey.equals(attributes.fileKey())) {
                     return false;
                 }
-                return Arrays.equals(contentDigest, digest(Files.readAllBytes(path)));
+                return Arrays.equals(contentDigest, digest(Files.readAllBytes(candidate)));
             }
-            catch (IOException failure) {
+            catch (IOException | SecurityException failure) {
                 return false;
             }
+        }
+
+        private RuntimeException removeIfOwned() {
+            Path quarantineDirectory = null;
+            Path quarantinedPath = null;
+            try {
+                final Path parent = path.getParent();
+                if (parent == null) {
+                    return null;
+                }
+                quarantineDirectory = Files.createTempDirectory(parent, ".freeplane-rollback-");
+                quarantinedPath = quarantineDirectory.resolve(path.getFileName());
+                Files.move(path, quarantinedPath, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+                if (!matches(quarantinedPath)) {
+                    return restore(quarantinedPath, quarantineDirectory);
+                }
+                Files.delete(quarantinedPath);
+                Files.delete(quarantineDirectory);
+                return null;
+            }
+            catch (IOException | SecurityException failure) {
+                RuntimeException result = new IllegalStateException(
+                    "Unable to remove newly-created graph workspace safely", failure);
+                if (quarantinedPath != null && Files.exists(quarantinedPath)) {
+                    result = recordFailure(result, restore(quarantinedPath, quarantineDirectory));
+                }
+                else if (quarantineDirectory != null) {
+                    result = recordFailure(result, deleteQuarantineDirectory(quarantineDirectory));
+                }
+                return result;
+            }
+        }
+
+        private RuntimeException restore(final Path quarantinedPath, final Path quarantineDirectory) {
+            RuntimeException failure = null;
+            try {
+                Files.move(quarantinedPath, path);
+            }
+            catch (IOException | SecurityException restoreFailure) {
+                failure = new IllegalStateException("Unable to restore graph workspace after rollback", restoreFailure);
+            }
+            failure = recordFailure(failure, deleteQuarantineDirectory(quarantineDirectory));
+            return failure;
+        }
+
+        private static RuntimeException deleteQuarantineDirectory(final Path quarantineDirectory) {
+            try {
+                Files.deleteIfExists(quarantineDirectory);
+                return null;
+            }
+            catch (IOException | SecurityException failure) {
+                return new IllegalStateException("Unable to remove graph workspace rollback state", failure);
+            }
+        }
+
+        private static RuntimeException recordFailure(final RuntimeException failure,
+                final RuntimeException additionalFailure) {
+            if (additionalFailure == null) {
+                return failure;
+            }
+            if (failure == null) {
+                return additionalFailure;
+            }
+            failure.addSuppressed(additionalFailure);
+            return failure;
         }
 
         private static byte[] digest(final byte[] content) {
@@ -411,17 +476,10 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
     }
 
     private static RuntimeException deleteNewWorkspace(final ResourceSet resources) {
-        if (resources == null || !resources.newlyCreated || resources.creationOwnership == null
-                || !resources.creationOwnership.stillOwnsPath()) {
+        if (resources == null || !resources.newlyCreated || resources.creationOwnership == null) {
             return null;
         }
-        try {
-            Files.deleteIfExists(resources.creationOwnership.path);
-            return null;
-        }
-        catch (IOException deleteFailure) {
-            return new IllegalStateException("Unable to delete newly-created graph workspace", deleteFailure);
-        }
+        return resources.creationOwnership.removeIfOwned();
     }
 
     private static RuntimeException recordFailure(final RuntimeException prior, final RuntimeException next) {
