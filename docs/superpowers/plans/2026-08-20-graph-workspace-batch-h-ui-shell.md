@@ -30,6 +30,8 @@
 **Implementer tier:** Capable
 
 **Files:**
+- Modify: `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/control/GraphWorkspaceViewBinding.java:1-end`
+- Modify: `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/control/DefaultGraphWorkspaceController.java:324-333`
 - Create: `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindow.java`
 - Create: `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/SwingGraphWorkspaceViewFactory.java`
 - Create: `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/MapListPanel.java`
@@ -42,7 +44,7 @@
 - `GraphWorkspaceWindow` is package-private and extends `JFrame`; its public cross-package surface is through the Task 33 `GraphWorkspaceView` interface.
 - The toolbar receives the application-level `GraphWorkspaceController` for Open and the existing `GraphWorkspaceHandle` for all session controls.
 - The map list consumes immutable map-row state and emits session `GraphCommand` intents for Add, Remove, Retry, and Locate.
-- The canvas is the existing `GraphCanvas` and receives the current immutable `CanvasState`; no Swing class reads mutable Freeplane models.
+- The canvas is the existing `GraphCanvas` and receives the current immutable `CanvasState`; the binding also exposes `currentViewport()` returning the immutable persisted `org.freeplane.plugin.graph.workspace.model.Viewport` for initial construction; no Swing class reads mutable Freeplane models.
 
 **Required behavior:**
 - Compose a modeless window with standard menu bar, compact toolbar, left map list, full-bleed `GraphCanvas`, compact right settings panel, and status slot reserved for Task 35.
@@ -50,7 +52,7 @@
 - Show map row states for active, loading, missing, read-only, retryable, and selected maps with stable dimensions and projected-node counts. Disable controls that cannot operate in read-only sessions.
 - Apply the active Look and Feel through normal Swing defaults; do not introduce a separate theme system.
 - Application Open calls `GraphWorkspaceController.open(Path)`; all other session actions route through the existing handle. The window must not mutate a store or controller directly.
-- On construction, apply the workspace's persisted viewport through `GraphCanvas.setViewport`. If the finite visible world rectangle does not overlap current graph bounds, call `fitGraph` before the window is shown.
+- On construction, apply the workspace's persisted viewport from `GraphWorkspaceViewBinding.currentViewport()` through `GraphCanvas.setViewport`. If the finite visible world rectangle does not overlap current graph bounds, call `fitGraph` before the window is shown.
 - `show()`, `focus()`, and `close()` must be safe for the modeless lifecycle expected by Task 33. Tests must never invoke `setVisible`.
 
 **Test requirements:**
@@ -62,9 +64,9 @@
 
 **Steps:**
 - [ ] Create the failing headless model/window tests covering each required behavior and run `gradle :freeplane_plugin_graph:test --tests '*GraphWorkspaceWindowModelShould' -PTestLoggingFull`; confirm failure is caused by absent UI classes or behavior.
-- [ ] Implement the minimum panel models, Swing composition, factory, routing callbacks, viewport application, and lifecycle methods needed by those tests.
-- [ ] Run the focused test until green, then run `gradle :freeplane_plugin_graph:test -PTestLoggingFull` and inspect the exact six-file diff.
-- [ ] Assert the index is empty, stage only the six listed paths, compare staged names to the allowlist, and commit:
+- [ ] Implement the minimum panel models, Swing composition, routing callbacks, viewport application, lifecycle methods, and the `GraphWorkspaceViewBinding.currentViewport()` implementation in `DefaultGraphWorkspaceController` needed by those tests.
+- [ ] Run the focused test until green, then run `gradle :freeplane_plugin_graph:test -PTestLoggingFull` and inspect the exact eight-file diff.
+- [ ] Assert the index is empty, stage only the eight listed paths, compare staged names to the allowlist, and commit:
   `2026-08-10-graph-workspace: Build the graph workspace shell`.
 
 ## Task 2: Source Task 35 - Add status, contributor, purge, and close dialogs
