@@ -100,8 +100,14 @@ public class LayoutSettleLoopShould {
             Collections.<EnclosureHullKey, LayoutPoint>emptyMap())));
         LayoutSettleLoop loop = new LayoutSettleLoop(WORKSPACE, stepper, new GraphGeometryEngine(), new ImmediateEdt());
         List<CanvasState> states = new ArrayList<CanvasState>();
+        CompletableFuture<CanvasState> failedPublication = new CompletableFuture<CanvasState>();
 
-        await(loop.start(batch(6L), projection, ProjectionDiff.between(emptyProjection(5L), projection), states::add));
+        CompletionStage<Void> completion = loop.start(batch(6L), projection,
+            ProjectionDiff.between(emptyProjection(5L), projection), state -> {
+                states.add(state);
+                failedPublication.complete(state);
+            });
+        await(failedPublication);
 
         assertThat(states).hasSize(1);
         CanvasState state = states.get(0);
@@ -110,7 +116,167 @@ public class LayoutSettleLoopShould {
         assertThat(state.layout().failed()).isTrue();
         assertThat(state.layout().positions().nodes().keySet()).containsExactlyElementsOf(nodeKeys(projection));
         assertThat(state.layout().positions().anchors().keySet()).containsExactlyElementsOf(enclosureKeys(projection));
+        assertThat(completion.toCompletableFuture().isDone()).isFalse();
         loop.close();
+        await(completion);
+    }
+
+    @Test
+    public void recoversAFailedFrameWithOneRestartAndASecondSubmission() {
+        ManualLifecycleDispatcher dispatcher = new ManualLifecycleDispatcher();
+        FailedThenIdleStepper stepper = new FailedThenIdleStepper();
+        LayoutSettleLoop loop = new LayoutSettleLoop(WORKSPACE, stepper, new GraphGeometryEngine(),
+            new ImmediateEdt(), dispatcher);
+        GraphProjection projection = populatedProjection(601L);
+        List<CanvasState> states = new ArrayList<CanvasState>();
+
+        try {
+            CompletionStage<Void> completion = loop.start(batch(601L), projection,
+                ProjectionDiff.between(emptyProjection(600L), projection), states::add);
+            dispatcher.runAll();
+
+            assertThat(states).extracting(CanvasState::status).containsExactly(OperationalStatus.FAILED);
+            assertThat(completion.toCompletableFuture().isDone()).isFalse();
+
+            loop.restart();
+            dispatcher.runAll();
+            await(completion);
+
+            assertThat(states).extracting(CanvasState::status)
+                .containsExactly(OperationalStatus.FAILED, OperationalStatus.IDLE);
+            assertThat(stepper.restartCount()).isEqualTo(2);
+            assertThat(stepper.submitCount()).isEqualTo(2);
+            assertThat(stepper.stepCount()).isZero();
+        }
+        finally {
+            closeFromExternalThread(loop, dispatcher, stepper);
+        }
+    }
+
+    @Test
+    public void recoversWhenRestartSupersedesPauseDuringFailedPublication() {
+        ManualLifecycleDispatcher dispatcher = new ManualLifecycleDispatcher();
+        QueuedEdt edt = new QueuedEdt();
+        FailedThenIdleStepper stepper = new FailedThenIdleStepper();
+        LayoutSettleLoop loop = new LayoutSettleLoop(WORKSPACE, stepper, new GraphGeometryEngine(), edt, dispatcher);
+        GraphProjection projection = populatedProjection(605L);
+        List<CanvasState> states = new ArrayList<CanvasState>();
+
+        try {
+            CompletionStage<Void> completion = loop.start(batch(605L), projection,
+                ProjectionDiff.between(emptyProjection(604L), projection), states::add);
+            dispatcher.runNext();
+            dispatcher.runNext();
+            assertThat(states).isEmpty();
+            assertThat(stepper.restartCount()).isEqualTo(1);
+
+            loop.pause();
+            loop.restart();
+            edt.runQueued();
+            dispatcher.runAll();
+            edt.runQueued();
+            dispatcher.runAll();
+
+            assertThat(states).isNotEmpty();
+            assertThat(states.get(states.size() - 1).status()).isEqualTo(OperationalStatus.IDLE);
+            assertThat(stepper.restartCount()).isEqualTo(2);
+            assertThat(stepper.submitCount()).isEqualTo(2);
+            assertThat(stepper.stepCount()).isZero();
+            assertThat(completion.toCompletableFuture().isDone()).isTrue();
+        }
+        finally {
+            closeFromExternalThread(loop, dispatcher, stepper);
+        }
+    }
+
+    @Test
+    public void coalescesReentrantDoubleRestartForAFailedPublication() {
+        ManualLifecycleDispatcher dispatcher = new ManualLifecycleDispatcher();
+        FailedThenIdleStepper stepper = new FailedThenIdleStepper();
+        LayoutSettleLoop loop = new LayoutSettleLoop(WORKSPACE, stepper, new GraphGeometryEngine(),
+            new ImmediateEdt(), dispatcher);
+        GraphProjection projection = populatedProjection(602L);
+        List<CanvasState> states = new ArrayList<CanvasState>();
+
+        try {
+            CompletionStage<Void> completion = loop.start(batch(602L), projection,
+                ProjectionDiff.between(emptyProjection(601L), projection), states::add);
+            dispatcher.runAll();
+
+            loop.restart();
+            loop.restart();
+            dispatcher.runAll();
+            await(completion);
+
+            assertThat(states).extracting(CanvasState::status)
+                .containsExactly(OperationalStatus.FAILED, OperationalStatus.IDLE);
+            assertThat(stepper.restartCount()).isEqualTo(2);
+            assertThat(stepper.submitCount()).isEqualTo(2);
+            assertThat(stepper.stepCount()).isZero();
+        }
+        finally {
+            closeFromExternalThread(loop, dispatcher, stepper);
+        }
+    }
+
+    @Test
+    public void letsResetWinOverAQueuedFailedRecovery() {
+        ManualLifecycleDispatcher dispatcher = new ManualLifecycleDispatcher();
+        FailedThenIdleStepper stepper = new FailedThenIdleStepper();
+        LayoutSettleLoop loop = new LayoutSettleLoop(WORKSPACE, stepper, new GraphGeometryEngine(),
+            new ImmediateEdt(), dispatcher);
+        GraphProjection projection = populatedProjection(603L);
+        List<CanvasState> states = new ArrayList<CanvasState>();
+
+        try {
+            CompletionStage<Void> completion = loop.start(batch(603L), projection,
+                ProjectionDiff.between(emptyProjection(602L), projection), states::add);
+            dispatcher.runAll();
+
+            loop.restart();
+            reset(loop);
+            dispatcher.runAll();
+            await(completion);
+
+            assertThat(states).extracting(CanvasState::status)
+                .containsExactly(OperationalStatus.FAILED, OperationalStatus.IDLE);
+            assertThat(stepper.restartCount()).isEqualTo(2);
+            assertThat(stepper.submitCount()).isEqualTo(2);
+            assertThat(stepper.stepCount()).isZero();
+        }
+        finally {
+            closeFromExternalThread(loop, dispatcher, stepper);
+        }
+    }
+
+    @Test
+    public void letsCloseWinOverAQueuedFailedRecovery() {
+        ManualLifecycleDispatcher dispatcher = new ManualLifecycleDispatcher();
+        FailedThenIdleStepper stepper = new FailedThenIdleStepper();
+        ImmediateEdt edt = new ImmediateEdt();
+        LayoutSettleLoop loop = new LayoutSettleLoop(WORKSPACE, stepper, new GraphGeometryEngine(), edt, dispatcher);
+        GraphProjection projection = populatedProjection(604L);
+        List<CanvasState> states = new ArrayList<CanvasState>();
+
+        try {
+            loop.start(batch(604L), projection, ProjectionDiff.between(emptyProjection(603L), projection), states::add);
+            dispatcher.runAll();
+
+            loop.restart();
+            edt.execute(loop::close);
+            dispatcher.runAll();
+
+            assertThat(states).extracting(CanvasState::status).containsExactly(OperationalStatus.FAILED);
+            assertThat(stepper.restartCount()).isEqualTo(1);
+            assertThat(stepper.submitCount()).isEqualTo(1);
+            assertThat(stepper.stepCount()).isZero();
+            assertThat(stepper.closeCount()).isEqualTo(1);
+        }
+        finally {
+            if (stepper.closeCount() == 0) {
+                closeFromExternalThread(loop, dispatcher, stepper);
+            }
+        }
     }
 
     @Test
@@ -993,6 +1159,8 @@ public class LayoutSettleLoopShould {
                 ProjectionDiff.between(emptyProjection(470L), projection), state -> { });
             dispatcher.runAll();
             CanvasState state = await(failedPublication);
+            loop.restart();
+            dispatcher.runAll();
             await(replacement);
 
             ProjectedNodeKey node = projection.nodes().get(0).key();
@@ -1007,8 +1175,8 @@ public class LayoutSettleLoopShould {
             assertThat(state.layout().idle().consecutiveStableFrames()).isEqualTo(7);
             assertThat(state.layout().idle().idle()).isTrue();
             assertThat(stepper.lastValidFrameCount()).isEqualTo(1);
-            assertThat(stepper.submitCount()).isEqualTo(1);
-            assertThat(stepper.restartCount()).isEqualTo(1);
+            assertThat(stepper.submitCount()).isEqualTo(2);
+            assertThat(stepper.restartCount()).isEqualTo(2);
             assertThat(edt.allCallbacksOnEdt).isTrue();
         }
         finally {
@@ -1248,6 +1416,15 @@ public class LayoutSettleLoopShould {
         return CompletableFuture.runAsync(dispatcher::runNext);
     }
 
+    static void closeFromExternalThread(final LayoutSettleLoop loop,
+            final ManualLifecycleDispatcher dispatcher, final FailedThenIdleStepper stepper) {
+        final int closeCommand = dispatcher.enqueueCount() + 1;
+        final CompletableFuture<Void> closeCall = CompletableFuture.runAsync(loop::close);
+        await(dispatcher.enqueuedAt(closeCommand));
+        dispatcher.runNext();
+        await(closeCall);
+    }
+
     private static List<Long> submissionGenerations(final RecordingStepper stepper) {
         List<Long> generations = new ArrayList<Long>();
         for (org.freeplane.plugin.graph.layout.LayoutRequest request : stepper.submissions()) {
@@ -1269,6 +1446,69 @@ public class LayoutSettleLoopShould {
         stepper.releaseClose();
         await(physicalClose);
         await(closeCall);
+    }
+
+    static final class FailedThenIdleStepper implements LayoutSettleLoop.FrameStepper {
+        private GraphProjection projection;
+        private int submitCount;
+        private int stepCount;
+        private int restartCount;
+        private int closeCount;
+
+        @Override
+        public CompletionStage<LayoutFrame> submit(final org.freeplane.plugin.graph.layout.LayoutRequest request) {
+            projection = request.projection();
+            ++submitCount;
+            if (submitCount == 1) {
+                return CompletableFuture.completedFuture(failedFrame(0L, positions(projection)));
+            }
+            return CompletableFuture.completedFuture(frame(projection, submitCount, true));
+        }
+
+        @Override
+        public CompletionStage<LayoutFrame> step() {
+            ++stepCount;
+            throw new AssertionError("Failed recovery must resubmit before stepping");
+        }
+
+        @Override
+        public void pause() {
+        }
+
+        @Override
+        public void restart() {
+            ++restartCount;
+        }
+
+        @Override
+        public void reset() {
+        }
+
+        @Override
+        public LayoutFrame lastValidFrame() {
+            return projection == null ? frame(0L, true) : frame(projection, 0L, true);
+        }
+
+        @Override
+        public void close() {
+            ++closeCount;
+        }
+
+        int submitCount() {
+            return submitCount;
+        }
+
+        int stepCount() {
+            return stepCount;
+        }
+
+        int restartCount() {
+            return restartCount;
+        }
+
+        int closeCount() {
+            return closeCount;
+        }
     }
 
     private static final class TestStepper implements LayoutSettleLoop.FrameStepper {

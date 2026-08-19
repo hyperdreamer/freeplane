@@ -117,6 +117,17 @@ public final class WorkspaceMapCoordinator implements AutoCloseable {
         });
     }
 
+    public void retry(final MapReference reference) {
+        final MapReference value = Objects.requireNonNull(reference, "reference");
+        edt.call(new Callable<Void>() {
+            @Override
+            public Void call() {
+                retryOnEdt(value);
+                return null;
+            }
+        });
+    }
+
     @Override
     public void close() {
         final ListenerRegistration storeRegistration;
@@ -262,6 +273,34 @@ public final class WorkspaceMapCoordinator implements AutoCloseable {
         }
         for (Registration registration : acquisitions) {
             beginAcquireOnEdt(registration);
+        }
+    }
+
+    private void retryOnEdt(final MapReference reference) {
+        Registration acquire = null;
+        MapLease staleLease = null;
+        synchronized (monitor) {
+            requireOpenLocked();
+            final MapReferenceId id = reference.id();
+            final Registration registration = registrations.get(id);
+            if (registration == null || !id.equals(registration.reference.id())
+                    || !registration.reference.equals(reference) || !reference.active()
+                    || !registration.reference.active()) {
+                throw new IllegalArgumentException("Map retry reference is stale or inactive");
+            }
+            staleLease = detachLeaseLocked(registration);
+            registration.availability = MapAvailability.LOADING;
+            final AcquisitionBarrier barrier = acquisitionBarriers.get(id);
+            if (barrier == null) {
+                acquire = registration;
+            }
+            else {
+                barrier.latestRegistration = registration;
+            }
+        }
+        closeLease(staleLease);
+        if (acquire != null) {
+            beginAcquireOnEdt(acquire);
         }
     }
 
