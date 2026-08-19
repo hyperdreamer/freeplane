@@ -21,6 +21,11 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import javax.swing.SwingUtilities;
 
+import org.freeplane.features.link.mindmapmode.MLinkController;
+import org.freeplane.features.map.mindmapmode.MMapController;
+import org.freeplane.features.mode.Controller;
+import org.freeplane.features.mode.ModeController;
+import org.freeplane.features.ui.IMapViewManager;
 import org.freeplane.plugin.graph.adapter.MapLeaseManager;
 import org.freeplane.plugin.graph.command.GraphCommand;
 import org.freeplane.plugin.graph.command.GraphCommandRouter;
@@ -518,12 +523,133 @@ public class DefaultGraphWorkspaceControllerShould {
         assertThat(result.get()).isTrue();
         assertThat(viewClosed.await(1, TimeUnit.SECONDS)).isTrue();
         caller.join(1000);
-        assertThat(sessions.owner(workspace)).isEmpty();
+        awaitOwnerAbsent(sessions, workspace);
         verify(resources.updates).close();
         verify(resources.leaseManager).close();
         verify(resources.scheduler).shutdownNow();
         verify(view).close();
     }
+    @Test
+    public void reportsAsyncTeardownFailureAfterTheSessionIsReleased() throws Exception {
+        Path workspace = temporaryFolder.getRoot().toPath().resolve("async-close-failure.fpg");
+        Files.createFile(workspace);
+        WorkspaceSessionRegistry sessions = new WorkspaceSessionRegistry();
+        DefaultGraphWorkspaceController.SessionResources resources = resources(false);
+        GraphWorkspaceView view = mock(GraphWorkspaceView.class);
+        AtomicReference<WorkspaceCloseController> close = new AtomicReference<WorkspaceCloseController>();
+        AtomicReference<Boolean> result = new AtomicReference<Boolean>();
+        CountDownLatch reported = new CountDownLatch(1);
+        AtomicReference<Throwable> reportedFailure = new AtomicReference<Throwable>();
+        Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
+        Thread.setDefaultUncaughtExceptionHandler((thread, failure) -> {
+            reportedFailure.set(failure);
+            reported.countDown();
+        });
+        doThrow(new IllegalStateException("lease teardown failed")).when(resources.leaseManager).close();
+        try {
+            DefaultGraphWorkspaceController controller = new DefaultGraphWorkspaceController(sessions,
+                (path, id, create) -> resources, (handle, binding, closeController) -> {
+                    close.set(closeController);
+                    return view;
+                });
+            controller.open(workspace);
+            SwingUtilities.invokeAndWait(() -> result.set(close.get().saveAndClose()));
+
+            assertThat(result).hasValue(true);
+            assertThat(reported.await(1, TimeUnit.SECONDS)).isTrue();
+            awaitOwnerAbsent(sessions, workspace);
+            assertThat(reportedFailure.get()).isInstanceOf(IllegalStateException.class)
+                .hasMessage("lease teardown failed");
+            verify(view).close();
+        }
+        finally {
+            Thread.setDefaultUncaughtExceptionHandler(previous);
+        }
+    }
+
+    @Test
+    public void keepsAProductionCreatedFileUntilEdtAssemblyRollbackFinishes() throws Exception {
+        Path workspace = temporaryFolder.getRoot().toPath().resolve("production-rollback.fpg");
+        ModeController modeController = mock(ModeController.class);
+        MMapController mapController = mock(MMapController.class);
+        Controller applicationController = mock(Controller.class);
+        IMapViewManager viewManager = mock(IMapViewManager.class);
+        CountDownLatch listenerRemovalEntered = new CountDownLatch(1);
+        CountDownLatch allowListenerRemoval = new CountDownLatch(1);
+        when(modeController.getMapController()).thenReturn(mapController);
+        when(modeController.getController()).thenReturn(applicationController);
+        when(applicationController.getMapViewManager()).thenReturn(viewManager);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            listenerRemovalEntered.countDown();
+            allowListenerRemoval.await(1, TimeUnit.SECONDS);
+            return null;
+        }).when(mapController).removeMapLifeCycleListener(any());
+
+        DefaultGraphWorkspaceController controller = new DefaultGraphWorkspaceController(modeController,
+            (handle, binding, close) -> mock(GraphWorkspaceView.class));
+        AtomicReference<Throwable> failure = new AtomicReference<Throwable>();
+        SwingUtilities.invokeAndWait(() -> {
+            try {
+                controller.open(workspace);
+            }
+            catch (Throwable exception) {
+                failure.set(exception);
+            }
+        });
+
+        assertThat(failure.get()).isInstanceOf(GraphWorkspaceOpenException.class);
+        assertThat(listenerRemovalEntered.await(1, TimeUnit.SECONDS)).isTrue();
+        assertThat(Files.exists(workspace)).isTrue();
+        allowListenerRemoval.countDown();
+        awaitPathAbsent(workspace);
+    }
+
+    @Test
+    public void opensAndClosesThroughTheProductionResourceComposition() throws Exception {
+        Path workspace = temporaryFolder.getRoot().toPath().resolve("production-composition.fpg");
+        ModeController modeController = mock(ModeController.class);
+        MMapController mapController = mock(MMapController.class);
+        Controller applicationController = mock(Controller.class);
+        IMapViewManager viewManager = mock(IMapViewManager.class);
+        MLinkController linkController = mock(MLinkController.class);
+        when(modeController.getMapController()).thenReturn(mapController);
+        when(modeController.getController()).thenReturn(applicationController);
+        when(applicationController.getMapViewManager()).thenReturn(viewManager);
+        when(modeController.getExtension(org.freeplane.features.link.LinkController.class))
+            .thenReturn(linkController);
+
+        GraphWorkspaceView view = mock(GraphWorkspaceView.class);
+        DefaultGraphWorkspaceController controller = new DefaultGraphWorkspaceController(modeController,
+            (handle, binding, close) -> view);
+
+        GraphWorkspaceHandle handle = controller.open(workspace);
+
+        assertThat(Files.exists(workspace)).isTrue();
+        handle.execute(org.freeplane.plugin.graph.command.GraphCommands.save());
+        handle.close();
+        verify(mapController).addMapLifeCycleListener(any());
+        verify(mapController).removeMapLifeCycleListener(any());
+        verify(view).show();
+        verify(view).close();
+    }
+
+    private static void awaitPathAbsent(final Path workspace) throws InterruptedException {
+        final long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
+        while (Files.exists(workspace) && System.nanoTime() < deadline) {
+            Thread.sleep(5L);
+        }
+        assertThat(Files.exists(workspace)).isFalse();
+    }
+
+    private static void awaitOwnerAbsent(final WorkspaceSessionRegistry sessions, final Path workspace)
+            throws InterruptedException {
+        final long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
+        while (sessions.owner(workspace).isPresent() && System.nanoTime() < deadline) {
+            Thread.sleep(5L);
+        }
+        assertThat(sessions.owner(workspace)).isEmpty();
+    }
+
     private DefaultGraphWorkspaceController.SessionResources resources(boolean newlyCreated) {
         return new DefaultGraphWorkspaceController.SessionResources(mock(GraphWorkspaceStore.class),
             mock(GraphUpdateCoordinator.class), mock(MapLeaseManager.class), mock(GraphCommandRouter.class),
