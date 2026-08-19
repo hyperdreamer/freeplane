@@ -74,7 +74,7 @@ public final class MapLeaseManager implements AutoCloseable {
     private final Object monitor = new Object();
     // Serializes future delivery with every mutation that can invalidate a reserved request.
     private final ReentrantLock settlementLock = new ReentrantLock();
-    private final Path workspaceFile;
+    private volatile Path workspaceFile;
     private final WorkspaceUriResolver uriResolver;
     private final ModeController modeController;
     private final MMapController mapController;
@@ -247,6 +247,10 @@ public final class MapLeaseManager implements AutoCloseable {
             shutdownOwnedScheduler();
             throw failure;
         }
+    }
+
+    public void rebaseWorkspace(final Path workspaceFile) {
+        this.workspaceFile = uriResolver.canonical(Objects.requireNonNull(workspaceFile, "workspaceFile"));
     }
 
     public CompletionStage<MapLease> acquire(final MapReference reference) {

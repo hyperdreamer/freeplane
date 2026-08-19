@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.net.URI;
+import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -20,6 +21,7 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.Callable;
@@ -43,6 +45,7 @@ import org.freeplane.plugin.graph.projection.input.SafeNodeLabel;
 import org.freeplane.plugin.graph.projection.input.SourceNodeKey;
 import org.freeplane.plugin.graph.workspace.GraphWorkspaceStore;
 import org.freeplane.plugin.graph.workspace.ListenerRegistration;
+import org.freeplane.plugin.graph.workspace.WorkspaceIdentityChange;
 import org.freeplane.plugin.graph.workspace.WorkspaceStoreEvent;
 import org.freeplane.plugin.graph.workspace.WorkspaceStoreListener;
 import org.freeplane.plugin.graph.workspace.model.MapReference;
@@ -67,6 +70,81 @@ public class WorkspaceMapCoordinatorShould {
         for (WorkspaceMapCoordinator coordinator : coordinators) {
             coordinator.close();
         }
+    }
+
+    @Test
+    public void rebasesLeaseResolutionBeforeInstallingSaveAsReferences() {
+        MapReferenceId mapId = id(1);
+        MapReference initial = registration(mapId, 1L, true);
+        MapReference replacement = MapReference.of(mapId, 1L, URI.create("../maps/replaced.mm"), true,
+            MAP_COLOR, Collections.<UnknownXml>emptyList());
+        WorkspaceDocument initialDocument = workspace(initial);
+        WorkspaceDocument replacementDocument = workspace(replacement);
+        FakeLease initialLease = new FakeLease(mapId, MapOperationalState.AVAILABLE);
+        FakeLease replacementLease = new FakeLease(mapId, MapOperationalState.AVAILABLE);
+        AtomicReference<WorkspaceDocument> currentDocument = new AtomicReference<WorkspaceDocument>(initialDocument);
+        AtomicReference<WorkspaceStoreListener> workspaceListener = new AtomicReference<WorkspaceStoreListener>();
+        AtomicReference<Boolean> rebased = new AtomicReference<Boolean>(false);
+        TestEdt edt = new TestEdt();
+        GraphWorkspaceStore store = mock(GraphWorkspaceStore.class);
+        MapLeaseManager leaseManager = mock(MapLeaseManager.class);
+        MapSnapshotFactory snapshotFactory = mock(MapSnapshotFactory.class);
+        when(store.currentDocument()).thenAnswer(invocation -> currentDocument.get());
+        when(store.addListener(any(WorkspaceStoreListener.class))).thenAnswer(invocation -> {
+            workspaceListener.set(invocation.getArgument(0));
+            return new ListenerRegistrationStub();
+        });
+        when(leaseManager.addListener(any(MapAdapterListener.class))).thenReturn(new ListenerRegistrationStub());
+        doAnswer(invocation -> {
+            rebased.set(true);
+            return null;
+        }).when(leaseManager).rebaseWorkspace(any(Path.class));
+        Path newWorkspace = java.nio.file.Paths.get("target", "moved.fpg").toAbsolutePath();
+        WorkspaceIdentityChange change = mock(WorkspaceIdentityChange.class);
+        when(change.newPath()).thenReturn(newWorkspace);
+
+        WorkspaceMapCoordinator coordinator = new WorkspaceMapCoordinator(snapshotFactory, leaseManager, store, edt,
+            reference -> {
+                if (reference.equals(initial)) {
+                    return CompletableFuture.completedFuture(initialLease);
+                }
+                assertThat(rebased.get()).isTrue();
+                return CompletableFuture.completedFuture(replacementLease);
+            });
+        coordinators.add(coordinator);
+
+        currentDocument.set(replacementDocument);
+        WorkspaceStoreEvent event = mock(WorkspaceStoreEvent.class);
+        when(event.type()).thenReturn(WorkspaceStoreEvent.Type.IDENTITY_CHANGED);
+        when(event.document()).thenReturn(replacementDocument);
+        when(event.identityChange()).thenReturn(Optional.of(change));
+        workspaceListener.get().onWorkspaceStoreEvent(event);
+        edt.runQueued();
+
+        verify(leaseManager).rebaseWorkspace(newWorkspace);
+        assertThat(replacementLease.closeCount()).isZero();
+    }
+
+    @Test
+    public void exposesTheCurrentLeaseWithoutTransferringItsOwnership() {
+        MapReferenceId id = id(1);
+        MapReference registration = registration(id, 1L, true);
+        WorkspaceDocument document = workspace(registration);
+        TestEdt edt = new TestEdt();
+        GraphWorkspaceStore store = mock(GraphWorkspaceStore.class);
+        MapLeaseManager leaseManager = mock(MapLeaseManager.class);
+        MapSnapshotFactory snapshots = mock(MapSnapshotFactory.class);
+        FakeLease lease = new FakeLease(id, MapOperationalState.AVAILABLE);
+        stubStoreAndListeners(store, leaseManager, document, new ListenerRegistrationStub(),
+            new ListenerRegistrationStub());
+        WorkspaceMapCoordinator coordinator = coordinator(document, edt, store, leaseManager, snapshots,
+            mapOf(id, CompletableFuture.completedFuture(lease)));
+        coordinators.add(coordinator);
+
+        assertThat(coordinator.find(id)).containsSame(lease);
+        assertThat(lease.closeCount()).isZero();
+        coordinator.close();
+        assertThat(lease.closeCount()).isEqualTo(1);
     }
 
     @Test

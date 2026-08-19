@@ -84,6 +84,26 @@ public class MapLeaseManagerShould {
     }
 
     @Test
+    public void rebasesRelativeMapResolutionAfterTheWorkspaceMoves() throws Exception {
+        TestEdt edt = new TestEdt();
+        TestEnvironment environment = environment(edt);
+        Path movedDirectory = temporaryFolder.newFolder("moved-workspace").toPath();
+        Path movedWorkspace = movedDirectory.resolve("workspace.fpg");
+        MapReference movedReference = reference(movedWorkspace, environment.mapPath);
+        AtomicReference<URL> loadedUrl = new AtomicReference<URL>();
+        MapLeaseManager manager = manager(environment, edt, url -> {
+            loadedUrl.set(url);
+            return environment.newMap(url);
+        });
+
+        manager.rebaseWorkspace(movedWorkspace);
+        MapLease lease = acquire(manager, movedReference, edt);
+
+        assertThat(loadedUrl.get()).isEqualTo(environment.mapPath.toUri().toURL());
+        lease.close();
+    }
+
+    @Test
     public void coalescesConcurrentLoadsAndReusesTheCanonicalViewlessModel() throws Exception {
         TestEdt edt = new TestEdt();
         TestEnvironment environment = environment(edt);

@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletionStage;
@@ -27,6 +28,7 @@ import org.freeplane.plugin.graph.projection.input.MapSnapshot;
 import org.freeplane.plugin.graph.projection.input.ProjectionInput;
 import org.freeplane.plugin.graph.workspace.GraphWorkspaceStore;
 import org.freeplane.plugin.graph.workspace.ListenerRegistration;
+import org.freeplane.plugin.graph.workspace.WorkspaceIdentityChange;
 import org.freeplane.plugin.graph.workspace.WorkspaceStoreEvent;
 import org.freeplane.plugin.graph.workspace.WorkspaceStoreListener;
 import org.freeplane.plugin.graph.workspace.model.MapReference;
@@ -117,6 +119,21 @@ public final class WorkspaceMapCoordinator implements AutoCloseable {
         });
     }
 
+    /**
+     * Returns the coordinator-owned lease without transferring ownership to the caller.
+     */
+    public Optional<MapLease> find(final MapReferenceId id) {
+        final MapReferenceId value = Objects.requireNonNull(id, "id");
+        synchronized (monitor) {
+            if (closed) {
+                return Optional.empty();
+            }
+            final Registration registration = registrations.get(value);
+            return registration == null || registration.lease == null
+                ? Optional.<MapLease>empty() : Optional.of(registration.lease);
+        }
+    }
+
     public void retry(final MapReference reference) {
         final MapReference value = Objects.requireNonNull(reference, "reference");
         edt.call(new Callable<Void>() {
@@ -173,6 +190,11 @@ public final class WorkspaceMapCoordinator implements AutoCloseable {
         final WorkspaceStoreEvent.Type type = event.type();
         if (type != WorkspaceStoreEvent.Type.DOCUMENT_CHANGED && type != WorkspaceStoreEvent.Type.IDENTITY_CHANGED) {
             return;
+        }
+        if (type == WorkspaceStoreEvent.Type.IDENTITY_CHANGED) {
+            final WorkspaceIdentityChange change = event.identityChange().orElseThrow(
+                () -> new IllegalStateException("Identity change event has no identity"));
+            leaseManager.rebaseWorkspace(change.newPath());
         }
         final WorkspaceDocument document = event.document();
         executeOnEdt(new Runnable() {
