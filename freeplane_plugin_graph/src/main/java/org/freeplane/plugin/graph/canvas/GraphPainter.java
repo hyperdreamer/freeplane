@@ -12,7 +12,6 @@ import java.awt.geom.Ellipse2D;
 import java.awt.geom.Line2D;
 import java.awt.geom.Path2D;
 import java.awt.geom.Point2D;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -107,7 +106,6 @@ final class GraphPainter {
             final GraphPaintState paintState, final GraphViewport viewport, final GraphTheme theme,
             final boolean dimUnrelated) {
         final GraphGeometry geometry = state.geometry();
-        final LayoutPositions positions = state.layout().positions();
         final Set<ProjectedEndpointKey> visibleEndpoints =
             ProjectedEndpointVisibility.visibleEndpoints(state.projection().nodes(),
                 state.projection().enclosures());
@@ -115,8 +113,8 @@ final class GraphPainter {
             if (!visibleEndpoints.contains(edge.first()) || !visibleEndpoints.contains(edge.second())) {
                 continue;
             }
-            final LayoutPoint firstTarget = endpointAnchor(edge.second(), geometry, positions);
-            final LayoutPoint secondTarget = endpointAnchor(edge.first(), geometry, positions);
+            final LayoutPoint firstTarget = endpointAnchor(edge.second(), state);
+            final LayoutPoint secondTarget = endpointAnchor(edge.first(), state);
             if (firstTarget == null || secondTarget == null) {
                 continue;
             }
@@ -249,6 +247,9 @@ final class GraphPainter {
         }
         for (final ProjectedEnclosure enclosure : state.projection().enclosures()) {
             if (enclosure.boundaryTier() == BoundaryTier.SUPPRESSED) {
+                continue;
+            }
+            if (geometry.hulls().get(enclosure.hullKey()) == null) {
                 continue;
             }
             for (final EnclosureKey endpointKey : enclosure.endpointKeys()) {
@@ -404,8 +405,9 @@ final class GraphPainter {
         return null;
     }
 
-    private static LayoutPoint endpointAnchor(final ProjectedEndpointKey endpoint, final GraphGeometry geometry,
-            final LayoutPositions positions) {
+    private static LayoutPoint endpointAnchor(final ProjectedEndpointKey endpoint, final CanvasState state) {
+        final GraphGeometry geometry = state.geometry();
+        final LayoutPositions positions = state.layout().positions();
         if (endpoint.isNode()) {
             final NodeGeometry node = geometry.nodes().get(endpoint.node().get());
             if (node != null) {
@@ -414,11 +416,16 @@ final class GraphPainter {
             return null;
         }
         final EnclosureKey enclosureKey = endpoint.enclosure().get();
-        for (final Map.Entry<EnclosureHullKey, HullGeometry> entry : geometry.hulls().entrySet()) {
-            if (entry.getKey().endpointKeys().contains(enclosureKey)) {
-                final LayoutPoint position = positions.anchors().get(entry.getKey());
-                return position == null ? entry.getValue().labelAnchor() : position;
+        for (final ProjectedEnclosure enclosure : state.projection().enclosures()) {
+            if (!enclosure.endpointKeys().contains(enclosureKey)) {
+                continue;
             }
+            final HullGeometry hull = geometry.hulls().get(enclosure.hullKey());
+            if (hull == null) {
+                return null;
+            }
+            final LayoutPoint position = positions.anchors().get(enclosure.hullKey());
+            return position == null ? hull.labelAnchor() : position;
         }
         return null;
     }
