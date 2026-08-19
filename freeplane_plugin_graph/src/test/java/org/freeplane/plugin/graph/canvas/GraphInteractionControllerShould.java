@@ -39,6 +39,8 @@ import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
 import org.freeplane.plugin.graph.projection.PinProjection;
+import org.freeplane.plugin.graph.projection.input.ConnectorDescriptor;
+import org.freeplane.plugin.graph.projection.input.ConnectorSnapshot;
 import org.freeplane.plugin.graph.projection.input.SafeNodeLabel;
 import org.freeplane.plugin.graph.projection.input.SourceNodeKey;
 import org.freeplane.plugin.graph.workspace.model.GraphRelationshipRecord;
@@ -229,6 +231,39 @@ public class GraphInteractionControllerShould {
         assertThat(index.endpointAt(LayoutPoint.of(-65.0, 0.0)))
             .contains(fixture.firstHullEndpoint);
         assertThat(index.endpointAt(LayoutPoint.of(95.0, 0.0))).isEmpty();
+    }
+
+    @Test
+    public void omitSuppressedEdgesFromHitTestingWhileRetainingVisibleEnclosureEdges() {
+        final Fixture fixture = Fixture.create();
+        final ConnectorDescriptor descriptor = ConnectorDescriptor.of(fixture.firstNodeKey.source(),
+            NodeReference.of(fixture.firstNodeKey.mapReferenceId(), PersistedNodeId.of("suppressed-edge")),
+            false, true, "source", "middle", "target");
+        final ProjectedEdge suppressedEdge = ProjectedEdge.of(
+            ProjectedEdgeKey.of(fixture.firstEndpoint, fixture.suppressedEndpoint),
+            Collections.singletonList(EdgeContributor.nativeConnector(
+                ConnectorSnapshot.of(0, descriptor), fixture.firstEndpoint, fixture.suppressedEndpoint)));
+        final List<ProjectedEdge> edges = new ArrayList<ProjectedEdge>(fixture.state.projection().edges());
+        edges.add(suppressedEdge);
+        final GraphProjection projection = GraphProjection.projected(1L,
+            fixture.state.projection().nodes(), fixture.state.projection().enclosures(), edges,
+            fixture.state.projection().relationshipResolutions(), fixture.state.projection().pins());
+        final CanvasState state = CanvasState.of(1L, projection, fixture.state.layout(),
+            fixture.state.geometry(), fixture.state.status());
+        final LayoutPoint sourceCenter = fixture.state.geometry().nodes().get(fixture.firstNodeKey).center();
+        final LayoutPoint targetAnchor = LayoutPoint.of(95.0, 0.0);
+        final LayoutPoint first = fixture.state.geometry().edgeAttachment(fixture.firstEndpoint, targetAnchor);
+        final LayoutPoint second = fixture.state.geometry().edgeAttachment(fixture.suppressedEndpoint,
+            sourceCenter);
+        final LayoutPoint query = LayoutPoint.of(first.x() + (second.x() - first.x()) * 0.8,
+            first.y() + (second.y() - first.y()) * 0.8);
+
+        final GraphHitIndex index = GraphHitIndex.from(state);
+
+        assertThat(index.edgeAt(query, 0.1)).isEmpty();
+        final AnchorFixture control = AnchorFixture.create();
+        assertThat(GraphHitIndex.from(control.state).edgeAt(control.paintedSegmentPoint, 0.1))
+            .contains(control.edgeKey);
     }
 
     @Test
@@ -641,13 +676,15 @@ public class GraphInteractionControllerShould {
         private final ProjectedEndpointKey secondEndpoint;
         private final ProjectedEndpointKey firstHullEndpoint;
         private final ProjectedEndpointKey secondHullEndpoint;
+        private final ProjectedEndpointKey suppressedEndpoint;
         private final ProjectedEdgeKey edgeKey;
         private final ContributorKey contributorKey;
 
         private Fixture(CanvasState state, ProjectedNodeKey firstNodeKey,
                 ProjectedNodeKey secondNodeKey, ProjectedEndpointKey firstEndpoint,
                 ProjectedEndpointKey secondEndpoint, ProjectedEndpointKey firstHullEndpoint,
-                ProjectedEndpointKey secondHullEndpoint, ProjectedEdgeKey edgeKey,
+                ProjectedEndpointKey secondHullEndpoint, ProjectedEndpointKey suppressedEndpoint,
+                ProjectedEdgeKey edgeKey,
                 ContributorKey contributorKey) {
             this.state = state;
             this.firstNodeKey = firstNodeKey;
@@ -656,6 +693,7 @@ public class GraphInteractionControllerShould {
             this.secondEndpoint = secondEndpoint;
             this.firstHullEndpoint = firstHullEndpoint;
             this.secondHullEndpoint = secondHullEndpoint;
+            this.suppressedEndpoint = suppressedEndpoint;
             this.edgeKey = edgeKey;
             this.contributorKey = contributorKey;
         }
@@ -752,7 +790,8 @@ public class GraphInteractionControllerShould {
                 OperationalStatus.IDLE);
             return new Fixture(state, first, second, firstEndpoint, secondEndpoint,
                 ProjectedEndpointKey.ofEnclosure(enclosureKey),
-                ProjectedEndpointKey.ofEnclosure(secondEnclosureKey), edgeKey, contributor.key());
+                ProjectedEndpointKey.ofEnclosure(secondEnclosureKey),
+                ProjectedEndpointKey.ofEnclosure(suppressedKey), edgeKey, contributor.key());
         }
 
         private static Map<ProjectedNodeKey, LayoutPoint> nodePoints(

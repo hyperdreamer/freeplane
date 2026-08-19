@@ -45,6 +45,8 @@ import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
 import org.freeplane.plugin.graph.projection.RelationshipResolution;
 import org.freeplane.plugin.graph.projection.PinProjection;
+import org.freeplane.plugin.graph.projection.input.ConnectorDescriptor;
+import org.freeplane.plugin.graph.projection.input.ConnectorSnapshot;
 import org.freeplane.plugin.graph.projection.input.SafeNodeLabel;
 import org.freeplane.plugin.graph.projection.input.SourceNodeKey;
 import org.freeplane.plugin.graph.workspace.model.GraphRelationshipRecord;
@@ -87,6 +89,44 @@ public class GraphCanvasPaintShould {
         assertThat(hasColorNear(image, attachmentScreen, theme.edgeColor(), 4)).isTrue();
         assertThat(nearColorPixelsIn(image, theme.edgeColor(), 147, 60, 155, 69, 80)).isGreaterThan(0);
         assertThat(nearColorPixelsIn(image, theme.edgeColor(), 92, 60, 100, 69, 80)).isEqualTo(0);
+    }
+
+    @Test
+    public void doNotPaintOrHitEdgesToSuppressedEndpoints() {
+        LabelFixture fixture = labelFixture(499);
+        ProjectedEdge edge = directedEdge(fixture.selected, fixture.suppressed, "SELECTED",
+            "suppressed-label");
+        CanvasState withEdge = stateWithEdges(fixture.state, Collections.singletonList(edge));
+        CanvasState withoutEdge = stateWithEdges(fixture.state, Collections.<ProjectedEdge>emptyList());
+        GraphTheme theme = lightTheme();
+
+        BufferedImage painted = paint(withEdge, GraphPaintState.empty(), theme, RenderingLevel.FULL);
+        BufferedImage unconnected = paint(withoutEdge, GraphPaintState.empty(), theme, RenderingLevel.FULL);
+
+        assertThat(differentPixels(painted, unconnected)).isZero();
+        assertThat(GraphHitIndex.from(withEdge).edgeAt(LayoutPoint.of(-36.0, -10.0), 4.0)).isEmpty();
+        assertThat(withEdge.projection().prominence().get(fixture.selected.node().get())
+            .visibleOutgoingTargets()).isZero();
+    }
+
+    @Test
+    public void skipEdgesWhenANodeHasOnlyALayoutPosition() {
+        Fixture fixture = fixture(16.0);
+        Map<ProjectedNodeKey, NodeGeometry> currentGeometry =
+            new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
+        currentGeometry.put(fixture.first.key(), fixture.state.geometry().nodes().get(fixture.first.key()));
+        CanvasState state = CanvasState.of(fixture.state.generation(), fixture.state.projection(),
+            fixture.state.layout(), GraphGeometry.of(currentGeometry, fixture.state.geometry().hulls(),
+                fixture.state.geometry().labels()), fixture.state.status());
+        CanvasState withoutEdge = stateWithEdges(state, Collections.<ProjectedEdge>emptyList());
+        GraphTheme theme = lightTheme();
+
+        BufferedImage painted = paint(state, GraphPaintState.empty(), theme, RenderingLevel.FULL);
+        BufferedImage unconnected = paint(withoutEdge, GraphPaintState.empty(), theme,
+            RenderingLevel.FULL);
+
+        assertThat(differentPixels(painted, unconnected)).isZero();
+        assertThat(GraphHitIndex.from(state).edgeAt(LayoutPoint.of(0.0, 0.0), 4.0)).isEmpty();
     }
 
     @Test
@@ -197,6 +237,24 @@ public class GraphCanvasPaintShould {
     public void exposeThemeBindingAsAPublicMethod() throws NoSuchMethodException {
         assertThat(Modifier.isPublic(GraphCanvas.class.getMethod("setTheme", GraphTheme.class).getModifiers()))
             .isTrue();
+    }
+
+    private static CanvasState stateWithEdges(final CanvasState base,
+            final List<ProjectedEdge> edges) {
+        GraphProjection projection = GraphProjection.projected(base.generation(), base.projection().nodes(),
+            base.projection().enclosures(), edges, base.projection().relationshipResolutions(),
+            base.projection().pins());
+        return CanvasState.of(base.generation(), projection, base.layout(), base.geometry(), base.status());
+    }
+
+    private static ProjectedEdge directedEdge(final ProjectedEndpointKey source,
+            final ProjectedEndpointKey target, final String sourceId, final String targetId) {
+        ConnectorDescriptor descriptor = ConnectorDescriptor.of(
+            SourceNodeKey.persisted(reference(FIRST_MAP, sourceId)), reference(FIRST_MAP, targetId),
+            false, true, "source", "middle", "target");
+        EdgeContributor contributor = EdgeContributor.nativeConnector(
+            ConnectorSnapshot.of(0, descriptor), source, target);
+        return ProjectedEdge.of(ProjectedEdgeKey.of(source, target), Collections.singletonList(contributor));
     }
 
     private static void assertForcedOrdinaryLabelsVisible(final BufferedImage image, final GraphTheme theme) {
