@@ -14,6 +14,7 @@ public final class DefaultGraphWorkspaceHandle implements GraphWorkspaceHandle {
     private final GraphUpdateCoordinator updates;
     private final WorkspaceCloseController closeController;
     private boolean closed;
+    private boolean closing;
 
     public DefaultGraphWorkspaceHandle(final GraphCommandRouter router, final GraphUpdateCoordinator updates,
             final WorkspaceCloseController closeController) {
@@ -28,9 +29,26 @@ public final class DefaultGraphWorkspaceHandle implements GraphWorkspaceHandle {
         this.closeController = Objects.requireNonNull(closeController, "closeController");
     }
 
+    void markClosing() {
+        synchronized (monitor) {
+            if (!closed) {
+                closing = true;
+            }
+        }
+    }
+
+    void reopenAfterCloseFailure() {
+        synchronized (monitor) {
+            if (!closed) {
+                closing = false;
+            }
+        }
+    }
+
     void markClosed() {
         synchronized (monitor) {
             closed = true;
+            closing = false;
         }
     }
 
@@ -44,8 +62,8 @@ public final class DefaultGraphWorkspaceHandle implements GraphWorkspaceHandle {
     @Override
     public GraphCommandResult execute(final GraphCommand command) {
         synchronized (monitor) {
-            if (closed) {
-                throw new IllegalStateException("Graph workspace handle is closed");
+            if (closed || closing) {
+                throw new IllegalStateException("Graph workspace handle is not open");
             }
             return router.execute(Objects.requireNonNull(command, "command"));
         }
@@ -54,8 +72,8 @@ public final class DefaultGraphWorkspaceHandle implements GraphWorkspaceHandle {
     @Override
     public ListenerRegistration addProjectionListener(final GraphProjectionListener listener) {
         synchronized (monitor) {
-            if (closed) {
-                throw new IllegalStateException("Graph workspace handle is closed");
+            if (closed || closing) {
+                throw new IllegalStateException("Graph workspace handle is not open");
             }
             return updates.addProjectionListener(Objects.requireNonNull(listener, "listener"));
         }
@@ -64,13 +82,13 @@ public final class DefaultGraphWorkspaceHandle implements GraphWorkspaceHandle {
     @Override
     public void close() {
         synchronized (monitor) {
-            if (closed) {
+            if (closed || closing) {
                 return;
             }
             if (!closeController.saveAndClose()) {
                 throw new IllegalStateException("Unable to save graph workspace while closing");
             }
-            closed = true;
+            closing = true;
         }
     }
 }
