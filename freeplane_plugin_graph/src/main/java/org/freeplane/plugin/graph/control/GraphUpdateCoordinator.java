@@ -53,8 +53,25 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
         final ProjectionEngine engine = Objects.requireNonNull(projectionEngine, "projectionEngine");
         final LayoutSettleLoop loop = Objects.requireNonNull(settleLoop, "settleLoop");
         if (store != null || leaseManager != null) {
-            Objects.requireNonNull(store, "store");
-            Objects.requireNonNull(leaseManager, "leaseManager");
+            try {
+                Objects.requireNonNull(store, "store");
+                Objects.requireNonNull(leaseManager, "leaseManager");
+            }
+            catch (RuntimeException failure) {
+                try {
+                    value.close();
+                }
+                catch (RuntimeException cleanupFailure) {
+                    failure = recordShutdownFailure(failure, cleanupFailure);
+                }
+                try {
+                    loop.close();
+                }
+                catch (RuntimeException cleanupFailure) {
+                    failure = recordShutdownFailure(failure, cleanupFailure);
+                }
+                throw failure;
+            }
         }
         this.pipeline = new LivePipeline(value, engine);
         this.batcher = new ProjectionBatcher(this::acceptBatch);
