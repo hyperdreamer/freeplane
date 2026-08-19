@@ -374,12 +374,34 @@ final class GraphPainter {
             ProjectedEndpointVisibility.visibleEndpoints(state.projection().nodes(),
                 state.projection().enclosures());
         if (!visibleEndpoints.contains(value.source())
-                || endpointAnchor(value.source(), state.geometry(), state.layout().positions()) == null) {
+                || previewEndpointAnchor(state, value.source()) == null) {
             return;
         }
         graphics.setColor(theme.previewColor());
         graphics.setStroke(theme.hoverStroke());
         graphics.draw(new Line2D.Double(value.from().x(), value.from().y(), value.to().x(), value.to().y()));
+    }
+
+    private static LayoutPoint previewEndpointAnchor(final CanvasState state,
+            final ProjectedEndpointKey endpoint) {
+        if (endpoint.isNode()) {
+            final NodeGeometry node = state.geometry().nodes().get(endpoint.node().get());
+            return node == null ? null : node.center();
+        }
+        final EnclosureKey enclosureKey = endpoint.enclosure().get();
+        for (final ProjectedEnclosure enclosure : state.projection().enclosures()) {
+            if (!enclosure.endpointKeys().contains(enclosureKey)) {
+                continue;
+            }
+            final EnclosureHullKey hullKey = enclosure.hullKey();
+            final HullGeometry hull = state.geometry().hulls().get(hullKey);
+            if (hull == null) {
+                return null;
+            }
+            final LayoutPoint position = state.layout().positions().anchors().get(hullKey);
+            return position == null ? hull.labelAnchor() : position;
+        }
+        return null;
     }
 
     private static LayoutPoint endpointAnchor(final ProjectedEndpointKey endpoint, final GraphGeometry geometry,
