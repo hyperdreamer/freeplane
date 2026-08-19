@@ -402,16 +402,26 @@ public final class GraphInteractionController {
         }
         final boolean shift = (modifiers & InputEvent.SHIFT_DOWN_MASK) != 0;
         if (!shift && canvas.paintState().selection().isPresent()) {
+            final Optional<ProjectedEndpointKey> selection = canvas.paintState().selection();
             final CanvasState state = canvas.canvasState();
-            if (state != null) {
-                final Optional<ProjectedEndpointKey> next = GraphTraversalOrder.nearest(
-                    state, canvas.paintState().selection().get(), directionFor(event.getKeyCode()));
-                if (next.isPresent()) {
-                    selectEndpoint(next.get());
+            if (state == null) {
+                setSelectionVisual(null);
+            }
+            else {
+                final List<ProjectedEndpointKey> order = GraphTraversalOrder.tabOrder(state);
+                if (!order.contains(selection.get())) {
+                    setSelectionVisual(null);
+                }
+                else {
+                    final Optional<ProjectedEndpointKey> next = GraphTraversalOrder.nearest(
+                        state, selection.get(), directionFor(event.getKeyCode()));
+                    if (next.isPresent()) {
+                        selectEndpoint(next.get());
+                    }
+                    event.consume();
+                    return;
                 }
             }
-            event.consume();
-            return;
         }
         final double pixels = shift ? ACCELERATED_ARROW_PIXELS : NORMAL_ARROW_PIXELS;
         panForArrow(event.getKeyCode(), pixels);
