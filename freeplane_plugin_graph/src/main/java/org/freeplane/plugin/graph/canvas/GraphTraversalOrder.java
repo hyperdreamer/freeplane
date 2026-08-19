@@ -8,15 +8,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 import org.freeplane.plugin.graph.control.CanvasState;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.HullGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.NodeGeometry;
-import org.freeplane.plugin.graph.projection.BoundaryTier;
 import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
+import org.freeplane.plugin.graph.projection.ProjectedEndpointVisibility;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 
 public final class GraphTraversalOrder {
@@ -60,24 +61,33 @@ public final class GraphTraversalOrder {
 
     private static Map<ProjectedEndpointKey, LayoutPoint> positions(final CanvasState state) {
         final GraphGeometry geometry = state.geometry();
+        final Set<ProjectedEndpointKey> visibleEndpoints =
+            ProjectedEndpointVisibility.visibleEndpoints(state.projection().nodes(),
+                state.projection().enclosures());
         final Map<ProjectedEndpointKey, LayoutPoint> positions =
             new HashMap<ProjectedEndpointKey, LayoutPoint>();
         for (ProjectedNode node : state.projection().nodes()) {
+            final ProjectedEndpointKey endpoint = ProjectedEndpointKey.ofNode(node.key());
+            if (!visibleEndpoints.contains(endpoint)) {
+                continue;
+            }
             final NodeGeometry nodeGeometry = geometry.nodes().get(node.key());
             if (nodeGeometry != null) {
                 positions.put(ProjectedEndpointKey.ofNode(node.key()), nodeGeometry.center());
             }
         }
         for (ProjectedEnclosure enclosure : state.projection().enclosures()) {
-            if (enclosure.boundaryTier() == BoundaryTier.SUPPRESSED) {
-                continue;
-            }
             final HullGeometry hull = geometry.hulls().get(enclosure.hullKey());
             if (hull == null) {
                 continue;
             }
             for (org.freeplane.plugin.graph.projection.EnclosureKey endpoint : enclosure.endpointKeys()) {
-                positions.put(ProjectedEndpointKey.ofEnclosure(endpoint), hull.labelAnchor());
+                final ProjectedEndpointKey projectedEndpoint =
+                    ProjectedEndpointKey.ofEnclosure(endpoint);
+                if (!visibleEndpoints.contains(projectedEndpoint)) {
+                    continue;
+                }
+                positions.put(projectedEndpoint, hull.labelAnchor());
             }
         }
         return positions;

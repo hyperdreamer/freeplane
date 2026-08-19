@@ -15,6 +15,7 @@ import java.awt.geom.Point2D;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 import org.freeplane.plugin.graph.control.CanvasState;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
@@ -29,6 +30,7 @@ import org.freeplane.plugin.graph.projection.EnclosureKey;
 import org.freeplane.plugin.graph.projection.PinProjection;
 import org.freeplane.plugin.graph.projection.ProjectedEdge;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
+import org.freeplane.plugin.graph.projection.ProjectedEndpointVisibility;
 import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 
@@ -106,7 +108,13 @@ final class GraphPainter {
             final boolean dimUnrelated) {
         final GraphGeometry geometry = state.geometry();
         final LayoutPositions positions = state.layout().positions();
+        final Set<ProjectedEndpointKey> visibleEndpoints =
+            ProjectedEndpointVisibility.visibleEndpoints(state.projection().nodes(),
+                state.projection().enclosures());
         for (final ProjectedEdge edge : state.projection().edges()) {
+            if (!visibleEndpoints.contains(edge.first()) || !visibleEndpoints.contains(edge.second())) {
+                continue;
+            }
             final LayoutPoint firstTarget = endpointAnchor(edge.second(), geometry, positions);
             final LayoutPoint secondTarget = endpointAnchor(edge.first(), geometry, positions);
             if (firstTarget == null || secondTarget == null) {
@@ -366,7 +374,7 @@ final class GraphPainter {
             if (node != null) {
                 return node.center();
             }
-            return positions.nodes().get(endpoint.node().get());
+            return null;
         }
         final EnclosureKey enclosureKey = endpoint.enclosure().get();
         for (final Map.Entry<EnclosureHullKey, HullGeometry> entry : geometry.hulls().entrySet()) {

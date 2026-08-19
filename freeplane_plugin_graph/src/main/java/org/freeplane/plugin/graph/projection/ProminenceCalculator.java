@@ -18,9 +18,14 @@ public final class ProminenceCalculator {
         final List<ProjectedNode> projectedNodes = Objects.requireNonNull(nodes, "nodes");
         final List<ProjectedEnclosure> projectedEnclosures = Objects.requireNonNull(enclosures, "enclosures");
         final List<ProjectedEdge> projectedEdges = Objects.requireNonNull(edges, "edges");
+        final Set<ProjectedEndpointKey> visibleEndpoints =
+            ProjectedEndpointVisibility.visibleEndpoints(projectedNodes, projectedEnclosures);
         final Map<EnclosureKey, EnclosureHullKey> hullsByEndpoint =
             new HashMap<EnclosureKey, EnclosureHullKey>();
         for (final ProjectedEnclosure enclosure : projectedEnclosures) {
+            if (enclosure.boundaryTier() == BoundaryTier.SUPPRESSED) {
+                continue;
+            }
             final EnclosureHullKey hullKey = enclosure.hullKey();
             for (final EnclosureKey endpoint : enclosure.endpointKeys()) {
                 hullsByEndpoint.put(endpoint, hullKey);
@@ -33,10 +38,10 @@ public final class ProminenceCalculator {
         }
         for (final ProjectedEdge edge : projectedEdges) {
             if (edge.arrowAtSecond()) {
-                register(targetsByNode, hullsByEndpoint, edge.first(), edge.second());
+                register(targetsByNode, hullsByEndpoint, visibleEndpoints, edge.first(), edge.second());
             }
             if (edge.arrowAtFirst()) {
-                register(targetsByNode, hullsByEndpoint, edge.second(), edge.first());
+                register(targetsByNode, hullsByEndpoint, visibleEndpoints, edge.second(), edge.first());
             }
         }
         final Map<ProjectedNodeKey, NodeProminence> prominence =
@@ -48,9 +53,10 @@ public final class ProminenceCalculator {
     }
 
     private static void register(final Map<ProjectedNodeKey, MutableTargets> targetsByNode,
-            final Map<EnclosureKey, EnclosureHullKey> hullsByEndpoint, final ProjectedEndpointKey source,
+            final Map<EnclosureKey, EnclosureHullKey> hullsByEndpoint,
+            final Set<ProjectedEndpointKey> visibleEndpoints, final ProjectedEndpointKey source,
             final ProjectedEndpointKey target) {
-        if (source.isEnclosure()) {
+        if (source.isEnclosure() || !visibleEndpoints.contains(target)) {
             return;
         }
         final MutableTargets targets = targetsByNode.get(source.node().get());

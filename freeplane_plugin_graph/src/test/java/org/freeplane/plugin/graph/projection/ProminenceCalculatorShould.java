@@ -107,6 +107,18 @@ public class ProminenceCalculatorShould {
     }
 
     @Test
+    public void ignoreSuppressedEnclosureTargets() {
+        EnclosureKey suppressed = EnclosureKey.of(source("suppressed-ancestor"));
+        ProjectedEnclosure enclosure = enclosure(BoundaryTier.SUPPRESSED, "suppressed-ancestor");
+
+        Map<ProjectedNodeKey, NodeProminence> prominence = ProminenceCalculator.calculate(
+            Collections.singletonList(node("a")), Collections.singletonList(enclosure),
+            Collections.singletonList(directedToEnclosureEdge("a", suppressed)));
+
+        assertThat(prominence.get(nodeKey("a")).visibleOutgoingTargets()).isZero();
+    }
+
+    @Test
     public void skipEnclosureTargetsAbsentFromTheSuppliedEnclosuresWithoutThrowing() {
         EnclosureKey missing = EnclosureKey.of(source("missing-ancestor"));
 
@@ -310,6 +322,10 @@ public class ProminenceCalculatorShould {
     }
 
     private static ProjectedEnclosure enclosure(String... ids) {
+        return enclosure(BoundaryTier.SUBTLE, ids);
+    }
+
+    private static ProjectedEnclosure enclosure(BoundaryTier tier, String... ids) {
         List<EnclosureKey> endpoints = new ArrayList<EnclosureKey>();
         List<SafeNodeLabel> labels = new ArrayList<SafeNodeLabel>();
         for (String id : ids) {
@@ -318,7 +334,7 @@ public class ProminenceCalculatorShould {
         }
         return ProjectedEnclosure.of(EnclosureHullKey.of(endpoints), endpoints, labels, "Map",
             Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(),
-            Collections.<EnclosureHullKey>emptyList(), true, BoundaryTier.SUBTLE);
+            Collections.<EnclosureHullKey>emptyList(), true, tier);
     }
 
     private static ProjectedEdge directedEdge(String from, String to) {

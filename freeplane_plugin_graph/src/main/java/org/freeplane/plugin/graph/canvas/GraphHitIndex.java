@@ -8,18 +8,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 import org.freeplane.plugin.graph.control.CanvasState;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.HullGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.NodeGeometry;
-import org.freeplane.plugin.graph.projection.BoundaryTier;
 import org.freeplane.plugin.graph.projection.EnclosureKey;
 import org.freeplane.plugin.graph.projection.ProjectedEdge;
 import org.freeplane.plugin.graph.projection.ProjectedEdgeKey;
 import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
+import org.freeplane.plugin.graph.projection.ProjectedEndpointVisibility;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 
 final class GraphHitIndex {
@@ -46,27 +47,33 @@ final class GraphHitIndex {
         final List<EndpointEntry> hullEntries = new ArrayList<EndpointEntry>();
         final Map<ProjectedEndpointKey, LayoutPoint> centers =
             new HashMap<ProjectedEndpointKey, LayoutPoint>();
+        final Set<ProjectedEndpointKey> visibleEndpoints =
+            ProjectedEndpointVisibility.visibleEndpoints(state.projection().nodes(),
+                state.projection().enclosures());
 
         for (final ProjectedNode node : state.projection().nodes()) {
+            final ProjectedEndpointKey endpoint = ProjectedEndpointKey.ofNode(node.key());
+            if (!visibleEndpoints.contains(endpoint)) {
+                continue;
+            }
             final NodeGeometry nodeGeometry = geometry.nodes().get(node.key());
             if (nodeGeometry == null) {
                 continue;
             }
-            final ProjectedEndpointKey endpoint = ProjectedEndpointKey.ofNode(node.key());
             nodeEntries.add(EndpointEntry.forNode(endpoint, nodeGeometry));
             centers.put(endpoint, nodeGeometry.center());
         }
 
         for (final ProjectedEnclosure enclosure : state.projection().enclosures()) {
-            if (enclosure.boundaryTier() == BoundaryTier.SUPPRESSED) {
-                continue;
-            }
             final HullGeometry hull = geometry.hulls().get(enclosure.hullKey());
             if (hull == null) {
                 continue;
             }
             for (final EnclosureKey endpointKey : enclosure.endpointKeys()) {
                 final ProjectedEndpointKey endpoint = ProjectedEndpointKey.ofEnclosure(endpointKey);
+                if (!visibleEndpoints.contains(endpoint)) {
+                    continue;
+                }
                 hullEntries.add(EndpointEntry.forHull(endpoint, hull));
                 final LayoutPoint anchor = enclosureAnchor(state, enclosure, hull);
                 if (anchor != null) {
@@ -77,6 +84,9 @@ final class GraphHitIndex {
 
         final List<EdgeEntry> edgeEntries = new ArrayList<EdgeEntry>();
         for (final ProjectedEdge edge : state.projection().edges()) {
+            if (!visibleEndpoints.contains(edge.first()) || !visibleEndpoints.contains(edge.second())) {
+                continue;
+            }
             final LayoutPoint firstCenter = centers.get(edge.first());
             final LayoutPoint secondCenter = centers.get(edge.second());
             if (firstCenter == null || secondCenter == null) {
