@@ -68,6 +68,40 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
         }
     }
 
+    private static final class ResourceSet {
+        private final GraphWorkspaceStore store;
+        private final WorkspaceMapCoordinator maps;
+        private final GraphUpdateCoordinator updates;
+        private final MapLeaseManager leaseManager;
+        private final ScheduledExecutorService scheduler;
+        private final boolean newlyCreated;
+
+        private ResourceSet(final GraphWorkspaceStore store, final WorkspaceMapCoordinator maps,
+                final GraphUpdateCoordinator updates, final MapLeaseManager leaseManager,
+                final ScheduledExecutorService scheduler, final boolean newlyCreated) {
+            this.store = store;
+            this.maps = maps;
+            this.updates = updates;
+            this.leaseManager = leaseManager;
+            this.scheduler = scheduler;
+            this.newlyCreated = newlyCreated;
+        }
+
+        private static ResourceSet from(final SessionResources resources) {
+            return new ResourceSet(resources.store, resources.maps, resources.updates, resources.leaseManager,
+                resources.scheduler, resources.newlyCreated);
+        }
+    }
+
+    private static final class SessionConstructionException extends RuntimeException {
+        private final ResourceSet resources;
+
+        private SessionConstructionException(final RuntimeException cause, final ResourceSet resources) {
+            super("Graph workspace resources could not be constructed", cause);
+            this.resources = resources;
+        }
+    }
+
     private final Object monitor = new Object();
     private final WorkspaceSessionRegistry sessions;
     private final SessionFactory sessionFactory;
@@ -136,10 +170,12 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
 
     private GraphWorkspaceHandle finishOpen(final Session session, final Path path, final boolean create) {
         SessionResources resources = null;
+        ResourceSet cleanup = null;
         try {
             final SessionResources openedResources = Objects.requireNonNull(
                 sessionFactory.open(path, session.id, create), "session resources");
             resources = openedResources;
+            cleanup = ResourceSet.from(openedResources);
             session.resources = openedResources;
             final WorkspaceCloseController closeController = new SessionCloseController(session);
             final DefaultGraphWorkspaceHandle handle = new DefaultGraphWorkspaceHandle(openedResources.router,
@@ -162,26 +198,27 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
             session.publishOpen();
             return handle;
         }
+        catch (SessionConstructionException failure) {
+            final RuntimeException cause = (RuntimeException) failure.getCause();
+            rollbackSession(session, failure.resources, create, cause);
+            throw new GraphWorkspaceOpenException(path, cause);
+        }
         catch (RuntimeException failure) {
-            rollbackSession(session, resources, create, failure);
+            rollbackSession(session, cleanup != null ? cleanup : resources == null ? null : ResourceSet.from(resources),
+                create, failure);
             throw new GraphWorkspaceOpenException(path, failure);
         }
     }
 
-    private void rollbackSession(final Session session, final SessionResources resources,
+    private void rollbackSession(final Session session, final ResourceSet resources,
             final boolean create, final RuntimeException original) {
         if (resources != null && SwingUtilities.isEventDispatchThread()) {
+            final ResourceSet cleanup = resources;
             final Thread thread = new Thread(() -> {
                 RuntimeException failure = original;
-                try {
-                    resources.store.discardAndClose();
-                }
-                catch (RuntimeException cleanupFailure) {
-                    failure = recordFailure(failure, cleanupFailure);
-                }
-                failure = recordFailure(failure, closeRemainingResources(resources));
+                failure = recordFailure(failure, cleanupResources(cleanup));
                 final RuntimeException completedFailure = failure;
-                SwingUtilities.invokeLater(() -> finishRollback(session, resources, create, completedFailure));
+                SwingUtilities.invokeLater(() -> finishRollback(session, cleanup, create, completedFailure));
             }, "freeplane-graph-workspace-open-rollback");
             thread.setDaemon(true);
             thread.start();
@@ -189,17 +226,12 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
         }
         RuntimeException failure = original;
         if (resources != null) {
-            try {
-                cleanupResources(resources);
-            }
-            catch (RuntimeException cleanupFailure) {
-                failure.addSuppressed(cleanupFailure);
-            }
+            failure = recordFailure(failure, cleanupResources(resources));
         }
         finishRollback(session, resources, create, failure);
     }
 
-    private void finishRollback(final Session session, final SessionResources resources,
+    private void finishRollback(final Session session, final ResourceSet resources,
             final boolean create, final RuntimeException original) {
         RuntimeException failure = original;
         try {
@@ -208,7 +240,7 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
             }
         }
         catch (RuntimeException viewFailure) {
-            failure.addSuppressed(viewFailure);
+            failure = recordFailure(failure, viewFailure);
         }
         deleteNewWorkspace(session.path, resources != null ? resources.newlyCreated : create, failure);
         session.failOpen();
@@ -218,21 +250,27 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
         }
     }
 
-    private static void cleanupResources(final SessionResources resources) {
-        RuntimeException failure = null;
-        try {
-            resources.store.discardAndClose();
+    private static RuntimeException cleanupResources(final ResourceSet resources) {
+        if (resources == null) {
+            return null;
         }
-        catch (RuntimeException exception) {
-            failure = recordFailure(failure, exception);
+        RuntimeException failure = null;
+        if (resources.store != null) {
+            try {
+                resources.store.discardAndClose();
+            }
+            catch (RuntimeException exception) {
+                failure = recordFailure(failure, exception);
+            }
         }
         failure = recordFailure(failure, closeRemainingResources(resources));
-        if (failure != null) {
-            throw failure;
-        }
+        return failure;
     }
 
-    private static RuntimeException closeRemainingResources(final SessionResources resources) {
+    private static RuntimeException closeRemainingResources(final ResourceSet resources) {
+        if (resources == null) {
+            return null;
+        }
         return closeRemainingResources(resources.updates, resources.maps, resources.leaseManager, resources.scheduler);
     }
 
@@ -240,11 +278,13 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
             final WorkspaceMapCoordinator maps, final MapLeaseManager leaseManager,
             final ScheduledExecutorService scheduler) {
         RuntimeException failure = null;
-        try {
-            closeUpdatesOffEdt(updates);
-        }
-        catch (RuntimeException exception) {
-            failure = recordFailure(failure, exception);
+        if (updates != null) {
+            try {
+                closeUpdatesOffEdt(updates);
+            }
+            catch (RuntimeException exception) {
+                failure = recordFailure(failure, exception);
+            }
         }
         if (maps != null) {
             try {
@@ -254,22 +294,26 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
                 failure = recordFailure(failure, exception);
             }
         }
-        try {
-            leaseManager.close();
+        if (leaseManager != null) {
+            try {
+                leaseManager.close();
+            }
+            catch (RuntimeException exception) {
+                failure = recordFailure(failure, exception);
+            }
         }
-        catch (RuntimeException exception) {
-            failure = recordFailure(failure, exception);
-        }
-        try {
-            scheduler.shutdownNow();
-        }
-        catch (RuntimeException exception) {
-            failure = recordFailure(failure, exception);
+        if (scheduler != null) {
+            try {
+                scheduler.shutdownNow();
+            }
+            catch (RuntimeException exception) {
+                failure = recordFailure(failure, exception);
+            }
         }
         return failure;
     }
 
-    private static void closeRemainingResourcesAsync(final SessionResources resources,
+    private static void closeRemainingResourcesAsync(final ResourceSet resources,
             final TeardownCompletion completion) {
         final Thread thread = new Thread(() -> {
             final RuntimeException failure = closeRemainingResources(resources);
@@ -279,13 +323,9 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
         thread.start();
     }
 
-    private static void closeRemainingResourcesAsync(final GraphUpdateCoordinator updates,
-            final WorkspaceMapCoordinator maps, final MapLeaseManager leaseManager,
-            final ScheduledExecutorService scheduler) {
-        final Thread thread = new Thread(() -> closeRemainingResources(updates, maps, leaseManager, scheduler),
-            "freeplane-graph-workspace-factory-rollback");
-        thread.setDaemon(true);
-        thread.start();
+    private static void closeRemainingResourcesAsync(final SessionResources resources,
+            final TeardownCompletion completion) {
+        closeRemainingResourcesAsync(ResourceSet.from(resources), completion);
     }
 
     private interface TeardownCompletion {
@@ -306,6 +346,9 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
     }
 
     private static RuntimeException recordFailure(final RuntimeException prior, final RuntimeException next) {
+        if (next == null) {
+            return prior;
+        }
         if (prior == null) {
             return next;
         }
@@ -369,11 +412,11 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
             closeSessionAsynchronously(session);
             return true;
         }
-        return finishClose(session, closeRemainingResources(session.resources), true);
+        return finishClose(session, closeRemainingResources(ResourceSet.from(session.resources)), true);
     }
 
     private void closeSessionAsynchronously(final Session session) {
-        closeRemainingResourcesAsync(session.resources, failure -> finishClose(session, failure, false));
+        closeRemainingResourcesAsync(session.resources, failure -> finishClose(session, failure, true));
     }
 
     private boolean finishClose(final Session session, final RuntimeException initialFailure,
@@ -574,51 +617,8 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
                 return new SessionResources(store, maps, updates, leaseManager, router, scheduler, create);
             }
             catch (RuntimeException failure) {
-                if (store != null) {
-                    try {
-                        store.discardAndClose();
-                    }
-                    catch (RuntimeException cleanupFailure) {
-                        failure.addSuppressed(cleanupFailure);
-                    }
-                }
-                if (updates != null && SwingUtilities.isEventDispatchThread()) {
-                    closeRemainingResourcesAsync(updates, maps, leaseManager, scheduler);
-                }
-                else {
-                    if (updates != null) {
-                        failure = recordFailure(failure, closeRemainingResources(updates, maps, leaseManager, scheduler));
-                    }
-                    else if (maps != null) {
-                        try {
-                            maps.close();
-                        }
-                        catch (RuntimeException cleanupFailure) {
-                            failure.addSuppressed(cleanupFailure);
-                        }
-                        if (leaseManager != null) {
-                            try {
-                                leaseManager.close();
-                            }
-                            catch (RuntimeException cleanupFailure) {
-                                failure.addSuppressed(cleanupFailure);
-                            }
-                        }
-                        scheduler.shutdownNow();
-                    }
-                    else {
-                        if (leaseManager != null) {
-                            try {
-                                leaseManager.close();
-                            }
-                            catch (RuntimeException cleanupFailure) {
-                                failure.addSuppressed(cleanupFailure);
-                            }
-                        }
-                        scheduler.shutdownNow();
-                    }
-                }
-                throw failure;
+                throw new SessionConstructionException(failure,
+                    new ResourceSet(store, maps, updates, leaseManager, scheduler, create));
             }
         }
     }
