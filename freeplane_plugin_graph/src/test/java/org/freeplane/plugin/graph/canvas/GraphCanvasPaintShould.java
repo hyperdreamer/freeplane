@@ -268,6 +268,60 @@ public class GraphCanvasPaintShould {
     }
 
     @Test
+    public void skipOrdinaryEdgeWhenCurrentEnclosureHullIsMissing() {
+        Fixture fixture = fixture(16.0);
+        GraphTheme theme = lightTheme();
+        ProjectedEnclosure previousEnclosure = fixture.state.projection().enclosures().get(0);
+        ProjectedEndpointKey enclosureEndpoint = ProjectedEndpointKey.ofEnclosure(
+            previousEnclosure.endpointKeys().get(0));
+        ProjectedEdge enclosureEdge = enclosureToNodeEdge(enclosureEndpoint, fixture.secondEndpoint);
+
+        CanvasState currentWithEdge = stateWithEdges(fixture.state, Collections.singletonList(enclosureEdge));
+        BufferedImage currentImage = paint(currentWithEdge, GraphPaintState.empty(), theme, RenderingLevel.FULL);
+        BufferedImage currentWithoutEdge = paint(stateWithEdges(fixture.state,
+            Collections.<ProjectedEdge>emptyList()), GraphPaintState.empty(), theme, RenderingLevel.FULL);
+        assertThat(differentPixels(currentImage, currentWithoutEdge)).isGreaterThan(0);
+
+        CanvasState replacement = replacementWithMissingCurrentEnclosureHull(fixture.state, previousEnclosure);
+        ProjectedEnclosure currentEnclosure = replacement.projection().enclosures().get(0);
+        assertThat(currentEnclosure.endpointKeys()).contains(enclosureEndpoint.enclosure().get());
+        assertThat(currentEnclosure.hullKey()).isNotEqualTo(previousEnclosure.hullKey());
+        assertThat(replacement.geometry().hulls()).containsKey(previousEnclosure.hullKey());
+        assertThat(replacement.geometry().hulls()).doesNotContainKey(currentEnclosure.hullKey());
+
+        CanvasState staleWithEdge = stateWithEdges(replacement, Collections.singletonList(enclosureEdge));
+        CanvasState staleWithoutEdge = stateWithEdges(replacement, Collections.<ProjectedEdge>emptyList());
+        BufferedImage staleImage = paint(staleWithEdge, GraphPaintState.empty(), theme, RenderingLevel.FULL);
+        BufferedImage staleWithoutEdgeImage = paint(staleWithoutEdge, GraphPaintState.empty(), theme,
+            RenderingLevel.FULL);
+        assertThat(differentPixels(staleImage, staleWithoutEdgeImage)).isZero();
+    }
+
+    @Test
+    public void skipEnclosureLabelWhenCurrentHullIsMissing() {
+        Fixture fixture = fixture(16.0);
+        GraphTheme theme = lightTheme();
+        ProjectedEnclosure previousEnclosure = fixture.state.projection().enclosures().get(0);
+        EnclosureKey enclosureEndpoint = previousEnclosure.endpointKeys().get(0);
+        BufferedImage currentImage = paint(fixture.state, GraphPaintState.empty(), theme, RenderingLevel.FULL);
+        assertThat(labelPixels(currentImage, theme, 50, 70, 110, 100)).isGreaterThan(0);
+
+        CanvasState replacement = replacementWithMissingCurrentEnclosureHull(fixture.state, previousEnclosure);
+        ProjectedEnclosure currentEnclosure = replacement.projection().enclosures().get(0);
+        assertThat(currentEnclosure.endpointKeys()).contains(enclosureEndpoint);
+        assertThat(currentEnclosure.hullKey()).isNotEqualTo(previousEnclosure.hullKey());
+        assertThat(replacement.geometry().hulls()).containsKey(previousEnclosure.hullKey());
+        assertThat(replacement.geometry().hulls()).doesNotContainKey(currentEnclosure.hullKey());
+        assertThat(replacement.geometry().labels()).containsKey(enclosureEndpoint);
+
+        CanvasState withoutRetainedLabel = withoutEnclosureLabel(replacement, enclosureEndpoint);
+        BufferedImage staleImage = paint(replacement, GraphPaintState.empty(), theme, RenderingLevel.FULL);
+        BufferedImage withoutRetainedLabelImage = paint(withoutRetainedLabel, GraphPaintState.empty(), theme,
+            RenderingLevel.FULL);
+        assertThat(differentPixels(staleImage, withoutRetainedLabelImage)).isZero();
+    }
+
+    @Test
     public void resolveHullColorsFromRegisteredMapsAndTierTreatment() {
         GraphTheme theme = lightTheme();
         GraphTheme reconstructed = GraphTheme.resolve(CanvasTheme.LIGHT, registeredMaps());
@@ -379,6 +433,25 @@ public class GraphCanvasPaintShould {
             enclosures.add(enclosure.equals(previous) ? current : enclosure);
         }
         return replacementState(base, base.projection().nodes(), enclosures, base.geometry());
+    }
+
+    private static CanvasState withoutEnclosureLabel(final CanvasState base,
+            final EnclosureKey removed) {
+        final Map<EnclosureKey, LabelPlacement> labels =
+            new LinkedHashMap<EnclosureKey, LabelPlacement>(base.geometry().labels());
+        labels.remove(removed);
+        return CanvasState.of(base.generation(), base.projection(), base.layout(),
+            GraphGeometry.of(base.geometry().nodes(), base.geometry().hulls(), labels), base.status());
+    }
+
+    private static ProjectedEdge enclosureToNodeEdge(final ProjectedEndpointKey enclosure,
+            final ProjectedEndpointKey node) {
+        GraphRelationshipRecord relationship = GraphRelationshipRecord.of(
+            RelationshipId.of("00000000-0000-0000-0000-000000000013"), 3L,
+            reference(FIRST_MAP, "enclosure-source"), reference(SECOND_MAP, "second"),
+            RelationshipDirection.UNDIRECTED, Collections.<UnknownXml>emptyList());
+        EdgeContributor contributor = EdgeContributor.graphRelationship(relationship, enclosure, node);
+        return ProjectedEdge.of(ProjectedEdgeKey.of(enclosure, node), Collections.singletonList(contributor));
     }
 
     private static CanvasState withoutNodeGeometry(final CanvasState base,
