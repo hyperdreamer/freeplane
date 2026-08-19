@@ -223,6 +223,30 @@ public class GraphInteractionControllerShould {
     }
 
     @Test
+    public void cancelConnectionPreviewWhenANodeSourceIsRemovedFromCurrentCanvasState() {
+        final Fixture fixture = Fixture.create();
+
+        assertConnectionPreviewCancelledAfterStateReplacement(fixture, fixture.firstEndpoint, -40.0, 0.0,
+            stateWithoutFirstNode(fixture));
+    }
+
+    @Test
+    public void cancelConnectionPreviewWhenAnEnclosureSourceIsSuppressedInCurrentCanvasState() {
+        final Fixture fixture = Fixture.create();
+
+        assertConnectionPreviewCancelledAfterStateReplacement(fixture, fixture.firstHullEndpoint, -65.0, 0.0,
+            stateWithSuppressedFirstEnclosure(fixture));
+    }
+
+    @Test
+    public void cancelConnectionPreviewWhenANodeSourceLosesCurrentGeometry() {
+        final Fixture fixture = Fixture.create();
+
+        assertConnectionPreviewCancelledAfterStateReplacement(fixture, fixture.firstEndpoint, -40.0, 0.0,
+            stateWithoutFirstNodeGeometry(fixture));
+    }
+
+    @Test
     public void useStableSharedHullEndpointOrderAndExcludeSuppressedHulls() {
         final Fixture fixture = Fixture.create();
         final GraphHitIndex index = GraphHitIndex.from(fixture.state);
@@ -392,6 +416,78 @@ public class GraphInteractionControllerShould {
         assertThat(canvas.getMouseMotionListeners()).isEmpty();
         assertThat(canvas.getMouseWheelListeners()).isEmpty();
         assertThat(canvas.getKeyListeners()).isEmpty();
+    }
+
+    private static void assertConnectionPreviewCancelledAfterStateReplacement(final Fixture fixture,
+            final ProjectedEndpointKey source, final double sourceX, final double sourceY,
+            final CanvasState replacement) {
+        final GraphCanvas canvas = fixture.canvas();
+        final RecordingListener listener = new RecordingListener();
+        final GraphInteractionController controller = new GraphInteractionController(listener);
+        controller.install(canvas);
+        controller.setTool(InteractionTool.CONNECT);
+
+        dispatch(canvas, press(canvas, sourceX, sourceY));
+        dispatch(canvas, drag(canvas, sourceX + 5.0, sourceY));
+        assertThat(canvas.paintState().connectionPreview()).isPresent();
+
+        canvas.setCanvasState(replacement);
+
+        assertThat(canvas.paintState().connectionPreview()).isEmpty();
+        assertThat(canvas.paintState().selection()).isEmpty();
+        dispatch(canvas, release(canvas, 40.0, 0.0));
+        assertThat(listener.intents).isEmpty();
+        assertThat(canvas.paintState().selection()).isEmpty();
+        controller.uninstall();
+    }
+
+    private static CanvasState stateWithoutFirstNode(final Fixture fixture) {
+        final List<ProjectedNode> nodes = new ArrayList<ProjectedNode>();
+        for (final ProjectedNode node : fixture.state.projection().nodes()) {
+            if (!node.key().equals(fixture.firstNodeKey)) {
+                nodes.add(node);
+            }
+        }
+        return replacementState(fixture.state, nodes, fixture.state.projection().enclosures(),
+            fixture.state.geometry());
+    }
+
+    private static CanvasState stateWithSuppressedFirstEnclosure(final Fixture fixture) {
+        final EnclosureKey source = fixture.firstHullEndpoint.enclosure().get();
+        final List<org.freeplane.plugin.graph.projection.ProjectedEnclosure> enclosures =
+            new ArrayList<org.freeplane.plugin.graph.projection.ProjectedEnclosure>();
+        for (final org.freeplane.plugin.graph.projection.ProjectedEnclosure enclosure
+                : fixture.state.projection().enclosures()) {
+            if (enclosure.endpointKeys().contains(source)) {
+                enclosures.add(org.freeplane.plugin.graph.projection.ProjectedEnclosure.of(enclosure.hullKey(),
+                    enclosure.endpointKeys(), enclosure.labels(), enclosure.mapName(), enclosure.parentHull(),
+                    enclosure.directNodes(), enclosure.directEnclosures(), enclosure.mapRoot(),
+                    BoundaryTier.SUPPRESSED));
+            }
+            else {
+                enclosures.add(enclosure);
+            }
+        }
+        return replacementState(fixture.state, fixture.state.projection().nodes(), enclosures,
+            fixture.state.geometry());
+    }
+
+    private static CanvasState stateWithoutFirstNodeGeometry(final Fixture fixture) {
+        final Map<ProjectedNodeKey, NodeGeometry> nodes =
+            new LinkedHashMap<ProjectedNodeKey, NodeGeometry>(fixture.state.geometry().nodes());
+        nodes.remove(fixture.firstNodeKey);
+        return replacementState(fixture.state, fixture.state.projection().nodes(),
+            fixture.state.projection().enclosures(), GraphGeometry.of(nodes, fixture.state.geometry().hulls(),
+                fixture.state.geometry().labels()));
+    }
+
+    private static CanvasState replacementState(final CanvasState base, final List<ProjectedNode> nodes,
+            final List<org.freeplane.plugin.graph.projection.ProjectedEnclosure> enclosures,
+            final GraphGeometry geometry) {
+        final GraphProjection projection = GraphProjection.projected(base.generation(), nodes, enclosures,
+            Collections.<ProjectedEdge>emptyList(), base.projection().relationshipResolutions(),
+            Collections.<PinProjection>emptyList());
+        return CanvasState.of(base.generation(), projection, base.layout(), geometry, base.status());
     }
 
     private static void dispatch(GraphCanvas canvas, AWTEvent event) {

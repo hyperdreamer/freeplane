@@ -121,6 +121,13 @@ public final class GraphInteractionController {
         next.setFocusable(true);
     }
 
+    void canvasStateChanged(final CanvasState state) {
+        final CanvasState value = Objects.requireNonNull(state, "state");
+        if (previewSource != null && !GraphTraversalOrder.tabOrder(value).contains(previewSource)) {
+            cancelPreview();
+        }
+    }
+
     public void uninstall() {
         final GraphCanvas oldCanvas = canvas;
         if (oldCanvas == null) {
@@ -465,10 +472,16 @@ public final class GraphInteractionController {
 
     private void finishConnect(final MouseEvent event) {
         final ProjectedEndpointKey source = previewSource;
-        final LayoutPoint world = canvas.worldAt(event.getPoint());
-        final Optional<ProjectedEndpointKey> target = canvas.hitIndex().endpointAt(world);
         cancelPreview();
-        if (source == null || !target.isPresent() || source.equals(target.get())) {
+        final CanvasState state = canvas.canvasState();
+        final LayoutPoint world = canvas.worldAt(event.getPoint());
+        final Optional<ProjectedEndpointKey> target = state == null
+            ? Optional.<ProjectedEndpointKey>empty() : canvas.hitIndex().endpointAt(world);
+        if (state == null || source == null || !target.isPresent() || source.equals(target.get())) {
+            return;
+        }
+        final List<ProjectedEndpointKey> currentEndpoints = GraphTraversalOrder.tabOrder(state);
+        if (!currentEndpoints.contains(source) || !currentEndpoints.contains(target.get())) {
             return;
         }
         emit(new GraphIntent.Connect(source, target.get(), relationshipDirection));
@@ -505,7 +518,7 @@ public final class GraphInteractionController {
             return;
         }
         canvas.setPaintState(canvas.paintState().withConnectionPreview(
-            GraphPaintState.ConnectionPreview.of(previewFrom, world)));
+            GraphPaintState.ConnectionPreview.of(previewSource, previewFrom, world)));
         canvas.repaintCanvas();
     }
 
