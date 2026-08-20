@@ -43,7 +43,8 @@ final class MapListPanel extends JPanel {
         LOADING,
         MISSING,
         READ_ONLY,
-        RETRYABLE
+        RETRYABLE,
+        INACTIVE
     }
 
     static final class MapRow {
@@ -359,6 +360,8 @@ final class MapListPanel extends JPanel {
                 return "Read only";
             case RETRYABLE:
                 return "Retry available";
+            case INACTIVE:
+                return "Inactive";
             default:
                 throw new IllegalArgumentException("Unknown map row state");
             }
@@ -376,6 +379,8 @@ final class MapListPanel extends JPanel {
                 return new Color(155, 155, 155);
             case RETRYABLE:
                 return new Color(242, 142, 43);
+            case INACTIVE:
+                return new Color(155, 155, 155);
             default:
                 return Color.GRAY;
             }
