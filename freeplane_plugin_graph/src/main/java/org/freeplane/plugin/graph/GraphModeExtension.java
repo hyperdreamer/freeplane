@@ -7,11 +7,17 @@ import org.freeplane.main.application.CommandLineOptions;
 import org.freeplane.main.osgi.IModeControllerExtensionProvider;
 import org.freeplane.plugin.graph.group.GraphGroupController;
 import org.freeplane.plugin.graph.group.GraphGroupMarkerPainter;
+import org.freeplane.plugin.graph.control.DefaultGraphWorkspaceController;
+import org.freeplane.plugin.graph.control.GraphWorkspaceController;
+import org.freeplane.plugin.graph.window.OpenGraphWorkspaceAction;
+import org.freeplane.plugin.graph.window.SwingGraphWorkspaceViewFactory;
 import org.freeplane.view.swing.map.NodeViewDecorationRegistry;
 
 public final class GraphModeExtension implements IModeControllerExtensionProvider, AutoCloseable {
     private GraphGroupController graphGroupController;
     private GraphGroupMarkerPainter graphGroupMarkerPainter;
+    private OpenGraphWorkspaceAction openGraphWorkspaceAction;
+    private GraphWorkspaceController graphWorkspaceController;
     private ModeController modeController;
     private NodeViewDecorationRegistry nodeViewDecorationRegistry;
 
@@ -27,6 +33,13 @@ public final class GraphModeExtension implements IModeControllerExtensionProvide
         this.modeController = modeController;
         graphGroupController = new GraphGroupController(modeController);
         modeController.addExtension(GraphGroupController.class, graphGroupController);
+        final ForwardingGraphWorkspaceController viewController = new ForwardingGraphWorkspaceController();
+        final DefaultGraphWorkspaceController completedController = new DefaultGraphWorkspaceController(modeController,
+            new SwingGraphWorkspaceViewFactory(viewController));
+        viewController.bind(completedController);
+        graphWorkspaceController = completedController;
+        openGraphWorkspaceAction = new OpenGraphWorkspaceAction(completedController);
+        modeController.addAction(openGraphWorkspaceAction);
         nodeViewDecorationRegistry = NodeViewDecorationRegistry.of(modeController);
         graphGroupMarkerPainter = new GraphGroupMarkerPainter();
         nodeViewDecorationRegistry.add(graphGroupMarkerPainter);
@@ -42,15 +55,38 @@ public final class GraphModeExtension implements IModeControllerExtensionProvide
                 nodeViewDecorationRegistry.remove(graphGroupMarkerPainter);
             }
             finally {
-                graphGroupController.close();
+                try {
+                    modeController.removeAction(OpenGraphWorkspaceAction.KEY);
+                }
+                finally {
+                    graphGroupController.close();
+                }
             }
         }
         finally {
             modeController.removeExtension(GraphGroupController.class);
             graphGroupController = null;
             graphGroupMarkerPainter = null;
+            openGraphWorkspaceAction = null;
+            graphWorkspaceController = null;
             modeController = null;
             nodeViewDecorationRegistry = null;
+        }
+    }
+
+    private static final class ForwardingGraphWorkspaceController implements GraphWorkspaceController {
+        private GraphWorkspaceController delegate;
+
+        private void bind(final GraphWorkspaceController value) {
+            delegate = value;
+        }
+
+        @Override
+        public org.freeplane.plugin.graph.control.GraphWorkspaceHandle open(final java.nio.file.Path path) {
+            if (delegate == null) {
+                throw new IllegalStateException("Graph workspace controller is not initialized");
+            }
+            return delegate.open(path);
         }
     }
 }

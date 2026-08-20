@@ -29,6 +29,7 @@ import javax.swing.ListSelectionModel;
 import javax.swing.SwingConstants;
 import javax.swing.border.EmptyBorder;
 
+import org.freeplane.core.util.TextUtils;
 import org.freeplane.plugin.graph.command.GraphCommand;
 import org.freeplane.plugin.graph.command.GraphCommands;
 import org.freeplane.plugin.graph.control.GraphWorkspaceHandle;
@@ -113,10 +114,10 @@ final class MapListPanel extends JPanel {
     private final Supplier<Path> pathChooser;
     private final DefaultListModel<MapRow> model = new DefaultListModel<MapRow>();
     private final JList<MapRow> list = new JList<MapRow>(model);
-    private final JButton addButton = button("Add", "add-map");
-    private final JButton removeButton = button("Remove", "remove-map");
-    private final JButton retryButton = button("Retry", "retry-map");
-    private final JButton locateButton = button("Locate", "locate-map");
+    private final JButton addButton = button("graph_workspace.action.add_map", "add-map");
+    private final JButton removeButton = button("graph_workspace.action.remove_map", "remove-map");
+    private final JButton retryButton = button("graph_workspace.action.retry_map", "retry-map");
+    private final JButton locateButton = button("graph_workspace.action.locate_map", "locate-map");
     private List<MapRow> rows = Collections.emptyList();
     private boolean readOnly;
     private boolean updatingSelection;
@@ -130,7 +131,7 @@ final class MapListPanel extends JPanel {
         setPreferredSize(new Dimension(PANEL_WIDTH, 0));
         setMinimumSize(new Dimension(PANEL_WIDTH, 0));
 
-        final JLabel heading = new JLabel("Maps");
+        final JLabel heading = new JLabel(TextUtils.getText("graph_workspace.map_list.heading"));
         heading.setName("graph-workspace-map-list-heading");
         heading.setBorder(new EmptyBorder(0, 2, 2, 2));
         add(heading, BorderLayout.NORTH);
@@ -299,8 +300,8 @@ final class MapListPanel extends JPanel {
             && (selected.state() == RowState.MISSING || selected.state() == RowState.RETRYABLE));
     }
 
-    private static JButton button(final String text, final String name) {
-        final JButton button = new JButton(text);
+    private static JButton button(final String textKey, final String name) {
+        final JButton button = new JButton(TextUtils.getText(textKey));
         button.setName("graph-workspace-" + name);
         button.setMargin(new Insets(2, 7, 2, 7));
         button.setFocusable(false);
@@ -343,28 +344,15 @@ final class MapListPanel extends JPanel {
             color.setBackground(colorFor(value.state()));
             name.setText(value.displayName());
             status.setText(labelFor(value.state()));
-            count.setText(Integer.toString(value.projectedNodeCount()));
+            count.setText(TextUtils.format("graph_workspace.map_list.node_count", Integer.valueOf(
+                value.projectedNodeCount())));
             setPreferredSize(new Dimension(PANEL_WIDTH - 24, ROW_HEIGHT));
             return this;
         }
 
         private static String labelFor(final RowState state) {
-            switch (state) {
-            case ACTIVE:
-                return "Active";
-            case LOADING:
-                return "Loading";
-            case MISSING:
-                return "Missing";
-            case READ_ONLY:
-                return "Read only";
-            case RETRYABLE:
-                return "Retry available";
-            case INACTIVE:
-                return "Inactive";
-            default:
-                throw new IllegalArgumentException("Unknown map row state");
-            }
+            return TextUtils.getText("graph_workspace.map.status." + state.name().toLowerCase(
+                java.util.Locale.ROOT));
         }
 
         private static Color colorFor(final RowState state) {

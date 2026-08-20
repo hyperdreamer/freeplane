@@ -17,6 +17,7 @@ import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 
+import org.freeplane.core.util.TextUtils;
 import org.freeplane.plugin.graph.command.GraphCommand;
 import org.freeplane.plugin.graph.command.GraphCommands;
 import org.freeplane.plugin.graph.control.CanvasState;
@@ -265,9 +266,9 @@ final class GraphStatusBar extends JPanel {
     private final JLabel historyState = label("history-state");
     private final JLabel nodeWarning = label("node-warning");
     private final JLabel edgeWarning = label("edge-warning");
-    private final JButton retrySaveButton = button("Retry Save", "retry-save");
-    private final JButton restartLayoutButton = button("Restart Layout", "restart-layout");
-    private final JButton unpinAllButton = button("Unpin All", "unpin-all");
+    private final JButton retrySaveButton = button("graph_workspace.action.retry_save", "retry-save");
+    private final JButton restartLayoutButton = button("graph_workspace.action.restart_layout", "restart-layout");
+    private final JButton unpinAllButton = button("graph_workspace.action.unpin_all", "unpin-all");
     private Status status;
 
     GraphStatusBar(final Consumer<GraphCommand> commandSink) {
@@ -314,18 +315,24 @@ final class GraphStatusBar extends JPanel {
     void setStatus(final Status value) {
         status = Objects.requireNonNull(value, "status");
         mapAvailability.setText(mapAvailabilityText(value));
-        projectedCounts.setText("Nodes " + value.projectedNodeCount + " / Edges " + value.projectedEdgeCount);
+        projectedCounts.setText(TextUtils.format("graph_workspace.status.counts",
+            Integer.valueOf(value.projectedNodeCount), Integer.valueOf(value.projectedEdgeCount)));
         selectedEndpoint.setText(value.selectedEndpointText.isEmpty()
-            ? "Selected none" : "Selected " + value.selectedEndpointText);
-        layoutState.setText("Layout " + value.layoutStatus.name());
-        unresolvedCounts.setText("Recoverable " + value.recoverableCount + " / Missing "
-            + value.missingNodeCount);
+            ? TextUtils.getText("graph_workspace.status.selected.none")
+            : TextUtils.format("graph_workspace.status.selected", value.selectedEndpointText));
+        layoutState.setText(TextUtils.format("graph_workspace.status.layout", TextUtils.getText(
+            "graph_workspace.layout_status." + value.layoutStatus.name().toLowerCase(java.util.Locale.ROOT))));
+        unresolvedCounts.setText(TextUtils.format("graph_workspace.status.unresolved",
+            Integer.valueOf(value.recoverableCount), Integer.valueOf(value.missingNodeCount)));
         workspaceState.setText(value.workspaceDirty
-            ? value.saveFailed ? "Workspace dirty, save failed" : "Workspace dirty" : "Workspace saved");
+            ? value.saveFailed ? TextUtils.getText("graph_workspace.status.workspace.save_failed")
+                : TextUtils.getText("graph_workspace.status.workspace.dirty")
+            : TextUtils.getText("graph_workspace.status.workspace.saved"));
         sourceMapState.setText(sourceMapText(value));
-        historyState.setText("History " + (value.workspaceHistoryAvailable() ? "available" : "empty"));
-        nodeWarning.setText("2,000+ nodes");
-        edgeWarning.setText("5,000+ edges");
+        historyState.setText(TextUtils.getText(value.workspaceHistoryAvailable()
+            ? "graph_workspace.status.history.available" : "graph_workspace.status.history.empty"));
+        nodeWarning.setText(TextUtils.getText("graph_workspace.warning.nodes"));
+        edgeWarning.setText(TextUtils.getText("graph_workspace.warning.edges"));
         nodeWarning.setVisible(value.projectedNodeCount >= NODE_WARNING_THRESHOLD);
         edgeWarning.setVisible(value.projectedEdgeCount >= EDGE_WARNING_THRESHOLD);
         retrySaveButton.setEnabled(!value.readOnly);
@@ -405,28 +412,30 @@ final class GraphStatusBar extends JPanel {
 
     private static String mapAvailabilityText(final Status value) {
         if (value.mapStatuses.isEmpty()) {
-            return "Maps none";
+            return TextUtils.getText("graph_workspace.status.maps.none");
         }
-        final StringBuilder result = new StringBuilder("Maps ");
+        final StringBuilder result = new StringBuilder(TextUtils.getText("graph_workspace.status.maps.prefix"));
         for (int index = 0; index < value.mapStatuses.size(); index++) {
             if (index > 0) {
                 result.append(", ");
             }
             final MapStatus map = value.mapStatuses.get(index);
-            result.append(map.displayName).append(" ").append(map.availability.name());
+            result.append(TextUtils.format("graph_workspace.status.map", map.displayName, TextUtils.getText(
+                "graph_workspace.map.availability." + map.availability.name().toLowerCase(java.util.Locale.ROOT))));
         }
         return result.toString();
     }
 
     private static String sourceMapText(final Status value) {
         if (value.dirtySourceMapCount == 0) {
-            return "Source maps clean";
+            return TextUtils.getText("graph_workspace.status.source_maps.clean");
         }
         if (value.dirtySourceMapNames.isEmpty()) {
-            return "Source maps dirty (" + value.dirtySourceMapCount + ")";
+            return TextUtils.format("graph_workspace.status.source_maps.dirty_count",
+                Integer.valueOf(value.dirtySourceMapCount));
         }
-        return "Source maps dirty (" + value.dirtySourceMapCount + "): "
-            + join(value.dirtySourceMapNames);
+        return TextUtils.format("graph_workspace.status.source_maps.dirty_names",
+            Integer.valueOf(value.dirtySourceMapCount), join(value.dirtySourceMapNames));
     }
 
     private static String join(final List<String> values) {
@@ -446,8 +455,8 @@ final class GraphStatusBar extends JPanel {
         return result;
     }
 
-    private static JButton button(final String text, final String name) {
-        final JButton result = new JButton(text);
+    private static JButton button(final String textKey, final String name) {
+        final JButton result = new JButton(TextUtils.getText(textKey));
         result.setName("graph-workspace-status-" + name);
         result.setMargin(new Insets(1, 6, 1, 6));
         result.setFocusable(false);
