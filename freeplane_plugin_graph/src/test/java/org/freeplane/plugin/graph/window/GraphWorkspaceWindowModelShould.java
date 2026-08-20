@@ -7,15 +7,15 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.awt.Dimension;
-import java.awt.GraphicsEnvironment;
-import java.awt.event.WindowEvent;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 
-import javax.swing.SwingUtilities;
+import javax.swing.JPanel;
+import javax.swing.UIManager;
 
 import org.freeplane.plugin.graph.canvas.GraphCanvas;
 import org.freeplane.plugin.graph.command.GraphCommand;
@@ -35,66 +35,71 @@ import org.freeplane.plugin.graph.layout.LayoutFrame;
 import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
+import org.freeplane.plugin.graph.projection.input.MapAvailability;
 import org.freeplane.plugin.graph.projection.input.SafeNodeLabel;
 import org.freeplane.plugin.graph.projection.input.SourceNodeKey;
 import org.freeplane.plugin.graph.workspace.ListenerRegistration;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 import org.freeplane.plugin.graph.workspace.model.UnknownXml;
 import org.freeplane.plugin.graph.workspace.model.Viewport;
-import org.junit.Assume;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 
 public class GraphWorkspaceWindowModelShould {
     private static final Path OPEN_PATH = Paths.get("/tmp/opened.graph-workspace");
+    private static final MapReferenceId ACTIVE_ID = id(1L);
 
     @Test
-    public void composesAHiddenModelessWorkspaceWithStablePanelsAndApprovedControls() {
-        Assume.assumeFalse(GraphicsEnvironment.isHeadless());
-        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, Collections.<UnknownXml>emptyList()),
-            nodeState(LayoutPoint.of(0.0, 0.0)));
+    public void composesAHeadlessModelessWorkspaceWithStablePanelsAndApprovedControls() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
 
-        GraphWorkspaceWindow window = fixture.window();
-
-        assertThat(window.isVisible()).isFalse();
-        assertThat(window.getModalExclusionType()).isEqualTo(java.awt.Dialog.ModalExclusionType.NO_EXCLUDE);
-        assertThat(window.getJMenuBar()).isNotNull();
-        assertThat(window.toolbar()).isNotNull();
-        assertThat(window.mapList()).isNotNull();
-        assertThat(window.canvas()).isInstanceOf(GraphCanvas.class);
-        assertThat(window.settingsPanel()).isNotNull();
-        assertThat(window.statusSlot()).isNotNull();
-        assertThat(window.statusSlot().getName()).isEqualTo("graph-workspace-status-slot");
-        assertThat(window.mapList().getPreferredSize().width).isGreaterThan(0);
-        assertThat(window.settingsPanel().getPreferredSize().width).isGreaterThan(0);
-        assertThat(window.toolbar().getPreferredSize().height).isGreaterThan(0);
-        assertThat(window.canvas().getPreferredSize()).isEqualTo(new Dimension(800, 560));
-        assertThat(window.toolbar().approvedControlNames()).contains(
+        assertThat(model.menuBar()).isNotNull();
+        assertThat(model.toolbar()).isNotNull();
+        assertThat(model.mapList()).isNotNull();
+        assertThat(model.canvas()).isInstanceOf(GraphCanvas.class);
+        assertThat(model.settingsPanel()).isNotNull();
+        assertThat(model.statusSlot()).isNotNull();
+        assertThat(model.statusSlot().getName()).isEqualTo("graph-workspace-status-slot");
+        assertThat(model.mapList().getPreferredSize().width).isGreaterThan(0);
+        assertThat(model.settingsPanel().getPreferredSize().width).isGreaterThan(0);
+        assertThat(model.toolbar().getPreferredSize().height).isGreaterThan(0);
+        assertThat(model.canvas().getPreferredSize()).isEqualTo(new Dimension(800, 560));
+        assertThat(model.toolbar().approvedControlNames()).contains(
             "open", "save", "add-map", "remove-map", "select", "connect", "direction", "search",
             "settings", "zoom-in", "zoom-out", "fit-graph", "reset-zoom", "pin", "unpin");
-        assertThat(window.settingsPanel().approvedSettingNames()).contains(
+        assertThat(model.settingsPanel().approvedSettingNames()).contains(
             "show-arrowheads", "canvas-theme", "remember-viewport", "dim-unrelated");
-        assertThat(window.mapList().rowHeight()).isEqualTo(MapListPanel.ROW_HEIGHT);
-        assertThat(window.toolbar().getComponentCount()).isGreaterThan(0);
-        assertThat(window.settingsPanel().getComponentCount()).isGreaterThan(0);
+        assertThat(model.mapList().rowHeight()).isEqualTo(MapListPanel.ROW_HEIGHT);
+        assertThat(model.toolbar().getComponentCount()).isGreaterThan(0);
+        assertThat(model.settingsPanel().getComponentCount()).isGreaterThan(0);
+        assertThat(UIManager.getLookAndFeel()).isNotNull();
 
-        window.close();
+        JPanel graphArea = (JPanel) model.content().getComponent(1);
+        assertThat(model.content().getComponentCount()).isEqualTo(3);
+        assertThat(graphArea.getComponentCount()).isEqualTo(3);
+        assertThat(graphArea.getComponent(0)).isSameAs(model.mapList());
+        assertThat(graphArea.getComponent(1)).isSameAs(model.canvas());
+        assertThat(graphArea.getComponent(2)).isSameAs(model.settingsPanel());
+        model.close();
     }
 
     @Test
     public void routesApplicationOpenToTheApplicationControllerAndSessionActionsToTheHandle() {
-        Assume.assumeFalse(GraphicsEnvironment.isHeadless());
-        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, Collections.<UnknownXml>emptyList()),
-            nodeState(LayoutPoint.of(0.0, 0.0)));
-        GraphWorkspaceWindow window = fixture.window();
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
 
-        window.toolbar().openButton().doClick();
-        window.toolbar().saveButton().doClick();
-        window.toolbar().undoButton().doClick();
-        window.toolbar().redoButton().doClick();
-        window.toolbar().zoomInButton().doClick();
-        window.toolbar().resetZoomButton().doClick();
-        window.settingsPanel().showArrowheads().doClick();
+        model.toolbar().openButton().doClick();
+        model.toolbar().saveButton().doClick();
+        model.toolbar().undoButton().doClick();
+        model.toolbar().redoButton().doClick();
+        model.toolbar().zoomInButton().doClick();
+        model.toolbar().resetZoomButton().doClick();
+        model.settingsPanel().showArrowheads().doClick();
 
         verify(fixture.applicationController).open(OPEN_PATH);
         ArgumentCaptor<GraphCommand> commands = ArgumentCaptor.forClass(GraphCommand.class);
@@ -102,38 +107,52 @@ public class GraphWorkspaceWindowModelShould {
         assertThat(commands.getAllValues()).extracting("class").contains(
             GraphCommands.Save.class, GraphCommands.UndoWorkspace.class, GraphCommands.RedoWorkspace.class,
             GraphCommands.Viewport.class, GraphCommands.Display.class);
-
-        window.close();
+        model.close();
     }
 
     @Test
-    public void exposesAllMapRowStatesWithProjectedCountsAndEmitsSessionCommands() {
-        MapReferenceId activeId = MapReferenceId.of(UUID.fromString("00000000-0000-0000-0000-000000000001"));
-        MapReferenceId loadingId = MapReferenceId.of(UUID.fromString("00000000-0000-0000-0000-000000000002"));
-        MapReferenceId missingId = MapReferenceId.of(UUID.fromString("00000000-0000-0000-0000-000000000003"));
-        MapReferenceId readOnlyId = MapReferenceId.of(UUID.fromString("00000000-0000-0000-0000-000000000004"));
-        MapReferenceId retryId = MapReferenceId.of(UUID.fromString("00000000-0000-0000-0000-000000000005"));
-        MapListPanel panel = new MapListPanel(mock(GraphWorkspaceHandle.class), () -> Paths.get("/tmp/map.mm"));
-        panel.setRows(Arrays.asList(
-            MapListPanel.MapRow.of(activeId, "Active", MapListPanel.RowState.ACTIVE, 7, false),
-            MapListPanel.MapRow.of(loadingId, "Loading", MapListPanel.RowState.LOADING, 0, false),
-            MapListPanel.MapRow.of(missingId, "Missing", MapListPanel.RowState.MISSING, 0, false),
-            MapListPanel.MapRow.of(readOnlyId, "Read only", MapListPanel.RowState.READ_ONLY, 2, false),
-            MapListPanel.MapRow.of(retryId, "Retry", MapListPanel.RowState.RETRYABLE, 1, true)));
+    public void exposesAllMapRowStatesWithProjectedCountsAndEmitsSessionCommandsOnCanvasUpdates() {
+        MapReferenceId loadingId = id(2L);
+        MapReferenceId missingId = id(3L);
+        MapReferenceId retryId = id(4L);
+        MapReferenceId inactiveId = id(5L);
+        List<GraphWorkspaceViewBinding.MapRegistration> registrations = Arrays.asList(
+            registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE),
+            registration(loadingId, "Loading", MapAvailability.LOADING),
+            registration(missingId, "Missing", MapAvailability.MISSING),
+            registration(retryId, "Retry", MapAvailability.UNREADABLE),
+            registration(inactiveId, "Inactive", MapAvailability.INACTIVE));
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            emptyState(), registrations, false);
+        GraphWorkspaceWindowModel model = fixture.model();
 
-        assertThat(panel.rows()).extracting(MapListPanel.MapRow::state).containsExactly(
+        model.acceptCanvasState(nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)));
+
+        assertThat(model.mapList().rows()).extracting(MapListPanel.MapRow::state).containsExactly(
             MapListPanel.RowState.ACTIVE, MapListPanel.RowState.LOADING, MapListPanel.RowState.MISSING,
-            MapListPanel.RowState.READ_ONLY, MapListPanel.RowState.RETRYABLE);
-        assertThat(panel.rows().get(0).projectedNodeCount()).isEqualTo(7);
-        assertThat(panel.rows().get(4).selected()).isTrue();
-        assertThat(panel.rowHeight()).isEqualTo(MapListPanel.ROW_HEIGHT);
+            MapListPanel.RowState.RETRYABLE, MapListPanel.RowState.INACTIVE);
+        assertThat(model.mapList().rows().get(0).projectedNodeCount()).isEqualTo(1);
+        assertThat(model.mapList().rows().get(3).projectedNodeCount()).isEqualTo(0);
+
+        model.mapList().selectMap(missingId);
+        model.mapList().locateButton().doClick();
+        model.mapList().selectMap(retryId);
+        assertThat(model.mapList().selectedRow().mapReferenceId()).isEqualTo(retryId);
+        assertThat(model.mapList().rows().get(3).selected()).isTrue();
+        model.mapList().retryButton().doClick();
+
+        ArgumentCaptor<GraphCommand> commands = ArgumentCaptor.forClass(GraphCommand.class);
+        verify(fixture.handle, org.mockito.Mockito.times(2)).execute(commands.capture());
+        assertThat(commands.getAllValues()).extracting("class").containsExactly(
+            GraphCommands.LocateMap.class, GraphCommands.RetryMap.class);
+        model.close();
     }
 
     @Test
     public void routesMapActionsToTheWorkspaceHandle() {
-        MapReferenceId activeId = MapReferenceId.of(UUID.fromString("00000000-0000-0000-0000-000000000021"));
-        MapReferenceId missingId = MapReferenceId.of(UUID.fromString("00000000-0000-0000-0000-000000000022"));
-        MapReferenceId retryId = MapReferenceId.of(UUID.fromString("00000000-0000-0000-0000-000000000023"));
+        MapReferenceId activeId = id(21L);
+        MapReferenceId missingId = id(22L);
+        MapReferenceId retryId = id(23L);
         GraphWorkspaceHandle handle = mock(GraphWorkspaceHandle.class);
         MapListPanel panel = new MapListPanel(handle, () -> Paths.get("/tmp/map.mm"));
         panel.setRows(Arrays.asList(
@@ -158,85 +177,103 @@ public class GraphWorkspaceWindowModelShould {
 
     @Test
     public void disablesMutatingControlsForReadOnlySessions() {
-        Assume.assumeFalse(GraphicsEnvironment.isHeadless());
-        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, Collections.<UnknownXml>emptyList()),
-            nodeState(LayoutPoint.of(0.0, 0.0)));
-        when(fixture.binding.isReadOnly()).thenReturn(true);
-        GraphWorkspaceWindow window = fixture.window();
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), true);
+        GraphWorkspaceWindowModel model = fixture.model();
 
-        assertThat(window.toolbar().saveButton().isEnabled()).isFalse();
-        assertThat(window.toolbar().pinButton().isEnabled()).isFalse();
-        assertThat(window.toolbar().unpinButton().isEnabled()).isFalse();
-        assertThat(window.mapList().removeButton().isEnabled()).isFalse();
-        assertThat(window.mapList().addButton().isEnabled()).isFalse();
-        assertThat(window.settingsPanel().isReadOnly()).isTrue();
-
-        window.close();
+        assertThat(model.toolbar().saveButton().isEnabled()).isFalse();
+        assertThat(model.toolbar().pinButton().isEnabled()).isFalse();
+        assertThat(model.toolbar().unpinButton().isEnabled()).isFalse();
+        assertThat(model.mapList().removeButton().isEnabled()).isFalse();
+        assertThat(model.mapList().addButton().isEnabled()).isFalse();
+        assertThat(model.settingsPanel().isReadOnly()).isTrue();
+        assertThat(model.mapList().rows().get(0).state()).isEqualTo(MapListPanel.RowState.READ_ONLY);
+        model.close();
     }
 
     @Test
-    public void appliesThePersistedViewportAndFitsWhenItDoesNotOverlapTheGraph() {
-        Assume.assumeFalse(GraphicsEnvironment.isHeadless());
-        Viewport persisted = Viewport.of(0.0, 0.0, 1.0, Collections.<UnknownXml>emptyList());
-        Fixture fixture = fixture(persisted, nodeState(LayoutPoint.of(10_000.0, 10_000.0)));
+    public void waitsForTheShellLayoutBeforeEvaluatingTheInitialViewport() {
+        Viewport persisted = Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml());
+        Fixture fixture = fixture(persisted, nodeState(ACTIVE_ID, LayoutPoint.of(10_000.0, 10_000.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
 
-        GraphWorkspaceWindow window = fixture.window();
+        GraphWorkspaceWindowModel model = fixture.modelWithoutLayout();
 
-        assertThat(window.canvas().viewport().centerX()).isEqualTo(10_000.0);
-        assertThat(window.canvas().viewport().centerY()).isEqualTo(10_000.0);
-        assertThat(window.canvas().viewport().zoom()).isGreaterThan(1.0);
-        window.close();
+        assertThat(model.canvas().viewport().centerX()).isEqualTo(0.0);
+        assertThat(model.canvas().viewport().centerY()).isEqualTo(0.0);
+        model.close();
     }
 
     @Test
-    public void preservesThePersistedViewportWhenItOverlapsTheGraph() {
-        Assume.assumeFalse(GraphicsEnvironment.isHeadless());
-        Viewport persisted = Viewport.of(10_000.0, 10_000.0, 1.0, Collections.<UnknownXml>emptyList());
-        Fixture fixture = fixture(persisted, nodeState(LayoutPoint.of(10_000.0, 10_000.0)));
+    public void appliesThePersistedViewportAndFitsWhenTheFirstNonEmptyCanvasStateDoesNotOverlap() {
+        Viewport persisted = Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml());
+        Fixture fixture = fixture(persisted, emptyState(), Collections.<GraphWorkspaceViewBinding.MapRegistration>emptyList(),
+            false);
+        GraphWorkspaceWindowModel model = fixture.model();
 
-        GraphWorkspaceWindow window = fixture.window();
+        assertThat(model.canvas().viewport().centerX()).isEqualTo(0.0);
+        model.acceptCanvasState(nodeState(ACTIVE_ID, LayoutPoint.of(10_000.0, 10_000.0)));
 
-        assertThat(window.canvas().viewport().centerX()).isEqualTo(10_000.0);
-        assertThat(window.canvas().viewport().centerY()).isEqualTo(10_000.0);
-        assertThat(window.canvas().viewport().zoom()).isEqualTo(1.0);
-        window.close();
+        assertThat(model.canvas().viewport().centerX()).isEqualTo(10_000.0);
+        assertThat(model.canvas().viewport().centerY()).isEqualTo(10_000.0);
+        assertThat(model.canvas().viewport().zoom()).isGreaterThan(1.0);
+        model.acceptCanvasState(nodeState(ACTIVE_ID, LayoutPoint.of(20_000.0, 20_000.0)));
+        assertThat(model.canvas().viewport().centerX()).isEqualTo(10_000.0);
+        assertThat(model.canvas().viewport().centerY()).isEqualTo(10_000.0);
+        model.close();
     }
 
     @Test
-    public void delegatesWindowClosingToTheCloseControllerBeforeDisposing() throws Exception {
-        Assume.assumeFalse(GraphicsEnvironment.isHeadless());
-        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, Collections.<UnknownXml>emptyList()),
-            nodeState(LayoutPoint.of(0.0, 0.0)));
-        when(fixture.closeController.saveAndClose()).thenReturn(false, true);
-        GraphWorkspaceWindow window = fixture.window();
+    public void preservesThePersistedViewportWhenTheFirstNonEmptyCanvasStateOverlaps() {
+        Viewport persisted = Viewport.of(10_000.0, 10_000.0, 1.0, emptyUnknownXml());
+        Fixture fixture = fixture(persisted, emptyState(), Collections.<GraphWorkspaceViewBinding.MapRegistration>emptyList(),
+            false);
+        GraphWorkspaceWindowModel model = fixture.model();
 
-        SwingUtilities.invokeAndWait(() -> window.dispatchEvent(
-            new WindowEvent(window, WindowEvent.WINDOW_CLOSING)));
-        verify(fixture.closeController).saveAndClose();
-        assertThat(window.isDisplayable()).isTrue();
+        model.acceptCanvasState(nodeState(ACTIVE_ID, LayoutPoint.of(10_000.0, 10_000.0)));
 
-        SwingUtilities.invokeAndWait(() -> window.dispatchEvent(
-            new WindowEvent(window, WindowEvent.WINDOW_CLOSING)));
-        assertThat(window.isDisplayable()).isFalse();
+        assertThat(model.canvas().viewport().centerX()).isEqualTo(10_000.0);
+        assertThat(model.canvas().viewport().centerY()).isEqualTo(10_000.0);
+        assertThat(model.canvas().viewport().zoom()).isEqualTo(1.0);
+        model.close();
+    }
+
+    @Test
+    public void closesTheHeadlessShellWithoutShowingIt() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
+
+        model.close();
+        model.close();
+
         verify(fixture.registration).close();
     }
 
     @Test
-    public void factoryDoesNotPublishOrShowAWindowBeforeConstructionCompletes() {
-        Assume.assumeFalse(GraphicsEnvironment.isHeadless());
-        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, Collections.<UnknownXml>emptyList()),
-            nodeState(LayoutPoint.of(0.0, 0.0)));
+    public void factoryDoesNotPublishOrShowAViewBeforeConstructionCompletes() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
         SwingGraphWorkspaceViewFactory factory = new SwingGraphWorkspaceViewFactory(
             fixture.applicationController, () -> OPEN_PATH);
 
         GraphWorkspaceView view = factory.create(fixture.handle, fixture.binding, fixture.closeController);
 
-        assertThat(view).isInstanceOf(GraphWorkspaceWindow.class);
-        assertThat(((GraphWorkspaceWindow) view).isVisible()).isFalse();
-        ((GraphWorkspaceWindow) view).close();
+        if (view instanceof GraphWorkspaceWindow) {
+            assertThat(((GraphWorkspaceWindow) view).isVisible()).isFalse();
+        }
+        else {
+            assertThat(view).isInstanceOf(HeadlessGraphWorkspaceView.class);
+            assertThat(((HeadlessGraphWorkspaceView) view).isVisible()).isFalse();
+        }
+        view.close();
     }
 
-    private static Fixture fixture(Viewport viewport, CanvasState state) {
+    private static Fixture fixture(Viewport viewport, CanvasState state,
+            List<GraphWorkspaceViewBinding.MapRegistration> registrations, boolean readOnly) {
         GraphWorkspaceController applicationController = mock(GraphWorkspaceController.class);
         GraphWorkspaceHandle handle = mock(GraphWorkspaceHandle.class);
         WorkspaceCloseController closeController = mock(WorkspaceCloseController.class);
@@ -244,14 +281,32 @@ public class GraphWorkspaceWindowModelShould {
         ListenerRegistration registration = mock(ListenerRegistration.class);
         when(binding.currentViewport()).thenReturn(viewport);
         when(binding.currentCanvasState()).thenReturn(state);
+        when(binding.currentMapRows()).thenReturn(registrations);
+        when(binding.isReadOnly()).thenReturn(readOnly);
         when(binding.addCanvasStateListener(any())).thenReturn(registration);
-        when(handle.currentProjection()).thenReturn(GraphProjection.structure(0L,
-            Collections.emptyList(), Collections.emptyList()));
         return new Fixture(applicationController, handle, closeController, binding, registration);
     }
 
-    private static CanvasState nodeState(LayoutPoint center) {
-        MapReferenceId mapId = MapReferenceId.of(UUID.fromString("00000000-0000-0000-0000-000000000011"));
+    private static GraphWorkspaceViewBinding.MapRegistration registration(MapReferenceId id, String name,
+            MapAvailability availability) {
+        return GraphWorkspaceViewBinding.MapRegistration.of(id, name, availability);
+    }
+
+    private static MapReferenceId id(long value) {
+        return MapReferenceId.of(UUID.fromString(String.format("00000000-0000-0000-0000-%012d", value)));
+    }
+
+    private static List<UnknownXml> emptyUnknownXml() {
+        return Collections.emptyList();
+    }
+
+    private static CanvasState emptyState() {
+        return CanvasState.of(0L, GraphProjection.structure(0L, Collections.emptyList(), Collections.emptyList()),
+            LayoutFrame.of(0L, LayoutPositions.of(Collections.emptyMap(), Collections.emptyMap()), false),
+            GraphGeometry.of(Collections.emptyMap(), Collections.emptyMap()), OperationalStatus.LOADING);
+    }
+
+    private static CanvasState nodeState(MapReferenceId mapId, LayoutPoint center) {
         SourceNodeKey source = SourceNodeKey.transientPath(mapId, Collections.emptyList());
         ProjectedNodeKey key = ProjectedNodeKey.of(source);
         ProjectedNode node = ProjectedNode.of(key, SafeNodeLabel.of("Node", "Node"), "Map", false);
@@ -281,15 +336,21 @@ public class GraphWorkspaceWindowModelShould {
             this.registration = registration;
         }
 
-        private GraphWorkspaceWindow window() {
-            final GraphWorkspaceWindow[] result = new GraphWorkspaceWindow[1];
-            try {
-                SwingUtilities.invokeAndWait(() -> result[0] = new GraphWorkspaceWindow(handle, binding,
-                    closeController, applicationController, () -> OPEN_PATH));
-            }
-            catch (Exception exception) {
-                throw new AssertionError(exception);
-            }
+        private GraphWorkspaceWindowModel model() {
+            GraphWorkspaceWindowModel result = modelWithoutLayout();
+            result.completeInitialLayout();
+            return result;
+        }
+
+        private GraphWorkspaceWindowModel modelWithoutLayout() {
+            final GraphWorkspaceWindowModel[] result = new GraphWorkspaceWindowModel[1];
+            GraphWorkspaceWindow.runOnEdt(new Runnable() {
+                @Override
+                public void run() {
+                    result[0] = new GraphWorkspaceWindowModel(handle, binding, applicationController,
+                        () -> OPEN_PATH, () -> { });
+                }
+            });
             return result[0];
         }
     }

@@ -6,9 +6,11 @@ import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -23,7 +25,9 @@ import javax.swing.SwingUtilities;
 
 import org.freeplane.features.mode.ModeController;
 import org.freeplane.plugin.graph.adapter.EdtExecutor;
+import org.freeplane.plugin.graph.adapter.MapLease;
 import org.freeplane.plugin.graph.adapter.MapLeaseManager;
+import org.freeplane.plugin.graph.adapter.MapOperationalState;
 import org.freeplane.plugin.graph.command.DefaultContributorDeletionHandler;
 import org.freeplane.plugin.graph.command.DefaultPurgeCommandHandler;
 import org.freeplane.plugin.graph.command.FreeplaneMapCommandExecutor;
@@ -31,12 +35,15 @@ import org.freeplane.plugin.graph.command.GraphCommandRouter;
 import org.freeplane.plugin.graph.command.SourceNavigation;
 import org.freeplane.plugin.graph.command.ViewMaterializationTracker;
 import org.freeplane.plugin.graph.projection.ProjectionEngine;
+import org.freeplane.plugin.graph.projection.input.MapAvailability;
 import org.freeplane.plugin.graph.workspace.AtomicWorkspaceWriter;
 import org.freeplane.plugin.graph.workspace.GraphWorkspaceStore;
 import org.freeplane.plugin.graph.workspace.ListenerRegistration;
 import org.freeplane.plugin.graph.workspace.WorkspaceUriResolver;
 import org.freeplane.plugin.graph.workspace.io.WorkspaceMigrationRegistry;
 import org.freeplane.plugin.graph.workspace.io.WorkspaceXmlCodec;
+import org.freeplane.plugin.graph.workspace.model.MapReference;
+import org.freeplane.plugin.graph.workspace.model.WorkspaceDocument;
 
 public final class DefaultGraphWorkspaceController implements GraphWorkspaceController {
     interface SessionFactory {
@@ -330,6 +337,11 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
                 @Override
                 public org.freeplane.plugin.graph.workspace.model.Viewport currentViewport() {
                     return openedResources.store.currentDocument().viewport();
+                }
+
+                @Override
+                public List<GraphWorkspaceViewBinding.MapRegistration> currentMapRows() {
+                    return mapRows(openedResources.store.currentDocument(), openedResources.maps);
                 }
 
                 @Override
@@ -781,6 +793,64 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
                     new ResourceSet(store, maps, updates, leaseManager, scheduler, create, creationOwnership));
             }
         }
+    }
+
+    private static List<GraphWorkspaceViewBinding.MapRegistration> mapRows(final WorkspaceDocument document,
+            final WorkspaceMapCoordinator maps) {
+        final WorkspaceDocument value = Objects.requireNonNull(document, "workspace document");
+        final List<GraphWorkspaceViewBinding.MapRegistration> rows =
+            new ArrayList<GraphWorkspaceViewBinding.MapRegistration>(value.maps().size());
+        for (final MapReference reference : value.maps()) {
+            rows.add(GraphWorkspaceViewBinding.MapRegistration.of(reference.id(), displayIdentity(reference),
+                availabilityFor(reference, maps)));
+        }
+        return Collections.unmodifiableList(rows);
+    }
+
+    private static MapAvailability availabilityFor(final MapReference reference,
+            final WorkspaceMapCoordinator maps) {
+        if (!reference.active()) {
+            return MapAvailability.INACTIVE;
+        }
+        if (maps == null) {
+            return MapAvailability.LOADING;
+        }
+        final Optional<MapLease> lease = maps.find(reference.id());
+        if (!lease.isPresent()) {
+            return MapAvailability.LOADING;
+        }
+        try {
+            final MapOperationalState state = lease.get().state();
+            if (state == null) {
+                return MapAvailability.UNREADABLE;
+            }
+            switch (state) {
+            case LOADING:
+                return MapAvailability.LOADING;
+            case AVAILABLE:
+                return MapAvailability.AVAILABLE;
+            case MISSING:
+                return MapAvailability.MISSING;
+            case UNREADABLE:
+                return MapAvailability.UNREADABLE;
+            case PASSWORD_REQUIRED:
+                return MapAvailability.PASSWORD_REQUIRED;
+            case RELOAD_REQUIRED:
+                return MapAvailability.RELOAD_REQUIRED;
+            default:
+                return MapAvailability.UNREADABLE;
+            }
+        }
+        catch (RuntimeException failure) {
+            return MapAvailability.UNREADABLE;
+        }
+    }
+
+    private static String displayIdentity(final MapReference reference) {
+        final String path = reference.storedUri().getPath();
+        final String value = path == null || path.isEmpty() ? reference.storedUri().toString() : path;
+        final int separator = Math.max(value.lastIndexOf('/'), value.lastIndexOf('\\'));
+        return separator >= 0 && separator < value.length() - 1 ? value.substring(separator + 1) : value;
     }
 
     private static ScheduledExecutorService newStoreScheduler() {

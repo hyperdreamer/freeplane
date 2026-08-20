@@ -1,5 +1,6 @@
 package org.freeplane.plugin.graph.window;
 
+import java.awt.GraphicsEnvironment;
 import java.nio.file.Path;
 import java.util.Objects;
 import java.util.function.Supplier;
@@ -38,7 +39,12 @@ public final class SwingGraphWorkspaceViewFactory implements GraphWorkspaceViewF
         final Runnable construction = new Runnable() {
             @Override
             public void run() {
-                view.set(new GraphWorkspaceWindow(handle, binding, close, applicationController, pathChooser));
+                if (GraphicsEnvironment.isHeadless()) {
+                    view.set(new HeadlessGraphWorkspaceView(handle, binding, close, applicationController, pathChooser));
+                }
+                else {
+                    view.set(new GraphWorkspaceWindow(handle, binding, close, applicationController, pathChooser));
+                }
             }
         };
         if (SwingUtilities.isEventDispatchThread()) {
