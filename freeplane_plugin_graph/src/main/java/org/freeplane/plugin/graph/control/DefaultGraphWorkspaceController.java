@@ -585,7 +585,6 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
             if (session.beginCloseLocked()) {
                 return true;
             }
-            publisherCloseFailure = closeSessionStatusPublisher(session);
             try {
                 if (discard) {
                     session.resources.store.discardAndClose();
@@ -598,6 +597,7 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
                 session.reopenAfterSaveFailureLocked();
                 return false;
             }
+            publisherCloseFailure = closeSessionStatusPublisher(session);
         }
         if (SwingUtilities.isEventDispatchThread()) {
             closeSessionAsynchronously(session, publisherCloseFailure);
