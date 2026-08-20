@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.awt.event.ActionEvent;
@@ -65,6 +66,7 @@ public class GraphPluginIntegrationShould {
         action.afterMapChange(UserRole.NO_MAP);
         assertThat(action.isEnabled()).isTrue();
         action.actionPerformed(new ActionEvent(this, ActionEvent.ACTION_PERFORMED, "cancelled"));
+        verifyNoInteractions(controller);
         selectedPath[0] = existingWorkspace;
         action.actionPerformed(new ActionEvent(this, ActionEvent.ACTION_PERFORMED, "existing"));
         selectedPath[0] = newWorkspace;
