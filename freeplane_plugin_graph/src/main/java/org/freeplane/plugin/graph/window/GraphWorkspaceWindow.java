@@ -265,6 +265,7 @@ final class GraphWorkspaceWindowModel {
     private final GraphWorkspaceHandle routedHandle;
     private final Action undoWorkspaceAction;
     private final Action redoWorkspaceAction;
+    private final Action sourceMapUndoAction;
     private final GraphViewport initialViewport;
     private CanvasState currentState;
     private WorkspaceSessionStatus currentSessionStatus;
@@ -276,6 +277,7 @@ final class GraphWorkspaceWindowModel {
     private boolean readOnly;
     private boolean closed;
     private WorkspaceCloseDialog closeDialog;
+    private ContributorInspector contributorInspector;
 
     GraphWorkspaceWindowModel(final GraphWorkspaceHandle handle, final GraphWorkspaceViewBinding binding,
             final GraphWorkspaceController applicationController, final Supplier<java.nio.file.Path> pathChooser,
@@ -388,6 +390,15 @@ final class GraphWorkspaceWindowModel {
                 toolbar.redoButton().doClick();
             }
         };
+        sourceMapUndoAction = new AbstractAction() {
+            private static final long serialVersionUID = 1L;
+
+            @Override
+            public void actionPerformed(final ActionEvent event) {
+                executeCommand(GraphCommands.undoSourceMap());
+            }
+        };
+        sourceMapUndoAction.setEnabled(false);
         menuBar = createMenuBar();
         content = createContent();
 
@@ -402,8 +413,7 @@ final class GraphWorkspaceWindowModel {
         initialViewport = GraphViewport.from(Objects.requireNonNull(binding.currentViewport(), "currentViewport"));
         canvas.setViewport(initialViewport);
         setReadOnlyOnEdt(binding.isReadOnly());
-        statusBar.setStatus(currentState, Optional.<String>empty(), binding.currentMapRows(),
-            currentSessionStatus, readOnly);
+        updateStatusBar();
         sessionStatusRegistration = registrationOrNoOp(binding.addSessionStatusListener(
             new WorkspaceSessionStatusListener() {
                 @Override
@@ -466,6 +476,7 @@ final class GraphWorkspaceWindowModel {
     private void updateStatusBar() {
         statusBar.setStatus(currentState, selectedEndpointText(), binding.currentMapRows(),
             currentSessionStatus, readOnly);
+        sourceMapUndoAction.setEnabled(statusBar.status().sourceMapUndoAvailable() && !readOnly);
     }
 
     private Optional<String> selectedEndpointText() {
@@ -516,15 +527,36 @@ final class GraphWorkspaceWindowModel {
         return statusBar;
     }
 
-    void purgeMissingNodes() {
+    PurgeConfirmationDialog createPurgeConfirmationDialog() {
         if (currentState == null || readOnly) {
-            return;
+            return null;
         }
         final PurgeConfirmationDialog dialog = PurgeConfirmationDialog.from(currentState,
             binding.currentMapRows(), this::executeCommand);
-        if (!dialog.isEmpty()) {
-            dialog.purge();
+        return dialog.isEmpty() ? null : dialog;
+    }
+
+    PurgeConfirmationDialog purgeMissingNodes() {
+        final PurgeConfirmationDialog dialog = createPurgeConfirmationDialog();
+        if (dialog != null && !GraphicsEnvironment.isHeadless()) {
+            showDialog("Purge Missing Nodes", dialog);
         }
+        return dialog;
+    }
+
+    ContributorInspector inspectEdge(final org.freeplane.plugin.graph.projection.ProjectedEdgeKey key) {
+        if (currentState == null) {
+            return null;
+        }
+        final GraphProjection projection = currentState.projection();
+        final ProjectedEdge edge = findEdge(projection, Objects.requireNonNull(key, "key"));
+        if (edge == null) {
+            return null;
+        }
+        contributorInspector = new ContributorInspector(currentState.generation(), projection, edge,
+            binding.currentMapRows(), this::executeCommand);
+        contributorInspector.setReadOnly(readOnly);
+        return contributorInspector;
     }
 
     private void handleEdgeIntent(final GraphIntent intent) {
@@ -533,16 +565,15 @@ final class GraphWorkspaceWindowModel {
         }
         final GraphProjection projection = currentState.projection();
         if (intent instanceof GraphIntent.InspectEdge) {
-            final ProjectedEdge edge = findEdge(projection, ((GraphIntent.InspectEdge) intent).edge());
-            if (edge != null) {
-                final ContributorInspector inspector = new ContributorInspector(currentState.generation(),
-                    projection, edge, binding.currentMapRows(), this::executeCommand);
-                if (!GraphicsEnvironment.isHeadless()) {
-                    showDialog("Inspect Contributors", inspector);
-                }
+            final ContributorInspector inspector = inspectEdge(((GraphIntent.InspectEdge) intent).edge());
+            if (inspector != null && !GraphicsEnvironment.isHeadless()) {
+                showDialog("Inspect Contributors", inspector);
             }
         }
         else if (intent instanceof GraphIntent.DeleteContributor) {
+            if (readOnly) {
+                return;
+            }
             final GraphIntent.DeleteContributor delete = (GraphIntent.DeleteContributor) intent;
             final ProjectedEdge edge = findEdgeContaining(projection, delete.contributor());
             if (edge != null) {
@@ -554,6 +585,9 @@ final class GraphWorkspaceWindowModel {
             }
         }
         else if (intent instanceof GraphIntent.DeleteAllContributors) {
+            if (readOnly) {
+                return;
+            }
             final GraphIntent.DeleteAllContributors delete = (GraphIntent.DeleteAllContributors) intent;
             final ProjectedEdge edge = findEdge(projection, delete.edge());
             if (edge != null) {
@@ -608,6 +642,9 @@ final class GraphWorkspaceWindowModel {
 
     private void showDialog(final String title, final JPanel panel) {
         final JDialog window = new JDialog((Window) null, title, Dialog.ModalityType.APPLICATION_MODAL);
+        if (panel instanceof WorkspaceCloseDialog) {
+            ((WorkspaceCloseDialog) panel).attachWindow(window);
+        }
         window.setContentPane(panel);
         window.pack();
         window.setLocationRelativeTo(null);
@@ -731,6 +768,9 @@ final class GraphWorkspaceWindowModel {
             interactionController.setTool(InteractionTool.SELECT);
             toolbar.selectButton().setSelected(true);
         }
+        if (contributorInspector != null) {
+            contributorInspector.setReadOnly(value);
+        }
         updateMapRows(currentState);
         updateStatusBar();
     }
@@ -763,8 +803,7 @@ final class GraphWorkspaceWindowModel {
         final JMenu edit = menu("Edit", "graph-workspace-edit-menu");
         edit.add(actionItem("Undo", "undo", undoWorkspaceAction));
         edit.add(actionItem("Redo", "redo", redoWorkspaceAction));
-        edit.add(item("Undo Source Map", "undo-source-map",
-            event -> executeCommand(GraphCommands.undoSourceMap())));
+        edit.add(actionItem("Undo Source Map", "undo-source-map", sourceMapUndoAction));
 
         final JMenu view = menu("View", "graph-workspace-view-menu");
         view.add(item("Fit Graph", "fit-graph", event -> toolbar.fitGraphButton().doClick()));
@@ -851,6 +890,10 @@ final class GraphWorkspaceWindowModel {
         default:
             throw new IllegalArgumentException("Unknown map availability");
         }
+    }
+
+    void acceptIntent(final GraphIntent intent) {
+        handleIntent(Objects.requireNonNull(intent, "intent"));
     }
 
     private void handleIntent(final GraphIntent intent) {

@@ -5,6 +5,7 @@ import java.awt.Insets;
 import java.util.Objects;
 
 import javax.swing.JButton;
+import javax.swing.JDialog;
 import javax.swing.JPanel;
 
 import org.freeplane.plugin.graph.control.WorkspaceCloseController;
@@ -17,6 +18,7 @@ final class WorkspaceCloseDialog extends JPanel {
     private final JButton retryButton = button("Retry", "retry");
     private final JButton discardButton = button("Discard", "discard");
     private final JButton cancelButton = button("Cancel", "cancel");
+    private JDialog window;
 
     WorkspaceCloseDialog(final WorkspaceCloseController closeController, final Runnable completion) {
         super(new FlowLayout(FlowLayout.TRAILING, 4, 2));
@@ -29,6 +31,10 @@ final class WorkspaceCloseDialog extends JPanel {
         retryButton.addActionListener(event -> retry());
         discardButton.addActionListener(event -> discard());
         cancelButton.addActionListener(event -> cancel());
+    }
+
+    void attachWindow(final JDialog value) {
+        window = Objects.requireNonNull(value, "window");
     }
 
     JButton retryButton() {
@@ -47,6 +53,7 @@ final class WorkspaceCloseDialog extends JPanel {
         if (!closeController.retrySaveAndClose()) {
             return false;
         }
+        dismissWindow();
         completion.run();
         return true;
     }
@@ -55,12 +62,23 @@ final class WorkspaceCloseDialog extends JPanel {
         if (!closeController.discardAndClose()) {
             return false;
         }
+        dismissWindow();
         completion.run();
         return true;
     }
 
     void cancel() {
+        dismissWindow();
         closeController.cancelClose();
+    }
+
+    private void dismissWindow() {
+        final JDialog value = window;
+        window = null;
+        if (value != null) {
+            value.setVisible(false);
+            value.dispose();
+        }
     }
 
     private static JButton button(final String text, final String name) {

@@ -161,7 +161,7 @@ final class GraphStatusBar extends JPanel {
                 selected.isPresent() ? selected.get() : "", layoutStatus, recoverableCount, missingNodeCount,
                 session.workspaceDirty(), session.saveFailed(), dirtyNames, session.dirtySourceMaps().size(),
                 session.workspaceUndoAvailable(), session.workspaceRedoAvailable(),
-                session.sourceMapUndoTarget().isPresent(), readOnly);
+                session.sourceMapUndoTarget().isPresent() && session.sourceMapUndoTarget().get().canUndo(), readOnly);
         }
 
         List<MapStatus> mapStatuses() {
