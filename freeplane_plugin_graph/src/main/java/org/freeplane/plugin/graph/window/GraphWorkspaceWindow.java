@@ -33,6 +33,7 @@ import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
 
+import org.freeplane.core.util.TextUtils;
 import org.freeplane.plugin.graph.command.GraphCommand;
 import org.freeplane.plugin.graph.command.GraphCommands;
 import org.freeplane.plugin.graph.canvas.GraphCanvas;
@@ -81,7 +82,7 @@ final class GraphWorkspaceWindow extends JFrame implements GraphWorkspaceView {
     GraphWorkspaceWindow(final GraphWorkspaceHandle handle, final GraphWorkspaceViewBinding binding,
             final WorkspaceCloseController closeController, final GraphWorkspaceController applicationController,
             final Supplier<java.nio.file.Path> pathChooser) {
-        super("Graph Workspace");
+        super(TextUtils.getText("graph_workspace.window.title"));
         this.closeController = Objects.requireNonNull(closeController, "closeController");
         Objects.requireNonNull(handle, "handle");
         Objects.requireNonNull(binding, "binding");
@@ -374,28 +375,35 @@ final class GraphWorkspaceWindowModel {
         toolbar.setPinAction(this::pinSelectedNode);
         toolbar.setUnpinAction(this::unpinSelectedNode);
 
-        undoWorkspaceAction = new AbstractAction() {
+        undoWorkspaceAction = new AbstractAction(TextUtils.getText("graph_workspace.action.undo_workspace")) {
             private static final long serialVersionUID = 1L;
 
             @Override
             public void actionPerformed(final ActionEvent event) {
-                toolbar.undoButton().doClick();
+                if (!readOnly && currentSessionStatus.workspaceUndoAvailable()) {
+                    executeCommand(GraphCommands.undoWorkspace());
+                }
             }
         };
-        redoWorkspaceAction = new AbstractAction() {
+        redoWorkspaceAction = new AbstractAction(TextUtils.getText("graph_workspace.action.redo_workspace")) {
             private static final long serialVersionUID = 1L;
 
             @Override
             public void actionPerformed(final ActionEvent event) {
-                toolbar.redoButton().doClick();
+                if (!readOnly && currentSessionStatus.workspaceRedoAvailable()) {
+                    executeCommand(GraphCommands.redoWorkspace());
+                }
             }
         };
-        sourceMapUndoAction = new AbstractAction() {
+        sourceMapUndoAction = new AbstractAction(TextUtils.getText("graph_workspace.action.undo_source_map.none")) {
             private static final long serialVersionUID = 1L;
 
             @Override
             public void actionPerformed(final ActionEvent event) {
-                executeCommand(GraphCommands.undoSourceMap());
+                if (!readOnly && currentSessionStatus.sourceMapUndoTarget().isPresent()
+                        && currentSessionStatus.sourceMapUndoTarget().get().canUndo()) {
+                    executeCommand(GraphCommands.undoSourceMap());
+                }
             }
         };
         sourceMapUndoAction.setEnabled(false);
@@ -476,7 +484,22 @@ final class GraphWorkspaceWindowModel {
     private void updateStatusBar() {
         statusBar.setStatus(currentState, selectedEndpointText(), binding.currentMapRows(),
             currentSessionStatus, readOnly);
-        sourceMapUndoAction.setEnabled(statusBar.status().sourceMapUndoAvailable() && !readOnly);
+        toolbar.setHistoryAvailability(currentSessionStatus.workspaceUndoAvailable(),
+            currentSessionStatus.workspaceRedoAvailable());
+        undoWorkspaceAction.setEnabled(currentSessionStatus.workspaceUndoAvailable() && !readOnly);
+        redoWorkspaceAction.setEnabled(currentSessionStatus.workspaceRedoAvailable() && !readOnly);
+        if (currentSessionStatus.sourceMapUndoTarget().isPresent()) {
+            final org.freeplane.plugin.graph.command.MapUndoTarget target =
+                currentSessionStatus.sourceMapUndoTarget().get();
+            sourceMapUndoAction.putValue(Action.NAME, TextUtils.format("graph_workspace.action.undo_source_map",
+                target.mapName()));
+            sourceMapUndoAction.setEnabled(target.canUndo() && !readOnly);
+        }
+        else {
+            sourceMapUndoAction.putValue(Action.NAME,
+                TextUtils.getText("graph_workspace.action.undo_source_map.none"));
+            sourceMapUndoAction.setEnabled(false);
+        }
     }
 
     private Optional<String> selectedEndpointText() {
@@ -510,7 +533,7 @@ final class GraphWorkspaceWindowModel {
                 }
                 closeDialog = new WorkspaceCloseDialog(closeController, closeCompletion);
                 if (!GraphicsEnvironment.isHeadless()) {
-                    showDialog("Close Graph Workspace", closeDialog);
+                    showDialog("graph_workspace.dialog.close.title", closeDialog);
                 }
             }
         });
@@ -539,7 +562,7 @@ final class GraphWorkspaceWindowModel {
     PurgeConfirmationDialog purgeMissingNodes() {
         final PurgeConfirmationDialog dialog = createPurgeConfirmationDialog();
         if (dialog != null && !GraphicsEnvironment.isHeadless()) {
-            showDialog("Purge Missing Nodes", dialog);
+            showDialog("graph_workspace.dialog.purge.title", dialog);
         }
         return dialog;
     }
@@ -567,7 +590,7 @@ final class GraphWorkspaceWindowModel {
         if (intent instanceof GraphIntent.InspectEdge) {
             final ContributorInspector inspector = inspectEdge(((GraphIntent.InspectEdge) intent).edge());
             if (inspector != null && !GraphicsEnvironment.isHeadless()) {
-                showDialog("Inspect Contributors", inspector);
+                showDialog("graph_workspace.dialog.contributors.title", inspector);
             }
         }
         else if (intent instanceof GraphIntent.DeleteContributor) {
@@ -640,8 +663,9 @@ final class GraphWorkspaceWindowModel {
         return null;
     }
 
-    private void showDialog(final String title, final JPanel panel) {
-        final JDialog window = new JDialog((Window) null, title, Dialog.ModalityType.APPLICATION_MODAL);
+    private void showDialog(final String titleKey, final JPanel panel) {
+        final JDialog window = new JDialog((Window) null, TextUtils.getText(titleKey),
+            Dialog.ModalityType.APPLICATION_MODAL);
         if (panel instanceof WorkspaceCloseDialog) {
             ((WorkspaceCloseDialog) panel).attachWindow(window);
         }
@@ -793,30 +817,31 @@ final class GraphWorkspaceWindowModel {
     private JMenuBar createMenuBar() {
         final JMenuBar result = new JMenuBar();
         result.setName("graph-workspace-menu-bar");
-        final JMenu file = menu("File", "graph-workspace-file-menu");
-        file.add(item("Open", "open", event -> toolbar.openButton().doClick()));
-        file.add(item("Save", "save", event -> toolbar.saveButton().doClick()));
-        file.add(item("Save As", "save-as", event -> toolbar.saveAsButton().doClick()));
+        final JMenu file = menu("graph_workspace.menu.file", "graph-workspace-file-menu");
+        file.add(item("graph_workspace.action.open", "open", event -> toolbar.openButton().doClick()));
+        file.add(item("graph_workspace.action.save", "save", event -> toolbar.saveButton().doClick()));
+        file.add(item("graph_workspace.action.save_as", "save-as", event -> toolbar.saveAsButton().doClick()));
         file.addSeparator();
-        file.add(item("Close", "close", event -> closeRequest.run()));
+        file.add(item("graph_workspace.action.close", "close", event -> closeRequest.run()));
 
-        final JMenu edit = menu("Edit", "graph-workspace-edit-menu");
-        edit.add(actionItem("Undo", "undo", undoWorkspaceAction));
-        edit.add(actionItem("Redo", "redo", redoWorkspaceAction));
-        edit.add(actionItem("Undo Source Map", "undo-source-map", sourceMapUndoAction));
+        final JMenu edit = menu("graph_workspace.menu.edit", "graph-workspace-edit-menu");
+        edit.add(actionItem("undo", undoWorkspaceAction));
+        edit.add(actionItem("redo", redoWorkspaceAction));
+        edit.add(actionItem("undo-source-map", sourceMapUndoAction));
 
-        final JMenu view = menu("View", "graph-workspace-view-menu");
-        view.add(item("Fit Graph", "fit-graph", event -> toolbar.fitGraphButton().doClick()));
-        view.add(item("Reset Zoom", "reset-zoom", event -> toolbar.resetZoomButton().doClick()));
-        view.add(item("Zoom In", "zoom-in", event -> toolbar.zoomInButton().doClick()));
-        view.add(item("Zoom Out", "zoom-out", event -> toolbar.zoomOutButton().doClick()));
-        view.add(item("Settings", "settings", event -> toolbar.settingsButton().doClick()));
+        final JMenu view = menu("graph_workspace.menu.view", "graph-workspace-view-menu");
+        view.add(item("graph_workspace.action.fit_graph", "fit-graph", event -> toolbar.fitGraphButton().doClick()));
+        view.add(item("graph_workspace.action.reset_zoom", "reset-zoom",
+            event -> toolbar.resetZoomButton().doClick()));
+        view.add(item("graph_workspace.action.zoom_in", "zoom-in", event -> toolbar.zoomInButton().doClick()));
+        view.add(item("graph_workspace.action.zoom_out", "zoom-out", event -> toolbar.zoomOutButton().doClick()));
+        view.add(item("graph_workspace.action.settings", "settings", event -> toolbar.settingsButton().doClick()));
 
-        final JMenu maps = menu("Maps", "graph-workspace-maps-menu");
-        maps.add(item("Add Map", "add-map", event -> mapList.addButton().doClick()));
-        maps.add(item("Remove Map", "remove-map", event -> mapList.removeButton().doClick()));
-        maps.add(item("Retry Map", "retry-map", event -> mapList.retryButton().doClick()));
-        maps.add(item("Locate Map", "locate-map", event -> mapList.locateButton().doClick()));
+        final JMenu maps = menu("graph_workspace.menu.maps", "graph-workspace-maps-menu");
+        maps.add(item("graph_workspace.action.add_map", "add-map", event -> mapList.addButton().doClick()));
+        maps.add(item("graph_workspace.action.remove_map", "remove-map", event -> mapList.removeButton().doClick()));
+        maps.add(item("graph_workspace.action.retry_map", "retry-map", event -> mapList.retryButton().doClick()));
+        maps.add(item("graph_workspace.action.locate_map", "locate-map", event -> mapList.locateButton().doClick()));
 
         result.add(file);
         result.add(edit);
@@ -1018,22 +1043,21 @@ final class GraphWorkspaceWindowModel {
         return bounds.empty() ? null : bounds;
     }
 
-    private static JMenu menu(final String title, final String name) {
-        final JMenu menu = new JMenu(title);
+    private static JMenu menu(final String titleKey, final String name) {
+        final JMenu menu = new JMenu(TextUtils.getText(titleKey));
         menu.setName(name);
         return menu;
     }
 
-    private static JMenuItem actionItem(final String title, final String name, final Action action) {
+    private static JMenuItem actionItem(final String name, final Action action) {
         final JMenuItem item = new JMenuItem(action);
-        item.setText(title);
         item.setName("graph-workspace-menu-item-" + name);
         return item;
     }
 
-    private static JMenuItem item(final String title, final String name,
+    private static JMenuItem item(final String titleKey, final String name,
             final ActionListener listener) {
-        final JMenuItem item = new JMenuItem(title);
+        final JMenuItem item = new JMenuItem(TextUtils.getText(titleKey));
         item.setName("graph-workspace-menu-item-" + name);
         item.addActionListener(listener);
         return item;

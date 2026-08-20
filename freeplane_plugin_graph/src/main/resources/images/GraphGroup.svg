@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" role="img" aria-label="Graph group">
+  <path d="M6 5.25a3 3 0 1 1 0 5.5 3 3 0 0 1 0-5.5Zm12 0a3 3 0 1 1 0 5.5 3 3 0 0 1 0-5.5ZM6 13.25a3 3 0 1 1 0 5.5 3 3 0 0 1 0-5.5Zm12 0a3 3 0 1 1 0 5.5 3 3 0 0 1 0-5.5Z" fill="#DF625D"/>
+  <path d="m8.3 9.2 7.4 0m-7.4 5.6 7.4 0M6 10.8v2.4m12-2.4v2.4" fill="none" stroke="#DF625D" stroke-width="1.8" stroke-linecap="round"/>
+</svg>

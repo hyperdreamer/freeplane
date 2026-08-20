@@ -18,6 +18,7 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 
+import org.freeplane.core.util.TextUtils;
 import org.freeplane.plugin.graph.command.GraphCommand;
 import org.freeplane.plugin.graph.command.GraphCommands;
 import org.freeplane.plugin.graph.control.CanvasState;
@@ -82,7 +83,7 @@ final class PurgeConfirmationDialog extends JPanel {
     private final long displayedGeneration;
     private final List<MissingRow> rows;
     private final Consumer<GraphCommand> commandSink;
-    private final JButton purgeButton = button("Purge", "purge");
+    private final JButton purgeButton = button("graph_workspace.action.purge", "purge");
     private boolean readOnly;
 
     PurgeConfirmationDialog(final long displayedGeneration, final List<MissingRow> rows,
@@ -101,11 +102,13 @@ final class PurgeConfirmationDialog extends JPanel {
         this.commandSink = Objects.requireNonNull(commandSink, "commandSink");
         setName("graph-workspace-purge-confirmation");
         setPreferredSize(new Dimension(420, 180));
-        add(new JLabel("Unresolved missing nodes"), BorderLayout.NORTH);
+        add(new JLabel(TextUtils.format("graph_workspace.purge.heading", Integer.valueOf(this.rows.size()))),
+            BorderLayout.NORTH);
         final JPanel rowPanel = new JPanel(new FlowLayout(FlowLayout.LEADING, 3, 2));
         rowPanel.setName("graph-workspace-purge-rows");
         for (final MissingRow row : this.rows) {
-            rowPanel.add(new JLabel(row.sourceDescription() + " -> " + row.targetDescription()));
+            rowPanel.add(new JLabel(TextUtils.format("graph_workspace.purge.relationship",
+                row.sourceDescription(), row.targetDescription())));
         }
         add(new JScrollPane(rowPanel), BorderLayout.CENTER);
         purgeButton.addActionListener(event -> purge());
@@ -189,8 +192,8 @@ final class PurgeConfirmationDialog extends JPanel {
         return result;
     }
 
-    private static JButton button(final String text, final String name) {
-        final JButton result = new JButton(text);
+    private static JButton button(final String textKey, final String name) {
+        final JButton result = new JButton(TextUtils.getText(textKey));
         result.setName("graph-workspace-purge-" + name);
         result.setMargin(new Insets(2, 7, 2, 7));
         result.setFocusable(false);

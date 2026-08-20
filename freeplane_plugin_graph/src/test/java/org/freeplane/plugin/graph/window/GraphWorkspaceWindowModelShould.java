@@ -27,6 +27,7 @@ import org.freeplane.plugin.graph.control.GraphWorkspaceView;
 import org.freeplane.plugin.graph.control.GraphWorkspaceViewBinding;
 import org.freeplane.plugin.graph.control.OperationalStatus;
 import org.freeplane.plugin.graph.control.WorkspaceCloseController;
+import org.freeplane.plugin.graph.control.WorkspaceSessionStatus;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
@@ -42,12 +43,70 @@ import org.freeplane.plugin.graph.workspace.ListenerRegistration;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 import org.freeplane.plugin.graph.workspace.model.UnknownXml;
 import org.freeplane.plugin.graph.workspace.model.Viewport;
+import org.freeplane.core.util.TextUtils;
+import org.freeplane.core.resources.ResourceController;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.MockedStatic;
 
 public class GraphWorkspaceWindowModelShould {
     private static final Path OPEN_PATH = Paths.get("/tmp/opened.graph-workspace");
     private static final MapReferenceId ACTIVE_ID = id(1L);
+    private static final java.util.List<EdtResources> RESOURCES =
+        new java.util.ArrayList<EdtResources>();
+    private MockedStatic<TextUtils> textUtils;
+    private MockedStatic<ResourceController> resourceController;
+
+    @Before
+    public void setUp() {
+        resourceController = org.mockito.Mockito.mockStatic(ResourceController.class);
+        resourceController.when(ResourceController::getResourceController)
+            .thenReturn(mock(ResourceController.class));
+        textUtils = org.mockito.Mockito.mockStatic(TextUtils.class);
+        textUtils.when(() -> TextUtils.getText(any(String.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+        textUtils.when(() -> TextUtils.getText(any(String.class), any(String.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+        textUtils.when(() -> TextUtils.getRawText(any(String.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+        textUtils.when(() -> TextUtils.getRawText(any(String.class), any(String.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+        textUtils.when(() -> TextUtils.format(any(String.class), any(Object[].class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+    }
+
+    @After
+    public void tearDown() {
+        textUtils.close();
+        resourceController.close();
+        if (!RESOURCES.isEmpty()) {
+            GraphWorkspaceWindow.runOnEdt(new Runnable() {
+                @Override
+                public void run() {
+                    for (EdtResources resource : RESOURCES) {
+                        resource.closeOnEdt();
+                    }
+                }
+            });
+            RESOURCES.clear();
+        }
+    }
+
+    @Test
+    public void rendersVisibleShellControlsFromGraphWorkspaceResourceKeys() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
+
+        assertThat(model.toolbar().openButton().getText()).isEqualTo("graph_workspace.action.open");
+        assertThat(model.toolbar().saveButton().getText()).isEqualTo("graph_workspace.action.save");
+        assertThat(model.settingsPanel().getComponent(0).getName()).isEqualTo("graph-workspace-settings-heading");
+        assertThat(model.mapList().getComponent(0).getName()).isEqualTo("graph-workspace-map-list-heading");
+        model.close();
+    }
 
     @Test
     public void composesAHeadlessModelessWorkspaceWithStablePanelsAndApprovedControls() {
@@ -90,7 +149,9 @@ public class GraphWorkspaceWindowModelShould {
     public void routesApplicationOpenToTheApplicationControllerAndSessionActionsToTheHandle() {
         Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
             nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
-            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false,
+            WorkspaceSessionStatus.of(false, true, true, false, Collections.<MapReferenceId>emptySet(),
+                java.util.Optional.<org.freeplane.plugin.graph.command.MapUndoTarget>empty()));
         GraphWorkspaceWindowModel model = fixture.model();
 
         model.toolbar().openButton().doClick();
@@ -265,6 +326,7 @@ public class GraphWorkspaceWindowModelShould {
         Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
             nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
             Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel resourceScope = fixture.model();
         SwingGraphWorkspaceViewFactory factory = new SwingGraphWorkspaceViewFactory(
             fixture.applicationController, () -> OPEN_PATH);
 
@@ -278,10 +340,17 @@ public class GraphWorkspaceWindowModelShould {
             assertThat(((HeadlessGraphWorkspaceView) view).isVisible()).isFalse();
         }
         view.close();
+        resourceScope.close();
     }
 
     private static Fixture fixture(Viewport viewport, CanvasState state,
             List<GraphWorkspaceViewBinding.MapRegistration> registrations, boolean readOnly) {
+        return fixture(viewport, state, registrations, readOnly, WorkspaceSessionStatus.empty());
+    }
+
+    private static Fixture fixture(Viewport viewport, CanvasState state,
+            List<GraphWorkspaceViewBinding.MapRegistration> registrations, boolean readOnly,
+            WorkspaceSessionStatus sessionStatus) {
         GraphWorkspaceController applicationController = mock(GraphWorkspaceController.class);
         GraphWorkspaceHandle handle = mock(GraphWorkspaceHandle.class);
         WorkspaceCloseController closeController = mock(WorkspaceCloseController.class);
@@ -292,6 +361,7 @@ public class GraphWorkspaceWindowModelShould {
         when(binding.currentCanvasState()).thenReturn(state);
         when(binding.currentMapRows()).thenReturn(registrations);
         when(binding.isReadOnly()).thenReturn(readOnly);
+        when(binding.currentSessionStatus()).thenReturn(sessionStatus);
         when(binding.addCanvasStateListener(any())).thenReturn(registration);
         when(binding.addSessionStatusListener(any())).thenReturn(sessionRegistration);
         return new Fixture(applicationController, handle, closeController, binding, registration,
@@ -357,14 +427,48 @@ public class GraphWorkspaceWindowModelShould {
 
         private GraphWorkspaceWindowModel modelWithoutLayout() {
             final GraphWorkspaceWindowModel[] result = new GraphWorkspaceWindowModel[1];
+            final EdtResources[] edtResources = new EdtResources[1];
             GraphWorkspaceWindow.runOnEdt(new Runnable() {
                 @Override
                 public void run() {
+                    edtResources[0] = new EdtResources();
                     result[0] = new GraphWorkspaceWindowModel(handle, binding, applicationController,
                         () -> OPEN_PATH, () -> { });
                 }
             });
+            RESOURCES.add(edtResources[0]);
             return result[0];
+        }
+    }
+
+    private static final class EdtResources {
+        private final MockedStatic<TextUtils> textUtils;
+        private final MockedStatic<ResourceController> resourceController;
+        private boolean closed;
+
+        private EdtResources() {
+            resourceController = org.mockito.Mockito.mockStatic(ResourceController.class);
+            resourceController.when(ResourceController::getResourceController)
+                .thenReturn(mock(ResourceController.class));
+            textUtils = org.mockito.Mockito.mockStatic(TextUtils.class);
+            textUtils.when(() -> TextUtils.getText(any(String.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+            textUtils.when(() -> TextUtils.getText(any(String.class), any(String.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+            textUtils.when(() -> TextUtils.getRawText(any(String.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+            textUtils.when(() -> TextUtils.getRawText(any(String.class), any(String.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+            textUtils.when(() -> TextUtils.format(any(String.class), any(Object[].class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        }
+
+        private void closeOnEdt() {
+            if (!closed) {
+                closed = true;
+                textUtils.close();
+                resourceController.close();
+            }
         }
     }
 }

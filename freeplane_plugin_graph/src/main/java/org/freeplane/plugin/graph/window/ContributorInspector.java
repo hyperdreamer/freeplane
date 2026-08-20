@@ -18,6 +18,7 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 
+import org.freeplane.core.util.TextUtils;
 import org.freeplane.plugin.graph.command.GraphCommand;
 import org.freeplane.plugin.graph.command.GraphCommands;
 import org.freeplane.plugin.graph.control.CanvasState;
@@ -96,7 +97,7 @@ final class ContributorInspector extends JPanel {
     private final ProjectedEdgeKey edgeKey;
     private final List<ContributorRow> rows;
     private final Consumer<GraphCommand> commandSink;
-    private final JButton deleteAllButton = button("Delete all", "delete-all");
+    private final JButton deleteAllButton = button("graph_workspace.action.delete_all_contributors", "delete-all");
     private final Map<org.freeplane.plugin.graph.projection.ContributorKey, JButton> deleteButtons =
         new LinkedHashMap<org.freeplane.plugin.graph.projection.ContributorKey, JButton>();
     private boolean readOnly;
@@ -116,23 +117,26 @@ final class ContributorInspector extends JPanel {
             displayedEdge, mapNames(mapRows)));
         setName("graph-workspace-contributor-inspector");
         setPreferredSize(new Dimension(360, 180));
-        add(new JLabel("Contributors"), BorderLayout.NORTH);
+        add(new JLabel(TextUtils.format("graph_workspace.contributor.heading", Integer.valueOf(rows.size()))),
+            BorderLayout.NORTH);
         final JPanel rowPanel = new JPanel(new FlowLayout(FlowLayout.LEADING, 3, 2));
         rowPanel.setName("graph-workspace-contributor-rows");
         for (final ContributorRow row : rows) {
             final JPanel rowView = new JPanel(new FlowLayout(FlowLayout.LEADING, 3, 2));
             rowView.setName("graph-workspace-contributor-row");
-            rowView.add(label("Source: " + row.sourceLabel(), "source"));
-            rowView.add(label("Middle: " + row.middleLabel(), "middle"));
-            rowView.add(label("Target: " + row.targetLabel(), "target"));
+            rowView.add(label(TextUtils.format("graph_workspace.contributor.source", row.sourceLabel()), "source"));
+            rowView.add(label(TextUtils.format("graph_workspace.contributor.middle", row.middleLabel()), "middle"));
+            rowView.add(label(TextUtils.format("graph_workspace.contributor.target", row.targetLabel()), "target"));
             if (!row.ownerDisplayName().isEmpty()) {
-                rowView.add(label("Owner: " + row.ownerDisplayName(), "owner"));
+                rowView.add(label(TextUtils.format("graph_workspace.contributor.owner", row.ownerDisplayName()),
+                    "owner"));
             }
-            rowView.add(label("Key: " + row.key(), "key"));
+            rowView.add(label(TextUtils.format("graph_workspace.contributor.key", row.key()), "key"));
             if (row.connectorDescriptor().isPresent()) {
-                rowView.add(label("Native connector: " + row.connectorDescriptor().get(), "descriptor"));
+                rowView.add(label(TextUtils.format("graph_workspace.contributor.native_connector",
+                    row.connectorDescriptor().get()), "descriptor"));
             }
-            final JButton delete = button("Delete", "delete-contributor");
+            final JButton delete = button("graph_workspace.action.delete_contributor", "delete-contributor");
             delete.addActionListener(event -> deleteOne(row.key));
             deleteButtons.put(row.key, delete);
             rowView.add(delete);
@@ -256,8 +260,8 @@ final class ContributorInspector extends JPanel {
         return result;
     }
 
-    private static JButton button(final String text, final String name) {
-        final JButton result = new JButton(text);
+    private static JButton button(final String textKey, final String name) {
+        final JButton result = new JButton(TextUtils.getText(textKey));
         result.setName("graph-workspace-contributor-" + name);
         result.setMargin(new Insets(2, 7, 2, 7));
         result.setFocusable(false);
@@ -298,13 +302,14 @@ final class GraphWindowEndpointLabels {
                 }
             }
         }
-        return "Unknown endpoint";
+        return TextUtils.getText("graph_workspace.endpoint.unknown");
     }
 
     static String description(final GraphProjection projection, final Optional<ProjectedEndpointKey> endpoint,
             final MapReferenceId mapId, final Map<MapReferenceId, String> mapNames) {
-        final String label = endpoint.isPresent() ? displayText(projection, endpoint.get()) : "Missing node";
+        final String label = endpoint.isPresent() ? displayText(projection, endpoint.get())
+            : TextUtils.getText("graph_workspace.endpoint.missing");
         final String mapName = mapNames.get(mapId);
-        return mapName == null ? label : mapName + " / " + label;
+        return mapName == null ? label : TextUtils.format("graph_workspace.endpoint.description", mapName, label);
     }
 }

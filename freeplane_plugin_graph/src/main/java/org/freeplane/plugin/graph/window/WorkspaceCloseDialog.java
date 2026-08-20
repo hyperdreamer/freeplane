@@ -8,6 +8,7 @@ import javax.swing.JButton;
 import javax.swing.JDialog;
 import javax.swing.JPanel;
 
+import org.freeplane.core.util.TextUtils;
 import org.freeplane.plugin.graph.control.WorkspaceCloseController;
 
 final class WorkspaceCloseDialog extends JPanel {
@@ -15,9 +16,9 @@ final class WorkspaceCloseDialog extends JPanel {
 
     private final WorkspaceCloseController closeController;
     private final Runnable completion;
-    private final JButton retryButton = button("Retry", "retry");
-    private final JButton discardButton = button("Discard", "discard");
-    private final JButton cancelButton = button("Cancel", "cancel");
+    private final JButton retryButton = button("graph_workspace.action.retry", "retry");
+    private final JButton discardButton = button("graph_workspace.action.discard", "discard");
+    private final JButton cancelButton = button("graph_workspace.action.cancel", "cancel");
     private JDialog window;
 
     WorkspaceCloseDialog(final WorkspaceCloseController closeController, final Runnable completion) {
@@ -81,8 +82,8 @@ final class WorkspaceCloseDialog extends JPanel {
         }
     }
 
-    private static JButton button(final String text, final String name) {
-        final JButton result = new JButton(text);
+    private static JButton button(final String textKey, final String name) {
+        final JButton result = new JButton(TextUtils.getText(textKey));
         result.setName("graph-workspace-close-" + name);
         result.setMargin(new Insets(2, 7, 2, 7));
         result.setFocusable(false);

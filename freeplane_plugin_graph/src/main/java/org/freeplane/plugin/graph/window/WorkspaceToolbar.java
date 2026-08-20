@@ -1,5 +1,6 @@
 package org.freeplane.plugin.graph.window;
 
+import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Insets;
@@ -15,13 +16,16 @@ import java.util.function.Supplier;
 import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
 import javax.swing.ButtonGroup;
+import javax.swing.DefaultListCellRenderer;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
+import javax.swing.JList;
 import javax.swing.JToggleButton;
 import javax.swing.JTextField;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 
+import org.freeplane.core.util.TextUtils;
 import org.freeplane.plugin.graph.canvas.GraphCanvas;
 import org.freeplane.plugin.graph.canvas.GraphInteractionController;
 import org.freeplane.plugin.graph.canvas.InteractionTool;
@@ -39,23 +43,23 @@ final class WorkspaceToolbar extends javax.swing.JPanel {
     private final GraphWorkspaceHandle handle;
     private final GraphCanvas canvas;
     private final Supplier<Path> pathChooser;
-    private final JButton openButton = button("Open", "open");
-    private final JButton saveButton = button("Save", "save");
-    private final JButton saveAsButton = button("Save As", "save-as");
-    private final JButton undoButton = button("Undo", "undo");
-    private final JButton redoButton = button("Redo", "redo");
-    private final JToggleButton selectButton = toggleButton("Select", "select");
-    private final JToggleButton connectButton = toggleButton("Connect", "connect");
+    private final JButton openButton = button("graph_workspace.action.open", "open");
+    private final JButton saveButton = button("graph_workspace.action.save", "save");
+    private final JButton saveAsButton = button("graph_workspace.action.save_as", "save-as");
+    private final JButton undoButton = button("graph_workspace.action.undo_workspace", "undo");
+    private final JButton redoButton = button("graph_workspace.action.redo_workspace", "redo");
+    private final JToggleButton selectButton = toggleButton("graph_workspace.tool.select", "select");
+    private final JToggleButton connectButton = toggleButton("graph_workspace.tool.connect", "connect");
     private final JComboBox<RelationshipDirection> directionComboBox =
         new JComboBox<RelationshipDirection>(RelationshipDirection.values());
     private final JTextField searchField = new JTextField();
-    private final JButton settingsButton = button("Settings", "settings");
-    private final JButton zoomInButton = button("Zoom In", "zoom-in");
-    private final JButton zoomOutButton = button("Zoom Out", "zoom-out");
-    private final JButton fitGraphButton = button("Fit Graph", "fit-graph");
-    private final JButton resetZoomButton = button("Reset Zoom", "reset-zoom");
-    private final JButton pinButton = button("Pin", "pin");
-    private final JButton unpinButton = button("Unpin", "unpin");
+    private final JButton settingsButton = button("graph_workspace.action.settings", "settings");
+    private final JButton zoomInButton = button("graph_workspace.action.zoom_in", "zoom-in");
+    private final JButton zoomOutButton = button("graph_workspace.action.zoom_out", "zoom-out");
+    private final JButton fitGraphButton = button("graph_workspace.action.fit_graph", "fit-graph");
+    private final JButton resetZoomButton = button("graph_workspace.action.reset_zoom", "reset-zoom");
+    private final JButton pinButton = button("graph_workspace.action.pin", "pin");
+    private final JButton unpinButton = button("graph_workspace.action.unpin", "unpin");
     private final Set<String> approvedControlNames = Collections.unmodifiableSet(new LinkedHashSet<String>(Arrays.asList(
         "open", "save", "add-map", "remove-map", "select", "connect", "direction", "search", "settings",
         "zoom-in", "zoom-out", "fit-graph", "reset-zoom", "pin", "unpin")));
@@ -68,6 +72,8 @@ final class WorkspaceToolbar extends javax.swing.JPanel {
     private Runnable unpinAction = () -> { };
     private GraphInteractionController interactionController;
     private boolean readOnly;
+    private boolean workspaceUndoAvailable;
+    private boolean workspaceRedoAvailable;
 
     WorkspaceToolbar(final GraphWorkspaceController applicationController, final GraphWorkspaceHandle handle,
             final GraphCanvas canvas, final Supplier<Path> pathChooser) {
@@ -86,12 +92,27 @@ final class WorkspaceToolbar extends javax.swing.JPanel {
         tools.add(selectButton);
         tools.add(connectButton);
         directionComboBox.setName("graph-workspace-direction");
-        directionComboBox.setToolTipText("Relationship direction");
+        directionComboBox.setToolTipText(TextUtils.getText("graph_workspace.tooltip.relationship_direction"));
         directionComboBox.setPreferredSize(new Dimension(128, 26));
+        directionComboBox.setRenderer(new DefaultListCellRenderer() {
+            private static final long serialVersionUID = 1L;
+
+            @Override
+            public Component getListCellRendererComponent(final JList<?> list, final Object value, final int index,
+                    final boolean isSelected, final boolean cellHasFocus) {
+                final Component result = super.getListCellRendererComponent(list, value, index, isSelected,
+                    cellHasFocus);
+                if (value instanceof RelationshipDirection) {
+                    setText(TextUtils.getText("graph_workspace.direction."
+                        + ((RelationshipDirection) value).name().toLowerCase(java.util.Locale.ROOT)));
+                }
+                return result;
+            }
+        });
         searchField.setName("graph-workspace-search");
-        searchField.setToolTipText("Search graph");
+        searchField.setToolTipText(TextUtils.getText("graph_workspace.tooltip.search"));
         searchField.setPreferredSize(new Dimension(160, 26));
-        settingsButton.setToolTipText("Display settings");
+        settingsButton.setToolTipText(TextUtils.getText("graph_workspace.tooltip.settings"));
 
         add(openButton);
         add(saveButton);
@@ -252,6 +273,12 @@ final class WorkspaceToolbar extends javax.swing.JPanel {
         return readOnly;
     }
 
+    void setHistoryAvailability(final boolean undoAvailable, final boolean redoAvailable) {
+        workspaceUndoAvailable = undoAvailable;
+        workspaceRedoAvailable = redoAvailable;
+        updateReadOnlyControls();
+    }
+
     private void openWorkspace() {
         final Path path = pathChooser.get();
         if (path != null) {
@@ -310,8 +337,8 @@ final class WorkspaceToolbar extends javax.swing.JPanel {
     private void updateReadOnlyControls() {
         saveButton.setEnabled(!readOnly);
         saveAsButton.setEnabled(!readOnly);
-        undoButton.setEnabled(!readOnly);
-        redoButton.setEnabled(!readOnly);
+        undoButton.setEnabled(!readOnly && workspaceUndoAvailable);
+        redoButton.setEnabled(!readOnly && workspaceRedoAvailable);
         connectButton.setEnabled(!readOnly);
         settingsButton.setEnabled(!readOnly);
         pinButton.setEnabled(!readOnly);
@@ -319,14 +346,14 @@ final class WorkspaceToolbar extends javax.swing.JPanel {
         directionComboBox.setEnabled(!readOnly);
     }
 
-    private static JButton button(final String text, final String name) {
-        final JButton button = new JButton(text);
+    private static JButton button(final String textKey, final String name) {
+        final JButton button = new JButton(TextUtils.getText(textKey));
         configure(button, name);
         return button;
     }
 
-    private static JToggleButton toggleButton(final String text, final String name) {
-        final JToggleButton button = new JToggleButton(text);
+    private static JToggleButton toggleButton(final String textKey, final String name) {
+        final JToggleButton button = new JToggleButton(TextUtils.getText(textKey));
         configure(button, name);
         return button;
     }

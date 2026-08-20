@@ -59,6 +59,7 @@
 		<Entry builder="main_toolbar_style" usedBy="EDITOR" row="1" width="11"/>
 		<Entry usedBy="EDITOR" row="2">
 			<Entry name="CloudAction" />
+			<Entry name="GraphGroupAction" />
 			<Entry name="CloudColorAction" />
 			<Entry name="NodeBackgroundColorAction" />
 			<Entry builder="panel" />
@@ -295,6 +296,7 @@
 					</Entry>
 				</Entry>
 		<Entry name="view">
+			<Entry name="OpenGraphWorkspaceAction" />
 			<Entry name="NewMapViewAction" />
 			<Entry name="OpenSelectionAsNewViewRootAction" accelerator="alt shift ESCAPE"/>
 			<Entry name="zoom">
