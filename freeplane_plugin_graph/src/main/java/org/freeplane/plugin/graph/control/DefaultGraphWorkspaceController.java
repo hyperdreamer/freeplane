@@ -328,6 +328,17 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
                 }
 
                 @Override
+                public org.freeplane.plugin.graph.workspace.model.Viewport currentViewport() {
+                    return openedResources.store.currentDocument().viewport();
+                }
+
+                @Override
+                public boolean isReadOnly() {
+                    return openedResources.store.currentDocument().compatibility()
+                        == org.freeplane.plugin.graph.workspace.model.WorkspaceCompatibility.READ_ONLY_NEWER;
+                }
+
+                @Override
                 public ListenerRegistration addCanvasStateListener(final CanvasStateListener listener) {
                     return openedResources.updates.addCanvasStateListener(listener);
                 }
