@@ -258,6 +258,59 @@ public class DefaultGraphWorkspaceControllerShould {
     }
 
     @Test
+    public void keepsStatusLiveAfterFailedSaveCloseAndClosesPublisherAfterRetrySucceeds() throws Exception {
+        Path workspace = temporaryFolder.getRoot().toPath().resolve("status-retry.fpg");
+        Files.createFile(workspace);
+        WorkspaceSessionRegistry sessions = new WorkspaceSessionRegistry();
+        DefaultGraphWorkspaceController.SessionResources resources = resources(false);
+        RecordingView view = new RecordingView();
+        AtomicReference<GraphWorkspaceViewBinding> binding = new AtomicReference<GraphWorkspaceViewBinding>();
+        AtomicReference<WorkspaceCloseController> close = new AtomicReference<WorkspaceCloseController>();
+        ListenerRegistration storeRegistration = mock(ListenerRegistration.class);
+        AtomicReference<WorkspaceStoreListener> storeListener = new AtomicReference<WorkspaceStoreListener>();
+        when(resources.store.addListener(any(WorkspaceStoreListener.class))).thenAnswer(invocation -> {
+            storeListener.set(invocation.getArgument(0));
+            return storeRegistration;
+        });
+        DefaultGraphWorkspaceController controller = new DefaultGraphWorkspaceController(sessions,
+            (path, id, create) -> resources, (handle, viewBinding, closeController) -> {
+                binding.set(viewBinding);
+                close.set(closeController);
+                return view;
+            });
+        GraphWorkspaceHandle handle = controller.open(workspace);
+        AtomicReference<WorkspaceSessionStatus> received = new AtomicReference<WorkspaceSessionStatus>();
+        WorkspaceSessionStatusListener statusListener = received::set;
+        ListenerRegistration statusRegistration = binding.get().addSessionStatusListener(statusListener);
+        assertThat(statusRegistration).isNotNull();
+
+        RuntimeException saveFailure = new IllegalStateException("save failed");
+        doThrow(saveFailure).when(resources.store).close();
+        assertThat(close.get().saveAndClose()).isFalse();
+        assertThat(sessions.owner(workspace)).isPresent();
+        assertThat(view.closeCount).hasValue(0);
+        assertThat(binding.get().currentSessionStatus()).isNotNull();
+        verify(storeRegistration, never()).close();
+
+        WorkspaceStoreEvent failedEvent = mock(WorkspaceStoreEvent.class);
+        when(failedEvent.type()).thenReturn(WorkspaceStoreEvent.Type.SAVE_FAILED);
+        storeListener.get().onWorkspaceStoreEvent(failedEvent);
+        assertThat(received.get()).isNotNull();
+        assertThat(received.get().saveFailed()).isTrue();
+
+        org.mockito.Mockito.doNothing().when(resources.store).close();
+        assertThat(close.get().retrySaveAndClose()).isTrue();
+        verify(storeRegistration, org.mockito.Mockito.times(1)).close();
+        assertThat(sessions.owner(workspace)).isEmpty();
+        assertThat(view.closeCount).hasValue(1);
+
+        received.set(null);
+        storeListener.get().onWorkspaceStoreEvent(failedEvent);
+        assertThat(received.get()).isNull();
+        handle.close();
+    }
+
+    @Test
     public void createsDistinctSessionsForDistinctWorkspacePaths() throws Exception {
         Path firstPath = temporaryFolder.getRoot().toPath().resolve("first.fpg");
         Path secondPath = temporaryFolder.getRoot().toPath().resolve("second.fpg");
@@ -485,8 +538,8 @@ public class DefaultGraphWorkspaceControllerShould {
         InOrder order = inOrder(view, sessionStatusStoreRegistration, resources.store, resources.updates,
             resources.leaseManager, resources.scheduler);
         order.verify(view).show();
-        order.verify(sessionStatusStoreRegistration).close();
         order.verify(resources.store).close();
+        order.verify(sessionStatusStoreRegistration).close();
         order.verify(resources.updates).close();
         order.verify(resources.leaseManager).close();
         order.verify(resources.scheduler).shutdownNow();
