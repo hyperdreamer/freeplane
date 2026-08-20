@@ -1,7 +1,10 @@
 package org.freeplane.plugin.graph.window;
 
 import java.awt.BorderLayout;
+import java.awt.Dialog;
 import java.awt.Dimension;
+import java.awt.GraphicsEnvironment;
+import java.awt.Window;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.WindowAdapter;
@@ -19,6 +22,7 @@ import java.util.function.Supplier;
 import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.JComponent;
+import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
@@ -29,6 +33,8 @@ import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
 
+import org.freeplane.plugin.graph.command.GraphCommand;
+import org.freeplane.plugin.graph.command.GraphCommands;
 import org.freeplane.plugin.graph.canvas.GraphCanvas;
 import org.freeplane.plugin.graph.canvas.GraphIntent;
 import org.freeplane.plugin.graph.canvas.GraphInteractionController;
@@ -43,17 +49,22 @@ import org.freeplane.plugin.graph.control.GraphWorkspaceHandle;
 import org.freeplane.plugin.graph.control.GraphWorkspaceView;
 import org.freeplane.plugin.graph.control.GraphWorkspaceViewBinding;
 import org.freeplane.plugin.graph.control.WorkspaceCloseController;
+import org.freeplane.plugin.graph.control.WorkspaceSessionStatus;
+import org.freeplane.plugin.graph.control.WorkspaceSessionStatusListener;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.HullGeometry;
 import org.freeplane.plugin.graph.geometry.NodeGeometry;
 import org.freeplane.plugin.graph.projection.BoundaryTier;
+import org.freeplane.plugin.graph.projection.EdgeContributor;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.GraphProjection;
+import org.freeplane.plugin.graph.projection.ProjectedEdge;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
 import org.freeplane.plugin.graph.projection.input.MapAvailability;
 import org.freeplane.plugin.graph.projection.input.SourceNodeKey;
+import org.freeplane.plugin.graph.workspace.GraphCommandResult;
 import org.freeplane.plugin.graph.workspace.ListenerRegistration;
 import org.freeplane.plugin.graph.workspace.model.DisplaySettings;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
@@ -80,11 +91,21 @@ final class GraphWorkspaceWindow extends JFrame implements GraphWorkspaceView {
         setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
         setResizable(true);
 
-        model = new GraphWorkspaceWindowModel(handle, binding, applicationController, pathChooser,
+        model = new GraphWorkspaceWindowModel(handle, binding, applicationController, pathChooser, closeController,
             new Runnable() {
                 @Override
                 public void run() {
                     requestClose();
+                }
+            }, new Runnable() {
+                @Override
+                public void run() {
+                    canvas().requestFocusInWindow();
+                }
+            }, new Runnable() {
+                @Override
+                public void run() {
+                    closeOnEdt();
                 }
             });
         setJMenuBar(model.menuBar());
@@ -185,8 +206,8 @@ final class GraphWorkspaceWindow extends JFrame implements GraphWorkspaceView {
     }
 
     private void requestClose() {
-        if (!closed && closeController.saveAndClose()) {
-            close();
+        if (!closed) {
+            model.requestClose();
         }
     }
 
@@ -236,38 +257,100 @@ final class GraphWorkspaceWindowModel {
     private final JMenuBar menuBar;
     private final GraphInteractionController interactionController;
     private final ListenerRegistration canvasRegistration;
+    private final ListenerRegistration sessionStatusRegistration;
+    private final GraphStatusBar statusBar;
+    private final WorkspaceCloseController closeController;
+    private final Runnable graphFocus;
+    private final Runnable closeCompletion;
+    private final GraphWorkspaceHandle routedHandle;
     private final Action undoWorkspaceAction;
     private final Action redoWorkspaceAction;
     private final GraphViewport initialViewport;
     private CanvasState currentState;
+    private WorkspaceSessionStatus currentSessionStatus;
     private GraphPaintState paintState = GraphPaintState.empty();
     private ProjectedNodeKey selectedNode;
+    private ProjectedEndpointKey selectedEndpoint;
     private boolean initialViewportLayoutReady;
     private boolean initialViewportPending = true;
     private boolean readOnly;
     private boolean closed;
+    private WorkspaceCloseDialog closeDialog;
 
     GraphWorkspaceWindowModel(final GraphWorkspaceHandle handle, final GraphWorkspaceViewBinding binding,
             final GraphWorkspaceController applicationController, final Supplier<java.nio.file.Path> pathChooser,
             final Runnable closeRequest) {
+        this(handle, binding, applicationController, pathChooser, noOpCloseController(), closeRequest, null);
+    }
+
+    GraphWorkspaceWindowModel(final GraphWorkspaceHandle handle, final GraphWorkspaceViewBinding binding,
+            final GraphWorkspaceController applicationController, final Supplier<java.nio.file.Path> pathChooser,
+            final Runnable closeRequest, final Runnable graphFocus) {
+        this(handle, binding, applicationController, pathChooser, noOpCloseController(), closeRequest, graphFocus);
+    }
+
+    GraphWorkspaceWindowModel(final GraphWorkspaceHandle handle, final GraphWorkspaceViewBinding binding,
+            final GraphWorkspaceController applicationController, final Supplier<java.nio.file.Path> pathChooser,
+            final WorkspaceCloseController closeController, final Runnable closeRequest,
+            final Runnable graphFocus) {
+        this(handle, binding, applicationController, pathChooser, closeController, closeRequest, graphFocus,
+            closeRequest);
+    }
+
+    GraphWorkspaceWindowModel(final GraphWorkspaceHandle handle, final GraphWorkspaceViewBinding binding,
+            final GraphWorkspaceController applicationController, final Supplier<java.nio.file.Path> pathChooser,
+            final WorkspaceCloseController closeController, final Runnable closeRequest,
+            final Runnable graphFocus, final Runnable closeCompletion) {
         this.handle = Objects.requireNonNull(handle, "handle");
         this.binding = Objects.requireNonNull(binding, "binding");
+        this.closeController = Objects.requireNonNull(closeController, "closeController");
         this.closeRequest = Objects.requireNonNull(closeRequest, "closeRequest");
+        this.closeCompletion = Objects.requireNonNull(closeCompletion, "closeCompletion");
         Objects.requireNonNull(applicationController, "applicationController");
         Objects.requireNonNull(pathChooser, "pathChooser");
 
         canvas = new GraphCanvas();
+        this.graphFocus = graphFocus == null ? new Runnable() {
+            @Override
+            public void run() {
+                canvas.requestFocusInWindow();
+            }
+        } : Objects.requireNonNull(graphFocus, "graphFocus");
+        routedHandle = new GraphWorkspaceHandle() {
+            @Override
+            public GraphProjection currentProjection() {
+                return handle.currentProjection();
+            }
+
+            @Override
+            public GraphCommandResult execute(final GraphCommand command) {
+                return executeCommand(command);
+            }
+
+            @Override
+            public ListenerRegistration addProjectionListener(
+                    final org.freeplane.plugin.graph.control.GraphProjectionListener listener) {
+                return handle.addProjectionListener(listener);
+            }
+
+            @Override
+            public void close() {
+                handle.close();
+            }
+        };
         canvas.setName("graph-workspace-canvas");
         canvas.setPreferredSize(CANVAS_PREFERRED_SIZE);
         canvas.setMinimumSize(new Dimension(320, 240));
         canvas.setSize(CANVAS_PREFERRED_SIZE);
-        mapList = new MapListPanel(handle, pathChooser);
-        toolbar = new WorkspaceToolbar(applicationController, handle, canvas, pathChooser);
-        settingsPanel = new WorkspaceSettingsPanel(handle, DisplaySettings.defaults());
+        mapList = new MapListPanel(routedHandle, pathChooser);
+        toolbar = new WorkspaceToolbar(applicationController, routedHandle, canvas, pathChooser);
+        settingsPanel = new WorkspaceSettingsPanel(routedHandle, DisplaySettings.defaults());
         statusSlot = new JPanel(new BorderLayout());
         statusSlot.setName("graph-workspace-status-slot");
         statusSlot.setPreferredSize(new Dimension(0, 26));
         statusSlot.setMinimumSize(new Dimension(0, 26));
+        statusBar = new GraphStatusBar(this::executeCommand);
+        statusSlot.add(statusBar, BorderLayout.CENTER);
 
         interactionController = new GraphInteractionController(this::handleIntent);
         interactionController.install(canvas);
@@ -283,7 +366,7 @@ final class GraphWorkspaceWindowModel {
         toolbar.setSearchListener(this::search);
         toolbar.setViewportListener(viewport -> {
             if (!readOnly) {
-                handle.execute(org.freeplane.plugin.graph.command.GraphCommands.viewport(viewport.toPersisted()));
+                executeCommand(GraphCommands.viewport(viewport.toPersisted()));
             }
         });
         toolbar.setPinAction(this::pinSelectedNode);
@@ -309,18 +392,237 @@ final class GraphWorkspaceWindowModel {
         content = createContent();
 
         currentState = binding.currentCanvasState();
+        currentSessionStatus = binding.currentSessionStatus();
+        if (currentSessionStatus == null) {
+            currentSessionStatus = WorkspaceSessionStatus.empty();
+        }
         if (currentState != null) {
             canvas.setCanvasState(currentState);
         }
         initialViewport = GraphViewport.from(Objects.requireNonNull(binding.currentViewport(), "currentViewport"));
         canvas.setViewport(initialViewport);
         setReadOnlyOnEdt(binding.isReadOnly());
-        canvasRegistration = binding.addCanvasStateListener(new CanvasStateListener() {
+        statusBar.setStatus(currentState, Optional.<String>empty(), binding.currentMapRows(),
+            currentSessionStatus, readOnly);
+        sessionStatusRegistration = registrationOrNoOp(binding.addSessionStatusListener(
+            new WorkspaceSessionStatusListener() {
+                @Override
+                public void onWorkspaceSessionStatus(final WorkspaceSessionStatus status) {
+                    acceptSessionStatus(status);
+                }
+            }));
+        canvasRegistration = registrationOrNoOp(binding.addCanvasStateListener(new CanvasStateListener() {
             @Override
             public void onCanvasState(final CanvasState state) {
                 acceptCanvasState(state);
             }
+        }));
+    }
+
+    private static ListenerRegistration registrationOrNoOp(final ListenerRegistration registration) {
+        return registration == null ? new ListenerRegistration() {
+            @Override
+            public void close() {
+            }
+        } : registration;
+    }
+
+    private static WorkspaceCloseController noOpCloseController() {
+        return new WorkspaceCloseController() {
+            @Override
+            public boolean saveAndClose() {
+                return false;
+            }
+
+            @Override
+            public boolean retrySaveAndClose() {
+                return false;
+            }
+
+            @Override
+            public boolean discardAndClose() {
+                return false;
+            }
+
+            @Override
+            public void cancelClose() {
+            }
+        };
+    }
+
+    private void acceptSessionStatus(final WorkspaceSessionStatus status) {
+        Objects.requireNonNull(status, "status");
+        GraphWorkspaceWindow.runOnEdt(new Runnable() {
+            @Override
+            public void run() {
+                if (!closed) {
+                    currentSessionStatus = status;
+                    updateStatusBar();
+                }
+            }
         });
+    }
+
+    private void updateStatusBar() {
+        statusBar.setStatus(currentState, selectedEndpointText(), binding.currentMapRows(),
+            currentSessionStatus, readOnly);
+    }
+
+    private Optional<String> selectedEndpointText() {
+        return selectedEndpoint != null && currentState != null
+            ? Optional.of(GraphWindowEndpointLabels.displayText(currentState.projection(), selectedEndpoint))
+            : Optional.<String>empty();
+    }
+
+    private GraphCommandResult executeCommand(final GraphCommand command) {
+        final GraphCommandResult result = handle.execute(Objects.requireNonNull(command, "command"));
+        if (result != null && result.editorViewActivated()) {
+            graphFocus.run();
+        }
+        return result;
+    }
+
+    GraphCommandResult execute(final GraphCommand command) {
+        return executeCommand(command);
+    }
+
+    void requestClose() {
+        GraphWorkspaceWindow.runOnEdt(new Runnable() {
+            @Override
+            public void run() {
+                if (closed) {
+                    return;
+                }
+                if (closeController.saveAndClose()) {
+                    closeCompletion.run();
+                    return;
+                }
+                closeDialog = new WorkspaceCloseDialog(closeController, closeCompletion);
+                if (!GraphicsEnvironment.isHeadless()) {
+                    showDialog("Close Graph Workspace", closeDialog);
+                }
+            }
+        });
+    }
+
+    WorkspaceCloseDialog closeDialog() {
+        if (closeDialog == null) {
+            closeDialog = new WorkspaceCloseDialog(closeController, closeCompletion);
+        }
+        return closeDialog;
+    }
+
+    GraphStatusBar statusBar() {
+        return statusBar;
+    }
+
+    void purgeMissingNodes() {
+        if (currentState == null || readOnly) {
+            return;
+        }
+        final PurgeConfirmationDialog dialog = PurgeConfirmationDialog.from(currentState,
+            binding.currentMapRows(), this::executeCommand);
+        if (!dialog.isEmpty()) {
+            dialog.purge();
+        }
+    }
+
+    private void handleEdgeIntent(final GraphIntent intent) {
+        if (currentState == null) {
+            return;
+        }
+        final GraphProjection projection = currentState.projection();
+        if (intent instanceof GraphIntent.InspectEdge) {
+            final ProjectedEdge edge = findEdge(projection, ((GraphIntent.InspectEdge) intent).edge());
+            if (edge != null) {
+                final ContributorInspector inspector = new ContributorInspector(currentState.generation(),
+                    projection, edge, binding.currentMapRows(), this::executeCommand);
+                if (!GraphicsEnvironment.isHeadless()) {
+                    showDialog("Inspect Contributors", inspector);
+                }
+            }
+        }
+        else if (intent instanceof GraphIntent.DeleteContributor) {
+            final GraphIntent.DeleteContributor delete = (GraphIntent.DeleteContributor) intent;
+            final ProjectedEdge edge = findEdgeContaining(projection, delete.contributor());
+            if (edge != null) {
+                final EdgeContributor contributor = findContributor(edge, delete.contributor());
+                if (contributor != null) {
+                    executeCommand(GraphCommands.deleteContributor(currentState.generation(), contributor.key(),
+                        contributor.connectorDescriptor().orElse(null)));
+                }
+            }
+        }
+        else if (intent instanceof GraphIntent.DeleteAllContributors) {
+            final GraphIntent.DeleteAllContributors delete = (GraphIntent.DeleteAllContributors) intent;
+            final ProjectedEdge edge = findEdge(projection, delete.edge());
+            if (edge != null) {
+                final List<org.freeplane.plugin.graph.projection.ContributorKey> keys = new ArrayList<org.freeplane.plugin.graph.projection.ContributorKey>();
+                final Map<org.freeplane.plugin.graph.projection.ContributorKey, org.freeplane.plugin.graph.projection.input.ConnectorDescriptor> descriptors =
+                    new LinkedHashMap<org.freeplane.plugin.graph.projection.ContributorKey, org.freeplane.plugin.graph.projection.input.ConnectorDescriptor>();
+                for (final org.freeplane.plugin.graph.projection.ContributorKey key : delete.contributors()) {
+                    final EdgeContributor contributor = findContributor(edge, key);
+                    if (contributor == null) {
+                        return;
+                    }
+                    keys.add(key);
+                    if (contributor.connectorDescriptor().isPresent()) {
+                        descriptors.put(key, contributor.connectorDescriptor().get());
+                    }
+                }
+                executeCommand(GraphCommands.deleteAllContributors(currentState.generation(), edge.key(), keys,
+                    descriptors));
+            }
+        }
+    }
+
+    private static ProjectedEdge findEdge(final GraphProjection projection,
+            final org.freeplane.plugin.graph.projection.ProjectedEdgeKey key) {
+        for (final ProjectedEdge edge : projection.edges()) {
+            if (edge.key().equals(key)) {
+                return edge;
+            }
+        }
+        return null;
+    }
+
+    private static ProjectedEdge findEdgeContaining(final GraphProjection projection,
+            final org.freeplane.plugin.graph.projection.ContributorKey key) {
+        for (final ProjectedEdge edge : projection.edges()) {
+            if (findContributor(edge, key) != null) {
+                return edge;
+            }
+        }
+        return null;
+    }
+
+    private static EdgeContributor findContributor(final ProjectedEdge edge,
+            final org.freeplane.plugin.graph.projection.ContributorKey key) {
+        for (final EdgeContributor contributor : edge.contributors()) {
+            if (contributor.key().equals(key)) {
+                return contributor;
+            }
+        }
+        return null;
+    }
+
+    private void showDialog(final String title, final JPanel panel) {
+        final JDialog window = new JDialog((Window) null, title, Dialog.ModalityType.APPLICATION_MODAL);
+        window.setContentPane(panel);
+        window.pack();
+        window.setLocationRelativeTo(null);
+        window.setVisible(true);
+    }
+
+    private void search(final String query) {
+        final CanvasState state = currentState;
+        if (state == null || query == null || query.trim().isEmpty()) {
+            paintState = paintState.withSearchMatches(Collections.<ProjectedEndpointKey>emptySet());
+        }
+        else {
+            paintState = paintState.withSearchMatches(GraphSearchModel.search(state, query));
+        }
+        canvas.setPaintState(paintState);
     }
 
     JMenuBar menuBar() {
@@ -399,6 +701,7 @@ final class GraphWorkspaceWindowModel {
                 canvas.setCanvasState(state);
                 applyInitialViewport(state);
                 updateMapRows(state);
+                updateStatusBar();
                 search(toolbar.searchField().getText());
             }
         });
@@ -413,6 +716,7 @@ final class GraphWorkspaceWindowModel {
                 }
                 closed = true;
                 canvasRegistration.close();
+                sessionStatusRegistration.close();
                 interactionController.uninstall();
             }
         });
@@ -428,6 +732,7 @@ final class GraphWorkspaceWindowModel {
             toolbar.selectButton().setSelected(true);
         }
         updateMapRows(currentState);
+        updateStatusBar();
     }
 
     private JPanel createContent() {
@@ -459,7 +764,7 @@ final class GraphWorkspaceWindowModel {
         edit.add(actionItem("Undo", "undo", undoWorkspaceAction));
         edit.add(actionItem("Redo", "redo", redoWorkspaceAction));
         edit.add(item("Undo Source Map", "undo-source-map",
-            event -> handle.execute(org.freeplane.plugin.graph.command.GraphCommands.undoSourceMap())));
+            event -> executeCommand(GraphCommands.undoSourceMap())));
 
         final JMenu view = menu("View", "graph-workspace-view-menu");
         view.add(item("Fit Graph", "fit-graph", event -> toolbar.fitGraphButton().doClick()));
@@ -548,21 +853,11 @@ final class GraphWorkspaceWindowModel {
         }
     }
 
-    private void search(final String query) {
-        final CanvasState state = currentState;
-        if (state == null || query == null || query.trim().isEmpty()) {
-            paintState = paintState.withSearchMatches(Collections.<ProjectedEndpointKey>emptySet());
-        }
-        else {
-            paintState = paintState.withSearchMatches(GraphSearchModel.search(state, query));
-        }
-        canvas.setPaintState(paintState);
-    }
-
     private void handleIntent(final GraphIntent intent) {
         Objects.requireNonNull(intent, "intent");
         if (intent instanceof GraphIntent.ChangeSelection) {
             final Optional<ProjectedEndpointKey> selection = ((GraphIntent.ChangeSelection) intent).selection();
+            selectedEndpoint = selection.orElse(null);
             selectedNode = selection.isPresent() && selection.get().isNode()
                 ? selection.get().node().get() : null;
             paintState = selection.isPresent() ? paintState.withSelection(selection.get())
@@ -570,6 +865,12 @@ final class GraphWorkspaceWindowModel {
                     GraphSearchModel.search(currentState, toolbar.searchField().getText()));
             canvas.setPaintState(paintState);
             updateMapRows(currentState);
+            updateStatusBar();
+        }
+        else if (intent instanceof GraphIntent.InspectEdge
+                || intent instanceof GraphIntent.DeleteContributor
+                || intent instanceof GraphIntent.DeleteAllContributors) {
+            handleEdgeIntent(intent);
         }
         else if (intent instanceof GraphIntent.Pin) {
             final GraphIntent.Pin pin = (GraphIntent.Pin) intent;
@@ -580,7 +881,7 @@ final class GraphWorkspaceWindowModel {
         }
         else if (intent instanceof GraphIntent.UnpinAll) {
             if (!readOnly) {
-                handle.execute(org.freeplane.plugin.graph.command.GraphCommands.unpinAll());
+                executeCommand(GraphCommands.unpinAll());
             }
         }
         else if (intent instanceof GraphIntent.Connect) {
@@ -588,14 +889,14 @@ final class GraphWorkspaceWindowModel {
                 return;
             }
             final GraphIntent.Connect connect = (GraphIntent.Connect) intent;
-            handle.execute(org.freeplane.plugin.graph.command.GraphCommands.connect(connect.source().isNode()
+            executeCommand(GraphCommands.connect(connect.source().isNode()
                 ? connect.source().node().get().source() : source(connect.source()),
                 connect.target().isNode() ? connect.target().node().get().source() : source(connect.target()),
                 connect.direction()));
         }
         else if (intent instanceof GraphIntent.OpenSourceNode) {
             final ProjectedEndpointKey endpoint = ((GraphIntent.OpenSourceNode) intent).endpoint();
-            handle.execute(org.freeplane.plugin.graph.command.GraphCommands.openSource(source(endpoint)));
+            executeCommand(GraphCommands.openSource(source(endpoint)));
         }
     }
 
@@ -619,14 +920,14 @@ final class GraphWorkspaceWindowModel {
     private void executePin(final ProjectedNodeKey node, final double x, final double y) {
         final NodeReference reference = node.source().persistedReference().orElse(null);
         if (reference != null && !readOnly) {
-            handle.execute(org.freeplane.plugin.graph.command.GraphCommands.pin(reference, x, y));
+            executeCommand(GraphCommands.pin(reference, x, y));
         }
     }
 
     private void executeUnpin(final ProjectedNodeKey node) {
         final NodeReference reference = node.source().persistedReference().orElse(null);
         if (reference != null && !readOnly) {
-            handle.execute(org.freeplane.plugin.graph.command.GraphCommands.unpin(reference));
+            executeCommand(GraphCommands.unpin(reference));
         }
     }
 
@@ -743,11 +1044,16 @@ final class HeadlessGraphWorkspaceView implements GraphWorkspaceView {
             final WorkspaceCloseController closeController, final GraphWorkspaceController applicationController,
             final Supplier<java.nio.file.Path> pathChooser) {
         this.closeController = Objects.requireNonNull(closeController, "closeController");
-        model = new GraphWorkspaceWindowModel(handle, binding, applicationController, pathChooser,
+        model = new GraphWorkspaceWindowModel(handle, binding, applicationController, pathChooser, closeController,
             new Runnable() {
                 @Override
                 public void run() {
                     requestClose();
+                }
+            }, null, new Runnable() {
+                @Override
+                public void run() {
+                    close();
                 }
             });
         model.completeInitialLayout();
@@ -786,8 +1092,8 @@ final class HeadlessGraphWorkspaceView implements GraphWorkspaceView {
     }
 
     private void requestClose() {
-        if (!closed && closeController.saveAndClose()) {
-            close();
+        if (!closed) {
+            model.requestClose();
         }
     }
 }
