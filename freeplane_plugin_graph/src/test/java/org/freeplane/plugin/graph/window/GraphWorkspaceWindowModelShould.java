@@ -257,6 +257,7 @@ public class GraphWorkspaceWindowModelShould {
         model.close();
 
         verify(fixture.registration).close();
+        verify(fixture.sessionRegistration).close();
     }
 
     @Test
@@ -286,12 +287,15 @@ public class GraphWorkspaceWindowModelShould {
         WorkspaceCloseController closeController = mock(WorkspaceCloseController.class);
         GraphWorkspaceViewBinding binding = mock(GraphWorkspaceViewBinding.class);
         ListenerRegistration registration = mock(ListenerRegistration.class);
+        ListenerRegistration sessionRegistration = mock(ListenerRegistration.class);
         when(binding.currentViewport()).thenReturn(viewport);
         when(binding.currentCanvasState()).thenReturn(state);
         when(binding.currentMapRows()).thenReturn(registrations);
         when(binding.isReadOnly()).thenReturn(readOnly);
         when(binding.addCanvasStateListener(any())).thenReturn(registration);
-        return new Fixture(applicationController, handle, closeController, binding, registration);
+        when(binding.addSessionStatusListener(any())).thenReturn(sessionRegistration);
+        return new Fixture(applicationController, handle, closeController, binding, registration,
+            sessionRegistration);
     }
 
     private static GraphWorkspaceViewBinding.MapRegistration registration(MapReferenceId id, String name,
@@ -332,15 +336,17 @@ public class GraphWorkspaceWindowModelShould {
         private final WorkspaceCloseController closeController;
         private final GraphWorkspaceViewBinding binding;
         private final ListenerRegistration registration;
+        private final ListenerRegistration sessionRegistration;
 
         private Fixture(GraphWorkspaceController applicationController, GraphWorkspaceHandle handle,
                 WorkspaceCloseController closeController, GraphWorkspaceViewBinding binding,
-                ListenerRegistration registration) {
+                ListenerRegistration registration, ListenerRegistration sessionRegistration) {
             this.applicationController = applicationController;
             this.handle = handle;
             this.closeController = closeController;
             this.binding = binding;
             this.registration = registration;
+            this.sessionRegistration = sessionRegistration;
         }
 
         private GraphWorkspaceWindowModel model() {
