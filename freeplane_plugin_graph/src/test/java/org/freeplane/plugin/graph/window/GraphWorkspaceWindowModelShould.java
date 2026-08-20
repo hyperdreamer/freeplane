@@ -193,15 +193,22 @@ public class GraphWorkspaceWindowModelShould {
     }
 
     @Test
-    public void waitsForTheShellLayoutBeforeEvaluatingTheInitialViewport() {
+    public void fitsAnOutOfRangeStateDeliveredBeforeInitialLayoutExactlyOnce() {
         Viewport persisted = Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml());
-        Fixture fixture = fixture(persisted, nodeState(ACTIVE_ID, LayoutPoint.of(10_000.0, 10_000.0)),
-            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
-
+        Fixture fixture = fixture(persisted, emptyState(),
+            Collections.<GraphWorkspaceViewBinding.MapRegistration>emptyList(), false);
         GraphWorkspaceWindowModel model = fixture.modelWithoutLayout();
 
+        model.acceptCanvasState(nodeState(ACTIVE_ID, LayoutPoint.of(10_000.0, 10_000.0)));
         assertThat(model.canvas().viewport().centerX()).isEqualTo(0.0);
-        assertThat(model.canvas().viewport().centerY()).isEqualTo(0.0);
+        model.completeInitialLayout();
+        assertThat(model.canvas().viewport().centerX()).isEqualTo(10_000.0);
+        assertThat(model.canvas().viewport().centerY()).isEqualTo(10_000.0);
+        assertThat(model.canvas().viewport().zoom()).isGreaterThan(1.0);
+
+        model.acceptCanvasState(nodeState(ACTIVE_ID, LayoutPoint.of(20_000.0, 20_000.0)));
+        assertThat(model.canvas().viewport().centerX()).isEqualTo(10_000.0);
+        assertThat(model.canvas().viewport().centerY()).isEqualTo(10_000.0);
         model.close();
     }
 
