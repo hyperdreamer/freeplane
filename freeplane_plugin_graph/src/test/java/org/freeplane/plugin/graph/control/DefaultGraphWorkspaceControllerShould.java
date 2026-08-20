@@ -14,6 +14,8 @@ import static org.mockito.Mockito.when;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.Collections;
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -30,10 +32,14 @@ import org.freeplane.features.ui.IMapViewManager;
 import org.freeplane.plugin.graph.adapter.MapLeaseManager;
 import org.freeplane.plugin.graph.command.GraphCommand;
 import org.freeplane.plugin.graph.command.GraphCommandRouter;
+import org.freeplane.plugin.graph.command.MapUndoTarget;
 import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.workspace.GraphCommandResult;
 import org.freeplane.plugin.graph.workspace.GraphWorkspaceStore;
 import org.freeplane.plugin.graph.workspace.ListenerRegistration;
+import org.freeplane.plugin.graph.workspace.WorkspaceStoreEvent;
+import org.freeplane.plugin.graph.workspace.WorkspaceStoreListener;
+import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 import org.mockito.InOrder;
 import org.junit.Rule;
 import org.junit.Test;
@@ -56,6 +62,13 @@ public class DefaultGraphWorkspaceControllerShould {
         CanvasState state = mock(CanvasState.class);
         CanvasStateListener canvasListener = mock(CanvasStateListener.class);
         ListenerRegistration canvasRegistration = mock(ListenerRegistration.class);
+        ListenerRegistration sessionStatusStoreRegistration = mock(ListenerRegistration.class);
+        AtomicReference<WorkspaceStoreListener> sessionStatusStoreListener =
+            new AtomicReference<WorkspaceStoreListener>();
+        when(resources.store.addListener(any())).thenAnswer(invocation -> {
+            sessionStatusStoreListener.set(invocation.getArgument(0));
+            return sessionStatusStoreRegistration;
+        });
         when(resources.updates.currentProjection()).thenReturn(projection);
         when(resources.updates.currentState()).thenReturn(state);
         when(resources.updates.addCanvasStateListener(canvasListener)).thenReturn(canvasRegistration);
@@ -76,10 +89,19 @@ public class DefaultGraphWorkspaceControllerShould {
         assertThat(view.showCount).hasValue(1);
         assertThat(binding.get().currentCanvasState()).isSameAs(state);
         assertThat(binding.get().addCanvasStateListener(canvasListener)).isSameAs(canvasRegistration);
+        assertThat(binding.get().currentSessionStatus()).isNotNull();
+        WorkspaceSessionStatusListener statusListener = mock(WorkspaceSessionStatusListener.class);
+        assertThat(binding.get().addSessionStatusListener(statusListener)).isNotNull();
+        WorkspaceStoreEvent statusEvent = mock(WorkspaceStoreEvent.class);
+        when(statusEvent.type()).thenReturn(WorkspaceStoreEvent.Type.DOCUMENT_CHANGED);
+        sessionStatusStoreListener.get().onWorkspaceStoreEvent(statusEvent);
+        verify(statusListener).onWorkspaceSessionStatus(binding.get().currentSessionStatus());
         assertThat(handle.currentProjection()).isSameAs(projection);
         assertThat(sessions.owner(workspace)).isPresent();
         assertThat(close).isNotNull();
         verify(resources.updates).addCanvasStateListener(canvasListener);
+        handle.close();
+        verify(sessionStatusStoreRegistration).close();
     }
 
     @Test
@@ -151,6 +173,34 @@ public class DefaultGraphWorkspaceControllerShould {
         verify(router).execute(command);
         verify(updates).addProjectionListener(listener);
         verify(close).saveAndClose();
+    }
+
+    @Test
+    public void recordsCompletedHandleCommandsInTheSessionStatusPublisher() {
+        GraphCommandRouter router = mock(GraphCommandRouter.class);
+        GraphUpdateCoordinator updates = mock(GraphUpdateCoordinator.class);
+        WorkspaceCloseController close = mock(WorkspaceCloseController.class);
+        GraphWorkspaceStore store = mock(GraphWorkspaceStore.class);
+        when(store.addListener(any())).thenReturn(mock(ListenerRegistration.class));
+        GraphCommand command = mock(GraphCommand.class);
+        GraphCommandResult result = mock(GraphCommandResult.class);
+        MapReferenceId mapId = MapReferenceId.of("00000000-0000-0000-0000-000000000104");
+        MapUndoTarget target = new MapUndoTarget(mapId, "Map one", true);
+        when(result.dirtySourceMaps()).thenReturn(Collections.singleton(mapId));
+        when(router.execute(command)).thenReturn(result);
+        when(router.currentMapUndoTarget()).thenReturn(Optional.of(target));
+        WorkspaceSessionStatusPublisher publisher = new WorkspaceSessionStatusPublisher(store, router);
+        AtomicReference<WorkspaceSessionStatus> received = new AtomicReference<WorkspaceSessionStatus>();
+        publisher.addListener(received::set);
+        DefaultGraphWorkspaceHandle handle = new DefaultGraphWorkspaceHandle(router, updates, close, publisher,
+            new Object());
+
+        assertThat(handle.execute(command)).isSameAs(result);
+
+        assertThat(received.get().dirtySourceMaps()).containsExactly(mapId);
+        assertThat(received.get().sourceMapUndoTarget()).contains(target);
+        verify(router).currentMapUndoTarget();
+        publisher.close();
     }
 
     @Test
@@ -318,6 +368,8 @@ public class DefaultGraphWorkspaceControllerShould {
         Path workspace = temporaryFolder.getRoot().toPath().resolve("assembly-failure.fpg");
         WorkspaceSessionRegistry sessions = new WorkspaceSessionRegistry();
         DefaultGraphWorkspaceController.SessionResources resources = resources(true);
+        ListenerRegistration sessionStatusStoreRegistration = mock(ListenerRegistration.class);
+        when(resources.store.addListener(any())).thenReturn(sessionStatusStoreRegistration);
         DefaultGraphWorkspaceController controller = new DefaultGraphWorkspaceController(sessions,
             (path, id, create) -> {
                 assertThat(create).isTrue();
@@ -337,6 +389,7 @@ public class DefaultGraphWorkspaceControllerShould {
         assertThat(Files.exists(workspace)).isFalse();
         assertThat(sessions.owner(workspace)).isEmpty();
         verify(resources.store).discardAndClose();
+        verify(sessionStatusStoreRegistration).close();
         verify(resources.updates).close();
         verify(resources.leaseManager).close();
         verify(resources.scheduler).shutdownNow();
@@ -417,6 +470,8 @@ public class DefaultGraphWorkspaceControllerShould {
         Files.createFile(workspace);
         WorkspaceSessionRegistry sessions = new WorkspaceSessionRegistry();
         DefaultGraphWorkspaceController.SessionResources resources = resources(false);
+        ListenerRegistration sessionStatusStoreRegistration = mock(ListenerRegistration.class);
+        when(resources.store.addListener(any())).thenReturn(sessionStatusStoreRegistration);
         GraphWorkspaceView view = mock(GraphWorkspaceView.class);
         AtomicReference<WorkspaceCloseController> close = new AtomicReference<WorkspaceCloseController>();
         DefaultGraphWorkspaceController controller = new DefaultGraphWorkspaceController(sessions,
@@ -427,9 +482,10 @@ public class DefaultGraphWorkspaceControllerShould {
         controller.open(workspace);
 
         assertThat(close.get().saveAndClose()).isTrue();
-        InOrder order = inOrder(view, resources.store, resources.updates, resources.leaseManager,
-            resources.scheduler);
+        InOrder order = inOrder(view, sessionStatusStoreRegistration, resources.store, resources.updates,
+            resources.leaseManager, resources.scheduler);
         order.verify(view).show();
+        order.verify(sessionStatusStoreRegistration).close();
         order.verify(resources.store).close();
         order.verify(resources.updates).close();
         order.verify(resources.leaseManager).close();
@@ -759,7 +815,9 @@ public class DefaultGraphWorkspaceControllerShould {
     }
 
     private DefaultGraphWorkspaceController.SessionResources resources(boolean newlyCreated) {
-        return new DefaultGraphWorkspaceController.SessionResources(mock(GraphWorkspaceStore.class),
+        GraphWorkspaceStore store = mock(GraphWorkspaceStore.class);
+        when(store.addListener(any())).thenReturn(mock(ListenerRegistration.class));
+        return new DefaultGraphWorkspaceController.SessionResources(store,
             mock(GraphUpdateCoordinator.class), mock(MapLeaseManager.class), mock(GraphCommandRouter.class),
             mock(ScheduledExecutorService.class), newlyCreated);
     }

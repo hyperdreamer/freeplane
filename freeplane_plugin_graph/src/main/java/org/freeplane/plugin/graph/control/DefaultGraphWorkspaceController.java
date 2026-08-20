@@ -324,9 +324,12 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
             resources = openedResources;
             cleanup = ResourceSet.from(openedResources, path);
             session.resources = openedResources;
+            final WorkspaceSessionStatusPublisher sessionStatusPublisher = new WorkspaceSessionStatusPublisher(
+                openedResources.store, openedResources.router);
+            session.sessionStatusPublisher = sessionStatusPublisher;
             final WorkspaceCloseController closeController = new SessionCloseController(session);
             final DefaultGraphWorkspaceHandle handle = new DefaultGraphWorkspaceHandle(openedResources.router,
-                openedResources.updates, closeController, session.monitor);
+                openedResources.updates, closeController, sessionStatusPublisher, session.monitor);
             session.handle = handle;
             final GraphWorkspaceViewBinding binding = new GraphWorkspaceViewBinding() {
                 @Override
@@ -348,6 +351,16 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
                 public boolean isReadOnly() {
                     return openedResources.store.currentDocument().compatibility()
                         == org.freeplane.plugin.graph.workspace.model.WorkspaceCompatibility.READ_ONLY_NEWER;
+                }
+
+                @Override
+                public WorkspaceSessionStatus currentSessionStatus() {
+                    return sessionStatusPublisher.currentSessionStatus();
+                }
+
+                @Override
+                public ListenerRegistration addSessionStatusListener(final WorkspaceSessionStatusListener listener) {
+                    return sessionStatusPublisher.addListener(listener);
                 }
 
                 @Override
@@ -375,19 +388,20 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
 
     private void rollbackSession(final Session session, final ResourceSet resources,
             final RuntimeException original) {
+        final RuntimeException publisherCloseFailure = closeSessionStatusPublisher(session);
         if (resources != null && SwingUtilities.isEventDispatchThread()) {
             final ResourceSet cleanup = resources;
             final Thread thread = new Thread(() -> {
-                final RuntimeException cleanupFailure = cleanupResources(cleanup);
+                RuntimeException cleanupFailure = recordFailure(publisherCloseFailure, cleanupResources(cleanup));
                 SwingUtilities.invokeLater(() -> finishRollback(session, cleanup, original, true, cleanupFailure));
             }, "freeplane-graph-workspace-open-rollback");
             thread.setDaemon(true);
             thread.start();
             return;
         }
-        RuntimeException cleanupFailure = null;
+        RuntimeException cleanupFailure = publisherCloseFailure;
         if (resources != null) {
-            cleanupFailure = cleanupResources(resources);
+            cleanupFailure = recordFailure(cleanupFailure, cleanupResources(resources));
         }
         finishRollback(session, resources, original, false, cleanupFailure);
     }
@@ -521,6 +535,16 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
         return prior;
     }
 
+    private static RuntimeException closeSessionStatusPublisher(final Session session) {
+        try {
+            session.closeSessionStatusPublisher();
+            return null;
+        }
+        catch (RuntimeException failure) {
+            return failure;
+        }
+    }
+
     private static void closeUpdatesOffEdt(final GraphUpdateCoordinator updates) {
         if (SwingUtilities.isEventDispatchThread()) {
             throw new IllegalStateException("Graph workspace updates must close off the EDT");
@@ -556,10 +580,12 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
     }
 
     private boolean closeSession(final Session session, final boolean discard) {
+        RuntimeException publisherCloseFailure = null;
         synchronized (session.monitor) {
             if (session.beginCloseLocked()) {
                 return true;
             }
+            publisherCloseFailure = closeSessionStatusPublisher(session);
             try {
                 if (discard) {
                     session.resources.store.discardAndClose();
@@ -574,14 +600,16 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
             }
         }
         if (SwingUtilities.isEventDispatchThread()) {
-            closeSessionAsynchronously(session);
+            closeSessionAsynchronously(session, publisherCloseFailure);
             return true;
         }
-        return finishClose(session, closeRemainingResources(ResourceSet.from(session.resources)), true);
+        return finishClose(session, recordFailure(publisherCloseFailure,
+            closeRemainingResources(ResourceSet.from(session.resources))), true);
     }
 
-    private void closeSessionAsynchronously(final Session session) {
-        closeRemainingResourcesAsync(session.resources, failure -> finishClose(session, failure, true));
+    private void closeSessionAsynchronously(final Session session, final RuntimeException publisherCloseFailure) {
+        closeRemainingResourcesAsync(session.resources,
+            failure -> finishClose(session, recordFailure(publisherCloseFailure, failure), true));
     }
 
     private boolean finishClose(final Session session, final RuntimeException initialFailure,
@@ -620,12 +648,23 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
         private State state = State.OPENING;
         private Thread closingThread;
         private DefaultGraphWorkspaceHandle handle;
+        private WorkspaceSessionStatusPublisher sessionStatusPublisher;
         private GraphWorkspaceView view;
         private boolean closingView;
 
         private Session(final WorkspaceSessionId id, final Path path) {
             this.id = id;
             this.path = path;
+        }
+
+        private void closeSessionStatusPublisher() {
+            final WorkspaceSessionStatusPublisher publisher;
+            synchronized (monitor) {
+                publisher = sessionStatusPublisher;
+            }
+            if (publisher != null) {
+                publisher.close();
+            }
         }
 
         private boolean awaitOpen() {

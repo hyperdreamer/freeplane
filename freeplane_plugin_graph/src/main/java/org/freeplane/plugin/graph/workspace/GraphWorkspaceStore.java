@@ -260,6 +260,18 @@ public final class GraphWorkspaceStore implements AutoCloseable {
         }
     }
 
+    public boolean canUndo() {
+        synchronized (monitor) {
+            return !closed && !isReadOnlyLocked() && history.canUndo();
+        }
+    }
+
+    public boolean canRedo() {
+        synchronized (monitor) {
+            return !closed && !isReadOnlyLocked() && history.canRedo();
+        }
+    }
+
     public ListenerRegistration addListener(final WorkspaceStoreListener listener) {
         synchronized (monitor) {
             requireOpenLocked();

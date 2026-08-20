@@ -13,20 +13,28 @@ public final class DefaultGraphWorkspaceHandle implements GraphWorkspaceHandle {
     private final GraphCommandRouter router;
     private final GraphUpdateCoordinator updates;
     private final WorkspaceCloseController closeController;
+    private final WorkspaceSessionStatusPublisher sessionStatusPublisher;
     private boolean closed;
     private boolean closing;
 
     public DefaultGraphWorkspaceHandle(final GraphCommandRouter router, final GraphUpdateCoordinator updates,
             final WorkspaceCloseController closeController) {
-        this(router, updates, closeController, new Object());
+        this(router, updates, closeController, WorkspaceSessionStatusPublisher.noOp(), new Object());
     }
 
     DefaultGraphWorkspaceHandle(final GraphCommandRouter router, final GraphUpdateCoordinator updates,
-            final WorkspaceCloseController closeController, final Object monitor) {
+            final WorkspaceCloseController closeController, final WorkspaceSessionStatusPublisher sessionStatusPublisher,
+            final Object monitor) {
         this.monitor = Objects.requireNonNull(monitor, "monitor");
         this.router = Objects.requireNonNull(router, "router");
         this.updates = Objects.requireNonNull(updates, "updates");
         this.closeController = Objects.requireNonNull(closeController, "closeController");
+        this.sessionStatusPublisher = Objects.requireNonNull(sessionStatusPublisher, "sessionStatusPublisher");
+    }
+
+    DefaultGraphWorkspaceHandle(final GraphCommandRouter router, final GraphUpdateCoordinator updates,
+            final WorkspaceCloseController closeController, final Object monitor) {
+        this(router, updates, closeController, WorkspaceSessionStatusPublisher.noOp(), monitor);
     }
 
     void markClosing() {
@@ -65,7 +73,9 @@ public final class DefaultGraphWorkspaceHandle implements GraphWorkspaceHandle {
             if (closed || closing) {
                 throw new IllegalStateException("Graph workspace handle is not open");
             }
-            return router.execute(Objects.requireNonNull(command, "command"));
+            final GraphCommandResult result = router.execute(Objects.requireNonNull(command, "command"));
+            sessionStatusPublisher.recordCommandResult(result);
+            return result;
         }
     }
 

@@ -15,6 +15,16 @@ public interface GraphWorkspaceViewBinding {
     default boolean isReadOnly() {
         return false;
     }
+    default WorkspaceSessionStatus currentSessionStatus() {
+        return WorkspaceSessionStatus.empty();
+    }
+    default ListenerRegistration addSessionStatusListener(final WorkspaceSessionStatusListener listener) {
+        return new ListenerRegistration() {
+            @Override
+            public void close() {
+            }
+        };
+    }
     ListenerRegistration addCanvasStateListener(CanvasStateListener listener);
 
     final class MapRegistration {
