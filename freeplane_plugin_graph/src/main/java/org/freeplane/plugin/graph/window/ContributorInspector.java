@@ -120,10 +120,23 @@ final class ContributorInspector extends JPanel {
         final JPanel rowPanel = new JPanel(new FlowLayout(FlowLayout.LEADING, 3, 2));
         rowPanel.setName("graph-workspace-contributor-rows");
         for (final ContributorRow row : rows) {
+            final JPanel rowView = new JPanel(new FlowLayout(FlowLayout.LEADING, 3, 2));
+            rowView.setName("graph-workspace-contributor-row");
+            rowView.add(label("Source: " + row.sourceLabel(), "source"));
+            rowView.add(label("Middle: " + row.middleLabel(), "middle"));
+            rowView.add(label("Target: " + row.targetLabel(), "target"));
+            if (!row.ownerDisplayName().isEmpty()) {
+                rowView.add(label("Owner: " + row.ownerDisplayName(), "owner"));
+            }
+            rowView.add(label("Key: " + row.key(), "key"));
+            if (row.connectorDescriptor().isPresent()) {
+                rowView.add(label("Native connector: " + row.connectorDescriptor().get(), "descriptor"));
+            }
             final JButton delete = button("Delete", "delete-contributor");
             delete.addActionListener(event -> deleteOne(row.key));
             deleteButtons.put(row.key, delete);
-            rowPanel.add(delete);
+            rowView.add(delete);
+            rowPanel.add(rowView);
         }
         add(new JScrollPane(rowPanel), BorderLayout.CENTER);
         deleteAllButton.addActionListener(event -> deleteAll());
@@ -235,6 +248,12 @@ final class ContributorInspector extends JPanel {
             result.put(value.mapReferenceId(), value.displayName());
         }
         return Collections.unmodifiableMap(result);
+    }
+
+    private static JLabel label(final String text, final String name) {
+        final JLabel result = new JLabel(Objects.requireNonNull(text, "text"));
+        result.setName("graph-workspace-contributor-" + name);
+        return result;
     }
 
     private static JButton button(final String text, final String name) {

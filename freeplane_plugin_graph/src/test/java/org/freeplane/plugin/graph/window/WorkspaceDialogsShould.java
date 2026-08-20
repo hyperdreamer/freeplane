@@ -6,6 +6,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.awt.Component;
+import java.awt.Container;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -17,14 +19,22 @@ import java.util.UUID;
 import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import javax.swing.JDialog;
+import javax.swing.JLabel;
+import javax.swing.JMenu;
+import javax.swing.JMenuItem;
+
+import org.freeplane.plugin.graph.canvas.GraphIntent;
 import org.freeplane.plugin.graph.command.GraphCommand;
 import org.freeplane.plugin.graph.command.GraphCommands;
+import org.freeplane.plugin.graph.command.MapUndoTarget;
 import org.freeplane.plugin.graph.control.CanvasState;
 import org.freeplane.plugin.graph.control.OperationalStatus;
 import org.freeplane.plugin.graph.control.WorkspaceCloseController;
 import org.freeplane.plugin.graph.control.GraphWorkspaceController;
 import org.freeplane.plugin.graph.control.GraphWorkspaceHandle;
 import org.freeplane.plugin.graph.control.WorkspaceSessionStatus;
+import org.freeplane.plugin.graph.control.WorkspaceSessionStatusListener;
 import org.freeplane.plugin.graph.control.GraphWorkspaceViewBinding;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
@@ -192,6 +202,17 @@ public class WorkspaceDialogsShould {
         assertThat(inspector.rows().get(0).ownerDisplayName()).isEqualTo("Source map");
         assertThat(inspector.rows().get(0).connectorDescriptor()).contains(descriptor);
         assertThat(inspector.rows().get(1).connectorDescriptor()).contains(secondNativeContributor.connectorDescriptor().get());
+        assertThat(labelTexts(inspector)).contains(
+            "Source: Source",
+            "Middle: middle",
+            "Target: Target",
+            "Owner: Source map",
+            "Key: " + nativeContributor.key(),
+            "Native connector: " + descriptor,
+            "Middle: middle-2",
+            "Key: " + secondNativeContributor.key(),
+            "Native connector: " + secondNativeContributor.connectorDescriptor().get())
+            .doesNotContain("secret source", "secret target");
 
         inspector.deleteOne(nativeContributor.key());
         assertThat(commands.get(0)).isInstanceOf(GraphCommands.DeleteContributor.class);
@@ -208,6 +229,77 @@ public class WorkspaceDialogsShould {
         assertThat(all.expectedConnectors()).containsEntry(nativeContributor.key(), descriptor);
         assertThat(all.expectedConnectors()).containsEntry(secondNativeContributor.key(),
             secondNativeContributor.connectorDescriptor().get());
+    }
+
+    @Test
+    public void opensPurgeWithoutEmittingUntilTheCapturedExplicitAction() {
+        ModelFixture fixture = modelFixture(stateWithCounts(7L, 0, 0,
+            Collections.singletonList(missingResolution(MISSING_ID))), false);
+
+        PurgeConfirmationDialog dialog = fixture.model.createPurgeConfirmationDialog();
+
+        assertThat(dialog).isNotNull();
+        assertThat(dialog.displayedGeneration()).isEqualTo(7L);
+        RelationshipId displayedRelationshipId = dialog.rows().get(0).relationshipId();
+        assertThat(fixture.commands).isEmpty();
+        fixture.model.acceptCanvasState(stateWithCounts(8L, 0, 0,
+            Collections.singletonList(missingResolution(RECOVERABLE_ID))));
+        assertThat(fixture.commands).isEmpty();
+
+        dialog.purgeButton().doClick();
+
+        assertThat(fixture.commands).hasSize(1);
+        GraphCommands.Purge purge = (GraphCommands.Purge) fixture.commands.get(0);
+        assertThat(purge.displayedGeneration()).isEqualTo(7L);
+        assertThat(purge.relationships()).containsExactly(displayedRelationshipId);
+        fixture.model.close();
+    }
+
+    @Test
+    public void keepsInspectionAvailableButBlocksEveryReadOnlyContributorDeletionPath() {
+        ContributorState contributorState = contributorState(23L);
+        ModelFixture fixture = modelFixture(contributorState.state, true);
+
+        ContributorInspector inspector = fixture.model.inspectEdge(contributorState.edge.key());
+
+        assertThat(inspector).isNotNull();
+        assertThat(inspector.isReadOnly()).isTrue();
+        assertThat(inspector.deleteButton(contributorState.contributor.key()).isEnabled()).isFalse();
+        assertThat(inspector.deleteAllButton().isEnabled()).isFalse();
+        inspector.deleteOne(contributorState.contributor.key());
+        inspector.deleteAll();
+        fixture.model.acceptIntent(new GraphIntent.DeleteContributor(contributorState.contributor.key()));
+        fixture.model.acceptIntent(new GraphIntent.DeleteAllContributors(contributorState.edge.key(),
+            Collections.singletonList(contributorState.contributor.key())));
+
+        assertThat(fixture.commands).isEmpty();
+        fixture.model.close();
+    }
+
+    @Test
+    public void updatesSourceMapUndoFromSessionStatusIndependentlyOfWorkspaceHistory() {
+        ModelFixture fixture = modelFixture(stateWithCounts(0, 0, Collections.emptyList()), false);
+        ArgumentCaptor<WorkspaceSessionStatusListener> listener =
+            ArgumentCaptor.forClass(WorkspaceSessionStatusListener.class);
+        verify(fixture.binding).addSessionStatusListener(listener.capture());
+        JMenuItem sourceMapUndo = menuItem(fixture.model, "graph-workspace-menu-item-undo-source-map");
+        assertThat(sourceMapUndo).isNotNull();
+        assertThat(sourceMapUndo.getAccelerator()).isNull();
+
+        listener.getValue().onWorkspaceSessionStatus(WorkspaceSessionStatus.of(false, true, true, false,
+            Collections.emptySet(), Optional.empty()));
+        assertThat(sourceMapUndo.isEnabled()).isFalse();
+
+        listener.getValue().onWorkspaceSessionStatus(WorkspaceSessionStatus.of(false, false, false, false,
+            Collections.emptySet(), Optional.of(new MapUndoTarget(MAP_ONE, "Source map", true))));
+        assertThat(sourceMapUndo.isEnabled()).isTrue();
+        sourceMapUndo.doClick();
+        assertThat(fixture.commands).extracting("class").containsExactly(GraphCommands.UndoSourceMap.class);
+
+        listener.getValue().onWorkspaceSessionStatus(WorkspaceSessionStatus.of(false, true, true, false,
+            Collections.emptySet(), Optional.of(new MapUndoTarget(MAP_ONE, "Source map", false))));
+        assertThat(sourceMapUndo.isEnabled()).isFalse();
+        fixture.model.close();
     }
 
     @Test
@@ -234,28 +326,58 @@ public class WorkspaceDialogsShould {
     }
 
     @Test
-    public void closeActionsCompleteOnlyAfterTheCloseControllerSucceeds() {
-        WorkspaceCloseController close = mock(WorkspaceCloseController.class);
-        when(close.retrySaveAndClose()).thenReturn(false, true);
-        when(close.discardAndClose()).thenReturn(false, true);
-        List<String> completed = new ArrayList<String>();
-        WorkspaceCloseDialog dialog = new WorkspaceCloseDialog(close, () -> completed.add("closed"));
+    public void disposesAnAttachedGraphicalWindowOnlyAfterSuccessfulCloseActionsAndOnCancel() {
+        WorkspaceCloseController retryClose = mock(WorkspaceCloseController.class);
+        when(retryClose.retrySaveAndClose()).thenReturn(false, true);
+        Runnable retryCompletion = mock(Runnable.class);
+        JDialog retryWindow = mock(JDialog.class);
+        WorkspaceCloseDialog retryDialog = new WorkspaceCloseDialog(retryClose, retryCompletion);
+        retryDialog.attachWindow(retryWindow);
 
-        dialog.retryButton().doClick();
-        assertThat(completed).isEmpty();
-        dialog.retryButton().doClick();
-        assertThat(completed).containsExactly("closed");
-        dialog.discardButton().doClick();
-        dialog.discardButton().doClick();
-        dialog.cancelButton().doClick();
+        retryDialog.retryButton().doClick();
+        verify(retryWindow, org.mockito.Mockito.never()).dispose();
+        verify(retryCompletion, org.mockito.Mockito.never()).run();
+        retryDialog.retryButton().doClick();
+        org.mockito.InOrder retryOrder = org.mockito.Mockito.inOrder(retryWindow, retryCompletion);
+        retryOrder.verify(retryWindow).setVisible(false);
+        retryOrder.verify(retryWindow).dispose();
+        retryOrder.verify(retryCompletion).run();
 
-        verify(close, org.mockito.Mockito.times(2)).retrySaveAndClose();
-        verify(close, org.mockito.Mockito.times(2)).discardAndClose();
-        verify(close).cancelClose();
-        assertThat(completed).containsExactly("closed", "closed");
+        WorkspaceCloseController discardClose = mock(WorkspaceCloseController.class);
+        when(discardClose.discardAndClose()).thenReturn(false, true);
+        Runnable discardCompletion = mock(Runnable.class);
+        JDialog discardWindow = mock(JDialog.class);
+        WorkspaceCloseDialog discardDialog = new WorkspaceCloseDialog(discardClose, discardCompletion);
+        discardDialog.attachWindow(discardWindow);
+
+        discardDialog.discardButton().doClick();
+        verify(discardWindow, org.mockito.Mockito.never()).dispose();
+        verify(discardCompletion, org.mockito.Mockito.never()).run();
+        discardDialog.discardButton().doClick();
+        verify(discardWindow).setVisible(false);
+        verify(discardWindow).dispose();
+        verify(discardCompletion).run();
+
+        WorkspaceCloseController cancelClose = mock(WorkspaceCloseController.class);
+        Runnable cancelCompletion = mock(Runnable.class);
+        JDialog cancelWindow = mock(JDialog.class);
+        WorkspaceCloseDialog cancelDialog = new WorkspaceCloseDialog(cancelClose, cancelCompletion);
+        cancelDialog.attachWindow(cancelWindow);
+
+        cancelDialog.cancelButton().doClick();
+
+        verify(cancelWindow).setVisible(false);
+        verify(cancelWindow).dispose();
+        verify(cancelClose).cancelClose();
+        verify(cancelCompletion, org.mockito.Mockito.never()).run();
     }
 
     private static CanvasState stateWithCounts(int nodes, int edges, List<RelationshipResolution> resolutions) {
+        return stateWithCounts(7L, nodes, edges, resolutions);
+    }
+
+    private static CanvasState stateWithCounts(long generation, int nodes, int edges,
+            List<RelationshipResolution> resolutions) {
         List<ProjectedNode> projectedNodes = new ArrayList<ProjectedNode>();
         for (int index = 0; index < nodes; index++) {
             MapReferenceId map = index % 2 == 0 ? MAP_ONE : MAP_TWO;
@@ -278,7 +400,7 @@ public class WorkspaceDialogsShould {
                 }
             }
         }
-        GraphProjection projection = GraphProjection.projected(7L, projectedNodes, Collections.emptyList(),
+        GraphProjection projection = GraphProjection.projected(generation, projectedNodes, Collections.emptyList(),
             projectedEdges, resolutions, Collections.emptyList());
         Map<ProjectedNodeKey, NodeGeometry> geometry = new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
         Map<ProjectedNodeKey, LayoutPoint> positions = new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
@@ -287,9 +409,93 @@ public class WorkspaceDialogsShould {
             geometry.put(node.key(), NodeGeometry.of(point, 10.0));
             positions.put(node.key(), point);
         }
-        return CanvasState.of(7L, projection, LayoutFrame.of(7L,
+        return CanvasState.of(generation, projection, LayoutFrame.of(generation,
             LayoutPositions.of(positions, Collections.emptyMap()), false), GraphGeometry.of(geometry,
                 Collections.emptyMap()), OperationalStatus.IDLE);
+    }
+
+    private static ContributorState contributorState(long generation) {
+        SourceNodeKey source = SourceNodeKey.transientPath(MAP_ONE, Collections.singletonList(Integer.valueOf(0)));
+        SourceNodeKey target = SourceNodeKey.transientPath(MAP_ONE, Collections.singletonList(Integer.valueOf(1)));
+        ProjectedNodeKey sourceKey = ProjectedNodeKey.of(source);
+        ProjectedNodeKey targetKey = ProjectedNodeKey.of(target);
+        ConnectorDescriptor descriptor = ConnectorDescriptor.of(source,
+            NodeReference.of(MAP_ONE, PersistedNodeId.of("target")), false, true,
+            "source", "middle", "target");
+        EdgeContributor contributor = nativeContributor(0, source, targetKey, descriptor);
+        ProjectedEdge edge = ProjectedEdge.of(ProjectedEdgeKey.of(ProjectedEndpointKey.ofNode(sourceKey),
+            ProjectedEndpointKey.ofNode(targetKey)), Collections.singletonList(contributor));
+        List<ProjectedNode> nodes = Arrays.asList(
+            ProjectedNode.of(sourceKey, SafeNodeLabel.of("secret source", "Source"), "Map one", false),
+            ProjectedNode.of(targetKey, SafeNodeLabel.of("secret target", "Target"), "Map one", false));
+        GraphProjection projection = GraphProjection.projected(generation, nodes, Collections.emptyList(),
+            Collections.singletonList(edge), Collections.emptyList(), Collections.emptyList());
+        Map<ProjectedNodeKey, NodeGeometry> geometry = new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
+        Map<ProjectedNodeKey, LayoutPoint> positions = new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        for (ProjectedNode node : nodes) {
+            LayoutPoint point = LayoutPoint.of(0.0, 0.0);
+            geometry.put(node.key(), NodeGeometry.of(point, 10.0));
+            positions.put(node.key(), point);
+        }
+        CanvasState state = CanvasState.of(generation, projection, LayoutFrame.of(generation,
+            LayoutPositions.of(positions, Collections.emptyMap()), false), GraphGeometry.of(geometry,
+            Collections.emptyMap()), OperationalStatus.IDLE);
+        return new ContributorState(state, edge, contributor);
+    }
+
+    private static ModelFixture modelFixture(CanvasState state, boolean readOnly) {
+        GraphWorkspaceHandle handle = mock(GraphWorkspaceHandle.class);
+        GraphWorkspaceViewBinding binding = mock(GraphWorkspaceViewBinding.class);
+        when(binding.currentViewport()).thenReturn(org.freeplane.plugin.graph.workspace.model.Viewport.of(0.0, 0.0,
+            1.0, Collections.<UnknownXml>emptyList()));
+        when(binding.currentCanvasState()).thenReturn(state);
+        when(binding.currentMapRows()).thenReturn(Arrays.asList(
+            registration(MAP_ONE, "Source map", MapAvailability.AVAILABLE),
+            registration(MAP_TWO, "Target map", MapAvailability.AVAILABLE)));
+        when(binding.currentSessionStatus()).thenReturn(WorkspaceSessionStatus.empty());
+        when(binding.isReadOnly()).thenReturn(readOnly);
+        when(binding.addCanvasStateListener(any())).thenReturn(mock(ListenerRegistration.class));
+        when(binding.addSessionStatusListener(any())).thenReturn(mock(ListenerRegistration.class));
+        List<GraphCommand> commands = new ArrayList<GraphCommand>();
+        when(handle.execute(any(GraphCommand.class))).thenAnswer(invocation -> {
+            commands.add(invocation.getArgument(0));
+            return null;
+        });
+        GraphWorkspaceWindowModel[] model = new GraphWorkspaceWindowModel[1];
+        GraphWorkspaceWindow.runOnEdt(() -> model[0] = new GraphWorkspaceWindowModel(handle, binding,
+            mock(GraphWorkspaceController.class), () -> null, mock(WorkspaceCloseController.class), () -> { },
+            () -> { }, () -> { }));
+        return new ModelFixture(model[0], binding, commands);
+    }
+
+    private static JMenuItem menuItem(GraphWorkspaceWindowModel model, String name) {
+        for (int menuIndex = 0; menuIndex < model.menuBar().getMenuCount(); menuIndex++) {
+            JMenu menu = model.menuBar().getMenu(menuIndex);
+            for (int itemIndex = 0; itemIndex < menu.getItemCount(); itemIndex++) {
+                JMenuItem item = menu.getItem(itemIndex);
+                if (item != null && name.equals(item.getName())) {
+                    return item;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static List<String> labelTexts(Container root) {
+        List<String> result = new ArrayList<String>();
+        collectLabelTexts(root, result);
+        return result;
+    }
+
+    private static void collectLabelTexts(Container root, List<String> result) {
+        for (Component component : root.getComponents()) {
+            if (component instanceof JLabel) {
+                result.add(((JLabel) component).getText());
+            }
+            if (component instanceof Container) {
+                collectLabelTexts((Container) component, result);
+            }
+        }
     }
 
     private static RelationshipResolution missingResolution(RelationshipId id) {
@@ -335,5 +541,29 @@ public class WorkspaceDialogsShould {
     private static GraphWorkspaceViewBinding.MapRegistration registration(MapReferenceId id, String name,
             MapAvailability availability) {
         return GraphWorkspaceViewBinding.MapRegistration.of(id, name, availability);
+    }
+    private static final class ContributorState {
+        private final CanvasState state;
+        private final ProjectedEdge edge;
+        private final EdgeContributor contributor;
+
+        private ContributorState(CanvasState state, ProjectedEdge edge, EdgeContributor contributor) {
+            this.state = state;
+            this.edge = edge;
+            this.contributor = contributor;
+        }
+    }
+
+    private static final class ModelFixture {
+        private final GraphWorkspaceWindowModel model;
+        private final GraphWorkspaceViewBinding binding;
+        private final List<GraphCommand> commands;
+
+        private ModelFixture(GraphWorkspaceWindowModel model, GraphWorkspaceViewBinding binding,
+                List<GraphCommand> commands) {
+            this.model = model;
+            this.binding = binding;
+            this.commands = commands;
+        }
     }
 }
