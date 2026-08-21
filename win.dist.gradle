@@ -47,6 +47,7 @@ def defineWinDistTasks =  { javaRuntime, distName ->
         '--java-options', "-XX:MaxRAM=20g",
         '--java-options', "-XX:MaxRAMPercentage=15.0",
         '--java-options', '-Djava.security.manager=allow',
+        '--java-options', '-Djbr.java.io.use.nio=false',
         '--java-options', '-Dorg.freeplane.userfpdir=%APPDATA%\\Freeplane',
         '--java-options', '-Dorg.freeplane.windows.launcher.setDllDirectory=true',
         '--java-options', '--add-exports', 
