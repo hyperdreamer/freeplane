@@ -63,14 +63,17 @@ final class GraphPainter {
             }
             copy.transform(worldTransform(currentViewport, componentSize));
             final boolean dimUnrelated = paintState.dimUnrelated() && dimUnrelatedEnabled;
+            final Set<ProjectedEndpointKey> visibleEndpoints =
+                ProjectedEndpointVisibility.visibleEndpoints(state.projection().nodes(),
+                    state.projection().enclosures());
             paintHulls(copy, state, paintState, currentTheme, dimUnrelated);
             paintEdges(copy, state, paintState, currentViewport, currentTheme, dimUnrelated,
-                showArrowheads);
+                showArrowheads, visibleEndpoints);
             paintNodes(copy, state, paintState, currentTheme, dimUnrelated);
-            paintPins(copy, state, paintState, currentTheme, dimUnrelated);
+            paintPins(copy, state, paintState, currentTheme, dimUnrelated, visibleEndpoints);
             paintLabels(copy, state, paintState, currentTheme, renderingLevel, currentViewport, dimUnrelated);
             paintHighlights(copy, state, paintState, currentTheme);
-            paintConnectionPreview(copy, state, paintState, currentTheme);
+            paintConnectionPreview(copy, state, paintState, currentTheme, visibleEndpoints);
         }
         finally {
             copy.dispose();
@@ -111,11 +114,9 @@ final class GraphPainter {
 
     private static void paintEdges(final Graphics2D graphics, final CanvasState state,
             final GraphPaintState paintState, final GraphViewport viewport, final GraphTheme theme,
-            final boolean dimUnrelated, final boolean showArrowheads) {
+            final boolean dimUnrelated, final boolean showArrowheads,
+            final Set<ProjectedEndpointKey> visibleEndpoints) {
         final GraphGeometry geometry = state.geometry();
-        final Set<ProjectedEndpointKey> visibleEndpoints =
-            ProjectedEndpointVisibility.visibleEndpoints(state.projection().nodes(),
-                state.projection().enclosures());
         for (final ProjectedEdge edge : state.projection().edges()) {
             if (!visibleEndpoints.contains(edge.first()) || !visibleEndpoints.contains(edge.second())) {
                 continue;
@@ -204,10 +205,8 @@ final class GraphPainter {
     }
 
     private static void paintPins(final Graphics2D graphics, final CanvasState state,
-            final GraphPaintState paintState, final GraphTheme theme, final boolean dimUnrelated) {
-        final Set<ProjectedEndpointKey> visibleEndpoints =
-            ProjectedEndpointVisibility.visibleEndpoints(state.projection().nodes(),
-                state.projection().enclosures());
+            final GraphPaintState paintState, final GraphTheme theme, final boolean dimUnrelated,
+            final Set<ProjectedEndpointKey> visibleEndpoints) {
         for (final PinProjection pin : state.projection().pins()) {
             if (!pin.active() || !pin.projectedNode().isPresent()) {
                 continue;
@@ -372,15 +371,13 @@ final class GraphPainter {
     }
 
     private static void paintConnectionPreview(final Graphics2D graphics, final CanvasState state,
-            final GraphPaintState paintState, final GraphTheme theme) {
+            final GraphPaintState paintState, final GraphTheme theme,
+            final Set<ProjectedEndpointKey> visibleEndpoints) {
         final Optional<GraphPaintState.ConnectionPreview> preview = paintState.connectionPreview();
         if (!preview.isPresent()) {
             return;
         }
         final GraphPaintState.ConnectionPreview value = preview.get();
-        final Set<ProjectedEndpointKey> visibleEndpoints =
-            ProjectedEndpointVisibility.visibleEndpoints(state.projection().nodes(),
-                state.projection().enclosures());
         if (!visibleEndpoints.contains(value.source())
                 || previewEndpointAnchor(state, value.source()) == null) {
             return;
