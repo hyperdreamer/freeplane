@@ -392,6 +392,67 @@ public class GraphCanvasPaintShould {
     }
 
     @Test
+    public void keepNodesUndimmedUntilATransientDimmingTriggerIsActive() {
+        Fixture fixture = fixture(16.0);
+        GraphTheme theme = lightTheme();
+        BufferedImage baseline = paint(fixture.state, GraphPaintState.empty(), theme, RenderingLevel.FULL);
+
+        GraphCanvas canvas = new GraphCanvas();
+        canvas.setSize(SIZE);
+        canvas.setTheme(theme);
+        canvas.setCanvasState(fixture.state);
+        canvas.setViewport(GraphViewport.of(0.0, 0.0, 1.0));
+        canvas.setPaintState(GraphPaintState.empty());
+        canvas.setDimUnrelated(true);
+        BufferedImage image = paintCanvas(canvas);
+
+        assertThat(image.getRGB(75, 70)).isEqualTo(theme.nodeFill().getRGB());
+        assertThat(image.getRGB(75, 70)).isEqualTo(baseline.getRGB(75, 70));
+        assertThat(image.getRGB(165, 70)).isEqualTo(baseline.getRGB(165, 70));
+    }
+
+    @Test
+    public void dimUnrelatedNodesWhenTransientTriggerAndPreferenceAreEnabled() {
+        Fixture fixture = fixture(16.0);
+        GraphTheme theme = lightTheme();
+        GraphPaintState active = GraphPaintState.empty()
+            .withSelection(fixture.firstEndpoint).withDimUnrelated(true);
+
+        GraphCanvas canvas = new GraphCanvas();
+        canvas.setSize(SIZE);
+        canvas.setTheme(theme);
+        canvas.setCanvasState(fixture.state);
+        canvas.setViewport(GraphViewport.of(0.0, 0.0, 1.0));
+        canvas.setPaintState(active);
+        canvas.setDimUnrelated(true);
+        BufferedImage image = paintCanvas(canvas);
+
+        assertThat(image.getRGB(75, 70)).isEqualTo(theme.nodeFill().getRGB());
+        assertThat(image.getRGB(165, 70)).isNotEqualTo(theme.nodeFill().getRGB());
+    }
+
+    @Test
+    public void keepUnrelatedNodesUndimmedWhenTransientTriggerMeetsDisabledPreference() {
+        Fixture fixture = fixture(16.0);
+        GraphTheme theme = lightTheme();
+        GraphPaintState active = GraphPaintState.empty()
+            .withSelection(fixture.firstEndpoint).withDimUnrelated(true);
+
+        GraphCanvas canvas = new GraphCanvas();
+        canvas.setSize(SIZE);
+        canvas.setTheme(theme);
+        canvas.setCanvasState(fixture.state);
+        canvas.setViewport(GraphViewport.of(0.0, 0.0, 1.0));
+        canvas.setDimUnrelated(false);
+        canvas.setPaintState(active);
+        BufferedImage image = paintCanvas(canvas);
+
+        assertThat(image.getRGB(75, 70)).isEqualTo(theme.nodeFill().getRGB());
+        assertThat(image.getRGB(165, 70)).isEqualTo(theme.nodeFill().getRGB());
+        assertThat(canvas.paintState().dimUnrelated()).isTrue();
+    }
+
+    @Test
     public void rejectPaintingAnUnregisteredMapColor() {
         GraphTheme theme = lightTheme();
 
