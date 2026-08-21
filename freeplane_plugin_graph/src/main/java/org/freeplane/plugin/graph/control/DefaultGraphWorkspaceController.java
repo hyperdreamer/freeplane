@@ -1,6 +1,8 @@
 package org.freeplane.plugin.graph.control;
 
 import java.io.IOException;
+import java.awt.SecondaryLoop;
+import java.awt.Toolkit;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -254,6 +256,7 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
     private final WorkspaceUriResolver uriResolver = new WorkspaceUriResolver();
     private final Map<WorkspaceSessionId, Session> openSessions =
         new HashMap<WorkspaceSessionId, Session>();
+    private boolean shutdownStarted;
 
     public DefaultGraphWorkspaceController(final ModeController modeController,
             final GraphWorkspaceViewFactory viewFactory) {
@@ -280,6 +283,9 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
             Session session = null;
             boolean create = false;
             synchronized (monitor) {
+                if (shutdownStarted) {
+                    throw new IllegalStateException("Graph workspace controller is shut down");
+                }
                 final Optional<WorkspaceSessionId> owner = sessions.owner(path);
                 if (owner.isPresent()) {
                     existing = openSessions.get(owner.get());
@@ -313,6 +319,112 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
             }
             return finishOpen(session, path, create);
         }
+    }
+
+    public void shutdown() {
+        final List<Session> sessionsToClose;
+        synchronized (monitor) {
+            if (shutdownStarted) {
+                return;
+            }
+            shutdownStarted = true;
+            sessionsToClose = new ArrayList<Session>(openSessions.values());
+        }
+        RuntimeException failure = null;
+        for (Session session : sessionsToClose) {
+            failure = recordFailure(failure, shutdownSession(session));
+        }
+        if (failure != null) {
+            throw failure;
+        }
+    }
+
+    private RuntimeException shutdownSession(final Session session) {
+        if (!session.beginShutdown()) {
+            removeSession(session);
+            return null;
+        }
+        RuntimeException failure = null;
+        final SessionResources resources = session.resources;
+        if (resources != null) {
+            try {
+                resources.store.discardAndClose();
+            }
+            catch (RuntimeException exception) {
+                failure = recordFailure(failure, exception);
+            }
+            failure = recordFailure(failure, closeSessionStatusPublisher(session));
+            failure = recordFailure(failure, closeRemainingResourcesOffEdt(resources));
+        }
+        else {
+            failure = recordFailure(failure, closeSessionStatusPublisher(session));
+        }
+        failure = recordFailure(failure, closeViewOnEdt(session));
+        synchronized (session.monitor) {
+            session.finishCloseLocked();
+        }
+        removeSession(session);
+        return failure;
+    }
+
+    private void removeSession(final Session session) {
+        synchronized (monitor) {
+            if (openSessions.get(session.id) == session) {
+                openSessions.remove(session.id);
+            }
+            sessions.unregister(session.id);
+        }
+    }
+
+    private static RuntimeException closeRemainingResourcesOffEdt(final SessionResources resources) {
+        if (!SwingUtilities.isEventDispatchThread()) {
+            return closeRemainingResources(ResourceSet.from(resources));
+        }
+        final SecondaryLoop loop = Toolkit.getDefaultToolkit().getSystemEventQueue().createSecondaryLoop();
+        final AtomicReference<RuntimeException> failure = new AtomicReference<RuntimeException>();
+        SwingUtilities.invokeLater(() -> {
+            final Thread thread = new Thread(() -> {
+                try {
+                    failure.set(closeRemainingResources(ResourceSet.from(resources)));
+                }
+                finally {
+                    loop.exit();
+                }
+            }, "freeplane-graph-workspace-shutdown");
+            thread.setDaemon(true);
+            thread.start();
+        });
+        if (!loop.enter()) {
+            return new IllegalStateException("Unable to enter the EDT shutdown loop");
+        }
+        return failure.get();
+    }
+
+    private static RuntimeException closeViewOnEdt(final Session session) {
+        final AtomicReference<RuntimeException> failure = new AtomicReference<RuntimeException>();
+        final Runnable close = () -> {
+            try {
+                session.closeView();
+            }
+            catch (RuntimeException exception) {
+                failure.set(exception);
+            }
+        };
+        if (SwingUtilities.isEventDispatchThread()) {
+            close.run();
+            return failure.get();
+        }
+        try {
+            SwingUtilities.invokeAndWait(close);
+        }
+        catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            return new IllegalStateException("Interrupted while closing graph workspace view", exception);
+        }
+        catch (java.lang.reflect.InvocationTargetException exception) {
+            return new IllegalStateException("Unable to close graph workspace view on the EDT", exception.getCause());
+        }
+        return failure.get();
     }
 
     private GraphWorkspaceHandle finishOpen(final Session session, final Path path, final boolean create) {
@@ -728,6 +840,29 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
                     return false;
                 }
                 view.focus();
+                return true;
+            }
+        }
+
+        private boolean beginShutdown() {
+            synchronized (monitor) {
+                while (state == State.OPENING || state == State.CLOSING) {
+                    try {
+                        monitor.wait();
+                    }
+                    catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                        throw new IllegalStateException("Interrupted while shutting down graph workspace", interrupted);
+                    }
+                }
+                if (state != State.OPEN) {
+                    return false;
+                }
+                state = State.CLOSING;
+                closingThread = Thread.currentThread();
+                if (handle != null) {
+                    handle.markClosing();
+                }
                 return true;
             }
         }
