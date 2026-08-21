@@ -67,7 +67,7 @@ public final class GraphModeExtension implements IModeControllerExtensionProvide
                 }
                 finally {
                     try {
-                        if (installedModeController != null) {
+                        if (installedModeController != null && openGraphWorkspaceAction != null) {
                             installedModeController.removeAction(OpenGraphWorkspaceAction.KEY);
                         }
                     }

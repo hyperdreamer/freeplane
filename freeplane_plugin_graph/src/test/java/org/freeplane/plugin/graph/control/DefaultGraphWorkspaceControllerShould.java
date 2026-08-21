@@ -924,6 +924,215 @@ public class DefaultGraphWorkspaceControllerShould {
     }
 
     @Test
+    public void waitsForAnOpeningSessionBeforeCompletingShutdownAndRejectsNewOpens() throws Exception {
+        Path openingPath = temporaryFolder.getRoot().toPath().resolve("shutdown-opening.fpg");
+        Path rejectedPath = temporaryFolder.getRoot().toPath().resolve("shutdown-rejected.fpg");
+        WorkspaceSessionRegistry sessions = new WorkspaceSessionRegistry();
+        DefaultGraphWorkspaceController.SessionResources resources = resources(false);
+        CountDownLatch factoryEntered = new CountDownLatch(1);
+        CountDownLatch allowFactory = new CountDownLatch(1);
+        CountDownLatch shutdownCleanupEntered = new CountDownLatch(1);
+        CountDownLatch allowShutdownCleanup = new CountDownLatch(1);
+        AtomicReference<GraphWorkspaceHandle> opened = new AtomicReference<GraphWorkspaceHandle>();
+        AtomicReference<Throwable> openingFailure = new AtomicReference<Throwable>();
+        AtomicReference<Throwable> shutdownFailure = new AtomicReference<Throwable>();
+        CountDownLatch shutdownReturned = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            shutdownCleanupEntered.countDown();
+            allowShutdownCleanup.await(1, TimeUnit.SECONDS);
+            return null;
+        }).when(resources.store).discardAndClose();
+        DefaultGraphWorkspaceController controller = new DefaultGraphWorkspaceController(sessions,
+            (path, id, create) -> {
+                factoryEntered.countDown();
+                try {
+                    allowFactory.await(1, TimeUnit.SECONDS);
+                }
+                catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(interrupted);
+                }
+                return resources;
+            }, (handle, binding, close) -> new RecordingView());
+
+        Thread opening = new Thread(() -> {
+            try {
+                opened.set(controller.open(openingPath));
+            }
+            catch (Throwable failure) {
+                openingFailure.set(failure);
+            }
+        }, "graph-workspace-opening-shutdown-test");
+        opening.start();
+        assertThat(factoryEntered.await(1, TimeUnit.SECONDS)).isTrue();
+        assertThat(sessions.owner(openingPath)).isPresent();
+
+        Thread shutdown = new Thread(() -> {
+            try {
+                controller.shutdown();
+            }
+            catch (Throwable failure) {
+                shutdownFailure.set(failure);
+            }
+            finally {
+                shutdownReturned.countDown();
+            }
+        }, "graph-workspace-opening-shutdown-owner-test");
+        shutdown.start();
+
+        allowFactory.countDown();
+        assertThat(shutdownCleanupEntered.await(1, TimeUnit.SECONDS)).isTrue();
+        assertThat(shutdownReturned.await(100, TimeUnit.MILLISECONDS)).isFalse();
+        assertThatThrownBy(() -> controller.open(rejectedPath))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("Graph workspace controller is shut down");
+
+        allowShutdownCleanup.countDown();
+        assertThat(shutdownReturned.await(1, TimeUnit.SECONDS)).isTrue();
+        opening.join(1000);
+        shutdown.join(1000);
+
+        assertThat(openingFailure.get()).isNull();
+        assertThat(shutdownFailure.get()).isNull();
+        assertThat(opened.get()).isNotNull();
+        assertThat(sessions.owner(openingPath)).isEmpty();
+        assertThatThrownBy(() -> opened.get().execute(mock(GraphCommand.class)))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("Graph workspace handle is not open");
+    }
+
+    @Test
+    public void makesConcurrentShutdownCallersAwaitTheSameTeardownFailure() throws Exception {
+        Path workspace = temporaryFolder.getRoot().toPath().resolve("concurrent-shutdown.fpg");
+        Files.createFile(workspace);
+        WorkspaceSessionRegistry sessions = new WorkspaceSessionRegistry();
+        DefaultGraphWorkspaceController.SessionResources resources = resources(false);
+        CountDownLatch cleanupEntered = new CountDownLatch(1);
+        CountDownLatch allowCleanup = new CountDownLatch(1);
+        RuntimeException cleanupFailure = new IllegalStateException("concurrent shutdown cleanup failed");
+        doAnswer(invocation -> {
+            cleanupEntered.countDown();
+            allowCleanup.await(1, TimeUnit.SECONDS);
+            throw cleanupFailure;
+        }).when(resources.updates).close();
+        DefaultGraphWorkspaceController controller = new DefaultGraphWorkspaceController(sessions,
+            (path, id, create) -> resources, (handle, binding, close) -> new RecordingView());
+        GraphWorkspaceHandle handle = controller.open(workspace);
+        AtomicReference<Throwable> firstFailure = new AtomicReference<Throwable>();
+        AtomicReference<Throwable> secondFailure = new AtomicReference<Throwable>();
+        CountDownLatch firstReturned = new CountDownLatch(1);
+        CountDownLatch secondReturned = new CountDownLatch(1);
+        Thread first = new Thread(() -> {
+            try {
+                controller.shutdown();
+            }
+            catch (Throwable failure) {
+                firstFailure.set(failure);
+            }
+            finally {
+                firstReturned.countDown();
+            }
+        }, "graph-workspace-first-shutdown-test");
+        first.start();
+        assertThat(cleanupEntered.await(1, TimeUnit.SECONDS)).isTrue();
+
+        CountDownLatch secondInvoked = new CountDownLatch(1);
+        Thread second = new Thread(() -> {
+            secondInvoked.countDown();
+            try {
+                controller.shutdown();
+            }
+            catch (Throwable failure) {
+                secondFailure.set(failure);
+            }
+            finally {
+                secondReturned.countDown();
+            }
+        }, "graph-workspace-second-shutdown-test");
+        second.start();
+        assertThat(secondInvoked.await(1, TimeUnit.SECONDS)).isTrue();
+        try {
+            assertThat(secondReturned.await(100, TimeUnit.MILLISECONDS)).isFalse();
+        }
+        finally {
+            allowCleanup.countDown();
+        }
+
+        assertThat(firstReturned.await(1, TimeUnit.SECONDS)).isTrue();
+        assertThat(secondReturned.await(1, TimeUnit.SECONDS)).isTrue();
+        first.join(1000);
+        second.join(1000);
+        assertThat(firstFailure.get()).isSameAs(cleanupFailure);
+        assertThat(secondFailure.get()).isSameAs(cleanupFailure);
+        assertThat(sessions.owner(workspace)).isEmpty();
+        assertThatThrownBy(() -> handle.execute(mock(GraphCommand.class)))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("Graph workspace handle is not open");
+    }
+
+    @Test
+    public void completesEdtShutdownAfterAnEdtUserCloseHasStartedAsyncTeardown() throws Exception {
+        Path workspace = temporaryFolder.getRoot().toPath().resolve("edt-user-close-shutdown.fpg");
+        Files.createFile(workspace);
+        WorkspaceSessionRegistry sessions = new WorkspaceSessionRegistry();
+        DefaultGraphWorkspaceController.SessionResources resources = resources(false);
+        CountDownLatch asyncCleanupEntered = new CountDownLatch(1);
+        CountDownLatch allowAsyncCleanup = new CountDownLatch(1);
+        CountDownLatch closeReturned = new CountDownLatch(1);
+        CountDownLatch shutdownReturned = new CountDownLatch(1);
+        AtomicReference<WorkspaceCloseController> close = new AtomicReference<WorkspaceCloseController>();
+        AtomicReference<GraphWorkspaceHandle> handle = new AtomicReference<GraphWorkspaceHandle>();
+        AtomicReference<Throwable> callerFailure = new AtomicReference<Throwable>();
+        AtomicReference<Thread> edt = new AtomicReference<Thread>();
+        doAnswer(invocation -> {
+            asyncCleanupEntered.countDown();
+            allowAsyncCleanup.await(1, TimeUnit.SECONDS);
+            return null;
+        }).when(resources.updates).close();
+        GraphWorkspaceView view = mock(GraphWorkspaceView.class);
+        DefaultGraphWorkspaceController controller = new DefaultGraphWorkspaceController(sessions,
+            (path, id, create) -> resources, (openedId, binding, closeController) -> {
+                close.set(closeController);
+                return view;
+            });
+        handle.set(controller.open(workspace));
+
+        Thread caller = new Thread(() -> {
+            try {
+                SwingUtilities.invokeAndWait(() -> {
+                    edt.set(Thread.currentThread());
+                    assertThat(close.get().saveAndClose()).isTrue();
+                    closeReturned.countDown();
+                    controller.shutdown();
+                    shutdownReturned.countDown();
+                });
+            }
+            catch (Throwable failure) {
+                callerFailure.set(failure);
+            }
+        }, "graph-workspace-edt-user-close-shutdown-test");
+        caller.start();
+
+        assertThat(closeReturned.await(1, TimeUnit.SECONDS)).isTrue();
+        assertThat(asyncCleanupEntered.await(1, TimeUnit.SECONDS)).isTrue();
+        assertThat(shutdownReturned.await(100, TimeUnit.MILLISECONDS)).isFalse();
+        allowAsyncCleanup.countDown();
+        boolean completed = shutdownReturned.await(1, TimeUnit.SECONDS);
+        if (!completed && edt.get() != null) {
+            edt.get().interrupt();
+        }
+        caller.join(1000);
+
+        assertThat(completed).isTrue();
+        assertThat(callerFailure.get()).isNull();
+        assertThat(sessions.owner(workspace)).isEmpty();
+        assertThatThrownBy(() -> handle.get().execute(mock(GraphCommand.class)))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("Graph workspace handle is not open");
+        verify(view).close();
+    }
+
+    @Test
     public void continuesShutdownAfterOneSessionCleanupFailsAndReturnsTheFailure() throws Exception {
         Path firstPath = temporaryFolder.getRoot().toPath().resolve("shutdown-failure-first.fpg");
         Path secondPath = temporaryFolder.getRoot().toPath().resolve("shutdown-failure-second.fpg");
@@ -933,7 +1142,9 @@ public class DefaultGraphWorkspaceControllerShould {
         DefaultGraphWorkspaceController.SessionResources firstResources = resources(false);
         DefaultGraphWorkspaceController.SessionResources secondResources = resources(false);
         RuntimeException cleanupFailure = new IllegalStateException("first cleanup failed");
+        RuntimeException secondCleanupFailure = new IllegalStateException("second cleanup failed");
         doThrow(cleanupFailure).when(firstResources.store).discardAndClose();
+        doThrow(secondCleanupFailure).when(firstResources.updates).close();
         AtomicInteger opens = new AtomicInteger();
         DefaultGraphWorkspaceController controller = new DefaultGraphWorkspaceController(sessions,
             (path, id, create) -> opens.getAndIncrement() == 0 ? firstResources : secondResources,
@@ -942,7 +1153,15 @@ public class DefaultGraphWorkspaceControllerShould {
         controller.open(firstPath);
         controller.open(secondPath);
 
-        assertThatThrownBy(controller::shutdown).isSameAs(cleanupFailure);
+        RuntimeException failure = null;
+        try {
+            controller.shutdown();
+        }
+        catch (RuntimeException exception) {
+            failure = exception;
+        }
+        assertThat(failure).isSameAs(cleanupFailure);
+        assertThat(failure.getSuppressed()).containsExactly(secondCleanupFailure);
 
         assertThat(sessions.owner(firstPath)).isEmpty();
         assertThat(sessions.owner(secondPath)).isEmpty();
