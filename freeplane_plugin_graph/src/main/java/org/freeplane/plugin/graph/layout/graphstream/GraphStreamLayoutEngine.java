@@ -49,6 +49,7 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
     private MultiGraph graph;
     private TypedSpringBox springBox;
     private LayoutRequest lastRequest;
+    private long lastSynchronizedProjectionGeneration = -1L;
     private WorkspaceId graphWorkspace;
     private long nextStepIndex;
     private Thread ownerThread;
@@ -68,9 +69,13 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
             initializeGraph(accepted.workspace());
             nextStepIndex = 0;
         }
-        if (lastRequest != null && accepted.diff().isEmpty()
+        if (lastRequest != null && accepted.workspace().equals(graphWorkspace)
+                && accepted.diff().isEmpty()
+                && accepted.diff().beforeGeneration() == lastSynchronizedProjectionGeneration
+                && lastRequest.workspace().equals(accepted.workspace())
                 && lastRequest.pins().equals(accepted.pins())) {
             lastRequest = accepted;
+            lastSynchronizedProjectionGeneration = accepted.projection().generation();
             return frame(nextStepIndex, false);
         }
         synchronize(accepted);
@@ -149,6 +154,7 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
         particles.clear();
         particles.putAll(ordered);
         replaceLinks(topology.links);
+        lastSynchronizedProjectionGeneration = request.projection().generation();
     }
 
     private void removeObsoleteParticles(final Set<String> desiredIds) {
@@ -313,6 +319,7 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
         graphWorkspace = null;
         particles.clear();
         graphEdgeIds.clear();
+        lastSynchronizedProjectionGeneration = -1L;
     }
 
     private static double initialPositionSpread(final GraphProjection projection) {
