@@ -9,6 +9,7 @@ import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 
+import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.util.Compat;
 import org.freeplane.core.util.Hyperlink;
 import org.freeplane.core.util.LogUtils;
@@ -182,21 +183,20 @@ public class Browser {
         }
     }
 
-    static final class WindowsShellLauncher {
+    public static class WindowsShellLauncher {
         private static final int REQUIRED_ARGUMENT_COUNT = 2;
 
         static void open(Hyperlink link) throws IOException {
-            final String baseDirectory = System.getProperty(ApplicationResourceController.FREEPLANE_BASEDIRECTORY_PROPERTY);
-            if (baseDirectory == null || baseDirectory.isEmpty()) {
-                throw new IOException("Missing system property "
-                        + ApplicationResourceController.FREEPLANE_BASEDIRECTORY_PROPERTY);
+            final String installationBaseDirectory = ResourceController.getResourceController().getInstallationBaseDir();
+            if (installationBaseDirectory == null || installationBaseDirectory.isEmpty()) {
+                throw new IOException("Missing installation base directory");
             }
 
             new ProcessBuilder(
                     javaCommand().getPath(),
                     "-D" + WINDOWS_SHELL_LAUNCHER_PROCESS_PROPERTY + "=true",
                     "-cp",
-                    helperClassPath(new File(baseDirectory)),
+                    helperClassPath(new File(installationBaseDirectory)),
                     WindowsShellLauncher.class.getName(),
                     link.toString(),
                     link.getUri().toString()
