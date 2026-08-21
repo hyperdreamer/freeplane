@@ -13,6 +13,9 @@ import org.freeplane.core.util.Hyperlink;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.features.mode.Controller;
 
+import com.sun.jna.platform.win32.Shell32;
+import com.sun.jna.platform.win32.WinUser;
+
 public class Browser {
 
     public void openDocument(final Hyperlink link) {
@@ -21,17 +24,19 @@ public class Browser {
             if (Desktop.isDesktopSupported()) {
                 Desktop desktop = Desktop.getDesktop();
 
-                if ("file".equalsIgnoreCase(uri.getScheme())) {
+                String scheme = uri.getScheme();
+				if ("file".equalsIgnoreCase(scheme)) {
 					if (desktop.isSupported(Desktop.Action.OPEN)) {
 					    desktop.open(new File(uri));
 					    return;
 					}
 				} else {
-					if ("mailto".equalsIgnoreCase(uri.getScheme()) && desktop.isSupported(Desktop.Action.MAIL)) {
+					if ("mailto".equalsIgnoreCase(scheme) && desktop.isSupported(Desktop.Action.MAIL)) {
 					    desktop.mail(uri);
 					    return;
 					}
-					if (desktop.isSupported(Desktop.Action.BROWSE)) {
+					if ((! Compat.isWindowsOS() || "https".equalsIgnoreCase(scheme)
+							|| "http".equalsIgnoreCase(scheme)) && desktop.isSupported(Desktop.Action.BROWSE)) {
 					    desktop.browse(uri);
 					    return;
 					}
@@ -116,13 +121,14 @@ public class Browser {
         String scheme = uri.getScheme();
         try {
             if (Compat.isWindowsOS()) {
- // UNSAFE:
-//                if ("file".equalsIgnoreCase(scheme) || "smb".equalsIgnoreCase(scheme) || uriString.startsWith("mailto:")) {
-//                    Controller.exec(new String[]{"rundll32", "url.dll,FileProtocolHandler", uriString});
-//                } else {
-//                    Controller.exec(new String[]{"cmd.exe", "/c", "start", "", uriString});
-//                }
-                Controller.exec(new String[]{"rundll32", "url.dll,FileProtocolHandler", uriString});
+                Shell32.INSTANCE.ShellExecute(
+                        null,
+                        "open",
+                        uriString,
+                        null,
+                        null,
+                        WinUser.SW_SHOWNORMAL
+                );
             } else if (Compat.isMacOsX()) {
                 if ("file".equalsIgnoreCase(scheme)) {
                     uriString = uri.getPath();
