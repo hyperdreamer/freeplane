@@ -70,7 +70,7 @@ public final class GraphCanvas extends JComponent implements Accessible {
         onEdt(new Runnable() {
             @Override
             public void run() {
-                paintState = dimUnrelated ? value : value.withDimUnrelated(false);
+                paintState = value;
                 repaint();
             }
         });
@@ -225,7 +225,6 @@ public final class GraphCanvas extends JComponent implements Accessible {
             @Override
             public void run() {
                 dimUnrelated = value;
-                paintState = paintState.withDimUnrelated(value);
                 repaint();
             }
         });
