@@ -842,6 +842,153 @@ public class DefaultGraphWorkspaceControllerShould {
         verify(view).close();
     }
 
+    @Test
+    public void shutsDownEverySessionWithoutSavingAndMakesHandlesUnusable() throws Exception {
+        Path firstPath = temporaryFolder.getRoot().toPath().resolve("shutdown-first.fpg");
+        Path secondPath = temporaryFolder.getRoot().toPath().resolve("shutdown-second.fpg");
+        Files.createFile(firstPath);
+        Files.createFile(secondPath);
+        WorkspaceSessionRegistry sessions = new WorkspaceSessionRegistry();
+        DefaultGraphWorkspaceController.SessionResources firstResources = resources(false);
+        DefaultGraphWorkspaceController.SessionResources secondResources = resources(false);
+        ListenerRegistration firstStatusRegistration = mock(ListenerRegistration.class);
+        ListenerRegistration secondStatusRegistration = mock(ListenerRegistration.class);
+        when(firstResources.store.addListener(any())).thenReturn(firstStatusRegistration);
+        when(secondResources.store.addListener(any())).thenReturn(secondStatusRegistration);
+        RecordingView firstView = new RecordingView();
+        RecordingView secondView = new RecordingView();
+        AtomicInteger opens = new AtomicInteger();
+        DefaultGraphWorkspaceController controller = new DefaultGraphWorkspaceController(sessions,
+            (path, id, create) -> opens.getAndIncrement() == 0 ? firstResources : secondResources,
+            (handle, binding, close) -> opens.get() == 1 ? firstView : secondView);
+
+        GraphWorkspaceHandle first = controller.open(firstPath);
+        GraphWorkspaceHandle second = controller.open(secondPath);
+
+        controller.shutdown();
+
+        assertThat(sessions.owner(firstPath)).isEmpty();
+        assertThat(sessions.owner(secondPath)).isEmpty();
+        assertThat(firstView.closeCount).hasValue(1);
+        assertThat(secondView.closeCount).hasValue(1);
+        verify(firstResources.store).discardAndClose();
+        verify(secondResources.store).discardAndClose();
+        verify(firstResources.store, never()).close();
+        verify(secondResources.store, never()).close();
+        verify(firstStatusRegistration).close();
+        verify(secondStatusRegistration).close();
+        verify(firstResources.updates).close();
+        verify(secondResources.updates).close();
+        verify(firstResources.leaseManager).close();
+        verify(secondResources.leaseManager).close();
+        verify(firstResources.scheduler).shutdownNow();
+        verify(secondResources.scheduler).shutdownNow();
+        assertThatThrownBy(() -> first.execute(mock(GraphCommand.class)))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("Graph workspace handle is not open");
+        assertThatThrownBy(() -> second.execute(mock(GraphCommand.class)))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("Graph workspace handle is not open");
+
+        controller.shutdown();
+
+        verify(firstResources.store, org.mockito.Mockito.times(1)).discardAndClose();
+        verify(secondResources.store, org.mockito.Mockito.times(1)).discardAndClose();
+        verify(firstResources.updates, org.mockito.Mockito.times(1)).close();
+        verify(secondResources.updates, org.mockito.Mockito.times(1)).close();
+        verify(firstResources.leaseManager, org.mockito.Mockito.times(1)).close();
+        verify(secondResources.leaseManager, org.mockito.Mockito.times(1)).close();
+        verify(firstResources.scheduler, org.mockito.Mockito.times(1)).shutdownNow();
+        verify(secondResources.scheduler, org.mockito.Mockito.times(1)).shutdownNow();
+    }
+
+    @Test
+    public void shutsDownWithoutSessionsAndRejectsFurtherOpens() {
+        Path workspace = temporaryFolder.getRoot().toPath().resolve("shutdown-after-empty.fpg");
+        WorkspaceSessionRegistry sessions = new WorkspaceSessionRegistry();
+        AtomicInteger factoryCalls = new AtomicInteger();
+        DefaultGraphWorkspaceController controller = new DefaultGraphWorkspaceController(sessions,
+            (path, id, create) -> {
+                factoryCalls.incrementAndGet();
+                return resources(false);
+            }, (handle, binding, close) -> new RecordingView());
+
+        controller.shutdown();
+        controller.shutdown();
+
+        assertThatThrownBy(() -> controller.open(workspace))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("Graph workspace controller is shut down");
+        assertThat(factoryCalls).hasValue(0);
+        assertThat(sessions.owner(workspace)).isEmpty();
+    }
+
+    @Test
+    public void continuesShutdownAfterOneSessionCleanupFailsAndReturnsTheFailure() throws Exception {
+        Path firstPath = temporaryFolder.getRoot().toPath().resolve("shutdown-failure-first.fpg");
+        Path secondPath = temporaryFolder.getRoot().toPath().resolve("shutdown-failure-second.fpg");
+        Files.createFile(firstPath);
+        Files.createFile(secondPath);
+        WorkspaceSessionRegistry sessions = new WorkspaceSessionRegistry();
+        DefaultGraphWorkspaceController.SessionResources firstResources = resources(false);
+        DefaultGraphWorkspaceController.SessionResources secondResources = resources(false);
+        RuntimeException cleanupFailure = new IllegalStateException("first cleanup failed");
+        doThrow(cleanupFailure).when(firstResources.store).discardAndClose();
+        AtomicInteger opens = new AtomicInteger();
+        DefaultGraphWorkspaceController controller = new DefaultGraphWorkspaceController(sessions,
+            (path, id, create) -> opens.getAndIncrement() == 0 ? firstResources : secondResources,
+            (handle, binding, close) -> new RecordingView());
+
+        controller.open(firstPath);
+        controller.open(secondPath);
+
+        assertThatThrownBy(controller::shutdown).isSameAs(cleanupFailure);
+
+        assertThat(sessions.owner(firstPath)).isEmpty();
+        assertThat(sessions.owner(secondPath)).isEmpty();
+        verify(firstResources.updates).close();
+        verify(firstResources.leaseManager).close();
+        verify(firstResources.scheduler).shutdownNow();
+        verify(secondResources.store).discardAndClose();
+        verify(secondResources.updates).close();
+        verify(secondResources.leaseManager).close();
+        verify(secondResources.scheduler).shutdownNow();
+    }
+
+    @Test
+    public void waitsForOffEdtResourceCleanupAndClosesTheViewOnTheEdt() throws Exception {
+        Path workspace = temporaryFolder.getRoot().toPath().resolve("shutdown-edt.fpg");
+        Files.createFile(workspace);
+        WorkspaceSessionRegistry sessions = new WorkspaceSessionRegistry();
+        DefaultGraphWorkspaceController.SessionResources resources = resources(false);
+        AtomicReference<Boolean> updatesClosedOffEdt = new AtomicReference<Boolean>();
+        AtomicReference<Boolean> viewClosedOnEdt = new AtomicReference<Boolean>();
+        CountDownLatch edtCallback = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            updatesClosedOffEdt.set(!SwingUtilities.isEventDispatchThread());
+            SwingUtilities.invokeLater(edtCallback::countDown);
+            if (!edtCallback.await(1, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("EDT cleanup was blocked");
+            }
+            return null;
+        }).when(resources.updates).close();
+        GraphWorkspaceView view = mock(GraphWorkspaceView.class);
+        doAnswer(invocation -> {
+            viewClosedOnEdt.set(SwingUtilities.isEventDispatchThread());
+            return null;
+        }).when(view).close();
+        DefaultGraphWorkspaceController controller = new DefaultGraphWorkspaceController(sessions,
+            (path, id, create) -> resources, (handle, binding, close) -> view);
+        controller.open(workspace);
+
+        SwingUtilities.invokeAndWait(controller::shutdown);
+
+        assertThat(updatesClosedOffEdt).hasValue(true);
+        assertThat(viewClosedOnEdt).hasValue(true);
+        assertThat(sessions.owner(workspace)).isEmpty();
+        verify(view).close();
+    }
+
     private static void awaitPathPresent(final Path workspace) throws InterruptedException {
         final long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
         while (!Files.exists(workspace) && System.nanoTime() < deadline) {

@@ -1,8 +1,12 @@
 package org.freeplane.plugin.graph.window;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockConstruction;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -24,12 +28,16 @@ import org.freeplane.core.ui.menubuilders.generic.UserRole;
 import org.freeplane.features.mode.ModeController;
 import org.freeplane.main.application.ApplicationResourceController;
 import org.freeplane.plugin.graph.GraphModeExtension;
+import org.freeplane.plugin.graph.control.DefaultGraphWorkspaceController;
 import org.freeplane.plugin.graph.control.GraphWorkspaceController;
+import org.freeplane.plugin.graph.group.GraphGroupController;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Answers;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
+import org.mockito.MockedConstruction;
 import org.mockito.MockedStatic;
 
 public class GraphPluginIntegrationShould {
@@ -99,6 +107,46 @@ public class GraphPluginIntegrationShould {
     }
 
     @Test
+    public void shutsDownWorkspaceSessionsBeforeRemovingGraphActionsAndExtensions() {
+        ApplicationResourceController applicationResources = mock(ApplicationResourceController.class);
+        resourceController.when(ResourceController::getResourceController).thenReturn(applicationResources);
+        ModeController modeController = configuredModeController();
+        GraphModeExtension extension = new GraphModeExtension();
+
+        try (MockedConstruction<DefaultGraphWorkspaceController> constructions =
+                mockConstruction(DefaultGraphWorkspaceController.class)) {
+            extension.installExtension(modeController, null);
+            DefaultGraphWorkspaceController controller = constructions.constructed().get(0);
+
+            extension.close();
+
+            InOrder order = inOrder(controller, modeController);
+            order.verify(controller).shutdown();
+            order.verify(modeController).removeAction(OpenGraphWorkspaceAction.KEY);
+            order.verify(modeController).removeExtension(GraphGroupController.class);
+        }
+    }
+
+    @Test
+    public void closesSafelyAfterPartialGraphGroupInstallation() {
+        ApplicationResourceController applicationResources = mock(ApplicationResourceController.class);
+        resourceController.when(ResourceController::getResourceController).thenReturn(applicationResources);
+        ModeController modeController = configuredModeController();
+        doThrow(new IllegalStateException("graph group installation failed")).when(modeController)
+            .addExtension(org.mockito.ArgumentMatchers.eq(GraphGroupController.class), any(GraphGroupController.class));
+        GraphModeExtension extension = new GraphModeExtension();
+
+        assertThatThrownBy(() -> extension.installExtension(modeController, null))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("graph group installation failed");
+
+        extension.close();
+        extension.close();
+
+        verify(modeController).removeExtension(GraphGroupController.class);
+    }
+
+    @Test
     public void placesAndDescribesBothGraphActionsWithTheirOwnIcons() throws IOException {
         String menu = read("freeplane/src/external/resources/xml/mindmapmodemenu.xml");
         String viewerProperties = read("freeplane/src/viewer/resources/freeplane.properties");
@@ -121,6 +169,15 @@ public class GraphPluginIntegrationShould {
         assertThat(translations.getProperty("OpenGraphWorkspaceAction.tooltip")).isNotBlank();
         assertThat(read("freeplane_plugin_graph/src/main/resources/images/GraphGroup.svg")).contains("<svg", "#DF625D");
         assertThat(read("freeplane_plugin_graph/src/main/resources/images/GraphWorkspace.svg")).contains("<svg");
+    }
+
+    private static ModeController configuredModeController() {
+        ModeController modeController = mock(ModeController.class);
+        MapController mapController = mock(MapController.class);
+        when(modeController.getMapController()).thenReturn(mapController);
+        when(mapController.getReadManager()).thenReturn(new org.freeplane.core.io.ReadManager());
+        when(mapController.getWriteManager()).thenReturn(new org.freeplane.core.io.WriteManager());
+        return modeController;
     }
 
     private static Properties properties(final String relativePath) throws IOException {

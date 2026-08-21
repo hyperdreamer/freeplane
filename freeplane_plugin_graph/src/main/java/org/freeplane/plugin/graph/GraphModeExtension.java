@@ -17,7 +17,7 @@ public final class GraphModeExtension implements IModeControllerExtensionProvide
     private GraphGroupController graphGroupController;
     private GraphGroupMarkerPainter graphGroupMarkerPainter;
     private OpenGraphWorkspaceAction openGraphWorkspaceAction;
-    private GraphWorkspaceController graphWorkspaceController;
+    private DefaultGraphWorkspaceController graphWorkspaceController;
     private ModeController modeController;
     private NodeViewDecorationRegistry nodeViewDecorationRegistry;
 
@@ -38,7 +38,7 @@ public final class GraphModeExtension implements IModeControllerExtensionProvide
             new SwingGraphWorkspaceViewFactory(viewController));
         viewController.bind(completedController);
         graphWorkspaceController = completedController;
-        openGraphWorkspaceAction = new OpenGraphWorkspaceAction(completedController);
+        openGraphWorkspaceAction = new OpenGraphWorkspaceAction(viewController);
         modeController.addAction(openGraphWorkspaceAction);
         nodeViewDecorationRegistry = NodeViewDecorationRegistry.of(modeController);
         graphGroupMarkerPainter = new GraphGroupMarkerPainter();
@@ -47,30 +47,52 @@ public final class GraphModeExtension implements IModeControllerExtensionProvide
 
     @Override
     public synchronized void close() {
-        if (modeController == null) {
+        if (modeController == null && graphWorkspaceController == null && graphGroupController == null
+                && graphGroupMarkerPainter == null && openGraphWorkspaceAction == null
+                && nodeViewDecorationRegistry == null) {
             return;
         }
+        final ModeController installedModeController = modeController;
         try {
             try {
-                nodeViewDecorationRegistry.remove(graphGroupMarkerPainter);
+                if (graphWorkspaceController != null) {
+                    graphWorkspaceController.shutdown();
+                }
             }
             finally {
                 try {
-                    modeController.removeAction(OpenGraphWorkspaceAction.KEY);
+                    if (nodeViewDecorationRegistry != null && graphGroupMarkerPainter != null) {
+                        nodeViewDecorationRegistry.remove(graphGroupMarkerPainter);
+                    }
                 }
                 finally {
-                    graphGroupController.close();
+                    try {
+                        if (installedModeController != null) {
+                            installedModeController.removeAction(OpenGraphWorkspaceAction.KEY);
+                        }
+                    }
+                    finally {
+                        if (graphGroupController != null) {
+                            graphGroupController.close();
+                        }
+                    }
                 }
             }
         }
         finally {
-            modeController.removeExtension(GraphGroupController.class);
-            graphGroupController = null;
-            graphGroupMarkerPainter = null;
-            openGraphWorkspaceAction = null;
-            graphWorkspaceController = null;
-            modeController = null;
-            nodeViewDecorationRegistry = null;
+            try {
+                if (installedModeController != null) {
+                    installedModeController.removeExtension(GraphGroupController.class);
+                }
+            }
+            finally {
+                graphGroupController = null;
+                graphGroupMarkerPainter = null;
+                openGraphWorkspaceAction = null;
+                graphWorkspaceController = null;
+                modeController = null;
+                nodeViewDecorationRegistry = null;
+            }
         }
     }
 
