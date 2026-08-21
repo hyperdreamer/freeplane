@@ -144,6 +144,7 @@ public class GraphPluginIntegrationShould {
         extension.close();
 
         verify(modeController).removeExtension(GraphGroupController.class);
+        verify(modeController, org.mockito.Mockito.never()).removeAction(OpenGraphWorkspaceAction.KEY);
     }
 
     @Test
