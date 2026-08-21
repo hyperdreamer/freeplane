@@ -1,6 +1,5 @@
 package org.freeplane.plugin.graph.layout;
 
-import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
 
@@ -126,8 +125,7 @@ public final class PerceptualIdlePolicy {
         }
 
         static KeySet of(final LayoutPositions positions) {
-            return new KeySet(new HashSet<Object>(positions.nodes().keySet()),
-                new HashSet<Object>(positions.anchors().keySet()));
+            return new KeySet(positions.nodes().keySet(), positions.anchors().keySet());
         }
 
         boolean isEmpty() {

@@ -15,6 +15,7 @@ import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
 
 public final class GraphGeometryEngine {
+    private static final int GEOMETRY_CACHE_SIZE = 2;
     private static final double BASE_RADIUS = 8.0;
     private static final double HULL_CLEARANCE = 16.0;
     private static final double DIAGONAL = Math.sqrt(0.5);
@@ -29,9 +30,15 @@ public final class GraphGeometryEngine {
         {DIAGONAL, -DIAGONAL},
     };
 
+    private final List<GeometryCacheEntry> geometryCache = new ArrayList<GeometryCacheEntry>();
+
     public GraphGeometry computeHulls(final GraphProjection projection, final LayoutPositions positions) {
         Objects.requireNonNull(projection, "projection");
         Objects.requireNonNull(positions, "positions");
+        final GraphGeometry cached = cachedGeometry(projection, positions);
+        if (cached != null) {
+            return cached;
+        }
         final Map<ProjectedNodeKey, ProjectedNode> nodesByKey =
             new LinkedHashMap<ProjectedNodeKey, ProjectedNode>();
         for (final ProjectedNode node : projection.nodes()) {
@@ -76,7 +83,53 @@ public final class GraphGeometryEngine {
             hulls.put(enclosure.hullKey(), computed.get(enclosure.hullKey()));
         }
         // Structural hull computation intentionally leaves labels to the ordered placement pass.
-        return GraphGeometry.of(nodeGeometry, hulls);
+        final GraphGeometry result = GraphGeometry.of(nodeGeometry, hulls);
+        rememberGeometry(projection, positions, result);
+        return result;
+    }
+
+    private synchronized GraphGeometry cachedGeometry(final GraphProjection projection,
+            final LayoutPositions positions) {
+        for (int index = 0; index < geometryCache.size(); index++) {
+            final GeometryCacheEntry entry = geometryCache.get(index);
+            if (entry.matches(projection, positions)) {
+                if (index > 0) {
+                    geometryCache.remove(index);
+                    geometryCache.add(0, entry);
+                }
+                return entry.geometry;
+            }
+        }
+        return null;
+    }
+
+    private synchronized void rememberGeometry(final GraphProjection projection, final LayoutPositions positions,
+            final GraphGeometry geometry) {
+        geometryCache.add(0, new GeometryCacheEntry(projection, positions, geometry));
+        while (geometryCache.size() > GEOMETRY_CACHE_SIZE) {
+            geometryCache.remove(geometryCache.size() - 1);
+        }
+    }
+
+    private static final class GeometryCacheEntry {
+        private final GraphProjection projection;
+        private final LayoutPositions positions;
+        private final GraphGeometry geometry;
+
+        private GeometryCacheEntry(final GraphProjection projection, final LayoutPositions positions,
+                final GraphGeometry geometry) {
+            this.projection = projection;
+            this.positions = positions;
+            this.geometry = geometry;
+        }
+
+        private boolean matches(final GraphProjection candidateProjection,
+                final LayoutPositions candidatePositions) {
+            return projection.nodes().equals(candidateProjection.nodes())
+                && projection.enclosures().equals(candidateProjection.enclosures())
+                && projection.prominence().equals(candidateProjection.prominence())
+                && positions.equals(candidatePositions);
+        }
     }
 
     private static void computeHull(final EnclosureHullKey hullKey,

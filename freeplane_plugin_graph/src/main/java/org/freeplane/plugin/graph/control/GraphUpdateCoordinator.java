@@ -31,6 +31,9 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
     private final ThreadLocal<Boolean> acceptingBatch = new ThreadLocal<Boolean>();
     private final List<CanvasStateListener> canvasListeners = new ArrayList<CanvasStateListener>();
     private final List<GraphProjectionListener> projectionListeners = new ArrayList<GraphProjectionListener>();
+    private static final GraphProjection EMPTY_PROJECTION = GraphProjection.projected(0L,
+        Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList(),
+        Collections.emptyList());
 
     private ListenerRegistration storeListenerRegistration;
     private ListenerRegistration adapterListenerRegistration;
@@ -540,8 +543,7 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
     }
 
     private static GraphProjection emptyProjection() {
-        return GraphProjection.projected(0L, Collections.emptyList(), Collections.emptyList(),
-            Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+        return EMPTY_PROJECTION;
     }
 
     interface RebuildPipeline {

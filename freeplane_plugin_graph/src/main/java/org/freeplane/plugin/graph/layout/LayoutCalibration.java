@@ -4,6 +4,8 @@ public final class LayoutCalibration {
     private static final double CONTAINMENT = 0.15;
     private static final double HIERARCHY = 0.30;
     private static final double SAME_MAP = 1.0;
+    private static final LayoutCalibration SPIKE_DEFAULTS =
+        new LayoutCalibration(CONTAINMENT, HIERARCHY, SAME_MAP);
 
     private final double containment;
     private final double hierarchy;
@@ -16,7 +18,7 @@ public final class LayoutCalibration {
     }
 
     public static LayoutCalibration spikeDefaults() {
-        return new LayoutCalibration(CONTAINMENT, HIERARCHY, SAME_MAP);
+        return SPIKE_DEFAULTS;
     }
 
     public double containment() {
