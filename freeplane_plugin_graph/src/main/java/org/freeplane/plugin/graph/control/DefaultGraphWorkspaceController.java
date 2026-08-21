@@ -348,6 +348,17 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
                 }
 
                 @Override
+                public GraphWorkspacePresentation currentPresentation() {
+                    final WorkspaceDocument document = openedResources.store.currentDocument();
+                    final List<GraphWorkspacePresentation.MapColor> colors =
+                        new ArrayList<GraphWorkspacePresentation.MapColor>(document.maps().size());
+                    for (final MapReference reference : document.maps()) {
+                        colors.add(GraphWorkspacePresentation.MapColor.of(reference.id(), reference.color()));
+                    }
+                    return GraphWorkspacePresentation.of(document.displaySettings(), colors);
+                }
+
+                @Override
                 public boolean isReadOnly() {
                     return openedResources.store.currentDocument().compatibility()
                         == org.freeplane.plugin.graph.workspace.model.WorkspaceCompatibility.READ_ONLY_NEWER;

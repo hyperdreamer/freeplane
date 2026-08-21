@@ -37,6 +37,12 @@ final class GraphPainter {
     void paint(final Graphics2D graphics, final CanvasState state, final GraphPaintState paintState,
             final GraphViewport viewport, final java.awt.Dimension size, final GraphTheme theme,
             final RenderingLevel level) {
+        paint(graphics, state, paintState, viewport, size, theme, level, true, true);
+    }
+
+    void paint(final Graphics2D graphics, final CanvasState state, final GraphPaintState paintState,
+            final GraphViewport viewport, final java.awt.Dimension size, final GraphTheme theme,
+            final RenderingLevel level, final boolean showArrowheads, final boolean dimUnrelatedEnabled) {
         Objects.requireNonNull(graphics, "graphics");
         Objects.requireNonNull(paintState, "paintState");
         final GraphViewport currentViewport = Objects.requireNonNull(viewport, "viewport");
@@ -56,9 +62,10 @@ final class GraphPainter {
                 return;
             }
             copy.transform(worldTransform(currentViewport, componentSize));
-            final boolean dimUnrelated = paintState.dimUnrelated();
+            final boolean dimUnrelated = paintState.dimUnrelated() && dimUnrelatedEnabled;
             paintHulls(copy, state, paintState, currentTheme, dimUnrelated);
-            paintEdges(copy, state, paintState, currentViewport, currentTheme, dimUnrelated);
+            paintEdges(copy, state, paintState, currentViewport, currentTheme, dimUnrelated,
+                showArrowheads);
             paintNodes(copy, state, paintState, currentTheme, dimUnrelated);
             paintPins(copy, state, paintState, currentTheme, dimUnrelated);
             paintLabels(copy, state, paintState, currentTheme, renderingLevel, currentViewport, dimUnrelated);
@@ -104,7 +111,7 @@ final class GraphPainter {
 
     private static void paintEdges(final Graphics2D graphics, final CanvasState state,
             final GraphPaintState paintState, final GraphViewport viewport, final GraphTheme theme,
-            final boolean dimUnrelated) {
+            final boolean dimUnrelated, final boolean showArrowheads) {
         final GraphGeometry geometry = state.geometry();
         final Set<ProjectedEndpointKey> visibleEndpoints =
             ProjectedEndpointVisibility.visibleEndpoints(state.projection().nodes(),
@@ -125,10 +132,10 @@ final class GraphPainter {
             graphics.setColor(theme.edgeColor());
             graphics.setStroke(theme.edgeStroke());
             graphics.draw(new Line2D.Double(first.x(), first.y(), second.x(), second.y()));
-            if (edge.arrowAtFirst()) {
+            if (showArrowheads && edge.arrowAtFirst()) {
                 paintArrow(graphics, first, second, theme.edgeColor(), viewport.zoom());
             }
-            if (edge.arrowAtSecond()) {
+            if (showArrowheads && edge.arrowAtSecond()) {
                 paintArrow(graphics, second, first, theme.edgeColor(), viewport.zoom());
             }
             if (edge.hasMultiplicityCue()) {

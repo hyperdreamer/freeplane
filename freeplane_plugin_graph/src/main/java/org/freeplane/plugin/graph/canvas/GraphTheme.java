@@ -77,8 +77,17 @@ public final class GraphTheme {
 
     public static GraphTheme resolve(final CanvasTheme requested,
             final List<MapReference> registeredMaps) {
+        return resolveWithMapColors(requested, resolveMapColors(registeredMaps));
+    }
+
+    public static GraphTheme resolve(final CanvasTheme requested,
+            final Map<MapReferenceId, String> registeredMaps) {
+        return resolveWithMapColors(requested, resolveMapColorsById(registeredMaps));
+    }
+
+    private static GraphTheme resolveWithMapColors(final CanvasTheme requested,
+            final Map<MapReferenceId, Color> mapColors) {
         final CanvasTheme theme = Objects.requireNonNull(requested, "requested");
-        final Map<MapReferenceId, Color> mapColors = resolveMapColors(registeredMaps);
         final Color uiBackground = UIManager.getColor("Panel.background");
         final Color uiForeground = UIManager.getColor("Label.foreground");
         final boolean dark;
@@ -293,6 +302,30 @@ public final class GraphTheme {
             assignments.put(id, Color.decode(reference.color()));
         }
         return assignments;
+    }
+
+    private static Map<MapReferenceId, Color> resolveMapColorsById(
+            final Map<MapReferenceId, String> registeredMaps) {
+        Objects.requireNonNull(registeredMaps, "registeredMaps");
+        final Map<MapReferenceId, Color> assignments = new LinkedHashMap<MapReferenceId, Color>();
+        for (final Map.Entry<MapReferenceId, String> entry : registeredMaps.entrySet()) {
+            final MapReferenceId id = Objects.requireNonNull(entry.getKey(), "registered map ID");
+            if (assignments.containsKey(id)) {
+                throw new IllegalArgumentException("Duplicate registered map ID " + id.value());
+            }
+            assignments.put(id, decodeColor(entry.getValue()));
+        }
+        return assignments;
+    }
+
+    private static Color decodeColor(final String value) {
+        Objects.requireNonNull(value, "registered map color");
+        try {
+            return Color.decode(value);
+        }
+        catch (NumberFormatException failure) {
+            throw new IllegalArgumentException("Invalid registered map color " + value, failure);
+        }
     }
 
     private static Map<MapReferenceId, Color> copyMapColors(final Map<MapReferenceId, Color> values) {

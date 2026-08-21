@@ -6,43 +6,59 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
+import javax.swing.JMenu;
+import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.UIManager;
 
 import org.freeplane.plugin.graph.canvas.GraphCanvas;
+import org.freeplane.plugin.graph.canvas.GraphTheme;
 import org.freeplane.plugin.graph.command.GraphCommand;
 import org.freeplane.plugin.graph.command.GraphCommands;
 import org.freeplane.plugin.graph.control.CanvasState;
 import org.freeplane.plugin.graph.control.GraphWorkspaceController;
 import org.freeplane.plugin.graph.control.GraphWorkspaceHandle;
+import org.freeplane.plugin.graph.control.GraphWorkspacePresentation;
 import org.freeplane.plugin.graph.control.GraphWorkspaceView;
 import org.freeplane.plugin.graph.control.GraphWorkspaceViewBinding;
 import org.freeplane.plugin.graph.control.OperationalStatus;
 import org.freeplane.plugin.graph.control.WorkspaceCloseController;
 import org.freeplane.plugin.graph.control.WorkspaceSessionStatus;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
+import org.freeplane.plugin.graph.geometry.HullGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.geometry.NodeGeometry;
 import org.freeplane.plugin.graph.layout.LayoutFrame;
+import org.freeplane.plugin.graph.projection.BoundaryTier;
+import org.freeplane.plugin.graph.projection.EnclosureHullKey;
+import org.freeplane.plugin.graph.projection.EnclosureKey;
 import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
+import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.input.MapAvailability;
 import org.freeplane.plugin.graph.projection.input.SafeNodeLabel;
 import org.freeplane.plugin.graph.projection.input.SourceNodeKey;
 import org.freeplane.plugin.graph.workspace.ListenerRegistration;
+import org.freeplane.plugin.graph.workspace.model.DisplaySettings;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 import org.freeplane.plugin.graph.workspace.model.UnknownXml;
 import org.freeplane.plugin.graph.workspace.model.Viewport;
+import org.freeplane.plugin.graph.workspace.model.DisplaySettings.CanvasTheme;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.core.resources.ResourceController;
 import org.junit.After;
@@ -254,6 +270,121 @@ public class GraphWorkspaceWindowModelShould {
     }
 
     @Test
+    public void startsWithPersistedPresentationValuesAndAppliesThePersistedThemeBeforePainting() {
+        DisplaySettings settings = DisplaySettings.of(false, CanvasTheme.DARK, false, false,
+            emptyUnknownXml());
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false,
+            WorkspaceSessionStatus.empty(), presentation(settings, ACTIVE_ID));
+        GraphWorkspaceWindowModel model = fixture.model();
+
+        assertThat(model.settingsPanel().showArrowheads().isSelected()).isFalse();
+        assertThat(model.settingsPanel().canvasTheme().getSelectedItem()).isEqualTo(CanvasTheme.DARK);
+        assertThat(model.settingsPanel().rememberViewport().isSelected()).isFalse();
+        assertThat(model.settingsPanel().dimUnrelated().isSelected()).isFalse();
+        BufferedImage image = paintCanvas(model.canvas());
+        assertThat(image.getRGB(0, 0)).isEqualTo(GraphTheme.resolve(CanvasTheme.DARK,
+            palette(ACTIVE_ID)).background().getRGB());
+        model.close();
+    }
+
+    @Test
+    public void refreshesCanvasPresentationAfterADisplayCommandWithoutResettingOtherSettings() {
+        DisplaySettings initial = DisplaySettings.of(true, CanvasTheme.LIGHT, true, true,
+            emptyUnknownXml());
+        DisplaySettings changed = DisplaySettings.of(false, CanvasTheme.DARK, true, false,
+            emptyUnknownXml());
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false,
+            WorkspaceSessionStatus.empty(), presentation(initial, ACTIVE_ID));
+        GraphWorkspaceWindowModel model = fixture.model();
+        when(fixture.binding.currentPresentation()).thenReturn(presentation(changed, ACTIVE_ID));
+
+        model.execute(GraphCommands.display(changed));
+
+        assertThat(model.settingsPanel().showArrowheads().isSelected()).isFalse();
+        assertThat(model.settingsPanel().canvasTheme().getSelectedItem()).isEqualTo(CanvasTheme.DARK);
+        assertThat(model.settingsPanel().rememberViewport().isSelected()).isTrue();
+        assertThat(model.settingsPanel().dimUnrelated().isSelected()).isFalse();
+        assertThat(paintCanvas(model.canvas()).getRGB(0, 0)).isEqualTo(GraphTheme.resolve(CanvasTheme.DARK,
+            palette(ACTIVE_ID)).background().getRGB());
+        verify(fixture.handle).execute(any(GraphCommand.class));
+        model.close();
+    }
+
+    @Test
+    public void paintsAVisibleEnclosureThroughTheWindowModel() {
+        DisplaySettings settings = DisplaySettings.defaults();
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            enclosureState(ACTIVE_ID),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false,
+            WorkspaceSessionStatus.empty(), presentation(settings, ACTIVE_ID));
+        GraphWorkspaceWindowModel model = fixture.model();
+
+        BufferedImage image = paintCanvas(model.canvas());
+
+        assertThat(nonBackgroundPixels(image, image.getRGB(0, 0))).isGreaterThan(0);
+        model.close();
+    }
+
+    @Test
+    public void fitsWhenRememberViewportIsDisabledEvenIfThePersistedViewportOverlaps() {
+        DisplaySettings settings = DisplaySettings.of(true, CanvasTheme.LIGHT, false, true,
+            emptyUnknownXml());
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false,
+            WorkspaceSessionStatus.empty(), presentation(settings, ACTIVE_ID));
+        GraphWorkspaceWindowModel model = fixture.model();
+
+        assertThat(model.canvas().viewport().zoom()).isGreaterThan(1.0);
+        model.close();
+    }
+
+    @Test
+    public void keepsMenuEnablementAlignedWithReadOnlyAndIndependentHistoryRules() {
+        WorkspaceSessionStatus status = WorkspaceSessionStatus.of(true, true, true, false,
+            Collections.<MapReferenceId>emptySet(),
+            java.util.Optional.of(new org.freeplane.plugin.graph.command.MapUndoTarget(ACTIVE_ID,
+                "Active", true)));
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false,
+            status, presentation(DisplaySettings.defaults(), ACTIVE_ID));
+        GraphWorkspaceWindowModel model = fixture.model();
+        model.mapList().selectMap(ACTIVE_ID);
+
+        assertThat(menuItem(model, "save").isEnabled()).isTrue();
+        assertThat(menuItem(model, "save-as").isEnabled()).isTrue();
+        assertThat(menuItem(model, "add-map").isEnabled()).isTrue();
+        assertThat(menuItem(model, "remove-map").isEnabled()).isTrue();
+        assertThat(menuItem(model, "fit-graph").isEnabled()).isTrue();
+        assertThat(menuItem(model, "reset-zoom").isEnabled()).isTrue();
+        assertThat(menuItem(model, "settings").isEnabled()).isTrue();
+        assertThat(menuItem(model, "undo").isEnabled()).isTrue();
+        assertThat(menuItem(model, "redo").isEnabled()).isTrue();
+        assertThat(menuItem(model, "undo-source-map").isEnabled()).isTrue();
+
+        model.setReadOnly(true);
+
+        assertThat(menuItem(model, "save").isEnabled()).isFalse();
+        assertThat(menuItem(model, "save-as").isEnabled()).isFalse();
+        assertThat(menuItem(model, "add-map").isEnabled()).isFalse();
+        assertThat(menuItem(model, "remove-map").isEnabled()).isFalse();
+        assertThat(menuItem(model, "retry-map").isEnabled()).isFalse();
+        assertThat(menuItem(model, "fit-graph").isEnabled()).isTrue();
+        assertThat(menuItem(model, "reset-zoom").isEnabled()).isTrue();
+        assertThat(menuItem(model, "settings").isEnabled()).isTrue();
+        assertThat(model.toolbar().settingsButton().isEnabled()).isTrue();
+        assertThat(menuItem(model, "undo").isEnabled()).isFalse();
+        assertThat(menuItem(model, "redo").isEnabled()).isFalse();
+        assertThat(menuItem(model, "undo-source-map").isEnabled()).isFalse();
+        model.close();
+    }
+
+    @Test
     public void fitsAnOutOfRangeStateDeliveredBeforeInitialLayoutExactlyOnce() {
         Viewport persisted = Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml());
         Fixture fixture = fixture(persisted, emptyState(),
@@ -345,12 +476,20 @@ public class GraphWorkspaceWindowModelShould {
 
     private static Fixture fixture(Viewport viewport, CanvasState state,
             List<GraphWorkspaceViewBinding.MapRegistration> registrations, boolean readOnly) {
-        return fixture(viewport, state, registrations, readOnly, WorkspaceSessionStatus.empty());
+        return fixture(viewport, state, registrations, readOnly, WorkspaceSessionStatus.empty(),
+            presentation(DisplaySettings.defaults(), ACTIVE_ID));
     }
 
     private static Fixture fixture(Viewport viewport, CanvasState state,
             List<GraphWorkspaceViewBinding.MapRegistration> registrations, boolean readOnly,
             WorkspaceSessionStatus sessionStatus) {
+        return fixture(viewport, state, registrations, readOnly, sessionStatus,
+            presentation(DisplaySettings.defaults(), ACTIVE_ID));
+    }
+
+    private static Fixture fixture(Viewport viewport, CanvasState state,
+            List<GraphWorkspaceViewBinding.MapRegistration> registrations, boolean readOnly,
+            WorkspaceSessionStatus sessionStatus, GraphWorkspacePresentation presentation) {
         GraphWorkspaceController applicationController = mock(GraphWorkspaceController.class);
         GraphWorkspaceHandle handle = mock(GraphWorkspaceHandle.class);
         WorkspaceCloseController closeController = mock(WorkspaceCloseController.class);
@@ -361,6 +500,7 @@ public class GraphWorkspaceWindowModelShould {
         when(binding.currentCanvasState()).thenReturn(state);
         when(binding.currentMapRows()).thenReturn(registrations);
         when(binding.isReadOnly()).thenReturn(readOnly);
+        when(binding.currentPresentation()).thenReturn(presentation);
         when(binding.currentSessionStatus()).thenReturn(sessionStatus);
         when(binding.addCanvasStateListener(any())).thenReturn(registration);
         when(binding.addSessionStatusListener(any())).thenReturn(sessionRegistration);
@@ -398,6 +538,86 @@ public class GraphWorkspaceWindowModelShould {
         LayoutFrame layout = LayoutFrame.of(0L, LayoutPositions.of(
             Collections.singletonMap(key, center), Collections.emptyMap()), false);
         return CanvasState.of(0L, projection, layout, geometry, OperationalStatus.IDLE);
+    }
+
+    private static CanvasState enclosureState(MapReferenceId mapId) {
+        SourceNodeKey source = SourceNodeKey.transientPath(mapId, Collections.emptyList());
+        EnclosureKey endpoint = EnclosureKey.of(source);
+        EnclosureHullKey hullKey = EnclosureHullKey.of(Collections.singletonList(endpoint));
+        ProjectedEnclosure enclosure = ProjectedEnclosure.of(hullKey,
+            Collections.singletonList(endpoint),
+            Collections.singletonList(SafeNodeLabel.of("Enclosure", "Enclosure")), "Map",
+            java.util.Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(),
+            Collections.<EnclosureHullKey>emptyList(), true, BoundaryTier.EMPHATIC);
+        LayoutPoint anchor = LayoutPoint.of(0.0, 0.0);
+        HullGeometry hull = HullGeometry.of(Arrays.asList(LayoutPoint.of(-30.0, -20.0),
+            LayoutPoint.of(30.0, -20.0), LayoutPoint.of(30.0, 20.0), LayoutPoint.of(-30.0, 20.0)), anchor);
+        GraphProjection projection = GraphProjection.projected(0L,
+            Collections.<ProjectedNode>emptyList(), Collections.singletonList(enclosure),
+            Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+        GraphGeometry geometry = GraphGeometry.of(Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(),
+            Collections.singletonMap(hullKey, hull), Collections.emptyMap());
+        LayoutFrame layout = LayoutFrame.of(0L, LayoutPositions.of(Collections.emptyMap(),
+            Collections.singletonMap(hullKey, anchor)), false);
+        return CanvasState.of(0L, projection, layout, geometry, OperationalStatus.IDLE);
+    }
+
+    private static GraphWorkspacePresentation presentation(final DisplaySettings settings,
+            final MapReferenceId... ids) {
+        List<GraphWorkspacePresentation.MapColor> colors = new java.util.ArrayList<GraphWorkspacePresentation.MapColor>();
+        String[] palette = new String[] {"#4E79A7", "#E15759", "#59A14F", "#F28E2B"};
+        for (int index = 0; index < ids.length; index++) {
+            colors.add(GraphWorkspacePresentation.MapColor.of(ids[index], palette[index % palette.length]));
+        }
+        return GraphWorkspacePresentation.of(settings, colors);
+    }
+
+    private static Map<MapReferenceId, String> palette(final MapReferenceId... ids) {
+        Map<MapReferenceId, String> result = new LinkedHashMap<MapReferenceId, String>();
+        String[] values = new String[] {"#4E79A7", "#E15759", "#59A14F", "#F28E2B"};
+        for (int index = 0; index < ids.length; index++) {
+            result.put(ids[index], values[index % values.length]);
+        }
+        return result;
+    }
+
+    private static BufferedImage paintCanvas(final GraphCanvas canvas) {
+        int width = Math.max(1, canvas.getWidth());
+        int height = Math.max(1, canvas.getHeight());
+        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = image.createGraphics();
+        try {
+            canvas.paint(graphics);
+        }
+        finally {
+            graphics.dispose();
+        }
+        return image;
+    }
+
+    private static int nonBackgroundPixels(final BufferedImage image, final int background) {
+        int count = 0;
+        for (int y = 0; y < image.getHeight(); y++) {
+            for (int x = 0; x < image.getWidth(); x++) {
+                if (image.getRGB(x, y) != background) {
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+
+    private static JMenuItem menuItem(final GraphWorkspaceWindowModel model, final String name) {
+        final String expected = "graph-workspace-menu-item-" + name;
+        for (int menuIndex = 0; menuIndex < model.menuBar().getMenuCount(); menuIndex++) {
+            JMenu menu = model.menuBar().getMenu(menuIndex);
+            for (Component component : menu.getMenuComponents()) {
+                if (component instanceof JMenuItem && expected.equals(component.getName())) {
+                    return (JMenuItem) component;
+                }
+            }
+        }
+        throw new AssertionError("Missing menu item " + expected);
     }
 
     private static final class Fixture {

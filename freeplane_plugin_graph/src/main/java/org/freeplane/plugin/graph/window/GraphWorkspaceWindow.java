@@ -41,12 +41,14 @@ import org.freeplane.plugin.graph.canvas.GraphIntent;
 import org.freeplane.plugin.graph.canvas.GraphInteractionController;
 import org.freeplane.plugin.graph.canvas.GraphPaintState;
 import org.freeplane.plugin.graph.canvas.GraphSearchModel;
+import org.freeplane.plugin.graph.canvas.GraphTheme;
 import org.freeplane.plugin.graph.canvas.GraphViewport;
 import org.freeplane.plugin.graph.canvas.InteractionTool;
 import org.freeplane.plugin.graph.control.CanvasState;
 import org.freeplane.plugin.graph.control.CanvasStateListener;
 import org.freeplane.plugin.graph.control.GraphWorkspaceController;
 import org.freeplane.plugin.graph.control.GraphWorkspaceHandle;
+import org.freeplane.plugin.graph.control.GraphWorkspacePresentation;
 import org.freeplane.plugin.graph.control.GraphWorkspaceView;
 import org.freeplane.plugin.graph.control.GraphWorkspaceViewBinding;
 import org.freeplane.plugin.graph.control.WorkspaceCloseController;
@@ -268,8 +270,16 @@ final class GraphWorkspaceWindowModel {
     private final Action redoWorkspaceAction;
     private final Action sourceMapUndoAction;
     private final GraphViewport initialViewport;
+    private JMenuItem fileSaveMenuItem;
+    private JMenuItem fileSaveAsMenuItem;
+    private JMenuItem viewSettingsMenuItem;
+    private JMenuItem mapsAddMenuItem;
+    private JMenuItem mapsRemoveMenuItem;
+    private JMenuItem mapsRetryMenuItem;
+    private JMenuItem mapsLocateMenuItem;
     private CanvasState currentState;
     private WorkspaceSessionStatus currentSessionStatus;
+    private GraphWorkspacePresentation currentPresentation;
     private GraphPaintState paintState = GraphPaintState.empty();
     private ProjectedNodeKey selectedNode;
     private ProjectedEndpointKey selectedEndpoint;
@@ -346,8 +356,14 @@ final class GraphWorkspaceWindowModel {
         canvas.setMinimumSize(new Dimension(320, 240));
         canvas.setSize(CANVAS_PREFERRED_SIZE);
         mapList = new MapListPanel(routedHandle, pathChooser);
+        mapList.rowList().addListSelectionListener(event -> {
+            if (!event.getValueIsAdjusting()) {
+                updateMenuEnablement();
+            }
+        });
         toolbar = new WorkspaceToolbar(applicationController, routedHandle, canvas, pathChooser);
-        settingsPanel = new WorkspaceSettingsPanel(routedHandle, DisplaySettings.defaults());
+        currentPresentation = presentationOrDefault(binding.currentPresentation());
+        settingsPanel = new WorkspaceSettingsPanel(routedHandle, currentPresentation.displaySettings());
         statusSlot = new JPanel(new BorderLayout());
         statusSlot.setName("graph-workspace-status-slot");
         statusSlot.setPreferredSize(new Dimension(0, 26));
@@ -415,6 +431,7 @@ final class GraphWorkspaceWindowModel {
         if (currentSessionStatus == null) {
             currentSessionStatus = WorkspaceSessionStatus.empty();
         }
+        applyPresentation(currentPresentation);
         if (currentState != null) {
             canvas.setCanvasState(currentState);
         }
@@ -435,6 +452,42 @@ final class GraphWorkspaceWindowModel {
                 acceptCanvasState(state);
             }
         }));
+    }
+
+    private static GraphWorkspacePresentation presentationOrDefault(
+            final GraphWorkspacePresentation presentation) {
+        return presentation == null ? GraphWorkspacePresentation.defaults() : presentation;
+    }
+
+    private static Map<MapReferenceId, String> palette(final GraphWorkspacePresentation presentation) {
+        final Map<MapReferenceId, String> result = new LinkedHashMap<MapReferenceId, String>();
+        for (final GraphWorkspacePresentation.MapColor color : presentation.mapColors()) {
+            result.put(color.mapReferenceId(), color.color());
+        }
+        return result;
+    }
+
+    private void applyPresentation(final GraphWorkspacePresentation value) {
+        final GraphWorkspacePresentation next = Objects.requireNonNull(value, "presentation");
+        final DisplaySettings previousSettings = currentPresentation == null
+            ? null : currentPresentation.displaySettings();
+        currentPresentation = next;
+        final DisplaySettings settings = next.displaySettings();
+        settingsPanel.setSettings(settings);
+        canvas.setTheme(GraphTheme.resolve(settings.canvasTheme(), palette(next)));
+        canvas.setShowArrowheads(settings.showArrowheads());
+        canvas.setDimUnrelated(settings.dimUnrelatedNodes());
+        if (previousSettings != null && previousSettings.rememberViewport()
+                && !settings.rememberViewport()) {
+            initialViewportPending = true;
+        }
+    }
+
+    private void refreshPresentation() {
+        final GraphWorkspacePresentation presentation = binding.currentPresentation();
+        if (presentation != null) {
+            applyPresentation(presentation);
+        }
     }
 
     private static ListenerRegistration registrationOrNoOp(final ListenerRegistration registration) {
@@ -500,6 +553,7 @@ final class GraphWorkspaceWindowModel {
                 TextUtils.getText("graph_workspace.action.undo_source_map.none"));
             sourceMapUndoAction.setEnabled(false);
         }
+        updateMenuEnablement();
     }
 
     private Optional<String> selectedEndpointText() {
@@ -510,6 +564,8 @@ final class GraphWorkspaceWindowModel {
 
     private GraphCommandResult executeCommand(final GraphCommand command) {
         final GraphCommandResult result = handle.execute(Objects.requireNonNull(command, "command"));
+        refreshPresentation();
+        applyInitialViewport(currentState);
         if (result != null && result.editorViewActivated()) {
             graphFocus.run();
         }
@@ -759,6 +815,7 @@ final class GraphWorkspaceWindowModel {
                     return;
                 }
                 currentState = state;
+                refreshPresentation();
                 canvas.setCanvasState(state);
                 applyInitialViewport(state);
                 updateMapRows(state);
@@ -786,6 +843,7 @@ final class GraphWorkspaceWindowModel {
     private void setReadOnlyOnEdt(final boolean value) {
         readOnly = value;
         toolbar.setReadOnly(value);
+        toolbar.settingsButton().setEnabled(true);
         mapList.setReadOnly(value);
         settingsPanel.setReadOnly(value);
         if (value) {
@@ -797,6 +855,25 @@ final class GraphWorkspaceWindowModel {
         }
         updateMapRows(currentState);
         updateStatusBar();
+    }
+
+    private void updateMenuEnablement() {
+        if (fileSaveMenuItem == null) {
+            return;
+        }
+        fileSaveMenuItem.setEnabled(toolbar.saveButton().isEnabled());
+        fileSaveAsMenuItem.setEnabled(toolbar.saveAsButton().isEnabled());
+        toolbar.settingsButton().setEnabled(true);
+        viewSettingsMenuItem.setEnabled(true);
+        final MapListPanel.MapRow selectedMap = mapList.selectedRow();
+        mapsAddMenuItem.setEnabled(!readOnly);
+        mapsRemoveMenuItem.setEnabled(!readOnly && selectedMap != null
+            && selectedMap.state() != MapListPanel.RowState.READ_ONLY);
+        mapsRetryMenuItem.setEnabled(!readOnly && selectedMap != null
+            && selectedMap.state() == MapListPanel.RowState.RETRYABLE);
+        mapsLocateMenuItem.setEnabled(!readOnly && selectedMap != null
+            && (selectedMap.state() == MapListPanel.RowState.MISSING
+                || selectedMap.state() == MapListPanel.RowState.RETRYABLE));
     }
 
     private JPanel createContent() {
@@ -819,8 +896,12 @@ final class GraphWorkspaceWindowModel {
         result.setName("graph-workspace-menu-bar");
         final JMenu file = menu("graph_workspace.menu.file", "graph-workspace-file-menu");
         file.add(item("graph_workspace.action.open", "open", event -> toolbar.openButton().doClick()));
-        file.add(item("graph_workspace.action.save", "save", event -> toolbar.saveButton().doClick()));
-        file.add(item("graph_workspace.action.save_as", "save-as", event -> toolbar.saveAsButton().doClick()));
+        fileSaveMenuItem = item("graph_workspace.action.save", "save",
+            event -> toolbar.saveButton().doClick());
+        file.add(fileSaveMenuItem);
+        fileSaveAsMenuItem = item("graph_workspace.action.save_as", "save-as",
+            event -> toolbar.saveAsButton().doClick());
+        file.add(fileSaveAsMenuItem);
         file.addSeparator();
         file.add(item("graph_workspace.action.close", "close", event -> closeRequest.run()));
 
@@ -835,13 +916,23 @@ final class GraphWorkspaceWindowModel {
             event -> toolbar.resetZoomButton().doClick()));
         view.add(item("graph_workspace.action.zoom_in", "zoom-in", event -> toolbar.zoomInButton().doClick()));
         view.add(item("graph_workspace.action.zoom_out", "zoom-out", event -> toolbar.zoomOutButton().doClick()));
-        view.add(item("graph_workspace.action.settings", "settings", event -> toolbar.settingsButton().doClick()));
+        viewSettingsMenuItem = item("graph_workspace.action.settings", "settings",
+            event -> toolbar.settingsButton().doClick());
+        view.add(viewSettingsMenuItem);
 
         final JMenu maps = menu("graph_workspace.menu.maps", "graph-workspace-maps-menu");
-        maps.add(item("graph_workspace.action.add_map", "add-map", event -> mapList.addButton().doClick()));
-        maps.add(item("graph_workspace.action.remove_map", "remove-map", event -> mapList.removeButton().doClick()));
-        maps.add(item("graph_workspace.action.retry_map", "retry-map", event -> mapList.retryButton().doClick()));
-        maps.add(item("graph_workspace.action.locate_map", "locate-map", event -> mapList.locateButton().doClick()));
+        mapsAddMenuItem = item("graph_workspace.action.add_map", "add-map",
+            event -> mapList.addButton().doClick());
+        maps.add(mapsAddMenuItem);
+        mapsRemoveMenuItem = item("graph_workspace.action.remove_map", "remove-map",
+            event -> mapList.removeButton().doClick());
+        maps.add(mapsRemoveMenuItem);
+        mapsRetryMenuItem = item("graph_workspace.action.retry_map", "retry-map",
+            event -> mapList.retryButton().doClick());
+        maps.add(mapsRetryMenuItem);
+        mapsLocateMenuItem = item("graph_workspace.action.locate_map", "locate-map",
+            event -> mapList.locateButton().doClick());
+        maps.add(mapsLocateMenuItem);
 
         result.add(file);
         result.add(edit);
@@ -896,6 +987,7 @@ final class GraphWorkspaceWindowModel {
                     && selectedNode.mapReferenceId().equals(accumulator.mapReferenceId)));
         }
         mapList.setRows(rows);
+        updateMenuEnablement();
     }
 
     private static MapListPanel.RowState rowStateFor(final MapAvailability availability) {
@@ -1015,7 +1107,8 @@ final class GraphWorkspaceWindowModel {
         initialViewportPending = false;
         final Dimension size = canvas.getSize();
         final Dimension overlapSize = size.width > 0 && size.height > 0 ? size : CANVAS_PREFERRED_SIZE;
-        if (!initialViewport.overlaps(bounds.minX, bounds.minY, bounds.maxX, bounds.maxY, overlapSize)) {
+        if (!currentPresentation.displaySettings().rememberViewport()
+                || !initialViewport.overlaps(bounds.minX, bounds.minY, bounds.maxX, bounds.maxY, overlapSize)) {
             canvas.fitGraph();
         }
     }
