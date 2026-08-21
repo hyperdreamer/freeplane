@@ -352,6 +352,46 @@ public class GraphCanvasPaintShould {
     }
 
     @Test
+    public void paintVisibleEnclosureUsingPersistedPaletteInput() {
+        Map<MapReferenceId, String> colors = new LinkedHashMap<MapReferenceId, String>();
+        colors.put(FIRST_MAP, "#4E79A7");
+        colors.put(SECOND_MAP, "#E15759");
+        GraphTheme theme = GraphTheme.resolve(CanvasTheme.LIGHT, colors);
+
+        BufferedImage image = paint(paletteState(FIRST_MAP, SECOND_MAP, FIRST_MAP),
+            GraphPaintState.empty(), theme, RenderingLevel.FULL);
+
+        assertThat(nonBackgroundPixels(image, theme.background())).isGreaterThan(100);
+    }
+
+    @Test
+    public void suppressAndRestoreDirectionalArrowheadsInThePaintedCanvas() {
+        Fixture fixture = fixture(16.0);
+        GraphTheme theme = lightTheme();
+        GraphCanvas canvas = new GraphCanvas();
+        canvas.setSize(SIZE);
+        canvas.setTheme(theme);
+        canvas.setCanvasState(fixture.state);
+        canvas.setViewport(GraphViewport.of(0.0, 0.0, 1.0));
+        canvas.setShowArrowheads(false);
+        BufferedImage withoutArrowheads = paintCanvas(canvas);
+
+        canvas.setShowArrowheads(true);
+        BufferedImage withArrowheads = paintCanvas(canvas);
+        ProjectedEdge noArrowEdge = ProjectedEdge.of(fixture.edge.key(), Arrays.asList(
+            undirectedRelationshipContributor("00000000-0000-0000-0000-000000000021", 1L,
+                fixture.firstEndpoint, fixture.secondEndpoint),
+            undirectedRelationshipContributor("00000000-0000-0000-0000-000000000022", 2L,
+                fixture.firstEndpoint, fixture.secondEndpoint)));
+        BufferedImage expectedWithoutArrowheads = paint(stateWithEdges(fixture.state,
+            Collections.singletonList(noArrowEdge)), GraphPaintState.empty(), theme, RenderingLevel.FULL);
+
+        assertThat(fixture.edge.arrowAtSecond()).isTrue();
+        assertThat(differentPixels(withoutArrowheads, expectedWithoutArrowheads)).isZero();
+        assertThat(differentPixels(withArrowheads, expectedWithoutArrowheads)).isGreaterThan(0);
+    }
+
+    @Test
     public void rejectPaintingAnUnregisteredMapColor() {
         GraphTheme theme = lightTheme();
 
@@ -927,6 +967,14 @@ public class GraphCanvasPaintShould {
             final ProjectedEndpointKey source, final ProjectedEndpointKey target) {
         GraphRelationshipRecord record = GraphRelationshipRecord.of(RelationshipId.of(relationshipId), sequence,
             reference(FIRST_MAP, "first"), reference(SECOND_MAP, "second"), RelationshipDirection.FORWARD,
+            Collections.<UnknownXml>emptyList());
+        return EdgeContributor.graphRelationship(record, source, target);
+    }
+
+    private static EdgeContributor undirectedRelationshipContributor(final String relationshipId,
+            final long sequence, final ProjectedEndpointKey source, final ProjectedEndpointKey target) {
+        GraphRelationshipRecord record = GraphRelationshipRecord.of(RelationshipId.of(relationshipId), sequence,
+            reference(FIRST_MAP, "first"), reference(SECOND_MAP, "second"), RelationshipDirection.UNDIRECTED,
             Collections.<UnknownXml>emptyList());
         return EdgeContributor.graphRelationship(record, source, target);
     }

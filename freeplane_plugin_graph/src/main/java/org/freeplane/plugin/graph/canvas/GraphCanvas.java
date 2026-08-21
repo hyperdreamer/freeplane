@@ -36,11 +36,15 @@ public final class GraphCanvas extends JComponent implements Accessible {
     private volatile GraphViewport viewport;
     private volatile GraphTheme theme;
     private volatile GraphInteractionController interactionController;
+    private volatile boolean showArrowheads;
+    private volatile boolean dimUnrelated;
 
     public GraphCanvas() {
         paintState = GraphPaintState.empty();
         viewport = GraphViewport.of(0.0, 0.0, 1.0);
         theme = GraphTheme.resolve(CanvasTheme.FOLLOW_FREEPLANE);
+        showArrowheads = true;
+        dimUnrelated = true;
         setOpaque(true);
         setFocusable(true);
         setDoubleBuffered(true);
@@ -66,7 +70,7 @@ public final class GraphCanvas extends JComponent implements Accessible {
         onEdt(new Runnable() {
             @Override
             public void run() {
-                paintState = value;
+                paintState = dimUnrelated ? value : value.withDimUnrelated(false);
                 repaint();
             }
         });
@@ -206,8 +210,37 @@ public final class GraphCanvas extends JComponent implements Accessible {
         });
     }
 
+    public void setShowArrowheads(final boolean value) {
+        onEdt(new Runnable() {
+            @Override
+            public void run() {
+                showArrowheads = value;
+                repaint();
+            }
+        });
+    }
+
+    public void setDimUnrelated(final boolean value) {
+        onEdt(new Runnable() {
+            @Override
+            public void run() {
+                dimUnrelated = value;
+                paintState = paintState.withDimUnrelated(value);
+                repaint();
+            }
+        });
+    }
+
     GraphTheme theme() {
         return theme;
+    }
+
+    boolean showArrowheads() {
+        return showArrowheads;
+    }
+
+    boolean dimUnrelated() {
+        return dimUnrelated;
     }
 
     void panByPixels(final double dx, final double dy) {
@@ -243,7 +276,7 @@ public final class GraphCanvas extends JComponent implements Accessible {
         final int nodeCount = state == null ? 0 : state.projection().nodes().size();
         final int edgeCount = state == null ? 0 : state.projection().edges().size();
         painter.paint((Graphics2D) graphics, state, paintState, viewport, size, theme,
-            renderingPolicy.forCounts(nodeCount, edgeCount));
+            renderingPolicy.forCounts(nodeCount, edgeCount), showArrowheads, dimUnrelated);
     }
 
     private Bounds visibleBounds(final CanvasState state) {

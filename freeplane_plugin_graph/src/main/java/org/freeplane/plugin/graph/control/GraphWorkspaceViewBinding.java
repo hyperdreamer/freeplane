@@ -1,10 +1,12 @@
 package org.freeplane.plugin.graph.control;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
 import org.freeplane.plugin.graph.projection.input.MapAvailability;
 import org.freeplane.plugin.graph.workspace.ListenerRegistration;
+import org.freeplane.plugin.graph.workspace.model.DisplaySettings;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 import org.freeplane.plugin.graph.workspace.model.Viewport;
 
@@ -12,6 +14,10 @@ public interface GraphWorkspaceViewBinding {
     CanvasState currentCanvasState();
     Viewport currentViewport();
     List<MapRegistration> currentMapRows();
+    default GraphWorkspacePresentation currentPresentation() {
+        return GraphWorkspacePresentation.of(DisplaySettings.defaults(),
+            Collections.<GraphWorkspacePresentation.MapColor>emptyList());
+    }
     default boolean isReadOnly() {
         return false;
     }
