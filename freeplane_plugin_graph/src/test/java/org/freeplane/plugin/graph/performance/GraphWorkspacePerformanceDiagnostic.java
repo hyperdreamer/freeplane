@@ -3,6 +3,7 @@ package org.freeplane.plugin.graph.performance;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.font.FontRenderContext;
 import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
@@ -17,6 +18,7 @@ import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletionException;
@@ -55,9 +57,11 @@ import org.freeplane.plugin.graph.layout.LayoutRequest;
 import org.freeplane.plugin.graph.layout.LayoutWorker;
 import org.freeplane.plugin.graph.layout.MapTierCorrection;
 import org.freeplane.plugin.graph.layout.graphstream.GraphStreamLayoutFactory;
+import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.projection.ProjectionDiff;
 import org.freeplane.plugin.graph.projection.ProjectionEngine;
+import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
 import org.freeplane.plugin.graph.workspace.model.DisplaySettings;
 import org.freeplane.plugin.graph.workspace.model.WorkspaceId;
 
@@ -70,7 +74,7 @@ public final class GraphWorkspacePerformanceDiagnostic {
 
     private final Path outputDirectory;
     private final boolean strict;
-    private final RelativeNanoClock clock;
+    private final NanoClock clock;
     private final long processStart;
     private final ExecutorService boundedOperations;
     private final GraphGeometryEngine geometryEngine = new GraphGeometryEngine();
@@ -83,11 +87,11 @@ public final class GraphWorkspacePerformanceDiagnostic {
         new ArrayList<PerformanceMeasurements.Summary>();
     private boolean preCorrectionOverlapChecked;
 
-    private GraphWorkspacePerformanceDiagnostic(final Path outputDirectory, final boolean strict) {
+    GraphWorkspacePerformanceDiagnostic(final Path outputDirectory, final boolean strict, final NanoClock clock) {
         this.outputDirectory = outputDirectory;
         this.strict = strict;
-        clock = new RelativeNanoClock();
-        processStart = clock.nanoTime();
+        this.clock = Objects.requireNonNull(clock, "clock");
+        processStart = this.clock.nanoTime();
         boundedOperations = Executors.newCachedThreadPool(new DaemonThreadFactory("graph-performance-bound"));
         textMetrics = new AwtGeometryTextMetrics(new Font("Dialog", Font.PLAIN, 12),
             new FontRenderContext(new AffineTransform(), false, false));
@@ -100,7 +104,7 @@ public final class GraphWorkspacePerformanceDiagnostic {
             : Paths.get(args[0]);
         final boolean strict = Boolean.parseBoolean(System.getProperty("graphStrictPerformance", "false"));
         try {
-            new GraphWorkspacePerformanceDiagnostic(output, strict).run();
+            new GraphWorkspacePerformanceDiagnostic(output, strict, new RelativeNanoClock()).run();
         }
         catch (final Throwable failure) {
             failure.printStackTrace(System.err);
@@ -280,7 +284,7 @@ public final class GraphWorkspacePerformanceDiagnostic {
         final long fullWorkerEnd = clock.nanoTime();
         measurements.recordDuration(PerformanceMeasurements.Stage.FULL_WORKER, fullWorkerStart, fullWorkerEnd,
             warmup);
-        requireUsableFrame(workerFrame, "full worker");
+        requireUsableFrame(workerFrame, current, "full worker", PerformanceMeasurements.Stage.FULL_WORKER);
         validatePinConflicts(generated, workerFrame);
 
         final long workerHullStart = clock.nanoTime();
@@ -292,8 +296,7 @@ public final class GraphWorkspacePerformanceDiagnostic {
                 textMetrics);
         final long workerLabelEnd = clock.nanoTime();
 
-        final CanvasState state = CanvasState.of(generation, current, workerFrame, workerGeometry,
-            OperationalStatus.IDLE);
+        final CanvasState state = acceptedFirstFrameState(generation, current, workerFrame, workerGeometry);
         final long swapStart = clock.nanoTime();
         setCanvasStateBounded(state);
         final long swapEnd = clock.nanoTime();
@@ -327,7 +330,7 @@ public final class GraphWorkspacePerformanceDiagnostic {
             final long mutationEnd = clock.nanoTime();
             measurements.recordDuration(PerformanceMeasurements.Stage.MUTATION, mutationStart, mutationEnd,
                 warmup);
-            requireUsableFrame(applied, "direct apply");
+            requireUsableFrame(applied, projection, "direct apply", PerformanceMeasurements.Stage.MUTATION);
 
             final GraphGeometry rawHull = geometryEngine.computeHulls(projection, applied.positions());
             if (!preCorrectionOverlapChecked
@@ -358,7 +361,7 @@ public final class GraphWorkspacePerformanceDiagnostic {
             final LayoutFrame forced = engine.step();
             final long forceEnd = clock.nanoTime();
             measurements.recordDuration(PerformanceMeasurements.Stage.FORCE, forceStart, forceEnd, warmup);
-            requireUsableFrame(forced, "direct force step");
+            requireUsableFrame(forced, projection, "direct force step", PerformanceMeasurements.Stage.FORCE);
         }
         catch (final DiagnosticFailure failure) {
             throw failure;
@@ -549,8 +552,8 @@ public final class GraphWorkspacePerformanceDiagnostic {
     }
 
     private void verifyWorkerCleanup() throws InterruptedException {
-        final long end = System.nanoTime() + TimeUnit.SECONDS.toNanos(5L);
-        while (System.nanoTime() < end) {
+        final long end = clock.nanoTime() + TimeUnit.SECONDS.toNanos(5L);
+        while (clock.nanoTime() < end) {
             boolean workerAlive = false;
             for (final Thread thread : Thread.getAllStackTraces().keySet()) {
                 if (thread.isAlive() && thread.getName().startsWith("freeplane-graph-layout-worker-")) {
@@ -579,6 +582,8 @@ public final class GraphWorkspacePerformanceDiagnostic {
                         final long start = clock.nanoTime();
                         final Graphics2D graphics = image.createGraphics();
                         try {
+                            graphics.setRenderingHint(RenderingHints.KEY_RENDERING,
+                                RenderingHints.VALUE_RENDER_SPEED);
                             canvas.paint(graphics);
                         }
                         finally {
@@ -672,20 +677,56 @@ public final class GraphWorkspacePerformanceDiagnostic {
         return current;
     }
 
-    private static void requireUsableFrame(final LayoutFrame frame, final String operation) {
+    NanoClock clock() {
+        return clock;
+    }
+
+    CanvasState acceptedFirstFrameState(final long generation, final GraphProjection projection,
+            final LayoutFrame frame, final GraphGeometry geometry) {
+        return CanvasState.of(generation, projection, frame, geometry, OperationalStatus.SETTLING);
+    }
+
+    void validateFrameCoverage(final LayoutFrame frame, final GraphProjection projection,
+            final String operation) {
+        Objects.requireNonNull(frame, "frame");
+        Objects.requireNonNull(projection, "projection");
+        Objects.requireNonNull(operation, "operation");
+        final Set<ProjectedNodeKey> expectedNodeKeys = new HashSet<ProjectedNodeKey>();
+        for (final org.freeplane.plugin.graph.projection.ProjectedNode node : projection.nodes()) {
+            expectedNodeKeys.add(node.key());
+        }
+        if (!expectedNodeKeys.equals(frame.positions().nodes().keySet())) {
+            throw new IllegalArgumentException(operation + " node coverage differs");
+        }
+        final Set<EnclosureHullKey> expectedAnchorKeys = new HashSet<EnclosureHullKey>();
+        for (final org.freeplane.plugin.graph.projection.ProjectedEnclosure enclosure : projection.enclosures()) {
+            expectedAnchorKeys.add(enclosure.hullKey());
+        }
+        if (!expectedAnchorKeys.equals(frame.positions().anchors().keySet())) {
+            throw new IllegalArgumentException(operation + " anchor coverage differs");
+        }
+    }
+
+    private void requireUsableFrame(final LayoutFrame frame, final GraphProjection projection,
+            final String operation, final PerformanceMeasurements.Stage stage) {
         if (frame == null || frame.failed()) {
-            throw new DiagnosticFailure(PerformanceMeasurements.Stage.FULL_WORKER,
-                operation + " returned a failed frame");
+            throw new DiagnosticFailure(stage, operation + " returned a failed frame");
+        }
+        try {
+            validateFrameCoverage(frame, projection, operation);
+        }
+        catch (final IllegalArgumentException failure) {
+            throw new DiagnosticFailure(stage, failure.getMessage(), failure);
         }
         for (final org.freeplane.plugin.graph.geometry.LayoutPoint point : frame.positions().nodes().values()) {
             if (!Double.isFinite(point.x()) || !Double.isFinite(point.y())) {
-                throw new DiagnosticFailure(PerformanceMeasurements.Stage.FULL_WORKER,
+                throw new DiagnosticFailure(stage,
                     operation + " returned a non-finite node position");
             }
         }
         for (final org.freeplane.plugin.graph.geometry.LayoutPoint point : frame.positions().anchors().values()) {
             if (!Double.isFinite(point.x()) || !Double.isFinite(point.y())) {
-                throw new DiagnosticFailure(PerformanceMeasurements.Stage.FULL_WORKER,
+                throw new DiagnosticFailure(stage,
                     operation + " returned a non-finite enclosure position");
             }
         }

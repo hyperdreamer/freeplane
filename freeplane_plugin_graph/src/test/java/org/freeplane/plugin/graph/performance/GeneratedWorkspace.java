@@ -417,7 +417,8 @@ public final class GeneratedWorkspace {
         for (int nodeIndex = 0; nodeIndex < references.size(); nodeIndex++) {
             final NodeReference reference = references.get(nodeIndex);
             final NodeSnapshot leaf = NodeSnapshot.of(SourceNodeKey.persisted(reference),
-                SafeNodeLabel.of(reference.nodeId().value(), reference.nodeId().value()), true, false, false,
+                SafeNodeLabel.of("node-full-" + reference.nodeId().value(),
+                    "node-" + reference.nodeId().value()), true, false, false,
                 Collections.<NodeSnapshot>emptyList());
             final int enclosureIndex = nodeIndex < enclosureCount ? nodeIndex : nodeIndex % enclosureCount;
             leavesByEnclosure.get(enclosureIndex).add(leaf);
@@ -597,6 +598,32 @@ public final class GeneratedWorkspace {
         final int relationshipCount = document.relationships().size();
         final int nodeCount = projection.nodes().size();
         final int enclosureCount = projection.enclosures().size();
+        final int[] actualNodesByMap = new int[mapCount];
+        final int[] actualEnclosuresByMap = new int[mapCount];
+        final Map<MapReferenceId, Integer> mapIndexes = new HashMap<MapReferenceId, Integer>();
+        for (int mapIndex = 0; mapIndex < document.maps().size(); mapIndex++) {
+            final MapReferenceId mapId = document.maps().get(mapIndex).id();
+            if (mapIndexes.put(mapId, Integer.valueOf(mapIndex)) != null) {
+                throw new IllegalStateException("Generated workspace map IDs must be unique");
+            }
+        }
+        for (final org.freeplane.plugin.graph.projection.ProjectedNode node : projection.nodes()) {
+            final Integer mapIndex = mapIndexes.get(node.mapReferenceId());
+            if (mapIndex == null) {
+                throw new IllegalStateException("Projected node belongs to an unknown map: " + node);
+            }
+            actualNodesByMap[mapIndex.intValue()]++;
+        }
+        for (final org.freeplane.plugin.graph.projection.ProjectedEnclosure enclosure : projection.enclosures()) {
+            final Integer mapIndex = mapIndexes.get(enclosure.mapReferenceId());
+            if (mapIndex == null) {
+                throw new IllegalStateException("Projected enclosure belongs to an unknown map: " + enclosure);
+            }
+            actualEnclosuresByMap[mapIndex.intValue()]++;
+        }
+        if (scenario == Scenario.SKEWED_REFERENCE) {
+            assertSkewedMapAllocationContract(scenario, actualNodesByMap, actualEnclosuresByMap);
+        }
         int containment = 0;
         int hierarchy = 0;
         int contributors = 0;
@@ -644,6 +671,37 @@ public final class GeneratedWorkspace {
         return new Counts(mapCount, nodeCount, enclosureCount, projection.edges().size(), contributors,
             nativeContributors, relationshipContributors, relationshipCount, containment, hierarchy,
             particles, springs);
+    }
+
+    static void assertSkewedMapAllocationContract(final Scenario scenario, final int[] actualNodesByMap,
+            final int[] actualEnclosuresByMap) {
+        if (scenario == null) {
+            throw new IllegalArgumentException("scenario");
+        }
+        if (actualNodesByMap == null) {
+            throw new IllegalArgumentException("actualNodesByMap");
+        }
+        if (actualEnclosuresByMap == null) {
+            throw new IllegalArgumentException("actualEnclosuresByMap");
+        }
+        if (scenario != Scenario.SKEWED_REFERENCE) {
+            throw new IllegalArgumentException("Skewed map allocation applies only to SKEWED_REFERENCE");
+        }
+        if (actualNodesByMap.length != scenario.mapCount
+                || actualEnclosuresByMap.length != scenario.mapCount) {
+            throw new IllegalArgumentException("Skewed map allocation must contain exactly "
+                + scenario.mapCount + " map buckets");
+        }
+        final int totalNodes = sum(actualNodesByMap);
+        final int totalEnclosures = sum(actualEnclosuresByMap);
+        if (totalNodes != 2000 || totalEnclosures != 1200
+                || actualNodesByMap[0] != 1600 || actualEnclosuresByMap[0] != 960
+                || actualNodesByMap[0] * 5 != totalNodes * 4
+                || actualEnclosuresByMap[0] * 5 != totalEnclosures * 4) {
+            throw new IllegalStateException("Skewed map allocation does not match the reference contract: nodes="
+                + Arrays.toString(actualNodesByMap) + ", enclosures="
+                + Arrays.toString(actualEnclosuresByMap));
+        }
     }
 
     private static int sum(final int[] values) {
