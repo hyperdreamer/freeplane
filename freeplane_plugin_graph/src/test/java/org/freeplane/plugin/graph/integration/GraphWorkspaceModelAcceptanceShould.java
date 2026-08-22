@@ -93,6 +93,7 @@ import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
 import org.freeplane.plugin.graph.projection.ProjectionDiff;
 import org.freeplane.plugin.graph.projection.ProjectionEngine;
 import org.freeplane.plugin.graph.projection.RecoverableReason;
+import org.freeplane.plugin.graph.projection.RelationshipResolution;
 import org.freeplane.plugin.graph.projection.RelationshipStatus;
 import org.freeplane.plugin.graph.projection.input.ConnectorDescriptor;
 import org.freeplane.plugin.graph.projection.input.ConnectorSnapshot;
@@ -493,13 +494,15 @@ public class GraphWorkspaceModelAcceptanceShould {
                 node(MAP_ONE, "second-leaf", "Second leaf", true, false, false)));
         MapSnapshot firstMap = map(MAP_ONE, 1, "First", firstRoot);
         MapSnapshot secondMap = map(MAP_TWO, 2, "Second",
-            node(MAP_TWO, "second-root", "Second root", true, false, false));
+            node(MAP_TWO, "second-root", "Second root", false, false, false,
+                node(MAP_TWO, "second-child", "Second child", true, false, false)));
         GraphRelationshipRecord crossMapRelationship = relationship(2L, reference(MAP_ONE, "first-leaf"),
             reference(MAP_TWO, "second-root"), RelationshipDirection.FORWARD);
+        PinRecord secondMapPin = PinRecord.of(reference(MAP_TWO, "second-child"), 32.0, -18.0, noUnknownXml());
         WorkspaceDocument oneMap = workspace(registration(MAP_ONE, 1L, true));
         WorkspaceDocument twoMaps = workspace(Arrays.asList(registration(MAP_ONE, 1L, true),
             registration(MAP_TWO, 2L, true)), Collections.singletonList(crossMapRelationship),
-            Collections.<PinRecord>emptyList());
+            Collections.singletonList(secondMapPin));
 
         GraphProjection single = project(oneMap, firstMap);
         GraphProjection active = project(twoMaps, availability(twoMaps, MapAvailability.AVAILABLE,
@@ -520,6 +523,16 @@ public class GraphWorkspaceModelAcceptanceShould {
         assertThat(active.relationshipResolutions()).hasSize(1);
         assertThat(active.relationshipResolutions().get(0).status()).isEqualTo(RelationshipStatus.ACTIVE);
         assertThat(active.edges()).hasSize(1);
+        assertThat(active.nodes()).extracting(ProjectedNode::source)
+            .contains(source(MAP_TWO, "second-child"));
+        assertThat(enclosure(active, MAP_TWO, "second-root").directNodes())
+            .containsExactly(ProjectedNodeKey.of(source(MAP_TWO, "second-child")));
+        assertThat(active.pins()).hasSize(1);
+        PinProjection activeSecondMapPin = active.pins().get(0);
+        assertThat(activeSecondMapPin.source()).isEqualTo(reference(MAP_TWO, "second-child"));
+        assertThat(activeSecondMapPin.active()).isTrue();
+        assertThat(activeSecondMapPin.projectedNode())
+            .contains(ProjectedNodeKey.of(source(MAP_TWO, "second-child")));
         assertThat(loading.relationshipResolutions()).hasSize(1);
         assertThat(loading.relationshipResolutions().get(0).status())
             .isEqualTo(RelationshipStatus.UNRESOLVED_RECOVERABLE);
@@ -529,7 +542,7 @@ public class GraphWorkspaceModelAcceptanceShould {
             .contains(ProjectedEndpointKey.ofNode(ProjectedNodeKey.of(source(MAP_ONE, "first-leaf"))));
         assertThat(loading.relationshipResolutions().get(0).target()).isNotPresent();
         assertThat(loading.edges()).isEmpty();
-        assertUnavailableMapAbsent(loading, MAP_TWO);
+        assertUnavailableMapAbsent(loading, MAP_TWO, secondMapPin);
         assertThat(missing.relationshipResolutions()).hasSize(1);
         assertThat(missing.relationshipResolutions().get(0).status())
             .isEqualTo(RelationshipStatus.UNRESOLVED_RECOVERABLE);
@@ -539,7 +552,7 @@ public class GraphWorkspaceModelAcceptanceShould {
             .contains(ProjectedEndpointKey.ofNode(ProjectedNodeKey.of(source(MAP_ONE, "first-leaf"))));
         assertThat(missing.relationshipResolutions().get(0).target()).isNotPresent();
         assertThat(missing.edges()).isEmpty();
-        assertUnavailableMapAbsent(missing, MAP_TWO);
+        assertUnavailableMapAbsent(missing, MAP_TWO, secondMapPin);
     }
 
     @Test
@@ -779,7 +792,7 @@ public class GraphWorkspaceModelAcceptanceShould {
     }
 
     private static void assertUnavailableMapAbsent(final GraphProjection projection,
-            final MapReferenceId unavailableMap) {
+            final MapReferenceId unavailableMap, final PinRecord retainedPin) {
         for (ProjectedNode node : projection.nodes()) {
             assertThat(node.mapReferenceId()).isNotEqualTo(unavailableMap);
         }
@@ -794,12 +807,31 @@ public class GraphWorkspaceModelAcceptanceShould {
                 assertThat(contributor.projectedTarget().mapReferenceId()).isNotEqualTo(unavailableMap);
             }
         }
-        for (PinProjection pin : projection.pins()) {
-            assertThat(pin.source().mapReferenceId()).isNotEqualTo(unavailableMap);
+        for (RelationshipResolution resolution : projection.relationshipResolutions()) {
+            if (resolution.source().isPresent()) {
+                assertThat(resolution.source().get().mapReferenceId()).isNotEqualTo(unavailableMap);
+            }
+            if (resolution.target().isPresent()) {
+                assertThat(resolution.target().get().mapReferenceId()).isNotEqualTo(unavailableMap);
+            }
         }
         for (ProjectedNodeKey key : projection.prominence().keySet()) {
             assertThat(key.mapReferenceId()).isNotEqualTo(unavailableMap);
         }
+        List<PinProjection> unavailablePins = new ArrayList<PinProjection>();
+        for (PinProjection pin : projection.pins()) {
+            if (pin.source().mapReferenceId().equals(unavailableMap)) {
+                unavailablePins.add(pin);
+            }
+        }
+        assertThat(unavailablePins).hasSize(1);
+        assertThat(unavailablePins).allMatch(pin -> !pin.active());
+        PinProjection dormantPin = unavailablePins.get(0);
+        assertThat(dormantPin.record()).isEqualTo(retainedPin);
+        assertThat(dormantPin.source()).isEqualTo(retainedPin.node());
+        assertThat(dormantPin.active()).isFalse();
+        assertThat(dormantPin.dormant()).isTrue();
+        assertThat(dormantPin.projectedNode()).isEmpty();
     }
 
     private static ProjectedEnclosure enclosure(final GraphProjection projection, final MapReferenceId map,
