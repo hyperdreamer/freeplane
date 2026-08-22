@@ -18,6 +18,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import javax.xml.namespace.QName;
+
 import org.freeplane.plugin.graph.projection.EdgeContributor;
 import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.projection.ProjectedEdge;
@@ -50,6 +52,12 @@ public final class GeneratedWorkspace {
     public static final long SEED = 20260810L;
     public static final long FIXED_SEED = SEED;
     private static final List<UnknownXml> NO_UNKNOWN_XML = Collections.emptyList();
+    private static final QName GENERATED_LABELS_ELEMENT = new QName("", "generated-visible-leaf-labels");
+    private static final QName GENERATED_LABEL_ELEMENT = new QName("", "label");
+    private static final QName MAP_ATTRIBUTE = new QName("", "map");
+    private static final QName NODE_ATTRIBUTE = new QName("", "node");
+    private static final QName FULL_ATTRIBUTE = new QName("", "full");
+    private static final QName DISPLAY_ATTRIBUTE = new QName("", "display");
     private static final List<Integer> SKEWED_FINAL_MAP_EMPTY_ENCLOSURE_BUCKETS =
         Collections.unmodifiableList(Arrays.asList(Integer.valueOf(22), Integer.valueOf(23)));
     private static final String[] MAP_COLORS = {
@@ -402,8 +410,42 @@ public final class GeneratedWorkspace {
             .viewport(Viewport.of(0.0, 0.0, 1.0, NO_UNKNOWN_XML))
             .displaySettings(DisplaySettings.of(true, DisplaySettings.CanvasTheme.LIGHT, true, false,
                 NO_UNKNOWN_XML))
+            .unknownXml(generatedLabelXml(snapshots))
             .build();
         return new BuildResult(document, snapshots, availability);
+    }
+
+    private static List<UnknownXml> generatedLabelXml(final List<MapSnapshot> snapshots) {
+        final List<UnknownXml.Content> labels = new ArrayList<UnknownXml.Content>();
+        for (final MapSnapshot snapshot : snapshots) {
+            appendVisibleLeafLabels(snapshot.root(), labels);
+        }
+        return Collections.singletonList(UnknownXml.element(UnknownXml.Owner.WORKSPACE, 5,
+            GENERATED_LABELS_ELEMENT, Collections.<QName, String>emptyMap(), labels));
+    }
+
+    private static void appendVisibleLeafLabels(final NodeSnapshot node,
+            final List<UnknownXml.Content> labels) {
+        if (node.structuralLeaf()) {
+            if (node.excluded()) {
+                return;
+            }
+            if (!node.key().persistent()) {
+                throw new IllegalStateException("Generated visible leaf must have a persisted key");
+            }
+            final NodeReference reference = node.key().persistedReference().get();
+            final Map<QName, String> attributes = new LinkedHashMap<QName, String>();
+            attributes.put(MAP_ATTRIBUTE, reference.mapReferenceId().toString());
+            attributes.put(NODE_ATTRIBUTE, reference.nodeId().value());
+            attributes.put(FULL_ATTRIBUTE, node.label().fullText());
+            attributes.put(DISPLAY_ATTRIBUTE, node.label().displayText());
+            labels.add(UnknownXml.Content.element(GENERATED_LABEL_ELEMENT, attributes,
+                Collections.<UnknownXml.Content>emptyList()));
+            return;
+        }
+        for (final NodeSnapshot child : node.children()) {
+            appendVisibleLeafLabels(child, labels);
+        }
     }
 
     private static MapSnapshot buildSnapshot(final Scenario scenario, final int mapIndex,

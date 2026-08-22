@@ -118,6 +118,48 @@ public class PerformanceTripwiresShould {
     }
 
     @Test
+    public void serializeCorrectedVisibleLeafLabelsIntoFixtureBytes() throws Exception {
+        java.nio.file.Path output = temporaryFolder.newFolder("label-fixtures").toPath();
+        GeneratedWorkspace.writeFixtures(output);
+        Map<String, List<String>> expectedLabels = new LinkedHashMap<String, List<String>>();
+        expectedLabels.put("two-map.fpg", Arrays.asList(
+            "node-full-m00-n0001", "node-m00-n0001", "node-full-m01-n0060", "node-m01-n0060"));
+        expectedLabels.put("three-map.fpg", Arrays.asList(
+            "node-full-m00-n0001", "node-m00-n0001", "node-full-m02-n0060", "node-m02-n0060"));
+        expectedLabels.put("reference-2000-5000.fpg", Arrays.asList(
+            "node-full-m00-n0001", "node-m00-n0001", "node-full-m19-n0100", "node-m19-n0100"));
+        Map<String, String> historicalHashes = new LinkedHashMap<String, String>();
+        historicalHashes.put("two-map.fpg",
+            "c66acb490c564a8cc8203a2742a193e4c81421b688a4b13b5168d24cc44ce5ad");
+        historicalHashes.put("three-map.fpg",
+            "9939eb26768c2be69bd378a97e9afd0af3a455bac767cb9acc2f29754b8a4202");
+        historicalHashes.put("reference-2000-5000.fpg",
+            "366a7bbe316b9f11b974730f2f063821ddb0d6ed3cf0f1fc6ee67e92766a691c");
+
+        for (Map.Entry<String, List<String>> fixture : expectedLabels.entrySet()) {
+            byte[] bytes = java.nio.file.Files.readAllBytes(output.resolve(fixture.getKey()));
+            String xml = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+            for (String label : fixture.getValue()) {
+                assertThat(xml).contains(label);
+            }
+            assertThat(sha256(bytes)).isNotEqualTo(historicalHashes.get(fixture.getKey()));
+        }
+    }
+
+    private static String sha256(byte[] bytes) throws Exception {
+        byte[] digest = java.security.MessageDigest.getInstance("SHA-256").digest(bytes);
+        StringBuilder result = new StringBuilder(digest.length * 2);
+        for (byte value : digest) {
+            String hex = Integer.toHexString(value & 0xff);
+            if (hex.length() == 1) {
+                result.append('0');
+            }
+            result.append(hex);
+        }
+        return result.toString();
+    }
+
+    @Test
     public void generateTheExactVariantMatrix() {
         for (GeneratedWorkspace.Scenario scenario : GeneratedWorkspace.Scenario.values()) {
             GeneratedWorkspace workspace = GeneratedWorkspace.forScenario(scenario);
