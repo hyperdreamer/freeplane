@@ -13,7 +13,7 @@
 
 - Use exactly `/home/guest/.sdkman/candidates/java/21.0.8-zulu`; use `gradle`, never Maven or the Gradle wrapper.
 - Preserve terminal runs `.superpowers/sdd/batch-j-task-39`, `.superpowers/sdd/batch-j-task-39-recovery`, `.superpowers/sdd/batch-j-task-39-rereview-recovery`, and `.superpowers/sdd/batch-j-task-39-fixer-recovery`; never edit or cite their terminal final-review report, prompt, transcript, state, or audit projection as approval evidence.
-- Audit exact range `834d381f724c8606034a6bc5c878bb91d105cb63..f2b16e5bf508108fa6a54cb8f0d8193d174e4bcb`.
+- Audit source baseline `f2b16e5bf508108fa6a54cb8f0d8193d174e4bcb`; the mandatory final review covers the complete `834d381f724c8606034a6bc5c878bb91d105cb63..HEAD` range, including successor recovery metadata commits.
 - The current source deliverable is `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/integration/GraphWorkspaceModelAcceptanceShould.java`; initial audit is read-only. Any authorized fix may change only this one acceptance path.
 - Persist complete renderer envelopes and no-trailing-newline pointers. Construct spawn prompts by reading the persisted pointer bytes. Compare pre-spawn candidate/pointer and post-spawn first-user-message bytes. Any mismatch is terminal.
 - Use `/data/home/guest/.tmp/freeplane-graph-batch-j-task-39-final-recovery` for Java/Gradle temp state and logs. Verification is serial.
