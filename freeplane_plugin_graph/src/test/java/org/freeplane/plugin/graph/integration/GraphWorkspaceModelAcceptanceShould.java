@@ -36,18 +36,13 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
-import org.freeplane.core.extension.IExtension;
-import org.freeplane.core.io.IAttributeWriter;
-import org.freeplane.core.io.IElementDOMHandler;
-import org.freeplane.core.io.IElementWriter;
-import org.freeplane.core.io.ITreeWriter;
 import org.freeplane.core.io.ReadManager;
 import org.freeplane.core.io.UnknownElementWriter;
 import org.freeplane.core.io.UnknownElements;
 import org.freeplane.core.io.WriteManager;
-import org.freeplane.core.io.xml.TreeXmlReader;
-import org.freeplane.core.io.xml.TreeXmlWriter;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.undo.IActor;
 import org.freeplane.core.undo.IUndoHandler;
@@ -58,13 +53,14 @@ import org.freeplane.features.filter.hidden.NodeVisibility;
 import org.freeplane.features.map.INodeDuplicator;
 import org.freeplane.features.map.MapController;
 import org.freeplane.features.map.MapModel;
+import org.freeplane.features.map.MapReader;
+import org.freeplane.features.map.MapWriter;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.map.mindmapmode.MMapController;
 import org.freeplane.features.map.mindmapmode.MMapModel;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
 import org.freeplane.features.ui.IMapViewManager;
-import org.freeplane.n3.nanoxml.XMLElement;
 import org.freeplane.plugin.graph.adapter.MapLease;
 import org.freeplane.plugin.graph.adapter.MapLeaseManager;
 import org.freeplane.plugin.graph.adapter.MapOperationalState;
@@ -452,10 +448,25 @@ public class GraphWorkspaceModelAcceptanceShould {
     public void scenario15_consumesTheRecordedStrictPerformancePassWithoutRerunningTheDiagnostic() throws Exception {
         Path report = repositoryFile("docs/superpowers/specs/2026-08-10-graph-workspace-performance-report.md");
         String contents = new String(Files.readAllBytes(report), StandardCharsets.UTF_8);
+        RecordedPerformanceLedger ledger = recordedPerformanceLedger(contents);
+        PerformanceRow row = ledger.onlyRow("reference-2000-5000", "accepted-batch-first-frame");
 
         assertThat(contents).contains("Status: PASS on a genuinely executed strict diagnostic");
-        assertThat(contents).contains("Every row has `failureCount=0`, `discardCount=0`, and `pass=true`.");
-        assertThat(contents).contains("reference-2000-5000,accepted-batch-first-frame");
+        assertThat(contents).contains("graphPerformanceDiagnostic -PgraphStrictPerformance");
+        assertThat(contents).contains("> Task :freeplane_plugin_graph:graphPerformanceDiagnostic");
+        assertThat(contents).contains("Neither capture contains an `UP-TO-DATE` result for the diagnostic task.");
+        assertThat(ledger.path).endsWith("strict-final-ledger.csv");
+
+        assertThat(row.failureCount).isZero();
+        assertThat(row.discardCount).isZero();
+        assertThat(row.pass).isTrue();
+        assertThat(row.measuredCount).isGreaterThan(0);
+        assertThat(row.p50Nanos).isLessThanOrEqualTo(ledger.strictP95CeilingNanos);
+        assertThat(row.p95Nanos).isLessThanOrEqualTo(ledger.strictP95CeilingNanos);
+        assertThat(row.p99Nanos).isLessThanOrEqualTo(ledger.strictP99CeilingNanos);
+        assertThat(row.p95Nanos).isEqualTo(ledger.reportedP95Nanos);
+        assertThat(row.p99Nanos).isEqualTo(ledger.reportedP99Nanos);
+        assertThat(row.strictThresholdNanos).isEqualTo(ledger.strictP95CeilingNanos);
     }
 
     @Test
@@ -483,8 +494,12 @@ public class GraphWorkspaceModelAcceptanceShould {
         MapSnapshot firstMap = map(MAP_ONE, 1, "First", firstRoot);
         MapSnapshot secondMap = map(MAP_TWO, 2, "Second",
             node(MAP_TWO, "second-root", "Second root", true, false, false));
+        GraphRelationshipRecord crossMapRelationship = relationship(2L, reference(MAP_ONE, "first-leaf"),
+            reference(MAP_TWO, "second-root"), RelationshipDirection.FORWARD);
         WorkspaceDocument oneMap = workspace(registration(MAP_ONE, 1L, true));
-        WorkspaceDocument twoMaps = workspace(registration(MAP_ONE, 1L, true), registration(MAP_TWO, 2L, true));
+        WorkspaceDocument twoMaps = workspace(Arrays.asList(registration(MAP_ONE, 1L, true),
+            registration(MAP_TWO, 2L, true)), Collections.singletonList(crossMapRelationship),
+            Collections.<PinRecord>emptyList());
 
         GraphProjection single = project(oneMap, firstMap);
         GraphProjection active = project(twoMaps, availability(twoMaps, MapAvailability.AVAILABLE,
@@ -502,11 +517,34 @@ public class GraphWorkspaceModelAcceptanceShould {
         assertThat(enclosure(loading, MAP_ONE, "first-branch").boundaryTier()).isEqualTo(BoundaryTier.SUBTLE);
         assertThat(enclosure(missing, MAP_ONE, "root").boundaryTier()).isEqualTo(BoundaryTier.EMPHATIC);
         assertThat(enclosure(missing, MAP_ONE, "first-branch").boundaryTier()).isEqualTo(BoundaryTier.SUBTLE);
+        assertThat(active.relationshipResolutions()).hasSize(1);
+        assertThat(active.relationshipResolutions().get(0).status()).isEqualTo(RelationshipStatus.ACTIVE);
+        assertThat(active.edges()).hasSize(1);
+        assertThat(loading.relationshipResolutions()).hasSize(1);
+        assertThat(loading.relationshipResolutions().get(0).status())
+            .isEqualTo(RelationshipStatus.UNRESOLVED_RECOVERABLE);
+        assertThat(loading.relationshipResolutions().get(0).recoverableReasons())
+            .containsExactly(RecoverableReason.MAP_LOADING);
+        assertThat(loading.relationshipResolutions().get(0).source())
+            .contains(ProjectedEndpointKey.ofNode(ProjectedNodeKey.of(source(MAP_ONE, "first-leaf"))));
+        assertThat(loading.relationshipResolutions().get(0).target()).isNotPresent();
+        assertThat(loading.edges()).isEmpty();
+        assertUnavailableMapAbsent(loading, MAP_TWO);
+        assertThat(missing.relationshipResolutions()).hasSize(1);
+        assertThat(missing.relationshipResolutions().get(0).status())
+            .isEqualTo(RelationshipStatus.UNRESOLVED_RECOVERABLE);
+        assertThat(missing.relationshipResolutions().get(0).recoverableReasons())
+            .containsExactly(RecoverableReason.MAP_MISSING);
+        assertThat(missing.relationshipResolutions().get(0).source())
+            .contains(ProjectedEndpointKey.ofNode(ProjectedNodeKey.of(source(MAP_ONE, "first-leaf"))));
+        assertThat(missing.relationshipResolutions().get(0).target()).isNotPresent();
+        assertThat(missing.edges()).isEmpty();
+        assertUnavailableMapAbsent(missing, MAP_TWO);
     }
 
     @Test
-    public void scenario23_cloneMarkerCompositionCollapsesEveryCloneAndUnmarkingRestoresThem() {
-        CloneFixture clones = new CloneFixture();
+    public void scenario23_cloneMarkerCompositionCollapsesEveryCloneAndUnmarkingRestoresThem() throws Exception {
+        CloneFixture clones = new CloneFixture(temporaryFolder.newFolder("scenario23").toPath());
         try {
             clones.mark(true);
             assertThat(GraphGroupModel.isMarked(clones.original)).isTrue();
@@ -514,19 +552,25 @@ public class GraphWorkspaceModelAcceptanceShould {
             assertThat(clones.controller.affectedClonePositionCount(Collections.singletonList(clones.original)))
                 .isEqualTo(2);
 
-            GraphProjection collapsed = cloneProjection(true);
+            MapSnapshot collapsedSnapshot = clones.snapshot();
+            GraphProjection collapsed = project(clones.workspace(), collapsedSnapshot);
             assertThat(collapsed.nodes()).extracting(ProjectedNode::graphGroup).containsExactly(true, true);
             assertThat(collapsed.nodes()).extracting(ProjectedNode::source)
-                .containsExactly(source(MAP_ONE, "clone-one"), source(MAP_ONE, "clone-two"));
+                .containsExactly(source(MAP_ONE, "ID_CLONE_ONE"), source(MAP_ONE, "ID_CLONE_TWO"));
+            assertThat(collapsed.nodes()).extracting(ProjectedNode::source)
+                .doesNotContain(source(MAP_ONE, "ID_CLONE_ONE_CHILD"), source(MAP_ONE, "ID_CLONE_TWO_CHILD"));
 
             clones.mark(false);
             assertThat(GraphGroupModel.isMarked(clones.original)).isFalse();
             assertThat(GraphGroupModel.isMarked(clones.clone)).isFalse();
 
-            GraphProjection restored = cloneProjection(false);
+            MapSnapshot restoredSnapshot = clones.snapshot();
+            GraphProjection restored = project(clones.workspace(), restoredSnapshot);
             assertThat(restored.nodes()).extracting(ProjectedNode::graphGroup).containsOnly(false);
             assertThat(restored.nodes()).extracting(ProjectedNode::source)
-                .containsExactly(source(MAP_ONE, "clone-one-child"), source(MAP_ONE, "clone-two-child"));
+                .containsExactly(source(MAP_ONE, "ID_CLONE_ONE_CHILD"), source(MAP_ONE, "ID_CLONE_TWO_CHILD"));
+            assertThat(restored.nodes()).extracting(ProjectedNode::source)
+                .doesNotContain(source(MAP_ONE, "ID_CLONE_ONE"), source(MAP_ONE, "ID_CLONE_TWO"));
         }
         finally {
             clones.close();
@@ -573,20 +617,28 @@ public class GraphWorkspaceModelAcceptanceShould {
 
     @Test
     public void scenario27_stockReaderPreservesMarkerUntilTheGraphReaderRestoresIt() throws Exception {
-        MarkerFixtureCodec stock = new MarkerFixtureCodec(false);
+        StockMapFixture stock = new StockMapFixture(false);
         String stockSaved;
         try {
             MapModel stockMap = stock.read(markedMapXml());
+            assertThat(stock.readManager.getElementHandlers().isEmpty("graph_group")).isTrue();
+            assertThat(stock.writeManager.getExtensionElementWriters().isEmpty(GraphGroupModel.class)).isTrue();
             assertThat(GraphGroupModel.isMarked(stockMap.getRootNode().getChildAt(0))).isFalse();
             stockSaved = stock.write(stockMap);
+            assertThat(stock.readManager.getElementHandlers().list("map"))
+                .anyMatch(handler -> handler instanceof MapReader);
+            assertThat(stock.writeManager.getElementWriters().list("map"))
+                .anyMatch(writer -> writer instanceof MapWriter);
             assertThat(stockSaved).contains("<graph_group version=\"1\"/>");
         }
         finally {
             stock.close();
         }
 
-        MarkerFixtureCodec graph = new MarkerFixtureCodec(true);
+        StockMapFixture graph = new StockMapFixture(true);
         try {
+            assertThat(graph.readManager.getElementHandlers().isEmpty("graph_group")).isFalse();
+            assertThat(graph.writeManager.getExtensionElementWriters().isEmpty(GraphGroupModel.class)).isFalse();
             MapModel restored = graph.read(stockSaved);
             assertThat(GraphGroupModel.isMarked(restored.getRootNode().getChildAt(0))).isTrue();
             assertThat(graph.write(restored)).contains("<graph_group version=\"1\"/>");
@@ -641,15 +693,6 @@ public class GraphWorkspaceModelAcceptanceShould {
         assertThat(maximumAlpha(active)).isEqualTo(255);
         assertThat(maximumAlpha(inactive)).isGreaterThan(0).isLessThan(255);
         assertThat(nonTransparentPixelCount(inactive)).isGreaterThan(0);
-    }
-
-    private static GraphProjection cloneProjection(final boolean marked) {
-        NodeSnapshot first = node(MAP_ONE, "clone-one", "Clone one", false, marked, false,
-            node(MAP_ONE, "clone-one-child", "Clone one child", true, false, false));
-        NodeSnapshot second = node(MAP_ONE, "clone-two", "Clone two", false, marked, false,
-            node(MAP_ONE, "clone-two-child", "Clone two child", true, false, false));
-        return project(workspace(registration(MAP_ONE, 1L, true)),
-            map(MAP_ONE, 1, "Map", node(MAP_ONE, "root", "Root", false, false, false, first, second)));
     }
 
     private static WorkspaceDocument workspace(final MapReference... registrations) {
@@ -735,6 +778,30 @@ public class GraphWorkspaceModelAcceptanceShould {
         return result;
     }
 
+    private static void assertUnavailableMapAbsent(final GraphProjection projection,
+            final MapReferenceId unavailableMap) {
+        for (ProjectedNode node : projection.nodes()) {
+            assertThat(node.mapReferenceId()).isNotEqualTo(unavailableMap);
+        }
+        for (ProjectedEnclosure enclosure : projection.enclosures()) {
+            assertThat(enclosure.mapReferenceId()).isNotEqualTo(unavailableMap);
+        }
+        for (ProjectedEdge edge : projection.edges()) {
+            assertThat(edge.first().mapReferenceId()).isNotEqualTo(unavailableMap);
+            assertThat(edge.second().mapReferenceId()).isNotEqualTo(unavailableMap);
+            for (EdgeContributor contributor : edge.contributors()) {
+                assertThat(contributor.projectedSource().mapReferenceId()).isNotEqualTo(unavailableMap);
+                assertThat(contributor.projectedTarget().mapReferenceId()).isNotEqualTo(unavailableMap);
+            }
+        }
+        for (PinProjection pin : projection.pins()) {
+            assertThat(pin.source().mapReferenceId()).isNotEqualTo(unavailableMap);
+        }
+        for (ProjectedNodeKey key : projection.prominence().keySet()) {
+            assertThat(key.mapReferenceId()).isNotEqualTo(unavailableMap);
+        }
+    }
+
     private static ProjectedEnclosure enclosure(final GraphProjection projection, final MapReferenceId map,
             final String sourceId) {
         EnclosureKey expected = EnclosureKey.of(source(map, sourceId));
@@ -800,13 +867,261 @@ public class GraphWorkspaceModelAcceptanceShould {
         throw new IllegalStateException("Cannot locate " + relativePath);
     }
 
-    private static MapModel plainMap() {
-        MapModel map = new MapModel(new INodeDuplicator() {
+    private static RecordedPerformanceLedger recordedPerformanceLedger(final String report) {
+        final String path = backtickedLine(report, "- Run-root final archive: ");
+        final String marker = "The following block is copied byte-for-byte from the authoritative final ledger:";
+        final int markerStart = report.indexOf(marker);
+        if (markerStart < 0 || markerStart != report.lastIndexOf(marker)) {
+            throw new AssertionError("The report must identify one authoritative ledger block");
+        }
+        final int csvStart = report.indexOf("```csv", markerStart + marker.length());
+        final int csvEnd = csvStart < 0 ? -1 : report.indexOf("```", csvStart + "```csv".length());
+        if (csvStart < 0 || csvEnd < 0) {
+            throw new AssertionError("The report must contain the recorded CSV ledger");
+        }
+        final String archiveFileName = Paths.get(path).getFileName().toString();
+        final String archiveStatement = "The authoritative final ledger is archived at the final evidence path, "
+            + "copied to the run-root `" + archiveFileName + "`, and mirrored at the required attempt-10 path.";
+        if (report.indexOf(archiveStatement) < 0 || report.indexOf(archiveStatement) > markerStart) {
+            throw new AssertionError("The report must tie its final ledger archive to the embedded CSV");
+        }
+        String csv = report.substring(csvStart + "```csv".length(), csvEnd);
+        if (csv.startsWith("\r\n")) {
+            csv = csv.substring(2);
+        }
+        else if (csv.startsWith("\n")) {
+            csv = csv.substring(1);
+        }
+        final String[] lines = csv.split("\\r?\\n", -1);
+        int lineCount = lines.length;
+        if (lineCount > 0 && lines[lineCount - 1].isEmpty()) {
+            lineCount--;
+        }
+        if (lineCount < 2) {
+            throw new AssertionError("The recorded CSV ledger must contain a header and rows");
+        }
+        final List<String> header = csvFields(lines[0]);
+        final List<String> expectedHeader = Arrays.asList("scenario", "stage", "warmupCount", "measuredCount",
+            "p50Nanos", "p95Nanos", "p99Nanos", "maxNanos", "normalThresholdNanos",
+            "strictThresholdNanos", "failureCount", "discardCount", "pass");
+        if (!header.equals(expectedHeader)) {
+            throw new AssertionError("Unexpected performance ledger header: " + header);
+        }
+        final Map<String, Integer> columns = new LinkedHashMap<String, Integer>();
+        for (int index = 0; index < header.size(); index++) {
+            if (columns.put(header.get(index), Integer.valueOf(index)) != null) {
+                throw new AssertionError("Duplicate performance ledger column: " + header.get(index));
+            }
+        }
+        final List<PerformanceRow> rows = new ArrayList<PerformanceRow>();
+        for (int lineIndex = 1; lineIndex < lineCount; lineIndex++) {
+            if (lines[lineIndex].isEmpty()) {
+                throw new AssertionError("Blank performance ledger row at line " + (lineIndex + 1));
+            }
+            final List<String> fields = csvFields(lines[lineIndex]);
+            if (fields.size() != header.size()) {
+                throw new AssertionError("Malformed performance ledger row at line " + (lineIndex + 1));
+            }
+            rows.add(new PerformanceRow(fields, columns));
+        }
+        final Matcher strictSummary = Pattern.compile(
+            "^- accepted-batch-first-frame p95 `(\\d+)` ns, p99 `(\\d+)` ns, "
+                + "strict ceilings `(\\d+)`/`(\\d+)` ns$", Pattern.MULTILINE)
+            .matcher(report);
+        if (!strictSummary.find()) {
+            throw new AssertionError("The report must record strict p95 and p99 ceilings");
+        }
+        final long reportedP95Nanos = Long.parseLong(strictSummary.group(1));
+        final long reportedP99Nanos = Long.parseLong(strictSummary.group(2));
+        final long strictP95CeilingNanos = Long.parseLong(strictSummary.group(3));
+        final long strictP99CeilingNanos = Long.parseLong(strictSummary.group(4));
+        if (strictSummary.find()) {
+            throw new AssertionError("The report must contain one strict reference summary");
+        }
+        return new RecordedPerformanceLedger(path, rows, reportedP95Nanos, reportedP99Nanos,
+            strictP95CeilingNanos, strictP99CeilingNanos);
+    }
+
+    private static String backtickedLine(final String contents, final String prefix) {
+        String value = null;
+        int matches = 0;
+        for (String line : contents.split("\\r?\\n")) {
+            if (!line.startsWith(prefix)) {
+                continue;
+            }
+            final int start = line.indexOf('`', prefix.length());
+            final int end = start < 0 ? -1 : line.indexOf('`', start + 1);
+            if (start < 0 || end < 0 || end == start + 1) {
+                throw new AssertionError("Malformed ledger path line: " + line);
+            }
+            value = line.substring(start + 1, end);
+            matches++;
+        }
+        if (matches != 1) {
+            throw new AssertionError("Expected one recorded ledger path, found " + matches);
+        }
+        return value;
+    }
+
+    private static List<String> csvFields(final String line) {
+        final List<String> fields = new ArrayList<String>();
+        final StringBuilder field = new StringBuilder();
+        boolean quoted = false;
+        boolean closedQuote = false;
+        for (int index = 0; index < line.length(); index++) {
+            final char character = line.charAt(index);
+            if (quoted) {
+                if (character == '"') {
+                    if (index + 1 < line.length() && line.charAt(index + 1) == '"') {
+                        field.append('"');
+                        index++;
+                    }
+                    else {
+                        quoted = false;
+                        closedQuote = true;
+                    }
+                }
+                else {
+                    field.append(character);
+                }
+            }
+            else if (closedQuote) {
+                if (character != ',') {
+                    throw new AssertionError("Malformed quoted CSV field: " + line);
+                }
+                fields.add(field.toString());
+                field.setLength(0);
+                closedQuote = false;
+            }
+            else if (character == ',' && !quoted) {
+                fields.add(field.toString());
+                field.setLength(0);
+            }
+            else if (character == '"') {
+                if (field.length() != 0) {
+                    throw new AssertionError("Malformed CSV quote: " + line);
+                }
+                quoted = true;
+            }
+            else {
+                field.append(character);
+            }
+        }
+        if (quoted) {
+            throw new AssertionError("Unclosed CSV quote: " + line);
+        }
+        fields.add(field.toString());
+        return fields;
+    }
+
+    private static final class RecordedPerformanceLedger {
+        private final String path;
+        private final List<PerformanceRow> rows;
+        private final long reportedP95Nanos;
+        private final long reportedP99Nanos;
+        private final long strictP95CeilingNanos;
+        private final long strictP99CeilingNanos;
+
+        private RecordedPerformanceLedger(final String path, final List<PerformanceRow> rows,
+                final long reportedP95Nanos, final long reportedP99Nanos,
+                final long strictP95CeilingNanos, final long strictP99CeilingNanos) {
+            this.path = path;
+            this.rows = rows;
+            this.reportedP95Nanos = reportedP95Nanos;
+            this.reportedP99Nanos = reportedP99Nanos;
+            this.strictP95CeilingNanos = strictP95CeilingNanos;
+            this.strictP99CeilingNanos = strictP99CeilingNanos;
+        }
+
+        private PerformanceRow onlyRow(final String scenario, final String stage) {
+            PerformanceRow result = null;
+            for (PerformanceRow row : rows) {
+                if (scenario.equals(row.scenario) && stage.equals(row.stage)) {
+                    if (result != null) {
+                        throw new AssertionError("Duplicate performance ledger row: " + scenario + "," + stage);
+                    }
+                    result = row;
+                }
+            }
+            if (result == null) {
+                throw new AssertionError("Missing performance ledger row: " + scenario + "," + stage);
+            }
+            return result;
+        }
+    }
+
+    private static final class PerformanceRow {
+        private final String scenario;
+        private final String stage;
+        private final int warmupCount;
+        private final int measuredCount;
+        private final long p50Nanos;
+        private final long p95Nanos;
+        private final long p99Nanos;
+        private final long maxNanos;
+        private final long normalThresholdNanos;
+        private final long strictThresholdNanos;
+        private final int failureCount;
+        private final int discardCount;
+        private final boolean pass;
+
+        private PerformanceRow(final List<String> fields, final Map<String, Integer> columns) {
+            scenario = field(fields, columns, "scenario");
+            stage = field(fields, columns, "stage");
+            warmupCount = integerField(fields, columns, "warmupCount");
+            measuredCount = integerField(fields, columns, "measuredCount");
+            p50Nanos = longField(fields, columns, "p50Nanos");
+            p95Nanos = longField(fields, columns, "p95Nanos");
+            p99Nanos = longField(fields, columns, "p99Nanos");
+            maxNanos = longField(fields, columns, "maxNanos");
+            normalThresholdNanos = longField(fields, columns, "normalThresholdNanos");
+            strictThresholdNanos = longField(fields, columns, "strictThresholdNanos");
+            failureCount = integerField(fields, columns, "failureCount");
+            discardCount = integerField(fields, columns, "discardCount");
+            final String passValue = field(fields, columns, "pass");
+            if (!"true".equals(passValue) && !"false".equals(passValue)) {
+                throw new AssertionError("Malformed pass field: " + passValue);
+            }
+            pass = Boolean.parseBoolean(passValue);
+        }
+
+        private static String field(final List<String> fields, final Map<String, Integer> columns,
+                final String name) {
+            return fields.get(columns.get(name).intValue());
+        }
+
+        private static int integerField(final List<String> fields, final Map<String, Integer> columns,
+                final String name) {
+            try {
+                return Integer.parseInt(field(fields, columns, name));
+            }
+            catch (NumberFormatException failure) {
+                throw new AssertionError("Malformed integer field " + name, failure);
+            }
+        }
+
+        private static long longField(final List<String> fields, final Map<String, Integer> columns,
+                final String name) {
+            try {
+                return Long.parseLong(field(fields, columns, name));
+            }
+            catch (NumberFormatException failure) {
+                throw new AssertionError("Malformed long field " + name, failure);
+            }
+        }
+    }
+
+    private static MapModel emptyMap() {
+        return new MapModel(new INodeDuplicator() {
             @Override
             public NodeModel duplicate(final NodeModel source, final MapModel targetMap, final boolean withChildren) {
                 return null;
             }
         }, null, null);
+    }
+
+    private static MapModel plainMap() {
+        MapModel map = emptyMap();
         map.setRoot(new NodeModel("root", map));
         return map;
     }
@@ -969,23 +1284,60 @@ public class GraphWorkspaceModelAcceptanceShould {
         private final GraphGroupController controller;
         private final NodeModel clone;
         private final NodeModel original;
+        private final MapReference registration;
+        private final WorkspaceDocument workspaceDocument;
+        private final MapLeaseManager leaseManager;
 
-        private CloneFixture() {
-            MapModel map = plainMap();
+        private CloneFixture(final Path directory) throws Exception {
+            final Path workspaceFile = directory.resolve("workspace.fpg");
+            final Path mapFile = directory.resolve("clone.mm");
+            Files.write(workspaceFile, Collections.singletonList(""), StandardCharsets.UTF_8);
+            Files.write(mapFile, Collections.singletonList("<map/>"), StandardCharsets.UTF_8);
+
+            final ModeController modeController = mock(ModeController.class);
+            final MMapController mapController = mock(MMapController.class);
+            final Controller hostController = mock(Controller.class);
+            when(hostController.getModeController()).thenReturn(modeController);
+            when(modeController.getMapController()).thenReturn(mapController);
+            final Controller previousController = Controller.getCurrentController();
+            Controller.setCurrentController(hostController);
+            final MMapModel map;
+            try {
+                map = new MMapModel(new INodeDuplicator() {
+                    @Override
+                    public NodeModel duplicate(final NodeModel source, final MapModel targetMap,
+                            final boolean withChildren) {
+                        return null;
+                    }
+                });
+            }
+            finally {
+                Controller.setCurrentController(previousController);
+            }
+            map.setURL(mapFile.toRealPath().toUri().toURL());
+            final NodeModel root = new NodeModel("root", map);
+            root.setID("ID_ROOT");
+            map.setRoot(root);
             original = new NodeModel("clone root", map);
-            original.setID("ID_CLONE_ROOT");
-            original.insert(new NodeModel("clone child", map));
-            map.getRootNode().insert(original);
+            original.setID("ID_CLONE_ONE");
+            final NodeModel originalChild = new NodeModel("clone child", map);
+            originalChild.setID("ID_CLONE_ONE_CHILD");
+            original.insert(originalChild);
+            root.insert(original);
             clone = original.cloneTree();
-            map.getRootNode().insert(clone);
+            clone.setID("ID_CLONE_TWO");
+            clone.getChildAt(0).setID("ID_CLONE_TWO_CHILD");
+            root.insert(clone);
             map.addExtension(IUndoHandler.class, mock(IUndoHandler.class));
 
-            ModeController modeController = mock(ModeController.class);
-            MapController mapController = mock(MapController.class);
-            ReadManager reader = new ReadManager();
-            WriteManager writer = new WriteManager();
-            when(modeController.getMapController()).thenReturn(mapController);
+            final IMapViewManager mapViews = mock(IMapViewManager.class);
+            final ReadManager reader = new ReadManager();
+            final WriteManager writer = new WriteManager();
+            when(modeController.getController()).thenReturn(hostController);
             when(modeController.canEdit(map)).thenReturn(true);
+            when(hostController.getMapViewManager()).thenReturn(mapViews);
+            when(mapViews.containsView(any(MapModel.class))).thenReturn(false);
+            when(mapController.getMap(any(URL.class))).thenReturn(map);
             when(mapController.getReadManager()).thenReturn(reader);
             when(mapController.getWriteManager()).thenReturn(writer);
             doAnswer(invocation -> {
@@ -993,59 +1345,92 @@ public class GraphWorkspaceModelAcceptanceShould {
                 return null;
             }).when(modeController).execute(any(IActor.class), eq(map));
             controller = new GraphGroupController(modeController);
+
+            registration = MapReference.of(MAP_ONE, 1L,
+                new WorkspaceUriResolver().toStoredUri(workspaceFile, mapFile), true, "#4E79A7",
+                noUnknownXml());
+            workspaceDocument = GraphWorkspaceModelAcceptanceShould.workspace(registration);
+            leaseManager = new MapLeaseManager(workspaceFile, modeController);
         }
 
         private void mark(final boolean marked) {
             controller.setMarked(Collections.singletonList(original), marked);
         }
 
+        private WorkspaceDocument workspace() {
+            return workspaceDocument;
+        }
+
+        private MapSnapshot snapshot() throws Exception {
+            MapLease lease = leaseManager.acquire(registration).toCompletableFuture().get(5L, TimeUnit.SECONDS);
+            try {
+                assertThat(lease.state()).isEqualTo(MapOperationalState.AVAILABLE);
+                return new MapSnapshotFactory().snapshot(lease);
+            }
+            finally {
+                lease.close();
+            }
+        }
+
         @Override
         public void close() {
-            controller.close();
+            try {
+                controller.close();
+            }
+            finally {
+                leaseManager.close();
+            }
         }
     }
 
-    private static final class MarkerFixtureCodec implements AutoCloseable {
+    private static final class StockMapFixture implements AutoCloseable {
         private final GraphGroupController graphGroups;
-        private final FixtureMapBuilder mapBuilder = new FixtureMapBuilder();
-        private final ReadManager readManager = new ReadManager();
-        private final WriteManager writeManager = new WriteManager();
+        private final MapReader mapReader;
+        private final MapWriter mapWriter;
+        private final ReadManager readManager;
+        private final WriteManager writeManager;
 
-        private MarkerFixtureCodec(final boolean graphGroupsEnabled) {
-            FixtureNodeBuilder nodeBuilder = new FixtureNodeBuilder(mapBuilder);
-            readManager.addElementHandler("map", mapBuilder);
-            readManager.addElementHandler("node", nodeBuilder);
-            writeManager.addAttributeWriter("map", new FixtureExtensionAttributeWriter());
-            writeManager.addAttributeWriter("node", new FixtureExtensionAttributeWriter());
-            writeManager.addElementWriter("map", new FixtureMapWriter());
-            writeManager.addElementWriter("node", new FixtureNodeWriter());
-            UnknownElementWriter unknown = new UnknownElementWriter();
+        private StockMapFixture(final boolean graphGroupsEnabled) {
+            readManager = new ReadManager();
+            writeManager = new WriteManager();
+            final ModeController modeController = mock(ModeController.class);
+            final MapController mapController = mock(MapController.class);
+            when(modeController.getMapController()).thenReturn(mapController);
+            when(mapController.getReadManager()).thenReturn(readManager);
+            when(mapController.getWriteManager()).thenReturn(writeManager);
+            when(mapController.getModeController()).thenReturn(modeController);
+            when(mapController.isFolded(any(NodeModel.class))).thenReturn(false);
+
+            final ResourceController resources = ResourceController.getResourceController();
+            when(resources.getBooleanProperty("useAsciiCharset")).thenReturn(false);
+            when(resources.getProperty("load_folding")).thenReturn("never");
+            when(resources.getProperty("save_folding")).thenReturn("never");
+
+            mapReader = new MapReader(readManager);
+            mapWriter = new MapWriter(mapController);
+            readManager.addElementHandler("map", mapReader);
+            readManager.addAttributeHandler("map", "version", (element, value) -> {
+            });
+            readManager.addAttributeHandler("map", "dialect", (element, value) -> {
+            });
+            writeManager.addElementWriter("map", mapWriter);
+            writeManager.addAttributeWriter("map", mapWriter);
+            final UnknownElementWriter unknown = new UnknownElementWriter();
             writeManager.addExtensionAttributeWriter(UnknownElements.class, unknown);
             writeManager.addExtensionElementWriter(UnknownElements.class, unknown);
-            if (graphGroupsEnabled) {
-                ModeController modeController = mock(ModeController.class);
-                MapController mapController = mock(MapController.class);
-                when(modeController.getMapController()).thenReturn(mapController);
-                when(mapController.getReadManager()).thenReturn(readManager);
-                when(mapController.getWriteManager()).thenReturn(writeManager);
-                graphGroups = new GraphGroupController(modeController);
-            }
-            else {
-                graphGroups = null;
-            }
+            graphGroups = graphGroupsEnabled ? new GraphGroupController(modeController) : null;
         }
 
         private MapModel read(final String xml) throws Exception {
-            mapBuilder.clear();
-            new TreeXmlReader(readManager).load(null, new StringReader(xml));
-            return mapBuilder.map();
+            final MapModel map = emptyMap();
+            mapReader.createNodeTreeFromXml(map, new StringReader(xml), MapWriter.Mode.FILE);
+            return map;
         }
 
         private String write(final MapModel map) throws IOException {
-            StringWriter output = new StringWriter();
-            TreeXmlWriter writer = new TreeXmlWriter(writeManager, output, false);
-            writer.addElement(map, "map");
-            writer.flush();
+            final StringWriter output = new StringWriter();
+            mapWriter.writeMapAsXml(map, output, MapWriter.Mode.FILE,
+                org.freeplane.features.map.clipboard.MapClipboardController.CopiedNodeSet.ALL_NODES, false);
             return output.toString();
         }
 
@@ -1057,91 +1442,4 @@ public class GraphWorkspaceModelAcceptanceShould {
         }
     }
 
-    private static final class FixtureMapBuilder implements IElementDOMHandler {
-        private MapModel map;
-
-        @Override
-        public Object createElement(final Object parent, final String tag, final XMLElement attributes) {
-            map = plainMap();
-            return map;
-        }
-
-        @Override
-        public void endElement(final Object parent, final String tag, final Object element, final XMLElement dom) {
-            if (dom.getAttributeCount() != 0 || dom.hasChildren()) {
-                ((MapModel) element).addExtension(new UnknownElements(dom));
-            }
-        }
-
-        private void clear() {
-            map = null;
-        }
-
-        private MapModel map() {
-            if (map == null) {
-                throw new AssertionError("Map reader did not create a map");
-            }
-            return map;
-        }
-    }
-
-    private static final class FixtureNodeBuilder implements IElementDOMHandler {
-        private final FixtureMapBuilder mapBuilder;
-
-        private FixtureNodeBuilder(final FixtureMapBuilder mapBuilder) {
-            this.mapBuilder = mapBuilder;
-        }
-
-        @Override
-        public Object createElement(final Object parent, final String tag, final XMLElement attributes) {
-            return new NodeModel(mapBuilder.map());
-        }
-
-        @Override
-        public void endElement(final Object parent, final String tag, final Object element, final XMLElement dom) {
-            NodeModel node = (NodeModel) element;
-            if (dom.getAttributeCount() != 0 || dom.hasChildren()) {
-                node.addExtension(new UnknownElements(dom));
-            }
-            if (parent instanceof MapModel) {
-                ((MapModel) parent).setRoot(node);
-            }
-            else if (parent instanceof NodeModel) {
-                ((NodeModel) parent).insert(node);
-            }
-        }
-    }
-
-    private static final class FixtureExtensionAttributeWriter implements IAttributeWriter {
-        @Override
-        public void writeAttributes(final ITreeWriter writer, final Object element, final String tag) {
-            if (element instanceof MapModel) {
-                writer.addExtensionAttributes(element, ((MapModel) element).getExtensions().values());
-            }
-            else if (element instanceof NodeModel) {
-                writer.addExtensionAttributes(element, ((NodeModel) element).getSharedExtensions().values());
-            }
-        }
-    }
-
-    private static final class FixtureMapWriter implements IElementWriter {
-        @Override
-        public void writeContent(final ITreeWriter writer, final Object element, final String tag) throws IOException {
-            MapModel map = (MapModel) element;
-            writer.addExtensionNodes(map, map.getExtensions().values());
-            writer.addElement(map.getRootNode(), "node");
-        }
-    }
-
-    private static final class FixtureNodeWriter implements IElementWriter {
-        @Override
-        public void writeContent(final ITreeWriter writer, final Object element, final String tag) throws IOException {
-            NodeModel node = (NodeModel) element;
-            List<IExtension> extensions = new ArrayList<IExtension>(node.getSharedExtensions().values());
-            writer.addExtensionNodes(node, extensions);
-            for (NodeModel child : node.getChildren()) {
-                writer.addElement(child, "node");
-            }
-        }
-    }
 }
