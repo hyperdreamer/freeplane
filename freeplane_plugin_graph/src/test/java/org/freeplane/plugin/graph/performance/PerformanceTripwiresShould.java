@@ -6,10 +6,31 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
+import org.freeplane.plugin.graph.control.CanvasState;
+import org.freeplane.plugin.graph.control.NanoClock;
+import org.freeplane.plugin.graph.control.OperationalStatus;
+import org.freeplane.plugin.graph.geometry.GraphGeometry;
+import org.freeplane.plugin.graph.geometry.LayoutPoint;
+import org.freeplane.plugin.graph.geometry.LayoutPositions;
+import org.freeplane.plugin.graph.layout.LayoutFrame;
+import org.freeplane.plugin.graph.projection.BoundaryTier;
+import org.freeplane.plugin.graph.projection.EnclosureHullKey;
+import org.freeplane.plugin.graph.projection.EnclosureKey;
+import org.freeplane.plugin.graph.projection.GraphProjection;
+import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
+import org.freeplane.plugin.graph.projection.ProjectedNode;
+import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
 import org.freeplane.plugin.graph.projection.input.NodeSnapshot;
+import org.freeplane.plugin.graph.projection.input.SafeNodeLabel;
+import org.freeplane.plugin.graph.projection.input.SourceNodeKey;
+import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
+import org.freeplane.plugin.graph.workspace.model.NodeReference;
+import org.freeplane.plugin.graph.workspace.model.PersistedNodeId;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -113,6 +134,111 @@ public class PerformanceTripwiresShould {
     }
 
     @Test
+    public void labelEveryGeneratedProjectedNodeFromItsPersistedIdentifier() {
+        for (GeneratedWorkspace.Scenario scenario : GeneratedWorkspace.Scenario.values()) {
+            GeneratedWorkspace workspace = GeneratedWorkspace.forScenario(scenario);
+            for (ProjectedNode node : workspace.projection().nodes()) {
+                NodeReference persistedReference = node.source().persistedReference().get();
+                assertThat(node.label().fullText())
+                    .isEqualTo("node-full-" + persistedReference.nodeId().value());
+                assertThat(node.label().displayText())
+                    .isEqualTo("node-" + persistedReference.nodeId().value());
+            }
+        }
+    }
+
+    @Test
+    public void acceptOnlyTheExactSkewedMapAllocation() {
+        int[] nodesByMap = new int[] {1600, 21, 21, 21, 21, 21, 21, 21, 21, 21,
+            21, 21, 21, 21, 21, 21, 21, 21, 21, 22};
+        int[] enclosuresByMap = new int[] {960, 12, 12, 12, 12, 12, 12, 12, 12, 12,
+            12, 12, 12, 12, 12, 12, 12, 12, 12, 24};
+
+        GeneratedWorkspace.assertSkewedMapAllocationContract(GeneratedWorkspace.Scenario.SKEWED_REFERENCE,
+            nodesByMap, enclosuresByMap);
+
+        int[] incompleteNodesByMap = nodesByMap.clone();
+        incompleteNodesByMap[0] = 1599;
+        assertThatThrownBy(() -> GeneratedWorkspace.assertSkewedMapAllocationContract(
+            GeneratedWorkspace.Scenario.SKEWED_REFERENCE, incompleteNodesByMap, enclosuresByMap))
+            .isInstanceOf(IllegalStateException.class);
+
+        assertThatThrownBy(() -> GeneratedWorkspace.assertSkewedMapAllocationContract(
+            GeneratedWorkspace.Scenario.TWO_MAP, nodesByMap, enclosuresByMap))
+            .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> GeneratedWorkspace.assertSkewedMapAllocationContract(null, nodesByMap,
+            enclosuresByMap)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    public void rejectFramesWhoseNodeAndAnchorKeysDoNotExactlyCoverTheProjection() throws Exception {
+        GraphWorkspacePerformanceDiagnostic diagnostic = diagnostic(new CountingNanoClock());
+        MapReferenceId mapId = MapReferenceId.of("00000000-0000-0000-0000-000000000001");
+        ProjectedNode node = ProjectedNode.of(ProjectedNodeKey.of(SourceNodeKey.persisted(NodeReference.of(mapId,
+            PersistedNodeId.of("node")))), SafeNodeLabel.of("full", "display"), "map", false);
+        EnclosureHullKey hullKey = EnclosureHullKey.of(Collections.singletonList(EnclosureKey.of(
+            SourceNodeKey.transientPath(mapId, Collections.singletonList(Integer.valueOf(0))))));
+        ProjectedEnclosure enclosure = ProjectedEnclosure.of(hullKey, hullKey.endpointKeys(),
+            Collections.singletonList(SafeNodeLabel.of("full", "display")), "map",
+            Optional.<EnclosureHullKey>empty(), Collections.singletonList(node.key()),
+            Collections.<EnclosureHullKey>emptyList(), true, BoundaryTier.SUBTLE);
+        GraphProjection projection = GraphProjection.structure(0L, Collections.singletonList(node),
+            Collections.singletonList(enclosure));
+        Map<ProjectedNodeKey, LayoutPoint> expectedNodes = Collections.singletonMap(node.key(),
+            LayoutPoint.of(0.0, 0.0));
+        Map<EnclosureHullKey, LayoutPoint> expectedAnchors = Collections.singletonMap(hullKey,
+            LayoutPoint.of(0.0, 0.0));
+
+        assertThatThrownBy(() -> diagnostic.validateFrameCoverage(
+            frame(Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(), expectedAnchors), projection,
+            "missing node")).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("missing node node coverage differs");
+        assertThatThrownBy(() -> diagnostic.validateFrameCoverage(
+            frame(expectedNodes, Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), projection,
+            "missing anchor")).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("missing anchor anchor coverage differs");
+
+        Map<ProjectedNodeKey, LayoutPoint> extraNodes = new LinkedHashMap<ProjectedNodeKey, LayoutPoint>(
+            expectedNodes);
+        extraNodes.put(ProjectedNodeKey.of(SourceNodeKey.persisted(NodeReference.of(mapId,
+            PersistedNodeId.of("extra-node")))), LayoutPoint.of(1.0, 0.0));
+        assertThatThrownBy(() -> diagnostic.validateFrameCoverage(frame(extraNodes, expectedAnchors), projection,
+            "extra node")).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("extra node node coverage differs");
+
+        EnclosureHullKey extraHullKey = EnclosureHullKey.of(Collections.singletonList(EnclosureKey.of(
+            SourceNodeKey.transientPath(mapId, Collections.singletonList(Integer.valueOf(1))))));
+        Map<EnclosureHullKey, LayoutPoint> extraAnchors = new LinkedHashMap<EnclosureHullKey, LayoutPoint>(
+            expectedAnchors);
+        extraAnchors.put(extraHullKey, LayoutPoint.of(1.0, 0.0));
+        assertThatThrownBy(() -> diagnostic.validateFrameCoverage(frame(expectedNodes, extraAnchors), projection,
+            "extra anchor")).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("extra anchor anchor coverage differs");
+
+        diagnostic.validateFrameCoverage(frame(expectedNodes, expectedAnchors), projection, "exact coverage");
+
+        GraphProjection emptyProjection = GraphProjection.structure(0L, Collections.<ProjectedNode>emptyList(),
+            Collections.<ProjectedEnclosure>emptyList());
+        diagnostic.validateFrameCoverage(frame(Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(),
+            Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), emptyProjection, "empty coverage");
+    }
+
+    @Test
+    public void retainTheInjectedClockAndPublishAcceptedFirstFramesAsSettling() throws Exception {
+        NanoClock clock = new CountingNanoClock();
+        GraphWorkspacePerformanceDiagnostic diagnostic = diagnostic(clock);
+        GraphProjection projection = GraphProjection.structure(0L, Collections.<ProjectedNode>emptyList(),
+            Collections.<ProjectedEnclosure>emptyList());
+        LayoutFrame frame = LayoutFrame.of(0L,
+            LayoutPositions.of(Collections.emptyMap(), Collections.emptyMap()), false);
+
+        assertThat(diagnostic.clock()).isSameAs(clock);
+        CanvasState state = diagnostic.acceptedFirstFrameState(0L, projection, frame,
+            GraphGeometry.of(Collections.emptyMap(), Collections.emptyMap()));
+        assertThat(state.status()).isEqualTo(OperationalStatus.SETTLING);
+    }
+
+    @Test
     public void permitOnlyTheDocumentedEmptyBucketsOnTheSkewedFinalMap() {
         int[] skewedFinalMapLeafCounts = directLeafCounts(24);
         skewedFinalMapLeafCounts[22] = 0;
@@ -164,6 +290,25 @@ public class PerformanceTripwiresShould {
             result += value;
         }
         return result;
+    }
+
+    private static LayoutFrame frame(Map<ProjectedNodeKey, LayoutPoint> nodes,
+            Map<EnclosureHullKey, LayoutPoint> anchors) {
+        return LayoutFrame.of(0L, LayoutPositions.of(nodes, anchors), false);
+    }
+
+    private GraphWorkspacePerformanceDiagnostic diagnostic(NanoClock clock) throws Exception {
+        return new GraphWorkspacePerformanceDiagnostic(temporaryFolder.newFolder("diagnostic").toPath(), false,
+            clock);
+    }
+
+    private static final class CountingNanoClock implements NanoClock {
+        private long value;
+
+        @Override
+        public long nanoTime() {
+            return value++;
+        }
     }
 
     @Test

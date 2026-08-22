@@ -109,13 +109,15 @@ tasks.register('verifyGraphBundle') {
 check.dependsOn verifyGraphBundle
 
 tasks.register('graphPerformanceDiagnostic', JavaExec) {
+    final boolean strictPerformance = project.hasProperty('graphStrictPerformance')
     dependsOn tasks.named('testClasses')
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'org.freeplane.plugin.graph.performance.GraphWorkspacePerformanceDiagnostic'
     systemProperty 'java.awt.headless', 'true'
     systemProperty 'user.language', 'en'
     systemProperty 'user.country', 'US'
-    systemProperty 'graphStrictPerformance', project.hasProperty('graphStrictPerformance').toString()
+    systemProperty 'graphStrictPerformance', strictPerformance.toString()
+    inputs.property('graphStrictPerformance', strictPerformance)
     outputs.dir(file("$buildDir/graph-performance"))
     args file("$buildDir/graph-performance").absolutePath
 }
