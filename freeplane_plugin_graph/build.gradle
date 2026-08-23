@@ -121,3 +121,55 @@ tasks.register('graphPerformanceDiagnostic', JavaExec) {
     outputs.dir(file("$buildDir/graph-performance"))
     args file("$buildDir/graph-performance").absolutePath
 }
+
+tasks.register('graphSmokeInstallation') {
+    dependsOn tasks.named('jar')
+    dependsOn tasks.named('copyOSGiJars')
+    dependsOn tasks.named('copyOSGiManifest')
+    dependsOn tasks.named('copyOSGiConfig')
+    dependsOn project(':freeplane').tasks.named('jar')
+    dependsOn project(':freeplane').tasks.named('copyOSGiJars')
+    dependsOn project(':freeplane').tasks.named('copyOSGiManifest')
+    dependsOn project(':freeplane').tasks.named('copyExternalResources')
+    dependsOn project(':freeplane_framework').tasks.named('copyLauncherStuff')
+}
+
+tasks.register('graphOsgiSmoke', JavaExec) {
+    dependsOn tasks.named('graphSmokeInstallation')
+    dependsOn tasks.named('testClasses')
+    classpath = files(rootProject.file('BIN/framework.jar')) + sourceSets.test.runtimeClasspath.filter {
+        !it.name.startsWith('framework-')
+    }
+    mainClass = 'org.freeplane.plugin.graph.smoke.GraphPluginOsgiSmoke'
+    systemProperty 'java.awt.headless', 'true'
+    systemProperty 'user.language', 'en'
+    systemProperty 'user.country', 'US'
+    args rootDir.absolutePath
+}
+
+tasks.register('graphUiEvidence', JavaExec) {
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'org.freeplane.plugin.graph.smoke.GraphWorkspaceUiEvidence'
+    workingDir rootDir
+    systemProperty 'java.awt.headless', 'true'
+    systemProperty 'user.language', 'en'
+    systemProperty 'user.country', 'US'
+    args rootProject.file('docs/superpowers/specs/images/2026-08-10-graph-workspace-implemented.png').absolutePath,
+        rootProject.file('docs/superpowers/specs/images/2026-08-10-graph-group-marker-implemented.png').absolutePath
+    outputs.files(
+        rootProject.file('docs/superpowers/specs/images/2026-08-10-graph-workspace-implemented.png'),
+        rootProject.file('docs/superpowers/specs/images/2026-08-10-graph-group-marker-implemented.png'))
+}
+
+tasks.register('freeplaneLaunchSmoke', JavaExec) {
+    dependsOn tasks.named('graphSmokeInstallation')
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'org.freeplane.plugin.graph.smoke.FreeplaneLaunchSmoke'
+    workingDir rootDir
+    systemProperty 'user.language', 'en'
+    systemProperty 'user.country', 'US'
+    args rootDir.absolutePath, file("$buildDir/freeplane-launch-smoke/result.properties").absolutePath
+    outputs.file(file("$buildDir/freeplane-launch-smoke/result.properties"))
+}
