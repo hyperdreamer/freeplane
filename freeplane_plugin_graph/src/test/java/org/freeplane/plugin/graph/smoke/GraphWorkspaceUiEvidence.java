@@ -1,13 +1,17 @@
 package org.freeplane.plugin.graph.smoke;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.Graphics2D;
+import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
@@ -22,6 +26,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
@@ -39,6 +44,8 @@ import javax.swing.SwingUtilities;
 
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.util.TextUtils;
+import org.freeplane.features.map.MapModel;
+import org.freeplane.features.map.NodeModel;
 import org.freeplane.plugin.graph.canvas.GraphCanvas;
 import org.freeplane.plugin.graph.control.CanvasState;
 import org.freeplane.plugin.graph.control.GraphWorkspaceController;
@@ -52,6 +59,8 @@ import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.geometry.NodeGeometry;
+import org.freeplane.plugin.graph.group.GraphGroupMarkerPainter;
+import org.freeplane.plugin.graph.group.GraphGroupModel;
 import org.freeplane.plugin.graph.layout.LayoutFrame;
 import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
@@ -63,6 +72,7 @@ import org.freeplane.plugin.graph.workspace.ListenerRegistration;
 import org.freeplane.plugin.graph.workspace.model.DisplaySettings;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 import org.freeplane.plugin.graph.workspace.model.Viewport;
+import org.freeplane.view.swing.map.NodeView;
 import org.mockito.Answers;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
@@ -79,12 +89,12 @@ public final class GraphWorkspaceUiEvidence {
 
     public static void main(final String[] arguments) throws Exception {
         if (arguments.length != 2) {
-            throw new IllegalArgumentException("Expected desktop and narrow image paths");
+            throw new IllegalArgumentException("Expected desktop workspace and marker image paths");
         }
         final Path desktop = Paths.get(arguments[0]).toAbsolutePath().normalize();
-        final Path narrow = Paths.get(arguments[1]).toAbsolutePath().normalize();
+        final Path marker = Paths.get(arguments[1]).toAbsolutePath().normalize();
         Files.createDirectories(desktop.getParent());
-        Files.createDirectories(narrow.getParent());
+        Files.createDirectories(marker.getParent());
 
         onEdt(new Runnable() {
             @Override
@@ -102,12 +112,12 @@ public final class GraphWorkspaceUiEvidence {
                         })) {
                     resourceController.when(ResourceController::getResourceController)
                         .thenReturn(mock(ResourceController.class));
-                    final EvidenceImages images = new EvidenceImages(desktop, narrow);
+                    final EvidenceImages images = new EvidenceImages(desktop, marker);
                     images.capture();
                 }
             }
         });
-        System.out.println("Graph UI evidence: EDT shell interactions and desktop/narrow paints passed");
+        System.out.println("Graph UI evidence: EDT shell interactions, desktop workspace, and marker paints passed");
     }
 
     private static void onEdt(final Runnable action) throws Exception {
@@ -193,7 +203,7 @@ public final class GraphWorkspaceUiEvidence {
             "00000000-0000-0000-0000-%012d", Long.valueOf(value))));
     }
 
-    private static CanvasState twoMapState(final boolean graphGroupOnSecondMap) {
+    private static CanvasState twoMapState() {
         final SourceNodeKey firstSource = SourceNodeKey.transientPath(FIRST_MAP, Collections.<Integer>emptyList());
         final SourceNodeKey secondSource = SourceNodeKey.transientPath(SECOND_MAP,
             Collections.<Integer>emptyList());
@@ -202,7 +212,7 @@ public final class GraphWorkspaceUiEvidence {
         final ProjectedNode first = ProjectedNode.of(firstKey, SafeNodeLabel.of("Alpha", "Alpha"),
             "Alpha map", false);
         final ProjectedNode second = ProjectedNode.of(secondKey, SafeNodeLabel.of("Beta", "Beta"),
-            "Beta map", graphGroupOnSecondMap);
+            "Beta map", false);
         final List<ProjectedNode> nodes = Arrays.asList(first, second);
         final GraphProjection projection = GraphProjection.structure(7L, nodes, Collections.emptyList());
         final LayoutPoint firstPoint = LayoutPoint.of(-110.0, -32.0);
@@ -228,15 +238,15 @@ public final class GraphWorkspaceUiEvidence {
 
     private static final class EvidenceImages {
         private final Path desktop;
-        private final Path narrow;
+        private final Path marker;
         private final ModelAccess modelAccess;
         private final JPanel root;
         private final GraphCanvas canvas;
 
-        EvidenceImages(final Path desktop, final Path narrow) {
+        EvidenceImages(final Path desktop, final Path marker) {
             this.desktop = desktop;
-            this.narrow = narrow;
-            final CanvasState state = twoMapState(false);
+            this.marker = marker;
+            final CanvasState state = twoMapState();
             final GraphWorkspaceHandle handle = mock(GraphWorkspaceHandle.class);
             when(handle.currentProjection()).thenReturn(state.projection());
             final GraphWorkspaceController applicationController = mock(GraphWorkspaceController.class);
@@ -272,12 +282,66 @@ public final class GraphWorkspaceUiEvidence {
             dispatchInteractions();
             paintAndVerify(desktop, root);
 
-            final CanvasState markedState = twoMapState(true);
-            modelAccess.acceptCanvasState(markedState);
             root.setSize(new Dimension(900, 900));
             layoutRecursively(root);
-            paintAndVerify(narrow, root);
+            verifyWorkspacePaint(root);
+            paintMarkerEvidence(marker);
             modelAccess.close();
+        }
+
+        private void verifyWorkspacePaint(final JPanel panel) {
+            final BufferedImage image = render(panel);
+            assertNonBlank(image, Paths.get("narrow graph workspace"));
+            assertNoOverlap(panel);
+        }
+
+        private void paintMarkerEvidence(final Path path) {
+            final MapModel map = new MapModel((source, targetMap, withChildren) -> null, null, null);
+            final NodeModel rootNode = new NodeModel("root", map);
+            map.setRoot(rootNode);
+            final NodeModel marked = new NodeModel("marked", map);
+            rootNode.insert(marked);
+            marked.addExtension(new GraphGroupModel());
+            if (!GraphGroupModel.isMarked(marked)) {
+                throw new AssertionError("Marker fixture did not contain a marked NodeModel");
+            }
+
+            final NodeView nodeView = mock(NodeView.class);
+            when(nodeView.getNode()).thenReturn(marked);
+            when(nodeView.getZoomed(anyInt())).thenAnswer(invocation ->
+                Integer.valueOf(((Integer) invocation.getArgument(0)).intValue()));
+            final Point[] points = new Point[] {
+                new Point(300, 300), new Point(300, 420), new Point(600, 420), new Point(600, 300)
+            };
+            doAnswer(invocation -> {
+                @SuppressWarnings("unchecked")
+                final LinkedList<Point> coordinates = (LinkedList<Point>) invocation.getArgument(0);
+                for (final Point point : points) {
+                    coordinates.add(new Point(point));
+                }
+                return null;
+            }).when(nodeView).getCoordinates(any(LinkedList.class));
+
+            final BufferedImage image = new BufferedImage(900, 900, BufferedImage.TYPE_INT_ARGB);
+            final Graphics2D graphics = image.createGraphics();
+            graphics.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
+                java.awt.RenderingHints.VALUE_ANTIALIAS_OFF);
+            try {
+                new GraphGroupMarkerPainter().paint(nodeView, graphics);
+            }
+            finally {
+                graphics.dispose();
+            }
+            final Rectangle markerBounds = opaqueCoralBounds(image);
+            final int markerPixels = opaqueCoralPixelCount(image);
+            if (markerPixels < 20 || markerBounds.width <= 300 || markerBounds.height <= 120
+                    || markerBounds.x > 300 || markerBounds.y > 300
+                    || markerBounds.x + markerBounds.width - 1 < 600
+                    || markerBounds.y + markerBounds.height - 1 < 420) {
+                throw new AssertionError("Marker geometry/coral assertion failed: pixels=" + markerPixels
+                    + ", bounds=" + markerBounds);
+            }
+            writeImage(image, path);
         }
 
         private void dispatchInteractions() {
@@ -323,6 +387,13 @@ public final class GraphWorkspaceUiEvidence {
         }
 
         private void paintAndVerify(final Path path, final JPanel panel) {
+            final BufferedImage image = render(panel);
+            assertNonBlank(image, path);
+            assertNoOverlap(panel);
+            writeImage(image, path);
+        }
+
+        private static BufferedImage render(final JPanel panel) {
             final BufferedImage image = new BufferedImage(panel.getWidth(), panel.getHeight(),
                 BufferedImage.TYPE_INT_ARGB);
             final Graphics2D graphics = image.createGraphics();
@@ -332,14 +403,50 @@ public final class GraphWorkspaceUiEvidence {
             finally {
                 graphics.dispose();
             }
-            assertNonBlank(image, path);
-            assertNoOverlap(panel);
+            return image;
+        }
+
+        private static void writeImage(final BufferedImage image, final Path path) {
             try {
                 ImageIO.write(image, "png", path.toFile());
             }
             catch (final java.io.IOException exception) {
                 throw new IllegalStateException("Unable to write UI evidence " + path, exception);
             }
+        }
+
+        private static int opaqueCoralPixelCount(final BufferedImage image) {
+            int count = 0;
+            for (int y = 0; y < image.getHeight(); y++) {
+                for (int x = 0; x < image.getWidth(); x++) {
+                    final Color color = new Color(image.getRGB(x, y), true);
+                    if (color.getRed() == 0xDF && color.getGreen() == 0x62
+                            && color.getBlue() == 0x5D && color.getAlpha() == 255) {
+                        count++;
+                    }
+                }
+            }
+            return count;
+        }
+
+        private static Rectangle opaqueCoralBounds(final BufferedImage image) {
+            int minX = image.getWidth();
+            int minY = image.getHeight();
+            int maxX = -1;
+            int maxY = -1;
+            for (int y = 0; y < image.getHeight(); y++) {
+                for (int x = 0; x < image.getWidth(); x++) {
+                    final Color color = new Color(image.getRGB(x, y), true);
+                    if (color.getRed() == 0xDF && color.getGreen() == 0x62
+                            && color.getBlue() == 0x5D && color.getAlpha() == 255) {
+                        minX = Math.min(minX, x);
+                        minY = Math.min(minY, y);
+                        maxX = Math.max(maxX, x);
+                        maxY = Math.max(maxY, y);
+                    }
+                }
+            }
+            return maxX < 0 ? new Rectangle() : new Rectangle(minX, minY, maxX - minX + 1, maxY - minY + 1);
         }
 
         private static void assertNonBlank(final BufferedImage image, final Path path) {
@@ -478,10 +585,6 @@ public final class GraphWorkspaceUiEvidence {
 
         void completeInitialLayout() {
             invoke("completeInitialLayout");
-        }
-
-        void acceptCanvasState(final CanvasState state) {
-            invoke("acceptCanvasState", state);
         }
 
         void close() {

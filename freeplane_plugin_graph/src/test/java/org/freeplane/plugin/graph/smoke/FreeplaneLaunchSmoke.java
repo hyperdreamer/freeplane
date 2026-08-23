@@ -41,6 +41,7 @@ public final class FreeplaneLaunchSmoke {
         final Path config = isolatedRoot.resolve("config");
         Files.createDirectories(home);
         Files.createDirectories(config);
+        writeLaunchProperties(config);
         final List<String> output = new ArrayList<String>();
         final AtomicBoolean graphBundleActive = new AtomicBoolean(false);
         final AtomicReference<Throwable> readerFailure = new AtomicReference<Throwable>();
@@ -53,17 +54,26 @@ public final class FreeplaneLaunchSmoke {
         int exitCode = Integer.MIN_VALUE;
         try {
             awaitGraphBundleActive(process, graphBundleActive, output, readerFailure);
-            if (process.waitFor(NORMAL_SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
-                exitCode = process.exitValue();
-            }
-            else {
+            if (!awaitProcessLifecycleTermination(process, launchMarker, NORMAL_SHUTDOWN_TIMEOUT_SECONDS)) {
                 termRequired = true;
                 process.destroy();
-                if (!process.waitFor(TERM_SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                terminateLaunchProcesses(launchMarker);
+                if (!awaitProcessLifecycleTermination(process, launchMarker, TERM_SHUTDOWN_TIMEOUT_SECONDS)) {
                     process.destroyForcibly();
-                    throw new AssertionError("Freeplane remained alive after normal shutdown and TERM");
+                    throw new AssertionError("Freeplane remained alive after normal shutdown and TERM\n"
+                        + join(output));
                 }
-                exitCode = process.exitValue();
+            }
+            reader.join(2_000L);
+            final Throwable failure = readerFailure.get();
+            if (failure != null) {
+                throw new IllegalStateException("Unable to read Freeplane launch output", failure);
+            }
+            exitCode = process.exitValue();
+            final boolean normalQuitRequested = containsOutput(output, "(QuitAction)");
+            if (!normalQuitRequested) {
+                throw new AssertionError("Production QuitAction was not observed in the child output\n"
+                    + join(output));
             }
             if (exitCode != 0) {
                 throw new AssertionError("Freeplane launch smoke exited with " + exitCode + "\n"
@@ -74,13 +84,10 @@ public final class FreeplaneLaunchSmoke {
                 throw new AssertionError("Freeplane or plugin-owned graph process remains: "
                     + remainingProcesses);
             }
-            if (!pluginThreadNames().isEmpty()) {
-                throw new AssertionError("Plugin-owned graph workers remain in launch smoke JVM: "
-                    + pluginThreadNames());
-            }
-            writeResult(resultPath, graphBundleActive.get(), termRequired, exitCode, output);
-            System.out.println("Freeplane launch smoke: graph bundle ACTIVE, normal shutdown exit=" + exitCode
-                + ", TERM required=" + termRequired);
+            writeResult(resultPath, graphBundleActive.get(), normalQuitRequested, termRequired,
+                exitCode, remainingProcesses.isEmpty(), output);
+            System.out.println("Freeplane launch smoke: graph bundle ACTIVE, production QuitAction, exit=" + exitCode
+                + ", TERM required=" + termRequired + ", child process table clear=true");
         }
         finally {
             if (process.isAlive()) {
@@ -93,18 +100,40 @@ public final class FreeplaneLaunchSmoke {
         }
     }
 
+    private static void writeLaunchProperties(final Path config) throws IOException {
+        final Path userDirectory = config.resolve("freeplane").resolve("1.12.x");
+        Files.createDirectories(userDirectory);
+        final String properties = "create_new_map_if_no_maps_are_loaded=false\n"
+            + "always_load_last_maps=false\n"
+            + "load_last_maps=false\n"
+            + "load_last_map=false\n";
+        Files.write(userDirectory.resolve("auto.properties"),
+            properties.getBytes(StandardCharsets.ISO_8859_1));
+    }
+
     private static Process start(final Path launcher, final Path home, final Path config,
             final String launchMarker) throws IOException {
-        final ProcessBuilder builder = new ProcessBuilder(launcher.toString());
+        final ProcessBuilder builder = new ProcessBuilder(launcher.toString(), "-XQuitAction");
         builder.directory(launcher.getParent().toFile());
         builder.redirectErrorStream(true);
         builder.environment().put("HOME", home.toString());
         builder.environment().put("XDG_CONFIG_HOME", config.toString());
         builder.environment().put("JAVA_HOME", "/home/henry/.sdkman/candidates/java/21.0.8-zulu");
         builder.environment().put("JAVA_OPTS",
-            "-Djava.awt.headless=true -Dorg.freeplane.exit_on_start=true -Dorg.freeplane.nosplash=true"
-                + " -Dgraph.launch.smoke.marker=" + launchMarker);
+            "-Dorg.freeplane.nosplash=true -Dgraph.launch.smoke.marker=" + launchMarker);
         return builder.start();
+    }
+
+    private static boolean awaitProcessLifecycleTermination(final Process process, final String launchMarker,
+            final long timeoutSeconds) throws IOException, InterruptedException {
+        final long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds);
+        while (System.nanoTime() < deadline) {
+            if (!process.isAlive() && runningLaunchProcesses(launchMarker).isEmpty()) {
+                return true;
+            }
+            Thread.sleep(100L);
+        }
+        return !process.isAlive() && runningLaunchProcesses(launchMarker).isEmpty();
     }
 
     private static List<String> runningLaunchProcesses(final String launchMarker) throws IOException, InterruptedException {
@@ -128,6 +157,20 @@ public final class FreeplaneLaunchSmoke {
             throw new IllegalStateException("Process-table inspection failed with " + process.exitValue());
         }
         return matches;
+    }
+
+    private static void terminateLaunchProcesses(final String launchMarker)
+            throws IOException, InterruptedException {
+        for (final String process : runningLaunchProcesses(launchMarker)) {
+            final String pid = firstToken(process);
+            if (pid == null) {
+                continue;
+            }
+            final Process terminator = new ProcessBuilder("kill", "-TERM", pid).start();
+            if (!terminator.waitFor(2L, TimeUnit.SECONDS)) {
+                terminator.destroyForcibly();
+            }
+        }
     }
 
     private static void terminateOrphans(final String launchMarker) throws Exception {
@@ -201,26 +244,30 @@ public final class FreeplaneLaunchSmoke {
         }
     }
 
-    private static List<String> pluginThreadNames() {
-        final List<String> names = new ArrayList<String>();
-        for (final Thread thread : Thread.getAllStackTraces().keySet()) {
-            if (thread.isAlive() && thread.getName().startsWith("freeplane-graph-")) {
-                names.add(thread.getName());
+    private static boolean containsOutput(final List<String> output, final String fragment) {
+        synchronized (output) {
+            for (final String line : output) {
+                if (line.contains(fragment)) {
+                    return true;
+                }
             }
         }
-        return names;
+        return false;
     }
 
-    private static void writeResult(final Path path, final boolean active, final boolean termRequired,
-            final int exitCode, final List<String> output) throws IOException {
+    private static void writeResult(final Path path, final boolean active, final boolean normalQuitRequested,
+            final boolean termRequired, final int exitCode, final boolean childProcessTerminated,
+            final List<String> output) throws IOException {
         final Path parent = path.getParent();
         if (parent != null) {
             Files.createDirectories(parent);
         }
         final StringBuilder result = new StringBuilder();
         result.append("graphBundleActive=").append(active).append('\n');
+        result.append("normalQuitRequested=").append(normalQuitRequested).append('\n');
         result.append("termRequired=").append(termRequired).append('\n');
         result.append("exitCode=").append(exitCode).append('\n');
+        result.append("childProcessTerminated=").append(childProcessTerminated).append('\n');
         result.append("normalShutdownTimeoutSeconds=").append(NORMAL_SHUTDOWN_TIMEOUT_SECONDS).append('\n');
         result.append("termShutdownTimeoutSeconds=").append(TERM_SHUTDOWN_TIMEOUT_SECONDS).append('\n');
         result.append("outputLineCount=").append(output.size()).append('\n');
