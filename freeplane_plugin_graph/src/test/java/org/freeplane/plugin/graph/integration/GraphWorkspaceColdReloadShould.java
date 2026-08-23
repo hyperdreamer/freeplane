@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.net.URL;
@@ -26,6 +27,10 @@ import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 
@@ -34,6 +39,7 @@ import javax.swing.Timer;
 import org.freeplane.core.undo.IActor;
 import org.freeplane.core.undo.IUndoHandler;
 import org.freeplane.core.ui.menubuilders.generic.Entry;
+import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.core.util.Compat;
 import org.freeplane.features.link.NodeLinks;
 import org.freeplane.features.map.IMapLifeCycleListener;
@@ -46,12 +52,14 @@ import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
 import org.freeplane.features.mode.mindmapmode.MModeController;
 import org.freeplane.features.ui.IMapViewManager;
+import org.freeplane.features.ui.ViewController;
 import org.freeplane.features.url.MapVersionInterpreter;
 import org.freeplane.features.url.mindmapmode.MFileManager;
 import org.freeplane.features.url.mindmapmode.MapLoader;
 import org.freeplane.main.application.ApplicationResourceController;
 import org.freeplane.main.application.CommandLineParser;
 import org.freeplane.main.headlessmode.FreeplaneHeadlessStarter;
+import org.freeplane.main.headlessmode.HeadlessUIController;
 import org.freeplane.plugin.graph.control.DefaultGraphWorkspaceController;
 import org.freeplane.plugin.graph.control.GraphWorkspaceHandle;
 import org.freeplane.plugin.graph.control.GraphWorkspaceView;
@@ -95,6 +103,20 @@ public class GraphWorkspaceColdReloadShould {
         GraphWorkspaceHandle handle = null;
         MapModel sourceMap = null;
         try {
+            final ExecutorService scopeExecutor = freeplane.controller().getMainThreadExecutorService();
+            final GraphWorkspaceIntegrationSupport.FreeplaneScope nestedScope =
+                new GraphWorkspaceIntegrationSupport.FreeplaneScope();
+            try {
+                assertThat(nestedScope.controller()).isSameAs(freeplane.controller());
+                assertThat(nestedScope.controller().getMainThreadExecutorService())
+                    .as("each acceptance scope has its own main-thread executor")
+                    .isNotSameAs(scopeExecutor);
+            }
+            finally {
+                nestedScope.close();
+            }
+            assertThat(freeplane.controller().getMainThreadExecutorService()).isSameAs(scopeExecutor);
+
             final Path sourceMapFile = temporaryFolder.getRoot().toPath().resolve("source.mm");
             GraphWorkspaceIntegrationSupport.copyFixture(sourceMapFile);
             freeplane.installGraphGroups();
@@ -531,11 +553,76 @@ final class GraphWorkspaceIntegrationSupport {
         }
     }
 
+    private static final class ActionRegistrationController extends Controller {
+        ActionRegistrationController(final Controller source) {
+            super(source.getResourceController());
+        }
+
+        @Override
+        public void addAction(final AFreeplaneAction action) {
+        }
+    }
+
+    private static final class ScopeHeadlessUIController extends HeadlessUIController {
+        private final ExecutorService executorService;
+        private volatile Thread dispatchThread;
+
+        ScopeHeadlessUIController(final Controller controller, final IMapViewManager mapViewManager) {
+            super(new ActionRegistrationController(controller), mapViewManager, "");
+            executorService = Executors.newSingleThreadExecutor(new ThreadFactory() {
+                @Override
+                public Thread newThread(final Runnable runnable) {
+                    final Thread thread = Executors.defaultThreadFactory().newThread(runnable);
+                    dispatchThread = thread;
+                    return thread;
+                }
+            });
+        }
+
+        @Override
+        public boolean isDispatchThread() {
+            return Thread.currentThread() == dispatchThread;
+        }
+
+        @Override
+        public ExecutorService getMainThreadExecutorService() {
+            return executorService;
+        }
+
+        @Override
+        public void invokeLater(final Runnable runnable) {
+            executorService.execute(runnable);
+        }
+
+        @Override
+        public void invokeAndWait(final Runnable runnable)
+                throws InterruptedException, InvocationTargetException {
+            try {
+                if (isDispatchThread()) {
+                    runnable.run();
+                }
+                else if (!executorService.isShutdown()) {
+                    executorService.submit(runnable).get();
+                }
+            }
+            catch (ExecutionException failure) {
+                throw new InvocationTargetException(failure);
+            }
+        }
+
+        void shutdownExecutor() {
+            executorService.shutdown();
+        }
+    }
+
     static final class FreeplaneScope implements AutoCloseable {
         private final Controller previousController;
+        private final ViewController previousViewController;
+        private final IMapViewManager previousMapViewManager;
         private final MapVersionInterpreter[] previousInterpreters;
         private final HeadlessResourceFiles resources;
         private final boolean ownsStarter;
+        private final ScopeHeadlessUIController scopeViewController;
         private final Entry previousMenuStructure;
         private final Controller controller;
         private final ModeController modeController;
@@ -569,6 +656,8 @@ final class GraphWorkspaceIntegrationSupport {
                 ownsStarter = false;
                 controller = previousController;
                 modeController = existing;
+                previousViewController = controller.getViewController();
+                previousMapViewManager = controller.getMapViewManager();
             }
             else {
                 resources = new HeadlessResourceFiles();
@@ -578,8 +667,12 @@ final class GraphWorkspaceIntegrationSupport {
                 starter.createFrame();
                 ownsStarter = true;
                 modeController = controller.getModeController(MModeController.MODENAME);
-                controller.setMapViewManager(selectableMapViewManager(controller.getMapViewManager()));
+                previousViewController = null;
+                previousMapViewManager = null;
             }
+            controller.setMapViewManager(selectableMapViewManager(controller.getMapViewManager()));
+            scopeViewController = new ScopeHeadlessUIController(controller, controller.getMapViewManager());
+            controller.setViewController(scopeViewController);
             mapController = (MMapController) modeController.getMapController();
             MapVersionInterpreter.addMapVersionInterpreter(new MapVersionInterpreter("GRAPH_WORKSPACE_INTEGRATION",
                 19, "freeplane 1.12.0", false, false, "Freeplane", "https://www.freeplane.org", null, null));
@@ -771,17 +864,28 @@ final class GraphWorkspaceIntegrationSupport {
                 }
             }
             finally {
-                if (!ownsStarter) {
-                    replaceMenuStructure(modeController, previousMenuStructure);
+                try {
+                    if (previousViewController != null) {
+                        controller.setViewController(previousViewController);
+                    }
+                    if (previousMapViewManager != null) {
+                        controller.setMapViewManager(previousMapViewManager);
+                    }
+                    if (!ownsStarter) {
+                        replaceMenuStructure(modeController, previousMenuStructure);
+                    }
+                    if (ownsStarter) {
+                        clearMapIoSingleton();
+                    }
+                    restoreMapVersionInterpreters(previousInterpreters);
+                    if (resources != null) {
+                        resources.close();
+                    }
+                    Controller.setCurrentController(previousController);
                 }
-                if (ownsStarter) {
-                    clearMapIoSingleton();
+                finally {
+                    scopeViewController.shutdownExecutor();
                 }
-                restoreMapVersionInterpreters(previousInterpreters);
-                if (resources != null) {
-                    resources.close();
-                }
-                Controller.setCurrentController(previousController);
             }
             if (failure != null) {
                 throw failure;
