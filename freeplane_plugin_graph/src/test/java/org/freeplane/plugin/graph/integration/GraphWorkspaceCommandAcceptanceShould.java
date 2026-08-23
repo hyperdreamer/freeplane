@@ -340,6 +340,9 @@ public class GraphWorkspaceCommandAcceptanceShould {
             assertThat(nodes.connectors()).isEmpty();
             assertThat(nodes.map.isSaved()).isTrue();
             assertThat(nodes.map.undo.undoCalls).isZero();
+            assertThat(nodes.map.undo.actorCount()).isZero();
+            assertThat(nodes.map.undo.canUndo()).isFalse();
+            assertThat(nodes.map.undo.getTransactionLevel()).isZero();
             assertThat(scope.store.currentDocument()).isSameAs(before);
             assertThat(scope.store.canUndo()).isFalse();
 
@@ -965,6 +968,10 @@ public class GraphWorkspaceCommandAcceptanceShould {
             else {
                 transaction.add(actor);
             }
+        }
+
+        private int actorCount() {
+            return actors.size();
         }
 
         @Override
