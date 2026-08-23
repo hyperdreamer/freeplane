@@ -337,7 +337,7 @@ public class GraphWorkspaceLifecycleShould {
                 }, loadedMap);
                 freeplane.closeMap(loadedMap);
             }
-            Thread.sleep(500L);
+            GraphWorkspaceIntegrationSupport.awaitPostCloseCompletion(freeplane, root, baseline);
             assertThat(projectionCallbacks).hasValue(projectionAfterClose);
             assertThat(canvasCallbacks).hasValue(canvasAfterClose);
             assertThat(statusCallbacks).hasValue(statusAfterClose);
@@ -345,7 +345,6 @@ public class GraphWorkspaceLifecycleShould {
                 Collections.emptyList()))))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("Graph workspace handle is not open");
-            GraphWorkspaceIntegrationSupport.awaitBaseline(freeplane, root, baseline);
         }
         finally {
             closeRegistration(projectionRegistration);

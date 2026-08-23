@@ -2,6 +2,7 @@ package org.freeplane.plugin.graph.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.awt.Component;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Field;
@@ -33,7 +34,11 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
 
+import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 
 import org.freeplane.core.undo.IActor;
@@ -41,9 +46,13 @@ import org.freeplane.core.undo.IUndoHandler;
 import org.freeplane.core.ui.menubuilders.generic.Entry;
 import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.core.util.Compat;
+import org.freeplane.core.util.LogUtils;
 import org.freeplane.features.link.NodeLinks;
+import org.freeplane.features.map.IMapChangeListener;
 import org.freeplane.features.map.IMapLifeCycleListener;
 import org.freeplane.features.map.IMapSelection;
+import org.freeplane.features.map.INodeChangeListener;
+import org.freeplane.features.map.INodeSelectionListener;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.map.mindmapmode.MMapController;
@@ -104,6 +113,8 @@ public class GraphWorkspaceColdReloadShould {
         MapModel sourceMap = null;
         try {
             final ExecutorService scopeExecutor = freeplane.controller().getMainThreadExecutorService();
+            final Thread.UncaughtExceptionHandler scopeHandler =
+                Thread.getDefaultUncaughtExceptionHandler();
             final GraphWorkspaceIntegrationSupport.FreeplaneScope nestedScope =
                 new GraphWorkspaceIntegrationSupport.FreeplaneScope();
             try {
@@ -116,6 +127,7 @@ public class GraphWorkspaceColdReloadShould {
                 nestedScope.close();
             }
             assertThat(freeplane.controller().getMainThreadExecutorService()).isSameAs(scopeExecutor);
+            assertThat(Thread.getDefaultUncaughtExceptionHandler()).isSameAs(scopeHandler);
 
             final Path sourceMapFile = temporaryFolder.getRoot().toPath().resolve("source.mm");
             GraphWorkspaceIntegrationSupport.copyFixture(sourceMapFile);
@@ -226,6 +238,7 @@ public class GraphWorkspaceColdReloadShould {
                 .containsExactlyElementsOf(expectedProjection.resolutions);
             assertThat(reopenedProjection.pins).as("pins").containsExactlyElementsOf(expectedProjection.pins);
             assertThat(reopenedProjection.prominence).as("node prominence").isEqualTo(expectedProjection.prominence);
+            freeplane.drainAsyncQueues();
         }
         finally {
             if (handle != null) {
@@ -353,6 +366,14 @@ final class GraphWorkspaceIntegrationSupport {
         assertThat(freeplane.timerCount()).isEqualTo(expected.timers);
         assertThat(graphThreadProfile()).isEqualTo(expected.threads);
         assertThat(temporaryArtifacts(root)).isEqualTo(expected.temporaryArtifacts);
+    }
+
+    static void awaitPostCloseCompletion(final FreeplaneScope freeplane, final Path root,
+            final ResourceBaseline expected) throws Exception {
+        awaitBaseline(freeplane, root, expected);
+        freeplane.drainAsyncQueues();
+        awaitBaseline(freeplane, root, expected);
+        freeplane.drainAsyncQueues();
     }
 
     static Map<String, Integer> graphThreadProfile() {
@@ -585,6 +606,16 @@ final class GraphWorkspaceIntegrationSupport {
         }
 
         @Override
+        public Component getCurrentRootComponent() {
+            return null;
+        }
+
+        @Override
+        public Component getMainFrameComponent() {
+            return null;
+        }
+
+        @Override
         public ExecutorService getMainThreadExecutorService() {
             return executorService;
         }
@@ -610,6 +641,17 @@ final class GraphWorkspaceIntegrationSupport {
             }
         }
 
+        void awaitIdle() throws Exception {
+            if (executorService.isShutdown()) {
+                return;
+            }
+            executorService.submit(new Runnable() {
+                @Override
+                public void run() {
+                }
+            }).get();
+        }
+
         void shutdownExecutor() {
             executorService.shutdown();
         }
@@ -623,6 +665,7 @@ final class GraphWorkspaceIntegrationSupport {
         private final HeadlessResourceFiles resources;
         private final boolean ownsStarter;
         private final ScopeHeadlessUIController scopeViewController;
+        private final HeadlessActionBoundary actionBoundary;
         private final Entry previousMenuStructure;
         private final Controller controller;
         private final ModeController modeController;
@@ -631,6 +674,7 @@ final class GraphWorkspaceIntegrationSupport {
             new IdentityHashMap<MapModel, Boolean>());
         private final Set<MapModel> observedMaps = Collections.newSetFromMap(
             new IdentityHashMap<MapModel, Boolean>());
+        private final AsyncFailureCapture asyncFailures;
         private final IMapLifeCycleListener observer = new IMapLifeCycleListener() {
             @Override
             public void onCreate(final MapModel map) {
@@ -674,9 +718,11 @@ final class GraphWorkspaceIntegrationSupport {
             scopeViewController = new ScopeHeadlessUIController(controller, controller.getMapViewManager());
             controller.setViewController(scopeViewController);
             mapController = (MMapController) modeController.getMapController();
+            actionBoundary = new HeadlessActionBoundary(mapController);
             MapVersionInterpreter.addMapVersionInterpreter(new MapVersionInterpreter("GRAPH_WORKSPACE_INTEGRATION",
                 19, "freeplane 1.12.0", false, false, "Freeplane", "https://www.freeplane.org", null, null));
             previousMenuStructure = replaceMenuStructure(modeController, new Entry());
+            asyncFailures = new AsyncFailureCapture();
         }
 
         ModeController modeController() {
@@ -738,6 +784,14 @@ final class GraphWorkspaceIntegrationSupport {
 
         void markMapDirtyWithoutChangingContent(final MapModel map) {
             mapController.mapSaved(map, false);
+        }
+
+        void drainAsyncQueues() throws Exception {
+            for (int pass = 0; pass < 4; pass++) {
+                scopeViewController.awaitIdle();
+                awaitAwtQueue();
+            }
+            asyncFailures.assertEmpty();
         }
 
         List<NodeModel> applyRandomActors(final MapModel map, final long seed, final int count) {
@@ -862,6 +916,7 @@ final class GraphWorkspaceIntegrationSupport {
                     graphGroups.close();
                     graphGroups = null;
                 }
+                drainAsyncQueues();
             }
             finally {
                 try {
@@ -884,7 +939,17 @@ final class GraphWorkspaceIntegrationSupport {
                     Controller.setCurrentController(previousController);
                 }
                 finally {
-                    scopeViewController.shutdownExecutor();
+                    try {
+                        scopeViewController.shutdownExecutor();
+                    }
+                    finally {
+                        try {
+                            actionBoundary.restore();
+                        }
+                        finally {
+                            asyncFailures.close();
+                        }
+                    }
                 }
             }
             if (failure != null) {
@@ -1076,6 +1141,9 @@ final class GraphWorkspaceIntegrationSupport {
                         if ("getMapSelection".equals(method.getName())) {
                             return selection;
                         }
+                        if ("moveFocusFromDescendantToSelection".equals(method.getName())) {
+                            return null;
+                        }
                         try {
                             return method.invoke(delegate, arguments);
                         }
@@ -1115,10 +1183,182 @@ final class GraphWorkspaceIntegrationSupport {
             field.set(null, values);
         }
 
+        private static void awaitAwtQueue() throws Exception {
+            if (!SwingUtilities.isEventDispatchThread()) {
+                SwingUtilities.invokeAndWait(new Runnable() {
+                    @Override
+                    public void run() {
+                    }
+                });
+            }
+        }
+
         private static void clearMapIoSingleton() throws Exception {
             final Field instance = MMapIO.class.getDeclaredField("INSTANCE");
             instance.setAccessible(true);
             instance.set(null, null);
+        }
+    }
+
+    private static final class HeadlessActionBoundary {
+        private final MMapController mapController;
+        private final List<INodeSelectionListener> removedSelectionListeners =
+            new ArrayList<INodeSelectionListener>();
+        private final List<INodeChangeListener> removedNodeChangeListeners =
+            new ArrayList<INodeChangeListener>();
+        private final List<IMapChangeListener> removedMapChangeListeners =
+            new ArrayList<IMapChangeListener>();
+
+        HeadlessActionBoundary(final MMapController mapController) throws Exception {
+            this.mapController = mapController;
+            final Object actionEnabler = actionListener(mapController, "actionEnablerOnChange");
+            final Object actionSelector = actionListener(mapController, "actionSelectorOnChange");
+            remove(actionEnabler);
+            remove(actionSelector);
+        }
+
+        private void remove(final Object listener) {
+            if (listener instanceof INodeSelectionListener) {
+                final INodeSelectionListener value = (INodeSelectionListener) listener;
+                if (mapController.getNodeSelectionListeners().contains(value)) {
+                    mapController.removeNodeSelectionListener(value);
+                    removedSelectionListeners.add(value);
+                }
+            }
+            if (listener instanceof INodeChangeListener) {
+                final INodeChangeListener value = (INodeChangeListener) listener;
+                if (mapController.getNodeChangeListeners().contains(value)) {
+                    mapController.removeNodeChangeListener(value);
+                    removedNodeChangeListeners.add(value);
+                }
+            }
+            if (listener instanceof IMapChangeListener) {
+                final IMapChangeListener value = (IMapChangeListener) listener;
+                if (mapController.getMapChangeListeners().contains(value)) {
+                    mapController.removeMapChangeListener(value);
+                    removedMapChangeListeners.add(value);
+                }
+            }
+        }
+
+        void restore() {
+            for (INodeSelectionListener listener : removedSelectionListeners) {
+                if (!mapController.getNodeSelectionListeners().contains(listener)) {
+                    mapController.addNodeSelectionListener(listener);
+                }
+            }
+            for (INodeChangeListener listener : removedNodeChangeListeners) {
+                if (!mapController.getNodeChangeListeners().contains(listener)) {
+                    mapController.addNodeChangeListener(listener);
+                }
+            }
+            for (IMapChangeListener listener : removedMapChangeListeners) {
+                if (!mapController.getMapChangeListeners().contains(listener)) {
+                    mapController.addMapChangeListener(listener);
+                }
+            }
+        }
+
+        private static Object actionListener(final MMapController mapController, final String fieldName)
+                throws Exception {
+            final Field field = org.freeplane.features.map.MapController.class.getDeclaredField(fieldName);
+            field.setAccessible(true);
+            return field.get(mapController);
+        }
+    }
+
+    private static final class AsyncFailureCapture implements AutoCloseable {
+        private final Thread.UncaughtExceptionHandler previous;
+        private final Thread.UncaughtExceptionHandler current;
+        private final Handler logHandler;
+        private final List<AsyncFailure> failures = Collections.synchronizedList(new ArrayList<AsyncFailure>());
+        private boolean closed;
+
+        AsyncFailureCapture() {
+            previous = Thread.getDefaultUncaughtExceptionHandler();
+            current = new Thread.UncaughtExceptionHandler() {
+                @Override
+                public void uncaughtException(final Thread thread, final Throwable failure) {
+                    record(thread, failure, "uncaught exception");
+                    if (previous != null) {
+                        previous.uncaughtException(thread, failure);
+                    }
+                    else {
+                        failure.printStackTrace(System.err);
+                    }
+                }
+            };
+            logHandler = new Handler() {
+                @Override
+                public void publish(final LogRecord record) {
+                    final String message = record.getMessage();
+                    if (record.getLevel().intValue() >= Level.SEVERE.intValue()
+                            && message != null && message.startsWith("Exception in thread")) {
+                        record(null, record.getThrown(), message);
+                    }
+                }
+
+                @Override
+                public void flush() {
+                }
+
+                @Override
+                public void close() {
+                }
+            };
+            logHandler.setLevel(Level.ALL);
+            Thread.setDefaultUncaughtExceptionHandler(current);
+            LogUtils.getLogger().addHandler(logHandler);
+        }
+
+        void record(final Thread thread, final Throwable failure, final String source) {
+            failures.add(new AsyncFailure(thread, failure, source));
+        }
+
+        void assertEmpty() {
+            final List<AsyncFailure> snapshot;
+            synchronized (failures) {
+                snapshot = new ArrayList<AsyncFailure>(failures);
+            }
+            if (snapshot.isEmpty()) {
+                return;
+            }
+            final AsyncFailure first = snapshot.get(0);
+            final String threadName = first.thread == null ? "logger" : first.thread.getName();
+            final AssertionError assertion = new AssertionError("Uncaught asynchronous failure on "
+                + threadName + " (" + first.source + "): " + first.failure);
+            if (first.failure != null) {
+                assertion.initCause(first.failure);
+            }
+            for (int index = 1; index < snapshot.size(); index++) {
+                if (snapshot.get(index).failure != null) {
+                    assertion.addSuppressed(snapshot.get(index).failure);
+                }
+            }
+            throw assertion;
+        }
+
+        @Override
+        public synchronized void close() {
+            if (!closed) {
+                LogUtils.getLogger().removeHandler(logHandler);
+                if (Thread.getDefaultUncaughtExceptionHandler() == current) {
+                    Thread.setDefaultUncaughtExceptionHandler(previous);
+                }
+                closed = true;
+            }
+        }
+    }
+
+    private static final class AsyncFailure {
+        private final Thread thread;
+        private final Throwable failure;
+        private final String source;
+
+        AsyncFailure(final Thread thread, final Throwable failure, final String source) {
+            this.thread = thread;
+            this.failure = failure;
+            this.source = source;
         }
     }
 
