@@ -536,6 +536,7 @@ final class GraphWorkspaceIntegrationSupport {
         private final MapVersionInterpreter[] previousInterpreters;
         private final HeadlessResourceFiles resources;
         private final boolean ownsStarter;
+        private final Entry previousMenuStructure;
         private final Controller controller;
         private final ModeController modeController;
         private final MMapController mapController;
@@ -582,9 +583,7 @@ final class GraphWorkspaceIntegrationSupport {
             mapController = (MMapController) modeController.getMapController();
             MapVersionInterpreter.addMapVersionInterpreter(new MapVersionInterpreter("GRAPH_WORKSPACE_INTEGRATION",
                 19, "freeplane 1.12.0", false, false, "Freeplane", "https://www.freeplane.org", null, null));
-            if (ownsStarter) {
-                installEmptyMenuStructure(modeController);
-            }
+            previousMenuStructure = replaceMenuStructure(modeController, new Entry());
         }
 
         ModeController modeController() {
@@ -772,6 +771,9 @@ final class GraphWorkspaceIntegrationSupport {
                 }
             }
             finally {
+                if (!ownsStarter) {
+                    replaceMenuStructure(modeController, previousMenuStructure);
+                }
                 if (ownsStarter) {
                     clearMapIoSingleton();
                 }
@@ -980,11 +982,14 @@ final class GraphWorkspaceIntegrationSupport {
                 });
         }
 
-        private static void installEmptyMenuStructure(final ModeController modeController) throws Exception {
+        private static Entry replaceMenuStructure(final ModeController modeController, final Entry menuRoot)
+                throws Exception {
             final Object inputFactory = modeController.getUserInputListenerFactory();
             final Field menuStructure = inputFactory.getClass().getDeclaredField("genericMenuStructure");
             menuStructure.setAccessible(true);
-            menuStructure.set(inputFactory, new Entry());
+            final Entry previousMenuStructure = (Entry) menuStructure.get(inputFactory);
+            menuStructure.set(inputFactory, menuRoot);
+            return previousMenuStructure;
         }
         private static RuntimeException recordFailure(final RuntimeException prior, final RuntimeException next) {
             if (prior == null) {
