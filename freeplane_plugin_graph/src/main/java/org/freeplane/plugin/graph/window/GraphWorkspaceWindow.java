@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import javax.swing.AbstractAction;
@@ -34,6 +35,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
 
 import org.freeplane.core.util.TextUtils;
+import org.freeplane.features.mode.Controller;
 import org.freeplane.plugin.graph.command.GraphCommand;
 import org.freeplane.plugin.graph.command.GraphCommands;
 import org.freeplane.plugin.graph.canvas.GraphCanvas;
@@ -110,7 +112,7 @@ final class GraphWorkspaceWindow extends JFrame implements GraphWorkspaceView {
                 public void run() {
                     closeOnEdt();
                 }
-            });
+            }, message -> Controller.getCurrentController().getViewController().out(message));
         setJMenuBar(model.menuBar());
         setContentPane(model.content());
         model.installWorkspaceHistoryKeys(getRootPane());
@@ -265,6 +267,7 @@ final class GraphWorkspaceWindowModel {
     private final WorkspaceCloseController closeController;
     private final Runnable graphFocus;
     private final Runnable closeCompletion;
+    private final Consumer<String> commandMessageSink;
     private final GraphWorkspaceHandle routedHandle;
     private final Action undoWorkspaceAction;
     private final Action redoWorkspaceAction;
@@ -293,13 +296,15 @@ final class GraphWorkspaceWindowModel {
     GraphWorkspaceWindowModel(final GraphWorkspaceHandle handle, final GraphWorkspaceViewBinding binding,
             final GraphWorkspaceController applicationController, final Supplier<java.nio.file.Path> pathChooser,
             final Runnable closeRequest) {
-        this(handle, binding, applicationController, pathChooser, noOpCloseController(), closeRequest, null);
+        this(handle, binding, applicationController, pathChooser, noOpCloseController(), closeRequest, null,
+            closeRequest, noOpCommandMessageSink());
     }
 
     GraphWorkspaceWindowModel(final GraphWorkspaceHandle handle, final GraphWorkspaceViewBinding binding,
             final GraphWorkspaceController applicationController, final Supplier<java.nio.file.Path> pathChooser,
             final Runnable closeRequest, final Runnable graphFocus) {
-        this(handle, binding, applicationController, pathChooser, noOpCloseController(), closeRequest, graphFocus);
+        this(handle, binding, applicationController, pathChooser, noOpCloseController(), closeRequest, graphFocus,
+            closeRequest, noOpCommandMessageSink());
     }
 
     GraphWorkspaceWindowModel(final GraphWorkspaceHandle handle, final GraphWorkspaceViewBinding binding,
@@ -307,18 +312,27 @@ final class GraphWorkspaceWindowModel {
             final WorkspaceCloseController closeController, final Runnable closeRequest,
             final Runnable graphFocus) {
         this(handle, binding, applicationController, pathChooser, closeController, closeRequest, graphFocus,
-            closeRequest);
+            closeRequest, noOpCommandMessageSink());
     }
 
     GraphWorkspaceWindowModel(final GraphWorkspaceHandle handle, final GraphWorkspaceViewBinding binding,
             final GraphWorkspaceController applicationController, final Supplier<java.nio.file.Path> pathChooser,
             final WorkspaceCloseController closeController, final Runnable closeRequest,
             final Runnable graphFocus, final Runnable closeCompletion) {
+        this(handle, binding, applicationController, pathChooser, closeController, closeRequest, graphFocus,
+            closeCompletion, noOpCommandMessageSink());
+    }
+
+    GraphWorkspaceWindowModel(final GraphWorkspaceHandle handle, final GraphWorkspaceViewBinding binding,
+            final GraphWorkspaceController applicationController, final Supplier<java.nio.file.Path> pathChooser,
+            final WorkspaceCloseController closeController, final Runnable closeRequest,
+            final Runnable graphFocus, final Runnable closeCompletion, final Consumer<String> commandMessageSink) {
         this.handle = Objects.requireNonNull(handle, "handle");
         this.binding = Objects.requireNonNull(binding, "binding");
         this.closeController = Objects.requireNonNull(closeController, "closeController");
         this.closeRequest = Objects.requireNonNull(closeRequest, "closeRequest");
         this.closeCompletion = Objects.requireNonNull(closeCompletion, "closeCompletion");
+        this.commandMessageSink = Objects.requireNonNull(commandMessageSink, "commandMessageSink");
         Objects.requireNonNull(applicationController, "applicationController");
         Objects.requireNonNull(pathChooser, "pathChooser");
 
@@ -454,6 +468,13 @@ final class GraphWorkspaceWindowModel {
         }));
     }
 
+    private static Consumer<String> noOpCommandMessageSink() {
+        return new Consumer<String>() {
+            @Override
+            public void accept(final String message) {
+            }
+        };
+    }
     private static GraphWorkspacePresentation presentationOrDefault(
             final GraphWorkspacePresentation presentation) {
         return presentation == null ? GraphWorkspacePresentation.defaults() : presentation;
@@ -568,6 +589,10 @@ final class GraphWorkspaceWindowModel {
         applyInitialViewport(currentState);
         if (result != null && result.editorViewActivated()) {
             graphFocus.run();
+        }
+        if (result != null && (result.status() == GraphCommandResult.Status.REJECTED
+                || result.status() == GraphCommandResult.Status.NO_OP)) {
+            commandMessageSink.accept(TextUtils.format(result.messageKey(), result.messageArguments().toArray()));
         }
         return result;
     }

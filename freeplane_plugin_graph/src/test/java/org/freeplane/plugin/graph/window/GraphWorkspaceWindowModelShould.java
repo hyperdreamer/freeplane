@@ -12,12 +12,14 @@ import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 import javax.swing.JMenu;
 import javax.swing.JMenuItem;
@@ -53,12 +55,16 @@ import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.input.MapAvailability;
 import org.freeplane.plugin.graph.projection.input.SafeNodeLabel;
 import org.freeplane.plugin.graph.projection.input.SourceNodeKey;
+import org.freeplane.plugin.graph.workspace.GraphCommandResult;
 import org.freeplane.plugin.graph.workspace.ListenerRegistration;
+import org.freeplane.plugin.graph.workspace.WorkspaceTransition;
 import org.freeplane.plugin.graph.workspace.model.DisplaySettings;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 import org.freeplane.plugin.graph.workspace.model.UnknownXml;
 import org.freeplane.plugin.graph.workspace.model.Viewport;
 import org.freeplane.plugin.graph.workspace.model.DisplaySettings.CanvasTheme;
+import org.freeplane.plugin.graph.workspace.model.WorkspaceDocument;
+import org.freeplane.plugin.graph.workspace.model.WorkspaceId;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.core.resources.ResourceController;
 import org.junit.After;
@@ -90,7 +96,7 @@ public class GraphWorkspaceWindowModelShould {
         textUtils.when(() -> TextUtils.getRawText(any(String.class), any(String.class)))
             .thenAnswer(invocation -> invocation.getArgument(0));
         textUtils.when(() -> TextUtils.format(any(String.class), any(Object[].class)))
-            .thenAnswer(invocation -> invocation.getArgument(0));
+            .thenAnswer(invocation -> formattedText(invocation));
     }
 
     @After
@@ -108,6 +114,18 @@ public class GraphWorkspaceWindowModelShould {
             });
             RESOURCES.clear();
         }
+    }
+
+    private static String formattedText(final org.mockito.invocation.InvocationOnMock invocation) {
+        final Object[] invocationArguments = invocation.getArguments();
+        final Object[] formatArguments;
+        if (invocationArguments.length == 2 && invocationArguments[1] instanceof Object[]) {
+            formatArguments = (Object[]) invocationArguments[1];
+        }
+        else {
+            formatArguments = Arrays.copyOfRange(invocationArguments, 1, invocationArguments.length);
+        }
+        return invocationArguments[0] + Arrays.toString(formatArguments);
     }
 
     @Test
@@ -184,6 +202,54 @@ public class GraphWorkspaceWindowModelShould {
         assertThat(commands.getAllValues()).extracting("class").contains(
             GraphCommands.Save.class, GraphCommands.UndoWorkspace.class, GraphCommands.RedoWorkspace.class,
             GraphCommands.Viewport.class, GraphCommands.Display.class);
+        model.close();
+    }
+
+    @Test
+    public void publishesOneLocalizedMessageForRejectedCommand() {
+        final List<String> messages = new ArrayList<String>();
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        when(fixture.handle.execute(any(GraphCommand.class))).thenReturn(commandResult(
+            WorkspaceTransition.rejected(emptyDocument(), "graph_workspace.test.rejected", "argument")));
+        GraphWorkspaceWindowModel model = fixture.model(messages::add);
+
+        model.execute(GraphCommands.save());
+
+        assertThat(messages).containsExactly("graph_workspace.test.rejected[argument]");
+        model.close();
+    }
+
+    @Test
+    public void publishesOneLocalizedMessageForNoOpCommand() {
+        final List<String> messages = new ArrayList<String>();
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        when(fixture.handle.execute(any(GraphCommand.class))).thenReturn(commandResult(
+            WorkspaceTransition.noOp(emptyDocument(), "graph_workspace.test.no_op", "argument")));
+        GraphWorkspaceWindowModel model = fixture.model(messages::add);
+
+        model.execute(GraphCommands.save());
+
+        assertThat(messages).containsExactly("graph_workspace.test.no_op[argument]");
+        model.close();
+    }
+
+    @Test
+    public void doesNotPublishMessageForAppliedCommand() {
+        final List<String> messages = new ArrayList<String>();
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        when(fixture.handle.execute(any(GraphCommand.class))).thenReturn(commandResult(
+            WorkspaceTransition.applied(emptyDocument(), "graph_workspace.test.applied", "argument")));
+        GraphWorkspaceWindowModel model = fixture.model(messages::add);
+
+        model.execute(GraphCommands.save());
+
+        assertThat(messages).isEmpty();
         model.close();
     }
 
@@ -474,6 +540,14 @@ public class GraphWorkspaceWindowModelShould {
         resourceScope.close();
     }
 
+    private static GraphCommandResult commandResult(final WorkspaceTransition transition) {
+        return GraphCommandResult.from(transition);
+    }
+
+    private static WorkspaceDocument emptyDocument() {
+        return WorkspaceDocument.createVersion1(WorkspaceId.of(
+            "00000000-0000-0000-0000-000000000001"));
+    }
     private static Fixture fixture(Viewport viewport, CanvasState state,
             List<GraphWorkspaceViewBinding.MapRegistration> registrations, boolean readOnly) {
         return fixture(viewport, state, registrations, readOnly, WorkspaceSessionStatus.empty(),
@@ -640,12 +714,22 @@ public class GraphWorkspaceWindowModelShould {
         }
 
         private GraphWorkspaceWindowModel model() {
-            GraphWorkspaceWindowModel result = modelWithoutLayout();
+            final GraphWorkspaceWindowModel result = modelWithoutLayout();
             result.completeInitialLayout();
             return result;
         }
 
         private GraphWorkspaceWindowModel modelWithoutLayout() {
+            return modelWithoutLayout(message -> { });
+        }
+
+        private GraphWorkspaceWindowModel model(final Consumer<String> commandMessageSink) {
+            final GraphWorkspaceWindowModel result = modelWithoutLayout(commandMessageSink);
+            result.completeInitialLayout();
+            return result;
+        }
+
+        private GraphWorkspaceWindowModel modelWithoutLayout(final Consumer<String> commandMessageSink) {
             final GraphWorkspaceWindowModel[] result = new GraphWorkspaceWindowModel[1];
             final EdtResources[] edtResources = new EdtResources[1];
             GraphWorkspaceWindow.runOnEdt(new Runnable() {
@@ -653,7 +737,7 @@ public class GraphWorkspaceWindowModelShould {
                 public void run() {
                     edtResources[0] = new EdtResources();
                     result[0] = new GraphWorkspaceWindowModel(handle, binding, applicationController,
-                        () -> OPEN_PATH, () -> { });
+                        () -> OPEN_PATH, closeController, () -> { }, () -> { }, () -> { }, commandMessageSink);
                 }
             });
             RESOURCES.add(edtResources[0]);
@@ -680,7 +764,7 @@ public class GraphWorkspaceWindowModelShould {
             textUtils.when(() -> TextUtils.getRawText(any(String.class), any(String.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
             textUtils.when(() -> TextUtils.format(any(String.class), any(Object[].class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+                .thenAnswer(invocation -> formattedText(invocation));
         }
 
         private void closeOnEdt() {

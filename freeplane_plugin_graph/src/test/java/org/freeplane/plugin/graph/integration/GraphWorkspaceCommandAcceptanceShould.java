@@ -13,7 +13,9 @@ import static org.mockito.Mockito.when;
 import java.awt.Dimension;
 import java.awt.event.ActionListener;
 import java.awt.event.MouseEvent;
+import java.io.BufferedWriter;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -28,6 +30,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
@@ -36,6 +39,7 @@ import java.util.concurrent.TimeUnit;
 
 import javax.swing.event.ChangeListener;
 
+import org.freeplane.core.io.WriteManager;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.undo.IActor;
 import org.freeplane.core.undo.IUndoHandler;
@@ -49,7 +53,9 @@ import org.freeplane.features.link.mindmapmode.MLinkController;
 import org.freeplane.features.map.INodeDuplicator;
 import org.freeplane.features.map.MapController;
 import org.freeplane.features.map.MapModel;
+import org.freeplane.features.map.MapWriter;
 import org.freeplane.features.map.NodeModel;
+import org.freeplane.features.map.clipboard.MapClipboardController.CopiedNodeSet;
 import org.freeplane.features.map.mindmapmode.MMapController;
 import org.freeplane.features.map.mindmapmode.MMapModel;
 import org.freeplane.features.mode.Controller;
@@ -152,8 +158,10 @@ public class GraphWorkspaceCommandAcceptanceShould {
     @Before
     public void setUpNativeModelStatics() {
         resourceControllers = org.mockito.Mockito.mockStatic(ResourceController.class);
+        final ResourceController resourceController = mock(ResourceController.class);
+        when(resourceController.getProperty(any(String.class))).thenReturn("");
         resourceControllers.when(ResourceController::getResourceController)
-            .thenReturn(mock(ResourceController.class));
+            .thenReturn(resourceController);
         textUtils = org.mockito.Mockito.mockStatic(TextUtils.class);
         textUtils.when(() -> TextUtils.getText(any(String.class)))
             .thenAnswer(invocation -> invocation.getArgument(0));
@@ -336,6 +344,14 @@ public class GraphWorkspaceCommandAcceptanceShould {
                 nodes.targetKey, RelationshipDirection.FORWARD));
 
             assertRejected(rejected, "graph_workspace.connector.target_requires_saved_id");
+            final Properties translations = new Properties();
+            try (InputStreamReader reader = new InputStreamReader(Files.newInputStream(repositoryFile(
+                    "freeplane/src/viewer/resources/translations/Resources_en.properties")),
+                    StandardCharsets.ISO_8859_1)) {
+                translations.load(reader);
+            }
+            assertThat(translations.getProperty("graph_workspace.connector.target_requires_saved_id"))
+                .contains("Open and save the map once, then retry");
             assertThat(nodes.target.getID()).isNull();
             assertThat(nodes.connectors()).isEmpty();
             assertThat(nodes.map.isSaved()).isTrue();
@@ -348,6 +364,8 @@ public class GraphWorkspaceCommandAcceptanceShould {
 
             final SourceNodeKey savedTarget = nodes.saveTargetNormally();
             assertThat(nodes.target.getID()).isNotNull();
+            assertThat(new String(Files.readAllBytes(nodes.mapFile), StandardCharsets.UTF_8))
+                .contains(nodes.target.getID());
             assertThat(nodes.map.isSaved()).isTrue();
             assertThat(savedTarget.persistent()).isTrue();
             final GraphCommandResult applied = handle.execute(GraphCommands.connect(nodes.sourceKey, savedTarget,
@@ -796,6 +814,7 @@ public class GraphWorkspaceCommandAcceptanceShould {
         private final IMapViewManager views = mock(IMapViewManager.class);
         private final MapLeaseManager manager;
         private final FreeplaneMapCommandExecutor executor;
+        private final MapWriter mapWriter;
         private final Map<URL, MMapModel> maps = new HashMap<URL, MMapModel>();
 
         private NativeFixture(final GraphWorkspaceStore store, final Path workspaceFile) {
@@ -805,6 +824,13 @@ public class GraphWorkspaceCommandAcceptanceShould {
             mode = new NativeModeController(application);
             when(application.getModeController()).thenReturn(mode);
             mapController = mock(MMapController.class);
+            final WriteManager writeManager = new WriteManager();
+            when(mapController.getWriteManager()).thenReturn(writeManager);
+            when(mapController.getModeController()).thenReturn(mode);
+            mapWriter = new MapWriter(mapController);
+            when(mapController.getMapWriter()).thenReturn(mapWriter);
+            writeManager.addElementWriter("map", mapWriter);
+            writeManager.addAttributeWriter("map", mapWriter);
             mode.setMapController(mapController);
             mode.addExtension(LinkController.class, new MLinkController(mode));
             when(mapController.getMap(any(URL.class))).thenAnswer(
@@ -853,7 +879,12 @@ public class GraphWorkspaceCommandAcceptanceShould {
             leases.put(mapId, lease);
             final SourceNodeKey targetKey = targetHasSavedId ? source(mapId, target.getID())
                 : SourceNodeKey.transientPath(mapId, Collections.singletonList(Integer.valueOf(1)));
-            return new NativeNodes(map, source, target, source(mapId, source.getID()), targetKey);
+            return new NativeNodes(this, map, mapFile, source, target, source(mapId, source.getID()), targetKey);
+        }
+
+        private void saveMapNormally(final NativeMapModel map, final Path mapFile) throws IOException {
+            final BufferedWriter writer = Files.newBufferedWriter(mapFile, StandardCharsets.UTF_8);
+            mapWriter.writeMapAsXml(map, writer, MapWriter.Mode.FILE, CopiedNodeSet.ALL_NODES, false);
         }
 
         @Override
@@ -865,25 +896,31 @@ public class GraphWorkspaceCommandAcceptanceShould {
             Controller.setCurrentController(previousController);
         }
     }
-
     private static final class NativeNodes {
+        private final NativeFixture fixture;
         private final NativeMapModel map;
+        private final Path mapFile;
         private final NodeModel source;
         private final NodeModel target;
         private final SourceNodeKey sourceKey;
         private final SourceNodeKey targetKey;
 
-        private NativeNodes(final NativeMapModel map, final NodeModel source, final NodeModel target,
+        private NativeNodes(final NativeFixture fixture, final NativeMapModel map, final Path mapFile,
+                final NodeModel source, final NodeModel target,
                 final SourceNodeKey sourceKey, final SourceNodeKey targetKey) {
+            this.fixture = fixture;
             this.map = map;
+            this.mapFile = mapFile;
             this.source = source;
             this.target = target;
             this.sourceKey = sourceKey;
             this.targetKey = targetKey;
         }
 
-        private SourceNodeKey saveTargetNormally() {
-            target.createID();
+        private SourceNodeKey saveTargetNormally() throws IOException {
+            fixture.saveMapNormally(map, mapFile);
+            assertThat(Files.size(mapFile)).isGreaterThan(0);
+            assertThat(target.getID()).isNotNull();
             map.setSaved(true);
             return source(mapReferenceId(), target.getID());
         }
