@@ -135,6 +135,7 @@ tasks.register('graphSmokeInstallation') {
 }
 
 tasks.register('graphOsgiSmoke', JavaExec) {
+    outputs.upToDateWhen { false }
     dependsOn tasks.named('graphSmokeInstallation')
     dependsOn tasks.named('testClasses')
     classpath = files(rootProject.file('BIN/framework.jar')) + sourceSets.test.runtimeClasspath.filter {
@@ -148,6 +149,7 @@ tasks.register('graphOsgiSmoke', JavaExec) {
 }
 
 tasks.register('graphUiEvidence', JavaExec) {
+    outputs.upToDateWhen { false }
     dependsOn tasks.named('testClasses')
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'org.freeplane.plugin.graph.smoke.GraphWorkspaceUiEvidence'
@@ -163,6 +165,7 @@ tasks.register('graphUiEvidence', JavaExec) {
 }
 
 tasks.register('freeplaneLaunchSmoke', JavaExec) {
+    outputs.upToDateWhen { false }
     dependsOn tasks.named('graphSmokeInstallation')
     dependsOn tasks.named('testClasses')
     classpath = sourceSets.test.runtimeClasspath

@@ -2,7 +2,7 @@
 
 Date: 2026-08-24
 
-This document records the implementation-phase verification for Graph Workspace Task 42. The source base for this run was `8f7c11f8797bbebd307c97d5bce5a8ad620d74b0`. The task changes are limited to the Gradle smoke wiring, three executable probes, this report, and the two declared PNG artifacts.
+This document records the implementation-phase verification for Graph Workspace Task 42 and its correction round. The source base for the implementation was `8f7c11f8797bbebd307c97d5bce5a8ad620d74b0`; the correction round was run from implementation commit `f8e5f23be3a1f084bf4e9f03b0a73a9f4839ab84`. The task changes are limited to the Gradle smoke wiring, three executable probes, this report, and the two declared PNG artifacts.
 
 ## Environment
 
@@ -45,8 +45,8 @@ gradle :freeplane_plugin_graph:graphOsgiSmoke :freeplane_plugin_graph:graphUiEvi
 The probes also passed independently:
 
 - `graphOsgiSmoke`: used the actual `BIN/framework.jar` and `BIN/props.xargs`; installed the core and graph bundle directories; observed the graph bundle `ACTIVE`; verified the three embedded jar entries; loaded GraphStream classes from `gs-core`, `pherd`, and `mbox2`; created a two-node/one-edge graph; calibrated SpringBox at quality `0.10`; stopped the framework; and observed no live thread whose name starts with `freeplane-graph-`.
-- `graphUiEvidence`: constructed the real `GraphWorkspaceWindowModel` shell on the EDT, attached the menu bar and content to one root panel, loaded deterministic two-map state, dispatched toolbar, search, mouse, wheel, and keyboard events, painted both view sizes, asserted nonblank output and sibling containment, and wrote both PNGs.
-- `freeplaneLaunchSmoke`: started `BIN/freeplane.sh`, waited for the graph bundle ACTIVE log, used a disposable user directory, and recorded `exitCode=0`, `termRequired=false` in `build/freeplane-launch-smoke/result.properties`. Normal shutdown completed within the required 15 seconds.
+- `graphUiEvidence`: constructed the real `GraphWorkspaceWindowModel` shell on the EDT, attached the menu bar and content to one root panel, loaded deterministic two-map state, dispatched toolbar, search, mouse, wheel, and keyboard events, painted and validated the 1280 x 800 desktop workspace, then validated a 900 x 900 narrow workspace in memory. The marker artifact is generated separately by invoking the production `GraphGroupMarkerPainter` with a real marked `NodeModel` and a mocked `NodeView`; exact coral pixels and enclosure geometry are asserted before the PNG is written.
+- `freeplaneLaunchSmoke`: started `BIN/freeplane.sh` without `org.freeplane.exit_on_start`, passed the production `-XQuitAction` menu request, used a disposable profile with automatic map creation disabled, waited for the graph bundle `Started:` log, observed child/process-table termination within the normal 15-second bound, and recorded `normalQuitRequested=true`, `termRequired=false`, `exitCode=0`, and `childProcessTerminated=true`. No parent-JVM child-thread enumeration is used.
 
 The strict performance command passed:
 
@@ -54,7 +54,7 @@ The strict performance command passed:
 gradle --no-daemon --no-parallel :freeplane_plugin_graph:graphPerformanceDiagnostic -PgraphStrictPerformance -PTestLoggingFull
 ```
 
-It produced `freeplane_plugin_graph/build/graph-performance/performance-ledger.csv` with six scenarios and twelve stages each: 72 rows, all `pass=true`, `failureCount=0`, and `discardCount=0`. The reference `reference-2000-5000` workload used 400 warm-up and 300 measured samples. Its gated p95 values were force `17.278 ms` (strict limit `50 ms`), full worker `9.396 ms` (strict limit `100 ms`), EDT swap `0.656 ms` (strict limit `2 ms`), and accepted-batch-first-frame `127.925 ms` (strict limit `150 ms`). The complete performance evidence is [the existing performance report](2026-08-10-graph-workspace-performance-report.md); the current generated ledger is the task output under `freeplane_plugin_graph/build/graph-performance/`.
+It produced `freeplane_plugin_graph/build/graph-performance/performance-ledger.csv` with six scenarios and twelve stages each: 72 rows, all `pass=true`, `failureCount=0`, and `discardCount=0`. The reference `reference-2000-5000` workload used 400 warm-up and 300 measured samples. Its gated p95 values were force `16.830455 ms` (strict limit `50 ms`), full worker `7.142015 ms` (strict limit `100 ms`), EDT swap `0.630658 ms` (strict limit `2 ms`), and accepted-batch-first-frame `128.784724 ms` (strict limit `150 ms`). The complete performance evidence is [the existing performance report](2026-08-10-graph-workspace-performance-report.md); the current generated ledger is the task output under `freeplane_plugin_graph/build/graph-performance/`.
 
 The two acceptance classes passed with zero failures and zero errors:
 
@@ -67,14 +67,16 @@ gradle --no-daemon --no-parallel :freeplane_plugin_graph:test \
 
 The result was 18 model tests plus 14 command tests. The command/acceptance classes cover all 29 numbered scenarios below (Scenario 22 has two separately named assertions).
 
-The required module command was attempted:
+The required module command was rerun after the corrections:
 
 ```text
-gradle :freeplane_plugin_graph:clean :freeplane_plugin_graph:check \
+gradle --no-daemon --no-parallel :freeplane_plugin_graph:clean :freeplane_plugin_graph:check \
   :freeplane_plugin_graph:test :freeplane_plugin_graph:build -PTestLoggingFull
 ```
 
-Compilation, bundle verification, and test-class construction completed, but the full test task did not return within the 1,800-second command bound. A serial no-daemon rerun with a 3,600-second bound also did not return. The completed focused classes and acceptance classes have no assertion failures; the unresolved full-suite issue is recorded as a verification concern rather than represented as a pass.
+Compilation, bundle verification, and test-class construction completed, but the command timed out at 420 seconds while `:freeplane_plugin_graph:test` was running. A focused reproduction completed in 25 seconds with `WorkspaceDialogsShould`: 9 tests, 0 passed, 9 failed, 0 skipped. Every failure is the same pre-existing setup defect: production `TextUtils`/resource lookup dereferences `Controller.getCurrentController()` while the test fixture has not installed a controller. The first and correction-round full-suite runs therefore remain unresolved; no test was excluded, relabeled, or hidden.
+
+The prescribed repository-wide `gradle test -PTestLoggingFull` was also bounded at 600 seconds and timed out while `:freeplane_plugin_graph:test` was running. This finding cannot be repaired within the immutable seven-file allowlist without changing unrelated test/production setup, so final verification status is `BLOCKED` on F-4.
 
 ## Scenario Results
 
@@ -115,7 +117,7 @@ Compilation, bundle verification, and test-class construction completed, but the
 The declared image artifacts were generated by `graphUiEvidence` and verified as PNG files:
 
 - [Graph Workspace implementation](images/2026-08-10-graph-workspace-implemented.png): 1280 x 800 RGBA, SHA-256 `82e15b923cb4f1fc888472d6b259bb97afd651f08235d8e65ba1ccaacb1370c9`.
-- [Graph Group marker implementation](images/2026-08-10-graph-group-marker-implemented.png): 900 x 900 RGBA, SHA-256 `a7f039fb8c27ca80293f7365d5ccb24cb9e6148f960a15731729688664f37b33`.
+- [Graph Group marker implementation](images/2026-08-10-graph-group-marker-implemented.png): 900 x 900 RGBA, SHA-256 `95146c0a0636da2564a01854850eef22c3a44b5231c88b60a4d50ba9cbf93ea3`. The artifact contains 1,743 exact opaque `#DF625D` pixels; measured coral bounds are `314 x 134 +293 +293`, enclosing the fixture coordinates from `(300,300)` through `(600,420)`.
 
 ## Additional Verification
 
@@ -123,10 +125,13 @@ The following checks were run or are covered by the scoped gates:
 
 - Exact GraphStream checksums, license, notice, manifest, and class-file compatibility: PASS through `verifyGraphBundle` and the OSGi probe.
 - GraphStream boundary and no-`LayoutRunner` architecture tests: PASS in the completed graph-plugin test runs.
-- `graphOsgiSmoke`, `graphUiEvidence`, and `freeplaneLaunchSmoke`: PASS.
+- `graphOsgiSmoke`, `graphUiEvidence`, and `freeplaneLaunchSmoke`: PASS on the exact combined smoke command; all three task bodies executed despite existing outputs.
+- Focused marker painter: PASS; the production painter test class and the correction evidence probe completed with no failures.
+- Focused acceptance classes: PASS, 18 model tests plus 14 command tests, 0 failures, 0 errors, 0 skipped.
 - Full strict performance ledger: PASS, 72/72 rows.
-- Translation formatting and the repository-wide test/build commands remain separate follow-up gates because the full graph-plugin test task did not terminate within the command bounds.
+- `gradle format_translation`, translation diff, ASCII filter, `:freeplane:compileJava`, and the forbidden production scan: PASS.
+- Full graph-plugin and repository-wide test gates: BLOCKED by the unresolved `WorkspaceDialogsShould` setup failures/timeouts described above.
 
 ## Residual Risk
 
-Performance timings are machine-specific despite the generous normal and strict thresholds; another host may have different repaint and label costs. The full graph-plugin test task needs a separate lifecycle investigation because the test worker did not terminate within one hour even though the focused adapter and acceptance classes completed successfully. No generated OSGi framework storage remains in the source tree; the smoke uses a temporary `-Forg.osgi.framework.storage` location and deletes it after stop.
+Performance timings are machine-specific despite the generous normal and strict thresholds; another host may have different repaint and label costs. The full graph-plugin test task remains blocked by nine deterministic `WorkspaceDialogsShould` failures caused by a null `Controller.getCurrentController()` in test setup, and by the full-task timeout after those failures. That issue is outside the immutable correction allowlist. No generated OSGi framework storage remains in the source tree; the smoke uses a temporary `-Forg.osgi.framework.storage` location and deletes it after stop.
