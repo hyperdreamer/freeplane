@@ -15,16 +15,19 @@ At Task 42 correction commit `a093868c24b1b68f8e6986ad5e646572f2006ab1`:
   reaches `TextUtils` on both the JUnit thread and the AWT event-dispatch
   thread, but the class installs no `ResourceController` or `TextUtils` static
   mocks. Mockito static mocks are thread-local.
-- With that class excluded, the graph-plugin test worker exits normally. The
-  remaining failure is `GraphWorkspaceColdReloadShould`: its headless resource
-  setup selects `freeplane/build/resources/viewer` as the application resource
-  base, while map loading requires
-  `xslt/freeplane_version_updater.xslt`, which is supplied by editor resources
-  and is absent from that base.
+- The complete isolated module run reaches `708` tests with `1` failure and
+  `2` skips, and its test worker exits normally. The failure is
+  `GraphWorkspaceColdReloadShould` after its saved map is reopened through
+  `MapLeaseManager`: `XsltPipeReaderFactory` cannot resolve
+  `/xslt/freeplane_version_updater.xslt`. Its headless resource setup selects
+  `freeplane/build/resources/viewer` as the application resource base, while
+  that XSLT is supplied by editor resources and is absent from the selected
+  base.
 
-The isolated run completed `699` tests with one bounded cold-reload failure and
-no leaked Gradle test worker. This is a fixture-visibility problem, not a
-graph-executor lifecycle problem.
+The cold-reload class can pass in isolation because its standalone execution
+does not always take the saved-map version-conversion path. The full-module
+failure is therefore the authoritative reproduction for resource visibility.
+This is a fixture-visibility problem, not a graph-executor lifecycle problem.
 
 ## Scope
 
@@ -77,12 +80,13 @@ base is already the path under test.
 
 ## Verification
 
-The implementation will first reproduce both failures at the untouched
-successor baseline. After the minimal fixture changes, it will run each focused
-class, then the full `:freeplane_plugin_graph:test` task with Zulu JDK 21 and
-explicit wall-clock bounds. The full module result must show zero failures and
-zero errors and its test executor must exit. It will then run repository
-`gradle test`, the three Task 42 smoke tasks, and the required focused
+The implementation will first reproduce the dialog failure with its focused
+class and the XSLT failure with the untouched full
+`:freeplane_plugin_graph:test` task. After the minimal fixture changes, it will
+run each focused class, then the full module task with Zulu JDK 21 and explicit
+wall-clock bounds. The full module result must show zero failures and zero
+errors and its test executor must exit. It will then run repository `gradle
+test`, the three Task 42 smoke tasks, and the required focused
 acceptance/performance gates before independent review.
 
 The test-only mutations will be checked with a focused resource-visibility
