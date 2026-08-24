@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -56,6 +57,7 @@ import org.freeplane.features.mode.ModeController;
 import org.freeplane.features.mode.mindmapmode.MModeController;
 import org.freeplane.features.ui.IMapViewManager;
 import org.freeplane.features.url.mindmapmode.MapLoader;
+import org.freeplane.features.url.MapVersionInterpreter;
 import org.freeplane.main.application.ApplicationResourceController;
 import org.freeplane.main.application.CommandLineParser;
 import org.freeplane.main.headlessmode.FreeplaneHeadlessStarter;
@@ -1736,6 +1738,8 @@ public class MapLeaseManagerShould {
                 assertThat(loaded).isNotNull();
                 assertThat(controller.getMapViewManager().containsView(loaded)).isFalse();
                 assertThat(edt.boundaryCalls).isGreaterThan(0);
+                String firstLine = Files.readAllLines(map, StandardCharsets.UTF_8).get(0);
+                assertThat(MapVersionInterpreter.getVersionInterpreter(firstLine).anotherDialect).isFalse();
                 first.close();
                 second.close();
                 edt.call(() -> {
@@ -2810,6 +2814,9 @@ public class MapLeaseManagerShould {
         private final byte[] previousProperties;
         private final Path testVersionProperties;
         private final byte[] previousVersionProperties;
+        private final Path testMapVersions;
+        private final byte[] previousMapVersions;
+        private final MapVersionInterpreter[] previousMapVersionInterpreters;
         private final Path testPreferences;
         private final byte[] previousPreferences;
 
@@ -2818,15 +2825,17 @@ public class MapLeaseManagerShould {
             if (fixtureUrl == null) {
                 throw new IOException("Missing graph projection fixture");
             }
+            previousMapVersionInterpreters = mapVersionInterpreters();
             Path testResourceDirectory = Paths.get(fixtureUrl.toURI()).getParent().getParent();
             Path projectDirectory = testResourceDirectory.getParent().getParent().getParent().getParent();
             Path viewerResources = projectDirectory.resolve("freeplane/build/resources/viewer");
             Path viewerProperties = viewerResources.resolve("freeplane.properties");
             Path viewerVersionProperties = viewerResources.resolve("version.properties");
             Path externalPreferences = projectDirectory.resolve("freeplane/src/external/resources/xml/preferences.xml");
+            Path editorMapVersions = projectDirectory.resolve("freeplane/src/editor/resources/xml/mapVersions.xml");
             if (!Files.isRegularFile(viewerProperties) || !Files.isRegularFile(viewerVersionProperties)
-                    || !Files.isRegularFile(externalPreferences)) {
-                throw new IOException("Missing Freeplane viewer resources");
+                    || !Files.isRegularFile(externalPreferences) || !Files.isRegularFile(editorMapVersions)) {
+                throw new IOException("Missing Freeplane headless test resources");
             }
             testProperties = testResourceDirectory.resolve("freeplane.properties");
             previousProperties = Files.exists(testProperties) ? Files.readAllBytes(testProperties) : null;
@@ -2835,6 +2844,11 @@ public class MapLeaseManagerShould {
             previousVersionProperties = Files.exists(testVersionProperties)
                 ? Files.readAllBytes(testVersionProperties) : null;
             Files.copy(viewerVersionProperties, testVersionProperties, StandardCopyOption.REPLACE_EXISTING);
+            testMapVersions = testResourceDirectory.resolve("xml/mapVersions.xml");
+            Files.createDirectories(testMapVersions.getParent());
+            previousMapVersions = Files.exists(testMapVersions) ? Files.readAllBytes(testMapVersions) : null;
+            Files.copy(editorMapVersions, testMapVersions, StandardCopyOption.REPLACE_EXISTING);
+            restoreMapVersionInterpreters(null);
             testPreferences = testResourceDirectory.resolve("xml/preferences.xml");
             Files.createDirectories(testPreferences.getParent());
             previousPreferences = Files.exists(testPreferences) ? Files.readAllBytes(testPreferences) : null;
@@ -2850,7 +2864,7 @@ public class MapLeaseManagerShould {
         }
 
         @Override
-        public void close() throws IOException {
+        public void close() throws Exception {
             if (previousGlobalResourceDirectory == null) {
                 System.clearProperty("org.freeplane.globalresourcedir");
             }
@@ -2859,23 +2873,32 @@ public class MapLeaseManagerShould {
             }
             ApplicationResourceController.RESOURCE_BASE_DIRECTORY = previousResourceBaseDirectory;
             ApplicationResourceController.INSTALLATION_BASE_DIRECTORY = previousInstallationBaseDirectory;
-            if (previousProperties == null) {
-                Files.deleteIfExists(testProperties);
+            restoreMapVersionInterpreters(previousMapVersionInterpreters);
+            restore(testProperties, previousProperties);
+            restore(testVersionProperties, previousVersionProperties);
+            restore(testMapVersions, previousMapVersions);
+            restore(testPreferences, previousPreferences);
+        }
+
+        private static MapVersionInterpreter[] mapVersionInterpreters() throws ReflectiveOperationException {
+            Field values = MapVersionInterpreter.class.getDeclaredField("values");
+            values.setAccessible(true);
+            return (MapVersionInterpreter[]) values.get(null);
+        }
+
+        private static void restoreMapVersionInterpreters(MapVersionInterpreter[] values)
+                throws ReflectiveOperationException {
+            Field field = MapVersionInterpreter.class.getDeclaredField("values");
+            field.setAccessible(true);
+            field.set(null, values);
+        }
+
+        private static void restore(Path path, byte[] previousContents) throws IOException {
+            if (previousContents == null) {
+                Files.deleteIfExists(path);
             }
             else {
-                Files.write(testProperties, previousProperties);
-            }
-            if (previousVersionProperties == null) {
-                Files.deleteIfExists(testVersionProperties);
-            }
-            else {
-                Files.write(testVersionProperties, previousVersionProperties);
-            }
-            if (previousPreferences == null) {
-                Files.deleteIfExists(testPreferences);
-            }
-            else {
-                Files.write(testPreferences, previousPreferences);
+                Files.write(path, previousContents);
             }
         }
     }
