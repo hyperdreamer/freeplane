@@ -307,9 +307,16 @@ public class GraphWorkspaceLifecycleShould {
                         return true;
                     }
                 }, 5000L, "close did not cross the handle closing boundary");
-                GraphWorkspaceIntegrationSupport.awaitCondition(
-                    () -> freeplane.mapLifecycleListenerCount() == baseline.mapLifecycleListeners,
-                    5000L, "close did not reach the graph update coordinator callback boundary");
+                GraphWorkspaceIntegrationSupport.awaitCondition(() -> {
+                    try {
+                        binding.addCanvasStateListener(state -> {
+                        }).close();
+                        return false;
+                    }
+                    catch (IllegalStateException expected) {
+                        return true;
+                    }
+                }, 5000L, "close did not reach the graph update coordinator callback boundary");
             }
             finally {
                 releaseFirstProjection.countDown();
