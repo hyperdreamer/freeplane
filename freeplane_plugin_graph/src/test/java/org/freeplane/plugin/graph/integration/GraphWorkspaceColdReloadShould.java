@@ -114,7 +114,21 @@ public class GraphWorkspaceColdReloadShould {
             final BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8));
             final String firstLine = reader.readLine();
             assertThat(firstLine).startsWith("<map version=\"freeplane 1.12.15\"");
-            assertThat(MapVersionInterpreter.getVersionInterpreter(firstLine).anotherDialect).isFalse();
+            final MapVersionInterpreter[] originalInterpreters =
+                GraphWorkspaceIntegrationSupport.mapVersionInterpreters();
+            try {
+                final MapVersionInterpreter[] emptyInterpreters = new MapVersionInterpreter[0];
+                GraphWorkspaceIntegrationSupport.restoreMapVersionInterpreters(emptyInterpreters);
+                try (GraphWorkspaceIntegrationSupport.FreeplaneScope freeplane =
+                        new GraphWorkspaceIntegrationSupport.FreeplaneScope()) {
+                    assertThat(MapVersionInterpreter.getVersionInterpreter(firstLine).anotherDialect).isFalse();
+                }
+                assertThat(GraphWorkspaceIntegrationSupport.mapVersionInterpreters())
+                    .isSameAs(emptyInterpreters);
+            }
+            finally {
+                GraphWorkspaceIntegrationSupport.restoreMapVersionInterpreters(originalInterpreters);
+            }
         }
     }
 
@@ -315,6 +329,18 @@ final class GraphWorkspaceIntegrationSupport {
             }
             Files.copy(input, target, StandardCopyOption.REPLACE_EXISTING);
         }
+    }
+
+    static MapVersionInterpreter[] mapVersionInterpreters() throws Exception {
+        final Field values = MapVersionInterpreter.class.getDeclaredField("values");
+        values.setAccessible(true);
+        return (MapVersionInterpreter[]) values.get(null);
+    }
+
+    static void restoreMapVersionInterpreters(final MapVersionInterpreter[] values) throws Exception {
+        final Field field = MapVersionInterpreter.class.getDeclaredField("values");
+        field.setAccessible(true);
+        field.set(null, values);
     }
 
     static void awaitProjection(final GraphWorkspaceHandle handle, final int minimumNodes) throws Exception {
@@ -675,6 +701,7 @@ final class GraphWorkspaceIntegrationSupport {
         private final Controller previousController;
         private final ViewController previousViewController;
         private final IMapViewManager previousMapViewManager;
+        private final MapVersionInterpreter[] previousInterpreters;
         private final HeadlessResourceFiles resources;
         private final boolean ownsStarter;
         private final ScopeHeadlessUIController scopeViewController;
@@ -705,7 +732,9 @@ final class GraphWorkspaceIntegrationSupport {
 
         FreeplaneScope() throws Exception {
             previousController = Controller.getCurrentController();
+            previousInterpreters = GraphWorkspaceIntegrationSupport.mapVersionInterpreters();
             resources = new HeadlessResourceFiles();
+            GraphWorkspaceIntegrationSupport.restoreMapVersionInterpreters(null);
             final ModeController existing = previousController == null ? null
                 : previousController.getModeController(MModeController.MODENAME);
             if (existing != null && existing.getMapController() instanceof MMapController) {
@@ -941,6 +970,7 @@ final class GraphWorkspaceIntegrationSupport {
                     if (ownsStarter) {
                         clearMapIoSingleton();
                     }
+                    GraphWorkspaceIntegrationSupport.restoreMapVersionInterpreters(previousInterpreters);
                     if (resources != null) {
                         resources.close();
                     }
