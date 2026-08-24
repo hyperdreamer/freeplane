@@ -693,10 +693,10 @@ final class GraphWorkspaceIntegrationSupport {
         FreeplaneScope() throws Exception {
             previousController = Controller.getCurrentController();
             previousInterpreters = mapVersionInterpreters();
+            resources = new HeadlessResourceFiles();
             final ModeController existing = previousController == null ? null
                 : previousController.getModeController(MModeController.MODENAME);
             if (existing != null && existing.getMapController() instanceof MMapController) {
-                resources = null;
                 ownsStarter = false;
                 controller = previousController;
                 modeController = existing;
@@ -704,7 +704,6 @@ final class GraphWorkspaceIntegrationSupport {
                 previousMapViewManager = controller.getMapViewManager();
             }
             else {
-                resources = new HeadlessResourceFiles();
                 final FreeplaneHeadlessStarter starter = new FreeplaneHeadlessStarter(CommandLineParser.parse());
                 controller = starter.createController();
                 starter.createModeControllers(controller);
@@ -1375,6 +1374,8 @@ final class GraphWorkspaceIntegrationSupport {
         private final byte[] previousMapVersions;
         private final Path preferences;
         private final byte[] previousPreferences;
+        private final Path xslt;
+        private final byte[] previousXslt;
 
         HeadlessResourceFiles() throws Exception {
             final URL fixtureUrl = GraphWorkspaceColdReloadShould.class.getResource("/maps/graph-projection.mm");
@@ -1388,8 +1389,12 @@ final class GraphWorkspaceIntegrationSupport {
             final Path viewerVersionProperties = viewerResources.resolve("version.properties");
             final Path externalPreferences = projectDirectory.resolve("freeplane/src/external/resources/xml/preferences.xml");
             final Path editorMapVersions = projectDirectory.resolve("freeplane/src/editor/resources/xml/mapVersions.xml");
+            final Path editorXslt = projectDirectory.resolve(
+                "freeplane/src/editor/resources/xslt/freeplane_version_updater.xslt");
+            xslt = viewerResources.resolve("xslt/freeplane_version_updater.xslt");
             if (!Files.isRegularFile(viewerProperties) || !Files.isRegularFile(viewerVersionProperties)
-                    || !Files.isRegularFile(externalPreferences) || !Files.isRegularFile(editorMapVersions)) {
+                    || !Files.isRegularFile(externalPreferences) || !Files.isRegularFile(editorMapVersions)
+                    || !Files.isRegularFile(editorXslt)) {
                 throw new IOException("Missing Freeplane headless test resources");
             }
             properties = testResourceDirectory.resolve("freeplane.properties");
@@ -1400,6 +1405,7 @@ final class GraphWorkspaceIntegrationSupport {
             previousMapVersions = copyWithBackup(editorMapVersions, mapVersions);
             preferences = testResourceDirectory.resolve("xml/preferences.xml");
             previousPreferences = copyWithBackup(externalPreferences, preferences);
+            previousXslt = copyWithBackup(editorXslt, xslt);
 
             previousGlobalResourceDirectory = System.getProperty("org.freeplane.globalresourcedir");
             previousResourceBaseDirectory = ApplicationResourceController.RESOURCE_BASE_DIRECTORY;
@@ -1423,6 +1429,7 @@ final class GraphWorkspaceIntegrationSupport {
             restore(versionProperties, previousVersionProperties);
             restore(mapVersions, previousMapVersions);
             restore(preferences, previousPreferences);
+            restore(xslt, previousXslt);
             if (previousGlobalResourceDirectory == null) {
                 System.clearProperty("org.freeplane.globalresourcedir");
             }
