@@ -3,8 +3,10 @@ package org.freeplane.plugin.graph.integration;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.awt.Component;
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
@@ -103,6 +105,18 @@ import org.junit.rules.TemporaryFolder;
 public class GraphWorkspaceColdReloadShould {
     @Rule
     public final TemporaryFolder temporaryFolder = new TemporaryFolder();
+
+    @Test
+    public void fixtureUsesBuiltInMapDialect() throws Exception {
+        try (InputStream input = GraphWorkspaceColdReloadShould.class.getResourceAsStream(
+                "/maps/graph-projection.mm")) {
+            assertThat(input).isNotNull();
+            final BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8));
+            final String firstLine = reader.readLine();
+            assertThat(firstLine).startsWith("<map version=\"freeplane 1.12.15\"");
+            assertThat(MapVersionInterpreter.getVersionInterpreter(firstLine).anotherDialect).isFalse();
+        }
+    }
 
     @Test
     public void coldReloadsProductionWorkspaceStateAndProjection() throws Exception {
@@ -661,7 +675,6 @@ final class GraphWorkspaceIntegrationSupport {
         private final Controller previousController;
         private final ViewController previousViewController;
         private final IMapViewManager previousMapViewManager;
-        private final MapVersionInterpreter[] previousInterpreters;
         private final HeadlessResourceFiles resources;
         private final boolean ownsStarter;
         private final ScopeHeadlessUIController scopeViewController;
@@ -692,7 +705,6 @@ final class GraphWorkspaceIntegrationSupport {
 
         FreeplaneScope() throws Exception {
             previousController = Controller.getCurrentController();
-            previousInterpreters = mapVersionInterpreters();
             resources = new HeadlessResourceFiles();
             final ModeController existing = previousController == null ? null
                 : previousController.getModeController(MModeController.MODENAME);
@@ -718,8 +730,6 @@ final class GraphWorkspaceIntegrationSupport {
             controller.setViewController(scopeViewController);
             mapController = (MMapController) modeController.getMapController();
             actionBoundary = new HeadlessActionBoundary(mapController);
-            MapVersionInterpreter.addMapVersionInterpreter(new MapVersionInterpreter("GRAPH_WORKSPACE_INTEGRATION",
-                19, "freeplane 1.12.0", false, false, "Freeplane", "https://www.freeplane.org", null, null));
             previousMenuStructure = replaceMenuStructure(modeController, new Entry());
             asyncFailures = new AsyncFailureCapture();
         }
@@ -931,7 +941,6 @@ final class GraphWorkspaceIntegrationSupport {
                     if (ownsStarter) {
                         clearMapIoSingleton();
                     }
-                    restoreMapVersionInterpreters(previousInterpreters);
                     if (resources != null) {
                         resources.close();
                     }
@@ -1168,18 +1177,6 @@ final class GraphWorkspaceIntegrationSupport {
             }
             prior.addSuppressed(next);
             return prior;
-        }
-
-        private static MapVersionInterpreter[] mapVersionInterpreters() throws Exception {
-            final Field values = MapVersionInterpreter.class.getDeclaredField("values");
-            values.setAccessible(true);
-            return (MapVersionInterpreter[]) values.get(null);
-        }
-
-        private static void restoreMapVersionInterpreters(final MapVersionInterpreter[] values) throws Exception {
-            final Field field = MapVersionInterpreter.class.getDeclaredField("values");
-            field.setAccessible(true);
-            field.set(null, values);
         }
 
         private static void awaitAwtQueue() throws Exception {
