@@ -257,6 +257,9 @@ public class GraphWorkspaceLifecycleShould {
             assertThat(handle.execute(GraphCommands.addMap(mapId, sourceMap.toUri())).status())
                 .isEqualTo(GraphCommandResult.Status.APPLIED);
             GraphWorkspaceIntegrationSupport.awaitProjection(handle, 1);
+            assertThat(freeplane.mapLifecycleListenerCount())
+                .as("workspace map lifecycle listener before close")
+                .isGreaterThan(baseline.mapLifecycleListeners);
             final GraphWorkspaceViewBinding binding = views.latestBinding();
             final AtomicInteger projectionCallbacks = new AtomicInteger();
             final AtomicInteger secondProjectionCallbacks = new AtomicInteger();
@@ -293,18 +296,25 @@ public class GraphWorkspaceLifecycleShould {
                 }
             }, "graph-workspace-stale-callback-close-probe");
             closing.start();
-            GraphWorkspaceIntegrationSupport.awaitCondition(() -> {
-                try {
-                    callbackHandle.execute(GraphCommands.viewport(Viewport.of(15, 16, 1.7,
-                        Collections.emptyList())));
-                    return false;
-                }
-                catch (IllegalStateException expected) {
-                    return true;
-                }
-            }, 5000L, "close did not cross the handle closing boundary");
-            releaseFirstProjection.countDown();
-            closing.join(10000L);
+            try {
+                GraphWorkspaceIntegrationSupport.awaitCondition(() -> {
+                    try {
+                        callbackHandle.execute(GraphCommands.viewport(Viewport.of(15, 16, 1.7,
+                            Collections.emptyList())));
+                        return false;
+                    }
+                    catch (IllegalStateException expected) {
+                        return true;
+                    }
+                }, 5000L, "close did not cross the handle closing boundary");
+                GraphWorkspaceIntegrationSupport.awaitCondition(
+                    () -> freeplane.mapLifecycleListenerCount() == baseline.mapLifecycleListeners,
+                    5000L, "close did not reach the graph update coordinator callback boundary");
+            }
+            finally {
+                releaseFirstProjection.countDown();
+                closing.join(10000L);
+            }
             assertThat(closing.isAlive()).as("close thread completed").isFalse();
             assertThat(closeFailure.get()).isNull();
             handle = null;
