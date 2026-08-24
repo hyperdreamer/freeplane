@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import java.awt.Component;
 import java.awt.Container;
+import java.text.MessageFormat;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -24,6 +25,8 @@ import javax.swing.JLabel;
 import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 
+import org.freeplane.core.resources.ResourceController;
+import org.freeplane.core.util.TextUtils;
 import org.freeplane.plugin.graph.canvas.GraphIntent;
 import org.freeplane.plugin.graph.command.GraphCommand;
 import org.freeplane.plugin.graph.command.GraphCommands;
@@ -65,14 +68,42 @@ import org.freeplane.plugin.graph.workspace.model.PersistedNodeId;
 import org.freeplane.plugin.graph.workspace.model.RelationshipDirection;
 import org.freeplane.plugin.graph.workspace.model.RelationshipId;
 import org.freeplane.plugin.graph.workspace.model.UnknownXml;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.MockedStatic;
+import org.mockito.invocation.InvocationOnMock;
 
 public class WorkspaceDialogsShould {
     private static final MapReferenceId MAP_ONE = mapId(1L);
     private static final MapReferenceId MAP_TWO = mapId(2L);
     private static final RelationshipId MISSING_ID = RelationshipId.of("00000000-0000-0000-0000-000000000101");
     private static final RelationshipId RECOVERABLE_ID = RelationshipId.of("00000000-0000-0000-0000-000000000102");
+    private static final List<ResourceMocks> EDT_RESOURCES = new ArrayList<ResourceMocks>();
+
+    private ResourceMocks resources;
+
+    @Before
+    public void setUpResources() {
+        resources = new ResourceMocks();
+    }
+
+    @After
+    public void tearDownResources() {
+        if (resources != null) {
+            resources.close();
+            resources = null;
+        }
+        if (!EDT_RESOURCES.isEmpty()) {
+            GraphWorkspaceWindow.runOnEdt(() -> {
+                for (ResourceMocks resource : EDT_RESOURCES) {
+                    resource.close();
+                }
+                EDT_RESOURCES.clear();
+            });
+        }
+    }
 
     @Test
     public void focusesTheGraphOnceOnlyForAnEditorActivatingCommandResultAfterRouting() {
@@ -94,7 +125,7 @@ public class WorkspaceDialogsShould {
         });
         final AtomicInteger focusCount = new AtomicInteger();
         final GraphWorkspaceWindowModel[] holder = new GraphWorkspaceWindowModel[1];
-        GraphWorkspaceWindow.runOnEdt(() -> holder[0] = new GraphWorkspaceWindowModel(handle, binding,
+        runOnEdtWithResources(() -> holder[0] = new GraphWorkspaceWindowModel(handle, binding,
             mock(GraphWorkspaceController.class), () -> null, mock(WorkspaceCloseController.class), () -> { },
             () -> {
                 events.add("focus");
@@ -462,7 +493,7 @@ public class WorkspaceDialogsShould {
             return null;
         });
         GraphWorkspaceWindowModel[] model = new GraphWorkspaceWindowModel[1];
-        GraphWorkspaceWindow.runOnEdt(() -> model[0] = new GraphWorkspaceWindowModel(handle, binding,
+        runOnEdtWithResources(() -> model[0] = new GraphWorkspaceWindowModel(handle, binding,
             mock(GraphWorkspaceController.class), () -> null, mock(WorkspaceCloseController.class), () -> { },
             () -> { }, () -> { }));
         return new ModelFixture(model[0], binding, commands);
@@ -542,6 +573,95 @@ public class WorkspaceDialogsShould {
             MapAvailability availability) {
         return GraphWorkspaceViewBinding.MapRegistration.of(id, name, availability);
     }
+    private static void runOnEdtWithResources(Runnable action) {
+        GraphWorkspaceWindow.runOnEdt(() -> {
+            ResourceMocks resources = new ResourceMocks();
+            EDT_RESOURCES.add(resources);
+            action.run();
+        });
+    }
+
+    private static String formattedText(InvocationOnMock invocation) {
+        Object[] invocationArguments = invocation.getArguments();
+        String key = String.valueOf(invocationArguments[0]);
+        List<Object> formatArguments = new ArrayList<Object>();
+        for (int index = 1; index < invocationArguments.length; index++) {
+            appendFormatArgument(formatArguments, invocationArguments[index]);
+        }
+        String contributorTemplate = contributorTemplate(key);
+        if (contributorTemplate != null) {
+            return MessageFormat.format(contributorTemplate, formatArguments.toArray());
+        }
+        StringBuilder result = new StringBuilder(key);
+        for (Object argument : formatArguments) {
+            result.append(':').append(argument);
+        }
+        return result.toString();
+    }
+
+    private static String contributorTemplate(String key) {
+        if ("graph_workspace.contributor.source".equals(key)) {
+            return "Source: {0}";
+        }
+        if ("graph_workspace.contributor.middle".equals(key)) {
+            return "Middle: {0}";
+        }
+        if ("graph_workspace.contributor.target".equals(key)) {
+            return "Target: {0}";
+        }
+        if ("graph_workspace.contributor.owner".equals(key)) {
+            return "Owner: {0}";
+        }
+        if ("graph_workspace.contributor.key".equals(key)) {
+            return "Key: {0}";
+        }
+        if ("graph_workspace.contributor.native_connector".equals(key)) {
+            return "Native connector: {0}";
+        }
+        return null;
+    }
+
+    private static void appendFormatArgument(List<Object> result, Object argument) {
+        if (argument instanceof Object[]) {
+            for (Object value : (Object[]) argument) {
+                appendFormatArgument(result, value);
+            }
+            return;
+        }
+        result.add(argument);
+    }
+
+    private static final class ResourceMocks {
+        private final MockedStatic<ResourceController> resourceController;
+        private final MockedStatic<TextUtils> textUtils;
+        private boolean closed;
+
+        private ResourceMocks() {
+            resourceController = org.mockito.Mockito.mockStatic(ResourceController.class);
+            resourceController.when(ResourceController::getResourceController)
+                .thenReturn(mock(ResourceController.class));
+            textUtils = org.mockito.Mockito.mockStatic(TextUtils.class);
+            textUtils.when(() -> TextUtils.getText(any(String.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+            textUtils.when(() -> TextUtils.getText(any(String.class), any(String.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+            textUtils.when(() -> TextUtils.getRawText(any(String.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+            textUtils.when(() -> TextUtils.getRawText(any(String.class), any(String.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+            textUtils.when(() -> TextUtils.format(any(String.class), any(Object[].class)))
+                .thenAnswer(invocation -> formattedText(invocation));
+        }
+
+        private void close() {
+            if (!closed) {
+                closed = true;
+                textUtils.close();
+                resourceController.close();
+            }
+        }
+    }
+
     private static final class ContributorState {
         private final CanvasState state;
         private final ProjectedEdge edge;
