@@ -20,6 +20,7 @@ import org.freeplane.plugin.graph.workspace.GraphWorkspaceStore;
 import org.freeplane.plugin.graph.workspace.ListenerRegistration;
 import org.freeplane.plugin.graph.workspace.WorkspaceStoreEvent;
 import org.freeplane.plugin.graph.workspace.WorkspaceStoreListener;
+import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 
 public final class GraphUpdateCoordinator implements AutoCloseable {
     private final Object monitor = new Object();
@@ -37,6 +38,7 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
 
     private ListenerRegistration storeListenerRegistration;
     private ListenerRegistration adapterListenerRegistration;
+    private ListenerRegistration leaseAttachmentRegistration;
     private GraphProjection projection;
     private CanvasState state;
     private long acceptedGeneration = -1L;
@@ -85,6 +87,20 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
         if (store != null) {
             registerSourceListeners(store, leaseManager);
         }
+        else {
+            try {
+                leaseAttachmentRegistration = registerLeaseAttachmentListener();
+            }
+            catch (RuntimeException failure) {
+                try {
+                    shutdownResources(null, null, leaseAttachmentRegistration);
+                }
+                catch (RuntimeException cleanupFailure) {
+                    failure = recordShutdownFailure(failure, cleanupFailure);
+                }
+                throw failure;
+            }
+        }
     }
 
     GraphUpdateCoordinator(final RebuildPipeline pipeline, final ProjectionBatcher batcher,
@@ -103,7 +119,7 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
         catch (RuntimeException failure) {
             if (store == null || leaseManager == null) {
                 try {
-                    shutdownResources(null, null);
+                    shutdownResources(null, null, null);
                 }
                 catch (RuntimeException cleanupFailure) {
                     failure = recordShutdownFailure(failure, cleanupFailure);
@@ -120,6 +136,19 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
         this.state = CanvasState.of(0L, projection, initialLayout,
             GraphGeometry.of(Collections.emptyMap(), Collections.emptyMap()), OperationalStatus.LOADING);
     }
+
+    private ListenerRegistration registerLeaseAttachmentListener() {
+        if (ownedMaps == null) {
+            return null;
+        }
+        return ownedMaps.addLeaseAttachmentListener(new WorkspaceMapCoordinator.LeaseAttachmentListener() {
+            @Override
+            public void onLeaseAttached(final MapReferenceId id) {
+                requestSourceRebuild(ChangeKind.MAP_STATE);
+            }
+        });
+    }
+
     private void registerSourceListeners(final GraphWorkspaceStore store, final MapLeaseManager leaseManager) {
         final WorkspaceStoreListener storeListener = new WorkspaceStoreListener() {
             @Override
@@ -135,16 +164,19 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
         };
         ListenerRegistration storeRegistration = null;
         ListenerRegistration adapterRegistration = null;
+        ListenerRegistration attachmentRegistration = null;
         try {
             storeRegistration = Objects.requireNonNull(store.addListener(storeListener), "store listener registration");
             adapterRegistration = Objects.requireNonNull(leaseManager.addListener(adapterListener),
                 "adapter listener registration");
+            attachmentRegistration = registerLeaseAttachmentListener();
             storeListenerRegistration = storeRegistration;
             adapterListenerRegistration = adapterRegistration;
+            leaseAttachmentRegistration = attachmentRegistration;
         }
         catch (RuntimeException failure) {
             try {
-                shutdownResources(storeRegistration, adapterRegistration);
+                shutdownResources(storeRegistration, adapterRegistration, attachmentRegistration);
             }
             catch (RuntimeException cleanupFailure) {
                 failure = recordShutdownFailure(failure, cleanupFailure);
@@ -294,6 +326,7 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
     public void close() {
         final ListenerRegistration storeRegistration;
         final ListenerRegistration adapterRegistration;
+        final ListenerRegistration attachmentRegistration;
         synchronized (monitor) {
             if (closed) {
                 return;
@@ -304,14 +337,16 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
             projectionListeners.clear();
             storeRegistration = storeListenerRegistration;
             adapterRegistration = adapterListenerRegistration;
+            attachmentRegistration = leaseAttachmentRegistration;
             storeListenerRegistration = null;
             adapterListenerRegistration = null;
+            leaseAttachmentRegistration = null;
         }
         if (edt.isEdt() || Boolean.TRUE.equals(acceptingBatch.get())) {
-            deferShutdown(storeRegistration, adapterRegistration);
+            deferShutdown(storeRegistration, adapterRegistration, attachmentRegistration);
         }
         else {
-            shutdownResources(storeRegistration, adapterRegistration);
+            shutdownResources(storeRegistration, adapterRegistration, attachmentRegistration);
         }
     }
 
@@ -333,12 +368,12 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
     }
 
     private void deferShutdown(final ListenerRegistration storeRegistration,
-            final ListenerRegistration adapterRegistration) {
+            final ListenerRegistration adapterRegistration, final ListenerRegistration attachmentRegistration) {
         final Thread shutdownThread = new Thread(new Runnable() {
             @Override
             public void run() {
                 try {
-                    shutdownResources(storeRegistration, adapterRegistration);
+                    shutdownResources(storeRegistration, adapterRegistration, attachmentRegistration);
                 }
                 catch (RuntimeException ignored) {
                     // An asynchronous close cannot report a shutdown failure to its caller.
@@ -350,7 +385,7 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
     }
 
     private void shutdownResources(final ListenerRegistration storeRegistration,
-            final ListenerRegistration adapterRegistration) {
+            final ListenerRegistration adapterRegistration, final ListenerRegistration attachmentRegistration) {
         RuntimeException failure = null;
         try {
             closeRegistration(storeRegistration);
@@ -360,6 +395,12 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
         }
         try {
             closeRegistration(adapterRegistration);
+        }
+        catch (RuntimeException exception) {
+            failure = recordShutdownFailure(failure, exception);
+        }
+        try {
+            closeRegistration(attachmentRegistration);
         }
         catch (RuntimeException exception) {
             failure = recordShutdownFailure(failure, exception);

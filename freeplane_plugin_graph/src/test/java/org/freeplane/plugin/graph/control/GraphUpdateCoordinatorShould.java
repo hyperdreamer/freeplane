@@ -2,10 +2,12 @@ package org.freeplane.plugin.graph.control;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.net.URI;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -27,8 +29,10 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.freeplane.plugin.graph.adapter.EdtExecutor;
 import org.freeplane.plugin.graph.adapter.MapAdapterEvent;
 import org.freeplane.plugin.graph.adapter.MapAdapterListener;
+import org.freeplane.plugin.graph.adapter.MapLease;
 import org.freeplane.plugin.graph.adapter.MapLeaseManager;
 import org.freeplane.plugin.graph.adapter.MapOperationalState;
+import org.freeplane.plugin.graph.adapter.MapSnapshotFactory;
 import org.freeplane.plugin.graph.geometry.GraphGeometryEngine;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.layout.LayoutFrame;
@@ -38,15 +42,20 @@ import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.projection.ProjectionEngine;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
+import org.freeplane.plugin.graph.projection.input.MapSnapshot;
+import org.freeplane.plugin.graph.projection.input.NodeSnapshot;
 import org.freeplane.plugin.graph.projection.input.SafeNodeLabel;
 import org.freeplane.plugin.graph.projection.input.SourceNodeKey;
 import org.freeplane.plugin.graph.workspace.GraphWorkspaceStore;
 import org.freeplane.plugin.graph.workspace.ListenerRegistration;
 import org.freeplane.plugin.graph.workspace.WorkspaceStoreEvent;
 import org.freeplane.plugin.graph.workspace.WorkspaceStoreListener;
+import org.freeplane.plugin.graph.workspace.model.MapReference;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 import org.freeplane.plugin.graph.workspace.model.NodeReference;
 import org.freeplane.plugin.graph.workspace.model.PersistedNodeId;
+import org.freeplane.plugin.graph.workspace.model.UnknownXml;
+import org.freeplane.plugin.graph.workspace.model.WorkspaceDocument;
 import org.freeplane.plugin.graph.workspace.model.WorkspaceId;
 import org.junit.Test;
 
@@ -168,6 +177,123 @@ public class GraphUpdateCoordinatorShould {
     }
 
     @Test
+    public void rebuildsAfterADeferredLeaseAttachment() throws Exception {
+        TestEdt mapEdt = new TestEdt();
+        GraphWorkspaceStore store = mock(GraphWorkspaceStore.class);
+        MapLeaseManager leaseManager = mock(MapLeaseManager.class);
+        MapSnapshotFactory snapshots = mock(MapSnapshotFactory.class);
+        MapReference reference = MapReference.of(MAP, 1L, URI.create("maps/map.mm"), true,
+            "#4E79A7", Collections.<UnknownXml>emptyList());
+        WorkspaceDocument document = WorkspaceDocument.createVersion1(WORKSPACE).toBuilder()
+            .maps(Collections.singletonList(reference)).build();
+        when(store.currentDocument()).thenReturn(document);
+        when(store.addListener(any(WorkspaceStoreListener.class))).thenReturn(new ListenerRegistrationStub());
+        List<MapAdapterListener> adapterListeners = new ArrayList<MapAdapterListener>();
+        when(leaseManager.addListener(any(MapAdapterListener.class))).thenAnswer(invocation -> {
+            adapterListeners.add(invocation.getArgument(0));
+            return new ListenerRegistrationStub();
+        });
+
+        CompletableFuture<MapLease> acquisition = new CompletableFuture<MapLease>();
+        MapLease lease = mock(MapLease.class);
+        when(lease.mapReferenceId()).thenReturn(MAP);
+        when(lease.state()).thenReturn(MapOperationalState.AVAILABLE);
+        MapSnapshot snapshot = snapshot(MAP);
+        when(snapshots.snapshot(same(lease))).thenReturn(snapshot);
+        WorkspaceMapCoordinator maps = new WorkspaceMapCoordinator(snapshots, leaseManager, store, mapEdt,
+            ignored -> acquisition);
+        LayoutSettleLoop settleLoop = mock(LayoutSettleLoop.class);
+        GraphUpdateCoordinator coordinator = new GraphUpdateCoordinator(maps, store, leaseManager,
+            new ProjectionEngine(), settleLoop);
+        CountDownLatch firstProjection = new CountDownLatch(1);
+        CountDownLatch emptyAvailabilityProjection = new CountDownLatch(1);
+        CountDownLatch projectedAfterAttachment = new CountDownLatch(1);
+        coordinator.addProjectionListener(projection -> {
+            if (projection.generation() == 1L) {
+                firstProjection.countDown();
+            }
+            if (projection.generation() >= 2L && projection.nodes().isEmpty()) {
+                emptyAvailabilityProjection.countDown();
+            }
+            if (!projection.nodes().isEmpty()) {
+                projectedAfterAttachment.countDown();
+            }
+        });
+
+        try {
+            coordinator.start();
+            assertThat(firstProjection.await(5L, TimeUnit.SECONDS)).isTrue();
+            assertThat(coordinator.currentProjection().nodes()).isEmpty();
+
+            MapAdapterEvent available = new MapAdapterEvent(MAP, MapOperationalState.AVAILABLE);
+            for (MapAdapterListener listener : adapterListeners) {
+                listener.onMapAdapterEvent(available);
+            }
+            mapEdt.runQueued();
+            assertThat(emptyAvailabilityProjection.await(5L, TimeUnit.SECONDS)).isTrue();
+
+            acquisition.complete(lease);
+            mapEdt.runQueued();
+
+            assertThat(projectedAfterAttachment.await(5L, TimeUnit.SECONDS)).isTrue();
+            assertThat(coordinator.currentProjection().nodes()).isNotEmpty();
+        }
+        finally {
+            coordinator.close();
+        }
+    }
+
+    @Test
+    public void rebuildsAfterADeferredLeaseAttachmentWithoutSourceListeners() throws Exception {
+        TestEdt mapEdt = new TestEdt();
+        GraphWorkspaceStore store = mock(GraphWorkspaceStore.class);
+        MapLeaseManager leaseManager = mock(MapLeaseManager.class);
+        MapSnapshotFactory snapshots = mock(MapSnapshotFactory.class);
+        MapReference reference = MapReference.of(MAP, 1L, URI.create("maps/map.mm"), true,
+            "#4E79A7", Collections.<UnknownXml>emptyList());
+        WorkspaceDocument document = WorkspaceDocument.createVersion1(WORKSPACE).toBuilder()
+            .maps(Collections.singletonList(reference)).build();
+        when(store.currentDocument()).thenReturn(document);
+        when(store.addListener(any(WorkspaceStoreListener.class))).thenReturn(new ListenerRegistrationStub());
+        when(leaseManager.addListener(any(MapAdapterListener.class))).thenReturn(new ListenerRegistrationStub());
+
+        CompletableFuture<MapLease> acquisition = new CompletableFuture<MapLease>();
+        MapLease lease = mock(MapLease.class);
+        when(lease.mapReferenceId()).thenReturn(MAP);
+        when(lease.state()).thenReturn(MapOperationalState.AVAILABLE);
+        when(snapshots.snapshot(same(lease))).thenReturn(snapshot(MAP));
+        WorkspaceMapCoordinator maps = new WorkspaceMapCoordinator(snapshots, leaseManager, store, mapEdt,
+            ignored -> acquisition);
+        GraphUpdateCoordinator coordinator = new GraphUpdateCoordinator(maps, new ProjectionEngine(),
+            mock(LayoutSettleLoop.class));
+        CountDownLatch initialProjection = new CountDownLatch(1);
+        CountDownLatch projectedAfterAttachment = new CountDownLatch(1);
+        coordinator.addProjectionListener(projection -> {
+            if (projection.generation() == 1L) {
+                initialProjection.countDown();
+            }
+            if (!projection.nodes().isEmpty()) {
+                projectedAfterAttachment.countDown();
+            }
+        });
+
+        try {
+            coordinator.start();
+            assertThat(initialProjection.await(5L, TimeUnit.SECONDS)).isTrue();
+            assertThat(coordinator.currentProjection().nodes()).isEmpty();
+
+            acquisition.complete(lease);
+            mapEdt.runQueued();
+
+            assertThat(projectedAfterAttachment.await(5L, TimeUnit.SECONDS)).isTrue();
+            assertThat(coordinator.currentProjection().nodes()).isNotEmpty();
+        }
+        finally {
+            coordinator.close();
+        }
+    }
+
+    @Test
     public void queuesMapStateRebuildForAdapterEvent() {
         SourceFixture source = sourceCoordinator();
         try {
@@ -233,6 +359,33 @@ public class GraphUpdateCoordinatorShould {
             assertThat(expected).hasMessage("registration failed");
         }
 
+        verify(maps).close();
+        verify(loop).close();
+    }
+
+    @Test
+    public void closesSourceRegistrationsWhenLeaseAttachmentRegistrationFails() {
+        WorkspaceMapCoordinator maps = mock(WorkspaceMapCoordinator.class);
+        LayoutSettleLoop loop = mock(LayoutSettleLoop.class);
+        GraphWorkspaceStore store = mock(GraphWorkspaceStore.class);
+        MapLeaseManager leaseManager = mock(MapLeaseManager.class);
+        ListenerRegistrationStub storeRegistration = new ListenerRegistrationStub();
+        ListenerRegistrationStub adapterRegistration = new ListenerRegistrationStub();
+        when(store.addListener(any())).thenReturn(storeRegistration);
+        when(leaseManager.addListener(any())).thenReturn(adapterRegistration);
+        when(maps.addLeaseAttachmentListener(any(WorkspaceMapCoordinator.LeaseAttachmentListener.class)))
+            .thenThrow(new IllegalStateException("attachment registration failed"));
+
+        try {
+            new GraphUpdateCoordinator(maps, store, leaseManager, new ProjectionEngine(), loop);
+            throw new AssertionError("construction should fail");
+        }
+        catch (IllegalStateException expected) {
+            assertThat(expected).hasMessage("attachment registration failed");
+        }
+
+        assertThat(storeRegistration.closeCount()).isEqualTo(1);
+        assertThat(adapterRegistration.closeCount()).isEqualTo(1);
         verify(maps).close();
         verify(loop).close();
     }
@@ -821,6 +974,12 @@ public class GraphUpdateCoordinatorShould {
             Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
     }
 
+    private static MapSnapshot snapshot(final MapReferenceId id) {
+        PersistedNodeId nodeId = PersistedNodeId.of("root-" + id.value());
+        NodeSnapshot root = NodeSnapshot.of(SourceNodeKey.persisted(NodeReference.of(id, nodeId)),
+            SafeNodeLabel.of("Node", "Node"), true, false, false, Collections.<NodeSnapshot>emptyList());
+        return MapSnapshot.of(id, 1, "Map", root, Collections.singleton(nodeId), false);
+    }
     private static WorkspaceStoreEvent workspaceEvent(final WorkspaceStoreEvent.Type type) {
         WorkspaceStoreEvent event = mock(WorkspaceStoreEvent.class);
         when(event.type()).thenReturn(type);
