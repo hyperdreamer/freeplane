@@ -64,7 +64,7 @@ public final class ProjectionEngine {
             collectNodes(root, projectedNodes);
             if (root instanceof ExactEnclosure) {
                 collectEnclosures(compress((ExactEnclosure) root, Optional.<EnclosureHullKey>empty(),
-                    activeRegistrationCount, false), projectedEnclosures);
+                    activeRegistrationCount, 0), projectedEnclosures);
             }
         }
 
@@ -229,7 +229,7 @@ public final class ProjectionEngine {
     }
 
     private static HullTree compress(final ExactEnclosure start, final Optional<EnclosureHullKey> parentHull,
-            final int activeRegistrationCount, final boolean directChildOfSuppressedRoot) {
+            final int activeRegistrationCount, final int boundaryDepth) {
         final List<ExactEnclosure> chain = new ArrayList<ExactEnclosure>();
         chain.add(start);
         ExactEnclosure deepest = start;
@@ -250,8 +250,7 @@ public final class ProjectionEngine {
         }
         final EnclosureHullKey hullKey = EnclosureHullKey.of(endpointKeys);
         final boolean mapRoot = !parentHull.isPresent();
-        final BoundaryTier boundaryTier = boundaryTier(mapRoot, endpointKeys, activeRegistrationCount,
-            directChildOfSuppressedRoot);
+        final BoundaryTier boundaryTier = boundaryTier(boundaryDepth, activeRegistrationCount);
         final List<ProjectedNodeKey> directNodes = new ArrayList<ProjectedNodeKey>();
         final List<HullTree> childHulls = new ArrayList<HullTree>();
         for (final StructuralElement child : deepest.children) {
@@ -260,7 +259,7 @@ public final class ProjectionEngine {
             }
             else {
                 childHulls.add(compress((ExactEnclosure) child, Optional.of(hullKey), activeRegistrationCount,
-                    mapRoot && boundaryTier == BoundaryTier.SUPPRESSED));
+                    boundaryDepth + 1));
             }
         }
         final List<EnclosureHullKey> directEnclosures = new ArrayList<EnclosureHullKey>(childHulls.size());
@@ -272,24 +271,24 @@ public final class ProjectionEngine {
         return new HullTree(enclosure, childHulls);
     }
 
-    private static BoundaryTier boundaryTier(final boolean mapRoot, final List<EnclosureKey> endpointKeys,
-            final int activeRegistrationCount, final boolean directChildOfSuppressedRoot) {
-        if (mapRoot) {
-            if (activeRegistrationCount >= 2) {
+    private static BoundaryTier boundaryTier(final int boundaryDepth,
+            final int activeRegistrationCount) {
+        if (activeRegistrationCount <= 1) {
+            if (boundaryDepth == 1) {
                 return BoundaryTier.EMPHATIC;
             }
-            if (activeRegistrationCount == 1 && endpointKeys.size() == 1) {
-                return BoundaryTier.SUPPRESSED;
+            if (boundaryDepth == 2) {
+                return BoundaryTier.SUBTLE;
             }
-            if (activeRegistrationCount == 1) {
-                return BoundaryTier.EMPHATIC;
-            }
-            return BoundaryTier.SUBTLE;
+            return BoundaryTier.SUPPRESSED;
         }
-        if (directChildOfSuppressedRoot) {
+        if (boundaryDepth == 0) {
             return BoundaryTier.EMPHATIC;
         }
-        return BoundaryTier.SUBTLE;
+        if (boundaryDepth == 1) {
+            return BoundaryTier.SUBTLE;
+        }
+        return BoundaryTier.SUPPRESSED;
     }
 
     private static void collectEnclosures(final HullTree tree, final List<ProjectedEnclosure> enclosures) {
