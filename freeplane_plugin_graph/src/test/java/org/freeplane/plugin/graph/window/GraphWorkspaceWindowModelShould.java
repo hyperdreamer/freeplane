@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.GraphicsEnvironment;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.nio.file.Path;
@@ -68,6 +69,7 @@ import org.freeplane.plugin.graph.workspace.model.WorkspaceId;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.core.resources.ResourceController;
 import org.junit.After;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
@@ -538,6 +540,53 @@ public class GraphWorkspaceWindowModelShould {
         }
         view.close();
         resourceScope.close();
+    }
+
+    @Test
+    public void showsAWorkspaceWindowAfterOpeningIt() {
+        Assume.assumeFalse(GraphicsEnvironment.isHeadless());
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel resourceScope = fixture.model();
+        GraphWorkspaceView view = new SwingGraphWorkspaceViewFactory(fixture.applicationController, () -> OPEN_PATH)
+            .create(fixture.handle, fixture.binding, fixture.closeController);
+        assertThat(view).isInstanceOf(GraphWorkspaceWindow.class);
+        GraphWorkspaceWindow window = (GraphWorkspaceWindow) view;
+
+        try {
+            window.show();
+
+            assertThat(window.isVisible()).isTrue();
+        }
+        finally {
+            window.close();
+            resourceScope.close();
+        }
+    }
+
+    @Test
+    public void showsAHiddenWorkspaceWindowWhenFocusingIt() {
+        Assume.assumeFalse(GraphicsEnvironment.isHeadless());
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel resourceScope = fixture.model();
+        GraphWorkspaceView view = new SwingGraphWorkspaceViewFactory(fixture.applicationController, () -> OPEN_PATH)
+            .create(fixture.handle, fixture.binding, fixture.closeController);
+        assertThat(view).isInstanceOf(GraphWorkspaceWindow.class);
+        GraphWorkspaceWindow window = (GraphWorkspaceWindow) view;
+
+        try {
+            assertThat(window.isVisible()).isFalse();
+            window.focus();
+
+            assertThat(window.isVisible()).isTrue();
+        }
+        finally {
+            window.close();
+            resourceScope.close();
+        }
     }
 
     private static GraphCommandResult commandResult(final WorkspaceTransition transition) {
