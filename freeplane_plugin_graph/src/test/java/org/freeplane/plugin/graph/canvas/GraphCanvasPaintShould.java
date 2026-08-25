@@ -25,6 +25,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import javax.swing.JScrollPane;
+import javax.swing.JViewport;
 
 import org.freeplane.plugin.graph.control.CanvasState;
 import org.freeplane.plugin.graph.control.OperationalStatus;
@@ -989,6 +990,61 @@ public class GraphCanvasPaintShould {
         scrollViewport.setViewPosition(new Point(finalMaxX, 0));
         assertThat(right.getX() - finalMaxX).isLessThan(scrollViewport.getExtentSize().getWidth());
     }
+
+    @Test
+    public void keepBothWorldExtremaReachableAfterOffCenterUserPan() {
+        Fixture fixture = fixture(16.0);
+        GraphCanvas canvas = new GraphCanvas();
+        canvas.setCanvasState(stateWithWideGeometry(fixture));
+        canvas.setViewport(GraphViewport.of(0.0, 0.0, 1.0));
+        canvas.setSize(canvas.getPreferredSize());
+        JScrollPane scrollPane = new JScrollPane(canvas);
+        scrollPane.setSize(new Dimension(320, 220));
+        scrollPane.doLayout();
+        JViewport scrollViewport = scrollPane.getViewport();
+        int initialMaximumX = Math.max(0, canvas.getWidth() - scrollViewport.getExtentSize().width);
+        scrollViewport.setViewPosition(new Point(initialMaximumX * 3 / 4, 0));
+        GraphViewport before = canvas.visibleViewport();
+
+        canvas.panByPixels(-700.0, 0.0);
+
+        GraphViewport after = canvas.visibleViewport();
+        assertThat(after.centerX() - before.centerX()).isCloseTo(700.0,
+            org.assertj.core.data.Offset.offset(0.000001));
+        Dimension surface = canvas.getSize();
+        double marginPixels = 80.0 * canvas.viewport().zoom();
+        Point2D left = canvas.viewport().toScreen(LayoutPoint.of(-510.0, 0.0), surface);
+        Point2D right = canvas.viewport().toScreen(LayoutPoint.of(510.0, 0.0), surface);
+        assertThat(left.getX()).isGreaterThanOrEqualTo(marginPixels);
+        assertThat(right.getX()).isLessThanOrEqualTo(surface.getWidth() - marginPixels);
+        assertHorizontallyReachable(scrollViewport, left.getX());
+        assertHorizontallyReachable(scrollViewport, right.getX());
+    }
+
+    @Test
+    public void deferSameGenerationSurfaceContractionUntilIdle() {
+        Fixture fixture = fixture(16.0);
+        GraphCanvas canvas = new GraphCanvas();
+        CanvasState expandedSettling = stateWithGeometry(fixture, 500.0, 400.0,
+            OperationalStatus.SETTLING);
+        CanvasState contractedSettling = stateWithGeometry(fixture, 100.0, 100.0,
+            OperationalStatus.SETTLING);
+        CanvasState contractedIdle = stateWithGeometry(fixture, 100.0, 100.0,
+            OperationalStatus.IDLE);
+
+        canvas.setCanvasState(expandedSettling);
+        Dimension expandedSurface = canvas.getPreferredSize();
+        assertThat(expandedSurface.width).isGreaterThan(800);
+        assertThat(expandedSurface.height).isGreaterThan(560);
+
+        canvas.setCanvasState(contractedSettling);
+        assertThat(canvas.getPreferredSize()).isEqualTo(expandedSurface);
+
+        canvas.setCanvasState(contractedIdle);
+        assertThat(canvas.getPreferredSize().width).isLessThan(expandedSurface.width);
+        assertThat(canvas.getPreferredSize().height).isLessThan(expandedSurface.height);
+    }
+
     @Test
     public void fitGraphUsesTheScrollableViewportExtentInsteadOfTheFullSurface() {
         Fixture fixture = fixture(16.0);
@@ -1042,12 +1098,29 @@ public class GraphCanvasPaintShould {
     }
 
     private static CanvasState stateWithWideGeometry(final Fixture fixture) {
+        return stateWithGeometry(fixture, 500.0, 0.0, fixture.state.status());
+    }
+
+    private static CanvasState stateWithGeometry(final Fixture fixture, final double horizontalCoordinate,
+            final double verticalCoordinate, final OperationalStatus status) {
         Map<ProjectedNodeKey, NodeGeometry> nodes = new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
-        nodes.put(fixture.first.key(), NodeGeometry.of(LayoutPoint.of(-500.0, 0.0), 10.0));
-        nodes.put(fixture.second.key(), NodeGeometry.of(LayoutPoint.of(500.0, 0.0), 10.0));
+        nodes.put(fixture.first.key(), NodeGeometry.of(
+            LayoutPoint.of(-horizontalCoordinate, -verticalCoordinate), 10.0));
+        nodes.put(fixture.second.key(), NodeGeometry.of(
+            LayoutPoint.of(horizontalCoordinate, verticalCoordinate), 10.0));
         return CanvasState.of(fixture.state.generation(), fixture.state.projection(), fixture.state.layout(),
             GraphGeometry.of(nodes, fixture.state.geometry().hulls(), fixture.state.geometry().labels()),
-            fixture.state.status());
+            status);
+    }
+
+    private static void assertHorizontallyReachable(final JViewport viewport, final double surfaceX) {
+        int extentWidth = viewport.getExtentSize().width;
+        int maximumX = Math.max(0, viewport.getView().getWidth() - extentWidth);
+        int centeredX = (int) Math.round(surfaceX - extentWidth * 0.5);
+        int viewX = Math.max(0, Math.min(maximumX, centeredX));
+        viewport.setViewPosition(new Point(viewX, viewport.getViewPosition().y));
+        double visibleX = surfaceX - viewport.getViewPosition().x;
+        assertThat(visibleX).isBetween(0.0, (double) extentWidth);
     }
 
     private static BufferedImage paint(final CanvasState state, final GraphPaintState paintState,

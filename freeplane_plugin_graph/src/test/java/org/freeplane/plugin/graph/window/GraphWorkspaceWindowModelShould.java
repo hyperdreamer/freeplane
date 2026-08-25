@@ -11,6 +11,11 @@ import java.awt.Dimension;
 import java.awt.GraphicsEnvironment;
 import java.awt.Graphics2D;
 import java.awt.Point;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseWheelEvent;
 import java.awt.image.BufferedImage;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -22,6 +27,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
+
+import javax.xml.namespace.QName;
 
 import javax.swing.JMenu;
 import javax.swing.JMenuItem;
@@ -232,6 +239,70 @@ public class GraphWorkspaceWindowModelShould {
         assertThat(visible.centerY()).isNotEqualTo(anchor.centerY());
         model.close();
     }
+
+    @Test
+    public void persistsCanvasDragAsTheVisibleViewportOnce() {
+        assertCanvasGesturePersistsVisibleViewportOnce(canvas -> {
+            int centerX = canvas.getWidth() / 2;
+            int centerY = canvas.getHeight() / 2;
+            canvas.dispatchEvent(mouse(canvas, MouseEvent.MOUSE_PRESSED, centerX, centerY,
+                InputEvent.BUTTON1_DOWN_MASK, MouseEvent.BUTTON1));
+            canvas.dispatchEvent(mouse(canvas, MouseEvent.MOUSE_DRAGGED, centerX + 15, centerY,
+                InputEvent.BUTTON1_DOWN_MASK, MouseEvent.NOBUTTON));
+            canvas.dispatchEvent(mouse(canvas, MouseEvent.MOUSE_DRAGGED, centerX + 30, centerY,
+                InputEvent.BUTTON1_DOWN_MASK, MouseEvent.NOBUTTON));
+            canvas.dispatchEvent(mouse(canvas, MouseEvent.MOUSE_RELEASED, centerX + 30, centerY,
+                0, MouseEvent.BUTTON1));
+        });
+    }
+
+    @Test
+    public void persistsCanvasArrowPanAsTheVisibleViewportOnce() {
+        assertCanvasGesturePersistsVisibleViewportOnce(canvas -> {
+            KeyEvent event = new KeyEvent(canvas, KeyEvent.KEY_PRESSED, System.currentTimeMillis(),
+                0, KeyEvent.VK_RIGHT, KeyEvent.CHAR_UNDEFINED);
+            for (KeyListener listener : canvas.getKeyListeners()) {
+                listener.keyPressed(event);
+            }
+        });
+    }
+
+    @Test
+    public void persistsCanvasWheelZoomAsTheVisibleViewportOnce() {
+        assertCanvasGesturePersistsVisibleViewportOnce(canvas -> canvas.dispatchEvent(
+            new MouseWheelEvent(canvas, MouseEvent.MOUSE_WHEEL, System.currentTimeMillis(), 0,
+                canvas.getWidth() / 2, canvas.getHeight() / 2, 0, false,
+                MouseWheelEvent.WHEEL_UNIT_SCROLL, 1, -1)));
+    }
+
+    @Test
+    public void preservesLoadedViewportUnknownXmlThroughToolbarZoomFitAndReset() {
+        UnknownXml retained = UnknownXml.attribute(UnknownXml.Owner.RECORD,
+            new QName("urn:freeplane:test", "retained"), "viewport-value");
+        List<UnknownXml> unknownXml = Collections.singletonList(retained);
+        Fixture fixture = fixture(Viewport.of(125.0, -75.0, 2.0, unknownXml),
+            wideNodeState(ACTIVE_ID),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
+        scrollViewport(model, new Dimension(420, 300));
+        awaitDeferredViewportClamp();
+        org.mockito.Mockito.clearInvocations(fixture.handle);
+
+        model.toolbar().zoomInButton().doClick();
+        model.toolbar().fitGraphButton().doClick();
+        model.toolbar().resetZoomButton().doClick();
+        awaitDeferredViewportClamp();
+
+        ArgumentCaptor<GraphCommand> commands = ArgumentCaptor.forClass(GraphCommand.class);
+        verify(fixture.handle, org.mockito.Mockito.times(3)).execute(commands.capture());
+        for (GraphCommand command : commands.getAllValues()) {
+            assertThat(command).isInstanceOf(GraphCommands.Viewport.class);
+            GraphCommands.Viewport viewportCommand = (GraphCommands.Viewport) command;
+            assertThat(viewportCommand.viewport().unknownXml()).containsExactly(retained);
+        }
+        model.close();
+    }
+
     @Test
     public void suppressesDeferredSurfaceResizeViewportPersistenceAfterExternalScroll() {
         Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
@@ -749,6 +820,27 @@ public class GraphWorkspaceWindowModelShould {
 
         assertViewportCommandCount(fixture, model, expectedCount);
         model.close();
+    }
+
+    private static void assertCanvasGesturePersistsVisibleViewportOnce(final Consumer<GraphCanvas> gesture) {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            wideNodeState(ACTIVE_ID),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
+        scrollViewport(model, new Dimension(420, 300));
+        awaitDeferredViewportClamp();
+        org.mockito.Mockito.clearInvocations(fixture.handle);
+
+        gesture.accept(model.canvas());
+        awaitDeferredViewportClamp();
+
+        assertViewportCommandCount(fixture, model, 1);
+        model.close();
+    }
+
+    private static MouseEvent mouse(final GraphCanvas canvas, final int id, final int x, final int y,
+            final int modifiers, final int button) {
+        return new MouseEvent(canvas, id, System.currentTimeMillis(), modifiers, x, y, 1, false, button);
     }
 
     private static JViewport scrollViewport(final GraphWorkspaceWindowModel model, final Dimension size) {
