@@ -48,6 +48,8 @@ public final class WorkspaceMapCoordinator implements AutoCloseable {
         new LinkedHashMap<MapReferenceId, AcquisitionBarrier>();
     private final Set<MapLease> pendingCompletions = Collections.newSetFromMap(
         new IdentityHashMap<MapLease, Boolean>());
+    private final List<LeaseAttachmentListener> leaseAttachmentListeners =
+        new ArrayList<LeaseAttachmentListener>();
     private final WorkspaceStoreListener workspaceListener;
     private final MapAdapterListener adapterListener;
 
@@ -145,6 +147,26 @@ public final class WorkspaceMapCoordinator implements AutoCloseable {
         });
     }
 
+    ListenerRegistration addLeaseAttachmentListener(final LeaseAttachmentListener listener) {
+        final LeaseAttachmentListener value = Objects.requireNonNull(listener, "listener");
+        synchronized (monitor) {
+            requireOpenLocked();
+            leaseAttachmentListeners.add(value);
+            return new ListenerRegistration() {
+                @Override
+                public void close() {
+                    removeLeaseAttachmentListener(value);
+                }
+            };
+        }
+    }
+
+    private void removeLeaseAttachmentListener(final LeaseAttachmentListener listener) {
+        synchronized (monitor) {
+            leaseAttachmentListeners.remove(listener);
+        }
+    }
+
     @Override
     public void close() {
         final ListenerRegistration storeRegistration;
@@ -168,6 +190,7 @@ public final class WorkspaceMapCoordinator implements AutoCloseable {
             }
             pendingCompletions.clear();
             acquisitionBarriers.clear();
+            leaseAttachmentListeners.clear();
             for (Registration registration : registrations.values()) {
                 final MapLease lease = detachLeaseLocked(registration);
                 if (lease != null && leasesToClose.add(lease)) {
@@ -421,6 +444,7 @@ public final class WorkspaceMapCoordinator implements AutoCloseable {
         }
         MapLease staleLease = null;
         Registration retry = null;
+        MapReferenceId attachedId = null;
         synchronized (monitor) {
             final MapReferenceId id = registration.reference.id();
             final AcquisitionBarrier barrier = acquisitionBarriers.get(id);
@@ -437,6 +461,7 @@ public final class WorkspaceMapCoordinator implements AutoCloseable {
                 if (currentSource && failure == null && validLease) {
                     registration.lease = lease;
                     registration.availability = availabilityFor(lease);
+                    attachedId = id;
                 }
                 else {
                     staleLease = lease;
@@ -451,9 +476,38 @@ public final class WorkspaceMapCoordinator implements AutoCloseable {
                 }
             }
         }
+        if (attachedId != null) {
+            notifyLeaseAttachmentListeners(attachedId);
+        }
         closeLease(staleLease);
         if (retry != null) {
             beginAcquireOnEdt(retry);
+        }
+    }
+
+    private void notifyLeaseAttachmentListeners(final MapReferenceId id) {
+        final List<LeaseAttachmentListener> listeners;
+        synchronized (monitor) {
+            if (closed) {
+                return;
+            }
+            listeners = new ArrayList<LeaseAttachmentListener>(leaseAttachmentListeners);
+        }
+        for (LeaseAttachmentListener listener : listeners) {
+            synchronized (monitor) {
+                if (closed) {
+                    return;
+                }
+                if (!leaseAttachmentListeners.contains(listener)) {
+                    continue;
+                }
+            }
+            try {
+                listener.onLeaseAttached(id);
+            }
+            catch (RuntimeException ignored) {
+                // A rebuild observer must not interfere with lease ownership settlement.
+            }
         }
     }
 
@@ -602,6 +656,10 @@ public final class WorkspaceMapCoordinator implements AutoCloseable {
         catch (RuntimeException ignored) {
             // A listener registration is no longer used after coordinator shutdown.
         }
+    }
+
+    interface LeaseAttachmentListener {
+        void onLeaseAttached(MapReferenceId id);
     }
 
     interface LeaseAcquirer {

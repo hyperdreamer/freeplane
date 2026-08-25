@@ -148,6 +148,86 @@ public class WorkspaceMapCoordinatorShould {
     }
 
     @Test
+    public void notifiesLeaseAttachmentListenersAfterInstallingTheLease() {
+        MapReferenceId id = id(1);
+        MapReference registration = registration(id, 1L, true);
+        WorkspaceDocument document = workspace(registration);
+        TestEdt edt = new TestEdt();
+        GraphWorkspaceStore store = mock(GraphWorkspaceStore.class);
+        MapLeaseManager leaseManager = mock(MapLeaseManager.class);
+        MapSnapshotFactory snapshots = mock(MapSnapshotFactory.class);
+        FakeLease lease = new FakeLease(id, MapOperationalState.AVAILABLE);
+        CompletableFuture<MapLease> acquisition = new CompletableFuture<MapLease>();
+        stubStoreAndListeners(store, leaseManager, document, new ListenerRegistrationStub(),
+            new ListenerRegistrationStub());
+        WorkspaceMapCoordinator coordinator = coordinator(document, edt, store, leaseManager, snapshots,
+            mapOf(id, acquisition));
+        coordinators.add(coordinator);
+        AtomicReference<MapLease> observedLease = new AtomicReference<MapLease>();
+        coordinator.addLeaseAttachmentListener(mapId -> observedLease.set(coordinator.find(mapId).orElse(null)));
+
+        acquisition.complete(lease);
+        edt.runQueued();
+
+        assertThat(observedLease.get()).isSameAs(lease);
+    }
+
+    @Test
+    public void stopsLeaseAttachmentDeliveryAfterAnEarlierListenerClosesTheCoordinator() {
+        MapReferenceId id = id(1);
+        MapReference registration = registration(id, 1L, true);
+        WorkspaceDocument document = workspace(registration);
+        TestEdt edt = new TestEdt();
+        GraphWorkspaceStore store = mock(GraphWorkspaceStore.class);
+        MapLeaseManager leaseManager = mock(MapLeaseManager.class);
+        MapSnapshotFactory snapshots = mock(MapSnapshotFactory.class);
+        FakeLease lease = new FakeLease(id, MapOperationalState.AVAILABLE);
+        CompletableFuture<MapLease> acquisition = new CompletableFuture<MapLease>();
+        stubStoreAndListeners(store, leaseManager, document, new ListenerRegistrationStub(),
+            new ListenerRegistrationStub());
+        WorkspaceMapCoordinator coordinator = coordinator(document, edt, store, leaseManager, snapshots,
+            mapOf(id, acquisition));
+        coordinators.add(coordinator);
+        AtomicInteger notificationsAfterClose = new AtomicInteger();
+        coordinator.addLeaseAttachmentListener(ignored -> coordinator.close());
+        coordinator.addLeaseAttachmentListener(ignored -> notificationsAfterClose.incrementAndGet());
+
+        acquisition.complete(lease);
+        edt.runQueued();
+
+        assertThat(notificationsAfterClose.get()).isZero();
+        assertThat(lease.closeCount()).isEqualTo(1);
+    }
+
+    @Test
+    public void stopsLeaseAttachmentDeliveryAfterAnEarlierListenerUnregistersTheNextListener() {
+        MapReferenceId id = id(1);
+        MapReference registration = registration(id, 1L, true);
+        WorkspaceDocument document = workspace(registration);
+        TestEdt edt = new TestEdt();
+        GraphWorkspaceStore store = mock(GraphWorkspaceStore.class);
+        MapLeaseManager leaseManager = mock(MapLeaseManager.class);
+        MapSnapshotFactory snapshots = mock(MapSnapshotFactory.class);
+        FakeLease lease = new FakeLease(id, MapOperationalState.AVAILABLE);
+        CompletableFuture<MapLease> acquisition = new CompletableFuture<MapLease>();
+        stubStoreAndListeners(store, leaseManager, document, new ListenerRegistrationStub(),
+            new ListenerRegistrationStub());
+        WorkspaceMapCoordinator coordinator = coordinator(document, edt, store, leaseManager, snapshots,
+            mapOf(id, acquisition));
+        coordinators.add(coordinator);
+        AtomicInteger notificationsAfterRemoval = new AtomicInteger();
+        ListenerRegistration[] laterRegistration = new ListenerRegistration[1];
+        coordinator.addLeaseAttachmentListener(ignored -> laterRegistration[0].close());
+        laterRegistration[0] = coordinator.addLeaseAttachmentListener(
+            ignored -> notificationsAfterRemoval.incrementAndGet());
+
+        acquisition.complete(lease);
+        edt.runQueued();
+
+        assertThat(notificationsAfterRemoval.get()).isZero();
+    }
+
+    @Test
     public void captureReadsWorkspaceAndSnapshotsOnlyThroughTheEdt() {
         MapReferenceId id = id(1);
         MapReference registration = registration(id, 1L, true);
