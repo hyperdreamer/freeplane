@@ -65,6 +65,7 @@ final class WorkspaceToolbar extends javax.swing.JPanel {
         "zoom-in", "zoom-out", "fit-graph", "reset-zoom", "pin", "unpin")));
     private Consumer<String> searchListener = value -> { };
     private Consumer<GraphViewport> viewportListener = value -> { };
+    private Consumer<Runnable> viewportOperation = action -> { action.run(); };
     private Consumer<InteractionTool> toolListener = value -> { };
     private Consumer<RelationshipDirection> directionListener = value -> { };
     private Runnable settingsAction = () -> { };
@@ -244,6 +245,10 @@ final class WorkspaceToolbar extends javax.swing.JPanel {
         viewportListener = Objects.requireNonNull(listener, "listener");
     }
 
+    void setViewportOperation(final Consumer<Runnable> operation) {
+        viewportOperation = Objects.requireNonNull(operation, "operation");
+    }
+
     void setToolListener(final Consumer<InteractionTool> listener) {
         toolListener = Objects.requireNonNull(listener, "listener");
     }
@@ -309,19 +314,25 @@ final class WorkspaceToolbar extends javax.swing.JPanel {
     }
 
     private void changeZoom(final double factor) {
-        final GraphViewport current = canvas.visibleViewport();
-        canvas.setViewport(GraphViewport.of(current.centerX(), current.centerY(), current.zoom() * factor));
-        viewportListener.accept(canvas.visibleViewport());
+        viewportOperation.accept(() -> {
+            final GraphViewport current = canvas.visibleViewport();
+            canvas.setViewport(GraphViewport.of(current.centerX(), current.centerY(), current.zoom() * factor));
+            viewportListener.accept(canvas.visibleViewport());
+        });
     }
 
     private void fitGraph() {
-        canvas.fitGraph();
-        viewportListener.accept(canvas.visibleViewport());
+        viewportOperation.accept(() -> {
+            canvas.fitGraph();
+            viewportListener.accept(canvas.visibleViewport());
+        });
     }
 
     private void resetZoom() {
-        canvas.resetZoom();
-        viewportListener.accept(canvas.visibleViewport());
+        viewportOperation.accept(() -> {
+            canvas.resetZoom();
+            viewportListener.accept(canvas.visibleViewport());
+        });
     }
 
     private void publishSearch() {

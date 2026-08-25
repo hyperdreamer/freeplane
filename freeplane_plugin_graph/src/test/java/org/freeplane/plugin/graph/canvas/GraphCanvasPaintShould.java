@@ -960,6 +960,36 @@ public class GraphCanvasPaintShould {
     }
 
     @Test
+    public void keepBothWorldExtremaScrollableAfterOffCenterZoom() {
+        Fixture fixture = fixture(16.0);
+        GraphCanvas canvas = new GraphCanvas();
+        canvas.setCanvasState(stateWithWideGeometry(fixture));
+        canvas.setViewport(GraphViewport.of(0.0, 0.0, 1.0));
+        JScrollPane scrollPane = new JScrollPane(canvas);
+        scrollPane.setSize(new Dimension(320, 220));
+        scrollPane.doLayout();
+        javax.swing.JViewport scrollViewport = scrollPane.getViewport();
+        int initialMaxX = Math.max(0, canvas.getWidth() - scrollViewport.getExtentSize().width);
+        scrollViewport.setViewPosition(new Point(initialMaxX, 0));
+        GraphViewport offCenter = canvas.visibleViewport();
+        assertThat(offCenter.centerX()).isGreaterThan(0.0);
+
+        canvas.setViewport(GraphViewport.of(offCenter.centerX(), offCenter.centerY(), 2.0));
+
+        Dimension surface = canvas.getSize();
+        double marginPixels = 80.0 * canvas.viewport().zoom();
+        Point2D left = canvas.viewport().toScreen(LayoutPoint.of(-510.0, 0.0), surface);
+        Point2D right = canvas.viewport().toScreen(LayoutPoint.of(510.0, 0.0), surface);
+        assertThat(left.getX()).isGreaterThanOrEqualTo(marginPixels);
+        assertThat(right.getX()).isLessThanOrEqualTo(surface.getWidth() - marginPixels);
+
+        scrollViewport.setViewPosition(new Point(0, 0));
+        assertThat(left.getX()).isLessThan(scrollViewport.getExtentSize().getWidth());
+        int finalMaxX = Math.max(0, canvas.getWidth() - scrollViewport.getExtentSize().width);
+        scrollViewport.setViewPosition(new Point(finalMaxX, 0));
+        assertThat(right.getX() - finalMaxX).isLessThan(scrollViewport.getExtentSize().getWidth());
+    }
+    @Test
     public void fitGraphUsesTheScrollableViewportExtentInsteadOfTheFullSurface() {
         Fixture fixture = fixture(16.0);
         GraphCanvas canvas = new GraphCanvas();

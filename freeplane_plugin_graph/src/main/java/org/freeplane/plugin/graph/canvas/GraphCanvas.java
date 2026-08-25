@@ -43,6 +43,8 @@ public final class GraphCanvas extends JComponent implements Accessible {
     private volatile GraphInteractionController interactionController;
     private volatile boolean showArrowheads;
     private volatile boolean dimUnrelated;
+    private volatile int viewportPositioningDepth;
+    private volatile int pendingViewportClamps;
 
     public GraphCanvas() {
         paintState = GraphPaintState.empty();
@@ -118,6 +120,10 @@ public final class GraphCanvas extends JComponent implements Accessible {
             + (visibleCenterY - getHeight() * 0.5) / anchor.zoom();
         return GraphViewport.from(Viewport.of(centerX, centerY, anchor.zoom(),
             anchor.toPersisted().unknownXml()));
+    }
+
+    public boolean isProgrammaticViewportChange() {
+        return viewportPositioningDepth > 0 || pendingViewportClamps > 0;
     }
 
     @Override
@@ -353,43 +359,42 @@ public final class GraphCanvas extends JComponent implements Accessible {
         final Dimension oldSize = getSize();
         final int oldWidth = oldSize.width > 0 ? oldSize.width : oldPreferred.width;
         final int oldHeight = oldSize.height > 0 ? oldSize.height : oldPreferred.height;
-        final int width = surfacePixels(bounds.spanX(), viewport.zoom(), MIN_SURFACE_WIDTH,
-            available == null ? 0 : available.width);
-        final int height = surfacePixels(bounds.spanY(), viewport.zoom(), MIN_SURFACE_HEIGHT,
-            available == null ? 0 : available.height);
+        final int width = surfacePixels(bounds.minX, bounds.maxX, viewport.centerX(), viewport.zoom(),
+            MIN_SURFACE_WIDTH, available == null ? 0 : available.width);
+        final int height = surfacePixels(bounds.minY, bounds.maxY, viewport.centerY(), viewport.zoom(),
+            MIN_SURFACE_HEIGHT, available == null ? 0 : available.height);
         if (oldPreferred.width == width && oldPreferred.height == height
                 && (scrollViewport == null || oldSize.width == width && oldSize.height == height)) {
             return;
         }
         final Point oldPosition = scrollViewport == null ? null : scrollViewport.getViewPosition();
         final Dimension nextSize = new Dimension(width, height);
-        setPreferredSize(nextSize);
-        if (scrollViewport != null) {
-            setSize(nextSize);
-            final int nextX = oldPosition == null ? 0
-                : oldPosition.x + (width - oldWidth) / 2;
-            final int nextY = oldPosition == null ? 0
-                : oldPosition.y + (height - oldHeight) / 2;
-            scrollViewport.setViewPosition(clampedPosition(scrollViewport, nextX, nextY));
+        beginViewportPositioning();
+        try {
+            setPreferredSize(nextSize);
+            if (scrollViewport != null) {
+                setSize(nextSize);
+                final int nextX = oldPosition == null ? 0
+                    : oldPosition.x + (width - oldWidth) / 2;
+                final int nextY = oldPosition == null ? 0
+                    : oldPosition.y + (height - oldHeight) / 2;
+                scrollViewport.setViewPosition(clampedPosition(scrollViewport, nextX, nextY));
+            }
+            revalidate();
+            if (scrollViewport != null) {
+                scheduleViewportClamp(scrollViewport);
+            }
         }
-        revalidate();
-        if (scrollViewport != null) {
-            SwingUtilities.invokeLater(new Runnable() {
-                @Override
-                public void run() {
-                    if (containingViewport() == scrollViewport) {
-                        final Point position = scrollViewport.getViewPosition();
-                        scrollViewport.setViewPosition(clampedPosition(scrollViewport,
-                            position.x, position.y));
-                    }
-                }
-            });
+        finally {
+            endViewportPositioning();
         }
     }
 
-    private static int surfacePixels(final double worldSpan, final double zoom, final int minimum,
-            final int available) {
-        final double requested = worldSpan * zoom + WORLD_MARGIN;
+    private static int surfacePixels(final double minWorld, final double maxWorld,
+            final double anchor, final double zoom, final int minimum, final int available) {
+        final double leftWorld = Math.max(0.0, anchor - minWorld + WORLD_MARGIN);
+        final double rightWorld = Math.max(0.0, maxWorld - anchor + WORLD_MARGIN);
+        final double requested = 2.0 * Math.max(leftWorld, rightWorld) * zoom;
         final double finiteRequested = Double.isFinite(requested) && requested > 0.0
             ? requested : minimum;
         final double bounded = Math.min(finiteRequested, Integer.MAX_VALUE - 1.0);
@@ -419,11 +424,57 @@ public final class GraphCanvas extends JComponent implements Accessible {
         final Dimension extent = scrollViewport.getExtentSize();
         final int centerX = (getWidth() - extent.width) / 2;
         final int centerY = (getHeight() - extent.height) / 2;
-        scrollViewport.setViewPosition(clampedPosition(scrollViewport, centerX, centerY));
+        setViewPositionProgrammatically(scrollViewport, centerX, centerY);
     }
 
     private JViewport containingViewport() {
         return (JViewport) SwingUtilities.getAncestorOfClass(JViewport.class, this);
+    }
+
+    private void setViewPositionProgrammatically(final JViewport scrollViewport, final int x,
+            final int y) {
+        beginViewportPositioning();
+        try {
+            scrollViewport.setViewPosition(clampedPosition(scrollViewport, x, y));
+        }
+        finally {
+            endViewportPositioning();
+        }
+    }
+
+    private void scheduleViewportClamp(final JViewport scrollViewport) {
+        pendingViewportClamps++;
+        try {
+            SwingUtilities.invokeLater(new Runnable() {
+                @Override
+                public void run() {
+                    beginViewportPositioning();
+                    try {
+                        if (containingViewport() == scrollViewport) {
+                            final Point position = scrollViewport.getViewPosition();
+                            scrollViewport.setViewPosition(clampedPosition(scrollViewport,
+                                position.x, position.y));
+                        }
+                    }
+                    finally {
+                        endViewportPositioning();
+                        pendingViewportClamps--;
+                    }
+                }
+            });
+        }
+        catch (final RuntimeException exception) {
+            pendingViewportClamps--;
+            throw exception;
+        }
+    }
+
+    private void beginViewportPositioning() {
+        viewportPositioningDepth++;
+    }
+
+    private void endViewportPositioning() {
+        viewportPositioningDepth--;
     }
 
     private static Point clampedPosition(final JViewport scrollViewport, final int x, final int y) {
