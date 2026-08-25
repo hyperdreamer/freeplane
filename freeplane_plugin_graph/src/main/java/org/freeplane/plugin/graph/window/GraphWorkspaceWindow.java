@@ -412,6 +412,7 @@ final class GraphWorkspaceWindowModel {
         toolbar.setToolListener(tool -> interactionController.setTool(tool));
         toolbar.setDirectionListener(interactionController::setRelationshipDirection);
         toolbar.setSearchListener(this::search);
+        toolbar.setViewportOperation(this::runWithViewportEventsSuppressed);
         toolbar.setViewportListener(this::publishToolbarViewport);
         toolbar.setPinAction(this::pinSelectedNode);
         toolbar.setUnpinAction(this::unpinSelectedNode);
@@ -602,7 +603,7 @@ final class GraphWorkspaceWindowModel {
     }
 
     private void publishExternalViewport() {
-        if (suppressViewportEvents || closed) {
+        if (suppressViewportEvents || canvas.isProgrammaticViewportChange() || closed) {
             return;
         }
         publishViewport(canvas.visibleViewport());

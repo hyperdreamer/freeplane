@@ -31,6 +31,7 @@ import javax.swing.UIManager;
 
 import org.freeplane.plugin.graph.canvas.GraphCanvas;
 import org.freeplane.plugin.graph.canvas.GraphTheme;
+import org.freeplane.plugin.graph.canvas.GraphViewport;
 import org.freeplane.plugin.graph.command.GraphCommand;
 import org.freeplane.plugin.graph.command.GraphCommands;
 import org.freeplane.plugin.graph.control.CanvasState;
@@ -220,7 +221,38 @@ public class GraphWorkspaceWindowModelShould {
         ArgumentCaptor<GraphCommand> commands = ArgumentCaptor.forClass(GraphCommand.class);
         verify(fixture.handle, org.mockito.Mockito.times(1)).execute(commands.capture());
         assertThat(commands.getValue()).isInstanceOf(GraphCommands.Viewport.class);
+        GraphCommands.Viewport command = (GraphCommands.Viewport) commands.getValue();
+        GraphViewport visible = model.canvas().visibleViewport();
+        GraphViewport anchor = model.canvas().viewport();
+        assertThat(command.viewport().centerX()).isEqualTo(visible.centerX());
+        assertThat(command.viewport().centerY()).isEqualTo(visible.centerY());
+        assertThat(command.viewport().zoom()).isEqualTo(visible.zoom());
+        assertThat(visible.centerX()).isNotEqualTo(anchor.centerX());
+        assertThat(visible.centerY()).isNotEqualTo(anchor.centerY());
         model.close();
+    }
+    @Test
+    public void suppressesSurfaceResizeViewportPersistenceAfterExternalScroll() {
+        assertViewportCommandCountAfterExternalScroll(0, wideNodeState(ACTIVE_ID),
+            model -> model.acceptCanvasState(widerNodeState(ACTIVE_ID)));
+    }
+
+    @Test
+    public void suppressesZoomViewportPersistenceAfterExternalScroll() {
+        assertViewportCommandCountAfterExternalScroll(1, wideNodeState(ACTIVE_ID),
+            model -> model.toolbar().zoomInButton().doClick());
+    }
+
+    @Test
+    public void suppressesFitViewportPersistenceAfterExternalScroll() {
+        assertViewportCommandCountAfterExternalScroll(1, wideNodeState(ACTIVE_ID),
+            model -> model.toolbar().fitGraphButton().doClick());
+    }
+
+    @Test
+    public void suppressesResetViewportPersistenceAfterExternalScroll() {
+        assertViewportCommandCountAfterExternalScroll(1, wideNodeState(ACTIVE_ID),
+            model -> model.toolbar().resetZoomButton().doClick());
     }
     @Test
     public void routesApplicationOpenToTheApplicationControllerAndSessionActionsToTheHandle() {
@@ -630,6 +662,43 @@ public class GraphWorkspaceWindowModelShould {
         }
     }
 
+    private static void assertViewportCommandCountAfterExternalScroll(final int expectedCount,
+            final CanvasState initialState, final Consumer<GraphWorkspaceWindowModel> operation) {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()), initialState,
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
+        JScrollPane graphScrollPane = graphScrollPane(model);
+        graphScrollPane.setSize(new Dimension(420, 300));
+        graphScrollPane.doLayout();
+        javax.swing.JViewport viewport = graphScrollPane.getViewport();
+        int maxX = Math.max(0, model.canvas().getWidth() - viewport.getExtentSize().width);
+        int maxY = Math.max(0, model.canvas().getHeight() - viewport.getExtentSize().height);
+        viewport.setViewPosition(new Point(Math.max(1, maxX * 3 / 4), Math.max(1, maxY * 3 / 4)));
+        GraphViewport external = model.canvas().visibleViewport();
+        assertThat(external.centerX()).isNotEqualTo(model.canvas().viewport().centerX());
+        org.mockito.Mockito.clearInvocations(fixture.handle);
+
+        operation.accept(model);
+        GraphWorkspaceWindow.runOnEdt(() -> { });
+
+        verify(fixture.handle, org.mockito.Mockito.times(expectedCount)).execute(any(GraphCommand.class));
+        if (expectedCount == 1) {
+            ArgumentCaptor<GraphCommand> commands = ArgumentCaptor.forClass(GraphCommand.class);
+            verify(fixture.handle, org.mockito.Mockito.times(1)).execute(commands.capture());
+            assertThat(commands.getValue()).isInstanceOf(GraphCommands.Viewport.class);
+            GraphCommands.Viewport command = (GraphCommands.Viewport) commands.getValue();
+            GraphViewport visible = model.canvas().visibleViewport();
+            assertThat(command.viewport().centerX()).isEqualTo(visible.centerX());
+            assertThat(command.viewport().centerY()).isEqualTo(visible.centerY());
+            assertThat(command.viewport().zoom()).isEqualTo(visible.zoom());
+        }
+        model.close();
+    }
+
+    private static JScrollPane graphScrollPane(final GraphWorkspaceWindowModel model) {
+        JPanel graphArea = (JPanel) model.content().getComponent(1);
+        return (JScrollPane) graphArea.getComponent(1);
+    }
     private static GraphCommandResult commandResult(final WorkspaceTransition transition) {
         return GraphCommandResult.from(transition);
     }
@@ -705,6 +774,14 @@ public class GraphWorkspaceWindowModelShould {
     }
 
     private static CanvasState wideNodeState(MapReferenceId mapId) {
+        return wideNodeState(mapId, 500.0);
+    }
+
+    private static CanvasState widerNodeState(MapReferenceId mapId) {
+        return wideNodeState(mapId, 1_000.0);
+    }
+
+    private static CanvasState wideNodeState(MapReferenceId mapId, double coordinate) {
         SourceNodeKey leftSource = SourceNodeKey.transientPath(mapId, Collections.singletonList(Integer.valueOf(0)));
         SourceNodeKey rightSource = SourceNodeKey.transientPath(mapId, Collections.singletonList(Integer.valueOf(1)));
         ProjectedNodeKey leftKey = ProjectedNodeKey.of(leftSource);
@@ -713,8 +790,8 @@ public class GraphWorkspaceWindowModelShould {
         ProjectedNode right = ProjectedNode.of(rightKey, SafeNodeLabel.of("Right", "Right"), "Map", false);
         List<ProjectedNode> nodes = Arrays.asList(left, right);
         GraphProjection projection = GraphProjection.structure(0L, nodes, Collections.emptyList());
-        LayoutPoint leftCenter = LayoutPoint.of(-500.0, 0.0);
-        LayoutPoint rightCenter = LayoutPoint.of(500.0, 0.0);
+        LayoutPoint leftCenter = LayoutPoint.of(-coordinate, 0.0);
+        LayoutPoint rightCenter = LayoutPoint.of(coordinate, 0.0);
         Map<ProjectedNodeKey, NodeGeometry> geometry = new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
         geometry.put(leftKey, NodeGeometry.of(leftCenter, 10.0));
         geometry.put(rightKey, NodeGeometry.of(rightCenter, 10.0));
