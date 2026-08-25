@@ -463,29 +463,46 @@ After each stable position update, the canvas computes a padded closed hull arou
 
 #### Two Visual Tiers
 
-Enclosures render in exactly two styles. No third tier is introduced at any depth. Which boundaries occupy the emphatic tier is decided by the tier rules below, not by absolute depth.
+Enclosures render in exactly two visible styles. Boundary depth counts projected enclosure hulls rather than
+source nodes inside a collapsed unary chain, so each maximal unary chain has one depth. The active mindmap
+count is the active registration count; temporarily Loading, Missing, or otherwise unavailable active maps
+still count.
 
-**Emphatic tier.** The topmost visible boundary of one added map:
+**Emphatic tier.**
 
 - thick solid stroke in the assigned map color at high opacity;
 - faint map-color fill;
 - bold, larger label that is always visible and never suppressed by level of detail.
 
-**Subtle tier.** Every boundary nested inside an emphatic one:
+**Subtle tier.**
 
 - thin, lower-opacity stroke in the same map color;
 - minimal or no fill;
 - normal-weight, smaller label subject to level-of-detail fading.
 
-Tier rules:
+For one active mindmap:
 
-1. With two or more added maps, each map's outermost boundary is emphatic and everything nested inside it is subtle.
-2. With exactly one added map, the map-root boundary is suppressed entirely, its first-level children become emphatic, and everything nested inside those is subtle.
-3. When a map root collapses into a combined unary chain, the resulting single boundary stays emphatic. Map ownership takes precedence over internal depth.
-4. Depth below the emphatic tier never changes styling; every deeper level is identical to the first subtle level.
-5. Adding or removing a map can therefore restyle an existing map's boundaries, because the emphatic tier is relative to how many maps are loaded.
+| Projected hull depth | Boundary tier |
+| --- | --- |
+| 0, map-root enclosure | `SUPPRESSED` |
+| 1, root's first projected child enclosure | `EMPHATIC` |
+| 2 | `SUBTLE` |
+| 3 and deeper | `SUPPRESSED` |
 
-Because map identity is carried by both stroke weight and color, an accessible palette is required but is not the only identity cue.
+For two or more active mindmaps:
+
+| Projected hull depth | Boundary tier |
+| --- | --- |
+| 0, map-root enclosure | `EMPHATIC` |
+| 1 | `SUBTLE` |
+| 2 and deeper | `SUPPRESSED` |
+
+Suppressed enclosures remain exact immutable `GraphProjection` records and retain their exact endpoint keys.
+They remain addressable for relationship resolution, stable diffs, and source navigation, but are not visible
+endpoints for painting, labels, hit testing, traversal, accessibility, or visible graph bounds.
+
+Because map identity is carried by both stroke weight and color, an accessible palette is required but is not
+the only identity cue.
 
 The committed window mockup predates this rule and does not yet differentiate stroke weights between tiers.
 
@@ -810,8 +827,8 @@ The test suite must never execute a map edit against a map lacking `IUndoHandler
 15. Load a 2,000-node/5,000-edge generated workspace and verify the accepted interaction target after the GraphStream gate passes.
 16. Load a legacy node without an ID and verify persistent endpoint commands request a normal map save without silently assigning an ID.
 17. Load three maps with dense cross-map relationships and verify map enclosures stay spatially distinct and emphatically styled while internal enclosures remain subtle.
-18. Load exactly one map and verify the map-root boundary is suppressed and first-level children carry the emphatic style.
-19. Add a second map to a single-map workspace and verify the first map's boundaries restyle so its root becomes emphatic and its first-level children become subtle.
+18. Load exactly one map and verify its map-root hull at depth 0 is suppressed, its depth-1 child hulls are emphatic, its depth-2 hulls are subtle, and all deeper hulls are suppressed while their exact records remain addressable but are not visible endpoints.
+19. Add a second map to a single-map workspace and verify the first map's boundaries restyle so depth 0 becomes emphatic, depth 1 becomes subtle, and depths 2 and deeper are suppressed.
 20. Pin two nodes so that map separation is unsatisfiable, then verify the pin is honored, the condition is reported, and Unpin is offered.
 21. Lock an encrypted branch holding a cross-map endpoint, then verify the relationship is recoverable, no decrypted text is exposed anywhere in the graph, purge cannot delete it, and unlocking restores it.
 22. Delete an endpoint node and save, then verify the relationship becomes `UNRESOLVED_MISSING_NODE`, purge lists it explicitly, and undo restores it.

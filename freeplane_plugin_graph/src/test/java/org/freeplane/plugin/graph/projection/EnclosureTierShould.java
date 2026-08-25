@@ -58,7 +58,31 @@ public class EnclosureTierShould {
     }
 
     @Test
-    public void emphasizeOneMapUnaryRootChainAndKeepItsDescendantsSubtle() {
+    public void showOnlyFirstAndSecondLevelsForOneActiveMindmap() {
+        GraphProjection projection = project(oneActiveWorkspace(), MapAvailability.AVAILABLE,
+            map(MAP_ONE, 1, deepBranchRoot()));
+
+        assertThat(tierFor(projection, rootNode())).isEqualTo(BoundaryTier.SUPPRESSED);
+        assertThat(tierFor(projection, firstLevelNode())).isEqualTo(BoundaryTier.EMPHATIC);
+        assertThat(tierFor(projection, secondLevelNode())).isEqualTo(BoundaryTier.SUBTLE);
+        assertThat(tierFor(projection, thirdLevelNode())).isEqualTo(BoundaryTier.SUPPRESSED);
+        assertThat(enclosureFor(projection, thirdLevelNode()).endpointKeys())
+            .containsExactly(EnclosureKey.of(thirdLevelNode().key()));
+    }
+
+    @Test
+    public void showRootAndFirstLevelForMultipleActiveMindmaps() {
+        GraphProjection projection = project(twoActiveWorkspace(), MapAvailability.AVAILABLE,
+            MapAvailability.AVAILABLE, map(MAP_ONE, 1, deepBranchRoot()), map(MAP_TWO, 2, leafRoot()));
+
+        assertThat(tierFor(projection, rootNode())).isEqualTo(BoundaryTier.EMPHATIC);
+        assertThat(tierFor(projection, firstLevelNode())).isEqualTo(BoundaryTier.SUBTLE);
+        assertThat(tierFor(projection, secondLevelNode())).isEqualTo(BoundaryTier.SUPPRESSED);
+        assertThat(tierFor(projection, thirdLevelNode())).isEqualTo(BoundaryTier.SUPPRESSED);
+    }
+
+    @Test
+    public void suppressOneMapUnaryRootChainAndEmphasizeItsFirstVisibleChildBoundary() {
         NodeSnapshot firstLeaf = node(MAP_ONE, "first", true, false, false);
         NodeSnapshot secondLeaf = node(MAP_ONE, "second", true, false, false);
         NodeSnapshot inner = node(MAP_ONE, "inner", false, false, false, firstLeaf, secondLeaf);
@@ -70,8 +94,55 @@ public class EnclosureTierShould {
 
         ProjectedEnclosure rootHull = enclosureFor(projection, root);
         assertThat(rootHull.endpointKeys()).containsExactly(EnclosureKey.of(root.key()), EnclosureKey.of(middle.key()));
-        assertThat(rootHull.boundaryTier()).isEqualTo(BoundaryTier.EMPHATIC);
-        assertThat(tierFor(projection, inner)).isEqualTo(BoundaryTier.SUBTLE);
+        assertThat(rootHull.boundaryTier()).isEqualTo(BoundaryTier.SUPPRESSED);
+        assertThat(tierFor(projection, inner)).isEqualTo(BoundaryTier.EMPHATIC);
+        assertThat(enclosureFor(projection, inner).endpointKeys()).containsExactly(EnclosureKey.of(inner.key()));
+    }
+
+    private static WorkspaceDocument oneActiveWorkspace() {
+        return workspace(registration(MAP_ONE, 1, true));
+    }
+
+    private static WorkspaceDocument twoActiveWorkspace() {
+        return workspace(registration(MAP_ONE, 1, true), registration(MAP_TWO, 2, true));
+    }
+
+    private static NodeSnapshot deepBranchRoot() {
+        return rootNode();
+    }
+
+    private static NodeSnapshot rootNode() {
+        return node(MAP_ONE, "root", false, false, false, firstLevelNode(), rootSiblingNode());
+    }
+
+    private static NodeSnapshot firstLevelNode() {
+        return node(MAP_ONE, "first-level", false, false, false, secondLevelNode(), firstLevelSiblingNode());
+    }
+
+    private static NodeSnapshot secondLevelNode() {
+        return node(MAP_ONE, "second-level", false, false, false, thirdLevelNode());
+    }
+
+    private static NodeSnapshot thirdLevelNode() {
+        return node(MAP_ONE, "third-level", false, false, false, leaf("third-left"), leaf("third-right"));
+    }
+
+    private static NodeSnapshot rootSiblingNode() {
+        return node(MAP_ONE, "root-sibling", false, false, false, leaf("root-sibling-left"),
+            leaf("root-sibling-right"));
+    }
+
+    private static NodeSnapshot firstLevelSiblingNode() {
+        return node(MAP_ONE, "first-level-sibling", false, false, false, leaf("first-sibling-left"),
+            leaf("first-sibling-right"));
+    }
+
+    private static NodeSnapshot leafRoot() {
+        return node(MAP_TWO, "leaf-root", true, false, false);
+    }
+
+    private static NodeSnapshot leaf(String id) {
+        return node(MAP_ONE, id, true, false, false);
     }
 
     private static void assertTwoMapTiers(GraphProjection projection, NodeSnapshot root, NodeSnapshot child) {
