@@ -34,6 +34,7 @@ import org.freeplane.plugin.graph.command.GraphCommands;
 import org.freeplane.plugin.graph.control.GraphWorkspaceController;
 import org.freeplane.plugin.graph.control.GraphWorkspaceHandle;
 import org.freeplane.plugin.graph.workspace.model.RelationshipDirection;
+import org.freeplane.plugin.graph.workspace.model.Viewport;
 
 final class WorkspaceToolbar extends javax.swing.JPanel {
     private static final double ZOOM_FACTOR = 1.25;
@@ -316,7 +317,8 @@ final class WorkspaceToolbar extends javax.swing.JPanel {
     private void changeZoom(final double factor) {
         viewportOperation.accept(() -> {
             final GraphViewport current = canvas.visibleViewport();
-            canvas.setViewport(GraphViewport.of(current.centerX(), current.centerY(), current.zoom() * factor));
+            canvas.setViewport(GraphViewport.from(Viewport.of(current.centerX(), current.centerY(),
+                current.zoom() * factor, current.toPersisted().unknownXml())));
             viewportListener.accept(canvas.visibleViewport());
         });
     }

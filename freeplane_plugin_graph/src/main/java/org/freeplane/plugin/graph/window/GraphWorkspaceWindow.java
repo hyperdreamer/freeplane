@@ -384,6 +384,7 @@ final class GraphWorkspaceWindowModel {
         graphScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
         graphScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
         graphScrollPane.getViewport().addChangeListener(event -> publishExternalViewport());
+        canvas.setUserViewportChangeListener(this::publishCanvasViewport);
         mapList = new MapListPanel(routedHandle, pathChooser);
         mapList.rowList().addListSelectionListener(event -> {
             if (!event.getValueIsAdjusting()) {
@@ -604,6 +605,13 @@ final class GraphWorkspaceWindowModel {
 
     private void publishExternalViewport() {
         if (suppressViewportEvents || canvas.isProgrammaticViewportChange() || closed) {
+            return;
+        }
+        publishViewport(canvas.visibleViewport());
+    }
+
+    private void publishCanvasViewport() {
+        if (suppressViewportEvents || closed) {
             return;
         }
         publishViewport(canvas.visibleViewport());

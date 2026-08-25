@@ -17,6 +17,7 @@ import javax.swing.JViewport;
 import javax.swing.SwingUtilities;
 
 import org.freeplane.plugin.graph.control.CanvasState;
+import org.freeplane.plugin.graph.control.OperationalStatus;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.HullGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
@@ -45,6 +46,9 @@ public final class GraphCanvas extends JComponent implements Accessible {
     private volatile boolean dimUnrelated;
     private volatile int viewportPositioningDepth;
     private volatile int pendingViewportClamps;
+    private volatile Runnable userViewportChangeListener;
+    private boolean userPanGestureActive;
+    private boolean userPanPending;
 
     public GraphCanvas() {
         paintState = GraphPaintState.empty();
@@ -52,6 +56,7 @@ public final class GraphCanvas extends JComponent implements Accessible {
         theme = GraphTheme.resolve(CanvasTheme.FOLLOW_FREEPLANE);
         showArrowheads = true;
         dimUnrelated = true;
+        userViewportChangeListener = () -> { };
         setOpaque(true);
         setFocusable(true);
         setDoubleBuffered(true);
@@ -171,7 +176,8 @@ public final class GraphCanvas extends JComponent implements Accessible {
                 if (!Double.isFinite(centerX) || !Double.isFinite(centerY)) {
                     return;
                 }
-                viewport = GraphViewport.of(centerX, centerY, zoom);
+                viewport = GraphViewport.from(Viewport.of(centerX, centerY, zoom,
+                    viewport.toPersisted().unknownXml()));
                 resizeSurface(state);
                 centerScrollView();
                 repaint();
@@ -183,7 +189,8 @@ public final class GraphCanvas extends JComponent implements Accessible {
         onEdt(new Runnable() {
             @Override
             public void run() {
-                viewport = GraphViewport.of(0.0, 0.0, 1.0);
+                viewport = GraphViewport.from(Viewport.of(0.0, 0.0, 1.0,
+                    viewport.toPersisted().unknownXml()));
                 final CanvasState state = canvasState;
                 if (state != null) {
                     resizeSurface(state);
@@ -196,6 +203,10 @@ public final class GraphCanvas extends JComponent implements Accessible {
 
     void setInteractionController(final GraphInteractionController controller) {
         interactionController = controller;
+    }
+
+    public void setUserViewportChangeListener(final Runnable listener) {
+        userViewportChangeListener = Objects.requireNonNull(listener, "listener");
     }
 
     CanvasState canvasState() {
@@ -289,6 +300,16 @@ public final class GraphCanvas extends JComponent implements Accessible {
             @Override
             public void run() {
                 viewport = viewport.panPixels(dx, dy);
+                final CanvasState state = canvasState;
+                if (state != null) {
+                    resizeSurface(state);
+                }
+                if (userPanGestureActive) {
+                    userPanPending = true;
+                }
+                else {
+                    userViewportChangeListener.run();
+                }
                 repaint();
             }
         });
@@ -304,6 +325,7 @@ public final class GraphCanvas extends JComponent implements Accessible {
                 if (state != null) {
                     resizeSurface(state);
                 }
+                userViewportChangeListener.run();
                 repaint();
             }
         });
@@ -311,6 +333,25 @@ public final class GraphCanvas extends JComponent implements Accessible {
 
     void zoomAround(final double x, final double y, final double factor) {
         zoomAround(new Point2D.Double(x, y), factor);
+    }
+
+    @Override
+    protected void processMouseEvent(final java.awt.event.MouseEvent event) {
+        if (event.getID() == java.awt.event.MouseEvent.MOUSE_PRESSED
+                && event.getButton() == java.awt.event.MouseEvent.BUTTON1) {
+            userPanGestureActive = true;
+            userPanPending = false;
+        }
+        super.processMouseEvent(event);
+        if (event.getID() == java.awt.event.MouseEvent.MOUSE_RELEASED
+                && userPanGestureActive) {
+            final boolean pending = userPanPending;
+            userPanGestureActive = false;
+            userPanPending = false;
+            if (pending) {
+                userViewportChangeListener.run();
+            }
+        }
     }
 
     @Override
@@ -359,10 +400,15 @@ public final class GraphCanvas extends JComponent implements Accessible {
         final Dimension oldSize = getSize();
         final int oldWidth = oldSize.width > 0 ? oldSize.width : oldPreferred.width;
         final int oldHeight = oldSize.height > 0 ? oldSize.height : oldPreferred.height;
-        final int width = surfacePixels(bounds.minX, bounds.maxX, viewport.centerX(), viewport.zoom(),
+        final int requestedWidth = surfacePixels(bounds.minX, bounds.maxX, viewport.centerX(), viewport.zoom(),
             MIN_SURFACE_WIDTH, available == null ? 0 : available.width);
-        final int height = surfacePixels(bounds.minY, bounds.maxY, viewport.centerY(), viewport.zoom(),
+        final int requestedHeight = surfacePixels(bounds.minY, bounds.maxY, viewport.centerY(), viewport.zoom(),
             MIN_SURFACE_HEIGHT, available == null ? 0 : available.height);
+        final boolean settling = state.status() == OperationalStatus.SETTLING;
+        final int width = settling
+            ? Math.max(requestedWidth, Math.max(oldPreferred.width, oldWidth)) : requestedWidth;
+        final int height = settling
+            ? Math.max(requestedHeight, Math.max(oldPreferred.height, oldHeight)) : requestedHeight;
         if (oldPreferred.width == width && oldPreferred.height == height
                 && (scrollViewport == null || oldSize.width == width && oldSize.height == height)) {
             return;
