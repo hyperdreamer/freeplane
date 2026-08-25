@@ -60,12 +60,13 @@ public final class GraphPluginOsgiSmoke {
             framework = main.start(new String[] { "-xargs", props.toString(),
                 "-Forg.osgi.framework.storage=" + storage.resolve("fwdir").toString(), "-bg" });
             final BundleContext context = framework.getBundleContext();
-            installIfAbsent(context, CORE_SYMBOLIC_NAME, coreBundlePath);
+            final Bundle coreBundle = installIfAbsent(context, CORE_SYMBOLIC_NAME, coreBundlePath);
             graphBundle = installIfAbsent(context, GRAPH_SYMBOLIC_NAME, graphBundlePath);
             if (graphBundle.getState() != Bundle.ACTIVE) {
                 graphBundle.start(Bundle.START_TRANSIENT);
             }
             awaitActive(graphBundle);
+            assertCoreExportsFilterHidden(coreBundle);
             assertGraphBundleContents(graphBundle);
             assertGraphOperation(graphBundle);
             System.out.println("Graph OSGi smoke: ACTIVE, three dependency jars/classes, and graph operation passed");
@@ -192,6 +193,13 @@ public final class GraphPluginOsgiSmoke {
         }
     }
 
+    private static void assertCoreExportsFilterHidden(final Bundle coreBundle) {
+        final Object exports = coreBundle.getHeaders().get("Export-Package");
+        if (exports == null || !exports.toString().contains("org.freeplane.features.filter.hidden")) {
+            throw new AssertionError("Core bundle does not export org.freeplane.features.filter.hidden: " + exports);
+        }
+    }
+
     private static void assertGraphBundleContents(final Bundle bundle) throws Exception {
         final String[] entries = new String[] {
             "lib/gs-core-1.3.jar",
@@ -214,7 +222,8 @@ public final class GraphPluginOsgiSmoke {
             "org.miv.pherd.Particle",
             "org.miv.pherd.ntree.NTree",
             "org.miv.mbox.net.Receiver",
-            "org.graphstream.stream.net.HTTPSource"
+            "org.graphstream.stream.net.HTTPSource",
+            "org.freeplane.features.filter.hidden.NodeVisibility"
         };
         for (final String className : classes) {
             bundle.loadClass(className);
