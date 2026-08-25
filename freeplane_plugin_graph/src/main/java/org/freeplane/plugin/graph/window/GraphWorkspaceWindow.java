@@ -29,6 +29,7 @@ import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
+import javax.swing.JScrollPane;
 import javax.swing.JRootPane;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
@@ -260,6 +261,7 @@ final class GraphWorkspaceWindowModel {
     private final GraphWorkspaceViewBinding binding;
     private final Runnable closeRequest;
     private final GraphCanvas canvas;
+    private final JScrollPane graphScrollPane;
     private final MapListPanel mapList;
     private final WorkspaceToolbar toolbar;
     private final WorkspaceSettingsPanel settingsPanel;
@@ -294,6 +296,8 @@ final class GraphWorkspaceWindowModel {
     private ProjectedEndpointKey selectedEndpoint;
     private boolean initialViewportLayoutReady;
     private boolean initialViewportPending = true;
+    private boolean suppressViewportEvents = true;
+    private GraphViewport lastPublishedViewport;
     private boolean readOnly;
     private boolean closed;
     private WorkspaceCloseDialog closeDialog;
@@ -375,6 +379,11 @@ final class GraphWorkspaceWindowModel {
         canvas.setPreferredSize(CANVAS_PREFERRED_SIZE);
         canvas.setMinimumSize(new Dimension(320, 240));
         canvas.setSize(CANVAS_PREFERRED_SIZE);
+        graphScrollPane = new JScrollPane(canvas);
+        graphScrollPane.setName("graph-workspace-scroll-pane");
+        graphScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        graphScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        graphScrollPane.getViewport().addChangeListener(event -> publishExternalViewport());
         mapList = new MapListPanel(routedHandle, pathChooser);
         mapList.rowList().addListSelectionListener(event -> {
             if (!event.getValueIsAdjusting()) {
@@ -403,11 +412,7 @@ final class GraphWorkspaceWindowModel {
         toolbar.setToolListener(tool -> interactionController.setTool(tool));
         toolbar.setDirectionListener(interactionController::setRelationshipDirection);
         toolbar.setSearchListener(this::search);
-        toolbar.setViewportListener(viewport -> {
-            if (!readOnly) {
-                executeCommand(GraphCommands.viewport(viewport.toPersisted()));
-            }
-        });
+        toolbar.setViewportListener(this::publishToolbarViewport);
         toolbar.setPinAction(this::pinSelectedNode);
         toolbar.setUnpinAction(this::unpinSelectedNode);
 
@@ -456,7 +461,14 @@ final class GraphWorkspaceWindowModel {
             canvas.setCanvasState(currentState);
         }
         initialViewport = GraphViewport.from(Objects.requireNonNull(binding.currentViewport(), "currentViewport"));
-        canvas.setViewport(initialViewport);
+        runWithViewportEventsSuppressed(new Runnable() {
+            @Override
+            public void run() {
+                canvas.setViewport(initialViewport);
+            }
+        });
+        lastPublishedViewport = canvas.visibleViewport();
+        suppressViewportEvents = false;
         setReadOnlyOnEdt(binding.isReadOnly());
         updateStatusBar();
         sessionStatusRegistration = registrationOrNoOp(binding.addSessionStatusListener(
@@ -589,6 +601,39 @@ final class GraphWorkspaceWindowModel {
             : Optional.<String>empty();
     }
 
+    private void publishExternalViewport() {
+        if (suppressViewportEvents || closed) {
+            return;
+        }
+        publishViewport(canvas.visibleViewport());
+    }
+
+    private void publishToolbarViewport(final GraphViewport value) {
+        publishViewport(Objects.requireNonNull(value, "viewport"));
+    }
+
+    private void publishViewport(final GraphViewport value) {
+        final GraphViewport next = Objects.requireNonNull(value, "viewport");
+        if (lastPublishedViewport != null && lastPublishedViewport.equals(next)) {
+            return;
+        }
+        lastPublishedViewport = next;
+        if (!readOnly) {
+            executeCommand(GraphCommands.viewport(next.toPersisted()));
+            lastPublishedViewport = canvas.visibleViewport();
+        }
+    }
+
+    private void runWithViewportEventsSuppressed(final Runnable action) {
+        final boolean previous = suppressViewportEvents;
+        suppressViewportEvents = true;
+        try {
+            Objects.requireNonNull(action, "action").run();
+        }
+        finally {
+            suppressViewportEvents = previous;
+        }
+    }
     private GraphCommandResult executeCommand(final GraphCommand command) {
         final GraphCommandResult result = handle.execute(Objects.requireNonNull(command, "command"));
         refreshPresentation();
@@ -847,8 +892,14 @@ final class GraphWorkspaceWindowModel {
                 }
                 currentState = state;
                 refreshPresentation();
-                canvas.setCanvasState(state);
-                applyInitialViewport(state);
+                runWithViewportEventsSuppressed(new Runnable() {
+                    @Override
+                    public void run() {
+                        canvas.setCanvasState(state);
+                        applyInitialViewport(state);
+                    }
+                });
+                lastPublishedViewport = canvas.visibleViewport();
                 updateMapRows(state);
                 updateStatusBar();
                 search(toolbar.searchField().getText());
@@ -911,7 +962,7 @@ final class GraphWorkspaceWindowModel {
         final JPanel graphArea = new JPanel(new BorderLayout(0, 0));
         graphArea.setName("graph-workspace-graph-area");
         graphArea.add(mapList, BorderLayout.WEST);
-        graphArea.add(canvas, BorderLayout.CENTER);
+        graphArea.add(graphScrollPane, BorderLayout.CENTER);
         graphArea.add(settingsPanel, BorderLayout.EAST);
 
         final JPanel result = new JPanel(new BorderLayout(0, 0));
@@ -1136,12 +1187,21 @@ final class GraphWorkspaceWindowModel {
             return;
         }
         initialViewportPending = false;
-        final Dimension size = canvas.getSize();
-        final Dimension overlapSize = size.width > 0 && size.height > 0 ? size : CANVAS_PREFERRED_SIZE;
-        if (!currentPresentation.displaySettings().rememberViewport()
-                || !initialViewport.overlaps(bounds.minX, bounds.minY, bounds.maxX, bounds.maxY, overlapSize)) {
-            canvas.fitGraph();
-        }
+        final Dimension overlapSize = graphScrollPane.getViewport().getExtentSize();
+        final Dimension effectiveOverlapSize = overlapSize.width > 0 && overlapSize.height > 0
+            ? overlapSize : CANVAS_PREFERRED_SIZE;
+        runWithViewportEventsSuppressed(new Runnable() {
+            @Override
+            public void run() {
+                canvas.setViewport(initialViewport);
+                if (!currentPresentation.displaySettings().rememberViewport()
+                        || !initialViewport.overlaps(bounds.minX, bounds.minY, bounds.maxX, bounds.maxY,
+                            effectiveOverlapSize)) {
+                    canvas.fitGraph();
+                }
+            }
+        });
+        lastPublishedViewport = canvas.visibleViewport();
     }
 
     private static Bounds graphBounds(final CanvasState state) {

@@ -309,19 +309,19 @@ final class WorkspaceToolbar extends javax.swing.JPanel {
     }
 
     private void changeZoom(final double factor) {
-        final GraphViewport current = canvas.viewport();
+        final GraphViewport current = canvas.visibleViewport();
         canvas.setViewport(GraphViewport.of(current.centerX(), current.centerY(), current.zoom() * factor));
-        viewportListener.accept(canvas.viewport());
+        viewportListener.accept(canvas.visibleViewport());
     }
 
     private void fitGraph() {
         canvas.fitGraph();
-        viewportListener.accept(canvas.viewport());
+        viewportListener.accept(canvas.visibleViewport());
     }
 
     private void resetZoom() {
         canvas.resetZoom();
-        viewportListener.accept(canvas.viewport());
+        viewportListener.accept(canvas.visibleViewport());
     }
 
     private void publishSearch() {

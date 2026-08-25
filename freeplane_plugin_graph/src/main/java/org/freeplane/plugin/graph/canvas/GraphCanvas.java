@@ -13,6 +13,7 @@ import java.util.Set;
 import javax.accessibility.Accessible;
 import javax.accessibility.AccessibleContext;
 import javax.swing.JComponent;
+import javax.swing.JViewport;
 import javax.swing.SwingUtilities;
 
 import org.freeplane.plugin.graph.control.CanvasState;
@@ -25,9 +26,13 @@ import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.workspace.model.DisplaySettings.CanvasTheme;
+import org.freeplane.plugin.graph.workspace.model.Viewport;
 
 public final class GraphCanvas extends JComponent implements Accessible {
     private static final long serialVersionUID = 1L;
+    private static final int MIN_SURFACE_WIDTH = 800;
+    private static final int MIN_SURFACE_HEIGHT = 560;
+    private static final double WORLD_MARGIN = 80.0;
 
     private final AdaptiveRenderingPolicy renderingPolicy = new AdaptiveRenderingPolicy();
     private final GraphPainter painter = new GraphPainter();
@@ -60,6 +65,7 @@ public final class GraphCanvas extends JComponent implements Accessible {
                 if (controller != null) {
                     controller.canvasStateChanged(value);
                 }
+                resizeSurface(value);
                 repaint();
             }
         });
@@ -82,6 +88,11 @@ public final class GraphCanvas extends JComponent implements Accessible {
             @Override
             public void run() {
                 viewport = next;
+                final CanvasState state = canvasState;
+                if (state != null) {
+                    resizeSurface(state);
+                }
+                centerScrollView();
                 repaint();
             }
         });
@@ -89,6 +100,24 @@ public final class GraphCanvas extends JComponent implements Accessible {
 
     public GraphViewport viewport() {
         return viewport;
+    }
+
+    public GraphViewport visibleViewport() {
+        final JViewport scrollViewport = containingViewport();
+        final GraphViewport anchor = viewport;
+        if (scrollViewport == null) {
+            return anchor;
+        }
+        final Point viewPosition = scrollViewport.getViewPosition();
+        final Dimension extent = scrollViewport.getExtentSize();
+        final double visibleCenterX = viewPosition.getX() + extent.getWidth() * 0.5;
+        final double visibleCenterY = viewPosition.getY() + extent.getHeight() * 0.5;
+        final double centerX = anchor.centerX()
+            + (visibleCenterX - getWidth() * 0.5) / anchor.zoom();
+        final double centerY = anchor.centerY()
+            + (visibleCenterY - getHeight() * 0.5) / anchor.zoom();
+        return GraphViewport.from(Viewport.of(centerX, centerY, anchor.zoom(),
+            anchor.toPersisted().unknownXml()));
     }
 
     @Override
@@ -110,7 +139,7 @@ public final class GraphCanvas extends JComponent implements Accessible {
             @Override
             public void run() {
                 final CanvasState state = canvasState;
-                final Dimension size = new Dimension(getWidth(), getHeight());
+                final Dimension size = fitSize();
                 if (state == null || size.width <= 0 || size.height <= 0) {
                     return;
                 }
@@ -137,6 +166,8 @@ public final class GraphCanvas extends JComponent implements Accessible {
                     return;
                 }
                 viewport = GraphViewport.of(centerX, centerY, zoom);
+                resizeSurface(state);
+                centerScrollView();
                 repaint();
             }
         });
@@ -147,6 +178,11 @@ public final class GraphCanvas extends JComponent implements Accessible {
             @Override
             public void run() {
                 viewport = GraphViewport.of(0.0, 0.0, 1.0);
+                final CanvasState state = canvasState;
+                if (state != null) {
+                    resizeSurface(state);
+                }
+                centerScrollView();
                 repaint();
             }
         });
@@ -258,6 +294,10 @@ public final class GraphCanvas extends JComponent implements Accessible {
             @Override
             public void run() {
                 viewport = viewport.zoomAround(value, factor, new Dimension(getWidth(), getHeight()));
+                final CanvasState state = canvasState;
+                if (state != null) {
+                    resizeSurface(state);
+                }
                 repaint();
             }
         });
@@ -302,6 +342,102 @@ public final class GraphCanvas extends JComponent implements Accessible {
         return bounds.isEmpty() ? null : bounds;
     }
 
+    private void resizeSurface(final CanvasState state) {
+        final Bounds bounds = visibleBounds(state);
+        if (bounds == null || !Double.isFinite(viewport.zoom()) || !(viewport.zoom() > 0.0)) {
+            return;
+        }
+        final JViewport scrollViewport = containingViewport();
+        final Dimension available = scrollViewport == null ? null : scrollViewport.getExtentSize();
+        final Dimension oldPreferred = getPreferredSize();
+        final Dimension oldSize = getSize();
+        final int oldWidth = oldSize.width > 0 ? oldSize.width : oldPreferred.width;
+        final int oldHeight = oldSize.height > 0 ? oldSize.height : oldPreferred.height;
+        final int width = surfacePixels(bounds.spanX(), viewport.zoom(), MIN_SURFACE_WIDTH,
+            available == null ? 0 : available.width);
+        final int height = surfacePixels(bounds.spanY(), viewport.zoom(), MIN_SURFACE_HEIGHT,
+            available == null ? 0 : available.height);
+        if (oldPreferred.width == width && oldPreferred.height == height
+                && (scrollViewport == null || oldSize.width == width && oldSize.height == height)) {
+            return;
+        }
+        final Point oldPosition = scrollViewport == null ? null : scrollViewport.getViewPosition();
+        final Dimension nextSize = new Dimension(width, height);
+        setPreferredSize(nextSize);
+        if (scrollViewport != null) {
+            setSize(nextSize);
+            final int nextX = oldPosition == null ? 0
+                : oldPosition.x + (width - oldWidth) / 2;
+            final int nextY = oldPosition == null ? 0
+                : oldPosition.y + (height - oldHeight) / 2;
+            scrollViewport.setViewPosition(clampedPosition(scrollViewport, nextX, nextY));
+        }
+        revalidate();
+        if (scrollViewport != null) {
+            SwingUtilities.invokeLater(new Runnable() {
+                @Override
+                public void run() {
+                    if (containingViewport() == scrollViewport) {
+                        final Point position = scrollViewport.getViewPosition();
+                        scrollViewport.setViewPosition(clampedPosition(scrollViewport,
+                            position.x, position.y));
+                    }
+                }
+            });
+        }
+    }
+
+    private static int surfacePixels(final double worldSpan, final double zoom, final int minimum,
+            final int available) {
+        final double requested = worldSpan * zoom + WORLD_MARGIN;
+        final double finiteRequested = Double.isFinite(requested) && requested > 0.0
+            ? requested : minimum;
+        final double bounded = Math.min(finiteRequested, Integer.MAX_VALUE - 1.0);
+        return Math.max(minimum, Math.max(available, (int) Math.ceil(bounded)));
+    }
+
+    private Dimension fitSize() {
+        final JViewport scrollViewport = containingViewport();
+        if (scrollViewport != null) {
+            final Dimension extent = scrollViewport.getExtentSize();
+            if (extent.width > 0 && extent.height > 0) {
+                return extent;
+            }
+        }
+        final Dimension size = getSize();
+        if (size.width > 0 && size.height > 0) {
+            return size;
+        }
+        return getPreferredSize();
+    }
+
+    private void centerScrollView() {
+        final JViewport scrollViewport = containingViewport();
+        if (scrollViewport == null) {
+            return;
+        }
+        final Dimension extent = scrollViewport.getExtentSize();
+        final int centerX = (getWidth() - extent.width) / 2;
+        final int centerY = (getHeight() - extent.height) / 2;
+        scrollViewport.setViewPosition(clampedPosition(scrollViewport, centerX, centerY));
+    }
+
+    private JViewport containingViewport() {
+        return (JViewport) SwingUtilities.getAncestorOfClass(JViewport.class, this);
+    }
+
+    private static Point clampedPosition(final JViewport scrollViewport, final int x, final int y) {
+        final java.awt.Component view = scrollViewport.getView();
+        final Dimension viewSize = view == null ? new Dimension() : view.getSize();
+        final Dimension extent = scrollViewport.getExtentSize();
+        final int maxX = Math.max(0, viewSize.width - extent.width);
+        final int maxY = Math.max(0, viewSize.height - extent.height);
+        return new Point(clamp(x, 0, maxX), clamp(y, 0, maxY));
+    }
+
+    private static int clamp(final int value, final int minimum, final int maximum) {
+        return Math.max(minimum, Math.min(maximum, value));
+    }
     private static void onEdt(final Runnable action) {
         Objects.requireNonNull(action, "action");
         if (SwingUtilities.isEventDispatchThread()) {
