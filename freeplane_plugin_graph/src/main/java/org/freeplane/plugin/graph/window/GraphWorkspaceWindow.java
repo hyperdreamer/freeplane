@@ -169,7 +169,7 @@ final class GraphWorkspaceWindow extends JFrame implements GraphWorkspaceView {
             @Override
             public void run() {
                 if (!closed) {
-                    setVisible(true);
+                    showWindowOnEdt();
                 }
             }
         });
@@ -182,7 +182,7 @@ final class GraphWorkspaceWindow extends JFrame implements GraphWorkspaceView {
             public void run() {
                 if (!closed) {
                     if (!isVisible()) {
-                        setVisible(true);
+                        showWindowOnEdt();
                     }
                     toFront();
                     requestFocus();
@@ -199,6 +199,12 @@ final class GraphWorkspaceWindow extends JFrame implements GraphWorkspaceView {
                 closeOnEdt();
             }
         });
+    }
+
+    @SuppressWarnings("deprecation")
+    private void showWindowOnEdt() {
+        // setVisible(true) dispatches to this GraphWorkspaceView.show() override.
+        super.show();
     }
 
     private void closeOnEdt() {
