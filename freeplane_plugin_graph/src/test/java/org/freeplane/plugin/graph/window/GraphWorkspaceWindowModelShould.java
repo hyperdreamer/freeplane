@@ -27,6 +27,7 @@ import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JViewport;
 import javax.swing.UIManager;
 
 import org.freeplane.plugin.graph.canvas.GraphCanvas;
@@ -232,9 +233,46 @@ public class GraphWorkspaceWindowModelShould {
         model.close();
     }
     @Test
-    public void suppressesSurfaceResizeViewportPersistenceAfterExternalScroll() {
-        assertViewportCommandCountAfterExternalScroll(0, wideNodeState(ACTIVE_ID),
-            model -> model.acceptCanvasState(widerNodeState(ACTIVE_ID)));
+    public void suppressesDeferredSurfaceResizeViewportPersistenceAfterExternalScroll() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            wideNodeState(ACTIVE_ID, 500.0, 500.0),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
+        JViewport viewport = scrollViewport(model, new Dimension(1000, 600));
+        int widthBeforeResize = model.canvas().getWidth();
+        Point externalPosition = scrollOffCenter(model, viewport);
+        awaitDeferredViewportClamp();
+        List<Point> viewportPositions = new ArrayList<Point>();
+        final boolean[] deferredSetupQueued = new boolean[] {false};
+        final int[] maximumX = new int[] {-1};
+        viewport.addChangeListener(event -> {
+            viewportPositions.add(viewport.getViewPosition());
+            if (!deferredSetupQueued[0]) {
+                deferredSetupQueued[0] = true;
+                // Run after resize compensation but before the canvas's deferred clamp.
+                javax.swing.SwingUtilities.invokeLater(() -> {
+                    Dimension viewSize = viewport.getView().getSize();
+                    Dimension extent = viewport.getExtentSize();
+                    maximumX[0] = Math.max(0, viewSize.width - extent.width);
+                    viewport.setViewPosition(new Point(maximumX[0] + 1,
+                        viewport.getViewPosition().y));
+                });
+            }
+        });
+        org.mockito.Mockito.clearInvocations(fixture.handle);
+
+        model.acceptCanvasState(wideNodeState(ACTIVE_ID, 460.0, 460.0));
+        awaitDeferredViewportClamp();
+
+        assertThat(deferredSetupQueued[0]).isTrue();
+        assertThat(model.canvas().getWidth()).isLessThan(widthBeforeResize);
+        assertThat(maximumX[0]).isGreaterThan(0);
+        assertThat(viewport.getViewPosition().x).isEqualTo(maximumX[0]);
+        assertThat(viewport.getViewPosition()).isNotEqualTo(externalPosition);
+        assertThat(viewportPositions).anyMatch(position -> position.x == maximumX[0] + 1);
+        assertThat(viewportPositions).anyMatch(position -> position.x == maximumX[0]);
+        assertViewportCommandCount(fixture, model, 0);
+        model.close();
     }
 
     @Test
@@ -251,8 +289,41 @@ public class GraphWorkspaceWindowModelShould {
 
     @Test
     public void suppressesResetViewportPersistenceAfterExternalScroll() {
-        assertViewportCommandCountAfterExternalScroll(1, wideNodeState(ACTIVE_ID),
-            model -> model.toolbar().resetZoomButton().doClick());
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 2.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
+        JViewport viewport = scrollViewport(model, new Dimension(420, 300));
+        assertThat(model.canvas().viewport().zoom()).isEqualTo(2.0);
+        int widthBeforeReset = model.canvas().getWidth();
+        Point externalPosition = scrollOffCenter(model, viewport);
+        awaitDeferredViewportClamp();
+        final boolean[] callbackMovedViewport = new boolean[] {false};
+        org.mockito.Mockito.clearInvocations(fixture.handle);
+        // Command handling can synchronously refresh the scroll position during reset publication.
+        when(fixture.handle.execute(any(GraphCommand.class))).thenAnswer(invocation -> {
+            if (!callbackMovedViewport[0]) {
+                callbackMovedViewport[0] = true;
+                Point finalPosition = viewport.getViewPosition();
+                int maximumX = Math.max(0, model.canvas().getWidth() - viewport.getExtentSize().width);
+                int alternateX = finalPosition.x < maximumX ? finalPosition.x + 1 : finalPosition.x - 1;
+                viewport.setViewPosition(new Point(alternateX, finalPosition.y));
+                viewport.setViewPosition(finalPosition);
+            }
+            return null;
+        });
+
+        model.toolbar().resetZoomButton().doClick();
+        awaitDeferredViewportClamp();
+
+        assertThat(model.canvas().viewport().centerX()).isEqualTo(0.0);
+        assertThat(model.canvas().viewport().centerY()).isEqualTo(0.0);
+        assertThat(model.canvas().viewport().zoom()).isEqualTo(1.0);
+        assertThat(model.canvas().getWidth()).isEqualTo(widthBeforeReset);
+        assertThat(viewport.getViewPosition()).isNotEqualTo(externalPosition);
+        assertThat(callbackMovedViewport[0]).isTrue();
+        assertViewportCommandCount(fixture, model, 1);
+        model.close();
     }
     @Test
     public void routesApplicationOpenToTheApplicationControllerAndSessionActionsToTheHandle() {
@@ -667,20 +738,41 @@ public class GraphWorkspaceWindowModelShould {
         Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()), initialState,
             Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
         GraphWorkspaceWindowModel model = fixture.model();
-        JScrollPane graphScrollPane = graphScrollPane(model);
-        graphScrollPane.setSize(new Dimension(420, 300));
-        graphScrollPane.doLayout();
-        javax.swing.JViewport viewport = graphScrollPane.getViewport();
-        int maxX = Math.max(0, model.canvas().getWidth() - viewport.getExtentSize().width);
-        int maxY = Math.max(0, model.canvas().getHeight() - viewport.getExtentSize().height);
-        viewport.setViewPosition(new Point(Math.max(1, maxX * 3 / 4), Math.max(1, maxY * 3 / 4)));
+        JViewport viewport = scrollViewport(model, new Dimension(420, 300));
+        scrollOffCenter(model, viewport);
         GraphViewport external = model.canvas().visibleViewport();
         assertThat(external.centerX()).isNotEqualTo(model.canvas().viewport().centerX());
         org.mockito.Mockito.clearInvocations(fixture.handle);
 
         operation.accept(model);
-        GraphWorkspaceWindow.runOnEdt(() -> { });
+        awaitDeferredViewportClamp();
 
+        assertViewportCommandCount(fixture, model, expectedCount);
+        model.close();
+    }
+
+    private static JViewport scrollViewport(final GraphWorkspaceWindowModel model, final Dimension size) {
+        JScrollPane graphScrollPane = graphScrollPane(model);
+        graphScrollPane.setSize(size);
+        graphScrollPane.doLayout();
+        return graphScrollPane.getViewport();
+    }
+
+    private static Point scrollOffCenter(final GraphWorkspaceWindowModel model, final JViewport viewport) {
+        int maxX = Math.max(0, model.canvas().getWidth() - viewport.getExtentSize().width);
+        int maxY = Math.max(0, model.canvas().getHeight() - viewport.getExtentSize().height);
+        viewport.setViewPosition(new Point(Math.max(1, maxX * 3 / 4), Math.max(1, maxY * 3 / 4)));
+        Point position = viewport.getViewPosition();
+        assertThat(position.x).isGreaterThan(0);
+        return position;
+    }
+
+    private static void awaitDeferredViewportClamp() {
+        GraphWorkspaceWindow.runOnEdt(() -> { });
+    }
+
+    private static void assertViewportCommandCount(final Fixture fixture, final GraphWorkspaceWindowModel model,
+            final int expectedCount) {
         verify(fixture.handle, org.mockito.Mockito.times(expectedCount)).execute(any(GraphCommand.class));
         if (expectedCount == 1) {
             ArgumentCaptor<GraphCommand> commands = ArgumentCaptor.forClass(GraphCommand.class);
@@ -692,7 +784,6 @@ public class GraphWorkspaceWindowModelShould {
             assertThat(command.viewport().centerY()).isEqualTo(visible.centerY());
             assertThat(command.viewport().zoom()).isEqualTo(visible.zoom());
         }
-        model.close();
     }
 
     private static JScrollPane graphScrollPane(final GraphWorkspaceWindowModel model) {
@@ -777,11 +868,12 @@ public class GraphWorkspaceWindowModelShould {
         return wideNodeState(mapId, 500.0);
     }
 
-    private static CanvasState widerNodeState(MapReferenceId mapId) {
-        return wideNodeState(mapId, 1_000.0);
+    private static CanvasState wideNodeState(MapReferenceId mapId, double coordinate) {
+        return wideNodeState(mapId, coordinate, 0.0);
     }
 
-    private static CanvasState wideNodeState(MapReferenceId mapId, double coordinate) {
+    private static CanvasState wideNodeState(MapReferenceId mapId, double coordinate,
+            double verticalCoordinate) {
         SourceNodeKey leftSource = SourceNodeKey.transientPath(mapId, Collections.singletonList(Integer.valueOf(0)));
         SourceNodeKey rightSource = SourceNodeKey.transientPath(mapId, Collections.singletonList(Integer.valueOf(1)));
         ProjectedNodeKey leftKey = ProjectedNodeKey.of(leftSource);
@@ -790,8 +882,8 @@ public class GraphWorkspaceWindowModelShould {
         ProjectedNode right = ProjectedNode.of(rightKey, SafeNodeLabel.of("Right", "Right"), "Map", false);
         List<ProjectedNode> nodes = Arrays.asList(left, right);
         GraphProjection projection = GraphProjection.structure(0L, nodes, Collections.emptyList());
-        LayoutPoint leftCenter = LayoutPoint.of(-coordinate, 0.0);
-        LayoutPoint rightCenter = LayoutPoint.of(coordinate, 0.0);
+        LayoutPoint leftCenter = LayoutPoint.of(-coordinate, -verticalCoordinate);
+        LayoutPoint rightCenter = LayoutPoint.of(coordinate, verticalCoordinate);
         Map<ProjectedNodeKey, NodeGeometry> geometry = new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
         geometry.put(leftKey, NodeGeometry.of(leftCenter, 10.0));
         geometry.put(rightKey, NodeGeometry.of(rightCenter, 10.0));
