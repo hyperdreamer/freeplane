@@ -8,6 +8,7 @@ import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics2D;
+import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.geom.Point2D;
 import java.awt.image.BufferedImage;
@@ -22,6 +23,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+
+import javax.swing.JScrollPane;
 
 import org.freeplane.plugin.graph.control.CanvasState;
 import org.freeplane.plugin.graph.control.OperationalStatus;
@@ -908,6 +911,74 @@ public class GraphCanvasPaintShould {
     }
 
     @Test
+    public void translatePhysicalScrollIntoVisibleWorldViewportWithoutMovingTheRenderingAnchor() {
+        Fixture fixture = fixture(16.0);
+        GraphCanvas canvas = new GraphCanvas();
+        canvas.setCanvasState(fixture.state);
+        canvas.setViewport(GraphViewport.of(12.0, -8.0, 2.0));
+        canvas.setPreferredSize(new Dimension(1200, 900));
+        canvas.setSize(new Dimension(1200, 900));
+        JScrollPane scrollPane = new JScrollPane(canvas);
+        scrollPane.setSize(new Dimension(320, 220));
+        scrollPane.doLayout();
+        final javax.swing.JViewport scrollViewport = scrollPane.getViewport();
+        scrollViewport.setViewPosition(new Point(100, 100));
+        GraphViewport before = canvas.visibleViewport();
+        GraphViewport anchor = canvas.viewport();
+        final int delta = 40;
+
+        scrollViewport.setViewPosition(new Point(100 + delta, 100));
+
+        GraphViewport after = canvas.visibleViewport();
+        assertThat(after.centerX() - before.centerX()).isCloseTo(delta / anchor.zoom(),
+            org.assertj.core.data.Offset.offset(0.000001));
+        assertThat(after.centerY()).isEqualTo(before.centerY());
+        assertThat(canvas.viewport()).isEqualTo(anchor);
+    }
+
+    @Test
+    public void preserveVisibleWorldCenterWhenTheSurfaceGrows() {
+        Fixture fixture = fixture(16.0);
+        GraphCanvas canvas = new GraphCanvas();
+        canvas.setPreferredSize(new Dimension(800, 560));
+        canvas.setSize(new Dimension(800, 560));
+        JScrollPane scrollPane = new JScrollPane(canvas);
+        scrollPane.setSize(new Dimension(320, 220));
+        scrollPane.doLayout();
+        final javax.swing.JViewport scrollViewport = scrollPane.getViewport();
+        scrollViewport.setViewPosition(new Point(120, 100));
+        canvas.setViewport(GraphViewport.of(0.0, 0.0, 1.0));
+        GraphViewport before = canvas.visibleViewport();
+
+        canvas.setCanvasState(stateWithWideGeometry(fixture));
+
+        GraphViewport after = canvas.visibleViewport();
+        assertThat(after.centerX()).isCloseTo(before.centerX(),
+            org.assertj.core.data.Offset.offset(0.000001));
+        assertThat(after.centerY()).isCloseTo(before.centerY(),
+            org.assertj.core.data.Offset.offset(0.000001));
+    }
+
+    @Test
+    public void fitGraphUsesTheScrollableViewportExtentInsteadOfTheFullSurface() {
+        Fixture fixture = fixture(16.0);
+        GraphCanvas canvas = new GraphCanvas();
+        canvas.setCanvasState(fixture.state);
+        canvas.setPreferredSize(new Dimension(1200, 900));
+        JScrollPane scrollPane = new JScrollPane(canvas);
+        scrollPane.setSize(SIZE);
+        scrollPane.doLayout();
+        Dimension extent = scrollPane.getViewport().getExtentSize();
+        canvas.fitGraph();
+
+        double expected = Math.min(extent.getWidth() * 0.8 / 140.0,
+            extent.getHeight() * 0.8 / 50.0);
+        assertThat(canvas.viewport().zoom()).isCloseTo(expected,
+            org.assertj.core.data.Offset.offset(0.000001));
+        assertThat(canvas.viewport().zoom()).isLessThan(1200.0 * 0.8 / 140.0);
+    }
+
+    @Test
     public void continuePaintingSelectedContentWhenAboveTarget() {
         Fixture fixture = fixture(16.0);
         List<ProjectedNode> nodes = new ArrayList<ProjectedNode>();
@@ -938,6 +1009,15 @@ public class GraphCanvasPaintShould {
         assertThat(nonBackgroundPixels(image, canvas.theme().background())).isGreaterThan(0);
         assertThat(hasInkNear(image, new Point2D.Double(75.0, 70.0), canvas.theme().selectionColor(), 22))
             .isTrue();
+    }
+
+    private static CanvasState stateWithWideGeometry(final Fixture fixture) {
+        Map<ProjectedNodeKey, NodeGeometry> nodes = new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
+        nodes.put(fixture.first.key(), NodeGeometry.of(LayoutPoint.of(-500.0, 0.0), 10.0));
+        nodes.put(fixture.second.key(), NodeGeometry.of(LayoutPoint.of(500.0, 0.0), 10.0));
+        return CanvasState.of(fixture.state.generation(), fixture.state.projection(), fixture.state.layout(),
+            GraphGeometry.of(nodes, fixture.state.geometry().hulls(), fixture.state.geometry().labels()),
+            fixture.state.status());
     }
 
     private static BufferedImage paint(final CanvasState state, final GraphPaintState paintState,

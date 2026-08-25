@@ -10,6 +10,7 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.GraphicsEnvironment;
 import java.awt.Graphics2D;
+import java.awt.Point;
 import java.awt.image.BufferedImage;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -25,6 +26,7 @@ import java.util.function.Consumer;
 import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
+import javax.swing.JScrollPane;
 import javax.swing.UIManager;
 
 import org.freeplane.plugin.graph.canvas.GraphCanvas;
@@ -176,11 +178,50 @@ public class GraphWorkspaceWindowModelShould {
         assertThat(model.content().getComponentCount()).isEqualTo(3);
         assertThat(graphArea.getComponentCount()).isEqualTo(3);
         assertThat(graphArea.getComponent(0)).isSameAs(model.mapList());
-        assertThat(graphArea.getComponent(1)).isSameAs(model.canvas());
+        assertThat(graphArea.getComponent(1)).isInstanceOf(JScrollPane.class);
+        JScrollPane graphScrollPane = (JScrollPane) graphArea.getComponent(1);
+        assertThat(graphScrollPane.getName()).isEqualTo("graph-workspace-scroll-pane");
+        assertThat(graphScrollPane.getViewport().getView()).isSameAs(model.canvas());
         assertThat(graphArea.getComponent(2)).isSameAs(model.settingsPanel());
         model.close();
     }
 
+    @Test
+    public void growsTheScrollableSurfaceForVisibleWorldGeometry() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            emptyState(), Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
+        JPanel graphArea = (JPanel) model.content().getComponent(1);
+        JScrollPane graphScrollPane = (JScrollPane) graphArea.getComponent(1);
+
+        model.acceptCanvasState(wideNodeState(ACTIVE_ID));
+
+        assertThat(model.canvas().getPreferredSize().width).isGreaterThan(800);
+        assertThat(graphScrollPane.getViewport().getView()).isSameAs(model.canvas());
+        model.close();
+    }
+
+    @Test
+    public void persistsExternalScrollAsTheVisibleViewportOnce() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            wideNodeState(ACTIVE_ID),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
+        JPanel graphArea = (JPanel) model.content().getComponent(1);
+        JScrollPane graphScrollPane = (JScrollPane) graphArea.getComponent(1);
+        graphScrollPane.setSize(new Dimension(420, 300));
+        graphScrollPane.doLayout();
+        javax.swing.JViewport viewport = graphScrollPane.getViewport();
+        viewport.setViewPosition(new Point(80, 60));
+        org.mockito.Mockito.clearInvocations(fixture.handle);
+
+        viewport.setViewPosition(new Point(120, 60));
+
+        ArgumentCaptor<GraphCommand> commands = ArgumentCaptor.forClass(GraphCommand.class);
+        verify(fixture.handle, org.mockito.Mockito.times(1)).execute(commands.capture());
+        assertThat(commands.getValue()).isInstanceOf(GraphCommands.Viewport.class);
+        model.close();
+    }
     @Test
     public void routesApplicationOpenToTheApplicationControllerAndSessionActionsToTheHandle() {
         Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
@@ -661,6 +702,28 @@ public class GraphWorkspaceWindowModelShould {
         LayoutFrame layout = LayoutFrame.of(0L, LayoutPositions.of(
             Collections.singletonMap(key, center), Collections.emptyMap()), false);
         return CanvasState.of(0L, projection, layout, geometry, OperationalStatus.IDLE);
+    }
+
+    private static CanvasState wideNodeState(MapReferenceId mapId) {
+        SourceNodeKey leftSource = SourceNodeKey.transientPath(mapId, Collections.singletonList(Integer.valueOf(0)));
+        SourceNodeKey rightSource = SourceNodeKey.transientPath(mapId, Collections.singletonList(Integer.valueOf(1)));
+        ProjectedNodeKey leftKey = ProjectedNodeKey.of(leftSource);
+        ProjectedNodeKey rightKey = ProjectedNodeKey.of(rightSource);
+        ProjectedNode left = ProjectedNode.of(leftKey, SafeNodeLabel.of("Left", "Left"), "Map", false);
+        ProjectedNode right = ProjectedNode.of(rightKey, SafeNodeLabel.of("Right", "Right"), "Map", false);
+        List<ProjectedNode> nodes = Arrays.asList(left, right);
+        GraphProjection projection = GraphProjection.structure(0L, nodes, Collections.emptyList());
+        LayoutPoint leftCenter = LayoutPoint.of(-500.0, 0.0);
+        LayoutPoint rightCenter = LayoutPoint.of(500.0, 0.0);
+        Map<ProjectedNodeKey, NodeGeometry> geometry = new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
+        geometry.put(leftKey, NodeGeometry.of(leftCenter, 10.0));
+        geometry.put(rightKey, NodeGeometry.of(rightCenter, 10.0));
+        Map<ProjectedNodeKey, LayoutPoint> positions = new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        positions.put(leftKey, leftCenter);
+        positions.put(rightKey, rightCenter);
+        return CanvasState.of(0L, projection,
+            LayoutFrame.of(0L, LayoutPositions.of(positions, Collections.emptyMap()), false),
+            GraphGeometry.of(geometry, Collections.emptyMap()), OperationalStatus.IDLE);
     }
 
     private static CanvasState enclosureState(MapReferenceId mapId) {
