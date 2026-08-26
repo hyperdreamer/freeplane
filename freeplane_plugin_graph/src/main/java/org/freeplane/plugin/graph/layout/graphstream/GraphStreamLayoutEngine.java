@@ -38,9 +38,7 @@ import org.graphstream.graph.implementations.MultiGraph;
 final class GraphStreamLayoutEngine implements LayoutEngine {
     private static final double NODE_RADIUS = 8.0;
     private static final double ANCHOR_RADIUS = 8.0;
-    private static final int LARGE_WORKSPACE_NODE_THRESHOLD = 1000;
-    private static final double DEFAULT_INITIAL_POSITION_SPREAD = 0.002;
-    private static final double LARGE_WORKSPACE_INITIAL_POSITION_SPREAD = 50.0;
+    private static final double INITIAL_POSITION_SPREAD = 50.0;
 
     private final LayoutCalibration calibration;
     private final LinkedHashMap<String, ParticleState> particles = new LinkedHashMap<String, ParticleState>();
@@ -131,12 +129,11 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
         removeObsoleteParticles(topology.particles.keySet());
         final Map<ProjectedNodeKey, PinProjection> activePins = activePins(request.pins());
         final LinkedHashMap<String, ParticleState> ordered = new LinkedHashMap<String, ParticleState>();
-        final double initialPositionSpread = initialPositionSpread(request.projection());
         for (final DesiredParticle desired : topology.particles.values()) {
             ParticleState state = particles.get(desired.id);
             if (state == null) {
                 state = new ParticleState(desired, initialPosition(request.workspace(), desired,
-                    initialPositionSpread));
+                    INITIAL_POSITION_SPREAD));
                 graph.addNode(desired.id);
                 springBox.setParticlePosition(desired.id, state.x, state.y);
             }
@@ -320,11 +317,6 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
         particles.clear();
         graphEdgeIds.clear();
         lastSynchronizedProjectionGeneration = -1L;
-    }
-
-    private static double initialPositionSpread(final GraphProjection projection) {
-        return projection.projectedNodeCount() >= LARGE_WORKSPACE_NODE_THRESHOLD
-            ? LARGE_WORKSPACE_INITIAL_POSITION_SPREAD : DEFAULT_INITIAL_POSITION_SPREAD;
     }
 
     private static Position initialPosition(final WorkspaceId workspace, final DesiredParticle particle,
