@@ -162,12 +162,14 @@ public class TypedForcesShould {
     public void reduceAnchorDistanceChangeWhenEnclosuresHaveAHierarchyLink() {
         GraphProjection nested = hierarchyProjection(1, true);
         GraphProjection peers = hierarchyProjection(1, false);
-        List<PinProjection> pins = Arrays.asList(pin(key(MAP_ONE, "hierarchy-parent-node"), 0.0, 0.0),
+        List<PinProjection> positioningPins = Arrays.asList(pin(key(MAP_ONE, "hierarchy-parent-node"), 0.0, 0.0),
+            pin(key(MAP_ONE, "hierarchy-child-node"), 10_000.0, 0.0));
+        List<PinProjection> activePins = Arrays.asList(pin(key(MAP_ONE, "hierarchy-parent-node"), 0.0, 0.0),
             pin(key(MAP_ONE, "hierarchy-child-node"), 24.0, 0.0));
-        double nestedChange = anchorDistanceChangeAfterOneStep(WORKSPACE_ONE, nested, pins,
-            hierarchyParentHull(), hierarchyChildHull());
-        double peerChange = anchorDistanceChangeAfterOneStep(WORKSPACE_ONE, peers, pins,
-            hierarchyParentHull(), hierarchyChildHull());
+        double nestedChange = anchorDistanceChangeAfterPositioningAndOneStep(WORKSPACE_ONE, peers, nested,
+            positioningPins, activePins, hierarchyParentHull(), hierarchyChildHull());
+        double peerChange = anchorDistanceChangeAfterPositioningAndOneStep(WORKSPACE_ONE, peers, peers,
+            positioningPins, activePins, hierarchyParentHull(), hierarchyChildHull());
 
         assertThat(nestedChange).isLessThan(peerChange);
     }
@@ -257,10 +259,15 @@ public class TypedForcesShould {
         }
     }
 
-    private static double anchorDistanceChangeAfterOneStep(WorkspaceId workspace, GraphProjection projection,
-            List<PinProjection> pins, EnclosureHullKey first, EnclosureHullKey second) {
+    private static double anchorDistanceChangeAfterPositioningAndOneStep(WorkspaceId workspace,
+            GraphProjection positioning, GraphProjection projection, List<PinProjection> positioningPins,
+            List<PinProjection> activePins, EnclosureHullKey first, EnclosureHullKey second) {
         try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
-            LayoutFrame before = engine.apply(request(workspace, projection, projection, pins));
+            engine.apply(request(workspace, positioning, positioning, positioningPins));
+            for (int step = 0; step < 500; step++) {
+                engine.step();
+            }
+            LayoutFrame before = engine.apply(request(workspace, positioning, projection, activePins));
             LayoutFrame after = engine.step();
             return distance(after.positions().anchors().get(first), after.positions().anchors().get(second))
                 - distance(before.positions().anchors().get(first), before.positions().anchors().get(second));
