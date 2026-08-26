@@ -72,6 +72,18 @@ public class TypedForcesShould {
     }
 
     @Test
+    public void spreadSmallWorkspaceNodePositionsBeyondOneWorldUnitBeforeStepping() {
+        GraphProjection projection = baseline(1);
+
+        try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
+            LayoutFrame frame = engine.apply(request(WORKSPACE_ONE, projection, projection,
+                Collections.<PinProjection>emptyList()));
+
+            assertThat(greatestPairwiseDistance(frame.positions().nodes().values())).isGreaterThan(1.0);
+        }
+    }
+
+    @Test
     public void exposeEveryVisibleNodeAndEnclosureAnchor() {
         GraphProjection projection = baseline(1);
 
@@ -86,10 +98,13 @@ public class TypedForcesShould {
         ProjectedNode secondNode = node(MAP_TWO, "solver-two");
         GraphProjection projection = projection(1, Arrays.asList(firstNode, secondNode),
             Collections.<ProjectedEnclosure>emptyList(), Collections.<ProjectedEdge>emptyList());
+        List<PinProjection> positioningPins = Arrays.asList(pin(firstNode.key(), 0.0, 0.0),
+            pin(secondNode.key(), 20.0, 0.0));
+        List<PinProjection> activePins = Collections.singletonList(pin(secondNode.key(), 20.0, 0.0));
 
         try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
-            LayoutFrame before = engine.apply(request(WORKSPACE_ONE, projection, projection,
-                Collections.<PinProjection>emptyList()));
+            engine.apply(request(WORKSPACE_ONE, projection, projection, positioningPins));
+            LayoutFrame before = engine.apply(request(WORKSPACE_ONE, projection, projection, activePins));
             LayoutFrame after = engine.step();
 
             assertThat(after.failed()).isFalse();
@@ -144,17 +159,17 @@ public class TypedForcesShould {
     }
 
     @Test
-    public void increaseAnchorSeparationWhenEnclosuresHaveAHierarchyLink() {
+    public void reduceAnchorDistanceChangeWhenEnclosuresHaveAHierarchyLink() {
         GraphProjection nested = hierarchyProjection(1, true);
         GraphProjection peers = hierarchyProjection(1, false);
+        List<PinProjection> pins = Arrays.asList(pin(key(MAP_ONE, "hierarchy-parent-node"), 0.0, 0.0),
+            pin(key(MAP_ONE, "hierarchy-child-node"), 24.0, 0.0));
+        double nestedChange = anchorDistanceChangeAfterOneStep(WORKSPACE_ONE, nested, pins,
+            hierarchyParentHull(), hierarchyChildHull());
+        double peerChange = anchorDistanceChangeAfterOneStep(WORKSPACE_ONE, peers, pins,
+            hierarchyParentHull(), hierarchyChildHull());
 
-        LayoutFrame nestedFrame = frameAfterOneStep(WORKSPACE_ONE, nested, Collections.<PinProjection>emptyList());
-        LayoutFrame peerFrame = frameAfterOneStep(WORKSPACE_ONE, peers, Collections.<PinProjection>emptyList());
-
-        assertThat(distance(nestedFrame.positions().anchors().get(hierarchyParentHull()),
-            nestedFrame.positions().anchors().get(hierarchyChildHull())))
-                .isGreaterThan(distance(peerFrame.positions().anchors().get(hierarchyParentHull()),
-                    peerFrame.positions().anchors().get(hierarchyChildHull())));
+        assertThat(nestedChange).isLessThan(peerChange);
     }
 
     @Test
@@ -199,12 +214,16 @@ public class TypedForcesShould {
         GraphProjection highProminence = prominenceProjection(1, true);
         ProjectedNodeKey source = key(MAP_ONE, "source");
         ProjectedNodeKey neighbor = key(MAP_ONE, "neighbor");
-        List<PinProjection> lowPins = Collections.singletonList(pin(neighbor, 0.0, 0.0));
-        List<PinProjection> highPins = Arrays.asList(pin(neighbor, 0.0, 0.0), pin(key(MAP_ONE, "target-one"),
-            100.0, 100.0), pin(key(MAP_ONE, "target-two"), 100.0, -100.0));
 
-        LayoutFrame low = frameAfterOneStep(WORKSPACE_ONE, lowProminence, lowPins);
-        LayoutFrame high = frameAfterOneStep(WORKSPACE_ONE, highProminence, highPins);
+        LayoutFrame low = frameAfterPositioningAndOneStep(WORKSPACE_ONE, lowProminence,
+            Arrays.asList(pin(source, 24.0, 0.0), pin(neighbor, 0.0, 0.0)),
+            Collections.singletonList(pin(neighbor, 0.0, 0.0)));
+        LayoutFrame high = frameAfterPositioningAndOneStep(WORKSPACE_ONE, highProminence,
+            Arrays.asList(pin(source, 24.0, 0.0), pin(neighbor, 0.0, 0.0),
+                pin(key(MAP_ONE, "target-one"), 100.0, 100.0),
+                pin(key(MAP_ONE, "target-two"), 100.0, -100.0)),
+            Arrays.asList(pin(neighbor, 0.0, 0.0), pin(key(MAP_ONE, "target-one"), 100.0, 100.0),
+                pin(key(MAP_ONE, "target-two"), 100.0, -100.0)));
 
         assertThat(distance(high.positions().nodes().get(source), high.positions().nodes().get(neighbor)))
             .isGreaterThan(distance(low.positions().nodes().get(source), low.positions().nodes().get(neighbor)));
@@ -228,6 +247,40 @@ public class TypedForcesShould {
             return engine.step();
         }
     }
+
+    private static LayoutFrame frameAfterPositioningAndOneStep(WorkspaceId workspace, GraphProjection projection,
+            List<PinProjection> positioningPins, List<PinProjection> activePins) {
+        try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
+            engine.apply(request(workspace, projection, projection, positioningPins));
+            engine.apply(request(workspace, projection, projection, activePins));
+            return engine.step();
+        }
+    }
+
+    private static double anchorDistanceChangeAfterOneStep(WorkspaceId workspace, GraphProjection projection,
+            List<PinProjection> pins, EnclosureHullKey first, EnclosureHullKey second) {
+        try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
+            LayoutFrame before = engine.apply(request(workspace, projection, projection, pins));
+            LayoutFrame after = engine.step();
+            return distance(after.positions().anchors().get(first), after.positions().anchors().get(second))
+                - distance(before.positions().anchors().get(first), before.positions().anchors().get(second));
+        }
+    }
+
+    private static double greatestPairwiseDistance(Iterable<LayoutPoint> points) {
+        List<LayoutPoint> values = new ArrayList<LayoutPoint>();
+        for (LayoutPoint point : points) {
+            values.add(point);
+        }
+        double greatest = 0.0;
+        for (int first = 0; first < values.size(); first++) {
+            for (int second = first + 1; second < values.size(); second++) {
+                greatest = Math.max(greatest, distance(values.get(first), values.get(second)));
+            }
+        }
+        return greatest;
+    }
+
 
     private static LayoutRequest request(WorkspaceId workspace, GraphProjection before, GraphProjection after,
             List<PinProjection> pins) {
@@ -299,12 +352,14 @@ public class TypedForcesShould {
     }
 
     private static GraphProjection hierarchyProjection(long generation, boolean includeHierarchy) {
+        ProjectedNode parentNode = node(MAP_ONE, "hierarchy-parent-node");
+        ProjectedNode childNode = node(MAP_ONE, "hierarchy-child-node");
         ProjectedEnclosure parent = enclosure(MAP_ONE, "hierarchy-parent", Optional.<EnclosureHullKey>empty(),
-            Collections.<ProjectedNodeKey>emptyList(), Collections.<EnclosureHullKey>emptyList(), true);
+            Collections.singletonList(parentNode.key()), Collections.<EnclosureHullKey>emptyList(), true);
         ProjectedEnclosure child = enclosure(MAP_ONE, "hierarchy-child",
             includeHierarchy ? Optional.of(parent.hullKey()) : Optional.<EnclosureHullKey>empty(),
-            Collections.<ProjectedNodeKey>emptyList(), Collections.<EnclosureHullKey>emptyList(), false);
-        return projection(generation, Collections.<ProjectedNode>emptyList(), Arrays.asList(parent, child),
+            Collections.singletonList(childNode.key()), Collections.<EnclosureHullKey>emptyList(), false);
+        return projection(generation, Arrays.asList(parentNode, childNode), Arrays.asList(parent, child),
             Collections.<ProjectedEdge>emptyList());
     }
 
