@@ -288,7 +288,7 @@ public final class GraphWorkspacePerformanceDiagnostic {
         validatePinConflicts(generated, workerFrame);
 
         final long workerHullStart = clock.nanoTime();
-        final GraphGeometry workerHull = geometryEngine.computeHulls(current, workerFrame.positions());
+        final GraphGeometry workerHull = geometryEngine.computeHulls(current, workerFrame.positions(), textMetrics);
         final long workerHullEnd = clock.nanoTime();
         final long workerLabelStart = clock.nanoTime();
         final GraphGeometry workerGeometry = textMetrics == null ? workerHull
@@ -332,7 +332,7 @@ public final class GraphWorkspacePerformanceDiagnostic {
                 warmup);
             requireUsableFrame(applied, projection, "direct apply", PerformanceMeasurements.Stage.MUTATION);
 
-            final GraphGeometry rawHull = geometryEngine.computeHulls(projection, applied.positions());
+            final GraphGeometry rawHull = geometryEngine.computeHulls(projection, applied.positions(), textMetrics);
             if (!preCorrectionOverlapChecked
                     && generated.scenario() == GeneratedWorkspace.Scenario.TWO_PINNED_MAPS) {
                 assertPinnedRootOverlap(projection, rawHull);
@@ -347,7 +347,7 @@ public final class GraphWorkspacePerformanceDiagnostic {
                 correctionEnd, warmup);
 
             final long hullStart = clock.nanoTime();
-            final GraphGeometry correctedHull = geometryEngine.computeHulls(projection, corrected.positions());
+            final GraphGeometry correctedHull = geometryEngine.computeHulls(projection, corrected.positions(), textMetrics);
             final long hullEnd = clock.nanoTime();
             measurements.recordDuration(PerformanceMeasurements.Stage.HULL, hullStart, hullEnd, warmup);
 
