@@ -31,6 +31,13 @@ final class TypedSpringBox extends SpringBox {
     }
 
     @Override
+    protected void chooseNodePosition(final NodeParticle first, final NodeParticle second) {
+        // Keep the engine's deterministic seeded positions. The default
+        // implementation teleports a degree-1 endpoint onto its already-connected
+        // neighbour at edge insertion, collapsing freshly seeded particles into a pile.
+    }
+
+    @Override
     public TypedNodeParticle newNodeParticle(final String id) {
         final TypedNodeParticle particle = new TypedNodeParticle(this, id);
         typedParticles.put(id, particle);

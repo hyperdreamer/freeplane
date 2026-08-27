@@ -74,6 +74,35 @@ public class TypedForcesShould {
     }
 
     @Test
+    public void firstStepDoesNotTeleportSeededParticlesOntoTheirNeighbours() {
+        GraphProjection projection = baseline(1);
+
+        try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
+            LayoutFrame applied = engine.apply(request(WORKSPACE_ONE, projection, projection,
+                Collections.<PinProjection>emptyList()));
+            LayoutFrame stepped = engine.step();
+
+            assertThat(greatestMovementBetween(applied, stepped)).isLessThan(1.0);
+        }
+    }
+
+    @Test
+    public void aTopologyChangeDoesNotTeleportRetainedParticles() {
+        GraphProjection baseline = baseline(1);
+        GraphProjection expanded = expanded(2);
+
+        try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
+            engine.apply(request(WORKSPACE_ONE, baseline, baseline, Collections.<PinProjection>emptyList()));
+            engine.step();
+            LayoutFrame before = engine.apply(request(WORKSPACE_ONE, baseline, expanded,
+                Collections.<PinProjection>emptyList()));
+            LayoutFrame after = engine.step();
+
+            assertThat(greatestMovementBetween(before, after)).isLessThan(1.0);
+        }
+    }
+
+    @Test
     public void deriveDistinctDeterministicSeedsForDifferentWorkspaces() {
         GraphProjection projection = baseline(1);
 
@@ -283,6 +312,19 @@ public class TypedForcesShould {
             }
         }
         return greatestDistance;
+    }
+
+    private static double greatestMovementBetween(LayoutFrame first, LayoutFrame second) {
+        double greatest = 0.0;
+        for (ProjectedNodeKey key : first.positions().nodes().keySet()) {
+            greatest = Math.max(greatest, distance(first.positions().nodes().get(key),
+                second.positions().nodes().get(key)));
+        }
+        for (EnclosureHullKey key : first.positions().anchors().keySet()) {
+            greatest = Math.max(greatest, distance(first.positions().anchors().get(key),
+                second.positions().anchors().get(key)));
+        }
+        return greatest;
     }
 
 
