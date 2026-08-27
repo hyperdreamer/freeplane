@@ -1,5 +1,6 @@
 package org.freeplane.plugin.graph.geometry;
 
+import java.awt.geom.Dimension2D;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -13,11 +14,15 @@ import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
+import org.freeplane.plugin.graph.projection.input.SafeNodeLabel;
 
 public final class GraphGeometryEngine {
     private static final int GEOMETRY_CACHE_SIZE = 2;
     private static final double BASE_RADIUS = 8.0;
     private static final double HULL_CLEARANCE = 16.0;
+    // Invariant: must equal GraphStreamLayoutEngine.BoundarySizes.BOUNDARY_PADDING so the
+    // label-sized octagon matches the layout footprint reserved for an empty boundary.
+    private static final double BOUNDARY_PADDING = 8.0;
     private static final double DIAGONAL = Math.sqrt(0.5);
     private static final double[][] NORMALS = {
         {1.0, 0.0},
@@ -32,9 +37,11 @@ public final class GraphGeometryEngine {
 
     private final List<GeometryCacheEntry> geometryCache = new ArrayList<GeometryCacheEntry>();
 
-    public GraphGeometry computeHulls(final GraphProjection projection, final LayoutPositions positions) {
+    public GraphGeometry computeHulls(final GraphProjection projection, final LayoutPositions positions,
+            final GeometryTextMetrics metrics) {
         Objects.requireNonNull(projection, "projection");
         Objects.requireNonNull(positions, "positions");
+        Objects.requireNonNull(metrics, "metrics");
         final GraphGeometry cached = cachedGeometry(projection, positions);
         if (cached != null) {
             return cached;
@@ -75,8 +82,8 @@ public final class GraphGeometryEngine {
         final Set<EnclosureHullKey> complete = new HashSet<EnclosureHullKey>();
         final Set<EnclosureHullKey> visiting = new HashSet<EnclosureHullKey>();
         for (final ProjectedEnclosure enclosure : projection.enclosures()) {
-            computeHull(enclosure.hullKey(), enclosuresByKey, positions, nodeGeometry, computed, complete,
-                visiting);
+            computeHull(enclosure.hullKey(), enclosuresByKey, positions, nodeGeometry, metrics, computed,
+                complete, visiting);
         }
         final Map<EnclosureHullKey, HullGeometry> hulls = new LinkedHashMap<EnclosureHullKey, HullGeometry>();
         for (final ProjectedEnclosure enclosure : projection.enclosures()) {
@@ -134,7 +141,7 @@ public final class GraphGeometryEngine {
 
     private static void computeHull(final EnclosureHullKey hullKey,
             final Map<EnclosureHullKey, ProjectedEnclosure> enclosuresByKey, final LayoutPositions positions,
-            final Map<ProjectedNodeKey, NodeGeometry> nodeGeometry,
+            final Map<ProjectedNodeKey, NodeGeometry> nodeGeometry, final GeometryTextMetrics metrics,
             final Map<EnclosureHullKey, HullGeometry> computed, final Set<EnclosureHullKey> complete,
             final Set<EnclosureHullKey> visiting) {
         if (complete.contains(hullKey)) {
@@ -148,7 +155,8 @@ public final class GraphGeometryEngine {
             if (!enclosuresByKey.containsKey(childKey)) {
                 throw new IllegalArgumentException("Enclosure references missing child hull " + childKey);
             }
-            computeHull(childKey, enclosuresByKey, positions, nodeGeometry, computed, complete, visiting);
+            computeHull(childKey, enclosuresByKey, positions, nodeGeometry, metrics, computed, complete,
+                visiting);
         }
         for (final ProjectedNodeKey nodeKey : enclosure.directNodes()) {
             if (!nodeGeometry.containsKey(nodeKey)) {
@@ -160,24 +168,33 @@ public final class GraphGeometryEngine {
         for (int index = 0; index < 8; index++) {
             final double nx = NORMALS[index][0];
             final double ny = NORMALS[index][1];
-            double maxSupport = Double.NEGATIVE_INFINITY;
+            final double maxSupport;
             if (empty) {
+                // An empty enclosure is a label-sized octagon centered on its layout anchor.
+                // No hull clearance applies: the label bounds plus boundary padding already
+                // match the footprint the layout engine reserves for an empty boundary.
                 final LayoutPoint anchor = positions.anchors().get(hullKey);
-                maxSupport = nx * anchor.x() + ny * anchor.y();
+                final Dimension2D label = labelSize(enclosure, metrics);
+                final double halfWidth = label.getWidth() * 0.5 + BOUNDARY_PADDING;
+                final double halfHeight = label.getHeight() * 0.5 + BOUNDARY_PADDING;
+                maxSupport = nx * anchor.x() + ny * anchor.y()
+                    + Math.max(Math.abs(nx) * halfWidth, Math.abs(ny) * halfHeight);
             }
             else {
+                double support = Double.NEGATIVE_INFINITY;
                 for (final ProjectedNodeKey nodeKey : enclosure.directNodes()) {
                     final NodeGeometry geometry = nodeGeometry.get(nodeKey);
-                    maxSupport = Math.max(maxSupport,
+                    support = Math.max(support,
                         nx * geometry.center().x() + ny * geometry.center().y() + geometry.radius());
                 }
                 for (final EnclosureHullKey childKey : enclosure.directEnclosures()) {
                     for (final LayoutPoint vertex : computed.get(childKey).exactPolygon()) {
-                        maxSupport = Math.max(maxSupport, nx * vertex.x() + ny * vertex.y());
+                        support = Math.max(support, nx * vertex.x() + ny * vertex.y());
                     }
                 }
+                maxSupport = support + HULL_CLEARANCE;
             }
-            supports[index] = maxSupport + HULL_CLEARANCE;
+            supports[index] = maxSupport;
         }
         final List<LayoutPoint> polygon = clipHalfPlanes(supports);
         final LayoutPoint labelAnchor;
@@ -190,6 +207,22 @@ public final class GraphGeometryEngine {
         computed.put(hullKey, HullGeometry.of(polygon, labelAnchor));
         visiting.remove(hullKey);
         complete.add(hullKey);
+    }
+
+    private static Dimension2D labelSize(final ProjectedEnclosure enclosure,
+            final GeometryTextMetrics metrics) {
+        Dimension2D largest = null;
+        for (final SafeNodeLabel label : enclosure.labels()) {
+            final Dimension2D measured = metrics.measure(label.displayText(), enclosure.boundaryTier());
+            if (largest == null || measured.getWidth() * measured.getHeight() > largest.getWidth()
+                    * largest.getHeight()) {
+                largest = measured;
+            }
+        }
+        if (largest == null) {
+            throw new IllegalArgumentException("Enclosures must carry at least one label");
+        }
+        return largest;
     }
 
     private static List<LayoutPoint> clipHalfPlanes(final double[] supports) {

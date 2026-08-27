@@ -28,14 +28,10 @@ import org.freeplane.plugin.graph.control.CanvasState;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.HullGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
-import org.freeplane.plugin.graph.geometry.NodeGeometry;
 import org.freeplane.plugin.graph.projection.BoundaryTier;
-import org.freeplane.plugin.graph.projection.NodeProminence;
-import org.freeplane.plugin.graph.projection.PinProjection;
 import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointVisibility;
-import org.freeplane.plugin.graph.projection.ProjectedNode;
 
 final class AccessibleGraphCanvas extends AccessibleContext implements AccessibleComponent {
     private final GraphCanvas canvas;
@@ -459,23 +455,6 @@ final class AccessibleGraphCanvas extends AccessibleContext implements Accessibl
                 return EndpointInfo.unavailable();
             }
             if (endpoint.isNode()) {
-                for (ProjectedNode node : state.projection().nodes()) {
-                    if (!endpoint.node().get().equals(node.key())) {
-                        continue;
-                    }
-                    final NodeGeometry nodeGeometry = geometry.nodes().get(node.key());
-                    if (nodeGeometry == null) {
-                        return EndpointInfo.unavailable();
-                    }
-                    final NodeProminence prominence = state.projection().prominence().get(node.key());
-                    final int visibleOutgoingTargets = prominence == null ? 0
-                        : prominence.visibleOutgoingTargets();
-                    return EndpointInfo.node(node.label().fullText(), node.mapName(),
-                        nodeGeometry.minX(), nodeGeometry.minY(), nodeGeometry.maxX(), nodeGeometry.maxY(),
-                        isSelected(state), isPinned(state, node.key()), visibleOutgoingTargets,
-                        screenBounds(nodeGeometry.minX(), nodeGeometry.minY(), nodeGeometry.maxX(),
-                            nodeGeometry.maxY()));
-                }
                 return EndpointInfo.unavailable();
             }
             for (ProjectedEnclosure enclosure : state.projection().enclosures()) {
@@ -514,17 +493,6 @@ final class AccessibleGraphCanvas extends AccessibleContext implements Accessibl
                 && endpoint.equals(canvas.paintState().selection().get());
         }
 
-        private static boolean isPinned(final CanvasState state,
-                final org.freeplane.plugin.graph.projection.ProjectedNodeKey node) {
-            for (PinProjection pin : state.projection().pins()) {
-                if (pin.active() && pin.projectedNode().isPresent()
-                        && node.equals(pin.projectedNode().get())) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
         private static int toInt(final double value) {
             if (value <= Integer.MIN_VALUE) {
                 return Integer.MIN_VALUE;
@@ -557,17 +525,10 @@ final class AccessibleGraphCanvas extends AccessibleContext implements Accessibl
             }
             final StringBuilder description = new StringBuilder(info.label)
                 .append(" on ").append(info.mapName).append(". ")
-                .append(info.node ? "Node endpoint." : "Enclosure endpoint.")
+                .append("Enclosure endpoint.")
                 .append(" Select action available. Open source action available.");
             if (info.selected) {
                 description.append(" Selected.");
-            }
-            if (info.pinned) {
-                description.append(" Pinned.");
-            }
-            if (info.visibleOutgoingTargets > 0) {
-                description.append(" Visible outgoing targets: ")
-                    .append(info.visibleOutgoingTargets).append('.');
             }
             return description.toString();
         }
@@ -631,43 +592,28 @@ final class AccessibleGraphCanvas extends AccessibleContext implements Accessibl
 
     private static final class EndpointInfo {
         private final boolean available;
-        private final boolean node;
         private final String label;
         private final String mapName;
         private final boolean selected;
-        private final boolean pinned;
-        private final int visibleOutgoingTargets;
         private final Rectangle bounds;
 
-        private EndpointInfo(final boolean available, final boolean node, final String label,
-                final String mapName, final boolean selected, final boolean pinned,
-                final int visibleOutgoingTargets, final Rectangle bounds) {
+        private EndpointInfo(final boolean available, final String label, final String mapName,
+                final boolean selected, final Rectangle bounds) {
             this.available = available;
-            this.node = node;
             this.label = label;
             this.mapName = mapName;
             this.selected = selected;
-            this.pinned = pinned;
-            this.visibleOutgoingTargets = visibleOutgoingTargets;
             this.bounds = bounds;
-        }
-
-        private static EndpointInfo node(final String label, final String mapName, final double minX,
-                final double minY, final double maxX, final double maxY, final boolean selected,
-                final boolean pinned, final int visibleOutgoingTargets, final Rectangle bounds) {
-            return new EndpointInfo(true, true, label, mapName, selected, pinned,
-                visibleOutgoingTargets, bounds);
         }
 
         private static EndpointInfo enclosure(final String label, final String mapName,
                 final double minX, final double minY, final double maxX, final double maxY,
                 final boolean selected, final Rectangle bounds) {
-            return new EndpointInfo(true, false, label, mapName, selected, false, 0, bounds);
+            return new EndpointInfo(true, label, mapName, selected, bounds);
         }
 
         private static EndpointInfo unavailable() {
-            return new EndpointInfo(false, false, "", "", false, false, 0,
-                new Rectangle());
+            return new EndpointInfo(false, "", "", false, new Rectangle());
         }
     }
 }
