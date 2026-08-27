@@ -4,7 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
 
+import java.awt.Font;
 import java.awt.Shape;
+import java.awt.font.FontRenderContext;
+import java.awt.geom.Dimension2D;
 import java.awt.geom.Path2D;
 import java.awt.geom.PathIterator;
 import java.lang.reflect.Method;
@@ -42,6 +45,8 @@ public class HullGeometryShould {
     private static final MapReferenceId MAP =
         MapReferenceId.of("00000000-0000-0000-0000-000000000001");
     private static final String MAP_NAME = "Map";
+    private static final GeometryTextMetrics METRICS = new AwtGeometryTextMetrics(
+        new Font(Font.SANS_SERIF, Font.PLAIN, 12), new FontRenderContext(null, true, true));
 
     @Test
     public void rejectsNonFinitePointsInvalidRadiiAndMutableOrMismatchedPositionState() {
@@ -107,23 +112,23 @@ public class HullGeometryShould {
             Collections.singletonMap(n1.key(), LayoutPoint.of(0.0, 0.0));
         Map<EnclosureHullKey, LayoutPoint> anchors = Collections.singletonMap(e1, LayoutPoint.of(0.0, 0.0));
         assertThatThrownBy(() -> new GraphGeometryEngine().computeHulls(projection,
-            LayoutPositions.of(Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(), anchors)))
+            LayoutPositions.of(Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(), anchors), METRICS))
                 .isInstanceOf(IllegalArgumentException.class);
         Map<ProjectedNodeKey, LayoutPoint> extraNode = new LinkedHashMap<ProjectedNodeKey, LayoutPoint>(nodePositions);
         extraNode.put(nodeKey("stale"), LayoutPoint.of(1.0, 1.0));
         assertThatThrownBy(() -> new GraphGeometryEngine().computeHulls(projection,
-            LayoutPositions.of(extraNode, anchors))).isInstanceOf(IllegalArgumentException.class);
+            LayoutPositions.of(extraNode, anchors), METRICS)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new GraphGeometryEngine().computeHulls(projection,
-            LayoutPositions.of(nodePositions, Collections.<EnclosureHullKey, LayoutPoint>emptyMap())))
+            LayoutPositions.of(nodePositions, Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), METRICS))
                 .isInstanceOf(IllegalArgumentException.class);
         Map<EnclosureHullKey, LayoutPoint> extraAnchor = new LinkedHashMap<EnclosureHullKey, LayoutPoint>(anchors);
         extraAnchor.put(hullKey("stale"), LayoutPoint.of(1.0, 1.0));
         assertThatThrownBy(() -> new GraphGeometryEngine().computeHulls(projection,
-            LayoutPositions.of(nodePositions, extraAnchor))).isInstanceOf(IllegalArgumentException.class);
+            LayoutPositions.of(nodePositions, extraAnchor), METRICS)).isInstanceOf(IllegalArgumentException.class);
         GraphProjection structure = GraphProjection.structure(1, Collections.singletonList(n1),
             Collections.singletonList(enclosure));
         assertThatThrownBy(() -> new GraphGeometryEngine().computeHulls(structure,
-            LayoutPositions.of(nodePositions, anchors))).isInstanceOf(IllegalArgumentException.class);
+            LayoutPositions.of(nodePositions, anchors), METRICS)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -353,13 +358,37 @@ public class HullGeometryShould {
             LayoutPositions.of(Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(),
                 Collections.singletonMap(emptyKey, anchor)));
 
+        Dimension2D label = METRICS.measure("empty", BoundaryTier.SUBTLE);
+        double halfWidth = label.getWidth() * 0.5 + 8.0;
+        double halfHeight = label.getHeight() * 0.5 + 8.0;
         HullGeometry hull = geometry.hulls().get(emptyKey);
         assertThat(hull.labelAnchor()).isEqualTo(anchor);
-        assertThat(hull.exactPolygon()).hasSize(8);
-        assertThat(hull.minX()).isEqualTo(14.0);
-        assertThat(hull.maxX()).isEqualTo(46.0);
-        assertThat(hull.minY()).isEqualTo(-36.0);
-        assertThat(hull.maxY()).isEqualTo(-4.0);
+        assertThat(hull.minX()).isCloseTo(anchor.x() - halfWidth, within(1e-9));
+        assertThat(hull.maxX()).isCloseTo(anchor.x() + halfWidth, within(1e-9));
+        assertThat(hull.minY()).isCloseTo(anchor.y() - halfHeight, within(1e-9));
+        assertThat(hull.maxY()).isCloseTo(anchor.y() + halfHeight, within(1e-9));
+        assertThat(hull.contains(anchor)).isTrue();
+    }
+
+    @Test
+    public void emptyEnclosuresSizeTheirOctagonFromTheLabel() {
+        EnclosureHullKey emptyKey = hullKey("Wide group label");
+        ProjectedEnclosure empty = enclosure(emptyKey, Optional.<EnclosureHullKey>empty(),
+            Collections.<ProjectedNodeKey>emptyList(), Collections.<EnclosureHullKey>emptyList());
+        LayoutPoint anchor = LayoutPoint.of(120.0, -80.0);
+        GraphGeometry geometry = compute(projection(Collections.<ProjectedNode>emptyList(),
+            Collections.singletonList(empty), Collections.<ProjectedEdge>emptyList()),
+            LayoutPositions.of(Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(),
+                Collections.singletonMap(emptyKey, anchor)));
+
+        Dimension2D label = METRICS.measure("Wide group label", BoundaryTier.SUBTLE);
+        double expectedWidth = label.getWidth() + 2.0 * 8.0;
+        HullGeometry hull = geometry.hulls().get(emptyKey);
+        double width = hull.maxX() - hull.minX();
+        assertThat(width).isBetween(expectedWidth - 1.0, expectedWidth + 1.0);
+        assertThat(hull.minX() + width * 0.5).isCloseTo(anchor.x(), within(1e-9));
+        assertThat(hull.minY() + (hull.maxY() - hull.minY()) * 0.5).isCloseTo(anchor.y(), within(1e-9));
+        assertThat(hull.labelAnchor()).isEqualTo(anchor);
         assertThat(hull.contains(anchor)).isTrue();
     }
 
@@ -714,13 +743,13 @@ public class HullGeometryShould {
         GraphProjection duplicateNodeProjection = projection(Arrays.asList(first, duplicate),
             Collections.singletonList(enclosure), Collections.<ProjectedEdge>emptyList());
         assertThatThrownBy(() -> new GraphGeometryEngine().computeHulls(duplicateNodeProjection,
-            LayoutPositions.of(nodePositions, anchors))).isInstanceOf(IllegalArgumentException.class);
+            LayoutPositions.of(nodePositions, anchors), METRICS)).isInstanceOf(IllegalArgumentException.class);
         ProjectedEnclosure duplicateEnclosure = enclosure(e1, Optional.<EnclosureHullKey>empty(),
             Collections.singletonList(first.key()), Collections.<EnclosureHullKey>emptyList());
         GraphProjection duplicateEnclosureProjection = projection(Collections.singletonList(first),
             Arrays.asList(enclosure, duplicateEnclosure), Collections.<ProjectedEdge>emptyList());
         assertThatThrownBy(() -> new GraphGeometryEngine().computeHulls(duplicateEnclosureProjection,
-            LayoutPositions.of(nodePositions, anchors))).isInstanceOf(IllegalArgumentException.class);
+            LayoutPositions.of(nodePositions, anchors), METRICS)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -1031,7 +1060,7 @@ public class HullGeometryShould {
     }
 
     private static GraphGeometry compute(final GraphProjection projection, final LayoutPositions positions) {
-        return new GraphGeometryEngine().computeHulls(projection, positions);
+        return new GraphGeometryEngine().computeHulls(projection, positions, METRICS);
     }
 
     private static void assertCircleInside(final NodeGeometry node, final HullGeometry hull) {

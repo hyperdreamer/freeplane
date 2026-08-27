@@ -276,7 +276,8 @@ public class LabelPlacementShould {
         LayoutPositions positions = LayoutPositions.of(
             Collections.singletonMap(node.key(), LayoutPoint.of(0.0, 0.0)),
             Collections.singletonMap(key, LayoutPoint.of(0.0, 0.0)));
-        GraphGeometry original = new GraphGeometryEngine().computeHulls(projection, positions);
+        GraphGeometry original =
+            new GraphGeometryEngine().computeHulls(projection, positions, new RecordingMetrics(dimension(8.0, 4.0)));
 
         GraphGeometry expanded = place(projection, original, new RecordingMetrics(dimension(52.0, 4.0)));
         HullGeometry expandedHull = expanded.hulls().get(key);
