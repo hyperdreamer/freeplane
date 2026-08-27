@@ -50,3 +50,7 @@ The mandatory frontier final review covers the full continuation range `3d364e17
 ## Scope
 
 Only `freeplane_plugin_graph` changes; the audit task changes no source. No `freeplane_api` surface changes; no persistence format change; no new UI.
+
+## Addendum: canvas scope completion
+
+The continuation run's canvas task reported `DONE_WITH_CONCERNS` with a scope concern: `GraphWorkspaceModelAcceptanceShould`, `GraphWorkspaceCommandAcceptanceShould`, and `GraphWorkspacePerformanceDiagnostic` needed group-only-model updates but were outside the task's Files allowlist, so the implementer left them unstaged and the committed tree alone does not compile the module's test sources. The continuation run is digest-frozen at its `IMPLEMENT_RUNNING` revision; it is preserved byte-for-byte. A second continuation run (`2026-08-27-graph-workspace-group-only-boundaries-continuation-2`) stages exactly those three prepared files, commits them, and independently audits the carried-forward canvas commit `ed1c324883` against the continuation plan's Task 2 requirements (including the `GraphHitIndex` node-centers observation and the label-octagon test-window note), reproducing the canvas mutant in a scratch clone. The mandatory final review then covers the whole carried-forward range `3d364e1768..HEAD`.
