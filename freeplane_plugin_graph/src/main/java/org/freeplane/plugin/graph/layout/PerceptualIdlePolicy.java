@@ -8,8 +8,8 @@ import org.freeplane.plugin.graph.geometry.LayoutPositions;
 
 public final class PerceptualIdlePolicy {
     private static final int SPIKE_CONSECUTIVE = 8;
-    private static final double SPIKE_RMS = 0.02;
-    private static final double SPIKE_MAX = 0.05;
+    private static final double SPIKE_RMS = 0.05;
+    private static final double SPIKE_MAX = 0.10;
 
     private final int requiredConsecutiveFrames;
     private final double rmsThreshold;

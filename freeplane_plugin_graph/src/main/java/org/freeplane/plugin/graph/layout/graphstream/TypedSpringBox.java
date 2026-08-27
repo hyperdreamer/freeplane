@@ -19,6 +19,7 @@ final class TypedSpringBox extends SpringBox {
     private static final double ATTRACTION_FACTOR = 0.05;
     private static final double REPULSION_FACTOR = 16.0;
     private static final double BASE_SEPARATION_RADIUS = 8.0;
+    private static final double BOUNDARY_REPULSION_FACTOR = 0.5;
 
     private final LayoutCalibration calibration;
     private final Map<String, TypedNodeParticle> typedParticles = new LinkedHashMap<String, TypedNodeParticle>();
@@ -134,5 +135,33 @@ final class TypedSpringBox extends SpringBox {
 
     double baseSeparationRadius() {
         return BASE_SEPARATION_RADIUS;
+    }
+
+    void addBoundaryRepulsion(final TypedNodeParticle particle, final Vector3 displacement) {
+        for (final Map.Entry<String, TypedNodeParticle> entry : typedParticles.entrySet()) {
+            final TypedNodeParticle other = entry.getValue();
+            if (other == particle) {
+                continue;
+            }
+            final Point3 own = particle.getPosition();
+            final Point3 position = other.getPosition();
+            double dx = own.x - position.x;
+            double dy = own.y - position.y;
+            double distance = Math.sqrt(dx * dx + dy * dy);
+            if (distance == 0.0) {
+                dx = particle.getId().toString().compareTo(other.getId().toString()) < 0 ? 1.0 : -1.0;
+                dy = 0.0;
+                distance = 1.0;
+            }
+            final double extent = particle.boundaryRadius() + other.boundaryRadius()
+                + GraphStreamLayoutEngine.BoundarySizes.SIBLING_GAP;
+            final double penetration = extent - distance;
+            if (penetration <= 0.0) {
+                continue;
+            }
+            final double force = penetration * BOUNDARY_REPULSION_FACTOR;
+            displacement.set(0, displacement.at(0) + dx / distance * force);
+            displacement.set(1, displacement.at(1) + dy / distance * force);
+        }
     }
 }

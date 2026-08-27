@@ -28,18 +28,16 @@ import org.freeplane.plugin.graph.projection.PinProjection;
 import org.freeplane.plugin.graph.projection.ProjectedEdge;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
 import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
-import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
+import org.freeplane.plugin.graph.projection.input.SafeNodeLabel;
 import org.freeplane.plugin.graph.projection.input.SourceNodeKey;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 import org.freeplane.plugin.graph.workspace.model.WorkspaceId;
 import org.graphstream.graph.implementations.MultiGraph;
 
 final class GraphStreamLayoutEngine implements LayoutEngine {
-    private static final double NODE_RADIUS = 8.0;
-    private static final double ANCHOR_RADIUS = 8.0;
-    private static final double MIN_INITIAL_POSITION_SPREAD = 50.0;
-    private static final double INITIAL_POSITION_SPREAD_PER_NODE = 20.0;
+    static final double GROUP_SPACING = 100.0;
+    static final double SUB_GROUP_SPACING = 60.0;
 
     private final LayoutCalibration calibration;
     private final LinkedHashMap<String, ParticleState> particles = new LinkedHashMap<String, ParticleState>();
@@ -126,10 +124,11 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
     }
 
     private void synchronize(final LayoutRequest request) {
-        final Topology topology = topology(request.projection());
+        final BoundarySizes sizes = new BoundarySizes(request.projection());
+        final Seeds seeds = new Seeds(sizes);
+        final Topology topology = topology(request.projection(), sizes);
         removeObsoleteParticles(topology.particles.keySet());
-        final Map<ProjectedNodeKey, PinProjection> activePins = activePins(request.pins());
-        final Seeds seeds = new Seeds(request.workspace(), request.projection(), topology.particles);
+        final Map<SourceNodeKey, PinProjection> pinsBySource = pinsBySource(request.pins());
         final LinkedHashMap<String, ParticleState> ordered = new LinkedHashMap<String, ParticleState>();
         for (final DesiredParticle desired : topology.particles.values()) {
             ParticleState state = particles.get(desired.id);
@@ -139,7 +138,7 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
                 springBox.setParticlePosition(desired.id, state.x, state.y);
             }
             state.radius = desired.radius;
-            final PinProjection pin = desired.nodeKey == null ? null : activePins.get(desired.nodeKey);
+            final PinProjection pin = pinFor(desired, pinsBySource);
             state.pinned = pin != null;
             springBox.configureParticle(desired.id, state.radius, state.pinned);
             if (pin != null) {
@@ -190,19 +189,13 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
         }
     }
 
-    private Topology topology(final GraphProjection projection) {
+    private Topology topology(final GraphProjection projection, final BoundarySizes sizes) {
         final LinkedHashMap<String, DesiredParticle> desired = new LinkedHashMap<String, DesiredParticle>();
-        final Map<ProjectedNodeKey, String> nodeIds = new LinkedHashMap<ProjectedNodeKey, String>();
-        for (final ProjectedNode node : projection.nodes()) {
-            final DesiredParticle particle = DesiredParticle.node(node.key(), NODE_RADIUS
-                * projection.prominence().get(node.key()).scale());
-            desired.put(particle.id, particle);
-            nodeIds.put(node.key(), particle.id);
-        }
         final Map<EnclosureHullKey, String> anchorIds = new LinkedHashMap<EnclosureHullKey, String>();
         final Map<EnclosureKey, String> enclosureEndpoints = new LinkedHashMap<EnclosureKey, String>();
         for (final ProjectedEnclosure enclosure : projection.enclosures()) {
-            final DesiredParticle particle = DesiredParticle.anchor(enclosure.hullKey(), ANCHOR_RADIUS);
+            final DesiredParticle particle = DesiredParticle.anchor(enclosure.hullKey(),
+                sizes.boundaryRadius(enclosure.hullKey()));
             desired.put(particle.id, particle);
             anchorIds.put(enclosure.hullKey(), particle.id);
             for (final EnclosureKey endpoint : enclosure.endpointKeys()) {
@@ -214,8 +207,8 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
         final Set<String> hierarchyPairs = new LinkedHashSet<String>();
         final Map<EnclosureHullKey, Integer> depths = enclosureDepths(projection);
         for (final ProjectedEdge edge : projection.edges()) {
-            final String first = endpointId(edge.first(), nodeIds, enclosureEndpoints);
-            final String second = endpointId(edge.second(), nodeIds, enclosureEndpoints);
+            final String first = endpointId(edge.first(), enclosureEndpoints);
+            final String second = endpointId(edge.second(), enclosureEndpoints);
             if (first != null && second != null) {
                 result.add(new ForceLink(first, second, ForceKind.RELATIONSHIP,
                     !edge.first().mapReferenceId().equals(edge.second().mapReferenceId()),
@@ -224,13 +217,6 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
         }
         for (final ProjectedEnclosure enclosure : projection.enclosures()) {
             final String anchor = anchorIds.get(enclosure.hullKey());
-            for (final ProjectedNodeKey child : enclosure.directNodes()) {
-                final String node = nodeIds.get(child);
-                if (node != null) {
-                    result.add(new ForceLink(anchor, node, ForceKind.CONTAINMENT, false,
-                        TypedSpringBox.REST_LENGTH));
-                }
-            }
             if (enclosure.parentHull().isPresent()) {
                 addHierarchyLink(result, hierarchyPairs, anchorIds.get(enclosure.parentHull().get()), anchor,
                     hierarchyRestLength(depths.get(enclosure.hullKey()).intValue()));
@@ -270,7 +256,7 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
     }
 
     private static double hierarchyRestLength(final int childDepth) {
-        return childDepth <= 1 ? Seeds.GROUP_SPACING : Seeds.SUB_GROUP_SPACING;
+        return childDepth <= 1 ? GROUP_SPACING : SUB_GROUP_SPACING;
     }
 
     private static void addHierarchyLink(final List<ForceLink> links, final Set<String> pairs,
@@ -285,21 +271,32 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
     }
 
     private static String endpointId(final ProjectedEndpointKey endpoint,
-            final Map<ProjectedNodeKey, String> nodeIds, final Map<EnclosureKey, String> enclosureEndpoints) {
+            final Map<EnclosureKey, String> enclosureEndpoints) {
         if (endpoint.isNode()) {
-            return nodeIds.get(endpoint.node().get());
+            return null;
         }
         return enclosureEndpoints.get(endpoint.enclosure().get());
     }
 
-    private static Map<ProjectedNodeKey, PinProjection> activePins(final List<PinProjection> pins) {
-        final Map<ProjectedNodeKey, PinProjection> result = new LinkedHashMap<ProjectedNodeKey, PinProjection>();
+    private static Map<SourceNodeKey, PinProjection> pinsBySource(final List<PinProjection> pins) {
+        final Map<SourceNodeKey, PinProjection> result = new LinkedHashMap<SourceNodeKey, PinProjection>();
         for (final PinProjection pin : pins) {
             if (pin.active()) {
-                result.put(pin.projectedNode().get(), pin);
+                result.put(SourceNodeKey.persisted(pin.source()), pin);
             }
         }
         return result;
+    }
+
+    private static PinProjection pinFor(final DesiredParticle desired,
+            final Map<SourceNodeKey, PinProjection> pinsBySource) {
+        for (final EnclosureKey endpoint : desired.anchorKey.endpointKeys()) {
+            final PinProjection pin = pinsBySource.get(endpoint.source());
+            if (pin != null) {
+                return pin;
+            }
+        }
+        return null;
     }
 
     private void synchronizeGraphPositions() {
@@ -320,13 +317,7 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
             if (!Double.isFinite(state.x) || !Double.isFinite(state.y)) {
                 throw new IllegalStateException("Layout snapshot contains non-finite coordinates");
             }
-            final LayoutPoint point = LayoutPoint.of(state.x, state.y);
-            if (state.nodeKey != null) {
-                nodes.put(state.nodeKey, point);
-            }
-            else {
-                anchors.put(state.anchorKey, point);
-            }
+            anchors.put(state.anchorKey, LayoutPoint.of(state.x, state.y));
         }
         return LayoutFrame.of(index, LayoutPositions.of(nodes, anchors), failed);
     }
@@ -355,37 +346,10 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
         lastSynchronizedProjectionGeneration = -1L;
     }
 
-    private static double initialPositionSpread(final GraphProjection projection) {
-        return Math.max(MIN_INITIAL_POSITION_SPREAD,
-            INITIAL_POSITION_SPREAD_PER_NODE * Math.sqrt(Math.max(1, projection.projectedNodeCount())));
-    }
-
-    private static Position initialPosition(final WorkspaceId workspace, final DesiredParticle particle,
-            final double spread) {
-        final Random random = new Random(lower64(sha256(seedBytes(workspace, particle.identity))));
-        return new Position(random.nextDouble() * spread - spread * 0.5,
-            random.nextDouble() * spread - spread * 0.5);
-    }
-
-    private static byte[] seedBytes(final WorkspaceId workspace, final byte[] identity) {
-        final ByteArrayOutputStream output = new ByteArrayOutputStream();
-        output.write(0x57);
-        writeUuid(output, workspace.value());
-        writeBytes(output, identity);
-        return output.toByteArray();
-    }
-
     private static byte[] workspaceBytes(final WorkspaceId workspace) {
         final ByteArrayOutputStream output = new ByteArrayOutputStream();
         output.write(0x57);
         writeUuid(output, workspace.value());
-        return output.toByteArray();
-    }
-
-    private static byte[] encodeNode(final ProjectedNodeKey key) {
-        final ByteArrayOutputStream output = new ByteArrayOutputStream();
-        output.write(0x4e);
-        writeSource(output, key.source());
         return output.toByteArray();
     }
 
@@ -493,85 +457,115 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
         }
     }
 
-    private static final class Seeds {
-        static final double GROUP_SPACING = 100.0;
-        static final double SUB_GROUP_SPACING = 60.0;
-        private static final double NODE_RING_RADIUS = 24.0;
-        private static final double NODE_RING_JITTER = 4.0;
+    static final class BoundarySizes {
+        static final double CHAR_WIDTH_UPPER_BOUND = 16.0;
+        static final double CHAR_HEIGHT_UPPER_BOUND = 24.0;
+        static final double BOUNDARY_PADDING = 8.0;
+        static final double SIBLING_GAP = 8.0;
+        static final double FRAME_CLEARANCE = 16.0;
 
-        private final WorkspaceId workspace;
-        private final double spread;
-        private final Map<ProjectedNodeKey, Position> nodes = new LinkedHashMap<ProjectedNodeKey, Position>();
-        private final Map<EnclosureHullKey, Position> anchors = new LinkedHashMap<EnclosureHullKey, Position>();
         private final Map<EnclosureHullKey, ProjectedEnclosure> enclosuresByHull =
             new LinkedHashMap<EnclosureHullKey, ProjectedEnclosure>();
-        private final Map<ProjectedNodeKey, ProjectedEnclosure> containingEnclosureOfNode =
-            new LinkedHashMap<ProjectedNodeKey, ProjectedEnclosure>();
-        private final Map<EnclosureHullKey, Integer> depth = new LinkedHashMap<EnclosureHullKey, Integer>();
-        private final Map<EnclosureHullKey, Position> centers = new LinkedHashMap<EnclosureHullKey, Position>();
-        private final Map<ProjectedNodeKey, DesiredParticle> desiredNodes =
-            new LinkedHashMap<ProjectedNodeKey, DesiredParticle>();
-        private final Map<EnclosureHullKey, DesiredParticle> desiredAnchors =
-            new LinkedHashMap<EnclosureHullKey, DesiredParticle>();
+        private final Map<EnclosureHullKey, Size> sizes = new LinkedHashMap<EnclosureHullKey, Size>();
 
-        Seeds(final WorkspaceId workspace, final GraphProjection projection,
-                final LinkedHashMap<String, DesiredParticle> desired) {
-            this.workspace = workspace;
-            this.spread = initialPositionSpread(projection);
+        BoundarySizes(final GraphProjection projection) {
             for (final ProjectedEnclosure enclosure : projection.enclosures()) {
                 enclosuresByHull.put(enclosure.hullKey(), enclosure);
             }
-            for (final DesiredParticle particle : desired.values()) {
-                if (particle.nodeKey != null) {
-                    desiredNodes.put(particle.nodeKey, particle);
-                }
-                else {
-                    desiredAnchors.put(particle.anchorKey, particle);
-                }
-            }
-            for (final ProjectedEnclosure enclosure : projection.enclosures()) {
-                depth.put(enclosure.hullKey(), depth(enclosure));
-            }
-            for (final ProjectedEnclosure enclosure : projection.enclosures()) {
-                for (final ProjectedNodeKey child : enclosure.directNodes()) {
-                    final ProjectedEnclosure previous = containingEnclosureOfNode.get(child);
-                    if (previous == null || depth(previous) > depth(enclosure)) {
-                        containingEnclosureOfNode.put(child, enclosure);
-                    }
-                }
-            }
         }
 
-        Position positionFor(final DesiredParticle particle) {
-            if (particle.nodeKey != null) {
-                return nodeSeed(particle);
-            }
-            return anchorSeed(particle);
+        double boundaryRadius(final EnclosureHullKey key) {
+            final Size size = sizeOf(key);
+            return 0.5 * Math.hypot(size.width, size.height);
         }
 
-        private Position nodeSeed(final DesiredParticle particle) {
-            final Position cached = nodes.get(particle.nodeKey);
+        double ringRadius(final EnclosureHullKey key) {
+            final ProjectedEnclosure enclosure = enclosuresByHull.get(key);
+            final List<EnclosureHullKey> children = enclosure.directEnclosures();
+            final int count = children.size();
+            if (count <= 1) {
+                return 0.0;
+            }
+            double maxWidth = 0.0;
+            double maxHeight = 0.0;
+            for (final EnclosureHullKey child : children) {
+                final Size size = sizeOf(child);
+                maxWidth = Math.max(maxWidth, size.width);
+                maxHeight = Math.max(maxHeight, size.height);
+            }
+            return Math.hypot(maxWidth + SIBLING_GAP, maxHeight + SIBLING_GAP)
+                / (2.0 * Math.sin(Math.PI / count));
+        }
+
+        ProjectedEnclosure enclosure(final EnclosureHullKey key) {
+            return enclosuresByHull.get(key);
+        }
+
+        List<ProjectedEnclosure> enclosures() {
+            return new ArrayList<ProjectedEnclosure>(enclosuresByHull.values());
+        }
+
+        Size sizeOf(final EnclosureHullKey key) {
+            final Size cached = sizes.get(key);
             if (cached != null) {
                 return cached;
             }
-            final ProjectedEnclosure containing = containingEnclosureOfNode.get(particle.nodeKey);
-            final Position seed;
-            if (containing == null) {
-                seed = initialPosition(workspace, particle, spread);
+            final ProjectedEnclosure enclosure = enclosuresByHull.get(key);
+            final Size size;
+            if (enclosure.directEnclosures().isEmpty()) {
+                double width = 2.0 * BOUNDARY_PADDING;
+                double height = CHAR_HEIGHT_UPPER_BOUND + 2.0 * BOUNDARY_PADDING;
+                for (final SafeNodeLabel label : enclosure.labels()) {
+                    width = Math.max(width,
+                        label.displayText().length() * CHAR_WIDTH_UPPER_BOUND + 2.0 * BOUNDARY_PADDING);
+                }
+                size = new Size(width, height);
             }
             else {
-                final Position center = center(containing.hullKey());
-                final Random random = new Random(lower64(sha256(seedBytes(workspace, particle.identity))));
-                final double angle = random.nextDouble() * 2.0 * Math.PI;
-                final double radius = NODE_RING_RADIUS + (random.nextDouble() - 0.5) * NODE_RING_JITTER;
-                seed = new Position(center.x + radius * Math.cos(angle),
-                    center.y + radius * Math.sin(angle));
+                double reach = 0.0;
+                final double radius = ringRadius(key);
+                for (final EnclosureHullKey child : enclosure.directEnclosures()) {
+                    reach = Math.max(reach, radius + reachOf(child));
+                }
+                size = new Size(2.0 * (reach + FRAME_CLEARANCE), 2.0 * (reach + FRAME_CLEARANCE));
             }
-            nodes.put(particle.nodeKey, seed);
-            return seed;
+            sizes.put(key, size);
+            return size;
         }
 
-        private Position anchorSeed(final DesiredParticle particle) {
+        private double reachOf(final EnclosureHullKey key) {
+            final ProjectedEnclosure enclosure = enclosuresByHull.get(key);
+            if (enclosure.directEnclosures().isEmpty()) {
+                return 0.5 * Math.hypot(sizeOf(key).width, sizeOf(key).height);
+            }
+            final double radius = ringRadius(key);
+            double reach = 0.0;
+            for (final EnclosureHullKey child : enclosure.directEnclosures()) {
+                reach = Math.max(reach, radius + reachOf(child));
+            }
+            return reach;
+        }
+
+        private static final class Size {
+            private final double width;
+            private final double height;
+
+            Size(final double width, final double height) {
+                this.width = width;
+                this.height = height;
+            }
+        }
+    }
+
+    private static final class Seeds {
+        private final BoundarySizes sizes;
+        private final Map<EnclosureHullKey, Position> centers = new LinkedHashMap<EnclosureHullKey, Position>();
+
+        Seeds(final BoundarySizes sizes) {
+            this.sizes = sizes;
+        }
+
+        Position positionFor(final DesiredParticle particle) {
             return center(particle.anchorKey);
         }
 
@@ -580,43 +574,58 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
             if (cached != null) {
                 return cached;
             }
-            final ProjectedEnclosure enclosure = enclosuresByHull.get(key);
             final Position center;
-            if (enclosure == null || enclosure.mapRoot() || !enclosure.parentHull().isPresent()) {
-                final DesiredParticle anchor = desiredAnchors.get(key);
-                center = anchor == null ? new Position(0.0, 0.0)
-                    : initialPosition(workspace, anchor, spread);
+            if (isTopLevel(key)) {
+                center = topRingPosition(key);
             }
             else {
-                final ProjectedEnclosure parent = enclosuresByHull.get(enclosure.parentHull().get());
-                final Position parentCenter = center(parent.hullKey());
-                final int index = parent.directEnclosures().indexOf(key);
-                final int count = parent.directEnclosures().size();
+                final ProjectedEnclosure enclosure = sizes.enclosure(key);
+                final EnclosureHullKey parentKey = enclosure.parentHull().get();
+                final Position parentCenter = center(parentKey);
+                final int index = sizes.enclosure(parentKey).directEnclosures().indexOf(key);
+                final int count = sizes.enclosure(parentKey).directEnclosures().size();
+                final double radius = sizes.ringRadius(parentKey);
                 final double angle = 2.0 * Math.PI * Math.max(0, index) / Math.max(1, count);
-                final double spacing = depth(enclosure) <= 1 ? GROUP_SPACING : SUB_GROUP_SPACING;
-                center = new Position(parentCenter.x + spacing * Math.cos(angle),
-                    parentCenter.y + spacing * Math.sin(angle));
+                center = new Position(parentCenter.x + radius * Math.cos(angle),
+                    parentCenter.y + radius * Math.sin(angle));
             }
             centers.put(key, center);
             return center;
         }
 
-        private int depth(final ProjectedEnclosure enclosure) {
-            final Integer cached = depth.get(enclosure.hullKey());
-            if (cached != null) {
-                return cached.intValue();
+        private boolean isTopLevel(final EnclosureHullKey key) {
+            final ProjectedEnclosure enclosure = sizes.enclosure(key);
+            return enclosure == null || enclosure.mapRoot() || !enclosure.parentHull().isPresent();
+        }
+
+        private Position topRingPosition(final EnclosureHullKey key) {
+            final List<EnclosureHullKey> roots = new ArrayList<EnclosureHullKey>();
+            for (final ProjectedEnclosure enclosure : sizes.enclosures()) {
+                if (enclosure.mapRoot()) {
+                    roots.add(enclosure.hullKey());
+                }
             }
-            final int value = enclosure.parentHull().isPresent()
-                ? depth(enclosuresByHull.get(enclosure.parentHull().get())) + 1 : 0;
-            depth.put(enclosure.hullKey(), Integer.valueOf(value));
-            return value;
+            final int count = roots.size();
+            if (count <= 1) {
+                return new Position(0.0, 0.0);
+            }
+            double maxWidth = 0.0;
+            double maxHeight = 0.0;
+            for (final EnclosureHullKey root : roots) {
+                maxWidth = Math.max(maxWidth, sizes.sizeOf(root).width);
+                maxHeight = Math.max(maxHeight, sizes.sizeOf(root).height);
+            }
+            final double radius = Math.hypot(maxWidth + BoundarySizes.SIBLING_GAP,
+                maxHeight + BoundarySizes.SIBLING_GAP) / (2.0 * Math.sin(Math.PI / count));
+            final int index = Math.max(0, roots.indexOf(key));
+            final double angle = 2.0 * Math.PI * index / count;
+            return new Position(radius * Math.cos(angle), radius * Math.sin(angle));
         }
     }
 
     static final class ParticleState {
         final String id;
         final MapReferenceId mapReferenceId;
-        final ProjectedNodeKey nodeKey;
         final EnclosureHullKey anchorKey;
         double radius;
         double x;
@@ -626,7 +635,6 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
         ParticleState(final DesiredParticle desired, final Position position) {
             id = desired.id;
             mapReferenceId = desired.mapReferenceId;
-            nodeKey = desired.nodeKey;
             anchorKey = desired.anchorKey;
             radius = desired.radius;
             x = position.x;
@@ -660,32 +668,20 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
     private static final class DesiredParticle {
         private final String id;
         private final MapReferenceId mapReferenceId;
-        private final ProjectedNodeKey nodeKey;
         private final EnclosureHullKey anchorKey;
         private final double radius;
-        private final byte[] identity;
 
         private DesiredParticle(final String id, final MapReferenceId mapReferenceId,
-                final ProjectedNodeKey nodeKey, final EnclosureHullKey anchorKey, final double radius,
-                final byte[] identity) {
+                final EnclosureHullKey anchorKey, final double radius) {
             this.id = id;
             this.mapReferenceId = mapReferenceId;
-            this.nodeKey = nodeKey;
             this.anchorKey = anchorKey;
             this.radius = radius;
-            this.identity = identity;
-        }
-
-        static DesiredParticle node(final ProjectedNodeKey key, final double radius) {
-            final byte[] identity = encodeNode(key);
-            return new DesiredParticle(identifier("node-", identity), key.mapReferenceId(), key, null, radius,
-                identity);
         }
 
         static DesiredParticle anchor(final EnclosureHullKey key, final double radius) {
-            final byte[] identity = encodeAnchor(key);
-            return new DesiredParticle(identifier("anchor-", identity), key.mapReferenceId(), null, key, radius,
-                identity);
+            return new DesiredParticle(identifier("anchor-", encodeAnchor(key)), key.mapReferenceId(), key,
+                radius);
         }
     }
 
