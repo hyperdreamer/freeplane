@@ -62,6 +62,18 @@ public class TypedForcesShould {
     }
 
     @Test
+    public void smallWorkspaceInitialPositionsAreNotCollapsedIntoTheOrigin() {
+        GraphProjection projection = baseline(1);
+
+        try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
+            LayoutFrame frame = engine.apply(request(WORKSPACE_ONE, projection, projection,
+                Collections.<PinProjection>emptyList()));
+
+            assertThat(greatestDistanceBetweenDistinctPositions(frame)).isGreaterThan(1.0);
+        }
+    }
+
+    @Test
     public void deriveDistinctDeterministicSeedsForDifferentWorkspaces() {
         GraphProjection projection = baseline(1);
 
@@ -69,18 +81,6 @@ public class TypedForcesShould {
         LayoutFrame second = frameAfterOneStep(WORKSPACE_TWO, projection, Collections.<PinProjection>emptyList());
 
         assertThat(first.positions()).isNotEqualTo(second.positions());
-    }
-
-    @Test
-    public void spreadSmallWorkspaceNodePositionsBeyondOneWorldUnitBeforeStepping() {
-        GraphProjection projection = baseline(1);
-
-        try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
-            LayoutFrame frame = engine.apply(request(WORKSPACE_ONE, projection, projection,
-                Collections.<PinProjection>emptyList()));
-
-            assertThat(greatestPairwiseDistance(frame.positions().nodes().values())).isGreaterThan(1.0);
-        }
     }
 
     @Test
@@ -274,18 +274,15 @@ public class TypedForcesShould {
         }
     }
 
-    private static double greatestPairwiseDistance(Iterable<LayoutPoint> points) {
-        List<LayoutPoint> values = new ArrayList<LayoutPoint>();
-        for (LayoutPoint point : points) {
-            values.add(point);
-        }
-        double greatest = 0.0;
-        for (int first = 0; first < values.size(); first++) {
-            for (int second = first + 1; second < values.size(); second++) {
-                greatest = Math.max(greatest, distance(values.get(first), values.get(second)));
+    private static double greatestDistanceBetweenDistinctPositions(LayoutFrame frame) {
+        List<LayoutPoint> positions = new ArrayList<LayoutPoint>(frame.positions().nodes().values());
+        double greatestDistance = 0.0;
+        for (int first = 0; first < positions.size(); first++) {
+            for (int second = first + 1; second < positions.size(); second++) {
+                greatestDistance = Math.max(greatestDistance, distance(positions.get(first), positions.get(second)));
             }
         }
-        return greatest;
+        return greatestDistance;
     }
 
 
