@@ -96,10 +96,14 @@ import org.freeplane.plugin.graph.layout.LayoutConflict;
 import org.freeplane.plugin.graph.layout.LayoutFrame;
 import org.freeplane.plugin.graph.projection.ContributorKey;
 import org.freeplane.plugin.graph.projection.EdgeContributor;
+import org.freeplane.plugin.graph.projection.EnclosureHullKey;
+import org.freeplane.plugin.graph.projection.EnclosureKey;
+import org.freeplane.plugin.graph.projection.BoundaryTier;
 import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.projection.PinProjection;
 import org.freeplane.plugin.graph.projection.ProjectedEdge;
 import org.freeplane.plugin.graph.projection.ProjectedEdgeKey;
+import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
@@ -1179,30 +1183,47 @@ public class GraphWorkspaceCommandAcceptanceShould {
         }
 
         private static CanvasFixture create() {
-            final ProjectedNodeKey firstKey = ProjectedNodeKey.of(source(MAP_ONE, "LOCKED_SECRET_SENTINEL"));
-            final ProjectedNodeKey secondKey = ProjectedNodeKey.of(source(MAP_TWO, "two"));
-            final ProjectedEndpointKey firstEndpoint = ProjectedEndpointKey.ofNode(firstKey);
-            final ProjectedEndpointKey secondEndpoint = ProjectedEndpointKey.ofNode(secondKey);
-            final ProjectedNode first = ProjectedNode.of(firstKey, SafeNodeLabel.of("First full safe label", "First"),
-                "One", false);
-            final ProjectedNode second = ProjectedNode.of(secondKey,
-                SafeNodeLabel.of("Second isolated label", "Second"),
-                "Two", false);
+            final EnclosureKey firstKey = EnclosureKey.of(source(MAP_ONE, "LOCKED_SECRET_SENTINEL"));
+            final EnclosureKey secondKey = EnclosureKey.of(source(MAP_TWO, "two"));
+            final ProjectedEndpointKey firstEndpoint = ProjectedEndpointKey.ofEnclosure(firstKey);
+            final ProjectedEndpointKey secondEndpoint = ProjectedEndpointKey.ofEnclosure(secondKey);
+            final EnclosureHullKey firstHull = EnclosureHullKey.of(Collections.singletonList(firstKey));
+            final EnclosureHullKey secondHull = EnclosureHullKey.of(Collections.singletonList(secondKey));
+            final ProjectedEnclosure first = ProjectedEnclosure.of(firstHull,
+                Collections.singletonList(firstKey),
+                Collections.singletonList(SafeNodeLabel.of("First full safe label", "First")), "One",
+                Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(),
+                Collections.<EnclosureHullKey>emptyList(), false, BoundaryTier.SUBTLE);
+            final ProjectedEnclosure second = ProjectedEnclosure.of(secondHull,
+                Collections.singletonList(secondKey),
+                Collections.singletonList(SafeNodeLabel.of("Second isolated label", "Second")), "Two",
+                Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(),
+                Collections.<EnclosureHullKey>emptyList(), false, BoundaryTier.SUBTLE);
             final ProjectedEdge edge = ProjectedEdge.of(ProjectedEdgeKey.of(firstEndpoint, secondEndpoint),
                 Arrays.asList(EdgeContributor.graphRelationship(relationship(), firstEndpoint, secondEndpoint),
                     EdgeContributor.graphRelationship(secondRelationship(), firstEndpoint, secondEndpoint)));
-            final GraphProjection projection = GraphProjection.projected(7L, Arrays.asList(first, second),
-                Collections.emptyList(), Collections.singletonList(edge), Collections.emptyList(),
-                Collections.emptyList());
-            final Map<ProjectedNodeKey, NodeGeometry> geometry = new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
-            geometry.put(firstKey, NodeGeometry.of(LayoutPoint.of(-40.0, 0.0), 10.0));
-            geometry.put(secondKey, NodeGeometry.of(LayoutPoint.of(40.0, 0.0), 10.0));
-            final Map<ProjectedNodeKey, LayoutPoint> positions = new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
-            positions.put(firstKey, LayoutPoint.of(-40.0, 0.0));
-            positions.put(secondKey, LayoutPoint.of(40.0, 0.0));
+            final GraphProjection projection = GraphProjection.projected(7L,
+                Collections.<ProjectedNode>emptyList(), Arrays.asList(first, second),
+                Collections.singletonList(edge), Collections.emptyList(), Collections.emptyList());
+            final Map<EnclosureHullKey, org.freeplane.plugin.graph.geometry.HullGeometry> hulls =
+                new LinkedHashMap<EnclosureHullKey, org.freeplane.plugin.graph.geometry.HullGeometry>();
+            hulls.put(firstHull, org.freeplane.plugin.graph.geometry.HullGeometry.of(
+                Arrays.asList(LayoutPoint.of(-50.0, -10.0), LayoutPoint.of(-30.0, -10.0),
+                    LayoutPoint.of(-30.0, 10.0), LayoutPoint.of(-50.0, 10.0)),
+                LayoutPoint.of(-40.0, 0.0)));
+            hulls.put(secondHull, org.freeplane.plugin.graph.geometry.HullGeometry.of(
+                Arrays.asList(LayoutPoint.of(30.0, -10.0), LayoutPoint.of(50.0, -10.0),
+                    LayoutPoint.of(50.0, 10.0), LayoutPoint.of(30.0, 10.0)),
+                LayoutPoint.of(40.0, 0.0)));
+            final Map<EnclosureHullKey, LayoutPoint> anchors =
+                new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
+            anchors.put(firstHull, LayoutPoint.of(-40.0, 0.0));
+            anchors.put(secondHull, LayoutPoint.of(40.0, 0.0));
             final CanvasState state = CanvasState.of(7L, projection,
-                LayoutFrame.of(7L, LayoutPositions.of(positions, Collections.emptyMap()), false),
-                GraphGeometry.of(geometry, Collections.emptyMap()), OperationalStatus.IDLE);
+                LayoutFrame.of(7L, LayoutPositions.of(Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(),
+                    anchors), false),
+                GraphGeometry.of(Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(), hulls),
+                OperationalStatus.IDLE);
             final GraphCanvas canvas = new GraphCanvas();
             canvas.setSize(new Dimension(400, 300));
             canvas.setCanvasState(state);

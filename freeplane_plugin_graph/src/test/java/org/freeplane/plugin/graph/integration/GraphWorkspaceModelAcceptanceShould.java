@@ -281,7 +281,7 @@ public class GraphWorkspaceModelAcceptanceShould {
         assertThat(labeled.labels().values()).filteredOn(placement -> "Map fixture".equals(placement.displayText()))
             .extracting(LabelPlacement::mode).containsExactly(LabelPlacement.Mode.INTERIOR);
         assertThat(labeled.labels().values()).filteredOn(placement -> !"Map fixture".equals(placement.displayText()))
-            .extracting(LabelPlacement::mode).containsOnly(LabelPlacement.Mode.EXTERNAL);
+            .extracting(LabelPlacement::mode).containsOnly(LabelPlacement.Mode.INTERIOR);
     }
 
     @Test
@@ -899,9 +899,10 @@ public class GraphWorkspaceModelAcceptanceShould {
     }
 
     private static GraphGeometry labelsFor(final GraphProjection projection) {
-        GraphGeometry geometry = new GraphGeometryEngine().computeHulls(projection, positionsFor(projection));
         AwtGeometryTextMetrics metrics = new AwtGeometryTextMetrics(new Font("Dialog", Font.PLAIN, 12),
             new FontRenderContext(new AffineTransform(), false, false));
+        GraphGeometry geometry =
+            new GraphGeometryEngine().computeHulls(projection, positionsFor(projection), metrics);
         return new LabelPlacementEngine(metrics).place(projection, geometry);
     }
 
