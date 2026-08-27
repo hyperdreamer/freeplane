@@ -1,6 +1,7 @@
 package org.freeplane.plugin.graph.layout;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -74,6 +75,36 @@ public class TypedForcesShould {
     }
 
     @Test
+    public void largerWorkspacesSeedWiderThanTheMinimumSpread() {
+        List<ProjectedNode> nodes = new ArrayList<ProjectedNode>();
+        for (int index = 0; index < 200; index++) {
+            nodes.add(node(MAP_ONE, "wide-" + index));
+        }
+        GraphProjection projection = projection(1, nodes, Collections.<ProjectedEnclosure>emptyList(),
+            Collections.<ProjectedEdge>emptyList());
+
+        try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
+            LayoutFrame frame = engine.apply(request(WORKSPACE_ONE, projection, projection,
+                Collections.<PinProjection>emptyList()));
+
+            assertThat(greatestDistanceBetweenDistinctPositions(frame)).isGreaterThan(150.0);
+        }
+    }
+
+    @Test
+    public void hierarchyAnchorsSeedOnTheGroupRing() {
+        GraphProjection projection = baseline(1);
+
+        try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
+            LayoutFrame frame = engine.apply(request(WORKSPACE_ONE, projection, projection,
+                Collections.<PinProjection>emptyList()));
+
+            assertThat(distance(frame.positions().anchors().get(rootHull()),
+                frame.positions().anchors().get(childHull()))).isCloseTo(100.0, within(10.0));
+        }
+    }
+
+    @Test
     public void firstStepDoesNotTeleportSeededParticlesOntoTheirNeighbours() {
         GraphProjection projection = baseline(1);
 
@@ -82,7 +113,7 @@ public class TypedForcesShould {
                 Collections.<PinProjection>emptyList()));
             LayoutFrame stepped = engine.step();
 
-            assertThat(greatestMovementBetween(applied, stepped)).isLessThan(1.0);
+            assertThat(greatestMovementBetween(applied, stepped)).isLessThan(8.0);
         }
     }
 
@@ -98,7 +129,7 @@ public class TypedForcesShould {
                 Collections.<PinProjection>emptyList()));
             LayoutFrame after = engine.step();
 
-            assertThat(greatestMovementBetween(before, after)).isLessThan(1.0);
+            assertThat(greatestMovementBetween(before, after)).isLessThan(8.0);
         }
     }
 
@@ -188,19 +219,16 @@ public class TypedForcesShould {
     }
 
     @Test
-    public void reduceAnchorDistanceChangeWhenEnclosuresHaveAHierarchyLink() {
+    public void hierarchyLinksPullNestedAnchorsTowardTheHierarchyRestLength() {
         GraphProjection nested = hierarchyProjection(1, true);
         GraphProjection peers = hierarchyProjection(1, false);
-        List<PinProjection> positioningPins = Arrays.asList(pin(key(MAP_ONE, "hierarchy-parent-node"), 0.0, 0.0),
-            pin(key(MAP_ONE, "hierarchy-child-node"), 10_000.0, 0.0));
-        List<PinProjection> activePins = Arrays.asList(pin(key(MAP_ONE, "hierarchy-parent-node"), 0.0, 0.0),
-            pin(key(MAP_ONE, "hierarchy-child-node"), 24.0, 0.0));
-        double nestedChange = anchorDistanceChangeAfterPositioningAndOneStep(WORKSPACE_ONE, peers, nested,
-            positioningPins, activePins, hierarchyParentHull(), hierarchyChildHull());
-        double peerChange = anchorDistanceChangeAfterPositioningAndOneStep(WORKSPACE_ONE, peers, peers,
-            positioningPins, activePins, hierarchyParentHull(), hierarchyChildHull());
+        List<PinProjection> pins = Arrays.asList(pin(key(MAP_ONE, "hierarchy-parent-node"), 0.0, 0.0),
+            pin(key(MAP_ONE, "hierarchy-child-node"), 400.0, 0.0));
+        double nestedDistance = anchorDistanceAfterSteps(WORKSPACE_ONE, nested, pins, 300);
+        double peerDistance = anchorDistanceAfterSteps(WORKSPACE_ONE, peers, pins, 300);
 
-        assertThat(nestedChange).isLessThan(peerChange);
+        assertThat(nestedDistance).isGreaterThan(100.0);
+        assertThat(nestedDistance).isLessThan(peerDistance);
     }
 
     @Test
@@ -288,18 +316,16 @@ public class TypedForcesShould {
         }
     }
 
-    private static double anchorDistanceChangeAfterPositioningAndOneStep(WorkspaceId workspace,
-            GraphProjection positioning, GraphProjection projection, List<PinProjection> positioningPins,
-            List<PinProjection> activePins, EnclosureHullKey first, EnclosureHullKey second) {
+    private static double anchorDistanceAfterSteps(WorkspaceId workspace, GraphProjection projection,
+            List<PinProjection> pins, int steps) {
         try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
-            engine.apply(request(workspace, positioning, positioning, positioningPins));
-            for (int step = 0; step < 500; step++) {
+            engine.apply(request(workspace, projection, projection, pins));
+            for (int step = 0; step < steps; step++) {
                 engine.step();
             }
-            LayoutFrame before = engine.apply(request(workspace, positioning, projection, activePins));
-            LayoutFrame after = engine.step();
-            return distance(after.positions().anchors().get(first), after.positions().anchors().get(second))
-                - distance(before.positions().anchors().get(first), before.positions().anchors().get(second));
+            LayoutFrame frame = engine.apply(request(workspace, projection, projection, pins));
+            return distance(frame.positions().anchors().get(hierarchyParentHull()),
+                frame.positions().anchors().get(hierarchyChildHull()));
         }
     }
 

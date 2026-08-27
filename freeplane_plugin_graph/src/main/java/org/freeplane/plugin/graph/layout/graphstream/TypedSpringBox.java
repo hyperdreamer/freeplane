@@ -15,8 +15,9 @@ import org.miv.pherd.geom.Point3;
 
 final class TypedSpringBox extends SpringBox {
     static final double CROSS_MAP_DISPLACEMENT_LIMIT = 0.005;
-    private static final double REST_LENGTH = 24.0;
-    private static final double ATTRACTION_FACTOR = 0.0001;
+    static final double REST_LENGTH = 24.0;
+    private static final double ATTRACTION_FACTOR = 0.05;
+    private static final double REPULSION_FACTOR = 16.0;
     private static final double BASE_SEPARATION_RADIUS = 8.0;
 
     private final LayoutCalibration calibration;
@@ -28,6 +29,7 @@ final class TypedSpringBox extends SpringBox {
         super(false, random);
         this.calibration = calibration;
         setQuality(0.10);
+        K2 = REPULSION_FACTOR;
     }
 
     @Override
@@ -98,7 +100,7 @@ final class TypedSpringBox extends SpringBox {
                 y = 0.0;
                 distance = 1.0;
             }
-            final double magnitude = (distance - REST_LENGTH) * ATTRACTION_FACTOR * multiplier(link.kind);
+            final double magnitude = (distance - link.restLength) * ATTRACTION_FACTOR * multiplier(link.kind);
             final double xContribution = x / distance * magnitude;
             final double yContribution = y / distance * magnitude;
             displacement.set(0, displacement.at(0) + xContribution);
