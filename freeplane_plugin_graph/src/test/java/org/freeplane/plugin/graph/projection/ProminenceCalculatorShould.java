@@ -131,9 +131,9 @@ public class ProminenceCalculatorShould {
     }
 
     @Test
-    public void countActiveGraphGroupRootsLikeOrdinaryNodes() {
+    public void projectOnlyGroupBoundariesAndKeepProminenceEmpty() {
         NodeSnapshot group = node(MAP, "group", true, true, false);
-        NodeSnapshot target = node(MAP, "target", true, false, false);
+        NodeSnapshot target = node(MAP, "target", true, true, false);
         NodeSnapshot root = node(MAP, "root", false, false, false, group, target);
         MapSnapshot snapshot = map(MAP, 1, root).withConnectors(Collections.singletonList(
             connector(0, source(MAP, "group"), reference(MAP, "target"), false, true)));
@@ -141,16 +141,12 @@ public class ProminenceCalculatorShould {
         GraphProjection projection = new ProjectionEngine().projectStructure(1,
             workspace(registration(MAP, 1, true)), Collections.singletonList(snapshot));
 
-        ProjectedNode groupNode = projection.nodes().get(0);
-        assertThat(groupNode.graphGroup()).isTrue();
-        Map<ProjectedNodeKey, NodeProminence> prominence = projection.prominence();
-        List<ProjectedNodeKey> expectedKeys = new ArrayList<ProjectedNodeKey>();
-        for (ProjectedNode value : projection.nodes()) {
-            expectedKeys.add(value.key());
-        }
-        assertThat(new ArrayList<ProjectedNodeKey>(prominence.keySet())).containsExactlyElementsOf(expectedKeys);
-        assertThat(prominence.get(groupNode.key()).visibleOutgoingTargets()).isEqualTo(1);
-        assertThat(prominence.get(nodeKey("target")).visibleOutgoingTargets()).isZero();
+        assertThat(projection.nodes()).isEmpty();
+        assertThat(projection.prominence()).isEmpty();
+        assertThat(projection.edges()).hasSize(1);
+        ProjectedEdge edge = projection.edges().get(0);
+        assertThat(edge.first().isEnclosure()).isTrue();
+        assertThat(edge.second().isEnclosure()).isTrue();
     }
 
     @Test

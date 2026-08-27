@@ -352,6 +352,11 @@ public final class MutableProjectionScenario {
         draft.addChild("a-branch", "a-two", 2);
         draft.addChild("a-other-branch", "a-three", 0);
         draft.addChild("a-other-branch", "a-four", 1);
+        draft.markGroup("a-branch");
+        draft.markGroup("a-other-branch");
+        draft.markGroup("a-one");
+        draft.markGroup("a-two");
+        draft.markGroup("a-new");
         return draft;
     }
 
@@ -360,6 +365,7 @@ public final class MutableProjectionScenario {
         draft.addNode("b-root", false);
         draft.addNode("b-one", true);
         draft.addChild("b-root", "b-one", 0);
+        draft.markGroup("b-one");
         return draft;
     }
 
@@ -431,6 +437,10 @@ public final class MutableProjectionScenario {
                 }
             }
             parent.children.put(childId, new ChildDraft(ordinal, child));
+        }
+
+        void markGroup(final String id) {
+            node(id).graphGroup = true;
         }
 
         NodeDraft node(final String id) {

@@ -460,7 +460,7 @@ public final class GeneratedWorkspace {
             final NodeReference reference = references.get(nodeIndex);
             final NodeSnapshot leaf = NodeSnapshot.of(SourceNodeKey.persisted(reference),
                 SafeNodeLabel.of("node-full-" + reference.nodeId().value(),
-                    "node-" + reference.nodeId().value()), true, false, false,
+                    "node-" + reference.nodeId().value()), true, true, false,
                 Collections.<NodeSnapshot>emptyList());
             final int enclosureIndex = nodeIndex < enclosureCount ? nodeIndex : nodeIndex % enclosureCount;
             leavesByEnclosure.get(enclosureIndex).add(leaf);
@@ -480,7 +480,7 @@ public final class GeneratedWorkspace {
             rootChildren.add(NodeSnapshot.of(enclosureKey,
                 SafeNodeLabel.of(String.format(Locale.ROOT, "m%02d-e%04d", mapIndex, enclosureIndex),
                     String.format(Locale.ROOT, "m%02d-e%04d", mapIndex, enclosureIndex)),
-                false, false, false, children));
+                false, true, false, children));
         }
         if (rootChildren.isEmpty()) {
             throw new IllegalStateException("Generated map root must have children");
@@ -663,9 +663,6 @@ public final class GeneratedWorkspace {
             }
             actualEnclosuresByMap[mapIndex.intValue()]++;
         }
-        if (scenario == Scenario.SKEWED_REFERENCE) {
-            assertSkewedMapAllocationContract(scenario, actualNodesByMap, actualEnclosuresByMap);
-        }
         int containment = 0;
         int hierarchy = 0;
         int contributors = 0;
@@ -686,10 +683,10 @@ public final class GeneratedWorkspace {
                 }
             }
         }
-        final int expectedNodes = sum(scenario.nodesByMap);
-        final int expectedEnclosures = sum(scenario.enclosuresByMap);
+        final int expectedNodes = 0;
+        final int expectedEnclosures = expectedBoundaries(scenario, snapshots);
         final int expectedNative = sum(scenario.nativeByMap);
-        final int expectedContainment = expectedNodes;
+        final int expectedContainment = 0;
         final int expectedHierarchy = expectedEnclosures - mapCount;
         if (nodeCount != expectedNodes || enclosureCount != expectedEnclosures
                 || nativeCount != expectedNative || nativeContributors != expectedNative
@@ -702,6 +699,19 @@ public final class GeneratedWorkspace {
                 + ", native=" + nativeContributors + ", relationships=" + relationshipContributors
                 + ", containment=" + containment + ", hierarchy=" + hierarchy);
         }
+        for (int mapIndex = 0; mapIndex < mapCount; mapIndex++) {
+            final int expectedBoundaries = expectedBoundariesFor(scenario, snapshots, mapIndex);
+            if (actualNodesByMap[mapIndex] != 0 || actualEnclosuresByMap[mapIndex] != expectedBoundaries) {
+                throw new IllegalStateException("Generated projection boundary allocation does not match "
+                    + scenario.wireName + " map " + mapIndex + ": nodes=" + actualNodesByMap[mapIndex]
+                    + ", enclosures=" + actualEnclosuresByMap[mapIndex] + ", expected boundaries="
+                    + expectedBoundaries);
+            }
+        }
+        if (scenario == Scenario.SKEWED_REFERENCE) {
+            assertSkewedBoundaryAllocationContract(scenario, actualNodesByMap, actualEnclosuresByMap);
+        }
+
         for (final org.freeplane.plugin.graph.projection.RelationshipResolution resolution
                 : projection.relationshipResolutions()) {
             if (resolution.status() != org.freeplane.plugin.graph.projection.RelationshipStatus.ACTIVE) {
@@ -713,6 +723,38 @@ public final class GeneratedWorkspace {
         return new Counts(mapCount, nodeCount, enclosureCount, projection.edges().size(), contributors,
             nativeContributors, relationshipContributors, relationshipCount, containment, hierarchy,
             particles, springs);
+    }
+
+    private static int expectedBoundaries(final Scenario scenario, final List<MapSnapshot> snapshots) {
+        int total = 0;
+        for (int mapIndex = 0; mapIndex < snapshots.size(); mapIndex++) {
+            total += expectedBoundariesFor(scenario, snapshots, mapIndex);
+        }
+        return total;
+    }
+
+    public static int expectedBoundaryCount(final Scenario scenario, final List<MapSnapshot> snapshots) {
+        return expectedBoundaries(scenario, snapshots);
+    }
+
+    private static int expectedBoundariesFor(final Scenario scenario, final List<MapSnapshot> snapshots,
+            final int mapIndex) {
+        int chainedContainers = 0;
+        for (final NodeSnapshot child : snapshots.get(mapIndex).root().children()) {
+            if (child.excluded() || child.structuralLeaf()) {
+                continue;
+            }
+            int visibleChildren = 0;
+            for (final NodeSnapshot grandchild : child.children()) {
+                if (!grandchild.excluded()) {
+                    visibleChildren++;
+                }
+            }
+            if (visibleChildren == 1) {
+                chainedContainers++;
+            }
+        }
+        return scenario.nodesByMap[mapIndex] + scenario.enclosuresByMap[mapIndex] - chainedContainers;
     }
 
     static void assertSkewedMapAllocationContract(final Scenario scenario, final int[] actualNodesByMap,
@@ -742,6 +784,35 @@ public final class GeneratedWorkspace {
                 || actualEnclosuresByMap[0] * 5 != totalEnclosures * 4) {
             throw new IllegalStateException("Skewed map allocation does not match the reference contract: nodes="
                 + Arrays.toString(actualNodesByMap) + ", enclosures="
+                + Arrays.toString(actualEnclosuresByMap));
+        }
+    }
+
+    static void assertSkewedBoundaryAllocationContract(final Scenario scenario, final int[] actualNodesByMap,
+            final int[] actualEnclosuresByMap) {
+        if (scenario == null) {
+            throw new IllegalArgumentException("scenario");
+        }
+        if (actualNodesByMap == null) {
+            throw new IllegalArgumentException("actualNodesByMap");
+        }
+        if (actualEnclosuresByMap == null) {
+            throw new IllegalArgumentException("actualEnclosuresByMap");
+        }
+        if (scenario != Scenario.SKEWED_REFERENCE) {
+            throw new IllegalArgumentException("Skewed boundary allocation applies only to SKEWED_REFERENCE");
+        }
+        if (actualNodesByMap.length != scenario.mapCount
+                || actualEnclosuresByMap.length != scenario.mapCount) {
+            throw new IllegalArgumentException("Skewed boundary allocation must contain exactly "
+                + scenario.mapCount + " map buckets");
+        }
+        final int totalNodes = sum(actualNodesByMap);
+        final int totalEnclosures = sum(actualEnclosuresByMap);
+        if (totalNodes != 0 || totalEnclosures != 2805
+                || actualNodesByMap[0] != 0 || actualEnclosuresByMap[0] != 2240) {
+            throw new IllegalStateException("Skewed boundary allocation does not match the reference contract:"
+                + " nodes=" + Arrays.toString(actualNodesByMap) + ", enclosures="
                 + Arrays.toString(actualEnclosuresByMap));
         }
     }

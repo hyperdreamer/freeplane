@@ -163,7 +163,7 @@ public class GraphWorkspaceColdReloadShould {
             sourceMap = freeplane.loadWithView(sourceMapFile);
             assertThat(sourceMap.getExtension(IUndoHandler.class)).as("editor map undo handler").isNotNull();
             final List<NodeModel> actorNodes = freeplane.applyRandomActors(sourceMap, 0x41BA7CL, 5);
-            freeplane.applyRandomGroups(actorNodes, 0x41BA7CL);
+            freeplane.markAllGroups(actorNodes);
 
             final GraphWorkspaceIntegrationSupport.RecordingViewFactory views =
                 new GraphWorkspaceIntegrationSupport.RecordingViewFactory();
@@ -343,14 +343,14 @@ final class GraphWorkspaceIntegrationSupport {
         field.set(null, values);
     }
 
-    static void awaitProjection(final GraphWorkspaceHandle handle, final int minimumNodes) throws Exception {
-        awaitCondition(() -> handle.currentProjection().projectedNodeCount() >= minimumNodes, 15000L,
+    static void awaitProjection(final GraphWorkspaceHandle handle, final int minimumEnclosures) throws Exception {
+        awaitCondition(() -> handle.currentProjection().enclosures().size() >= minimumEnclosures, 15000L,
             "production graph projection did not become available");
     }
 
-    static void awaitProjectionWithEdges(final GraphWorkspaceHandle handle, final int minimumNodes,
+    static void awaitProjectionWithEdges(final GraphWorkspaceHandle handle, final int minimumEnclosures,
             final int minimumEdges) throws Exception {
-        awaitCondition(() -> handle.currentProjection().projectedNodeCount() >= minimumNodes
+        awaitCondition(() -> handle.currentProjection().enclosures().size() >= minimumEnclosures
             && handle.currentProjection().projectedEdgeCount() >= minimumEdges, 15000L,
             "production graph projection did not publish the expected native edges");
     }
@@ -872,21 +872,11 @@ final class GraphWorkspaceIntegrationSupport {
             return nodes;
         }
 
-        void applyRandomGroups(final List<NodeModel> nodes, final long seed) {
+        void markAllGroups(final List<NodeModel> nodes) {
             if (graphGroups == null) {
                 throw new IllegalStateException("Graph groups are not installed");
             }
-            final Random random = new Random(seed ^ 0x47524F5550L);
-            final List<NodeModel> selected = new ArrayList<NodeModel>();
-            for (NodeModel node : nodes) {
-                if (random.nextBoolean()) {
-                    selected.add(node);
-                }
-            }
-            if (selected.isEmpty()) {
-                selected.add(nodes.get(0));
-            }
-            graphGroups.setMarked(selected, true);
+            graphGroups.setMarked(nodes, true);
         }
 
         int mapLifecycleListenerCount() {

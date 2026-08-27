@@ -31,8 +31,8 @@ public class EnclosureTierShould {
     @Test
     public void retainTwoRegistrationTiersThroughMissingLoadingRetryAndAvailableTransitions() {
         NodeSnapshot childLeaf = node(MAP_ONE, "child-leaf", true, false, false);
-        NodeSnapshot child = node(MAP_ONE, "child", false, false, false, childLeaf);
-        NodeSnapshot directLeaf = node(MAP_ONE, "direct-leaf", true, false, false);
+        NodeSnapshot child = node(MAP_ONE, "child", false, true, false, childLeaf);
+        NodeSnapshot directLeaf = node(MAP_ONE, "direct-leaf", true, true, false);
         NodeSnapshot root = node(MAP_ONE, "root", false, false, false, child, directLeaf);
         NodeSnapshot secondRoot = node(MAP_TWO, "second-root", true, false, false);
         WorkspaceDocument twoActive = workspace(registration(MAP_ONE, 1, true), registration(MAP_TWO, 2, true));
@@ -82,10 +82,10 @@ public class EnclosureTierShould {
     }
 
     @Test
-    public void suppressOneMapUnaryRootChainAndEmphasizeItsFirstVisibleChildBoundary() {
+    public void suppressTheMapRootFrameAndEmphasizeItsFirstBoundary() {
         NodeSnapshot firstLeaf = node(MAP_ONE, "first", true, false, false);
         NodeSnapshot secondLeaf = node(MAP_ONE, "second", true, false, false);
-        NodeSnapshot inner = node(MAP_ONE, "inner", false, false, false, firstLeaf, secondLeaf);
+        NodeSnapshot inner = node(MAP_ONE, "inner", false, true, false, firstLeaf, secondLeaf);
         NodeSnapshot middle = node(MAP_ONE, "middle", false, false, false, inner);
         NodeSnapshot root = node(MAP_ONE, "root", false, false, false, middle);
         WorkspaceDocument workspace = workspace(registration(MAP_ONE, 1, true));
@@ -93,7 +93,7 @@ public class EnclosureTierShould {
         GraphProjection projection = project(workspace, MapAvailability.AVAILABLE, map(MAP_ONE, 1, root));
 
         ProjectedEnclosure rootHull = enclosureFor(projection, root);
-        assertThat(rootHull.endpointKeys()).containsExactly(EnclosureKey.of(root.key()), EnclosureKey.of(middle.key()));
+        assertThat(rootHull.endpointKeys()).containsExactly(EnclosureKey.of(root.key()));
         assertThat(rootHull.boundaryTier()).isEqualTo(BoundaryTier.SUPPRESSED);
         assertThat(tierFor(projection, inner)).isEqualTo(BoundaryTier.EMPHATIC);
         assertThat(enclosureFor(projection, inner).endpointKeys()).containsExactly(EnclosureKey.of(inner.key()));
@@ -116,15 +116,15 @@ public class EnclosureTierShould {
     }
 
     private static NodeSnapshot firstLevelNode() {
-        return node(MAP_ONE, "first-level", false, false, false, secondLevelNode(), firstLevelSiblingNode());
+        return node(MAP_ONE, "first-level", false, true, false, secondLevelNode(), firstLevelSiblingNode());
     }
 
     private static NodeSnapshot secondLevelNode() {
-        return node(MAP_ONE, "second-level", false, false, false, thirdLevelNode());
+        return node(MAP_ONE, "second-level", false, true, false, thirdLevelNode(), secondLevelSiblingNode());
     }
 
     private static NodeSnapshot thirdLevelNode() {
-        return node(MAP_ONE, "third-level", false, false, false, leaf("third-left"), leaf("third-right"));
+        return node(MAP_ONE, "third-level", false, true, false, leaf("third-left"), leaf("third-right"));
     }
 
     private static NodeSnapshot rootSiblingNode() {
@@ -135,6 +135,11 @@ public class EnclosureTierShould {
     private static NodeSnapshot firstLevelSiblingNode() {
         return node(MAP_ONE, "first-level-sibling", false, false, false, leaf("first-sibling-left"),
             leaf("first-sibling-right"));
+    }
+
+    private static NodeSnapshot secondLevelSiblingNode() {
+        return node(MAP_ONE, "second-level-sibling", false, false, false, leaf("second-sibling-left"),
+            leaf("second-sibling-right"));
     }
 
     private static NodeSnapshot leafRoot() {

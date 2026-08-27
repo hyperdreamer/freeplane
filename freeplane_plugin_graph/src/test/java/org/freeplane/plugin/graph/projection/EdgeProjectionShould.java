@@ -47,8 +47,8 @@ public class EdgeProjectionShould {
         assertThat(ProjectedEdgeKey.of(aEndpoint, bEndpoint).first()).isEqualTo(aEndpoint);
 
         NodeSnapshot root = node(MAP_ONE, "root", false, false, false,
-            node(MAP_ONE, "a", true, false, false), node(MAP_ONE, "b", true, false, false),
-            node(MAP_ONE, "c", true, false, false));
+            node(MAP_ONE, "a", true, true, false), node(MAP_ONE, "b", true, true, false),
+            node(MAP_ONE, "c", true, true, false));
         MapSnapshot snapshot = map(MAP_ONE, 1, root).withConnectors(Arrays.asList(
             connector(0, c, reference(MAP_ONE, "a"), false, true),
             connector(0, b, reference(MAP_ONE, "a"), false, true)));
@@ -101,7 +101,7 @@ public class EdgeProjectionShould {
         ConnectorDescriptor descriptor = ConnectorDescriptor.of(a, reference(MAP_ONE, "b"), false, true,
             "source label", "middle label", "target label");
         NodeSnapshot root = node(MAP_ONE, "root", false, false, false,
-            node(MAP_ONE, "a", true, false, false), node(MAP_ONE, "b", true, false, false));
+            node(MAP_ONE, "a", true, true, false), node(MAP_ONE, "b", true, true, false));
         MapSnapshot snapshot = map(MAP_ONE, 1, root).withConnectors(Arrays.asList(
             ConnectorSnapshot.of(1, descriptor), ConnectorSnapshot.of(0, descriptor)));
 
@@ -192,7 +192,7 @@ public class EdgeProjectionShould {
     @Test
     public void preserveProjectionAndContributorOrderingAcrossMapInputPermutations() {
         NodeSnapshot firstRoot = node(MAP_ONE, "root", false, false, false,
-            node(MAP_ONE, "a", true, false, false), node(MAP_ONE, "b", true, false, false));
+            node(MAP_ONE, "a", true, true, false), node(MAP_ONE, "b", true, true, false));
         MapSnapshot firstMap = map(MAP_ONE, 2, firstRoot).withConnectors(Arrays.asList(
             connector(1, source(MAP_ONE, "a"), reference(MAP_ONE, "b"), false, true),
             connector(0, source(MAP_ONE, "a"), reference(MAP_ONE, "b"), false, true)));
@@ -302,7 +302,7 @@ public class EdgeProjectionShould {
     }
 
     private static ProjectedEndpointKey endpoint(SourceNodeKey source) {
-        return ProjectedEndpointKey.ofNode(ProjectedNodeKey.of(source));
+        return ProjectedEndpointKey.ofEnclosure(EnclosureKey.of(source));
     }
 
     private static NodeSnapshot node(MapReferenceId map, String id, boolean structuralLeaf, boolean graphGroup,

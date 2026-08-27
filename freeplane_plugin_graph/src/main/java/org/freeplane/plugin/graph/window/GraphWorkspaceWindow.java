@@ -59,6 +59,7 @@ import org.freeplane.plugin.graph.control.WorkspaceSessionStatus;
 import org.freeplane.plugin.graph.control.WorkspaceSessionStatusListener;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.HullGeometry;
+import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.NodeGeometry;
 import org.freeplane.plugin.graph.projection.BoundaryTier;
 import org.freeplane.plugin.graph.projection.EdgeContributor;
@@ -1109,8 +1110,6 @@ final class GraphWorkspaceWindowModel {
         if (intent instanceof GraphIntent.ChangeSelection) {
             final Optional<ProjectedEndpointKey> selection = ((GraphIntent.ChangeSelection) intent).selection();
             selectedEndpoint = selection.orElse(null);
-            selectedNode = selection.isPresent() && selection.get().isNode()
-                ? selection.get().node().get() : null;
             paintState = selection.isPresent() ? paintState.withSelection(selection.get())
                 : GraphPaintState.empty().withSearchMatches(
                     GraphSearchModel.search(currentState, toolbar.searchField().getText()));
@@ -1151,20 +1150,34 @@ final class GraphWorkspaceWindowModel {
         }
     }
 
+    private EnclosureHullKey hullKeyOf(final ProjectedEndpointKey endpoint) {
+        if (endpoint == null || endpoint.isNode() || currentState == null) {
+            return null;
+        }
+        for (final org.freeplane.plugin.graph.projection.ProjectedEnclosure enclosure
+                : currentState.projection().enclosures()) {
+            if (enclosure.endpointKeys().contains(endpoint.enclosure().get())) {
+                return enclosure.hullKey();
+            }
+        }
+        return null;
+    }
+
     private void pinSelectedNode() {
-        if (selectedNode == null || currentState == null) {
+        if (selectedEndpoint == null || currentState == null) {
             return;
         }
-        final NodeReference reference = selectedNode.source().persistedReference().orElse(null);
-        final NodeGeometry geometry = currentState.geometry().nodes().get(selectedNode);
-        if (reference != null && geometry != null) {
-            executePin(selectedNode, geometry.center().x(), geometry.center().y());
+        final EnclosureHullKey hull = hullKeyOf(selectedEndpoint);
+        if (hull == null) {
+            return;
         }
+        final LayoutPoint anchor = currentState.geometry().hulls().get(hull).labelAnchor();
+        executePin(ProjectedNodeKey.of(source(selectedEndpoint)), anchor.x(), anchor.y());
     }
 
     private void unpinSelectedNode() {
-        if (selectedNode != null) {
-            executeUnpin(selectedNode);
+        if (selectedEndpoint != null) {
+            executeUnpin(ProjectedNodeKey.of(source(selectedEndpoint)));
         }
     }
 
