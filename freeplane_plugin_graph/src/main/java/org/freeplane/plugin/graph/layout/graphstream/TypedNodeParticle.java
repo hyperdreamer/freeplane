@@ -25,11 +25,16 @@ final class TypedNodeParticle extends SpringBoxNodeParticle {
         return separationRadius;
     }
 
+    double boundaryRadius() {
+        return separationRadius;
+    }
+
     @Override
     protected void repulsionN2(final Vector3 displacement) {
         final Vector3 before = new Vector3(disp);
         super.repulsionN2(displacement);
         scaleRepulsion(before);
+        typedBox.addBoundaryRepulsion(this, disp);
     }
 
     @Override
@@ -37,6 +42,7 @@ final class TypedNodeParticle extends SpringBoxNodeParticle {
         final Vector3 before = new Vector3(disp);
         super.repulsionNLogN(displacement);
         scaleRepulsion(before);
+        typedBox.addBoundaryRepulsion(this, disp);
     }
 
     @Override

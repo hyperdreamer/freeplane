@@ -60,25 +60,25 @@ public class PerceptualIdlePolicyShould {
     @Test
     public void acceptExactSpikeRmsAndMaximumBoundaries() {
         LayoutPositions zero = boundaryPositions(0.0, 0);
-        LayoutPositions rmsBoundary = boundaryPositions(0.02, 0);
+        LayoutPositions rmsBoundary = boundaryPositions(0.05, 0);
         PerceptualIdlePolicy rmsPolicy = PerceptualIdlePolicy.spikeDefaults();
         PerceptualIdlePolicy.IdleMeasurement rmsMeasurement = null;
         for (int frame = 0; frame < 8; frame++) {
             rmsMeasurement = rmsPolicy.observe(zero, rmsBoundary);
         }
-        assertThat(rmsMeasurement.rms()).isEqualTo(0.02);
-        assertThat(rmsMeasurement.max()).isEqualTo(0.02);
+        assertThat(rmsMeasurement.rms()).isEqualTo(0.05);
+        assertThat(rmsMeasurement.max()).isEqualTo(0.05);
         assertThat(rmsMeasurement.consecutiveStableFrames()).isEqualTo(8);
         assertThat(rmsMeasurement.idle()).isTrue();
 
-        LayoutPositions maxBoundary = boundaryPositions(0.05, 8);
+        LayoutPositions maxBoundary = boundaryPositions(0.10, 8);
         PerceptualIdlePolicy maxPolicy = PerceptualIdlePolicy.spikeDefaults();
         PerceptualIdlePolicy.IdleMeasurement maxMeasurement = null;
         for (int frame = 0; frame < 8; frame++) {
             maxMeasurement = maxPolicy.observe(zeroWithZeros(8), maxBoundary);
         }
-        assertThat(maxMeasurement.rms()).isLessThanOrEqualTo(0.02);
-        assertThat(maxMeasurement.max()).isEqualTo(0.05);
+        assertThat(maxMeasurement.rms()).isLessThanOrEqualTo(0.05);
+        assertThat(maxMeasurement.max()).isEqualTo(0.10);
         assertThat(maxMeasurement.consecutiveStableFrames()).isEqualTo(8);
         assertThat(maxMeasurement.idle()).isTrue();
     }
