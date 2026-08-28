@@ -52,8 +52,26 @@ public class StructuralProjectionShould {
         assertThat(projection.edges()).isEmpty();
         assertThat(projection.relationshipResolutions()).isEmpty();
         assertThat(projection.pins()).isEmpty();
-        assertThat(projection.projectedNodeCount()).isZero();
+        assertThat(projection.projectedNodeCount()).isEqualTo(1);
         assertThat(projection.projectedEdgeCount()).isZero();
+    }
+
+    @Test
+    public void countGroupMarkedBoundariesAsNodesButNeverMapRootFrames() {
+        NodeSnapshot group = node(MAP_ONE, "group", "Group", true, true, false);
+        NodeSnapshot plain = node(MAP_ONE, "plain", "Plain", true, false, false);
+        NodeSnapshot root = node(MAP_ONE, "root", "Root", false, false, false, group, plain);
+
+        GraphProjection projection = project(workspace(registration(MAP_ONE, 1, true)),
+            map(MAP_ONE, 1, root));
+
+        assertThat(projection.projectedNodeCount()).isEqualTo(1);
+        assertThat(projection.enclosures().get(1).mapRoot()).isFalse();
+
+        NodeSnapshot rootOnly = node(MAP_ONE, "root", "Root", false, false, false, plain);
+        GraphProjection noGroups = project(workspace(registration(MAP_ONE, 1, true)),
+            map(MAP_ONE, 1, rootOnly));
+        assertThat(noGroups.projectedNodeCount()).isZero();
     }
 
     @Test
