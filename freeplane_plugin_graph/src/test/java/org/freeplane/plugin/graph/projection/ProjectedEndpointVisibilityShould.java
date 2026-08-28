@@ -106,13 +106,14 @@ public class ProjectedEndpointVisibilityShould {
 
     private static NodeSnapshot deepBranchRoot() {
         return enclosureNode("root", enclosureNode("first-level", enclosureNode("second-level",
-            enclosureNode("third-level", leaf("third-left"), leaf("third-right"))),
+            enclosureNode("third-level", leaf("third-left"), leaf("third-right")),
+            enclosureNode("second-level-sibling", leaf("second-sibling-left"), leaf("second-sibling-right"))),
             enclosureNode("first-level-sibling", leaf("first-sibling-left"), leaf("first-sibling-right"))),
             enclosureNode("root-sibling", leaf("root-sibling-left"), leaf("root-sibling-right")));
     }
 
     private static NodeSnapshot enclosureNode(String id, NodeSnapshot... children) {
-        return NodeSnapshot.of(source(id), SafeNodeLabel.of(id, id), false, false, false, Arrays.asList(children));
+        return NodeSnapshot.of(source(id), SafeNodeLabel.of(id, id), false, true, false, Arrays.asList(children));
     }
 
     private static NodeSnapshot leaf(String id) {

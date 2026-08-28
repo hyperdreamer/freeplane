@@ -30,54 +30,62 @@ public class StructuralProjectionShould {
     private static final MapReferenceId MAP_THREE = MapReferenceId.of("00000000-0000-0000-0000-000000000003");
 
     @Test
-    public void projectGroupsBeforeStructuralLeaves() {
+    public void projectGroupMarkedLeavesAsBoundariesBeforePlainLeavesVanish() {
         NodeSnapshot group = node(MAP_ONE, "group", "Group", true, true, false);
         NodeSnapshot leaf = node(MAP_ONE, "leaf", "Leaf", true, false, false);
         NodeSnapshot root = node(MAP_ONE, "root", "Root", false, false, false, group, leaf);
 
         GraphProjection projection = project(workspace(registration(MAP_ONE, 1, true)), map(MAP_ONE, 1, root));
 
-        assertThat(projection.nodes()).hasSize(2);
-        assertThat(projection.nodes().get(0).source()).isEqualTo(group.key());
-        assertThat(projection.nodes().get(0).graphGroup()).isTrue();
-        assertThat(projection.nodes().get(1).source()).isEqualTo(leaf.key());
-        assertThat(projection.nodes().get(1).graphGroup()).isFalse();
-        assertThat(projection.enclosures()).hasSize(1);
+        assertThat(projection.nodes()).isEmpty();
+        assertThat(projection.enclosures()).hasSize(2);
         assertThat(projection.enclosures().get(0).endpointKeys())
             .containsExactly(EnclosureKey.of(root.key()));
-        assertThat(projection.enclosures().get(0).directNodes()).containsExactly(
-            ProjectedNodeKey.of(group.key()), ProjectedNodeKey.of(leaf.key()));
+        assertThat(projection.enclosures().get(0).directNodes()).isEmpty();
+        assertThat(projection.enclosures().get(0).directEnclosures())
+            .containsExactly(EnclosureHullKey.of(Collections.singletonList(EnclosureKey.of(group.key()))));
         assertThat(projection.enclosures().get(0).mapRoot()).isTrue();
+        assertThat(projection.enclosures().get(1).endpointKeys())
+            .containsExactly(EnclosureKey.of(group.key()));
+        assertThat(projection.enclosures().get(1).mapRoot()).isFalse();
+        assertThat(projectedLabels(projection)).doesNotContain("Leaf");
         assertThat(projection.edges()).isEmpty();
         assertThat(projection.relationshipResolutions()).isEmpty();
         assertThat(projection.pins()).isEmpty();
-        assertThat(projection.projectedNodeCount()).isEqualTo(2);
+        assertThat(projection.projectedNodeCount()).isZero();
         assertThat(projection.projectedEdgeCount()).isZero();
     }
 
     @Test
-    public void suppressOuterGroupsBeforeNestedGroupsAndReactivateThemWhenRemoved() {
+    public void nestNestedGroupsAndReactivateThemWhenTheOuterGroupIsRemoved() {
         NodeSnapshot innerGroup = node(MAP_ONE, "inner", "INNER_SECRET", true, true, false);
         NodeSnapshot secretLeaf = node(MAP_ONE, "secret", "LEAF_SECRET", true, false, false);
         NodeSnapshot groupedOuter = node(MAP_ONE, "outer", "Outer", false, true, false, innerGroup, secretLeaf);
         NodeSnapshot root = node(MAP_ONE, "root", "Root", false, false, false, groupedOuter);
         WorkspaceDocument workspace = workspace(registration(MAP_ONE, 1, true));
 
-        GraphProjection suppressed = project(workspace, map(MAP_ONE, 1, root));
+        GraphProjection nested = project(workspace, map(MAP_ONE, 1, root));
 
-        assertThat(suppressed.nodes()).hasSize(1);
-        assertThat(suppressed.nodes().get(0).source()).isEqualTo(groupedOuter.key());
-        assertThat(suppressed.nodes().get(0).graphGroup()).isTrue();
-        assertThat(projectedLabels(suppressed)).doesNotContain("INNER_SECRET", "LEAF_SECRET");
+        assertThat(nested.nodes()).isEmpty();
+        assertThat(nested.enclosures()).hasSize(3);
+        assertThat(nested.enclosures().get(1).endpointKeys())
+            .containsExactly(EnclosureKey.of(groupedOuter.key()));
+        assertThat(nested.enclosures().get(2).endpointKeys())
+            .containsExactly(EnclosureKey.of(innerGroup.key()));
+        assertThat(nested.enclosures().get(2).parentHull().get())
+            .isEqualTo(nested.enclosures().get(1).hullKey());
+        assertThat(projectedLabels(nested)).contains("INNER_SECRET").doesNotContain("LEAF_SECRET");
 
         NodeSnapshot ordinaryOuter = node(MAP_ONE, "outer", "Outer", false, false, false, innerGroup, secretLeaf);
         NodeSnapshot ordinaryRoot = node(MAP_ONE, "root", "Root", false, false, false, ordinaryOuter);
         GraphProjection reactivated = project(workspace, map(MAP_ONE, 1, ordinaryRoot));
 
-        assertThat(reactivated.nodes()).extracting(ProjectedNode::source)
-            .containsExactly(innerGroup.key(), secretLeaf.key());
-        assertThat(reactivated.nodes().get(0).graphGroup()).isTrue();
-        assertThat(projectedLabels(reactivated)).contains("INNER_SECRET", "LEAF_SECRET");
+        assertThat(reactivated.enclosures()).hasSize(2);
+        assertThat(reactivated.enclosures().get(1).endpointKeys())
+            .containsExactly(EnclosureKey.of(innerGroup.key()));
+        assertThat(reactivated.enclosures().get(1).parentHull().get())
+            .isEqualTo(reactivated.enclosures().get(0).hullKey());
+        assertThat(projectedLabels(reactivated)).contains("INNER_SECRET").doesNotContain("LEAF_SECRET");
     }
 
     @Test
@@ -90,97 +98,127 @@ public class StructuralProjectionShould {
 
         GraphProjection projection = project(workspace(registration(MAP_ONE, 1, true)), map(MAP_ONE, 1, root));
 
-        assertThat(projection.nodes()).extracting(ProjectedNode::source).containsExactly(visibleLeaf.key());
+        assertThat(projection.nodes()).isEmpty();
+        assertThat(projection.enclosures()).hasSize(1);
+        assertThat(projection.enclosures().get(0).endpointKeys())
+            .containsExactly(EnclosureKey.of(root.key()));
         assertThat(projectedLabels(projection)).doesNotContain("SECRET_ENCLOSURE", "SECRET_DESCENDANT");
     }
 
     @Test
-    public void projectLockedLeavesAndVisibleSummaryAndFreeNodesNormally() {
-        NodeSnapshot visibleSummary = node(MAP_ONE, "summary", "Visible summary", true, false, false);
-        NodeSnapshot freeNode = node(MAP_ONE, "free", "Free node", true, false, false);
-        NodeSnapshot lockedLeaf = node(MAP_ONE, "locked", "Locked leaf", true, false, false);
+    public void projectLockedLeavesAndVisibleSummaryAndFreeNodesAsBoundaries() {
+        NodeSnapshot visibleSummary = node(MAP_ONE, "summary", "Visible summary", true, true, false);
+        NodeSnapshot freeNode = node(MAP_ONE, "free", "Free node", true, true, false);
+        NodeSnapshot lockedLeaf = node(MAP_ONE, "locked", "Locked leaf", true, true, false);
         NodeSnapshot root = node(MAP_ONE, "root", "Root", false, false, false,
             visibleSummary, freeNode, lockedLeaf);
 
         GraphProjection projection = project(workspace(registration(MAP_ONE, 1, true)),
             map(MAP_ONE, 1, root, true));
 
-        assertThat(projection.nodes()).extracting(ProjectedNode::source)
-            .containsExactly(visibleSummary.key(), freeNode.key(), lockedLeaf.key());
-        assertThat(projection.nodes()).allMatch(node -> !node.graphGroup());
+        assertThat(projection.nodes()).isEmpty();
+        assertThat(projection.enclosures()).hasSize(4);
+        assertThat(projection.enclosures().get(1).endpointKeys())
+            .containsExactly(EnclosureKey.of(visibleSummary.key()));
+        assertThat(projection.enclosures().get(2).endpointKeys())
+            .containsExactly(EnclosureKey.of(freeNode.key()));
+        assertThat(projection.enclosures().get(3).endpointKeys())
+            .containsExactly(EnclosureKey.of(lockedLeaf.key()));
+        assertThat(projection.enclosures().get(1).mapRoot()).isFalse();
+        assertThat(projection.enclosures().get(2).mapRoot()).isFalse();
+        assertThat(projection.enclosures().get(3).mapRoot()).isFalse();
     }
 
     @Test
-    public void compressUnaryEnclosuresIntoOneMapRootHull() {
-        NodeSnapshot leaf = node(MAP_ONE, "leaf", "Leaf", true, false, false);
-        NodeSnapshot middle = node(MAP_ONE, "middle", "Middle", false, false, false, leaf);
-        NodeSnapshot root = node(MAP_ONE, "root", "Root", false, false, false, middle);
-
-        GraphProjection projection = project(workspace(registration(MAP_ONE, 1, true)), map(MAP_ONE, 1, root));
-
-        assertThat(projection.enclosures()).hasSize(1);
-        ProjectedEnclosure hull = projection.enclosures().get(0);
-        assertThat(hull.endpointKeys()).containsExactly(EnclosureKey.of(root.key()), EnclosureKey.of(middle.key()));
-        assertThat(hull.labels()).containsExactly(root.label(), middle.label());
-        assertThat(hull.directNodes()).containsExactly(ProjectedNodeKey.of(leaf.key()));
-        assertThat(hull.directEnclosures()).isEmpty();
-        assertThat(hull.parentHull()).isEmpty();
-        assertThat(hull.mapRoot()).isTrue();
-    }
-
-    @Test
-    public void keepBranchingAndEmptyEnclosuresAsSeparateHulls() {
-        NodeSnapshot excludedLeaf = node(MAP_ONE, "excluded", "Excluded", true, false, true);
-        NodeSnapshot empty = node(MAP_ONE, "empty", "Visible parent", false, false, false, excludedLeaf);
-        NodeSnapshot sibling = node(MAP_ONE, "sibling", "Sibling", true, false, false);
-        NodeSnapshot root = node(MAP_ONE, "root", "Root", false, false, false, empty, sibling);
+    public void keepTheMapRootFrameAloneAndChainUnaryGroups() {
+        NodeSnapshot leafGroup = node(MAP_ONE, "leaf-group", "Leaf group", true, true, false);
+        NodeSnapshot middleGroup = node(MAP_ONE, "middle", "Middle", false, true, false, leafGroup);
+        NodeSnapshot root = node(MAP_ONE, "root", "Root", false, false, false, middleGroup);
 
         GraphProjection projection = project(workspace(registration(MAP_ONE, 1, true)), map(MAP_ONE, 1, root));
 
         assertThat(projection.enclosures()).hasSize(2);
         ProjectedEnclosure rootHull = projection.enclosures().get(0);
-        ProjectedEnclosure emptyHull = projection.enclosures().get(1);
+        ProjectedEnclosure chainedHull = projection.enclosures().get(1);
         assertThat(rootHull.endpointKeys()).containsExactly(EnclosureKey.of(root.key()));
-        assertThat(rootHull.directNodes()).containsExactly(ProjectedNodeKey.of(sibling.key()));
-        assertThat(rootHull.directEnclosures()).containsExactly(emptyHull.hullKey());
-        assertThat(emptyHull.endpointKeys()).containsExactly(EnclosureKey.of(empty.key()));
+        assertThat(rootHull.directNodes()).isEmpty();
+        assertThat(rootHull.directEnclosures()).containsExactly(chainedHull.hullKey());
+        assertThat(rootHull.parentHull()).isEmpty();
+        assertThat(rootHull.mapRoot()).isTrue();
+        assertThat(chainedHull.endpointKeys()).containsExactly(EnclosureKey.of(middleGroup.key()),
+            EnclosureKey.of(leafGroup.key()));
+        assertThat(chainedHull.labels()).containsExactly(middleGroup.label(), leafGroup.label());
+        assertThat(chainedHull.directNodes()).isEmpty();
+        assertThat(chainedHull.directEnclosures()).isEmpty();
+        assertThat(chainedHull.parentHull()).contains(rootHull.hullKey());
+    }
+
+    @Test
+    public void keepBranchingAndEmptyGroupsAsSeparateHulls() {
+        NodeSnapshot innerOne = node(MAP_ONE, "inner-one", "Inner one", false, true, false);
+        NodeSnapshot innerTwo = node(MAP_ONE, "inner-two", "Inner two", false, true, false);
+        NodeSnapshot outer = node(MAP_ONE, "outer", "Outer", false, true, false, innerOne, innerTwo);
+        NodeSnapshot emptyGroup = node(MAP_ONE, "empty-group", "Empty group", false, true, false,
+            node(MAP_ONE, "plain", "Plain", true, false, false));
+        NodeSnapshot root = node(MAP_ONE, "root", "Root", false, false, false, outer, emptyGroup);
+
+        GraphProjection projection = project(workspace(registration(MAP_ONE, 1, true)), map(MAP_ONE, 1, root));
+
+        assertThat(projection.enclosures()).hasSize(5);
+        ProjectedEnclosure rootHull = projection.enclosures().get(0);
+        ProjectedEnclosure outerHull = projection.enclosures().get(1);
+        ProjectedEnclosure innerOneHull = projection.enclosures().get(2);
+        ProjectedEnclosure innerTwoHull = projection.enclosures().get(3);
+        ProjectedEnclosure emptyHull = projection.enclosures().get(4);
+        assertThat(rootHull.endpointKeys()).containsExactly(EnclosureKey.of(root.key()));
+        assertThat(rootHull.directNodes()).isEmpty();
+        assertThat(rootHull.directEnclosures()).containsExactly(outerHull.hullKey(), emptyHull.hullKey());
+        assertThat(outerHull.endpointKeys()).containsExactly(EnclosureKey.of(outer.key()));
+        assertThat(outerHull.directNodes()).isEmpty();
+        assertThat(outerHull.directEnclosures()).containsExactly(innerOneHull.hullKey(), innerTwoHull.hullKey());
+        assertThat(innerOneHull.parentHull()).contains(outerHull.hullKey());
+        assertThat(innerTwoHull.parentHull()).contains(outerHull.hullKey());
+        assertThat(emptyHull.endpointKeys()).containsExactly(EnclosureKey.of(emptyGroup.key()));
         assertThat(emptyHull.directNodes()).isEmpty();
         assertThat(emptyHull.directEnclosures()).isEmpty();
         assertThat(emptyHull.parentHull()).contains(rootHull.hullKey());
     }
 
     @Test
-    public void retainAnEmptyVisibleParentBelowAUnaryMapRoot() {
+    public void retainAnEmptyGroupBoundaryBelowTheMapRootFrame() {
         NodeSnapshot hiddenChild = node(MAP_ONE, "hidden", "Hidden", true, false, true);
-        NodeSnapshot visibleParent = node(MAP_ONE, "parent", "Visible parent", false, false, false, hiddenChild);
-        NodeSnapshot root = node(MAP_ONE, "root", "Root", false, false, false, visibleParent);
+        NodeSnapshot group = node(MAP_ONE, "group", "Group", false, true, false, hiddenChild);
+        NodeSnapshot root = node(MAP_ONE, "root", "Root", false, false, false, group);
 
         GraphProjection projection = project(workspace(registration(MAP_ONE, 1, true)), map(MAP_ONE, 1, root));
 
         assertThat(projection.enclosures()).hasSize(2);
         ProjectedEnclosure rootHull = projection.enclosures().get(0);
-        ProjectedEnclosure parentHull = projection.enclosures().get(1);
+        ProjectedEnclosure groupHull = projection.enclosures().get(1);
         assertThat(rootHull.endpointKeys()).containsExactly(EnclosureKey.of(root.key()));
-        assertThat(rootHull.directEnclosures()).containsExactly(parentHull.hullKey());
-        assertThat(parentHull.endpointKeys()).containsExactly(EnclosureKey.of(visibleParent.key()));
-        assertThat(parentHull.labels()).containsExactly(visibleParent.label());
-        assertThat(parentHull.directNodes()).isEmpty();
-        assertThat(parentHull.directEnclosures()).isEmpty();
+        assertThat(rootHull.directEnclosures()).containsExactly(groupHull.hullKey());
+        assertThat(groupHull.endpointKeys()).containsExactly(EnclosureKey.of(group.key()));
+        assertThat(groupHull.labels()).containsExactly(group.label());
+        assertThat(groupHull.directNodes()).isEmpty();
+        assertThat(groupHull.directEnclosures()).isEmpty();
     }
 
     @Test
     public void useDistinctPersistentKeysForClonedLabels() {
-        NodeSnapshot firstClone = node(MAP_ONE, "clone-one", "Clone", true, false, false);
-        NodeSnapshot secondClone = node(MAP_ONE, "clone-two", "Clone", true, false, false);
+        NodeSnapshot firstClone = node(MAP_ONE, "clone-one", "Clone", true, true, false);
+        NodeSnapshot secondClone = node(MAP_ONE, "clone-two", "Clone", true, true, false);
         NodeSnapshot root = node(MAP_ONE, "root", "Root", false, false, false, firstClone, secondClone);
 
         GraphProjection projection = project(workspace(registration(MAP_ONE, 1, true)), map(MAP_ONE, 1, root));
 
-        assertThat(projection.nodes()).extracting(ProjectedNode::label)
-            .containsExactly(firstClone.label(), secondClone.label());
-        assertThat(projection.nodes()).extracting(ProjectedNode::key)
-            .containsExactly(ProjectedNodeKey.of(firstClone.key()), ProjectedNodeKey.of(secondClone.key()));
-        assertThat(projection.nodes().get(0).key()).isNotEqualTo(projection.nodes().get(1).key());
+        assertThat(projection.enclosures()).hasSize(3);
+        assertThat(projection.enclosures().get(1).endpointKeys())
+            .containsExactly(EnclosureKey.of(firstClone.key()));
+        assertThat(projection.enclosures().get(2).endpointKeys())
+            .containsExactly(EnclosureKey.of(secondClone.key()));
+        assertThat(projection.enclosures().get(1).labels()).containsExactly(firstClone.label());
+        assertThat(projection.enclosures().get(2).labels()).containsExactly(secondClone.label());
+        assertThat(projection.enclosures().get(1).hullKey()).isNotEqualTo(projection.enclosures().get(2).hullKey());
     }
 
     @Test
@@ -195,8 +233,8 @@ public class StructuralProjectionShould {
         GraphProjection second = project(workspace, secondMap, firstMap);
 
         assertThat(first).isEqualTo(second);
-        assertThat(first.nodes()).extracting(ProjectedNode::source)
-            .containsExactly(secondRoot.key(), firstRoot.key());
+        assertThat(first.enclosures()).extracting(ProjectedEnclosure::mapReferenceId)
+            .containsExactly(MAP_TWO, MAP_ONE);
     }
 
     @Test
@@ -209,7 +247,8 @@ public class StructuralProjectionShould {
 
         GraphProjection projection = project(workspace, activeMap, inactiveMap);
 
-        assertThat(projection.nodes()).extracting(ProjectedNode::source).containsExactly(activeRoot.key());
+        assertThat(projection.enclosures()).extracting(ProjectedEnclosure::mapReferenceId)
+            .containsExactly(MAP_ONE);
         MapSnapshot unregistered = map(MAP_THREE, 3, node(MAP_THREE, "other", "Other", true, false, false));
         assertThatThrownBy(() -> project(workspace, activeMap, unregistered))
             .isInstanceOf(IllegalArgumentException.class);

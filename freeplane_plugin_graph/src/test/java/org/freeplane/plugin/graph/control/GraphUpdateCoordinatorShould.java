@@ -212,10 +212,10 @@ public class GraphUpdateCoordinatorShould {
             if (projection.generation() == 1L) {
                 firstProjection.countDown();
             }
-            if (projection.generation() >= 2L && projection.nodes().isEmpty()) {
+            if (projection.generation() >= 2L && projection.enclosures().isEmpty()) {
                 emptyAvailabilityProjection.countDown();
             }
-            if (!projection.nodes().isEmpty()) {
+            if (!projection.enclosures().isEmpty()) {
                 projectedAfterAttachment.countDown();
             }
         });
@@ -223,7 +223,7 @@ public class GraphUpdateCoordinatorShould {
         try {
             coordinator.start();
             assertThat(firstProjection.await(5L, TimeUnit.SECONDS)).isTrue();
-            assertThat(coordinator.currentProjection().nodes()).isEmpty();
+            assertThat(coordinator.currentProjection().enclosures()).isEmpty();
 
             MapAdapterEvent available = new MapAdapterEvent(MAP, MapOperationalState.AVAILABLE);
             for (MapAdapterListener listener : adapterListeners) {
@@ -236,7 +236,7 @@ public class GraphUpdateCoordinatorShould {
             mapEdt.runQueued();
 
             assertThat(projectedAfterAttachment.await(5L, TimeUnit.SECONDS)).isTrue();
-            assertThat(coordinator.currentProjection().nodes()).isNotEmpty();
+            assertThat(coordinator.currentProjection().enclosures()).isNotEmpty();
         }
         finally {
             coordinator.close();
@@ -272,7 +272,7 @@ public class GraphUpdateCoordinatorShould {
             if (projection.generation() == 1L) {
                 initialProjection.countDown();
             }
-            if (!projection.nodes().isEmpty()) {
+            if (!projection.enclosures().isEmpty()) {
                 projectedAfterAttachment.countDown();
             }
         });
@@ -280,13 +280,13 @@ public class GraphUpdateCoordinatorShould {
         try {
             coordinator.start();
             assertThat(initialProjection.await(5L, TimeUnit.SECONDS)).isTrue();
-            assertThat(coordinator.currentProjection().nodes()).isEmpty();
+            assertThat(coordinator.currentProjection().enclosures()).isEmpty();
 
             acquisition.complete(lease);
             mapEdt.runQueued();
 
             assertThat(projectedAfterAttachment.await(5L, TimeUnit.SECONDS)).isTrue();
-            assertThat(coordinator.currentProjection().nodes()).isNotEmpty();
+            assertThat(coordinator.currentProjection().enclosures()).isNotEmpty();
         }
         finally {
             coordinator.close();

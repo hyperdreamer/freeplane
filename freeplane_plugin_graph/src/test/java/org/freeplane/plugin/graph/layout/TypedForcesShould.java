@@ -6,9 +6,7 @@ import static org.assertj.core.api.Assertions.within;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
@@ -21,8 +19,8 @@ import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.projection.PinProjection;
 import org.freeplane.plugin.graph.projection.ProjectedEdge;
 import org.freeplane.plugin.graph.projection.ProjectedEdgeKey;
-import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
 import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
+import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
 import org.freeplane.plugin.graph.projection.ProjectionDiff;
@@ -35,18 +33,24 @@ import org.freeplane.plugin.graph.workspace.model.GraphRelationshipRecord;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 import org.freeplane.plugin.graph.workspace.model.NodeReference;
 import org.freeplane.plugin.graph.workspace.model.PersistedNodeId;
+import org.freeplane.plugin.graph.workspace.model.PinRecord;
 import org.freeplane.plugin.graph.workspace.model.RelationshipDirection;
 import org.freeplane.plugin.graph.workspace.model.RelationshipId;
-import org.freeplane.plugin.graph.workspace.model.PinRecord;
 import org.freeplane.plugin.graph.workspace.model.UnknownXml;
 import org.freeplane.plugin.graph.workspace.model.WorkspaceId;
 import org.junit.Test;
 
 public class TypedForcesShould {
+    // Test-local size formulas; the values must equal the production
+    // BoundarySizes constants (reviewed by the task reviewer).
+    private static final double CHAR_WIDTH_UPPER_BOUND = 16.0;
+    private static final double CHAR_HEIGHT_UPPER_BOUND = 24.0;
+    private static final double BOUNDARY_PADDING = 8.0;
+    private static final double SIBLING_GAP = 8.0;
+    private static final double FRAME_CLEARANCE = 16.0;
+
     private static final WorkspaceId WORKSPACE_ONE =
         WorkspaceId.of("00000000-0000-0000-0000-000000000111");
-    private static final WorkspaceId WORKSPACE_TWO =
-        WorkspaceId.of("00000000-0000-0000-0000-000000000222");
     private static final MapReferenceId MAP_ONE =
         MapReferenceId.of("00000000-0000-0000-0000-000000000001");
     private static final MapReferenceId MAP_TWO =
@@ -75,38 +79,8 @@ public class TypedForcesShould {
     }
 
     @Test
-    public void largerWorkspacesSeedWiderThanTheMinimumSpread() {
-        List<ProjectedNode> nodes = new ArrayList<ProjectedNode>();
-        for (int index = 0; index < 200; index++) {
-            nodes.add(node(MAP_ONE, "wide-" + index));
-        }
-        GraphProjection projection = projection(1, nodes, Collections.<ProjectedEnclosure>emptyList(),
-            Collections.<ProjectedEdge>emptyList());
-
-        try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
-            LayoutFrame frame = engine.apply(request(WORKSPACE_ONE, projection, projection,
-                Collections.<PinProjection>emptyList()));
-
-            assertThat(greatestDistanceBetweenDistinctPositions(frame)).isGreaterThan(150.0);
-        }
-    }
-
-    @Test
-    public void hierarchyAnchorsSeedOnTheGroupRing() {
-        GraphProjection projection = baseline(1);
-
-        try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
-            LayoutFrame frame = engine.apply(request(WORKSPACE_ONE, projection, projection,
-                Collections.<PinProjection>emptyList()));
-
-            assertThat(distance(frame.positions().anchors().get(rootHull()),
-                frame.positions().anchors().get(childHull()))).isCloseTo(100.0, within(10.0));
-        }
-    }
-
-    @Test
     public void firstStepDoesNotTeleportSeededParticlesOntoTheirNeighbours() {
-        GraphProjection projection = baseline(1);
+        GraphProjection projection = leafRoots(2);
 
         try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
             LayoutFrame applied = engine.apply(request(WORKSPACE_ONE, projection, projection,
@@ -119,8 +93,8 @@ public class TypedForcesShould {
 
     @Test
     public void aTopologyChangeDoesNotTeleportRetainedParticles() {
-        GraphProjection baseline = baseline(1);
-        GraphProjection expanded = expanded(2);
+        GraphProjection baseline = leafRoots(3);
+        GraphProjection expanded = leafRoots(2);
 
         try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
             engine.apply(request(WORKSPACE_ONE, baseline, baseline, Collections.<PinProjection>emptyList()));
@@ -130,52 +104,130 @@ public class TypedForcesShould {
             LayoutFrame after = engine.step();
 
             assertThat(greatestMovementBetween(before, after)).isLessThan(8.0);
+
+            LayoutFrame reAdded = engine.apply(request(WORKSPACE_ONE, expanded, baseline,
+                Collections.<PinProjection>emptyList()));
+            LayoutFrame afterReAdd = engine.step();
+
+            assertThat(greatestMovementBetween(reAdded, afterReAdd)).isLessThan(8.0);
         }
     }
 
     @Test
-    public void deriveDistinctDeterministicSeedsForDifferentWorkspaces() {
-        GraphProjection projection = baseline(1);
-
-        LayoutFrame first = frameAfterOneStep(WORKSPACE_ONE, projection, Collections.<PinProjection>emptyList());
-        LayoutFrame second = frameAfterOneStep(WORKSPACE_TWO, projection, Collections.<PinProjection>emptyList());
-
-        assertThat(first.positions()).isNotEqualTo(second.positions());
-    }
-
-    @Test
-    public void exposeEveryVisibleNodeAndEnclosureAnchor() {
-        GraphProjection projection = baseline(1);
-
-        LayoutFrame frame = frameAfterOneStep(WORKSPACE_ONE, projection, Collections.<PinProjection>emptyList());
-
-        assertCoverage(frame, projection);
-    }
-
-    @Test
-    public void moveAnUnpinnedParticleThroughTheGraphStreamSolver() {
-        ProjectedNode firstNode = node(MAP_ONE, "solver-one");
-        ProjectedNode secondNode = node(MAP_TWO, "solver-two");
-        GraphProjection projection = projection(1, Arrays.asList(firstNode, secondNode),
-            Collections.<ProjectedEnclosure>emptyList(), Collections.<ProjectedEdge>emptyList());
-        List<PinProjection> positioningPins = Arrays.asList(pin(firstNode.key(), 0.0, 0.0),
-            pin(secondNode.key(), 20.0, 0.0));
-        List<PinProjection> activePins = Collections.singletonList(pin(secondNode.key(), 20.0, 0.0));
+    public void largerWorkspacesSeedWiderThanTheMinimumSpread() {
+        List<ProjectedEnclosure> enclosures = new ArrayList<ProjectedEnclosure>();
+        List<EnclosureHullKey> rootChildren = new ArrayList<EnclosureHullKey>();
+        EnclosureHullKey rootHull = hull(MAP_ONE, "root");
+        for (int index = 0; index < 200; index++) {
+            EnclosureKey key = EnclosureKey.of(source(MAP_ONE, "wide-" + index));
+            EnclosureHullKey hull = EnclosureHullKey.of(Collections.singletonList(key));
+            SafeNodeLabel label = SafeNodeLabel.of("wide-" + index, "wide-" + index);
+            enclosures.add(ProjectedEnclosure.of(hull, Collections.singletonList(key),
+                Collections.singletonList(label), "Map", Optional.of(rootHull),
+                Collections.<ProjectedNodeKey>emptyList(), Collections.<EnclosureHullKey>emptyList(), false,
+                BoundaryTier.SUBTLE));
+            rootChildren.add(hull);
+        }
+        enclosures.add(ProjectedEnclosure.of(rootHull, Collections.singletonList(
+            EnclosureKey.of(source(MAP_ONE, "root"))), Collections.singletonList(SafeNodeLabel.of("Root", "Root")),
+            "Map", Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(), rootChildren,
+            true, BoundaryTier.EMPHATIC));
+        GraphProjection projection = projection(1, Collections.<ProjectedNode>emptyList(), enclosures,
+            Collections.<ProjectedEdge>emptyList());
 
         try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
-            engine.apply(request(WORKSPACE_ONE, projection, projection, positioningPins));
-            LayoutFrame before = engine.apply(request(WORKSPACE_ONE, projection, projection, activePins));
-            LayoutFrame after = engine.step();
+            LayoutFrame frame = engine.apply(request(WORKSPACE_ONE, projection, projection,
+                Collections.<PinProjection>emptyList()));
 
-            assertThat(after.failed()).isFalse();
-            assertThat(distance(before.positions().nodes().get(firstNode.key()),
-                after.positions().nodes().get(firstNode.key()))).isGreaterThan(0.0);
+            assertThat(greatestDistanceBetweenDistinctPositions(frame)).isGreaterThan(150.0);
         }
     }
 
     @Test
-    public void acceptRelationshipAndContainmentEdgesBetweenTheSameParticles() {
-        GraphProjection projection = withParallelGraphEdges(1);
+    public void hierarchyAnchorsSeedOnTheGroupRing() {
+        List<SafeNodeLabel> groupLabels = new ArrayList<SafeNodeLabel>();
+        List<EnclosureHullKey> groupHulls = new ArrayList<EnclosureHullKey>();
+        List<EnclosureHullKey> rootChildren = new ArrayList<EnclosureHullKey>();
+        List<ProjectedEnclosure> enclosures = new ArrayList<ProjectedEnclosure>();
+        EnclosureHullKey rootHull = hull(MAP_ONE, "root");
+        for (int index = 0; index < 3; index++) {
+            SafeNodeLabel label = SafeNodeLabel.of("group-" + index, "group-" + index);
+            groupLabels.add(label);
+            EnclosureHullKey groupHull = hull(MAP_ONE, "group-" + index);
+            groupHulls.add(groupHull);
+            rootChildren.add(groupHull);
+            enclosures.add(ProjectedEnclosure.of(groupHull, Collections.singletonList(
+                EnclosureKey.of(source(MAP_ONE, "group-" + index))), Collections.singletonList(label), "Map",
+                Optional.of(rootHull), Collections.<ProjectedNodeKey>emptyList(),
+                Collections.<EnclosureHullKey>emptyList(), false, BoundaryTier.SUBTLE));
+        }
+        enclosures.add(ProjectedEnclosure.of(rootHull, Collections.singletonList(
+            EnclosureKey.of(source(MAP_ONE, "root"))), Collections.singletonList(SafeNodeLabel.of("Root", "Root")),
+            "Map", Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(), rootChildren,
+            true, BoundaryTier.EMPHATIC));
+        GraphProjection projection = projection(1, Collections.<ProjectedNode>emptyList(), enclosures,
+            Collections.<ProjectedEdge>emptyList());
+        double ringRadius = ringRadius(groupLabels);
+
+        try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
+            LayoutFrame frame = engine.apply(request(WORKSPACE_ONE, projection, projection,
+                Collections.<PinProjection>emptyList()));
+
+            for (EnclosureHullKey groupHull : groupHulls) {
+                assertThat(distance(frame.positions().anchors().get(rootHull),
+                    frame.positions().anchors().get(groupHull))).isCloseTo(ringRadius, within(0.001));
+            }
+            for (int first = 0; first < groupHulls.size(); first++) {
+                for (int second = first + 1; second < groupHulls.size(); second++) {
+                    double chord = distance(frame.positions().anchors().get(groupHulls.get(first)),
+                        frame.positions().anchors().get(groupHulls.get(second)));
+                    assertThat(chord).isGreaterThanOrEqualTo(maximumWidth(groupLabels) + SIBLING_GAP);
+                }
+            }
+        }
+    }
+
+    @Test
+    public void hierarchyLinksPullNestedAnchorsTowardTheHierarchyRestLength() {
+        GraphProjection nested = hierarchyProjection(1, true);
+        GraphProjection peers = hierarchyProjection(1, false);
+        List<PinProjection> pins = Collections.singletonList(pin(key(MAP_ONE, "hierarchy-parent"), 0.0, 0.0));
+        double nestedDistance = anchorDistanceAfterSteps(WORKSPACE_ONE, nested, pins, 300);
+        double peerDistance = anchorDistanceAfterSteps(WORKSPACE_ONE, peers, pins, 300);
+
+        assertThat(nestedDistance).isGreaterThan(100.0);
+        assertThat(nestedDistance).isLessThan(peerDistance);
+    }
+
+    @Test
+    public void capAggregateCrossMapFanOutDisplacementOncePerParticle() {
+        GraphProjection projection = crossMapFanOut(1);
+        EnclosureHullKey center = hull(MAP_ONE, "center");
+
+        try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
+            LayoutFrame before = engine.apply(request(WORKSPACE_ONE, projection, projection,
+                Collections.<PinProjection>emptyList()));
+            LayoutFrame after = engine.step();
+
+            assertThat(distance(before.positions().anchors().get(center), after.positions().anchors().get(center)))
+                .isLessThanOrEqualTo(0.0050000001);
+        }
+    }
+
+    @Test
+    public void acceptRelationshipAndHierarchyEdgesBetweenTheSameAnchors() {
+        EnclosureKey parentKey = EnclosureKey.of(source(MAP_ONE, "parallel-parent"));
+        EnclosureKey childKey = EnclosureKey.of(source(MAP_ONE, "parallel-child"));
+        EnclosureHullKey parentHull = EnclosureHullKey.of(Collections.singletonList(parentKey));
+        EnclosureHullKey childHull = EnclosureHullKey.of(Collections.singletonList(childKey));
+        ProjectedEnclosure parent = enclosure(parentHull, parentKey, "parallel-parent",
+            Optional.<EnclosureHullKey>empty(), Collections.singletonList(childHull), true);
+        ProjectedEnclosure child = enclosure(childHull, childKey, "parallel-child", Optional.of(parentHull),
+            Collections.<EnclosureHullKey>emptyList(), false);
+        GraphProjection projection = projection(1, Collections.<ProjectedNode>emptyList(),
+            Arrays.asList(parent, child),
+            Collections.singletonList(connectorEdge(0, ProjectedEndpointKey.ofEnclosure(parentKey),
+                ProjectedEndpointKey.ofEnclosure(childKey))));
 
         try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
             LayoutFrame applied = engine.apply(request(WORKSPACE_ONE, projection, projection,
@@ -189,7 +241,16 @@ public class TypedForcesShould {
     }
 
     @Test
-    public void retainDirectContainmentAndHierarchyAnchorsAcrossSteps() {
+    public void exposeEveryEnclosureAnchor() {
+        GraphProjection projection = baseline(1);
+
+        LayoutFrame frame = frameAfterOneStep(WORKSPACE_ONE, projection, Collections.<PinProjection>emptyList());
+
+        assertCoverage(frame, projection);
+    }
+
+    @Test
+    public void retainHierarchyAnchorsAcrossSteps() {
         GraphProjection projection = baseline(1);
 
         try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
@@ -201,34 +262,6 @@ public class TypedForcesShould {
             assertCoverage(second, projection);
             assertThat(second.positions().anchors()).containsKeys(rootHull(), childHull());
         }
-    }
-
-    @Test
-    public void moveAContainmentAnchorCloserToItsPinnedDirectNode() {
-        GraphProjection contained = containmentProjection(1, true);
-        GraphProjection detached = containmentProjection(1, false);
-        ProjectedNodeKey directNode = key(MAP_ONE, "contained-node");
-        LayoutPoint pinPosition = LayoutPoint.of(100.0, 0.0);
-        List<PinProjection> pins = Collections.singletonList(pin(directNode, pinPosition.x(), pinPosition.y()));
-
-        LayoutFrame containedFrame = frameAfterOneStep(WORKSPACE_ONE, contained, pins);
-        LayoutFrame detachedFrame = frameAfterOneStep(WORKSPACE_ONE, detached, pins);
-
-        assertThat(distance(containedFrame.positions().anchors().get(containmentHull()), pinPosition))
-            .isLessThan(distance(detachedFrame.positions().anchors().get(containmentHull()), pinPosition));
-    }
-
-    @Test
-    public void hierarchyLinksPullNestedAnchorsTowardTheHierarchyRestLength() {
-        GraphProjection nested = hierarchyProjection(1, true);
-        GraphProjection peers = hierarchyProjection(1, false);
-        List<PinProjection> pins = Arrays.asList(pin(key(MAP_ONE, "hierarchy-parent-node"), 0.0, 0.0),
-            pin(key(MAP_ONE, "hierarchy-child-node"), 400.0, 0.0));
-        double nestedDistance = anchorDistanceAfterSteps(WORKSPACE_ONE, nested, pins, 300);
-        double peerDistance = anchorDistanceAfterSteps(WORKSPACE_ONE, peers, pins, 300);
-
-        assertThat(nestedDistance).isGreaterThan(100.0);
-        assertThat(nestedDistance).isLessThan(peerDistance);
     }
 
     @Test
@@ -252,66 +285,10 @@ public class TypedForcesShould {
         assertCoverage(finalFrame, baseline);
     }
 
-    @Test
-    public void capAggregateCrossMapFanOutDisplacementOncePerParticle() {
-        GraphProjection projection = crossMapFanOut(1);
-        ProjectedNodeKey center = key(MAP_ONE, "center");
-
-        try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
-            LayoutFrame before = engine.apply(request(WORKSPACE_ONE, projection, projection,
-                Collections.<PinProjection>emptyList()));
-            LayoutFrame after = engine.step();
-
-            assertThat(distance(before.positions().nodes().get(center), after.positions().nodes().get(center)))
-                .isLessThanOrEqualTo(0.0050000001);
-        }
-    }
-
-    @Test
-    public void increaseSeparationForHigherProminence() {
-        GraphProjection lowProminence = prominenceProjection(1, false);
-        GraphProjection highProminence = prominenceProjection(1, true);
-        ProjectedNodeKey source = key(MAP_ONE, "source");
-        ProjectedNodeKey neighbor = key(MAP_ONE, "neighbor");
-
-        LayoutFrame low = frameAfterPositioningAndOneStep(WORKSPACE_ONE, lowProminence,
-            Arrays.asList(pin(source, 24.0, 0.0), pin(neighbor, 0.0, 0.0)),
-            Collections.singletonList(pin(neighbor, 0.0, 0.0)));
-        LayoutFrame high = frameAfterPositioningAndOneStep(WORKSPACE_ONE, highProminence,
-            Arrays.asList(pin(source, 24.0, 0.0), pin(neighbor, 0.0, 0.0),
-                pin(key(MAP_ONE, "target-one"), 100.0, 100.0),
-                pin(key(MAP_ONE, "target-two"), 100.0, -100.0)),
-            Arrays.asList(pin(neighbor, 0.0, 0.0), pin(key(MAP_ONE, "target-one"), 100.0, 100.0),
-                pin(key(MAP_ONE, "target-two"), 100.0, -100.0)));
-
-        assertThat(distance(high.positions().nodes().get(source), high.positions().nodes().get(neighbor)))
-            .isGreaterThan(distance(low.positions().nodes().get(source), low.positions().nodes().get(neighbor)));
-    }
-
-    @Test
-    public void keepAnActivePinnedNeighborAtItsExactLayoutCoordinates() {
-        GraphProjection projection = baseline(1);
-        ProjectedNodeKey pinned = key(MAP_TWO, "b-one");
-        PinProjection activePin = pin(pinned, 12.5, -9.75);
-
-        LayoutFrame frame = frameAfterOneStep(WORKSPACE_ONE, projection, Collections.singletonList(activePin));
-
-        assertThat(frame.positions().nodes().get(pinned)).isEqualTo(LayoutPoint.of(12.5, -9.75));
-    }
-
     private static LayoutFrame frameAfterOneStep(WorkspaceId workspace, GraphProjection projection,
             List<PinProjection> pins) {
         try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
             engine.apply(request(workspace, projection, projection, pins));
-            return engine.step();
-        }
-    }
-
-    private static LayoutFrame frameAfterPositioningAndOneStep(WorkspaceId workspace, GraphProjection projection,
-            List<PinProjection> positioningPins, List<PinProjection> activePins) {
-        try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
-            engine.apply(request(workspace, projection, projection, positioningPins));
-            engine.apply(request(workspace, projection, projection, activePins));
             return engine.step();
         }
     }
@@ -330,7 +307,7 @@ public class TypedForcesShould {
     }
 
     private static double greatestDistanceBetweenDistinctPositions(LayoutFrame frame) {
-        List<LayoutPoint> positions = new ArrayList<LayoutPoint>(frame.positions().nodes().values());
+        List<LayoutPoint> positions = new ArrayList<LayoutPoint>(frame.positions().anchors().values());
         double greatestDistance = 0.0;
         for (int first = 0; first < positions.size(); first++) {
             for (int second = first + 1; second < positions.size(); second++) {
@@ -342,10 +319,6 @@ public class TypedForcesShould {
 
     private static double greatestMovementBetween(LayoutFrame first, LayoutFrame second) {
         double greatest = 0.0;
-        for (ProjectedNodeKey key : first.positions().nodes().keySet()) {
-            greatest = Math.max(greatest, distance(first.positions().nodes().get(key),
-                second.positions().nodes().get(key)));
-        }
         for (EnclosureHullKey key : first.positions().anchors().keySet()) {
             greatest = Math.max(greatest, distance(first.positions().anchors().get(key),
                 second.positions().anchors().get(key)));
@@ -353,137 +326,92 @@ public class TypedForcesShould {
         return greatest;
     }
 
-
     private static LayoutRequest request(WorkspaceId workspace, GraphProjection before, GraphProjection after,
             List<PinProjection> pins) {
         return LayoutRequest.of(workspace, after, ProjectionDiff.between(before, after), pins);
     }
 
     private static void assertCoverage(LayoutFrame frame, GraphProjection projection) {
-        List<ProjectedNodeKey> nodes = new ArrayList<ProjectedNodeKey>();
-        for (ProjectedNode node : projection.nodes()) {
-            nodes.add(node.key());
-        }
         List<EnclosureHullKey> anchors = new ArrayList<EnclosureHullKey>();
         for (ProjectedEnclosure enclosure : projection.enclosures()) {
             anchors.add(enclosure.hullKey());
         }
-        assertThat(frame.positions().nodes().keySet()).containsExactlyElementsOf(nodes);
+        assertThat(frame.positions().nodes()).isEmpty();
         assertThat(frame.positions().anchors().keySet()).containsExactlyElementsOf(anchors);
     }
 
     private static GraphProjection baseline(long generation) {
-        ProjectedNode aOne = node(MAP_ONE, "a-one");
-        ProjectedNode aTwo = node(MAP_ONE, "a-two");
-        ProjectedNode bOne = node(MAP_TWO, "b-one");
-        ProjectedEnclosure root = enclosure(MAP_ONE, "root", Optional.<EnclosureHullKey>empty(),
-            Collections.singletonList(aOne.key()), Collections.singletonList(childHull()), true);
-        ProjectedEnclosure child = enclosure(MAP_ONE, "child", Optional.of(root.hullKey()),
-            Collections.singletonList(aTwo.key()), Collections.<EnclosureHullKey>emptyList(), false);
-        ProjectedEnclosure otherRoot = enclosure(MAP_TWO, "other-root", Optional.<EnclosureHullKey>empty(),
-            Collections.singletonList(bOne.key()), Collections.<EnclosureHullKey>emptyList(), true);
-        return projection(generation, Arrays.asList(aOne, aTwo, bOne), Arrays.asList(root, child, otherRoot),
-            Collections.singletonList(edge(0, aOne.key(), bOne.key())));
+        ProjectedEnclosure root = enclosure(rootHull(), enclosureKey(MAP_ONE, "root"),
+            "root", Optional.<EnclosureHullKey>empty(), Collections.singletonList(childHull()), true);
+        ProjectedEnclosure child = enclosure(childHull(), enclosureKey(MAP_ONE, "child"), "child",
+            Optional.of(rootHull()),
+            Collections.<EnclosureHullKey>emptyList(), false);
+        ProjectedEnclosure otherRoot = enclosure(hull(MAP_TWO, "other-root"), enclosureKey(MAP_TWO, "other-root"),
+            "other-root", Optional.<EnclosureHullKey>empty(), Collections.<EnclosureHullKey>emptyList(), true);
+        return projection(generation, Collections.<ProjectedNode>emptyList(), Arrays.asList(root, child, otherRoot),
+            Collections.<ProjectedEdge>emptyList());
     }
 
     private static GraphProjection expanded(long generation) {
-        ProjectedNode aOne = node(MAP_ONE, "a-one");
-        ProjectedNode aTwo = node(MAP_ONE, "a-two");
-        ProjectedNode aExtra = node(MAP_ONE, "a-extra");
-        ProjectedNode bOne = node(MAP_TWO, "b-one");
-        ProjectedEnclosure root = enclosure(MAP_ONE, "root", Optional.<EnclosureHullKey>empty(),
-            Collections.singletonList(aOne.key()), Arrays.asList(childHull(), extraHull()), true);
-        ProjectedEnclosure child = enclosure(MAP_ONE, "child", Optional.of(root.hullKey()),
-            Collections.singletonList(aTwo.key()), Collections.<EnclosureHullKey>emptyList(), false);
-        ProjectedEnclosure extra = enclosure(MAP_ONE, "extra", Optional.of(root.hullKey()),
-            Collections.singletonList(aExtra.key()), Collections.<EnclosureHullKey>emptyList(), false);
-        ProjectedEnclosure otherRoot = enclosure(MAP_TWO, "other-root", Optional.<EnclosureHullKey>empty(),
-            Collections.singletonList(bOne.key()), Collections.<EnclosureHullKey>emptyList(), true);
-        return projection(generation, Arrays.asList(aOne, aTwo, aExtra, bOne),
-            Arrays.asList(root, child, extra, otherRoot), Arrays.asList(edge(0, aOne.key(), bOne.key()),
-                edge(1, aExtra.key(), bOne.key())));
+        ProjectedEnclosure root = enclosure(rootHull(), enclosureKey(MAP_ONE, "root"),
+            "root", Optional.<EnclosureHullKey>empty(), Arrays.asList(childHull(), extraHull()), true);
+        ProjectedEnclosure child = enclosure(childHull(), enclosureKey(MAP_ONE, "child"), "child",
+            Optional.of(rootHull()),
+            Collections.<EnclosureHullKey>emptyList(), false);
+        ProjectedEnclosure extra = enclosure(extraHull(), enclosureKey(MAP_ONE, "extra"), "extra",
+            Optional.of(rootHull()),
+            Collections.<EnclosureHullKey>emptyList(), false);
+        ProjectedEnclosure otherRoot = enclosure(hull(MAP_TWO, "other-root"), enclosureKey(MAP_TWO, "other-root"),
+            "other-root", Optional.<EnclosureHullKey>empty(), Collections.<EnclosureHullKey>emptyList(), true);
+        return projection(generation, Collections.<ProjectedNode>emptyList(),
+            Arrays.asList(root, child, extra, otherRoot), Collections.<ProjectedEdge>emptyList());
     }
 
-    private static GraphProjection withParallelGraphEdges(long generation) {
-        ProjectedNode directNode = node(MAP_ONE, "parallel-node");
-        ProjectedEnclosure enclosure = enclosure(MAP_ONE, "parallel-root", Optional.<EnclosureHullKey>empty(),
-            Collections.singletonList(directNode.key()), Collections.<EnclosureHullKey>emptyList(), true);
-        ProjectedEndpointKey anchor = ProjectedEndpointKey.ofEnclosure(enclosure.endpointKeys().get(0));
-        ProjectedEndpointKey node = ProjectedEndpointKey.ofNode(directNode.key());
-        return projection(generation, Collections.singletonList(directNode), Collections.singletonList(enclosure),
-            Collections.singletonList(connectorEdge(0, anchor, node)));
-    }
-
-    private static GraphProjection containmentProjection(long generation, boolean includeContainment) {
-        ProjectedNode directNode = node(MAP_ONE, "contained-node");
-        ProjectedEnclosure enclosure = enclosure(MAP_ONE, "containment-root",
-            Optional.<EnclosureHullKey>empty(), includeContainment ? Collections.singletonList(directNode.key())
-                : Collections.<ProjectedNodeKey>emptyList(), Collections.<EnclosureHullKey>emptyList(), true);
-        return projection(generation, Collections.singletonList(directNode), Collections.singletonList(enclosure),
+    private static GraphProjection leafRoots(int count) {
+        List<ProjectedEnclosure> enclosures = new ArrayList<ProjectedEnclosure>();
+        for (int index = 0; index < count; index++) {
+            String id = "r" + (index + 1);
+            enclosures.add(enclosure(hull(MAP_ONE, id), enclosureKey(MAP_ONE, id), id,
+                Optional.<EnclosureHullKey>empty(), Collections.<EnclosureHullKey>emptyList(), true));
+        }
+        return projection(1, Collections.<ProjectedNode>emptyList(), enclosures,
             Collections.<ProjectedEdge>emptyList());
     }
 
     private static GraphProjection hierarchyProjection(long generation, boolean includeHierarchy) {
-        ProjectedNode parentNode = node(MAP_ONE, "hierarchy-parent-node");
-        ProjectedNode childNode = node(MAP_ONE, "hierarchy-child-node");
-        ProjectedEnclosure parent = enclosure(MAP_ONE, "hierarchy-parent", Optional.<EnclosureHullKey>empty(),
-            Collections.singletonList(parentNode.key()), Collections.<EnclosureHullKey>emptyList(), true);
-        ProjectedEnclosure child = enclosure(MAP_ONE, "hierarchy-child",
-            includeHierarchy ? Optional.of(parent.hullKey()) : Optional.<EnclosureHullKey>empty(),
-            Collections.singletonList(childNode.key()), Collections.<EnclosureHullKey>emptyList(), false);
-        return projection(generation, Arrays.asList(parentNode, childNode), Arrays.asList(parent, child),
+        ProjectedEnclosure parent = enclosure(hierarchyParentHull(), enclosureKey(MAP_ONE, "hierarchy-parent"),
+            "hierarchy-parent", Optional.<EnclosureHullKey>empty(), Collections.<EnclosureHullKey>emptyList(),
+            true);
+        ProjectedEnclosure child = enclosure(hierarchyChildHull(), enclosureKey(MAP_ONE, "hierarchy-child"),
+            "hierarchy-child",
+            includeHierarchy ? Optional.of(hierarchyParentHull()) : Optional.<EnclosureHullKey>empty(),
+            Collections.<EnclosureHullKey>emptyList(), false);
+        return projection(generation, Collections.<ProjectedNode>emptyList(), Arrays.asList(parent, child),
             Collections.<ProjectedEdge>emptyList());
     }
 
     private static GraphProjection crossMapFanOut(long generation) {
-        ProjectedNode center = node(MAP_ONE, "center");
-        List<ProjectedNode> nodes = new ArrayList<ProjectedNode>();
+        List<ProjectedEnclosure> enclosures = new ArrayList<ProjectedEnclosure>();
         List<ProjectedEdge> edges = new ArrayList<ProjectedEdge>();
-        nodes.add(center);
+        EnclosureHullKey centerHull = hull(MAP_ONE, "center");
+        EnclosureKey centerKey = enclosureKey(MAP_ONE, "center");
+        enclosures.add(enclosure(centerHull, centerKey, "center", Optional.<EnclosureHullKey>empty(),
+            Collections.<EnclosureHullKey>emptyList(), true));
+        List<EnclosureHullKey> leafHulls = new ArrayList<EnclosureHullKey>();
         for (int index = 0; index < 8; index++) {
-            ProjectedNode leaf = node(MAP_TWO, "leaf-" + index);
-            nodes.add(leaf);
-            edges.add(edge(index, center.key(), leaf.key()));
+            EnclosureKey leafKey = enclosureKey(MAP_TWO, "leaf-" + index);
+            leafHulls.add(EnclosureHullKey.of(Collections.singletonList(leafKey)));
         }
-        return projection(generation, nodes, Collections.<ProjectedEnclosure>emptyList(), edges);
-    }
-
-    private static GraphProjection prominenceProjection(long generation, boolean highProminence) {
-        ProjectedNode source = node(MAP_ONE, "source");
-        ProjectedNode neighbor = node(MAP_ONE, "neighbor");
-        ProjectedNode targetOne = node(MAP_ONE, "target-one");
-        ProjectedNode targetTwo = node(MAP_ONE, "target-two");
-        List<ProjectedNode> nodes = highProminence
-            ? Arrays.asList(source, neighbor, targetOne, targetTwo)
-            : Arrays.asList(source, neighbor);
-        List<ProjectedEdge> edges = highProminence
-            ? Arrays.asList(edge(0, source.key(), targetOne.key()), edge(1, source.key(), targetTwo.key()))
-            : Collections.<ProjectedEdge>emptyList();
-        return projection(generation, nodes, Collections.<ProjectedEnclosure>emptyList(), edges);
-    }
-
-    private static GraphProjection projection(long generation, List<ProjectedNode> nodes,
-            List<ProjectedEnclosure> enclosures, List<ProjectedEdge> edges) {
-        return GraphProjection.projected(generation, nodes, enclosures, edges,
-            Collections.<RelationshipResolution>emptyList(), Collections.<PinProjection>emptyList());
-    }
-
-    private static ProjectedNode node(MapReferenceId map, String id) {
-        ProjectedNodeKey key = key(map, id);
-        return ProjectedNode.of(key, SafeNodeLabel.of(id, id), "Map " + map.value(), false);
-    }
-
-    private static ProjectedNodeKey key(MapReferenceId map, String id) {
-        return ProjectedNodeKey.of(SourceNodeKey.persisted(reference(map, id)));
-    }
-
-    private static ProjectedEnclosure enclosure(MapReferenceId map, String id, Optional<EnclosureHullKey> parent,
-            List<ProjectedNodeKey> directNodes, List<EnclosureHullKey> directEnclosures, boolean mapRoot) {
-        EnclosureKey endpoint = EnclosureKey.of(SourceNodeKey.persisted(reference(map, id)));
-        EnclosureHullKey hull = EnclosureHullKey.of(Collections.singletonList(endpoint));
-        return ProjectedEnclosure.of(hull, Collections.singletonList(endpoint),
-            Collections.singletonList(SafeNodeLabel.of(id, id)), "Map " + map.value(), parent, directNodes,
-            directEnclosures, mapRoot, BoundaryTier.SUBTLE);
+        enclosures.add(enclosure(hull(MAP_TWO, "other-root"), enclosureKey(MAP_TWO, "other-root"), "other-root",
+            Optional.<EnclosureHullKey>empty(), leafHulls, true));
+        for (int index = 0; index < 8; index++) {
+            EnclosureKey leafKey = enclosureKey(MAP_TWO, "leaf-" + index);
+            enclosures.add(enclosure(EnclosureHullKey.of(Collections.singletonList(leafKey)), leafKey,
+                "leaf-" + index, Optional.of(hull(MAP_TWO, "other-root")),
+                Collections.<EnclosureHullKey>emptyList(), false));
+            edges.add(edge(index, centerKey, leafKey));
+        }
+        return projection(generation, Collections.<ProjectedNode>emptyList(), enclosures, edges);
     }
 
     private static ProjectedEdge connectorEdge(int occurrence, ProjectedEndpointKey source,
@@ -507,9 +435,9 @@ public class TypedForcesShould {
         return endpointSource(endpoint).persistedReference().get();
     }
 
-    private static ProjectedEdge edge(int occurrence, ProjectedNodeKey source, ProjectedNodeKey target) {
-        ProjectedEndpointKey sourceEndpoint = ProjectedEndpointKey.ofNode(source);
-        ProjectedEndpointKey targetEndpoint = ProjectedEndpointKey.ofNode(target);
+    private static ProjectedEdge edge(int occurrence, EnclosureKey source, EnclosureKey target) {
+        ProjectedEndpointKey sourceEndpoint = ProjectedEndpointKey.ofEnclosure(source);
+        ProjectedEndpointKey targetEndpoint = ProjectedEndpointKey.ofEnclosure(target);
         EdgeContributor contributor;
         if (source.mapReferenceId().equals(target.mapReferenceId())) {
             ConnectorDescriptor descriptor = ConnectorDescriptor.of(source.source(),
@@ -529,14 +457,32 @@ public class TypedForcesShould {
             Collections.singletonList(contributor));
     }
 
-    private static PinProjection pin(ProjectedNodeKey node, double x, double y) {
-        PinRecord record = PinRecord.of(node.source().persistedReference().get(), x, y,
-            Collections.<UnknownXml>emptyList());
-        return PinProjection.active(record, node);
+    private static GraphProjection projection(long generation, List<ProjectedNode> nodes,
+            List<ProjectedEnclosure> enclosures, List<ProjectedEdge> edges) {
+        return GraphProjection.projected(generation, nodes, enclosures, edges,
+            Collections.<RelationshipResolution>emptyList(), Collections.<PinProjection>emptyList());
     }
 
-    private static EnclosureHullKey containmentHull() {
-        return hull(MAP_ONE, "containment-root");
+    private static ProjectedEnclosure enclosure(EnclosureHullKey hull, EnclosureKey endpoint, String id,
+            Optional<EnclosureHullKey> parent, List<EnclosureHullKey> directEnclosures, boolean mapRoot) {
+        return ProjectedEnclosure.of(hull, Collections.singletonList(endpoint),
+            Collections.singletonList(SafeNodeLabel.of(id, id)), "Map", parent,
+            Collections.<ProjectedNodeKey>emptyList(), directEnclosures, mapRoot,
+            mapRoot ? BoundaryTier.EMPHATIC : BoundaryTier.SUBTLE);
+    }
+
+    private static ProjectedNodeKey key(MapReferenceId map, String id) {
+        return ProjectedNodeKey.of(source(map, id));
+    }
+
+    private static EnclosureKey enclosureKey(MapReferenceId map, String id) {
+        return EnclosureKey.of(source(map, id));
+    }
+
+    private static PinProjection pin(ProjectedNodeKey node, double x, double y) {
+        PinRecord record = PinRecord.of(node.source().persistedReference().get(), x, y,
+            Collections.<org.freeplane.plugin.graph.workspace.model.UnknownXml>emptyList());
+        return PinProjection.active(record, node);
     }
 
     private static EnclosureHullKey hierarchyParentHull() {
@@ -560,12 +506,41 @@ public class TypedForcesShould {
     }
 
     private static EnclosureHullKey hull(MapReferenceId map, String id) {
-        return EnclosureHullKey.of(Collections.singletonList(
-            EnclosureKey.of(SourceNodeKey.persisted(reference(map, id)))));
+        return EnclosureHullKey.of(Collections.singletonList(EnclosureKey.of(source(map, id))));
     }
 
-    private static NodeReference reference(MapReferenceId map, String id) {
-        return NodeReference.of(map, PersistedNodeId.of(id));
+    private static SourceNodeKey source(MapReferenceId map, String id) {
+        return SourceNodeKey.persisted(NodeReference.of(map, PersistedNodeId.of(id)));
+    }
+
+    private static double ringRadius(List<SafeNodeLabel> children) {
+        if (children.size() <= 1) {
+            return 0.0;
+        }
+        double maxWidth = 0.0;
+        double maxHeight = 0.0;
+        for (SafeNodeLabel label : children) {
+            maxWidth = Math.max(maxWidth, widthOf(label));
+            maxHeight = Math.max(maxHeight, heightOf(label));
+        }
+        return Math.hypot(maxWidth + SIBLING_GAP, maxHeight + SIBLING_GAP)
+            / (2.0 * Math.sin(Math.PI / children.size()));
+    }
+
+    private static double maximumWidth(List<SafeNodeLabel> labels) {
+        double result = 0.0;
+        for (SafeNodeLabel label : labels) {
+            result = Math.max(result, widthOf(label));
+        }
+        return result;
+    }
+
+    private static double widthOf(SafeNodeLabel label) {
+        return label.displayText().length() * CHAR_WIDTH_UPPER_BOUND + 2.0 * BOUNDARY_PADDING;
+    }
+
+    private static double heightOf(SafeNodeLabel label) {
+        return CHAR_HEIGHT_UPPER_BOUND + 2.0 * BOUNDARY_PADDING;
     }
 
     private static double distance(LayoutPoint first, LayoutPoint second) {

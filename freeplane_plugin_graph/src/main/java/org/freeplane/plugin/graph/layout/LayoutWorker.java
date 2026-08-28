@@ -1,5 +1,7 @@
 package org.freeplane.plugin.graph.layout;
 
+import java.awt.Font;
+import java.awt.font.FontRenderContext;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -16,6 +18,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
+import org.freeplane.plugin.graph.geometry.AwtGeometryTextMetrics;
+import org.freeplane.plugin.graph.geometry.GeometryTextMetrics;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.GraphGeometryEngine;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
@@ -278,7 +282,8 @@ public final class LayoutWorker implements AutoCloseable {
             return failedFrame(raw.stepIndex());
         }
         validateCoverage(request.projection(), raw.positions());
-        final GraphGeometry geometry = geometryEngine.computeHulls(request.projection(), raw.positions());
+        final GraphGeometry geometry =
+            geometryEngine.computeHulls(request.projection(), raw.positions(), defaultMetrics());
         final MapTierCorrection.CorrectionResult correction = mapCorrection.apply(request.projection(),
             raw.positions(), geometry, request.pins());
         final LayoutPositions corrected = correction.positions();
@@ -305,6 +310,11 @@ public final class LayoutWorker implements AutoCloseable {
         if (!nodeKeys.equals(positions.nodes().keySet()) || !anchorKeys.equals(positions.anchors().keySet())) {
             throw new IllegalArgumentException("Layout frame positions must cover the current projection");
         }
+    }
+
+    private static GeometryTextMetrics defaultMetrics() {
+        return new AwtGeometryTextMetrics(new Font("Dialog", Font.PLAIN, 12),
+            new FontRenderContext(null, true, true));
     }
 
     private LayoutEngine newEngine() {

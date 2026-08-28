@@ -14,7 +14,6 @@ import org.freeplane.plugin.graph.control.CanvasState;
 import org.freeplane.plugin.graph.projection.BoundaryTier;
 import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
-import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.input.SafeNodeLabel;
 
 public final class GraphSearchModel {
@@ -49,11 +48,6 @@ public final class GraphSearchModel {
     private static Map<ProjectedEndpointKey, SafeText> index(final CanvasState state) {
         final Map<ProjectedEndpointKey, SafeText> index =
             new LinkedHashMap<ProjectedEndpointKey, SafeText>();
-        for (final ProjectedNode node : state.projection().nodes()) {
-            final ProjectedEndpointKey endpoint = ProjectedEndpointKey.ofNode(node.key());
-            final SafeText value = new SafeText(node.label().fullText(), node.mapName());
-            index.put(endpoint, merge(index.get(endpoint), value));
-        }
         for (final ProjectedEnclosure enclosure : state.projection().enclosures()) {
             if (enclosure.boundaryTier() == BoundaryTier.SUPPRESSED) {
                 continue;

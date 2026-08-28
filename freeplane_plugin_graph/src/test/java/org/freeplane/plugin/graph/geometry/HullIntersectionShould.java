@@ -11,6 +11,20 @@ import org.junit.Test;
 
 public class HullIntersectionShould {
     @Test
+    public void siblingOverlapPredicateRejectsNestedContainment() {
+        HullGeometry outer = octagon(0.0, 0.0, 40.0);
+        HullGeometry inner = octagon(0.0, 0.0, 15.0);
+
+        assertThat(HullIntersection.siblingOverlap(outer, inner)).isFalse();
+        assertThat(HullIntersection.siblingOverlap(inner, outer)).isFalse();
+
+        HullGeometry left = octagon(-20.0, 0.0, 40.0);
+        HullGeometry right = octagon(20.0, 0.0, 40.0);
+        assertThat(HullIntersection.siblingOverlap(left, right)).isTrue();
+        assertThat(HullIntersection.siblingOverlap(right, left)).isTrue();
+    }
+
+    @Test
     public void returnsZeroForDisjointOrMerelyTouchingHulls() {
         HullGeometry first = square(0, 0);
         assertPositiveZero(HullIntersection.minimumSeparatingTranslation(first, square(12, 0)));
@@ -115,6 +129,16 @@ public class HullIntersectionShould {
         assertThat(offsetTranslation.y()).isCloseTo(4.9999999001856e299, within(1.0e285));
         assertPositiveZero(HullIntersection.minimumSeparatingTranslation(first,
             translate(second, offsetTranslation)));
+    }
+
+    private static HullGeometry octagon(final double centerX, final double centerY, final double radius) {
+        List<LayoutPoint> vertices = new ArrayList<LayoutPoint>();
+        for (int index = 0; index < 8; index++) {
+            double angle = Math.PI * index / 4.0;
+            vertices.add(LayoutPoint.of(centerX + radius * Math.cos(angle),
+                centerY + radius * Math.sin(angle)));
+        }
+        return HullGeometry.of(vertices, LayoutPoint.of(centerX, centerY));
     }
 
     private static HullGeometry square(final double x, final double y) {

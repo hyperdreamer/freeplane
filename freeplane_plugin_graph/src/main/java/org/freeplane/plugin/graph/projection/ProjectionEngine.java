@@ -52,31 +52,27 @@ public final class ProjectionEngine {
         final ProjectionInput value = Objects.requireNonNull(input, "input");
         final List<MapSnapshot> selectedMaps = selectedAvailableMaps(value);
         final int activeRegistrationCount = activeRegistrationCount(value.workspace());
-        final List<ProjectedNode> projectedNodes = new ArrayList<ProjectedNode>();
         final List<ProjectedEnclosure> projectedEnclosures = new ArrayList<ProjectedEnclosure>();
 
         for (final MapSnapshot map : selectedMaps) {
             validateSafeIdentityTraversal(map);
-            final StructuralElement root = projectNode(map.root(), map.mapName());
-            if (root == null) {
+            final NodeSnapshot root = map.root();
+            if (root.excluded()) {
                 continue;
             }
-            collectNodes(root, projectedNodes);
-            if (root instanceof ExactEnclosure) {
-                collectEnclosures(compress((ExactEnclosure) root, Optional.<EnclosureHullKey>empty(),
-                    activeRegistrationCount, 0), projectedEnclosures);
-            }
+            final ExactEnclosure rootEnclosure = projectRoot(root, map.mapName());
+            collectEnclosures(compress(rootEnclosure, Optional.<EnclosureHullKey>empty(),
+                activeRegistrationCount, 0), projectedEnclosures);
         }
 
-        final Map<SourceNodeKey, ProjectedEndpointKey> exactEndpoints =
-            indexExactEndpoints(projectedNodes, projectedEnclosures);
+        final Map<SourceNodeKey, ProjectedEndpointKey> exactEndpoints = indexExactEndpoints(projectedEnclosures);
         final Map<MapReferenceId, EndpointTraversal> endpointTraversals =
             indexEndpointTraversals(selectedMaps, exactEndpoints);
         final List<RelationshipResolution> resolutions = resolveRelationships(value, endpointTraversals);
-        final List<PinProjection> pins = projectPins(value.workspace(), projectedNodes);
+        final List<PinProjection> pins = projectPins(value.workspace(), projectedEnclosures);
         final List<ProjectedEdge> edges = projectEdges(selectedMaps, endpointTraversals, resolutions);
-        return GraphProjection.projected(value.generation(), projectedNodes, projectedEnclosures, edges, resolutions,
-            pins);
+        return GraphProjection.projected(value.generation(), Collections.<ProjectedNode>emptyList(),
+            projectedEnclosures, edges, resolutions, pins);
     }
 
     private static List<ProjectedEdge> projectEdges(final List<MapSnapshot> maps,
@@ -196,36 +192,50 @@ public final class ProjectionEngine {
         }
     }
 
-    private static StructuralElement projectNode(final NodeSnapshot snapshot, final String mapName) {
-        if (snapshot.excluded()) {
-            return null;
+    private static ExactEnclosure projectRoot(final NodeSnapshot root, final String mapName) {
+        final ExactEnclosure enclosure = new ExactEnclosure(EnclosureKey.of(root.key()), root.label(), mapName,
+            visibleChildCount(root));
+        final List<StructuralElement> groups = new ArrayList<StructuralElement>();
+        for (final NodeSnapshot child : root.children()) {
+            projectGroups(child, mapName, groups);
         }
-        if (snapshot.graphGroup()) {
-            return new ExactNode(ProjectedNode.of(ProjectedNodeKey.of(snapshot.key()), snapshot.label(), mapName,
-                true));
-        }
-        if (snapshot.structuralLeaf()) {
-            return new ExactNode(ProjectedNode.of(ProjectedNodeKey.of(snapshot.key()), snapshot.label(), mapName,
-                false));
-        }
-        final ExactEnclosure enclosure = new ExactEnclosure(EnclosureKey.of(snapshot.key()), snapshot.label(), mapName);
-        for (final NodeSnapshot child : snapshot.children()) {
-            final StructuralElement childElement = projectNode(child, mapName);
-            if (childElement != null) {
-                enclosure.children.add(childElement);
-            }
-        }
+        enclosure.children.addAll(groups);
         return enclosure;
     }
 
-    private static void collectNodes(final StructuralElement element, final List<ProjectedNode> nodes) {
-        if (element instanceof ExactNode) {
-            nodes.add(((ExactNode) element).node);
+    private static void projectGroups(final NodeSnapshot snapshot, final String mapName,
+            final List<StructuralElement> groups) {
+        if (snapshot.excluded()) {
             return;
         }
-        for (final StructuralElement child : ((ExactEnclosure) element).children) {
-            collectNodes(child, nodes);
+        if (snapshot.graphGroup()) {
+            groups.add(projectGroup(snapshot, mapName));
+            return;
         }
+        for (final NodeSnapshot child : snapshot.children()) {
+            projectGroups(child, mapName, groups);
+        }
+    }
+
+    private static ExactEnclosure projectGroup(final NodeSnapshot snapshot, final String mapName) {
+        final ExactEnclosure enclosure = new ExactEnclosure(EnclosureKey.of(snapshot.key()), snapshot.label(),
+            mapName, visibleChildCount(snapshot));
+        final List<StructuralElement> nested = new ArrayList<StructuralElement>();
+        for (final NodeSnapshot child : snapshot.children()) {
+            projectGroups(child, mapName, nested);
+        }
+        enclosure.children.addAll(nested);
+        return enclosure;
+    }
+
+    private static int visibleChildCount(final NodeSnapshot snapshot) {
+        int count = 0;
+        for (final NodeSnapshot child : snapshot.children()) {
+            if (!child.excluded()) {
+                count++;
+            }
+        }
+        return count;
     }
 
     private static HullTree compress(final ExactEnclosure start, final Optional<EnclosureHullKey> parentHull,
@@ -233,13 +243,13 @@ public final class ProjectionEngine {
         final List<ExactEnclosure> chain = new ArrayList<ExactEnclosure>();
         chain.add(start);
         ExactEnclosure deepest = start;
-        while (deepest.children.size() == 1 && deepest.children.get(0) instanceof ExactEnclosure) {
-            final ExactEnclosure child = (ExactEnclosure) deepest.children.get(0);
-            if (child.children.size() != 1) {
-                break;
+        final boolean mapRoot = !parentHull.isPresent();
+        if (!mapRoot) {
+            while (deepest.children.size() == 1 && deepest.sourceChildCount == 1
+                    && deepest.children.get(0) instanceof ExactEnclosure) {
+                deepest = (ExactEnclosure) deepest.children.get(0);
+                chain.add(deepest);
             }
-            chain.add(child);
-            deepest = child;
         }
 
         final List<EnclosureKey> endpointKeys = new ArrayList<EnclosureKey>(chain.size());
@@ -249,18 +259,12 @@ public final class ProjectionEngine {
             labels.add(enclosure.label);
         }
         final EnclosureHullKey hullKey = EnclosureHullKey.of(endpointKeys);
-        final boolean mapRoot = !parentHull.isPresent();
         final BoundaryTier boundaryTier = boundaryTier(boundaryDepth, activeRegistrationCount);
         final List<ProjectedNodeKey> directNodes = new ArrayList<ProjectedNodeKey>();
         final List<HullTree> childHulls = new ArrayList<HullTree>();
         for (final StructuralElement child : deepest.children) {
-            if (child instanceof ExactNode) {
-                directNodes.add(((ExactNode) child).node.key());
-            }
-            else {
-                childHulls.add(compress((ExactEnclosure) child, Optional.of(hullKey), activeRegistrationCount,
-                    boundaryDepth + 1));
-            }
+            childHulls.add(compress((ExactEnclosure) child, Optional.of(hullKey), activeRegistrationCount,
+                boundaryDepth + 1));
         }
         final List<EnclosureHullKey> directEnclosures = new ArrayList<EnclosureHullKey>(childHulls.size());
         for (final HullTree childHull : childHulls) {
@@ -299,12 +303,9 @@ public final class ProjectionEngine {
     }
 
     private static Map<SourceNodeKey, ProjectedEndpointKey> indexExactEndpoints(
-            final List<ProjectedNode> nodes, final List<ProjectedEnclosure> enclosures) {
+            final List<ProjectedEnclosure> enclosures) {
         final Map<SourceNodeKey, ProjectedEndpointKey> endpoints =
             new HashMap<SourceNodeKey, ProjectedEndpointKey>();
-        for (final ProjectedNode node : nodes) {
-            addExactEndpoint(endpoints, node.source(), ProjectedEndpointKey.ofNode(node.key()));
-        }
         for (final ProjectedEnclosure enclosure : enclosures) {
             for (final EnclosureKey endpoint : enclosure.endpointKeys()) {
                 addExactEndpoint(endpoints, endpoint.source(), ProjectedEndpointKey.ofEnclosure(endpoint));
@@ -327,7 +328,7 @@ public final class ProjectionEngine {
             new HashMap<MapReferenceId, EndpointTraversal>();
         for (final MapSnapshot map : maps) {
             final EndpointTraversal traversal = new EndpointTraversal(map);
-            traverseEndpoints(map.root(), exactEndpoints, traversal, null);
+            traverseEndpoints(map.root(), exactEndpoints, traversal, null, true);
             if (result.put(map.mapReferenceId(), traversal) != null) {
                 throw new IllegalArgumentException("Available map snapshots must be unique");
             }
@@ -337,41 +338,38 @@ public final class ProjectionEngine {
 
     private static void traverseEndpoints(final NodeSnapshot node,
             final Map<SourceNodeKey, ProjectedEndpointKey> exactEndpoints, final EndpointTraversal traversal,
-            final ProjectedEndpointKey outerGroup) {
+            final ProjectedEndpointKey outerGroup, final boolean rootNode) {
         if (node.excluded()) {
             recordExcludedSubtree(node, traversal);
+            return;
+        }
+        if (node.graphGroup()) {
+            final ProjectedEndpointKey exactEndpoint = exactEndpoints.get(node.key());
+            if (exactEndpoint == null || !exactEndpoint.isEnclosure()) {
+                throw new IllegalArgumentException("Active graph groups must have an exact projected enclosure");
+            }
+            traversal.recordEndpoint(node.key(), exactEndpoint);
+            for (final NodeSnapshot child : node.children()) {
+                traverseEndpoints(child, exactEndpoints, traversal, exactEndpoint, false);
+            }
             return;
         }
         if (outerGroup != null) {
-            recordGroupSubtree(node, outerGroup, traversal);
-            return;
-        }
-        final ProjectedEndpointKey exactEndpoint = exactEndpoints.get(node.key());
-        if (node.graphGroup()) {
-            if (exactEndpoint == null || !exactEndpoint.isNode()) {
-                throw new IllegalArgumentException("Active graph groups must have an exact projected node");
+            traversal.recordEndpoint(node.key(), outerGroup);
+            for (final NodeSnapshot child : node.children()) {
+                traverseEndpoints(child, exactEndpoints, traversal, outerGroup, false);
             }
-            recordGroupSubtree(node, exactEndpoint, traversal);
             return;
         }
-        if (exactEndpoint == null) {
-            throw new IllegalArgumentException("Visible nodes must have exact projected endpoints");
+        if (rootNode) {
+            final ProjectedEndpointKey rootEndpoint = exactEndpoints.get(node.key());
+            if (rootEndpoint == null || !rootEndpoint.isEnclosure()) {
+                throw new IllegalArgumentException("Map roots must have an exact projected enclosure");
+            }
+            traversal.recordEndpoint(node.key(), rootEndpoint);
         }
-        traversal.recordEndpoint(node.key(), exactEndpoint);
         for (final NodeSnapshot child : node.children()) {
-            traverseEndpoints(child, exactEndpoints, traversal, null);
-        }
-    }
-
-    private static void recordGroupSubtree(final NodeSnapshot node, final ProjectedEndpointKey groupEndpoint,
-            final EndpointTraversal traversal) {
-        if (node.excluded()) {
-            recordExcludedSubtree(node, traversal);
-            return;
-        }
-        traversal.recordEndpoint(node.key(), groupEndpoint);
-        for (final NodeSnapshot child : node.children()) {
-            recordGroupSubtree(child, groupEndpoint, traversal);
+            traverseEndpoints(child, exactEndpoints, traversal, null, false);
         }
     }
 
@@ -452,17 +450,20 @@ public final class ProjectionEngine {
     }
 
     private static List<PinProjection> projectPins(final WorkspaceDocument workspace,
-            final List<ProjectedNode> nodes) {
-        final Map<SourceNodeKey, ProjectedNodeKey> exactNodes = new HashMap<SourceNodeKey, ProjectedNodeKey>();
-        for (final ProjectedNode node : nodes) {
-            if (exactNodes.put(node.source(), node.key()) != null) {
-                throw new IllegalArgumentException("Projected nodes must be exact and unique");
+            final List<ProjectedEnclosure> enclosures) {
+        final Map<SourceNodeKey, EnclosureKey> exactBoundaries = new HashMap<SourceNodeKey, EnclosureKey>();
+        for (final ProjectedEnclosure enclosure : enclosures) {
+            for (final EnclosureKey endpoint : enclosure.endpointKeys()) {
+                if (exactBoundaries.put(endpoint.source(), endpoint) != null) {
+                    throw new IllegalArgumentException("Projected enclosure endpoints must be exact and unique");
+                }
             }
         }
         final List<PinProjection> pins = new ArrayList<PinProjection>();
         for (final PinRecord pin : workspace.pins()) {
-            final ProjectedNodeKey node = exactNodes.get(SourceNodeKey.persisted(pin.node()));
-            pins.add(node == null ? PinProjection.dormant(pin) : PinProjection.active(pin, node));
+            final EnclosureKey boundary = exactBoundaries.get(SourceNodeKey.persisted(pin.node()));
+            pins.add(boundary == null ? PinProjection.dormant(pin)
+                : PinProjection.active(pin, ProjectedNodeKey.of(SourceNodeKey.persisted(pin.node()))));
         }
         return pins;
     }
@@ -470,24 +471,19 @@ public final class ProjectionEngine {
     private interface StructuralElement {
     }
 
-    private static final class ExactNode implements StructuralElement {
-        private final ProjectedNode node;
-
-        private ExactNode(final ProjectedNode node) {
-            this.node = node;
-        }
-    }
-
     private static final class ExactEnclosure implements StructuralElement {
         private final EnclosureKey key;
         private final SafeNodeLabel label;
         private final String mapName;
+        private final int sourceChildCount;
         private final List<StructuralElement> children = new ArrayList<StructuralElement>();
 
-        private ExactEnclosure(final EnclosureKey key, final SafeNodeLabel label, final String mapName) {
+        private ExactEnclosure(final EnclosureKey key, final SafeNodeLabel label, final String mapName,
+                final int sourceChildCount) {
             this.key = key;
             this.label = label;
             this.mapName = mapName;
+            this.sourceChildCount = sourceChildCount;
         }
     }
 

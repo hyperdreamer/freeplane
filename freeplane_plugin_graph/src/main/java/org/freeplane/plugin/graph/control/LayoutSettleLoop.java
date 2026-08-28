@@ -541,7 +541,7 @@ public final class LayoutSettleLoop implements AutoCloseable {
         }
         try {
             final GraphGeometry geometry = labels.place(run.projection,
-                geometryEngine.computeHulls(run.projection, frame.positions()), metrics);
+                geometryEngine.computeHulls(run.projection, frame.positions(), metrics), metrics);
             final OperationalStatus status = isEmpty(run.projection)
                 ? OperationalStatus.EMPTY
                 : frame.idle().idle() ? OperationalStatus.IDLE : OperationalStatus.SETTLING;
@@ -719,7 +719,7 @@ public final class LayoutSettleLoop implements AutoCloseable {
         final LayoutFrame failed = failedFrame(run, source);
         try {
             final GraphGeometry geometry = labels.place(run.projection,
-                geometryEngine.computeHulls(run.projection, failed.positions()), metrics);
+                geometryEngine.computeHulls(run.projection, failed.positions(), metrics), metrics);
             final CanvasState state = CanvasState.of(run.batch.generation(), run.projection, failed, geometry,
                 OperationalStatus.FAILED);
             publish(run, state, true);

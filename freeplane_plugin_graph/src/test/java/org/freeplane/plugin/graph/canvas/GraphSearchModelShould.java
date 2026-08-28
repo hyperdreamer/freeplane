@@ -41,9 +41,9 @@ public class GraphSearchModelShould {
         final Fixture fixture = Fixture.create();
 
         final Set<ProjectedEndpointKey> results = GraphSearchModel.search(fixture.state, "  LONG ");
-        assertThat(results).containsExactly(fixture.nodeEndpoint);
+        assertThat(results).containsExactly(fixture.northEndpoint);
         assertThat(GraphSearchModel.search(fixture.state, "NORTH MAP"))
-            .containsExactly(fixture.nodeEndpoint);
+            .containsExactly(fixture.northEndpoint);
         assertThat(GraphSearchModel.search(fixture.state, "enclosure safe"))
             .containsExactly(fixture.enclosureEndpoint);
         assertThat(GraphSearchModel.search(fixture.state, "second enclosure"))
@@ -63,7 +63,7 @@ public class GraphSearchModelShould {
         assertThat(GraphSearchModel.search(fixture.state, fixture.sourceIdentitySentinel))
             .isEmpty();
         assertThat(GraphSearchModel.search(fixture.state, "A very long safe label"))
-            .containsExactly(fixture.nodeEndpoint);
+            .containsExactly(fixture.northEndpoint);
     }
 
     @Test
@@ -76,14 +76,14 @@ public class GraphSearchModelShould {
         assertThat(GraphSearchModel.search(fixture.state, "suppressed label")).isEmpty();
         assertThat(GraphSearchModel.tooltip(fixture.state, fixture.suppressedEndpoint)).isNull();
         assertThatThrownBy(() -> GraphSearchModel.search(fixture.state, "long")
-            .add(fixture.nodeEndpoint)).isInstanceOf(UnsupportedOperationException.class);
+            .add(fixture.northEndpoint)).isInstanceOf(UnsupportedOperationException.class);
     }
 
     @Test
     public void exposeOnlyFullSafeTooltipTextAndOwningMap() {
         final Fixture fixture = Fixture.create();
 
-        final String tooltip = GraphSearchModel.tooltip(fixture.state, fixture.nodeEndpoint);
+        final String tooltip = GraphSearchModel.tooltip(fixture.state, fixture.northEndpoint);
         assertThat(tooltip).contains("A very long safe label");
         assertThat(tooltip).contains("North Map");
         assertThat(tooltip).doesNotContain("A very...");
@@ -96,20 +96,20 @@ public class GraphSearchModelShould {
 
     private static final class Fixture {
         private final CanvasState state;
-        private final ProjectedEndpointKey nodeEndpoint;
+        private final ProjectedEndpointKey northEndpoint;
         private final ProjectedEndpointKey enclosureEndpoint;
         private final ProjectedEndpointKey secondEnclosureEndpoint;
         private final ProjectedEndpointKey suppressedEndpoint;
         private final ProjectedNodeKey otherNodeKey;
         private final String sourceIdentitySentinel;
 
-        private Fixture(CanvasState state, ProjectedEndpointKey nodeEndpoint,
+        private Fixture(CanvasState state, ProjectedEndpointKey northEndpoint,
                 ProjectedEndpointKey enclosureEndpoint,
                 ProjectedEndpointKey secondEnclosureEndpoint,
                 ProjectedEndpointKey suppressedEndpoint, ProjectedNodeKey otherNodeKey,
                 String sourceIdentitySentinel) {
             this.state = state;
-            this.nodeEndpoint = nodeEndpoint;
+            this.northEndpoint = northEndpoint;
             this.enclosureEndpoint = enclosureEndpoint;
             this.secondEnclosureEndpoint = secondEnclosureEndpoint;
             this.suppressedEndpoint = suppressedEndpoint;
@@ -122,10 +122,12 @@ public class GraphSearchModelShould {
                 UUID.fromString("00000000-0000-0000-0000-000000000001"));
             final MapReferenceId south = MapReferenceId.of(
                 UUID.fromString("00000000-0000-0000-0000-000000000002"));
-            final ProjectedNodeKey nodeKey = ProjectedNodeKey.of(
-                SourceNodeKey.transientPath(north, Arrays.asList(0)));
             final ProjectedNodeKey otherNodeKey = ProjectedNodeKey.of(
                 SourceNodeKey.transientPath(north, Arrays.asList(1)));
+            final EnclosureKey northKey = EnclosureKey.of(
+                SourceNodeKey.transientPath(north, Arrays.asList(0)));
+            final EnclosureHullKey northHullKey = EnclosureHullKey.of(
+                Collections.singletonList(northKey));
             final EnclosureKey enclosureKey = EnclosureKey.of(
                 SourceNodeKey.transientPath(south, Arrays.asList(0)));
             final EnclosureKey secondEnclosureKey = EnclosureKey.of(
@@ -137,9 +139,13 @@ public class GraphSearchModelShould {
             final EnclosureHullKey suppressedHullKey = EnclosureHullKey.of(
                 Collections.singletonList(suppressedKey));
 
-            final ProjectedNode node = ProjectedNode.of(nodeKey,
-                SafeNodeLabel.of("A very long safe label", "A very..."), "North Map", false);
-            final String sourceIdentitySentinel = node.source().toString();
+            final ProjectedEnclosure northEnclosure = ProjectedEnclosure.of(northHullKey,
+                Collections.singletonList(northKey),
+                Collections.singletonList(SafeNodeLabel.of("A very long safe label", "A very...")),
+                "North Map", Optional.<EnclosureHullKey>empty(),
+                Collections.<ProjectedNodeKey>emptyList(), Collections.<EnclosureHullKey>emptyList(), false,
+                BoundaryTier.EMPHATIC);
+            final String sourceIdentitySentinel = northEnclosure.endpointKeys().get(0).source().toString();
             final ProjectedEnclosure enclosure = ProjectedEnclosure.of(hullKey,
                 Arrays.asList(enclosureKey, secondEnclosureKey), Arrays.asList(
                     SafeNodeLabel.of("Enclosure Safe Label", "Enclosure"),
@@ -153,37 +159,32 @@ public class GraphSearchModelShould {
                 Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(),
                 Collections.<EnclosureHullKey>emptyList(), false, BoundaryTier.SUPPRESSED);
             final GraphProjection projection = GraphProjection.structure(1L,
-                Collections.singletonList(node), Arrays.asList(enclosure, suppressed));
-            final Map<ProjectedNodeKey, NodeGeometry> nodeGeometry =
-                new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
-            nodeGeometry.put(nodeKey, NodeGeometry.of(LayoutPoint.of(0.0, 0.0), 10.0));
+                Collections.<ProjectedNode>emptyList(), Arrays.asList(northEnclosure, enclosure, suppressed));
             final Map<EnclosureHullKey, org.freeplane.plugin.graph.geometry.HullGeometry> hullGeometry =
                 new LinkedHashMap<EnclosureHullKey, org.freeplane.plugin.graph.geometry.HullGeometry>();
+            hullGeometry.put(northHullKey, org.freeplane.plugin.graph.geometry.HullGeometry.of(
+                Arrays.asList(LayoutPoint.of(-30.0, -20.0), LayoutPoint.of(30.0, -20.0),
+                    LayoutPoint.of(30.0, 20.0), LayoutPoint.of(-30.0, 20.0)),
+                LayoutPoint.of(0.0, 0.0)));
             hullGeometry.put(hullKey, org.freeplane.plugin.graph.geometry.HullGeometry.of(
                 Arrays.asList(LayoutPoint.of(-20.0, -20.0), LayoutPoint.of(20.0, -20.0),
                     LayoutPoint.of(20.0, 20.0), LayoutPoint.of(-20.0, 20.0)),
                 LayoutPoint.of(0.0, 0.0)));
-            final GraphGeometry geometry = GraphGeometry.of(nodeGeometry, hullGeometry);
+            final GraphGeometry geometry = GraphGeometry.of(
+                Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(), hullGeometry);
+            final Map<EnclosureHullKey, LayoutPoint> anchors =
+                new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
+            anchors.put(northHullKey, LayoutPoint.of(0.0, 0.0));
+            anchors.put(hullKey, LayoutPoint.of(0.0, 0.0));
             final LayoutPositions positions = LayoutPositions.of(
-                new LinkedHashMap<ProjectedNodeKey, LayoutPoint>(nodeGeometryAsPoints(nodeGeometry)),
-                Collections.singletonMap(hullKey, LayoutPoint.of(0.0, 0.0)));
+                Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(), anchors);
             final LayoutFrame frame = LayoutFrame.of(1L, positions, false);
             final CanvasState state = CanvasState.of(1L, projection, frame, geometry,
                 OperationalStatus.IDLE);
-            return new Fixture(state, ProjectedEndpointKey.ofNode(nodeKey),
+            return new Fixture(state, ProjectedEndpointKey.ofEnclosure(northKey),
                 ProjectedEndpointKey.ofEnclosure(enclosureKey),
                 ProjectedEndpointKey.ofEnclosure(secondEnclosureKey),
                 ProjectedEndpointKey.ofEnclosure(suppressedKey), otherNodeKey, sourceIdentitySentinel);
-        }
-
-        private static Map<ProjectedNodeKey, LayoutPoint> nodeGeometryAsPoints(
-                Map<ProjectedNodeKey, NodeGeometry> geometries) {
-            final Map<ProjectedNodeKey, LayoutPoint> points =
-                new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
-            for (Map.Entry<ProjectedNodeKey, NodeGeometry> entry : geometries.entrySet()) {
-                points.put(entry.getKey(), entry.getValue().center());
-            }
-            return points;
         }
     }
 

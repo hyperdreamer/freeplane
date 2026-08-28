@@ -13,9 +13,47 @@ public final class HullIntersection {
     private HullIntersection() {
     }
 
-    public static LayoutPoint minimumSeparatingTranslation(final HullGeometry first, final HullGeometry second) {
+    public static boolean siblingOverlap(final HullGeometry first, final HullGeometry second) {
         Objects.requireNonNull(first, "first");
         Objects.requireNonNull(second, "second");
+        // Two convex hull polygons overlap strictly iff no separating axis exists and neither
+        // polygon is contained in the other. Containment and mere boundary contact are not
+        // sibling overlap: the interiors must share at least one point.
+        if (separatedByAnAxis(first, second)) {
+            return false;
+        }
+        return !contained(first.exactPolygon(), second) && !contained(second.exactPolygon(), first);
+    }
+
+    private static boolean separatedByAnAxis(final HullGeometry first, final HullGeometry second) {
+        final List<LayoutPoint> axes = uniqueAxes(first, second);
+        final LayoutPoint origin = first.exactPolygon().get(0);
+        final RelativeCoordinates firstRelative = RelativeCoordinates.of(first.exactPolygon(), origin);
+        final RelativeCoordinates secondRelative = RelativeCoordinates.of(second.exactPolygon(), origin);
+        final int scaleExponent = TARGET_EXPONENT
+            - Math.max(firstRelative.maxExponent(), secondRelative.maxExponent());
+        firstRelative.normalize(scaleExponent);
+        secondRelative.normalize(scaleExponent);
+        for (final LayoutPoint axis : axes) {
+            final double[] firstInterval = project(firstRelative, axis);
+            final double[] secondInterval = project(secondRelative, axis);
+            if (firstInterval[1] <= secondInterval[0] || secondInterval[1] <= firstInterval[0]) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean contained(final List<LayoutPoint> polygon, final HullGeometry hull) {
+        for (final LayoutPoint vertex : polygon) {
+            if (!hull.contains(vertex)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static List<LayoutPoint> uniqueAxes(final HullGeometry first, final HullGeometry second) {
         final List<LayoutPoint> axes = new ArrayList<LayoutPoint>();
         collectAxes(first.exactPolygon(), axes);
         collectAxes(second.exactPolygon(), axes);
@@ -42,6 +80,13 @@ public final class HullIntersection {
                 return Double.compare(right.y(), left.y());
             }
         });
+        return uniqueAxes;
+    }
+
+    public static LayoutPoint minimumSeparatingTranslation(final HullGeometry first, final HullGeometry second) {
+        Objects.requireNonNull(first, "first");
+        Objects.requireNonNull(second, "second");
+        final List<LayoutPoint> uniqueAxes = uniqueAxes(first, second);
         final LayoutPoint origin = first.exactPolygon().get(0);
         final RelativeCoordinates firstRelative = RelativeCoordinates.of(first.exactPolygon(), origin);
         final RelativeCoordinates secondRelative = RelativeCoordinates.of(second.exactPolygon(), origin);

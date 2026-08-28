@@ -3,6 +3,8 @@ package org.freeplane.plugin.graph.control;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.font.FontRenderContext;
 import java.awt.geom.Dimension2D;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -21,6 +23,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.freeplane.plugin.graph.adapter.EdtExecutor;
+import org.freeplane.plugin.graph.geometry.AwtGeometryTextMetrics;
 import org.freeplane.plugin.graph.geometry.GeometryTextMetrics;
 import org.freeplane.plugin.graph.geometry.GraphGeometryEngine;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
@@ -1311,7 +1314,9 @@ public class LayoutSettleLoopShould {
         GraphProjection projection = emptyProjection(9L);
         CanvasState state = CanvasState.of(9L, projection, frame(0L, true),
             new GraphGeometryEngine().computeHulls(projection, LayoutPositions.of(
-                Collections.emptyMap(), Collections.emptyMap())), OperationalStatus.IDLE);
+                Collections.emptyMap(), Collections.emptyMap()),
+                new AwtGeometryTextMetrics(new Font("Dialog", Font.PLAIN, 12),
+                    new FontRenderContext(null, true, true))), OperationalStatus.IDLE);
 
         assertThat(state.generation()).isEqualTo(9L);
         assertThat(state.projection()).isSameAs(projection);

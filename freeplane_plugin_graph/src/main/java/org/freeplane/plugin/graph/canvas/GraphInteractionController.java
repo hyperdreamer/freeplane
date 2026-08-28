@@ -438,8 +438,7 @@ public final class GraphInteractionController {
     private void beginSelect(final CanvasState state, final Optional<ProjectedEndpointKey> endpoint,
             final LayoutPoint world, final MouseEvent event) {
         final ProjectedEndpointKey value = endpoint.orElse(null);
-        final boolean pinCandidate = value != null && value.isNode()
-            && !isPinned(state, value.node().get());
+        final boolean pinCandidate = value != null && !isPinned(state, pinKey(value));
         drag = DragState.select(value, pinCandidate, event.getX(), event.getY());
     }
 
@@ -463,11 +462,11 @@ public final class GraphInteractionController {
         final boolean moved = current.moved
             || Math.hypot(event.getX() - current.startX, event.getY() - current.startY)
                 >= DRAG_THRESHOLD_PIXELS;
-        if (!moved || !current.endpoint.isNode()) {
+        if (!moved || current.endpoint == null) {
             return;
         }
         final LayoutPoint world = canvas.worldAt(event.getPoint());
-        emit(new GraphIntent.Pin(current.endpoint.node().get(), world.x(), world.y()));
+        emit(new GraphIntent.Pin(pinKey(current.endpoint), world.x(), world.y()));
     }
 
     private void finishConnect(final MouseEvent event) {
@@ -494,9 +493,8 @@ public final class GraphInteractionController {
         }
         final LayoutPoint world = canvas.worldAt(event.getPoint());
         final Optional<ProjectedEndpointKey> endpoint = canvas.hitIndex().endpointAt(world);
-        if (endpoint.isPresent() && endpoint.get().isNode()
-                && isPinned(state, endpoint.get().node().get())) {
-            emit(new GraphIntent.Unpin(endpoint.get().node().get()));
+        if (endpoint.isPresent() && isPinned(state, pinKey(endpoint.get()))) {
+            emit(new GraphIntent.Unpin(pinKey(endpoint.get())));
             return;
         }
         final double zoom = canvas.viewport().zoom();
@@ -573,6 +571,11 @@ public final class GraphInteractionController {
             }
         }
         return false;
+    }
+
+    private static ProjectedNodeKey pinKey(final ProjectedEndpointKey endpoint) {
+        return endpoint.isNode() ? endpoint.node().get()
+            : ProjectedNodeKey.of(endpoint.enclosure().get().source());
     }
 
     private void selectEndpoint(final ProjectedEndpointKey endpoint) {
