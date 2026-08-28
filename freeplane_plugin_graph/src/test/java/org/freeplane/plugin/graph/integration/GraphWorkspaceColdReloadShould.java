@@ -396,6 +396,9 @@ public class GraphWorkspaceColdReloadShould {
             GraphWorkspaceIntegrationSupport.awaitCondition(
                 () -> liveHandle.currentProjection().enclosures().size() == 1, 5000L,
                 "unmarking through a symlinked editor path left the boundary in the projection");
+            GraphWorkspaceIntegrationSupport.awaitCondition(
+                () -> views.latestBinding().currentCanvasState().projection().enclosures().size() == 1, 5000L,
+                "unmarking through a symlinked editor path left the boundary in the canvas state");
         }
         finally {
             if (handle != null) {
