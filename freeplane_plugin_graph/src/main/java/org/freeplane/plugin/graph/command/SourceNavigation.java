@@ -63,6 +63,7 @@ public final class SourceNavigation {
                     return rejected(SOURCE_MAP_UNAVAILABLE);
                 }
                 mapController.select(resolved.get());
+                mapController.centerNode(resolved.get());
                 return GraphCommandResult.from(WorkspaceTransition.applied(results.currentDocument(), SOURCE_OPENED))
                     .withEditorViewActivated(true);
             }

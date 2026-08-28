@@ -645,13 +645,17 @@ final class GraphWorkspaceWindowModel {
         }
     }
     private GraphCommandResult executeCommand(final GraphCommand command) {
+        return executeCommand(command, false);
+    }
+
+    private GraphCommandResult executeCommand(final GraphCommand command, final boolean silent) {
         final GraphCommandResult result = handle.execute(Objects.requireNonNull(command, "command"));
         refreshPresentation();
         applyInitialViewport(currentState);
         if (result != null && result.editorViewActivated()) {
             graphFocus.run();
         }
-        if (result != null && (result.status() == GraphCommandResult.Status.REJECTED
+        if (!silent && result != null && (result.status() == GraphCommandResult.Status.REJECTED
                 || result.status() == GraphCommandResult.Status.NO_OP)) {
             commandMessageSink.accept(TextUtils.format(result.messageKey(), result.messageArguments().toArray()));
         }
@@ -1046,27 +1050,18 @@ final class GraphWorkspaceWindowModel {
         }
         if (state != null) {
             final GraphProjection projection = state.projection();
-            for (final ProjectedNode node : projection.nodes()) {
-                final MapReferenceId mapId = node.mapReferenceId();
-                RowAccumulator accumulator = accumulators.get(mapId);
-                if (accumulator == null) {
-                    accumulator = new RowAccumulator(mapId, node.mapName(), MapAvailability.AVAILABLE);
-                    accumulators.put(mapId, accumulator);
-                }
-                else {
-                    accumulator.displayName = node.mapName();
-                }
-                accumulator.projectedNodeCount++;
-            }
             for (final org.freeplane.plugin.graph.projection.ProjectedEnclosure enclosure : projection.enclosures()) {
                 final MapReferenceId mapId = enclosure.mapReferenceId();
                 RowAccumulator accumulator = accumulators.get(mapId);
                 if (accumulator == null) {
-                    accumulators.put(mapId, new RowAccumulator(mapId, enclosure.mapName(),
-                        MapAvailability.AVAILABLE));
+                    accumulator = new RowAccumulator(mapId, enclosure.mapName(), MapAvailability.AVAILABLE);
+                    accumulators.put(mapId, accumulator);
                 }
                 else if (accumulator.projectedNodeCount == 0) {
                     accumulator.displayName = enclosure.mapName();
+                }
+                if (!enclosure.mapRoot()) {
+                    accumulator.projectedNodeCount++;
                 }
             }
         }
@@ -1143,6 +1138,10 @@ final class GraphWorkspaceWindowModel {
                 ? connect.source().node().get().source() : source(connect.source()),
                 connect.target().isNode() ? connect.target().node().get().source() : source(connect.target()),
                 connect.direction()));
+        }
+        else if (intent instanceof GraphIntent.RevealSourceNode) {
+            final ProjectedEndpointKey endpoint = ((GraphIntent.RevealSourceNode) intent).endpoint();
+            executeCommand(GraphCommands.openSource(source(endpoint)), true);
         }
         else if (intent instanceof GraphIntent.OpenSourceNode) {
             final ProjectedEndpointKey endpoint = ((GraphIntent.OpenSourceNode) intent).endpoint();

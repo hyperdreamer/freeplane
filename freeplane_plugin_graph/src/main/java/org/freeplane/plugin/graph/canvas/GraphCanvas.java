@@ -359,7 +359,7 @@ public final class GraphCanvas extends JComponent implements Accessible {
         super.paintComponent(graphics);
         final Dimension size = new Dimension(getWidth(), getHeight());
         final CanvasState state = canvasState;
-        final int nodeCount = state == null ? 0 : state.projection().nodes().size();
+        final int nodeCount = state == null ? 0 : state.projection().projectedNodeCount();
         final int edgeCount = state == null ? 0 : state.projection().edges().size();
         painter.paint((Graphics2D) graphics, state, paintState, viewport, size, theme,
             renderingPolicy.forCounts(nodeCount, edgeCount), showArrowheads, dimUnrelated);

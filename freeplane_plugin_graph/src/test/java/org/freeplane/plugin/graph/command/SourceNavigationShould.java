@@ -44,6 +44,10 @@ public class SourceNavigationShould {
         assertThat(result.editorViewActivated()).isTrue();
         assertThat(fixture.resolver.lastKey).isEqualTo(nodes.key);
         assertThat(fixture.selected).isSameAs(nodes.node);
+        assertThat(fixture.centered).isSameAs(nodes.node);
+        final org.mockito.InOrder order = org.mockito.Mockito.inOrder(fixture.mapController);
+        order.verify(fixture.mapController).select(nodes.node);
+        order.verify(fixture.mapController).centerNode(nodes.node);
         assertThat(nodes.map.registryCalls()).isZero();
         assertThat(fixture.edt.callCount()).isEqualTo(1);
         assertThat(fixture.results.saveHookCalls()).isZero();
@@ -61,6 +65,7 @@ public class SourceNavigationShould {
         assertRejected(unavailable, "graph_workspace.source_map.unavailable");
         assertThat(fixture.resolver.resolveCalls).isZero();
         assertThat(fixture.selected).isNull();
+        assertThat(fixture.centered).isNull();
         assertThat(fixture.edt.callCount()).isEqualTo(1);
 
         fixture.leases.put(nodes.mapId, new TestLease(nodes.mapId, MapOperationalState.AVAILABLE, fixture.edt));
@@ -70,6 +75,7 @@ public class SourceNavigationShould {
         assertRejected(notFound, "graph_workspace.source_node.not_found");
         assertThat(fixture.resolver.resolveCalls).isEqualTo(1);
         assertThat(fixture.selected).isNull();
+        assertThat(fixture.centered).isNull();
         assertThat(fixture.edt.callCount()).isEqualTo(2);
     }
 
@@ -88,6 +94,7 @@ public class SourceNavigationShould {
 
         assertThat(result.status()).isEqualTo(GraphCommandResult.Status.APPLIED);
         assertThat(fixture.selected).isSameAs(nodes.node);
+        assertThat(fixture.centered).isSameAs(nodes.node);
         assertThat(nodes.node.getID()).isNull();
         assertThat(nodes.map.registryCalls()).isEqualTo(registryCallsBeforeOpen);
         assertThat(fixture.edt.callCount()).isEqualTo(1);
@@ -107,6 +114,7 @@ public class SourceNavigationShould {
         private final ReadOnlyResultEnvelope results;
         private final SourceNavigation navigation;
         private NodeModel selected;
+        private NodeModel centered;
 
         private Fixture() {
             resolver = new Resolver(edt);
@@ -120,6 +128,11 @@ public class SourceNavigationShould {
                 selected = invocation.getArgument(0);
                 return null;
             }).when(mapController).select(any(NodeModel.class));
+            doAnswer(invocation -> {
+                edt.requireOnEdt("source centering");
+                centered = invocation.getArgument(0);
+                return null;
+            }).when(mapController).centerNode(any(NodeModel.class));
             navigation = new SourceNavigation(new LeaseLookup(leases, edt), modeController, edt, resolver, results);
         }
 

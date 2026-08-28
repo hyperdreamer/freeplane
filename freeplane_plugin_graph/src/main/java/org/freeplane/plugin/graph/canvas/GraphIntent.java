@@ -64,6 +64,43 @@ public abstract class GraphIntent {
         }
     }
 
+    public static final class RevealSourceNode extends GraphIntent {
+        private final ProjectedEndpointKey endpoint;
+
+        public RevealSourceNode(final ProjectedEndpointKey endpoint) {
+            this.endpoint = require(endpoint, "endpoint");
+        }
+
+        public static RevealSourceNode of(final ProjectedEndpointKey endpoint) {
+            return new RevealSourceNode(endpoint);
+        }
+
+        public ProjectedEndpointKey endpoint() {
+            return endpoint;
+        }
+
+        public ProjectedEndpointKey key() {
+            return endpoint;
+        }
+
+        @Override
+        public boolean equals(final Object object) {
+            if (this == object) {
+                return true;
+            }
+            if (!(object instanceof RevealSourceNode)) {
+                return false;
+            }
+            final RevealSourceNode other = (RevealSourceNode) object;
+            return endpoint.equals(other.endpoint);
+        }
+
+        @Override
+        public int hashCode() {
+            return endpoint.hashCode();
+        }
+    }
+
     public static final class Pin extends GraphIntent {
         private final ProjectedNodeKey node;
         private final double worldX;

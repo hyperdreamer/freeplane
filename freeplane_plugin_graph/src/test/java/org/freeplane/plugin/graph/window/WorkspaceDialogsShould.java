@@ -68,6 +68,11 @@ import org.freeplane.plugin.graph.workspace.model.PersistedNodeId;
 import org.freeplane.plugin.graph.workspace.model.RelationshipDirection;
 import org.freeplane.plugin.graph.workspace.model.RelationshipId;
 import org.freeplane.plugin.graph.workspace.model.UnknownXml;
+import org.freeplane.plugin.graph.geometry.HullGeometry;
+import org.freeplane.plugin.graph.projection.BoundaryTier;
+import org.freeplane.plugin.graph.projection.EnclosureHullKey;
+import org.freeplane.plugin.graph.projection.EnclosureKey;
+import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -409,39 +414,43 @@ public class WorkspaceDialogsShould {
 
     private static CanvasState stateWithCounts(long generation, int nodes, int edges,
             List<RelationshipResolution> resolutions) {
-        List<ProjectedNode> projectedNodes = new ArrayList<ProjectedNode>();
+        List<ProjectedEnclosure> enclosures = new ArrayList<ProjectedEnclosure>();
+        Map<EnclosureHullKey, HullGeometry> hullGeometry = new LinkedHashMap<EnclosureHullKey, HullGeometry>();
+        Map<EnclosureHullKey, LayoutPoint> anchors = new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
         for (int index = 0; index < nodes; index++) {
             MapReferenceId map = index % 2 == 0 ? MAP_ONE : MAP_TWO;
-            SourceNodeKey source = SourceNodeKey.transientPath(map, Collections.singletonList(Integer.valueOf(index)));
-            ProjectedNodeKey key = ProjectedNodeKey.of(source);
-            projectedNodes.add(ProjectedNode.of(key, SafeNodeLabel.of("full-" + index, "Node " + index),
-                map.equals(MAP_ONE) ? "Map one" : "Map two", false));
+            SourceNodeKey source = SourceNodeKey.transientPath(map,
+                Collections.singletonList(Integer.valueOf(index)));
+            EnclosureKey endpoint = EnclosureKey.of(source);
+            EnclosureHullKey hullKey = EnclosureHullKey.of(Collections.singletonList(endpoint));
+            enclosures.add(ProjectedEnclosure.of(hullKey, Collections.singletonList(endpoint),
+                Collections.singletonList(SafeNodeLabel.of("full-" + index, "Node " + index)),
+                map.equals(MAP_ONE) ? "Map one" : "Map two",
+                java.util.Optional.<EnclosureHullKey>empty(),
+                Collections.<ProjectedNodeKey>emptyList(), Collections.<EnclosureHullKey>emptyList(),
+                false, BoundaryTier.EMPHATIC));
+            LayoutPoint point = LayoutPoint.of(0.0, 0.0);
+            hullGeometry.put(hullKey, HullGeometry.of(Arrays.asList(LayoutPoint.of(-30.0, -20.0),
+                LayoutPoint.of(30.0, -20.0), LayoutPoint.of(30.0, 20.0), LayoutPoint.of(-30.0, 20.0)), point));
+            anchors.put(hullKey, point);
         }
         List<ProjectedEdge> projectedEdges = new ArrayList<ProjectedEdge>();
-        if (edges > 0) {
-            ProjectedNodeKey first = projectedNodes.get(0).key();
-            ProjectedNodeKey second = projectedNodes.size() > 1 ? projectedNodes.get(1).key() : first;
-            if (!first.equals(second)) {
-                EdgeContributor contributor = EdgeContributor.graphRelationship(relationship(3L),
-                    ProjectedEndpointKey.ofNode(first), ProjectedEndpointKey.ofNode(second));
-                ProjectedEdge edge = ProjectedEdge.of(ProjectedEdgeKey.of(ProjectedEndpointKey.ofNode(first),
-                    ProjectedEndpointKey.ofNode(second)), Collections.singletonList(contributor));
-                for (int index = 0; index < edges; index++) {
-                    projectedEdges.add(edge);
-                }
+        if (edges > 0 && nodes >= 2) {
+            ProjectedEndpointKey first = ProjectedEndpointKey.ofEnclosure(enclosures.get(0).endpointKeys().get(0));
+            ProjectedEndpointKey second = ProjectedEndpointKey.ofEnclosure(enclosures.get(1).endpointKeys().get(0));
+            EdgeContributor contributor = EdgeContributor.graphRelationship(relationship(3L), first, second);
+            ProjectedEdge edge = ProjectedEdge.of(ProjectedEdgeKey.of(first, second),
+                Collections.singletonList(contributor));
+            for (int index = 0; index < edges; index++) {
+                projectedEdges.add(edge);
             }
         }
-        GraphProjection projection = GraphProjection.projected(generation, projectedNodes, Collections.emptyList(),
-            projectedEdges, resolutions, Collections.emptyList());
-        Map<ProjectedNodeKey, NodeGeometry> geometry = new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
-        Map<ProjectedNodeKey, LayoutPoint> positions = new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
-        for (ProjectedNode node : projectedNodes) {
-            LayoutPoint point = LayoutPoint.of(0.0, 0.0);
-            geometry.put(node.key(), NodeGeometry.of(point, 10.0));
-            positions.put(node.key(), point);
-        }
+        GraphProjection projection = GraphProjection.projected(generation,
+            Collections.<ProjectedNode>emptyList(), enclosures, projectedEdges, resolutions,
+            Collections.emptyList());
         return CanvasState.of(generation, projection, LayoutFrame.of(generation,
-            LayoutPositions.of(positions, Collections.emptyMap()), false), GraphGeometry.of(geometry,
+            LayoutPositions.of(Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(), anchors), false),
+            GraphGeometry.of(Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(), hullGeometry,
                 Collections.emptyMap()), OperationalStatus.IDLE);
     }
 

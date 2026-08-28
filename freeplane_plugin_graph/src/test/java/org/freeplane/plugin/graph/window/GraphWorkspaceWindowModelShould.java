@@ -38,6 +38,7 @@ import javax.swing.JViewport;
 import javax.swing.UIManager;
 
 import org.freeplane.plugin.graph.canvas.GraphCanvas;
+import org.freeplane.plugin.graph.canvas.GraphIntent;
 import org.freeplane.plugin.graph.canvas.GraphTheme;
 import org.freeplane.plugin.graph.canvas.GraphViewport;
 import org.freeplane.plugin.graph.command.GraphCommand;
@@ -64,6 +65,7 @@ import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
 import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
+import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
 import org.freeplane.plugin.graph.projection.input.MapAvailability;
 import org.freeplane.plugin.graph.projection.input.SafeNodeLabel;
 import org.freeplane.plugin.graph.projection.input.SourceNodeKey;
@@ -471,6 +473,32 @@ public class GraphWorkspaceWindowModelShould {
     }
 
     @Test
+    public void revealsSourceNodeSilentlyOnSingleClickIntentWhileDoubleClickOpenStillReportsFailures() {
+        final List<String> messages = new ArrayList<String>();
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            enclosureState(ACTIVE_ID), Collections.singletonList(registration(ACTIVE_ID, "Active",
+                MapAvailability.AVAILABLE)), false);
+        when(fixture.handle.execute(any(GraphCommand.class))).thenReturn(commandResult(
+            WorkspaceTransition.rejected(emptyDocument(), "graph_workspace.test.rejected")));
+        GraphWorkspaceWindowModel model = fixture.model(messages::add);
+        final SourceNodeKey source = SourceNodeKey.transientPath(ACTIVE_ID, Collections.emptyList());
+        final ProjectedEndpointKey endpoint = ProjectedEndpointKey.ofEnclosure(EnclosureKey.of(source));
+
+        model.acceptIntent(new GraphIntent.RevealSourceNode(endpoint));
+
+        ArgumentCaptor<GraphCommand> commands = ArgumentCaptor.forClass(GraphCommand.class);
+        verify(fixture.handle).execute(commands.capture());
+        assertThat(commands.getValue()).isInstanceOf(GraphCommands.OpenSource.class);
+        assertThat(((GraphCommands.OpenSource) commands.getValue()).source()).isEqualTo(source);
+        assertThat(messages).isEmpty();
+
+        model.acceptIntent(new GraphIntent.OpenSourceNode(endpoint));
+
+        assertThat(messages).containsExactly("graph_workspace.test.rejected[]");
+        model.close();
+    }
+
+    @Test
     public void exposesAllMapRowStatesWithProjectedCountsAndEmitsSessionCommandsOnCanvasUpdates() {
         MapReferenceId loadingId = id(2L);
         MapReferenceId missingId = id(3L);
@@ -486,7 +514,7 @@ public class GraphWorkspaceWindowModelShould {
             emptyState(), registrations, false);
         GraphWorkspaceWindowModel model = fixture.model();
 
-        model.acceptCanvasState(nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)));
+        model.acceptCanvasState(groupState(ACTIVE_ID));
 
         assertThat(model.mapList().rows()).extracting(MapListPanel.MapRow::state).containsExactly(
             MapListPanel.RowState.ACTIVE, MapListPanel.RowState.LOADING, MapListPanel.RowState.MISSING,
@@ -996,6 +1024,28 @@ public class GraphWorkspaceWindowModelShould {
             Collections.singletonList(SafeNodeLabel.of("Enclosure", "Enclosure")), "Map",
             java.util.Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(),
             Collections.<EnclosureHullKey>emptyList(), true, BoundaryTier.EMPHATIC);
+        LayoutPoint anchor = LayoutPoint.of(0.0, 0.0);
+        HullGeometry hull = HullGeometry.of(Arrays.asList(LayoutPoint.of(-30.0, -20.0),
+            LayoutPoint.of(30.0, -20.0), LayoutPoint.of(30.0, 20.0), LayoutPoint.of(-30.0, 20.0)), anchor);
+        GraphProjection projection = GraphProjection.projected(0L,
+            Collections.<ProjectedNode>emptyList(), Collections.singletonList(enclosure),
+            Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+        GraphGeometry geometry = GraphGeometry.of(Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(),
+            Collections.singletonMap(hullKey, hull), Collections.emptyMap());
+        LayoutFrame layout = LayoutFrame.of(0L, LayoutPositions.of(Collections.emptyMap(),
+            Collections.singletonMap(hullKey, anchor)), false);
+        return CanvasState.of(0L, projection, layout, geometry, OperationalStatus.IDLE);
+    }
+
+    private static CanvasState groupState(MapReferenceId mapId) {
+        SourceNodeKey source = SourceNodeKey.transientPath(mapId, Collections.emptyList());
+        EnclosureKey endpoint = EnclosureKey.of(source);
+        EnclosureHullKey hullKey = EnclosureHullKey.of(Collections.singletonList(endpoint));
+        ProjectedEnclosure enclosure = ProjectedEnclosure.of(hullKey,
+            Collections.singletonList(endpoint),
+            Collections.singletonList(SafeNodeLabel.of("Group", "Group")), "Map",
+            java.util.Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(),
+            Collections.<EnclosureHullKey>emptyList(), false, BoundaryTier.EMPHATIC);
         LayoutPoint anchor = LayoutPoint.of(0.0, 0.0);
         HullGeometry hull = HullGeometry.of(Arrays.asList(LayoutPoint.of(-30.0, -20.0),
             LayoutPoint.of(30.0, -20.0), LayoutPoint.of(30.0, 20.0), LayoutPoint.of(-30.0, 20.0)), anchor);
