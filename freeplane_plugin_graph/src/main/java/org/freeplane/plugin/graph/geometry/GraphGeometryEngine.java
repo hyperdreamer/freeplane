@@ -14,6 +14,7 @@ import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
+import org.freeplane.plugin.graph.projection.BoundaryTier;
 import org.freeplane.plugin.graph.projection.input.SafeNodeLabel;
 
 public final class GraphGeometryEngine {
@@ -33,6 +34,22 @@ public final class GraphGeometryEngine {
         {-DIAGONAL, -DIAGONAL},
         {0.0, -1.0},
         {DIAGONAL, -DIAGONAL},
+    };
+    private static final Dimension2D ZERO_SIZE = new Dimension2D() {
+        @Override
+        public double getWidth() {
+            return 0.0;
+        }
+
+        @Override
+        public double getHeight() {
+            return 0.0;
+        }
+
+        @Override
+        public void setSize(final double width, final double height) {
+            throw new UnsupportedOperationException("Geometry sizes are immutable");
+        }
     };
 
     private final List<GeometryCacheEntry> geometryCache = new ArrayList<GeometryCacheEntry>();
@@ -211,6 +228,11 @@ public final class GraphGeometryEngine {
 
     private static Dimension2D labelSize(final ProjectedEnclosure enclosure,
             final GeometryTextMetrics metrics) {
+        if (enclosure.boundaryTier() == BoundaryTier.SUPPRESSED) {
+            // Suppressed enclosures render no label and must never be measured (the metrics guard
+            // rejects them by design); their footprint is the anchor itself.
+            return ZERO_SIZE;
+        }
         Dimension2D largest = null;
         for (final SafeNodeLabel label : enclosure.labels()) {
             final Dimension2D measured = metrics.measure(label.displayText(), enclosure.boundaryTier());
