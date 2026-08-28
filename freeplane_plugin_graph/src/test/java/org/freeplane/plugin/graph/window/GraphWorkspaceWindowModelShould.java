@@ -38,6 +38,7 @@ import javax.swing.JViewport;
 import javax.swing.UIManager;
 
 import org.freeplane.plugin.graph.canvas.GraphCanvas;
+import org.freeplane.plugin.graph.canvas.GraphIntent;
 import org.freeplane.plugin.graph.canvas.GraphTheme;
 import org.freeplane.plugin.graph.canvas.GraphViewport;
 import org.freeplane.plugin.graph.command.GraphCommand;
@@ -64,6 +65,7 @@ import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
 import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
+import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
 import org.freeplane.plugin.graph.projection.input.MapAvailability;
 import org.freeplane.plugin.graph.projection.input.SafeNodeLabel;
 import org.freeplane.plugin.graph.projection.input.SourceNodeKey;
@@ -467,6 +469,32 @@ public class GraphWorkspaceWindowModelShould {
         model.execute(GraphCommands.save());
 
         assertThat(messages).isEmpty();
+        model.close();
+    }
+
+    @Test
+    public void revealsSourceNodeSilentlyOnSingleClickIntentWhileDoubleClickOpenStillReportsFailures() {
+        final List<String> messages = new ArrayList<String>();
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            enclosureState(ACTIVE_ID), Collections.singletonList(registration(ACTIVE_ID, "Active",
+                MapAvailability.AVAILABLE)), false);
+        when(fixture.handle.execute(any(GraphCommand.class))).thenReturn(commandResult(
+            WorkspaceTransition.rejected(emptyDocument(), "graph_workspace.test.rejected")));
+        GraphWorkspaceWindowModel model = fixture.model(messages::add);
+        final SourceNodeKey source = SourceNodeKey.transientPath(ACTIVE_ID, Collections.emptyList());
+        final ProjectedEndpointKey endpoint = ProjectedEndpointKey.ofEnclosure(EnclosureKey.of(source));
+
+        model.acceptIntent(new GraphIntent.RevealSourceNode(endpoint));
+
+        ArgumentCaptor<GraphCommand> commands = ArgumentCaptor.forClass(GraphCommand.class);
+        verify(fixture.handle).execute(commands.capture());
+        assertThat(commands.getValue()).isInstanceOf(GraphCommands.OpenSource.class);
+        assertThat(((GraphCommands.OpenSource) commands.getValue()).source()).isEqualTo(source);
+        assertThat(messages).isEmpty();
+
+        model.acceptIntent(new GraphIntent.OpenSourceNode(endpoint));
+
+        assertThat(messages).containsExactly("graph_workspace.test.rejected[]");
         model.close();
     }
 
