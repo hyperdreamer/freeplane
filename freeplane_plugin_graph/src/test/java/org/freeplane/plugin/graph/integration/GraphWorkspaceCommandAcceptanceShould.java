@@ -326,7 +326,9 @@ public class GraphWorkspaceCommandAcceptanceShould {
             dispatch(canvas, mouse(canvas, MouseEvent.MOUSE_PRESSED, 200, 150, 1, MouseEvent.BUTTON3));
 
             assertThat(listener.intents).contains(new GraphIntent.ChangeSelection(Optional.of(fixture.firstEndpoint)),
-                new GraphIntent.OpenSourceNode(fixture.firstEndpoint), new GraphIntent.InspectEdge(fixture.edge.key()));
+                new GraphIntent.RevealSourceNode(fixture.firstEndpoint),
+                new GraphIntent.OpenSourceNode(fixture.firstEndpoint),
+                new GraphIntent.InspectEdge(fixture.edge.key()));
         }
         finally {
             interaction.uninstall();
