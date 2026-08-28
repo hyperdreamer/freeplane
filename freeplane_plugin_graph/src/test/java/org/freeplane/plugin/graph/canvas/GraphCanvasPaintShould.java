@@ -821,9 +821,9 @@ public class GraphCanvasPaintShould {
             BoundaryTier.SUBTLE);
         ProjectedEnclosure searchMatched = enclosure(searchMatchedHull, searchMatchedKey, "SEARCH", "SEARCH",
             BoundaryTier.SUBTLE);
-        List<ProjectedNode> nodes = new ArrayList<ProjectedNode>(nodeCount);
+        List<ProjectedEnclosure> extras = new ArrayList<ProjectedEnclosure>(nodeCount);
         for (int index = 0; index < nodeCount; index++) {
-            nodes.add(node(FIRST_MAP, "label-extra-" + index, LayoutPoint.of(500.0 + index, 500.0)));
+            extras.add(groupBoundary("label-extra-" + index));
         }
         EnclosureKey emphaticKey = EnclosureKey.of(source(FIRST_MAP, "emphatic-label"));
         EnclosureKey subtleKey = EnclosureKey.of(source(SECOND_MAP, "subtle-label"));
@@ -860,11 +860,6 @@ public class GraphCanvasPaintShould {
             LayoutPoint.of(85.0, 45.0), 45.0, 10.0, Optional.<LayoutPoint>empty()));
         labels.put(suppressedKey, LabelPlacement.of("SUPPRESSED", LabelPlacement.Mode.INTERIOR,
             LayoutPoint.of(-72.5, 5.0), 70.0, 10.0, Optional.<LayoutPoint>empty()));
-        Map<ProjectedNodeKey, LayoutPoint> positions = new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
-        for (int index = 0; index < nodeCount; index++) {
-            ProjectedNodeKey key = nodes.get(index).key();
-            positions.put(key, LayoutPoint.of(500.0 + index, 500.0));
-        }
         Map<EnclosureHullKey, LayoutPoint> anchors = new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
         anchors.put(ordinaryHull, LayoutPoint.of(-85.0, -41.0));
         anchors.put(selectedHull, LayoutPoint.of(0.0, -41.0));
@@ -873,12 +868,15 @@ public class GraphCanvasPaintShould {
         anchors.put(emphaticHull, LayoutPoint.of(0.0, 45.0));
         anchors.put(subtleHull, LayoutPoint.of(85.0, 45.0));
         anchors.put(suppressedHull, LayoutPoint.of(-72.5, 5.0));
-        GraphProjection projection = GraphProjection.projected(1L, nodes,
-            Arrays.asList(ordinary, selected, hovered, searchMatched, emphatic, subtle, suppressed),
-            Collections.<ProjectedEdge>emptyList(), Collections.<RelationshipResolution>emptyList(),
+        List<ProjectedEnclosure> enclosures = new ArrayList<ProjectedEnclosure>(
+            Arrays.asList(ordinary, selected, hovered, searchMatched, emphatic, subtle, suppressed));
+        enclosures.addAll(extras);
+        GraphProjection projection = GraphProjection.projected(1L, Collections.<ProjectedNode>emptyList(),
+            enclosures, Collections.<ProjectedEdge>emptyList(), Collections.<RelationshipResolution>emptyList(),
             Collections.<PinProjection>emptyList());
         CanvasState state = CanvasState.of(1L, projection,
-            LayoutFrame.of(1L, LayoutPositions.of(positions, anchors), false),
+            LayoutFrame.of(1L, LayoutPositions.of(Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(), anchors),
+                false),
             GraphGeometry.of(Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(), hulls, labels),
             OperationalStatus.IDLE);
         return new LabelFixture(state, ProjectedEndpointKey.ofEnclosure(selectedKey),
@@ -1256,6 +1254,15 @@ public class GraphCanvasPaintShould {
             Collections.singletonList(SafeNodeLabel.of(fullLabel, displayLabel)), "Map",
             Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(),
             Collections.<EnclosureHullKey>emptyList(), true, tier);
+    }
+
+    private static ProjectedEnclosure groupBoundary(final String id) {
+        EnclosureKey endpoint = EnclosureKey.of(source(FIRST_MAP, id));
+        EnclosureHullKey hullKey = EnclosureHullKey.of(Collections.singletonList(endpoint));
+        return ProjectedEnclosure.of(hullKey, Collections.singletonList(endpoint),
+            Collections.singletonList(SafeNodeLabel.of(id, id)), "Map",
+            Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(),
+            Collections.<EnclosureHullKey>emptyList(), false, BoundaryTier.EMPHATIC);
     }
 
     private static ProjectedNode node(final MapReferenceId map, final String id, final LayoutPoint center) {
