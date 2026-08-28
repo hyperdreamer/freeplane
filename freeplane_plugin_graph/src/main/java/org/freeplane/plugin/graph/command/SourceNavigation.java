@@ -27,22 +27,24 @@ public final class SourceNavigation {
     private final EdtExecutor edt;
     private final FreeplaneMapCommandExecutor.TraversalResolver traversal;
     private final FreeplaneMapCommandExecutor.ResultEnvelope results;
+    private final ViewMaterializationTracker views;
 
     public SourceNavigation(final GraphWorkspaceStore workspace,
             final FreeplaneMapCommandExecutor.MapLeaseLookup leases, final ModeController modeController,
-            final EdtExecutor edt) {
+            final EdtExecutor edt, final ViewMaterializationTracker views) {
         this(leases, modeController, edt, FreeplaneMapCommandExecutor.productionTraversalResolver(),
-            FreeplaneMapCommandExecutor.resultEnvelope(workspace));
+            FreeplaneMapCommandExecutor.resultEnvelope(workspace), views);
     }
 
     SourceNavigation(final FreeplaneMapCommandExecutor.MapLeaseLookup leases, final ModeController modeController,
             final EdtExecutor edt, final FreeplaneMapCommandExecutor.TraversalResolver traversal,
-            final FreeplaneMapCommandExecutor.ResultEnvelope results) {
+            final FreeplaneMapCommandExecutor.ResultEnvelope results, final ViewMaterializationTracker views) {
         this.leases = Objects.requireNonNull(leases, "leases");
         this.modeController = Objects.requireNonNull(modeController, "modeController");
         this.edt = Objects.requireNonNull(edt, "edt");
         this.traversal = Objects.requireNonNull(traversal, "traversal");
         this.results = Objects.requireNonNull(results, "results");
+        this.views = Objects.requireNonNull(views, "views");
     }
 
     public GraphCommandResult open(final SourceNodeKey source) {
@@ -62,6 +64,10 @@ public final class SourceNavigation {
                 if (mapController == null) {
                     return rejected(SOURCE_MAP_UNAVAILABLE);
                 }
+                // Workspace maps are loaded model-only (no MapView). MapController.select
+                // silently no-ops without one (changeToMap finds no view, displayNode
+                // early-returns on map mismatch), so materialize the view first.
+                views.materialize(requestedSource.mapReferenceId(), resolved.get().getMap());
                 mapController.select(resolved.get());
                 mapController.centerNode(resolved.get());
                 return GraphCommandResult.from(WorkspaceTransition.applied(results.currentDocument(), SOURCE_OPENED))

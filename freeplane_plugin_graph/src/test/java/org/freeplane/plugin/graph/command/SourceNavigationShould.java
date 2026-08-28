@@ -6,8 +6,10 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -17,7 +19,9 @@ import org.freeplane.features.map.INodeDuplicator;
 import org.freeplane.features.map.MapController;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
+import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
+import org.freeplane.features.ui.IMapViewManager;
 import org.freeplane.plugin.graph.adapter.EdtExecutor;
 import org.freeplane.plugin.graph.adapter.MapLease;
 import org.freeplane.plugin.graph.adapter.MapOperationalState;
@@ -66,6 +70,7 @@ public class SourceNavigationShould {
         assertThat(fixture.resolver.resolveCalls).isZero();
         assertThat(fixture.selected).isNull();
         assertThat(fixture.centered).isNull();
+        assertThat(fixture.materializedModels).isEmpty();
         assertThat(fixture.edt.callCount()).isEqualTo(1);
 
         fixture.leases.put(nodes.mapId, new TestLease(nodes.mapId, MapOperationalState.AVAILABLE, fixture.edt));
@@ -76,6 +81,7 @@ public class SourceNavigationShould {
         assertThat(fixture.resolver.resolveCalls).isEqualTo(1);
         assertThat(fixture.selected).isNull();
         assertThat(fixture.centered).isNull();
+        assertThat(fixture.materializedModels).isEmpty();
         assertThat(fixture.edt.callCount()).isEqualTo(2);
     }
 
@@ -100,6 +106,25 @@ public class SourceNavigationShould {
         assertThat(fixture.edt.callCount()).isEqualTo(1);
     }
 
+    @Test
+    public void materializesTheMapViewBeforeSelectingWhenTheSourceMapHasNoView() {
+        // Catches navigation that selects on a model-only map: MapController.select
+        // silently no-ops when no MapView exists (changeToMap finds no view,
+        // displayNode early-returns on map mismatch, getNodeView returns null), so
+        // the source map view must be materialized before select.
+        Fixture fixture = new Fixture();
+        MapNodes nodes = fixture.addMap("materialize");
+
+        GraphCommandResult result = fixture.navigation.open(nodes.key);
+
+        assertThat(result.status()).isEqualTo(GraphCommandResult.Status.APPLIED);
+        assertThat(fixture.materializedModels).containsExactly(nodes.map);
+        final org.mockito.InOrder order = org.mockito.Mockito.inOrder(fixture.mapController);
+        order.verify(fixture.mapController).createMapView(nodes.map);
+        order.verify(fixture.mapController).select(nodes.node);
+        order.verify(fixture.mapController).centerNode(nodes.node);
+    }
+
     private static void assertRejected(GraphCommandResult result, String key) {
         assertThat(result.status()).isEqualTo(GraphCommandResult.Status.REJECTED);
         assertThat(result.messageKey()).isEqualTo(key);
@@ -110,9 +135,13 @@ public class SourceNavigationShould {
         private final Map<MapReferenceId, TestLease> leases = new HashMap<MapReferenceId, TestLease>();
         private final Resolver resolver;
         private final ModeController modeController = mock(ModeController.class);
+        private final Controller applicationController = mock(Controller.class);
+        private final IMapViewManager viewManager = mock(IMapViewManager.class);
         private final MapController mapController = mock(MapController.class);
         private final ReadOnlyResultEnvelope results;
+        private final ViewMaterializationTracker views;
         private final SourceNavigation navigation;
+        private final List<MapModel> materializedModels = new ArrayList<MapModel>();
         private NodeModel selected;
         private NodeModel centered;
 
@@ -123,6 +152,17 @@ public class SourceNavigationShould {
                 edt.requireOnEdt("mode controller map access");
                 return mapController;
             });
+            when(modeController.getController()).thenReturn(applicationController);
+            when(applicationController.getMapViewManager()).thenReturn(viewManager);
+            final ModeController trackerMode = mock(ModeController.class);
+            when(trackerMode.getMapController()).thenReturn(mapController);
+            when(trackerMode.getController()).thenReturn(applicationController);
+            views = new ViewMaterializationTracker(trackerMode);
+            doAnswer(invocation -> {
+                edt.requireOnEdt("view materialization");
+                materializedModels.add(invocation.getArgument(0));
+                return null;
+            }).when(mapController).createMapView(any(MapModel.class));
             doAnswer(invocation -> {
                 edt.requireOnEdt("source selection");
                 selected = invocation.getArgument(0);
@@ -133,7 +173,8 @@ public class SourceNavigationShould {
                 centered = invocation.getArgument(0);
                 return null;
             }).when(mapController).centerNode(any(NodeModel.class));
-            navigation = new SourceNavigation(new LeaseLookup(leases, edt), modeController, edt, resolver, results);
+            navigation = new SourceNavigation(new LeaseLookup(leases, edt), modeController, edt, resolver, results,
+                views);
         }
 
         private MapNodes addMap(String title) {

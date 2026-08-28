@@ -1097,9 +1097,10 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
                 updates = new GraphUpdateCoordinator(maps, store, leaseManager, new ProjectionEngine(),
                     new LayoutSettleLoop(store.currentDocument().id()));
                 final EdtExecutor edt = new SwingEdtExecutor();
+                final ViewMaterializationTracker views = new ViewMaterializationTracker(modeController);
                 final FreeplaneMapCommandExecutor mapCommands = new FreeplaneMapCommandExecutor(store, maps::find,
-                    modeController, edt, new ViewMaterializationTracker(modeController));
-                final SourceNavigation navigation = new SourceNavigation(store, maps::find, modeController, edt);
+                    modeController, edt, views);
+                final SourceNavigation navigation = new SourceNavigation(store, maps::find, modeController, edt, views);
                 final DefaultPurgeCommandHandler purge = new DefaultPurgeCommandHandler(updates, store, edt);
                 final DefaultContributorDeletionHandler deletion =
                     new DefaultContributorDeletionHandler(updates, store, mapCommands, edt);
