@@ -21,17 +21,22 @@ public final class TraversalNodeResolver {
         return access.withModelOnEdt(new MapModelCallback<Optional<NodeModel>>() {
             @Override
             public Optional<NodeModel> apply(final MapModel model, final int workspaceOrder) {
-                final NodeModel root = model.getRootNode();
-                if (root == null) {
-                    return Optional.empty();
-                }
-                if (requestedKey.persistent()) {
-                    final String requestedId = requestedKey.persistedReference().get().nodeId().value();
-                    return Optional.ofNullable(findPersistent(root, requestedId, false));
-                }
-                return findTransient(root, requestedKey.structuralPath());
+                return resolve(model, requestedKey);
             }
         });
+    }
+
+    public Optional<NodeModel> resolve(final MapModel model, final SourceNodeKey key) {
+        final SourceNodeKey requestedKey = Objects.requireNonNull(key, "key");
+        final NodeModel root = model.getRootNode();
+        if (root == null) {
+            return Optional.empty();
+        }
+        if (requestedKey.persistent()) {
+            final String requestedId = requestedKey.persistedReference().get().nodeId().value();
+            return Optional.ofNullable(findPersistent(root, requestedId, false));
+        }
+        return findTransient(root, requestedKey.structuralPath());
     }
 
     private MapLeaseAccess accessFor(final MapLease lease) {

@@ -1,5 +1,7 @@
 package org.freeplane.plugin.graph.command;
 
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.Callable;
@@ -7,7 +9,9 @@ import java.util.concurrent.Callable;
 import org.freeplane.features.map.MapController;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
+import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
+import org.freeplane.features.ui.IMapViewManager;
 import org.freeplane.plugin.graph.adapter.EdtExecutor;
 import org.freeplane.plugin.graph.adapter.MapLease;
 import org.freeplane.plugin.graph.adapter.MapOperationalState;
@@ -64,10 +68,21 @@ public final class SourceNavigation {
                 if (mapController == null) {
                     return rejected(SOURCE_MAP_UNAVAILABLE);
                 }
-                // Workspace maps are loaded model-only (no MapView). MapController.select
-                // silently no-ops without one (changeToMap finds no view, displayNode
-                // early-returns on map mismatch), so materialize the view first.
-                views.materialize(requestedSource.mapReferenceId(), resolved.get().getMap());
+                final MapModel map = resolved.get().getMap();
+                if (!views.containsView(map)) {
+                    // Workspace maps are loaded model-only (no MapView). MapController.select
+                    // silently no-ops without one (changeToMap finds no view, displayNode
+                    // early-returns on map mismatch), so the view must exist first. If the
+                    // same file is already open under another instance (a parallel load),
+                    // switch to that view instead of materializing a duplicate.
+                    if (!switchToOpenView(requestedSource, map)) {
+                        views.materialize(requestedSource.mapReferenceId(), map);
+                    }
+                    else {
+                        return GraphCommandResult.from(WorkspaceTransition.applied(results.currentDocument(),
+                            SOURCE_OPENED)).withEditorViewActivated(true);
+                    }
+                }
                 mapController.select(resolved.get());
                 mapController.centerNode(resolved.get());
                 return GraphCommandResult.from(WorkspaceTransition.applied(results.currentDocument(), SOURCE_OPENED))
@@ -97,6 +112,39 @@ public final class SourceNavigation {
             return Optional.empty();
         }
         return resolved;
+    }
+
+    private boolean switchToOpenView(final SourceNodeKey key, final MapModel map) {
+        final URL url = map.getURL();
+        if (url == null) {
+            return false;
+        }
+        final Controller controller = modeController.getController();
+        final IMapViewManager viewManager = controller == null ? null : controller.getMapViewManager();
+        if (viewManager == null) {
+            return false;
+        }
+        final boolean switched;
+        try {
+            switched = viewManager.tryToChangeToMapView(url);
+        }
+        catch (final MalformedURLException exception) {
+            return false;
+        }
+        if (!switched || controller.getMap() == null) {
+            return false;
+        }
+        final Optional<NodeModel> openNode = traversal.resolve(controller.getMap(), key);
+        if (openNode == null || !openNode.isPresent() || !attachedToMap(openNode.get())) {
+            return false;
+        }
+        final MapController mapController = modeController.getMapController();
+        if (mapController == null) {
+            return false;
+        }
+        mapController.select(openNode.get());
+        mapController.centerNode(openNode.get());
+        return true;
     }
 
     private static boolean attachedToMap(final NodeModel node) {

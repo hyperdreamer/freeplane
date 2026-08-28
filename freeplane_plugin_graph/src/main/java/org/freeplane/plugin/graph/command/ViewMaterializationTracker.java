@@ -21,6 +21,11 @@ public final class ViewMaterializationTracker {
         viewManager = Objects.requireNonNull(applicationController.getMapViewManager(), "mapViewManager");
     }
 
+    public boolean containsView(final MapModel map) {
+        Objects.requireNonNull(map, "map");
+        return viewManager.containsView(map);
+    }
+
     public boolean materialize(final MapReferenceId mapReferenceId, final MapModel map) {
         Objects.requireNonNull(mapReferenceId, "mapReferenceId");
         final MapModel model = Objects.requireNonNull(map, "map");
