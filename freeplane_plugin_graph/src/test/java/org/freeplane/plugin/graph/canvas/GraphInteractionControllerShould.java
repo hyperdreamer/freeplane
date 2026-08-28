@@ -369,9 +369,9 @@ public class GraphInteractionControllerShould {
 
         dispatch(canvas, click(canvas, MouseEvent.MOUSE_CLICKED, -40.0, 0.0, 1,
             MouseEvent.BUTTON1));
-        assertThat(listener.last()).isInstanceOf(GraphIntent.ChangeSelection.class);
-        assertThat(((GraphIntent.ChangeSelection) listener.last()).selection())
-            .contains(fixture.firstHullEndpoint);
+        assertThat(listener.intents).contains(
+            new GraphIntent.ChangeSelection(Optional.of(fixture.firstHullEndpoint)),
+            new GraphIntent.RevealSourceNode(fixture.firstHullEndpoint));
         assertThat(canvas.paintState().selection()).contains(fixture.firstHullEndpoint);
 
         final double beforeZoom = canvas.viewport().zoom();
@@ -416,6 +416,29 @@ public class GraphInteractionControllerShould {
         assertThat(canvas.getMouseMotionListeners()).isEmpty();
         assertThat(canvas.getMouseWheelListeners()).isEmpty();
         assertThat(canvas.getKeyListeners()).isEmpty();
+    }
+
+    @Test
+    public void revealHitEndpointSourceOnSingleClickWhileEmptySpaceOnlyClearsSelection() {
+        final Fixture fixture = Fixture.create();
+        final GraphCanvas canvas = fixture.canvas();
+        final RecordingListener listener = new RecordingListener();
+        final GraphInteractionController controller = new GraphInteractionController(listener);
+        controller.install(canvas);
+
+        dispatch(canvas, click(canvas, MouseEvent.MOUSE_CLICKED, -40.0, 0.0, 1,
+            MouseEvent.BUTTON1));
+        assertThat(listener.intents).containsExactly(
+            new GraphIntent.ChangeSelection(Optional.of(fixture.firstHullEndpoint)),
+            new GraphIntent.RevealSourceNode(fixture.firstHullEndpoint));
+
+        dispatch(canvas, clickAt(canvas, MouseEvent.MOUSE_CLICKED, 390, 290, 1,
+            MouseEvent.BUTTON1));
+        assertThat(listener.intents).containsExactly(
+            new GraphIntent.ChangeSelection(Optional.of(fixture.firstHullEndpoint)),
+            new GraphIntent.RevealSourceNode(fixture.firstHullEndpoint),
+            new GraphIntent.ChangeSelection(Optional.<ProjectedEndpointKey>empty()));
+        controller.uninstall();
     }
 
     private static void assertConnectionPreviewCancelledAfterStateReplacement(final Fixture fixture,
