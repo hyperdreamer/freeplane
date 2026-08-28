@@ -514,7 +514,7 @@ public class GraphWorkspaceWindowModelShould {
             emptyState(), registrations, false);
         GraphWorkspaceWindowModel model = fixture.model();
 
-        model.acceptCanvasState(nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)));
+        model.acceptCanvasState(groupState(ACTIVE_ID));
 
         assertThat(model.mapList().rows()).extracting(MapListPanel.MapRow::state).containsExactly(
             MapListPanel.RowState.ACTIVE, MapListPanel.RowState.LOADING, MapListPanel.RowState.MISSING,
@@ -1024,6 +1024,28 @@ public class GraphWorkspaceWindowModelShould {
             Collections.singletonList(SafeNodeLabel.of("Enclosure", "Enclosure")), "Map",
             java.util.Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(),
             Collections.<EnclosureHullKey>emptyList(), true, BoundaryTier.EMPHATIC);
+        LayoutPoint anchor = LayoutPoint.of(0.0, 0.0);
+        HullGeometry hull = HullGeometry.of(Arrays.asList(LayoutPoint.of(-30.0, -20.0),
+            LayoutPoint.of(30.0, -20.0), LayoutPoint.of(30.0, 20.0), LayoutPoint.of(-30.0, 20.0)), anchor);
+        GraphProjection projection = GraphProjection.projected(0L,
+            Collections.<ProjectedNode>emptyList(), Collections.singletonList(enclosure),
+            Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+        GraphGeometry geometry = GraphGeometry.of(Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(),
+            Collections.singletonMap(hullKey, hull), Collections.emptyMap());
+        LayoutFrame layout = LayoutFrame.of(0L, LayoutPositions.of(Collections.emptyMap(),
+            Collections.singletonMap(hullKey, anchor)), false);
+        return CanvasState.of(0L, projection, layout, geometry, OperationalStatus.IDLE);
+    }
+
+    private static CanvasState groupState(MapReferenceId mapId) {
+        SourceNodeKey source = SourceNodeKey.transientPath(mapId, Collections.emptyList());
+        EnclosureKey endpoint = EnclosureKey.of(source);
+        EnclosureHullKey hullKey = EnclosureHullKey.of(Collections.singletonList(endpoint));
+        ProjectedEnclosure enclosure = ProjectedEnclosure.of(hullKey,
+            Collections.singletonList(endpoint),
+            Collections.singletonList(SafeNodeLabel.of("Group", "Group")), "Map",
+            java.util.Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(),
+            Collections.<EnclosureHullKey>emptyList(), false, BoundaryTier.EMPHATIC);
         LayoutPoint anchor = LayoutPoint.of(0.0, 0.0);
         HullGeometry hull = HullGeometry.of(Arrays.asList(LayoutPoint.of(-30.0, -20.0),
             LayoutPoint.of(30.0, -20.0), LayoutPoint.of(30.0, 20.0), LayoutPoint.of(-30.0, 20.0)), anchor);

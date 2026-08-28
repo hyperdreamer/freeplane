@@ -126,9 +126,14 @@ final class GraphStatusBar extends JPanel {
                 projectedNodeCount = value.projection().projectedNodeCount();
                 projectedEdgeCount = value.projection().projectedEdgeCount();
                 layoutStatus = value.status();
-                for (final org.freeplane.plugin.graph.projection.ProjectedNode node : value.projection().nodes()) {
-                    final Integer count = nodeCounts.get(node.mapReferenceId());
-                    nodeCounts.put(node.mapReferenceId(), Integer.valueOf(count == null ? 1 : count.intValue() + 1));
+                for (final org.freeplane.plugin.graph.projection.ProjectedEnclosure enclosure
+                        : value.projection().enclosures()) {
+                    if (enclosure.mapRoot()) {
+                        continue;
+                    }
+                    final Integer count = nodeCounts.get(enclosure.mapReferenceId());
+                    nodeCounts.put(enclosure.mapReferenceId(),
+                        Integer.valueOf(count == null ? 1 : count.intValue() + 1));
                 }
                 for (final RelationshipResolution resolution : value.projection().relationshipResolutions()) {
                     if (resolution.status() == RelationshipStatus.UNRESOLVED_RECOVERABLE) {

@@ -1050,27 +1050,18 @@ final class GraphWorkspaceWindowModel {
         }
         if (state != null) {
             final GraphProjection projection = state.projection();
-            for (final ProjectedNode node : projection.nodes()) {
-                final MapReferenceId mapId = node.mapReferenceId();
-                RowAccumulator accumulator = accumulators.get(mapId);
-                if (accumulator == null) {
-                    accumulator = new RowAccumulator(mapId, node.mapName(), MapAvailability.AVAILABLE);
-                    accumulators.put(mapId, accumulator);
-                }
-                else {
-                    accumulator.displayName = node.mapName();
-                }
-                accumulator.projectedNodeCount++;
-            }
             for (final org.freeplane.plugin.graph.projection.ProjectedEnclosure enclosure : projection.enclosures()) {
                 final MapReferenceId mapId = enclosure.mapReferenceId();
                 RowAccumulator accumulator = accumulators.get(mapId);
                 if (accumulator == null) {
-                    accumulators.put(mapId, new RowAccumulator(mapId, enclosure.mapName(),
-                        MapAvailability.AVAILABLE));
+                    accumulator = new RowAccumulator(mapId, enclosure.mapName(), MapAvailability.AVAILABLE);
+                    accumulators.put(mapId, accumulator);
                 }
                 else if (accumulator.projectedNodeCount == 0) {
                     accumulator.displayName = enclosure.mapName();
+                }
+                if (!enclosure.mapRoot()) {
+                    accumulator.projectedNodeCount++;
                 }
             }
         }

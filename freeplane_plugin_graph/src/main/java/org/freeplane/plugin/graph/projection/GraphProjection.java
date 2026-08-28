@@ -82,7 +82,13 @@ public final class GraphProjection {
     }
 
     public int projectedNodeCount() {
-        return nodes.size();
+        int count = 0;
+        for (final ProjectedEnclosure enclosure : enclosures) {
+            if (!enclosure.mapRoot()) {
+                count++;
+            }
+        }
+        return count;
     }
 
     public int projectedEdgeCount() {
