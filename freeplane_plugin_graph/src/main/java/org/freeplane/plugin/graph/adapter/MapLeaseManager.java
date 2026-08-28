@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -220,7 +221,13 @@ public final class MapLeaseManager implements AutoCloseable {
         this.mapLookup = mapLookup != null ? mapLookup : new MapLookup() {
             @Override
             public MapModel get(final URL canonicalUrl) {
-                return MapLeaseManager.this.mapController.getMap(canonicalUrl);
+                MapModel found = MapLeaseManager.this.mapController.getMap(canonicalUrl);
+                if (found == null) {
+                    // Maps opened in the editor may carry a different URL for the same physical file
+                    // (e.g. through a symlinked directory), so an exact-URL lookup misses them.
+                    found = openModelForSameFile(canonicalUrl);
+                }
+                return found;
             }
         };
         try {
@@ -251,6 +258,46 @@ public final class MapLeaseManager implements AutoCloseable {
 
     public void rebaseWorkspace(final Path workspaceFile) {
         this.workspaceFile = uriResolver.canonical(Objects.requireNonNull(workspaceFile, "workspaceFile"));
+    }
+
+    private MapModel openModelForSameFile(final URL canonicalUrl) {
+        final Path canonicalPath = canonicalPath(canonicalUrl);
+        if (canonicalPath == null) {
+            return null;
+        }
+        final IMapViewManager mapViewManager = modeController.getController().getMapViewManager();
+        if (mapViewManager == null) {
+            return null;
+        }
+        for (MapModel model : mapViewManager.getMaps().values()) {
+            if (model == null || model.getURL() == null) {
+                continue;
+            }
+            // Only models the map controller still tracks as loaded may be reused; a closed map may
+            // linger in a view registry while it has already been released.
+            if (mapController.getMap(model.getURL()) != model) {
+                continue;
+            }
+            if (canonicalPath.equals(canonicalPath(model.getURL()))) {
+                return model;
+            }
+        }
+        return null;
+    }
+
+    private Path canonicalPath(final URL url) {
+        if (url == null) {
+            return null;
+        }
+        try {
+            return uriResolver.canonical(Paths.get(url.toURI()));
+        }
+        catch (RuntimeException failure) {
+            return null;
+        }
+        catch (Exception failure) {
+            return null;
+        }
     }
 
     public CompletionStage<MapLease> acquire(final MapReference reference) {
@@ -1400,6 +1447,26 @@ public final class MapLeaseManager implements AutoCloseable {
 
     private final class LifecycleListener implements IMapLifeCycleListener {
         @Override
+        public void onCreate(final MapModel map) {
+            if (edt.isEdt()) {
+                handleMapCreatedOnEdt(map);
+            }
+            else {
+                try {
+                    edt.execute(new Runnable() {
+                        @Override
+                        public void run() {
+                            handleMapCreatedOnEdt(map);
+                        }
+                    });
+                }
+                catch (RuntimeException ignored) {
+                    // Manager close invalidates lifecycle callbacks.
+                }
+            }
+        }
+
+        @Override
         public void onRemove(final MapModel map) {
             if (edt.isEdt()) {
                 handleMapRemovedOnEdt(map);
@@ -1418,6 +1485,63 @@ public final class MapLeaseManager implements AutoCloseable {
                 }
             }
         }
+    }
+
+    private void handleMapCreatedOnEdt(final MapModel map) {
+        final List<Entry> targets;
+        synchronized (monitor) {
+            if (closed || map == null) {
+                return;
+            }
+            targets = new ArrayList<Entry>();
+            for (Entry entry : entries.values()) {
+                if (entry.model != null && entry.model != map && entry.leaseCount > 0 && !entry.loading
+                        && sameMapPath(map, entry.mapPath)) {
+                    targets.add(entry);
+                }
+            }
+        }
+        for (Entry entry : targets) {
+            followNewlyCreatedModel(entry, map);
+        }
+    }
+
+    private boolean sameMapPath(final MapModel map, final Path entryMapPath) {
+        final Path modelPath = canonicalPath(map.getURL());
+        return modelPath != null && modelPath.equals(entryMapPath);
+    }
+
+    private void followNewlyCreatedModel(final Entry entry, final MapModel map) {
+        final MapModel previousModel;
+        final IMapChangeListener previousListener;
+        final long generation;
+        synchronized (monitor) {
+            if (closed || entries.get(entry.id) != entry || entry.leaseCount == 0 || entry.loading
+                    || entry.model == null || entry.model == map) {
+                return;
+            }
+            previousModel = entry.model;
+            previousListener = entry.modelListener;
+            generation = entry.generation;
+        }
+        final IMapChangeListener listener = listenerFor(entry, map, generation);
+        final MapAdapterEvent event;
+        synchronized (monitor) {
+            if (closed || entries.get(entry.id) != entry || entry.leaseCount == 0 || entry.loading
+                    || entry.generation != generation || entry.model != previousModel) {
+                return;
+            }
+            entry.modelListener = listener;
+            entry.model = map;
+            entry.managerOwned = false;
+            entry.state = entry.state == MapOperationalState.RELOAD_REQUIRED
+                ? MapOperationalState.RELOAD_REQUIRED : stateForModel(map);
+            event = new MapAdapterEvent(entry.id, entry.state);
+        }
+        if (previousListener != null) {
+            previousModel.removeMapChangeListener(previousListener);
+        }
+        publish(event);
     }
 
     private interface DeferredOperation {
