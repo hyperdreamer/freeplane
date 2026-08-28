@@ -283,6 +283,9 @@ public final class GraphInteractionController {
         }
         setSelectionVisual(endpoint.orElse(null));
         emit(new GraphIntent.ChangeSelection(endpoint));
+        if (endpoint.isPresent()) {
+            emit(new GraphIntent.RevealSourceNode(endpoint.get()));
+        }
     }
 
     private void handleMouseDragged(final MouseEvent event) {
