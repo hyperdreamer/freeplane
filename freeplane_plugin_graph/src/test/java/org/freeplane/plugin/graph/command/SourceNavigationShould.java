@@ -3,9 +3,13 @@ package org.freeplane.plugin.graph.command;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -36,7 +40,7 @@ import org.junit.Test;
 
 public class SourceNavigationShould {
     @Test
-    public void selectsAReachableSourceThroughTheTraversalResolver() {
+    public void selectsAReachableSourceThroughTheTraversalResolver() throws Exception {
         // Catches navigation that selects by a fabricated ID rather than the resolver's reachable node.
         Fixture fixture = new Fixture();
         MapNodes nodes = fixture.addMap("reachable");
@@ -58,7 +62,7 @@ public class SourceNavigationShould {
     }
 
     @Test
-    public void rejectsUnavailableOrUnreachableSourcesWithoutSelectingAnything() {
+    public void rejectsUnavailableOrUnreachableSourcesWithoutSelectingAnything() throws Exception {
         // Catches source navigation that selects a stale node when the lease is unavailable or resolution fails.
         Fixture fixture = new Fixture();
         MapNodes nodes = fixture.addMap("rejects");
@@ -86,7 +90,7 @@ public class SourceNavigationShould {
     }
 
     @Test
-    public void navigatesToAnIdlessSourceWithoutAssigningAnId() {
+    public void navigatesToAnIdlessSourceWithoutAssigningAnId() throws Exception {
         // Catches navigation that calls createID while resolving a transient structural source.
         Fixture fixture = new Fixture();
         MapNodes nodes = fixture.addMap("idless");
@@ -107,7 +111,7 @@ public class SourceNavigationShould {
     }
 
     @Test
-    public void materializesTheMapViewBeforeSelectingWhenTheSourceMapHasNoView() {
+    public void materializesTheMapViewBeforeSelectingWhenTheSourceMapHasNoView() throws Exception {
         // Catches navigation that selects on a model-only map: MapController.select
         // silently no-ops when no MapView exists (changeToMap finds no view,
         // displayNode early-returns on map mismatch, getNodeView returns null), so
@@ -123,6 +127,27 @@ public class SourceNavigationShould {
         order.verify(fixture.mapController).createMapView(nodes.map);
         order.verify(fixture.mapController).select(nodes.node);
         order.verify(fixture.mapController).centerNode(nodes.node);
+    }
+
+    @Test
+    public void switchesToAnAlreadyOpenViewOfTheSameFileInsteadOfMaterializingADuplicate() throws Exception {
+        // The workspace can hold a model-only instance of a map that Freeplane already
+        // shows under another instance (parallel load). Materializing the workspace
+        // instance would reopen the map; navigation must switch to the open view and
+        // select the node there instead.
+        Fixture fixture = new Fixture();
+        MapNodes nodes = fixture.addMap("already-open");
+        nodes.map.setURL(new URL("file:///tmp/graph-e2e/already-open.mm"));
+        when(fixture.viewManager.tryToChangeToMapView(any(URL.class))).thenReturn(true);
+        when(fixture.applicationController.getMap()).thenReturn(nodes.map);
+
+        GraphCommandResult result = fixture.navigation.open(nodes.key);
+
+        assertThat(result.status()).isEqualTo(GraphCommandResult.Status.APPLIED);
+        assertThat(fixture.materializedModels).isEmpty();
+        verify(fixture.viewManager).tryToChangeToMapView(nodes.map.getURL());
+        assertThat(fixture.selected).isSameAs(nodes.node);
+        assertThat(fixture.centered).isSameAs(nodes.node);
     }
 
     private static void assertRejected(GraphCommandResult result, String key) {
@@ -145,7 +170,7 @@ public class SourceNavigationShould {
         private NodeModel selected;
         private NodeModel centered;
 
-        private Fixture() {
+        private Fixture() throws MalformedURLException {
             resolver = new Resolver(edt);
             results = new ReadOnlyResultEnvelope(edt);
             when(modeController.getMapController()).thenAnswer(invocation -> {
@@ -154,6 +179,12 @@ public class SourceNavigationShould {
             });
             when(modeController.getController()).thenReturn(applicationController);
             when(applicationController.getMapViewManager()).thenReturn(viewManager);
+            try {
+                doReturn(false).when(viewManager).tryToChangeToMapView(any(URL.class));
+            }
+            catch (MalformedURLException exception) {
+                throw new IllegalStateException("view switch stub failed", exception);
+            }
             final ModeController trackerMode = mock(ModeController.class);
             when(trackerMode.getMapController()).thenReturn(mapController);
             when(trackerMode.getController()).thenReturn(applicationController);
@@ -238,6 +269,12 @@ public class SourceNavigationShould {
             edt.requireOnEdt("traversal resolution");
             resolveCalls++;
             lastKey = key;
+            return Optional.ofNullable(nodes.get(key));
+        }
+
+        @Override
+        public Optional<NodeModel> resolve(org.freeplane.features.map.MapModel model, SourceNodeKey key) {
+            edt.requireOnEdt("open-instance traversal resolution");
             return Optional.ofNullable(nodes.get(key));
         }
     }

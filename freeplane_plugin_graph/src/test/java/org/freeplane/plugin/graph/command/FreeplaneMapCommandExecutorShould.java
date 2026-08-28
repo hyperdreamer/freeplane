@@ -910,6 +910,12 @@ public class FreeplaneMapCommandExecutorShould {
             edt.requireOnEdt("traversal resolution");
             return Optional.ofNullable(nodes.get(key));
         }
+
+        @Override
+        public Optional<NodeModel> resolve(org.freeplane.features.map.MapModel model, SourceNodeKey key) {
+            edt.requireOnEdt("open-instance traversal resolution");
+            return Optional.ofNullable(nodes.get(key));
+        }
     }
 
     private static final class ReadOnlyResultEnvelope implements FreeplaneMapCommandExecutor.ResultEnvelope {

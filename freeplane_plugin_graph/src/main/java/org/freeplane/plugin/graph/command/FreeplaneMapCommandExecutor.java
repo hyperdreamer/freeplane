@@ -59,6 +59,8 @@ public final class FreeplaneMapCommandExecutor {
 
     interface TraversalResolver {
         Optional<NodeModel> resolve(MapLease lease, SourceNodeKey key);
+
+        Optional<NodeModel> resolve(MapModel model, SourceNodeKey key);
     }
 
     interface ResultEnvelope {
@@ -812,6 +814,11 @@ public final class FreeplaneMapCommandExecutor {
         @Override
         public Optional<NodeModel> resolve(final MapLease lease, final SourceNodeKey key) {
             return resolver.resolve(lease, key);
+        }
+
+        @Override
+        public Optional<NodeModel> resolve(final MapModel model, final SourceNodeKey key) {
+            return resolver.resolve(model, key);
         }
     }
 
