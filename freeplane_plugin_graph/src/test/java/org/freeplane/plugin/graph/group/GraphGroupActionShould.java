@@ -23,6 +23,8 @@ import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.undo.IActor;
 import org.freeplane.core.undo.IUndoHandler;
 import org.freeplane.core.util.TextUtils;
+import org.freeplane.features.map.IMapChangeListener;
+import org.freeplane.features.map.MapChangeEvent;
 import org.freeplane.features.map.MapController;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.INodeChangeListener;
@@ -218,6 +220,82 @@ public class GraphGroupActionShould {
     }
 
     @Test
+    public void broadcastsMarkerTogglesAsMapLevelChangeEventsOnActUndoAndRedo() {
+        Controller previousController = Controller.getCurrentController();
+        Controller.setCurrentController(mock(Controller.class));
+        try {
+            MapModel map = mapWithTwoLeaves();
+            NodeModel marked = map.getRootNode().getChildAt(0);
+            marked.addExtension(new GraphGroupModel());
+            marked.setHistoryInformation(null);
+            final List<MapChangeEvent> modelEvents = new ArrayList<MapChangeEvent>();
+            map.addMapChangeListener(new IMapChangeListener() {
+                @Override
+                public void mapChanged(final MapChangeEvent event) {
+                    modelEvents.add(event);
+                }
+
+                @Override
+                public void onNodeDeleted(final org.freeplane.features.map.NodeDeletionEvent event) {
+                }
+
+                @Override
+                public void onNodeInserted(final NodeModel parent, final NodeModel child, final int index) {
+                }
+
+                @Override
+                public void onNodeMoved(final org.freeplane.features.map.NodeMoveEvent event) {
+                }
+
+                @Override
+                public void onPreNodeMoved(final org.freeplane.features.map.NodeMoveEvent event) {
+                }
+
+                @Override
+                public void onPreNodeDelete(final org.freeplane.features.map.NodeDeletionEvent event) {
+                }
+            });
+            ModeController eventModeController = mock(ModeController.class);
+            EventPublishingMapController eventMapController = new EventPublishingMapController(eventModeController);
+            when(eventModeController.getMapController()).thenReturn(eventMapController);
+            AtomicReference<IActor> actor = prepareEditableMap(eventModeController, map);
+            GraphGroupController controller = new GraphGroupController(eventModeController);
+
+            controller.setMarked(Collections.singletonList(marked), false);
+
+            assertThat(eventMapController.publishedMapChanges()).hasSize(1);
+            assertThat(modelEvents).hasSize(1);
+            MapChangeEvent unmark = eventMapController.publishedMapChanges().get(0);
+            assertThat(unmark.getMap()).isSameAs(map);
+            assertThat(unmark.getProperty()).isEqualTo(GraphGroupModel.class);
+            assertThat(unmark.getOldValue()).isEqualTo(Boolean.TRUE);
+            assertThat(unmark.getNewValue()).isEqualTo(Boolean.FALSE);
+            assertThat(unmark.setsDirtyFlag()).isFalse();
+
+            eventMapController.clearPublishedMapChanges();
+            modelEvents.clear();
+            actor.get().undo();
+
+            assertThat(eventMapController.publishedMapChanges()).hasSize(1);
+            assertThat(modelEvents).hasSize(1);
+            assertThat(eventMapController.publishedMapChanges().get(0).getOldValue()).isEqualTo(Boolean.FALSE);
+            assertThat(eventMapController.publishedMapChanges().get(0).getNewValue()).isEqualTo(Boolean.TRUE);
+
+            eventMapController.clearPublishedMapChanges();
+            modelEvents.clear();
+            actor.get().act();
+
+            assertThat(eventMapController.publishedMapChanges()).hasSize(1);
+            assertThat(modelEvents).hasSize(1);
+            assertThat(eventMapController.publishedMapChanges().get(0).getOldValue()).isEqualTo(Boolean.TRUE);
+            assertThat(eventMapController.publishedMapChanges().get(0).getNewValue()).isEqualTo(Boolean.FALSE);
+        }
+        finally {
+            Controller.setCurrentController(previousController);
+        }
+    }
+
+    @Test
     public void doesNotCreateAnActorOrPublishChangesForAnAlreadyHeldTargetState() {
         MapModel map = mapWithTwoLeaves();
         NodeModel node = map.getRootNode().getChildAt(0);
@@ -325,6 +403,7 @@ public class GraphGroupActionShould {
 
     private static final class EventPublishingMapController extends MapController {
         private final List<NodeModel> publishedNodes = new ArrayList<NodeModel>();
+        private final List<MapChangeEvent> publishedMapChanges = new ArrayList<MapChangeEvent>();
 
         private EventPublishingMapController(ModeController modeController) {
             super(modeController);
@@ -341,8 +420,22 @@ public class GraphGroupActionShould {
             super.nodeChanged(node);
         }
 
+        @Override
+        public void fireMapChanged(final MapChangeEvent event) {
+            publishedMapChanges.add(event);
+            super.fireMapChanged(event);
+        }
+
         private List<NodeModel> publishedNodes() {
             return publishedNodes;
+        }
+
+        private List<MapChangeEvent> publishedMapChanges() {
+            return publishedMapChanges;
+        }
+
+        private void clearPublishedMapChanges() {
+            publishedMapChanges.clear();
         }
     }
 }
