@@ -13,6 +13,7 @@ import org.freeplane.core.io.ReadManager;
 import org.freeplane.core.io.WriteManager;
 import org.freeplane.core.undo.IActor;
 import org.freeplane.core.undo.IUndoHandler;
+import org.freeplane.features.map.MapChangeEvent;
 import org.freeplane.features.map.MapController;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
@@ -127,6 +128,7 @@ public final class GraphGroupController implements IExtension {
     }
 
     private void setMarker(final NodeModel node, final boolean marked) {
+        final boolean wasMarked = GraphGroupModel.isMarked(node);
         if (marked) {
             node.putExtension(new GraphGroupModel());
         }
@@ -134,6 +136,8 @@ public final class GraphGroupController implements IExtension {
             node.removeExtension(GraphGroupModel.class);
         }
         mapController.nodeChanged(node);
+        mapController.fireMapChanged(new MapChangeEvent(this, node.getMap(), GraphGroupModel.class,
+            Boolean.valueOf(wasMarked), Boolean.valueOf(marked), false));
     }
 
     private List<NodeModel> uniqueNodes(final Collection<NodeModel> nodes) {
