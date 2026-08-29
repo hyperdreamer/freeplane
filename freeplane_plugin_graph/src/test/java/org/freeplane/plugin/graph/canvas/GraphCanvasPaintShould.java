@@ -2,6 +2,8 @@ package org.freeplane.plugin.graph.canvas;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.awt.Color;
 import java.awt.Dimension;
@@ -27,6 +29,8 @@ import java.util.Set;
 import javax.swing.JScrollPane;
 import javax.swing.JViewport;
 
+import org.freeplane.core.resources.ResourceController;
+import org.freeplane.main.application.ApplicationResourceController;
 import org.freeplane.plugin.graph.control.CanvasState;
 import org.freeplane.plugin.graph.control.OperationalStatus;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
@@ -35,6 +39,7 @@ import org.freeplane.plugin.graph.geometry.LabelPlacement;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.geometry.NodeGeometry;
+import org.freeplane.plugin.graph.group.GraphGroupColors;
 import org.freeplane.plugin.graph.layout.LayoutFrame;
 import org.freeplane.plugin.graph.projection.BoundaryTier;
 import org.freeplane.plugin.graph.projection.EdgeContributor;
@@ -63,7 +68,10 @@ import org.freeplane.plugin.graph.workspace.model.RelationshipDirection;
 import org.freeplane.plugin.graph.workspace.model.RelationshipId;
 import org.freeplane.plugin.graph.workspace.model.UnknownXml;
 import org.freeplane.plugin.graph.workspace.model.DisplaySettings.CanvasTheme;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
+import org.mockito.MockedStatic;
 
 public class GraphCanvasPaintShould {
     private static final MapReferenceId FIRST_MAP =
@@ -73,6 +81,21 @@ public class GraphCanvasPaintShould {
     private static final MapReferenceId UNREGISTERED_MAP =
         MapReferenceId.of("00000000-0000-0000-0000-000000000099");
     private static final Dimension SIZE = new Dimension(240, 140);
+
+    private ApplicationResourceController resources;
+    private MockedStatic<ResourceController> resourceController;
+
+    @Before
+    public void setUp() {
+        resourceController = org.mockito.Mockito.mockStatic(ResourceController.class);
+        resources = mock(ApplicationResourceController.class);
+        resourceController.when(ResourceController::getResourceController).thenReturn(resources);
+    }
+
+    @After
+    public void tearDown() {
+        resourceController.close();
+    }
 
     @Test
     public void paintBoundaryShapesOnlyAndNeverNodeCircles() {
@@ -103,6 +126,39 @@ public class GraphCanvasPaintShould {
         assertThat(colorPixelsIn(image, theme.nodeFill(), 0, 0, SIZE.width, SIZE.height)).isZero();
         assertThat(nonBackgroundPixels(image, theme.background())).isGreaterThan(100);
         assertThat(image.getRGB(120, 70)).isEqualTo(new Color(0xDF, 0x62, 0x5D).getRGB());
+    }
+
+    @Test
+    public void paintsGroupBoundariesInTheConfiguredColor() {
+        Color configured = new Color(0x22, 0x55, 0xAA);
+        when(resources.getColorProperty(GraphGroupColors.COLOR_PROPERTY_KEY)).thenReturn(configured);
+        EnclosureKey boundaryKey = EnclosureKey.of(source(FIRST_MAP, "boundary-only"));
+        EnclosureHullKey boundaryHull = EnclosureHullKey.of(Collections.singletonList(boundaryKey));
+        ProjectedEnclosure boundary = ProjectedEnclosure.of(boundaryHull,
+            Collections.singletonList(boundaryKey),
+            Collections.singletonList(SafeNodeLabel.of("Boundary only", "Boundary only")), "Map",
+            Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(),
+            Collections.<EnclosureHullKey>emptyList(), false, BoundaryTier.SUBTLE);
+        ProjectedNode retained = node(FIRST_MAP, "retained", LayoutPoint.of(-45.0, 0.0));
+        Map<ProjectedNodeKey, NodeGeometry> nodeGeometry =
+            new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
+        nodeGeometry.put(retained.key(), NodeGeometry.of(LayoutPoint.of(-45.0, 0.0), 8.0));
+        Map<EnclosureHullKey, HullGeometry> hulls = new LinkedHashMap<EnclosureHullKey, HullGeometry>();
+        hulls.put(boundaryHull, rectangle(-50.0, -20.0, 50.0, 20.0, LayoutPoint.of(0.0, 0.0)));
+        GraphProjection projection = GraphProjection.projected(1L, Collections.singletonList(retained),
+            Collections.singletonList(boundary), Collections.<ProjectedEdge>emptyList(),
+            Collections.<RelationshipResolution>emptyList(), Collections.<PinProjection>emptyList());
+        LayoutFrame layout = LayoutFrame.of(1L, LayoutPositions.of(
+            Collections.singletonMap(retained.key(), LayoutPoint.of(-45.0, 0.0)),
+            Collections.singletonMap(boundaryHull, LayoutPoint.of(0.0, 0.0))), false);
+        CanvasState state = CanvasState.of(1L, projection, layout,
+            GraphGeometry.of(nodeGeometry, hulls), OperationalStatus.IDLE);
+        GraphTheme theme = lightTheme();
+        BufferedImage image = paint(state, GraphPaintState.empty(), theme, RenderingLevel.FULL);
+
+        assertThat(image.getRGB(120, 70)).isEqualTo(configured.getRGB());
+        assertThat(colorPixelsIn(image, new Color(0xDF, 0x62, 0x5D), 0, 0, SIZE.width, SIZE.height))
+            .as("default coral must not appear").isZero();
     }
 
     @Test
