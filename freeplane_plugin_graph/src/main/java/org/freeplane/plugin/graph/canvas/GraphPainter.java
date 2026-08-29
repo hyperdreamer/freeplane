@@ -22,6 +22,7 @@ import org.freeplane.plugin.graph.geometry.LabelPlacement;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.geometry.NodeGeometry;
+import org.freeplane.plugin.graph.group.GraphGroupColors;
 import org.freeplane.plugin.graph.projection.BoundaryTier;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.EnclosureKey;
@@ -32,7 +33,6 @@ import org.freeplane.plugin.graph.projection.ProjectedEndpointVisibility;
 import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 
 final class GraphPainter {
-    private static final Color GROUP_BOUNDARY_COLOR = new Color(0xDF, 0x62, 0x5D);
     void paint(final Graphics2D graphics, final CanvasState state, final GraphPaintState paintState,
             final GraphViewport viewport, final java.awt.Dimension size, final GraphTheme theme,
             final RenderingLevel level) {
@@ -100,20 +100,20 @@ final class GraphPainter {
             }
             final Shape path = hull.smoothPath();
             final boolean dim = dimUnrelated && !isEnclosureRelated(enclosure, paintState);
+            final Color groupBoundaryColor = GraphGroupColors.currentColor();
             final AlphaComposite oldComposite = setOpacity(graphics, dim);
             if (enclosure.mapRoot()) {
                 graphics.setColor(theme.hullFill(enclosure.mapReferenceId(), enclosure.boundaryTier()));
             }
             else {
-                // Group boundaries use the fixed coral marker color.
-                graphics.setColor(GROUP_BOUNDARY_COLOR);
+                graphics.setColor(groupBoundaryColor);
             }
             graphics.fill(path);
             if (enclosure.mapRoot()) {
                 graphics.setColor(theme.hullStroke(enclosure.mapReferenceId(), enclosure.boundaryTier()));
             }
             else {
-                graphics.setColor(GROUP_BOUNDARY_COLOR);
+                graphics.setColor(groupBoundaryColor);
             }
             graphics.setStroke(theme.hullStrokeStyle(enclosure.boundaryTier()));
             graphics.draw(path);
