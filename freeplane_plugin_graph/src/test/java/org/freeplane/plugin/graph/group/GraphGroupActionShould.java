@@ -321,7 +321,8 @@ public class GraphGroupActionShould {
         GraphGroupController controller = new GraphGroupController(modeController);
 
         assertThatIllegalStateException().isThrownBy(() -> controller.setMarked(
-            Collections.singletonList(noUndoNode), true));
+            Collections.singletonList(noUndoNode), true))
+            .withMessage("Graph inclusion requires undo support");
         assertThat(GraphGroupModel.isMarked(noUndoNode)).isFalse();
 
         MapModel readOnlyMap = mapWithTwoLeaves();
@@ -330,7 +331,8 @@ public class GraphGroupActionShould {
         readOnlyMap.setReadOnly(true);
 
         assertThatIllegalStateException().isThrownBy(() -> controller.setMarked(
-            Collections.singletonList(readOnlyNode), true));
+            Collections.singletonList(readOnlyNode), true))
+            .withMessage("Graph inclusion requires an editable map");
         assertThat(GraphGroupModel.isMarked(readOnlyNode)).isFalse();
 
         MapModel otherMap = mapWithTwoLeaves();
@@ -339,14 +341,16 @@ public class GraphGroupActionShould {
         otherMap.addExtension(IUndoHandler.class, mock(IUndoHandler.class));
 
         assertThatIllegalArgumentException().isThrownBy(() -> controller.setMarked(
-            Arrays.asList(noUndoNode, otherNode), true));
+            Arrays.asList(noUndoNode, otherNode), true))
+            .withMessage("Selected nodes must belong to one map for Graph Workspace inclusion");
         assertThat(GraphGroupModel.isMarked(noUndoNode)).isFalse();
         assertThat(GraphGroupModel.isMarked(otherNode)).isFalse();
 
         NodeModel detached = new NodeModel("detached", noUndoMap);
 
         assertThatIllegalArgumentException().isThrownBy(() -> controller.setMarked(
-            Collections.singletonList(detached), true));
+            Collections.singletonList(detached), true))
+            .withMessage("Only attached nodes can be included in Graph Workspace");
         assertThat(GraphGroupModel.isMarked(detached)).isFalse();
     }
 

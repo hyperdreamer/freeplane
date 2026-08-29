@@ -179,7 +179,8 @@ public class GraphPluginIntegrationShould {
             .contains("GraphGroupColorAction.icon=/images/Colors24.svg?useAccentColor\\=true");
         assertThat(translations.getProperty("OpenGraphWorkspaceAction.text")).isNotBlank();
         assertThat(translations.getProperty("OpenGraphWorkspaceAction.tooltip")).isNotBlank();
-        assertThat(read("freeplane_plugin_graph/src/main/resources/images/GraphGroup.svg")).contains("<svg", "#DF625D");
+        assertThat(read("freeplane_plugin_graph/src/main/resources/images/GraphGroup.svg"))
+            .contains("<svg", "#DF625D", "aria-label=\"Graph inclusion marker\"");
         assertThat(read("freeplane_plugin_graph/src/main/resources/images/GraphWorkspace.svg")).contains("<svg");
     }
 
