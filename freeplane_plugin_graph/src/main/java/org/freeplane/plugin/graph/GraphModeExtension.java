@@ -1,11 +1,17 @@
 package org.freeplane.plugin.graph;
 
+import java.awt.Component;
+
+import org.freeplane.core.resources.IFreeplanePropertyListener;
 import org.freeplane.core.resources.ResourceController;
+import org.freeplane.core.util.ColorUtils;
+import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
 import org.freeplane.main.application.ApplicationResourceController;
 import org.freeplane.main.application.CommandLineOptions;
 import org.freeplane.main.osgi.IModeControllerExtensionProvider;
 import org.freeplane.plugin.graph.group.GraphGroupController;
+import org.freeplane.plugin.graph.group.GraphGroupColors;
 import org.freeplane.plugin.graph.group.GraphGroupMarkerPainter;
 import org.freeplane.plugin.graph.control.DefaultGraphWorkspaceController;
 import org.freeplane.plugin.graph.control.GraphWorkspaceController;
@@ -16,6 +22,7 @@ import org.freeplane.view.swing.map.NodeViewDecorationRegistry;
 public final class GraphModeExtension implements IModeControllerExtensionProvider, AutoCloseable {
     private GraphGroupController graphGroupController;
     private GraphGroupMarkerPainter graphGroupMarkerPainter;
+    private IFreeplanePropertyListener graphColorChangeListener;
     private OpenGraphWorkspaceAction openGraphWorkspaceAction;
     private DefaultGraphWorkspaceController graphWorkspaceController;
     private ModeController modeController;
@@ -40,6 +47,18 @@ public final class GraphModeExtension implements IModeControllerExtensionProvide
         graphWorkspaceController = completedController;
         openGraphWorkspaceAction = new OpenGraphWorkspaceAction(viewController);
         modeController.addAction(openGraphWorkspaceAction);
+        resourceController.setDefaultProperty(GraphGroupColors.COLOR_PROPERTY_KEY,
+            ColorUtils.colorToString(GraphGroupColors.DEFAULT_COLOR));
+        graphColorChangeListener = new IFreeplanePropertyListener() {
+            @Override
+            public void propertyChanged(final String propertyName, final String newValue,
+                    final String oldValue) {
+                if (GraphGroupColors.COLOR_PROPERTY_KEY.equals(propertyName)) {
+                    repaintMapViews();
+                }
+            }
+        };
+        resourceController.addPropertyChangeListener(graphColorChangeListener);
         nodeViewDecorationRegistry = NodeViewDecorationRegistry.of(modeController);
         graphGroupMarkerPainter = new GraphGroupMarkerPainter();
         nodeViewDecorationRegistry.add(graphGroupMarkerPainter);
@@ -72,6 +91,10 @@ public final class GraphModeExtension implements IModeControllerExtensionProvide
                         }
                     }
                     finally {
+                        if (graphColorChangeListener != null) {
+                            ResourceController.getResourceController()
+                                .removePropertyChangeListener(graphColorChangeListener);
+                        }
                         if (graphGroupController != null) {
                             graphGroupController.close();
                         }
@@ -88,11 +111,22 @@ public final class GraphModeExtension implements IModeControllerExtensionProvide
             finally {
                 graphGroupController = null;
                 graphGroupMarkerPainter = null;
+                graphColorChangeListener = null;
                 openGraphWorkspaceAction = null;
                 graphWorkspaceController = null;
                 modeController = null;
                 nodeViewDecorationRegistry = null;
             }
+        }
+    }
+
+    private static void repaintMapViews() {
+        final Controller controller = Controller.getCurrentController();
+        if (controller == null) {
+            return;
+        }
+        for (final Component mapView : controller.getMapViewManager().getMapViews()) {
+            mapView.repaint();
         }
     }
 

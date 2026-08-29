@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -19,6 +20,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
+import org.freeplane.core.resources.IFreeplanePropertyListener;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.undo.IActor;
 import org.freeplane.core.undo.IUndoHandler;
@@ -33,8 +35,10 @@ import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.map.clipboard.MapClipboardController;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
+import org.freeplane.features.ui.IMapViewManager;
 import org.freeplane.main.application.ApplicationResourceController;
 import org.freeplane.plugin.graph.GraphModeExtension;
+import org.freeplane.view.swing.map.MapView;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -375,6 +379,34 @@ public class GraphGroupActionShould {
         verify(modeController, times(1)).removeAction("GraphGroupColorAction");
         verify(modeController, times(1)).removeAction("GraphGroupAction");
         verify(modeController, times(1)).removeExtension(GraphGroupController.class);
+        verify(applicationResources).addPropertyChangeListener(any(IFreeplanePropertyListener.class));
+        verify(applicationResources).removePropertyChangeListener(any(IFreeplanePropertyListener.class));
+    }
+
+    @Test
+    public void repaintsAllOpenMapViewsWhenTheColorPreferenceChanges() {
+        ApplicationResourceController applicationResources = mock(ApplicationResourceController.class);
+        resourceController.when(ResourceController::getResourceController).thenReturn(applicationResources);
+        GraphModeExtension extension = new GraphModeExtension();
+        extension.installExtension(modeController, null);
+        ArgumentCaptor<IFreeplanePropertyListener> captor =
+            ArgumentCaptor.forClass(IFreeplanePropertyListener.class);
+        verify(applicationResources).addPropertyChangeListener(captor.capture());
+
+        // MapView's static initializer reads the show_connectors preference and interns it;
+        // the mocked ResourceController would return null there, so supply a value.
+        when(applicationResources.getProperty(any(String.class))).thenReturn("show_connectors");
+        MapView mapView = mock(MapView.class);
+        IMapViewManager mapViewManager = mock(IMapViewManager.class);
+        doReturn(Collections.singletonList(mapView)).when(mapViewManager).getMapViews();
+        Controller controller = mock(Controller.class);
+        when(controller.getMapViewManager()).thenReturn(mapViewManager);
+        try (MockedStatic<Controller> controllers = org.mockito.Mockito.mockStatic(Controller.class)) {
+            controllers.when(Controller::getCurrentController).thenReturn(controller);
+            captor.getValue().propertyChanged(GraphGroupColors.COLOR_PROPERTY_KEY, "#112233", "#df625d");
+        }
+
+        verify(mapView).repaint();
     }
 
     private AtomicReference<IActor> prepareEditableMap(MapModel map) {
