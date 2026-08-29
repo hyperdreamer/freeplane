@@ -41,7 +41,10 @@ preference, so existing users see no change until they pick a color.
 - Default: `#DF625D` (current coral), registered by the plugin on install.
 - Accessor: plugin-side helper (`GraphGroupColors.currentColor()`), reading
   `ResourceController.getColorProperty(KEY)` with a coral fallback when the
-  property is missing or invalid.
+  property is missing or invalid. Note: `getColorProperty` on a missing
+  key returns `""` and `ColorUtils.stringToColor("")` throws
+  `NumberFormatException`, so the fallback must wrap the lookup in
+try/catch.
 
 ### Writer: `GraphGroupColorAction`
 
@@ -64,11 +67,19 @@ preference, so existing users see no change until they pick a color.
 
 ### Repaint trigger
 
-- One `IFreeplanePropertyListener` registered in
-  `GraphModeExtension.installExtension`, removed in `close()`.
-- On `graph_group_color` change: repaint all open `MapView`s and all open
-  windows (so open Graph Workspace canvases refresh). Filtered by key,
-  funneled to the EDT.
+Two small `IFreeplanePropertyListener`s, both filtered by the key and safe
+on the EDT (property changes originate from the action on the EDT):
+
+- `GraphModeExtension` registers one listener on install (removed in
+  `close()`) that iterates
+  `Controller.getCurrentController().getMapViewManager().getMapViews()` and
+  calls `repaint()` on each `MapView` (the marker painter is invoked from
+  `NodeView.paint`).
+- `GraphCanvas` registers one listener in its constructor
+ (removed in
+  `removeNotify()`) that calls `repaint()`; `GraphWorkspaceWindow` is
+  package-private, so the canvas is the natural self-contained hook and the
+  listener cannot outlive a closed window.
 
 ### Menu entry
 
