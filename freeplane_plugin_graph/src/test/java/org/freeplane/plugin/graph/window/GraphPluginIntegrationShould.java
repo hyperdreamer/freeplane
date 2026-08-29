@@ -100,7 +100,7 @@ public class GraphPluginIntegrationShould {
         extension.close();
 
         ArgumentCaptor<AFreeplaneAction> actions = ArgumentCaptor.forClass(AFreeplaneAction.class);
-        verify(modeController, org.mockito.Mockito.times(2)).addAction(actions.capture());
+        verify(modeController, org.mockito.Mockito.times(3)).addAction(actions.capture());
         assertThat(actions.getAllValues()).anyMatch(action -> action instanceof OpenGraphWorkspaceAction);
         verify(modeController).removeAction(OpenGraphWorkspaceAction.KEY);
         verify(applicationResources).registerResourceLoader(GraphModeExtension.class.getClassLoader());
@@ -155,17 +155,25 @@ public class GraphPluginIntegrationShould {
 
         int cloud = menu.indexOf("<Entry name=\"CloudAction\" />");
         int graphGroup = menu.indexOf("<Entry name=\"GraphGroupAction\" />");
+        int colorAction = menu.indexOf("<Entry name=\"GraphGroupColorAction\" />");
         int view = menu.indexOf("<Entry name=\"view\">");
         int format = menu.indexOf("<Entry name=\"format\"");
         int workspaceAction = menu.indexOf("<Entry name=\"OpenGraphWorkspaceAction\" />", view);
         assertThat(graphGroup).isGreaterThan(cloud);
         assertThat(menu.substring(cloud, graphGroup)).isEqualTo("<Entry name=\"CloudAction\" />\n\t\t\t");
+        assertThat(colorAction).isGreaterThan(graphGroup);
+        assertThat(menu.substring(graphGroup, colorAction))
+            .isEqualTo("<Entry name=\"GraphGroupAction\" />\n\t\t\t");
         assertThat(workspaceAction).isGreaterThan(view);
         assertThat(workspaceAction).isLessThan(format);
         assertThat(viewerProperties).contains("GraphGroupAction.icon=/images/GraphGroup.svg");
         assertThat(viewerProperties).contains("OpenGraphWorkspaceAction.icon=/images/GraphWorkspace.svg");
         assertThat(translations.getProperty("GraphGroupAction.text")).isNotBlank();
         assertThat(translations.getProperty("GraphGroupAction.tooltip")).isNotBlank();
+        assertThat(translations.getProperty("GraphGroupColorAction.text")).isNotBlank();
+        assertThat(translations.getProperty("GraphGroupColorAction.tooltip")).isNotBlank();
+        assertThat(viewerProperties)
+            .contains("GraphGroupColorAction.icon=/images/Colors24.svg?useAccentColor\\=true");
         assertThat(translations.getProperty("OpenGraphWorkspaceAction.text")).isNotBlank();
         assertThat(translations.getProperty("OpenGraphWorkspaceAction.tooltip")).isNotBlank();
         assertThat(read("freeplane_plugin_graph/src/main/resources/images/GraphGroup.svg")).contains("<svg", "#DF625D");

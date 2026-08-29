@@ -22,6 +22,7 @@ import org.freeplane.features.mode.ModeController;
 
 public final class GraphGroupController implements IExtension {
     private GraphGroupAction graphGroupAction;
+    private GraphGroupColorAction graphGroupColorAction;
     private GraphGroupBuilder graphGroupBuilder;
     private final MapController mapController;
     private final ModeController modeController;
@@ -41,6 +42,8 @@ public final class GraphGroupController implements IExtension {
         graphGroupBuilder.registerBy(reader, writer);
         graphGroupAction = new GraphGroupAction(modeController, this);
         modeController.addAction(graphGroupAction);
+        graphGroupColorAction = new GraphGroupColorAction();
+        modeController.addAction(graphGroupColorAction);
     }
 
     public void close() {
@@ -49,6 +52,8 @@ public final class GraphGroupController implements IExtension {
         }
         graphGroupBuilder.unregisterFrom(mapController.getReadManager(), mapController.getWriteManager());
         modeController.removeAction(graphGroupAction.getKey());
+        modeController.removeAction(graphGroupColorAction.getKey());
+        graphGroupColorAction = null;
         graphGroupAction = null;
         graphGroupBuilder = null;
     }
