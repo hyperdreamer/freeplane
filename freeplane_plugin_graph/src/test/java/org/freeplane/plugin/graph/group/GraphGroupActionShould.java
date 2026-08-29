@@ -371,6 +371,8 @@ public class GraphGroupActionShould {
         assertThat(writer.getExtensionElementWriters().list(GraphGroupModel.class)).isEmpty();
         verify(modeController).addExtension(eq(GraphGroupController.class), any(GraphGroupController.class));
         verify(modeController).addAction(any(GraphGroupAction.class));
+        verify(modeController).addAction(any(GraphGroupColorAction.class));
+        verify(modeController, times(1)).removeAction("GraphGroupColorAction");
         verify(modeController, times(1)).removeAction("GraphGroupAction");
         verify(modeController, times(1)).removeExtension(GraphGroupController.class);
     }

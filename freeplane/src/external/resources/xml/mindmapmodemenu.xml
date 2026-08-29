@@ -60,6 +60,7 @@
 		<Entry usedBy="EDITOR" row="2">
 			<Entry name="CloudAction" />
 			<Entry name="GraphGroupAction" />
+			<Entry name="GraphGroupColorAction" />
 			<Entry name="CloudColorAction" />
 			<Entry name="NodeBackgroundColorAction" />
 			<Entry builder="panel" />
