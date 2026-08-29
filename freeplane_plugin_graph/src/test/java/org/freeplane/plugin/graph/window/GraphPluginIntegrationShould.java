@@ -168,10 +168,13 @@ public class GraphPluginIntegrationShould {
         assertThat(workspaceAction).isLessThan(format);
         assertThat(viewerProperties).contains("GraphGroupAction.icon=/images/GraphGroup.svg");
         assertThat(viewerProperties).contains("OpenGraphWorkspaceAction.icon=/images/GraphWorkspace.svg");
-        assertThat(translations.getProperty("GraphGroupAction.text")).isNotBlank();
-        assertThat(translations.getProperty("GraphGroupAction.tooltip")).isNotBlank();
-        assertThat(translations.getProperty("GraphGroupColorAction.text")).isNotBlank();
-        assertThat(translations.getProperty("GraphGroupColorAction.tooltip")).isNotBlank();
+        assertThat(translations.getProperty("GraphGroupAction.text")).isEqualTo("Include in Graph");
+        assertThat(translations.getProperty("GraphGroupAction.tooltip"))
+            .isEqualTo("Toggle inclusion in Graph Workspace for the selected nodes");
+        assertThat(translations.getProperty("GraphGroupColorAction.text")).isEqualTo("Graph marker color");
+        assertThat(translations.getProperty("GraphGroupColorAction.tooltip"))
+            .isEqualTo("Change the color of graph inclusion markers");
+        assertThat(translations.getProperty("choose_graph_group_color")).isEqualTo("Choose Graph Marker Color:");
         assertThat(viewerProperties)
             .contains("GraphGroupColorAction.icon=/images/Colors24.svg?useAccentColor\\=true");
         assertThat(translations.getProperty("OpenGraphWorkspaceAction.text")).isNotBlank();
