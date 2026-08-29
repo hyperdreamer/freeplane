@@ -65,10 +65,11 @@ public class GraphGroupMarkerPainterShould {
 
     private MockedStatic<ResourceController> resourceControllers;
     private MockedStatic<TextUtils> textUtils;
+    private ApplicationResourceController resources;
 
     @Before
     public void setUp() {
-        ApplicationResourceController resources = mock(ApplicationResourceController.class);
+        resources = mock(ApplicationResourceController.class);
         when(resources.getProperty(anyString())).thenReturn("");
         when(resources.getProperty(CloudController.RESOURCES_CLOUD_COLOR)).thenReturn("#ff808080");
         resourceControllers = org.mockito.Mockito.mockStatic(ResourceController.class);
@@ -158,6 +159,25 @@ public class GraphGroupMarkerPainterShould {
         assertThat(maxAlphaWithCoral(activeImage)).isEqualTo(255);
         assertThat(maxAlphaWithCoral(inactiveImage)).isLessThan(255);
         assertThat(nonTransparentPixelCount(inactiveImage)).isLessThan(nonTransparentPixelCount(activeImage));
+    }
+
+    @Test
+    public void paintsTheConfiguredColorInsteadOfTheDefaultCoral() {
+        Color configured = new Color(0x22, 0x55, 0xAA);
+        when(resources.getColorProperty(GraphGroupColors.COLOR_PROPERTY_KEY)).thenReturn(configured);
+        MapModel map = mapWithRoot();
+        NodeModel marked = new NodeModel("marked", map);
+        map.getRootNode().insert(marked);
+        marked.addExtension(new GraphGroupModel());
+        GraphGroupMarkerPainter painter = new GraphGroupMarkerPainter();
+
+        BufferedImage image = image();
+        paint(painter, nodeView(marked, new Point[] {
+            new Point(20, 20), new Point(20, 45), new Point(115, 45), new Point(115, 20)
+        }, null), image);
+
+        assertThat(maxAlphaWithColor(image, configured)).isEqualTo(255);
+        assertThat(maxAlphaWithColor(image, GraphGroupColors.DEFAULT_COLOR)).isEqualTo(0);
     }
 
     @Test
@@ -478,13 +498,17 @@ public class GraphGroupMarkerPainterShould {
     }
 
     private static int maxAlphaWithCoral(BufferedImage image) {
+        return maxAlphaWithColor(image, CORAL);
+    }
+
+    private static int maxAlphaWithColor(BufferedImage image, Color color) {
         int maxAlpha = 0;
         for (int y = 0; y < image.getHeight(); y++) {
             for (int x = 0; x < image.getWidth(); x++) {
-                Color color = new Color(image.getRGB(x, y), true);
-                if (color.getRed() == CORAL.getRed() && color.getGreen() == CORAL.getGreen()
-                        && color.getBlue() == CORAL.getBlue()) {
-                    maxAlpha = Math.max(maxAlpha, color.getAlpha());
+                Color pixelColor = new Color(image.getRGB(x, y), true);
+                if (pixelColor.getRed() == color.getRed() && pixelColor.getGreen() == color.getGreen()
+                        && pixelColor.getBlue() == color.getBlue()) {
+                    maxAlpha = Math.max(maxAlpha, pixelColor.getAlpha());
                 }
             }
         }
