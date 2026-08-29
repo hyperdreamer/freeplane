@@ -35,10 +35,13 @@ import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
 
+import org.freeplane.core.resources.IFreeplanePropertyListener;
+import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.plugin.graph.command.GraphCommand;
 import org.freeplane.plugin.graph.command.GraphCommands;
+import org.freeplane.plugin.graph.group.GraphGroupColors;
 import org.freeplane.plugin.graph.canvas.GraphCanvas;
 import org.freeplane.plugin.graph.canvas.GraphIntent;
 import org.freeplane.plugin.graph.canvas.GraphInteractionController;
@@ -83,6 +86,7 @@ final class GraphWorkspaceWindow extends JFrame implements GraphWorkspaceView {
 
     private final WorkspaceCloseController closeController;
     private final GraphWorkspaceWindowModel model;
+    private final IFreeplanePropertyListener colorChangeListener;
     private boolean closed;
 
     GraphWorkspaceWindow(final GraphWorkspaceHandle handle, final GraphWorkspaceViewBinding binding,
@@ -124,6 +128,13 @@ final class GraphWorkspaceWindow extends JFrame implements GraphWorkspaceView {
                 requestClose();
             }
         });
+        colorChangeListener = repaintOnColorChange(new Runnable() {
+            @Override
+            public void run() {
+                canvas().repaint();
+            }
+        });
+        ResourceController.getResourceController().addPropertyChangeListener(colorChangeListener);
         pack();
         setSize(WINDOW_SIZE);
         validate();
@@ -135,6 +146,18 @@ final class GraphWorkspaceWindow extends JFrame implements GraphWorkspaceView {
     GraphWorkspaceWindow(final GraphWorkspaceHandle handle, final GraphWorkspaceViewBinding binding,
             final WorkspaceCloseController closeController, final GraphWorkspaceController applicationController) {
         this(handle, binding, closeController, applicationController, GraphWorkspaceWindow::chooseWorkspacePath);
+    }
+
+    static IFreeplanePropertyListener repaintOnColorChange(final Runnable repaint) {
+        return new IFreeplanePropertyListener() {
+            @Override
+            public void propertyChanged(final String propertyName, final String newValue,
+                    final String oldValue) {
+                if (GraphGroupColors.COLOR_PROPERTY_KEY.equals(propertyName)) {
+                    repaint.run();
+                }
+            }
+        };
     }
 
     GraphCanvas canvas() {
@@ -214,6 +237,7 @@ final class GraphWorkspaceWindow extends JFrame implements GraphWorkspaceView {
             return;
         }
         closed = true;
+        ResourceController.getResourceController().removePropertyChangeListener(colorChangeListener);
         model.close();
         dispose();
     }
