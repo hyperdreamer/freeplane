@@ -158,10 +158,10 @@ public final class GraphGroupController implements IExtension {
 
     private void validateMap(final MapModel map) {
         if (map.isReadOnly() || !modeController.canEdit(map)) {
-            throw new IllegalStateException("Graph Group requires an editable map");
+            throw new IllegalStateException("Graph inclusion requires an editable map");
         }
         if (map.getExtension(IUndoHandler.class) == null) {
-            throw new IllegalStateException("Graph Group requires undo support");
+            throw new IllegalStateException("Graph inclusion requires undo support");
         }
     }
 
@@ -169,13 +169,14 @@ public final class GraphGroupController implements IExtension {
         MapModel map = null;
         for (NodeModel node : nodes) {
             if (node == null || node.getMap() == null || !node.allClones().contains(node)) {
-                throw new IllegalArgumentException("Graph Group requires attached nodes");
+                throw new IllegalArgumentException("Only attached nodes can be included in Graph Workspace");
             }
             if (map == null) {
                 map = node.getMap();
             }
             else if (map != node.getMap()) {
-                throw new IllegalArgumentException("Graph Group selection must belong to one map");
+                throw new IllegalArgumentException(
+                    "Selected nodes must belong to one map for Graph Workspace inclusion");
             }
         }
         return map;
