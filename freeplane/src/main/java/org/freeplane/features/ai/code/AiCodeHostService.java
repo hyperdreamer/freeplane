@@ -9,6 +9,8 @@ public interface AiCodeHostService {
 
     RunCodeResponse runCode(RunCodeRequest request);
 
+    RunCodeResponse writeAndRunCode(WriteAndRunCodeRequest request);
+
     AiChatCodeOperationResult evaluateFormula(EvaluateFormulaRequest request);
 
     void addRunListener(AiCodeRunListener listener);

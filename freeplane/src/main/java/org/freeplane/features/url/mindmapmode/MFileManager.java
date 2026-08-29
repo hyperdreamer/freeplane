@@ -44,7 +44,6 @@ import java.nio.channels.FileLock;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.Collection;
@@ -487,11 +486,10 @@ public class MFileManager extends UrlManager implements IMapViewChangeListener {
 		if (!file.exists()) {
 			throw new FileNotFoundException(TextUtils.format("file_not_found", file.getPath()));
 		}
-		Path filePath = file.toPath();
-		if (!Files.isReadable(filePath)) {
+		if (!Files.isReadable(file.toPath())) {
 			throw new FileNotFoundException(TextUtils.format("file_not_accessible", file.getPath()));
 		}
-		if (!Files.isWritable(filePath)) {
+		if (!file.canWrite()) {
 			map.setReadOnly(true);
 		}
 		try {
@@ -767,7 +765,7 @@ public class MFileManager extends UrlManager implements IMapViewChangeListener {
 			    TextUtils.format("locking_failed_by_save_as", file.getName()));
 			return false;
 		}
-		if (file.exists() && !Files.isWritable(file.toPath())) {
+		if (file.exists() && !file.canWrite()) {
 			JOptionPane.showMessageDialog(Controller.getCurrentController()
 			    .getMapViewManager().getMapViewComponent(),
 			    TextUtils.format("SaveAs_toReadonlyMsg", file),

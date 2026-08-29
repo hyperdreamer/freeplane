@@ -26,6 +26,7 @@ import org.freeplane.features.ai.code.ReadCodeResponse;
 import org.freeplane.features.ai.code.RunCodeRequest;
 import org.freeplane.features.ai.code.RunCodeResponse;
 import org.freeplane.features.ai.code.ScriptHost;
+import org.freeplane.features.ai.code.WriteAndRunCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeResponse;
 import org.freeplane.plugin.ai.chat.session.LiveChatSessionId;
@@ -143,6 +144,11 @@ public class SingleEditorAttachmentService implements AiChatAttachmentService, A
         attachment.latestCodeState = stateFromRunResponse(attachment, response);
         fireRunFinished(response);
         return response;
+    }
+
+    @Override
+    public RunCodeResponse writeAndRunCode(WriteAndRunCodeRequest request) {
+        throw new IllegalStateException("One-call AI-owned script execution is not supported for attached editors.");
     }
 
     @Override

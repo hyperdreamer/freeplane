@@ -18,6 +18,7 @@ import org.freeplane.features.ai.code.ReadCodeResponse;
 import org.freeplane.features.ai.code.RunCodeRequest;
 import org.freeplane.features.ai.code.RunCodeResponse;
 import org.freeplane.features.ai.code.ScriptHost;
+import org.freeplane.features.ai.code.WriteAndRunCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeResponse;
 import org.freeplane.plugin.ai.tools.availability.ToolAvailabilityLevel;
@@ -30,6 +31,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 public class AiCodeOperationAuthorizerTest {
     private static final String SCRIPT_CONTENT_TYPE = "text/x-freeplane-script-groovy";
     private static final String FORMULA_CONTENT_TYPE = "text/x-freeplane-formula-groovy";
+    private static final String FORMULA_CONDITION_CONTENT_TYPE = "text/x-freeplane-formula-condition-groovy";
 
     @Test
     public void attachedScriptEditorOverrideKeepsReadWriteAndCompileAuthorizedAtReading() {
@@ -69,7 +71,7 @@ public class AiCodeOperationAuthorizerTest {
     }
 
     @Test
-    public void scriptExecutionAvailabilityAddsRunCodeForScriptContent() {
+    public void scriptExecutionAvailabilityAddsWriteAndRunCode() {
         FakeCodeHostService codeHostService = new FakeCodeHostService()
             .withState(ScriptHost.ATTACHED_EDITOR, SCRIPT_CONTENT_TYPE, CodeState.EDITED);
         AiCodeOperationAuthorizer uut = authorizer(
@@ -78,8 +80,33 @@ public class AiCodeOperationAuthorizerTest {
             false,
             codeHostService);
 
-        assertThat(uut.authorizedToolNames()).contains("runCode");
+        assertThat(uut.authorizedToolNames()).contains("runCode", "writeAndRunCode");
         uut.assertAuthorized("runCode", ScriptHost.ATTACHED_EDITOR);
+    }
+
+    @Test
+    public void writeAndRunCodeDoesNotRequireExistingStoredAiCode() {
+        FakeCodeHostService codeHostService = new FakeCodeHostService();
+        AiCodeOperationAuthorizer uut = authorizer(
+            () -> ToolAvailabilityLevel.SCRIPT_EXECUTION,
+            () -> null,
+            false,
+            codeHostService);
+
+        uut.assertAuthorized("writeAndRunCode", ScriptHost.AI);
+    }
+
+    @Test
+    public void writeAndRunCodeRejectsWhenScriptExecutionIsUnavailable() {
+        AiCodeOperationAuthorizer uut = authorizer(
+            () -> ToolAvailabilityLevel.EDITING,
+            () -> null,
+            false,
+            new FakeCodeHostService());
+
+        assertThatThrownBy(() -> uut.assertAuthorized("writeAndRunCode", ScriptHost.AI))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("Script execution is not available at the current availability level.");
     }
 
     @Test
@@ -91,7 +118,42 @@ public class AiCodeOperationAuthorizerTest {
             false,
             codeHostService);
 
-        assertThat(uut.authorizedToolNames()).containsExactly("readCode", "writeCode", "compileCode", "runCode");
+        assertThat(uut.authorizedToolNames()).containsExactly(
+            "readCode", "writeCode", "compileCode", "runCode", "writeAndRunCode");
+    }
+
+    @Test
+    public void attachedFilterConditionWriteAndCompileRequireFormulaEditingPermission() {
+        FakeCodeHostService codeHostService = new FakeCodeHostService()
+            .withState(ScriptHost.ATTACHED_EDITOR, FORMULA_CONDITION_CONTENT_TYPE, CodeState.EDITED);
+        AiCodeOperationAuthorizer uut = authorizer(
+            () -> ToolAvailabilityLevel.EDITING,
+            () -> null,
+            false,
+            codeHostService);
+
+        assertThat(uut.authorizedToolNames()).containsExactly("readCode");
+        assertThatThrownBy(() -> uut.assertAuthorized("writeCode", ScriptHost.ATTACHED_EDITOR))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("The requested code host is not writable at the current availability level.");
+        assertThatThrownBy(() -> uut.assertAuthorized("compileCode", ScriptHost.ATTACHED_EDITOR))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("The requested code host is not writable at the current availability level.");
+    }
+
+    @Test
+    public void editingAvailabilityAllowsAttachedFilterConditionWriteAndCompileWhenFormulaEditingIsEnabled() {
+        FakeCodeHostService codeHostService = new FakeCodeHostService()
+            .withState(ScriptHost.ATTACHED_EDITOR, FORMULA_CONDITION_CONTENT_TYPE, CodeState.EDITED);
+        AiCodeOperationAuthorizer uut = authorizer(
+            () -> ToolAvailabilityLevel.EDITING,
+            () -> null,
+            true,
+            codeHostService);
+
+        assertThat(uut.authorizedToolNames()).contains("readCode", "writeCode", "compileCode");
+        uut.assertAuthorized("writeCode", ScriptHost.ATTACHED_EDITOR);
+        uut.assertAuthorized("compileCode", ScriptHost.ATTACHED_EDITOR);
     }
 
     @Test
@@ -107,6 +169,21 @@ public class AiCodeOperationAuthorizerTest {
         assertThat(uut.authorizedToolNames()).contains("readCode", "writeCode", "compileCode");
         uut.assertAuthorized("writeCode", ScriptHost.ATTACHED_EDITOR);
         uut.assertAuthorized("compileCode", ScriptHost.ATTACHED_EDITOR);
+    }
+
+    @Test
+    public void runCodeRejectsFilterConditionContent() {
+        FakeCodeHostService codeHostService = new FakeCodeHostService()
+            .withState(ScriptHost.ATTACHED_EDITOR, FORMULA_CONDITION_CONTENT_TYPE, CodeState.EDITED);
+        AiCodeOperationAuthorizer uut = authorizer(
+            () -> ToolAvailabilityLevel.SCRIPT_EXECUTION,
+            () -> null,
+            true,
+            codeHostService);
+
+        assertThatThrownBy(() -> uut.assertAuthorized("runCode", ScriptHost.ATTACHED_EDITOR))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("Only script content is runnable.");
     }
 
     @Test
@@ -201,6 +278,11 @@ public class AiCodeOperationAuthorizerTest {
 
         @Override
         public RunCodeResponse runCode(RunCodeRequest request) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public RunCodeResponse writeAndRunCode(WriteAndRunCodeRequest request) {
             throw new UnsupportedOperationException();
         }
 

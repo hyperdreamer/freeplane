@@ -20,6 +20,7 @@
 package org.freeplane.features.filter;
 
 import java.awt.event.ActionEvent;
+import java.util.function.Predicate;
 
 import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.features.filter.condition.ASelectableCondition;
@@ -69,13 +70,24 @@ class QuickFindAllAction extends AFreeplaneAction {
             searchStart = selected;
         else
             searchStart = searchRoot;
-		boolean nodeFound = condition.checkNode(searchStart);
+        final Filter quickSelectionFilter = filterController
+                .createQuickSelectionFilter(condition, selection);
+        final Predicate<NodeModel> matches;
+        if (quickSelectionFilter == null) {
+            matches = condition::checkNode;
+        }
+        else {
+            quickSelectionFilter.calculateFilterResults(searchRoot);
+            filterController.unfoldMatchingBranchesForQuickSelection(quickSelectionFilter, selection);
+            matches = node -> quickSelectionFilter.getFilterInfo(node).isMatched();
+        }
+		boolean nodeFound = matches.test(searchStart);
 		if(nodeFound){
 			selection.selectAsTheOnlyOneSelected(searchStart);
 		}
 		NodeModel next = searchRoot;
 		for(;;){
-			next = filterController.findNext(next, searchRoot, Direction.FORWARD_VISIBLE, condition, selection.getFilter());
+			next = filterController.findNextMatching(next, searchRoot, Direction.FORWARD_VISIBLE, matches, selection.getFilter());
 			if(next == null){
 				break;
 			}
@@ -88,7 +100,7 @@ class QuickFindAllAction extends AFreeplaneAction {
 				nodeFound = true;
 			}
 		}
-		if(condition.checkNode(searchStart))
+		if(matches.test(searchStart))
 		    selection.makeTheSelected(searchStart);
 	}
 }

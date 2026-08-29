@@ -216,45 +216,141 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
             mapRootView.updateAll(cause);
     }
 
-    private void updateFilterNodeFolding() {
-        final FilterController filterController = FilterController.getCurrentFilterController();
-        if (filterController == null || currentRootView == null || filter == null
-                || !filterController.isUnfoldMatchingBranchesSelected()
-                || filter.getCondition() == null
-                || filter.getFilteredElement() == Filter.FilteredElement.CONNECTOR) {
+    void updateFilterNodeFolding() {
+        applyManagedFilterNodeFolding();
+    }
+
+    public void unfoldMatchingBranches(final Filter foldingFilter, final NodeModel foldingRoot) {
+        if (foldingFilter == null || foldingRoot == null || currentRootView == null
+                || !isInDisplayedRoot(foldingRoot) || !hasMatchingNode(foldingRoot, foldingFilter)) {
+            return;
+        }
+        final Set<NodeModel> unfoldNodeModels = new LinkedHashSet<>();
+        if (foldingRoot != currentRootView.getNode()) {
+            unfoldNodeModels.add(foldingRoot);
+        }
+        collectFilteredAncestorNodeModels(foldingRoot, foldingFilter, true, unfoldNodeModels);
+        if (unfoldNodeModels.isEmpty()) {
+            return;
+        }
+        selectionDrivenFoldingState = SelectionDrivenFoldingState.PENDING_SELECTION_UPDATE;
+        pendingSelectionUnfoldNodeModels.clear();
+        pendingSelectionUnfoldNodeModels.addAll(unfoldNodeModels);
+        applyManagedFilterNodeFolding();
+    }
+
+    private void applyManagedFilterNodeFolding() {
+        if (currentRootView == null) {
             filterNodeViewFolder.adjustFolding(Collections.emptySet());
             return;
         }
-        final Set<NodeView> unfoldNodeViews = collectAncestorViews(currentRootView);
-        filterNodeViewFolder.adjustFolding(unfoldNodeViews);
+        final Set<NodeModel> unfoldNodeModels = collectFilterUnfoldNodeModels();
+        switch (selectionDrivenFoldingState) {
+        case PENDING_SELECTION_UPDATE:
+            unfoldNodeModels.addAll(pendingSelectionUnfoldNodeModels);
+            unfoldNodeModels.addAll(selectionUnfoldNodeModels);
+            break;
+        case FOLLOWING_SELECTION:
+            unfoldNodeModels.addAll(selectionUnfoldNodeModels);
+            break;
+        case INACTIVE:
+            break;
+        }
+        adjustFilterNodeFolding(unfoldNodeModels);
     }
 
-    private Set<NodeView> collectAncestorViews(final NodeView rootView) {
+    private Set<NodeModel> collectFilterUnfoldNodeModels() {
+        final FilterController filterController = FilterController.getCurrentFilterController();
+        if (filterController == null || filter == null
+                || !filterController.isUnfoldMatchingBranchesSelected()
+                || filter.getCondition() == null
+                || filter.getFilteredElement() == Filter.FilteredElement.CONNECTOR) {
+            return new LinkedHashSet<>();
+        }
+        final Set<NodeModel> unfoldNodeModels = new LinkedHashSet<>();
+        collectFilteredAncestorNodeModels(currentRootView.getNode(), filter, true, unfoldNodeModels);
+        return unfoldNodeModels;
+    }
+
+    private void collectFilteredAncestorNodeModels(final NodeModel node, final Filter foldingFilter,
+            final boolean isRoot, final Set<NodeModel> unfoldNodeModels) {
+        if (!isRoot && foldingFilter.isFilteredAsAncestor(node)) {
+            unfoldNodeModels.add(node);
+        }
+        for (final NodeModel child : node.getChildren()) {
+            collectFilteredAncestorNodeModels(child, foldingFilter, false, unfoldNodeModels);
+        }
+    }
+
+    private void adjustFilterNodeFolding(final Set<NodeModel> unfoldNodeModels) {
+        Set<NodeView> visibleUnfoldNodeViews = Collections.emptySet();
+        while (true) {
+            final Set<NodeView> nextVisibleUnfoldNodeViews = collectVisibleUnfoldNodeViews(unfoldNodeModels);
+            if (nextVisibleUnfoldNodeViews.equals(visibleUnfoldNodeViews)) {
+                filterNodeViewFolder.adjustFolding(nextVisibleUnfoldNodeViews);
+                return;
+            }
+            filterNodeViewFolder.adjustFolding(nextVisibleUnfoldNodeViews);
+            visibleUnfoldNodeViews = nextVisibleUnfoldNodeViews;
+        }
+    }
+
+    private Set<NodeView> collectVisibleUnfoldNodeViews(final Set<NodeModel> unfoldNodeModels) {
         final Set<NodeView> unfoldNodeViews = new HashSet<>();
-        boolean changed;
-        do {
-            changed = collectAncestorViews(rootView, rootView, unfoldNodeViews);
-            if (changed) {
-                filterNodeViewFolder.adjustFolding(new HashSet<>(unfoldNodeViews));
+        for (final NodeModel node : unfoldNodeModels) {
+            if (!isInDisplayedRoot(node)) {
+                continue;
+            }
+            final NodeView nodeView = getNodeView(node);
+            if (nodeView != null) {
+                unfoldNodeViews.add(nodeView);
             }
         }
-        while (changed);
         return unfoldNodeViews;
     }
 
-    private boolean collectAncestorViews(final NodeView rootView, final NodeView nodeView,
-            final Set<NodeView> unfoldNodeViews) {
-        boolean changed = false;
-        if (nodeView != rootView && filter.isFilteredAsAncestor(nodeView.getNode())) {
-            changed |= unfoldNodeViews.add(nodeView);
+    void updateSelectionDrivenFolding() {
+        if (selectionDrivenFoldingState == SelectionDrivenFoldingState.INACTIVE) {
+            return;
         }
-        if (nodeView.isFolded()) {
-            return changed;
+        pendingSelectionUnfoldNodeModels.clear();
+        selectionUnfoldNodeModels.clear();
+        for (final NodeView nodeView : selection.getSelection()) {
+            collectSelectionAncestorNodeModels(nodeView.getNode(), selectionUnfoldNodeModels);
         }
-        for (final NodeView childView : nodeView.getChildrenViews()) {
-            changed |= collectAncestorViews(rootView, childView, unfoldNodeViews);
+        selectionDrivenFoldingState = SelectionDrivenFoldingState.FOLLOWING_SELECTION;
+        applyManagedFilterNodeFolding();
+    }
+
+    private void collectSelectionAncestorNodeModels(final NodeModel node, final Set<NodeModel> unfoldNodeModels) {
+        if (!isInDisplayedRoot(node)) {
+            return;
         }
-        return changed;
+        final NodeModel displayedRoot = currentRootView.getNode();
+        for (NodeModel ancestor = node.getParentNode();
+                ancestor != null && ancestor != displayedRoot;
+                ancestor = ancestor.getParentNode()) {
+            unfoldNodeModels.add(ancestor);
+        }
+    }
+
+    private void clearSelectionDrivenFolding() {
+        selectionDrivenFoldingState = SelectionDrivenFoldingState.INACTIVE;
+        selectionUnfoldNodeModels.clear();
+        pendingSelectionUnfoldNodeModels.clear();
+    }
+
+    private boolean isInDisplayedRoot(final NodeModel node) {
+        if (currentRootView == null) {
+            return false;
+        }
+        final NodeModel displayedRoot = currentRootView.getNode();
+        return node == displayedRoot || node.isDescendantOf(displayedRoot);
+    }
+
+    private boolean hasMatchingNode(final NodeModel node, final Filter foldingFilter) {
+        return foldingFilter.getFilterInfo(node).isMatched()
+                || foldingFilter.isFilteredAsAncestor(node);
     }
 
 	private boolean showNotes;
@@ -728,6 +824,7 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
             if(selectionChanged) {
                 selectionChanged = false;
                 if (isSelected()) {
+                    updateSelectionDrivenFolding();
                     if(selection.selectedNode != null)
                         modeController.getMapController().onSelectionChange(getMapSelection());
                     if(isClientPropertyTrue(FOLDING_FOLLOWS_SELECTION)) {
@@ -846,9 +943,18 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
     private IconLocation iconLocation;
     private boolean repaintsViewOnSelectionChange;
 
+    private enum SelectionDrivenFoldingState {
+        INACTIVE,
+        PENDING_SELECTION_UPDATE,
+        FOLLOWING_SELECTION
+    }
+
     public static final int SCROLL_VELOCITY_PX = (int) (UITools.FONT_SCALE_FACTOR  * 10);
     private final NodeViewFolder nodeViewFolder;
     private final NodeViewFolder filterNodeViewFolder;
+    private final Set<NodeModel> selectionUnfoldNodeModels;
+    private final Set<NodeModel> pendingSelectionUnfoldNodeModels;
+    private SelectionDrivenFoldingState selectionDrivenFoldingState = SelectionDrivenFoldingState.INACTIVE;
 	private final AntiAliasingConfigurator antiAliasingConfigurator;
 	private FilterUpdateListener filterUpdateListener;
 
@@ -922,6 +1028,8 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 		    putClientProperty(SPOTLIGHT_ENABLED, Boolean.TRUE);
 		nodeViewFolder = new NodeViewFolder(true);
         filterNodeViewFolder = new NodeViewFolder(false);
+        selectionUnfoldNodeModels = new LinkedHashSet<>();
+        pendingSelectionUnfoldNodeModels = new LinkedHashSet<>();
 		setMap(viewedMap);
 		mapScroller = new MapScroller(this);
 	}
@@ -956,6 +1064,7 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
         iconLocation = mapStyle.iconLocation(viewedMap);
         rootsHistory.clear();
         filter = Filter.createTransparentFilter();
+        clearSelectionDrivenFolding();
         if(lastViewedMap != viewedMap) {
             selectAsTheOnlyOneSelected(getRoot());
 			modeController.getMapController().fireMapChanged(new MapChangeEvent(this, viewedMap, MapView.class, null, this, false));
@@ -1271,6 +1380,27 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 	public IMapSelection getMapSelection() {
 		return new MapSelection();
 	}
+
+    void initializeForTest(final MapViewLayout layoutType, final int siblingMaxLevel) {
+        this.layoutType = layoutType;
+        this.siblingMaxLevel = siblingMaxLevel;
+    }
+
+    void attachRootViewForTest(final NodeView rootView) {
+        mapRootView = rootView;
+        currentRootView = rootView;
+        currentRootParentView = null;
+        add(rootView);
+    }
+
+    void fireSelectionChanged() {
+        selection.fireSelectionChanged();
+    }
+
+    void setCurrentRootViewForTest(final NodeView currentRootView) {
+        this.currentRootView = currentRootView;
+        currentRootParentView = currentRootView != null ? currentRootView.getParentView() : null;
+    }
 
 	public ModeController getModeController() {
 		return modeController;

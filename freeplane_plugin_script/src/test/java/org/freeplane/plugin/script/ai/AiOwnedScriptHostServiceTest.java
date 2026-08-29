@@ -3,17 +3,22 @@ package org.freeplane.plugin.script.ai;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.when;
 
+import java.lang.reflect.Method;
 import java.util.Collections;
+import java.util.List;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.ai.code.CodeState;
 import org.freeplane.features.ai.code.CodeStateContent;
 import org.freeplane.features.ai.code.CodeStateField;
 import org.freeplane.features.ai.code.CodeStateToken;
+import org.freeplane.features.ai.code.CompileCodeRequest;
 import org.freeplane.features.ai.code.CompileCodeResponse;
 import org.freeplane.features.ai.code.EvaluateFormulaRequest;
 import org.freeplane.features.ai.code.ReadCodeRequest;
@@ -21,13 +26,19 @@ import org.freeplane.features.ai.code.ReadCodeResponse;
 import org.freeplane.features.ai.code.RunCodeRequest;
 import org.freeplane.features.ai.code.RunCodeResponse;
 import org.freeplane.features.ai.code.ScriptHost;
+import org.freeplane.features.ai.code.ScriptRunInitiator;
+import org.freeplane.features.ai.code.WriteAndRunCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeResponse;
+import org.freeplane.features.map.MapController;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
+import org.freeplane.features.mode.Controller;
+import org.freeplane.features.mode.ModeController;
 import org.freeplane.plugin.script.FormulaValidationSupport;
 import org.freeplane.plugin.script.ScriptingPermissions;
 import org.junit.Test;
+import org.mockito.MockedStatic;
 
 public class AiOwnedScriptHostServiceTest {
     @Test
@@ -48,6 +59,101 @@ public class AiOwnedScriptHostServiceTest {
         assertThat(current.getCodeState()).isEqualTo(CodeState.EDITED);
         assertThat(current.getContent().getSourceText()).isEqualTo("println 2");
         assertThat(current.getStateToken()).isEqualTo(second.getStateToken());
+    }
+
+    @Test
+    public void writeAndRunCodeCreatesAiOwnedStateAndRunsIt() {
+        ensureScriptClasspath();
+        try (MockedStatic<Controller> controller = mockStatic(Controller.class)) {
+            ResourceController resourceController = mock(ResourceController.class);
+            when(resourceController.getEnumProperty(
+                eq(AiOwnedScriptHostService.AI_SCRIPT_EXECUTION_POLICY),
+                eq(AiScriptExecutionPolicy.SHOWN_USER_RUN))).thenReturn(AiScriptExecutionPolicy.HIDDEN_AI_RUN);
+            when(resourceController.getIntProperty("compiled_script_cache_size", 200)).thenReturn(8);
+            Controller currentController = mock(Controller.class);
+            ModeController modeController = mock(ModeController.class);
+            MapController mapController = mock(MapController.class);
+            NodeModel selectedNode = new NodeModel("selected", new MapModel((source, targetMap, withChildren) -> null, null, null));
+            when(currentController.getResourceController()).thenReturn(resourceController);
+            when(modeController.getMapController()).thenReturn(mapController);
+            when(mapController.getSelectedNode()).thenReturn(selectedNode);
+            controller.when(Controller::getCurrentController).thenReturn(currentController);
+            controller.when(Controller::getCurrentModeController).thenReturn(modeController);
+
+            AiOwnedScriptHostService uut = new AiOwnedScriptHostService(resourceController);
+
+            RunCodeResponse response = uut.doWriteAndRunCode(new WriteAndRunCodeRequest(
+                new CodeStateContent("println 'hello'\nreturn 7", null)));
+            ReadCodeResponse state = uut.doReadCode(new ReadCodeRequest(ScriptHost.AI));
+
+            assertThat(response.getCodeState()).isEqualTo(CodeState.RUN_SUCCEEDED);
+            assertThat(response.getStdout()).contains("hello");
+            assertThat(response.getStructuredResult()).isEqualTo(7);
+            assertThat(state.getContent().getSourceText()).isEqualTo("println 'hello'\nreturn 7");
+            assertThat(state.getStateToken()).isEqualTo(response.getStateToken());
+        }
+    }
+
+    @Test
+    public void writeAndRunCodeReplacesExistingAiOwnedStateWithoutPriorRead() {
+        ResourceController resourceController = mock(ResourceController.class);
+        when(resourceController.getEnumProperty(
+            eq(AiOwnedScriptHostService.AI_SCRIPT_EXECUTION_POLICY),
+            eq(AiScriptExecutionPolicy.SHOWN_USER_RUN))).thenReturn(AiScriptExecutionPolicy.SHOWN_USER_RUN);
+        AiOwnedScriptHostService uut = new AiOwnedScriptHostService(resourceController, new LoadingDialogFactory());
+
+        uut.doWriteAndRunCode(new WriteAndRunCodeRequest(new CodeStateContent("println 1", null)));
+        RunCodeResponse response = uut.doWriteAndRunCode(new WriteAndRunCodeRequest(
+            new CodeStateContent("println 2", "{}")));
+        ReadCodeResponse state = uut.doReadCode(new ReadCodeRequest(ScriptHost.AI));
+
+        assertThat(response.getCodeState()).isEqualTo(CodeState.WAITING_FOR_USER_RUN);
+        assertThat(state.getContent()).isEqualTo(new CodeStateContent("println 2", "{}"));
+        assertThat(state.getStateToken()).isEqualTo(response.getStateToken());
+    }
+
+    @Test
+    public void writeAndRunCodeReturnsGroovyDiagnosticLocations() {
+        ensureScriptClasspath();
+        try (MockedStatic<Controller> controller = mockCurrentController()) {
+            ResourceController resourceController = mock(ResourceController.class);
+            when(resourceController.getEnumProperty(
+                eq(AiOwnedScriptHostService.AI_SCRIPT_EXECUTION_POLICY),
+                eq(AiScriptExecutionPolicy.SHOWN_USER_RUN))).thenReturn(AiScriptExecutionPolicy.HIDDEN_AI_RUN);
+            when(resourceController.getIntProperty("compiled_script_cache_size", 200)).thenReturn(8);
+            AiOwnedScriptHostService uut = new AiOwnedScriptHostService(resourceController);
+
+            RunCodeResponse response = uut.doWriteAndRunCode(new WriteAndRunCodeRequest(
+                new CodeStateContent("import a.A\nimport b.B\nprintln 'x'\n", null)));
+
+            assertThat(response.getCodeState()).isEqualTo(CodeState.INVALID_SCRIPT);
+            assertThat(response.getDiagnostics())
+                .extracting(diagnostic -> diagnostic.getLine(), diagnostic -> diagnostic.getColumn())
+                .containsExactly(
+                    tuple(1, 1),
+                    tuple(2, 1));
+        }
+    }
+
+    @Test
+    public void writeAndRunCodeShownUserRunReusesDialogAndPersistsUserEdits() {
+        ResourceController resourceController = mock(ResourceController.class);
+        when(resourceController.getEnumProperty(
+            eq(AiOwnedScriptHostService.AI_SCRIPT_EXECUTION_POLICY),
+            eq(AiScriptExecutionPolicy.SHOWN_USER_RUN))).thenReturn(AiScriptExecutionPolicy.SHOWN_USER_RUN);
+        LoadingDialogFactory dialogFactory = new LoadingDialogFactory();
+        AiOwnedScriptHostService uut = new AiOwnedScriptHostService(resourceController, dialogFactory);
+
+        RunCodeResponse waiting = uut.doWriteAndRunCode(new WriteAndRunCodeRequest(
+            new CodeStateContent("println 1", null)));
+        dialogFactory.dialog.currentContent = new CodeStateContent("println 2", null);
+        uut.dialogCancelled();
+        ReadCodeResponse state = uut.doReadCode(new ReadCodeRequest(ScriptHost.AI));
+
+        assertThat(waiting.getCodeState()).isEqualTo(CodeState.WAITING_FOR_USER_RUN);
+        assertThat(dialogFactory.dialog.showAndFocusCalls).isEqualTo(1);
+        assertThat(state.getCodeState()).isEqualTo(CodeState.USER_RUN_CANCELLED);
+        assertThat(state.getContent().getSourceText()).isEqualTo("println 2");
     }
 
     @Test
@@ -159,13 +265,54 @@ public class AiOwnedScriptHostServiceTest {
         AiOwnedScriptHostService uut = new AiOwnedScriptHostService(null);
 
         WriteCodeResponse written = uut.doWriteCode(writeRequest("return args", "{", null));
-        CompileCodeResponse compileResponse = uut.doCompileCode(new org.freeplane.features.ai.code.CompileCodeRequest(
+        CompileCodeResponse compileResponse = uut.doCompileCode(new CompileCodeRequest(
             ScriptHost.AI,
             written.getStateToken()));
 
         assertThat(compileResponse.getCodeState()).isEqualTo(CodeState.INVALID_ARGUMENTS_JSON);
         assertThat(compileResponse.getDiagnostics()).hasSize(1);
         assertThat(compileResponse.getDiagnostics().get(0).getField()).isEqualTo(CodeStateField.ARGUMENTS_JSON);
+    }
+
+    @Test
+    public void compileCodeReturnsGroovyDiagnosticLocations() {
+        ensureScriptClasspath();
+        try (MockedStatic<Controller> controller = mockCurrentController()) {
+            AiOwnedScriptHostService uut = new AiOwnedScriptHostService(null);
+
+            WriteCodeResponse written = uut.doWriteCode(writeRequest("import a.A\nimport b.B\nprintln 'x'\n", null, null));
+            CompileCodeResponse compileResponse = uut.doCompileCode(new CompileCodeRequest(
+                ScriptHost.AI,
+                written.getStateToken()));
+
+            assertThat(compileResponse.getCodeState()).isEqualTo(CodeState.INVALID_SCRIPT);
+            assertThat(compileResponse.getDiagnostics())
+                .extracting(diagnostic -> diagnostic.getLine(), diagnostic -> diagnostic.getColumn())
+                .containsExactly(
+                    tuple(1, 1),
+                    tuple(2, 1));
+            assertThat(compileResponse.getErrorMessage()).isEqualTo("Groovy compilation failed with 2 diagnostics.");
+        }
+    }
+
+    @Test
+    public void runFromDialogReturnsGroovyDiagnosticLocationsForCompileFailure() {
+        ensureScriptClasspath();
+        try (MockedStatic<Controller> controller = mockCurrentController()) {
+            AiOwnedScriptHostService uut = new AiOwnedScriptHostService(null);
+            uut.doWriteCode(writeRequest("println 1", null, null));
+
+            RunCodeResponse response = uut.runFromDialog(new CodeStateContent("import a.A\nimport b.B\nprintln 'x'\n", null));
+
+            assertThat(response.getCodeState()).isEqualTo(CodeState.INVALID_SCRIPT);
+            assertThat(response.getRunInitiator()).isEqualTo(ScriptRunInitiator.USER);
+            assertThat(response.getDiagnostics())
+                .extracting(diagnostic -> diagnostic.getLine(), diagnostic -> diagnostic.getColumn())
+                .containsExactly(
+                    tuple(1, 1),
+                    tuple(2, 1));
+            assertThat(response.getErrorMessage()).isEqualTo("Groovy compilation failed with 2 diagnostics.");
+        }
     }
 
     @Test
@@ -235,6 +382,36 @@ public class AiOwnedScriptHostServiceTest {
 
     private WriteCodeRequest writeRequest(String sourceText, String argumentsJsonText, CodeStateToken expectedStateToken) {
         return new WriteCodeRequest(ScriptHost.AI, new CodeStateContent(sourceText, argumentsJsonText), expectedStateToken);
+    }
+
+    private MockedStatic<Controller> mockCurrentController() {
+        MockedStatic<Controller> controller = mockStatic(Controller.class);
+        Controller currentController = mock(Controller.class);
+        ResourceController resourceController = mock(ResourceController.class);
+        when(currentController.getResourceController()).thenReturn(resourceController);
+        when(resourceController.getIntProperty("compiled_script_cache_size", 200)).thenReturn(8);
+        controller.when(Controller::getCurrentController).thenReturn(currentController);
+        return controller;
+    }
+
+    private void ensureScriptClasspath() {
+        try {
+            Method getClasspath = Class.forName("org.freeplane.plugin.script.ScriptResources")
+                .getDeclaredMethod("getClasspath");
+            getClasspath.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            List<String> classpath = (List<String>) getClasspath.invoke(null);
+            if (classpath != null) {
+                return;
+            }
+            Method setClasspath = Class.forName("org.freeplane.plugin.script.ScriptResources")
+                .getDeclaredMethod("setClasspath", List.class);
+            setClasspath.setAccessible(true);
+            setClasspath.invoke(null, Collections.<String>emptyList());
+        }
+        catch (Exception error) {
+            throw new IllegalStateException(error);
+        }
     }
 
     private static class RecordingDialogFactory implements AiOwnedScriptHostService.DialogFactory {

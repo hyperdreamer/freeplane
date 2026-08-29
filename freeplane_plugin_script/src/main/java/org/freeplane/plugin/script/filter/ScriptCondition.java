@@ -16,8 +16,11 @@ import org.freeplane.features.filter.condition.ASelectableCondition;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.n3.nanoxml.XMLElement;
-import org.freeplane.plugin.script.*;
-import org.freeplane.plugin.script.ScriptContext;
+import org.freeplane.plugin.script.ExecuteScriptException;
+import org.freeplane.plugin.script.FormulaUtils;
+import org.freeplane.plugin.script.GroovyScript;
+import org.freeplane.plugin.script.ScriptRunner;
+import org.freeplane.plugin.script.ScriptingPermissions;
 
 public class ScriptCondition extends ASelectableCondition {
 	private static final String SCRIPT_FILTER_DESCRIPTION_RESOURCE = "plugins/script_filter";
@@ -75,32 +78,23 @@ public class ScriptCondition extends ASelectableCondition {
 
 	@Override
 	public boolean checkNode(NodeModel node){
-		NodeScript nodeScript = new NodeScript(node, source);
-		final ScriptContext scriptContext = new ScriptContext(nodeScript);
-		if (! FormulaThreadLocalStacks.INSTANCE.push(scriptContext))
-			return false;
-		scriptRunner.setScriptContext(scriptContext);
-		try {
-	        final Object result;
-	        try {
-	            result = FormulaUtils.executeScript(scriptContext, () -> scriptRunner.execute(node));
-	            if(result instanceof Boolean)
-	                return (Boolean) result;
-	            if(result instanceof Number)
-	                return ((Number) result).doubleValue() != 0;
-	            final String info = createErrorDescription(node, String.valueOf(result), SCRIPT_FILTER_ERROR_RESOURCE);
-	            setErrorStatus(info);
-	        }
-	        catch (ExecuteScriptException e) {
-	            final String info = createErrorDescription(node, String.valueOf(e.getMessage()), SCRIPT_FILTER_EXECUTE_ERROR_RESOURCE);
-	            setErrorStatus(info);
-	        }
-	        return false;
-		}
-		finally {
-			FormulaThreadLocalStacks.INSTANCE.pop();
-			scriptRunner.setScriptContext(null);
-		}
+        try {
+            ScriptConditionExecution.ConditionExecutionResult execution =
+                ScriptConditionExecution.execute(node, source, scriptRunner);
+            if (execution.isCycleDetected()) {
+                return false;
+            }
+            Object result = execution.getValue();
+            if (FilterScriptConditionValidationSupport.isConditionResult(result))
+                return FilterScriptConditionValidationSupport.conditionResultAsBoolean(result);
+            final String info = createErrorDescription(node, String.valueOf(result), SCRIPT_FILTER_ERROR_RESOURCE);
+            setErrorStatus(info);
+        }
+        catch (ExecuteScriptException e) {
+            final String info = createErrorDescription(node, String.valueOf(e.getMessage()), SCRIPT_FILTER_EXECUTE_ERROR_RESOURCE);
+            setErrorStatus(info);
+        }
+        return false;
 	}
 
 

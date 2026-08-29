@@ -92,8 +92,8 @@ public class ModelContextProtocolToolRegistry {
             return appendCapabilityNote(
                 description,
                 formulaEditingAllowed
-                    ? "Current attached formula editing capability: enabled when the attached editor content is a formula."
-                    : "Current attached formula editing capability: disabled. Enable AI may edit formulas to edit attached formulas.");
+                    ? "Attached formula editing: enabled for content and condition formulas."
+                    : "Attached formula editing: disabled; enable AI formula editing.");
         }
         return description;
     }

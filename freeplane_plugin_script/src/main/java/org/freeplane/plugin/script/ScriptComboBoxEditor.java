@@ -23,152 +23,109 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Rectangle;
-import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.util.LinkedList;
-import java.util.List;
 
 import javax.swing.ComboBoxEditor;
-import javax.swing.JButton;
 import javax.swing.JDialog;
 import javax.swing.JEditorPane;
 import javax.swing.JOptionPane;
-import javax.swing.SwingConstants;
 
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.ui.components.JRestrictedSizeScrollPane;
-import org.freeplane.core.ui.components.UITools;
-import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.core.util.TextUtils;
+import org.freeplane.core.ui.components.UITools;
 import org.freeplane.features.text.mindmapmode.SourceTextEditorUIConfigurator;
 
-/**
- * @author Dimitry Polivaev
- * Mar 5, 2009
- */
 public class ScriptComboBoxEditor implements ComboBoxEditor {
+    private final ScriptEditorButton scriptEditorButton;
+    private Dimension minimumSize;
+    private Rectangle bounds;
 
-	final private JButton showEditorBtn;
-	final private List<ActionListener> actionListeners;
-	private String script;
-	private Dimension minimumSize;
-	private Rectangle bounds;
-
-	public ScriptComboBoxEditor() {
-		showEditorBtn = new JButton();
-		script = "";
-		setButtonText();
-		showEditorBtn.setHorizontalAlignment(SwingConstants.LEFT);
-		showEditorBtn.addActionListener(new ActionListener() {
-			@Override
-			public void actionPerformed(ActionEvent e) {
-				editScript(false);
-			}
-		});
-		actionListeners = new LinkedList<ActionListener>();
-		minimumSize = new Dimension(600, 400);
-		bounds = null;
-	}
-
-	public Dimension getMinimumSize() {
-    	return minimumSize;
+    public ScriptComboBoxEditor() {
+        scriptEditorButton = new ScriptEditorButton(this, this::editScript);
+        minimumSize = new Dimension(600, 400);
+        bounds = null;
     }
 
-	public void setMinimumSize(Dimension minimumSize) {
-    	this.minimumSize = minimumSize;
+    public Dimension getMinimumSize() {
+        return minimumSize;
     }
 
-	protected void editScript(boolean selectAll) {
-		JEditorPane textEditor = new JEditorPane();
-		SourceTextEditorUIConfigurator.configureColors(textEditor);
-		final JRestrictedSizeScrollPane scrollPane = new JRestrictedSizeScrollPane(textEditor);
-		UITools.setScrollbarIncrement(scrollPane);
-		scrollPane.setMinimumSize(minimumSize);
-		textEditor.setContentType("text/groovy");
-
-		final String fontName = ResourceController.getResourceController().getProperty(ScriptEditorPanel.GROOVY_EDITOR_FONT);
-		final int fontSize = ResourceController.getResourceController().getIntProperty(ScriptEditorPanel.GROOVY_EDITOR_FONT_SIZE);
-		final Font font = UITools.scaleUI(new Font(fontName, Font.PLAIN, fontSize));
-		textEditor.setFont(font);
-
-		textEditor.setText(script);
-		if(selectAll){
-			textEditor.selectAll();
-		}
-		String title = TextUtils.getText("plugins/ScriptEditor/window.title");
-		final JOptionPane optionPane = new JOptionPane(scrollPane, JOptionPane.QUESTION_MESSAGE, JOptionPane.OK_CANCEL_OPTION);
-		final JDialog dialog = optionPane.createDialog(showEditorBtn, title);
-		dialog.setResizable(true);
-		if(bounds != null)
-			dialog.setBounds(bounds);
-		else {
-			dialog.pack();
-			UITools.setDialogLocationRelativeTo(dialog, showEditorBtn);
-			bounds = dialog.getBounds();
-		}
-		dialog.setVisible(true);
-		final Integer result = ((Integer)optionPane.getValue());
-		if(result == null || result != JOptionPane.OK_OPTION)
-			return;
-		script = textEditor.getText();
-		setButtonText();
-	    final ActionEvent actionEvent = new ActionEvent(this, 0, null);
-	    for (final ActionListener l : actionListeners) {
-	    	l.actionPerformed(actionEvent);
-	    }
+    public void setMinimumSize(Dimension minimumSize) {
+        this.minimumSize = minimumSize;
     }
 
-	protected void setButtonText() {
-	    final String text = script.substring(0, Math.min(40, script.length())).trim().replaceAll("\\s+", " ");
-	    if(! text.equals("")) {
-	    	showEditorBtn.setToolTipText(HtmlUtils.plainToHTML(script));
-	        showEditorBtn.setText(text);
+    protected void editScript(boolean selectAll) {
+        JEditorPane textEditor = new JEditorPane();
+        SourceTextEditorUIConfigurator.configureColors(textEditor);
+        final JRestrictedSizeScrollPane scrollPane = new JRestrictedSizeScrollPane(textEditor);
+        UITools.setScrollbarIncrement(scrollPane);
+        scrollPane.setMinimumSize(minimumSize);
+        textEditor.setContentType("text/groovy");
+
+        final String fontName = ResourceController.getResourceController().getProperty(ScriptEditorPanel.GROOVY_EDITOR_FONT);
+        final int fontSize = ResourceController.getResourceController().getIntProperty(ScriptEditorPanel.GROOVY_EDITOR_FONT_SIZE);
+        final Font font = UITools.scaleUI(new Font(fontName, Font.PLAIN, fontSize));
+        textEditor.setFont(font);
+
+        textEditor.setText((String) scriptEditorButton.getItem());
+        if (selectAll) {
+            textEditor.selectAll();
         }
-        else{
-	    	final String title = TextUtils.getText("EditScript");
-	    	showEditorBtn.setToolTipText(null);
-	    	showEditorBtn.setText(title);
-	    }
-
+        String title = TextUtils.getText("plugins/ScriptEditor/window.title");
+        final JOptionPane optionPane = new JOptionPane(scrollPane, JOptionPane.QUESTION_MESSAGE, JOptionPane.OK_CANCEL_OPTION);
+        final JDialog dialog = optionPane.createDialog(scriptEditorButton.getEditorComponent(), title);
+        dialog.setResizable(true);
+        if (bounds != null) {
+            dialog.setBounds(bounds);
+        } else {
+            dialog.pack();
+            UITools.setDialogLocationRelativeTo(dialog, scriptEditorButton.getEditorComponent());
+            bounds = dialog.getBounds();
+        }
+        dialog.setVisible(true);
+        final Integer result = (Integer) optionPane.getValue();
+        if (result == null || result != JOptionPane.OK_OPTION) {
+            return;
+        }
+        scriptEditorButton.setItemAndNotify(textEditor.getText());
     }
 
-	@Override
-	public Component getEditorComponent() {
-		return showEditorBtn;
-	}
-	@Override
-	public void setItem(Object anObject) {
-		if(anObject == null)
-			script = "";
-		else
-			this.script = (String)anObject;
-		setButtonText();
+    @Override
+    public Component getEditorComponent() {
+        return scriptEditorButton.getEditorComponent();
     }
 
-	@Override
-	public Object getItem() {
-	    return script;
-    }
-	@Override
-	public void selectAll() {
-		editScript(true);
-    }
-	@Override
-	public void addActionListener(final ActionListener l) {
-		actionListeners.add(l);
-	}
-
-	@Override
-	public void removeActionListener(final ActionListener l) {
-		actionListeners.remove(l);
-	}
-
-	public void setPreferredSize(Dimension preferredSize) {
-	    showEditorBtn.setPreferredSize(preferredSize);
+    @Override
+    public void setItem(Object anObject) {
+        scriptEditorButton.setItem(anObject);
     }
 
-	public Dimension getPreferredSize() {
-	    return showEditorBtn.getPreferredSize();
+    @Override
+    public Object getItem() {
+        return scriptEditorButton.getItem();
     }
 
+    @Override
+    public void selectAll() {
+        scriptEditorButton.selectAll();
+    }
+
+    @Override
+    public void addActionListener(ActionListener listener) {
+        scriptEditorButton.addActionListener(listener);
+    }
+
+    @Override
+    public void removeActionListener(ActionListener listener) {
+        scriptEditorButton.removeActionListener(listener);
+    }
+
+    public void setPreferredSize(Dimension preferredSize) {
+        scriptEditorButton.setPreferredSize(preferredSize);
+    }
+
+    public Dimension getPreferredSize() {
+        return scriptEditorButton.getPreferredSize();
+    }
 }

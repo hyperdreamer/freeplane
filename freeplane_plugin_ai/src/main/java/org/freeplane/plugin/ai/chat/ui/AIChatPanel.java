@@ -74,6 +74,7 @@ import org.freeplane.features.ai.code.ReadCodeResponse;
 import org.freeplane.features.ai.code.RunCodeRequest;
 import org.freeplane.features.ai.code.RunCodeResponse;
 import org.freeplane.features.ai.code.ScriptHost;
+import org.freeplane.features.ai.code.WriteAndRunCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeResponse;
 import org.freeplane.features.mode.Controller;
@@ -1680,6 +1681,13 @@ public class AIChatPanel extends JPanel {
             @Override
             public RunCodeResponse runCode(RunCodeRequest request) {
                 RunCodeResponse response = delegate.runCode(request);
+                rememberAiOwnedUserRunFollowup(response, sessionId);
+                return response;
+            }
+
+            @Override
+            public RunCodeResponse writeAndRunCode(WriteAndRunCodeRequest request) {
+                RunCodeResponse response = delegate.writeAndRunCode(request);
                 rememberAiOwnedUserRunFollowup(response, sessionId);
                 return response;
             }

@@ -16,6 +16,7 @@ import org.freeplane.features.ai.code.RunCodeRequest;
 import org.freeplane.features.ai.code.RunCodeResponse;
 import org.freeplane.features.ai.code.ScriptHost;
 import org.freeplane.features.ai.code.ScriptRunInitiator;
+import org.freeplane.features.ai.code.WriteAndRunCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeResponse;
 import org.freeplane.features.attribute.AttributeController;
@@ -83,6 +84,11 @@ public class AIToolSetBuilderTest {
                     null,
                     null,
                     null);
+            }
+
+            @Override
+            public RunCodeResponse writeAndRunCode(WriteAndRunCodeRequest request) {
+                throw new UnsupportedOperationException();
             }
 
             @Override

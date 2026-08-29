@@ -20,6 +20,7 @@ public class ScriptingEngineTest {
     public void compileGroovyScriptForDiagnosticsSucceedsWithoutExecutingScriptBody() {
         try (MockedStatic<ResourceController> resourceController = mockStatic(ResourceController.class)) {
             resourceController.when(ResourceController::getResourceController).thenReturn(new TestResourceController());
+            ensureScriptClasspath();
             ScriptingEngine.GroovyCompileResult result = ScriptingEngine.compileGroovyScriptForDiagnostics(
                 "throw new RuntimeException('boom')",
                 ScriptingPermissions.getPermissiveScriptingPermissions());
@@ -58,21 +59,55 @@ public class ScriptingEngineTest {
     }
 
     @Test
-    public void compileGroovyScriptForDiagnosticsReturnsErrorMessageAndLineNumberForInvalidGroovy() {
+    public void compileGroovyScriptForDiagnosticsReturnsLineAndColumnForSyntaxError() {
         try (MockedStatic<ResourceController> resourceController = mockStatic(ResourceController.class)) {
             resourceController.when(ResourceController::getResourceController).thenReturn(new TestResourceController());
+            ensureScriptClasspath();
             ScriptingEngine.GroovyCompileResult result = ScriptingEngine.compileGroovyScriptForDiagnostics(
-                "if (",
+                "println 'start'\n"
+                    + "def x = 1\n"
+                    + "def y = 2\n"
+                    + "if (x > y {\n"
+                    + "    println 'broken'\n"
+                    + "}\n",
                 ScriptingPermissions.getPermissiveScriptingPermissions());
 
             assertThat(result.isSuccessful()).isFalse();
-            assertThat(result.getCompilerDiagnostics()).isNotEmpty();
-            assertThat(result.getErrorMessage()).isNotBlank();
+            assertThat(result.getCompilerDiagnostics()).hasSize(1);
+            assertThat(result.getCompilerDiagnostics().get(0).getLine()).isEqualTo(7);
+            assertThat(result.getCompilerDiagnostics().get(0).getColumn()).isEqualTo(1);
+            assertThat(result.getErrorMessage()).isEqualTo("Groovy compilation failed with 1 diagnostic.");
+        }
+    }
+
+    @Test
+    public void compileGroovyScriptForDiagnosticsReturnsSeparateLocationsForMultipleImportErrors() {
+        try (MockedStatic<ResourceController> resourceController = mockStatic(ResourceController.class)) {
+            resourceController.when(ResourceController::getResourceController).thenReturn(new TestResourceController());
+            ensureScriptClasspath();
+            ScriptingEngine.GroovyCompileResult result = ScriptingEngine.compileGroovyScriptForDiagnostics(
+                "import a.A\nimport b.B\nprintln 'x'\n",
+                ScriptingPermissions.getPermissiveScriptingPermissions());
+            assertThat(result.isSuccessful()).isFalse();
+            assertThat(result.getCompilerDiagnostics()).hasSize(2);
+            assertThat(result.getCompilerDiagnostics())
+                .extracting(ScriptingEngine.GroovyCompilerDiagnostic::getLine,
+                    ScriptingEngine.GroovyCompilerDiagnostic::getColumn)
+                .containsExactly(
+                    org.assertj.core.groups.Tuple.tuple(1, 1),
+                    org.assertj.core.groups.Tuple.tuple(2, 1));
+            assertThat(result.getErrorMessage()).isEqualTo("Groovy compilation failed with 2 diagnostics.");
         }
     }
 
     private static String normalizeLineEndings(String text) {
         return text.replace("\r\n", "\n");
+    }
+
+    private static void ensureScriptClasspath() {
+        if (ScriptResources.getClasspath() == null) {
+            ScriptResources.setClasspath(Collections.<String>emptyList());
+        }
     }
 
     private static class TestResourceController extends ResourceController {

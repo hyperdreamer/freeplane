@@ -19,7 +19,8 @@ public class ModelContextProtocolToolCallAuthorizer {
         "readCode",
         "writeCode",
         "compileCode",
-        "runCode")));
+        "runCode",
+        "writeAndRunCode")));
     private static final Set<String> DISABLED_API_MAP_READ_TOOL_NAMES = Collections.unmodifiableSet(
         new LinkedHashSet<String>(Arrays.asList(
             "readNodesWithDescendants",
@@ -51,7 +52,7 @@ public class ModelContextProtocolToolCallAuthorizer {
         if (CODE_TOOL_NAMES.contains(normalizedToolName)) {
             aiCodeOperationAuthorizer.assertAuthorized(
                 normalizedToolName,
-                hostValue(argumentsNode));
+                "writeAndRunCode".equals(normalizedToolName) ? ScriptHost.AI : hostValue(argumentsNode));
             return;
         }
         mapTargetToolCallAuthorizer.assertAuthorized(

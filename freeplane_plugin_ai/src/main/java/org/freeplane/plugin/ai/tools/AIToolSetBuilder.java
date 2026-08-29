@@ -16,6 +16,7 @@ import org.freeplane.features.ai.code.ReadCodeResponse;
 import org.freeplane.features.ai.code.RunCodeRequest;
 import org.freeplane.features.ai.code.RunCodeResponse;
 import org.freeplane.features.ai.code.ScriptHost;
+import org.freeplane.features.ai.code.WriteAndRunCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeResponse;
 import org.freeplane.features.attribute.AttributeController;
@@ -214,6 +215,11 @@ public class AIToolSetBuilder {
             @Override
             public RunCodeResponse runCode(RunCodeRequest request) {
                 throw new IllegalStateException("No editor is attached.");
+            }
+
+            @Override
+            public RunCodeResponse writeAndRunCode(WriteAndRunCodeRequest request) {
+                throw new IllegalStateException("AI code host is unavailable.");
             }
 
             @Override

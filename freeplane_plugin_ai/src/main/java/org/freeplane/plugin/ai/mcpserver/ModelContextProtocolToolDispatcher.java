@@ -91,31 +91,35 @@ public class ModelContextProtocolToolDispatcher {
             .arguments(arguments)
             .build();
         ToolExecutionResult result = executor.executeWithContext(request, InvocationContext.builder().build());
-        result = completeDelayedRunCodeResult(toolName, result);
+        result = completeDelayedAiExecutionResult(toolName, result);
         if (result != null && result.isError()) {
             LogUtils.info(buildToolCallLog(toolName, arguments, result.resultText()));
         }
         return result;
     }
 
-    private ToolExecutionResult completeDelayedRunCodeResult(String toolName, ToolExecutionResult result) {
-        if (aiCodeHostService == null || !"runCode".equals(toolName) || result == null) {
+    private ToolExecutionResult completeDelayedAiExecutionResult(String toolName, ToolExecutionResult result) {
+        if (aiCodeHostService == null || !isDelayedAiExecutionTool(toolName) || result == null) {
             return result;
         }
         Object rawResult = result.result();
         if (!(rawResult instanceof RunCodeResponse)) {
             return result;
         }
-        RunCodeResponse runCodeResponse = (RunCodeResponse) rawResult;
-        if (!isWaitingAiRunResponse(runCodeResponse)) {
+        RunCodeResponse waitingResponse = (RunCodeResponse) rawResult;
+        if (!isWaitingAiRunResponse(waitingResponse)) {
             return result;
         }
-        RunCodeResponse finalResponse = aiCodeHostService.awaitFinalRunResponse(runCodeResponse);
-        publishDelayedRunCodeSummary(finalResponse);
-        if (finalResponse == runCodeResponse || isWaitingAiRunResponse(finalResponse)) {
+        RunCodeResponse finalResponse = aiCodeHostService.awaitFinalRunResponse(waitingResponse);
+        publishDelayedAiExecutionSummary(toolName, finalResponse);
+        if (finalResponse == waitingResponse || isWaitingAiRunResponse(finalResponse)) {
             return result;
         }
         return toolExecutionResult(finalResponse);
+    }
+
+    private boolean isDelayedAiExecutionTool(String toolName) {
+        return "runCode".equals(toolName) || "writeAndRunCode".equals(toolName);
     }
 
     private boolean isWaitingAiRunResponse(RunCodeResponse response) {
@@ -124,13 +128,14 @@ public class ModelContextProtocolToolDispatcher {
             && response.getCodeState() == CodeState.WAITING_FOR_USER_RUN;
     }
 
-    private void publishDelayedRunCodeSummary(RunCodeResponse response) {
+    private void publishDelayedAiExecutionSummary(String toolName, RunCodeResponse response) {
         if (toolCallSummaryHandler == null || response == null) {
             return;
         }
+        String summaryText = AiCodeToolSet.runCodeSummaryText(toolName, response);
         toolCallSummaryHandler.handleToolCallSummary(new ToolCallSummary(
-            "runCode",
-            AiCodeToolSet.runCodeSummaryText(response),
+            toolName,
+            summaryText,
             isFailureState(response.getCodeState()),
             ToolCaller.MCP));
     }

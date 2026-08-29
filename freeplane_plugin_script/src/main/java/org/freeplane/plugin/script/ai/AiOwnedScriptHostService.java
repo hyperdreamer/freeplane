@@ -32,6 +32,7 @@ import org.freeplane.features.ai.code.RunCodeRequest;
 import org.freeplane.features.ai.code.RunCodeResponse;
 import org.freeplane.features.ai.code.ScriptHost;
 import org.freeplane.features.ai.code.ScriptRunInitiator;
+import org.freeplane.features.ai.code.WriteAndRunCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeResponse;
 import org.freeplane.features.map.NodeModel;
@@ -39,6 +40,7 @@ import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
 import org.freeplane.plugin.script.ExecuteScriptException;
 import org.freeplane.plugin.script.FormulaValidationSupport;
+import org.freeplane.plugin.script.GroovyCompilerDiagnosticsMapper;
 import org.freeplane.plugin.script.IFreeplaneScriptErrorHandler;
 import org.freeplane.plugin.script.ScriptContext;
 import org.freeplane.plugin.script.ScriptInputJsonSupport;
@@ -150,6 +152,11 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
     }
 
     @Override
+    public RunCodeResponse writeAndRunCode(WriteAndRunCodeRequest request) {
+        return onEdt(() -> doWriteAndRunCode(request));
+    }
+
+    @Override
     public AiChatCodeOperationResult evaluateFormula(EvaluateFormulaRequest request) {
         return onEdt(() -> doEvaluateFormula(request));
     }
@@ -232,23 +239,27 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
             throw new IllegalArgumentException("content is required.");
         }
         assertNotRunning();
-        if (currentScript == null) {
-            currentScript = new CurrentScript(sanitizeContent(request.getContent()));
-        }
-        else {
+        if (currentScript != null) {
             requireExpectedStateToken(request.getExpectedStateToken());
-            currentScript.storedContent = sanitizeContent(request.getContent());
         }
-        if (dialog != null) {
-            showCodeInDialog();
-        }
-        CodeStateToken stateToken = currentStateToken();
-        currentScript.latestState = editedState(stateToken, currentScript.storedContent);
+        CodeStateToken stateToken = storeCurrentScriptContent(request.getContent());
         return new WriteCodeResponse(
             ScriptHost.AI,
             AI_SCRIPT_CONTENT_TYPE,
             CodeState.EDITED,
             stateToken);
+    }
+
+    RunCodeResponse doWriteAndRunCode(WriteAndRunCodeRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("request is required.");
+        }
+        if (request.getContent() == null) {
+            throw new IllegalArgumentException("content is required.");
+        }
+        assertNotRunning();
+        CodeStateToken stateToken = storeCurrentScriptContent(request.getContent());
+        return doRunCode(new RunCodeRequest(ScriptHost.AI, stateToken));
     }
 
     CompileCodeResponse doCompileCode(CompileCodeRequest request) {
@@ -550,9 +561,8 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
             content.getSourceText(),
             permissions);
         if (!compileResult.isSuccessful()) {
-            List<CodeStateDiagnostic> diagnostics = CodeStateDiagnostics.sourceDiagnostics(
-                compileResult.getCompilerDiagnostics(),
-                compileResult.getLineNumber());
+            List<CodeStateDiagnostic> diagnostics = GroovyCompilerDiagnosticsMapper.toSourceDiagnostics(
+                compileResult.getCompilerDiagnostics());
             return new ValidationOutcome(CodeState.INVALID_SCRIPT, diagnostics, compileResult.getErrorMessage(), null);
         }
         return new ValidationOutcome(null, null, null, argumentsValidation.argsValue);
@@ -735,6 +745,22 @@ public class AiOwnedScriptHostService implements AiCodeHostService {
         } finally {
             loadingDialogCode = false;
         }
+    }
+
+    private CodeStateToken storeCurrentScriptContent(CodeStateContent content) {
+        CodeStateContent sanitizedContent = sanitizeContent(content);
+        if (currentScript == null) {
+            currentScript = new CurrentScript(sanitizedContent);
+        }
+        else {
+            currentScript.storedContent = sanitizedContent;
+        }
+        if (dialog != null) {
+            showCodeInDialog();
+        }
+        CodeStateToken stateToken = currentStateToken();
+        currentScript.latestState = editedState(stateToken, currentScript.storedContent);
+        return stateToken;
     }
 
     private void synchronizeCurrentContentFromDialog() {

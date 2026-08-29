@@ -16,6 +16,7 @@ import org.freeplane.plugin.ai.tools.utilities.ToolCaller;
 public class AiCodeOperationAuthorizer {
     private static final String SCRIPT_CONTENT_TYPE = "text/x-freeplane-script-groovy";
     private static final String FORMULA_CONTENT_TYPE = "text/x-freeplane-formula-groovy";
+    private static final String FORMULA_CONDITION_CONTENT_TYPE = "text/x-freeplane-formula-condition-groovy";
 
     @SuppressWarnings("unused")
     private final ToolCaller toolCaller;
@@ -52,6 +53,7 @@ public class AiCodeOperationAuthorizer {
         }
         if (scriptExecutionAvailable) {
             toolNames.add("runCode");
+            toolNames.add("writeAndRunCode");
         }
         return Collections.unmodifiableSet(toolNames);
     }
@@ -75,6 +77,15 @@ public class AiCodeOperationAuthorizer {
                 return;
             }
             throw new IllegalStateException("The requested code host is not writable at the current availability level.");
+        }
+        if ("writeAndRunCode".equals(operation)) {
+            if (resolvedHost != ScriptHost.AI) {
+                throw new IllegalStateException("writeAndRunCode requires the AI code host.");
+            }
+            if (!globalAvailability().includesScriptExecution()) {
+                throw new IllegalStateException("Script execution is not available at the current availability level.");
+            }
+            return;
         }
         if ("runCode".equals(operation)) {
             if (!globalAvailability().includesScriptExecution()) {
@@ -118,12 +129,16 @@ public class AiCodeOperationAuthorizer {
         if (state == null || state.getCodeState() == CodeState.NO_CODE) {
             return false;
         }
-        if (FORMULA_CONTENT_TYPE.equals(state.getContentType())) {
+        if (isFormulaLikeContentType(state.getContentType())) {
             return FormulaEditingAccess.isFormulaEditingAllowed(
                 currentToolAvailability(),
                 formulaEditingEnabledSupplier != null && formulaEditingEnabledSupplier.get().booleanValue());
         }
         return hasSessionOverride() || globalAvailability().includesEditing();
+    }
+
+    private boolean isFormulaLikeContentType(String contentType) {
+        return FORMULA_CONTENT_TYPE.equals(contentType) || FORMULA_CONDITION_CONTENT_TYPE.equals(contentType);
     }
 
     private boolean canReadAiHost() {

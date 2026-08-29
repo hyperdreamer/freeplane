@@ -3,6 +3,7 @@ package org.freeplane.plugin.ai.tools.code;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import org.freeplane.features.ai.code.AiChatCodeOperationResult;
 import org.freeplane.features.ai.code.AiCodeEditor;
 import org.freeplane.features.ai.code.AiCodeHostService;
@@ -21,6 +22,7 @@ import org.freeplane.features.ai.code.RunCodeRequest;
 import org.freeplane.features.ai.code.RunCodeResponse;
 import org.freeplane.features.ai.code.ScriptHost;
 import org.freeplane.features.ai.code.ScriptRunInitiator;
+import org.freeplane.features.ai.code.WriteAndRunCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeRequest;
 import org.freeplane.features.ai.code.WriteCodeResponse;
 import org.freeplane.plugin.ai.chat.session.LiveChatSessionId;
@@ -34,6 +36,7 @@ import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -107,6 +110,11 @@ public class AiCodeToolSetTest {
             }
 
             @Override
+            public RunCodeResponse writeAndRunCode(WriteAndRunCodeRequest request) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
             public AiChatCodeOperationResult evaluateFormula(EvaluateFormulaRequest request) {
                 throw new UnsupportedOperationException();
             }
@@ -124,9 +132,70 @@ public class AiCodeToolSetTest {
         String message = uut.systemMessageForChat("request");
 
         assertThat(message).contains("Use readCode, writeCode, and compileCode.");
-        assertThat(message).contains("The attached content is a formula.");
-        assertThat(message).contains("argumentsJsonText stays blank or null for formulas");
-        assertThat(message).contains("Keep it value-computing.");
+        assertThat(message).contains("The attached content is a content formula.");
+        assertThat(message).contains("argument-free");
+        assertThat(message).contains("runCode is not supported");
+    }
+
+    @Test
+    public void filterConditionSystemMessageExplainsConditionSemantics() {
+        AiCodeHostService codeHostService = new AiCodeHostService() {
+            @Override
+            public ReadCodeResponse readCode(ReadCodeRequest request) {
+                return new ReadCodeResponse(
+                    ScriptHost.ATTACHED_EDITOR,
+                    "text/x-freeplane-formula-condition-groovy",
+                    CodeState.EDITED,
+                    null,
+                    token("fingerprint"),
+                    new CodeStateContent("node.text == 'x'", null),
+                    null,
+                    null,
+                    null,
+                    null);
+            }
+
+            @Override
+            public WriteCodeResponse writeCode(WriteCodeRequest request) {
+                throw new IllegalStateException("not needed");
+            }
+
+            @Override
+            public CompileCodeResponse compileCode(CompileCodeRequest request) {
+                throw new IllegalStateException("not needed");
+            }
+
+            @Override
+            public RunCodeResponse runCode(RunCodeRequest request) {
+                throw new IllegalStateException("not runnable");
+            }
+
+            @Override
+            public RunCodeResponse writeAndRunCode(WriteAndRunCodeRequest request) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public AiChatCodeOperationResult evaluateFormula(EvaluateFormulaRequest request) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public void addRunListener(AiCodeRunListener listener) {
+            }
+
+            @Override
+            public void removeRunListener(AiCodeRunListener listener) {
+            }
+        };
+        AiCodeToolSet uut = new AiCodeToolSet(codeHostService, null, null, ToolCaller.CHAT);
+
+        String message = uut.systemMessageForChat("request");
+
+        assertThat(message).contains("The attached content is a condition formula.");
+        assertThat(message).contains("argument-free");
+        assertThat(message).contains("Boolean or Number");
+        assertThat(message).contains("runCode is not supported");
     }
 
     @Test
@@ -138,7 +207,7 @@ public class AiCodeToolSetTest {
 
         WriteCodeResponse response = uut.writeCode(new WriteCodeToolRequest(
             ScriptHost.ATTACHED_EDITOR,
-            new CodeStateContent("after", null),
+            new CodeStateContentPayload("after", null),
             uut.readCode(new ReadCodeToolRequest(ScriptHost.ATTACHED_EDITOR)).getStateToken()));
 
         assertThat(editor.getCodeStateContent().getSourceText()).isEqualTo("after");
@@ -184,6 +253,63 @@ public class AiCodeToolSetTest {
     }
 
     @Test
+    public void writeAndRunCodePublishesSummariesAndForwardsContent() {
+        AiCodeHostService codeHostService = mock(AiCodeHostService.class);
+        AtomicReference<WriteAndRunCodeRequest> receivedRequest = new AtomicReference<WriteAndRunCodeRequest>();
+        RunCodeResponse expectedResponse = new RunCodeResponse(
+            ScriptHost.AI,
+            "text/x-freeplane-script-groovy",
+            CodeState.RUN_SUCCEEDED,
+            ScriptRunInitiator.AI,
+            token("args"),
+            null,
+            null,
+            "done",
+            Integer.valueOf(7));
+        when(codeHostService.writeAndRunCode(any(WriteAndRunCodeRequest.class))).thenAnswer(invocation -> {
+            receivedRequest.set(invocation.getArgument(0));
+            return expectedResponse;
+        });
+        List<ToolCallSummary> summaries = new ArrayList<ToolCallSummary>();
+        AiCodeToolSet uut = new AiCodeToolSet(codeHostService, null, summaries::add, ToolCaller.CHAT);
+
+        RunCodeResponse response = uut.writeAndRunCode(new WriteAndRunCodeToolRequest(
+            new CodeStateContentPayload("return 7", "{}")));
+
+        assertThat(response).isSameAs(expectedResponse);
+        assertThat(receivedRequest.get().getContent()).isEqualTo(new CodeStateContent("return 7", "{}"));
+        assertThat(summaries).extracting(ToolCallSummary::getSummaryText)
+            .containsExactly("writeAndRunCode: codeState=RUN_SUCCEEDED, host=AI");
+    }
+
+    @Test
+    public void systemMessageMentionsWriteAndRunCodeAsOneCallPersistentExecution() {
+        AiCodeToolSet uut = new AiCodeToolSet(newDetachedCodeHostService(), null, null, ToolCaller.CHAT);
+
+        String message = uut.systemMessageForChat("request");
+
+        assertThat(message).contains("writeAndRunCode");
+        assertThat(message).contains("does not require a prior readCode or expectedStateToken");
+        assertThat(message).contains("For the explicit token-checked workflow");
+    }
+
+    @Test
+    public void writeAndRunCodeSuppressesMcpWaitingAiSummaryForDelayedDispatcherCompletion() {
+        List<ToolCallSummary> summaries = new ArrayList<ToolCallSummary>();
+        AiCodeToolSet uut = new AiCodeToolSet(
+            newRunCodeHostService(CodeState.WAITING_FOR_USER_RUN, ScriptHost.AI),
+            null,
+            summaries::add,
+            ToolCaller.MCP);
+
+        RunCodeResponse response = uut.writeAndRunCode(new WriteAndRunCodeToolRequest(
+            new CodeStateContentPayload("println 1", null)));
+
+        assertThat(response.getCodeState()).isEqualTo(CodeState.WAITING_FOR_USER_RUN);
+        assertThat(summaries).isEmpty();
+    }
+
+    @Test
     public void runCodeSuppressesMcpWaitingAiSummaryForDelayedDispatcherCompletion() {
         List<ToolCallSummary> summaries = new ArrayList<ToolCallSummary>();
         AiCodeToolSet uut = new AiCodeToolSet(
@@ -220,7 +346,7 @@ public class AiCodeToolSetTest {
 
         assertThatThrownBy(() -> uut.writeCode(new WriteCodeToolRequest(
             ScriptHost.ATTACHED_EDITOR,
-            new CodeStateContent("x", null),
+            new CodeStateContentPayload("x", null),
             null)))
             .isInstanceOf(IllegalStateException.class)
             .hasMessage("No editor is attached.");
@@ -256,6 +382,20 @@ public class AiCodeToolSetTest {
 
             @Override
             public RunCodeResponse runCode(RunCodeRequest request) {
+                return new RunCodeResponse(
+                    host,
+                    "text/x-freeplane-script-groovy",
+                    codeState,
+                    ScriptRunInitiator.AI,
+                    token("args"),
+                    null,
+                    null,
+                    null,
+                    null);
+            }
+
+            @Override
+            public RunCodeResponse writeAndRunCode(WriteAndRunCodeRequest request) {
                 return new RunCodeResponse(
                     host,
                     "text/x-freeplane-script-groovy",
@@ -312,6 +452,11 @@ public class AiCodeToolSetTest {
 
             @Override
             public RunCodeResponse runCode(RunCodeRequest request) {
+                throw new IllegalStateException("No editor is attached.");
+            }
+
+            @Override
+            public RunCodeResponse writeAndRunCode(WriteAndRunCodeRequest request) {
                 throw new IllegalStateException("No editor is attached.");
             }
 
