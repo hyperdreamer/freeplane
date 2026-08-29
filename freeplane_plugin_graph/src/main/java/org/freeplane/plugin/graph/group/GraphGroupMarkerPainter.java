@@ -15,7 +15,6 @@ import org.freeplane.view.swing.map.NodeView;
 import org.freeplane.view.swing.map.NodeViewDecorationPainter;
 
 public final class GraphGroupMarkerPainter implements NodeViewDecorationPainter {
-    private static final Color CORAL = new Color(0xDF, 0x62, 0x5D);
     private static final int ACTIVE_FILL_ALPHA = 40;
     private static final int ACTIVE_STROKE_WIDTH = 2;
     private static final int ARC_CLOUD_ALLOWANCE = 48;
@@ -43,9 +42,10 @@ public final class GraphGroupMarkerPainter implements NodeViewDecorationPainter 
         }
         final boolean inactive = hasMarkedAncestor(node);
         final RoundRectangle2D envelope = envelope(nodeView, coordinates);
-        graphics.setColor(coral(inactive ? INACTIVE_FILL_ALPHA : ACTIVE_FILL_ALPHA));
+        final Color markerColor = GraphGroupColors.currentColor();
+        graphics.setColor(withAlpha(markerColor, inactive ? INACTIVE_FILL_ALPHA : ACTIVE_FILL_ALPHA));
         graphics.fill(envelope);
-        graphics.setColor(inactive ? coral(INACTIVE_STROKE_ALPHA) : CORAL);
+        graphics.setColor(inactive ? withAlpha(markerColor, INACTIVE_STROKE_ALPHA) : markerColor);
         graphics.setStroke(stroke(nodeView, inactive));
         graphics.draw(envelope);
     }
@@ -85,8 +85,8 @@ public final class GraphGroupMarkerPainter implements NodeViewDecorationPainter 
         return ARC_CLOUD_ALLOWANCE;
     }
 
-    private Color coral(final int alpha) {
-        return new Color(CORAL.getRed(), CORAL.getGreen(), CORAL.getBlue(), alpha);
+    private Color withAlpha(final Color color, final int alpha) {
+        return new Color(color.getRed(), color.getGreen(), color.getBlue(), alpha);
     }
 
     private boolean hasMarkedAncestor(final NodeModel node) {
