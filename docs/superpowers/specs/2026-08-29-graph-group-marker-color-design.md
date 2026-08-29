@@ -75,11 +75,13 @@ on the EDT (property changes originate from the action on the EDT):
   `Controller.getCurrentController().getMapViewManager().getMapViews()` and
   calls `repaint()` on each `MapView` (the marker painter is invoked from
   `NodeView.paint`).
-- `GraphCanvas` registers one listener in its constructor
- (removed in
-  `removeNotify()`) that calls `repaint()`; `GraphWorkspaceWindow` is
-  package-private, so the canvas is the natural self-contained hook and the
-  listener cannot outlive a closed window.
+- `GraphWorkspaceWindow` registers one listener in its constructor
+  (removed in `closeOnEdt()`) that calls `canvas.repaint()`; the window owns
+  the canvas and is only constructed in the real app (`HeadlessGraphWorkspaceView`
+  is used in headless tests), so the listener cannot outlive a closed window
+  and no existing unit test constructs it. (`GraphCanvas.addNotify()` was
+  rejected: `AccessibleGraphCanvasShould` attaches a real canvas to a JFrame
+  without a `Controller`, so registering there would NPE in tests.)
 
 ### Menu entry
 
