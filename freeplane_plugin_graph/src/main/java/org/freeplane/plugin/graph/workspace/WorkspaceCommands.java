@@ -29,6 +29,7 @@ public final class WorkspaceCommands {
     private static final String MAP_ADDED = "graph_workspace.map.added";
     private static final String MAP_REACTIVATED = "graph_workspace.map.reactivated";
     private static final String MAP_REMOVED = "graph_workspace.map.removed";
+    private static final String MAP_DELETED = "graph_workspace.map.deleted";
     private static final String MAP_LOCATED = "graph_workspace.map.located";
     private static final String MAP_NOT_FOUND = "graph_workspace.map.not_found";
     private static final String MAP_ID_IN_USE = "graph_workspace.map.id_in_use";
@@ -62,6 +63,10 @@ public final class WorkspaceCommands {
 
     public static WorkspaceCommand removeMap(final MapReferenceId id) {
         return new RemoveMapCommand(Objects.requireNonNull(id, "id"));
+    }
+
+    public static WorkspaceCommand deleteMap(final MapReferenceId id) {
+        return new DeleteMapCommand(Objects.requireNonNull(id, "id"));
     }
 
     public static WorkspaceCommand locateMap(final MapReferenceId id, final URI replacementUri) {
@@ -190,6 +195,51 @@ public final class WorkspaceCommands {
                 return noChange(before, "removeMap");
             }
             return replaceMap(before, existing, copyMap(existing, false, existing.storedUri()), MAP_REMOVED, id);
+        }
+    }
+
+    private static final class DeleteMapCommand implements WorkspaceCommand {
+        private final MapReferenceId id;
+
+        private DeleteMapCommand(final MapReferenceId id) {
+            this.id = id;
+        }
+
+        @Override
+        public WorkspaceTransition apply(final WorkspaceDocument before) {
+            Objects.requireNonNull(before, "before");
+            final MapReference existing = mapById(before, id);
+            if (existing == null) {
+                return WorkspaceTransition.rejected(before, MAP_NOT_FOUND, id);
+            }
+            final List<MapReference> maps = new ArrayList<MapReference>();
+            for (final MapReference map : before.maps()) {
+                if (!map.id().equals(id)) {
+                    maps.add(map);
+                }
+            }
+            final List<GraphRelationshipRecord> relationships = new ArrayList<GraphRelationshipRecord>();
+            for (final GraphRelationshipRecord relationship : before.relationships()) {
+                final boolean touchesSource = relationship.source().mapReferenceId().equals(id);
+                final boolean touchesTarget = relationship.target().mapReferenceId().equals(id);
+                if (!touchesSource && !touchesTarget) {
+                    relationships.add(relationship);
+                }
+            }
+            final List<PinRecord> pins = new ArrayList<PinRecord>();
+            for (final PinRecord pin : before.pins()) {
+                if (!pin.node().mapReferenceId().equals(id)) {
+                    pins.add(pin);
+                }
+            }
+            return WorkspaceTransition.applied(
+                before.toBuilder()
+                    .maps(maps)
+                    .relationships(relationships)
+                    .pins(pins)
+                    .build(),
+                MAP_DELETED,
+                id);
         }
     }
 
