@@ -4,8 +4,8 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
-import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.GraphicsEnvironment;
 import java.awt.GridLayout;
 import java.awt.Insets;
 import java.net.URI;
@@ -38,6 +38,11 @@ import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 final class MapListPanel extends JPanel {
     static final int ROW_HEIGHT = 52;
     private static final int PANEL_WIDTH = 264;
+
+    @FunctionalInterface
+    interface DeleteConfirmationPrompt {
+        boolean confirmDelete(Component parent, String mapDisplayName);
+    }
 
     enum RowState {
         ACTIVE,
@@ -123,21 +128,68 @@ final class MapListPanel extends JPanel {
         }
     }
 
+    private static final class ScrollableListContainer extends JPanel implements javax.swing.Scrollable {
+        private static final long serialVersionUID = 1L;
+
+        private ScrollableListContainer() {
+            setLayout(new javax.swing.BoxLayout(this, javax.swing.BoxLayout.Y_AXIS));
+        }
+
+        @Override
+        public Dimension getPreferredScrollableViewportSize() {
+            return getPreferredSize();
+        }
+
+        @Override
+        public int getScrollableUnitIncrement(final java.awt.Rectangle visibleRect, final int orientation, final int direction) {
+            return ROW_HEIGHT / 2;
+        }
+
+        @Override
+        public int getScrollableBlockIncrement(final java.awt.Rectangle visibleRect, final int orientation, final int direction) {
+            return ROW_HEIGHT * 2;
+        }
+
+        @Override
+        public boolean getScrollableTracksViewportWidth() {
+            return true;
+        }
+
+        @Override
+        public boolean getScrollableTracksViewportHeight() {
+            return false;
+        }
+    }
+
     private final GraphWorkspaceHandle handle;
     private final Supplier<Path> pathChooser;
-    private final DefaultListModel<MapRow> model = new DefaultListModel<MapRow>();
-    private final JList<MapRow> list = new JList<MapRow>(model);
-    private final JButton addButton = button("graph_workspace.action.add_map", "add-map");
-    private final JButton removeButton = button("graph_workspace.action.remove_map", "remove-map");
+    private final DefaultListModel<MapRow> activeModel = new DefaultListModel<MapRow>();
+    private final JList<MapRow> activeList = new JList<MapRow>(activeModel);
+    private final DefaultListModel<MapRow> inactiveModel = new DefaultListModel<MapRow>();
+    private final JList<MapRow> inactiveList = new JList<MapRow>(inactiveModel);
+    private final JLabel activeHeader = new JLabel();
+    private final JLabel inactiveHeader = new JLabel();
+    private final JButton actionButton1 = button("graph_workspace.action.add_map", "add-map");
+    private final JButton actionButton2 = button("graph_workspace.action.deactivate_map", "remove-map");
     private final JButton retryButton = button("graph_workspace.action.retry_map", "retry-map");
     private final JButton locateButton = button("graph_workspace.action.locate_map", "locate-map");
+    private final DeleteConfirmationPrompt deletePrompt;
+    private final List<java.util.function.Consumer<MapRow>> selectionListeners =
+        new ArrayList<java.util.function.Consumer<MapRow>>();
+    private MapReferenceId pendingSelectionId;
     private List<MapRow> rows = Collections.emptyList();
     private boolean readOnly;
     private boolean updatingSelection;
 
     MapListPanel(final GraphWorkspaceHandle handle, final Supplier<Path> pathChooser) {
+        this(handle, pathChooser, defaultDeleteConfirmationPrompt());
+    }
+
+    MapListPanel(final GraphWorkspaceHandle handle, final Supplier<Path> pathChooser,
+            final DeleteConfirmationPrompt deletePrompt) {
         this.handle = Objects.requireNonNull(handle, "handle");
         this.pathChooser = Objects.requireNonNull(pathChooser, "pathChooser");
+        this.deletePrompt = Objects.requireNonNull(deletePrompt, "deletePrompt");
         setName("graph-workspace-map-list");
         setLayout(new BorderLayout(0, 4));
         setBorder(new EmptyBorder(6, 6, 6, 6));
@@ -149,32 +201,95 @@ final class MapListPanel extends JPanel {
         heading.setBorder(new EmptyBorder(0, 2, 2, 2));
         add(heading, BorderLayout.NORTH);
 
-        list.setName("graph-workspace-map-list-rows");
-        list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        list.setFixedCellHeight(ROW_HEIGHT);
-        list.setVisibleRowCount(8);
-        list.setCellRenderer(new RowRenderer());
-        list.addListSelectionListener(event -> {
+        activeHeader.setName("graph-workspace-active-header");
+        activeHeader.setBorder(new EmptyBorder(4, 2, 2, 2));
+        activeHeader.setFont(activeHeader.getFont().deriveFont(Font.BOLD, 10f));
+        activeHeader.setForeground(Color.GRAY);
+
+        activeList.setName("graph-workspace-active-map-list");
+        activeList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        activeList.setFixedCellHeight(ROW_HEIGHT);
+        activeList.setVisibleRowCount(0);
+        activeList.setCellRenderer(new RowRenderer());
+        activeList.addListSelectionListener(event -> {
             if (!event.getValueIsAdjusting() && !updatingSelection) {
-                synchronizeSelection();
+                updatingSelection = true;
+                try {
+                    inactiveList.clearSelection();
+                    synchronizeSelection();
+                }
+                finally {
+                    updatingSelection = false;
+                }
             }
         });
-        add(new JScrollPane(list), BorderLayout.CENTER);
 
-        final JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEADING, 3, 0));
+        final JPanel activeSection = new JPanel(new BorderLayout());
+        activeSection.add(activeHeader, BorderLayout.NORTH);
+        activeSection.add(activeList, BorderLayout.CENTER);
+
+        inactiveHeader.setName("graph-workspace-inactive-header");
+        inactiveHeader.setBorder(new EmptyBorder(8, 2, 2, 2));
+        inactiveHeader.setFont(inactiveHeader.getFont().deriveFont(Font.BOLD, 10f));
+        inactiveHeader.setForeground(Color.GRAY);
+
+        inactiveList.setName("graph-workspace-inactive-map-list");
+        inactiveList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        inactiveList.setFixedCellHeight(ROW_HEIGHT);
+        inactiveList.setVisibleRowCount(0);
+        inactiveList.setCellRenderer(new RowRenderer());
+        inactiveList.addListSelectionListener(event -> {
+            if (!event.getValueIsAdjusting() && !updatingSelection) {
+                updatingSelection = true;
+                try {
+                    activeList.clearSelection();
+                    synchronizeSelection();
+                }
+                finally {
+                    updatingSelection = false;
+                }
+            }
+        });
+
+        final JPanel inactiveSection = new JPanel(new BorderLayout());
+        inactiveSection.add(inactiveHeader, BorderLayout.NORTH);
+        inactiveSection.add(inactiveList, BorderLayout.CENTER);
+
+        final ScrollableListContainer listContainer = new ScrollableListContainer();
+        listContainer.add(activeSection);
+        listContainer.add(inactiveSection);
+
+        final JScrollPane scrollPane = new JScrollPane(listContainer);
+        scrollPane.setName("graph-workspace-map-list-scroll");
+        scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        add(scrollPane, BorderLayout.CENTER);
+
+        final JPanel actions = new JPanel(new GridLayout(2, 2, 4, 4));
         actions.setName("graph-workspace-map-list-actions");
         actions.setBorder(new EmptyBorder(2, 0, 0, 0));
-        actions.add(addButton);
-        actions.add(removeButton);
+        actions.add(actionButton1);
+        actions.add(actionButton2);
         actions.add(retryButton);
         actions.add(locateButton);
         add(actions, BorderLayout.SOUTH);
 
-        addButton.addActionListener(event -> addMapFromChooser());
-        removeButton.addActionListener(event -> removeSelected());
+        actionButton1.addActionListener(event -> handleActionButton1());
+        actionButton2.addActionListener(event -> handleActionButton2());
         retryButton.addActionListener(event -> retrySelected());
         locateButton.addActionListener(event -> locateSelected());
         updateButtons();
+    }
+
+    private static DeleteConfirmationPrompt defaultDeleteConfirmationPrompt() {
+        return (parent, mapDisplayName) -> {
+            if (GraphicsEnvironment.isHeadless()) {
+                return true;
+            }
+            final String title = TextUtils.getText("graph_workspace.dialog.delete_map.title");
+            final String message = TextUtils.format("graph_workspace.dialog.delete_map.message", mapDisplayName);
+            return javax.swing.JOptionPane.showConfirmDialog(parent, message, title,
+                javax.swing.JOptionPane.YES_NO_OPTION) == javax.swing.JOptionPane.YES_OPTION;
+        };
     }
 
     void setRows(final List<MapRow> values) {
@@ -186,57 +301,121 @@ final class MapListPanel extends JPanel {
         rows = Collections.unmodifiableList(copy);
         updatingSelection = true;
         try {
-            model.clear();
-            int selectedIndex = -1;
-            for (int index = 0; index < rows.size(); index++) {
-                final MapRow row = rows.get(index);
-                model.addElement(row);
-                if (row.selected() && selectedIndex < 0) {
-                    selectedIndex = index;
+            activeModel.clear();
+            inactiveModel.clear();
+            int selectedActiveIndex = -1;
+            int selectedInactiveIndex = -1;
+
+            final MapReferenceId targetSelection = pendingSelectionId != null
+                ? pendingSelectionId : (selectedRow() != null ? selectedRow().mapReferenceId() : null);
+
+            for (final MapRow row : rows) {
+                if (row.partition() == MapPartition.ACTIVE) {
+                    activeModel.addElement(row);
+                    if (targetSelection != null && targetSelection.equals(row.mapReferenceId())) {
+                        selectedActiveIndex = activeModel.size() - 1;
+                    }
+                    else if (row.selected() && selectedActiveIndex < 0 && targetSelection == null) {
+                        selectedActiveIndex = activeModel.size() - 1;
+                    }
+                }
+                else {
+                    inactiveModel.addElement(row);
+                    if (targetSelection != null && targetSelection.equals(row.mapReferenceId())) {
+                        selectedInactiveIndex = inactiveModel.size() - 1;
+                    }
+                    else if (row.selected() && selectedInactiveIndex < 0 && targetSelection == null) {
+                        selectedInactiveIndex = inactiveModel.size() - 1;
+                    }
                 }
             }
-            if (selectedIndex >= 0) {
-                list.setSelectedIndex(selectedIndex);
+
+            activeHeader.setText(TextUtils.format("graph_workspace.map_list.active_heading", activeModel.size()));
+            inactiveHeader.setText(TextUtils.format("graph_workspace.map_list.inactive_heading", inactiveModel.size()));
+
+            activeList.setPreferredSize(new Dimension(PANEL_WIDTH, activeModel.size() * ROW_HEIGHT));
+            inactiveList.setPreferredSize(new Dimension(PANEL_WIDTH, inactiveModel.size() * ROW_HEIGHT));
+
+            if (selectedActiveIndex >= 0) {
+                activeList.setSelectedIndex(selectedActiveIndex);
+                inactiveList.clearSelection();
+            }
+            else if (selectedInactiveIndex >= 0) {
+                inactiveList.setSelectedIndex(selectedInactiveIndex);
+                activeList.clearSelection();
             }
             else {
-                list.clearSelection();
+                activeList.clearSelection();
+                inactiveList.clearSelection();
             }
+            pendingSelectionId = null;
         }
         finally {
             updatingSelection = false;
         }
-        updateButtons();
+        synchronizeSelection();
     }
 
     List<MapRow> rows() {
         return rows;
     }
 
+    void addSelectionListener(final java.util.function.Consumer<MapRow> listener) {
+        selectionListeners.add(Objects.requireNonNull(listener, "listener"));
+    }
+
     void selectMap(final MapReferenceId mapReferenceId) {
         Objects.requireNonNull(mapReferenceId, "mapReferenceId");
-        for (int index = 0; index < model.size(); index++) {
-            if (mapReferenceId.equals(model.get(index).mapReferenceId())) {
-                list.setSelectedIndex(index);
-                return;
+        updatingSelection = true;
+        try {
+            for (int i = 0; i < activeModel.size(); i++) {
+                if (mapReferenceId.equals(activeModel.get(i).mapReferenceId())) {
+                    activeList.setSelectedIndex(i);
+                    inactiveList.clearSelection();
+                    return;
+                }
             }
+            for (int i = 0; i < inactiveModel.size(); i++) {
+                if (mapReferenceId.equals(inactiveModel.get(i).mapReferenceId())) {
+                    inactiveList.setSelectedIndex(i);
+                    activeList.clearSelection();
+                    return;
+                }
+            }
+            activeList.clearSelection();
+            inactiveList.clearSelection();
         }
-        list.clearSelection();
+        finally {
+            updatingSelection = false;
+            synchronizeSelection();
+        }
     }
 
     MapRow selectedRow() {
-        return list.getSelectedValue();
+        if (activeList.getSelectedValue() != null) {
+            return activeList.getSelectedValue();
+        }
+        return inactiveList.getSelectedValue();
+    }
+
+    JList<MapRow> activeList() {
+        return activeList;
+    }
+
+    JList<MapRow> inactiveList() {
+        return inactiveList;
     }
 
     JList<MapRow> rowList() {
-        return list;
+        return activeList;
     }
 
     JButton addButton() {
-        return addButton;
+        return actionButton1;
     }
 
     JButton removeButton() {
-        return removeButton;
+        return actionButton2;
     }
 
     JButton retryButton() {
@@ -248,7 +427,7 @@ final class MapListPanel extends JPanel {
     }
 
     int rowHeight() {
-        return list.getFixedCellHeight();
+        return ROW_HEIGHT;
     }
 
     void setReadOnly(final boolean value) {
@@ -260,7 +439,7 @@ final class MapListPanel extends JPanel {
         return readOnly;
     }
 
-    private void addMapFromChooser() {
+    void addMapFromChooser() {
         final Path path = pathChooser.get();
         if (path == null || readOnly) {
             return;
@@ -268,25 +447,64 @@ final class MapListPanel extends JPanel {
         execute(GraphCommands.addMap(MapReferenceId.of(UUID.randomUUID()), path.toUri()));
     }
 
-    private void removeSelected() {
+    void deactivateSelected() {
         final MapRow row = selectedRow();
-        if (row != null && !readOnly) {
+        if (row != null && !readOnly && row.partition() == MapPartition.ACTIVE) {
+            pendingSelectionId = row.mapReferenceId();
             execute(GraphCommands.removeMap(row.mapReferenceId()));
         }
     }
 
-    private void retrySelected() {
+    void reactivateSelected() {
         final MapRow row = selectedRow();
-        if (row != null && !readOnly && row.state() == RowState.RETRYABLE) {
+        if (row != null && !readOnly && row.partition() == MapPartition.INACTIVE) {
+            pendingSelectionId = row.mapReferenceId();
+            execute(GraphCommands.reactivateMap(row.mapReferenceId()));
+        }
+    }
+
+    void deleteSelected() {
+        final MapRow row = selectedRow();
+        if (row != null && !readOnly && row.partition() == MapPartition.INACTIVE) {
+            if (deletePrompt.confirmDelete(this, row.displayName())) {
+                pendingSelectionId = null;
+                execute(GraphCommands.deleteMap(row.mapReferenceId()));
+            }
+        }
+    }
+
+    void retrySelected() {
+        final MapRow row = selectedRow();
+        if (row != null && !readOnly && row.partition() == MapPartition.ACTIVE && row.state() == RowState.RETRYABLE) {
             execute(GraphCommands.retryMap(row.mapReferenceId()));
         }
     }
 
-    private void locateSelected() {
+    void locateSelected() {
         final MapRow row = selectedRow();
         final Path path = pathChooser.get();
         if (row != null && path != null && !readOnly) {
             execute(GraphCommands.locateMap(row.mapReferenceId(), path.toUri()));
+        }
+    }
+
+    private void handleActionButton1() {
+        final MapRow row = selectedRow();
+        if (row != null && row.partition() == MapPartition.INACTIVE) {
+            reactivateSelected();
+        }
+        else {
+            addMapFromChooser();
+        }
+    }
+
+    private void handleActionButton2() {
+        final MapRow row = selectedRow();
+        if (row != null && row.partition() == MapPartition.INACTIVE) {
+            deleteSelected();
+        }
+        else {
+            deactivateSelected();
         }
     }
 
@@ -295,20 +513,34 @@ final class MapListPanel extends JPanel {
     }
 
     private void synchronizeSelection() {
-        final MapRow selected = list.getSelectedValue();
+        final MapRow selected = selectedRow();
         final List<MapRow> next = new ArrayList<MapRow>(rows.size());
         for (final MapRow row : rows) {
             next.add(row.withSelected(selected != null && row.mapReferenceId().equals(selected.mapReferenceId())));
         }
         rows = Collections.unmodifiableList(next);
         updateButtons();
+        for (final java.util.function.Consumer<MapRow> listener : selectionListeners) {
+            listener.accept(selected);
+        }
     }
 
     private void updateButtons() {
         final MapRow selected = selectedRow();
-        addButton.setEnabled(!readOnly);
-        removeButton.setEnabled(!readOnly && selected != null && selected.state() != RowState.READ_ONLY);
-        retryButton.setEnabled(!readOnly && selected != null && selected.state() == RowState.RETRYABLE);
+        if (selected == null || selected.partition() == MapPartition.ACTIVE) {
+            actionButton1.setText(TextUtils.getText("graph_workspace.action.add_map"));
+            actionButton1.setEnabled(!readOnly);
+            actionButton2.setText(TextUtils.getText("graph_workspace.action.deactivate_map"));
+            actionButton2.setEnabled(!readOnly && selected != null && selected.state() != RowState.READ_ONLY);
+            retryButton.setEnabled(!readOnly && selected != null && selected.state() == RowState.RETRYABLE);
+        }
+        else {
+            actionButton1.setText(TextUtils.getText("graph_workspace.action.reactivate_map"));
+            actionButton1.setEnabled(!readOnly && selected.state() != RowState.READ_ONLY);
+            actionButton2.setText(TextUtils.getText("graph_workspace.action.delete_map"));
+            actionButton2.setEnabled(!readOnly && selected.state() != RowState.READ_ONLY);
+            retryButton.setEnabled(false);
+        }
         locateButton.setEnabled(!readOnly && selected != null
             && (selected.state() == RowState.MISSING || selected.state() == RowState.RETRYABLE));
     }
