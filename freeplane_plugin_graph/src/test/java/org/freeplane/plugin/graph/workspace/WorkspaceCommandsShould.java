@@ -150,6 +150,82 @@ public class WorkspaceCommandsShould {
     }
 
     @Test
+    public void deleteMapPurgesMapAndCascadesRelationshipsAndPinsBothSourceAndTarget() {
+        MapReferenceId deletedId = MAP_TWO;
+        WorkspaceDocument before = document(
+            Arrays.asList(
+                map(MAP_ONE, 1, "maps/one.mm", true, "#4E79A7", noUnknownXml()),
+                map(MAP_TWO, 2, "maps/two.mm", false, "#59A14F", noUnknownXml()),
+                map(MAP_THREE, 3, "maps/three.mm", true, "#EDC948", noUnknownXml())),
+            Arrays.asList(
+                relationship(RELATIONSHIP_ONE, 1, MAP_ONE, "n1", MAP_TWO, "n2", RelationshipDirection.FORWARD),
+                relationship(RELATIONSHIP_TWO, 2, MAP_TWO, "n2", MAP_THREE, "n3", RelationshipDirection.FORWARD),
+                relationship(RELATIONSHIP_THREE, 3, MAP_ONE, "n1", MAP_THREE, "n3", RelationshipDirection.FORWARD)),
+            Arrays.asList(
+                pin(MAP_ONE, "n1", 10.0, 20.0),
+                pin(MAP_TWO, "n2", 30.0, 40.0),
+                pin(MAP_THREE, "n3", 50.0, 60.0)));
+
+        WorkspaceTransition transition = WorkspaceCommands.deleteMap(deletedId).apply(before);
+
+        assertThat(transition.status()).isEqualTo(WorkspaceTransition.Status.APPLIED);
+        assertThat(transition.messageKey()).isEqualTo("graph_workspace.map.deleted");
+        assertThat(transition.messageArguments()).containsExactly(deletedId);
+
+        WorkspaceDocument after = transition.after();
+        assertThat(after.maps()).extracting(MapReference::id).containsExactly(MAP_ONE, MAP_THREE);
+        assertThat(after.relationships()).extracting(GraphRelationshipRecord::id).containsExactly(RELATIONSHIP_THREE);
+        assertThat(after.pins()).extracting(pin -> pin.node().mapReferenceId()).containsExactly(MAP_ONE, MAP_THREE);
+    }
+
+    @Test
+    public void deleteMapRejectsUnknownMapId() {
+        WorkspaceDocument before = document(
+            Collections.singletonList(map(MAP_ONE, 1, "maps/one.mm", true, "#4E79A7", noUnknownXml())),
+            noRelationships(),
+            noPins());
+
+        WorkspaceTransition transition = WorkspaceCommands.deleteMap(MAP_EIGHT).apply(before);
+
+        assertThat(transition.status()).isEqualTo(WorkspaceTransition.Status.REJECTED);
+        assertThat(transition.messageKey()).isEqualTo("graph_workspace.map.not_found");
+        assertThat(transition.messageArguments()).containsExactly(MAP_EIGHT);
+        assertThat(transition.after()).isSameAs(before);
+    }
+
+    @Test
+    public void deleteMapIsUndoableAndRedoableWithAllCascadedEntities() {
+        WorkspaceDocument initial = document(
+            Arrays.asList(
+                map(MAP_ONE, 1, "maps/one.mm", true, "#4E79A7", noUnknownXml()),
+                map(MAP_TWO, 2, "maps/two.mm", false, "#59A14F", noUnknownXml())),
+            Collections.singletonList(
+                relationship(RELATIONSHIP_ONE, 1, MAP_ONE, "n1", MAP_TWO, "n2", RelationshipDirection.FORWARD)),
+            Collections.singletonList(
+                pin(MAP_TWO, "n2", 30.0, 40.0)));
+
+        WorkspaceHistory history = new WorkspaceHistory();
+        WorkspaceTransition deleteTransition = history.execute(WorkspaceCommands.deleteMap(MAP_TWO), initial);
+
+        assertThat(deleteTransition.after().maps()).extracting(MapReference::id).containsExactly(MAP_ONE);
+        assertThat(deleteTransition.after().relationships()).isEmpty();
+        assertThat(deleteTransition.after().pins()).isEmpty();
+
+        WorkspaceTransition undoTransition = history.undo(deleteTransition.after());
+        assertThat(undoTransition.status()).isEqualTo(WorkspaceTransition.Status.APPLIED);
+        WorkspaceDocument restored = undoTransition.after();
+        assertThat(restored.maps()).extracting(MapReference::id).containsExactly(MAP_ONE, MAP_TWO);
+        assertThat(restored.relationships()).extracting(GraphRelationshipRecord::id).containsExactly(RELATIONSHIP_ONE);
+        assertThat(restored.pins()).extracting(pin -> pin.node().mapReferenceId()).containsExactly(MAP_TWO);
+
+        WorkspaceTransition redoTransition = history.redo(restored);
+        assertThat(redoTransition.status()).isEqualTo(WorkspaceTransition.Status.APPLIED);
+        assertThat(redoTransition.after().maps()).extracting(MapReference::id).containsExactly(MAP_ONE);
+        assertThat(redoTransition.after().relationships()).isEmpty();
+        assertThat(redoTransition.after().pins()).isEmpty();
+    }
+
+    @Test
     public void locateMapsOnlyByExplicitlyRebindingUris() {
         UnknownXml mapUnknown = unknown("map", "kept");
         WorkspaceDocument before = document(Arrays.asList(
@@ -436,6 +512,7 @@ public class WorkspaceCommandsShould {
             .isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> WorkspaceCommands.reactivateMap(null)).isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> WorkspaceCommands.removeMap(null)).isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> WorkspaceCommands.deleteMap(null)).isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> WorkspaceCommands.locateMap(MAP_ONE, null)).isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> WorkspaceCommands.createRelationship(null, source, target,
             RelationshipDirection.FORWARD)).isInstanceOf(NullPointerException.class);
@@ -479,6 +556,16 @@ public class WorkspaceCommandsShould {
     private static GraphRelationshipRecord relationship(RelationshipId id, long sequence, NodeReference source,
             NodeReference target, RelationshipDirection direction, List<UnknownXml> unknownXml) {
         return GraphRelationshipRecord.of(id, sequence, source, target, direction, unknownXml);
+    }
+
+    private static GraphRelationshipRecord relationship(RelationshipId id, long sequence, MapReferenceId sourceMap,
+            String sourceNode, MapReferenceId targetMap, String targetNode, RelationshipDirection direction) {
+        return relationship(id, sequence, node(sourceMap, sourceNode), node(targetMap, targetNode), direction,
+            noUnknownXml());
+    }
+
+    private static PinRecord pin(MapReferenceId map, String node, double x, double y) {
+        return PinRecord.of(node(map, node), x, y, noUnknownXml());
     }
 
     private static NodeReference node(MapReferenceId map, String id) {
