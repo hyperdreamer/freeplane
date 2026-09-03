@@ -21,6 +21,7 @@ import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 
 public final class GraphCommandRouter {
     private static final String MAP_NOT_FOUND = "graph_workspace.map.not_found";
+    private static final String MAP_DELETE_ACTIVE = "graph_workspace.map.delete_active";
     private static final String MAP_RETRY_STARTED = "graph_workspace.map.retry.started";
     private static final String MAP_RETRY_INACTIVE = "graph_workspace.map.retry.inactive";
     private static final String MAP_RETRY_FAILED = "graph_workspace.map.retry.failed";
@@ -68,6 +69,12 @@ public final class GraphCommandRouter {
         }
         if (value instanceof GraphCommands.RemoveMap) {
             return executeRemoveMap((GraphCommands.RemoveMap) value);
+        }
+        if (value instanceof GraphCommands.ReactivateMap) {
+            return executeReactivateMap((GraphCommands.ReactivateMap) value);
+        }
+        if (value instanceof GraphCommands.DeleteMap) {
+            return executeDeleteMap((GraphCommands.DeleteMap) value);
         }
         if (value instanceof GraphCommands.LocateMap) {
             return executeLocateMap((GraphCommands.LocateMap) value);
@@ -172,6 +179,18 @@ public final class GraphCommandRouter {
 
     private GraphCommandResult executeRemoveMap(final GraphCommands.RemoveMap command) {
         return executeWorkspace(WorkspaceCommands.removeMap(command.mapReferenceId()));
+    }
+
+    private GraphCommandResult executeReactivateMap(final GraphCommands.ReactivateMap command) {
+        return executeWorkspace(WorkspaceCommands.reactivateMap(command.mapReferenceId()));
+    }
+
+    private GraphCommandResult executeDeleteMap(final GraphCommands.DeleteMap command) {
+        final MapReference map = findMap(command.mapReferenceId());
+        if (map != null && map.active()) {
+            return rejected(MAP_DELETE_ACTIVE, command.mapReferenceId());
+        }
+        return executeWorkspace(WorkspaceCommands.deleteMap(command.mapReferenceId()));
     }
 
     private GraphCommandResult executeLocateMap(final GraphCommands.LocateMap command) {

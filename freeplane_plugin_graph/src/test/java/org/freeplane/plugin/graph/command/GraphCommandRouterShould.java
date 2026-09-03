@@ -499,6 +499,69 @@ public class GraphCommandRouterShould {
     }
 
     @Test
+    public void routesReactivateMapToWorkspaceCommand() {
+        Fixture fixture = new Fixture();
+        MapReference active = map(MAP_ONE, 1, "one.mm", true, "#4E79A7");
+        MapReference inactive = map(MAP_TWO, 2, "two.mm", false, "#F28E2B");
+        fixture.document = WorkspaceDocument.createVersion1(WORKSPACE_ID).toBuilder()
+            .maps(Arrays.asList(active, inactive)).build();
+        when(fixture.store.currentDocument()).thenReturn(fixture.document);
+
+        GraphCommandResult result = fixture.router.execute(GraphCommands.reactivateMap(MAP_TWO));
+
+        assertThat(result.status()).isEqualTo(GraphCommandResult.Status.APPLIED);
+        ArgumentCaptor<WorkspaceCommand> commandCaptor = ArgumentCaptor.forClass(WorkspaceCommand.class);
+        verify(fixture.store).execute(commandCaptor.capture());
+        WorkspaceTransition transition = commandCaptor.getValue().apply(fixture.document);
+        assertThat(transition.status()).isEqualTo(WorkspaceTransition.Status.APPLIED);
+        assertThat(mapReference(transition.after(), MAP_TWO).active()).isTrue();
+    }
+
+    @Test
+    public void routesDeleteMapForInactiveMap() {
+        Fixture fixture = new Fixture();
+        MapReference active = map(MAP_ONE, 1, "one.mm", true, "#4E79A7");
+        MapReference inactive = map(MAP_TWO, 2, "two.mm", false, "#F28E2B");
+        fixture.document = WorkspaceDocument.createVersion1(WORKSPACE_ID).toBuilder()
+            .maps(Arrays.asList(active, inactive)).build();
+        when(fixture.store.currentDocument()).thenReturn(fixture.document);
+
+        GraphCommandResult result = fixture.router.execute(GraphCommands.deleteMap(MAP_TWO));
+
+        assertThat(result.status()).isEqualTo(GraphCommandResult.Status.APPLIED);
+        ArgumentCaptor<WorkspaceCommand> commandCaptor = ArgumentCaptor.forClass(WorkspaceCommand.class);
+        verify(fixture.store).execute(commandCaptor.capture());
+        WorkspaceTransition transition = commandCaptor.getValue().apply(fixture.document);
+        assertThat(transition.status()).isEqualTo(WorkspaceTransition.Status.APPLIED);
+        assertThat(transition.after().maps()).extracting(MapReference::id).containsExactly(MAP_ONE);
+    }
+
+    @Test
+    public void rejectsDeleteMapForActiveMap() {
+        Fixture fixture = new Fixture();
+        MapReference active = map(MAP_ONE, 1, "one.mm", true, "#4E79A7");
+        MapReference activeTwo = map(MAP_TWO, 2, "two.mm", true, "#F28E2B");
+        fixture.document = WorkspaceDocument.createVersion1(WORKSPACE_ID).toBuilder()
+            .maps(Arrays.asList(active, activeTwo)).build();
+        when(fixture.store.currentDocument()).thenReturn(fixture.document);
+
+        GraphCommandResult result = fixture.router.execute(GraphCommands.deleteMap(MAP_ONE));
+
+        assertThat(result.status()).isEqualTo(GraphCommandResult.Status.REJECTED);
+        assertThat(result.messageKey()).isEqualTo("graph_workspace.map.delete_active");
+        assertThat(result.messageArguments()).containsExactly(MAP_ONE);
+        verify(fixture.store, never()).execute(any(WorkspaceCommand.class));
+    }
+
+    @Test
+    public void rejectsNullParametersForReactivateMapAndDeleteMap() {
+        assertThatThrownBy(() -> GraphCommands.reactivateMap(null))
+            .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> GraphCommands.deleteMap(null))
+            .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
     public void saveAsCommitsTheReservationOnlyAfterTheStorePublishesTheNewIdentity() throws Exception {
         Path current = temporaryFolder.newFolder("real-current").toPath().resolve("workspace.fpg");
         Path target = temporaryFolder.newFolder("real-target").toPath().resolve("renamed.fpg");
