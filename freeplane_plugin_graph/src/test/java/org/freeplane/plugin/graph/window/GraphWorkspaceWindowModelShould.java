@@ -706,6 +706,52 @@ public class GraphWorkspaceWindowModelShould {
     }
 
     @Test
+    public void updatesMapsMenuEnablementForActiveAndInactivePartitions() {
+        MapReferenceId activeId = id(101L);
+        MapReferenceId inactiveId = id(102L);
+        List<GraphWorkspaceViewBinding.MapRegistration> registrations = Arrays.asList(
+            registration(activeId, "Active", MapAvailability.AVAILABLE),
+            registration(inactiveId, "Inactive", MapAvailability.INACTIVE));
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            emptyState(), registrations, false);
+        GraphWorkspaceWindowModel model = fixture.model();
+
+        // Select Active map
+        model.mapList().selectMap(activeId);
+        assertThat(menuItem(model, "add-map").isEnabled()).isTrue();
+        assertThat(menuItem(model, "deactivate-map").isEnabled()).isTrue();
+        assertThat(menuItem(model, "reactivate-map").isEnabled()).isFalse();
+        assertThat(menuItem(model, "delete-map").isEnabled()).isFalse();
+
+        // Select Inactive map
+        model.mapList().selectMap(inactiveId);
+        assertThat(menuItem(model, "add-map").isEnabled()).isTrue();
+        assertThat(menuItem(model, "deactivate-map").isEnabled()).isFalse();
+        assertThat(menuItem(model, "reactivate-map").isEnabled()).isTrue();
+        assertThat(menuItem(model, "delete-map").isEnabled()).isTrue();
+
+        model.close();
+    }
+
+    @Test
+    public void preservesInactivePartitionInReadOnlyMode() {
+        MapReferenceId inactiveId = id(103L);
+        List<GraphWorkspaceViewBinding.MapRegistration> registrations = Collections.singletonList(
+            registration(inactiveId, "Inactive", MapAvailability.INACTIVE));
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            emptyState(), registrations, true);
+        GraphWorkspaceWindowModel model = fixture.model();
+
+        MapListPanel.MapRow row = model.mapList().rows().get(0);
+        assertThat(row.partition()).isEqualTo(MapPartition.INACTIVE);
+        assertThat(row.state()).isEqualTo(MapListPanel.RowState.READ_ONLY);
+        assertThat(model.mapList().addButton().isEnabled()).isFalse();
+        assertThat(model.mapList().removeButton().isEnabled()).isFalse();
+
+        model.close();
+    }
+
+    @Test
     public void keepsMenuEnablementAlignedWithReadOnlyAndIndependentHistoryRules() {
         WorkspaceSessionStatus status = WorkspaceSessionStatus.of(true, true, true, false,
             Collections.<MapReferenceId>emptySet(),
@@ -721,7 +767,7 @@ public class GraphWorkspaceWindowModelShould {
         assertThat(menuItem(model, "save").isEnabled()).isTrue();
         assertThat(menuItem(model, "save-as").isEnabled()).isTrue();
         assertThat(menuItem(model, "add-map").isEnabled()).isTrue();
-        assertThat(menuItem(model, "remove-map").isEnabled()).isTrue();
+        assertThat(menuItem(model, "deactivate-map").isEnabled()).isTrue();
         assertThat(menuItem(model, "fit-graph").isEnabled()).isTrue();
         assertThat(menuItem(model, "reset-zoom").isEnabled()).isTrue();
         assertThat(menuItem(model, "settings").isEnabled()).isTrue();
@@ -734,7 +780,9 @@ public class GraphWorkspaceWindowModelShould {
         assertThat(menuItem(model, "save").isEnabled()).isFalse();
         assertThat(menuItem(model, "save-as").isEnabled()).isFalse();
         assertThat(menuItem(model, "add-map").isEnabled()).isFalse();
-        assertThat(menuItem(model, "remove-map").isEnabled()).isFalse();
+        assertThat(menuItem(model, "deactivate-map").isEnabled()).isFalse();
+        assertThat(menuItem(model, "reactivate-map").isEnabled()).isFalse();
+        assertThat(menuItem(model, "delete-map").isEnabled()).isFalse();
         assertThat(menuItem(model, "retry-map").isEnabled()).isFalse();
         assertThat(menuItem(model, "fit-graph").isEnabled()).isTrue();
         assertThat(menuItem(model, "reset-zoom").isEnabled()).isTrue();

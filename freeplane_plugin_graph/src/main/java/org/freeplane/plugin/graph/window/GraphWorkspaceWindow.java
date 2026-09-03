@@ -310,7 +310,9 @@ final class GraphWorkspaceWindowModel {
     private JMenuItem fileSaveAsMenuItem;
     private JMenuItem viewSettingsMenuItem;
     private JMenuItem mapsAddMenuItem;
-    private JMenuItem mapsRemoveMenuItem;
+    private JMenuItem mapsDeactivateMenuItem;
+    private JMenuItem mapsReactivateMenuItem;
+    private JMenuItem mapsDeleteMenuItem;
     private JMenuItem mapsRetryMenuItem;
     private JMenuItem mapsLocateMenuItem;
     private CanvasState currentState;
@@ -411,11 +413,7 @@ final class GraphWorkspaceWindowModel {
         graphScrollPane.getViewport().addChangeListener(event -> publishExternalViewport());
         canvas.setUserViewportChangeListener(this::publishCanvasViewport);
         mapList = new MapListPanel(routedHandle, pathChooser);
-        mapList.rowList().addListSelectionListener(event -> {
-            if (!event.getValueIsAdjusting()) {
-                updateMenuEnablement();
-            }
-        });
+        mapList.addSelectionListener(row -> updateMenuEnablement());
         toolbar = new WorkspaceToolbar(applicationController, routedHandle, canvas, pathChooser);
         currentPresentation = presentationOrDefault(binding.currentPresentation());
         settingsPanel = new WorkspaceSettingsPanel(routedHandle, currentPresentation.displaySettings());
@@ -987,9 +985,17 @@ final class GraphWorkspaceWindowModel {
         viewSettingsMenuItem.setEnabled(true);
         final MapListPanel.MapRow selectedMap = mapList.selectedRow();
         mapsAddMenuItem.setEnabled(!readOnly);
-        mapsRemoveMenuItem.setEnabled(!readOnly && selectedMap != null
+        mapsDeactivateMenuItem.setEnabled(!readOnly && selectedMap != null
+            && selectedMap.partition() == MapPartition.ACTIVE
+            && selectedMap.state() != MapListPanel.RowState.READ_ONLY);
+        mapsReactivateMenuItem.setEnabled(!readOnly && selectedMap != null
+            && selectedMap.partition() == MapPartition.INACTIVE
+            && selectedMap.state() != MapListPanel.RowState.READ_ONLY);
+        mapsDeleteMenuItem.setEnabled(!readOnly && selectedMap != null
+            && selectedMap.partition() == MapPartition.INACTIVE
             && selectedMap.state() != MapListPanel.RowState.READ_ONLY);
         mapsRetryMenuItem.setEnabled(!readOnly && selectedMap != null
+            && selectedMap.partition() == MapPartition.ACTIVE
             && selectedMap.state() == MapListPanel.RowState.RETRYABLE);
         mapsLocateMenuItem.setEnabled(!readOnly && selectedMap != null
             && (selectedMap.state() == MapListPanel.RowState.MISSING
@@ -1042,16 +1048,22 @@ final class GraphWorkspaceWindowModel {
 
         final JMenu maps = menu("graph_workspace.menu.maps", "graph-workspace-maps-menu");
         mapsAddMenuItem = item("graph_workspace.action.add_map", "add-map",
-            event -> mapList.addButton().doClick());
+            event -> mapList.addMapFromChooser());
         maps.add(mapsAddMenuItem);
-        mapsRemoveMenuItem = item("graph_workspace.action.remove_map", "remove-map",
-            event -> mapList.removeButton().doClick());
-        maps.add(mapsRemoveMenuItem);
+        mapsDeactivateMenuItem = item("graph_workspace.action.deactivate_map", "deactivate-map",
+            event -> mapList.deactivateSelected());
+        maps.add(mapsDeactivateMenuItem);
+        mapsReactivateMenuItem = item("graph_workspace.action.reactivate_map", "reactivate-map",
+            event -> mapList.reactivateSelected());
+        maps.add(mapsReactivateMenuItem);
+        mapsDeleteMenuItem = item("graph_workspace.action.delete_map", "delete-map",
+            event -> mapList.deleteSelected());
+        maps.add(mapsDeleteMenuItem);
         mapsRetryMenuItem = item("graph_workspace.action.retry_map", "retry-map",
-            event -> mapList.retryButton().doClick());
+            event -> mapList.retrySelected());
         maps.add(mapsRetryMenuItem);
         mapsLocateMenuItem = item("graph_workspace.action.locate_map", "locate-map",
-            event -> mapList.locateButton().doClick());
+            event -> mapList.locateSelected());
         maps.add(mapsLocateMenuItem);
 
         result.add(file);
@@ -1091,11 +1103,13 @@ final class GraphWorkspaceWindowModel {
         }
         final List<MapListPanel.MapRow> rows = new ArrayList<MapListPanel.MapRow>(accumulators.size());
         for (final RowAccumulator accumulator : accumulators.values()) {
+            final boolean isSelected = selectedNode != null && selectedNode.mapReferenceId().equals(accumulator.mapReferenceId);
+            final MapPartition partition = accumulator.availability == MapAvailability.INACTIVE
+                ? MapPartition.INACTIVE : MapPartition.ACTIVE;
             final MapListPanel.RowState rowState = readOnly ? MapListPanel.RowState.READ_ONLY
                 : rowStateFor(accumulator.availability);
-            rows.add(MapListPanel.MapRow.of(accumulator.mapReferenceId, accumulator.displayName, rowState,
-                accumulator.projectedNodeCount, selectedNode != null
-                    && selectedNode.mapReferenceId().equals(accumulator.mapReferenceId)));
+            rows.add(MapListPanel.MapRow.of(accumulator.mapReferenceId, accumulator.displayName,
+                rowState, partition, accumulator.projectedNodeCount, isSelected));
         }
         mapList.setRows(rows);
         updateMenuEnablement();
