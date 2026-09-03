@@ -52,14 +52,16 @@ final class MapListPanel extends JPanel {
         private final MapReferenceId mapReferenceId;
         private final String displayName;
         private final RowState state;
+        private final MapPartition partition;
         private final int projectedNodeCount;
         private final boolean selected;
 
         private MapRow(final MapReferenceId mapReferenceId, final String displayName, final RowState state,
-                final int projectedNodeCount, final boolean selected) {
+                final MapPartition partition, final int projectedNodeCount, final boolean selected) {
             this.mapReferenceId = Objects.requireNonNull(mapReferenceId, "mapReferenceId");
             this.displayName = requireText(displayName, "displayName");
             this.state = Objects.requireNonNull(state, "state");
+            this.partition = Objects.requireNonNull(partition, "partition");
             if (projectedNodeCount < 0) {
                 throw new IllegalArgumentException("Projected node count must be nonnegative");
             }
@@ -68,8 +70,15 @@ final class MapListPanel extends JPanel {
         }
 
         static MapRow of(final MapReferenceId mapReferenceId, final String displayName, final RowState state,
+                final MapPartition partition, final int projectedNodeCount, final boolean selected) {
+            return new MapRow(mapReferenceId, displayName, state, partition, projectedNodeCount, selected);
+        }
+
+        static MapRow of(final MapReferenceId mapReferenceId, final String displayName, final RowState state,
                 final int projectedNodeCount, final boolean selected) {
-            return new MapRow(mapReferenceId, displayName, state, projectedNodeCount, selected);
+            final MapPartition inferred = state == RowState.INACTIVE
+                ? MapPartition.INACTIVE : MapPartition.ACTIVE;
+            return of(mapReferenceId, displayName, state, inferred, projectedNodeCount, selected);
         }
 
         MapReferenceId mapReferenceId() {
@@ -84,6 +93,10 @@ final class MapListPanel extends JPanel {
             return state;
         }
 
+        MapPartition partition() {
+            return partition;
+        }
+
         int projectedNodeCount() {
             return projectedNodeCount;
         }
@@ -93,7 +106,7 @@ final class MapListPanel extends JPanel {
         }
 
         MapRow withSelected(final boolean value) {
-            return new MapRow(mapReferenceId, displayName, state, projectedNodeCount, value);
+            return new MapRow(mapReferenceId, displayName, state, partition, projectedNodeCount, value);
         }
 
         private static String requireText(final String value, final String name) {

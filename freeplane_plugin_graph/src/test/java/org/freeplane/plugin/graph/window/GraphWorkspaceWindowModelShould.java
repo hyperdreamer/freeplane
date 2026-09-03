@@ -564,6 +564,57 @@ public class GraphWorkspaceWindowModelShould {
     }
 
     @Test
+    public void mapRowRecordsAndExposesMapPartition() {
+        MapReferenceId mapId = id(31L);
+        MapListPanel.MapRow row = MapListPanel.MapRow.of(
+            mapId, "My Map", MapListPanel.RowState.ACTIVE, MapPartition.ACTIVE, 5, true);
+
+        assertThat(row.mapReferenceId()).isEqualTo(mapId);
+        assertThat(row.displayName()).isEqualTo("My Map");
+        assertThat(row.state()).isEqualTo(MapListPanel.RowState.ACTIVE);
+        assertThat(row.partition()).isEqualTo(MapPartition.ACTIVE);
+        assertThat(row.projectedNodeCount()).isEqualTo(5);
+        assertThat(row.selected()).isTrue();
+    }
+
+    @Test
+    public void mapRowOfWithPartitionSetsPartitionProperly() {
+        MapReferenceId mapId = id(32L);
+        MapListPanel.MapRow row = MapListPanel.MapRow.of(
+            mapId, "Inactive Map", MapListPanel.RowState.INACTIVE, MapPartition.INACTIVE, 0, false);
+
+        assertThat(row.partition()).isEqualTo(MapPartition.INACTIVE);
+        assertThat(row.state()).isEqualTo(MapListPanel.RowState.INACTIVE);
+    }
+
+    @Test
+    public void backwardCompatibleMapRowOfDerivesPartitionFromState() {
+        MapReferenceId mapId = id(33L);
+        MapListPanel.MapRow activeRow = MapListPanel.MapRow.of(
+            mapId, "Active Map", MapListPanel.RowState.ACTIVE, 3, false);
+        MapListPanel.MapRow inactiveRow = MapListPanel.MapRow.of(
+            mapId, "Inactive Map", MapListPanel.RowState.INACTIVE, 0, false);
+        MapListPanel.MapRow missingRow = MapListPanel.MapRow.of(
+            mapId, "Missing Map", MapListPanel.RowState.MISSING, 0, false);
+
+        assertThat(activeRow.partition()).isEqualTo(MapPartition.ACTIVE);
+        assertThat(inactiveRow.partition()).isEqualTo(MapPartition.INACTIVE);
+        assertThat(missingRow.partition()).isEqualTo(MapPartition.ACTIVE);
+    }
+
+    @Test
+    public void mapRowWithSelectedPreservesPartition() {
+        MapReferenceId mapId = id(34L);
+        MapListPanel.MapRow row = MapListPanel.MapRow.of(
+            mapId, "My Map", MapListPanel.RowState.READ_ONLY, MapPartition.INACTIVE, 0, false);
+        MapListPanel.MapRow updated = row.withSelected(true);
+
+        assertThat(updated.selected()).isTrue();
+        assertThat(updated.partition()).isEqualTo(MapPartition.INACTIVE);
+        assertThat(updated.state()).isEqualTo(MapListPanel.RowState.READ_ONLY);
+    }
+
+    @Test
     public void disablesMutatingControlsForReadOnlySessions() {
         Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
             nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
