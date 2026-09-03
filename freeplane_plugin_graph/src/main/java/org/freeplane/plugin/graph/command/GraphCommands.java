@@ -38,6 +38,14 @@ public final class GraphCommands {
         return new RemoveMap(mapReferenceId);
     }
 
+    public static ReactivateMap reactivateMap(final MapReferenceId mapReferenceId) {
+        return new ReactivateMap(mapReferenceId);
+    }
+
+    public static DeleteMap deleteMap(final MapReferenceId mapReferenceId) {
+        return new DeleteMap(mapReferenceId);
+    }
+
     public static LocateMap locateMap(final MapReferenceId mapReferenceId, final URI replacementUri) {
         return new LocateMap(mapReferenceId, replacementUri);
     }
@@ -195,6 +203,30 @@ public final class GraphCommands {
         private final MapReferenceId mapReferenceId;
 
         private RemoveMap(final MapReferenceId mapReferenceId) {
+            this.mapReferenceId = Objects.requireNonNull(mapReferenceId, "mapReferenceId");
+        }
+
+        public MapReferenceId mapReferenceId() {
+            return mapReferenceId;
+        }
+    }
+
+    public static final class ReactivateMap implements GraphCommand {
+        private final MapReferenceId mapReferenceId;
+
+        private ReactivateMap(final MapReferenceId mapReferenceId) {
+            this.mapReferenceId = Objects.requireNonNull(mapReferenceId, "mapReferenceId");
+        }
+
+        public MapReferenceId mapReferenceId() {
+            return mapReferenceId;
+        }
+    }
+
+    public static final class DeleteMap implements GraphCommand {
+        private final MapReferenceId mapReferenceId;
+
+        private DeleteMap(final MapReferenceId mapReferenceId) {
             this.mapReferenceId = Objects.requireNonNull(mapReferenceId, "mapReferenceId");
         }
 
