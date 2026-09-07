@@ -198,6 +198,9 @@ public final class GraphPluginOsgiSmoke {
         if (exports == null || !exports.toString().contains("org.freeplane.features.filter.hidden")) {
             throw new AssertionError("Core bundle does not export org.freeplane.features.filter.hidden: " + exports);
         }
+        if (exports == null || !exports.toString().contains("org.freeplane.core.ui.components")) {
+            throw new AssertionError("Core bundle does not export org.freeplane.core.ui.components: " + exports);
+        }
     }
 
     private static void assertGraphBundleContents(final Bundle bundle) throws Exception {
@@ -223,7 +226,8 @@ public final class GraphPluginOsgiSmoke {
             "org.miv.pherd.ntree.NTree",
             "org.miv.mbox.net.Receiver",
             "org.graphstream.stream.net.HTTPSource",
-            "org.freeplane.features.filter.hidden.NodeVisibility"
+            "org.freeplane.features.filter.hidden.NodeVisibility",
+            "org.freeplane.core.ui.components.FrameResynchronizer"
         };
         for (final String className : classes) {
             bundle.loadClass(className);

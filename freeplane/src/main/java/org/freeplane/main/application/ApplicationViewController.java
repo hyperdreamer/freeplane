@@ -66,7 +66,6 @@ class ApplicationViewController extends FrameController {
 	private static final String APPWINDOW_X = "appwindow_x";
 	private static final String APPWINDOW_Y = "appwindow_y";
 	private static final String APPWINDOW_STATE = "appwindow_state";
-
 	private static Image frameIcon(String size) {
         return new ImageIcon(ResourceController.getResourceController().getResource(
                 "/images/Freeplane_frame_icon_"+ size + ".png")).getImage();
@@ -365,7 +364,6 @@ class ApplicationViewController extends FrameController {
 		// Register full screen listener for macOS
 		Compat.registerFullScreenListener(frame);
 	}
-
 
 	public void openMapsOnStart() {
 	    mapViewWindows.loadLayout();

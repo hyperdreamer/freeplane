@@ -81,6 +81,7 @@ import org.freeplane.plugin.graph.workspace.model.WorkspaceDocument;
 import org.freeplane.plugin.graph.workspace.model.WorkspaceId;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.core.resources.ResourceController;
+import org.freeplane.core.ui.components.FrameResynchronizer;
 import org.junit.After;
 import org.junit.Assume;
 import org.junit.Before;
@@ -924,6 +925,32 @@ public class GraphWorkspaceWindowModelShould {
             window.focus();
 
             assertThat(window.isVisible()).isTrue();
+        }
+        finally {
+            window.close();
+            resourceScope.close();
+        }
+    }
+
+    @Test
+    public void installsPopupFrameResynchronizationOnTheWorkspaceWindow() {
+        Assume.assumeFalse(GraphicsEnvironment.isHeadless());
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel resourceScope = fixture.model();
+        GraphWorkspaceView view = new SwingGraphWorkspaceViewFactory(fixture.applicationController, () -> OPEN_PATH)
+            .create(fixture.handle, fixture.binding, fixture.closeController);
+        assertThat(view).isInstanceOf(GraphWorkspaceWindow.class);
+        GraphWorkspaceWindow window = (GraphWorkspaceWindow) view;
+
+        try {
+            // The X11/KWin coordinate resynchronizer must be installed before the
+            // window can be shown so that popup menus stay selectable after
+            // maximize, unmaximize, or arbitrary window manager moves.
+            assertThat(window.getWindowListeners()).anyMatch(listener -> listener instanceof FrameResynchronizer);
+            assertThat(window.getWindowStateListeners()).anyMatch(listener -> listener instanceof FrameResynchronizer);
+            assertThat(window.getComponentListeners()).anyMatch(listener -> listener instanceof FrameResynchronizer);
         }
         finally {
             window.close();

@@ -37,6 +37,7 @@ import javax.swing.WindowConstants;
 
 import org.freeplane.core.resources.IFreeplanePropertyListener;
 import org.freeplane.core.resources.ResourceController;
+import org.freeplane.core.ui.components.FrameResynchronizer;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.plugin.graph.command.GraphCommand;
@@ -128,6 +129,10 @@ final class GraphWorkspaceWindow extends JFrame implements GraphWorkspaceView {
                 requestClose();
             }
         });
+        // X11/KWin window managers may leave the AWT coordinate cache stale after
+        // maximize, unmaximize, or arbitrary moves; without this resynchronizer
+        // the frame's popup menus are misplaced and dismiss on release.
+        FrameResynchronizer.install(this);
         colorChangeListener = repaintOnColorChange(new Runnable() {
             @Override
             public void run() {
