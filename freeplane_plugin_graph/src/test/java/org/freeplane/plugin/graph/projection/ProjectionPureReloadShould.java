@@ -121,7 +121,7 @@ public class ProjectionPureReloadShould {
         assertThat(projection.pins()).extracting(PinProjection::source).containsExactly(
             MutableProjectionScenario.reference(MutableProjectionScenario.MAP_ONE, "a-one"),
             MutableProjectionScenario.reference(MutableProjectionScenario.MAP_TWO, "b-one"));
-        assertThat(projection.pins()).extracting(PinProjection::active).containsExactly(true, true);
+        assertThat(projection.pins()).extracting(PinProjection::active).containsExactly(false, true);
         assertThat(projection.pins()).extracting(PinProjection::x).containsExactly(1.25, -3.75);
         assertThat(projection.pins()).extracting(PinProjection::y).containsExactly(-2.5, 4.5);
     }

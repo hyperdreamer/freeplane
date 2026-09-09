@@ -3,6 +3,7 @@ package org.freeplane.plugin.graph.projection;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -30,8 +31,8 @@ public class EnclosureTierShould {
 
     @Test
     public void retainTwoRegistrationTiersThroughMissingLoadingRetryAndAvailableTransitions() {
-        NodeSnapshot childLeaf = node(MAP_ONE, "child-leaf", true, false, false);
-        NodeSnapshot child = node(MAP_ONE, "child", false, true, false, childLeaf);
+        NodeSnapshot childLeaf = node(MAP_ONE, "child-leaf", true, true, false);
+        NodeSnapshot child = node(MAP_ONE, "child", false, false, false, childLeaf);
         NodeSnapshot directLeaf = node(MAP_ONE, "direct-leaf", true, true, false);
         NodeSnapshot root = node(MAP_ONE, "root", false, false, false, child, directLeaf);
         NodeSnapshot secondRoot = node(MAP_TWO, "second-root", true, false, false);
@@ -65,9 +66,20 @@ public class EnclosureTierShould {
         assertThat(tierFor(projection, rootNode())).isEqualTo(BoundaryTier.SUPPRESSED);
         assertThat(tierFor(projection, firstLevelNode())).isEqualTo(BoundaryTier.EMPHATIC);
         assertThat(tierFor(projection, secondLevelNode())).isEqualTo(BoundaryTier.SUBTLE);
-        assertThat(tierFor(projection, thirdLevelNode())).isEqualTo(BoundaryTier.SUPPRESSED);
-        assertThat(enclosureFor(projection, thirdLevelNode()).endpointKeys())
-            .containsExactly(EnclosureKey.of(thirdLevelNode().key()));
+        // Both firstLevelNode and firstLevelSiblingNode are depth 1.
+        // secondLevelNode and secondLevelSiblingNode are depth 2.
+        // rootSiblingNode is depth 1.
+        // All have reachable leaves!
+        List<EnclosureKey> actualKeys = new ArrayList<EnclosureKey>();
+        for (ProjectedEnclosure enclosure : projection.enclosures()) {
+            actualKeys.add(enclosure.endpointKeys().get(0));
+        }
+        assertThat(actualKeys).containsExactly(
+            EnclosureKey.of(rootNode().key()),
+            EnclosureKey.of(firstLevelNode().key()),
+            EnclosureKey.of(secondLevelNode().key()),
+            EnclosureKey.of(firstLevelSiblingNode().key()),
+            EnclosureKey.of(rootSiblingNode().key()));
     }
 
     @Test
@@ -77,15 +89,19 @@ public class EnclosureTierShould {
 
         assertThat(tierFor(projection, rootNode())).isEqualTo(BoundaryTier.EMPHATIC);
         assertThat(tierFor(projection, firstLevelNode())).isEqualTo(BoundaryTier.SUBTLE);
-        assertThat(tierFor(projection, secondLevelNode())).isEqualTo(BoundaryTier.SUPPRESSED);
-        assertThat(tierFor(projection, thirdLevelNode())).isEqualTo(BoundaryTier.SUPPRESSED);
+        assertThat(projection.enclosures()).extracting(enclosure -> enclosure.endpointKeys().get(0))
+            .containsExactly(
+                EnclosureKey.of(rootNode().key()),
+                EnclosureKey.of(firstLevelNode().key()),
+                EnclosureKey.of(rootSiblingNode().key()),
+                EnclosureKey.of(leafRoot().key()));
     }
 
     @Test
     public void suppressTheMapRootFrameAndEmphasizeItsFirstBoundary() {
-        NodeSnapshot firstLeaf = node(MAP_ONE, "first", true, false, false);
+        NodeSnapshot firstLeaf = node(MAP_ONE, "first", true, true, false);
         NodeSnapshot secondLeaf = node(MAP_ONE, "second", true, false, false);
-        NodeSnapshot inner = node(MAP_ONE, "inner", false, true, false, firstLeaf, secondLeaf);
+        NodeSnapshot inner = node(MAP_ONE, "inner", false, false, false, firstLeaf, secondLeaf);
         NodeSnapshot middle = node(MAP_ONE, "middle", false, false, false, inner);
         NodeSnapshot root = node(MAP_ONE, "root", false, false, false, middle);
         WorkspaceDocument workspace = workspace(registration(MAP_ONE, 1, true));
@@ -95,8 +111,9 @@ public class EnclosureTierShould {
         ProjectedEnclosure rootHull = enclosureFor(projection, root);
         assertThat(rootHull.endpointKeys()).containsExactly(EnclosureKey.of(root.key()));
         assertThat(rootHull.boundaryTier()).isEqualTo(BoundaryTier.SUPPRESSED);
-        assertThat(tierFor(projection, inner)).isEqualTo(BoundaryTier.EMPHATIC);
-        assertThat(enclosureFor(projection, inner).endpointKeys()).containsExactly(EnclosureKey.of(inner.key()));
+        // middle is at depth 1 -> EMPHATIC
+        assertThat(tierFor(projection, middle)).isEqualTo(BoundaryTier.EMPHATIC);
+        assertThat(enclosureFor(projection, middle).endpointKeys()).containsExactly(EnclosureKey.of(middle.key()));
     }
 
     private static WorkspaceDocument oneActiveWorkspace() {
@@ -116,15 +133,15 @@ public class EnclosureTierShould {
     }
 
     private static NodeSnapshot firstLevelNode() {
-        return node(MAP_ONE, "first-level", false, true, false, secondLevelNode(), firstLevelSiblingNode());
+        return node(MAP_ONE, "first-level", false, false, false, secondLevelNode(), firstLevelSiblingNode());
     }
 
     private static NodeSnapshot secondLevelNode() {
-        return node(MAP_ONE, "second-level", false, true, false, thirdLevelNode(), secondLevelSiblingNode());
+        return node(MAP_ONE, "second-level", false, false, false, thirdLevelNode(), secondLevelSiblingNode());
     }
 
     private static NodeSnapshot thirdLevelNode() {
-        return node(MAP_ONE, "third-level", false, true, false, leaf("third-left"), leaf("third-right"));
+        return node(MAP_ONE, "third-level", false, false, false, leaf("third-left"), leaf("third-right"));
     }
 
     private static NodeSnapshot rootSiblingNode() {
@@ -143,11 +160,11 @@ public class EnclosureTierShould {
     }
 
     private static NodeSnapshot leafRoot() {
-        return node(MAP_TWO, "leaf-root", true, false, false);
+        return node(MAP_TWO, "leaf-root", true, true, false);
     }
 
     private static NodeSnapshot leaf(String id) {
-        return node(MAP_ONE, id, true, false, false);
+        return node(MAP_ONE, id, true, true, false);
     }
 
     private static void assertTwoMapTiers(GraphProjection projection, NodeSnapshot root, NodeSnapshot child) {

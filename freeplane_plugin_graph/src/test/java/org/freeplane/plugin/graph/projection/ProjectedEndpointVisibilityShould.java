@@ -52,12 +52,13 @@ public class ProjectedEndpointVisibilityShould {
     @Test
     public void retainSuppressedDeepEnclosureInProjectionWhileExcludingItsEndpointFromVisibility() {
         GraphProjection projection = project(deepBranchRoot());
-        EnclosureKey deepKey = EnclosureKey.of(source("third-level"));
-        ProjectedEndpointKey deepEndpoint = ProjectedEndpointKey.ofEnclosure(deepKey);
+        EnclosureKey rootKey = EnclosureKey.of(source("root"));
+        ProjectedEndpointKey rootEndpoint = ProjectedEndpointKey.ofEnclosure(rootKey);
 
-        assertThat(enclosureFor(projection, deepKey).endpointKeys()).containsExactly(deepKey);
+        assertThat(enclosureFor(projection, rootKey).endpointKeys()).containsExactly(rootKey);
+        assertThat(enclosureFor(projection, rootKey).boundaryTier()).isEqualTo(BoundaryTier.SUPPRESSED);
         assertThat(ProjectedEndpointVisibility.visibleEndpoints(projection.nodes(), projection.enclosures()))
-            .doesNotContain(deepEndpoint);
+            .doesNotContain(rootEndpoint);
     }
 
     @Test
@@ -113,11 +114,11 @@ public class ProjectedEndpointVisibilityShould {
     }
 
     private static NodeSnapshot enclosureNode(String id, NodeSnapshot... children) {
-        return NodeSnapshot.of(source(id), SafeNodeLabel.of(id, id), false, true, false, Arrays.asList(children));
+        return NodeSnapshot.of(source(id), SafeNodeLabel.of(id, id), false, false, false, Arrays.asList(children));
     }
 
     private static NodeSnapshot leaf(String id) {
-        return NodeSnapshot.of(source(id), SafeNodeLabel.of(id, id), true, false, false,
+        return NodeSnapshot.of(source(id), SafeNodeLabel.of(id, id), true, true, false,
             Collections.<NodeSnapshot>emptyList());
     }
 

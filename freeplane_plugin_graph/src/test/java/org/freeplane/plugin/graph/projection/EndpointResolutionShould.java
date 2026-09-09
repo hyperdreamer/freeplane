@@ -44,11 +44,12 @@ public class EndpointResolutionShould {
     private static final MapReferenceId MAP_EIGHT = mapId("00000000-0000-0000-0000-000000000008");
 
     @Test
-    public void resolveLeafAndEveryExactEnclosureEndpointInAUnaryHull() {
+    public void resolveLeafGroupMarkerAndDescendantInAUnaryChain() {
         NodeSnapshot leaf = node(MAP_ONE, "leaf", true, true, false);
-        NodeSnapshot middle = node(MAP_ONE, "middle", false, true, false, leaf);
+        NodeSnapshot middle = node(MAP_ONE, "middle", false, false, false, leaf);
         NodeSnapshot root = node(MAP_ONE, "root", false, false, false, middle);
-        NodeSnapshot target = node(MAP_TWO, "target", true, false, false);
+        NodeSnapshot targetRoot = node(MAP_TWO, "target-root", false, false, false,
+            node(MAP_TWO, "target", true, true, false));
         WorkspaceDocument workspace = workspace(
             registrations(registration(MAP_ONE, 1, true), registration(MAP_TWO, 2, true)),
             relationships(
@@ -59,46 +60,40 @@ public class EndpointResolutionShould {
 
         GraphProjection projection = project(workspace, availability(workspace,
             MapAvailability.AVAILABLE, MapAvailability.AVAILABLE),
-            map(MAP_ONE, 1, root), map(MAP_TWO, 2, target));
+            map(MAP_ONE, 1, root), map(MAP_TWO, 2, targetRoot));
 
-        assertThat(projection.nodes()).isEmpty();
-        assertSourceEndpoint(projection.relationshipResolutions().get(0),
-            ProjectedEndpointKey.ofEnclosure(EnclosureKey.of(root.key())));
-        assertSourceEndpoint(projection.relationshipResolutions().get(1),
-            ProjectedEndpointKey.ofEnclosure(EnclosureKey.of(middle.key())));
+        assertThat(projection.nodes()).hasSize(2);
+        // Structural nodes (root, middle) do not resolve to semantic endpoints
+        assertThat(projection.relationshipResolutions().get(0).status()).isEqualTo(RelationshipStatus.UNRESOLVED_MISSING_NODE);
+        assertThat(projection.relationshipResolutions().get(1).status()).isEqualTo(RelationshipStatus.UNRESOLVED_MISSING_NODE);
         assertSourceEndpoint(projection.relationshipResolutions().get(2),
-            ProjectedEndpointKey.ofEnclosure(EnclosureKey.of(leaf.key())));
-        assertThat(projection.relationshipResolutions()).allMatch(resolution ->
-            resolution.status() == RelationshipStatus.ACTIVE && resolution.recoverableReasons().isEmpty());
+            ProjectedEndpointKey.ofNode(ProjectedNodeKey.of(leaf.key())));
+        assertThat(projection.relationshipResolutions().get(2).status()).isEqualTo(RelationshipStatus.ACTIVE);
     }
 
     @Test
-    public void resolveGroupBoundariesExactlyAndFoldPlainDescendantsToTheirOuterGroup() {
-        NodeSnapshot nestedGroup = node(MAP_ONE, "nested-group", false, true, false);
+    public void resolveGroupNodesExactlyAndFoldPlainDescendantsToTheirOuterGroup() {
         NodeSnapshot descendant = node(MAP_ONE, "descendant", true, false, false);
-        NodeSnapshot outerGroup = node(MAP_ONE, "outer-group", false, true, false, nestedGroup, descendant);
+        NodeSnapshot outerGroup = node(MAP_ONE, "outer-group", false, true, false, descendant);
         NodeSnapshot root = node(MAP_ONE, "root", false, false, false, outerGroup);
-        NodeSnapshot target = node(MAP_TWO, "target", true, false, false);
+        NodeSnapshot targetRoot = node(MAP_TWO, "target-root", false, false, false,
+            node(MAP_TWO, "target", true, true, false));
         WorkspaceDocument workspace = workspace(
             registrations(registration(MAP_ONE, 1, true), registration(MAP_TWO, 2, true)),
             relationships(
                 relationship(1, reference(MAP_ONE, "outer-group"), reference(MAP_TWO, "target")),
-                relationship(2, reference(MAP_ONE, "nested-group"), reference(MAP_TWO, "target")),
-                relationship(3, reference(MAP_ONE, "descendant"), reference(MAP_TWO, "target"))),
+                relationship(2, reference(MAP_ONE, "descendant"), reference(MAP_TWO, "target"))),
             Collections.<PinRecord>emptyList());
 
         GraphProjection projection = project(workspace, availability(workspace,
             MapAvailability.AVAILABLE, MapAvailability.AVAILABLE),
-            map(MAP_ONE, 1, root), map(MAP_TWO, 2, target));
+            map(MAP_ONE, 1, root), map(MAP_TWO, 2, targetRoot));
 
-        assertThat(projection.nodes()).isEmpty();
+        assertThat(projection.nodes()).hasSize(2);
         ProjectedEndpointKey outerEndpoint =
-            ProjectedEndpointKey.ofEnclosure(EnclosureKey.of(outerGroup.key()));
-        ProjectedEndpointKey nestedEndpoint =
-            ProjectedEndpointKey.ofEnclosure(EnclosureKey.of(nestedGroup.key()));
+            ProjectedEndpointKey.ofNode(ProjectedNodeKey.of(outerGroup.key()));
         assertSourceEndpoint(projection.relationshipResolutions().get(0), outerEndpoint);
-        assertSourceEndpoint(projection.relationshipResolutions().get(1), nestedEndpoint);
-        assertSourceEndpoint(projection.relationshipResolutions().get(2), outerEndpoint);
+        assertSourceEndpoint(projection.relationshipResolutions().get(1), outerEndpoint);
         for (RelationshipResolution resolution : projection.relationshipResolutions()) {
             assertThat(resolution.status()).isEqualTo(RelationshipStatus.ACTIVE);
         }
@@ -109,7 +104,8 @@ public class EndpointResolutionShould {
         NodeSnapshot descendant = node(MAP_ONE, "descendant", true, false, false);
         NodeSnapshot formerGroup = node(MAP_ONE, "former-group", false, false, false, descendant);
         NodeSnapshot root = node(MAP_ONE, "root", false, false, false, formerGroup);
-        NodeSnapshot target = node(MAP_TWO, "target", true, false, false);
+        NodeSnapshot targetRoot = node(MAP_TWO, "target-root", false, false, false,
+            node(MAP_TWO, "target", true, true, false));
         WorkspaceDocument workspace = workspace(
             registrations(registration(MAP_ONE, 1, true), registration(MAP_TWO, 2, true)),
             Collections.singletonList(
@@ -120,7 +116,7 @@ public class EndpointResolutionShould {
             MapAvailability.AVAILABLE, MapAvailability.AVAILABLE),
             map(MAP_ONE, 1, root, new LinkedHashSet<PersistedNodeId>(Arrays.asList(
                 PersistedNodeId.of("former-group"), PersistedNodeId.of("descendant"))), false),
-            map(MAP_TWO, 2, target));
+            map(MAP_TWO, 2, targetRoot));
 
         RelationshipResolution resolution = projection.relationshipResolutions().get(0);
         assertThat(resolution.status()).isEqualTo(RelationshipStatus.UNRESOLVED_RECOVERABLE);
@@ -131,14 +127,14 @@ public class EndpointResolutionShould {
 
     @Test
     public void treatAllUnavailableStatesAndTheirStaleSnapshotsAsRecoverable() {
-        NodeSnapshot inactive = node(MAP_ONE, "inactive", true, false, false);
-        NodeSnapshot loading = node(MAP_TWO, "loading", true, false, false);
-        NodeSnapshot available = node(MAP_THREE, "available", true, false, false);
-        NodeSnapshot missing = node(MAP_FOUR, "missing", true, false, false);
-        NodeSnapshot unreadable = node(MAP_FIVE, "unreadable", true, false, false);
-        NodeSnapshot password = node(MAP_SIX, "password", true, false, false);
-        NodeSnapshot reload = node(MAP_SEVEN, "reload", true, false, false);
-        NodeSnapshot target = node(MAP_EIGHT, "target", true, false, false);
+        NodeSnapshot inactive = node(MAP_ONE, "root", false, false, false, node(MAP_ONE, "inactive", true, true, false));
+        NodeSnapshot loading = node(MAP_TWO, "root", false, false, false, node(MAP_TWO, "loading", true, true, false));
+        NodeSnapshot available = node(MAP_THREE, "root", false, false, false, node(MAP_THREE, "available", true, true, false));
+        NodeSnapshot missing = node(MAP_FOUR, "root", false, false, false, node(MAP_FOUR, "missing", true, true, false));
+        NodeSnapshot unreadable = node(MAP_FIVE, "root", false, false, false, node(MAP_FIVE, "unreadable", true, true, false));
+        NodeSnapshot password = node(MAP_SIX, "root", false, false, false, node(MAP_SIX, "password", true, true, false));
+        NodeSnapshot reload = node(MAP_SEVEN, "root", false, false, false, node(MAP_SEVEN, "reload", true, true, false));
+        NodeSnapshot target = node(MAP_EIGHT, "root", false, false, false, node(MAP_EIGHT, "target", true, true, false));
         WorkspaceDocument workspace = workspace(registrations(
             registration(MAP_ONE, 1, false), registration(MAP_TWO, 2, true), registration(MAP_THREE, 3, true),
             registration(MAP_FOUR, 4, true), registration(MAP_FIVE, 5, true), registration(MAP_SIX, 6, true),
@@ -166,7 +162,7 @@ public class EndpointResolutionShould {
         assertRecoverable(projection.relationshipResolutions().get(4), RecoverableReason.MAP_UNREADABLE);
         assertRecoverable(projection.relationshipResolutions().get(5), RecoverableReason.MAP_PASSWORD_REQUIRED);
         assertRecoverable(projection.relationshipResolutions().get(6), RecoverableReason.MAP_RELOAD_REQUIRED);
-        assertThat(projection.nodes()).isEmpty();
+        assertThat(projection.nodes()).hasSize(2);
         assertThat(projection.enclosures()).extracting(ProjectedEnclosure::mapReferenceId)
             .containsExactly(MAP_THREE, MAP_EIGHT);
     }
@@ -231,8 +227,8 @@ public class EndpointResolutionShould {
 
     @Test
     public void retainAResolvedSourceWhenTheTargetIsRecoverablyUnavailable() {
-        NodeSnapshot source = node(MAP_ONE, "source", true, false, false);
-        NodeSnapshot target = node(MAP_TWO, "target", true, false, false);
+        NodeSnapshot source = node(MAP_ONE, "root", false, false, false, node(MAP_ONE, "source", true, true, false));
+        NodeSnapshot target = node(MAP_TWO, "root", false, false, false, node(MAP_TWO, "target", true, true, false));
         WorkspaceDocument workspace = workspace(
             registrations(registration(MAP_ONE, 1, true), registration(MAP_TWO, 2, true)),
             Collections.singletonList(
@@ -245,7 +241,7 @@ public class EndpointResolutionShould {
 
         RelationshipResolution resolution = projection.relationshipResolutions().get(0);
         assertThat(resolution.status()).isEqualTo(RelationshipStatus.UNRESOLVED_RECOVERABLE);
-        assertThat(resolution.source()).contains(ProjectedEndpointKey.ofEnclosure(EnclosureKey.of(source.key())));
+        assertThat(resolution.source()).contains(ProjectedEndpointKey.ofNode(ProjectedNodeKey.of(SourceNodeKey.persisted(reference(MAP_ONE, "source")))));
         assertThat(resolution.target()).isEmpty();
         assertThat(resolution.recoverableReasons()).containsExactly(RecoverableReason.MAP_PASSWORD_REQUIRED);
     }
@@ -287,7 +283,7 @@ public class EndpointResolutionShould {
     }
 
     @Test
-    public void connectorsToGroupDescendantsFoldToTheBoundary() {
+    public void connectorsToGroupDescendantsFoldToTheNodeEndpoint() {
         NodeSnapshot inner = node(MAP_ONE, "inner", true, false, false);
         NodeSnapshot group = node(MAP_ONE, "group", false, true, false, inner);
         NodeSnapshot otherGroup = node(MAP_ONE, "other-group", false, true, false);
@@ -299,10 +295,10 @@ public class EndpointResolutionShould {
 
         assertThat(projection.edges()).hasSize(1);
         ProjectedEdge edge = projection.edges().get(0);
-        assertThat(edge.first().isEnclosure()).isTrue();
-        assertThat(edge.second().isEnclosure()).isTrue();
-        assertThat(edge.first().enclosure().get().source()).isEqualTo(group.key());
-        assertThat(edge.second().enclosure().get().source()).isEqualTo(otherGroup.key());
+        assertThat(edge.first().isNode()).isTrue();
+        assertThat(edge.second().isNode()).isTrue();
+        assertThat(edge.first().node().get().source()).isEqualTo(group.key());
+        assertThat(edge.second().node().get().source()).isEqualTo(otherGroup.key());
     }
 
     @Test
@@ -319,7 +315,7 @@ public class EndpointResolutionShould {
     }
 
     @Test
-    public void activateOnlyPinsWhoseNodesAreMapRootsOrGroupMarked() {
+    public void activateOnlyPinsWhoseNodesAreGroupMarked() {
         NodeSnapshot visible = node(MAP_ONE, "visible", true, false, false);
         NodeSnapshot groupedDescendant = node(MAP_ONE, "grouped-descendant", true, false, false);
         NodeSnapshot group = node(MAP_ONE, "group", false, true, false, groupedDescendant);
@@ -327,7 +323,8 @@ public class EndpointResolutionShould {
         NodeSnapshot enclosure = node(MAP_ONE, "enclosure", false, false, false, enclosureLeaf);
         NodeSnapshot excluded = node(MAP_ONE, "excluded", true, false, true);
         NodeSnapshot root = node(MAP_ONE, "root", false, false, false, visible, group, enclosure, excluded);
-        NodeSnapshot unavailable = node(MAP_TWO, "unavailable", true, false, false);
+        NodeSnapshot unavailable = node(MAP_TWO, "root", false, false, false,
+            node(MAP_TWO, "unavailable", true, true, false));
         List<PinRecord> pins = Arrays.asList(
             pin(MAP_ONE, "visible", 1, 2), pin(MAP_ONE, "group", 3, 4),
             pin(MAP_ONE, "grouped-descendant", 5, 6), pin(MAP_ONE, "enclosure", 7, 8),
@@ -342,7 +339,7 @@ public class EndpointResolutionShould {
             map(MAP_ONE, 1, root), map(MAP_TWO, 2, unavailable));
 
         assertActivePin(first, reference(MAP_ONE, "group"));
-        assertActivePin(first, reference(MAP_ONE, "root"));
+        assertDormantPin(first, reference(MAP_ONE, "root"));
         assertDormantPin(first, reference(MAP_ONE, "visible"));
         assertDormantPin(first, reference(MAP_ONE, "grouped-descendant"));
         assertDormantPin(first, reference(MAP_ONE, "enclosure"));
@@ -361,7 +358,7 @@ public class EndpointResolutionShould {
             map(MAP_ONE, 1, reactivatedRoot), map(MAP_TWO, 2, unavailable));
 
         assertActivePin(second, reference(MAP_ONE, "grouped-descendant"));
-        assertActivePin(second, reference(MAP_ONE, "root"));
+        assertDormantPin(second, reference(MAP_ONE, "root"));
         assertActivePin(second, reference(MAP_TWO, "unavailable"));
         assertDormantPin(second, reference(MAP_ONE, "group"));
         assertDormantPin(second, reference(MAP_ONE, "visible"));

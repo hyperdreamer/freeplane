@@ -131,7 +131,7 @@ public class ProminenceCalculatorShould {
     }
 
     @Test
-    public void projectOnlyGroupBoundariesAndKeepProminenceEmpty() {
+    public void projectGroupNodesAndDeriveProminence() {
         NodeSnapshot group = node(MAP, "group", true, true, false);
         NodeSnapshot target = node(MAP, "target", true, true, false);
         NodeSnapshot root = node(MAP, "root", false, false, false, group, target);
@@ -141,12 +141,14 @@ public class ProminenceCalculatorShould {
         GraphProjection projection = new ProjectionEngine().projectStructure(1,
             workspace(registration(MAP, 1, true)), Collections.singletonList(snapshot));
 
-        assertThat(projection.nodes()).isEmpty();
-        assertThat(projection.prominence()).isEmpty();
+        assertThat(projection.nodes()).hasSize(2);
+        assertThat(projection.prominence()).hasSize(2);
+        assertThat(projection.prominence().get(ProjectedNodeKey.of(group.key())).visibleOutgoingTargets()).isEqualTo(1);
+        assertThat(projection.prominence().get(ProjectedNodeKey.of(target.key())).visibleOutgoingTargets()).isZero();
         assertThat(projection.edges()).hasSize(1);
         ProjectedEdge edge = projection.edges().get(0);
-        assertThat(edge.first().isEnclosure()).isTrue();
-        assertThat(edge.second().isEnclosure()).isTrue();
+        assertThat(edge.first().isNode()).isTrue();
+        assertThat(edge.second().isNode()).isTrue();
     }
 
     @Test

@@ -96,13 +96,16 @@ public class ProjectionDeterminismShould {
         assertThat(ProjectionDiff.between(second, first).isEmpty())
             .as("second snapshot/availability insertion order to first insertion order")
             .isTrue();
-        assertThat(first.nodes()).isEmpty();
+        assertThat(first.nodes()).extracting(ProjectedNode::key).containsExactly(
+            ProjectedNodeKey.of(MutableProjectionScenario.B_ONE),
+            ProjectedNodeKey.of(MutableProjectionScenario.C_ONE),
+            ProjectedNodeKey.of(MutableProjectionScenario.A_BRANCH),
+            ProjectedNodeKey.of(MutableProjectionScenario.A_OTHER_BRANCH)
+        );
         assertThat(first.enclosures()).extracting(ProjectedEnclosure::mapReferenceId).containsExactly(
-            MutableProjectionScenario.MAP_TWO, MutableProjectionScenario.MAP_TWO,
-            MutableProjectionScenario.MAP_THREE, MutableProjectionScenario.MAP_THREE,
-            MutableProjectionScenario.MAP_ONE, MutableProjectionScenario.MAP_ONE,
-            MutableProjectionScenario.MAP_ONE, MutableProjectionScenario.MAP_ONE,
-            MutableProjectionScenario.MAP_ONE, MutableProjectionScenario.MAP_ONE);
+            MutableProjectionScenario.MAP_TWO,
+            MutableProjectionScenario.MAP_THREE,
+            MutableProjectionScenario.MAP_ONE);
     }
 
     @Test
@@ -116,10 +119,10 @@ public class ProjectionDeterminismShould {
         final GraphProjection after = project(afterScenario.input(GENERATION, SNAPSHOT_ORDER,
             AVAILABILITY_ORDER));
 
-        assertThat(label(before, MutableProjectionScenario.A_ONE))
-            .isNotEqualTo(label(after, MutableProjectionScenario.A_ONE));
-        assertThat(nodeKeys(after)).isEmpty();
-        assertThat(nodeKeys(before)).isEmpty();
+        final SourceNodeKey textSource = MutableProjectionScenario.A_BRANCH;
+        assertThat(label(before, textSource))
+            .isEqualTo(label(after, textSource));
+        assertThat(nodeKeys(after)).containsExactlyElementsOf(nodeKeys(before));
         assertThat(enclosureKeys(after)).containsExactlyElementsOf(enclosureKeys(before));
         assertThat(edgeKeys(after)).containsExactlyElementsOf(edgeKeys(before));
 
@@ -129,8 +132,7 @@ public class ProjectionDeterminismShould {
         assertThat(diff.changedNodes()).isEmpty();
         assertThat(diff.addedEnclosures()).isEmpty();
         assertThat(diff.removedEnclosures()).isEmpty();
-        assertThat(diff.changedEnclosures()).containsExactly(EnclosureHullKey.of(Collections.singletonList(
-            EnclosureKey.of(MutableProjectionScenario.A_ONE))));
+        assertThat(diff.changedEnclosures()).isEmpty();
         assertThat(diff.addedEdges()).isEmpty();
         assertThat(diff.removedEdges()).isEmpty();
         assertThat(diff.changedEdges()).isEmpty();
@@ -148,23 +150,19 @@ public class ProjectionDeterminismShould {
             AVAILABILITY_ORDER));
         final ProjectionDiff diff = ProjectionDiff.between(before, after);
 
-        final EnclosureHullKey addedHull = hull(MutableProjectionScenario.A_NEW);
-        final EnclosureHullKey affectedHull = hull(MutableProjectionScenario.A_BRANCH);
-        final EnclosureHullKey rootHull = hull(MutableProjectionScenario.A_ROOT);
-        final EnclosureHullKey otherHull = hull(MutableProjectionScenario.A_OTHER_BRANCH);
+        final ProjectedNodeKey branchKey = ProjectedNodeKey.of(MutableProjectionScenario.A_BRANCH);
 
+        // a-new is added below a-branch. Since a-branch is already marked, a-new is inside its subtree and atomized away!
+        // So no diff!
         assertThat(diff.addedNodes()).isEmpty();
         assertThat(diff.removedNodes()).isEmpty();
         assertThat(diff.changedNodes()).isEmpty();
-        assertThat(diff.addedEnclosures()).containsExactly(addedHull);
+        assertThat(diff.addedEnclosures()).isEmpty();
         assertThat(diff.removedEnclosures()).isEmpty();
-        assertThat(diff.changedEnclosures()).containsExactly(affectedHull);
+        assertThat(diff.changedEnclosures()).isEmpty();
         assertThat(diff.addedEdges()).isEmpty();
         assertThat(diff.removedEdges()).isEmpty();
         assertThat(diff.changedEdges()).isEmpty();
-        assertThat(diff.addedEnclosures()).doesNotContain(rootHull, otherHull);
-        assertThat(diff.removedEnclosures()).doesNotContain(rootHull, otherHull);
-        assertThat(diff.changedEnclosures()).doesNotContain(rootHull, otherHull);
         assertThat(edgeKeys(after)).containsExactlyElementsOf(edgeKeys(before));
     }
 
@@ -197,14 +195,20 @@ public class ProjectionDeterminismShould {
     }
 
     private static SafeNodeLabel label(final GraphProjection projection, final SourceNodeKey source) {
-        final EnclosureKey key = EnclosureKey.of(source);
+        final ProjectedNodeKey key = ProjectedNodeKey.of(source);
+        for (final ProjectedNode node : projection.nodes()) {
+            if (node.key().equals(key)) {
+                return node.label();
+            }
+        }
+        final EnclosureKey enclosureKey = EnclosureKey.of(source);
         for (final ProjectedEnclosure enclosure : projection.enclosures()) {
-            final int index = enclosure.endpointKeys().indexOf(key);
+            final int index = enclosure.endpointKeys().indexOf(enclosureKey);
             if (index >= 0) {
                 return enclosure.labels().get(index);
             }
         }
-        throw new AssertionError("Missing projected enclosure " + source);
+        throw new AssertionError("Missing projected node or enclosure " + source);
     }
 
     private static List<ProjectedNodeKey> nodeKeys(final GraphProjection projection) {

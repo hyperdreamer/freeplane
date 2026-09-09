@@ -134,8 +134,8 @@ public class EdgeProjectionShould {
             registrations(registration(MAP_ONE, 1, true), registration(MAP_TWO, 2, true)),
             Arrays.asList(forward, opposite));
         GraphProjection projection = project(workspace,
-            map(MAP_ONE, 1, node(MAP_ONE, "a", true, false, false)),
-            map(MAP_TWO, 2, node(MAP_TWO, "b", true, false, false)));
+            map(MAP_ONE, 1, node(MAP_ONE, "a", true, true, false)),
+            map(MAP_TWO, 2, node(MAP_TWO, "b", true, true, false)));
 
         assertThat(projection.edges()).hasSize(1);
         ProjectedEdge edge = projection.edges().get(0);
@@ -162,6 +162,22 @@ public class EdgeProjectionShould {
         assertThat(snapshot.connectors()).hasSize(1);
         assertThat(snapshot.withConnectors(snapshot.connectors()).connectors()).containsExactlyElementsOf(
             snapshot.connectors());
+    }
+
+    @Test
+    public void omitRelationshipsToStructuralNodes() {
+        SourceNodeKey available = source(MAP_ONE, "available");
+        SourceNodeKey structural = source(MAP_TWO, "structural");
+        GraphRelationshipRecord relationship = relationship(1, reference(MAP_ONE, "available"),
+            reference(MAP_TWO, "structural"), RelationshipDirection.FORWARD);
+        WorkspaceDocument workspace = workspace(
+            registrations(registration(MAP_ONE, 1, true), registration(MAP_TWO, 2, true)),
+            Collections.singletonList(relationship));
+        GraphProjection projection = project(workspace,
+            map(MAP_ONE, 1, node(MAP_ONE, "available", true, true, false)),
+            map(MAP_TWO, 2, node(MAP_TWO, "structural", true, false, false)));
+
+        assertThat(projection.edges()).isEmpty();
     }
 
     @Test
@@ -302,7 +318,7 @@ public class EdgeProjectionShould {
     }
 
     private static ProjectedEndpointKey endpoint(SourceNodeKey source) {
-        return ProjectedEndpointKey.ofEnclosure(EnclosureKey.of(source));
+        return ProjectedEndpointKey.ofNode(ProjectedNodeKey.of(source));
     }
 
     private static NodeSnapshot node(MapReferenceId map, String id, boolean structuralLeaf, boolean graphGroup,
