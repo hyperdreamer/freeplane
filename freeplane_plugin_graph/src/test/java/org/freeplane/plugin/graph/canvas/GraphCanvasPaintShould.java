@@ -98,7 +98,7 @@ public class GraphCanvasPaintShould {
     }
 
     @Test
-    public void paintBoundaryShapesOnlyAndNeverNodeCircles() {
+    public void paintNodeDiscAndLabelFromNodeGeometryWithTierBasedStructuralHulls() {
         EnclosureKey boundaryKey = EnclosureKey.of(source(FIRST_MAP, "boundary-only"));
         EnclosureHullKey boundaryHull = EnclosureHullKey.of(Collections.singletonList(boundaryKey));
         ProjectedEnclosure boundary = ProjectedEnclosure.of(boundaryHull,
@@ -106,7 +106,7 @@ public class GraphCanvasPaintShould {
             Collections.singletonList(SafeNodeLabel.of("Boundary only", "Boundary only")), "Map",
             Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(),
             Collections.<EnclosureHullKey>emptyList(), false, BoundaryTier.SUBTLE);
-        ProjectedNode retained = node(FIRST_MAP, "retained", LayoutPoint.of(-45.0, 0.0));
+        ProjectedNode retained = markedNode(FIRST_MAP, "retained", LayoutPoint.of(-45.0, 0.0));
         Map<ProjectedNodeKey, NodeGeometry> nodeGeometry =
             new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
         nodeGeometry.put(retained.key(), NodeGeometry.of(LayoutPoint.of(-45.0, 0.0), 8.0));
@@ -123,13 +123,18 @@ public class GraphCanvasPaintShould {
         GraphTheme theme = lightTheme();
         BufferedImage image = paint(state, GraphPaintState.empty(), theme, RenderingLevel.FULL);
 
-        assertThat(colorPixelsIn(image, theme.nodeFill(), 0, 0, SIZE.width, SIZE.height)).isZero();
-        assertThat(nonBackgroundPixels(image, theme.background())).isGreaterThan(100);
-        assertThat(image.getRGB(120, 70)).isEqualTo(new Color(0xDF, 0x62, 0x5D).getRGB());
+        // The marked node renders its disc and label, while the structural boundary
+        // keeps its tier-based hull colors instead of any group marker color.
+        assertThat(colorPixelsIn(image, theme.nodeFill(), 60, 55, 90, 85)).isGreaterThan(0);
+        assertThat(labelPixels(image, theme, 55, 38, 95, 56)).isGreaterThan(0);
+        assertThat(image.getRGB(120, 70))
+            .isEqualTo(theme.hullFill(FIRST_MAP, BoundaryTier.SUBTLE).getRGB());
+        assertThat(colorPixelsIn(image, new Color(0xDF, 0x62, 0x5D), 0, 0, SIZE.width, SIZE.height))
+            .as("fixed coral marker color must not appear").isZero();
     }
 
     @Test
-    public void paintsGroupBoundariesInTheConfiguredColor() {
+    public void doNotApplyTheConfiguredGroupColorToStructuralBoundaries() {
         Color configured = new Color(0x22, 0x55, 0xAA);
         when(resources.getColorProperty(GraphGroupColors.COLOR_PROPERTY_KEY)).thenReturn(configured);
         EnclosureKey boundaryKey = EnclosureKey.of(source(FIRST_MAP, "boundary-only"));
@@ -139,7 +144,7 @@ public class GraphCanvasPaintShould {
             Collections.singletonList(SafeNodeLabel.of("Boundary only", "Boundary only")), "Map",
             Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(),
             Collections.<EnclosureHullKey>emptyList(), false, BoundaryTier.SUBTLE);
-        ProjectedNode retained = node(FIRST_MAP, "retained", LayoutPoint.of(-45.0, 0.0));
+        ProjectedNode retained = markedNode(FIRST_MAP, "retained", LayoutPoint.of(-45.0, 0.0));
         Map<ProjectedNodeKey, NodeGeometry> nodeGeometry =
             new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
         nodeGeometry.put(retained.key(), NodeGeometry.of(LayoutPoint.of(-45.0, 0.0), 8.0));
@@ -156,9 +161,33 @@ public class GraphCanvasPaintShould {
         GraphTheme theme = lightTheme();
         BufferedImage image = paint(state, GraphPaintState.empty(), theme, RenderingLevel.FULL);
 
-        assertThat(image.getRGB(120, 70)).isEqualTo(configured.getRGB());
+        assertThat(image.getRGB(120, 70))
+            .isEqualTo(theme.hullFill(FIRST_MAP, BoundaryTier.SUBTLE).getRGB());
+        assertThat(colorPixelsIn(image, configured, 0, 0, SIZE.width, SIZE.height))
+            .as("the group marker color must not color a structural boundary").isZero();
         assertThat(colorPixelsIn(image, new Color(0xDF, 0x62, 0x5D), 0, 0, SIZE.width, SIZE.height))
             .as("default coral must not appear").isZero();
+    }
+
+    @Test
+    public void paintNodeSelectionAndPinTreatmentFromNodeGeometry() {
+        Fixture fixture = fixture(16.0);
+        PinProjection active = PinProjection.active(PinRecord.of(reference(FIRST_MAP, "first"), -10.0, -40.0,
+            Collections.<UnknownXml>emptyList()), fixture.first.key());
+        GraphProjection projection = GraphProjection.projected(1L, fixture.state.projection().nodes(),
+            fixture.state.projection().enclosures(), fixture.state.projection().edges(),
+            fixture.state.projection().relationshipResolutions(), Arrays.asList(active));
+        CanvasState state = CanvasState.of(1L, projection, fixture.state.layout(), fixture.state.geometry(),
+            OperationalStatus.IDLE);
+        GraphTheme theme = lightTheme();
+        BufferedImage selected = paint(state,
+            GraphPaintState.empty().withSelection(fixture.firstEndpoint), theme, RenderingLevel.FULL);
+        BufferedImage plain = paint(state, GraphPaintState.empty(), theme, RenderingLevel.FULL);
+
+        assertThat(nearColorPixelsIn(selected, theme.selectionColor(), 55, 50, 95, 90, 60)).isGreaterThan(0);
+        assertThat(nearColorPixelsIn(plain, theme.selectionColor(), 55, 50, 95, 90, 60)).isZero();
+        assertThat(colorPixelsIn(selected, theme.pinColor(), 104, 24, 117, 37)).isGreaterThan(0);
+        assertThat(colorPixelsIn(plain, theme.pinColor(), 104, 24, 117, 37)).isGreaterThan(0);
     }
 
     @Test
@@ -170,13 +199,13 @@ public class GraphCanvasPaintShould {
         assertThat(allPixelsAreOpaque(image)).isTrue();
         assertThat(nonBackgroundPixels(image, theme.background())).isGreaterThan(100);
         assertThat(image.getRGB(120, 70)).isEqualTo(theme.edgeColor().getRGB());
-        assertThat(image.getRGB(75, 70)).isEqualTo(theme.hullFill(FIRST_MAP, BoundaryTier.EMPHATIC).getRGB());
+        assertThat(image.getRGB(75, 70)).isEqualTo(theme.nodeFill().getRGB());
         assertThat(image.getRGB(55, 70)).isNotEqualTo(theme.background().getRGB());
         assertThat(image.getRGB(185, 70)).isNotEqualTo(theme.background().getRGB());
-        assertThat(colorPixelsIn(image, theme.nodeFill(), 0, 0, SIZE.width, SIZE.height)).isZero();
+        assertThat(colorPixelsIn(image, theme.nodeFill(), 0, 0, SIZE.width, SIZE.height)).isGreaterThan(0);
 
         LayoutPoint attachment = fixture.state.geometry().edgeAttachment(fixture.edge.first(),
-            fixture.state.layout().positions().anchors().get(fixture.secondHullKey));
+            fixture.state.geometry().nodes().get(fixture.second.key()).center());
         Point2D attachmentScreen = GraphViewport.of(0.0, 0.0, 1.0).toScreen(attachment, SIZE);
         assertThat(hasColorNear(image, attachmentScreen, theme.edgeColor(), 4)).isTrue();
         assertThat(nearColorPixelsIn(image, theme.edgeColor(), 147, 60, 155, 69, 80)).isGreaterThan(0);
@@ -265,7 +294,7 @@ public class GraphCanvasPaintShould {
     }
 
     @Test
-    public void doNotPaintNodeKeyedPinMarkers() {
+    public void paintOnlyActivePinsAtTheirRecordedNodePositions() {
         Fixture fixture = fixture(16.0);
         PinProjection active = PinProjection.active(PinRecord.of(reference(FIRST_MAP, "first"), -10.0, -40.0,
             Collections.<UnknownXml>emptyList()), fixture.first.key());
@@ -279,8 +308,8 @@ public class GraphCanvasPaintShould {
         GraphTheme theme = lightTheme();
         BufferedImage image = paint(state, GraphPaintState.empty(), theme, RenderingLevel.FULL);
 
-        // Node-keyed pins have no current hull: boundary-only painting never draws pin crosses.
-        assertThat(colorPixelsIn(image, theme.pinColor(), 0, 0, SIZE.width, SIZE.height)).isZero();
+        assertThat(colorPixelsIn(image, theme.pinColor(), 104, 24, 117, 37)).isGreaterThan(0);
+        assertThat(colorPixelsIn(image, theme.pinColor(), 174, 24, 187, 37)).isEqualTo(0);
     }
 
     @Test
@@ -483,7 +512,7 @@ public class GraphCanvasPaintShould {
     }
 
     @Test
-    public void keepBoundariesUndimmedUntilATransientDimmingTriggerIsActive() {
+    public void keepNodesUndimmedUntilATransientDimmingTriggerIsActive() {
         Fixture fixture = fixture(16.0);
         GraphTheme theme = lightTheme();
         BufferedImage baseline = paint(fixture.state, GraphPaintState.empty(), theme, RenderingLevel.FULL);
@@ -497,17 +526,17 @@ public class GraphCanvasPaintShould {
         canvas.setDimUnrelated(true);
         BufferedImage image = paintCanvas(canvas);
 
-        assertThat(image.getRGB(75, 70)).isEqualTo(theme.hullFill(FIRST_MAP, BoundaryTier.EMPHATIC).getRGB());
+        assertThat(image.getRGB(75, 70)).isEqualTo(theme.nodeFill().getRGB());
         assertThat(image.getRGB(75, 70)).isEqualTo(baseline.getRGB(75, 70));
         assertThat(image.getRGB(165, 70)).isEqualTo(baseline.getRGB(165, 70));
     }
 
     @Test
-    public void dimUnrelatedBoundariesWhenTransientTriggerAndPreferenceAreEnabled() {
+    public void dimUnrelatedNodesWhenTransientTriggerAndPreferenceAreEnabled() {
         Fixture fixture = fixture(16.0);
         GraphTheme theme = lightTheme();
         GraphPaintState active = GraphPaintState.empty()
-            .withSelection(fixture.firstHullEndpoint).withDimUnrelated(true);
+            .withSelection(fixture.firstEndpoint).withDimUnrelated(true);
 
         GraphCanvas canvas = new GraphCanvas();
         canvas.setSize(SIZE);
@@ -518,16 +547,16 @@ public class GraphCanvasPaintShould {
         canvas.setDimUnrelated(true);
         BufferedImage image = paintCanvas(canvas);
 
-        assertThat(image.getRGB(75, 70)).isEqualTo(theme.hullFill(FIRST_MAP, BoundaryTier.EMPHATIC).getRGB());
-        assertThat(image.getRGB(165, 70)).isNotEqualTo(theme.hullFill(SECOND_MAP, BoundaryTier.SUBTLE).getRGB());
+        assertThat(image.getRGB(75, 70)).isEqualTo(theme.nodeFill().getRGB());
+        assertThat(image.getRGB(165, 70)).isNotEqualTo(theme.nodeFill().getRGB());
     }
 
     @Test
-    public void keepUnrelatedBoundariesUndimmedWhenTransientTriggerMeetsDisabledPreference() {
+    public void keepUnrelatedNodesUndimmedWhenTransientTriggerMeetsDisabledPreference() {
         Fixture fixture = fixture(16.0);
         GraphTheme theme = lightTheme();
         GraphPaintState active = GraphPaintState.empty()
-            .withSelection(fixture.firstHullEndpoint).withDimUnrelated(true);
+            .withSelection(fixture.firstEndpoint).withDimUnrelated(true);
 
         GraphCanvas canvas = new GraphCanvas();
         canvas.setSize(SIZE);
@@ -538,8 +567,8 @@ public class GraphCanvasPaintShould {
         canvas.setPaintState(active);
         BufferedImage image = paintCanvas(canvas);
 
-        assertThat(image.getRGB(75, 70)).isEqualTo(theme.hullFill(FIRST_MAP, BoundaryTier.EMPHATIC).getRGB());
-        assertThat(image.getRGB(165, 70)).isEqualTo(theme.hullFill(SECOND_MAP, BoundaryTier.SUBTLE).getRGB());
+        assertThat(image.getRGB(75, 70)).isEqualTo(theme.nodeFill().getRGB());
+        assertThat(image.getRGB(165, 70)).isEqualTo(theme.nodeFill().getRGB());
         assertThat(canvas.paintState().dimUnrelated()).isTrue();
     }
 
@@ -877,9 +906,9 @@ public class GraphCanvasPaintShould {
             BoundaryTier.SUBTLE);
         ProjectedEnclosure searchMatched = enclosure(searchMatchedHull, searchMatchedKey, "SEARCH", "SEARCH",
             BoundaryTier.SUBTLE);
-        List<ProjectedEnclosure> extras = new ArrayList<ProjectedEnclosure>(nodeCount);
+        List<ProjectedNode> extras = new ArrayList<ProjectedNode>(nodeCount);
         for (int index = 0; index < nodeCount; index++) {
-            extras.add(groupBoundary("label-extra-" + index));
+            extras.add(node(FIRST_MAP, "label-extra-" + index, LayoutPoint.of(500.0 + index, 500.0)));
         }
         EnclosureKey emphaticKey = EnclosureKey.of(source(FIRST_MAP, "emphatic-label"));
         EnclosureKey subtleKey = EnclosureKey.of(source(SECOND_MAP, "subtle-label"));
@@ -926,14 +955,20 @@ public class GraphCanvasPaintShould {
         anchors.put(suppressedHull, LayoutPoint.of(-72.5, 5.0));
         List<ProjectedEnclosure> enclosures = new ArrayList<ProjectedEnclosure>(
             Arrays.asList(ordinary, selected, hovered, searchMatched, emphatic, subtle, suppressed));
-        enclosures.addAll(extras);
-        GraphProjection projection = GraphProjection.projected(1L, Collections.<ProjectedNode>emptyList(),
-            enclosures, Collections.<ProjectedEdge>emptyList(), Collections.<RelationshipResolution>emptyList(),
+        Map<ProjectedNodeKey, NodeGeometry> geometries = new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
+        Map<ProjectedNodeKey, LayoutPoint> positions = new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        for (int index = 0; index < nodeCount; index++) {
+            ProjectedNodeKey key = extras.get(index).key();
+            LayoutPoint center = LayoutPoint.of(500.0 + index, 500.0);
+            geometries.put(key, NodeGeometry.of(center, 8.0));
+            positions.put(key, center);
+        }
+        GraphProjection projection = GraphProjection.projected(1L, extras, enclosures,
+            Collections.<ProjectedEdge>emptyList(), Collections.<RelationshipResolution>emptyList(),
             Collections.<PinProjection>emptyList());
         CanvasState state = CanvasState.of(1L, projection,
-            LayoutFrame.of(1L, LayoutPositions.of(Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(), anchors),
-                false),
-            GraphGeometry.of(Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(), hulls, labels),
+            LayoutFrame.of(1L, LayoutPositions.of(positions, anchors), false),
+            GraphGeometry.of(geometries, hulls, labels),
             OperationalStatus.IDLE);
         return new LabelFixture(state, ProjectedEndpointKey.ofEnclosure(selectedKey),
             ProjectedEndpointKey.ofEnclosure(hoveredKey),
@@ -942,7 +977,7 @@ public class GraphCanvasPaintShould {
     }
 
     @Test
-    public void paintBoundaryShapesRegardlessOfTheRetainedNodeRadius() {
+    public void useTheSuppliedNodeRadiusWithoutChangingGeometry() {
         Fixture small = fixture(10.0);
         Fixture large = fixture(24.0);
         GraphTheme theme = lightTheme();
@@ -950,10 +985,8 @@ public class GraphCanvasPaintShould {
         BufferedImage smallImage = paint(small.state, GraphPaintState.empty(), theme, RenderingLevel.FULL);
         BufferedImage largeImage = paint(large.state, GraphPaintState.empty(), theme, RenderingLevel.FULL);
 
-        assertThat(colorPixelsIn(largeImage, theme.nodeFill(), 0, 0, SIZE.width, SIZE.height)).isZero();
-        assertThat(colorPixelsIn(smallImage, theme.nodeFill(), 0, 0, SIZE.width, SIZE.height)).isZero();
-        assertThat(colorPixelsIn(largeImage, theme.hullFill(FIRST_MAP, BoundaryTier.EMPHATIC), 60, 40, 90, 100))
-            .isGreaterThan(0);
+        assertThat(colorPixelsIn(largeImage, theme.nodeFill(), 60, 40, 90, 100))
+            .isGreaterThan(colorPixelsIn(smallImage, theme.nodeFill(), 60, 40, 90, 100));
         assertThat(large.state.geometry().nodes().get(large.first.key()).radius()).isEqualTo(24.0);
     }
 
@@ -1231,6 +1264,37 @@ public class GraphCanvasPaintShould {
         assertThat(visibleX).isBetween(0.0, (double) extentWidth);
     }
 
+    @Test
+    public void suppressedRootKeepsContainmentGeometryButAddsNoEndpointHitEntry() {
+        EnclosureKey rootKey = EnclosureKey.of(source(FIRST_MAP, "suppressed-root"));
+        EnclosureHullKey rootHull = EnclosureHullKey.of(Collections.singletonList(rootKey));
+        ProjectedEnclosure root = ProjectedEnclosure.of(rootHull,
+            Collections.singletonList(rootKey),
+            Collections.singletonList(SafeNodeLabel.of("Suppressed root", "Suppressed root")), "Map",
+            Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(),
+            Collections.<EnclosureHullKey>emptyList(), true, BoundaryTier.SUPPRESSED);
+        ProjectedNode retained = markedNode(FIRST_MAP, "retained", LayoutPoint.of(-45.0, 0.0));
+        Map<ProjectedNodeKey, NodeGeometry> nodeGeometry =
+            new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
+        nodeGeometry.put(retained.key(), NodeGeometry.of(LayoutPoint.of(-45.0, 0.0), 8.0));
+        Map<EnclosureHullKey, HullGeometry> hulls = new LinkedHashMap<EnclosureHullKey, HullGeometry>();
+        hulls.put(rootHull, rectangle(-50.0, -20.0, 50.0, 20.0, LayoutPoint.of(0.0, 0.0)));
+        GraphProjection projection = GraphProjection.projected(1L, Collections.singletonList(retained),
+            Collections.singletonList(root), Collections.<ProjectedEdge>emptyList(),
+            Collections.<RelationshipResolution>emptyList(), Collections.<PinProjection>emptyList());
+        LayoutFrame layout = LayoutFrame.of(1L, LayoutPositions.of(
+            Collections.singletonMap(retained.key(), LayoutPoint.of(-45.0, 0.0)),
+            Collections.singletonMap(rootHull, LayoutPoint.of(0.0, 0.0))), false);
+        CanvasState state = CanvasState.of(1L, projection, layout,
+            GraphGeometry.of(nodeGeometry, hulls), OperationalStatus.IDLE);
+
+        assertThat(state.geometry().hulls()).containsKey(rootHull);
+        final GraphHitIndex index = GraphHitIndex.from(state);
+        assertThat(index.endpointAt(LayoutPoint.of(-45.0, 0.0)))
+            .contains(ProjectedEndpointKey.ofNode(retained.key()));
+        assertThat(index.endpointAt(LayoutPoint.of(-20.0, 0.0))).isEmpty();
+    }
+
     private static BufferedImage paint(final CanvasState state, final GraphPaintState paintState,
             final GraphTheme theme, final RenderingLevel level) {
         GraphCanvas canvas = new GraphCanvas();
@@ -1312,18 +1376,15 @@ public class GraphCanvasPaintShould {
             Collections.<EnclosureHullKey>emptyList(), true, tier);
     }
 
-    private static ProjectedEnclosure groupBoundary(final String id) {
-        EnclosureKey endpoint = EnclosureKey.of(source(FIRST_MAP, id));
-        EnclosureHullKey hullKey = EnclosureHullKey.of(Collections.singletonList(endpoint));
-        return ProjectedEnclosure.of(hullKey, Collections.singletonList(endpoint),
-            Collections.singletonList(SafeNodeLabel.of(id, id)), "Map",
-            Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(),
-            Collections.<EnclosureHullKey>emptyList(), false, BoundaryTier.EMPHATIC);
-    }
-
     private static ProjectedNode node(final MapReferenceId map, final String id, final LayoutPoint center) {
         SourceNodeKey source = source(map, id);
         return ProjectedNode.of(ProjectedNodeKey.of(source), SafeNodeLabel.of(id, id), "Map", false);
+    }
+
+    private static ProjectedNode markedNode(final MapReferenceId map, final String id,
+            final LayoutPoint center) {
+        SourceNodeKey source = source(map, id);
+        return ProjectedNode.of(ProjectedNodeKey.of(source), SafeNodeLabel.of(id, id), "Map", true);
     }
 
     private static EdgeContributor relationshipContributor(final String relationshipId, final long sequence,

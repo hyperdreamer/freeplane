@@ -63,7 +63,6 @@ import org.freeplane.plugin.graph.control.WorkspaceSessionStatus;
 import org.freeplane.plugin.graph.control.WorkspaceSessionStatusListener;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.HullGeometry;
-import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.NodeGeometry;
 import org.freeplane.plugin.graph.projection.BoundaryTier;
 import org.freeplane.plugin.graph.projection.EdgeContributor;
@@ -1091,19 +1090,17 @@ final class GraphWorkspaceWindowModel {
         }
         if (state != null) {
             final GraphProjection projection = state.projection();
-            for (final org.freeplane.plugin.graph.projection.ProjectedEnclosure enclosure : projection.enclosures()) {
-                final MapReferenceId mapId = enclosure.mapReferenceId();
+            for (final ProjectedNode node : projection.nodes()) {
+                final MapReferenceId mapId = node.mapReferenceId();
                 RowAccumulator accumulator = accumulators.get(mapId);
                 if (accumulator == null) {
-                    accumulator = new RowAccumulator(mapId, enclosure.mapName(), MapAvailability.AVAILABLE);
+                    accumulator = new RowAccumulator(mapId, node.mapName(), MapAvailability.AVAILABLE);
                     accumulators.put(mapId, accumulator);
                 }
-                else if (accumulator.projectedNodeCount == 0) {
-                    accumulator.displayName = enclosure.mapName();
+                else {
+                    accumulator.displayName = node.mapName();
                 }
-                if (!enclosure.mapRoot()) {
-                    accumulator.projectedNodeCount++;
-                }
+                accumulator.projectedNodeCount++;
             }
         }
         final List<MapListPanel.MapRow> rows = new ArrayList<MapListPanel.MapRow>(accumulators.size());
@@ -1148,6 +1145,8 @@ final class GraphWorkspaceWindowModel {
         if (intent instanceof GraphIntent.ChangeSelection) {
             final Optional<ProjectedEndpointKey> selection = ((GraphIntent.ChangeSelection) intent).selection();
             selectedEndpoint = selection.orElse(null);
+            selectedNode = selection.isPresent() && selection.get().isNode()
+                ? selection.get().node().get() : null;
             paintState = selection.isPresent() ? paintState.withSelection(selection.get())
                 : GraphPaintState.empty().withSearchMatches(
                     GraphSearchModel.search(currentState, toolbar.searchField().getText()));
@@ -1177,10 +1176,11 @@ final class GraphWorkspaceWindowModel {
                 return;
             }
             final GraphIntent.Connect connect = (GraphIntent.Connect) intent;
-            executeCommand(GraphCommands.connect(connect.source().isNode()
-                ? connect.source().node().get().source() : source(connect.source()),
-                connect.target().isNode() ? connect.target().node().get().source() : source(connect.target()),
-                connect.direction()));
+            if (!connect.source().isNode() || !connect.target().isNode()) {
+                return;
+            }
+            executeCommand(GraphCommands.connect(connect.source().node().get().source(),
+                connect.target().node().get().source(), connect.direction()));
         }
         else if (intent instanceof GraphIntent.RevealSourceNode) {
             final ProjectedEndpointKey endpoint = ((GraphIntent.RevealSourceNode) intent).endpoint();
@@ -1192,34 +1192,20 @@ final class GraphWorkspaceWindowModel {
         }
     }
 
-    private EnclosureHullKey hullKeyOf(final ProjectedEndpointKey endpoint) {
-        if (endpoint == null || endpoint.isNode() || currentState == null) {
-            return null;
-        }
-        for (final org.freeplane.plugin.graph.projection.ProjectedEnclosure enclosure
-                : currentState.projection().enclosures()) {
-            if (enclosure.endpointKeys().contains(endpoint.enclosure().get())) {
-                return enclosure.hullKey();
-            }
-        }
-        return null;
-    }
-
     private void pinSelectedNode() {
-        if (selectedEndpoint == null || currentState == null) {
+        if (selectedNode == null || currentState == null) {
             return;
         }
-        final EnclosureHullKey hull = hullKeyOf(selectedEndpoint);
-        if (hull == null) {
-            return;
+        final NodeReference reference = selectedNode.source().persistedReference().orElse(null);
+        final NodeGeometry geometry = currentState.geometry().nodes().get(selectedNode);
+        if (reference != null && geometry != null) {
+            executePin(selectedNode, geometry.center().x(), geometry.center().y());
         }
-        final LayoutPoint anchor = currentState.geometry().hulls().get(hull).labelAnchor();
-        executePin(ProjectedNodeKey.of(source(selectedEndpoint)), anchor.x(), anchor.y());
     }
 
     private void unpinSelectedNode() {
-        if (selectedEndpoint != null) {
-            executeUnpin(ProjectedNodeKey.of(source(selectedEndpoint)));
+        if (selectedNode != null) {
+            executeUnpin(selectedNode);
         }
     }
 

@@ -25,6 +25,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -74,6 +75,9 @@ import org.freeplane.plugin.graph.workspace.ListenerRegistration;
 import org.freeplane.plugin.graph.workspace.WorkspaceTransition;
 import org.freeplane.plugin.graph.workspace.model.DisplaySettings;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
+import org.freeplane.plugin.graph.workspace.model.NodeReference;
+import org.freeplane.plugin.graph.workspace.model.PersistedNodeId;
+import org.freeplane.plugin.graph.workspace.model.RelationshipDirection;
 import org.freeplane.plugin.graph.workspace.model.UnknownXml;
 import org.freeplane.plugin.graph.workspace.model.Viewport;
 import org.freeplane.plugin.graph.workspace.model.DisplaySettings.CanvasTheme;
@@ -515,7 +519,7 @@ public class GraphWorkspaceWindowModelShould {
             emptyState(), registrations, false);
         GraphWorkspaceWindowModel model = fixture.model();
 
-        model.acceptCanvasState(groupState(ACTIVE_ID));
+        model.acceptCanvasState(nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)));
 
         assertThat(model.mapList().rows()).extracting(MapListPanel.MapRow::state).containsExactly(
             MapListPanel.RowState.ACTIVE, MapListPanel.RowState.LOADING, MapListPanel.RowState.MISSING,
@@ -1097,6 +1101,127 @@ public class GraphWorkspaceWindowModelShould {
             GraphGeometry.of(Collections.emptyMap(), Collections.emptyMap()), OperationalStatus.LOADING);
     }
 
+    @Test
+    public void selectsTheSelectedNodeMapRowAndPinsTheSelectedNode() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            persistedNodeState(ACTIVE_ID, LayoutPoint.of(2.0, -3.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
+        ProjectedNodeKey nodeKey = ProjectedNodeKey.of(SourceNodeKey.persisted(
+            NodeReference.of(ACTIVE_ID, PersistedNodeId.of("selected"))));
+        ProjectedEndpointKey nodeEndpoint = ProjectedEndpointKey.ofNode(nodeKey);
+
+        model.acceptIntent(new GraphIntent.ChangeSelection(Optional.of(nodeEndpoint)));
+
+        assertThat(model.mapList().rows().get(0).selected()).isTrue();
+        model.toolbar().pinButton().doClick();
+
+        ArgumentCaptor<GraphCommand> commands = ArgumentCaptor.forClass(GraphCommand.class);
+        verify(fixture.handle).execute(commands.capture());
+        assertThat(commands.getValue()).isInstanceOf(GraphCommands.Pin.class);
+        GraphCommands.Pin pin = (GraphCommands.Pin) commands.getValue();
+        assertThat(pin.node()).isEqualTo(NodeReference.of(ACTIVE_ID, PersistedNodeId.of("selected")));
+        assertThat(pin.x()).isEqualTo(2.0);
+        assertThat(pin.y()).isEqualTo(-3.0);
+
+        model.acceptIntent(new GraphIntent.ChangeSelection(Optional.<ProjectedEndpointKey>empty()));
+        assertThat(model.mapList().rows().get(0).selected()).isFalse();
+        model.toolbar().unpinButton().doClick();
+        verify(fixture.handle, org.mockito.Mockito.times(1)).execute(any(GraphCommand.class));
+        model.close();
+    }
+
+    @Test
+    public void boundarySelectionDoesNotPinOrSelectAMapRow() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            boundaryWithNodeState(),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
+        EnclosureKey boundary = EnclosureKey.of(SourceNodeKey.transientPath(ACTIVE_ID,
+            Collections.singletonList(Integer.valueOf(2))));
+        ProjectedEndpointKey boundaryEndpoint = ProjectedEndpointKey.ofEnclosure(boundary);
+
+        model.acceptIntent(new GraphIntent.ChangeSelection(Optional.of(boundaryEndpoint)));
+
+        assertThat(model.mapList().rows().get(0).selected()).isFalse();
+        model.toolbar().pinButton().doClick();
+        verify(fixture.handle, org.mockito.Mockito.never()).execute(any(GraphCommand.class));
+        model.close();
+    }
+
+    @Test
+    public void connectIntentRequiresBothNodeEndpoints() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            wideNodeState(ACTIVE_ID),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
+        SourceNodeKey left = SourceNodeKey.transientPath(ACTIVE_ID,
+            Collections.singletonList(Integer.valueOf(0)));
+        SourceNodeKey right = SourceNodeKey.transientPath(ACTIVE_ID,
+            Collections.singletonList(Integer.valueOf(1)));
+        ProjectedEndpointKey leftEndpoint = ProjectedEndpointKey.ofNode(ProjectedNodeKey.of(left));
+        ProjectedEndpointKey rightEndpoint = ProjectedEndpointKey.ofNode(ProjectedNodeKey.of(right));
+        ProjectedEndpointKey boundaryEndpoint = ProjectedEndpointKey.ofEnclosure(EnclosureKey.of(
+            SourceNodeKey.transientPath(ACTIVE_ID, Collections.singletonList(Integer.valueOf(2)))));
+
+        model.acceptIntent(new GraphIntent.Connect(leftEndpoint, boundaryEndpoint,
+            RelationshipDirection.FORWARD));
+        verify(fixture.handle, org.mockito.Mockito.never()).execute(any(GraphCommand.class));
+
+        model.acceptIntent(new GraphIntent.Connect(leftEndpoint, rightEndpoint,
+            RelationshipDirection.FORWARD));
+        ArgumentCaptor<GraphCommand> commands = ArgumentCaptor.forClass(GraphCommand.class);
+        verify(fixture.handle).execute(commands.capture());
+        assertThat(commands.getValue()).isInstanceOf(GraphCommands.Connect.class);
+        GraphCommands.Connect connect = (GraphCommands.Connect) commands.getValue();
+        assertThat(connect.source()).isEqualTo(left);
+        assertThat(connect.target()).isEqualTo(right);
+        assertThat(connect.direction()).isEqualTo(RelationshipDirection.FORWARD);
+        model.close();
+    }
+
+    private static CanvasState persistedNodeState(MapReferenceId mapId, LayoutPoint center) {
+        SourceNodeKey source = SourceNodeKey.persisted(
+            NodeReference.of(mapId, PersistedNodeId.of("selected")));
+        ProjectedNodeKey key = ProjectedNodeKey.of(source);
+        ProjectedNode node = ProjectedNode.of(key, SafeNodeLabel.of("Selected", "Selected"), "Map", true);
+        GraphProjection projection = GraphProjection.structure(0L, Collections.singletonList(node),
+            Collections.emptyList());
+        GraphGeometry geometry = GraphGeometry.of(Collections.singletonMap(key, NodeGeometry.of(center, 10.0)),
+            Collections.emptyMap());
+        LayoutFrame layout = LayoutFrame.of(0L, LayoutPositions.of(
+            Collections.singletonMap(key, center), Collections.emptyMap()), false);
+        return CanvasState.of(0L, projection, layout, geometry, OperationalStatus.IDLE);
+    }
+
+    private static CanvasState boundaryWithNodeState() {
+        SourceNodeKey nodeSource = SourceNodeKey.transientPath(ACTIVE_ID,
+            Collections.singletonList(Integer.valueOf(0)));
+        ProjectedNodeKey key = ProjectedNodeKey.of(nodeSource);
+        ProjectedNode node = ProjectedNode.of(key, SafeNodeLabel.of("Node", "Node"), "Map", true);
+        EnclosureKey boundary = EnclosureKey.of(SourceNodeKey.transientPath(ACTIVE_ID,
+            Collections.singletonList(Integer.valueOf(2))));
+        EnclosureHullKey hullKey = EnclosureHullKey.of(Collections.singletonList(boundary));
+        ProjectedEnclosure enclosure = ProjectedEnclosure.of(hullKey,
+            Collections.singletonList(boundary),
+            Collections.singletonList(SafeNodeLabel.of("Boundary", "Boundary")), "Map",
+            java.util.Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(),
+            Collections.<EnclosureHullKey>emptyList(), false, BoundaryTier.EMPHATIC);
+        LayoutPoint anchor = LayoutPoint.of(-40.0, 0.0);
+        HullGeometry hull = HullGeometry.of(Arrays.asList(LayoutPoint.of(-60.0, -20.0),
+            LayoutPoint.of(-20.0, -20.0), LayoutPoint.of(-20.0, 20.0), LayoutPoint.of(-60.0, 20.0)), anchor);
+        GraphProjection projection = GraphProjection.projected(0L, Collections.singletonList(node),
+            Collections.singletonList(enclosure), Collections.emptyList(), Collections.emptyList(),
+            Collections.emptyList());
+        GraphGeometry geometry = GraphGeometry.of(Collections.singletonMap(key,
+            NodeGeometry.of(LayoutPoint.of(0.0, 0.0), 10.0)), Collections.singletonMap(hullKey, hull),
+            Collections.emptyMap());
+        LayoutFrame layout = LayoutFrame.of(0L, LayoutPositions.of(
+            Collections.singletonMap(key, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonMap(hullKey, anchor)), false);
+        return CanvasState.of(0L, projection, layout, geometry, OperationalStatus.IDLE);
+    }
+
     private static CanvasState nodeState(MapReferenceId mapId, LayoutPoint center) {
         SourceNodeKey source = SourceNodeKey.transientPath(mapId, Collections.emptyList());
         ProjectedNodeKey key = ProjectedNodeKey.of(source);
@@ -1163,27 +1288,6 @@ public class GraphWorkspaceWindowModelShould {
         return CanvasState.of(0L, projection, layout, geometry, OperationalStatus.IDLE);
     }
 
-    private static CanvasState groupState(MapReferenceId mapId) {
-        SourceNodeKey source = SourceNodeKey.transientPath(mapId, Collections.emptyList());
-        EnclosureKey endpoint = EnclosureKey.of(source);
-        EnclosureHullKey hullKey = EnclosureHullKey.of(Collections.singletonList(endpoint));
-        ProjectedEnclosure enclosure = ProjectedEnclosure.of(hullKey,
-            Collections.singletonList(endpoint),
-            Collections.singletonList(SafeNodeLabel.of("Group", "Group")), "Map",
-            java.util.Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(),
-            Collections.<EnclosureHullKey>emptyList(), false, BoundaryTier.EMPHATIC);
-        LayoutPoint anchor = LayoutPoint.of(0.0, 0.0);
-        HullGeometry hull = HullGeometry.of(Arrays.asList(LayoutPoint.of(-30.0, -20.0),
-            LayoutPoint.of(30.0, -20.0), LayoutPoint.of(30.0, 20.0), LayoutPoint.of(-30.0, 20.0)), anchor);
-        GraphProjection projection = GraphProjection.projected(0L,
-            Collections.<ProjectedNode>emptyList(), Collections.singletonList(enclosure),
-            Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
-        GraphGeometry geometry = GraphGeometry.of(Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(),
-            Collections.singletonMap(hullKey, hull), Collections.emptyMap());
-        LayoutFrame layout = LayoutFrame.of(0L, LayoutPositions.of(Collections.emptyMap(),
-            Collections.singletonMap(hullKey, anchor)), false);
-        return CanvasState.of(0L, projection, layout, geometry, OperationalStatus.IDLE);
-    }
 
     private static GraphWorkspacePresentation presentation(final DisplaySettings settings,
             final MapReferenceId... ids) {

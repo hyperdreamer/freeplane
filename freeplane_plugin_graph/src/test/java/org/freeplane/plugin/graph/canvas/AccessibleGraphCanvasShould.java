@@ -398,8 +398,8 @@ public class AccessibleGraphCanvasShould {
         assertThat(childContext.getAccessibleName()).contains("Prominent safe label")
             .contains("Map Prominent");
         assertThat(childContext.getAccessibleDescription()).contains("Map Prominent")
-            .doesNotContain("outgoing").doesNotContain("1.2")
-            .doesNotContain("#").doesNotContain("raw source");
+            .contains("outgoing").contains("1")
+            .doesNotContain("1.2").doesNotContain("#").doesNotContain("raw source");
         final AccessibleComponent component = childContext.getAccessibleComponent();
         final Rectangle bounds = component.getBounds();
         assertThat(bounds.width).isGreaterThan(0);
@@ -425,6 +425,34 @@ public class AccessibleGraphCanvasShould {
         canvas.setPaintState(canvas.paintState().withSelection(fixture.prominentEndpoint));
         assertThat(child.getAccessibleContext().getAccessibleDescription()).contains("Selected");
         controller.uninstall();
+    }
+
+    @Test
+    public void reportNodeLabelMapNameBoundsSelectionPinAndOutgoingTargetCount() {
+        final Fixture fixture = Fixture.create();
+        final GraphCanvas canvas = fixture.canvas();
+        final AccessibleContext root = canvas.getAccessibleContext();
+        final AccessibleContext source = childFor(root, fixture.sourceEndpoint).getAccessibleContext();
+        assertThat(source.getAccessibleName()).contains("Source safe label").contains("Map Source");
+        assertThat(source.getAccessibleDescription()).contains("Node endpoint.")
+            .contains("Pinned.").doesNotContain("Visible outgoing targets");
+        assertThat(source.getAccessibleComponent().getBounds().width).isGreaterThan(0);
+        assertThat(source.getAccessibleComponent().getBounds().height).isGreaterThan(0);
+
+        final AccessibleContext prominent = childFor(root, fixture.prominentEndpoint)
+            .getAccessibleContext();
+        assertThat(prominent.getAccessibleDescription())
+            .contains("Visible outgoing targets: 1.");
+        assertThat(prominent.getAccessibleStateSet().contains(AccessibleState.SELECTED)).isFalse();
+
+        canvas.setPaintState(GraphPaintState.empty().withSelection(fixture.prominentEndpoint));
+        assertThat(prominent.getAccessibleDescription()).contains("Selected");
+        assertThat(prominent.getAccessibleStateSet().contains(AccessibleState.SELECTED)).isTrue();
+
+        final AccessibleContext enclosure = childFor(root, fixture.enclosureEndpoint)
+            .getAccessibleContext();
+        assertThat(enclosure.getAccessibleDescription()).contains("Enclosure endpoint.")
+            .doesNotContain("outgoing").doesNotContain("Pinned.");
     }
 
     private static Accessible childFor(final AccessibleContext root, final ProjectedEndpointKey endpoint) {
@@ -676,16 +704,15 @@ public class AccessibleGraphCanvasShould {
             final NodeReference leftReference = reference(mapLeft, "left");
             final NodeReference upReference = reference(mapUp, "up");
             final ProjectedNodeKey source = nodeKey(sourceReference);
-            final ProjectedEndpointKey sourceEndpoint = ProjectedEndpointKey.ofEnclosure(
-                EnclosureKey.of(SourceNodeKey.persisted(sourceReference)));
-            final ProjectedEndpointKey prominentEndpoint = ProjectedEndpointKey.ofEnclosure(
-                EnclosureKey.of(SourceNodeKey.persisted(prominentReference)));
-            final ProjectedEndpointKey tieEndpoint = ProjectedEndpointKey.ofEnclosure(
-                EnclosureKey.of(SourceNodeKey.persisted(tieReference)));
-            final ProjectedEndpointKey leftEndpoint = ProjectedEndpointKey.ofEnclosure(
-                EnclosureKey.of(SourceNodeKey.persisted(leftReference)));
-            final ProjectedEndpointKey upEndpoint = ProjectedEndpointKey.ofEnclosure(
-                EnclosureKey.of(SourceNodeKey.persisted(upReference)));
+            final ProjectedNodeKey prominent = nodeKey(prominentReference);
+            final ProjectedNodeKey tie = nodeKey(tieReference);
+            final ProjectedNodeKey left = nodeKey(leftReference);
+            final ProjectedNodeKey up = nodeKey(upReference);
+            final ProjectedEndpointKey sourceEndpoint = ProjectedEndpointKey.ofNode(source);
+            final ProjectedEndpointKey prominentEndpoint = ProjectedEndpointKey.ofNode(prominent);
+            final ProjectedEndpointKey tieEndpoint = ProjectedEndpointKey.ofNode(tie);
+            final ProjectedEndpointKey leftEndpoint = ProjectedEndpointKey.ofNode(left);
+            final ProjectedEndpointKey upEndpoint = ProjectedEndpointKey.ofNode(up);
             final EnclosureKey enclosure = EnclosureKey.of(SourceNodeKey.transientPath(mapSource,
                 Collections.singletonList(Integer.valueOf(20))));
             final EnclosureKey suppressed = EnclosureKey.of(SourceNodeKey.transientPath(mapSource,
@@ -698,12 +725,14 @@ public class AccessibleGraphCanvasShould {
             final ProjectedEndpointKey enclosureEndpoint = ProjectedEndpointKey.ofEnclosure(enclosure);
             final ProjectedEndpointKey suppressedEndpoint = ProjectedEndpointKey.ofEnclosure(suppressed);
             final ProjectedEndpointKey geometrylessEndpoint = ProjectedEndpointKey.ofEnclosure(geometryless);
-            final List<ProjectedEnclosure> boundaries = Arrays.asList(
-                boundary(sourceReference, "Source safe label", "Source", "Map Source"),
-                boundary(prominentReference, "Prominent safe label", "Prominent", "Map Prominent"),
-                boundary(tieReference, "Tie safe label", "Tie", "Map Tie"),
-                boundary(leftReference, "Left safe label", "Left", "Map Left"),
-                boundary(upReference, "Up safe label", "Up", "Map Up"));
+            final List<ProjectedNode> nodes = Arrays.asList(
+                ProjectedNode.of(source, SafeNodeLabel.of("Source safe label", "Source"),
+                    "Map Source", true),
+                ProjectedNode.of(prominent, SafeNodeLabel.of("Prominent safe label", "Prominent"),
+                    "Map Prominent", true),
+                ProjectedNode.of(tie, SafeNodeLabel.of("Tie safe label", "Tie"), "Map Tie", true),
+                ProjectedNode.of(left, SafeNodeLabel.of("Left safe label", "Left"), "Map Left", true),
+                ProjectedNode.of(up, SafeNodeLabel.of("Up safe label", "Up"), "Map Up", true));
             final ProjectedEnclosure visibleEnclosure = ProjectedEnclosure.of(enclosureHull,
                 Collections.singletonList(enclosure),
                 Collections.singletonList(SafeNodeLabel.of("Visible enclosure label", "Visible")),
@@ -729,57 +758,40 @@ public class AccessibleGraphCanvasShould {
             final ProjectedEdgeKey edgeKey = ProjectedEdgeKey.of(sourceEndpoint, prominentEndpoint);
             final EdgeContributor contributor = EdgeContributor.graphRelationship(relationship,
                 prominentEndpoint, sourceEndpoint);
-            final List<ProjectedEnclosure> enclosures = new ArrayList<ProjectedEnclosure>(boundaries);
-            enclosures.add(visibleEnclosure);
-            enclosures.add(hiddenEnclosure);
-            enclosures.add(missingGeometryEnclosure);
-            final GraphProjection projection = GraphProjection.projected(1L,
-                Collections.<ProjectedNode>emptyList(), enclosures,
+            final List<ProjectedEnclosure> enclosures = Arrays.asList(visibleEnclosure, hiddenEnclosure,
+                missingGeometryEnclosure);
+            final GraphProjection projection = GraphProjection.projected(1L, nodes, enclosures,
                 Collections.singletonList(ProjectedEdge.of(edgeKey, Collections.singletonList(contributor))),
                 Collections.emptyList(), Collections.singletonList(PinProjection.active(
                     PinRecord.of(sourceReference, 0.0, 0.0, Collections.emptyList()), source)));
+            final Map<ProjectedNodeKey, NodeGeometry> nodeGeometry =
+                new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
+            nodeGeometry.put(source, NodeGeometry.of(LayoutPoint.of(0.0, 0.0), 12.0));
+            nodeGeometry.put(prominent, NodeGeometry.of(LayoutPoint.of(100.0, 30.0), 18.0));
+            nodeGeometry.put(tie, NodeGeometry.of(LayoutPoint.of(100.0, -30.0), 8.0));
+            nodeGeometry.put(left, NodeGeometry.of(LayoutPoint.of(-100.0, 10.0), 9.0));
+            nodeGeometry.put(up, NodeGeometry.of(LayoutPoint.of(0.0, -100.0), 10.0));
             final Map<EnclosureHullKey, HullGeometry> hullGeometry =
                 new LinkedHashMap<EnclosureHullKey, HullGeometry>();
-            hullGeometry.put(EnclosureHullKey.of(Collections.singletonList(
-                EnclosureKey.of(SourceNodeKey.persisted(sourceReference)))),
-                rectangle(-12.0, -12.0, 12.0, 12.0, 0.0, 0.0));
-            hullGeometry.put(EnclosureHullKey.of(Collections.singletonList(
-                EnclosureKey.of(SourceNodeKey.persisted(prominentReference)))),
-                rectangle(82.0, 12.0, 118.0, 48.0, 100.0, 30.0));
-            hullGeometry.put(EnclosureHullKey.of(Collections.singletonList(
-                EnclosureKey.of(SourceNodeKey.persisted(tieReference)))),
-                rectangle(92.0, -38.0, 108.0, -22.0, 100.0, -30.0));
-            hullGeometry.put(EnclosureHullKey.of(Collections.singletonList(
-                EnclosureKey.of(SourceNodeKey.persisted(leftReference)))),
-                rectangle(-109.0, 1.0, -91.0, 19.0, -100.0, 10.0));
-            hullGeometry.put(EnclosureHullKey.of(Collections.singletonList(
-                EnclosureKey.of(SourceNodeKey.persisted(upReference)))),
-                rectangle(-10.0, -110.0, 10.0, -90.0, 0.0, -100.0));
             hullGeometry.put(enclosureHull, rectangle(-20.0, 80.0, 20.0, 120.0, 0.0, 100.0));
             hullGeometry.put(suppressedHull, rectangle(80.0, 160.0, 110.0, 190.0, 95.0, 175.0));
-            final GraphGeometry geometry = GraphGeometry.of(
-                Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(), hullGeometry);
+            final GraphGeometry geometry = GraphGeometry.of(nodeGeometry, hullGeometry);
+            final Map<ProjectedNodeKey, LayoutPoint> positions =
+                new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+            for (Map.Entry<ProjectedNodeKey, NodeGeometry> entry : nodeGeometry.entrySet()) {
+                positions.put(entry.getKey(), entry.getValue().center());
+            }
             final Map<EnclosureHullKey, LayoutPoint> anchors =
                 new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
             for (Map.Entry<EnclosureHullKey, HullGeometry> entry : hullGeometry.entrySet()) {
                 anchors.put(entry.getKey(), entry.getValue().labelAnchor());
             }
             final LayoutFrame frame = LayoutFrame.of(1L,
-                LayoutPositions.of(Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(), anchors), false);
+                LayoutPositions.of(positions, anchors), false);
             final CanvasState state = CanvasState.of(1L, projection, frame, geometry,
                 OperationalStatus.IDLE);
             return new Fixture(state, sourceEndpoint, prominentEndpoint, tieEndpoint, leftEndpoint,
                 upEndpoint, enclosureEndpoint, suppressedEndpoint, geometrylessEndpoint);
-        }
-
-        private static ProjectedEnclosure boundary(final NodeReference reference, final String fullLabel,
-                final String displayLabel, final String mapName) {
-            return ProjectedEnclosure.of(EnclosureHullKey.of(Collections.singletonList(
-                EnclosureKey.of(SourceNodeKey.persisted(reference)))),
-                Collections.singletonList(EnclosureKey.of(SourceNodeKey.persisted(reference))),
-                Collections.singletonList(SafeNodeLabel.of(fullLabel, displayLabel)), mapName,
-                Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(),
-                Collections.<EnclosureHullKey>emptyList(), false, BoundaryTier.SUBTLE);
         }
 
         private static HullGeometry rectangle(final double minX, final double minY,

@@ -24,22 +24,26 @@ import org.freeplane.plugin.graph.projection.ProjectedEndpointVisibility;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 
 final class GraphHitIndex {
+    private final List<EndpointEntry> nodes;
     private final List<EndpointEntry> hulls;
     private final List<EdgeEntry> edges;
 
-    private GraphHitIndex(final List<EndpointEntry> hulls, final List<EdgeEntry> edges) {
+    private GraphHitIndex(final List<EndpointEntry> nodes, final List<EndpointEntry> hulls,
+            final List<EdgeEntry> edges) {
+        this.nodes = Collections.unmodifiableList(new ArrayList<EndpointEntry>(nodes));
         this.hulls = Collections.unmodifiableList(new ArrayList<EndpointEntry>(hulls));
         this.edges = Collections.unmodifiableList(new ArrayList<EdgeEntry>(edges));
     }
 
     static GraphHitIndex empty() {
         return new GraphHitIndex(Collections.<EndpointEntry>emptyList(),
-            Collections.<EdgeEntry>emptyList());
+            Collections.<EndpointEntry>emptyList(), Collections.<EdgeEntry>emptyList());
     }
 
     static GraphHitIndex from(final CanvasState state) {
         Objects.requireNonNull(state, "state");
         final GraphGeometry geometry = state.geometry();
+        final List<EndpointEntry> nodeEntries = new ArrayList<EndpointEntry>();
         final List<EndpointEntry> hullEntries = new ArrayList<EndpointEntry>();
         final Map<ProjectedEndpointKey, LayoutPoint> centers =
             new HashMap<ProjectedEndpointKey, LayoutPoint>();
@@ -47,17 +51,19 @@ final class GraphHitIndex {
             ProjectedEndpointVisibility.visibleEndpoints(state.projection().nodes(),
                 state.projection().enclosures());
 
-        // Node endpoints are never hit-testable; their geometry centers remain available so
-        // retained edges between node endpoints keep resolving exact segments.
+        // Node endpoints take hit priority so a marked node stays selectable within
+        // a containing structural boundary.
         for (final ProjectedNode node : state.projection().nodes()) {
             final ProjectedEndpointKey endpoint = ProjectedEndpointKey.ofNode(node.key());
             if (!visibleEndpoints.contains(endpoint)) {
                 continue;
             }
             final NodeGeometry nodeGeometry = geometry.nodes().get(node.key());
-            if (nodeGeometry != null) {
-                centers.put(endpoint, nodeGeometry.center());
+            if (nodeGeometry == null) {
+                continue;
             }
+            nodeEntries.add(EndpointEntry.forNode(endpoint, nodeGeometry));
+            centers.put(endpoint, nodeGeometry.center());
         }
 
         for (final ProjectedEnclosure enclosure : state.projection().enclosures()) {
@@ -99,12 +105,16 @@ final class GraphHitIndex {
                 // A partially rendered endpoint cannot provide a hit-testable edge.
             }
         }
-        return new GraphHitIndex(hullEntries, edgeEntries);
+        return new GraphHitIndex(nodeEntries, hullEntries, edgeEntries);
     }
 
     Optional<ProjectedEndpointKey> endpointAt(final LayoutPoint point) {
         Objects.requireNonNull(point, "point");
-        final ProjectedEndpointKey match = matchingEndpoint(hulls, point);
+        ProjectedEndpointKey match = matchingEndpoint(nodes, point);
+        if (match != null) {
+            return Optional.of(match);
+        }
+        match = matchingEndpoint(hulls, point);
         return match == null ? Optional.<ProjectedEndpointKey>empty() : Optional.of(match);
     }
 
@@ -343,20 +353,28 @@ final class GraphHitIndex {
 
     private static final class EndpointEntry {
         private final ProjectedEndpointKey endpoint;
+        private final NodeGeometry node;
         private final HullGeometry hull;
 
-        private EndpointEntry(final ProjectedEndpointKey endpoint, final HullGeometry hull) {
+        private EndpointEntry(final ProjectedEndpointKey endpoint, final NodeGeometry node,
+                final HullGeometry hull) {
             this.endpoint = endpoint;
+            this.node = node;
             this.hull = hull;
+        }
+
+        private static EndpointEntry forNode(final ProjectedEndpointKey endpoint,
+                final NodeGeometry node) {
+            return new EndpointEntry(endpoint, node, null);
         }
 
         private static EndpointEntry forHull(final ProjectedEndpointKey endpoint,
                 final HullGeometry hull) {
-            return new EndpointEntry(endpoint, hull);
+            return new EndpointEntry(endpoint, null, hull);
         }
 
         private boolean contains(final LayoutPoint point) {
-            return hull.contains(point);
+            return node == null ? hull.contains(point) : node.contains(point);
         }
     }
 

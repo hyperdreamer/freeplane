@@ -55,13 +55,13 @@ import org.junit.Test;
 
 public class GraphInteractionControllerShould {
     @Test
-    public void hitHullEndpointsAndResolveEdgesByTolerance() {
+    public void hitNodeEndpointsFirstAndPreserveHullHitOrdering() {
         final Fixture fixture = Fixture.create();
         final GraphHitIndex index = GraphHitIndex.from(fixture.state);
 
         assertThat(index.endpointAt(LayoutPoint.of(-25.0, 0.0)))
-            .contains(fixture.firstHullEndpoint);
-        assertThat(index.endpointAt(LayoutPoint.of(-40.0, 0.0)))
+            .contains(fixture.firstEndpoint);
+        assertThat(index.endpointAt(LayoutPoint.of(-65.0, 0.0)))
             .contains(fixture.firstHullEndpoint);
         assertThat(index.edgeAt(LayoutPoint.of(0.0, 3.0), 4.0))
             .contains(fixture.edgeKey);
@@ -165,7 +165,7 @@ public class GraphInteractionControllerShould {
         dispatch(canvas, click(canvas, MouseEvent.MOUSE_CLICKED, -40.0, 0.0, 2,
             MouseEvent.BUTTON1));
         assertThat(listener.intents).containsExactly(new GraphIntent.OpenSourceNode(
-            fixture.firstHullEndpoint));
+            fixture.firstEndpoint));
         controller.uninstall();
     }
 
@@ -217,33 +217,9 @@ public class GraphInteractionControllerShould {
         dispatch(canvas, press(canvas, -40.0, 0.0));
         dispatch(canvas, drag(canvas, 40.0, 0.0));
         dispatch(canvas, release(canvas, 40.0, 0.0));
-        assertThat(listener.intents).containsExactly(new GraphIntent.Connect(fixture.firstHullEndpoint,
-            fixture.secondHullEndpoint, RelationshipDirection.BIDIRECTIONAL));
+        assertThat(listener.intents).containsExactly(new GraphIntent.Connect(fixture.firstEndpoint,
+            fixture.secondEndpoint, RelationshipDirection.BIDIRECTIONAL));
         controller.uninstall();
-    }
-
-    @Test
-    public void cancelConnectionPreviewWhenABoundarySourceIsRemovedFromCurrentCanvasState() {
-        final Fixture fixture = Fixture.create();
-
-        assertConnectionPreviewCancelledAfterStateReplacement(fixture, fixture.firstHullEndpoint, -40.0, 0.0,
-            stateWithoutFirstEnclosure(fixture));
-    }
-
-    @Test
-    public void cancelConnectionPreviewWhenAnEnclosureSourceIsSuppressedInCurrentCanvasState() {
-        final Fixture fixture = Fixture.create();
-
-        assertConnectionPreviewCancelledAfterStateReplacement(fixture, fixture.firstHullEndpoint, -65.0, 0.0,
-            stateWithSuppressedFirstEnclosure(fixture));
-    }
-
-    @Test
-    public void cancelConnectionPreviewWhenABoundarySourceLosesCurrentGeometry() {
-        final Fixture fixture = Fixture.create();
-
-        assertConnectionPreviewCancelledAfterStateReplacement(fixture, fixture.firstHullEndpoint, -40.0, 0.0,
-            stateWithoutFirstHullGeometry(fixture));
     }
 
     @Test
@@ -255,6 +231,96 @@ public class GraphInteractionControllerShould {
         assertThat(index.endpointAt(LayoutPoint.of(-65.0, 0.0)))
             .contains(fixture.firstHullEndpoint);
         assertThat(index.endpointAt(LayoutPoint.of(95.0, 0.0))).isEmpty();
+    }
+
+    @Test
+    public void cancelConnectionPreviewWhenANodeIsRemovedFromCurrentCanvasState() {
+        final Fixture fixture = Fixture.create();
+
+        assertConnectionPreviewCancelledAfterStateReplacement(fixture, fixture.firstEndpoint, -40.0, 0.0,
+            stateWithoutFirstNode(fixture));
+    }
+
+    @Test
+    public void cancelConnectionPreviewWhenANodeSourceLosesCurrentGeometry() {
+        final Fixture fixture = Fixture.create();
+
+        assertConnectionPreviewCancelledAfterStateReplacement(fixture, fixture.firstEndpoint, -40.0, 0.0,
+            stateWithoutFirstNodeGeometry(fixture));
+    }
+
+    @Test
+    public void keepNodeConnectionPreviewWhenOnlyABoundaryIsSuppressed() {
+        final Fixture fixture = Fixture.create();
+        final GraphCanvas canvas = fixture.canvas();
+        final RecordingListener listener = new RecordingListener();
+        final GraphInteractionController controller = new GraphInteractionController(listener);
+        controller.install(canvas);
+        controller.setTool(InteractionTool.CONNECT);
+
+        dispatch(canvas, press(canvas, -40.0, 0.0));
+        dispatch(canvas, drag(canvas, -35.0, 2.0));
+        assertThat(canvas.paintState().connectionPreview()).isPresent();
+
+        canvas.setCanvasState(stateWithSuppressedFirstEnclosure(fixture));
+
+        assertThat(canvas.paintState().connectionPreview()).isPresent();
+        dispatch(canvas, release(canvas, 40.0, 0.0));
+        assertThat(listener.last()).isEqualTo(new GraphIntent.Connect(fixture.firstEndpoint,
+            fixture.secondEndpoint, RelationshipDirection.FORWARD));
+        controller.uninstall();
+    }
+
+    @Test
+    public void boundariesStaySelectableButNeverBecomeConnectOrPinEndpoints() {
+        final Fixture fixture = Fixture.create();
+        final GraphCanvas canvas = fixture.canvas();
+        final RecordingListener listener = new RecordingListener();
+        final GraphInteractionController controller = new GraphInteractionController(listener);
+        controller.install(canvas);
+        // A hull-only spot inside the first boundary but outside the node disc.
+        dispatch(canvas, click(canvas, MouseEvent.MOUSE_CLICKED, -65.0, 20.0, 1,
+            MouseEvent.BUTTON1));
+        assertThat(listener.intents).containsExactly(
+            new GraphIntent.ChangeSelection(Optional.of(fixture.firstHullEndpoint)),
+            new GraphIntent.RevealSourceNode(fixture.firstHullEndpoint));
+
+        controller.setTool(InteractionTool.CONNECT);
+        dispatch(canvas, press(canvas, -65.0, 20.0));
+        dispatch(canvas, drag(canvas, 40.0, 0.0));
+        assertThat(canvas.paintState().connectionPreview()).isEmpty();
+        dispatch(canvas, release(canvas, 40.0, 0.0));
+        assertThat(listener.intents).hasSize(2);
+
+        controller.setTool(InteractionTool.SELECT);
+        dispatch(canvas, press(canvas, -65.0, 20.0));
+        dispatch(canvas, drag(canvas, -50.0, 25.0));
+        dispatch(canvas, release(canvas, -50.0, 25.0));
+        assertThat(listener.intents).hasSize(2);
+        controller.uninstall();
+    }
+
+    @Test
+    public void rejectConnectCompletionUnlessBothEndpointsAreNodes() {
+        final Fixture fixture = Fixture.create();
+        final GraphCanvas canvas = fixture.canvas();
+        final RecordingListener listener = new RecordingListener();
+        final GraphInteractionController controller = new GraphInteractionController(listener);
+        controller.install(canvas);
+        controller.setTool(InteractionTool.CONNECT);
+
+        dispatch(canvas, press(canvas, -40.0, 0.0));
+        dispatch(canvas, drag(canvas, -65.0, 20.0));
+        dispatch(canvas, release(canvas, -65.0, 20.0));
+        assertThat(listener.intents).isEmpty();
+        assertThat(canvas.paintState().connectionPreview()).isEmpty();
+
+        dispatch(canvas, press(canvas, -40.0, 0.0));
+        dispatch(canvas, drag(canvas, 40.0, 0.0));
+        dispatch(canvas, release(canvas, 40.0, 0.0));
+        assertThat(listener.intents).containsExactly(new GraphIntent.Connect(fixture.firstEndpoint,
+            fixture.secondEndpoint, RelationshipDirection.FORWARD));
+        controller.uninstall();
     }
 
     @Test
@@ -299,7 +365,7 @@ public class GraphInteractionControllerShould {
         controller.install(canvas);
 
         dispatch(canvas, move(canvas, -40.0, 0.0));
-        assertThat(canvas.paintState().hover()).contains(fixture.firstHullEndpoint);
+        assertThat(canvas.paintState().hover()).contains(fixture.firstEndpoint);
         assertThat(canvas.paintState().dimUnrelated()).isTrue();
         assertThat(canvas.getToolTipText()).contains("First full label").contains("Map");
         dispatch(canvas, exit(canvas));
@@ -350,7 +416,7 @@ public class GraphInteractionControllerShould {
         final int intentsBeforeEscape = listener.intents.size();
         dispatchKey(canvas, key(canvas, KeyEvent.VK_ESCAPE, 0));
         assertThat(canvas.paintState().connectionPreview()).isEmpty();
-        assertThat(canvas.paintState().selection()).contains(fixture.firstHullEndpoint);
+        assertThat(canvas.paintState().selection()).contains(fixture.firstEndpoint);
         assertThat(listener.intents).hasSize(intentsBeforeEscape);
         dispatchKey(canvas, key(canvas, KeyEvent.VK_ESCAPE, 0));
         assertThat(canvas.paintState().selection()).isEmpty();
@@ -370,9 +436,9 @@ public class GraphInteractionControllerShould {
         dispatch(canvas, click(canvas, MouseEvent.MOUSE_CLICKED, -40.0, 0.0, 1,
             MouseEvent.BUTTON1));
         assertThat(listener.intents).contains(
-            new GraphIntent.ChangeSelection(Optional.of(fixture.firstHullEndpoint)),
-            new GraphIntent.RevealSourceNode(fixture.firstHullEndpoint));
-        assertThat(canvas.paintState().selection()).contains(fixture.firstHullEndpoint);
+            new GraphIntent.ChangeSelection(Optional.of(fixture.firstEndpoint)),
+            new GraphIntent.RevealSourceNode(fixture.firstEndpoint));
+        assertThat(canvas.paintState().selection()).contains(fixture.firstEndpoint);
 
         final double beforeZoom = canvas.viewport().zoom();
         final LayoutPoint pointerWorld = canvas.viewport().toWorld(260.0, 150.0,
@@ -402,8 +468,8 @@ public class GraphInteractionControllerShould {
         dispatch(canvas, release(canvas, 40.0, 0.0));
         assertThat(listener.last()).isInstanceOf(GraphIntent.Connect.class);
         final GraphIntent.Connect connect = (GraphIntent.Connect) listener.last();
-        assertThat(connect.source()).isEqualTo(fixture.firstHullEndpoint);
-        assertThat(connect.target()).isEqualTo(fixture.secondHullEndpoint);
+        assertThat(connect.source()).isEqualTo(fixture.firstEndpoint);
+        assertThat(connect.target()).isEqualTo(fixture.secondEndpoint);
         assertThat(connect.direction()).isEqualTo(RelationshipDirection.FORWARD);
         assertThat(canvas.paintState().connectionPreview()).isEmpty();
 
@@ -429,14 +495,14 @@ public class GraphInteractionControllerShould {
         dispatch(canvas, click(canvas, MouseEvent.MOUSE_CLICKED, -40.0, 0.0, 1,
             MouseEvent.BUTTON1));
         assertThat(listener.intents).containsExactly(
-            new GraphIntent.ChangeSelection(Optional.of(fixture.firstHullEndpoint)),
-            new GraphIntent.RevealSourceNode(fixture.firstHullEndpoint));
+            new GraphIntent.ChangeSelection(Optional.of(fixture.firstEndpoint)),
+            new GraphIntent.RevealSourceNode(fixture.firstEndpoint));
 
         dispatch(canvas, clickAt(canvas, MouseEvent.MOUSE_CLICKED, 390, 290, 1,
             MouseEvent.BUTTON1));
         assertThat(listener.intents).containsExactly(
-            new GraphIntent.ChangeSelection(Optional.of(fixture.firstHullEndpoint)),
-            new GraphIntent.RevealSourceNode(fixture.firstHullEndpoint),
+            new GraphIntent.ChangeSelection(Optional.of(fixture.firstEndpoint)),
+            new GraphIntent.RevealSourceNode(fixture.firstEndpoint),
             new GraphIntent.ChangeSelection(Optional.<ProjectedEndpointKey>empty()));
         controller.uninstall();
     }
@@ -464,18 +530,24 @@ public class GraphInteractionControllerShould {
         controller.uninstall();
     }
 
-    private static CanvasState stateWithoutFirstEnclosure(final Fixture fixture) {
-        final EnclosureKey removed = fixture.firstHullEndpoint.enclosure().get();
-        final List<org.freeplane.plugin.graph.projection.ProjectedEnclosure> enclosures =
-            new ArrayList<org.freeplane.plugin.graph.projection.ProjectedEnclosure>();
-        for (final org.freeplane.plugin.graph.projection.ProjectedEnclosure enclosure
-                : fixture.state.projection().enclosures()) {
-            if (!enclosure.endpointKeys().contains(removed)) {
-                enclosures.add(enclosure);
+    private static CanvasState stateWithoutFirstNode(final Fixture fixture) {
+        final List<ProjectedNode> nodes = new ArrayList<ProjectedNode>();
+        for (final ProjectedNode node : fixture.state.projection().nodes()) {
+            if (!fixture.firstNodeKey.equals(node.key())) {
+                nodes.add(node);
             }
         }
-        return replacementState(fixture.state, fixture.state.projection().nodes(), enclosures,
+        return replacementState(fixture.state, nodes, fixture.state.projection().enclosures(),
             fixture.state.geometry());
+    }
+
+    private static CanvasState stateWithoutFirstNodeGeometry(final Fixture fixture) {
+        final Map<ProjectedNodeKey, NodeGeometry> nodes =
+            new LinkedHashMap<ProjectedNodeKey, NodeGeometry>(fixture.state.geometry().nodes());
+        nodes.remove(fixture.firstNodeKey);
+        return replacementState(fixture.state, fixture.state.projection().nodes(),
+            fixture.state.projection().enclosures(), GraphGeometry.of(nodes, fixture.state.geometry().hulls(),
+                fixture.state.geometry().labels()));
     }
 
     private static CanvasState stateWithSuppressedFirstEnclosure(final Fixture fixture) {
@@ -496,16 +568,6 @@ public class GraphInteractionControllerShould {
         }
         return replacementState(fixture.state, fixture.state.projection().nodes(), enclosures,
             fixture.state.geometry());
-    }
-
-    private static CanvasState stateWithoutFirstHullGeometry(final Fixture fixture) {
-        final Map<EnclosureHullKey, org.freeplane.plugin.graph.geometry.HullGeometry> hulls =
-            new LinkedHashMap<EnclosureHullKey, org.freeplane.plugin.graph.geometry.HullGeometry>(
-                fixture.state.geometry().hulls());
-        hulls.remove(fixture.firstHullKey);
-        return replacementState(fixture.state, fixture.state.projection().nodes(),
-            fixture.state.projection().enclosures(), GraphGeometry.of(fixture.state.geometry().nodes(), hulls,
-                fixture.state.geometry().labels()));
     }
 
     private static CanvasState replacementState(final CanvasState base, final List<ProjectedNode> nodes,
