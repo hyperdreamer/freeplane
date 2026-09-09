@@ -134,6 +134,7 @@ Restore the pre-group-only node-particle path while retaining the current bounda
 - Create a `DesiredParticle.node(ProjectedNodeKey, radius)` for each projected group node.
 - Preserve `encodeNode(key)` and `identifier("node-", sha256(identity))`; do not introduce textual `node:<sourceKey>` IDs.
 - Create private anchor particles for each enclosure using the existing `encodeAnchor`/`identifier("anchor-", ...)` scheme.
+- Classify boundary anchors inside `TypedSpringBox` when `GraphStreamLayoutEngine` configures a particle, so boundary-separation repulsion applies only to two anchors. `TypedNodeParticle` retains its ordinary node-force behavior.
 - Add private `ForceKind.CONTAINMENT` links from each enclosure anchor to its `directNodes()` and private `ForceKind.HIERARCHY` links between parent and child enclosure anchors.
 - Add relationship force links only for semantic `ProjectedEdge` values. Private force links must not alter `GraphProjection.edges()`, prominence, or graph degree.
 - Publish both node and anchor positions in `LayoutPositions`.
@@ -148,6 +149,7 @@ Restore the pre-group-only node-particle path while retaining the current bounda
 - `GraphPainter` restores node discs, node labels, node highlights, and node pin rendering. Structural enclosure hulls use the normal map/theme hull styling; marked group vertices use the existing node styling. Suppressed hulls remain omitted from paint and label placement.
 - `GraphHitIndex` checks node entries before hull entries. `GraphInteractionController` pin/unpin gestures operate only on node endpoints; connecting is restricted to semantic node endpoints. Boundary selection/navigation continues through enclosure endpoints where supported by existing behavior.
 - `GraphWorkspaceWindow` counts projected nodes from `projection.nodes()` for map/status rows and restores selected-node pin/unpin coordinates from `NodeGeometry`, not an enclosure label anchor.
+- `AccessibleGraphCanvas` restores node endpoint bounds, selection, pin, and outgoing-reach exposure. `GraphSearchModel` restores node label/map-name indexing alongside visible non-suppressed enclosure labels.
 - `ProjectedEndpointVisibility` must continue to include visible node endpoints and non-suppressed enclosure endpoints while excluding suppressed enclosure endpoints.
 
 ### 5.4 Lifecycle and Snapshot Isolation
@@ -173,9 +175,12 @@ All implementation and test edits remain in this worktree and are limited to the
 - `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/projection/ProjectionEngine.java`
 - `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/projection/GraphProjection.java`
 - `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/GraphStreamLayoutEngine.java`
+- `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/TypedSpringBox.java`
 - `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/GraphHitIndex.java`
 - `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/GraphPainter.java`
 - `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/GraphInteractionController.java`
+- `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/AccessibleGraphCanvas.java`
+- `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/GraphSearchModel.java`
 - `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindow.java`
 
 `ProjectedEndpointVisibility.java` is an explicit verification target; it may be edited only if the restored node/enclosure projection requires a behavior correction.
@@ -186,17 +191,25 @@ All implementation and test edits remain in this worktree and are limited to the
 - `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/projection/StructuralProjectionShould.java`
 - `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/projection/GroupOnlyProjectionShould.java`
 - `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/projection/EndpointResolutionShould.java`
+- `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/projection/EdgeProjectionShould.java`
 - `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/projection/EnclosureTierShould.java`
 - `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/projection/ProjectionDeterminismShould.java`
 - `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/projection/ProminenceCalculatorShould.java`
+- `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/projection/ProjectedEndpointVisibilityShould.java`
+- `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/projection/ProjectionPureReloadShould.java`
 - `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/LayoutWorkerShould.java`
 - `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/TypedForcesShould.java`
 - `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundarySeparationShould.java`
 - `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/GraphCanvasPaintShould.java`
 - `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/GraphInteractionControllerShould.java`
+- `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/AccessibleGraphCanvasShould.java`
+- `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/GraphSearchModelShould.java`
 - `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/integration/GraphWorkspaceModelAcceptanceShould.java`
+- `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/integration/GraphWorkspaceColdReloadShould.java`
+- `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/control/GraphUpdateCoordinatorShould.java`
 - `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindowModelShould.java`
-- `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/projection/ProjectionPureReloadShould.java`
+- `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/GeneratedWorkspace.java`
+- `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/PerformanceTripwiresShould.java`
 
 ## 8. Falsifiable Test Requirements
 
