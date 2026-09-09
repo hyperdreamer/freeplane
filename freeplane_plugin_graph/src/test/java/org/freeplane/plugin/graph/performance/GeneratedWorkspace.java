@@ -473,14 +473,47 @@ public final class GeneratedWorkspace {
         rootChildren.addAll(rootLeaves);
         final SourceNodeKey rootKey = SourceNodeKey.transientPath(mapId,
             Collections.singletonList(Integer.valueOf(0)));
-        for (int enclosureIndex = 1; enclosureIndex < enclosureCount; enclosureIndex++) {
-            final SourceNodeKey enclosureKey = SourceNodeKey.transientPath(mapId,
-                Collections.singletonList(Integer.valueOf(enclosureIndex)));
-            final List<NodeSnapshot> children = leavesByEnclosure.get(enclosureIndex);
-            rootChildren.add(NodeSnapshot.of(enclosureKey,
-                SafeNodeLabel.of(String.format(Locale.ROOT, "m%02d-e%04d", mapIndex, enclosureIndex),
-                    String.format(Locale.ROOT, "m%02d-e%04d", mapIndex, enclosureIndex)),
-                false, true, false, children));
+        if (scenario == Scenario.SKEWED_REFERENCE && mapIndex == 0) {
+            // The skewed reference map hosts 1600 marked nodes across 960 leaf containers. Under the
+            // restored semantics every depth-1 container becomes a structural boundary, so a flat
+            // root with 959 wall children lets the layout span grow without bound. Inserting a
+            // single balanced mid-container level keeps every hull's direct-children count in the
+            // same order as the other scenarios while the deeper leaf containers stay transparent.
+            final int midContainerCount = 40;
+            final List<List<NodeSnapshot>> mids = new ArrayList<List<NodeSnapshot>>(midContainerCount);
+            for (int midIndex = 0; midIndex < midContainerCount; midIndex++) {
+                mids.add(new ArrayList<NodeSnapshot>());
+            }
+            for (int leafContainerIndex = 1; leafContainerIndex < enclosureCount; leafContainerIndex++) {
+                final int midIndex = (leafContainerIndex - 1) % midContainerCount;
+                final SourceNodeKey leafContainerKey = SourceNodeKey.transientPath(mapId,
+                    Arrays.asList(Integer.valueOf(1), Integer.valueOf(leafContainerIndex)));
+                mids.get(midIndex).add(NodeSnapshot.of(leafContainerKey,
+                    SafeNodeLabel.of(String.format(Locale.ROOT, "m%02d-e%04d", mapIndex, leafContainerIndex),
+                        String.format(Locale.ROOT, "m%02d-e%04d", mapIndex, leafContainerIndex)),
+                    false, false, false, leavesByEnclosure.get(leafContainerIndex)));
+            }
+            for (int midIndex = 0; midIndex < midContainerCount; midIndex++) {
+                final SourceNodeKey midKey = SourceNodeKey.transientPath(mapId,
+                    Collections.singletonList(Integer.valueOf(1000 + midIndex)));
+                rootChildren.add(NodeSnapshot.of(midKey,
+                    SafeNodeLabel.of(String.format(Locale.ROOT, "m%02d-m%04d", mapIndex, midIndex),
+                        String.format(Locale.ROOT, "m%02d-m%04d", mapIndex, midIndex)),
+                    false, false, false, mids.get(midIndex)));
+            }
+        }
+        else {
+            for (int enclosureIndex = 1; enclosureIndex < enclosureCount; enclosureIndex++) {
+                final SourceNodeKey enclosureKey = SourceNodeKey.transientPath(mapId,
+                    Collections.singletonList(Integer.valueOf(enclosureIndex)));
+                final List<NodeSnapshot> children = leavesByEnclosure.get(enclosureIndex);
+                // Containers are unmarked: under ancestor-boundary derivation they become structural
+                // boundaries at raw depth 1 while their marked leaves project as atomic graph nodes.
+                rootChildren.add(NodeSnapshot.of(enclosureKey,
+                    SafeNodeLabel.of(String.format(Locale.ROOT, "m%02d-e%04d", mapIndex, enclosureIndex),
+                        String.format(Locale.ROOT, "m%02d-e%04d", mapIndex, enclosureIndex)),
+                    false, false, false, children));
+            }
         }
         if (rootChildren.isEmpty()) {
             throw new IllegalStateException("Generated map root must have children");
@@ -683,10 +716,10 @@ public final class GeneratedWorkspace {
                 }
             }
         }
-        final int expectedNodes = 0;
+        final int expectedNodes = sum(scenario.nodesByMap);
         final int expectedEnclosures = expectedBoundaries(scenario, snapshots);
         final int expectedNative = sum(scenario.nativeByMap);
-        final int expectedContainment = 0;
+        final int expectedContainment = expectedNodes;
         final int expectedHierarchy = expectedEnclosures - mapCount;
         if (nodeCount != expectedNodes || enclosureCount != expectedEnclosures
                 || nativeCount != expectedNative || nativeContributors != expectedNative
@@ -701,11 +734,12 @@ public final class GeneratedWorkspace {
         }
         for (int mapIndex = 0; mapIndex < mapCount; mapIndex++) {
             final int expectedBoundaries = expectedBoundariesFor(scenario, snapshots, mapIndex);
-            if (actualNodesByMap[mapIndex] != 0 || actualEnclosuresByMap[mapIndex] != expectedBoundaries) {
-                throw new IllegalStateException("Generated projection boundary allocation does not match "
+            if (actualNodesByMap[mapIndex] != scenario.nodesByMap[mapIndex]
+                    || actualEnclosuresByMap[mapIndex] != expectedBoundaries) {
+                throw new IllegalStateException("Generated projection allocation does not match "
                     + scenario.wireName + " map " + mapIndex + ": nodes=" + actualNodesByMap[mapIndex]
-                    + ", enclosures=" + actualEnclosuresByMap[mapIndex] + ", expected boundaries="
-                    + expectedBoundaries);
+                    + ", enclosures=" + actualEnclosuresByMap[mapIndex] + ", expected nodes="
+                    + scenario.nodesByMap[mapIndex] + ", expected boundaries=" + expectedBoundaries);
             }
         }
         if (scenario == Scenario.SKEWED_REFERENCE) {
@@ -739,22 +773,19 @@ public final class GeneratedWorkspace {
 
     private static int expectedBoundariesFor(final Scenario scenario, final List<MapSnapshot> snapshots,
             final int mapIndex) {
-        int chainedContainers = 0;
+        int boundaries = 1;
         for (final NodeSnapshot child : snapshots.get(mapIndex).root().children()) {
-            if (child.excluded() || child.structuralLeaf()) {
+            if (child.excluded() || child.structuralLeaf() || child.graphGroup()) {
                 continue;
             }
-            int visibleChildren = 0;
             for (final NodeSnapshot grandchild : child.children()) {
                 if (!grandchild.excluded()) {
-                    visibleChildren++;
+                    boundaries++;
+                    break;
                 }
             }
-            if (visibleChildren == 1) {
-                chainedContainers++;
-            }
         }
-        return scenario.nodesByMap[mapIndex] + scenario.enclosuresByMap[mapIndex] - chainedContainers;
+        return boundaries;
     }
 
     static void assertSkewedMapAllocationContract(final Scenario scenario, final int[] actualNodesByMap,
@@ -809,9 +840,13 @@ public final class GeneratedWorkspace {
         }
         final int totalNodes = sum(actualNodesByMap);
         final int totalEnclosures = sum(actualEnclosuresByMap);
-        if (totalNodes != 0 || totalEnclosures != 2805
-                || actualNodesByMap[0] != 0 || actualEnclosuresByMap[0] != 2240) {
-            throw new IllegalStateException("Skewed boundary allocation does not match the reference contract:"
+        // Map 0 keeps its 1600 marked nodes and hosts them inside 40 balanced mid-level boundaries
+        // (the 960 leaf containers stay transparent at raw depth 2); the final map's two documented
+        // empty containers never become boundaries, so the projected total is 279.
+        if (totalNodes != 2000 || totalEnclosures != 279
+                || actualNodesByMap[0] != 1600 || actualEnclosuresByMap[0] != 41
+                || actualNodesByMap[0] * 5 != totalNodes * 4) {
+            throw new IllegalStateException("Skewed boundary allocation does not match the restored contract:"
                 + " nodes=" + Arrays.toString(actualNodesByMap) + ", enclosures="
                 + Arrays.toString(actualEnclosuresByMap));
         }

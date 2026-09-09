@@ -76,8 +76,11 @@ import org.freeplane.plugin.graph.control.GraphWorkspaceHandle;
 import org.freeplane.plugin.graph.control.GraphWorkspaceView;
 import org.freeplane.plugin.graph.control.GraphWorkspaceViewBinding;
 import org.freeplane.plugin.graph.control.GraphWorkspaceViewFactory;
+import org.freeplane.plugin.graph.control.OperationalStatus;
 import org.freeplane.plugin.graph.control.WorkspaceCloseController;
 import org.freeplane.plugin.graph.group.GraphGroupController;
+import org.freeplane.plugin.graph.projection.BoundaryTier;
+import org.freeplane.plugin.graph.projection.EnclosureKey;
 import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.projection.NodeProminence;
 import org.freeplane.plugin.graph.projection.PinProjection;
@@ -86,6 +89,7 @@ import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
 import org.freeplane.plugin.graph.projection.RelationshipResolution;
+import org.freeplane.plugin.graph.projection.input.MapAvailability;
 import org.freeplane.plugin.graph.projection.input.SourceNodeKey;
 import org.freeplane.plugin.graph.command.GraphCommands;
 import org.freeplane.plugin.graph.workspace.GraphCommandResult;
@@ -93,6 +97,7 @@ import org.freeplane.plugin.graph.workspace.ListenerRegistration;
 import org.freeplane.plugin.graph.workspace.io.WorkspaceMigrationRegistry;
 import org.freeplane.plugin.graph.workspace.io.WorkspaceXmlCodec;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
+import org.freeplane.plugin.graph.workspace.model.NodeReference;
 import org.freeplane.plugin.graph.workspace.model.PersistedNodeId;
 import org.freeplane.plugin.graph.workspace.model.RelationshipDirection;
 import org.freeplane.plugin.graph.workspace.model.Viewport;
@@ -177,14 +182,14 @@ public class GraphWorkspaceColdReloadShould {
             GraphWorkspaceIntegrationSupport.awaitProjection(handle, 1);
 
             final List<NodeModel> connectorTargets = new ArrayList<NodeModel>();
-            connectorTargets.add(sourceMap.getRootNode());
             connectorTargets.addAll(actorNodes);
             final List<int[]> connectorPairs = new ArrayList<int[]>();
+            // Connector endpoints resolve only to marked projected nodes, so only actor pairs are
+            // candidates: the map root never becomes a semantic graph endpoint.
             connectorPairs.add(new int[] { 0, 1 });
             connectorPairs.add(new int[] { 1, 2 });
             connectorPairs.add(new int[] { 2, 3 });
             connectorPairs.add(new int[] { 3, 4 });
-            connectorPairs.add(new int[] { 4, 5 });
             final Random connectorRandom = new Random(0xC0FFEE);
             Collections.shuffle(connectorPairs, connectorRandom);
             final RelationshipDirection[] directions = RelationshipDirection.values();
@@ -322,13 +327,13 @@ public class GraphWorkspaceColdReloadShould {
             final GraphCommandResult addMap = handle.execute(GraphCommands.addMap(mapId, sourceMapFile.toUri()));
             assertThat(addMap.status()).isEqualTo(GraphCommandResult.Status.APPLIED);
             GraphWorkspaceIntegrationSupport.awaitCondition(
-                () -> liveHandle.currentProjection().enclosures().size() >= 2, 15000L,
+                () -> liveHandle.currentProjection().nodes().size() >= 1, 15000L,
                 "marked boundary did not appear in the live projection");
 
             freeplane.unmarkAllGroups(Collections.singletonList(child));
 
             GraphWorkspaceIntegrationSupport.awaitCondition(
-                () -> liveHandle.currentProjection().enclosures().size() == 1, 15000L,
+                () -> liveHandle.currentProjection().nodes().isEmpty(), 15000L,
                 "unmarked boundary did not disappear from the live projection");
         }
         finally {
@@ -383,7 +388,7 @@ public class GraphWorkspaceColdReloadShould {
             final GraphCommandResult addMap = handle.execute(GraphCommands.addMap(mapId, aliasMapFile.toUri()));
             assertThat(addMap.status()).isEqualTo(GraphCommandResult.Status.APPLIED);
             GraphWorkspaceIntegrationSupport.awaitCondition(
-                () -> liveHandle.currentProjection().enclosures().size() >= 2, 15000L,
+                () -> liveHandle.currentProjection().nodes().size() >= 1, 15000L,
                 "marked boundary did not appear after the lease-load");
 
             // The editor opens the very same file through the alias path: Freeplane loads a distinct
@@ -394,10 +399,10 @@ public class GraphWorkspaceColdReloadShould {
             freeplane.unmarkAllGroups(Collections.singletonList(editorChild));
 
             GraphWorkspaceIntegrationSupport.awaitCondition(
-                () -> liveHandle.currentProjection().enclosures().size() == 1, 5000L,
+                () -> liveHandle.currentProjection().nodes().isEmpty(), 5000L,
                 "unmarking through a symlinked editor path left the boundary in the projection");
             GraphWorkspaceIntegrationSupport.awaitCondition(
-                () -> views.latestBinding().currentCanvasState().projection().enclosures().size() == 1, 5000L,
+                () -> views.latestBinding().currentCanvasState().projection().nodes().isEmpty(), 5000L,
                 "unmarking through a symlinked editor path left the boundary in the canvas state");
         }
         finally {
@@ -407,6 +412,117 @@ public class GraphWorkspaceColdReloadShould {
                 }
                 catch (RuntimeException ignored) {
                     // The controller shutdown below performs deterministic discard cleanup for a failed close.
+                }
+            }
+            if (controller != null) {
+                try {
+                    controller.shutdown();
+                }
+                catch (RuntimeException ignored) {
+                    // Preserve the original assertion failure while still releasing the headless Freeplane scope.
+                }
+            }
+            freeplane.close();
+        }
+    }
+
+    private static final String ANCESTOR_MARKED_FIXTURE = "<map version=\"freeplane 1.12.15\">\n"
+        + "  <node TEXT=\"multi-map root\" ID=\"ID_ROOT\">\n"
+        + "    <node TEXT=\"level one\" ID=\"ID_L1\">\n"
+        + "      <node TEXT=\"level two\" ID=\"ID_L2\">\n"
+        + "        <node TEXT=\"marked group\" ID=\"ID_MARKED\">\n"
+        + "          <graph_group version=\"1\"/>\n"
+        + "        </node>\n"
+        + "      </node>\n"
+        + "    </node>\n"
+        + "  </node>\n"
+        + "</map>\n";
+
+    private static ProjectedEnclosure enclosure(final GraphProjection projection, final MapReferenceId map,
+            final String sourceId) {
+        final EnclosureKey expected = EnclosureKey.of(SourceNodeKey.persisted(NodeReference.of(map,
+            PersistedNodeId.of(sourceId))));
+        for (ProjectedEnclosure enclosure : projection.enclosures()) {
+            if (enclosure.endpointKeys().contains(expected)) {
+                return enclosure;
+            }
+        }
+        throw new AssertionError("Missing enclosure " + expected);
+    }
+
+    @Test
+    public void unavailableRegistrationKeepsTheAvailableMapEmphaticSubtleAndInteractable() throws Exception {
+        final GraphWorkspaceIntegrationSupport.FreeplaneScope freeplane =
+            new GraphWorkspaceIntegrationSupport.FreeplaneScope();
+        DefaultGraphWorkspaceController controller = null;
+        GraphWorkspaceHandle handle = null;
+        try {
+            final Path sourceMapFile = temporaryFolder.getRoot().toPath().resolve("math-notebook.mm");
+            Files.write(sourceMapFile, ANCESTOR_MARKED_FIXTURE.getBytes(StandardCharsets.UTF_8));
+            freeplane.installGraphGroups();
+
+            final GraphWorkspaceIntegrationSupport.RecordingViewFactory views =
+                new GraphWorkspaceIntegrationSupport.RecordingViewFactory();
+            controller = new DefaultGraphWorkspaceController(freeplane.modeController(), views);
+            final Path workspaceFile = temporaryFolder.getRoot().toPath().resolve("math-notebook.fpg");
+            handle = controller.open(workspaceFile);
+            final GraphWorkspaceHandle liveHandle = handle;
+            final MapReferenceId mapId = MapReferenceId.of(UUID.nameUUIDFromBytes(
+                sourceMapFile.toAbsolutePath().toString().getBytes(StandardCharsets.UTF_8)));
+            final GraphCommandResult addMap = handle.execute(GraphCommands.addMap(mapId, sourceMapFile.toUri()));
+            assertThat(addMap.status()).isEqualTo(GraphCommandResult.Status.APPLIED);
+            final Path missingMapFile = temporaryFolder.getRoot().toPath().resolve("missing-map.mm");
+            final MapReferenceId missingMapId =
+                MapReferenceId.of("00000000-0000-0000-0000-000000000099");
+            final GraphCommandResult addMissing = handle.execute(
+                GraphCommands.addMap(missingMapId, missingMapFile.toUri()));
+            assertThat(addMissing.status()).isEqualTo(GraphCommandResult.Status.APPLIED);
+
+            GraphWorkspaceIntegrationSupport.awaitCondition(
+                () -> liveHandle.currentProjection().enclosures().size() >= 2
+                    && liveHandle.currentProjection().nodes().size() == 1,
+                20000L, "the live projection did not publish the restored ancestor boundary tiers");
+            freeplane.drainAsyncQueues();
+
+            final GraphProjection live = liveHandle.currentProjection();
+            final ProjectedEnclosure liveRoot = enclosure(live, mapId, "ID_ROOT");
+            final ProjectedEnclosure liveLevelOne = enclosure(live, mapId, "ID_L1");
+            assertThat(liveRoot.boundaryTier()).isEqualTo(BoundaryTier.EMPHATIC);
+            assertThat(liveRoot.mapRoot()).isTrue();
+            assertThat(liveLevelOne.boundaryTier()).isEqualTo(BoundaryTier.SUBTLE);
+            assertThat(liveLevelOne.parentHull().get()).isEqualTo(liveRoot.hullKey());
+            assertThat(liveLevelOne.directNodes())
+                .containsExactly(ProjectedNodeKey.of(SourceNodeKey.persisted(NodeReference.of(mapId,
+                    PersistedNodeId.of("ID_MARKED")))));
+            assertThat(live.nodes()).hasSize(1);
+            assertThat(live.nodes().get(0).key().source().persistedReference().get().nodeId().value())
+                .isEqualTo("ID_MARKED");
+            assertThat(live.enclosures()).extracting(ProjectedEnclosure::endpointKeys)
+                .flatExtracting(keys -> keys)
+                .extracting(key -> key.source().persistedReference().get().nodeId().value())
+                .containsExactlyInAnyOrder("ID_ROOT", "ID_L1");
+
+            GraphWorkspaceIntegrationSupport.awaitCondition(
+                () -> GraphWorkspaceIntegrationSupport.rows(views.latestBinding()).stream()
+                    .anyMatch(row -> row.endsWith("|" + MapAvailability.MISSING.name())),
+                20000L, "the unavailable map row never reached the MISSING availability");
+            GraphWorkspaceIntegrationSupport.awaitCondition(
+                () -> views.latestBinding().currentCanvasState() != null
+                    && views.latestBinding().currentCanvasState().status() != OperationalStatus.FAILED
+                    && views.latestBinding().currentCanvasState().generation() == live.generation(),
+                20000L, "the unavailable registration must not block a published canvas state");
+            freeplane.drainAsyncQueues();
+
+            assertThat(views.showCalls()).isGreaterThanOrEqualTo(1);
+            assertThat(views.latestBinding().currentCanvasState().projection()).isEqualTo(live);
+        }
+        finally {
+            if (handle != null) {
+                try {
+                    handle.close();
+                }
+                catch (RuntimeException ignored) {
+                    // The controller shutdown below performs deterministic cleanup for a failed close.
                 }
             }
             if (controller != null) {
@@ -451,7 +567,7 @@ public class GraphWorkspaceColdReloadShould {
             final GraphCommandResult addMap = handle.execute(GraphCommands.addMap(mapId, sourceMapFile.toUri()));
             assertThat(addMap.status()).isEqualTo(GraphCommandResult.Status.APPLIED);
             GraphWorkspaceIntegrationSupport.awaitCondition(
-                () -> liveHandle.currentProjection().enclosures().size() >= 2, 15000L,
+                () -> liveHandle.currentProjection().nodes().size() >= 1, 15000L,
                 "marked boundary did not appear after the lease-load");
 
             // The real editor open path (MMapController.openMap / MFileManager) always loads a fresh,
@@ -461,7 +577,7 @@ public class GraphWorkspaceColdReloadShould {
             freeplane.unmarkAllGroups(Collections.singletonList(editorChild));
 
             GraphWorkspaceIntegrationSupport.awaitCondition(
-                () -> liveHandle.currentProjection().enclosures().size() == 1, 5000L,
+                () -> liveHandle.currentProjection().nodes().isEmpty(), 5000L,
                 "unmarking after a late map open left the boundary in the projection");
         }
         finally {

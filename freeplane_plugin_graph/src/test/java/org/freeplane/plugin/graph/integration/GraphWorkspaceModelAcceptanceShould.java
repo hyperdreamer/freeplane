@@ -210,7 +210,7 @@ public class GraphWorkspaceModelAcceptanceShould {
     }
 
     @Test
-    public void scenario02_projectsOnlyGroupMarkedBoundariesAndKeepsPlainSubtreesHidden()
+    public void scenario02_projectsGroupMarkedNodesAndKeepsPlainSubtreesHidden()
             throws Exception {
         AdapterFixture adapter = new AdapterFixture(temporaryFolder.newFile("scenario02.fpg").toPath());
         try {
@@ -227,22 +227,25 @@ public class GraphWorkspaceModelAcceptanceShould {
             WorkspaceDocument workspace = workspace(registration(MAP_ONE, 1L, true));
             GraphProjection projection = project(workspace, snapshot);
 
-            assertThat(projection.nodes()).isEmpty();
-            assertThat(projection.enclosures()).hasSize(2);
-            assertThat(projection.enclosures().get(0).endpointKeys())
+            assertThat(projection.nodes()).hasSize(1);
+            ProjectedNode groupNode = projection.nodes().get(0);
+            assertThat(groupNode.key()).isEqualTo(ProjectedNodeKey.of(source(MAP_ONE, "ID_GROUP")));
+            assertThat(groupNode.graphGroup()).isTrue();
+            assertThat(groupNode.source().persistedReference().get().nodeId().value())
+                .isEqualTo("ID_GROUP");
+
+            assertThat(projection.enclosures()).hasSize(1);
+            ProjectedEnclosure mapRoot = projection.enclosures().get(0);
+            assertThat(mapRoot.endpointKeys())
                 .containsExactly(EnclosureKey.of(source(MAP_ONE, "ID_ROOT")));
-            assertThat(projection.enclosures().get(0).mapRoot()).isTrue();
-            assertThat(projection.enclosures().get(1).endpointKeys())
-                .containsExactly(EnclosureKey.of(source(MAP_ONE, "ID_GROUP")));
-            assertThat(projection.enclosures().get(1).parentHull().get())
-                .isEqualTo(projection.enclosures().get(0).hullKey());
-            for (ProjectedEnclosure enclosure : projection.enclosures()) {
-                assertThat(enclosure.directNodes()).isEmpty();
-                for (EnclosureKey endpoint : enclosure.endpointKeys()) {
-                    assertThat(endpoint.source().persistedReference().get().nodeId().value())
-                        .isNotIn("ID_GROUP_CHILD", "ID_HIDDEN_CHILD", "ID_VISIBLE_LEAF",
-                            "ID_VISIBLE_PARENT");
-                }
+            assertThat(mapRoot.mapRoot()).isTrue();
+            assertThat(mapRoot.boundaryTier()).isEqualTo(BoundaryTier.SUPPRESSED);
+            assertThat(mapRoot.directNodes()).containsExactly(groupNode.key());
+            assertThat(mapRoot.directEnclosures()).isEmpty();
+            for (ProjectedNode projected : projection.nodes()) {
+                assertThat(projected.source().persistedReference().get().nodeId().value())
+                    .isNotIn("ID_GROUP_CHILD", "ID_HIDDEN_CHILD", "ID_VISIBLE_LEAF",
+                        "ID_VISIBLE_PARENT");
             }
         }
         finally {
@@ -269,15 +272,26 @@ public class GraphWorkspaceModelAcceptanceShould {
             registration(MAP_TWO, 2L, true)), firstMap, secondMap);
 
         ProjectedEnclosure mapRoot = enclosure(projection, MAP_ONE, "root");
-        ProjectedEnclosure first = enclosure(projection, MAP_ONE, "first-interior");
-        ProjectedEnclosure second = enclosure(projection, MAP_ONE, "second-interior");
         GraphGeometry labeled = labelsFor(projection);
 
         assertThat(mapRoot.boundaryTier()).isEqualTo(BoundaryTier.EMPHATIC);
-        assertThat(first.boundaryTier()).isEqualTo(BoundaryTier.SUBTLE);
-        assertThat(second.boundaryTier()).isEqualTo(BoundaryTier.SUBTLE);
+        assertThat(projection.enclosures()).hasSize(2);
+        assertThat(projection.enclosures().get(1).endpointKeys())
+            .containsExactly(EnclosureKey.of(source(MAP_TWO, "second-root")));
+        assertThat(mapRoot.directEnclosures()).isEmpty();
+        assertThat(mapRoot.directNodes()).containsExactly(
+            ProjectedNodeKey.of(source(MAP_ONE, "first-interior")),
+            ProjectedNodeKey.of(source(MAP_ONE, "second-interior")));
+        assertThat(projection.nodes()).extracting(ProjectedNode::key)
+            .containsExactly(
+                ProjectedNodeKey.of(source(MAP_ONE, "first-interior")),
+                ProjectedNodeKey.of(source(MAP_ONE, "second-interior")));
+        assertThat(projection.nodes()).allMatch(ProjectedNode::graphGroup);
+        assertThat(projection.nodes()).extracting(ProjectedNode::label)
+            .extracting(SafeNodeLabel::displayText)
+            .containsExactlyInAnyOrder("First interior", "Second interior");
         assertThat(labeled.labels().values()).extracting(LabelPlacement::displayText)
-            .containsExactlyInAnyOrder("Map fixture", "First interior", "Second interior", "Second root");
+            .containsExactlyInAnyOrder("Map fixture", "Second root");
         assertThat(labeled.labels().values()).filteredOn(placement -> "Map fixture".equals(placement.displayText()))
             .extracting(LabelPlacement::mode).containsExactly(LabelPlacement.Mode.INTERIOR);
         assertThat(labeled.labels().values()).filteredOn(placement -> !"Map fixture".equals(placement.displayText()))
@@ -285,7 +299,7 @@ public class GraphWorkspaceModelAcceptanceShould {
     }
 
     @Test
-    public void scenario04_nestedMarkersProjectNestedBoundaries() {
+    public void scenario04_nestedMarkersAtomizeTheOuterAndPromoteInnerWhenOuterIsPlain() {
         NodeSnapshot innerLeaf = node(MAP_ONE, "inner-leaf", "Inner leaf", true, false, false);
         NodeSnapshot inner = node(MAP_ONE, "inner", "Inner group", false, true, false, innerLeaf);
         NodeSnapshot outerLeaf = node(MAP_ONE, "outer-leaf", "Outer leaf", true, false, false);
@@ -294,22 +308,33 @@ public class GraphWorkspaceModelAcceptanceShould {
         WorkspaceDocument workspace = workspace(registration(MAP_ONE, 1L, true));
 
         GraphProjection outerActive = project(workspace, map(MAP_ONE, 1, "Map", root));
-        assertThat(outerActive.nodes()).isEmpty();
-        assertThat(outerActive.enclosures()).hasSize(3);
-        assertThat(outerActive.enclosures().get(1).endpointKeys())
-            .containsExactly(EnclosureKey.of(source(MAP_ONE, "outer")));
-        assertThat(outerActive.enclosures().get(2).endpointKeys())
-            .containsExactly(EnclosureKey.of(source(MAP_ONE, "inner")));
-        assertThat(outerActive.enclosures().get(2).parentHull().get())
-            .isEqualTo(outerActive.enclosures().get(1).hullKey());
+        assertThat(outerActive.nodes()).hasSize(1);
+        assertThat(outerActive.nodes().get(0).key()).isEqualTo(ProjectedNodeKey.of(source(MAP_ONE, "outer")));
+        assertThat(outerActive.nodes().get(0).graphGroup()).isTrue();
+        assertThat(outerActive.enclosures()).hasSize(1);
+        assertThat(outerActive.enclosures().get(0).endpointKeys())
+            .containsExactly(EnclosureKey.of(source(MAP_ONE, "root")));
+        assertThat(outerActive.enclosures().get(0).directNodes())
+            .containsExactly(ProjectedNodeKey.of(source(MAP_ONE, "outer")));
+        for (ProjectedNode projected : outerActive.nodes()) {
+            assertThat(projected.source().persistedReference().get().nodeId().value())
+                .isNotIn("inner", "inner-leaf", "outer-leaf");
+        }
 
         NodeSnapshot unmarkedOuter = node(MAP_ONE, "outer", "Outer group", false, false, false, inner,
             outerLeaf);
         GraphProjection innerReactivated = project(workspace,
             map(MAP_ONE, 1, "Map", node(MAP_ONE, "root", "Root", false, false, false, unmarkedOuter)));
+        assertThat(innerReactivated.nodes()).hasSize(1);
+        assertThat(innerReactivated.nodes().get(0).key()).isEqualTo(ProjectedNodeKey.of(source(MAP_ONE, "inner")));
+        assertThat(innerReactivated.nodes().get(0).graphGroup()).isTrue();
         assertThat(innerReactivated.enclosures()).hasSize(2);
         assertThat(innerReactivated.enclosures().get(1).endpointKeys())
-            .containsExactly(EnclosureKey.of(source(MAP_ONE, "inner")));
+            .containsExactly(EnclosureKey.of(source(MAP_ONE, "outer")));
+        assertThat(innerReactivated.enclosures().get(1).boundaryTier())
+            .isEqualTo(BoundaryTier.EMPHATIC);
+        assertThat(innerReactivated.enclosures().get(1).directNodes())
+            .containsExactly(ProjectedNodeKey.of(source(MAP_ONE, "inner")));
         assertThat(innerReactivated.enclosures().get(1).parentHull().get())
             .isEqualTo(innerReactivated.enclosures().get(0).hullKey());
     }
@@ -349,7 +374,7 @@ public class GraphWorkspaceModelAcceptanceShould {
     }
 
     @Test
-    public void scenario07_omitsConnectorsCollapsedInsideAnActiveGroup() {
+    public void scenario07_omitsConnectorsResolvedInsideAnAtomicGroupNode() {
         NodeSnapshot descendant = node(MAP_ONE, "descendant", "Descendant", true, false, false);
         NodeSnapshot group = node(MAP_ONE, "group", "Group", false, true, false, descendant);
         MapSnapshot snapshot = map(MAP_ONE, 1, "Map", node(MAP_ONE, "root", "Root", false, false, false,
@@ -358,10 +383,13 @@ public class GraphWorkspaceModelAcceptanceShould {
 
         GraphProjection projection = project(workspace(registration(MAP_ONE, 1L, true)), snapshot);
 
-        assertThat(projection.nodes()).isEmpty();
-        assertThat(projection.enclosures()).hasSize(2);
-        assertThat(projection.enclosures().get(1).endpointKeys())
-            .containsExactly(EnclosureKey.of(source(MAP_ONE, "group")));
+        assertThat(projection.nodes()).hasSize(1);
+        assertThat(projection.nodes().get(0).key()).isEqualTo(ProjectedNodeKey.of(source(MAP_ONE, "group")));
+        assertThat(projection.enclosures()).hasSize(1);
+        assertThat(projection.enclosures().get(0).endpointKeys())
+            .containsExactly(EnclosureKey.of(source(MAP_ONE, "root")));
+        assertThat(projection.enclosures().get(0).directNodes())
+            .containsExactly(ProjectedNodeKey.of(source(MAP_ONE, "group")));
         assertThat(projection.edges()).isEmpty();
         assertThat(snapshot.connectors()).hasSize(1);
     }
@@ -374,8 +402,10 @@ public class GraphWorkspaceModelAcceptanceShould {
         WorkspaceDocument active = workspace(Arrays.asList(registration(MAP_ONE, 1L, true),
             registration(MAP_TWO, 2L, true)), Collections.singletonList(relationship),
             Collections.<PinRecord>emptyList());
-        MapSnapshot firstMap = map(MAP_ONE, 1, "First", node(MAP_ONE, "first", "First", true, false, false));
-        MapSnapshot secondMap = map(MAP_TWO, 2, "Second", node(MAP_TWO, "second", "Second", true, false, false));
+        MapSnapshot firstMap = map(MAP_ONE, 1, "First", node(MAP_ONE, "first-root", "First", false, false,
+            false, node(MAP_ONE, "first", "First", true, true, false)));
+        MapSnapshot secondMap = map(MAP_TWO, 2, "Second", node(MAP_TWO, "second-root", "Second", false, false,
+            false, node(MAP_TWO, "second", "Second", true, true, false)));
 
         GraphProjection initiallyActive = project(active, availability(active, MapAvailability.AVAILABLE,
             MapAvailability.AVAILABLE), firstMap, secondMap);
@@ -410,7 +440,8 @@ public class GraphWorkspaceModelAcceptanceShould {
         NodeSnapshot grouped = node(MAP_ONE, "group", "Group", false, true, false, child);
         MapSnapshot firstGrouped = map(MAP_ONE, 1, "First", node(MAP_ONE, "root", "Root", false, false, false,
             grouped));
-        MapSnapshot target = map(MAP_TWO, 2, "Second", node(MAP_TWO, "target", "Target", true, false, false));
+        MapSnapshot target = map(MAP_TWO, 2, "Second", node(MAP_TWO, "target-root", "Second", false, false,
+            false, node(MAP_TWO, "target", "Target", true, true, false)));
 
         GraphProjection groupedProjection = project(workspace, availability(workspace, MapAvailability.AVAILABLE,
             MapAvailability.AVAILABLE), firstGrouped, target);
@@ -421,8 +452,8 @@ public class GraphWorkspaceModelAcceptanceShould {
 
         ProjectedEndpointKey groupedSource =
             groupedProjection.edges().get(0).contributors().get(0).projectedSource();
-        assertThat(groupedSource.isEnclosure()).isTrue();
-        assertThat(groupedSource.enclosure()).contains(EnclosureKey.of(source(MAP_ONE, "group")));
+        assertThat(groupedSource.isNode()).isTrue();
+        assertThat(groupedSource.node()).contains(ProjectedNodeKey.of(source(MAP_ONE, "group")));
         assertThat(ungroupedProjection.edges()).isEmpty();
         assertThat(ungroupedProjection.relationshipResolutions().get(0).status())
             .isEqualTo(RelationshipStatus.UNRESOLVED_RECOVERABLE);
@@ -450,10 +481,8 @@ public class GraphWorkspaceModelAcceptanceShould {
                     false, node(MAP_ONE, "pinned", "Pinned", true, true, false),
                     node(MAP_ONE, "neighbor", "Neighbor", true, true, false)));
                 GraphProjection projection = project(reopened.currentDocument(), snapshot);
-                EnclosureHullKey pinnedHull = EnclosureHullKey.of(Collections.singletonList(
-                    EnclosureKey.of(source(MAP_ONE, "pinned"))));
-                EnclosureHullKey neighborHull = EnclosureHullKey.of(Collections.singletonList(
-                    EnclosureKey.of(source(MAP_ONE, "neighbor"))));
+                ProjectedNodeKey pinnedKey = ProjectedNodeKey.of(source(MAP_ONE, "pinned"));
+                ProjectedNodeKey neighborKey = ProjectedNodeKey.of(source(MAP_ONE, "neighbor"));
 
                 assertThat(projection.pins()).hasSize(1);
                 assertThat(projection.pins().get(0).active()).isTrue();
@@ -465,9 +494,9 @@ public class GraphWorkspaceModelAcceptanceShould {
                     LayoutFrame applied = layout.apply(request);
                     LayoutFrame settled = layout.step();
 
-                    assertThat(applied.positions().anchors()).containsKeys(pinnedHull, neighborHull);
-                    assertThat(settled.positions().anchors()).containsKeys(pinnedHull, neighborHull);
-                    assertThat(applied.positions().anchors().values())
+                    assertThat(applied.positions().nodes()).containsKeys(pinnedKey, neighborKey);
+                    assertThat(settled.positions().nodes()).containsKeys(pinnedKey, neighborKey);
+                    assertThat(applied.positions().nodes().values())
                         .allMatch(point -> Double.isFinite(point.x()) && Double.isFinite(point.y()));
                 }
             }
@@ -506,7 +535,7 @@ public class GraphWorkspaceModelAcceptanceShould {
     }
 
     @Test
-    public void scenario18_suppressesTheOnlyMapRootAndPromotesItsFirstLevelBoundaries() {
+    public void scenario18_suppressesTheOnlyMapRootAndHostsFirstLevelGroupNodes() {
         NodeSnapshot root = node(MAP_ONE, "root", "Root", false, false, false,
             node(MAP_ONE, "left", "Left", false, true, false,
                 node(MAP_ONE, "left-leaf", "Left leaf", true, false, false)),
@@ -515,16 +544,30 @@ public class GraphWorkspaceModelAcceptanceShould {
         GraphProjection projection = project(workspace(registration(MAP_ONE, 1L, true)),
             map(MAP_ONE, 1, "Map", root));
 
-        assertThat(enclosure(projection, MAP_ONE, "root").boundaryTier()).isEqualTo(BoundaryTier.SUPPRESSED);
-        assertThat(enclosure(projection, MAP_ONE, "left").boundaryTier()).isEqualTo(BoundaryTier.EMPHATIC);
-        assertThat(enclosure(projection, MAP_ONE, "right").boundaryTier()).isEqualTo(BoundaryTier.EMPHATIC);
+        assertThat(projection.enclosures()).hasSize(1);
+        ProjectedEnclosure mapRoot = enclosure(projection, MAP_ONE, "root");
+        assertThat(mapRoot.boundaryTier()).isEqualTo(BoundaryTier.SUPPRESSED);
+        assertThat(mapRoot.mapRoot()).isTrue();
+        assertThat(mapRoot.directEnclosures()).isEmpty();
+        assertThat(mapRoot.directNodes()).containsExactly(
+            ProjectedNodeKey.of(source(MAP_ONE, "left")),
+            ProjectedNodeKey.of(source(MAP_ONE, "right")));
+        assertThat(projection.nodes()).extracting(ProjectedNode::key)
+            .containsExactly(
+                ProjectedNodeKey.of(source(MAP_ONE, "left")),
+                ProjectedNodeKey.of(source(MAP_ONE, "right")));
+        assertThat(projection.nodes()).allMatch(ProjectedNode::graphGroup);
+        for (ProjectedNode projected : projection.nodes()) {
+            assertThat(projected.source().persistedReference().get().nodeId().value())
+                .isNotIn("left-leaf", "right-leaf");
+        }
     }
 
     @Test
     public void scenario19_secondActiveMapRestylesWithoutLoadingOrMissingFlicker() {
         NodeSnapshot firstRoot = node(MAP_ONE, "root", "Root", false, false, false,
             node(MAP_ONE, "first-branch", "First branch", false, true, false,
-                node(MAP_ONE, "first-leaf", "First leaf", true, true, false)),
+                node(MAP_ONE, "first-leaf", "First leaf", true, false, false)),
             node(MAP_ONE, "second-branch", "Second branch", false, true, false,
                 node(MAP_ONE, "second-leaf", "Second leaf", true, false, false)));
         MapSnapshot firstMap = map(MAP_ONE, 1, "First", firstRoot);
@@ -532,7 +575,7 @@ public class GraphWorkspaceModelAcceptanceShould {
             node(MAP_TWO, "second-root", "Second root", false, false, false,
                 node(MAP_TWO, "second-child", "Second child", true, true, false)));
         GraphRelationshipRecord crossMapRelationship = relationship(2L, reference(MAP_ONE, "first-leaf"),
-            reference(MAP_TWO, "second-root"), RelationshipDirection.FORWARD);
+            reference(MAP_TWO, "second-child"), RelationshipDirection.FORWARD);
         PinRecord secondMapPin = PinRecord.of(reference(MAP_TWO, "second-child"), 32.0, -18.0, noUnknownXml());
         WorkspaceDocument oneMap = workspace(registration(MAP_ONE, 1L, true));
         WorkspaceDocument twoMaps = workspace(Arrays.asList(registration(MAP_ONE, 1L, true),
@@ -548,48 +591,57 @@ public class GraphWorkspaceModelAcceptanceShould {
             MapAvailability.MISSING), firstMap, secondMap);
 
         assertThat(enclosure(single, MAP_ONE, "root").boundaryTier()).isEqualTo(BoundaryTier.SUPPRESSED);
-        assertThat(enclosure(single, MAP_ONE, "first-branch").boundaryTier()).isEqualTo(BoundaryTier.EMPHATIC);
+        assertThat(single.nodes()).extracting(ProjectedNode::key)
+            .containsExactly(
+                ProjectedNodeKey.of(source(MAP_ONE, "first-branch")),
+                ProjectedNodeKey.of(source(MAP_ONE, "second-branch")));
         assertThat(enclosure(active, MAP_ONE, "root").boundaryTier()).isEqualTo(BoundaryTier.EMPHATIC);
-        assertThat(enclosure(active, MAP_ONE, "first-branch").boundaryTier()).isEqualTo(BoundaryTier.SUBTLE);
+        assertThat(enclosure(active, MAP_TWO, "second-root").boundaryTier()).isEqualTo(BoundaryTier.EMPHATIC);
         assertThat(enclosure(loading, MAP_ONE, "root").boundaryTier()).isEqualTo(BoundaryTier.EMPHATIC);
-        assertThat(enclosure(loading, MAP_ONE, "first-branch").boundaryTier()).isEqualTo(BoundaryTier.SUBTLE);
         assertThat(enclosure(missing, MAP_ONE, "root").boundaryTier()).isEqualTo(BoundaryTier.EMPHATIC);
-        assertThat(enclosure(missing, MAP_ONE, "first-branch").boundaryTier()).isEqualTo(BoundaryTier.SUBTLE);
         assertThat(active.relationshipResolutions()).hasSize(1);
         assertThat(active.relationshipResolutions().get(0).status()).isEqualTo(RelationshipStatus.ACTIVE);
         assertThat(active.edges()).hasSize(1);
-        assertThat(active.nodes()).isEmpty();
-        assertThat(active.enclosures()).extracting(ProjectedEnclosure::endpointKeys)
-            .flatExtracting(keys -> keys)
-            .extracting(key -> key.source().persistedReference().get().nodeId().value())
-            .contains("second-child");
-        assertThat(enclosure(active, MAP_TWO, "second-root").directNodes()).isEmpty();
-        assertThat(enclosure(active, MAP_TWO, "second-root").directEnclosures())
-            .containsExactly(EnclosureHullKey.of(Collections.singletonList(
-                EnclosureKey.of(source(MAP_TWO, "second-child")))));
+        assertThat(active.nodes()).extracting(ProjectedNode::key)
+            .containsExactlyInAnyOrder(
+                ProjectedNodeKey.of(source(MAP_ONE, "first-branch")),
+                ProjectedNodeKey.of(source(MAP_ONE, "second-branch")),
+                ProjectedNodeKey.of(source(MAP_TWO, "second-child")));
+        assertThat(active.enclosures()).hasSize(2);
+        assertThat(enclosure(active, MAP_TWO, "second-root").directNodes())
+            .containsExactly(ProjectedNodeKey.of(source(MAP_TWO, "second-child")));
+        assertThat(enclosure(active, MAP_TWO, "second-root").directEnclosures()).isEmpty();
         assertThat(active.pins()).hasSize(1);
         PinProjection activeSecondMapPin = active.pins().get(0);
         assertThat(activeSecondMapPin.source()).isEqualTo(reference(MAP_TWO, "second-child"));
         assertThat(activeSecondMapPin.active()).isTrue();
         assertThat(activeSecondMapPin.projectedNode())
             .contains(ProjectedNodeKey.of(source(MAP_TWO, "second-child")));
+        assertThat(loading.nodes()).extracting(ProjectedNode::key)
+            .containsExactly(
+                ProjectedNodeKey.of(source(MAP_ONE, "first-branch")),
+                ProjectedNodeKey.of(source(MAP_ONE, "second-branch")));
         assertThat(loading.relationshipResolutions()).hasSize(1);
         assertThat(loading.relationshipResolutions().get(0).status())
             .isEqualTo(RelationshipStatus.UNRESOLVED_RECOVERABLE);
         assertThat(loading.relationshipResolutions().get(0).recoverableReasons())
             .containsExactly(RecoverableReason.MAP_LOADING);
         assertThat(loading.relationshipResolutions().get(0).source())
-            .contains(ProjectedEndpointKey.ofEnclosure(EnclosureKey.of(source(MAP_ONE, "first-leaf"))));
+            .contains(ProjectedEndpointKey.ofNode(ProjectedNodeKey.of(source(MAP_ONE, "first-branch"))));
         assertThat(loading.relationshipResolutions().get(0).target()).isNotPresent();
         assertThat(loading.edges()).isEmpty();
         assertUnavailableMapAbsent(loading, MAP_TWO, secondMapPin);
+        assertThat(missing.nodes()).extracting(ProjectedNode::key)
+            .containsExactly(
+                ProjectedNodeKey.of(source(MAP_ONE, "first-branch")),
+                ProjectedNodeKey.of(source(MAP_ONE, "second-branch")));
         assertThat(missing.relationshipResolutions()).hasSize(1);
         assertThat(missing.relationshipResolutions().get(0).status())
             .isEqualTo(RelationshipStatus.UNRESOLVED_RECOVERABLE);
         assertThat(missing.relationshipResolutions().get(0).recoverableReasons())
             .containsExactly(RecoverableReason.MAP_MISSING);
         assertThat(missing.relationshipResolutions().get(0).source())
-            .contains(ProjectedEndpointKey.ofEnclosure(EnclosureKey.of(source(MAP_ONE, "first-leaf"))));
+            .contains(ProjectedEndpointKey.ofNode(ProjectedNodeKey.of(source(MAP_ONE, "first-branch"))));
         assertThat(missing.relationshipResolutions().get(0).target()).isNotPresent();
         assertThat(missing.edges()).isEmpty();
         assertUnavailableMapAbsent(missing, MAP_TWO, secondMapPin);
@@ -607,18 +659,22 @@ public class GraphWorkspaceModelAcceptanceShould {
 
             MapSnapshot collapsedSnapshot = clones.snapshot();
             GraphProjection collapsed = project(clones.workspace(), collapsedSnapshot);
-            assertThat(collapsed.nodes()).isEmpty();
-            assertThat(collapsed.enclosures()).hasSize(3);
-            assertThat(collapsed.enclosures().get(1).endpointKeys())
-                .containsExactly(EnclosureKey.of(source(MAP_ONE, "ID_CLONE_ONE")));
-            assertThat(collapsed.enclosures().get(2).endpointKeys())
-                .containsExactly(EnclosureKey.of(source(MAP_ONE, "ID_CLONE_TWO")));
-            for (ProjectedEnclosure enclosure : collapsed.enclosures()) {
-                assertThat(enclosure.directNodes()).isEmpty();
-                for (EnclosureKey endpoint : enclosure.endpointKeys()) {
-                    assertThat(endpoint.source().persistedReference().get().nodeId().value())
-                        .isNotIn("ID_CLONE_ONE_CHILD", "ID_CLONE_TWO_CHILD");
-                }
+            assertThat(collapsed.nodes()).hasSize(2);
+            assertThat(collapsed.nodes()).extracting(ProjectedNode::key)
+                .containsExactly(
+                    ProjectedNodeKey.of(source(MAP_ONE, "ID_CLONE_ONE")),
+                    ProjectedNodeKey.of(source(MAP_ONE, "ID_CLONE_TWO")));
+            assertThat(collapsed.enclosures()).hasSize(1);
+            assertThat(collapsed.enclosures().get(0).endpointKeys())
+                .containsExactly(EnclosureKey.of(source(MAP_ONE, "ID_ROOT")));
+            assertThat(collapsed.enclosures().get(0).directNodes())
+                .containsExactly(
+                    ProjectedNodeKey.of(source(MAP_ONE, "ID_CLONE_ONE")),
+                    ProjectedNodeKey.of(source(MAP_ONE, "ID_CLONE_TWO")));
+            assertThat(collapsed.enclosures().get(0).directEnclosures()).isEmpty();
+            for (ProjectedNode projected : collapsed.nodes()) {
+                assertThat(projected.source().persistedReference().get().nodeId().value())
+                    .isNotIn("ID_CLONE_ONE_CHILD", "ID_CLONE_TWO_CHILD");
             }
 
             clones.mark(false);
@@ -759,6 +815,90 @@ public class GraphWorkspaceModelAcceptanceShould {
         assertThat(maximumAlpha(active)).isEqualTo(255);
         assertThat(maximumAlpha(inactive)).isGreaterThan(0).isLessThan(255);
         assertThat(nonTransparentPixelCount(inactive)).isGreaterThan(0);
+    }
+
+    @Test
+    public void scenario30_mathNotebookAncestorBoundariesProjectGroupsHullsAndGeometry() {
+        NodeSnapshot extensionality = node(MAP_ONE, "ext", "Extensionality", true, true, false);
+        NodeSnapshot pairing = node(MAP_ONE, "pair", "Pairing", true, true, false);
+        NodeSnapshot union = node(MAP_ONE, "union", "Union", true, true, false);
+        NodeSnapshot axioms = node(MAP_ONE, "axioms", "Axioms", false, false, false,
+            extensionality, pairing, union);
+        NodeSnapshot russell = node(MAP_ONE, "russell", "Russell Theorem", true, true, false);
+        NodeSnapshot definitions = node(MAP_ONE, "defs", "Basic Definitions and Theorems", false, false,
+            false, russell);
+        NodeSnapshot zfc = node(MAP_ONE, "zfc", "ZFC", false, false, false, axioms, definitions);
+        NodeSnapshot root = node(MAP_ONE, "root", "Root", false, false, false, zfc);
+        MapSnapshot snapshot = map(MAP_ONE, 1, "Math notebook", root).withConnectors(
+            Collections.singletonList(connector(0, MAP_ONE, "union", "russell", false, true)));
+
+        GraphProjection projection = project(workspace(registration(MAP_ONE, 1L, true)), snapshot);
+
+        assertThat(projection.nodes()).hasSize(4);
+        assertThat(projection.nodes()).extracting(ProjectedNode::key)
+            .containsExactly(
+                ProjectedNodeKey.of(source(MAP_ONE, "ext")),
+                ProjectedNodeKey.of(source(MAP_ONE, "pair")),
+                ProjectedNodeKey.of(source(MAP_ONE, "union")),
+                ProjectedNodeKey.of(source(MAP_ONE, "russell")));
+
+        assertThat(projection.enclosures()).hasSize(4);
+        ProjectedEnclosure mapRoot = enclosure(projection, MAP_ONE, "root");
+        ProjectedEnclosure zfcHull = enclosure(projection, MAP_ONE, "zfc");
+        ProjectedEnclosure axiomsHull = enclosure(projection, MAP_ONE, "axioms");
+        ProjectedEnclosure definitionsHull = enclosure(projection, MAP_ONE, "defs");
+
+        assertThat(mapRoot.boundaryTier()).isEqualTo(BoundaryTier.SUPPRESSED);
+        assertThat(zfcHull.boundaryTier()).isEqualTo(BoundaryTier.EMPHATIC);
+        assertThat(axiomsHull.boundaryTier()).isEqualTo(BoundaryTier.SUBTLE);
+        assertThat(definitionsHull.boundaryTier()).isEqualTo(BoundaryTier.SUBTLE);
+        assertThat(zfcHull.parentHull().get()).isEqualTo(mapRoot.hullKey());
+        assertThat(axiomsHull.parentHull().get()).isEqualTo(zfcHull.hullKey());
+        assertThat(definitionsHull.parentHull().get()).isEqualTo(zfcHull.hullKey());
+        assertThat(mapRoot.directEnclosures()).containsExactly(zfcHull.hullKey());
+        assertThat(zfcHull.directEnclosures()).containsExactly(axiomsHull.hullKey(), definitionsHull.hullKey());
+        assertThat(axiomsHull.directNodes()).containsExactly(
+            ProjectedNodeKey.of(source(MAP_ONE, "ext")),
+            ProjectedNodeKey.of(source(MAP_ONE, "pair")),
+            ProjectedNodeKey.of(source(MAP_ONE, "union")));
+        assertThat(definitionsHull.directNodes())
+            .containsExactly(ProjectedNodeKey.of(source(MAP_ONE, "russell")));
+
+        try (LayoutEngine layout = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
+            LayoutRequest request = LayoutRequest.of(WORKSPACE, projection,
+                ProjectionDiff.between(projection, projection), projection.pins());
+            LayoutFrame applied = layout.apply(request);
+            LayoutFrame settled = layout.step();
+
+            assertThat(applied.positions().nodes()).containsKeys(
+                ProjectedNodeKey.of(source(MAP_ONE, "ext")),
+                ProjectedNodeKey.of(source(MAP_ONE, "pair")),
+                ProjectedNodeKey.of(source(MAP_ONE, "union")),
+                ProjectedNodeKey.of(source(MAP_ONE, "russell")));
+            assertThat(settled.positions().nodes()).containsKeys(
+                ProjectedNodeKey.of(source(MAP_ONE, "ext")),
+                ProjectedNodeKey.of(source(MAP_ONE, "pair")),
+                ProjectedNodeKey.of(source(MAP_ONE, "union")),
+                ProjectedNodeKey.of(source(MAP_ONE, "russell")));
+            assertThat(applied.positions().anchors()).containsKeys(mapRoot.hullKey(), zfcHull.hullKey(),
+                axiomsHull.hullKey(), definitionsHull.hullKey());
+            assertThat(settled.positions().anchors()).containsKeys(mapRoot.hullKey(), zfcHull.hullKey(),
+                axiomsHull.hullKey(), definitionsHull.hullKey());
+            assertThat(applied.positions().nodes().values())
+                .allMatch(point -> Double.isFinite(point.x()) && Double.isFinite(point.y()));
+            assertThat(applied.positions().anchors().values())
+                .allMatch(point -> Double.isFinite(point.x()) && Double.isFinite(point.y()));
+        }
+
+        assertThat(projection.edges()).hasSize(1);
+        ProjectedEdge theoremEdge = projection.edges().get(0);
+        // Edge endpoints are stored in canonical (sorted) order and resolve only to marked group nodes.
+        assertThat(theoremEdge.first().isNode()).isTrue();
+        assertThat(theoremEdge.first().node()).contains(ProjectedNodeKey.of(source(MAP_ONE, "russell")));
+        assertThat(theoremEdge.second().isNode()).isTrue();
+        assertThat(theoremEdge.second().node()).contains(ProjectedNodeKey.of(source(MAP_ONE, "union")));
+        assertThat(theoremEdge.contributors()).hasSize(1);
+        assertThat(theoremEdge.contributors().get(0).connectorDescriptor()).isPresent();
     }
 
     private static WorkspaceDocument workspace(final MapReference... registrations) {

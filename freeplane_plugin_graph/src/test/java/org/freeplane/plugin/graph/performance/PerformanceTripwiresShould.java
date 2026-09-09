@@ -164,9 +164,12 @@ public class PerformanceTripwiresShould {
         for (GeneratedWorkspace.Scenario scenario : GeneratedWorkspace.Scenario.values()) {
             GeneratedWorkspace workspace = GeneratedWorkspace.forScenario(scenario);
             assertThat(workspace.mapCount()).isEqualTo(scenario.mapCount());
-            assertThat(workspace.nodeCount()).isZero();
+            assertThat(workspace.nodeCount()).isEqualTo(sum(scenario.nodesByMap()));
             assertThat(workspace.enclosureCount()).isEqualTo(
                 GeneratedWorkspace.expectedBoundaryCount(scenario, workspace.snapshots()));
+            assertThat(workspace.containmentLinkCount()).isEqualTo(sum(scenario.nodesByMap()));
+            assertThat(workspace.hierarchyLinkCount()).isEqualTo(
+                GeneratedWorkspace.expectedBoundaryCount(scenario, workspace.snapshots()) - scenario.mapCount());
             assertThat(workspace.nativeContributorCount()).isEqualTo(sum(scenario.nativeContributorsByMap()));
             assertThat(workspace.relationshipCount()).isEqualTo(
                 scenario == GeneratedWorkspace.Scenario.SKEWED_REFERENCE
@@ -177,20 +180,14 @@ public class PerformanceTripwiresShould {
     }
 
     @Test
-    public void labelEveryGeneratedProjectedBoundaryFromItsPersistedIdentifier() {
+    public void labelEveryGeneratedProjectedNodeFromItsPersistedIdentifier() {
         for (GeneratedWorkspace.Scenario scenario : GeneratedWorkspace.Scenario.values()) {
             GeneratedWorkspace workspace = GeneratedWorkspace.forScenario(scenario);
-            for (ProjectedEnclosure enclosure : workspace.projection().enclosures()) {
-                for (EnclosureKey endpoint : enclosure.endpointKeys()) {
-                    if (!endpoint.source().persistent()) {
-                        continue;
-                    }
-                    NodeReference persistedReference = endpoint.source().persistedReference().get();
-                    assertThat(enclosure.labels()).extracting(SafeNodeLabel::fullText)
-                        .contains("node-full-" + persistedReference.nodeId().value());
-                    assertThat(enclosure.labels()).extracting(SafeNodeLabel::displayText)
-                        .contains("node-" + persistedReference.nodeId().value());
-                }
+            for (ProjectedNode node : workspace.projection().nodes()) {
+                assertThat(node.source().persistent()).isTrue();
+                NodeReference persistedReference = node.source().persistedReference().get();
+                assertThat(node.label().fullText()).isEqualTo("node-full-" + persistedReference.nodeId().value());
+                assertThat(node.label().displayText()).isEqualTo("node-" + persistedReference.nodeId().value());
             }
         }
     }
@@ -363,13 +360,13 @@ public class PerformanceTripwiresShould {
     public void generateTheReferenceStructuralCounts() {
         GeneratedWorkspace workspace = GeneratedWorkspace.forScenario("reference-2000-5000");
         assertThat(workspace.mapCount()).isEqualTo(20);
-        assertThat(workspace.nodeCount()).isZero();
-        assertThat(workspace.enclosureCount()).isEqualTo(2800);
+        assertThat(workspace.nodeCount()).isEqualTo(2000);
+        assertThat(workspace.enclosureCount()).isEqualTo(1200);
         assertThat(workspace.nativeContributorCount()).isEqualTo(3500);
         assertThat(workspace.relationshipCount()).isEqualTo(1500);
-        assertThat(workspace.containmentLinkCount()).isZero();
-        assertThat(workspace.hierarchyLinkCount()).isEqualTo(2780);
-        assertThat(workspace.particleCount()).isEqualTo(2800);
-        assertThat(workspace.springCount()).isEqualTo(7780);
+        assertThat(workspace.containmentLinkCount()).isEqualTo(2000);
+        assertThat(workspace.hierarchyLinkCount()).isEqualTo(1180);
+        assertThat(workspace.particleCount()).isEqualTo(3200);
+        assertThat(workspace.springCount()).isEqualTo(8180);
     }
 }

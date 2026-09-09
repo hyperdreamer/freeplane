@@ -10,10 +10,15 @@ import static org.mockito.Mockito.when;
 import java.net.URI;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.EnumSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
@@ -34,11 +39,16 @@ import org.freeplane.plugin.graph.adapter.MapLeaseManager;
 import org.freeplane.plugin.graph.adapter.MapOperationalState;
 import org.freeplane.plugin.graph.adapter.MapSnapshotFactory;
 import org.freeplane.plugin.graph.geometry.GraphGeometryEngine;
+import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.layout.LayoutFrame;
 import org.freeplane.plugin.graph.layout.LayoutRequest;
 import org.freeplane.plugin.graph.layout.PerceptualIdlePolicy;
+import org.freeplane.plugin.graph.projection.BoundaryTier;
+import org.freeplane.plugin.graph.projection.EnclosureHullKey;
+import org.freeplane.plugin.graph.projection.EnclosureKey;
 import org.freeplane.plugin.graph.projection.GraphProjection;
+import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectionEngine;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
@@ -54,6 +64,7 @@ import org.freeplane.plugin.graph.workspace.model.MapReference;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 import org.freeplane.plugin.graph.workspace.model.NodeReference;
 import org.freeplane.plugin.graph.workspace.model.PersistedNodeId;
+import org.freeplane.plugin.graph.workspace.model.PinRecord;
 import org.freeplane.plugin.graph.workspace.model.UnknownXml;
 import org.freeplane.plugin.graph.workspace.model.WorkspaceDocument;
 import org.freeplane.plugin.graph.workspace.model.WorkspaceId;
@@ -909,6 +920,159 @@ public class GraphUpdateCoordinatorShould {
         }
     }
 
+    @Test
+    public void replacementProjectionRetainsMarkedKeysPinsAndTiersAndDropsTheRemovedHull() {
+        final ImmediateEdt edt = new ImmediateEdt();
+        final TestScheduler scheduler = new TestScheduler();
+        final GraphUpdateCoordinator[] holder = new GraphUpdateCoordinator[1];
+        ProjectionBatcher batcher = new ProjectionBatcher(edt, scheduler, () -> 20L, batch -> {
+            holder[0].acceptBatch(batch);
+        });
+        final WorkspaceDocument document = documentWithPin();
+        final AtomicReference<MapSnapshot> source = new AtomicReference<MapSnapshot>(zfcSnapshot(true));
+        final LayoutSettleLoopShould.ManualLifecycleDispatcher dispatcher =
+            new LayoutSettleLoopShould.ManualLifecycleDispatcher();
+        GraphUpdateCoordinator coordinator = coordinator(new GraphUpdateCoordinator.RebuildPipeline() {
+            @Override
+            public GraphProjection rebuild(final AcceptedBatch batch, final GraphProjection previous) {
+                return new ProjectionEngine().projectStructure(batch.generation(), document,
+                    Collections.singletonList(source.get()));
+            }
+        }, batcher, new LayoutSettleLoop(WORKSPACE, new CoveredStepper(), new GraphGeometryEngine(), edt,
+            dispatcher), edt);
+        holder[0] = coordinator;
+        final ProjectedNodeKey extKey = ProjectedNodeKey.of(SourceNodeKey.persisted(
+            NodeReference.of(MAP, PersistedNodeId.of("ext"))));
+        final ProjectedNodeKey pairKey = ProjectedNodeKey.of(SourceNodeKey.persisted(
+            NodeReference.of(MAP, PersistedNodeId.of("pair"))));
+        final ProjectedNodeKey unionKey = ProjectedNodeKey.of(SourceNodeKey.persisted(
+            NodeReference.of(MAP, PersistedNodeId.of("union"))));
+        final ProjectedNodeKey russellKey = ProjectedNodeKey.of(SourceNodeKey.persisted(
+            NodeReference.of(MAP, PersistedNodeId.of("russell"))));
+        CompletableFuture<CanvasState> firstCanvas = new CompletableFuture<CanvasState>();
+        CompletableFuture<CanvasState> secondCanvas = new CompletableFuture<CanvasState>();
+        coordinator.addCanvasStateListener(state -> {
+            if (state.generation() == 1L) {
+                firstCanvas.complete(state);
+            }
+            else if (state.generation() == 2L) {
+                secondCanvas.complete(state);
+            }
+        });
+        try {
+            coordinator.start();
+            scheduler.runAllIncludingCancelled();
+            dispatcher.runAll();
+
+            assertThat(coordinator.currentProjection().generation()).isEqualTo(1L);
+            await(firstCanvas);
+            GraphProjection first = coordinator.currentProjection();
+            assertThat(first.nodes()).extracting(ProjectedNode::key)
+                .containsExactly(extKey, pairKey, unionKey, russellKey);
+            assertThat(first.pins()).hasSize(1);
+            assertThat(first.pins().get(0).active()).isTrue();
+            assertThat(first.pins().get(0).projectedNode()).contains(extKey);
+            assertThat(first.enclosures()).extracting(
+                enclosure -> enclosure.endpointKeys().get(0).source().persistedReference().get().nodeId().value())
+                .containsExactly("root", "zfc", "axioms", "defs");
+            assertThat(first.enclosures().get(0).boundaryTier()).isEqualTo(BoundaryTier.SUPPRESSED);
+            assertThat(first.enclosures().get(1).boundaryTier()).isEqualTo(BoundaryTier.EMPHATIC);
+            assertThat(first.enclosures().get(2).boundaryTier()).isEqualTo(BoundaryTier.SUBTLE);
+            assertThat(first.enclosures().get(3).boundaryTier()).isEqualTo(BoundaryTier.SUBTLE);
+
+            source.set(zfcSnapshot(false));
+            edt.execute(() -> coordinator.requestRebuild(ChangeKind.STRUCTURE));
+            scheduler.runAllIncludingCancelled();
+            dispatcher.runAll();
+
+            assertThat(coordinator.currentProjection().generation()).isEqualTo(2L);
+            GraphProjection replaced = coordinator.currentProjection();
+            CanvasState accepted = await(secondCanvas);
+            assertThat(accepted.projection()).isSameAs(replaced);
+            assertThat(coordinator.currentState()).isSameAs(accepted);
+            assertThat(replaced.nodes()).extracting(ProjectedNode::key)
+                .containsExactly(extKey, pairKey, unionKey, russellKey);
+            assertThat(replaced.pins()).hasSize(1);
+            assertThat(replaced.pins().get(0).active()).isTrue();
+            assertThat(replaced.pins().get(0).projectedNode()).contains(extKey);
+            assertThat(replaced.enclosures()).extracting(
+                enclosure -> enclosure.endpointKeys().get(0).source().persistedReference().get().nodeId().value())
+                .containsExactly("root", "zfc", "defs");
+            assertThat(replaced.enclosures().get(0).boundaryTier()).isEqualTo(BoundaryTier.SUPPRESSED);
+            assertThat(replaced.enclosures().get(1).boundaryTier()).isEqualTo(BoundaryTier.EMPHATIC);
+            assertThat(replaced.enclosures().get(2).boundaryTier()).isEqualTo(BoundaryTier.SUBTLE);
+
+            assertThat(accepted.layout().positions().anchors().keySet())
+                .doesNotContain(EnclosureHullKey.of(Collections.singletonList(
+                    EnclosureKey.of(SourceNodeKey.persisted(NodeReference.of(MAP,
+                        PersistedNodeId.of("axioms")))))));
+            assertThat(accepted.layout().positions().anchors().keySet())
+                .extracting(hull -> hull.endpointKeys().get(0).source().persistedReference().get().nodeId().value())
+                .containsExactlyInAnyOrder("root", "zfc", "defs");
+            assertThat(accepted.layout().positions().nodes().keySet())
+                .extracting(key -> key.source().persistedReference().get().nodeId().value())
+                .containsExactlyInAnyOrder("ext", "pair", "union", "russell");
+        }
+        finally {
+            edt.execute(coordinator::close);
+            dispatcher.runAll();
+        }
+    }
+
+    private static WorkspaceDocument documentWithPin() {
+        MapReference reference = MapReference.of(MAP, 1L, URI.create("maps/map.mm"), true,
+            "#4E79A7", Collections.<UnknownXml>emptyList());
+        PinRecord pin = PinRecord.of(NodeReference.of(MAP, PersistedNodeId.of("ext")), 4.0, 2.0,
+            Collections.<UnknownXml>emptyList());
+        return WorkspaceDocument.createVersion1(WORKSPACE).toBuilder()
+            .maps(Collections.singletonList(reference))
+            .pins(Collections.singletonList(pin))
+            .build();
+    }
+
+    private static MapSnapshot zfcSnapshot(final boolean withAxiomsBoundary) {
+        NodeSnapshot ext = markedNode("ext");
+        NodeSnapshot pair = markedNode("pair");
+        NodeSnapshot union = markedNode("union");
+        NodeSnapshot russell = markedNode("russell");
+        NodeSnapshot axioms = plainNode("axioms", ext, pair, union);
+        NodeSnapshot defs = plainNode("defs", russell);
+        List<NodeSnapshot> zfcChildren = new ArrayList<NodeSnapshot>();
+        if (withAxiomsBoundary) {
+            zfcChildren.add(axioms);
+        }
+        else {
+            zfcChildren.add(ext);
+            zfcChildren.add(pair);
+            zfcChildren.add(union);
+        }
+        zfcChildren.add(defs);
+        NodeSnapshot zfc = plainNode("zfc", zfcChildren.toArray(new NodeSnapshot[zfcChildren.size()]));
+        NodeSnapshot root = plainNode("root", zfc);
+        Set<PersistedNodeId> ids = new LinkedHashSet<PersistedNodeId>();
+        collectPersistentIds(root, ids);
+        return MapSnapshot.of(MAP, 1, "Map", root, ids, false);
+    }
+
+    private static NodeSnapshot markedNode(final String id) {
+        return NodeSnapshot.of(SourceNodeKey.persisted(NodeReference.of(MAP, PersistedNodeId.of(id))),
+            SafeNodeLabel.of(id, id), true, true, false, Collections.<NodeSnapshot>emptyList());
+    }
+
+    private static NodeSnapshot plainNode(final String id, final NodeSnapshot... children) {
+        return NodeSnapshot.of(SourceNodeKey.persisted(NodeReference.of(MAP, PersistedNodeId.of(id))),
+            SafeNodeLabel.of(id, id), children.length == 0, false, false, Arrays.asList(children));
+    }
+
+    private static void collectPersistentIds(final NodeSnapshot node, final Set<PersistedNodeId> ids) {
+        if (node.key().persistent()) {
+            ids.add(node.key().persistedReference().get().nodeId());
+        }
+        for (NodeSnapshot child : node.children()) {
+            collectPersistentIds(child, ids);
+        }
+    }
+
     private static GraphUpdateCoordinator coordinator(final GraphUpdateCoordinator.RebuildPipeline pipeline,
             final ProjectionBatcher batcher, final LayoutSettleLoop loop, final EdtExecutor edt) {
         GraphWorkspaceStore store = mock(GraphWorkspaceStore.class);
@@ -1367,6 +1531,58 @@ public class GraphUpdateCoordinatorShould {
                 active.set(previous);
             }
         }
+    }
+
+    private static final class CoveredStepper implements LayoutSettleLoop.FrameStepper {
+        private GraphProjection lastProjection;
+
+        @Override
+        public CompletionStage<LayoutFrame> submit(final LayoutRequest request) {
+            lastProjection = request.projection();
+            return CompletableFuture.completedFuture(coveredIdleFrame(request.projection().generation(),
+                lastProjection));
+        }
+
+        @Override
+        public CompletionStage<LayoutFrame> step() {
+            return CompletableFuture.completedFuture(coveredIdleFrame(0L, lastProjection));
+        }
+
+        @Override
+        public void pause() {
+        }
+
+        @Override
+        public void restart() {
+        }
+
+        @Override
+        public LayoutFrame lastValidFrame() {
+            return coveredIdleFrame(0L, lastProjection);
+        }
+
+        @Override
+        public void close() {
+        }
+    }
+
+    private static LayoutFrame coveredIdleFrame(final long generation, final GraphProjection projection) {
+        final Map<ProjectedNodeKey, LayoutPoint> nodes = new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        int nodeIndex = 0;
+        for (ProjectedNode node : projection.nodes()) {
+            nodes.put(node.key(), LayoutPoint.of(nodeIndex * 10.0, 0.0));
+            nodeIndex++;
+        }
+        final Map<EnclosureHullKey, LayoutPoint> anchors =
+            new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
+        int anchorIndex = 0;
+        for (ProjectedEnclosure enclosure : projection.enclosures()) {
+            anchors.put(enclosure.hullKey(), LayoutPoint.of(anchorIndex * 10.0, 5.0));
+            anchorIndex++;
+        }
+        return LayoutFrame.withDiagnostics(LayoutFrame.of(generation,
+            LayoutPositions.of(nodes, anchors), false), Collections.emptyList(),
+            new PerceptualIdlePolicy.IdleMeasurement(0.0, 0.0, 8, true));
     }
 
     private static final class TestPipeline implements GraphUpdateCoordinator.RebuildPipeline {

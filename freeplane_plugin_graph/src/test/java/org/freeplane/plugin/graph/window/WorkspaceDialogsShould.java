@@ -409,7 +409,37 @@ public class WorkspaceDialogsShould {
     }
 
     private static CanvasState stateWithCounts(int nodes, int edges, List<RelationshipResolution> resolutions) {
-        return stateWithCounts(7L, nodes, edges, resolutions);
+        List<ProjectedNode> projectedNodes = new ArrayList<ProjectedNode>();
+        Map<ProjectedNodeKey, LayoutPoint> nodePositions =
+            new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        for (int index = 0; index < nodes; index++) {
+            MapReferenceId map = index % 2 == 0 ? MAP_ONE : MAP_TWO;
+            SourceNodeKey source = SourceNodeKey.transientPath(map,
+                Collections.singletonList(Integer.valueOf(index)));
+            ProjectedNodeKey key = ProjectedNodeKey.of(source);
+            projectedNodes.add(ProjectedNode.of(key, SafeNodeLabel.of("full-" + index, "Node " + index),
+                map.equals(MAP_ONE) ? "Map one" : "Map two", true));
+            nodePositions.put(key, LayoutPoint.of(0.0, 0.0));
+        }
+        List<ProjectedEdge> projectedEdges = new ArrayList<ProjectedEdge>();
+        if (edges > 0 && nodes >= 2) {
+            ProjectedEndpointKey first = ProjectedEndpointKey.ofNode(projectedNodes.get(0).key());
+            ProjectedEndpointKey second = ProjectedEndpointKey.ofNode(projectedNodes.get(1).key());
+            EdgeContributor contributor = EdgeContributor.graphRelationship(relationship(3L), first, second);
+            ProjectedEdge edge = ProjectedEdge.of(ProjectedEdgeKey.of(first, second),
+                Collections.singletonList(contributor));
+            for (int index = 0; index < edges; index++) {
+                projectedEdges.add(edge);
+            }
+        }
+        GraphProjection projection = GraphProjection.projected(7L, projectedNodes,
+            Collections.<ProjectedEnclosure>emptyList(), projectedEdges, resolutions,
+            Collections.emptyList());
+        return CanvasState.of(7L, projection, LayoutFrame.of(7L,
+            LayoutPositions.of(nodePositions, Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false),
+            GraphGeometry.of(Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(),
+                Collections.<EnclosureHullKey, HullGeometry>emptyMap(), Collections.emptyMap()),
+            OperationalStatus.IDLE);
     }
 
     private static CanvasState stateWithCounts(long generation, int nodes, int edges,
