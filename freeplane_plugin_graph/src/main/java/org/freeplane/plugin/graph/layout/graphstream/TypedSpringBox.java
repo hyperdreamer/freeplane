@@ -26,6 +26,8 @@ final class TypedSpringBox extends SpringBox {
     private final Map<String, GraphStreamLayoutEngine.ForceLink> typedLinks =
         new LinkedHashMap<String, GraphStreamLayoutEngine.ForceLink>();
 
+    private final Map<String, Boolean> anchorFlags = new LinkedHashMap<String, Boolean>();
+
     TypedSpringBox(final LayoutCalibration calibration, final Random random) {
         super(false, random);
         this.calibration = calibration;
@@ -47,7 +49,8 @@ final class TypedSpringBox extends SpringBox {
         return particle;
     }
 
-    void configureParticle(final String id, final double radius, final boolean pinned) {
+    void configureParticle(final String id, final double radius, final boolean pinned, final boolean anchor) {
+        anchorFlags.put(id, Boolean.valueOf(anchor));
         final TypedNodeParticle particle = typedParticles.get(id);
         if (particle != null) {
             particle.configure(radius, pinned);
@@ -68,6 +71,7 @@ final class TypedSpringBox extends SpringBox {
     }
 
     void forgetParticle(final String id) {
+        anchorFlags.remove(id);
         typedParticles.remove(id);
     }
 
@@ -138,7 +142,15 @@ final class TypedSpringBox extends SpringBox {
     }
 
     void addBoundaryRepulsion(final TypedNodeParticle particle, final Vector3 displacement) {
+        final Boolean isAnchor = anchorFlags.get(particle.getId().toString());
+        if (isAnchor == null || !isAnchor.booleanValue()) {
+            return;
+        }
         for (final Map.Entry<String, TypedNodeParticle> entry : typedParticles.entrySet()) {
+            final Boolean otherAnchor = anchorFlags.get(entry.getKey());
+            if (otherAnchor == null || !otherAnchor.booleanValue()) {
+                continue;
+            }
             final TypedNodeParticle other = entry.getValue();
             if (other == particle) {
                 continue;

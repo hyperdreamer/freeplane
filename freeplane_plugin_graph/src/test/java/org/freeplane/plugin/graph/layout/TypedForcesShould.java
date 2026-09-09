@@ -285,6 +285,52 @@ public class TypedForcesShould {
         assertCoverage(finalFrame, baseline);
     }
 
+    @Test
+    public void observeDirectNodeContainmentInfluenceOnEnclosureAnchorCoordinates() {
+        ProjectedNode directNode = node(MAP_ONE, "direct-node");
+        EnclosureKey parentKey = EnclosureKey.of(source(MAP_ONE, "containment-parent"));
+        EnclosureHullKey parentHull = EnclosureHullKey.of(Collections.singletonList(parentKey));
+
+        ProjectedEnclosure withNode = ProjectedEnclosure.of(parentHull, Collections.singletonList(parentKey),
+            Collections.singletonList(SafeNodeLabel.of("Parent", "Parent")), "Map",
+            Optional.<EnclosureHullKey>empty(), Collections.singletonList(directNode.key()),
+            Collections.<EnclosureHullKey>emptyList(), true, BoundaryTier.EMPHATIC);
+
+        ProjectedEnclosure withoutNode = ProjectedEnclosure.of(parentHull, Collections.singletonList(parentKey),
+            Collections.singletonList(SafeNodeLabel.of("Parent", "Parent")), "Map",
+            Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(),
+            Collections.<EnclosureHullKey>emptyList(), true, BoundaryTier.EMPHATIC);
+
+        PinProjection nodePin = pin(directNode.key(), 150.0, 150.0);
+
+        GraphProjection withNodeProjection = projection(1, Collections.singletonList(directNode),
+            Collections.singletonList(withNode), Collections.<ProjectedEdge>emptyList());
+        GraphProjection withoutNodeProjection = projection(1, Collections.<ProjectedNode>emptyList(),
+            Collections.singletonList(withoutNode), Collections.<ProjectedEdge>emptyList());
+
+        LayoutFrame withNodeFrame = frameAfterSteps(WORKSPACE_ONE, withNodeProjection,
+            Collections.singletonList(nodePin), 50);
+        LayoutFrame withoutNodeFrame = frameAfterSteps(WORKSPACE_ONE, withoutNodeProjection,
+            Collections.<PinProjection>emptyList(), 50);
+
+        LayoutPoint anchorWithNode = withNodeFrame.positions().anchors().get(parentHull);
+        LayoutPoint anchorWithoutNode = withoutNodeFrame.positions().anchors().get(parentHull);
+
+        assertThat(distance(anchorWithNode, LayoutPoint.of(150.0, 150.0)))
+            .isLessThan(distance(anchorWithoutNode, LayoutPoint.of(150.0, 150.0)));
+    }
+
+    private static LayoutFrame frameAfterSteps(WorkspaceId workspace, GraphProjection projection,
+            List<PinProjection> pins, int steps) {
+        try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
+            engine.apply(request(workspace, projection, projection, pins));
+            for (int step = 0; step < steps; step++) {
+                engine.step();
+            }
+            return engine.apply(request(workspace, projection, projection, pins));
+        }
+    }
+
     private static LayoutFrame frameAfterOneStep(WorkspaceId workspace, GraphProjection projection,
             List<PinProjection> pins) {
         try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
@@ -324,6 +370,11 @@ public class TypedForcesShould {
                 second.positions().anchors().get(key)));
         }
         return greatest;
+    }
+
+    private static ProjectedNode node(MapReferenceId map, String id) {
+        ProjectedNodeKey key = key(map, id);
+        return ProjectedNode.of(key, SafeNodeLabel.of(id, id), "Map " + map.value(), false);
     }
 
     private static LayoutRequest request(WorkspaceId workspace, GraphProjection before, GraphProjection after,

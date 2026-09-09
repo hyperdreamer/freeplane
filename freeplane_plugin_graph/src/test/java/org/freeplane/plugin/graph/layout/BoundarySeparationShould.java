@@ -3,6 +3,7 @@ package org.freeplane.plugin.graph.layout;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -165,29 +166,33 @@ public class BoundarySeparationShould {
     }
 
     @Test
-    public void pinnedBoundariesKeepTheirForcedPositions() {
-        List<ProjectedEnclosure> enclosures = new ArrayList<ProjectedEnclosure>();
-        List<EnclosureHullKey> pinnedHulls = new ArrayList<EnclosureHullKey>();
-        List<EnclosureHullKey> rootChildren = new ArrayList<EnclosureHullKey>();
-        List<PinProjection> pins = new ArrayList<PinProjection>();
-        EnclosureHullKey rootHull = hull(MAP_ONE, "root");
-        for (int index = 0; index < 2; index++) {
-            EnclosureKey key = EnclosureKey.of(source(MAP_ONE, "pinned-" + index));
-            EnclosureHullKey hull = EnclosureHullKey.of(Collections.singletonList(key));
-            enclosures.add(ProjectedEnclosure.of(hull, Collections.singletonList(key),
-                Collections.singletonList(SafeNodeLabel.of("Pinned " + index, "Pinned " + index)), "map",
-                Optional.of(rootHull), Collections.<ProjectedNodeKey>emptyList(),
-                Collections.<EnclosureHullKey>emptyList(), false, BoundaryTier.EMPHATIC));
-            pinnedHulls.add(hull);
-            rootChildren.add(hull);
-            pins.add(pin(key(MAP_ONE, "pinned-" + index), 40.0, 40.0));
-        }
-        enclosures.add(ProjectedEnclosure.of(rootHull, Collections.singletonList(
-            EnclosureKey.of(source(MAP_ONE, "root"))), Collections.singletonList(SafeNodeLabel.of("Root", "Root")),
-            "map", Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(), rootChildren,
-            true, BoundaryTier.EMPHATIC));
-        GraphProjection projection = projection(1, Collections.<ProjectedNode>emptyList(), enclosures,
-            Collections.<ProjectedEdge>emptyList());
+    public void pinnedNodesKeepTheirForcedPositions() {
+        ProjectedNodeKey pinnedNodeOne = key(MAP_ONE, "pinned-1");
+        ProjectedNodeKey pinnedNodeTwo = key(MAP_ONE, "pinned-2");
+        ProjectedNode nodeObjectOne = node(MAP_ONE, "pinned-1");
+        ProjectedNode nodeObjectTwo = node(MAP_ONE, "pinned-2");
+
+        EnclosureKey groupKey = EnclosureKey.of(source(MAP_ONE, "group"));
+        EnclosureHullKey groupHull = EnclosureHullKey.of(Collections.singletonList(groupKey));
+        EnclosureKey rootKey = EnclosureKey.of(source(MAP_ONE, "root"));
+        EnclosureHullKey rootHull = EnclosureHullKey.of(Collections.singletonList(rootKey));
+
+        ProjectedEnclosure group = ProjectedEnclosure.of(groupHull, Collections.singletonList(groupKey),
+            Collections.singletonList(SafeNodeLabel.of("Group", "Group")), "map",
+            Optional.of(rootHull), Arrays.asList(pinnedNodeOne, pinnedNodeTwo),
+            Collections.<EnclosureHullKey>emptyList(), false, BoundaryTier.EMPHATIC);
+        ProjectedEnclosure root = ProjectedEnclosure.of(rootHull, Collections.singletonList(rootKey),
+            Collections.singletonList(SafeNodeLabel.of("Root", "Root")), "map",
+            Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(),
+            Collections.singletonList(groupHull), true, BoundaryTier.EMPHATIC);
+
+        List<PinProjection> pins = Arrays.asList(
+            pin(pinnedNodeOne, 40.0, 40.0),
+            pin(pinnedNodeTwo, 60.0, 80.0)
+        );
+
+        GraphProjection projection = projection(1, Arrays.asList(nodeObjectOne, nodeObjectTwo),
+            Arrays.asList(root, group), Collections.<ProjectedEdge>emptyList());
 
         try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
             engine.apply(request(WORKSPACE_ONE, projection, projection, pins));
@@ -196,9 +201,8 @@ public class BoundarySeparationShould {
             }
             LayoutFrame frame = engine.apply(request(WORKSPACE_ONE, projection, projection, pins));
 
-            for (EnclosureHullKey hull : pinnedHulls) {
-                assertThat(frame.positions().anchors().get(hull)).isEqualTo(LayoutPoint.of(40.0, 40.0));
-            }
+            assertThat(frame.positions().nodes().get(pinnedNodeOne)).isEqualTo(LayoutPoint.of(40.0, 40.0));
+            assertThat(frame.positions().nodes().get(pinnedNodeTwo)).isEqualTo(LayoutPoint.of(60.0, 80.0));
         }
     }
 
@@ -210,6 +214,63 @@ public class BoundarySeparationShould {
         LayoutFrame second = settle(WORKSPACE_ONE, fixture.projection);
 
         assertThat(second.positions()).isEqualTo(first.positions());
+    }
+
+    @Test
+    public void directNodesLieInsideTheirParentHullAfterGeometryComputation() {
+        ProjectedNodeKey nodeOne = key(MAP_ONE, "direct-one");
+        ProjectedNodeKey nodeTwo = key(MAP_ONE, "direct-two");
+        ProjectedNode nodeObjectOne = node(MAP_ONE, "direct-one");
+        ProjectedNode nodeObjectTwo = node(MAP_ONE, "direct-two");
+
+        EnclosureKey groupKey = EnclosureKey.of(source(MAP_ONE, "enclosure"));
+        EnclosureHullKey groupHull = EnclosureHullKey.of(Collections.singletonList(groupKey));
+        EnclosureKey rootKey = EnclosureKey.of(source(MAP_ONE, "root"));
+        EnclosureHullKey rootHull = EnclosureHullKey.of(Collections.singletonList(rootKey));
+
+        ProjectedEnclosure enclosure = ProjectedEnclosure.of(groupHull, Collections.singletonList(groupKey),
+            Collections.singletonList(SafeNodeLabel.of("Enclosure", "Enclosure")), "map",
+            Optional.of(rootHull), Arrays.asList(nodeOne, nodeTwo), Collections.<EnclosureHullKey>emptyList(),
+            false, BoundaryTier.SUBTLE);
+        ProjectedEnclosure root = ProjectedEnclosure.of(rootHull, Collections.singletonList(rootKey),
+            Collections.singletonList(SafeNodeLabel.of("Root", "Root")), "map",
+            Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(),
+            Collections.singletonList(groupHull), true, BoundaryTier.SUPPRESSED);
+
+        GraphProjection testProjection = projection(1, Arrays.asList(nodeObjectOne, nodeObjectTwo),
+            Arrays.asList(root, enclosure), Collections.<ProjectedEdge>emptyList());
+
+        try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
+            engine.apply(request(WORKSPACE_ONE, testProjection, testProjection, Collections.<PinProjection>emptyList()));
+            for (int step = 0; step < 300; step++) {
+                engine.step();
+            }
+            LayoutFrame frame = engine.apply(request(WORKSPACE_ONE, testProjection, testProjection,
+                Collections.<PinProjection>emptyList()));
+
+            org.freeplane.plugin.graph.geometry.GraphGeometry geometry =
+                new org.freeplane.plugin.graph.geometry.GraphGeometryEngine().computeHulls(
+                    testProjection, frame.positions(),
+                    new org.freeplane.plugin.graph.geometry.AwtGeometryTextMetrics(
+                        new java.awt.Font(java.awt.Font.SANS_SERIF, java.awt.Font.PLAIN, 12),
+                        new java.awt.font.FontRenderContext(null, true, true)));
+
+            org.freeplane.plugin.graph.geometry.HullGeometry hullGeometry = geometry.hulls().get(groupHull);
+            assertThat(hullGeometry).isNotNull();
+
+            LayoutPoint posOne = frame.positions().nodes().get(nodeOne);
+            LayoutPoint posTwo = frame.positions().nodes().get(nodeTwo);
+            assertThat(posOne).isNotNull();
+            assertThat(posTwo).isNotNull();
+
+            assertThat(hullGeometry.contains(posOne)).isTrue();
+            assertThat(hullGeometry.contains(posTwo)).isTrue();
+        }
+    }
+
+    private static ProjectedNode node(MapReferenceId map, String id) {
+        ProjectedNodeKey key = key(map, id);
+        return ProjectedNode.of(key, SafeNodeLabel.of(id, id), "Map " + map.value(), false);
     }
 
     private static LayoutFrame settle(WorkspaceId workspace, GraphProjection projection) {

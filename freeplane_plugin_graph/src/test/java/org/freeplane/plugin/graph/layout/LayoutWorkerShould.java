@@ -20,20 +20,28 @@ import java.util.function.Supplier;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.projection.BoundaryTier;
+import org.freeplane.plugin.graph.projection.EdgeContributor;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.EnclosureKey;
 import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.projection.PinProjection;
+import org.freeplane.plugin.graph.projection.ProjectedEdge;
+import org.freeplane.plugin.graph.projection.ProjectedEdgeKey;
+import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
 import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
 import org.freeplane.plugin.graph.projection.ProjectionDiff;
+import org.freeplane.plugin.graph.projection.input.ConnectorDescriptor;
 import org.freeplane.plugin.graph.projection.input.SafeNodeLabel;
 import org.freeplane.plugin.graph.projection.input.SourceNodeKey;
+import org.freeplane.plugin.graph.workspace.model.GraphRelationshipRecord;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 import org.freeplane.plugin.graph.workspace.model.NodeReference;
 import org.freeplane.plugin.graph.workspace.model.PersistedNodeId;
 import org.freeplane.plugin.graph.workspace.model.PinRecord;
+import org.freeplane.plugin.graph.workspace.model.RelationshipDirection;
+import org.freeplane.plugin.graph.workspace.model.RelationshipId;
 import org.freeplane.plugin.graph.workspace.model.UnknownXml;
 import org.freeplane.plugin.graph.workspace.model.WorkspaceId;
 import org.junit.Test;
@@ -418,9 +426,90 @@ public class LayoutWorkerShould {
         return NodeReference.of(map, PersistedNodeId.of(id));
     }
 
-    private static PinRecord pinRecord(MapReferenceId map, String id) {
-        return PinRecord.of(reference(map, id), 0.0, 0.0, Collections.<UnknownXml>emptyList());
+    @Test
+    public void produceNodeAndAnchorPositionsAndHonorNodePinCoordinates() throws Exception {
+        ProjectedNodeKey nodeA = nodeKey(MAP_ONE, "node-a");
+        ProjectedNodeKey nodeB = nodeKey(MAP_TWO, "node-b");
+        ProjectedNode nodeObjectA = node(nodeA);
+        ProjectedNode nodeObjectB = node(nodeB);
+
+        EnclosureKey rootKey = EnclosureKey.of(SourceNodeKey.persisted(reference(MAP_ONE, "root")));
+        EnclosureKey level1Key = EnclosureKey.of(SourceNodeKey.persisted(reference(MAP_ONE, "level1")));
+        EnclosureKey level2Key = EnclosureKey.of(SourceNodeKey.persisted(reference(MAP_ONE, "level2")));
+
+        EnclosureKey rootKeyTwo = EnclosureKey.of(SourceNodeKey.persisted(reference(MAP_TWO, "root-two")));
+        EnclosureHullKey rootHullTwo = EnclosureHullKey.of(Collections.singletonList(rootKeyTwo));
+        ProjectedEnclosure rootTwo = ProjectedEnclosure.of(rootHullTwo, Collections.singletonList(rootKeyTwo),
+            Collections.singletonList(SafeNodeLabel.of("rootTwo", "rootTwo")), "Map", Optional.<EnclosureHullKey>empty(),
+            Collections.singletonList(nodeB), Collections.<EnclosureHullKey>emptyList(), true, BoundaryTier.EMPHATIC);
+
+        EnclosureHullKey rootHull = EnclosureHullKey.of(Collections.singletonList(rootKey));
+        EnclosureHullKey level1Hull = EnclosureHullKey.of(Collections.singletonList(level1Key));
+        EnclosureHullKey level2Hull = EnclosureHullKey.of(Collections.singletonList(level2Key));
+
+        ProjectedEnclosure level2 = ProjectedEnclosure.of(level2Hull, Collections.singletonList(level2Key),
+            Collections.singletonList(SafeNodeLabel.of("level2", "level2")), "Map", Optional.of(level1Hull),
+            Collections.singletonList(nodeA), Collections.<EnclosureHullKey>emptyList(), false, BoundaryTier.SUBTLE);
+        ProjectedEnclosure level1 = ProjectedEnclosure.of(level1Hull, Collections.singletonList(level1Key),
+            Collections.singletonList(SafeNodeLabel.of("level1", "level1")), "Map", Optional.of(rootHull),
+            Collections.<ProjectedNodeKey>emptyList(), Collections.singletonList(level2Hull), false, BoundaryTier.SUBTLE);
+        ProjectedEnclosure root = ProjectedEnclosure.of(rootHull, Collections.singletonList(rootKey),
+            Collections.singletonList(SafeNodeLabel.of("root", "root")), "Map", Optional.<EnclosureHullKey>empty(),
+            Collections.<ProjectedNodeKey>emptyList(), Collections.singletonList(level1Hull), true, BoundaryTier.EMPHATIC);
+
+        ProjectedEndpointKey endpointA = ProjectedEndpointKey.ofNode(nodeA);
+        ProjectedEndpointKey endpointB = ProjectedEndpointKey.ofNode(nodeB);
+        GraphRelationshipRecord record = GraphRelationshipRecord.of(
+            RelationshipId.of("00000000-0000-0000-0000-000000000999"), 1L,
+            reference(MAP_ONE, "node-a"), reference(MAP_TWO, "node-b"), RelationshipDirection.FORWARD,
+            Collections.<UnknownXml>emptyList());
+        ProjectedEdge edge = ProjectedEdge.of(ProjectedEdgeKey.of(endpointA, endpointB),
+            Collections.singletonList(
+                EdgeContributor.graphRelationship(record, endpointA, endpointB)));
+
+        PinProjection pinA = PinProjection.active(pinRecord(MAP_ONE, "node-a", 25.0, 35.0), nodeA);
+
+        GraphProjection projection = GraphProjection.projected(1L, Arrays.asList(nodeObjectA, nodeObjectB),
+            Arrays.asList(root, level1, level2, rootTwo), Collections.singletonList(edge),
+            Collections.<org.freeplane.plugin.graph.projection.RelationshipResolution>emptyList(),
+            Collections.singletonList(pinA));
+
+        try (LayoutEngine engine = org.freeplane.plugin.graph.layout.graphstream.GraphStreamLayoutFactory.create(
+                LayoutCalibration.spikeDefaults())) {
+            LayoutRequest request = LayoutRequest.of(WORKSPACE, projection, ProjectionDiff.between(projection, projection),
+                Collections.singletonList(pinA));
+            LayoutFrame applied = engine.apply(request);
+            LayoutFrame stepped = engine.step();
+
+            assertThat(stepped.failed()).isFalse();
+            assertThat(stepped.positions().nodes()).containsKeys(nodeA, nodeB);
+            assertThat(stepped.positions().anchors()).containsKeys(rootHull, level1Hull, level2Hull);
+
+            LayoutPoint pinnedPos = stepped.positions().nodes().get(nodeA);
+            assertThat(pinnedPos.x()).isCloseTo(25.0, org.assertj.core.api.Assertions.within(0.001));
+            assertThat(pinnedPos.y()).isCloseTo(35.0, org.assertj.core.api.Assertions.within(0.001));
+
+            org.freeplane.plugin.graph.geometry.GraphGeometry geometry =
+                new org.freeplane.plugin.graph.geometry.GraphGeometryEngine().computeHulls(
+                    projection, stepped.positions(),
+                    new org.freeplane.plugin.graph.geometry.AwtGeometryTextMetrics(
+                        new java.awt.Font(java.awt.Font.SANS_SERIF, java.awt.Font.PLAIN, 12),
+                        new java.awt.font.FontRenderContext(null, true, true)));
+
+            org.freeplane.plugin.graph.geometry.HullGeometry level2HullGeometry =
+                geometry.hulls().get(level2Hull);
+            assertThat(level2HullGeometry.contains(stepped.positions().nodes().get(nodeA))).isTrue();
+        }
     }
+
+    private static PinRecord pinRecord(MapReferenceId map, String id) {
+        return pinRecord(map, id, 0.0, 0.0);
+    }
+
+    private static PinRecord pinRecord(MapReferenceId map, String id, double x, double y) {
+        return PinRecord.of(reference(map, id), x, y, Collections.<UnknownXml>emptyList());
+    }
+
 
     private static void assertUniformDelta(LayoutPositions before, LayoutPositions after,
             ProjectedNodeKey firstNode, ProjectedNodeKey secondNode, EnclosureHullKey anchor) {
