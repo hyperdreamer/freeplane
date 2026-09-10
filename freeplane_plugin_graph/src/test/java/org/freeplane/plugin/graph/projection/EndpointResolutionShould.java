@@ -72,6 +72,48 @@ public class EndpointResolutionShould {
     }
 
     @Test
+    public void ignoreAMarkedMapRootWhenResolvingItsPlainChildrenAndMarkedDescendants() {
+        NodeSnapshot markedDescendant = node(MAP_ONE, "marked-descendant", true, true, false);
+        NodeSnapshot plainChild = node(MAP_ONE, "plain-child", false, false, false, markedDescendant);
+        NodeSnapshot markedRoot = node(MAP_ONE, "root", false, true, false, plainChild);
+        NodeSnapshot targetRoot = node(MAP_TWO, "target-root", false, false, false,
+            node(MAP_TWO, "target", true, true, false));
+        WorkspaceDocument workspace = workspace(
+            registrations(registration(MAP_ONE, 1, true), registration(MAP_TWO, 2, true)),
+            relationships(
+                relationship(1, reference(MAP_ONE, "root"), reference(MAP_TWO, "target")),
+                relationship(2, reference(MAP_ONE, "plain-child"), reference(MAP_TWO, "target")),
+                relationship(3, reference(MAP_ONE, "marked-descendant"), reference(MAP_TWO, "target"))),
+            Collections.<PinRecord>emptyList());
+
+        GraphProjection projection = project(workspace, availability(workspace,
+            MapAvailability.AVAILABLE, MapAvailability.AVAILABLE),
+            map(MAP_ONE, 1, markedRoot), map(MAP_TWO, 2, targetRoot));
+
+        assertThat(projection.nodes()).extracting(ProjectedNode::source).doesNotContain(markedRoot.key());
+        assertThat(projection.relationshipResolutions().get(0).status())
+            .isEqualTo(RelationshipStatus.UNRESOLVED_MISSING_NODE);
+        assertThat(projection.relationshipResolutions().get(1).status())
+            .isEqualTo(RelationshipStatus.UNRESOLVED_MISSING_NODE);
+        assertThat(projection.relationshipResolutions().get(0).source()).isEmpty();
+        assertThat(projection.relationshipResolutions().get(1).source()).isEmpty();
+
+        RelationshipResolution markedDescendantResolution = projection.relationshipResolutions().get(2);
+        ProjectedEndpointKey descendantEndpoint =
+            ProjectedEndpointKey.ofNode(ProjectedNodeKey.of(markedDescendant.key()));
+        ProjectedEndpointKey targetEndpoint =
+            ProjectedEndpointKey.ofNode(ProjectedNodeKey.of(SourceNodeKey.persisted(reference(MAP_TWO, "target"))));
+        assertThat(markedDescendantResolution.status()).isEqualTo(RelationshipStatus.ACTIVE);
+        assertThat(markedDescendantResolution.source()).contains(descendantEndpoint);
+        assertThat(markedDescendantResolution.target()).contains(targetEndpoint);
+        assertThat(projection.edges()).hasSize(1);
+        List<ProjectedEndpointKey> edgeEndpoints = Arrays.asList(projection.edges().get(0).first(),
+            projection.edges().get(0).second());
+        assertThat(edgeEndpoints).containsExactlyInAnyOrder(descendantEndpoint, targetEndpoint);
+        assertThat(edgeEndpoints).doesNotContain(ProjectedEndpointKey.ofNode(ProjectedNodeKey.of(markedRoot.key())));
+    }
+
+    @Test
     public void resolveGroupNodesExactlyAndFoldPlainDescendantsToTheirOuterGroup() {
         NodeSnapshot descendant = node(MAP_ONE, "descendant", true, false, false);
         NodeSnapshot outerGroup = node(MAP_ONE, "outer-group", false, true, false, descendant);

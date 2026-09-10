@@ -134,8 +134,10 @@ public class EdgeProjectionShould {
             registrations(registration(MAP_ONE, 1, true), registration(MAP_TWO, 2, true)),
             Arrays.asList(forward, opposite));
         GraphProjection projection = project(workspace,
-            map(MAP_ONE, 1, node(MAP_ONE, "a", true, true, false)),
-            map(MAP_TWO, 2, node(MAP_TWO, "b", true, true, false)));
+            map(MAP_ONE, 1, node(MAP_ONE, "root-one", false, false, false,
+                node(MAP_ONE, "a", true, true, false))),
+            map(MAP_TWO, 2, node(MAP_TWO, "root-two", false, false, false,
+                node(MAP_TWO, "b", true, true, false))));
 
         assertThat(projection.edges()).hasSize(1);
         ProjectedEdge edge = projection.edges().get(0);
@@ -174,10 +176,14 @@ public class EdgeProjectionShould {
             registrations(registration(MAP_ONE, 1, true), registration(MAP_TWO, 2, true)),
             Collections.singletonList(relationship));
         GraphProjection projection = project(workspace,
-            map(MAP_ONE, 1, node(MAP_ONE, "available", true, true, false)),
+            map(MAP_ONE, 1, node(MAP_ONE, "root", false, false, false,
+                node(MAP_ONE, "available", true, true, false))),
             map(MAP_TWO, 2, node(MAP_TWO, "structural", true, false, false)));
 
+        RelationshipResolution resolution = projection.relationshipResolutions().get(0);
         assertThat(projection.edges()).isEmpty();
+        assertThat(resolution.status()).isEqualTo(RelationshipStatus.UNRESOLVED_MISSING_NODE);
+        assertThat(resolution.source()).contains(endpoint(available));
     }
 
     @Test

@@ -312,7 +312,7 @@ public final class ProjectionEngine {
             new HashMap<MapReferenceId, EndpointTraversal>();
         for (final MapSnapshot map : maps) {
             final EndpointTraversal traversal = new EndpointTraversal(map);
-            traverseEndpoints(map.root(), traversal, null);
+            traverseEndpoints(map.root(), traversal, null, true);
             if (result.put(map.mapReferenceId(), traversal) != null) {
                 throw new IllegalArgumentException("Available map snapshots must be unique");
             }
@@ -321,29 +321,29 @@ public final class ProjectionEngine {
     }
 
     private static void traverseEndpoints(final NodeSnapshot node, final EndpointTraversal traversal,
-            final ProjectedEndpointKey activeGroupMarker) {
+            final ProjectedEndpointKey activeGroupMarker, final boolean rootNode) {
         if (node.excluded()) {
             recordExcludedSubtree(node, traversal);
             return;
         }
-        if (node.graphGroup()) {
+        if (!rootNode && node.graphGroup()) {
             final ProjectedEndpointKey groupEndpoint =
                 ProjectedEndpointKey.ofNode(ProjectedNodeKey.of(node.key()));
             traversal.recordEndpoint(node.key(), groupEndpoint);
             for (final NodeSnapshot child : node.children()) {
-                traverseEndpoints(child, traversal, groupEndpoint);
+                traverseEndpoints(child, traversal, groupEndpoint, false);
             }
             return;
         }
         if (activeGroupMarker != null) {
             traversal.recordEndpoint(node.key(), activeGroupMarker);
             for (final NodeSnapshot child : node.children()) {
-                traverseEndpoints(child, traversal, activeGroupMarker);
+                traverseEndpoints(child, traversal, activeGroupMarker, false);
             }
             return;
         }
         for (final NodeSnapshot child : node.children()) {
-            traverseEndpoints(child, traversal, null);
+            traverseEndpoints(child, traversal, null, false);
         }
     }
 
