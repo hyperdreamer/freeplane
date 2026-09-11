@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Work only in the delivery worktree `/data/home/guest/Development/freeplane/.worktrees/graph-workspace` on branch `feature/graph-workspace`.
+- Work only in the lane worktree you were given (its absolute path is stated in your task brief). Never create, modify, or delete anything under `/data/home/guest/Development/freeplane/.worktrees/graph-workspace` — that is the delivery target, which the Project Manager keeps pristine until an explicit delivery decision. Commit only on the branch already checked out in your lane worktree, and never run `git worktree`, `git switch`, `git checkout <branch>`, `git reset`, or `git clean`.
 - Java 8 source and target bytecode (class major version 52) built with the Java 21 toolchain at `/home/henry/.sdkman/candidates/java/21.0.8-zulu`; run every Gradle command as `JAVA_HOME=/home/henry/.sdkman/candidates/java/21.0.8-zulu gradle ...`.
 - Source files are UTF-8; indentation is 4 spaces.
 - Tests use JUnit 4 with AssertJ and Mockito 5.18.0 (the repository versions).
