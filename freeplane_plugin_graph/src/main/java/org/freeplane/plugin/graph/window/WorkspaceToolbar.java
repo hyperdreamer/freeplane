@@ -66,10 +66,9 @@ final class WorkspaceToolbar extends javax.swing.JPanel {
     private final JButton fitGraphButton = button("graph_workspace.action.fit_graph", "fit-graph");
     private final JButton resetZoomButton = button("graph_workspace.action.reset_zoom", "reset-zoom");
     private final JButton pinButton = button("graph_workspace.action.pin", "pin");
-    private final JButton unpinButton = button("graph_workspace.action.unpin", "unpin");
     private final Set<String> approvedControlNames = Collections.unmodifiableSet(new LinkedHashSet<String>(Arrays.asList(
         "open", "save", "add-map", "remove-map", "select", "connect", "direction", "search", "settings",
-        "zoom-in", "zoom-out", "fit-graph", "reset-zoom", "pin", "unpin")));
+        "zoom-in", "zoom-out", "fit-graph", "reset-zoom", "pin")));
     private Consumer<String> searchListener = value -> { };
     private Consumer<GraphViewport> viewportListener = value -> { };
     private Consumer<Runnable> viewportOperation = action -> { action.run(); };
@@ -77,11 +76,12 @@ final class WorkspaceToolbar extends javax.swing.JPanel {
     private Consumer<RelationshipDirection> directionListener = value -> { };
     private Runnable settingsAction = () -> { };
     private Runnable pinAction = () -> { };
-    private Runnable unpinAction = () -> { };
     private GraphInteractionController interactionController;
     private boolean readOnly;
     private boolean workspaceUndoAvailable;
     private boolean workspaceRedoAvailable;
+    private boolean pinEnabled;
+    private boolean pinPinned;
 
     WorkspaceToolbar(final GraphWorkspaceController applicationController, final GraphWorkspaceHandle handle,
             final GraphCanvas canvas, final Supplier<Path> pathChooser) {
@@ -136,7 +136,6 @@ final class WorkspaceToolbar extends javax.swing.JPanel {
         add(fitGraphButton);
         add(resetZoomButton);
         add(pinButton);
-        add(unpinButton);
 
         openButton.addActionListener(event -> openWorkspace());
         saveButton.addActionListener(event -> execute(GraphCommands.save()));
@@ -152,7 +151,6 @@ final class WorkspaceToolbar extends javax.swing.JPanel {
         fitGraphButton.addActionListener(event -> fitGraph());
         resetZoomButton.addActionListener(event -> resetZoom());
         pinButton.addActionListener(event -> pinAction.run());
-        unpinButton.addActionListener(event -> unpinAction.run());
         searchField.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void insertUpdate(final DocumentEvent event) {
@@ -232,10 +230,6 @@ final class WorkspaceToolbar extends javax.swing.JPanel {
         return pinButton;
     }
 
-    JButton unpinButton() {
-        return unpinButton;
-    }
-
     Set<String> approvedControlNames() {
         return approvedControlNames;
     }
@@ -272,10 +266,6 @@ final class WorkspaceToolbar extends javax.swing.JPanel {
         pinAction = Objects.requireNonNull(action, "action");
     }
 
-    void setUnpinAction(final Runnable action) {
-        unpinAction = Objects.requireNonNull(action, "action");
-    }
-
     void setReadOnly(final boolean value) {
         readOnly = value;
         updateReadOnlyControls();
@@ -288,6 +278,12 @@ final class WorkspaceToolbar extends javax.swing.JPanel {
     void setHistoryAvailability(final boolean undoAvailable, final boolean redoAvailable) {
         workspaceUndoAvailable = undoAvailable;
         workspaceRedoAvailable = redoAvailable;
+        updateReadOnlyControls();
+    }
+
+    void setPinState(final boolean enabled, final boolean pinned) {
+        pinEnabled = enabled;
+        pinPinned = pinned;
         updateReadOnlyControls();
     }
 
@@ -360,8 +356,9 @@ final class WorkspaceToolbar extends javax.swing.JPanel {
         redoButton.setEnabled(!readOnly && workspaceRedoAvailable);
         connectButton.setEnabled(!readOnly);
         settingsButton.setEnabled(!readOnly);
-        pinButton.setEnabled(!readOnly);
-        unpinButton.setEnabled(!readOnly);
+        pinButton.setEnabled(!readOnly && pinEnabled);
+        pinButton.setText(TextUtils.getText(pinPinned
+            ? "graph_workspace.action.unpin" : "graph_workspace.action.pin"));
         directionComboBox.setEnabled(!readOnly);
     }
 

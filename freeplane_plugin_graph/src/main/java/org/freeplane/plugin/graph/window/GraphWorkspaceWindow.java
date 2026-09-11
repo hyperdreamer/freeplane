@@ -71,6 +71,7 @@ import org.freeplane.plugin.graph.projection.BoundaryTier;
 import org.freeplane.plugin.graph.projection.EdgeContributor;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.GraphProjection;
+import org.freeplane.plugin.graph.projection.PinProjection;
 import org.freeplane.plugin.graph.projection.ProjectedEdge;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
@@ -465,8 +466,7 @@ final class GraphWorkspaceWindowModel {
         toolbar.setSearchListener(this::search);
         toolbar.setViewportOperation(this::runWithViewportEventsSuppressed);
         toolbar.setViewportListener(this::publishToolbarViewport);
-        toolbar.setPinAction(this::pinSelectedNode);
-        toolbar.setUnpinAction(this::unpinSelectedNode);
+        toolbar.setPinAction(this::togglePinSelectedNode);
 
         undoWorkspaceAction = new AbstractAction(TextUtils.getText("graph_workspace.action.undo_workspace")) {
             private static final long serialVersionUID = 1L;
@@ -630,6 +630,9 @@ final class GraphWorkspaceWindowModel {
             currentSessionStatus, readOnly);
         toolbar.setHistoryAvailability(currentSessionStatus.workspaceUndoAvailable(),
             currentSessionStatus.workspaceRedoAvailable());
+        final boolean nodeSelected = selectedNode != null && currentState != null;
+        final boolean pinned = nodeSelected && PinProjection.isPinned(currentState.projection(), selectedNode);
+        toolbar.setPinState(nodeSelected, pinned);
         undoWorkspaceAction.setEnabled(currentSessionStatus.workspaceUndoAvailable() && !readOnly);
         redoWorkspaceAction.setEnabled(currentSessionStatus.workspaceRedoAvailable() && !readOnly);
         if (currentSessionStatus.sourceMapUndoTarget().isPresent()) {
@@ -1279,20 +1282,17 @@ final class GraphWorkspaceWindowModel {
         }
     }
 
-    private void pinSelectedNode() {
+    private void togglePinSelectedNode() {
         if (selectedNode == null || currentState == null) {
             return;
         }
-        final NodeReference reference = selectedNode.source().persistedReference().orElse(null);
-        final NodeGeometry geometry = currentState.geometry().nodes().get(selectedNode);
-        if (reference != null && geometry != null) {
-            executePin(selectedNode, geometry.center().x(), geometry.center().y());
-        }
-    }
-
-    private void unpinSelectedNode() {
-        if (selectedNode != null) {
+        if (PinProjection.isPinned(currentState.projection(), selectedNode)) {
             executeUnpin(selectedNode);
+            return;
+        }
+        final NodeGeometry geometry = currentState.geometry().nodes().get(selectedNode);
+        if (geometry != null) {
+            executePin(selectedNode, geometry.center().x(), geometry.center().y());
         }
     }
 

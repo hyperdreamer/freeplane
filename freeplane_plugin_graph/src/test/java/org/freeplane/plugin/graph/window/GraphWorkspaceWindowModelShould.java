@@ -19,6 +19,7 @@ import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.awt.image.BufferedImage;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -77,6 +78,7 @@ import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
 import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
+import org.freeplane.plugin.graph.projection.PinProjection;
 import org.freeplane.plugin.graph.projection.input.MapAvailability;
 import org.freeplane.plugin.graph.projection.input.SafeNodeLabel;
 import org.freeplane.plugin.graph.projection.input.SourceNodeKey;
@@ -88,6 +90,7 @@ import org.freeplane.plugin.graph.workspace.model.DisplaySettings;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 import org.freeplane.plugin.graph.workspace.model.NodeReference;
 import org.freeplane.plugin.graph.workspace.model.PersistedNodeId;
+import org.freeplane.plugin.graph.workspace.model.PinRecord;
 import org.freeplane.plugin.graph.workspace.model.RelationshipDirection;
 import org.freeplane.plugin.graph.workspace.model.UnknownXml;
 import org.freeplane.plugin.graph.workspace.model.Viewport;
@@ -198,7 +201,7 @@ public class GraphWorkspaceWindowModelShould {
         assertThat(model.canvas().getPreferredSize()).isEqualTo(new Dimension(800, 560));
         assertThat(model.toolbar().approvedControlNames()).contains(
             "open", "save", "add-map", "remove-map", "select", "connect", "direction", "search",
-            "settings", "zoom-in", "zoom-out", "fit-graph", "reset-zoom", "pin", "unpin");
+            "settings", "zoom-in", "zoom-out", "fit-graph", "reset-zoom", "pin").doesNotContain("unpin");
         assertThat(model.settingsPanel().approvedSettingNames()).contains(
             "show-arrowheads", "canvas-theme", "remember-viewport", "dim-unrelated");
         assertThat(model.mapList().rowHeight()).isEqualTo(MapListPanel.ROW_HEIGHT);
@@ -770,7 +773,7 @@ public class GraphWorkspaceWindowModelShould {
 
         assertThat(model.toolbar().saveButton().isEnabled()).isFalse();
         assertThat(model.toolbar().pinButton().isEnabled()).isFalse();
-        assertThat(model.toolbar().unpinButton().isEnabled()).isFalse();
+        assertThat(model.toolbar().pinButton().getText()).isEqualTo("graph_workspace.action.pin");
         assertThat(model.mapList().removeButton().isEnabled()).isFalse();
         assertThat(model.mapList().addButton().isEnabled()).isFalse();
         assertThat(model.settingsPanel().isReadOnly()).isTrue();
@@ -1551,7 +1554,7 @@ public class GraphWorkspaceWindowModelShould {
     }
 
     @Test
-    public void selectsTheSelectedNodeMapRowAndPinsTheSelectedNode() {
+    public void selectsTheSelectedNodeMapRowAndPinsTheSelectedNode() throws Exception {
         Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
             persistedNodeState(ACTIVE_ID, LayoutPoint.of(2.0, -3.0)),
             Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
@@ -1575,7 +1578,9 @@ public class GraphWorkspaceWindowModelShould {
 
         model.acceptIntent(new GraphIntent.ChangeSelection(Optional.<ProjectedEndpointKey>empty()));
         assertThat(model.mapList().rows().get(0).selected()).isFalse();
-        model.toolbar().unpinButton().doClick();
+        Method togglePin = GraphWorkspaceWindowModel.class.getDeclaredMethod("togglePinSelectedNode");
+        togglePin.setAccessible(true);
+        togglePin.invoke(model);
         verify(fixture.handle, org.mockito.Mockito.times(1)).execute(any(GraphCommand.class));
         model.close();
     }
@@ -1595,6 +1600,139 @@ public class GraphWorkspaceWindowModelShould {
         assertThat(model.mapList().rows().get(0).selected()).isFalse();
         model.toolbar().pinButton().doClick();
         verify(fixture.handle, org.mockito.Mockito.never()).execute(any(GraphCommand.class));
+        model.close();
+    }
+
+    @Test
+    public void tracksPinToggleLabelAndEnablementAcrossSelectionAndPinnedStates() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            persistedNodeState(ACTIVE_ID, LayoutPoint.of(2.0, -3.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
+        ProjectedNodeKey nodeKey = ProjectedNodeKey.of(SourceNodeKey.persisted(
+            NodeReference.of(ACTIVE_ID, PersistedNodeId.of("selected"))));
+        ProjectedEndpointKey nodeEndpoint = ProjectedEndpointKey.ofNode(nodeKey);
+
+        assertThat(model.toolbar().pinButton().getText()).isEqualTo("graph_workspace.action.pin");
+        assertThat(model.toolbar().pinButton().isEnabled()).isFalse();
+        model.acceptIntent(new GraphIntent.ChangeSelection(Optional.of(nodeEndpoint)));
+        assertThat(model.toolbar().pinButton().getText()).isEqualTo("graph_workspace.action.pin");
+        assertThat(model.toolbar().pinButton().isEnabled()).isTrue();
+        model.acceptCanvasState(persistedPinnedNodeState(ACTIVE_ID, LayoutPoint.of(2.0, -3.0), 2.0, -3.0));
+        assertThat(model.toolbar().pinButton().getText()).isEqualTo("graph_workspace.action.unpin");
+        assertThat(model.toolbar().pinButton().isEnabled()).isTrue();
+        model.acceptIntent(new GraphIntent.ChangeSelection(Optional.<ProjectedEndpointKey>empty()));
+        assertThat(model.toolbar().pinButton().getText()).isEqualTo("graph_workspace.action.pin");
+        assertThat(model.toolbar().pinButton().isEnabled()).isFalse();
+        model.close();
+
+        Fixture boundaryFixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            boundaryWithNodeState(),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel boundaryModel = boundaryFixture.model();
+        EnclosureKey boundary = EnclosureKey.of(SourceNodeKey.transientPath(ACTIVE_ID,
+            Collections.singletonList(Integer.valueOf(2))));
+        ProjectedEndpointKey boundaryEndpoint = ProjectedEndpointKey.ofEnclosure(boundary);
+
+        boundaryModel.acceptIntent(new GraphIntent.ChangeSelection(Optional.of(boundaryEndpoint)));
+        assertThat(boundaryModel.toolbar().pinButton().getText()).isEqualTo("graph_workspace.action.pin");
+        assertThat(boundaryModel.toolbar().pinButton().isEnabled()).isFalse();
+        boundaryModel.close();
+    }
+
+    @Test
+    public void keepsPinLabelTruthfulWhenReadOnlyDisablesTheToggle() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            persistedPinnedNodeState(ACTIVE_ID, LayoutPoint.of(2.0, -3.0), 2.0, -3.0),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), true);
+        GraphWorkspaceWindowModel model = fixture.model();
+        ProjectedNodeKey nodeKey = ProjectedNodeKey.of(SourceNodeKey.persisted(
+            NodeReference.of(ACTIVE_ID, PersistedNodeId.of("selected"))));
+        ProjectedEndpointKey nodeEndpoint = ProjectedEndpointKey.ofNode(nodeKey);
+
+        model.acceptIntent(new GraphIntent.ChangeSelection(Optional.of(nodeEndpoint)));
+        assertThat(model.toolbar().pinButton().getText()).isEqualTo("graph_workspace.action.unpin");
+        assertThat(model.toolbar().pinButton().isEnabled()).isFalse();
+        model.acceptCanvasState(persistedNodeState(ACTIVE_ID, LayoutPoint.of(2.0, -3.0)));
+        assertThat(model.toolbar().pinButton().getText()).isEqualTo("graph_workspace.action.pin");
+        assertThat(model.toolbar().pinButton().isEnabled()).isFalse();
+        model.close();
+    }
+
+    @Test
+    public void removesTheStandaloneUnpinControlFromToolbarAndApprovedNames() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
+
+        assertThat(model.toolbar().approvedControlNames()).doesNotContain("unpin").contains("pin");
+        for (Component component : model.toolbar().getComponents()) {
+            assertThat(component.getName()).isNotEqualTo("graph-workspace-unpin");
+        }
+        model.close();
+    }
+
+    @Test
+    public void pinsTheSelectedNodeAtItsGeometryCentreAndUnpinsWhenPinned() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            persistedNodeState(ACTIVE_ID, LayoutPoint.of(2.0, -3.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
+        ProjectedNodeKey nodeKey = ProjectedNodeKey.of(SourceNodeKey.persisted(
+            NodeReference.of(ACTIVE_ID, PersistedNodeId.of("selected"))));
+        ProjectedEndpointKey nodeEndpoint = ProjectedEndpointKey.ofNode(nodeKey);
+        model.acceptIntent(new GraphIntent.ChangeSelection(Optional.of(nodeEndpoint)));
+
+        model.toolbar().pinButton().doClick();
+        ArgumentCaptor<GraphCommand> commands = ArgumentCaptor.forClass(GraphCommand.class);
+        verify(fixture.handle).execute(commands.capture());
+        assertThat(commands.getValue()).isInstanceOf(GraphCommands.Pin.class);
+        GraphCommands.Pin pin = (GraphCommands.Pin) commands.getValue();
+        assertThat(pin.node()).isEqualTo(NodeReference.of(ACTIVE_ID, PersistedNodeId.of("selected")));
+        assertThat(pin.x()).isEqualTo(2.0);
+        assertThat(pin.y()).isEqualTo(-3.0);
+
+        org.mockito.Mockito.clearInvocations(fixture.handle);
+        model.acceptCanvasState(persistedPinnedNodeState(ACTIVE_ID, LayoutPoint.of(2.0, -3.0), 2.0, -3.0));
+        assertThat(model.toolbar().pinButton().getText()).isEqualTo("graph_workspace.action.unpin");
+        model.toolbar().pinButton().doClick();
+        ArgumentCaptor<GraphCommand> unpinCommands = ArgumentCaptor.forClass(GraphCommand.class);
+        verify(fixture.handle).execute(unpinCommands.capture());
+        assertThat(unpinCommands.getValue()).isInstanceOf(GraphCommands.Unpin.class);
+        assertThat(((GraphCommands.Unpin) unpinCommands.getValue()).node())
+            .isEqualTo(NodeReference.of(ACTIVE_ID, PersistedNodeId.of("selected")));
+        model.close();
+    }
+
+    @Test
+    public void doesNotCommandPinWithoutGeometryOrSelection() throws Exception {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            persistedNodeStateWithoutGeometry(ACTIVE_ID),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
+        ProjectedNodeKey nodeKey = ProjectedNodeKey.of(SourceNodeKey.persisted(
+            NodeReference.of(ACTIVE_ID, PersistedNodeId.of("selected"))));
+        ProjectedEndpointKey nodeEndpoint = ProjectedEndpointKey.ofNode(nodeKey);
+        model.acceptIntent(new GraphIntent.ChangeSelection(Optional.of(nodeEndpoint)));
+
+        assertThat(model.toolbar().pinButton().isEnabled()).isTrue();
+        model.toolbar().pinButton().doClick();
+        verify(fixture.handle, never()).execute(any(GraphCommand.class));
+
+        model.acceptCanvasState(persistedPinnedNodeStateWithoutGeometry(ACTIVE_ID));
+        assertThat(model.toolbar().pinButton().getText()).isEqualTo("graph_workspace.action.unpin");
+        model.toolbar().pinButton().doClick();
+        ArgumentCaptor<GraphCommand> commands = ArgumentCaptor.forClass(GraphCommand.class);
+        verify(fixture.handle).execute(commands.capture());
+        assertThat(commands.getValue()).isInstanceOf(GraphCommands.Unpin.class);
+        org.mockito.Mockito.clearInvocations(fixture.handle);
+
+        model.acceptIntent(new GraphIntent.ChangeSelection(Optional.<ProjectedEndpointKey>empty()));
+        Method method = GraphWorkspaceWindowModel.class.getDeclaredMethod("togglePinSelectedNode");
+        method.setAccessible(true);
+        method.invoke(model);
+        verify(fixture.handle, never()).execute(any(GraphCommand.class));
         model.close();
     }
 
@@ -1641,6 +1779,51 @@ public class GraphWorkspaceWindowModelShould {
         LayoutFrame layout = LayoutFrame.of(0L, LayoutPositions.of(
             Collections.singletonMap(key, center), Collections.emptyMap()), false);
         return CanvasState.of(0L, projection, layout, geometry, OperationalStatus.IDLE);
+    }
+
+    private static CanvasState persistedPinnedNodeState(MapReferenceId mapId, LayoutPoint center,
+            double pinX, double pinY) {
+        SourceNodeKey source = SourceNodeKey.persisted(
+            NodeReference.of(mapId, PersistedNodeId.of("selected")));
+        ProjectedNodeKey key = ProjectedNodeKey.of(source);
+        ProjectedNode node = ProjectedNode.of(key, SafeNodeLabel.of("Selected", "Selected"), "Map", true);
+        GraphProjection projection = GraphProjection.projected(0L, Collections.singletonList(node),
+            Collections.emptyList(), Collections.emptyList(), Collections.emptyList(),
+            Collections.singletonList(PinProjection.active(
+                PinRecord.of(NodeReference.of(mapId, PersistedNodeId.of("selected")), pinX, pinY,
+                    Collections.emptyList()), key)));
+        GraphGeometry geometry = GraphGeometry.of(Collections.singletonMap(key, NodeGeometry.of(center, 10.0)),
+            Collections.emptyMap());
+        LayoutFrame layout = LayoutFrame.of(0L, LayoutPositions.of(
+            Collections.singletonMap(key, center), Collections.emptyMap()), false);
+        return CanvasState.of(0L, projection, layout, geometry, OperationalStatus.IDLE);
+    }
+
+    private static CanvasState persistedNodeStateWithoutGeometry(MapReferenceId mapId) {
+        SourceNodeKey source = SourceNodeKey.persisted(
+            NodeReference.of(mapId, PersistedNodeId.of("selected")));
+        ProjectedNodeKey key = ProjectedNodeKey.of(source);
+        ProjectedNode node = ProjectedNode.of(key, SafeNodeLabel.of("Selected", "Selected"), "Map", true);
+        GraphProjection projection = GraphProjection.structure(0L, Collections.singletonList(node),
+            Collections.emptyList());
+        return CanvasState.of(0L, projection,
+            LayoutFrame.of(0L, LayoutPositions.of(Collections.emptyMap(), Collections.emptyMap()), false),
+            GraphGeometry.of(Collections.emptyMap(), Collections.emptyMap()), OperationalStatus.IDLE);
+    }
+
+    private static CanvasState persistedPinnedNodeStateWithoutGeometry(MapReferenceId mapId) {
+        SourceNodeKey source = SourceNodeKey.persisted(
+            NodeReference.of(mapId, PersistedNodeId.of("selected")));
+        ProjectedNodeKey key = ProjectedNodeKey.of(source);
+        ProjectedNode node = ProjectedNode.of(key, SafeNodeLabel.of("Selected", "Selected"), "Map", true);
+        GraphProjection projection = GraphProjection.projected(0L, Collections.singletonList(node),
+            Collections.emptyList(), Collections.emptyList(), Collections.emptyList(),
+            Collections.singletonList(PinProjection.active(
+                PinRecord.of(NodeReference.of(mapId, PersistedNodeId.of("selected")), 2.0, -3.0,
+                    Collections.emptyList()), key)));
+        return CanvasState.of(0L, projection,
+            LayoutFrame.of(0L, LayoutPositions.of(Collections.emptyMap(), Collections.emptyMap()), false),
+            GraphGeometry.of(Collections.emptyMap(), Collections.emptyMap()), OperationalStatus.IDLE);
     }
 
     private static CanvasState boundaryWithNodeState() {
