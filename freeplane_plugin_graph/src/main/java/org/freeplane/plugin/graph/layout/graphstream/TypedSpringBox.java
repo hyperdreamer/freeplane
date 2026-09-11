@@ -141,6 +141,11 @@ final class TypedSpringBox extends SpringBox {
         return BASE_SEPARATION_RADIUS;
     }
 
+    boolean isAnchorParticle(final String id) {
+        final Boolean flag = anchorFlags.get(id);
+        return flag != null && flag.booleanValue();
+    }
+
     void addBoundaryRepulsion(final TypedNodeParticle particle, final Vector3 displacement) {
         final Boolean isAnchor = anchorFlags.get(particle.getId().toString());
         if (isAnchor == null || !isAnchor.booleanValue()) {

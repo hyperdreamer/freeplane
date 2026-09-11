@@ -84,7 +84,8 @@ final class TypedNodeParticle extends SpringBoxNodeParticle {
     private void scaleRepulsion(final Vector3 before) {
         final Vector3 repulsion = new Vector3(disp);
         repulsion.sub(before);
-        if (separationRadius != typedBox.baseSeparationRadius()) {
+        if (!typedBox.isAnchorParticle(getId().toString())
+                && separationRadius != typedBox.baseSeparationRadius()) {
             repulsion.scalarMult(separationRadius / typedBox.baseSeparationRadius());
             disp.copy(before);
             disp.add(repulsion);

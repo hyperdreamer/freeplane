@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
@@ -318,6 +319,36 @@ public class TypedForcesShould {
 
         assertThat(distance(anchorWithNode, LayoutPoint.of(150.0, 150.0)))
             .isLessThan(distance(anchorWithoutNode, LayoutPoint.of(150.0, 150.0)));
+    }
+
+    @Test
+    public void nativeRepulsionDisplacementsSumToZeroWithoutDrift() {
+        GraphProjection projection = ReferenceRepulsionFixture.referenceProjection(1L);
+        try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
+            engine.apply(LayoutRequest.of(ReferenceRepulsionFixture.WORKSPACE, projection,
+                ProjectionDiff.between(projection, projection), Collections.<PinProjection>emptyList()));
+            LayoutFrame before = engine.step();
+            LayoutFrame after = engine.step();
+            // Pins, cross-map budgeting, and Barnes-Hut aggregation are deliberately
+            // outside this assertion: the fixture has <= 10 particles (single leaf
+            // cell, exact pairwise pass), no pins, no relationship edges, no
+            // cross-map links, and all pairwise springs are symmetric.
+            double sumDx = 0.0;
+            double sumDy = 0.0;
+            for (Map.Entry<ProjectedNodeKey, LayoutPoint> entry : before.positions().nodes().entrySet()) {
+                LayoutPoint from = entry.getValue();
+                LayoutPoint to = after.positions().nodes().get(entry.getKey());
+                sumDx += to.x() - from.x();
+                sumDy += to.y() - from.y();
+            }
+            for (Map.Entry<EnclosureHullKey, LayoutPoint> entry : before.positions().anchors().entrySet()) {
+                LayoutPoint from = entry.getValue();
+                LayoutPoint to = after.positions().anchors().get(entry.getKey());
+                sumDx += to.x() - from.x();
+                sumDy += to.y() - from.y();
+            }
+            assertThat(Math.hypot(sumDx, sumDy)).isLessThanOrEqualTo(1.0e-9);
+        }
     }
 
     private static LayoutFrame frameAfterSteps(WorkspaceId workspace, GraphProjection projection,
