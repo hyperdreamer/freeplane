@@ -1,7 +1,7 @@
 # Graph Workspace Node Repulsion & Layout Settling — Design
 
 - Date: 2026-09-11
-- Status: Revised after frontier design review (attempt 1)
+- Status: Revised after frontier design review rounds 1 and 2
 - Ticket: none — Task Identifier: `2026-09-11-graph-node-repulsion`
 - Scope: `freeplane_plugin_graph` (feature branch `feature/graph-workspace`)
 
@@ -33,17 +33,18 @@ byte-identical plugin classes):
 
 ## 3. Diagnosis & Evidence
 
-Headless reproduction with the production classes and a projection mirroring the
-user's `math.fpg` workspace: one map, enclosures `root(SUPPRESSED)`,
-`ZFC(EMPHATIC)`, `Axioms(SUBTLE)` with nodes "Fundation / Regularity",
-"Replacement Scheme", "Axiom of Choice", and `Basic Definitions and Theorems
-(SUBTLE)` with node "Theorem"; **no relationships, no pins** — exactly the saved
-workspace (aside from its stored pin, which is exercised separately).
+Headless reproduction with the production classes and the **reference fixture**
+(used by every measurement and test below): one map, 4 enclosures —
+`"Axiomatic Set Theory"` (map root, `SUPPRESSED`), `"ZFC"` (`EMPHATIC`),
+`"Axioms"` (`SUBTLE`, nodes `"Fundation / Regularity"`, `"Replacement Scheme"`,
+`"Axiom of Choice"`), `"Basic Definitions and Theorems"` (`SUBTLE`, node
+`"Theorem"`) — with **no relationship edges and no pins**, mirroring the user's
+saved `math.fpg` workspace. `BoundarySizes` depends on these label texts, so the
+exact strings are part of the fixture contract.
 
 | Experiment | Residual motion after 1500+ steps |
 |---|---|
 | Production `LayoutWorker` + current settings | stalls at rms 0.184 / max 0.241; **never idle in 4000 frames** |
-| Exact N² repulsion (bypass Barnes–Hut) | identical stall → not an approximation artifact |
 | Repulsion off (`K2 = 0`) | converges to rms 0.0012 |
 | `K2` = 0.024 / 0.5 / 1 / 2 / 4 / 8 / 16 / 32 | rms 0.001 / 0.019 / 0.037 / 0.060 / 0.088 / 0.129 / **0.184** / 0.255 |
 | Half step size (`force = 0.5`) | stalls at ~0.09 — amplitude scales with the step, never decays |
@@ -57,42 +58,56 @@ force on the system**. Every force term is pairwise and symmetric *except one*:
 `TypedNodeParticle.scaleRepulsion` multiplies a particle's **total** native
 repulsion (`disp_after − before` of the native pass) by its **own**
 `separationRadius / 8`. Hull anchors have `separationRadius` of order 10³
-(≈ 180× for the validated fixture's root and `ZFC` hulls) while nodes are 8–14
-(factor 1.0–1.75, from `NodeProminence.MAX_SCALE`). For an anchor–node pair the
-two sides of the repulsion are no longer equal and opposite, so the system has a
-constant net force and drifts forever. The amplitude scales linearly with `K2`
-and with the step size, which is why this is a persistent drift and not slow
-convergence.
+(≈ 180× for the reference fixture's root and `ZFC` hulls, both ≈ 1441.7) while
+nodes are 8–14 (factor 1.0–1.75, from `NodeProminence.MAX_SCALE`). For an
+anchor–node pair the two sides of the repulsion are no longer equal and opposite,
+so the system has a constant net force and drifts forever. The amplitude scales
+linearly with `K2` and with the step size, which is why this is a persistent
+drift and not slow convergence.
+
+Measured net momentum (Σ of per-particle position deltas over one step) on the
+reference fixture: **0.1725** on the first step (both before and after any fix —
+see §9 test 2), **6.55** on the second step unfixed, **9.9e-14** fixed.
 
 Secondary geometric defect found in the same force model: boundary repulsion
 (`TypedSpringBox.addBoundaryRepulsion`) is applied to **all** anchor pairs,
-including nested parent/child/grandchild hulls that are supposed to overlap. The
-nested fixture's anchors settle ~3800 units apart; ancestor exclusion reduces
-the maximum pairwise anchor spread to ~711 (the sibling contact distance
-`593.9 + 117.5 + 8 = 719.3`).
+including nested parent/child/grandchild hulls that are supposed to overlap.
+Measured settled anchor distances on the reference fixture:
+
+| Pair | Unfixed | With ancestor exclusion |
+|---|---|---|
+| root–ZFC (direct parent/child) | 2810.58 | 100.19 |
+| ZFC–Axioms (direct parent/child) | 1984.96 | 355.33 |
+| ZFC–Definitions (direct parent/child) | 1522.93 | 355.14 |
+| root–Axioms (grandparent/grandchild) | 2042.95 | 455.53 |
+| Axioms–Definitions (siblings) | 3489.46 | 710.48 (contact ≈ 719.3) |
 
 ## 4. Goals
 
-1. Per-frame displacement of the unpinned layout falls below the idle thresholds
-   so `LayoutSettleLoop` terminates, freezes the canvas, and the CPU returns to
-   idle. This is "perceptually at rest", not a proof of physical convergence —
-   the accepted prominence asymmetry (below) can leave a sub-threshold residual.
-2. Nested boundaries stay nested: parent/child/grandchild hull anchors are not
+1. **Reported class fixed:** for the unpinned, relationship-free workspace class
+   the reported bug belongs to (and for moderate multi-map workspaces), per-frame
+   displacement falls below the idle thresholds so `LayoutSettleLoop` terminates,
+   freezes the canvas, and the CPU returns to idle. This is "perceptually at
+   rest", not a proof of physical convergence; §12 records the measured
+   residuals that are deliberately left out of scope.
+2. **Nested boundaries stay nested:** direct parent/child hull anchors are not
    repelled apart by the boundary repulsion.
-3. The fix is minimal and local: idle thresholds, `K2`, typed attraction,
-   cross-map budget, pins, projection and geometry code stay unchanged.
+3. **Minimal and local:** idle thresholds, `K2`, typed attraction, cross-map
+   budget, pins, projection and geometry code stay unchanged.
 
 ## 5. Non-Goals
 
 - Not changing the cross-map displacement budget (≤ 0.005) that currently
-  replaces repulsion for cross-map-linked particles (separate defect, no
-  relationship present in the user's workspace).
+  replaces repulsion for cross-map-linked particles (separate defect).
 - Not retuning `K2`, `ATTRACTION_FACTOR`, rest lengths, or the idle thresholds.
 - Not adding damping/inertia: the root cause is the asymmetric repulsion, not
   the integrator. (See §7.)
-- Not making node prominence repulsion fully pairwise-symmetric (bounded
-  asymmetry 1.0–1.75; empirically settles — see §10). Documented as an accepted
-  residual in §12.
+- Not removing the node-prominence repulsion weighting: the approved prominence
+  design makes layout consume prominence as a per-particle separation size hint,
+  and its asynchrony is bounded (1.0–1.75, §12). Anchors have no such contract,
+  and their weighting (≈ 180×) is the defect.
+- Not addressing Barnes–Hut cell-transition re-excitation in larger graphs
+  (separately diagnosed, measured, and recorded in §12).
 
 ## 6. Design
 
@@ -103,7 +118,8 @@ Three localized changes, all in the package
 `TypedNodeParticle.scaleRepulsion` currently scales the accumulated native
 repulsion by `separationRadius / baseSeparationRadius` for every particle. New
 behavior: **anchor particles (hull centers) skip the scaling**; node particles
-keep it (their scale range is bounded, 1.0–1.75, from `NodeProminence`).
+keep it (bounded 1.0–1.75, and consumed by layout as the prominence separation
+size hint).
 
 - `TypedSpringBox` gains `boolean isAnchorParticle(String id)` (reads the
   existing `anchorFlags` map).
@@ -139,13 +155,14 @@ particle configuration instead of leaving the box to infer relationships:
   `isAncestorPair(a, b)` walks `parentOf` from `a` and from `b` with
   `while (current != null) { if (current.equals(other)) return true; current =
   parentOf.get(current); }`, so an absent key or a null parent terminates the
-  walk. The skip is applied **before** the zero-distance fallback, so a
-  parent/child pair seeded at the same point (single-child boundary,
-  `Seeds.center` with `ringRadius = 0`) is excluded rather than resolved by the
-  fallback direction.
+  walk. The skip is applied **before** the zero-distance fallback (a
+  code-impact note, not independently observable: the fallback only mutates
+  local `dx/dy/distance`). A parent/child pair seeded at the same point
+  (single-child boundary, `Seeds.center` with `ringRadius = 0`) is therefore
+  excluded rather than resolved by the fallback direction.
 - Sibling boundaries, different-map roots, and cross-map anchors still repel —
   separation contracts are unchanged. Direct-parent-only exclusion is
-  insufficient (measured: spread 2025 with direct-parent-only vs 711 with full
+  insufficient (measured spread 2025 with direct-parent-only vs 710.5 with full
   ancestry).
 
 ### 6.4 Unchanged behavior
@@ -157,7 +174,7 @@ particle configuration instead of leaving the box to infer relationships:
 One coupled effect must be stated: `scaleRepulsion` also captures
 `rawBudgetedRepulsion` for cross-map-linked particles, so removing anchor scaling
 shrinks that term to the anchor's true native repulsion magnitude (previously
-inflated ~180×). The ≤ 0.005 budget cap and its
+inflated ≈ 180×). The ≤ 0.005 budget cap and its
 `capAggregateCrossMapFanOutDisplacementOncePerParticle` contract are preserved;
 only the composition of the capped sum changes (cross-map attraction dominates
 it in practice).
@@ -166,11 +183,12 @@ it in practice).
 
 | Approach | Result |
 |---|---|
-| **Symmetry + nesting exclusion (chosen)** | settles: 457 frames (user graph), 292 after unpin, 419 for a 2-map/24-node/4-cross-map-edge graph; geometry nests; 50 layout + 38 settle-loop tests pass |
+| **Symmetry for anchors + nesting exclusion (chosen)** | idle 457 (reference fixture), 292 after unpin, 419 (2-map/24-node); geometry nests; 50 layout + 38 settle-loop tests pass |
+| Symmetry for **all** particles (`noRadiusScale`) | same results on the reference and 2-map fixtures; drops the documented prominence layout contract; **does not** fix the Barnes–Hut re-excitation (§12) |
 | Damping (EMA α = 0.5 / 0.8 / 0.9) | no effect on a steady drift; a DC-gain mistake even amplifies it |
 | Recenter layout each frame (remove rigid drift) | settles unpinned (462) but **never settles with a pin** (rms 0.113) and masks the defect |
 | Lower `K2` below idle thresholds | amplitude ∝ `K2`, so it only hides the drift; headroom shrinks as graphs grow |
-| Fully symmetric pairwise radius weighting for all particles | correct but larger change; deferred per scope |
+| Disable Barnes–Hut (`viewZone = -1`) | converges even the crowded 17-particle fixture to rms 0.0000, but changes the performance profile for large projections — out of scope (§12) |
 
 ## 8. Error Handling
 
@@ -187,69 +205,99 @@ one configuration parameter.
 
 ## 9. Test Strategy
 
-All new tests are JUnit 4 `*Should` tests. All fixtures are **exact copies of the
-validated projection** (shared test helper: one map, 4 enclosures — suppressed
-root "Axiomatic Set Theory", emphatic "ZFC", subtle "Axioms" and "Basic
-Definitions and Theorems" — and the 4 nodes "Fundation / Regularity",
-"Replacement Scheme", "Axiom of Choice", "Theorem"), because `BoundarySizes`
-depends on label texts and on the suppressed map root, and all measured bounds
-below were obtained with that fixture. Size formulas used in assertions are
-test-local copies, as the existing suites already do.
+All new tests are JUnit 4 `*Should` tests. Unless stated otherwise they use the
+**reference fixture of §3** (exact labels, fixed workspace id
+`00000000-0000-0000-0000-0000000000aa`), shared through a test helper, because
+all measured bounds below belong to exactly that fixture. Tests 2, 3, 4 and 9
+are only valid on the relationship-free fixture (all node prominence scales are
+exactly 1.0); do not reuse them on fixtures with relationship edges.
 
 1. `TypedForcesShould.settleRelationshipFreeNestedBoundaryProjectionToIdle` —
-   the exact fixture above (no edges, no pins), driven by `LayoutWorker` with
+   reference fixture, no pins, driven by `LayoutWorker` with
    `PerceptualIdlePolicy.spikeDefaults()`; assert `frame.idle().idle()` becomes
    true within 2000 steps (measured 457).
-2. `TypedForcesShould.nativeRepulsionDisplacementsSumToZeroWithoutDrift` —
-   drive the raw `LayoutEngine` (not `LayoutWorker`, which applies
-   `MapTierCorrection`) on the same fixture, compute
-   `Σ (position_after − position_before)` over all particles between `apply()`
-   and `step()`, and assert the vector norm is ≤ 1e-9. The fixture has ≤ 10
-   particles (one Barnes–Hut leaf cell → exact pairwise pass), no pins (pins
-   freeze one side of every incident force), no edges (all prominence scales are
-   exactly 1.0, so no node scaling asymmetry), and no cross-map links; a comment
-   records that prominence asymmetry, pins, cross-map budgeting and
-   Barnes–Hut aggregation are deliberately outside this assertion.
-3. `BoundarySeparationShould.nestedAncestorsSatisfyTheNestingInvariantAfterSettling`
-   — after settling the fixture, for every ancestor–descendant anchor pair
-   assert `distance(parent, child) + boundaryRadius(child) ≤ boundaryRadius(parent)`
-   with a small tolerance, using test-local `BoundarySizes` formulas (for the
-   validated fixture the parent radius is ≈ 1441.7 and parent–child distances
-   are the hierarchy rest lengths, ~60/100). This encodes Goal 2 directly
-   instead of a loose spread bound.
-4. `BoundarySeparationShould.siblingAnchorsRemainSeparatedAfterSettling` — after
-   settling, assert every sibling-anchor pair still satisfies the existing
-   non-overlap contract, and the maximum pairwise anchor spread is ≤ 1000
-   (measured 711 = sibling contact distance), so a sibling regression is caught
-   separately from the nesting invariant.
+2. `TypedForcesShould.nativeRepulsionDisplacementsSumToZeroWithoutDrift` — drive
+   the raw `LayoutEngine` (not `LayoutWorker`, which applies
+   `MapTierCorrection`) on the reference fixture and compare **two post-seeding
+   frames**: `apply(); step(); before = step(); after = step();` then assert
+   `‖Σ (position_after − position_before)‖ ≤ 1e-9`. The first step must not be
+   used: `NodeParticle.move` clamps each particle's displacement independently
+   to `box.area/2`, which is ≈ 1.414 during seeding, so the first-step sum is
+   0.1725 even on fully symmetric code. Measured: fixed 9.9e-14, unfixed 6.55.
+   The fixture has ≤ 10 particles (one Barnes–Hut leaf cell → exact pairwise
+   pass), no pins (pins freeze one side of every incident force), no
+   relationship edges (all prominence scales exactly 1.0) and no cross-map links;
+   hierarchy and containment springs exist but are pairwise symmetric, so they
+   are compatible with the assertion. A comment records that pins, cross-map
+   budgeting and Barnes–Hut aggregation are deliberately outside this assertion.
+3. `BoundarySeparationShould.directParentChildAnchorsSatisfyTheProximityInvariantAfterSettling`
+   — after settling the reference fixture, for every **direct** hierarchy pair
+   assert `distance(parent, child) ≤ boundaryRadius(parent) − FRAME_CLEARANCE`
+   using test-local `BoundarySizes` formulas. Measured (fixed): root–ZFC 100.19,
+   ZFC–Axioms 355.33, ZFC–Definitions 355.14; bound for root/ZFC is
+   `1441.73 − 16 = 1425.73`. Unfixed: root–ZFC 2810.58 → fails. Full
+   containment (`d + r_child ≤ r_parent`) is deliberately **not** asserted: for
+   wrapper hulls such as the suppressed root, parent and child radius are equal
+   by construction (both 1441.73), and the approved prominence design rejects
+   strict geometric containment at every depth. Only direct pairs are asserted;
+   no guaranteed containment exists for deeper ancestors at settle time (the
+   grandparent case is covered by test 8 instead).
+4. `BoundarySeparationShould.siblingAnchorsRemainSeparatedAfterSettling` —
+   after settling the reference fixture, assert every sibling pair still
+   satisfies the existing non-overlap contract and the maximum pairwise anchor
+   spread is ≤ 1000. Measured: fixed Axioms–Definitions 710.48 (contact
+   593.87 + 117.45 + 8 = 719.32), unfixed 3489.46 → fails.
 5. `BoundarySeparationShould.pinnedFixtureSettlesWithPinPositionUnchanged` —
-   same fixture with one node pinned; assert idle within 10000 steps (measured
-   2471; the measured first-idle rms 0.0495 sits close to the 0.05 threshold, so
-   the bound is deliberately far above the measurement), the pinned node's
-   coordinates are exactly the pin values, and **after** first idle continue ~100
-   frames asserting the measurement stays under both thresholds and the pin
-   position is unchanged (guards against spurious short dips and threshold
-   hovering).
+   reference fixture with node `"Replacement Scheme"` pinned at `(1059, -145)`;
+   assert idle within 10000 steps (measured 2471 at rms 0.049654, i.e. within
+   1 % of the 0.05 threshold, hence the deliberately large bound), the pinned
+   node's coordinates exactly equal the pin values, and after first idle the
+   layout is stepped ~100 further frames asserting the measurement stays under
+   `rms ≤ 0.0505` and `max ≤ 0.10` (the small RMS tolerance accommodates the
+   measured 0.049654 margin) with the pin position unchanged.
 6. `BoundarySeparationShould.unpinTransitionSettlesAfterFormerPinReleased` — the
-   reported scenario: submit with an active pin, step 300–1500 frames, submit a
-   new `LayoutRequest` with empty pins on the same worker, then assert idle
-   within 2000 steps (measured 292) and that the formerly pinned node position
-   is no longer frozen at the pin coordinates.
+   reported scenario: submit the reference fixture with `"Replacement Scheme"`
+   pinned at `(1059, -145)`, step exactly 1500 frames, submit a new
+   `LayoutRequest` with empty pins on the same worker, then assert idle within
+   2000 steps (measured 292) and that the formerly pinned node is no longer held
+   at the pin: its settled position must differ from `(1059, -145)` by more than
+   10 units (measured 122.04).
 7. `BoundarySeparationShould.reparentedBoundaryRefreshesAncestorExclusion` —
-   settle the fixture, apply a projection that reparents (or flattens) one
-   boundary, and assert the reparented anchor now repels its former sibling
-   (behaviour follows the new ancestry; stale exclusions are not retained).
+   settle the reference fixture, then reparent `"Basic Definitions and
+   Theorems"` from `"ZFC"` to `"Axioms"`, building the request with
+   `ProjectionDiff.between(originalProjection, reparentedProjection)` and a
+   distinct generation (an empty diff makes `GraphStreamLayoutEngine.apply`
+   early-return without `synchronize()`, which would leave `parentOf` stale — a
+   pre-existing engine contract the test must not accidentally exercise), then
+   settle and assert `distance("Axioms", "Basic Definitions and Theorems") ≤
+   boundaryRadius("Axioms") − FRAME_CLEARANCE` (bound ≈ 577.9). With the
+   refreshed exclusion the pair is a hierarchy pair (rest length 60); with stale
+   sibling exclusion it stays at contact distance ≈ 719.3 and fails.
 8. `BoundarySeparationShould.grandchildAnchorsAreExcludedFromBoundaryRepulsion`
-   — explicit assertion that a grandparent–grandchild pair is not pushed apart
-   (the measured decision point: direct-parent-only exclusion leaves spread
-   2025).
-9. `BoundarySeparationShould.coincidentParentChildAnchorsStayExcluded` — fixture
-   with a single-child boundary whose parent and child anchors seed at the same
-   point; assert the exclusion applies before the zero-distance fallback and the
-   settling result stays finite and idle.
-10. `TypedForcesShould.twoMapWorkspaceSettlesToIdle` — the §10 two-map fixture
-    (24 nodes, 8 anchors, 4 cross-map edges) asserts idle within 2000 steps
-    (measured 419), locking the multi-map / `MapTierCorrection` coexistence.
+   — after settling the reference fixture, assert
+   `distance(root, "Axioms") < 1000`. Measured: fixed 455.53; ancestor
+   exclusion removed 2042.95 (direct-parent-only ≈ 2025) → fails.
+9. `BoundarySeparationShould.coincidentParentChildAnchorsStayExcluded` — the
+   single-child boundary case, in which `Seeds.center` gives `ringRadius = 0`
+   and the parent/child anchors seed at the same point (this is already the
+   root–ZFC configuration of the reference fixture); assert the same proximity
+   invariant as test 3 after settling (fixed 100.19, unfixed 2810.58 → fails).
+   The exclusion-before-fallback ordering itself is a code-impact note, not an
+   observable assertion.
+10. `TypedForcesShould.twoMapWorkspaceSettlesToIdle` — the explicitly defined
+    two-map fixture: workspace id `00000000-0000-0000-0000-0000000000aa`; map A
+    `…0001` with root `"Axiomatic Set Theory"` (`mapRoot`, `SUPPRESSED`) and
+    sub-boundaries `"A-sub 0".."A-sub 2"` (`SUBTLE`), each holding 4 nodes
+    `a{s}_{n}` labelled `"Boundary {s} node {n}"`; map B `…0002` with root
+    `"Topology"` (`mapRoot`, `EMPHATIC`) and sub-boundaries `"B-sub 0".."B-sub 2"`
+    (`SUBTLE`), each holding 4 nodes `b{s}_{n}` labelled `"Boundary {s} node {n}"`;
+    4 cross-map `GraphRelationshipRecord`s (ids
+    `20000000-0000-0000-0000-00000000000{i+1}`, sequence `i+1`, `FORWARD`) from
+    `a0_i` to `b0_i` for `i = 0..3`, projected through
+    `EdgeContributor.graphRelationship`. 24 nodes, 8 anchors. Assert idle within
+    2000 steps (measured 419, rms 0.0018) and that the measurement stays under
+    both thresholds for the following 100 frames; baseline never idles (rms
+    ≈ 0.24).
 11. Existing suites must stay green: `TypedForcesShould`,
     `BoundarySeparationShould`, `GraphStreamBoundaryShould`, `LayoutWorkerShould`,
     `PerceptualIdlePolicyShould`, `MapTierCorrectionShould`,
@@ -257,19 +305,21 @@ test-local copies, as the existing suites already do.
 
 ## 10. Validation Evidence (headless, production classes + patched copies)
 
-All numbers below come from driving the real `LayoutWorker`/engine with the
-worktree's compiled classes; patched candidates were compiled into a shadowing
-directory so the target worktree was never modified.
+All numbers come from driving the real `LayoutWorker`/engine with the worktree's
+compiled classes; patched candidates were compiled into a shadowing directory so
+the target worktree was never modified.
 
-- User graph (no relationships): baseline never idle; fix idle at step 457
-  (rms 0.0456), converges monotonically to rms 0.0018 by step 2500.
+- Reference fixture: baseline never idle; fix idle at step 457 (rms 0.0456),
+  converging monotonically to rms 0.0018 by step 2500.
 - Pin → unpin: baseline never idle in either state; fix idle 292 steps after
-  unpin.
+  unpin, formerly pinned node 122.04 units from the pin.
 - Pinned while settling: baseline never idle; fix idle at step 2471 (rms
-  0.0495).
-- Larger graph (2 maps, 24 nodes, 8 anchors, 4 cross-map edges): baseline never
-  idle (rms ~0.24); fix idle at step 419 (rms 0.0019).
-- Anchor spread for the nested fixture: 3781 → 711 (nesting restored).
+  0.049654).
+- Two-map fixture (§9 test 10): baseline never idle (rms ~0.24); fix idle at
+  step 419 (rms 0.0018) and stays idle through step 4000.
+- Momentum: step 1 = 0.1725 (clamp artifact, before and after the fix), step 2
+  = 6.55 unfixed vs 9.9e-14 fixed, step 3 = 0.54 unfixed vs 1.0e-13 fixed.
+- Settled anchor distances and net momentum: see §3 tables.
 - Existing tests: 50 layout-package tests and 38 `LayoutSettleLoopShould` tests
   pass with the fix enabled.
 
@@ -286,11 +336,22 @@ directory so the target worktree was never modified.
    separation) in a follow-up; non-overlap must hold meanwhile.
 4. Commit on `feature/graph-workspace` via the PM delivery gate.
 
-## 12. Known Residuals (accepted, out of scope)
+## 12. Known Residuals (measured, out of scope)
 
-- Node prominence repulsion remains one-sided (factor 1.0–1.75); some graphs may
-  settle with a small sub-threshold residual drift rather than a mathematically
-  static configuration. Idle still fires, so the loop terminates.
-- Cross-map-linked particles still have their repulsion replaced by the
-  ≤ 0.005 per-particle budget (separate defect, no relationship in the reported
-  workspace).
+- **Node prominence repulsion weighting** remains one-sided (factor 1.0–1.75)
+  because layout consumes prominence as a separation size hint. Its asymmetry is
+  an order of magnitude smaller than the anchor defect and does not by itself
+  prevent idle on the reference or two-map fixtures.
+- **Barnes–Hut re-excitation in larger graphs.** With > 10 particles the worker
+  uses `repulsionNLogN`; cell-boundary/aggregation discontinuities can
+  re-excite an otherwise settling layout. Measured on a 17-particle crowded
+  same-map-relationship fixture (hub with 14 outgoing targets, scale 1.75,
+  single boundary): baseline never idle (rms 0.31); with this fix it idles once
+  at step 183 but does not remain under both thresholds (max ≈ 0.156). The same
+  fixture with Barnes–Hut disabled (`viewZone = -1`) converges to rms 0.0000 and
+  stays idle — proving the residual is aggregation discontinuity, not force
+  asymmetry. The reported relationship-free workspace and the 24-particle
+  two-map fixture are unaffected (both stay idle). Fixing this would change the
+  large-projection performance profile and is a separate task.
+- **Cross-map-linked particles** still have their repulsion replaced by the
+  ≤ 0.005 per-particle budget (separate defect).
