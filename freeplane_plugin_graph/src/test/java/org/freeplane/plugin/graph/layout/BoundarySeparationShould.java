@@ -7,6 +7,8 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.TimeUnit;
 
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.layout.graphstream.GraphStreamLayoutFactory;
@@ -324,6 +326,87 @@ public class BoundarySeparationShould {
             frame.positions().anchors().get(ReferenceRepulsionFixture.zfcHull())))
             .isLessThanOrEqualTo(ReferenceRepulsionFixture.boundaryRadius(projection,
                 ReferenceRepulsionFixture.rootHull()) - 16.0);
+    }
+
+    @Test
+    public void pinnedFixtureSettlesWithPinPositionUnchanged() throws Exception {
+        GraphProjection projection = ReferenceRepulsionFixture.referenceProjection(1L);
+        ProjectedNodeKey pinned = ReferenceRepulsionFixture.replacementNode();
+        PinRecord record = PinRecord.of(pinned.source().persistedReference().get(), 1059.0, -145.0,
+            Collections.<org.freeplane.plugin.graph.workspace.model.UnknownXml>emptyList());
+        List<PinProjection> pins = Collections.singletonList(PinProjection.active(record, pinned));
+        LayoutWorker worker = new LayoutWorker(LayoutCalibration.spikeDefaults());
+        try {
+            await(worker.submit(LayoutRequest.of(ReferenceRepulsionFixture.WORKSPACE, projection,
+                ProjectionDiff.between(projection, projection), pins)));
+            LayoutFrame firstIdle = null;
+            int firstIdleStep = 0;
+            for (int step = 1; step <= 10000; step++) {
+                LayoutFrame frame = await(worker.step());
+                if (frame.idle().idle()) {
+                    firstIdle = frame;
+                    firstIdleStep = step;
+                    break;
+                }
+            }
+            assertThat(firstIdle).isNotNull();
+            assertThat(firstIdleStep).isLessThanOrEqualTo(10000);
+            assertThat(firstIdle.positions().nodes().get(pinned)).isEqualTo(LayoutPoint.of(1059.0, -145.0));
+            double worstRms = 0.0;
+            double worstMax = 0.0;
+            LayoutFrame last = firstIdle;
+            for (int step = 0; step < 100; step++) {
+                last = await(worker.step());
+                worstRms = Math.max(worstRms, last.idle().rms());
+                worstMax = Math.max(worstMax, last.idle().max());
+            }
+            assertThat(worstRms).isLessThanOrEqualTo(0.0505);
+            assertThat(worstMax).isLessThanOrEqualTo(0.10);
+            assertThat(last.positions().nodes().get(pinned)).isEqualTo(LayoutPoint.of(1059.0, -145.0));
+        }
+        finally {
+            worker.close();
+        }
+    }
+
+    @Test
+    public void unpinTransitionSettlesAfterFormerPinReleased() throws Exception {
+        GraphProjection projection = ReferenceRepulsionFixture.referenceProjection(1L);
+        ProjectedNodeKey pinned = ReferenceRepulsionFixture.replacementNode();
+        PinRecord record = PinRecord.of(pinned.source().persistedReference().get(), 1059.0, -145.0,
+            Collections.<org.freeplane.plugin.graph.workspace.model.UnknownXml>emptyList());
+        List<PinProjection> pins = Collections.singletonList(PinProjection.active(record, pinned));
+        LayoutWorker worker = new LayoutWorker(LayoutCalibration.spikeDefaults());
+        try {
+            await(worker.submit(LayoutRequest.of(ReferenceRepulsionFixture.WORKSPACE, projection,
+                ProjectionDiff.between(projection, projection), pins)));
+            for (int step = 0; step < 1500; step++) {
+                await(worker.step());
+            }
+            await(worker.submit(LayoutRequest.of(ReferenceRepulsionFixture.WORKSPACE, projection,
+                ProjectionDiff.between(projection, projection), Collections.<PinProjection>emptyList())));
+            LayoutFrame firstIdle = null;
+            int firstIdleStep = 0;
+            for (int step = 1; step <= 2000; step++) {
+                LayoutFrame frame = await(worker.step());
+                if (frame.idle().idle()) {
+                    firstIdle = frame;
+                    firstIdleStep = step;
+                    break;
+                }
+            }
+            assertThat(firstIdle).isNotNull();
+            assertThat(firstIdleStep).isLessThanOrEqualTo(2000);
+            assertThat(distance(firstIdle.positions().nodes().get(pinned), LayoutPoint.of(1059.0, -145.0)))
+                .isGreaterThan(10.0);
+        }
+        finally {
+            worker.close();
+        }
+    }
+
+    private static LayoutFrame await(CompletionStage<LayoutFrame> stage) throws Exception {
+        return stage.toCompletableFuture().get(5L, TimeUnit.SECONDS);
     }
 
     private static ProjectedNode node(MapReferenceId map, String id) {

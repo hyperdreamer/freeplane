@@ -9,6 +9,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.TimeUnit;
 
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.layout.graphstream.GraphStreamLayoutFactory;
@@ -349,6 +351,35 @@ public class TypedForcesShould {
             }
             assertThat(Math.hypot(sumDx, sumDy)).isLessThanOrEqualTo(1.0e-9);
         }
+    }
+
+    @Test
+    public void settleRelationshipFreeNestedBoundaryProjectionToIdle() throws Exception {
+        GraphProjection projection = ReferenceRepulsionFixture.referenceProjection(1L);
+        LayoutWorker worker = new LayoutWorker(LayoutCalibration.spikeDefaults());
+        try {
+            await(worker.submit(LayoutRequest.of(ReferenceRepulsionFixture.WORKSPACE, projection,
+                ProjectionDiff.between(projection, projection), Collections.<PinProjection>emptyList())));
+            LayoutFrame firstIdle = null;
+            int firstIdleStep = 0;
+            for (int step = 1; step <= 2000; step++) {
+                LayoutFrame frame = await(worker.step());
+                if (frame.idle().idle()) {
+                    firstIdle = frame;
+                    firstIdleStep = step;
+                    break;
+                }
+            }
+            assertThat(firstIdle).isNotNull();
+            assertThat(firstIdleStep).isLessThanOrEqualTo(2000);
+        }
+        finally {
+            worker.close();
+        }
+    }
+
+    private static LayoutFrame await(CompletionStage<LayoutFrame> stage) throws Exception {
+        return stage.toCompletableFuture().get(5L, TimeUnit.SECONDS);
     }
 
     private static LayoutFrame frameAfterSteps(WorkspaceId workspace, GraphProjection projection,
