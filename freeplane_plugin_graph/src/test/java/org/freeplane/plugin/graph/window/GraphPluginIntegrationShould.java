@@ -440,6 +440,20 @@ public class GraphPluginIntegrationShould {
         }
     }
 
+    @Test
+    public void shipsTheFourRecentWorkspaceResourceKeys() throws IOException {
+        Properties translations = properties("freeplane/src/viewer/resources/translations/Resources_en.properties");
+
+        assertThat(translations.getProperty("graph_workspace.action.clear_recent_workspaces"))
+            .isEqualTo("Clear Recent Workspaces");
+        assertThat(translations.getProperty("graph_workspace.menu.recent_workspaces"))
+            .isEqualTo("Recent Workspaces");
+        assertThat(translations.getProperty("graph_workspace.recent_workspaces.empty"))
+            .isEqualTo("No recent workspaces");
+        assertThat(translations.getProperty("graph_workspace.recent_workspaces.open_failed"))
+            .isEqualTo("Could not open the recent workspace: {0}");
+    }
+
     private static ModeController configuredModeController() {
         ModeController modeController = mock(ModeController.class);
         MapController mapController = mock(MapController.class);
