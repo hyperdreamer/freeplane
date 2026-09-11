@@ -42,6 +42,7 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSeparator;
 import javax.swing.JViewport;
+import javax.swing.Icon;
 import javax.swing.UIManager;
 import javax.swing.event.PopupMenuEvent;
 import javax.swing.event.PopupMenuListener;
@@ -215,6 +216,132 @@ public class GraphWorkspaceWindowModelShould {
         assertThat(graphScrollPane.getViewport().getView()).isSameAs(model.canvas());
         assertThat(graphArea.getComponent(2)).isSameAs(model.settingsPanel());
         model.close();
+    }
+
+    @Test
+    public void rendersFourIconOnlyControlsThroughTheScalableIconLookup() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        Icon undoIcon = icon(24, 16);
+        Icon redoIcon = icon(16, 16);
+        Icon zoomInIcon = icon(20, 16);
+        Icon zoomOutIcon = icon(28, 16);
+        fixture.stubIcon("/images/undo.svg?useAccentColor=true", undoIcon);
+        fixture.stubIcon("/images/redo.svg?useAccentColor=true", redoIcon);
+        fixture.stubIcon("/images/ZoomIn24.svg?useAccentColor=true", zoomInIcon);
+        fixture.stubIcon("/images/ZoomOut24.svg?useAccentColor=true", zoomOutIcon);
+        GraphWorkspaceWindowModel model = fixture.model();
+
+        assertThat(model.toolbar().undoButton().getIcon()).isSameAs(undoIcon);
+        assertThat(model.toolbar().undoButton().getText()).isNull();
+        assertThat(model.toolbar().undoButton().getToolTipText())
+            .isEqualTo("graph_workspace.action.undo_workspace");
+        assertThat(model.toolbar().undoButton().getAccessibleContext().getAccessibleName())
+            .isEqualTo("graph_workspace.action.undo_workspace");
+        assertThat(model.toolbar().undoButton().getName()).isEqualTo("graph-workspace-undo");
+
+        assertThat(model.toolbar().redoButton().getIcon()).isSameAs(redoIcon);
+        assertThat(model.toolbar().redoButton().getText()).isNull();
+        assertThat(model.toolbar().redoButton().getToolTipText())
+            .isEqualTo("graph_workspace.action.redo_workspace");
+        assertThat(model.toolbar().redoButton().getAccessibleContext().getAccessibleName())
+            .isEqualTo("graph_workspace.action.redo_workspace");
+        assertThat(model.toolbar().redoButton().getName()).isEqualTo("graph-workspace-redo");
+
+        assertThat(model.toolbar().zoomInButton().getIcon()).isSameAs(zoomInIcon);
+        assertThat(model.toolbar().zoomInButton().getText()).isNull();
+        assertThat(model.toolbar().zoomInButton().getToolTipText())
+            .isEqualTo("graph_workspace.action.zoom_in");
+        assertThat(model.toolbar().zoomInButton().getAccessibleContext().getAccessibleName())
+            .isEqualTo("graph_workspace.action.zoom_in");
+        assertThat(model.toolbar().zoomInButton().getName()).isEqualTo("graph-workspace-zoom-in");
+
+        assertThat(model.toolbar().zoomOutButton().getIcon()).isSameAs(zoomOutIcon);
+        assertThat(model.toolbar().zoomOutButton().getText()).isNull();
+        assertThat(model.toolbar().zoomOutButton().getToolTipText())
+            .isEqualTo("graph_workspace.action.zoom_out");
+        assertThat(model.toolbar().zoomOutButton().getAccessibleContext().getAccessibleName())
+            .isEqualTo("graph_workspace.action.zoom_out");
+        assertThat(model.toolbar().zoomOutButton().getName()).isEqualTo("graph-workspace-zoom-out");
+
+        assertThat(model.toolbar().undoButton().getPreferredSize().width
+            - model.toolbar().redoButton().getPreferredSize().width).isEqualTo(8);
+        assertThat(model.toolbar().zoomOutButton().getPreferredSize().width
+            - model.toolbar().zoomInButton().getPreferredSize().width).isEqualTo(8);
+
+        verify(fixture.resourceController()).getOptionalIcon("/images/undo.svg?useAccentColor=true");
+        verify(fixture.resourceController()).getOptionalIcon("/images/redo.svg?useAccentColor=true");
+        verify(fixture.resourceController()).getOptionalIcon("/images/ZoomIn24.svg?useAccentColor=true");
+        verify(fixture.resourceController()).getOptionalIcon("/images/ZoomOut24.svg?useAccentColor=true");
+        model.close();
+    }
+
+    @Test
+    public void keepsTextFallbackWhenTheIconLookupReturnsNoIcon() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
+
+        assertThat(model.toolbar().undoButton().getIcon()).isNull();
+        assertThat(model.toolbar().undoButton().getText())
+            .isEqualTo("graph_workspace.action.undo_workspace");
+        assertThat(model.toolbar().undoButton().getToolTipText()).isNull();
+        assertThat(model.toolbar().undoButton().getName()).isEqualTo("graph-workspace-undo");
+        assertThat(model.toolbar().redoButton().getIcon()).isNull();
+        assertThat(model.toolbar().redoButton().getText())
+            .isEqualTo("graph_workspace.action.redo_workspace");
+        assertThat(model.toolbar().redoButton().getToolTipText()).isNull();
+        assertThat(model.toolbar().redoButton().getName()).isEqualTo("graph-workspace-redo");
+        assertThat(model.toolbar().zoomInButton().getIcon()).isNull();
+        assertThat(model.toolbar().zoomInButton().getText())
+            .isEqualTo("graph_workspace.action.zoom_in");
+        assertThat(model.toolbar().zoomInButton().getToolTipText()).isNull();
+        assertThat(model.toolbar().zoomInButton().getName()).isEqualTo("graph-workspace-zoom-in");
+        assertThat(model.toolbar().zoomOutButton().getIcon()).isNull();
+        assertThat(model.toolbar().zoomOutButton().getText())
+            .isEqualTo("graph_workspace.action.zoom_out");
+        assertThat(model.toolbar().zoomOutButton().getToolTipText()).isNull();
+        assertThat(model.toolbar().zoomOutButton().getName()).isEqualTo("graph-workspace-zoom-out");
+
+        org.mockito.Mockito.clearInvocations(fixture.handle);
+        model.toolbar().zoomInButton().doClick();
+        verify(fixture.handle, org.mockito.Mockito.times(1)).execute(any(GraphCommand.class));
+        model.close();
+    }
+
+    @Test
+    public void keepsUndoRedoEnablementRulesAndZoomButtonsEnabledWithoutHistoryAndInReadOnlySessions() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false,
+            WorkspaceSessionStatus.empty());
+        GraphWorkspaceWindowModel model = fixture.model();
+
+        assertThat(model.toolbar().undoButton().isEnabled()).isFalse();
+        assertThat(model.toolbar().redoButton().isEnabled()).isFalse();
+        assertThat(model.toolbar().zoomInButton().isEnabled()).isTrue();
+        assertThat(model.toolbar().zoomOutButton().isEnabled()).isTrue();
+        org.mockito.Mockito.clearInvocations(fixture.handle);
+        model.toolbar().zoomInButton().doClick();
+        verify(fixture.handle, org.mockito.Mockito.times(1)).execute(any(GraphCommand.class));
+        model.close();
+
+        Fixture readOnlyFixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), true,
+            WorkspaceSessionStatus.empty());
+        GraphWorkspaceWindowModel readOnlyModel = readOnlyFixture.model();
+
+        assertThat(readOnlyModel.toolbar().undoButton().isEnabled()).isFalse();
+        assertThat(readOnlyModel.toolbar().redoButton().isEnabled()).isFalse();
+        assertThat(readOnlyModel.toolbar().zoomInButton().isEnabled()).isTrue();
+        assertThat(readOnlyModel.toolbar().zoomOutButton().isEnabled()).isTrue();
+        org.mockito.Mockito.clearInvocations(readOnlyFixture.handle);
+        readOnlyModel.toolbar().zoomInButton().doClick();
+        verify(readOnlyFixture.handle, org.mockito.Mockito.never()).execute(any(GraphCommand.class));
+        readOnlyModel.close();
     }
 
     @Test
@@ -1712,6 +1839,13 @@ public class GraphWorkspaceWindowModelShould {
         throw new AssertionError("Missing recent-workspaces popup listener");
     }
 
+    private static Icon icon(final int width, final int height) {
+        final Icon icon = mock(Icon.class);
+        when(icon.getIconWidth()).thenReturn(Integer.valueOf(width));
+        when(icon.getIconHeight()).thenReturn(Integer.valueOf(height));
+        return icon;
+    }
+
     private static final class Fixture {
         private final GraphWorkspaceController applicationController;
         private final GraphWorkspaceHandle handle;
@@ -1720,6 +1854,8 @@ public class GraphWorkspaceWindowModelShould {
         private final ListenerRegistration registration;
         private final ListenerRegistration sessionRegistration;
         private final RecentWorkspaceList recentWorkspaces;
+        private final Map<String, Icon> iconStubs = new LinkedHashMap<String, Icon>();
+        private EdtResources resources;
 
         private Fixture(GraphWorkspaceController applicationController, GraphWorkspaceHandle handle,
                 WorkspaceCloseController closeController, GraphWorkspaceViewBinding binding,
@@ -1732,6 +1868,15 @@ public class GraphWorkspaceWindowModelShould {
             this.registration = registration;
             this.sessionRegistration = sessionRegistration;
             this.recentWorkspaces = recentWorkspaces;
+        }
+
+        private Fixture stubIcon(final String path, final Icon icon) {
+            iconStubs.put(path, icon);
+            return this;
+        }
+
+        private ResourceController resourceController() {
+            return resources.controller();
         }
 
         private GraphWorkspaceWindowModel model() {
@@ -1756,12 +1901,13 @@ public class GraphWorkspaceWindowModelShould {
             GraphWorkspaceWindow.runOnEdt(new Runnable() {
                 @Override
                 public void run() {
-                    edtResources[0] = new EdtResources();
+                    edtResources[0] = new EdtResources(iconStubs);
                     result[0] = new GraphWorkspaceWindowModel(handle, binding, applicationController,
                         () -> OPEN_PATH, closeController, () -> { }, () -> { }, () -> { }, commandMessageSink,
                         recentWorkspaces);
                 }
             });
+            resources = edtResources[0];
             RESOURCES.add(edtResources[0]);
             return result[0];
         }
@@ -1770,12 +1916,20 @@ public class GraphWorkspaceWindowModelShould {
     private static final class EdtResources {
         private final MockedStatic<TextUtils> textUtils;
         private final MockedStatic<ResourceController> resourceController;
+        private final ResourceController controller;
         private boolean closed;
 
         private EdtResources() {
+            this(Collections.<String, Icon>emptyMap());
+        }
+
+        private EdtResources(final Map<String, Icon> iconStubs) {
+            closePreviouslyRegisteredResources();
+            controller = mock(ResourceController.class);
             resourceController = org.mockito.Mockito.mockStatic(ResourceController.class);
-            resourceController.when(ResourceController::getResourceController)
-                .thenReturn(mock(ResourceController.class));
+            resourceController.when(ResourceController::getResourceController).thenReturn(controller);
+            when(controller.getOptionalIcon(any(String.class)))
+                .thenAnswer(invocation -> iconStubs.get(invocation.getArgument(0)));
             textUtils = org.mockito.Mockito.mockStatic(TextUtils.class);
             textUtils.when(() -> TextUtils.getText(any(String.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -1787,6 +1941,21 @@ public class GraphWorkspaceWindowModelShould {
                 .thenAnswer(invocation -> invocation.getArgument(0));
             textUtils.when(() -> TextUtils.format(any(String.class), any(Object[].class)))
                 .thenAnswer(invocation -> formattedText(invocation));
+        }
+
+        private ResourceController controller() {
+            return controller;
+        }
+
+        private void closePreviouslyRegisteredResources() {
+            final java.util.Iterator<EdtResources> registered = RESOURCES.iterator();
+            while (registered.hasNext()) {
+                final EdtResources resource = registered.next();
+                if (resource != this) {
+                    resource.closeOnEdt();
+                }
+                registered.remove();
+            }
         }
 
         private void closeOnEdt() {

@@ -17,6 +17,7 @@ import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
 import javax.swing.ButtonGroup;
 import javax.swing.DefaultListCellRenderer;
+import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JList;
@@ -25,6 +26,7 @@ import javax.swing.JTextField;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 
+import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.plugin.graph.canvas.GraphCanvas;
 import org.freeplane.plugin.graph.canvas.GraphInteractionController;
@@ -47,16 +49,20 @@ final class WorkspaceToolbar extends javax.swing.JPanel {
     private final JButton openButton = button("graph_workspace.action.open", "open");
     private final JButton saveButton = button("graph_workspace.action.save", "save");
     private final JButton saveAsButton = button("graph_workspace.action.save_as", "save-as");
-    private final JButton undoButton = button("graph_workspace.action.undo_workspace", "undo");
-    private final JButton redoButton = button("graph_workspace.action.redo_workspace", "redo");
+    private final JButton undoButton = iconButton("graph_workspace.action.undo_workspace", "undo",
+        "/images/undo.svg?useAccentColor=true");
+    private final JButton redoButton = iconButton("graph_workspace.action.redo_workspace", "redo",
+        "/images/redo.svg?useAccentColor=true");
     private final JToggleButton selectButton = toggleButton("graph_workspace.tool.select", "select");
     private final JToggleButton connectButton = toggleButton("graph_workspace.tool.connect", "connect");
     private final JComboBox<RelationshipDirection> directionComboBox =
         new JComboBox<RelationshipDirection>(RelationshipDirection.values());
     private final JTextField searchField = new JTextField();
     private final JButton settingsButton = button("graph_workspace.action.settings", "settings");
-    private final JButton zoomInButton = button("graph_workspace.action.zoom_in", "zoom-in");
-    private final JButton zoomOutButton = button("graph_workspace.action.zoom_out", "zoom-out");
+    private final JButton zoomInButton = iconButton("graph_workspace.action.zoom_in", "zoom-in",
+        "/images/ZoomIn24.svg?useAccentColor=true");
+    private final JButton zoomOutButton = iconButton("graph_workspace.action.zoom_out", "zoom-out",
+        "/images/ZoomOut24.svg?useAccentColor=true");
     private final JButton fitGraphButton = button("graph_workspace.action.fit_graph", "fit-graph");
     private final JButton resetZoomButton = button("graph_workspace.action.reset_zoom", "reset-zoom");
     private final JButton pinButton = button("graph_workspace.action.pin", "pin");
@@ -361,6 +367,20 @@ final class WorkspaceToolbar extends javax.swing.JPanel {
 
     private static JButton button(final String textKey, final String name) {
         final JButton button = new JButton(TextUtils.getText(textKey));
+        configure(button, name);
+        return button;
+    }
+
+    private static JButton iconButton(final String textKey, final String name,
+            final String iconPath) {
+        final JButton button = new JButton(TextUtils.getText(textKey));
+        final Icon icon = ResourceController.getResourceController().getOptionalIcon(iconPath);
+        if (icon != null) {
+            button.setIcon(icon);
+            button.setText(null);
+            button.setToolTipText(TextUtils.getText(textKey));
+            button.getAccessibleContext().setAccessibleName(TextUtils.getText(textKey));
+        }
         configure(button, name);
         return button;
     }
