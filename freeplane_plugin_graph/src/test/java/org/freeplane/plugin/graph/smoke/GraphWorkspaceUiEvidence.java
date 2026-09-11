@@ -28,6 +28,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -35,6 +36,7 @@ import java.util.function.Supplier;
 
 import javax.imageio.ImageIO;
 import javax.swing.AbstractButton;
+import javax.swing.Icon;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JMenuBar;
@@ -47,6 +49,7 @@ import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.plugin.graph.canvas.GraphCanvas;
+import org.freeplane.plugin.graph.canvas.GraphIntent;
 import org.freeplane.plugin.graph.control.CanvasState;
 import org.freeplane.plugin.graph.control.GraphWorkspaceController;
 import org.freeplane.plugin.graph.control.GraphWorkspaceHandle;
@@ -63,14 +66,22 @@ import org.freeplane.plugin.graph.group.GraphGroupMarkerPainter;
 import org.freeplane.plugin.graph.group.GraphGroupModel;
 import org.freeplane.plugin.graph.layout.LayoutFrame;
 import org.freeplane.plugin.graph.projection.GraphProjection;
+import org.freeplane.plugin.graph.projection.PinProjection;
+import org.freeplane.plugin.graph.projection.ProjectedEdge;
+import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
+import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
+import org.freeplane.plugin.graph.projection.RelationshipResolution;
 import org.freeplane.plugin.graph.projection.input.MapAvailability;
 import org.freeplane.plugin.graph.projection.input.SafeNodeLabel;
 import org.freeplane.plugin.graph.projection.input.SourceNodeKey;
 import org.freeplane.plugin.graph.workspace.ListenerRegistration;
 import org.freeplane.plugin.graph.workspace.model.DisplaySettings;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
+import org.freeplane.plugin.graph.workspace.model.NodeReference;
+import org.freeplane.plugin.graph.workspace.model.PersistedNodeId;
+import org.freeplane.plugin.graph.workspace.model.PinRecord;
 import org.freeplane.plugin.graph.workspace.model.Viewport;
 import org.freeplane.view.swing.map.NodeView;
 import org.mockito.Answers;
@@ -83,6 +94,12 @@ import org.mockito.Mockito;
 public final class GraphWorkspaceUiEvidence {
     private static final MapReferenceId FIRST_MAP = mapId(1L);
     private static final MapReferenceId SECOND_MAP = mapId(2L);
+    private static final NodeReference FIRST_REFERENCE = NodeReference.of(FIRST_MAP, PersistedNodeId.of("first"));
+    private static final NodeReference SECOND_REFERENCE = NodeReference.of(SECOND_MAP, PersistedNodeId.of("second"));
+    private static final ProjectedNodeKey FIRST_KEY = ProjectedNodeKey.of(
+        SourceNodeKey.persisted(FIRST_REFERENCE));
+    private static final ProjectedNodeKey SECOND_KEY = ProjectedNodeKey.of(
+        SourceNodeKey.persisted(SECOND_REFERENCE));
 
     private GraphWorkspaceUiEvidence() {
     }
@@ -110,8 +127,18 @@ public final class GraphWorkspaceUiEvidence {
                             }
                             return Answers.RETURNS_DEFAULTS.answer(invocation);
                         })) {
-                    resourceController.when(ResourceController::getResourceController)
-                        .thenReturn(mock(ResourceController.class));
+                    final ResourceController controller = mock(ResourceController.class);
+                    resourceController.when(ResourceController::getResourceController).thenReturn(controller);
+                    final Icon placeholder = mock(Icon.class);
+                    when(placeholder.getIconWidth()).thenReturn(Integer.valueOf(16));
+                    when(placeholder.getIconHeight()).thenReturn(Integer.valueOf(16));
+                    for (final String path : new String[] {
+                            "/images/undo.svg?useAccentColor=true",
+                            "/images/redo.svg?useAccentColor=true",
+                            "/images/ZoomIn24.svg?useAccentColor=true",
+                            "/images/ZoomOut24.svg?useAccentColor=true" }) {
+                        when(controller.getOptionalIcon(path)).thenReturn(placeholder);
+                    }
                     final EvidenceImages images = new EvidenceImages(desktop, marker);
                     images.capture();
                 }
@@ -203,28 +230,45 @@ public final class GraphWorkspaceUiEvidence {
             "00000000-0000-0000-0000-%012d", Long.valueOf(value))));
     }
 
-    private static CanvasState twoMapState() {
-        final SourceNodeKey firstSource = SourceNodeKey.transientPath(FIRST_MAP, Collections.<Integer>emptyList());
-        final SourceNodeKey secondSource = SourceNodeKey.transientPath(SECOND_MAP,
-            Collections.<Integer>emptyList());
-        final ProjectedNodeKey firstKey = ProjectedNodeKey.of(firstSource);
-        final ProjectedNodeKey secondKey = ProjectedNodeKey.of(secondSource);
-        final ProjectedNode first = ProjectedNode.of(firstKey, SafeNodeLabel.of("Alpha", "Alpha"),
+    private static List<ProjectedNode> twoMapNodes() {
+        final ProjectedNode first = ProjectedNode.of(FIRST_KEY, SafeNodeLabel.of("Alpha", "Alpha"),
             "Alpha map", false);
-        final ProjectedNode second = ProjectedNode.of(secondKey, SafeNodeLabel.of("Beta", "Beta"),
+        final ProjectedNode second = ProjectedNode.of(SECOND_KEY, SafeNodeLabel.of("Beta", "Beta"),
             "Beta map", false);
-        final List<ProjectedNode> nodes = Arrays.asList(first, second);
+        return Arrays.asList(first, second);
+    }
+
+    private static CanvasState twoMapState() {
+        final List<ProjectedNode> nodes = twoMapNodes();
         final GraphProjection projection = GraphProjection.structure(7L, nodes, Collections.emptyList());
+        return twoMapCanvasState(projection);
+    }
+
+    private static CanvasState pinnedTwoMapState() {
+        final List<ProjectedNode> nodes = twoMapNodes();
+        final GraphProjection projection = GraphProjection.projected(7L, nodes,
+            Collections.<ProjectedEnclosure>emptyList(), Collections.<ProjectedEdge>emptyList(),
+            Collections.<RelationshipResolution>emptyList(),
+            Collections.singletonList(PinProjection.active(PinRecord.of(SECOND_REFERENCE, 110.0, 32.0,
+                Collections.emptyList()), SECOND_KEY)));
+        return twoMapCanvasState(projection);
+    }
+
+    private static CanvasState unpinnedState() {
+        return twoMapState();
+    }
+
+    private static CanvasState twoMapCanvasState(final GraphProjection projection) {
         final LayoutPoint firstPoint = LayoutPoint.of(-110.0, -32.0);
         final LayoutPoint secondPoint = LayoutPoint.of(110.0, 32.0);
         final java.util.Map<ProjectedNodeKey, NodeGeometry> geometry =
             new java.util.LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
-        geometry.put(firstKey, NodeGeometry.of(firstPoint, 28.0));
-        geometry.put(secondKey, NodeGeometry.of(secondPoint, 28.0));
+        geometry.put(FIRST_KEY, NodeGeometry.of(firstPoint, 28.0));
+        geometry.put(SECOND_KEY, NodeGeometry.of(secondPoint, 28.0));
         final java.util.Map<ProjectedNodeKey, LayoutPoint> positions =
             new java.util.LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
-        positions.put(firstKey, firstPoint);
-        positions.put(secondKey, secondPoint);
+        positions.put(FIRST_KEY, firstPoint);
+        positions.put(SECOND_KEY, secondPoint);
         return CanvasState.of(7L, projection,
             LayoutFrame.of(0L, LayoutPositions.of(positions, Collections.emptyMap()), false),
             GraphGeometry.of(geometry, Collections.emptyMap()), OperationalStatus.IDLE);
@@ -280,6 +324,7 @@ public final class GraphWorkspaceUiEvidence {
             root.setSize(new Dimension(1280, 800));
             layoutRecursively(root);
             dispatchInteractions();
+            verifyPinToggleStates(pinnedTwoMapState());
             paintAndVerify(desktop, root);
 
             root.setSize(new Dimension(900, 900));
@@ -384,6 +429,33 @@ public final class GraphWorkspaceUiEvidence {
                 MouseWheelEvent.WHEEL_UNIT_SCROLL, 1, -1));
             canvas.dispatchEvent(new KeyEvent(canvas, KeyEvent.KEY_PRESSED, now + 4L, 0,
                 KeyEvent.VK_RIGHT, KeyEvent.CHAR_UNDEFINED));
+        }
+
+        private void verifyPinToggleStates(final CanvasState pinnedState) {
+            final JComponent pin = findNamed(root, "graph-workspace-pin");
+            requireComponent(pin, "pin toggle");
+            final ProjectedEndpointKey firstEndpoint =
+                ProjectedEndpointKey.ofNode(pinnedState.projection().nodes().get(0).key());
+            final ProjectedEndpointKey secondEndpoint =
+                ProjectedEndpointKey.ofNode(pinnedState.projection().nodes().get(1).key());
+            modelAccess.invoke("acceptCanvasState", pinnedState);
+            modelAccess.invoke("acceptIntent", new GraphIntent.ChangeSelection(Optional.of(secondEndpoint)));
+            assertPinState((AbstractButton) pin, "unpin", true, "pinned selection");
+            modelAccess.invoke("setReadOnly", Boolean.TRUE);
+            assertPinState((AbstractButton) pin, "unpin", false, "read-only pinned selection");
+            modelAccess.invoke("acceptCanvasState", unpinnedState());
+            assertPinState((AbstractButton) pin, "pin", false, "read-only unpinned selection");
+            modelAccess.invoke("setReadOnly", Boolean.FALSE);
+            assertPinState((AbstractButton) pin, "pin", true, "unpinned selection");
+        }
+
+        private static void assertPinState(final AbstractButton button, final String expected,
+                final boolean enabled, final String description) {
+            final String actual = compactText(button.getText());
+            if (!expected.equals(actual) || button.isEnabled() != enabled) {
+                throw new AssertionError("Pin toggle " + description + " expected " + expected + "/"
+                    + enabled + " but was " + actual + "/" + button.isEnabled());
+            }
         }
 
         private void paintAndVerify(final Path path, final JPanel panel) {
@@ -599,6 +671,22 @@ public final class GraphWorkspaceUiEvidence {
                 if (parameterTypes.length == 1 && parameterTypes[0] == CanvasState.class) {
                     try {
                         return type.getDeclaredMethod(name, CanvasState.class);
+                    }
+                    catch (final NoSuchMethodException ignored) {
+                        throw new IllegalStateException(exception);
+                    }
+                }
+                if (parameterTypes.length == 1 && GraphIntent.class.isAssignableFrom(parameterTypes[0])) {
+                    try {
+                        return type.getDeclaredMethod(name, GraphIntent.class);
+                    }
+                    catch (final NoSuchMethodException ignored) {
+                        throw new IllegalStateException(exception);
+                    }
+                }
+                if (parameterTypes.length == 1 && parameterTypes[0] == Boolean.class) {
+                    try {
+                        return type.getDeclaredMethod(name, boolean.class);
                     }
                     catch (final NoSuchMethodException ignored) {
                         throw new IllegalStateException(exception);
