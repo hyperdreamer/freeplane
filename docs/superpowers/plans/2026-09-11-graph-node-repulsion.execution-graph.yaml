@@ -1,0 +1,141 @@
+schema_version: 1
+topic: graph-node-repulsion
+run_id: pm-run-20260911-085410-438034e0
+source_plan:
+  path: docs/superpowers/plans/2026-09-11-graph-node-repulsion.md
+  sha256: 1863127d2fca367a455c61e8b759ca9f409f1788692b706d33abafd9c336c15a
+  commit_oid: 520678c3281918ec8d326208d56b68b91358f3b2
+  task_numbers: [1, 2, 3, 4]
+lanes:
+  - id: graph-repulsion
+    sequence: 1
+    task_ids:
+      - repulsion-task-1
+      - repulsion-task-2
+      - repulsion-task-3
+      - repulsion-task-4
+    exclusive_resources:
+      - gradle-daemon
+tasks:
+  - id: repulsion-task-1
+    plan_task: 1
+    lane: graph-repulsion
+    sequence: 1
+    depends_on: []
+    owns:
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/TypedSpringBox.java
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/TypedNodeParticle.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/ReferenceRepulsionFixture.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/TypedForcesShould.java
+    exclusive_resources:
+      - gradle-daemon
+    interfaces:
+      produces:
+        - id: iface-anchor-predicate
+          signature: "boolean TypedSpringBox.isAnchorParticle(String id)"
+          digest: 5b6a3acad61935ab
+        - id: iface-scale-repulsion
+          signature: "void TypedNodeParticle.scaleRepulsion(org.graphstream.ui.geom.Vector3 before)"
+          digest: 94cf39344102b88b
+        - id: iface-reference-fixture
+          signature: "ReferenceRepulsionFixture {WORKSPACE, referenceProjection(long), replacementNode(), axiomsHull(), definitionsHull(), rootHull(), zfcHull(), Sizes}"
+          digest: 9175953f4385611f
+      consumes: []
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.layout.TypedForcesShould", "-PTestLoggingFull", "--rerun-tasks"]
+        expect_exit: 0
+  - id: repulsion-task-2
+    plan_task: 2
+    lane: graph-repulsion
+    sequence: 2
+    depends_on: [repulsion-task-1]
+    owns:
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/GraphStreamLayoutEngine.java
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/TypedSpringBox.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundarySeparationShould.java
+    exclusive_resources:
+      - gradle-daemon
+    interfaces:
+      produces:
+        - id: iface-parent-anchor-id
+          signature: "String GraphStreamLayoutEngine.DesiredParticle.parentAnchorId"
+          digest: 9a7371f2780f1b4f
+        - id: iface-configure-particle
+          signature: "void TypedSpringBox.configureParticle(String id, double radius, boolean pinned, boolean anchor, String parentAnchorId)"
+          digest: 40bea79ec71b2e03
+        - id: iface-ancestor-pair
+          signature: "boolean TypedSpringBox.isAncestorPair(String first, String second)"
+          digest: 662cd81026d4382f
+      consumes:
+        - from_task: repulsion-task-1
+          id: iface-reference-fixture
+          digest: 9175953f4385611f
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.layout.BoundarySeparationShould", "-PTestLoggingFull", "--rerun-tasks"]
+        expect_exit: 0
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.layout.TypedForcesShould", "-PTestLoggingFull", "--rerun-tasks"]
+        expect_exit: 0
+  - id: repulsion-task-3
+    plan_task: 3
+    lane: graph-repulsion
+    sequence: 3
+    depends_on: [repulsion-task-2]
+    owns:
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/TypedForcesShould.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundarySeparationShould.java
+    exclusive_resources:
+      - gradle-daemon
+    interfaces:
+      produces:
+        - id: iface-await-helper
+          signature: "private static LayoutFrame await(java.util.concurrent.CompletionStage<LayoutFrame> stage)"
+          digest: 82fe2b10ed61bf0f
+        - id: iface-settle-tests
+          signature: "TypedForcesShould.settleRelationshipFreeNestedBoundaryProjectionToIdle(); BoundarySeparationShould.pinnedFixtureSettlesWithPinPositionUnchanged(); BoundarySeparationShould.unpinTransitionSettlesAfterFormerPinReleased()"
+          digest: 2b3866e2f3103052
+      consumes:
+        - from_task: repulsion-task-1
+          id: iface-reference-fixture
+          digest: 9175953f4385611f
+        - from_task: repulsion-task-1
+          id: iface-anchor-predicate
+          digest: 5b6a3acad61935ab
+        - from_task: repulsion-task-2
+          id: iface-ancestor-pair
+          digest: 662cd81026d4382f
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.layout.TypedForcesShould", "--tests", "org.freeplane.plugin.graph.layout.BoundarySeparationShould", "-PTestLoggingFull", "--rerun-tasks"]
+        expect_exit: 0
+  - id: repulsion-task-4
+    plan_task: 4
+    lane: graph-repulsion
+    sequence: 4
+    depends_on: [repulsion-task-3]
+    owns:
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/TypedForcesShould.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundarySeparationShould.java
+    exclusive_resources:
+      - gradle-daemon
+    interfaces:
+      produces:
+        - id: iface-reparent-test
+          signature: "BoundarySeparationShould.reparentedBoundaryRefreshesAncestorExclusion()"
+          digest: ecdcd24f29da4021
+        - id: iface-twomap-test
+          signature: "TypedForcesShould.twoMapWorkspaceSettlesToIdle(); TypedForcesShould.twoMapProjection(long generation)"
+          digest: 9c27999571a5cba9
+      consumes:
+        - from_task: repulsion-task-1
+          id: iface-reference-fixture
+          digest: 9175953f4385611f
+        - from_task: repulsion-task-3
+          id: iface-await-helper
+          digest: 82fe2b10ed61bf0f
+        - from_task: repulsion-task-3
+          id: iface-settle-tests
+          digest: 2b3866e2f3103052
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.layout.BoundarySeparationShould", "--tests", "org.freeplane.plugin.graph.layout.TypedForcesShould", "-PTestLoggingFull", "--rerun-tasks"]
+        expect_exit: 0
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "-PTestLoggingFull", "--rerun-tasks"]
+        expect_exit: 0

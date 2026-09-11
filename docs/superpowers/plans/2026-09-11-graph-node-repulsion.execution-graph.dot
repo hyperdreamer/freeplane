@@ -1,0 +1,16 @@
+digraph execution_plan {
+    rankdir=TB;
+    node [shape=box, style=rounded, fontname="Helvetica"];
+    label="graph-node-repulsion (single lane, plan 1863127d2fca)";
+    labelloc=t;
+    subgraph cluster_graph_repulsion {
+        label="lane graph-repulsion (sequence 1..4)";
+        "repulsion-task-1" [label="Task 1: Make anchor repulsion symmetric and add the shared reference fixture\ntier: Standard"];
+        "repulsion-task-2" [label="Task 2: Exclude ancestor anchors from boundary repulsion\ntier: Standard"];
+        "repulsion-task-3" [label="Task 3: Prove pin, unpin, and nested-settle idle behavior\ntier: Standard"];
+        "repulsion-task-4" [label="Task 4: Prove reparenting, two-map settling, and the full suite\ntier: Standard"];
+    }
+    "repulsion-task-1" -> "repulsion-task-2";
+    "repulsion-task-2" -> "repulsion-task-3";
+    "repulsion-task-3" -> "repulsion-task-4";
+}
