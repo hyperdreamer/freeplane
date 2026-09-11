@@ -1,0 +1,47 @@
+digraph most_recent_workspaces_execution {
+    rankdir=TB;
+    node [shape=box, style=rounded];
+    subgraph cluster_recent_list {
+        label="recent-list";
+        t1 [label="Task 1: RecentWorkspaceList policy module|[recent-list, fast]"];
+    }
+    subgraph cluster_recent_recorder {
+        label="recent-recorder";
+        t2 [label="Task 2: RecentWorkspaceRecorder|[recent-recorder, fast]"];
+    }
+    subgraph cluster_controller {
+        label="controller";
+        t3 [label="Task 3: Non-creating openExisting on the workspace controller|[controller, advanced]"];
+        t4 [label="Task 4: Record opened and focused workspaces|[controller, advanced]"];
+    }
+    subgraph cluster_window {
+        label="window";
+        t5 [label="Task 5: Recent Workspaces submenu in the graph workspace window|[window, advanced]"];
+    }
+    subgraph cluster_window_action {
+        label="window-action";
+        t6 [label="Task 6: Recent resolution in OpenGraphWorkspaceAction|[window-action, standard]"];
+    }
+    subgraph cluster_integration {
+        label="integration";
+        t7 [label="Task 7: Propagate the shared list through the view factory|[integration, standard]"];
+        t8 [label="Task 8: Wire one application-wide recent workspace list|[integration, advanced]"];
+        t9 [label="Task 9: Recent workspace resource keys|[integration, fast]"];
+    }
+    t1 -> t2;
+    t1 -> t4;
+    t2 -> t4;
+    t3 -> t4;
+    t1 -> t5;
+    t3 -> t5;
+    t1 -> t6;
+    t3 -> t6;
+    t1 -> t7;
+    t5 -> t7;
+    t1 -> t8;
+    t3 -> t8;
+    t4 -> t8;
+    t6 -> t8;
+    t7 -> t8;
+    t8 -> t9;
+}

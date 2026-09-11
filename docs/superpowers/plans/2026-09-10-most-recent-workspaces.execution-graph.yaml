@@ -1,0 +1,225 @@
+schema_version: 1
+run_id: pm-run-20260910-233923-b6399f81
+topic: most-recent-workspaces
+source_plan:
+  path: docs/superpowers/plans/2026-09-10-most-recent-workspaces.md
+  sha256: cf6f78ace0bf4ee85796083e1009c9f730871ff1d7f0dfa36ae3b9f1d66780dc
+  commit_oid: 0959f253366ceb51a661269ad23c3da6c1758728
+  validated_at: 2026-09-11T03:10:54Z
+  plan_tasks: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+lanes:
+  - id: recent-list
+    sequence: 1
+    task_ids: [t1]
+  - id: recent-recorder
+    sequence: 2
+    task_ids: [t2]
+  - id: controller
+    sequence: 3
+    task_ids: [t3, t4]
+  - id: window
+    sequence: 4
+    task_ids: [t5]
+  - id: window-action
+    sequence: 5
+    task_ids: [t6]
+  - id: integration
+    sequence: 6
+    task_ids: [t7, t8, t9]
+tasks:
+  - id: t1
+    plan_task: 1
+    title: "RecentWorkspaceList policy module"
+    lane: recent-list
+    sequence: 1
+    implementer_tier: fast
+    depends_on: []
+    ownership:
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/workspace/RecentWorkspaceList.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/workspace/RecentWorkspaceListShould.java
+    exclusive_resources: []
+    produces:
+      - key: iface-t1
+        digest: 5fa39d8f36cef321350aed00cd17557dd1e1092bc1cedc4bd2f6b5a6b9b50c0c
+    consumes: []
+    validation:
+      - ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.workspace.RecentWorkspaceListShould", "-Dorg.gradle.java.home=/home/henry/.sdkman/candidates/java/21.0.8-zulu"]
+  - id: t2
+    plan_task: 2
+    title: "RecentWorkspaceRecorder"
+    lane: recent-recorder
+    sequence: 1
+    implementer_tier: fast
+    depends_on: [t1]
+    ownership:
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/workspace/RecentWorkspaceRecorder.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/workspace/RecentWorkspaceRecorderShould.java
+    exclusive_resources: []
+    produces:
+      - key: iface-t2
+        digest: 7ad949ccbe229782c179fabc75cd6fd4610d1c0f3076f43c017d95b74e8741c2
+    consumes:
+      - key: iface-t1
+        from_task: t1
+        digest: 5fa39d8f36cef321350aed00cd17557dd1e1092bc1cedc4bd2f6b5a6b9b50c0c
+    validation:
+      - ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.workspace.RecentWorkspaceRecorderShould", "-Dorg.gradle.java.home=/home/henry/.sdkman/candidates/java/21.0.8-zulu"]
+  - id: t3
+    plan_task: 3
+    title: "Non-creating openExisting on the workspace controller"
+    lane: controller
+    sequence: 1
+    implementer_tier: advanced
+    depends_on: []
+    ownership:
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/control/DefaultGraphWorkspaceController.java
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/control/GraphWorkspaceController.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/control/DefaultGraphWorkspaceControllerShould.java
+    exclusive_resources: []
+    produces:
+      - key: iface-t3
+        digest: c2d5bcafaa3a7d823c885fc12256f7118f1eebe5f85aeb9e1629b09501f37755
+    consumes: []
+    validation:
+      - ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould", "-Dorg.gradle.java.home=/home/henry/.sdkman/candidates/java/21.0.8-zulu"]
+  - id: t4
+    plan_task: 4
+    title: "Record opened and focused workspaces"
+    lane: controller
+    sequence: 2
+    implementer_tier: advanced
+    depends_on: [t1, t2, t3]
+    ownership:
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/control/DefaultGraphWorkspaceController.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/control/DefaultGraphWorkspaceControllerShould.java
+    exclusive_resources: []
+    produces:
+      - key: iface-t4
+        digest: 989be8c00a19c230502dfbb54c8b1aecd4da4ec637d5fd759d9ee8206939b3ff
+    consumes:
+      - key: iface-t1
+        from_task: t1
+        digest: 5fa39d8f36cef321350aed00cd17557dd1e1092bc1cedc4bd2f6b5a6b9b50c0c
+      - key: iface-t2
+        from_task: t2
+        digest: 7ad949ccbe229782c179fabc75cd6fd4610d1c0f3076f43c017d95b74e8741c2
+    validation:
+      - ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould", "-Dorg.gradle.java.home=/home/henry/.sdkman/candidates/java/21.0.8-zulu"]
+  - id: t5
+    plan_task: 5
+    title: "Recent Workspaces submenu in the graph workspace window"
+    lane: window
+    sequence: 1
+    implementer_tier: advanced
+    depends_on: [t1, t3]
+    ownership:
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindow.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindowModelShould.java
+    exclusive_resources: []
+    produces:
+      - key: iface-t5
+        digest: b207850feccde0c638d9e803e1ffa8fe64c8f411a38e13a3fc865e1f7cf7b0c9
+    consumes:
+      - key: iface-t1
+        from_task: t1
+        digest: 5fa39d8f36cef321350aed00cd17557dd1e1092bc1cedc4bd2f6b5a6b9b50c0c
+      - key: iface-t3
+        from_task: t3
+        digest: c2d5bcafaa3a7d823c885fc12256f7118f1eebe5f85aeb9e1629b09501f37755
+    validation:
+      - ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.window.GraphWorkspaceWindowModelShould", "-Dorg.gradle.java.home=/home/henry/.sdkman/candidates/java/21.0.8-zulu"]
+  - id: t6
+    plan_task: 6
+    title: "Recent resolution in OpenGraphWorkspaceAction"
+    lane: window-action
+    sequence: 1
+    implementer_tier: standard
+    depends_on: [t1, t3]
+    ownership:
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/OpenGraphWorkspaceAction.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/OpenGraphWorkspaceActionShould.java
+    exclusive_resources: []
+    produces:
+      - key: iface-t6
+        digest: b65e0904cb68152c23a5d00d1777a94ace208cbb05f143a28762f840a2bb3429
+    consumes:
+      - key: iface-t1
+        from_task: t1
+        digest: 5fa39d8f36cef321350aed00cd17557dd1e1092bc1cedc4bd2f6b5a6b9b50c0c
+      - key: iface-t3
+        from_task: t3
+        digest: c2d5bcafaa3a7d823c885fc12256f7118f1eebe5f85aeb9e1629b09501f37755
+    validation:
+      - ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.window.OpenGraphWorkspaceActionShould", "-Dorg.gradle.java.home=/home/henry/.sdkman/candidates/java/21.0.8-zulu"]
+  - id: t7
+    plan_task: 7
+    title: "Propagate the shared list through the view factory"
+    lane: integration
+    sequence: 1
+    implementer_tier: standard
+    depends_on: [t1, t5]
+    ownership:
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/SwingGraphWorkspaceViewFactory.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/GraphPluginIntegrationShould.java
+    exclusive_resources: []
+    produces:
+      - key: iface-t7
+        digest: 35ecea20f6a8906d351b092649de4e8fe3f251dc25297c49723f721385763648
+    consumes:
+      - key: iface-t1
+        from_task: t1
+        digest: 5fa39d8f36cef321350aed00cd17557dd1e1092bc1cedc4bd2f6b5a6b9b50c0c
+      - key: iface-t5
+        from_task: t5
+        digest: b207850feccde0c638d9e803e1ffa8fe64c8f411a38e13a3fc865e1f7cf7b0c9
+    validation:
+      - ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.window.GraphPluginIntegrationShould", "-Dorg.gradle.java.home=/home/henry/.sdkman/candidates/java/21.0.8-zulu"]
+  - id: t8
+    plan_task: 8
+    title: "Wire one application-wide recent workspace list"
+    lane: integration
+    sequence: 2
+    implementer_tier: advanced
+    depends_on: [t1, t3, t4, t6, t7]
+    ownership:
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/GraphModeExtension.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/GraphPluginIntegrationShould.java
+    exclusive_resources: []
+    produces:
+      - key: iface-t8
+        digest: f900e6ef0a86828c985c62b77b85a6743b42352a68da05960d2f70ff6eb5eac9
+    consumes:
+      - key: iface-t1
+        from_task: t1
+        digest: 5fa39d8f36cef321350aed00cd17557dd1e1092bc1cedc4bd2f6b5a6b9b50c0c
+      - key: iface-t3
+        from_task: t3
+        digest: c2d5bcafaa3a7d823c885fc12256f7118f1eebe5f85aeb9e1629b09501f37755
+      - key: iface-t4
+        from_task: t4
+        digest: 989be8c00a19c230502dfbb54c8b1aecd4da4ec637d5fd759d9ee8206939b3ff
+      - key: iface-t6
+        from_task: t6
+        digest: b65e0904cb68152c23a5d00d1777a94ace208cbb05f143a28762f840a2bb3429
+      - key: iface-t7
+        from_task: t7
+        digest: 35ecea20f6a8906d351b092649de4e8fe3f251dc25297c49723f721385763648
+    validation:
+      - ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.window.GraphPluginIntegrationShould", "-Dorg.gradle.java.home=/home/henry/.sdkman/candidates/java/21.0.8-zulu"]
+  - id: t9
+    plan_task: 9
+    title: "Recent workspace resource keys"
+    lane: integration
+    sequence: 3
+    implementer_tier: fast
+    depends_on: [t8]
+    ownership:
+      - freeplane/src/viewer/resources/translations/Resources_en.properties
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/GraphPluginIntegrationShould.java
+    exclusive_resources: []
+    produces:
+      - key: iface-t9
+        digest: 2405d50b897ce0b5ee786d2298de8ad1a04153b19fc137adc40e2b8192831750
+    consumes: []
+    validation:
+      - ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.window.GraphPluginIntegrationShould", "-Dorg.gradle.java.home=/home/henry/.sdkman/candidates/java/21.0.8-zulu"]
