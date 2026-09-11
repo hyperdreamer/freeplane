@@ -405,6 +405,30 @@ public class BoundarySeparationShould {
         }
     }
 
+    @Test
+    public void reparentedBoundaryRefreshesAncestorExclusion() {
+        GraphProjection original = ReferenceRepulsionFixture.referenceProjection(1L);
+        GraphProjection reparented = ReferenceRepulsionFixture.reparentedProjection(2L);
+        try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
+            engine.apply(LayoutRequest.of(ReferenceRepulsionFixture.WORKSPACE, original,
+                ProjectionDiff.between(original, original), Collections.<PinProjection>emptyList()));
+            for (int step = 0; step < 1500; step++) {
+                engine.step();
+            }
+            LayoutRequest reparentRequest = LayoutRequest.of(ReferenceRepulsionFixture.WORKSPACE, reparented,
+                ProjectionDiff.between(original, reparented), Collections.<PinProjection>emptyList());
+            engine.apply(reparentRequest);
+            for (int step = 0; step < 1500; step++) {
+                engine.step();
+            }
+            LayoutFrame frame = engine.apply(reparentRequest);
+            assertThat(distance(frame.positions().anchors().get(ReferenceRepulsionFixture.axiomsHull()),
+                frame.positions().anchors().get(ReferenceRepulsionFixture.definitionsHull())))
+                .isLessThanOrEqualTo(ReferenceRepulsionFixture.boundaryRadius(reparented,
+                    ReferenceRepulsionFixture.axiomsHull()) - 16.0);
+        }
+    }
+
     private static LayoutFrame await(CompletionStage<LayoutFrame> stage) throws Exception {
         return stage.toCompletableFuture().get(5L, TimeUnit.SECONDS);
     }

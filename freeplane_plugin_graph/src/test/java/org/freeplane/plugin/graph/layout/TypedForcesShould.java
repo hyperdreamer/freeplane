@@ -378,6 +378,36 @@ public class TypedForcesShould {
         }
     }
 
+    @Test
+    public void twoMapWorkspaceSettlesToIdle() throws Exception {
+        GraphProjection projection = twoMapProjection(1L);
+        LayoutWorker worker = new LayoutWorker(LayoutCalibration.spikeDefaults());
+        try {
+            await(worker.submit(LayoutRequest.of(ReferenceRepulsionFixture.WORKSPACE, projection,
+                ProjectionDiff.between(projection, projection), Collections.<PinProjection>emptyList())));
+            LayoutFrame firstIdle = null;
+            int firstIdleStep = 0;
+            for (int step = 1; step <= 2000; step++) {
+                LayoutFrame frame = await(worker.step());
+                if (frame.idle().idle()) {
+                    firstIdle = frame;
+                    firstIdleStep = step;
+                    break;
+                }
+            }
+            assertThat(firstIdle).isNotNull();
+            assertThat(firstIdleStep).isLessThanOrEqualTo(2000);
+            for (int step = 0; step < 100; step++) {
+                LayoutFrame frame = await(worker.step());
+                assertThat(frame.idle().rms()).isLessThanOrEqualTo(0.05);
+                assertThat(frame.idle().max()).isLessThanOrEqualTo(0.10);
+            }
+        }
+        finally {
+            worker.close();
+        }
+    }
+
     private static LayoutFrame await(CompletionStage<LayoutFrame> stage) throws Exception {
         return stage.toCompletableFuture().get(5L, TimeUnit.SECONDS);
     }
@@ -437,6 +467,60 @@ public class TypedForcesShould {
     private static ProjectedNode node(MapReferenceId map, String id) {
         ProjectedNodeKey key = key(map, id);
         return ProjectedNode.of(key, SafeNodeLabel.of(id, id), "Map " + map.value(), false);
+    }
+
+    private static GraphProjection twoMapProjection(long generation) {
+        List<ProjectedNode> nodes = new ArrayList<ProjectedNode>();
+        List<ProjectedEnclosure> enclosures = new ArrayList<ProjectedEnclosure>();
+        List<ProjectedEdge> edges = new ArrayList<ProjectedEdge>();
+        MapReferenceId[] maps = new MapReferenceId[] {MAP_ONE, MAP_TWO};
+        for (int mapIndex = 0; mapIndex < maps.length; mapIndex++) {
+            MapReferenceId map = maps[mapIndex];
+            String prefix = mapIndex == 0 ? "a" : "b";
+            EnclosureHullKey rootHull = hull(map, prefix + "-root");
+            List<EnclosureHullKey> subHulls = new ArrayList<EnclosureHullKey>();
+            for (int sub = 0; sub < 3; sub++) {
+                String subId = prefix + "-sub-" + sub;
+                EnclosureHullKey subHull = hull(map, subId);
+                List<ProjectedNodeKey> subNodes = new ArrayList<ProjectedNodeKey>();
+                for (int nodeIndex = 0; nodeIndex < 4; nodeIndex++) {
+                    ProjectedNodeKey nodeKey = key(map, prefix + sub + "_" + nodeIndex);
+                    String nodeLabel = "Boundary " + sub + " node " + nodeIndex;
+                    nodes.add(ProjectedNode.of(nodeKey, SafeNodeLabel.of(nodeLabel, nodeLabel), "Map", true));
+                    subNodes.add(nodeKey);
+                }
+                String subLabel = (mapIndex == 0 ? "A-sub " : "B-sub ") + sub;
+                enclosures.add(ProjectedEnclosure.of(subHull, Collections.singletonList(
+                    EnclosureKey.of(source(map, subId))),
+                    Collections.singletonList(SafeNodeLabel.of(subLabel, subLabel)), "Map",
+                    Optional.of(rootHull), subNodes, Collections.<EnclosureHullKey>emptyList(), false,
+                    BoundaryTier.SUBTLE));
+                subHulls.add(subHull);
+            }
+            String rootLabel = mapIndex == 0 ? "Axiomatic Set Theory" : "Topology";
+            BoundaryTier rootTier = mapIndex == 0 ? BoundaryTier.SUPPRESSED : BoundaryTier.EMPHATIC;
+            enclosures.add(ProjectedEnclosure.of(rootHull, Collections.singletonList(
+                EnclosureKey.of(source(map, prefix + "-root"))),
+                Collections.singletonList(SafeNodeLabel.of(rootLabel, rootLabel)), "Map",
+                Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(), subHulls, true,
+                rootTier));
+        }
+        for (int i = 0; i < 4; i++) {
+            long sequence = i + 1L;
+            GraphRelationshipRecord relationship = GraphRelationshipRecord.of(
+                RelationshipId.of(String.format("20000000-0000-0000-0000-%012d", Long.valueOf(sequence))),
+                sequence,
+                key(MAP_ONE, "a0_" + i).source().persistedReference().get(),
+                key(MAP_TWO, "b0_" + i).source().persistedReference().get(),
+                RelationshipDirection.FORWARD,
+                Collections.<UnknownXml>emptyList());
+            ProjectedEndpointKey sourceEndpoint = ProjectedEndpointKey.ofNode(key(MAP_ONE, "a0_" + i));
+            ProjectedEndpointKey targetEndpoint = ProjectedEndpointKey.ofNode(key(MAP_TWO, "b0_" + i));
+            edges.add(ProjectedEdge.of(ProjectedEdgeKey.of(sourceEndpoint, targetEndpoint),
+                Collections.singletonList(EdgeContributor.graphRelationship(relationship, sourceEndpoint,
+                    targetEndpoint))));
+        }
+        return projection(generation, nodes, enclosures, edges);
     }
 
     private static LayoutRequest request(WorkspaceId workspace, GraphProjection before, GraphProjection after,
