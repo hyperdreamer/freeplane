@@ -1,7 +1,7 @@
 # Graph Workspace Node Repulsion & Layout Settling — Design
 
 - Date: 2026-09-11
-- Status: Revised after frontier design review rounds 1 and 2
+- Status: Revised after frontier design review rounds 1–3
 - Ticket: none — Task Identifier: `2026-09-11-graph-node-repulsion`
 - Scope: `freeplane_plugin_graph` (feature branch `feature/graph-workspace`)
 
@@ -72,15 +72,15 @@ see §9 test 2), **6.55** on the second step unfixed, **9.9e-14** fixed.
 Secondary geometric defect found in the same force model: boundary repulsion
 (`TypedSpringBox.addBoundaryRepulsion`) is applied to **all** anchor pairs,
 including nested parent/child/grandchild hulls that are supposed to overlap.
-Measured settled anchor distances on the reference fixture:
+Measured anchor distances on the reference fixture after exactly 1500 frames:
 
 | Pair | Unfixed | With ancestor exclusion |
 |---|---|---|
-| root–ZFC (direct parent/child) | 2810.58 | 100.19 |
-| ZFC–Axioms (direct parent/child) | 1984.96 | 355.33 |
-| ZFC–Definitions (direct parent/child) | 1522.93 | 355.14 |
-| root–Axioms (grandparent/grandchild) | 2042.95 | 455.53 |
-| Axioms–Definitions (siblings) | 3489.46 | 710.48 (contact ≈ 719.3) |
+| root–ZFC (direct parent/child) | 2810.58 | 100.23 |
+| ZFC–Axioms (direct parent/child) | 1984.77 | 355.37 |
+| ZFC–Definitions (direct parent/child) | 1522.81 | 355.11 |
+| root–Axioms (grandparent/grandchild) | 2043.08 | 455.60 |
+| Axioms–Definitions (siblings) | 3485.41 | 710.48 (contact ≈ 719.3) |
 
 ## 4. Goals
 
@@ -236,9 +236,10 @@ exactly 1.0); do not reuse them on fixtures with relationship edges.
    — step exactly 1500 frames (mirroring the existing `settle(...)` helper
    convention in `BoundarySeparationShould`) and then, for every **direct**
    hierarchy pair, assert `distance(parent, child) ≤ boundaryRadius(parent) − FRAME_CLEARANCE`
-   using test-local `BoundarySizes` formulas. Measured (fixed): root–ZFC 100.19,
-   ZFC–Axioms 355.33, ZFC–Definitions 355.14; bound for root/ZFC is
-   `1441.73 − 16 = 1425.73`. Unfixed: root–ZFC 2810.58 → fails. Full
+   using test-local `BoundarySizes` formulas. Measured after exactly 1500
+   steps (fixed): root–ZFC 100.23, ZFC–Axioms 355.37, ZFC–Definitions 355.11;
+   bound for root/ZFC is `1441.73 − 16 = 1425.73`. Unfixed: root–ZFC 2810.58 →
+   fails. Full
    containment (`d + r_child ≤ r_parent`) is deliberately **not** asserted: for
    wrapper hulls such as the suppressed root, parent and child radius are equal
    by construction (both 1441.73), and the approved prominence design rejects
@@ -249,7 +250,7 @@ exactly 1.0); do not reuse them on fixtures with relationship edges.
    step exactly 1500 frames, then assert every sibling pair still satisfies the
    existing non-overlap contract and the maximum pairwise anchor
    spread is ≤ 1000. Measured: fixed Axioms–Definitions 710.48 (contact
-   593.87 + 117.45 + 8 = 719.32), unfixed 3489.46 → fails.
+   593.87 + 117.45 + 8 = 719.32), unfixed 3485.41 → fails.
 5. `BoundarySeparationShould.pinnedFixtureSettlesWithPinPositionUnchanged` —
    reference fixture with node `"Replacement Scheme"` pinned at `(1059, -145)`;
    assert idle within 10000 steps (measured 2471 at rms 0.049654, i.e. within
@@ -275,17 +276,19 @@ exactly 1.0); do not reuse them on fixtures with relationship edges.
    step exactly 1500 further frames and assert
    `distance("Axioms", "Basic Definitions and Theorems") ≤
    boundaryRadius("Axioms") − FRAME_CLEARANCE` (bound ≈ 577.9). With the
-   refreshed exclusion the pair is a hierarchy pair (rest length 60); with stale
-   sibling exclusion it stays at contact distance ≈ 719.3 and fails.
+   refreshed exclusion the pair is a hierarchy pair (rest length 60; measured
+   61.8); with stale sibling exclusion it stays near the contact distance
+   (measured 699.9) and fails.
 8. `BoundarySeparationShould.grandchildAnchorsAreExcludedFromBoundaryRepulsion`
    — step exactly 1500 frames, then assert
-   `distance(root, "Axioms") < 1000`. Measured: fixed 455.53; ancestor
-   exclusion removed 2042.95 (direct-parent-only ≈ 2025) → fails.
+   `distance(root, "Axioms") < 1000`. Measured after exactly 1500 steps:
+   fixed 455.60; ancestor exclusion removed 2043.08 (direct-parent-only ≈ 2025)
+   → fails.
 9. `BoundarySeparationShould.coincidentParentChildAnchorsStayExcluded` — the
    single-child boundary case, in which `Seeds.center` gives `ringRadius = 0`
    and the parent/child anchors seed at the same point (this is already the
    root–ZFC configuration of the reference fixture); step exactly 1500 frames
-   and assert the same proximity invariant as test 3 (fixed 100.19, unfixed
+   and assert the same proximity invariant as test 3 (fixed 100.23, unfixed
    2810.58 → fails).
    The exclusion-before-fallback ordering itself is a code-impact note, not an
    observable assertion.
@@ -363,7 +366,8 @@ the target worktree was never modified.
   of scope) reaches rms 0.0000. The residual is therefore a combined effect of
   n-tree aggregation discontinuities and the retained node-prominence weighting,
   not the anchor asymmetry this design removes. The reported relationship-free
-  workspace and the 24-particle two-map fixture are unaffected (both stay idle).
+  workspace and the 24-node (32-particle) two-map fixture are unaffected (both
+  stay idle).
   Addressing it would change the large-projection performance profile and is a
   separate task.
 - **Cross-map-linked particles** still have their repulsion replaced by the
