@@ -38,6 +38,8 @@ import org.freeplane.plugin.graph.command.MapUndoTarget;
 import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.workspace.GraphCommandResult;
 import org.freeplane.plugin.graph.workspace.GraphWorkspaceStore;
+import org.freeplane.plugin.graph.workspace.RecentWorkspaceList;
+import org.freeplane.plugin.graph.workspace.RecentWorkspaceRecorder;
 import org.freeplane.plugin.graph.workspace.ListenerRegistration;
 import org.freeplane.plugin.graph.workspace.WorkspaceStoreEvent;
 import org.freeplane.plugin.graph.workspace.WorkspaceStoreListener;
@@ -1313,6 +1315,116 @@ public class DefaultGraphWorkspaceControllerShould {
             .hasCauseInstanceOf(IllegalStateException.class);
     }
 
+    @Test
+    public void recordsAnOpenedWorkspaceInTheRecentList() throws Exception {
+        Path workspace = temporaryFolder.newFile("recorded-open.fpg").toPath().toRealPath();
+        WorkspaceSessionRegistry sessions = new WorkspaceSessionRegistry();
+        DefaultGraphWorkspaceController.SessionResources resources = resources(false);
+        AtomicReference<String> persisted = new AtomicReference<String>();
+        RecentWorkspaceList list = new RecentWorkspaceList("", persisted::set);
+        DefaultGraphWorkspaceController controller = new DefaultGraphWorkspaceController(sessions,
+            (path, id, create) -> resources, (handle, binding, close) -> new RecordingView(), list);
+
+        controller.open(workspace);
+
+        assertThat(list.mostRecentExisting()).contains(workspace);
+        assertThat(persisted.get()).contains(workspace.toString());
+    }
+
+    @Test
+    public void recordsAgainWhenAnAlreadyOpenWorkspaceIsFocusedAfterClear() throws Exception {
+        Path workspace = temporaryFolder.newFile("refocused.fpg").toPath().toRealPath();
+        WorkspaceSessionRegistry sessions = new WorkspaceSessionRegistry();
+        DefaultGraphWorkspaceController.SessionResources resources = resources(false);
+        AtomicReference<String> persisted = new AtomicReference<String>();
+        RecentWorkspaceList list = new RecentWorkspaceList("", persisted::set);
+        DefaultGraphWorkspaceController controller = new DefaultGraphWorkspaceController(sessions,
+            (path, id, create) -> resources, (handle, binding, close) -> new RecordingView(), list);
+        controller.open(workspace);
+        list.clear();
+        assertThat(list.mostRecentExisting()).isEmpty();
+
+        controller.open(workspace);
+
+        assertThat(list.mostRecentExisting()).contains(workspace);
+    }
+
+    @Test
+    public void aFailingPersisterDoesNotFailTheOpenOrHideTheWindow() throws Exception {
+        Path workspace = temporaryFolder.newFile("failing-persister-open.fpg").toPath().toRealPath();
+        WorkspaceSessionRegistry sessions = new WorkspaceSessionRegistry();
+        DefaultGraphWorkspaceController.SessionResources resources = resources(false);
+        RecordingView view = new RecordingView();
+        RecentWorkspaceList list = new RecentWorkspaceList("", value -> {
+            throw new IllegalStateException("persister failed");
+        });
+        DefaultGraphWorkspaceController controller = new DefaultGraphWorkspaceController(sessions,
+            (path, id, create) -> resources, (handle, binding, close) -> view, list);
+
+        GraphWorkspaceHandle handle = controller.open(workspace);
+
+        assertThat(handle).isNotNull();
+        assertThat(view.showCount).hasValue(1);
+    }
+
+    @Test
+    public void closesTheSessionRecorderWhenTheSessionCloses() throws Exception {
+        Path workspace = temporaryFolder.newFile("recorder-close.fpg").toPath().toRealPath();
+        WorkspaceSessionRegistry sessions = new WorkspaceSessionRegistry();
+        RecentWorkspaceRecorder recorder = mock(RecentWorkspaceRecorder.class);
+        DefaultGraphWorkspaceController.SessionResources resources = resources(false, recorder);
+        AtomicReference<WorkspaceCloseController> close = new AtomicReference<WorkspaceCloseController>();
+        DefaultGraphWorkspaceController controller = new DefaultGraphWorkspaceController(sessions,
+            (path, id, create) -> resources, (handle, binding, closeController) -> {
+                close.set(closeController);
+                return new RecordingView();
+            }, new RecentWorkspaceList("", value -> { }));
+        controller.open(workspace);
+
+        assertThat(close.get().saveAndClose()).isTrue();
+
+        verify(recorder).close();
+    }
+
+    @Test
+    public void closesTheSessionRecorderOnShutdown() throws Exception {
+        Path workspace = temporaryFolder.newFile("recorder-shutdown.fpg").toPath().toRealPath();
+        WorkspaceSessionRegistry sessions = new WorkspaceSessionRegistry();
+        RecentWorkspaceRecorder recorder = mock(RecentWorkspaceRecorder.class);
+        DefaultGraphWorkspaceController.SessionResources resources = resources(false, recorder);
+        DefaultGraphWorkspaceController controller = new DefaultGraphWorkspaceController(sessions,
+            (path, id, create) -> resources, (handle, binding, close) -> new RecordingView(),
+            new RecentWorkspaceList("", value -> { }));
+        controller.open(workspace);
+
+        controller.shutdown();
+
+        verify(recorder).close();
+    }
+
+    @Test
+    public void keepsTheSessionRecorderOpenOnSaveFailureAndClosesItOnRetry() throws Exception {
+        Path workspace = temporaryFolder.newFile("recorder-retry.fpg").toPath().toRealPath();
+        WorkspaceSessionRegistry sessions = new WorkspaceSessionRegistry();
+        RecentWorkspaceRecorder recorder = mock(RecentWorkspaceRecorder.class);
+        DefaultGraphWorkspaceController.SessionResources resources = resources(false, recorder);
+        AtomicReference<WorkspaceCloseController> close = new AtomicReference<WorkspaceCloseController>();
+        DefaultGraphWorkspaceController controller = new DefaultGraphWorkspaceController(sessions,
+            (path, id, create) -> resources, (handle, binding, closeController) -> {
+                close.set(closeController);
+                return new RecordingView();
+            }, new RecentWorkspaceList("", value -> { }));
+        controller.open(workspace);
+        doThrow(new IllegalStateException("save failed")).when(resources.store).close();
+
+        assertThat(close.get().saveAndClose()).isFalse();
+        verify(recorder, never()).close();
+
+        org.mockito.Mockito.doNothing().when(resources.store).close();
+        assertThat(close.get().retrySaveAndClose()).isTrue();
+        verify(recorder).close();
+    }
+
     private static void awaitPathPresent(final Path workspace) throws InterruptedException {
         final long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
         while (!Files.exists(workspace) && System.nanoTime() < deadline) {
@@ -1336,6 +1448,15 @@ public class DefaultGraphWorkspaceControllerShould {
             Thread.sleep(5L);
         }
         assertThat(sessions.owner(workspace)).isEmpty();
+    }
+
+    private DefaultGraphWorkspaceController.SessionResources resources(boolean newlyCreated,
+            RecentWorkspaceRecorder recorder) {
+        GraphWorkspaceStore store = mock(GraphWorkspaceStore.class);
+        when(store.addListener(any())).thenReturn(mock(ListenerRegistration.class));
+        return new DefaultGraphWorkspaceController.SessionResources(store, null,
+            mock(GraphUpdateCoordinator.class), mock(MapLeaseManager.class), mock(GraphCommandRouter.class),
+            mock(ScheduledExecutorService.class), newlyCreated, null, recorder);
     }
 
     private DefaultGraphWorkspaceController.SessionResources resources(boolean newlyCreated) {

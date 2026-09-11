@@ -42,6 +42,8 @@ import org.freeplane.plugin.graph.projection.input.MapAvailability;
 import org.freeplane.plugin.graph.workspace.AtomicWorkspaceWriter;
 import org.freeplane.plugin.graph.workspace.GraphWorkspaceStore;
 import org.freeplane.plugin.graph.workspace.ListenerRegistration;
+import org.freeplane.plugin.graph.workspace.RecentWorkspaceList;
+import org.freeplane.plugin.graph.workspace.RecentWorkspaceRecorder;
 import org.freeplane.plugin.graph.workspace.WorkspaceUriResolver;
 import org.freeplane.plugin.graph.workspace.io.WorkspaceMigrationRegistry;
 import org.freeplane.plugin.graph.workspace.io.WorkspaceXmlCodec;
@@ -62,24 +64,33 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
         final ScheduledExecutorService scheduler;
         final boolean newlyCreated;
         final WorkspaceCreationOwnership creationOwnership;
+        final RecentWorkspaceRecorder recorder;
 
         SessionResources(final GraphWorkspaceStore store, final GraphUpdateCoordinator updates,
                 final MapLeaseManager leaseManager, final GraphCommandRouter router,
                 final ScheduledExecutorService scheduler, final boolean newlyCreated) {
-            this(store, null, updates, leaseManager, router, scheduler, newlyCreated, null);
+            this(store, null, updates, leaseManager, router, scheduler, newlyCreated, null, null);
         }
 
         SessionResources(final GraphWorkspaceStore store, final WorkspaceMapCoordinator maps,
                 final GraphUpdateCoordinator updates, final MapLeaseManager leaseManager,
                 final GraphCommandRouter router, final ScheduledExecutorService scheduler,
                 final boolean newlyCreated) {
-            this(store, maps, updates, leaseManager, router, scheduler, newlyCreated, null);
+            this(store, maps, updates, leaseManager, router, scheduler, newlyCreated, null, null);
         }
 
         SessionResources(final GraphWorkspaceStore store, final WorkspaceMapCoordinator maps,
                 final GraphUpdateCoordinator updates, final MapLeaseManager leaseManager,
                 final GraphCommandRouter router, final ScheduledExecutorService scheduler,
                 final boolean newlyCreated, final WorkspaceCreationOwnership creationOwnership) {
+            this(store, maps, updates, leaseManager, router, scheduler, newlyCreated, creationOwnership, null);
+        }
+
+        SessionResources(final GraphWorkspaceStore store, final WorkspaceMapCoordinator maps,
+                final GraphUpdateCoordinator updates, final MapLeaseManager leaseManager,
+                final GraphCommandRouter router, final ScheduledExecutorService scheduler,
+                final boolean newlyCreated, final WorkspaceCreationOwnership creationOwnership,
+                final RecentWorkspaceRecorder recorder) {
             this.store = Objects.requireNonNull(store, "store");
             this.maps = maps;
             this.updates = Objects.requireNonNull(updates, "updates");
@@ -88,6 +99,7 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
             this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
             this.newlyCreated = newlyCreated;
             this.creationOwnership = creationOwnership;
+            this.recorder = recorder;
         }
     }
 
@@ -214,11 +226,12 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
         private final ScheduledExecutorService scheduler;
         private final boolean newlyCreated;
         private final WorkspaceCreationOwnership creationOwnership;
+        private final RecentWorkspaceRecorder recorder;
 
         private ResourceSet(final GraphWorkspaceStore store, final WorkspaceMapCoordinator maps,
                 final GraphUpdateCoordinator updates, final MapLeaseManager leaseManager,
                 final ScheduledExecutorService scheduler, final boolean newlyCreated,
-                final WorkspaceCreationOwnership creationOwnership) {
+                final WorkspaceCreationOwnership creationOwnership, final RecentWorkspaceRecorder recorder) {
             this.store = store;
             this.maps = maps;
             this.updates = updates;
@@ -226,18 +239,20 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
             this.scheduler = scheduler;
             this.newlyCreated = newlyCreated;
             this.creationOwnership = creationOwnership;
+            this.recorder = recorder;
         }
 
         private static ResourceSet from(final SessionResources resources, final Path path) {
             return new ResourceSet(resources.store, resources.maps, resources.updates, resources.leaseManager,
                 resources.scheduler, resources.newlyCreated,
                 resources.creationOwnership != null ? resources.creationOwnership
-                    : resources.newlyCreated ? WorkspaceCreationOwnership.capture(path) : null);
+                    : resources.newlyCreated ? WorkspaceCreationOwnership.capture(path) : null,
+                resources.recorder);
         }
 
         private static ResourceSet from(final SessionResources resources) {
             return new ResourceSet(resources.store, resources.maps, resources.updates, resources.leaseManager,
-                resources.scheduler, resources.newlyCreated, resources.creationOwnership);
+                resources.scheduler, resources.newlyCreated, resources.creationOwnership, resources.recorder);
         }
     }
 
@@ -254,6 +269,7 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
     private final WorkspaceSessionRegistry sessions;
     private final SessionFactory sessionFactory;
     private final GraphWorkspaceViewFactory viewFactory;
+    private final RecentWorkspaceList recentWorkspaces;
     private final WorkspaceUriResolver uriResolver = new WorkspaceUriResolver();
     private final Map<WorkspaceSessionId, Session> openSessions =
         new HashMap<WorkspaceSessionId, Session>();
@@ -262,20 +278,33 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
     private RuntimeException shutdownFailure;
 
     public DefaultGraphWorkspaceController(final ModeController modeController,
+            final GraphWorkspaceViewFactory viewFactory, final RecentWorkspaceList recentWorkspaces) {
+        this(new WorkspaceSessionRegistry(), modeController, viewFactory, recentWorkspaces);
+    }
+
+    public DefaultGraphWorkspaceController(final ModeController modeController,
             final GraphWorkspaceViewFactory viewFactory) {
-        this(new WorkspaceSessionRegistry(), modeController, viewFactory);
+        this(modeController, viewFactory, RecentWorkspaceList.empty());
     }
 
     private DefaultGraphWorkspaceController(final WorkspaceSessionRegistry sessions,
-            final ModeController modeController, final GraphWorkspaceViewFactory viewFactory) {
-        this(sessions, new ProductionSessionFactory(modeController, sessions), viewFactory);
+            final ModeController modeController, final GraphWorkspaceViewFactory viewFactory,
+            final RecentWorkspaceList recentWorkspaces) {
+        this(sessions, new ProductionSessionFactory(modeController, sessions, recentWorkspaces), viewFactory,
+            recentWorkspaces);
+    }
+
+    DefaultGraphWorkspaceController(final WorkspaceSessionRegistry sessions, final SessionFactory sessionFactory,
+            final GraphWorkspaceViewFactory viewFactory, final RecentWorkspaceList recentWorkspaces) {
+        this.sessions = Objects.requireNonNull(sessions, "sessions");
+        this.sessionFactory = Objects.requireNonNull(sessionFactory, "sessionFactory");
+        this.viewFactory = Objects.requireNonNull(viewFactory, "viewFactory");
+        this.recentWorkspaces = Objects.requireNonNull(recentWorkspaces, "recentWorkspaces");
     }
 
     DefaultGraphWorkspaceController(final WorkspaceSessionRegistry sessions, final SessionFactory sessionFactory,
             final GraphWorkspaceViewFactory viewFactory) {
-        this.sessions = Objects.requireNonNull(sessions, "sessions");
-        this.sessionFactory = Objects.requireNonNull(sessionFactory, "sessionFactory");
-        this.viewFactory = Objects.requireNonNull(viewFactory, "viewFactory");
+        this(sessions, sessionFactory, viewFactory, RecentWorkspaceList.empty());
     }
 
     @Override
@@ -342,6 +371,7 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
                 }
                 if (existing.awaitOpen()) {
                     if (existing.focus()) {
+                        recordRecentWorkspace(path);
                         return existing.handle;
                     }
                     continue;
@@ -349,6 +379,15 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
                 continue;
             }
             return finishOpen(session, path, create);
+        }
+    }
+
+    private void recordRecentWorkspace(final Path path) {
+        try {
+            recentWorkspaces.record(path);
+        }
+        catch (RuntimeException ignored) {
+            // Recording is best effort and must never roll back a successful open.
         }
     }
 
@@ -646,6 +685,7 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
                 "workspace view");
             session.view.show();
             session.publishOpen();
+            recordRecentWorkspace(path);
             return handle;
         }
         catch (SessionConstructionException failure) {
@@ -727,7 +767,18 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
         if (resources == null) {
             return null;
         }
-        return closeRemainingResources(resources.updates, resources.maps, resources.leaseManager, resources.scheduler);
+        RuntimeException failure = null;
+        if (resources.recorder != null) {
+            try {
+                resources.recorder.close();
+            }
+            catch (RuntimeException exception) {
+                failure = recordFailure(failure, exception);
+            }
+        }
+        failure = recordFailure(failure, closeRemainingResources(resources.updates, resources.maps,
+            resources.leaseManager, resources.scheduler));
+        return failure;
     }
 
     private static RuntimeException closeRemainingResources(final GraphUpdateCoordinator updates,
@@ -1097,11 +1148,13 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
     private static final class ProductionSessionFactory implements SessionFactory {
         private final ModeController modeController;
         private final WorkspaceSessionRegistry sessions;
+        private final RecentWorkspaceList recentWorkspaces;
 
         private ProductionSessionFactory(final ModeController modeController,
-                final WorkspaceSessionRegistry sessions) {
+                final WorkspaceSessionRegistry sessions, final RecentWorkspaceList recentWorkspaces) {
             this.modeController = Objects.requireNonNull(modeController, "modeController");
             this.sessions = Objects.requireNonNull(sessions, "sessions");
+            this.recentWorkspaces = Objects.requireNonNull(recentWorkspaces, "recentWorkspaces");
         }
 
         @Override
@@ -1121,6 +1174,7 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
                 if (create) {
                     creationOwnership = WorkspaceCreationOwnership.capture(path);
                 }
+                final RecentWorkspaceRecorder recorder = new RecentWorkspaceRecorder(store, recentWorkspaces);
                 leaseManager = new MapLeaseManager(path, modeController);
                 maps = new WorkspaceMapCoordinator(store, leaseManager);
                 updates = new GraphUpdateCoordinator(maps, store, leaseManager, new ProjectionEngine(),
@@ -1137,11 +1191,11 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
                     updates, sessions, sessionId, purge, deletion);
                 updates.start();
                 return new SessionResources(store, maps, updates, leaseManager, router, scheduler, create,
-                    creationOwnership);
+                    creationOwnership, recorder);
             }
             catch (RuntimeException failure) {
                 throw new SessionConstructionException(failure,
-                    new ResourceSet(store, maps, updates, leaseManager, scheduler, create, creationOwnership));
+                    new ResourceSet(store, maps, updates, leaseManager, scheduler, create, creationOwnership, null));
             }
         }
     }
