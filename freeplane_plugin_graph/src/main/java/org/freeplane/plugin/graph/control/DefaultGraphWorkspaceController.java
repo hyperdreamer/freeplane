@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.awt.SecondaryLoop;
 import java.awt.Toolkit;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
@@ -279,6 +280,34 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
 
     @Override
     public GraphWorkspaceHandle open(final Path workspaceFile) {
+        return open(workspaceFile, true);
+    }
+
+    @Override
+    public GraphWorkspaceHandle openExisting(final Path workspaceFile) {
+        Objects.requireNonNull(workspaceFile, "workspaceFile");
+        final Path path;
+        try {
+            path = uriResolver.canonical(workspaceFile);
+        }
+        catch (RuntimeException failure) {
+            throw new GraphWorkspaceOpenException(workspaceFile, failure);
+        }
+        try {
+            if (!Files.isRegularFile(path)) {
+                throw new GraphWorkspaceOpenException(path, new NoSuchFileException(path.toString()));
+            }
+            return open(path, false);
+        }
+        catch (GraphWorkspaceOpenException failure) {
+            throw failure;
+        }
+        catch (RuntimeException failure) {
+            throw new GraphWorkspaceOpenException(path, failure);
+        }
+    }
+
+    private GraphWorkspaceHandle open(final Path workspaceFile, final boolean createMissing) {
         final Path path = uriResolver.canonical(Objects.requireNonNull(workspaceFile, "workspaceFile"));
         while (true) {
             Session existing = null;
@@ -301,7 +330,7 @@ public final class DefaultGraphWorkspaceController implements GraphWorkspaceCont
                     if (!sessions.register(sessionId, path)) {
                         continue;
                     }
-                    create = !Files.exists(path);
+                    create = createMissing && !Files.exists(path);
                     session = new Session(sessionId, path);
                     openSessions.put(sessionId, session);
                 }

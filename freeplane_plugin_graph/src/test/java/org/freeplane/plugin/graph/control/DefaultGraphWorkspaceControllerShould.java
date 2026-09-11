@@ -11,7 +11,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.io.File;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Collections;
@@ -41,6 +43,8 @@ import org.freeplane.plugin.graph.workspace.WorkspaceStoreEvent;
 import org.freeplane.plugin.graph.workspace.WorkspaceStoreListener;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 import org.mockito.InOrder;
+import org.mockito.MockedStatic;
+import org.junit.Assume;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -1206,6 +1210,107 @@ public class DefaultGraphWorkspaceControllerShould {
         assertThat(viewClosedOnEdt).hasValue(true);
         assertThat(sessions.owner(workspace)).isEmpty();
         verify(view).close();
+    }
+
+    @Test
+    public void openExistingNeverCreatesAWorkspaceForAMissingPath() throws Exception {
+        Path missing = temporaryFolder.getRoot().toPath().resolve("never-created.fpg");
+        WorkspaceSessionRegistry sessions = new WorkspaceSessionRegistry();
+        AtomicInteger factoryCalls = new AtomicInteger();
+        DefaultGraphWorkspaceController controller = new DefaultGraphWorkspaceController(sessions,
+            (path, id, create) -> {
+                factoryCalls.incrementAndGet();
+                return resources(false);
+            }, (handle, binding, close) -> new RecordingView());
+
+        assertThatThrownBy(() -> controller.openExisting(missing))
+            .isInstanceOf(GraphWorkspaceOpenException.class)
+            .hasCauseInstanceOf(NoSuchFileException.class);
+
+        assertThat(factoryCalls).hasValue(0);
+        assertThat(Files.exists(missing)).isFalse();
+        assertThat(sessions.owner(missing)).isEmpty();
+    }
+
+    @Test
+    public void openExistingForcesACreateDisabledOpenWhenTheFileVanishesAfterTheCheck() throws Exception {
+        Path workspace = temporaryFolder.getRoot().toPath().resolve("vanishing.fpg");
+        WorkspaceSessionRegistry sessions = new WorkspaceSessionRegistry();
+        AtomicReference<Boolean> capturedCreate = new AtomicReference<Boolean>();
+        DefaultGraphWorkspaceController controller = new DefaultGraphWorkspaceController(sessions,
+            (path, id, create) -> {
+                capturedCreate.set(create);
+                throw new IllegalStateException("store open failed");
+            }, (handle, binding, close) -> new RecordingView());
+
+        try (MockedStatic<Files> files = org.mockito.Mockito.mockStatic(Files.class)) {
+            files.when(() -> Files.isRegularFile(any(Path.class))).thenReturn(true);
+            files.when(() -> Files.exists(any(Path.class))).thenReturn(false);
+
+            assertThatThrownBy(() -> controller.openExisting(workspace))
+                .isInstanceOf(GraphWorkspaceOpenException.class)
+                .hasCauseInstanceOf(IllegalStateException.class);
+        }
+
+        assertThat(capturedCreate).hasValue(false);
+    }
+
+    @Test
+    public void openExistingOpensAnExistingFileWithoutCreating() throws Exception {
+        Path workspace = temporaryFolder.newFile("open-existing.fpg").toPath().toRealPath();
+        WorkspaceSessionRegistry sessions = new WorkspaceSessionRegistry();
+        DefaultGraphWorkspaceController.SessionResources resources = resources(false);
+        AtomicReference<Boolean> capturedCreate = new AtomicReference<Boolean>();
+        RecordingView view = new RecordingView();
+        DefaultGraphWorkspaceController controller = new DefaultGraphWorkspaceController(sessions,
+            (path, id, create) -> {
+                capturedCreate.set(create);
+                return resources;
+            }, (handle, binding, close) -> view);
+
+        GraphWorkspaceHandle handle = controller.openExisting(workspace);
+
+        assertThat(handle).isNotNull();
+        assertThat(capturedCreate).hasValue(false);
+        assertThat(view.showCount).hasValue(1);
+        assertThat(sessions.owner(workspace)).isPresent();
+    }
+
+    @Test
+    public void openExistingWrapsCanonicalizationFailure() throws Exception {
+        Assume.assumeTrue(File.separatorChar == '/');
+        Path blocker = temporaryFolder.newFile("blocker.fpg").toPath().toRealPath();
+        Path workspace = blocker.resolve("child.fpg");
+        WorkspaceSessionRegistry sessions = new WorkspaceSessionRegistry();
+        AtomicInteger factoryCalls = new AtomicInteger();
+        DefaultGraphWorkspaceController controller = new DefaultGraphWorkspaceController(sessions,
+            (path, id, create) -> {
+                factoryCalls.incrementAndGet();
+                return resources(false);
+            }, (handle, binding, close) -> new RecordingView());
+
+        assertThatThrownBy(() -> controller.openExisting(workspace))
+            .isInstanceOf(GraphWorkspaceOpenException.class)
+            .hasCauseInstanceOf(IllegalArgumentException.class);
+
+        assertThat(factoryCalls).hasValue(0);
+    }
+
+    @Test
+    public void openExistingWrapsShutdownFailure() throws Exception {
+        Path first = temporaryFolder.newFile("shutdown-open.fpg").toPath().toRealPath();
+        Path second = temporaryFolder.newFile("shutdown-reopen.fpg").toPath().toRealPath();
+        WorkspaceSessionRegistry sessions = new WorkspaceSessionRegistry();
+        DefaultGraphWorkspaceController.SessionResources resources = resources(false);
+        DefaultGraphWorkspaceController controller = new DefaultGraphWorkspaceController(sessions,
+            (path, id, create) -> resources, (handle, binding, close) -> new RecordingView());
+        controller.open(first);
+
+        controller.shutdown();
+
+        assertThatThrownBy(() -> controller.openExisting(second))
+            .isInstanceOf(GraphWorkspaceOpenException.class)
+            .hasCauseInstanceOf(IllegalStateException.class);
     }
 
     private static void awaitPathPresent(final Path workspace) throws InterruptedException {

@@ -144,5 +144,14 @@ public final class GraphModeExtension implements IModeControllerExtensionProvide
             }
             return delegate.open(path);
         }
+
+        @Override
+        public org.freeplane.plugin.graph.control.GraphWorkspaceHandle openExisting(final java.nio.file.Path path) {
+            if (delegate == null) {
+                throw new org.freeplane.plugin.graph.control.GraphWorkspaceOpenException(path,
+                    new IllegalStateException("Graph workspace controller is not initialized"));
+            }
+            return delegate.openExisting(path);
+        }
     }
 }
