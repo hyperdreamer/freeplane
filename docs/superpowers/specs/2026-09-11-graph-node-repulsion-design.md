@@ -270,9 +270,10 @@ exactly 1.0); do not reuse them on fixtures with relationship edges.
    step exactly 1500 frames, then reparent `"Basic Definitions and
    Theorems"` from `"ZFC"` to `"Axioms"`, building the request with
    `ProjectionDiff.between(originalProjection, reparentedProjection)` and a
-   distinct generation (an empty diff makes `GraphStreamLayoutEngine.apply`
-   early-return without `synchronize()`, which would leave `parentOf` stale — a
-   pre-existing engine contract the test must not accidentally exercise), then
+   distinct generation (the honest request description: the fast path is only
+   taken for an empty diff whose `beforeGeneration()` matches the last
+   synchronized generation, so a real reparent always re-synchronizes; the
+   assertion fails if `configureParticle` does not overwrite `parentOf`), then
    step exactly 1500 further frames and assert
    `distance("Axioms", "Basic Definitions and Theorems") ≤
    boundaryRadius("Axioms") − FRAME_CLEARANCE` (bound ≈ 577.9). With the

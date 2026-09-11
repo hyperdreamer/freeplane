@@ -308,7 +308,7 @@ The following must remain byte-for-byte equivalent in behavior (no retuning, no 
 
 ### 3.4 Reparenting refresh and the empty-diff early return
 
-`R18`: A reparented boundary refreshes `parentOf` only when `GraphStreamLayoutEngine.apply` calls `synchronize()`. The empty-diff fast path in `apply` (`accepted.diff().isEmpty()` plus matching generation, workspace, and pins) skips `synchronize()` and would leave `parentOf` stale. Test T7 must therefore build its request with `ProjectionDiff.between(originalProjection, reparentedProjection)` (a non-empty diff) and a distinct generation; it must not exercise the empty-diff path.
+`R18`: A reparented boundary refreshes `parentOf` only when `GraphStreamLayoutEngine.apply` calls `synchronize()`. The empty-diff fast path in `apply` is taken only when `accepted.diff().isEmpty()` **and** `accepted.diff().beforeGeneration() == lastSynchronizedProjectionGeneration` (plus matching workspace and pins); otherwise `synchronize()` runs. A content change cannot be combined with a matching-generation empty diff (`LayoutRequest` forces `afterGeneration == projection.generation()`), so any request that actually reparents a boundary re-synchronizes. Test T7 builds its request with `ProjectionDiff.between(originalProjection, reparentedProjection)` (a non-empty diff) and a distinct generation as the honest request description; the assertion fails when `configureParticle` does not overwrite `parentOf`, which is the contract under test.
 
 ### 3.5 Guards and recovery untouched
 
@@ -323,7 +323,7 @@ The following must remain byte-for-byte equivalent in behavior (no retuning, no 
 - Raw-engine tests use `GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())` in try-with-resources.
 - `LayoutWorker` tests use `new LayoutWorker(LayoutCalibration.spikeDefaults())` and `try { ... } finally { worker.close(); }`.
 - Idle step counting convention: submit the request once, then count `worker.step()` calls starting at 1. A "cap of N" means the loop performs at most N `step()` calls after the submit, stopping at the first frame with `frame.idle().idle() == true`. Measured step numbers below use this convention.
-- 1500-frame settle convention (mirrors the existing private `settle(...)` helper in `BoundarySeparationShould`): `engine.apply(request)`, then exactly `1500` × `engine.step()`, then a trailing `engine.apply(request)` whose returned frame is asserted on. The trailing `apply` takes the empty-diff fast path and returns the current positions.
+- 1500-frame settle convention (mirrors the existing private `settle(...)` helper in `BoundarySeparationShould`): `engine.apply(request)`, then exactly `1500` × `engine.step()`, then a trailing `engine.apply(request)` whose returned frame is asserted on. For the empty-diff settle requests (T3/T4/T8/T9) the trailing `apply` takes the empty-diff fast path and returns the current positions; T7's reparent settle uses the non-empty reparent request, so its trailing `apply` re-synchronizes instead, which is position-idempotent (no re-seeding, no pins).
 - No existing test method or assertion may be modified; new tests are appended.
 
 ### 4.2 Fixtures
@@ -360,7 +360,7 @@ Same nodes, same enclosure list order `[root, zfc, axioms, definitions]`, genera
 - `axioms.directEnclosures = [definitions]` (definitions added),
 - `definitions.parentHull = Optional.of(axioms)` (was `zfc`).
 
-`ProjectionDiff.between(reference, reparented)` is therefore non-empty (two changed enclosures).
+`ProjectionDiff.between(reference, reparented)` is therefore non-empty (three changed enclosures: `zfc`, `axioms`, `definitions`).
 
 #### 4.2.3 Two-map fixture (used by T10)
 
@@ -484,8 +484,8 @@ LayoutFrame after = engine.step();
 - Assert (`R21`):
   (a) the existing label-box non-overlap contract via `assertNoSiblingOverlap(frame, Arrays.asList(axiomsHull(), definitionsHull()), Arrays.asList(SafeNodeLabel.of("Axioms", "Axioms"), SafeNodeLabel.of("Basic Definitions and Theorems", "Basic Definitions and Theorems")))`; and
   (b) the maximum pairwise anchor distance over all four hulls is `<= 1000.0`.
-- Measured after exactly 1500 steps: axioms–definitions `710.48`; contact ≈ `593.87 + 117.45 + 8 = 719.32`; unfixed axioms–definitions `3485.41`.
-- Falsifiability: unfixed spread 3485.41 > 1000 fails (the label-box guard is implied by the spread because the label boxes are far smaller than the 1000-unit bound).
+- Measured after exactly 1500 steps: axioms–definitions `710.48`; contact ≈ `593.87 + 117.45 + 8 = 719.32`; unfixed axioms–definitions `3485.41` and unfixed maximum pairwise anchor distance `3814.17`.
+- Falsifiability: the unfixed maximum pairwise anchor distance `3814.17 > 1000` fails (the label-box guard is implied by the spread because the label boxes are far smaller than the 1000-unit bound).
 
 #### T5 — `BoundarySeparationShould.pinnedFixtureSettlesWithPinPositionUnchanged`
 
@@ -535,7 +535,7 @@ LayoutFrame frame = engine.apply(reparentRequest);
 - Assert: `distance(frame.positions().anchors().get(axiomsHull), frame.positions().anchors().get(definitionsHull))`
   `<= ReferenceRepulsionFixture.boundaryRadius(reparented, axiomsHull) - 16.0` (≈ `593.87 − 16 = 577.87`).
 - Measured after exactly 1500 steps after the reparent: refreshed exclusion `61.84`; stale sibling exclusion `699.88`.
-- Falsifiability: an empty diff (or any path that skips `synchronize()`) leaves `parentOf` stale, the pair stays near the contact distance `699.88 > 577.87`, and the assertion fails. This is why the request must use `ProjectionDiff.between(original, reparented)` with a distinct generation (design §6.3, this spec §3.4).
+- Falsifiability: the assertion fails on unfixed code (measured `699.88 > 577.87`) and fails if `configureParticle` does not overwrite `parentOf` on reparent, or if the exclusion is direct-parent-only or absent. `ProjectionDiff.between(original, reparented)` is the honest request description and guarantees `synchronize()`; an empty diff at a *different* generation also re-synchronizes, and the fast path is only taken for an empty diff whose `beforeGeneration()` equals the last synchronized generation (design §6.3, this spec §3.4).
 
 #### T8 — `BoundarySeparationShould.grandchildAnchorsAreExcludedFromBoundaryRepulsion`
 
