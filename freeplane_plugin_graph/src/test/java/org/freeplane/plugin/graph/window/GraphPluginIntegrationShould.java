@@ -11,6 +11,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.awt.Component;
+import java.awt.GraphicsEnvironment;
 import java.awt.event.ActionEvent;
 import java.io.IOException;
 import java.io.InputStream;
@@ -18,7 +20,14 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Collections;
 import java.util.Properties;
+
+import javax.swing.JMenu;
+import javax.swing.JMenuBar;
+import javax.swing.JMenuItem;
+import javax.swing.event.PopupMenuEvent;
+import javax.swing.event.PopupMenuListener;
 
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.ui.AFreeplaneAction;
@@ -30,10 +39,20 @@ import org.freeplane.main.application.ApplicationResourceController;
 import org.freeplane.plugin.graph.GraphModeExtension;
 import org.freeplane.plugin.graph.control.DefaultGraphWorkspaceController;
 import org.freeplane.plugin.graph.control.GraphWorkspaceController;
+import org.freeplane.plugin.graph.control.GraphWorkspaceHandle;
+import org.freeplane.plugin.graph.control.GraphWorkspaceView;
+import org.freeplane.plugin.graph.control.GraphWorkspaceViewBinding;
+import org.freeplane.plugin.graph.control.WorkspaceCloseController;
+import org.freeplane.plugin.graph.control.WorkspaceSessionStatus;
 import org.freeplane.plugin.graph.group.GraphGroupController;
+import org.freeplane.plugin.graph.workspace.RecentWorkspaceList;
+import org.freeplane.plugin.graph.workspace.model.Viewport;
 import org.junit.After;
+import org.junit.Assume;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 import org.mockito.Answers;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
@@ -43,6 +62,9 @@ import org.mockito.MockedStatic;
 public class GraphPluginIntegrationShould {
     private MockedStatic<ResourceController> resourceController;
     private MockedStatic<TextUtils> textUtils;
+
+    @Rule
+    public final TemporaryFolder temporaryFolder = new TemporaryFolder();
 
     @Before
     public void setUp() {
@@ -182,6 +204,138 @@ public class GraphPluginIntegrationShould {
         assertThat(read("freeplane_plugin_graph/src/main/resources/images/GraphGroup.svg"))
             .contains("<svg", "#DF625D", "aria-label=\"Graph inclusion marker\"");
         assertThat(read("freeplane_plugin_graph/src/main/resources/images/GraphWorkspace.svg")).contains("<svg");
+    }
+
+    @Test
+    public void passesTheSharedListIntoTheCreatedHeadlessView() throws Exception {
+        Assume.assumeTrue(GraphicsEnvironment.isHeadless());
+        Path workspace = temporaryFolder.newFile("factory-headless.fpg").toPath().toRealPath();
+        GraphWorkspaceController controller = mock(GraphWorkspaceController.class);
+        GraphWorkspaceHandle handle = mock(GraphWorkspaceHandle.class);
+        GraphWorkspaceViewBinding binding = modelBinding();
+        WorkspaceCloseController close = mock(WorkspaceCloseController.class);
+        RecentWorkspaceList list = new RecentWorkspaceList("", value -> { });
+        list.record(workspace);
+
+        GraphWorkspaceWindow.runOnEdt(new Runnable() {
+            @Override
+            public void run() {
+                try (MockedStatic<TextUtils> edtTextUtils = edtTextUtils();
+                        MockedStatic<ResourceController> edtResourceController = edtResourceController()) {
+                    GraphWorkspaceView view = new SwingGraphWorkspaceViewFactory(controller, list)
+                        .create(handle, binding, close);
+                    assertThat(view).isInstanceOf(HeadlessGraphWorkspaceView.class);
+                    HeadlessGraphWorkspaceView headless = (HeadlessGraphWorkspaceView) view;
+                    headless.model().rebuildRecentWorkspacesMenu();
+                    JMenu recents = recentsMenu(headless.model().menuBar());
+                    assertThat(recents.getMenuComponentCount()).isEqualTo(3);
+                    assertThat(((JMenuItem) recents.getMenuComponent(0)).getName())
+                        .isEqualTo("graph-workspace-recent-workspace-0");
+                    view.close();
+                }
+            }
+        });
+
+        GraphWorkspaceWindow.runOnEdt(new Runnable() {
+            @Override
+            public void run() {
+                try (MockedStatic<TextUtils> edtTextUtils = edtTextUtils();
+                        MockedStatic<ResourceController> edtResourceController = edtResourceController()) {
+                    GraphWorkspaceView view = new SwingGraphWorkspaceViewFactory(controller)
+                        .create(handle, binding, close);
+                    HeadlessGraphWorkspaceView headless = (HeadlessGraphWorkspaceView) view;
+                    headless.model().rebuildRecentWorkspacesMenu();
+                    JMenu recents = recentsMenu(headless.model().menuBar());
+                    assertThat(recents.getMenuComponentCount()).isEqualTo(1);
+                    assertThat(((JMenuItem) recents.getMenuComponent(0)).getName())
+                        .isEqualTo("graph-workspace-recent-workspaces-empty");
+                    view.close();
+                }
+            }
+        });
+    }
+
+    @Test
+    public void passesTheSharedListIntoTheCreatedSwingWindow() throws Exception {
+        Assume.assumeFalse(GraphicsEnvironment.isHeadless());
+        Path workspace = temporaryFolder.newFile("factory-window.fpg").toPath().toRealPath();
+        GraphWorkspaceController controller = mock(GraphWorkspaceController.class);
+        GraphWorkspaceHandle handle = mock(GraphWorkspaceHandle.class);
+        GraphWorkspaceViewBinding binding = modelBinding();
+        WorkspaceCloseController close = mock(WorkspaceCloseController.class);
+        RecentWorkspaceList list = new RecentWorkspaceList("", value -> { });
+        list.record(workspace);
+
+        GraphWorkspaceWindow.runOnEdt(new Runnable() {
+            @Override
+            public void run() {
+                try (MockedStatic<TextUtils> edtTextUtils = edtTextUtils();
+                        MockedStatic<ResourceController> edtResourceController = edtResourceController()) {
+                    GraphWorkspaceView view = new SwingGraphWorkspaceViewFactory(controller, list)
+                        .create(handle, binding, close);
+                    assertThat(view).isInstanceOf(GraphWorkspaceWindow.class);
+                    GraphWorkspaceWindow window = (GraphWorkspaceWindow) view;
+                    JMenu recents = recentsMenu(window.getJMenuBar());
+                    recentsPopupListener(recents).popupMenuWillBecomeVisible(
+                        new PopupMenuEvent(recents.getPopupMenu()));
+                    assertThat(recents.getMenuComponentCount()).isEqualTo(3);
+                    assertThat(((JMenuItem) recents.getMenuComponent(0)).getName())
+                        .isEqualTo("graph-workspace-recent-workspace-0");
+                    view.close();
+                }
+            }
+        });
+    }
+
+    private static GraphWorkspaceViewBinding modelBinding() {
+        GraphWorkspaceViewBinding binding = mock(GraphWorkspaceViewBinding.class);
+        when(binding.currentViewport()).thenReturn(Viewport.of(0.0, 0.0, 1.0, Collections.emptyList()));
+        when(binding.currentCanvasState()).thenReturn(null);
+        when(binding.currentSessionStatus()).thenReturn(WorkspaceSessionStatus.empty());
+        when(binding.currentMapRows()).thenReturn(Collections.emptyList());
+        return binding;
+    }
+
+    private static JMenu recentsMenu(final JMenuBar menuBar) {
+        for (int index = 0; index < menuBar.getMenuCount(); index++) {
+            JMenu menu = menuBar.getMenu(index);
+            for (Component component : menu.getMenuComponents()) {
+                if (component instanceof JMenu
+                        && "graph-workspace-recent-workspaces-menu".equals(component.getName())) {
+                    return (JMenu) component;
+                }
+            }
+        }
+        throw new AssertionError("Missing recent workspaces menu");
+    }
+
+    private static PopupMenuListener recentsPopupListener(final JMenu menu) {
+        PopupMenuListener[] listeners = menu.getPopupMenu().getPopupMenuListeners();
+        for (PopupMenuListener listener : listeners) {
+            if (!listener.getClass().getName().startsWith("javax.swing.")) {
+                return listener;
+            }
+        }
+        throw new AssertionError("Missing recent-workspaces popup listener");
+    }
+
+    private static MockedStatic<TextUtils> edtTextUtils() {
+        MockedStatic<TextUtils> textUtils = org.mockito.Mockito.mockStatic(TextUtils.class);
+        textUtils.when(() -> TextUtils.getText(any(String.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+        textUtils.when(() -> TextUtils.getText(any(String.class), any(String.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+        textUtils.when(() -> TextUtils.getRawText(any(String.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+        textUtils.when(() -> TextUtils.getRawText(any(String.class), any(String.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+        return textUtils;
+    }
+
+    private static MockedStatic<ResourceController> edtResourceController() {
+        MockedStatic<ResourceController> resources = org.mockito.Mockito.mockStatic(ResourceController.class);
+        resources.when(ResourceController::getResourceController).thenReturn(mock(ResourceController.class));
+        return resources;
     }
 
     private static ModeController configuredModeController() {

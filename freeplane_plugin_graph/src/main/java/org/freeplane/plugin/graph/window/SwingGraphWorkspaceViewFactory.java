@@ -14,19 +14,32 @@ import org.freeplane.plugin.graph.control.GraphWorkspaceView;
 import org.freeplane.plugin.graph.control.GraphWorkspaceViewBinding;
 import org.freeplane.plugin.graph.control.GraphWorkspaceViewFactory;
 import org.freeplane.plugin.graph.control.WorkspaceCloseController;
+import org.freeplane.plugin.graph.workspace.RecentWorkspaceList;
 
 public final class SwingGraphWorkspaceViewFactory implements GraphWorkspaceViewFactory {
     private final GraphWorkspaceController applicationController;
     private final Supplier<Path> pathChooser;
+    private final RecentWorkspaceList recentWorkspaces;
 
     public SwingGraphWorkspaceViewFactory(final GraphWorkspaceController applicationController) {
-        this(applicationController, GraphWorkspaceWindow::chooseWorkspacePath);
+        this(applicationController, GraphWorkspaceWindow::chooseWorkspacePath, RecentWorkspaceList.empty());
+    }
+
+    public SwingGraphWorkspaceViewFactory(final GraphWorkspaceController applicationController,
+            final RecentWorkspaceList recentWorkspaces) {
+        this(applicationController, GraphWorkspaceWindow::chooseWorkspacePath, recentWorkspaces);
     }
 
     SwingGraphWorkspaceViewFactory(final GraphWorkspaceController applicationController,
             final Supplier<Path> pathChooser) {
+        this(applicationController, pathChooser, RecentWorkspaceList.empty());
+    }
+
+    SwingGraphWorkspaceViewFactory(final GraphWorkspaceController applicationController,
+            final Supplier<Path> pathChooser, final RecentWorkspaceList recentWorkspaces) {
         this.applicationController = Objects.requireNonNull(applicationController, "applicationController");
         this.pathChooser = Objects.requireNonNull(pathChooser, "pathChooser");
+        this.recentWorkspaces = Objects.requireNonNull(recentWorkspaces, "recentWorkspaces");
     }
 
     @Override
@@ -40,10 +53,12 @@ public final class SwingGraphWorkspaceViewFactory implements GraphWorkspaceViewF
             @Override
             public void run() {
                 if (GraphicsEnvironment.isHeadless()) {
-                    view.set(new HeadlessGraphWorkspaceView(handle, binding, close, applicationController, pathChooser));
+                    view.set(new HeadlessGraphWorkspaceView(handle, binding, close, applicationController,
+                        pathChooser, recentWorkspaces));
                 }
                 else {
-                    view.set(new GraphWorkspaceWindow(handle, binding, close, applicationController, pathChooser));
+                    view.set(new GraphWorkspaceWindow(handle, binding, close, applicationController, pathChooser,
+                        recentWorkspaces));
                 }
             }
         };
