@@ -185,10 +185,20 @@ public final class RecentWorkspaceList {
     private long persistedRevision = -1L;
 
     public static RecentWorkspaceList standard() {
-        final ResourceController resources = ResourceController.getResourceController();
+        ResourceController resources = null;
+        try {
+            resources = ResourceController.getResourceController();
+        }
+        catch (final NullPointerException ignored) {
+        }
         final String stored = resources == null ? "" : resources.getProperty(PROPERTY_KEY, "");
         return new RecentWorkspaceList(stored, value -> {
-            final ResourceController current = ResourceController.getResourceController();
+            ResourceController current = null;
+            try {
+                current = ResourceController.getResourceController();
+            }
+            catch (final NullPointerException ignored) {
+            }
             if (current != null) {
                 current.setProperty(PROPERTY_KEY, value);
             }
@@ -797,10 +807,11 @@ The 9-argument signature exists specifically because
 `(GraphWorkspaceHandle, GraphWorkspaceViewBinding, GraphWorkspaceController, Supplier, WorkspaceCloseController,
 Runnable, Runnable, Runnable, Consumer)`; it must not be removed, renamed, or reordered.
 
-The model gains exactly two fields: `private final RecentWorkspaceList recentWorkspaces;`
-(assigned from the canonical constructor; the 9-argument form passes
-`RecentWorkspaceList.empty()`) and `private JMenu recentWorkspacesMenu;` (assigned in
-`createMenuBar()`, used by the rebuild method and by the click handler).
+The model gains exactly three fields: `private final GraphWorkspaceController applicationController;`
+(stored by the canonical constructor; `openRecentWorkspace` needs it),
+`private final RecentWorkspaceList recentWorkspaces;` (assigned from the canonical constructor;
+the 9-argument form passes `RecentWorkspaceList.empty()`) and `private JMenu recentWorkspacesMenu;`
+(assigned in `createMenuBar()`, used by the rebuild method and by the click handler).
 
 `GraphWorkspaceWindow`:
 
@@ -1149,13 +1160,14 @@ Shared fixture: `@Rule TemporaryFolder`, a capturing persister
 | A8 | `roundTripsThePersistenceFormatThroughEncodeListValue` | record two files; captured value equals `ConfigurationUtils.encodeListValue([canonicalFirst, canonicalSecond], true)`; constructing from that value yields the same paths | encode/decode contract |
 | A9 | `dropsInvalidStoredTokensAtConstruction` | construct from a value containing one absolute path, one relative token, and `"\u0000bad"`; only the absolute path is stored; `null` and `""` produce empty lists without throwing | null/blank/malformed tolerance |
 | A10 | `truncatesDecodedValuesToTheStoredCapacity` | construct from a hand-built value of 26 absolute tokens, then record an existing file; the captured value holds 25 entries (the new path plus the first 24 decoded) and not the last two decoded tokens | decode-time truncation, bounded-probe precondition |
-| A11 | `recordNeverThrowsOnAnUnusablePath` | path `blocker/child.fpg` where `blocker` is a regular file; `record` returns without throwing, list stays empty, persister never called | canonicalization failure is skipped |
+| A11 | `recordNeverThrowsOnAnUnusablePath` | `Assume.assumeTrue(File.separatorChar == '/')` (on Windows the JDK maps a non-directory prefix to `NoSuchFileException`, so the path resolves and no failure exists to exercise); path `blocker/child.fpg` where `blocker` is a regular file; `record` returns without throwing, list stays empty, persister never called | canonicalization failure is skipped |
 | A12 | `recordAndClearNeverThrowWhenThePersisterFails` | persister throws `IllegalStateException`; `record(existingFile)` does not throw and `hasStoredEntries()` is true; `clear()` does not throw | best-effort persistence |
 | A13 | `keepsUnresolvableStoredPathsAcrossAnUnrelatedRecord` | stored value contains an absolute path blocked by a regular-file parent (e.g. `blocker.fpg/child.fpg` where `blocker.fpg` is a regular file); construction, `displayEntries()`, and `mostRecentExisting()` do not throw and keep it stored; after recording an unrelated existing file the captured value still contains the unresolvable token | decode never canonicalizes, never prunes, and needs no symlink privilege |
 | A14 | `recordsTheCanonicalPathAndNotTheGivenVariant` | record `dir/../dir/x.fpg`; the captured value contains `dir/x.fpg`'s real path and not the `..` string | record canonicalizes |
 | A15 | `emptyReturnsFreshInertInstances` | `empty()` is not `isSameAs` another `empty()`; recording an existing path leaves `hasStoredEntries()` false and `displayEntries()` empty; `clear()` is a no-op | fresh instances, no cross-test leakage |
 | A16 | `labelHelperUsesFileNameAndFullContainingFolder` | path `Paths.get("/a/b/x.fpg")`; `labelFor(path)` equals `"x.fpg (" + path.getParent() + ")"` (expected value derived from the same `Path`, so it also holds on Windows); labels for `/p/a/x.fpg` and `/q/a/x.fpg` differ | label policy / full folder |
 | A17 | `labelHelperFallsBackToThePathStringForARoot` | `labelFor(temporaryFolder.getRoot().toPath().getRoot())` equals `TextWritingDirection.LEFT_TO_RIGHT.isolatePathSeparators(root.toString())` and does not throw | null-`getFileName` fallback |
+| A18 | `standardToleratesAnAbsentResourceController` | `mockStatic(ResourceController.class)` with `getResourceController()` throwing `NullPointerException` (the absent-`Controller` case): `RecentWorkspaceList.standard()` returns a list with `hasStoredEntries()` false and `displayEntries()` empty, and `record(existingFile)`/`clear()` do not throw | EC11 tolerance without a live `Controller` |
 
 ### 10.2 `OpenGraphWorkspaceActionShould` (new)
 
@@ -1219,7 +1231,7 @@ mock of `RecentWorkspaceRecorder`.
 | D4 | `openExistingNeverCreatesAWorkspaceForAMissingPath` | capturing `SessionFactory`; `assertThatThrownBy(openExisting(missing))` is `GraphWorkspaceOpenException` with a `NoSuchFileException` cause; factory call count 0 (no `create=true` ever observed); file still absent; `sessions.owner(path)` empty | bare delegation to creating `open` |
 | D5 | `openExistingForcesACreateDisabledOpenWhenTheFileVanishesAfterTheCheck` | `mockStatic(Files.class)` with `isRegularFile(path)` returning `true` and `exists(path)` returning `false`; factory captures `create` and throws; the captured `create` is `false` and the failure is `GraphWorkspaceOpenException` | pre-check plus creating `open` (captured `create` becomes `true`); the race window |
 | D6 | `openExistingOpensAnExistingFileWithoutCreating` | existing file; factory captures `create` false; handle returned and view shown | `openExisting` shares the non-creating path |
-| D7 | `openExistingWrapsCanonicalizationFailure` | path `blocker/child.fpg` beneath a regular file; `GraphWorkspaceOpenException` with an `IllegalArgumentException` cause; factory never called | canonicalization wrapping |
+| D7 | `openExistingWrapsCanonicalizationFailure` | `Assume.assumeTrue(File.separatorChar == '/')` for the same ENOTDIR reason as A11; path `blocker/child.fpg` beneath a regular file; `GraphWorkspaceOpenException` with an `IllegalArgumentException` cause; factory never called | canonicalization wrapping |
 | D8 | `openExistingWrapsShutdownFailure` | open once, `shutdown()`, then `openExisting` on an existing file; `GraphWorkspaceOpenException` with an `IllegalStateException` cause | shut-down wrapping |
 | D9 | `closesTheSessionRecorderWhenTheSessionCloses` | `SessionResources` with a mocked `RecentWorkspaceRecorder`; capture close controller; `saveAndClose()` true; `verify(recorder).close()` | teardown via `closeRemainingResources` on close |
 | D10 | `closesTheSessionRecorderOnShutdown` | same resources; `controller.shutdown()` off the EDT; `verify(recorder).close()` | teardown via `closeRemainingResourcesOffEdt` |
@@ -1255,6 +1267,8 @@ mocked `WorkspaceDocument` and `WorkspaceId.of(...)`.
 | F1 | `wiresApplicationWideRecentWorkspacesThroughUserProperties` | mock `ApplicationResourceController`; `when(getProperty(RecentWorkspaceList.PROPERTY_KEY, "")).thenReturn(seededValue)`; `mockConstruction(DefaultGraphWorkspaceController.class)` captures constructor arguments; the third argument is a `RecentWorkspaceList` reflecting the seeded value; capture the list given to `SwingGraphWorkspaceViewFactory` and to `OpenGraphWorkspaceAction` and assert `isSameAs` the controller's list, so a second or inert instance cannot slip in; recording a second temp file triggers `setProperty(PROPERTY_KEY, value)` captured; `clear()` triggers `setProperty(PROPERTY_KEY, "")` | property-backed wiring and one shared application-wide instance |
 | F2 | `shipsTheFourRecentWorkspaceResourceKeys` | read `Resources_en.properties`; assert the four exact key/value pairs from section 8 | resource bundle content |
 | F3 | `delegatesOpenExistingThroughTheForwardingController` | the production `ForwardingGraphWorkspaceController` bound to a delegate: `openExisting(path)` reaches `delegate.openExisting(path)` and never `delegate.open(...)`; while unbound it throws `GraphWorkspaceOpenException` rather than the raw `IllegalStateException` | forwarding-controller fidelity: the production action path cannot silently fall back to create-or-open |
+| F4 | `passesTheSharedListIntoTheCreatedHeadlessView` | `new SwingGraphWorkspaceViewFactory(controller, list)` with a list holding one recorded existing file; `create(handle, binding, close)` on the headless branch returns a `HeadlessGraphWorkspaceView`; reach its package-private `model()`, rebuild, and assert the recents menu holds exactly that one entry; a factory built without the list yields the empty row instead | factory → view → model propagation of the shared list |
+| F5 | `passesTheSharedListIntoTheCreatedSwingWindow` | same as F4 on the non-headless branch, guarded by `Assume.assumeFalse(GraphicsEnvironment.isHeadless())`: the created `GraphWorkspaceWindow`'s menu bar contains the recents submenu, and firing its recents popup listener yields the recorded entry | window-branch propagation (skipped in headless CI, covered by construction in the headless case) |
 
 ### 10.7 Regression tests that must stay green
 
@@ -1285,16 +1299,17 @@ mocked `WorkspaceDocument` and `WorkspaceId.of(...)`.
 | --- | --- |
 | File > Recent Workspaces submenu with exact placement and policy | C1–C9; `gradle :freeplane_plugin_graph:test` |
 | View > Open Graph Workspace recent resolution and fallback | B1–B7; `gradle :freeplane_plugin_graph:test` |
-| `RecentWorkspaceList` policy (caps, ordering, de-dup, hide-but-keep, labels, tolerance) | A1–A17; `gradle :freeplane_plugin_graph:test` |
-| Persistence format and property wiring | A8, F1; captured `setProperty` evidence in the test report |
+| `RecentWorkspaceList` policy (caps, ordering, de-dup, hide-but-keep, labels, tolerance) | A1–A18; `gradle :freeplane_plugin_graph:test` |
+| Persistence format and property wiring | A8, A18, F1; captured `setProperty` evidence in the test report |
 | `openExisting` never creates and wraps all failures | D4–D8, F3; captured `create` flag in the test report |
 | Recording on open, focus, and Save As; best-effort isolation | D1–D3, E1–E3; `gradle :freeplane_plugin_graph:test` |
 | Recorder teardown through the resource funnel | D9–D11; `gradle :freeplane_plugin_graph:test` |
 | 9-argument `GraphWorkspaceWindowModel` constructor compatibility | C10; `gradle :freeplane_plugin_graph:graphUiEvidence` regenerates `docs/superpowers/specs/images/2026-08-10-graph-workspace-implemented.png` without reflective-constructor failure |
+| One shared application-wide list reaches every window and view | F1, F4, F5; `gradle :freeplane_plugin_graph:test` |
 | Four resource keys with exact text and encoding | F2; `gradle format_translation` output |
 | No regressions | section 10.7; full `gradle :freeplane_plugin_graph:test -PTestLoggingFull --rerun-tasks` |
 
-Verification commands, run from the delivery worktree root:
+Verification commands, run from the root of whichever worktree the change is applied in:
 
 ```bash
 JAVA_HOME=/home/henry/.sdkman/candidates/java/21.0.8-zulu gradle format_translation
