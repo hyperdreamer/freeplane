@@ -1,7 +1,7 @@
 # Graph Workspace Node Repulsion & Layout Settling — Design
 
 - Date: 2026-09-11
-- Status: Revised after frontier design review rounds 1–3
+- Status: Approved at frontier design review round 5; post-approval corrigendum applied after specification review round 1 (test-7 fast-path rationale)
 - Ticket: none — Task Identifier: `2026-09-11-graph-node-repulsion`
 - Scope: `freeplane_plugin_graph` (feature branch `feature/graph-workspace`)
 

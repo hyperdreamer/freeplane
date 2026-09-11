@@ -300,7 +300,7 @@ The following must remain byte-for-byte equivalent in behavior (no retuning, no 
 
 ### 3.2 Ancestry walk termination
 
-`R16`: The `isAncestorPair` walks terminate when `parentOf.get(current)` returns `null` (map root or null value) or when the key is absent. No cycle detection is added because `ProjectedEnclosure` enforces a non-self, same-map parent; the walk is bounded by the enclosure tree depth.
+`R16`: The `isAncestorPair` walks terminate when `parentOf.get(current)` returns `null` (map root or null value) or when the key is absent. No cycle detection is added: `ProjectedEnclosure` enforces a non-self, same-map parent but not acyclicity, and a cyclic parent chain already fails earlier in `GraphStreamLayoutEngine.enclosureDepths` (unbounded recursion) before any `isAncestorPair` call during stepping, so the walk adds no new failure mode and is otherwise bounded by the enclosure tree depth.
 
 ### 3.3 `forgetParticle` hygiene
 
@@ -308,7 +308,7 @@ The following must remain byte-for-byte equivalent in behavior (no retuning, no 
 
 ### 3.4 Reparenting refresh and the empty-diff early return
 
-`R18`: A reparented boundary refreshes `parentOf` only when `GraphStreamLayoutEngine.apply` calls `synchronize()`. The empty-diff fast path in `apply` is taken only when `accepted.diff().isEmpty()` **and** `accepted.diff().beforeGeneration() == lastSynchronizedProjectionGeneration` (plus matching workspace and pins); otherwise `synchronize()` runs. A content change cannot be combined with a matching-generation empty diff (`LayoutRequest` forces `afterGeneration == projection.generation()`), so any request that actually reparents a boundary re-synchronizes. Test T7 builds its request with `ProjectionDiff.between(originalProjection, reparentedProjection)` (a non-empty diff) and a distinct generation as the honest request description; the assertion fails when `configureParticle` does not overwrite `parentOf`, which is the contract under test.
+`R18`: A reparented boundary refreshes `parentOf` only when `GraphStreamLayoutEngine.apply` calls `synchronize()`. The empty-diff fast path in `apply` is taken only when `accepted.diff().isEmpty()` **and** `accepted.diff().beforeGeneration() == lastSynchronizedProjectionGeneration` (plus matching workspace and pins); otherwise `synchronize()` runs. Under the generation-identifies-content protocol any request that actually reparents a boundary also advances the generation, so it cannot carry a matching-generation empty diff (`LayoutRequest` itself only forces `afterGeneration == projection.generation()`) and therefore re-synchronizes. Test T7 builds its request with `ProjectionDiff.between(originalProjection, reparentedProjection)` (a non-empty diff) and a distinct generation as the honest request description; the assertion fails when `configureParticle` does not overwrite `parentOf`, which is the contract under test.
 
 ### 3.5 Guards and recovery untouched
 
@@ -505,7 +505,7 @@ List<PinProjection> pins = Collections.singletonList(PinProjection.active(record
   - the pinned node's coordinates on the first idle frame and on the last guard frame are exactly `LayoutPoint.of(1059.0, -145.0)`;
   - `worstRms <= 0.0505` and `worstMax <= 0.10` (RMS guard relaxed from `0.05` to accommodate the measured `0.049654` margin).
 - Measured: first idle at step 2471 with rms `0.049654`; post-idle 100-frame guard stays under both bounds.
-- Falsifiability: unfixed never idles within 10000 steps, so `firstIdleStep <= 10000` fails.
+- Falsifiability: the unfixed pinned run does not idle in the recorded 1500 frames, and its constant-amplitude drift mechanism (Section 7) does not decay, so `firstIdleStep <= 10000` fails.
 
 #### T6 — `BoundarySeparationShould.unpinTransitionSettlesAfterFormerPinReleased`
 
@@ -535,7 +535,7 @@ LayoutFrame frame = engine.apply(reparentRequest);
 - Assert: `distance(frame.positions().anchors().get(axiomsHull), frame.positions().anchors().get(definitionsHull))`
   `<= ReferenceRepulsionFixture.boundaryRadius(reparented, axiomsHull) - 16.0` (≈ `593.87 − 16 = 577.87`).
 - Measured after exactly 1500 steps after the reparent: refreshed exclusion `61.84`; stale sibling exclusion `699.88`.
-- Falsifiability: the assertion fails on unfixed code (measured `699.88 > 577.87`) and fails if `configureParticle` does not overwrite `parentOf` on reparent, or if the exclusion is direct-parent-only or absent. `ProjectionDiff.between(original, reparented)` is the honest request description and guarantees `synchronize()`; an empty diff at a *different* generation also re-synchronizes, and the fast path is only taken for an empty diff whose `beforeGeneration()` equals the last synchronized generation (design §6.3, this spec §3.4).
+- Falsifiability: the assertion fails on unfixed code (measured `699.88 > 577.87`) and fails if `configureParticle` does not overwrite `parentOf` on reparent. (Direct-parent-only exclusion also excludes this pair, because `axioms` is `definitions`' direct parent; that insufficiency is discriminated by T8 instead.) `ProjectionDiff.between(original, reparented)` is the honest request description and guarantees `synchronize()`; an empty diff at a *different* generation also re-synchronizes, and the fast path is only taken for an empty diff whose `beforeGeneration()` equals the last synchronized generation (design §6.3, this spec §3.4).
 
 #### T8 — `BoundarySeparationShould.grandchildAnchorsAreExcludedFromBoundaryRepulsion`
 
