@@ -1,0 +1,238 @@
+schema_version: 1
+topic: graph-toolbar-icons
+run_id: pm-run-20260911-083115-a0aae9a1
+source_plan:
+  path: docs/superpowers/plans/2026-09-11-graph-toolbar-icons.md
+  sha256: ea92e0f1772bbc65ee53d65180f1112bfef3ee87df4cdeaedc5013e9626362cd
+  commit_oid: a1c831fcf0054487bb523d29fb474f0f47dd2221
+  task_numbers:
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+lanes:
+- id: graph-toolbar-icons
+  sequence: 1
+  task_ids:
+  - toolbar-task-1
+  - toolbar-task-2
+  - toolbar-task-3
+  - toolbar-task-4
+  - toolbar-task-5
+  - toolbar-task-6
+  exclusive_resources:
+  - gradle-daemon
+tasks:
+- id: toolbar-task-1
+  plan_task: 1
+  lane: graph-toolbar-icons
+  sequence: 1
+  depends_on: []
+  owns:
+  - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/projection/PinProjection.java
+  - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/projection/PinProjectionShould.java
+  exclusive_resources:
+  - gradle-daemon
+  interfaces:
+    produces:
+    - id: iface-pin-lookup
+      signature: public static boolean PinProjection.isPinned(GraphProjection projection, ProjectedNodeKey node)
+      digest: b35f16327611225d
+    - id: iface-pin-lookup-tests
+      signature: PinProjectionShould.resolvesPinnedStateFromActiveProjectionPins()
+      digest: 4442860a149d6660
+    consumes: []
+  validation:
+  - argv:
+    - gradle
+    - :freeplane_plugin_graph:test
+    - --tests
+    - org.freeplane.plugin.graph.projection.PinProjectionShould
+    - -PTestLoggingFull
+    - --rerun-tasks
+    expect_exit: 0
+- id: toolbar-task-2
+  plan_task: 2
+  lane: graph-toolbar-icons
+  sequence: 2
+  depends_on:
+  - toolbar-task-1
+  owns:
+  - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/WorkspaceToolbar.java
+  - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindowModelShould.java
+  exclusive_resources:
+  - gradle-daemon
+  interfaces:
+    produces:
+    - id: iface-icon-button
+      signature: private static JButton WorkspaceToolbar.iconButton(String textKey, String name, String iconPath)
+      digest: 473109b04670aa91
+    - id: iface-fixture-icon-plumbing
+      signature: GraphWorkspaceWindowModelShould.icon(int width, int height) + Fixture.stubIcon(String path, Icon icon) + Fixture.resourceController() + EdtResources(Map<String, Icon> iconStubs) + EdtResources.controller()
+      digest: 7cf8174d71883bce
+    consumes: []
+  validation:
+  - argv:
+    - gradle
+    - :freeplane_plugin_graph:test
+    - --tests
+    - org.freeplane.plugin.graph.window.GraphWorkspaceWindowModelShould
+    - -PTestLoggingFull
+    - --rerun-tasks
+    expect_exit: 0
+  - argv:
+    - gradle
+    - :freeplane_plugin_graph:test
+    - --tests
+    - org.freeplane.plugin.graph.window.UndoRoutingShould
+    - -PTestLoggingFull
+    - --rerun-tasks
+    expect_exit: 0
+- id: toolbar-task-3
+  plan_task: 3
+  lane: graph-toolbar-icons
+  sequence: 3
+  depends_on:
+  - toolbar-task-2
+  owns:
+  - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/WorkspaceToolbar.java
+  - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindow.java
+  - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindowModelShould.java
+  exclusive_resources:
+  - gradle-daemon
+  interfaces:
+    produces:
+    - id: iface-pin-toggle
+      signature: void WorkspaceToolbar.setPinState(boolean enabled, boolean pinned) + private void GraphWorkspaceWindowModel.togglePinSelectedNode()
+      digest: ede8497c12fbc5ef
+    - id: iface-pin-test-helpers
+      signature: GraphWorkspaceWindowModelShould.persistedPinnedNodeState(MapReferenceId, LayoutPoint, double, double) + persistedNodeStateWithoutGeometry(MapReferenceId) + persistedPinnedNodeStateWithoutGeometry(MapReferenceId)
+      digest: f6216c7f84d9a46c
+    consumes:
+    - from_task: toolbar-task-1
+      id: iface-pin-lookup
+      digest: b35f16327611225d
+    - from_task: toolbar-task-2
+      id: iface-fixture-icon-plumbing
+      digest: 7cf8174d71883bce
+  validation:
+  - argv:
+    - gradle
+    - :freeplane_plugin_graph:test
+    - --tests
+    - org.freeplane.plugin.graph.window.GraphWorkspaceWindowModelShould
+    - -PTestLoggingFull
+    - --rerun-tasks
+    expect_exit: 0
+  - argv:
+    - gradle
+    - :freeplane_plugin_graph:test
+    - --tests
+    - org.freeplane.plugin.graph.window.UndoRoutingShould
+    - -PTestLoggingFull
+    - --rerun-tasks
+    expect_exit: 0
+- id: toolbar-task-4
+  plan_task: 4
+  lane: graph-toolbar-icons
+  sequence: 4
+  depends_on:
+  - toolbar-task-3
+  owns:
+  - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindowModelShould.java
+  exclusive_resources:
+  - gradle-daemon
+  interfaces:
+    produces:
+    - id: iface-pin-refresh-tests
+      signature: GraphWorkspaceWindowModelShould.refreshesPinToggleAfterPostCommandCanvasStatePublication() + rejectsPinAndUnpinIntentsInReadOnlySessions()
+      digest: 2c995688c908ecac
+    consumes:
+    - from_task: toolbar-task-3
+      id: iface-pin-toggle
+      digest: ede8497c12fbc5ef
+    - from_task: toolbar-task-3
+      id: iface-pin-test-helpers
+      digest: f6216c7f84d9a46c
+  validation:
+  - argv:
+    - gradle
+    - :freeplane_plugin_graph:test
+    - --tests
+    - org.freeplane.plugin.graph.window.GraphWorkspaceWindowModelShould
+    - -PTestLoggingFull
+    - --rerun-tasks
+    expect_exit: 0
+- id: toolbar-task-5
+  plan_task: 5
+  lane: graph-toolbar-icons
+  sequence: 5
+  depends_on:
+  - toolbar-task-4
+  owns:
+  - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/GraphInteractionController.java
+  - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/AccessibleGraphCanvas.java
+  - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/GraphInteractionControllerShould.java
+  exclusive_resources:
+  - gradle-daemon
+  interfaces:
+    produces:
+    - id: iface-context-pin-toggle
+      signature: private void GraphInteractionController.handleContext(MouseEvent event) symmetric node pin toggle
+      digest: 7dd7614a8fc4a4b3
+    consumes:
+    - from_task: toolbar-task-1
+      id: iface-pin-lookup
+      digest: b35f16327611225d
+  validation:
+  - argv:
+    - gradle
+    - :freeplane_plugin_graph:test
+    - --tests
+    - org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould
+    - -PTestLoggingFull
+    - --rerun-tasks
+    expect_exit: 0
+  - argv:
+    - gradle
+    - :freeplane_plugin_graph:test
+    - --tests
+    - org.freeplane.plugin.graph.integration.GraphWorkspaceCommandAcceptanceShould
+    - -PTestLoggingFull
+    - --rerun-tasks
+    expect_exit: 0
+- id: toolbar-task-6
+  plan_task: 6
+  lane: graph-toolbar-icons
+  sequence: 6
+  depends_on:
+  - toolbar-task-5
+  owns:
+  - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/smoke/GraphWorkspaceUiEvidence.java
+  - docs/superpowers/specs/images/2026-08-10-graph-workspace-implemented.png
+  exclusive_resources:
+  - gradle-daemon
+  interfaces:
+    produces:
+    - id: iface-evidence-pin-assertions
+      signature: GraphWorkspaceUiEvidence.verifyPinToggleStates(CanvasState pinnedState) + assertPinState(AbstractButton button, String expected, boolean enabled, String description)
+      digest: 6ffadadc74b53ca7
+    consumes:
+    - from_task: toolbar-task-2
+      id: iface-icon-button
+      digest: 473109b04670aa91
+    - from_task: toolbar-task-3
+      id: iface-pin-toggle
+      digest: ede8497c12fbc5ef
+  validation:
+  - argv:
+    - gradle
+    - :freeplane_plugin_graph:test
+    - -PTestLoggingFull
+    expect_exit: 0
+  - argv:
+    - gradle
+    - :freeplane_plugin_graph:graphUiEvidence
+    expect_exit: 0

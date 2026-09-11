@@ -1,0 +1,25 @@
+digraph graph_toolbar_icons_execution {
+  rankdir=TB;
+  node [shape=box, style=rounded];
+  subgraph cluster_lane_graph_toolbar_icons {
+    label="lane graph-toolbar-icons (sequence 1)";
+    "toolbar-task-1" [label="Task 1: Add the shared pinned-state query\nStandard"];
+    "toolbar-task-2" [label="Task 2: Render four toolbar controls as scalable icons\nStandard"];
+    "toolbar-task-3" [label="Task 3: Replace the two pin buttons with one context-sensitive toggle\nAdvanced"];
+    "toolbar-task-4" [label="Task 4: Prove pin-toggle refresh paths and read-only rejection\nStandard"];
+    "toolbar-task-5" [label="Task 5: Toggle pin from canvas right-click and share the canvas pinned lookup\nAdvanced"];
+    "toolbar-task-6" [label="Task 6: Regenerate the UI evidence and run the full verification contract\nAdvanced"];
+  }
+  "toolbar-task-1" -> "toolbar-task-2";
+  "toolbar-task-2" -> "toolbar-task-3";
+  "toolbar-task-3" -> "toolbar-task-4";
+  "toolbar-task-4" -> "toolbar-task-5";
+  "toolbar-task-5" -> "toolbar-task-6";
+  "toolbar-task-1" -> "toolbar-task-3" [style=dashed, label="iface-pin-lookup"];
+  "toolbar-task-2" -> "toolbar-task-3" [style=dashed, label="iface-fixture-icon-plumbing"];
+  "toolbar-task-3" -> "toolbar-task-4" [style=dashed, label="iface-pin-toggle"];
+  "toolbar-task-3" -> "toolbar-task-4" [style=dashed, label="iface-pin-test-helpers"];
+  "toolbar-task-1" -> "toolbar-task-5" [style=dashed, label="iface-pin-lookup"];
+  "toolbar-task-2" -> "toolbar-task-6" [style=dashed, label="iface-icon-button"];
+  "toolbar-task-3" -> "toolbar-task-6" [style=dashed, label="iface-pin-toggle"];
+}
