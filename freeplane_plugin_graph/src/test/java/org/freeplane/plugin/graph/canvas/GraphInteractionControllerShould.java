@@ -401,6 +401,45 @@ public class GraphInteractionControllerShould {
     }
 
     @Test
+    public void togglesPinOnTheNodeUnderTheContextClickAtItsCentre() {
+        final Fixture fixture = Fixture.create();
+        final GraphCanvas canvas = fixture.canvas();
+        final RecordingListener listener = new RecordingListener();
+        final GraphInteractionController controller = new GraphInteractionController(listener);
+        controller.install(canvas);
+
+        dispatch(canvas, context(canvas, -30.0, 0.0));
+        assertThat(listener.last()).isEqualTo(new GraphIntent.Pin(fixture.firstNodeKey, -40.0, 0.0));
+        for (GraphIntent intent : listener.intents) {
+            assertThat(intent).isNotInstanceOf(GraphIntent.ChangeSelection.class);
+        }
+
+        dispatch(canvas, context(canvas, 35.0, 0.0));
+        assertThat(listener.last()).isEqualTo(new GraphIntent.Unpin(fixture.secondNodeKey));
+
+        dispatch(canvas, context(canvas, 0.0, 0.0));
+        assertThat(listener.last()).isEqualTo(new GraphIntent.InspectEdge(fixture.edgeKey));
+        controller.uninstall();
+    }
+
+    @Test
+    public void dispatchesAtMostOneContextActionPerGesture() {
+        final Fixture fixture = Fixture.create();
+        final GraphCanvas canvas = fixture.canvas();
+        final RecordingListener listener = new RecordingListener();
+        final GraphInteractionController controller = new GraphInteractionController(listener);
+        controller.install(canvas);
+
+        dispatch(canvas, click(canvas, MouseEvent.MOUSE_PRESSED, -30.0, 0.0, 1, MouseEvent.BUTTON3));
+        dispatch(canvas, click(canvas, MouseEvent.MOUSE_RELEASED, -30.0, 0.0, 1, MouseEvent.BUTTON3));
+        dispatch(canvas, click(canvas, MouseEvent.MOUSE_CLICKED, -30.0, 0.0, 1, MouseEvent.BUTTON3));
+
+        assertThat(listener.intents).hasSize(1);
+        assertThat(listener.last()).isEqualTo(new GraphIntent.Pin(fixture.firstNodeKey, -40.0, 0.0));
+        controller.uninstall();
+    }
+
+    @Test
     public void cancelConnectionPreviewBeforeClearingSelection() {
         final Fixture fixture = Fixture.create();
         final GraphCanvas canvas = fixture.canvas();

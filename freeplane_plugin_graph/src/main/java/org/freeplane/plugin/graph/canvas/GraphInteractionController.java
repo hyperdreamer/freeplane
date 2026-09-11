@@ -20,6 +20,7 @@ import javax.swing.SwingUtilities;
 
 import org.freeplane.plugin.graph.control.CanvasState;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
+import org.freeplane.plugin.graph.geometry.NodeGeometry;
 import org.freeplane.plugin.graph.projection.ContributorKey;
 import org.freeplane.plugin.graph.projection.ProjectedEdgeKey;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
@@ -442,7 +443,7 @@ public final class GraphInteractionController {
             final LayoutPoint world, final MouseEvent event) {
         final ProjectedEndpointKey value = endpoint.orElse(null);
         final boolean pinCandidate = value != null && value.isNode()
-            && !isPinned(state, value.node().get());
+            && !PinProjection.isPinned(state.projection(), value.node().get());
         drag = DragState.select(value, pinCandidate, event.getX(), event.getY());
     }
 
@@ -498,9 +499,17 @@ public final class GraphInteractionController {
         }
         final LayoutPoint world = canvas.worldAt(event.getPoint());
         final Optional<ProjectedEndpointKey> endpoint = canvas.hitIndex().endpointAt(world);
-        if (endpoint.isPresent() && endpoint.get().isNode()
-                && isPinned(state, endpoint.get().node().get())) {
-            emit(new GraphIntent.Unpin(endpoint.get().node().get()));
+        if (endpoint.isPresent() && endpoint.get().isNode()) {
+            final ProjectedNodeKey node = endpoint.get().node().get();
+            if (PinProjection.isPinned(state.projection(), node)) {
+                emit(new GraphIntent.Unpin(node));
+            }
+            else {
+                final NodeGeometry geometry = state.geometry().nodes().get(node);
+                if (geometry != null) {
+                    emit(new GraphIntent.Pin(node, geometry.center().x(), geometry.center().y()));
+                }
+            }
             return;
         }
         final double zoom = canvas.viewport().zoom();
@@ -567,16 +576,6 @@ public final class GraphInteractionController {
             return geometry == null ? null : geometry.labelAnchor();
         }
         return null;
-    }
-
-    private static boolean isPinned(final CanvasState state, final ProjectedNodeKey node) {
-        for (final PinProjection pin : state.projection().pins()) {
-            if (pin.active() && pin.projectedNode().isPresent()
-                    && node.equals(pin.projectedNode().get())) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private void selectEndpoint(final ProjectedEndpointKey endpoint) {

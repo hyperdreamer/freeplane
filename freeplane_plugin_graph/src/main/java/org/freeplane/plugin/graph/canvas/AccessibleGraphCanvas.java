@@ -36,7 +36,6 @@ import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointVisibility;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
-import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
 
 final class AccessibleGraphCanvas extends AccessibleContext implements AccessibleComponent {
     private final GraphCanvas canvas;
@@ -473,7 +472,8 @@ final class AccessibleGraphCanvas extends AccessibleContext implements Accessibl
                         : prominence.visibleOutgoingTargets();
                     return EndpointInfo.node(node.label().fullText(), node.mapName(),
                         nodeGeometry.minX(), nodeGeometry.minY(), nodeGeometry.maxX(), nodeGeometry.maxY(),
-                        isSelected(state), isPinned(state, node.key()), visibleOutgoingTargets,
+                        isSelected(state), PinProjection.isPinned(state.projection(), node.key()),
+                        visibleOutgoingTargets,
                         screenBounds(nodeGeometry.minX(), nodeGeometry.minY(), nodeGeometry.maxX(),
                             nodeGeometry.maxY()));
                 }
@@ -513,16 +513,6 @@ final class AccessibleGraphCanvas extends AccessibleContext implements Accessibl
         private boolean isSelected(final CanvasState state) {
             return canvas.paintState().selection().isPresent()
                 && endpoint.equals(canvas.paintState().selection().get());
-        }
-
-        private static boolean isPinned(final CanvasState state, final ProjectedNodeKey node) {
-            for (PinProjection pin : state.projection().pins()) {
-                if (pin.active() && pin.projectedNode().isPresent()
-                        && node.equals(pin.projectedNode().get())) {
-                    return true;
-                }
-            }
-            return false;
         }
 
         private static int toInt(final double value) {
