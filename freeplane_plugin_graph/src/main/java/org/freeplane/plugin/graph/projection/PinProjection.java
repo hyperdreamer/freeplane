@@ -49,6 +49,16 @@ public final class PinProjection {
         return !active();
     }
 
+    public static boolean isPinned(final GraphProjection projection, final ProjectedNodeKey node) {
+        for (final PinProjection pin : projection.pins()) {
+            if (pin.active() && pin.projectedNode().isPresent()
+                    && node.equals(pin.projectedNode().get())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public double x() {
         return record.x();
     }
