@@ -142,7 +142,8 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
             state.radius = desired.radius;
             final PinProjection pin = pinFor(desired, pinsBySource);
             state.pinned = pin != null;
-            springBox.configureParticle(desired.id, state.radius, state.pinned, desired.nodeKey == null);
+            springBox.configureParticle(desired.id, state.radius, state.pinned, desired.nodeKey == null,
+                desired.parentAnchorId);
             if (pin != null) {
                 state.x = pin.x();
                 state.y = pin.y();
@@ -211,6 +212,10 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
             for (final EnclosureKey endpoint : enclosure.endpointKeys()) {
                 enclosureEndpoints.put(endpoint, particle.id);
             }
+        }
+        for (final ProjectedEnclosure enclosure : projection.enclosures()) {
+            final DesiredParticle particle = desired.get(anchorIds.get(enclosure.hullKey()));
+            particle.parentAnchorId = anchorIds.get(enclosure.parentHull().orElse(null));
         }
 
         final List<ForceLink> result = new ArrayList<ForceLink>();
@@ -789,6 +794,7 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
         private final ProjectedNodeKey nodeKey;
         private final EnclosureHullKey anchorKey;
         private final double radius;
+        private String parentAnchorId;
 
         private DesiredParticle(final String id, final MapReferenceId mapReferenceId,
                 final ProjectedNodeKey nodeKey, final EnclosureHullKey anchorKey, final double radius) {

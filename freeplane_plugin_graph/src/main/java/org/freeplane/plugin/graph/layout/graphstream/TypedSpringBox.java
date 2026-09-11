@@ -27,6 +27,7 @@ final class TypedSpringBox extends SpringBox {
         new LinkedHashMap<String, GraphStreamLayoutEngine.ForceLink>();
 
     private final Map<String, Boolean> anchorFlags = new LinkedHashMap<String, Boolean>();
+    private final Map<String, String> parentOf = new LinkedHashMap<String, String>();
 
     TypedSpringBox(final LayoutCalibration calibration, final Random random) {
         super(false, random);
@@ -49,7 +50,9 @@ final class TypedSpringBox extends SpringBox {
         return particle;
     }
 
-    void configureParticle(final String id, final double radius, final boolean pinned, final boolean anchor) {
+    void configureParticle(final String id, final double radius, final boolean pinned, final boolean anchor,
+            final String parentAnchorId) {
+        parentOf.put(id, parentAnchorId);
         anchorFlags.put(id, Boolean.valueOf(anchor));
         final TypedNodeParticle particle = typedParticles.get(id);
         if (particle != null) {
@@ -72,6 +75,7 @@ final class TypedSpringBox extends SpringBox {
 
     void forgetParticle(final String id) {
         anchorFlags.remove(id);
+        parentOf.remove(id);
         typedParticles.remove(id);
     }
 
@@ -160,6 +164,9 @@ final class TypedSpringBox extends SpringBox {
             if (other == particle) {
                 continue;
             }
+            if (isAncestorPair(particle.getId().toString(), other.getId().toString())) {
+                continue;
+            }
             final Point3 own = particle.getPosition();
             final Point3 position = other.getPosition();
             double dx = own.x - position.x;
@@ -180,5 +187,19 @@ final class TypedSpringBox extends SpringBox {
             displacement.set(0, displacement.at(0) + dx / distance * force);
             displacement.set(1, displacement.at(1) + dy / distance * force);
         }
+    }
+
+    private boolean isAncestorPair(final String first, final String second) {
+        for (String current = parentOf.get(first); current != null; current = parentOf.get(current)) {
+            if (current.equals(second)) {
+                return true;
+            }
+        }
+        for (String current = parentOf.get(second); current != null; current = parentOf.get(current)) {
+            if (current.equals(first)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

@@ -268,6 +268,64 @@ public class BoundarySeparationShould {
         }
     }
 
+    @Test
+    public void directParentChildAnchorsSatisfyTheProximityInvariantAfterSettling() {
+        GraphProjection projection = ReferenceRepulsionFixture.referenceProjection(1L);
+        LayoutFrame frame = settle(ReferenceRepulsionFixture.WORKSPACE, projection);
+        for (ProjectedEnclosure enclosure : projection.enclosures()) {
+            if (!enclosure.parentHull().isPresent()) {
+                continue;
+            }
+            EnclosureHullKey childHull = enclosure.hullKey();
+            EnclosureHullKey parentHull = enclosure.parentHull().get();
+            assertThat(distance(frame.positions().anchors().get(childHull),
+                frame.positions().anchors().get(parentHull)))
+                .as("distance from %s to parent %s", childHull, parentHull)
+                .isLessThanOrEqualTo(
+                    ReferenceRepulsionFixture.boundaryRadius(projection, parentHull) - 16.0);
+        }
+    }
+
+    @Test
+    public void siblingAnchorsRemainSeparatedAfterSettling() {
+        GraphProjection projection = ReferenceRepulsionFixture.referenceProjection(1L);
+        LayoutFrame frame = settle(ReferenceRepulsionFixture.WORKSPACE, projection);
+        assertNoSiblingOverlap(frame,
+            Arrays.asList(ReferenceRepulsionFixture.axiomsHull(),
+                ReferenceRepulsionFixture.definitionsHull()),
+            Arrays.asList(SafeNodeLabel.of("Axioms", "Axioms"),
+                SafeNodeLabel.of("Basic Definitions and Theorems", "Basic Definitions and Theorems")));
+        List<EnclosureHullKey> hulls = Arrays.asList(ReferenceRepulsionFixture.rootHull(),
+            ReferenceRepulsionFixture.zfcHull(), ReferenceRepulsionFixture.axiomsHull(),
+            ReferenceRepulsionFixture.definitionsHull());
+        double maximum = 0.0;
+        for (int first = 0; first < hulls.size(); first++) {
+            for (int second = first + 1; second < hulls.size(); second++) {
+                maximum = Math.max(maximum, distance(frame.positions().anchors().get(hulls.get(first)),
+                    frame.positions().anchors().get(hulls.get(second))));
+            }
+        }
+        assertThat(maximum).isLessThanOrEqualTo(1000.0);
+    }
+
+    @Test
+    public void grandchildAnchorsAreExcludedFromBoundaryRepulsion() {
+        GraphProjection projection = ReferenceRepulsionFixture.referenceProjection(1L);
+        LayoutFrame frame = settle(ReferenceRepulsionFixture.WORKSPACE, projection);
+        assertThat(distance(frame.positions().anchors().get(ReferenceRepulsionFixture.rootHull()),
+            frame.positions().anchors().get(ReferenceRepulsionFixture.axiomsHull()))).isLessThan(1000.0);
+    }
+
+    @Test
+    public void coincidentParentChildAnchorsStayExcluded() {
+        GraphProjection projection = ReferenceRepulsionFixture.referenceProjection(1L);
+        LayoutFrame frame = settle(ReferenceRepulsionFixture.WORKSPACE, projection);
+        assertThat(distance(frame.positions().anchors().get(ReferenceRepulsionFixture.rootHull()),
+            frame.positions().anchors().get(ReferenceRepulsionFixture.zfcHull())))
+            .isLessThanOrEqualTo(ReferenceRepulsionFixture.boundaryRadius(projection,
+                ReferenceRepulsionFixture.rootHull()) - 16.0);
+    }
+
     private static ProjectedNode node(MapReferenceId map, String id) {
         ProjectedNodeKey key = key(map, id);
         return ProjectedNode.of(key, SafeNodeLabel.of(id, id), "Map " + map.value(), false);
