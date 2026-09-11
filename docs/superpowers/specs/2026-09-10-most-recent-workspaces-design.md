@@ -108,16 +108,23 @@ public final class RecentWorkspaceList {
 - Paths are canonicalized through the existing
   `WorkspaceUriResolver.canonical`, the same normalizer
   `DefaultGraphWorkspaceController.open` already uses, so `..` or symlink
-  variants cannot become duplicate entries.
+  variants cannot become duplicate entries. Canonicalization happens **only**
+  while recording, wrapped, and a failure skips the entry; construction and
+  decoding never canonicalize (see Persistence contract).
 - `displayEntries` only returns **existing regular files**, in stored order,
   truncated to the display cap. Hidden entries do not consume display slots.
-- Label policy: `file name (/absolute/containing/folder)`, or just the file
-  name when the path has no parent, with path separators isolated for
-  right-to-left rendering via
+- Label policy: `file name (/absolute/containing/folder)`, with path
+  separators isolated for right-to-left rendering via
   `TextWritingDirection.LEFT_TO_RIGHT.isolatePathSeparators`, exactly as core's
-  recent-map menu labels its entries.
+  recent-map menu labels its entries. The policy lives in a package-private
+  label helper so it is unit-testable without a window. When the path has no
+  containing folder, or `getFileName()` is null (a filesystem root), the label
+  falls back to the path's own string form.
 - Thread-safe: internally synchronized (recording can happen off the EDT,
   menu construction happens on it).
+- Bounded I/O on the EDT: one popup rebuild or one resolution performs at most
+  25 non-throwing existence probes — the stored cap — while walking for up to 8
+  displayable entries. No other I/O runs on the EDT, and no caching is added.
 - The two zero-argument factories keep the distinction between production
   (properties-backed) and tests (no persistence) explicit; the constructor
   with a persister is the single seam the unit tests drive.
@@ -133,13 +140,21 @@ public final class RecentWorkspaceList {
   newest-first order, each the canonical absolute `path.toString()`, joined by
   the platform path separator doubled. That is the same convention core's
   recent-map list uses, and it is what makes Windows drive letters safe.
-- Decoding is total and must never throw: a null or blank stored value decodes
-  to an empty list; entries that fail `Paths.get` or are not absolute are
-  dropped at decode time, since they can never become valid workspace paths.
-  Missing files are **not** dropped (hide-but-keep); they are filtered only from
-  display. Because the doubled separator is the delimiter, a path containing
-  two consecutive platform separators cannot round-trip; that limitation is
-  inherited from core, is unreachable through the UI, and is accepted.
+- Decoding is total and must never throw, and it **never canonicalizes**: the
+  stored absolute strings are kept verbatim, validated only with `Paths.get`
+  plus an absoluteness check. Canonicalization is applied in `record` alone, and
+  a failure there skips the entry. This matters because canonicalizing a path
+  whose drive or mount is currently unreachable throws; doing it at decode time
+  would drop the entry from memory, and the next `record` would re-encode the
+  list without it — permanently losing exactly the shortcut that hide-but-keep
+  exists to preserve.
+- Entries that fail `Paths.get` or are not absolute are dropped at decode time,
+  since they can never become valid workspace paths. Missing files are **not**
+  dropped (hide-but-keep); they are filtered only from display.
+- Because the doubled separator is the delimiter, a path containing two
+  consecutive platform separators cannot round-trip. The limitation is
+  inherited from core, is rare, and is accepted; it is not claimed to be
+  unreachable, since such names are legal on POSIX and on Windows.
 - `clear()` writes the empty string and swallows a failing persister.
 - `standard()` must never assume `ResourceController.getProperty` returns a
   non-null value: `GraphPluginIntegrationShould` installs `GraphModeExtension`
@@ -172,16 +187,27 @@ swallowed instead of reaching the `finishOpen` catch block, which rolls a
 successfully opened session back. The Save-As seam already has this protection
 because `GraphWorkspaceStore.drainEvents` swallows listener exceptions.
 
-The recorder is a session resource: `ProductionSessionFactory` registers the
-listener immediately after creating the store, **`ResourceSet`** carries it
-(both `ResourceSet.from(...)` overloads copy it, and a test-compatible
-`SessionResources` overload is kept, since several existing tests construct
-`SessionResources` directly), and the existing resource-teardown funnel
-(`closeRemainingResources` and `cleanupResources`, reached from shutdown,
-close, and rollback) closes it. That funnel is chosen deliberately so the
-recorder survives a failed save — on save failure the store stays open and only
-reopens the session; the store clears its own listener list only on a
-successful close.
+The recorder is one small object, not a bare registration:
+`RecentWorkspaceRecorder implements WorkspaceStoreListener, AutoCloseable`. Its
+`onWorkspaceStoreEvent` records the new path on `IDENTITY_CHANGED` and ignores
+every other event type; `close()` releases the store registration. That shape is
+what makes the recording testable: `ProductionSessionFactory` is private and
+builds the store itself, so a test that injects its own `SessionFactory` can
+never fire a bare listener, whereas one object that both receives events and can
+be closed is directly exercisable.
+
+`ProductionSessionFactory` creates the recorder immediately after creating the
+store, **`ResourceSet`** carries the recorder (both `ResourceSet.from(...)`
+overloads copy it, and a test-compatible `SessionResources` overload is kept,
+since several existing tests construct `SessionResources` directly), and the
+existing resource-teardown funnel (`closeRemainingResources` and
+`cleanupResources`, reached from shutdown, close, and rollback) closes it. That
+funnel is chosen deliberately so the recorder survives a failed save — on save
+failure the store stays open and only reopens the session; the store clears its
+own listener list only on a successful close. The factory's own construction
+failure path builds a `ResourceSet` without a recorder, which is safe because
+`cleanupResources` calls `store.discardAndClose()` first and that clears the
+store's listener list.
 
 ### Menu
 
@@ -201,6 +227,16 @@ and before the existing separator and Close item.
   workspace can be created even if the file disappears between opening the menu
   and clicking. The pre-click existence check decides only what is displayed;
   correctness does not depend on it.
+- A failed click reports through the message sink and calls the same
+  package-private rebuild method to repaint the current popup. It never edits
+  the *stored* list, so a file that is only temporarily unavailable stays
+  remembered; the next popup open rebuilds from storage again anyway.
+- Clicking an entry whose session is momentarily OPENING or CLOSING (possible
+  only within the same EDT dispatch cycle) surfaces the controller's "still
+  being opened or closed" failure and is reported like any other failed open.
+  Accepted: the pending session presents the workspace moments later, so the
+  report is cosmetic, and special-casing it would need a distinct exception type
+  for no functional gain.
 - The rebuild is reachable as a package-private model method, so headless tests
   can trigger exactly what the popup listener triggers without showing a popup.
   A screenshot of the open popup is not obtainable from the existing UI evidence
@@ -210,12 +246,15 @@ and before the existing separator and Close item.
 
 ### View ▸ Open Graph Workspace
 
-`OpenGraphWorkspaceAction` gains a constructor taking `(GraphWorkspaceController,
-RecentWorkspaceList)`; the existing `(controller, Supplier<Path>)` constructor is
-unchanged, so current tests keep their meaning. The failure report goes to an
-injected message sink that defaults to the same
-`Controller.getCurrentController().getViewController().out(...)` sink the window
-model already uses, so tests can capture it. Resolution and opening is:
+`OpenGraphWorkspaceAction` gains these constructors: `(controller)`,
+`(controller, RecentWorkspaceList)`, and
+`(controller, RecentWorkspaceList, Consumer<String> messageSink)`; the existing
+`(controller, Supplier<Path>)` constructor is unchanged, so current tests keep
+their meaning. The default sink is a lazy lambda identical to the window
+model's —
+`message -> Controller.getCurrentController().getViewController().out(message)`
+— so it is not evaluated at install time, where the install test constructs the
+action against a mocked `Controller`. Resolution and opening is:
 
 ```java
 Optional<Path> recent = recentWorkspaces.mostRecentExisting();
@@ -224,7 +263,7 @@ if (recent.isPresent()) {
         applicationController.openExisting(recent.get());
         return;
     }
-    catch (GraphWorkspaceOpenException failure) {
+    catch (RuntimeException failure) {
         report("graph_workspace.recent_workspaces.open_failed", recent.get());
     }
 }
@@ -233,6 +272,17 @@ if (chosen != null) {
     applicationController.open(chosen);   // unchanged create-or-open semantics
 }
 ```
+
+The recents branch catches `RuntimeException`, not `GraphWorkspaceOpenException`
+alone, and `openExisting`'s contract is correspondingly strict: **every**
+failure surfaces as `GraphWorkspaceOpenException`. The exception type alone is
+not enough, because `DefaultGraphWorkspaceController.open` calls
+`uriResolver.canonical(...)` *before* its own error handling and
+`WorkspaceUriResolver.canonical` throws `IllegalArgumentException` for an
+unreachable path, a symlink loop, or an ACL change, while a shut-down or unbound
+controller throws `IllegalStateException`. Any of those escaping the action
+would produce no message and no chooser — the silent no-op the requirement
+forbids.
 
 The two branches use different controller methods on purpose. A remembered
 workspace must never be created, so it goes through `openExisting`; a path from
@@ -254,8 +304,10 @@ that existing behaviour; this change covers the recents path only.
 `GraphWorkspaceWindow` and `GraphWorkspaceWindowModel` take the list through
 their existing constructor chains, and the submenu opens entries with
 `applicationController.openExisting(path)`. `GraphWorkspaceController` gains
-`openExisting(Path)`, implemented by `DefaultGraphWorkspaceController` and
-delegated by `GraphModeExtension.ForwardingGraphWorkspaceController`. Test-only
+`GraphWorkspaceHandle openExisting(Path)`, implemented by
+`DefaultGraphWorkspaceController` and delegated by
+`GraphModeExtension.ForwardingGraphWorkspaceController`. It never creates a
+workspace and surfaces every failure mode as `GraphWorkspaceOpenException`. Test-only
 short overloads default to `RecentWorkspaceList.empty()` so no existing test
 starts touching user properties.
 
@@ -316,7 +368,13 @@ plain ASCII).
   shutdown and preferences close), so a hard crash can lose the newest entry —
   the same exposure core already has. No new persistence machinery is added.
 - Opening an already-open workspace continues to focus its window rather than
-  creating a second one.
+  creating a second one. Two accepted consequences of the existing session
+  registry: clicking a recent entry whose session is momentarily OPENING or
+  CLOSING reports a failed open (the pending session presents the workspace
+  moments later), and a path that is the in-flight Save-As target of another
+  workspace resolves to that workspace's window instead of opening the clicked
+  file. Neither can create a workspace, and neither justifies a separate code
+  path.
 
 ## Testing
 
@@ -324,10 +382,10 @@ plain ASCII).
   re-recording an existing path promotes instead of duplicating; stored cap 25
   evicts the oldest; display cap 8 truncates; missing files are filtered out of
   `displayEntries` and `mostRecentExisting` yet survive a write/read round-trip
-  (hide-but-keep); `clear()` empties stored entries; label formatting including
-  the parentless case; persisted-value round-trip through
-  `encodeListValue`/`decodeListValue`; `record` never throws on an unusable
-  path or a failing persister.
+  (hide-but-keep); `clear()` empties stored entries; persisted-value round-trip
+  through `encodeListValue`/`decodeListValue`; `record` never throws on an
+  unusable path or a failing persister. Label formatting is asserted through the
+  package-private label helper (see the dedicated bullet below).
 - Open resolution: covered at the `OpenGraphWorkspaceAction` level — the newest
   existing entry is opened with `openExisting`; a missing newest entry falls
   through to the next existing entry; an empty list delegates to the chooser; a
@@ -342,11 +400,27 @@ plain ASCII).
   empties the list; a failing `openExisting` reports through the message sink
   and never calls `open`.
 - `DefaultGraphWorkspaceControllerShould` (extend): opening a workspace records
-  it; re-opening an already-open workspace records it again after `clear()`;
-  Save As records the new path; a throwing persister does not fail the open and
-  the window is still shown.
-- Label collisions: same file name under same-named parents in different trees
-  produce different labels; a parentless path renders the bare file name.
+  it; re-opening an already-open workspace records it again after `clear()`; a
+  throwing persister does not fail the open and the window is still shown.
+- `RecentWorkspaceRecorderShould` (new): an `IDENTITY_CHANGED` event records the
+  new path, other event types record nothing, and `close()` releases the store
+  registration. The recorder is exercised directly, because the production
+  listener is created inside a private session factory and cannot be fired
+  through an injected `SessionFactory`.
+- `openExisting` never creates: with a capturing `SessionFactory`, opening a path
+  that does not exist fails with `GraphWorkspaceOpenException`, the captured
+  `create` flag is never `true`, the file is still absent afterwards, and the
+  session registry has no owner for the path. This pins requirement 4 at the
+  controller level; the action and model tests only assert which method is
+  called, so reverting `openExisting` to a pre-check plus `open()` would
+  otherwise pass every test.
+- Hide-but-keep survives an unresolvable path: a stored absolute path whose
+  parent is unreachable (for example a symlink loop) stays in the list after
+  construction and after an unrelated `record`, proving decode never
+  canonicalizes and never prunes.
+- Label helper: same file name under same-named parents in different trees
+  produce different labels; a filesystem root (null `getFileName()`) falls back
+  to the path string instead of throwing.
 - Constructor compatibility: the **9-argument `GraphWorkspaceWindowModel`
   constructor must survive** — `GraphWorkspaceUiEvidence.ModelAccess.create`
   reflectively requires exactly that signature — so the recents list is added
