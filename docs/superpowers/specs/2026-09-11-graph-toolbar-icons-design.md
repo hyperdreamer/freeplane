@@ -283,7 +283,7 @@ Following the repository's legacy-removal policy:
 - The `unpinButton.setEnabled(!readOnly)` line inside `updateReadOnlyControls`
   (`WorkspaceToolbar.java:358`), replaced by `setPinState`.
 - `GraphWorkspaceWindowModel.pinSelectedNode` (`GraphWorkspaceWindow.java:1282-1291`)
-  and `unpinSelectedNode` (lines 1293-1296) plus their `setPinAction` /
+  and `unpinSelectedNode` (lines 1293-1297) plus their `setPinAction` /
   `setUnpinAction` wiring (lines 468-469);
   `setPinAction(this::togglePinSelectedNode)` replaces both.
 - The two duplicated private `isPinned` helpers
@@ -407,7 +407,7 @@ Evidence and integration:
 | Removing the separate unpin button breaks existing tests that reference `unpinButton()`/`approvedControlNames()` | Those call sites are identified (`GraphWorkspaceWindowModelShould` lines ~198, ~645, ~1451) and updated with the toggle tests. |
 | Right-click behaviour change surprises users who previously reached edge inspection through a node | Accepted: nodes and edges are distinct hit targets; edge inspection still works wherever no node is hit. |
 | `toolbar_icon_height` larger than roughly 28–30 pt makes icon buttons taller than the fixed 42 px row, reintroducing clipping | Explicit accepted residual: the row height is a Non-Goal, the default 16 pt is unaffected, and the verification records the boundary with one larger value. A clamp or a derived row height is a documented follow-up candidate. |
-| Right-click acceptance tests regress | `GraphWorkspaceCommandAcceptanceShould.scenario14` right-clicks world (0,0) expecting `InspectEdge` (lines 326, 361-363); its fixture projects enclosures only, with no nodes, so it still falls through to edge inspection and stays green. |
+| Right-click acceptance tests regress | `GraphWorkspaceCommandAcceptanceShould.scenario14` right-clicks world (0,0) expecting `InspectEdge` (right-click at line 326; `InspectEdge` assertion at lines 328-332); its fixture projects enclosures only, with no nodes, so it still falls through to edge inspection and stays green. |
 | Pin label lags behind fast interactions | The single refresh point (`updateStatusBar`) already runs for both selection and canvas-state changes; the tests cover each path. |
 
 ## 10. Verification Plan
