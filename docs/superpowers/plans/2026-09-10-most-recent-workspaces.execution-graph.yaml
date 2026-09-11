@@ -67,6 +67,8 @@ tasks:
   - id: t3
     plan_task: 3
     title: "Non-creating openExisting on the workspace controller"
+    ownership_note: "GraphModeExtension.java is shared sequentially with t8: t3 lands the forwarding override required by the interface change, t8 lands the wiring after t3 and t4 are integrated, and t8 depends on both so the lanes never edit it concurrently."
+
     lane: controller
     sequence: 1
     implementer_tier: advanced
@@ -75,6 +77,7 @@ tasks:
       - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/control/DefaultGraphWorkspaceController.java
       - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/control/GraphWorkspaceController.java
       - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/control/DefaultGraphWorkspaceControllerShould.java
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/GraphModeExtension.java
     exclusive_resources: []
     produces:
       - key: iface-t3
