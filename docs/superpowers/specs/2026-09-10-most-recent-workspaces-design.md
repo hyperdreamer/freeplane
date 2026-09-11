@@ -268,8 +268,11 @@ and before the existing separator and Close item.
 ### View ▸ Open Graph Workspace
 
 `OpenGraphWorkspaceAction` gains these constructors: `(controller)`,
-`(controller, RecentWorkspaceList)`, and
-`(controller, RecentWorkspaceList, Consumer<String> messageSink)`; the existing
+`(controller, RecentWorkspaceList)`,
+`(controller, RecentWorkspaceList, Consumer<String> messageSink)`, and a
+package-private `(controller, RecentWorkspaceList, Supplier<Path> recentChooser,
+Consumer<String> messageSink)` that the others delegate to — tests need the
+list, the chooser, and the sink together; the existing
 `(controller, Supplier<Path>)` constructor is unchanged, so current tests keep
 their meaning. The default sink is a lazy lambda identical to the window
 model's —
