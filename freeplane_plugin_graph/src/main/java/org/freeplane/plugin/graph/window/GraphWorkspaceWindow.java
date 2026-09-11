@@ -9,6 +9,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -34,6 +35,8 @@ import javax.swing.JRootPane;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
+import javax.swing.event.PopupMenuEvent;
+import javax.swing.event.PopupMenuListener;
 
 import org.freeplane.core.resources.IFreeplanePropertyListener;
 import org.freeplane.core.resources.ResourceController;
@@ -76,6 +79,7 @@ import org.freeplane.plugin.graph.projection.input.MapAvailability;
 import org.freeplane.plugin.graph.projection.input.SourceNodeKey;
 import org.freeplane.plugin.graph.workspace.GraphCommandResult;
 import org.freeplane.plugin.graph.workspace.ListenerRegistration;
+import org.freeplane.plugin.graph.workspace.RecentWorkspaceList;
 import org.freeplane.plugin.graph.workspace.model.DisplaySettings;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 import org.freeplane.plugin.graph.workspace.model.NodeReference;
@@ -91,7 +95,7 @@ final class GraphWorkspaceWindow extends JFrame implements GraphWorkspaceView {
 
     GraphWorkspaceWindow(final GraphWorkspaceHandle handle, final GraphWorkspaceViewBinding binding,
             final WorkspaceCloseController closeController, final GraphWorkspaceController applicationController,
-            final Supplier<java.nio.file.Path> pathChooser) {
+            final Supplier<java.nio.file.Path> pathChooser, final RecentWorkspaceList recentWorkspaces) {
         super(TextUtils.getText("graph_workspace.window.title"));
         this.closeController = Objects.requireNonNull(closeController, "closeController");
         Objects.requireNonNull(handle, "handle");
@@ -118,7 +122,7 @@ final class GraphWorkspaceWindow extends JFrame implements GraphWorkspaceView {
                 public void run() {
                     closeOnEdt();
                 }
-            }, message -> Controller.getCurrentController().getViewController().out(message));
+            }, message -> Controller.getCurrentController().getViewController().out(message), recentWorkspaces);
         setJMenuBar(model.menuBar());
         setContentPane(model.content());
         model.installWorkspaceHistoryKeys(getRootPane());
@@ -145,6 +149,12 @@ final class GraphWorkspaceWindow extends JFrame implements GraphWorkspaceView {
         doLayout();
         model.completeInitialLayout();
         setLocationByPlatform(true);
+    }
+
+    GraphWorkspaceWindow(final GraphWorkspaceHandle handle, final GraphWorkspaceViewBinding binding,
+            final WorkspaceCloseController closeController, final GraphWorkspaceController applicationController,
+            final Supplier<java.nio.file.Path> pathChooser) {
+        this(handle, binding, closeController, applicationController, pathChooser, RecentWorkspaceList.empty());
     }
 
     GraphWorkspaceWindow(final GraphWorkspaceHandle handle, final GraphWorkspaceViewBinding binding,
@@ -288,6 +298,8 @@ final class GraphWorkspaceWindowModel {
 
     private final GraphWorkspaceHandle handle;
     private final GraphWorkspaceViewBinding binding;
+    private final GraphWorkspaceController applicationController;
+    private final RecentWorkspaceList recentWorkspaces;
     private final Runnable closeRequest;
     private final GraphCanvas canvas;
     private final JScrollPane graphScrollPane;
@@ -312,6 +324,7 @@ final class GraphWorkspaceWindowModel {
     private final GraphViewport initialViewport;
     private JMenuItem fileSaveMenuItem;
     private JMenuItem fileSaveAsMenuItem;
+    private JMenu recentWorkspacesMenu;
     private JMenuItem viewSettingsMenuItem;
     private JMenuItem mapsAddMenuItem;
     private JMenuItem mapsDeactivateMenuItem;
@@ -368,13 +381,23 @@ final class GraphWorkspaceWindowModel {
             final GraphWorkspaceController applicationController, final Supplier<java.nio.file.Path> pathChooser,
             final WorkspaceCloseController closeController, final Runnable closeRequest,
             final Runnable graphFocus, final Runnable closeCompletion, final Consumer<String> commandMessageSink) {
+        this(handle, binding, applicationController, pathChooser, closeController, closeRequest, graphFocus,
+            closeCompletion, commandMessageSink, RecentWorkspaceList.empty());
+    }
+
+    GraphWorkspaceWindowModel(final GraphWorkspaceHandle handle, final GraphWorkspaceViewBinding binding,
+            final GraphWorkspaceController applicationController, final Supplier<java.nio.file.Path> pathChooser,
+            final WorkspaceCloseController closeController, final Runnable closeRequest,
+            final Runnable graphFocus, final Runnable closeCompletion, final Consumer<String> commandMessageSink,
+            final RecentWorkspaceList recentWorkspaces) {
         this.handle = Objects.requireNonNull(handle, "handle");
+        this.applicationController = Objects.requireNonNull(applicationController, "applicationController");
+        this.recentWorkspaces = Objects.requireNonNull(recentWorkspaces, "recentWorkspaces");
         this.binding = Objects.requireNonNull(binding, "binding");
         this.closeController = Objects.requireNonNull(closeController, "closeController");
         this.closeRequest = Objects.requireNonNull(closeRequest, "closeRequest");
         this.closeCompletion = Objects.requireNonNull(closeCompletion, "closeCompletion");
         this.commandMessageSink = Objects.requireNonNull(commandMessageSink, "commandMessageSink");
-        Objects.requireNonNull(applicationController, "applicationController");
         Objects.requireNonNull(pathChooser, "pathChooser");
 
         canvas = new GraphCanvas();
@@ -1032,6 +1055,23 @@ final class GraphWorkspaceWindowModel {
         fileSaveAsMenuItem = item("graph_workspace.action.save_as", "save-as",
             event -> toolbar.saveAsButton().doClick());
         file.add(fileSaveAsMenuItem);
+        recentWorkspacesMenu = new JMenu(TextUtils.getText("graph_workspace.menu.recent_workspaces"));
+        recentWorkspacesMenu.setName("graph-workspace-recent-workspaces-menu");
+        recentWorkspacesMenu.getPopupMenu().addPopupMenuListener(new PopupMenuListener() {
+            @Override
+            public void popupMenuWillBecomeVisible(final PopupMenuEvent event) {
+                rebuildRecentWorkspacesMenu();
+            }
+
+            @Override
+            public void popupMenuWillBecomeInvisible(final PopupMenuEvent event) {
+            }
+
+            @Override
+            public void popupMenuCanceled(final PopupMenuEvent event) {
+            }
+        });
+        file.add(recentWorkspacesMenu);
         file.addSeparator();
         file.add(item("graph_workspace.action.close", "close", event -> closeRequest.run()));
 
@@ -1075,6 +1115,53 @@ final class GraphWorkspaceWindowModel {
         result.add(view);
         result.add(maps);
         return result;
+    }
+
+    void rebuildRecentWorkspacesMenu() {
+        recentWorkspacesMenu.removeAll();
+        final List<RecentWorkspaceList.Entry> entries = recentWorkspaces.displayEntries();
+        if (entries.isEmpty()) {
+            final JMenuItem empty = new JMenuItem(TextUtils.getText("graph_workspace.recent_workspaces.empty"));
+            empty.setName("graph-workspace-recent-workspaces-empty");
+            empty.setEnabled(false);
+            recentWorkspacesMenu.add(empty);
+            if (recentWorkspaces.hasStoredEntries()) {
+                recentWorkspacesMenu.addSeparator();
+                recentWorkspacesMenu.add(clearRecentWorkspacesItem());
+            }
+            recentWorkspacesMenu.setEnabled(true);
+            return;
+        }
+        for (int index = 0; index < entries.size(); index++) {
+            final RecentWorkspaceList.Entry entry = entries.get(index);
+            final JMenuItem item = new JMenuItem(entry.label());
+            item.setName("graph-workspace-recent-workspace-" + index);
+            item.addActionListener(event -> openRecentWorkspace(entry.path()));
+            recentWorkspacesMenu.add(item);
+        }
+        recentWorkspacesMenu.addSeparator();
+        recentWorkspacesMenu.add(clearRecentWorkspacesItem());
+        recentWorkspacesMenu.setEnabled(true);
+    }
+
+    private JMenuItem clearRecentWorkspacesItem() {
+        final JMenuItem item = new JMenuItem(TextUtils.getText("graph_workspace.action.clear_recent_workspaces"));
+        item.setName("graph-workspace-recent-workspaces-clear");
+        item.addActionListener(event -> {
+            recentWorkspaces.clear();
+            rebuildRecentWorkspacesMenu();
+        });
+        return item;
+    }
+
+    private void openRecentWorkspace(final Path path) {
+        try {
+            applicationController.openExisting(path);
+        }
+        catch (RuntimeException failure) {
+            commandMessageSink.accept(TextUtils.format("graph_workspace.recent_workspaces.open_failed", path));
+            rebuildRecentWorkspacesMenu();
+        }
     }
 
     private void updateMapRows(final CanvasState state) {
@@ -1343,7 +1430,7 @@ final class HeadlessGraphWorkspaceView implements GraphWorkspaceView {
 
     HeadlessGraphWorkspaceView(final GraphWorkspaceHandle handle, final GraphWorkspaceViewBinding binding,
             final WorkspaceCloseController closeController, final GraphWorkspaceController applicationController,
-            final Supplier<java.nio.file.Path> pathChooser) {
+            final Supplier<java.nio.file.Path> pathChooser, final RecentWorkspaceList recentWorkspaces) {
         this.closeController = Objects.requireNonNull(closeController, "closeController");
         model = new GraphWorkspaceWindowModel(handle, binding, applicationController, pathChooser, closeController,
             new Runnable() {
@@ -1356,8 +1443,14 @@ final class HeadlessGraphWorkspaceView implements GraphWorkspaceView {
                 public void run() {
                     close();
                 }
-            });
+            }, message -> { }, recentWorkspaces);
         model.completeInitialLayout();
+    }
+
+    HeadlessGraphWorkspaceView(final GraphWorkspaceHandle handle, final GraphWorkspaceViewBinding binding,
+            final WorkspaceCloseController closeController, final GraphWorkspaceController applicationController,
+            final Supplier<java.nio.file.Path> pathChooser) {
+        this(handle, binding, closeController, applicationController, pathChooser, RecentWorkspaceList.empty());
     }
 
     @Override

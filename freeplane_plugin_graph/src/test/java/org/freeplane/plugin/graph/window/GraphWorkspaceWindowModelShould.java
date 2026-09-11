@@ -3,6 +3,7 @@ package org.freeplane.plugin.graph.window;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -17,6 +18,8 @@ import java.awt.event.KeyListener;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.awt.image.BufferedImage;
+import java.lang.reflect.Constructor;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -27,7 +30,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 import javax.xml.namespace.QName;
 
@@ -35,8 +40,11 @@ import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JSeparator;
 import javax.swing.JViewport;
 import javax.swing.UIManager;
+import javax.swing.event.PopupMenuEvent;
+import javax.swing.event.PopupMenuListener;
 
 import org.freeplane.plugin.graph.canvas.GraphCanvas;
 import org.freeplane.plugin.graph.canvas.GraphIntent;
@@ -47,6 +55,7 @@ import org.freeplane.plugin.graph.command.GraphCommands;
 import org.freeplane.plugin.graph.control.CanvasState;
 import org.freeplane.plugin.graph.control.GraphWorkspaceController;
 import org.freeplane.plugin.graph.control.GraphWorkspaceHandle;
+import org.freeplane.plugin.graph.control.GraphWorkspaceOpenException;
 import org.freeplane.plugin.graph.control.GraphWorkspacePresentation;
 import org.freeplane.plugin.graph.control.GraphWorkspaceView;
 import org.freeplane.plugin.graph.control.GraphWorkspaceViewBinding;
@@ -72,6 +81,7 @@ import org.freeplane.plugin.graph.projection.input.SafeNodeLabel;
 import org.freeplane.plugin.graph.projection.input.SourceNodeKey;
 import org.freeplane.plugin.graph.workspace.GraphCommandResult;
 import org.freeplane.plugin.graph.workspace.ListenerRegistration;
+import org.freeplane.plugin.graph.workspace.RecentWorkspaceList;
 import org.freeplane.plugin.graph.workspace.WorkspaceTransition;
 import org.freeplane.plugin.graph.workspace.model.DisplaySettings;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
@@ -89,7 +99,9 @@ import org.freeplane.core.ui.components.FrameResynchronizer;
 import org.junit.After;
 import org.junit.Assume;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
 
@@ -100,6 +112,9 @@ public class GraphWorkspaceWindowModelShould {
         new java.util.ArrayList<EdtResources>();
     private MockedStatic<TextUtils> textUtils;
     private MockedStatic<ResourceController> resourceController;
+
+    @Rule
+    public final TemporaryFolder temporaryFolder = new TemporaryFolder();
 
     @Before
     public void setUp() {
@@ -1040,6 +1055,298 @@ public class GraphWorkspaceWindowModelShould {
         JPanel graphArea = (JPanel) model.content().getComponent(1);
         return (JScrollPane) graphArea.getComponent(1);
     }
+    @Test
+    public void placesRecentWorkspacesMenuBetweenSaveAsAndClose() {
+        Fixture fixture = fixture(RecentWorkspaceList.empty());
+        GraphWorkspaceWindowModel model = fixture.model();
+
+        JMenu file = menu(model, "graph-workspace-file-menu");
+
+        assertThat(file.getMenuComponentCount()).isEqualTo(6);
+        assertThat(file.getMenuComponent(2).getName()).isEqualTo("graph-workspace-menu-item-save-as");
+        assertThat(file.getMenuComponent(3)).isInstanceOf(JMenu.class);
+        JMenu recents = (JMenu) file.getMenuComponent(3);
+        assertThat(recents.getName()).isEqualTo("graph-workspace-recent-workspaces-menu");
+        assertThat(recents.getText()).isEqualTo("graph_workspace.menu.recent_workspaces");
+        assertThat(file.getMenuComponent(4)).isInstanceOf(JSeparator.class);
+        assertThat(file.getMenuComponent(5).getName()).isEqualTo("graph-workspace-menu-item-close");
+        model.close();
+    }
+
+    @Test
+    public void rebuildsRecentEntriesInOrderWithLabels() throws Exception {
+        Path first = temporaryFolder.newFile("menu-first.fpg").toPath().toRealPath();
+        Path second = temporaryFolder.newFile("menu-second.fpg").toPath().toRealPath();
+        RecentWorkspaceList list = recentList(first, second);
+        Fixture fixture = fixture(list);
+        GraphWorkspaceWindowModel model = fixture.model();
+        List<RecentWorkspaceList.Entry> entries = list.displayEntries();
+
+        GraphWorkspaceWindow.runOnEdt(new Runnable() {
+            @Override
+            public void run() {
+                model.rebuildRecentWorkspacesMenu();
+                JMenu recents = menu(model, "graph-workspace-recent-workspaces-menu");
+                assertThat(recents.isEnabled()).isTrue();
+                assertThat(recents.getMenuComponentCount()).isEqualTo(4);
+                assertThat(((JMenuItem) recents.getMenuComponent(0)).getName())
+                    .isEqualTo("graph-workspace-recent-workspace-0");
+                assertThat(((JMenuItem) recents.getMenuComponent(0)).getText())
+                    .isEqualTo(entries.get(0).label());
+                assertThat(((JMenuItem) recents.getMenuComponent(1)).getName())
+                    .isEqualTo("graph-workspace-recent-workspace-1");
+                assertThat(((JMenuItem) recents.getMenuComponent(1)).getText())
+                    .isEqualTo(entries.get(1).label());
+                assertThat(recents.getMenuComponent(2)).isInstanceOf(JSeparator.class);
+                JMenuItem clear = (JMenuItem) recents.getMenuComponent(3);
+                assertThat(clear.getName()).isEqualTo("graph-workspace-recent-workspaces-clear");
+                assertThat(clear.isEnabled()).isTrue();
+            }
+        });
+        model.close();
+    }
+
+    @Test
+    public void limitsRebuiltEntriesToTheDisplayCap() throws Exception {
+        RecentWorkspaceList list = new RecentWorkspaceList("", value -> { });
+        for (int index = 0; index < 10; index++) {
+            list.record(temporaryFolder.newFile("menu-cap-" + index + ".fpg").toPath().toRealPath());
+        }
+        Fixture fixture = fixture(list);
+        GraphWorkspaceWindowModel model = fixture.model();
+
+        GraphWorkspaceWindow.runOnEdt(new Runnable() {
+            @Override
+            public void run() {
+                model.rebuildRecentWorkspacesMenu();
+                JMenu recents = menu(model, "graph-workspace-recent-workspaces-menu");
+                assertThat(recents.getMenuComponentCount()).isEqualTo(10);
+                for (int index = 0; index < RecentWorkspaceList.DISPLAY_CAPACITY; index++) {
+                    assertThat(((JMenuItem) recents.getMenuComponent(index)).getName())
+                        .isEqualTo("graph-workspace-recent-workspace-" + index);
+                }
+                assertThat(recents.getMenuComponent(8)).isInstanceOf(JSeparator.class);
+                assertThat(((JMenuItem) recents.getMenuComponent(9)).getName())
+                    .isEqualTo("graph-workspace-recent-workspaces-clear");
+            }
+        });
+        model.close();
+    }
+
+    @Test
+    public void hidesMissingEntriesFromTheRebuiltMenu() throws Exception {
+        Path existing = temporaryFolder.newFile("menu-existing.fpg").toPath().toRealPath();
+        Path missing = temporaryFolder.newFile("menu-missing.fpg").toPath().toRealPath();
+        RecentWorkspaceList list = recentList(existing, missing);
+        Files.delete(missing);
+        Fixture fixture = fixture(list);
+        GraphWorkspaceWindowModel model = fixture.model();
+        String label = list.displayEntries().get(0).label();
+
+        GraphWorkspaceWindow.runOnEdt(new Runnable() {
+            @Override
+            public void run() {
+                model.rebuildRecentWorkspacesMenu();
+                JMenu recents = menu(model, "graph-workspace-recent-workspaces-menu");
+                assertThat(recents.getMenuComponentCount()).isEqualTo(3);
+                JMenuItem entry = (JMenuItem) recents.getMenuComponent(0);
+                assertThat(entry.getName()).isEqualTo("graph-workspace-recent-workspace-0");
+                assertThat(entry.getText()).isEqualTo(label);
+                assertThat(recents.getMenuComponent(1)).isInstanceOf(JSeparator.class);
+                assertThat(((JMenuItem) recents.getMenuComponent(2)).getName())
+                    .isEqualTo("graph-workspace-recent-workspaces-clear");
+            }
+        });
+        model.close();
+    }
+
+    @Test
+    public void showsDisabledEmptyRowWithoutClearWhenNothingIsStored() {
+        Fixture fixture = fixture(RecentWorkspaceList.empty());
+        GraphWorkspaceWindowModel model = fixture.model();
+
+        GraphWorkspaceWindow.runOnEdt(new Runnable() {
+            @Override
+            public void run() {
+                JMenu recents = menu(model, "graph-workspace-recent-workspaces-menu");
+                recents.setEnabled(false);
+
+                model.rebuildRecentWorkspacesMenu();
+
+                assertThat(recents.isEnabled()).isTrue();
+                assertThat(recents.getMenuComponentCount()).isEqualTo(1);
+                JMenuItem empty = (JMenuItem) recents.getMenuComponent(0);
+                assertThat(empty.getName()).isEqualTo("graph-workspace-recent-workspaces-empty");
+                assertThat(empty.getText()).isEqualTo("graph_workspace.recent_workspaces.empty");
+                assertThat(empty.isEnabled()).isFalse();
+            }
+        });
+        model.close();
+    }
+
+    @Test
+    public void keepsClearAndTheMenuEnabledWhenOnlyHiddenEntriesAreStored() throws Exception {
+        Path missing = temporaryFolder.newFile("menu-hidden.fpg").toPath().toRealPath();
+        RecentWorkspaceList list = recentList(missing);
+        Files.delete(missing);
+        Fixture fixture = fixture(list);
+        GraphWorkspaceWindowModel model = fixture.model();
+
+        GraphWorkspaceWindow.runOnEdt(new Runnable() {
+            @Override
+            public void run() {
+                JMenu recents = menu(model, "graph-workspace-recent-workspaces-menu");
+                recents.setEnabled(false);
+
+                model.rebuildRecentWorkspacesMenu();
+
+                assertThat(recents.isEnabled()).isTrue();
+                assertThat(recents.getMenuComponentCount()).isEqualTo(3);
+                JMenuItem empty = (JMenuItem) recents.getMenuComponent(0);
+                assertThat(empty.getName()).isEqualTo("graph-workspace-recent-workspaces-empty");
+                assertThat(empty.isEnabled()).isFalse();
+                assertThat(recents.getMenuComponent(1)).isInstanceOf(JSeparator.class);
+                JMenuItem clear = (JMenuItem) recents.getMenuComponent(2);
+                assertThat(clear.getName()).isEqualTo("graph-workspace-recent-workspaces-clear");
+                assertThat(clear.isEnabled()).isTrue();
+            }
+        });
+        model.close();
+    }
+
+    @Test
+    public void clearsTheListAndRebuildsWhenClearIsClicked() throws Exception {
+        Path existing = temporaryFolder.newFile("menu-clear.fpg").toPath().toRealPath();
+        RecentWorkspaceList list = recentList(existing);
+        Fixture fixture = fixture(list);
+        GraphWorkspaceWindowModel model = fixture.model();
+
+        GraphWorkspaceWindow.runOnEdt(new Runnable() {
+            @Override
+            public void run() {
+                model.rebuildRecentWorkspacesMenu();
+                JMenu recents = menu(model, "graph-workspace-recent-workspaces-menu");
+                JMenuItem clear = (JMenuItem) recents.getMenuComponent(2);
+                assertThat(clear.getName()).isEqualTo("graph-workspace-recent-workspaces-clear");
+
+                clear.doClick();
+
+                assertThat(list.hasStoredEntries()).isFalse();
+                assertThat(recents.getMenuComponentCount()).isEqualTo(1);
+                assertThat(((JMenuItem) recents.getMenuComponent(0)).getName())
+                    .isEqualTo("graph-workspace-recent-workspaces-empty");
+            }
+        });
+        model.close();
+    }
+
+    @Test
+    public void reportsAFailedOpenFromTheMenuAndNeverCreatesAWorkspace() throws Exception {
+        Path existing = temporaryFolder.newFile("menu-failing.fpg").toPath().toRealPath();
+        RecentWorkspaceList list = recentList(existing);
+        Fixture fixture = fixture(list);
+        List<String> messages = new ArrayList<String>();
+        GraphWorkspaceWindowModel model = fixture.model(messages::add);
+        when(fixture.applicationController.openExisting(any(Path.class)))
+            .thenThrow(new GraphWorkspaceOpenException(existing, new IllegalStateException("missing")));
+        AtomicReference<JMenuItem> entry = new AtomicReference<JMenuItem>();
+
+        GraphWorkspaceWindow.runOnEdt(new Runnable() {
+            @Override
+            public void run() {
+                model.rebuildRecentWorkspacesMenu();
+                JMenu recents = menu(model, "graph-workspace-recent-workspaces-menu");
+                assertThat(recents.getMenuComponentCount()).isEqualTo(3);
+                entry.set((JMenuItem) recents.getMenuComponent(0));
+            }
+        });
+
+        Files.delete(existing);
+
+        GraphWorkspaceWindow.runOnEdt(new Runnable() {
+            @Override
+            public void run() {
+                entry.get().doClick();
+
+                assertThat(messages).containsExactly(
+                    "graph_workspace.recent_workspaces.open_failed[" + existing + "]");
+                JMenu recents = menu(model, "graph-workspace-recent-workspaces-menu");
+                assertThat(recents.getMenuComponentCount()).isEqualTo(3);
+                assertThat(((JMenuItem) recents.getMenuComponent(0)).getName())
+                    .isEqualTo("graph-workspace-recent-workspaces-empty");
+                assertThat(((JMenuItem) recents.getMenuComponent(2)).getName())
+                    .isEqualTo("graph-workspace-recent-workspaces-clear");
+            }
+        });
+        verify(fixture.applicationController, never()).open(any());
+        model.close();
+    }
+
+    @Test
+    public void rebuildsTheMenuFromThePopupListener() throws Exception {
+        Path existing = temporaryFolder.newFile("menu-popup.fpg").toPath().toRealPath();
+        RecentWorkspaceList list = recentList(existing);
+        Fixture fixture = fixture(list);
+        GraphWorkspaceWindowModel model = fixture.model();
+
+        GraphWorkspaceWindow.runOnEdt(new Runnable() {
+            @Override
+            public void run() {
+                JMenu recents = menu(model, "graph-workspace-recent-workspaces-menu");
+
+                recentsPopupListener(recents).popupMenuWillBecomeVisible(
+                    new PopupMenuEvent(recents.getPopupMenu()));
+
+                assertThat(recents.getMenuComponentCount()).isEqualTo(3);
+                assertThat(((JMenuItem) recents.getMenuComponent(0)).getName())
+                    .isEqualTo("graph-workspace-recent-workspace-0");
+            }
+        });
+        model.close();
+    }
+
+    @Test
+    public void keepsTheNineArgumentConstructorForTheUiEvidenceHarness() {
+        Fixture fixture = fixture(RecentWorkspaceList.empty());
+        final GraphWorkspaceWindowModel[] result = new GraphWorkspaceWindowModel[1];
+        final EdtResources[] edtResources = new EdtResources[1];
+        GraphWorkspaceWindow.runOnEdt(new Runnable() {
+            @Override
+            public void run() {
+                edtResources[0] = new EdtResources();
+                try {
+                    Constructor<GraphWorkspaceWindowModel> constructor =
+                        GraphWorkspaceWindowModel.class.getDeclaredConstructor(
+                            GraphWorkspaceHandle.class, GraphWorkspaceViewBinding.class,
+                            GraphWorkspaceController.class, Supplier.class, WorkspaceCloseController.class,
+                            Runnable.class, Runnable.class, Runnable.class, Consumer.class);
+                    result[0] = constructor.newInstance(fixture.handle, fixture.binding,
+                        fixture.applicationController, (Supplier<Path>) () -> OPEN_PATH,
+                        fixture.closeController, (Runnable) () -> { }, (Runnable) () -> { },
+                        (Runnable) () -> { }, (Consumer<String>) message -> { });
+                }
+                catch (ReflectiveOperationException failure) {
+                    throw new AssertionError(failure);
+                }
+            }
+        });
+        RESOURCES.add(edtResources[0]);
+        GraphWorkspaceWindowModel model = result[0];
+
+        assertThat(model).isNotNull();
+        GraphWorkspaceWindow.runOnEdt(new Runnable() {
+            @Override
+            public void run() {
+                model.rebuildRecentWorkspacesMenu();
+                JMenu recents = menu(model, "graph-workspace-recent-workspaces-menu");
+                assertThat(recents.getMenuComponentCount()).isEqualTo(1);
+                assertThat(((JMenuItem) recents.getMenuComponent(0)).getName())
+                    .isEqualTo("graph-workspace-recent-workspaces-empty");
+            }
+        });
+        model.close();
+    }
+
     private static GraphCommandResult commandResult(final WorkspaceTransition transition) {
         return GraphCommandResult.from(transition);
     }
@@ -1064,6 +1371,14 @@ public class GraphWorkspaceWindowModelShould {
     private static Fixture fixture(Viewport viewport, CanvasState state,
             List<GraphWorkspaceViewBinding.MapRegistration> registrations, boolean readOnly,
             WorkspaceSessionStatus sessionStatus, GraphWorkspacePresentation presentation) {
+        return fixture(viewport, state, registrations, readOnly, sessionStatus, presentation,
+            RecentWorkspaceList.empty());
+    }
+
+    private static Fixture fixture(Viewport viewport, CanvasState state,
+            List<GraphWorkspaceViewBinding.MapRegistration> registrations, boolean readOnly,
+            WorkspaceSessionStatus sessionStatus, GraphWorkspacePresentation presentation,
+            RecentWorkspaceList recentWorkspaces) {
         GraphWorkspaceController applicationController = mock(GraphWorkspaceController.class);
         GraphWorkspaceHandle handle = mock(GraphWorkspaceHandle.class);
         WorkspaceCloseController closeController = mock(WorkspaceCloseController.class);
@@ -1079,7 +1394,14 @@ public class GraphWorkspaceWindowModelShould {
         when(binding.addCanvasStateListener(any())).thenReturn(registration);
         when(binding.addSessionStatusListener(any())).thenReturn(sessionRegistration);
         return new Fixture(applicationController, handle, closeController, binding, registration,
-            sessionRegistration);
+            sessionRegistration, recentWorkspaces);
+    }
+
+    private static Fixture fixture(final RecentWorkspaceList recentWorkspaces) {
+        return fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()), emptyState(),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false,
+            WorkspaceSessionStatus.empty(), presentation(DisplaySettings.defaults(), ACTIVE_ID),
+            recentWorkspaces);
     }
 
     private static GraphWorkspaceViewBinding.MapRegistration registration(MapReferenceId id, String name,
@@ -1347,6 +1669,49 @@ public class GraphWorkspaceWindowModelShould {
         throw new AssertionError("Missing menu item " + expected);
     }
 
+    private static RecentWorkspaceList recentList(final Path... paths) {
+        RecentWorkspaceList list = new RecentWorkspaceList("", value -> { });
+        for (Path path : paths) {
+            list.record(path);
+        }
+        return list;
+    }
+
+    private static JMenu menu(final GraphWorkspaceWindowModel model, final String name) {
+        for (int menuIndex = 0; menuIndex < model.menuBar().getMenuCount(); menuIndex++) {
+            JMenu found = findMenu(model.menuBar().getMenu(menuIndex), name);
+            if (found != null) {
+                return found;
+            }
+        }
+        throw new AssertionError("Missing menu " + name);
+    }
+
+    private static JMenu findMenu(final JMenu menu, final String name) {
+        if (name.equals(menu.getName())) {
+            return menu;
+        }
+        for (Component component : menu.getMenuComponents()) {
+            if (component instanceof JMenu) {
+                JMenu found = findMenu((JMenu) component, name);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static PopupMenuListener recentsPopupListener(final JMenu menu) {
+        PopupMenuListener[] listeners = menu.getPopupMenu().getPopupMenuListeners();
+        for (PopupMenuListener listener : listeners) {
+            if (!listener.getClass().getName().startsWith("javax.swing.")) {
+                return listener;
+            }
+        }
+        throw new AssertionError("Missing recent-workspaces popup listener");
+    }
+
     private static final class Fixture {
         private final GraphWorkspaceController applicationController;
         private final GraphWorkspaceHandle handle;
@@ -1354,16 +1719,19 @@ public class GraphWorkspaceWindowModelShould {
         private final GraphWorkspaceViewBinding binding;
         private final ListenerRegistration registration;
         private final ListenerRegistration sessionRegistration;
+        private final RecentWorkspaceList recentWorkspaces;
 
         private Fixture(GraphWorkspaceController applicationController, GraphWorkspaceHandle handle,
                 WorkspaceCloseController closeController, GraphWorkspaceViewBinding binding,
-                ListenerRegistration registration, ListenerRegistration sessionRegistration) {
+                ListenerRegistration registration, ListenerRegistration sessionRegistration,
+                RecentWorkspaceList recentWorkspaces) {
             this.applicationController = applicationController;
             this.handle = handle;
             this.closeController = closeController;
             this.binding = binding;
             this.registration = registration;
             this.sessionRegistration = sessionRegistration;
+            this.recentWorkspaces = recentWorkspaces;
         }
 
         private GraphWorkspaceWindowModel model() {
@@ -1390,7 +1758,8 @@ public class GraphWorkspaceWindowModelShould {
                 public void run() {
                     edtResources[0] = new EdtResources();
                     result[0] = new GraphWorkspaceWindowModel(handle, binding, applicationController,
-                        () -> OPEN_PATH, closeController, () -> { }, () -> { }, () -> { }, commandMessageSink);
+                        () -> OPEN_PATH, closeController, () -> { }, () -> { }, () -> { }, commandMessageSink,
+                        recentWorkspaces);
                 }
             });
             RESOURCES.add(edtResources[0]);
