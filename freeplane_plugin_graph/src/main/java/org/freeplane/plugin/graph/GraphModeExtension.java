@@ -15,6 +15,7 @@ import org.freeplane.plugin.graph.group.GraphGroupColors;
 import org.freeplane.plugin.graph.group.GraphGroupMarkerPainter;
 import org.freeplane.plugin.graph.control.DefaultGraphWorkspaceController;
 import org.freeplane.plugin.graph.control.GraphWorkspaceController;
+import org.freeplane.plugin.graph.workspace.RecentWorkspaceList;
 import org.freeplane.plugin.graph.window.OpenGraphWorkspaceAction;
 import org.freeplane.plugin.graph.window.SwingGraphWorkspaceViewFactory;
 import org.freeplane.view.swing.map.NodeViewDecorationRegistry;
@@ -40,12 +41,13 @@ public final class GraphModeExtension implements IModeControllerExtensionProvide
         this.modeController = modeController;
         graphGroupController = new GraphGroupController(modeController);
         modeController.addExtension(GraphGroupController.class, graphGroupController);
+        final RecentWorkspaceList recentWorkspaces = RecentWorkspaceList.standard();
         final ForwardingGraphWorkspaceController viewController = new ForwardingGraphWorkspaceController();
         final DefaultGraphWorkspaceController completedController = new DefaultGraphWorkspaceController(modeController,
-            new SwingGraphWorkspaceViewFactory(viewController));
+            new SwingGraphWorkspaceViewFactory(viewController, recentWorkspaces), recentWorkspaces);
         viewController.bind(completedController);
         graphWorkspaceController = completedController;
-        openGraphWorkspaceAction = new OpenGraphWorkspaceAction(viewController);
+        openGraphWorkspaceAction = new OpenGraphWorkspaceAction(viewController, recentWorkspaces);
         modeController.addAction(openGraphWorkspaceAction);
         resourceController.setDefaultProperty(GraphGroupColors.COLOR_PROPERTY_KEY,
             ColorUtils.colorToString(GraphGroupColors.DEFAULT_COLOR));

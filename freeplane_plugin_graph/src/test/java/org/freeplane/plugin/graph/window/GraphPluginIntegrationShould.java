@@ -3,10 +3,13 @@ package org.freeplane.plugin.graph.window;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockConstruction;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -16,12 +19,16 @@ import java.awt.GraphicsEnvironment;
 import java.awt.event.ActionEvent;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Properties;
+import java.util.concurrent.atomic.AtomicReference;
 
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
@@ -31,6 +38,7 @@ import javax.swing.event.PopupMenuListener;
 
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.ui.AFreeplaneAction;
+import org.freeplane.core.util.ConfigurationUtils;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.map.MapController;
 import org.freeplane.core.ui.menubuilders.generic.UserRole;
@@ -40,6 +48,7 @@ import org.freeplane.plugin.graph.GraphModeExtension;
 import org.freeplane.plugin.graph.control.DefaultGraphWorkspaceController;
 import org.freeplane.plugin.graph.control.GraphWorkspaceController;
 import org.freeplane.plugin.graph.control.GraphWorkspaceHandle;
+import org.freeplane.plugin.graph.control.GraphWorkspaceOpenException;
 import org.freeplane.plugin.graph.control.GraphWorkspaceView;
 import org.freeplane.plugin.graph.control.GraphWorkspaceViewBinding;
 import org.freeplane.plugin.graph.control.WorkspaceCloseController;
@@ -336,6 +345,99 @@ public class GraphPluginIntegrationShould {
         MockedStatic<ResourceController> resources = org.mockito.Mockito.mockStatic(ResourceController.class);
         resources.when(ResourceController::getResourceController).thenReturn(mock(ResourceController.class));
         return resources;
+    }
+
+    @Test
+    public void wiresApplicationWideRecentWorkspacesThroughUserProperties() throws Exception {
+        ApplicationResourceController applicationResources = mock(ApplicationResourceController.class);
+        resourceController.when(ResourceController::getResourceController).thenReturn(applicationResources);
+        Path first = temporaryFolder.newFile("seeded-workspace.fpg").toPath().toRealPath();
+        Path second = temporaryFolder.newFile("recorded-workspace.fpg").toPath().toRealPath();
+        when(applicationResources.getProperty(RecentWorkspaceList.PROPERTY_KEY, ""))
+            .thenReturn(ConfigurationUtils.encodeListValue(Arrays.asList(first.toString()), true));
+        AtomicReference<RecentWorkspaceList> controllerList = new AtomicReference<RecentWorkspaceList>();
+        AtomicReference<RecentWorkspaceList> factoryList = new AtomicReference<RecentWorkspaceList>();
+        AtomicReference<RecentWorkspaceList> actionList = new AtomicReference<RecentWorkspaceList>();
+        ModeController modeController = configuredModeController();
+        GraphModeExtension extension = new GraphModeExtension();
+
+        try (MockedConstruction<DefaultGraphWorkspaceController> controllerConstruction =
+                mockConstruction(DefaultGraphWorkspaceController.class, (mock, context) ->
+                    controllerList.set((RecentWorkspaceList) context.arguments().get(2)));
+             MockedConstruction<SwingGraphWorkspaceViewFactory> factoryConstruction =
+                mockConstruction(SwingGraphWorkspaceViewFactory.class, (mock, context) ->
+                    factoryList.set((RecentWorkspaceList) context.arguments().get(1)));
+             MockedConstruction<OpenGraphWorkspaceAction> actionConstruction =
+                mockConstruction(OpenGraphWorkspaceAction.class, (mock, context) ->
+                    actionList.set((RecentWorkspaceList) context.arguments().get(1)))) {
+            extension.installExtension(modeController, null);
+
+            assertThat(controllerConstruction.constructed()).hasSize(1);
+            assertThat(controllerList.get()).isNotNull();
+            assertThat(controllerList.get().mostRecentExisting()).contains(first);
+            assertThat(factoryList.get()).isSameAs(controllerList.get());
+            assertThat(actionList.get()).isSameAs(controllerList.get());
+
+            controllerList.get().record(second);
+            controllerList.get().clear();
+
+            ArgumentCaptor<String> persisted = ArgumentCaptor.forClass(String.class);
+            verify(applicationResources, times(2)).setProperty(eq(RecentWorkspaceList.PROPERTY_KEY),
+                persisted.capture());
+            assertThat(persisted.getAllValues().get(0)).isEqualTo(
+                ConfigurationUtils.encodeListValue(Arrays.asList(second.toString(), first.toString()), true));
+            assertThat(persisted.getAllValues().get(1)).isEqualTo("");
+
+            extension.close();
+        }
+    }
+
+    @Test
+    public void delegatesOpenExistingThroughTheForwardingController() throws Exception {
+        ApplicationResourceController applicationResources = mock(ApplicationResourceController.class);
+        resourceController.when(ResourceController::getResourceController).thenReturn(applicationResources);
+        Path recent = temporaryFolder.newFile("forwarded.fpg").toPath().toRealPath();
+        when(applicationResources.getProperty(RecentWorkspaceList.PROPERTY_KEY, ""))
+            .thenReturn(ConfigurationUtils.encodeListValue(Arrays.asList(recent.toString()), true));
+        ModeController modeController = configuredModeController();
+        GraphModeExtension extension = new GraphModeExtension();
+
+        try (MockedConstruction<DefaultGraphWorkspaceController> constructions =
+                mockConstruction(DefaultGraphWorkspaceController.class)) {
+            extension.installExtension(modeController, null);
+            DefaultGraphWorkspaceController constructed = constructions.constructed().get(0);
+            ArgumentCaptor<AFreeplaneAction> actions = ArgumentCaptor.forClass(AFreeplaneAction.class);
+            verify(modeController, times(3)).addAction(actions.capture());
+            OpenGraphWorkspaceAction action = null;
+            for (AFreeplaneAction candidate : actions.getAllValues()) {
+                if (candidate instanceof OpenGraphWorkspaceAction) {
+                    action = (OpenGraphWorkspaceAction) candidate;
+                }
+            }
+            assertThat(action).isNotNull();
+
+            action.actionPerformed(new ActionEvent(this, ActionEvent.ACTION_PERFORMED, "recent"));
+
+            verify(constructed).openExisting(recent);
+            verify(constructed, never()).open(any(java.nio.file.Path.class));
+            extension.close();
+        }
+
+        Class<?> forwardingType = Class.forName(
+            "org.freeplane.plugin.graph.GraphModeExtension$ForwardingGraphWorkspaceController");
+        Constructor<?> constructor = forwardingType.getDeclaredConstructor();
+        constructor.setAccessible(true);
+        Object forwarding = constructor.newInstance();
+        Method openExisting = forwardingType.getDeclaredMethod("openExisting", java.nio.file.Path.class);
+        openExisting.setAccessible(true);
+        try {
+            openExisting.invoke(forwarding, recent);
+            throw new AssertionError("Expected GraphWorkspaceOpenException");
+        }
+        catch (java.lang.reflect.InvocationTargetException failure) {
+            assertThat(failure.getCause()).isInstanceOf(GraphWorkspaceOpenException.class);
+            assertThat(failure.getCause()).hasCauseInstanceOf(IllegalStateException.class);
+        }
     }
 
     private static ModeController configuredModeController() {
