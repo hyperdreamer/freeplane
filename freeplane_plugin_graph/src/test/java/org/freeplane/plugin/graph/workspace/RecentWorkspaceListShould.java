@@ -2,6 +2,9 @@ package org.freeplane.plugin.graph.workspace;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.times;
 
 import java.io.File;
 import java.nio.file.Files;
@@ -172,8 +175,11 @@ public class RecentWorkspaceListShould {
     @Test
     public void dropsInvalidStoredTokensAtConstruction() throws Exception {
         Path absolute = temporaryFolder.newFile("absolute.fpg").toPath().toRealPath();
+        Path relativeExisting = Paths.get("").toAbsolutePath().relativize(absolute);
+        assertThat(relativeExisting.isAbsolute()).isFalse();
+        assertThat(Files.isRegularFile(relativeExisting)).isTrue();
         String stored = ConfigurationUtils.encodeListValue(Arrays.asList(
-            absolute.toString(), "relative.fpg", "\u0000bad"), true);
+            absolute.toString(), relativeExisting.toString(), "\u0000bad"), true);
 
         RecentWorkspaceList list = new RecentWorkspaceList(stored, value -> { });
 
@@ -193,6 +199,12 @@ public class RecentWorkspaceListShould {
         Path recorded = temporaryFolder.newFile("decoded-recorded.fpg").toPath().toRealPath();
         AtomicReference<String> persisted = new AtomicReference<String>();
         RecentWorkspaceList list = new RecentWorkspaceList(stored, persisted::set);
+
+        try (MockedStatic<Files> files = mockStatic(Files.class)) {
+            assertThat(list.displayEntries()).isEmpty();
+            files.verify(() -> Files.isRegularFile(any(Path.class)),
+                times(RecentWorkspaceList.STORED_CAPACITY));
+        }
 
         list.record(recorded);
 

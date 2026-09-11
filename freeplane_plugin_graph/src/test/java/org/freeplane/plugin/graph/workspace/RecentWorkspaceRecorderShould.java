@@ -8,6 +8,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.lang.reflect.Constructor;
 import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -42,18 +43,37 @@ public class RecentWorkspaceRecorderShould {
     }
 
     @Test
-    public void ignoresDocumentChangedSavedAndSaveFailedEvents() {
+    public void ignoresDocumentChangedSavedAndSaveFailedEvents() throws Exception {
         Fixture fixture = fixture();
         WorkspaceDocument document = WorkspaceDocument.createVersion1(
             WorkspaceId.of("00000000-0000-0000-0000-000000000001"));
+        Path newPath = temporaryFolder.newFile("mismatched-target.fpg").toPath().toRealPath();
+        WorkspaceIdentityChange change = new WorkspaceIdentityChange(
+            temporaryFolder.getRoot().toPath().resolve("mismatched-source.fpg"), newPath,
+            WorkspaceId.of("00000000-0000-0000-0000-000000000001"),
+            WorkspaceId.of("00000000-0000-0000-0000-000000000002"));
+        WorkspaceStoreEvent mismatched = savedEventCarryingIdentityChange(document, change);
+
+        assertThat(mismatched.type()).isEqualTo(WorkspaceStoreEvent.Type.SAVED);
+        assertThat(mismatched.identityChange()).contains(change);
 
         fixture.listener().onWorkspaceStoreEvent(WorkspaceStoreEvent.documentChanged(document));
         fixture.listener().onWorkspaceStoreEvent(WorkspaceStoreEvent.saved(document));
         fixture.listener().onWorkspaceStoreEvent(WorkspaceStoreEvent.saveFailed(document,
             new IllegalStateException("save failed")));
+        fixture.listener().onWorkspaceStoreEvent(mismatched);
 
         assertThat(fixture.list.hasStoredEntries()).isFalse();
         assertThat(fixture.persisterCalls).hasValue(0);
+    }
+
+    private static WorkspaceStoreEvent savedEventCarryingIdentityChange(final WorkspaceDocument document,
+            final WorkspaceIdentityChange change) throws Exception {
+        Constructor<WorkspaceStoreEvent> constructor = WorkspaceStoreEvent.class.getDeclaredConstructor(
+            WorkspaceStoreEvent.Type.class, WorkspaceDocument.class, WorkspaceIdentityChange.class,
+            Throwable.class);
+        constructor.setAccessible(true);
+        return constructor.newInstance(WorkspaceStoreEvent.Type.SAVED, document, change, null);
     }
 
     @Test
