@@ -64,6 +64,7 @@ import org.freeplane.plugin.graph.control.GraphWorkspaceViewBinding;
 import org.freeplane.plugin.graph.control.OperationalStatus;
 import org.freeplane.plugin.graph.control.WorkspaceCloseController;
 import org.freeplane.plugin.graph.control.WorkspaceSessionStatus;
+import org.freeplane.plugin.graph.control.WorkspaceSessionStatusListener;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.HullGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
@@ -1733,6 +1734,68 @@ public class GraphWorkspaceWindowModelShould {
         method.setAccessible(true);
         method.invoke(model);
         verify(fixture.handle, never()).execute(any(GraphCommand.class));
+        model.close();
+    }
+
+    @Test
+    public void refreshesPinToggleAfterPostCommandCanvasStatePublication() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            persistedNodeState(ACTIVE_ID, LayoutPoint.of(2.0, -3.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
+        ProjectedNodeKey nodeKey = ProjectedNodeKey.of(SourceNodeKey.persisted(
+            NodeReference.of(ACTIVE_ID, PersistedNodeId.of("selected"))));
+        ProjectedEndpointKey nodeEndpoint = ProjectedEndpointKey.ofNode(nodeKey);
+        model.acceptIntent(new GraphIntent.ChangeSelection(Optional.of(nodeEndpoint)));
+        assertThat(model.toolbar().pinButton().getText()).isEqualTo("graph_workspace.action.pin");
+
+        model.acceptCanvasState(persistedPinnedNodeState(ACTIVE_ID, LayoutPoint.of(2.0, -3.0), 2.0, -3.0));
+        assertThat(model.toolbar().pinButton().getText()).isEqualTo("graph_workspace.action.unpin");
+
+        org.mockito.Mockito.clearInvocations(fixture.handle);
+        ArgumentCaptor<GraphCommand> commands = ArgumentCaptor.forClass(GraphCommand.class);
+        model.acceptIntent(new GraphIntent.Unpin(nodeKey));
+        verify(fixture.handle, org.mockito.Mockito.times(1)).execute(commands.capture());
+        assertThat(commands.getValue()).isInstanceOf(GraphCommands.Unpin.class);
+        model.acceptCanvasState(persistedNodeState(ACTIVE_ID, LayoutPoint.of(2.0, -3.0)));
+        assertThat(model.toolbar().pinButton().getText()).isEqualTo("graph_workspace.action.pin");
+
+        model.acceptCanvasState(persistedPinnedNodeState(ACTIVE_ID, LayoutPoint.of(2.0, -3.0), 2.0, -3.0));
+        assertThat(model.toolbar().pinButton().getText()).isEqualTo("graph_workspace.action.unpin");
+        org.mockito.Mockito.clearInvocations(fixture.handle);
+        ArgumentCaptor<GraphCommand> allCommands = ArgumentCaptor.forClass(GraphCommand.class);
+        model.acceptIntent(new GraphIntent.UnpinAll());
+        verify(fixture.handle, org.mockito.Mockito.times(1)).execute(allCommands.capture());
+        assertThat(allCommands.getValue()).isInstanceOf(GraphCommands.UnpinAll.class);
+        model.acceptCanvasState(persistedNodeState(ACTIVE_ID, LayoutPoint.of(2.0, -3.0)));
+        assertThat(model.toolbar().pinButton().getText()).isEqualTo("graph_workspace.action.pin");
+
+        model.acceptCanvasState(persistedPinnedNodeState(ACTIVE_ID, LayoutPoint.of(2.0, -3.0), 2.0, -3.0));
+        assertThat(model.toolbar().pinButton().getText()).isEqualTo("graph_workspace.action.unpin");
+        ArgumentCaptor<WorkspaceSessionStatusListener> statusListener =
+            ArgumentCaptor.forClass(WorkspaceSessionStatusListener.class);
+        verify(fixture.binding).addSessionStatusListener(statusListener.capture());
+        statusListener.getValue().onWorkspaceSessionStatus(
+            WorkspaceSessionStatus.of(true, true, false, false, Collections.<MapReferenceId>emptySet(),
+                Optional.<org.freeplane.plugin.graph.command.MapUndoTarget>empty()));
+        assertThat(model.toolbar().pinButton().getText()).isEqualTo("graph_workspace.action.unpin");
+        assertThat(model.toolbar().pinButton().isEnabled()).isTrue();
+        model.close();
+    }
+
+    @Test
+    public void rejectsPinAndUnpinIntentsInReadOnlySessions() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            persistedNodeState(ACTIVE_ID, LayoutPoint.of(2.0, -3.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), true);
+        GraphWorkspaceWindowModel model = fixture.model();
+        ProjectedNodeKey nodeKey = ProjectedNodeKey.of(SourceNodeKey.persisted(
+            NodeReference.of(ACTIVE_ID, PersistedNodeId.of("selected"))));
+
+        model.acceptIntent(new GraphIntent.Pin(nodeKey, 5.0, 6.0));
+        model.acceptIntent(new GraphIntent.Unpin(nodeKey));
+        verify(fixture.handle, never()).execute(any(GraphCommand.class));
+        assertThat(model.toolbar().pinButton().isEnabled()).isFalse();
         model.close();
     }
 
