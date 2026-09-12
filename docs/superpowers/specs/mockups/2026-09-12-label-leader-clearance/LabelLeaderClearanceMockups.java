@@ -32,14 +32,17 @@ import java.io.File;
  * magnified junctions: an adjacent RIGHT slot and a displaced RIGHT_FAR slot.
  *
  * The clipped leader ends are the only geometry this mockup invents; they are
- * computed by clipToRect() (first boundary crossing of the rim -> centre
- * segment with the label rectangle) and, for option A, backed off by 2 px.
+ * computed by clipToRect() (first boundary crossing of the rim -> centre segment
+ * with the label rectangle). Option A clips against the rectangle inflated by
+ * OPTION_A_GAP on all four sides, so the leader's Euclidean clearance from the
+ * name's box is OPTION_A_GAP on a face entry and up to OPTION_A_GAP*sqrt(2) at a
+ * corner; option B clips against the plain rectangle.
  */
 public final class LabelLeaderClearanceMockups {
 
     static final double SLOT_GAP = 6.0;
     static final double DISPLACED_OFFSET = 30.0;
-    static final double OPTION_A_GAP = 2.0;
+    static final double OPTION_A_GAP = 3.0;
 
     static final Font FULL = new Font(Font.DIALOG, Font.PLAIN, 12);
     static final Font TITLE = new Font(Font.DIALOG, Font.BOLD, 17);
@@ -104,7 +107,7 @@ public final class LabelLeaderClearanceMockups {
     static final double PANEL_H = 596.0;
     static final double COL_GAP = 20.0;
     static final double OUTER = 24.0;
-    static final double HEAD = 64.0;
+    static final double HEAD = 78.0;
 
     static final double SCENE_Y = 56.0;
     static final double INSET_Y = SCENE_Y + SCENE_H + 34.0;
@@ -140,7 +143,11 @@ public final class LabelLeaderClearanceMockups {
         g.drawString("Identical fixture in all four panels, drawn at production scale with the "
             + "shipped constants (SLOT_GAP 6, DISPLACED_OFFSET 30, 12 pt label font). "
             + "The leader is painted under the name, exactly as GraphPainter does.",
-            (float) OUTER, 52f);
+            (float) OUTER, 50f);
+        g.drawString("A clips the leader on the name's box inflated by 3 px (clearance 3 px on a face "
+            + "entry, up to 4.24 px at a corner). B clips on the bare box. C drops the leader for "
+            + "adjacent slots and trims the displaced and enclosure leaders like A.",
+            (float) OUTER, 66f);
 
         for (int i = 0; i < modes.length; i++) {
             final int col = i % 2;
@@ -226,8 +233,8 @@ public final class LabelLeaderClearanceMockups {
                         + "(red = the part that crosses the name)" };
             case A:
                 return new String[] {
-                    "Option A \u2014 stop at the name's box, 2 px gap",
-                    "leader keeps its disc-rim start and is trimmed at the box edge, backed off 2 px; "
+                    "Option A \u2014 stop 3 px clear of the name's box",
+                    "leader keeps its disc-rim start and ends on the box inflated by 3 px; "
                         + "every slot keeps its leader" };
             case B:
                 return new String[] {
@@ -357,20 +364,14 @@ public final class LabelLeaderClearanceMockups {
             return new double[] { anchorX, anchorY };
         }
         final double[] clip = clipToRect(new double[] { startX, startY },
-            new double[] { anchorX, anchorY }, rect);
-        if (clip == null) {
-            return null;
-        }
-        if (mode == Mode.A) {
-            final double dx = clip[0] - startX;
-            final double dy = clip[1] - startY;
-            final double d = Math.hypot(dx, dy);
-            if (d > OPTION_A_GAP) {
-                return new double[] { clip[0] - dx / d * OPTION_A_GAP,
-                    clip[1] - dy / d * OPTION_A_GAP };
-            }
-        }
+            new double[] { anchorX, anchorY }, mode == Mode.A ? inflate(rect, OPTION_A_GAP) : rect);
         return clip;
+    }
+
+    /** Rectangle inflated by gap on all four sides; the leader stops on its boundary. */
+    static Rectangle2D inflate(final Rectangle2D rect, final double gap) {
+        return new Rectangle2D.Double(rect.getMinX() - gap, rect.getMinY() - gap,
+            rect.getWidth() + 2.0 * gap, rect.getHeight() + 2.0 * gap);
     }
 
     /**
