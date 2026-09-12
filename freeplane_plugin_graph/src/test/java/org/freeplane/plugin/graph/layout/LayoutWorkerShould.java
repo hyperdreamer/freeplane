@@ -354,6 +354,78 @@ public class LayoutWorkerShould {
         }
     }
 
+    @Test
+    public void projectsAcceptedFramesAndPublishesTheRecomputedResidual() throws Exception {
+        ProjectedNodeKey first = nodeKey(MAP_ONE, "sep-one");
+        ProjectedNodeKey second = nodeKey(MAP_ONE, "sep-two");
+        ProjectedNode firstNode = ProjectedNode.of(first, SafeNodeLabel.of("one", "one"), "Map", false);
+        ProjectedNode secondNode = ProjectedNode.of(second, SafeNodeLabel.of("two", "two"), "Map", false);
+        GraphProjection projection = GraphProjection.projected(1L, Arrays.asList(firstNode, secondNode),
+            Collections.<ProjectedEnclosure>emptyList(), Collections.<ProjectedEdge>emptyList(),
+            Collections.<org.freeplane.plugin.graph.projection.RelationshipResolution>emptyList(),
+            Collections.<PinProjection>emptyList());
+        LayoutRequest request = LayoutRequest.of(WORKSPACE, projection,
+            ProjectionDiff.between(projection, projection), Collections.<PinProjection>emptyList());
+        LayoutWorker worker = new LayoutWorker(new FixedEngineSupplier(new SeparatedPairEngine(first, second)),
+            new PerceptualIdlePolicy(2, 0.1, 0.1));
+        try {
+            LayoutFrame frame = await(worker.submit(request));
+
+            assertThat(frame.failed()).isFalse();
+            assertThat(frame.verified()).isTrue();
+            assertThat(frame.residualViolations()).isZero();
+            assertThat(frame.positions().nodes().get(first)).isEqualTo(LayoutPoint.of(-1.0, 0.0));
+            assertThat(frame.positions().nodes().get(second)).isEqualTo(LayoutPoint.of(21.0, 0.0));
+        }
+        finally {
+            worker.close();
+        }
+    }
+
+    @Test
+    public void carriesTheRetainedResidualIntoAFailedFrame() throws Exception {
+        CountingEngine engine = new CountingEngine(new AtomicInteger(), new AtomicInteger());
+        LayoutWorker worker = new LayoutWorker(new FixedEngineSupplier(engine),
+            new PerceptualIdlePolicy(2, 0.1, 0.1));
+        try {
+            LayoutFrame valid = await(worker.submit(request()));
+            FailingAfterValidEngine failing = new FailingAfterValidEngine();
+            LayoutWorker second = new LayoutWorker(new FixedEngineSupplier(failing),
+                new PerceptualIdlePolicy(2, 0.1, 0.1));
+            try {
+                await(second.submit(request()));
+                LayoutFrame failed = await(second.step());
+
+                assertThat(valid.verified()).isTrue();
+                assertThat(failed.failed()).isTrue();
+                assertThat(failed.residualViolations()).isEqualTo(valid.residualViolations());
+                assertThat(failed.positions()).isEqualTo(valid.positions());
+            }
+            finally {
+                second.close();
+            }
+        }
+        finally {
+            worker.close();
+        }
+    }
+
+    @Test
+    public void startsFromAnEmptyFailedFrameWithAZeroResidual() {
+        LayoutWorker worker = new LayoutWorker(new FixedEngineSupplier(new CountingEngine(new AtomicInteger(),
+            new AtomicInteger())), PerceptualIdlePolicy.spikeDefaults());
+        try {
+            LayoutFrame sentinel = worker.lastValidFrame();
+
+            assertThat(sentinel.failed()).isTrue();
+            assertThat(sentinel.residualViolations()).isZero();
+            assertThat(sentinel.verified()).isTrue();
+        }
+        finally {
+            worker.close();
+        }
+    }
+
     private static LayoutRequest request() {
         return request(Collections.<PinProjection>emptyList());
     }
@@ -385,8 +457,8 @@ public class LayoutWorkerShould {
         Map<ProjectedNodeKey, LayoutPoint> nodes = new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
         for (ProjectedNode node : projection.nodes()) {
             final MapReferenceId map = node.mapReferenceId();
-            final double x = MAP_ONE.equals(map) ? 0.0 : 1.0;
-            final double y = node.key().equals(NODE_ONE_OTHER) || node.key().equals(NODE_TWO_OTHER) ? 1.0 : 0.0;
+            final double x = MAP_ONE.equals(map) ? 0.0 : 40.0;
+            final double y = node.key().equals(NODE_ONE_OTHER) || node.key().equals(NODE_TWO_OTHER) ? 40.0 : 0.0;
             nodes.put(node.key(), LayoutPoint.of(x, y));
         }
         Map<EnclosureHullKey, LayoutPoint> anchors = new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
@@ -560,7 +632,7 @@ public class LayoutWorkerShould {
                 currentRequest = request;
                 events.add("apply");
                 lastRaw = rawPositions(request.projection());
-                return LayoutFrame.of(applies, lastRaw, false);
+                return LayoutFrame.of(applies, lastRaw, false, 0);
             }
             finally {
                 leave();
@@ -574,7 +646,7 @@ public class LayoutWorkerShould {
                 steps++;
                 events.add("step");
                 lastRaw = rawPositions(currentRequest.projection());
-                return LayoutFrame.of(applies + steps, lastRaw, false);
+                return LayoutFrame.of(applies + steps, lastRaw, false, 0);
             }
             finally {
                 leave();
@@ -638,6 +710,53 @@ public class LayoutWorkerShould {
 
     private static final class FailingEngine extends CountingEngine {
         FailingEngine() {
+            super(new AtomicInteger(), new AtomicInteger());
+        }
+
+        @Override
+        public LayoutFrame step() {
+            throw new IllegalStateException("step failed");
+        }
+    }
+
+    private static final class SeparatedPairEngine implements LayoutEngine {
+        private final ProjectedNodeKey first;
+        private final ProjectedNodeKey second;
+
+        SeparatedPairEngine(ProjectedNodeKey first, ProjectedNodeKey second) {
+            this.first = first;
+            this.second = second;
+        }
+
+        @Override
+        public LayoutFrame apply(LayoutRequest request) {
+            return frame();
+        }
+
+        @Override
+        public LayoutFrame step() {
+            return frame();
+        }
+
+        @Override
+        public void reset() {
+        }
+
+        @Override
+        public void close() {
+        }
+
+        private LayoutFrame frame() {
+            Map<ProjectedNodeKey, LayoutPoint> nodes = new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+            nodes.put(first, LayoutPoint.of(0.0, 0.0));
+            nodes.put(second, LayoutPoint.of(20.0, 0.0));
+            return LayoutFrame.of(1L, LayoutPositions.of(nodes,
+                Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false);
+        }
+    }
+
+    private static final class FailingAfterValidEngine extends CountingEngine {
+        FailingAfterValidEngine() {
             super(new AtomicInteger(), new AtomicInteger());
         }
 

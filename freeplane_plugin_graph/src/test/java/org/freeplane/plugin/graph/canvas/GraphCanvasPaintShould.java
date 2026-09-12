@@ -117,7 +117,7 @@ public class GraphCanvasPaintShould {
             Collections.<RelationshipResolution>emptyList(), Collections.<PinProjection>emptyList());
         LayoutFrame layout = LayoutFrame.of(1L, LayoutPositions.of(
             Collections.singletonMap(retained.key(), LayoutPoint.of(-45.0, 0.0)),
-            Collections.singletonMap(boundaryHull, LayoutPoint.of(0.0, 0.0))), false);
+            Collections.singletonMap(boundaryHull, LayoutPoint.of(0.0, 0.0))), false, 0);
         CanvasState state = CanvasState.of(1L, projection, layout,
             GraphGeometry.of(nodeGeometry, hulls), OperationalStatus.IDLE);
         GraphTheme theme = lightTheme();
@@ -155,7 +155,7 @@ public class GraphCanvasPaintShould {
             Collections.<RelationshipResolution>emptyList(), Collections.<PinProjection>emptyList());
         LayoutFrame layout = LayoutFrame.of(1L, LayoutPositions.of(
             Collections.singletonMap(retained.key(), LayoutPoint.of(-45.0, 0.0)),
-            Collections.singletonMap(boundaryHull, LayoutPoint.of(0.0, 0.0))), false);
+            Collections.singletonMap(boundaryHull, LayoutPoint.of(0.0, 0.0))), false, 0);
         CanvasState state = CanvasState.of(1L, projection, layout,
             GraphGeometry.of(nodeGeometry, hulls), OperationalStatus.IDLE);
         GraphTheme theme = lightTheme();
@@ -883,7 +883,7 @@ public class GraphCanvasPaintShould {
             Arrays.asList(firstRoot, secondRoot, firstChild), Collections.<ProjectedEdge>emptyList(),
             Collections.<RelationshipResolution>emptyList(), Collections.<PinProjection>emptyList());
         LayoutFrame layout = LayoutFrame.of(1L, LayoutPositions.of(Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(),
-            Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false);
+            Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false, 0);
         return CanvasState.of(1L, projection, layout,
             GraphGeometry.of(Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(), hulls,
                 Collections.<EnclosureKey, LabelPlacement>emptyMap()), OperationalStatus.IDLE);
@@ -967,7 +967,7 @@ public class GraphCanvasPaintShould {
             Collections.<ProjectedEdge>emptyList(), Collections.<RelationshipResolution>emptyList(),
             Collections.<PinProjection>emptyList());
         CanvasState state = CanvasState.of(1L, projection,
-            LayoutFrame.of(1L, LayoutPositions.of(positions, anchors), false),
+            LayoutFrame.of(1L, LayoutPositions.of(positions, anchors), false, 0),
             GraphGeometry.of(geometries, hulls, labels),
             OperationalStatus.IDLE);
         return new LabelFixture(state, ProjectedEndpointKey.ofEnclosure(selectedKey),
@@ -1221,7 +1221,7 @@ public class GraphCanvasPaintShould {
         geometries.put(fixture.first.key(), fixture.state.geometry().nodes().get(fixture.first.key()));
         CanvasState state = CanvasState.of(1L, projection,
             LayoutFrame.of(1L, LayoutPositions.of(fixture.state.layout().positions().nodes(),
-                fixture.state.layout().positions().anchors()), false),
+                fixture.state.layout().positions().anchors()), false, 0),
             GraphGeometry.of(geometries, fixture.state.geometry().hulls(),
                 fixture.state.geometry().labels()), OperationalStatus.IDLE);
         GraphCanvas canvas = new GraphCanvas();
@@ -1284,7 +1284,7 @@ public class GraphCanvasPaintShould {
             Collections.<RelationshipResolution>emptyList(), Collections.<PinProjection>emptyList());
         LayoutFrame layout = LayoutFrame.of(1L, LayoutPositions.of(
             Collections.singletonMap(retained.key(), LayoutPoint.of(-45.0, 0.0)),
-            Collections.singletonMap(rootHull, LayoutPoint.of(0.0, 0.0))), false);
+            Collections.singletonMap(rootHull, LayoutPoint.of(0.0, 0.0))), false, 0);
         CanvasState state = CanvasState.of(1L, projection, layout,
             GraphGeometry.of(nodeGeometry, hulls), OperationalStatus.IDLE);
 
@@ -1361,7 +1361,7 @@ public class GraphCanvasPaintShould {
         Map<EnclosureHullKey, LayoutPoint> anchors = new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
         anchors.put(firstHullKey, LayoutPoint.of(-45.0, 14.0));
         anchors.put(secondHullKey, LayoutPoint.of(45.0, 12.0));
-        LayoutFrame layout = LayoutFrame.of(1L, LayoutPositions.of(positions, anchors), false);
+        LayoutFrame layout = LayoutFrame.of(1L, LayoutPositions.of(positions, anchors), false, 0);
         CanvasState state = CanvasState.of(1L, projection, layout, geometry, OperationalStatus.IDLE);
         return new Fixture(state, first, second, edge, firstEndpoint, secondEndpoint, firstHullKey,
             secondHullKey, ProjectedEndpointKey.ofEnclosure(firstEnclosureKey),

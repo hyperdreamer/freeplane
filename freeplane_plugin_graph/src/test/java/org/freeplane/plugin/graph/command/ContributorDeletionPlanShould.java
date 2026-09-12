@@ -854,7 +854,7 @@ public class ContributorDeletionPlanShould {
 
     private static CanvasState availableState() {
         return CanvasState.of(0L, projection(0L),
-            LayoutFrame.of(0L, LayoutPositions.of(Collections.emptyMap(), Collections.emptyMap()), false),
+            LayoutFrame.of(0L, LayoutPositions.of(Collections.emptyMap(), Collections.emptyMap()), false, 0),
             GraphGeometry.of(Collections.emptyMap(), Collections.emptyMap()), OperationalStatus.IDLE);
     }
 

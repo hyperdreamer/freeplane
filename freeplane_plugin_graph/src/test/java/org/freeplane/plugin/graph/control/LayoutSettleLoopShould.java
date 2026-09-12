@@ -125,6 +125,58 @@ public class LayoutSettleLoopShould {
     }
 
     @Test
+    public void publishesAFallbackFrameWithARecomputedResidual() throws Exception {
+        GraphProjection projection = populatedProjection(6L);
+        TestStepper stepper = new TestStepper(failedFrame(0L, LayoutPositions.of(
+            Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(),
+            Collections.<EnclosureHullKey, LayoutPoint>emptyMap())));
+        LayoutSettleLoop loop = new LayoutSettleLoop(WORKSPACE, stepper, new GraphGeometryEngine(), new ImmediateEdt());
+        List<CanvasState> states = new ArrayList<CanvasState>();
+        CompletableFuture<CanvasState> failedPublication = new CompletableFuture<CanvasState>();
+
+        CompletionStage<Void> completion = loop.start(batch(6L), projection,
+            ProjectionDiff.between(emptyProjection(5L), projection), state -> {
+                states.add(state);
+                failedPublication.complete(state);
+            });
+        await(failedPublication);
+
+        final CanvasState failed = states.get(0);
+        final LayoutPositions positions = failed.layout().positions();
+        assertThat(failed.layout().failed()).isTrue();
+        assertThat(failed.layout().verified()).isTrue();
+        assertThat(failed.layout().residualViolations())
+            .isEqualTo(independentlyCountViolations(failed.projection(), positions));
+        loop.close();
+        await(completion);
+    }
+
+    private static int independentlyCountViolations(final GraphProjection projection,
+            final LayoutPositions positions) {
+        final List<ProjectedNodeKey> keys = new ArrayList<ProjectedNodeKey>(positions.nodes().keySet());
+        int violations = 0;
+        for (int first = 0; first < keys.size(); first++) {
+            for (int second = first + 1; second < keys.size(); second++) {
+                final double firstRadius = radius(projection, keys.get(first));
+                final double secondRadius = radius(projection, keys.get(second));
+                final LayoutPoint firstPoint = positions.nodes().get(keys.get(first));
+                final LayoutPoint secondPoint = positions.nodes().get(keys.get(second));
+                if (Math.hypot(firstPoint.x() - secondPoint.x(), firstPoint.y() - secondPoint.y())
+                        < firstRadius + secondRadius + 6.0) {
+                    violations++;
+                }
+            }
+        }
+        return violations;
+    }
+
+    private static double radius(final GraphProjection projection, final ProjectedNodeKey key) {
+        final org.freeplane.plugin.graph.projection.NodeProminence prominence =
+            projection.prominence().get(key);
+        return 8.0 * (prominence == null ? 1.0 : prominence.scale());
+    }
+
+    @Test
     public void recoversAFailedFrameWithOneRestartAndASecondSubmission() {
         ManualLifecycleDispatcher dispatcher = new ManualLifecycleDispatcher();
         FailedThenIdleStepper stepper = new FailedThenIdleStepper();
@@ -1141,7 +1193,7 @@ public class LayoutSettleLoopShould {
         MapReferenceId otherMap = MapReferenceId.of("00000000-0000-0000-0000-000000000103");
         LayoutConflict conflict = LayoutConflict.of(MAP, otherMap, Collections.emptyList());
         PerceptualIdlePolicy.IdleMeasurement idle = new PerceptualIdlePolicy.IdleMeasurement(1.5, 2.5, 7, true);
-        LayoutFrame retained = LayoutFrame.withDiagnostics(LayoutFrame.of(9L, positions(projection, 123.5), false),
+        LayoutFrame retained = LayoutFrame.withDiagnostics(LayoutFrame.of(9L, positions(projection, 123.5), false, 0),
             Collections.singletonList(conflict), idle);
         CompletableFuture<CanvasState> failedPublication = new CompletableFuture<CanvasState>();
 
@@ -1348,7 +1400,7 @@ public class LayoutSettleLoopShould {
     }
 
     private static LayoutFrame frame(long index, LayoutPositions positions, boolean failed, boolean idle) {
-        return LayoutFrame.withDiagnostics(LayoutFrame.of(index, positions, failed),
+        return LayoutFrame.withDiagnostics(LayoutFrame.of(index, positions, failed, 0),
             Collections.emptyList(), new PerceptualIdlePolicy.IdleMeasurement(0.0, 0.0,
                 idle ? 8 : 1, idle));
     }
