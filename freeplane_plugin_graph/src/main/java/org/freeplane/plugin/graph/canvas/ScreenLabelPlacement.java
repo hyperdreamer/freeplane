@@ -184,7 +184,7 @@ public final class ScreenLabelPlacement {
         context.obstacles.add(candidate);
         return new PlacedLabel(previous.endpoint(), previous.text(), previous.font(), previous.mode(),
             previous.rung(), anchor[0], anchor[1], previous.width(), previous.height(),
-            previous.truncated(), previous.forced(), previous.emphaticAtAnchor(),
+            previous.truncated(), isForced(context, key), previous.emphaticAtAnchor(),
             previous.forcedAtBaseSlot(), false, previous.leaderStart(), previous.slot());
     }
 

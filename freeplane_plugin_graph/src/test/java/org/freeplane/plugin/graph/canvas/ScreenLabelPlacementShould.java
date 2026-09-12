@@ -239,6 +239,274 @@ public class ScreenLabelPlacementShould {
         }
     }
 
+    @Test
+    public void keepsPlacementsStickyAcrossAPan() {
+        List<SceneNode> scene = denseScene();
+        Rectangle2D area = area(1128.0, 364.0);
+        Rectangle2D standIn = standIn(scene, 1.0);
+        List<PlacedLabel> baseline = place(scene, 1.0, area, standIn, forced("Axiom of Choice"),
+            RenderingLevel.FULL, null);
+        Rectangle2D shiftedStandIn = new Rectangle2D.Double(standIn.getX() - 1.0, standIn.getY(),
+            standIn.getWidth(), standIn.getHeight());
+
+        List<PlacedLabel> panned = placeShifted(scene, 1.0, area, shiftedStandIn,
+            forced("Axiom of Choice"), RenderingLevel.FULL, baseline, 1.0, 0.0);
+
+        assertThat(countVisible(panned)).isEqualTo(11);
+        for (PlacedLabel label : baseline) {
+            if (label.mode() == PlacedLabel.Mode.HOVER_ONLY) {
+                continue;
+            }
+            PlacedLabel after = find(panned, nodeName(label.endpoint()));
+            assertThat(after).as(nodeName(label.endpoint())).isNotNull();
+            assertThat(after.rung()).isEqualTo(label.rung());
+            assertThat(after.text()).isEqualTo(label.text());
+            assertThat(after.font()).isEqualTo(label.font());
+        }
+        List<PlacedLabel> reapplied = placeShifted(scene, 1.0, area, shiftedStandIn,
+            forced("Axiom of Choice"), RenderingLevel.FULL, panned, 1.0, 0.0);
+        assertSamePlacement(panned, reapplied);
+    }
+
+    @Test
+    public void retainsASlotForAOnePixelMove() {
+        List<SceneNode> scene = denseScene();
+        Rectangle2D area = area(200.0, 130.0);
+        List<PlacedLabel> baseline = place(scene, 1.0, area, standInIn(scene, 1.0, area),
+            forced("Axiom of Choice"), RenderingLevel.FULL, null);
+
+        assertRow(placedIn(baseline, area, 200.0, 130.0), area,
+            "Axiom of Choice", "ABOVE", 12, "Axiom of Choice", -17.0, -56.172057,
+            91.104675, 16.344114);
+        assertRow(placedIn(baseline, area, 200.0, 130.0), area, "Theorem", "BELOW_FAR", 9,
+            "Theorem", -51.0, 16.129043, 38.295258, 12.258085);
+        assertRow(placedIn(baseline, area, 200.0, 130.0), area, "Pairing", "LEFT", 9,
+            "Pairing", -79.976112, 0.0, 29.952225, 12.258085);
+        assertRow(placedIn(baseline, area, 200.0, 130.0), area, "Infinity", "RIGHT", 9,
+            "Infinity", 79.877113, 0.0, 29.754227, 12.258085);
+        assertRow(placedIn(baseline, area, 200.0, 130.0), area, "Separation", "BELOW", 12,
+            "Separation", -51.0, 56.172057, 61.260422, 16.344114);
+        assertRow(placedIn(baseline, area, 200.0, 130.0), area, "Comprehension", "BELOW", 9,
+            "Comprehension", 17.0, 54.129043, 67.716476, 12.258085);
+
+        List<SceneNode> movedScene = moved(scene, "Infinity", 51.0, -1.0);
+        List<PlacedLabel> again = place(movedScene, 1.0, area, standInIn(scene, 1.0, area),
+            forced("Axiom of Choice"), RenderingLevel.FULL, baseline);
+
+        PlacedLabel infinity = find(again, "Infinity");
+        assertThat(slotOfAt(infinity, 51.0 + 100.0, -1.0 + 65.0, 8.0)).isEqualTo("RIGHT");
+        assertThat(infinity.font().getSize()).isEqualTo(9);
+        assertThat(infinity.anchorX() - 100.0).isCloseTo(79.877113, within(ELLIPSIS_TOLERANCE));
+        assertThat(infinity.anchorY() - 65.0).isCloseTo(-1.0, within(ELLIPSIS_TOLERANCE));
+        assertThat(infinity.width()).isCloseTo(29.754227, within(ELLIPSIS_TOLERANCE));
+        assertThat(infinity.height()).isCloseTo(12.258085, within(ELLIPSIS_TOLERANCE));
+        for (PlacedLabel label : baseline) {
+            if ("Infinity".equals(nodeName(label.endpoint()))
+                    || label.mode() == PlacedLabel.Mode.HOVER_ONLY) {
+                continue;
+            }
+            PlacedLabel after = find(again, nodeName(label.endpoint()));
+            assertThat(after.anchorX()).isEqualTo(label.anchorX());
+            assertThat(after.anchorY()).isEqualTo(label.anchorY());
+            assertThat(after.text()).isEqualTo(label.text());
+            assertThat(after.font()).isEqualTo(label.font());
+        }
+        assertThat(labelLabelCollisions(again)).isZero();
+        assertThat(discCollisionsIn(again, movedScene, 1.0, area)).isZero();
+        assertSamePlacement(again, place(movedScene, 1.0, area, standInIn(scene, 1.0, area),
+            forced("Axiom of Choice"), RenderingLevel.FULL, again));
+    }
+
+    @Test
+    public void invalidatesAStaleSlotAndReLadders() {
+        List<SceneNode> scene = new ArrayList<SceneNode>();
+        scene.add(new SceneNode("Alpha", 8.0, true, 0.0, 0.0));
+        scene.add(new SceneNode("Beta", 8.0, false, -40.0, 0.0));
+        Rectangle2D area = area(400.0, 300.0);
+        List<PlacedLabel> baseline = place(scene, 1.0, area, null, forced("Alpha"),
+            RenderingLevel.FULL, null);
+
+        assertRow(baseline, area, "Alpha", "ABOVE", 12, "Alpha", 0.0, -22.172057,
+            32.292221, 16.344114);
+        assertRow(baseline, area, "Beta", "ABOVE", 12, "Beta", -40.0, -22.172057,
+            25.632172, 16.344114);
+
+        List<SceneNode> movedScene = moved(scene, "Beta", 0.0, -35.0);
+        List<PlacedLabel> again = place(movedScene, 1.0, area, null, forced("Alpha"),
+            RenderingLevel.FULL, baseline);
+
+        assertThat(slotOfAt(find(again, "Alpha"), 200.0, 150.0, 8.0)).isEqualTo("BELOW");
+        assertThat(find(again, "Alpha").anchorY() - 150.0).isCloseTo(22.172057, within(ELLIPSIS_TOLERANCE));
+        assertThat(find(again, "Alpha").width()).isCloseTo(32.292221, within(ELLIPSIS_TOLERANCE));
+        assertThat(slotOfAt(find(again, "Beta"), 200.0, 115.0, 8.0)).isEqualTo("ABOVE");
+        assertThat(find(again, "Beta").anchorY() - 150.0).isCloseTo(-57.172057, within(ELLIPSIS_TOLERANCE));
+        assertThat(find(again, "Beta").width()).isCloseTo(25.632172, within(ELLIPSIS_TOLERANCE));
+        assertThat(labelLabelCollisions(again)).isZero();
+        assertThat(discCollisionsIn(again, movedScene, 1.0, area)).isZero();
+        assertSamePlacement(again, place(movedScene, 1.0, area, null, forced("Alpha"),
+            RenderingLevel.FULL, again));
+    }
+
+    @Test
+    public void keepsPaintedInkSeparatedAcrossTheZoomMatrix() {
+        assertInk("dense z=0.25", denseScene(), 0.25, standIn(denseScene(), 0.25), 6,
+            "Axiom of Choice", "BELOW_FAR", -4.25, 31.672057, false, 0.4958, 2.155886);
+        assertInk("dense z=1.00", denseScene(), 1.0, standIn(denseScene(), 1.0), 11,
+            "Axiom of Choice", "ABOVE", -17.0, -56.172057, false, 0.5156, 1.655886);
+        assertInk("dense z=2.00", denseScene(), 2.0, standIn(denseScene(), 2.0), 11,
+            "Axiom of Choice", "ABOVE", -34.0, -98.172057, true, 0.7578, 19.921654);
+        assertInk("long z=1 none", longScene(), 1.0, null, 6,
+            "Well-Ordering Theorem of Choice and Regularity", "ABOVE", -22.0, -22.172057, true,
+            0.4793, 7.655886);
+        assertInk("long z=1 stand-in", longScene(), 1.0, standIn(longScene(), 1.0), 6,
+            "Well-Ordering Theorem of Choice and Regularity", "ABOVE", -22.0, -22.172057, true,
+            0.2151, 5.655886);
+    }
+
+    private static void assertInk(String tag, List<SceneNode> scene, double zoom, Rectangle2D standIn,
+            int expectedPlaced, String forcedName, String forcedSlot, double forcedX, double forcedY,
+            boolean forcedBaseSlot, double expectedOverhang, double expectedMinGap) {
+        Rectangle2D area = area(1128.0, 364.0);
+        List<PlacedLabel> placed = place(scene, zoom, area, standIn, forced(forcedName),
+            RenderingLevel.FULL, null);
+        assertThat(countVisible(placed)).as(tag + " placed").isEqualTo(expectedPlaced);
+        PlacedLabel forcedLabel = find(placed, forcedName);
+        assertThat(slotOf(forcedLabel, scene, zoom)).as(tag + " forced slot").isEqualTo(forcedSlot);
+        assertThat(forcedLabel.anchorX() - area.getWidth() * 0.5).as(tag + " forced x")
+            .isCloseTo(forcedX, within(1e-4));
+        assertThat(forcedLabel.anchorY() - area.getHeight() * 0.5).as(tag + " forced y")
+            .isCloseTo(forcedY, within(1e-4));
+        assertThat(forcedLabel.forcedAtBaseSlot()).as(tag + " forced base").isEqualTo(forcedBaseSlot);
+
+        int width = (int) area.getWidth();
+        int height = (int) area.getHeight();
+        List<boolean[]> masks = new ArrayList<boolean[]>();
+        double maxOverhang = 0.0;
+        for (PlacedLabel label : placed) {
+            if (label.mode() == PlacedLabel.Mode.HOVER_ONLY) {
+                continue;
+            }
+            boolean[] mask = inkMask(label, width, height);
+            masks.add(mask);
+            double[] overhang = overhang(label, mask, width, height);
+            maxOverhang = Math.max(maxOverhang,
+                Math.max(Math.max(overhang[0], overhang[1]), Math.max(overhang[2], overhang[3])));
+        }
+        assertThat(maxOverhang).as(tag + " max overhang").isCloseTo(expectedOverhang, within(1e-4));
+        assertThat(minRectGap(placed)).as(tag + " min gap").isCloseTo(expectedMinGap, within(1e-6));
+
+        for (int first = 0; first < masks.size(); first++) {
+            for (int second = first + 1; second < masks.size(); second++) {
+                assertThat(overlaps(masks.get(first), masks.get(second)))
+                    .as(tag + " ink pair " + first + "/" + second).isFalse();
+            }
+        }
+        List<boolean[]> discs = new ArrayList<boolean[]>();
+        for (SceneNode node : scene) {
+            discs.add(discMask(node.x * zoom + width * 0.5, node.y * zoom + height * 0.5,
+                Math.max(2.0, node.radius * zoom), width, height));
+        }
+        for (boolean[] mask : masks) {
+            for (boolean[] disc : discs) {
+                assertThat(overlaps(mask, disc)).as(tag + " ink/disc").isFalse();
+            }
+        }
+    }
+
+    @Test
+    public void boundsEveryPlacedLabelByItsSlotForms() {
+        assertBounds(denseScene(), 1.0, standIn(denseScene(), 1.0), 11, 77.894615, 138.704698,
+            "Axiom of Choice");
+        assertBounds(denseScene(), 2.0, standIn(denseScene(), 2.0), 11, 73.611911, 118.655013,
+            "Axiom of Choice");
+        assertBounds(longScene(), 1.0, standIn(longScene(), 1.0), 6, 78.656464, 143.545734,
+            "Well-Ordering Theorem of Choice and Regularity");
+        assertBounds(longScene(), 2.0, standIn(longScene(), 2.0), 5, 86.656464, 151.533443,
+            "Well-Ordering Theorem of Choice and Regularity");
+    }
+
+    private static void assertBounds(List<SceneNode> scene, double zoom, Rectangle2D standIn,
+            int expectedVisible, double expectedMaxLeader, double expectedMaxSupport,
+            String forcedName) {
+        Rectangle2D area = area(1128.0, 364.0);
+        List<PlacedLabel> placed = place(scene, zoom, area, standIn, forced(forcedName),
+            RenderingLevel.FULL, null);
+        assertThat(countVisible(placed)).isEqualTo(expectedVisible);
+        for (PlacedLabel label : placed) {
+            if (label.mode() == PlacedLabel.Mode.HOVER_ONLY) {
+                continue;
+            }
+            String slot = slotOf(label, scene, zoom);
+            SceneNode node = sceneNode(scene, nodeName(label.endpoint()));
+            double radius = Math.max(2.0, node.radius * zoom);
+            assertThat(leader(label, scene, zoom)).as("leader " + slot)
+                .isLessThanOrEqualTo(leaderForm(slot, radius, label.width(), label.height()) + 1e-6);
+            assertThat(support(label, scene, zoom)).as("support " + slot)
+                .isLessThanOrEqualTo(supportForm(slot, radius, label.width(), label.height()) + 1e-6);
+        }
+        assertThat(maxLeader(placed, scene, zoom)).isCloseTo(expectedMaxLeader, within(1e-4));
+        assertThat(maxSupport(placed, scene, zoom)).isCloseTo(expectedMaxSupport, within(1e-4));
+    }
+
+    @Test
+    public void promotesAHoverOnlyLabelToForcedWithoutCollisions() {
+        List<SceneNode> scene = denseScene();
+        Rectangle2D area = area(200.0, 130.0);
+        Rectangle2D standIn = standIn(scene, 1.0);
+        List<PlacedLabel> baseline = place(scene, 1.0, area, standIn, forced("Axiom of Choice"),
+            RenderingLevel.FULL, null);
+        assertThat(find(baseline, "Well-Ordering").mode()).isEqualTo(PlacedLabel.Mode.HOVER_ONLY);
+        assertThat(find(baseline, "Comprehension").mode()).isNotEqualTo(PlacedLabel.Mode.HOVER_ONLY);
+
+        Set<ProjectedEndpointKey> promoted = new LinkedHashSet<ProjectedEndpointKey>();
+        promoted.add(ProjectedEndpointKey.ofNode(key("Axiom of Choice")));
+        promoted.add(ProjectedEndpointKey.ofNode(key("Well-Ordering")));
+        List<PlacedLabel> forcedResult = place(scene, 1.0, area, standIn, promoted,
+            RenderingLevel.FULL, baseline);
+
+        assertThat(slotOfAt(find(forcedResult, "Well-Ordering"), 51.0 + 100.0, 34.0 + 65.0, 8.0))
+            .isEqualTo("BELOW");
+        assertThat(find(forcedResult, "Well-Ordering").font().getSize()).isEqualTo(12);
+        assertThat(find(forcedResult, "Well-Ordering").anchorY() - 65.0)
+            .isCloseTo(56.172057, within(ELLIPSIS_TOLERANCE));
+        assertThat(find(forcedResult, "Comprehension").mode()).isEqualTo(PlacedLabel.Mode.HOVER_ONLY);
+        for (String name : Arrays.asList("Axiom of Choice", "Theorem", "Pairing", "Infinity",
+                "Separation")) {
+            assertThat(find(forcedResult, name).mode()).as(name).isNotEqualTo(PlacedLabel.Mode.HOVER_ONLY);
+        }
+        assertThat(labelLabelCollisions(forcedResult)).isZero();
+        assertThat(discCollisionsIn(forcedResult, scene, 1.0, area)).isZero();
+        assertSamePlacement(forcedResult, place(scene, 1.0, area, standIn, promoted,
+            RenderingLevel.FULL, forcedResult));
+    }
+
+    @Test
+    public void reusesTheCachedPlacementUntilTheKeyChanges() {
+        List<SceneNode> scene = denseScene();
+        Rectangle2D area = area(1128.0, 364.0);
+        LabelFonts fonts = LabelFonts.from(GraphTheme.resolve(CanvasTheme.LIGHT));
+        ScreenLabelPlacementCache cache = new ScreenLabelPlacementCache();
+        LabelPlacementRequest request = request(scene, 1.0, area, forced("Axiom of Choice"),
+            RenderingLevel.FULL);
+
+        List<PlacedLabel> first = cache.place(request, fonts);
+        List<PlacedLabel> second = cache.place(request, fonts);
+        assertThat(second).isSameAs(first);
+
+        LabelPlacementRequest rebuilt = request(scene, 1.0, area, forced("Axiom of Choice"),
+            RenderingLevel.FULL);
+        List<PlacedLabel> third = cache.place(rebuilt, fonts);
+        assertThat(third).isNotSameAs(first);
+        assertSamePlacement(first, third);
+
+        LabelPlacementRequest forcedChanged = request(scene, 1.0, area, forced("Axiom of Choice",
+            "Well-Ordering"), RenderingLevel.FULL);
+        List<PlacedLabel> fourth = cache.place(forcedChanged, fonts);
+        assertThat(fourth).isNotSameAs(first);
+        assertThat(find(fourth, "Well-Ordering").forced()).isTrue();
+        assertThat(labelLabelCollisions(fourth)).isZero();
+    }
+
     private static void assertZoomCell(List<SceneNode> scene, Rectangle2D area, double zoom,
             int placedCount, int fullCount, int denseCount, String forcedSlot, double forcedX,
             double forcedY, List<String> hidden) {
@@ -287,6 +555,11 @@ public class ScreenLabelPlacementShould {
 
     static LabelPlacementRequest request(List<SceneNode> scene, double zoom, Rectangle2D area,
             Set<ProjectedEndpointKey> forced, RenderingLevel level) {
+        return request(scene, zoom, area, forced, level, 0.0, 0.0);
+    }
+
+    static LabelPlacementRequest request(List<SceneNode> scene, double zoom, Rectangle2D area,
+            Set<ProjectedEndpointKey> forced, RenderingLevel level, double centerX, double centerY) {
         List<ProjectedNode> nodes = new ArrayList<ProjectedNode>();
         Map<ProjectedNodeKey, NodeGeometry> geometry = new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
         Map<ProjectedNodeKey, LayoutPoint> positions = new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
@@ -302,8 +575,18 @@ public class ScreenLabelPlacementShould {
             Collections.<EnclosureHullKey, HullGeometry>emptyMap());
         LayoutPositions layoutPositions = LayoutPositions.of(positions,
             Collections.<EnclosureHullKey, LayoutPoint>emptyMap());
-        return LabelPlacementRequest.of(projection, graphGeometry, layoutPositions, zoom, 0.0, 0.0,
+        return LabelPlacementRequest.of(projection, graphGeometry, layoutPositions, zoom, centerX, centerY,
             area, forced, level);
+    }
+
+    static List<PlacedLabel> placeShifted(List<SceneNode> scene, double zoom, Rectangle2D area,
+            Rectangle2D standIn, Set<ProjectedEndpointKey> forced, RenderingLevel level,
+            List<PlacedLabel> previous, double centerX, double centerY) {
+        List<Rectangle2D> obstacles = standIn == null
+            ? Collections.<Rectangle2D>emptyList() : Collections.singletonList(standIn);
+        return new ScreenLabelPlacement().place(
+            request(scene, zoom, area, forced, level, centerX, centerY), previous,
+            LabelFonts.from(GraphTheme.resolve(CanvasTheme.LIGHT)), obstacles);
     }
 
     static Rectangle2D area(double width, double height) {
@@ -383,7 +666,7 @@ public class ScreenLabelPlacementShould {
         return null;
     }
 
-    private static SceneNode sceneNode(List<SceneNode> scene, String name) {
+    static SceneNode sceneNode(List<SceneNode> scene, String name) {
         for (SceneNode node : scene) {
             if (node.name.equals(name)) {
                 return node;
@@ -498,6 +781,227 @@ public class ScreenLabelPlacementShould {
                 continue;
             }
             max = Math.max(max, leader(label, scene, zoom, area));
+        }
+        return max;
+    }
+
+    static List<SceneNode> moved(List<SceneNode> scene, String name, double x, double y) {
+        List<SceneNode> moved = new ArrayList<SceneNode>();
+        for (SceneNode node : scene) {
+            moved.add(name.equals(node.name) ? new SceneNode(node.name, node.radius, node.selected, x, y) : node);
+        }
+        return moved;
+    }
+
+    static Rectangle2D standInIn(List<SceneNode> scene, double zoom, Rectangle2D area) {
+        Rectangle2D worldCentred = standIn(scene, zoom);
+        return new Rectangle2D.Double(worldCentred.getX() - 564.0 + area.getWidth() * 0.5,
+            worldCentred.getY() - 182.0 + area.getHeight() * 0.5,
+            worldCentred.getWidth(), worldCentred.getHeight());
+    }
+
+    static int discCollisionsIn(List<PlacedLabel> placed, List<SceneNode> scene, double zoom,
+            Rectangle2D area) {
+        int collisions = 0;
+        for (PlacedLabel label : placed) {
+            if (label.mode() == PlacedLabel.Mode.HOVER_ONLY) {
+                continue;
+            }
+            for (SceneNode node : scene) {
+                double radius = Math.max(2.0, node.radius * zoom);
+                Rectangle2D disc = new Rectangle2D.Double(node.x * zoom - radius + area.getWidth() * 0.5,
+                    node.y * zoom - radius + area.getHeight() * 0.5, 2.0 * radius, 2.0 * radius);
+                if (disc.intersects(label.bounds())) {
+                    collisions++;
+                    break;
+                }
+            }
+        }
+        return collisions;
+    }
+
+    static String slotOfAt(PlacedLabel label, double centerX, double centerY, double radius) {
+        for (ScreenLabelPlacement.Slot slot : ScreenLabelPlacement.Slot.values()) {
+            double[] anchor = ScreenLabelPlacement.slotAnchor(slot, centerX, centerY, radius,
+                label.width(), label.height());
+            if (Math.abs(anchor[0] - label.anchorX()) <= 1e-6
+                    && Math.abs(anchor[1] - label.anchorY()) <= 1e-6) {
+                return slot.name();
+            }
+        }
+        return null;
+    }
+
+    static void assertSamePlacement(List<PlacedLabel> expected, List<PlacedLabel> actual) {
+        assertThat(actual).hasSameSizeAs(expected);
+        for (PlacedLabel label : expected) {
+            PlacedLabel other = find(actual, nodeName(label.endpoint()));
+            assertThat(other).isNotNull();
+            assertThat(other.rung()).isEqualTo(label.rung());
+            assertThat(other.text()).isEqualTo(label.text());
+            assertThat(other.font()).isEqualTo(label.font());
+            assertThat(other.anchorX()).isEqualTo(label.anchorX());
+            assertThat(other.anchorY()).isEqualTo(label.anchorY());
+            assertThat(other.width()).isEqualTo(label.width());
+            assertThat(other.height()).isEqualTo(label.height());
+        }
+    }
+
+    static List<PlacedLabel> placedIn(List<PlacedLabel> placed, Rectangle2D area, double width,
+            double height) {
+        return placed;
+    }
+
+    static boolean[] inkMask(PlacedLabel label, int width, int height) {
+        java.awt.image.BufferedImage image = new java.awt.image.BufferedImage(width, height,
+            java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        java.awt.Graphics2D graphics = image.createGraphics();
+        try {
+            graphics.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
+                java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+            graphics.setRenderingHint(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING,
+                java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+            graphics.setFont(label.font());
+            graphics.setColor(java.awt.Color.BLACK);
+            Rectangle2D bounds = label.font().getStringBounds(label.text(), ScreenLabelPlacement.SCREEN_FRC);
+            java.awt.FontMetrics metrics = graphics.getFontMetrics(label.font());
+            double baseline = label.anchorY() + (metrics.getAscent() - metrics.getDescent()) / 2.0;
+            graphics.drawString(label.text(), (float) (label.anchorX() - bounds.getWidth() / 2.0),
+                (float) baseline);
+        }
+        finally {
+            graphics.dispose();
+        }
+        boolean[] mask = new boolean[width * height];
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                if ((image.getRGB(x, y) >>> 24) != 0) {
+                    mask[y * width + x] = true;
+                }
+            }
+        }
+        return mask;
+    }
+
+    static boolean[] discMask(double centerX, double centerY, double radius, int width, int height) {
+        java.awt.image.BufferedImage image = new java.awt.image.BufferedImage(width, height,
+            java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        java.awt.Graphics2D graphics = image.createGraphics();
+        try {
+            graphics.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
+                java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+            graphics.fill(new java.awt.geom.Ellipse2D.Double(centerX - radius, centerY - radius,
+                2.0 * radius, 2.0 * radius));
+        }
+        finally {
+            graphics.dispose();
+        }
+        boolean[] mask = new boolean[width * height];
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                if ((image.getRGB(x, y) >>> 24) != 0) {
+                    mask[y * width + x] = true;
+                }
+            }
+        }
+        return mask;
+    }
+
+    static boolean overlaps(boolean[] first, boolean[] second) {
+        for (int index = 0; index < first.length; index++) {
+            if (first[index] && second[index]) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    static double[] overhang(PlacedLabel label, boolean[] mask, int width, int height) {
+        int minX = Integer.MAX_VALUE;
+        int maxX = -1;
+        int minY = Integer.MAX_VALUE;
+        int maxY = -1;
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                if (mask[y * width + x]) {
+                    minX = Math.min(minX, x);
+                    maxX = Math.max(maxX, x);
+                    minY = Math.min(minY, y);
+                    maxY = Math.max(maxY, y);
+                }
+            }
+        }
+        Rectangle2D bounds = label.bounds();
+        return new double[] { bounds.getMinX() - minX, maxX + 1 - bounds.getMaxX(),
+            bounds.getMinY() - minY, maxY + 1 - bounds.getMaxY() };
+    }
+
+    static double minRectGap(List<PlacedLabel> placed) {
+        double best = Double.MAX_VALUE;
+        for (int first = 0; first < placed.size(); first++) {
+            if (placed.get(first).mode() == PlacedLabel.Mode.HOVER_ONLY) {
+                continue;
+            }
+            for (int second = first + 1; second < placed.size(); second++) {
+                if (placed.get(second).mode() == PlacedLabel.Mode.HOVER_ONLY) {
+                    continue;
+                }
+                Rectangle2D a = placed.get(first).bounds();
+                Rectangle2D b = placed.get(second).bounds();
+                double dx = Math.max(0.0, Math.max(a.getMinX() - b.getMaxX(), b.getMinX() - a.getMaxX()));
+                double dy = Math.max(0.0, Math.max(a.getMinY() - b.getMaxY(), b.getMinY() - a.getMaxY()));
+                best = Math.min(best, Math.hypot(dx, dy));
+            }
+        }
+        return best;
+    }
+
+    static double leaderForm(String slot, double radius, double width, double height) {
+        if ("ABOVE".equals(slot) || "BELOW".equals(slot)) {
+            return radius + 6.0 + height / 2.0;
+        }
+        if ("ABOVE_FAR".equals(slot) || "BELOW_FAR".equals(slot)) {
+            return radius + 30.0 + height / 2.0;
+        }
+        if ("RIGHT".equals(slot) || "LEFT".equals(slot)) {
+            return radius + 6.0 + width / 2.0;
+        }
+        if ("RIGHT_FAR".equals(slot) || "LEFT_FAR".equals(slot)) {
+            return radius + 30.0 + width / 2.0;
+        }
+        return Math.hypot(radius + 6.0 + width / 2.0, radius + 6.0 + height / 2.0);
+    }
+
+    static double supportForm(String slot, double radius, double width, double height) {
+        if ("ABOVE".equals(slot) || "BELOW".equals(slot)) {
+            return Math.hypot(width / 2.0, radius + 6.0 + height);
+        }
+        if ("ABOVE_FAR".equals(slot) || "BELOW_FAR".equals(slot)) {
+            return Math.hypot(width / 2.0, radius + 30.0 + height);
+        }
+        if ("RIGHT".equals(slot) || "LEFT".equals(slot)) {
+            return Math.hypot(radius + 6.0 + width, height / 2.0);
+        }
+        if ("RIGHT_FAR".equals(slot) || "LEFT_FAR".equals(slot)) {
+            return Math.hypot(radius + 30.0 + width, height / 2.0);
+        }
+        return Math.hypot(radius + 6.0 + width, radius + 6.0 + height);
+    }
+
+    static double support(PlacedLabel label, List<SceneNode> scene, double zoom) {
+        SceneNode node = sceneNode(scene, nodeName(label.endpoint()));
+        double centerX = node.x * zoom + 564.0;
+        double centerY = node.y * zoom + 182.0;
+        return Math.hypot(Math.abs(label.anchorX() - centerX) + label.width() / 2.0,
+            Math.abs(label.anchorY() - centerY) + label.height() / 2.0);
+    }
+
+    static double maxSupport(List<PlacedLabel> placed, List<SceneNode> scene, double zoom) {
+        double max = 0.0;
+        for (PlacedLabel label : placed) {
+            if (label.mode() != PlacedLabel.Mode.HOVER_ONLY) {
+                max = Math.max(max, support(label, scene, zoom));
+            }
         }
         return max;
     }
