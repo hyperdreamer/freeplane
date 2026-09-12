@@ -1,8 +1,11 @@
 # Graph Workspace label / leader-line clearance — Design
 
-- Date: 2026-09-12 (revision 2)
-- Review status: **revision 2, awaiting review attempt 2.** Attempt 1 reported
-  `1 blocker, 4 majors, 5 minors`; §13 maps every finding to its resolution.
+- Date: 2026-09-12 (revision 3)
+- Review status: **approved for specification drafting.** Attempt 1 reported `1 blocker, 4 majors,
+  5 minors`; attempt 2 reported **0 blockers**, 2 majors, 5 minors and confirmed the blocker and both
+  behavioural majors resolved. Revision 3 applies the two attempt-2 majors and all five minors. None of
+  them changes the contract of §5 — they correct two text defects, an API signature and an ordering claim —
+  so no third attempt is scheduled; §13 records both rounds.
 - Topic: `graph-label-leader-clearance`
 - PM run: `pm-run-20260912-212024-c7dfa6db`
 - Delivery target: `refs/heads/plugin/graph-workspace` at `/data/home/guest/Development/freeplane`
@@ -50,6 +53,29 @@
 9. L3's alternative is now considered and rejected with a reason. (was MINOR `l3-alternative`)
 10. The painted test uses a production-faithful glyph mask; the legacy harness mask is left untouched and
     its 0.156 px baseline approximation is recorded. (was MINOR `inkmask-fidelity`)
+
+## Revision 3 changelog
+
+1. **The enclosure-external pin is now specified, not implied.** `placesEmphaticEnclosureLabelsExternally-
+   WithALeader` (`ScreenLabelPlacementShould.java:789-800`) pins `leaderStart()` present at `:797` for the
+   lane-0 label whose near face is only `EXTERNAL_GAP` px from the hull; under L6 that leader is dropped, so
+   §9.4 now names the test, flips `:797` to `leader().isEmpty()`, keeps its placement pins and moves its
+   start-coordinate pin to a lane-1 fixture. §9.1 gains the matching presence/absence assertions.
+   (was MAJOR `external-pin-conflict`)
+2. **The stroke seam is typed `BasicStroke`**, so `GraphPainter.leaderStroke(...).getLineWidth()` in §9.3
+   compiles. (was MAJOR `leaderstroke-signature`)
+3. §4.4's clearance-2.0 row is qualified by the stroke mode it needs, the two sweep citations match what
+   was actually run (60 directions × 2 phases), and §4.2 attributes the shared-pixel result to the gap-1
+   sweep. (was MINOR `option-b-evidence-residual`)
+4. The enclosure-external consequence is stated as conditional (it depends on the label's own metrics and
+   the edge normal's direction), and §5.1.6/R3 now state the ordering that actually protects node leaders,
+   `LEADER_CLEARANCE + MIN_VISIBLE_LEADER ≤ SLOT_GAP`. (was MINOR `external-consequence-overclaim`)
+5. The mockup's enclosure fixture uses the production lane geometry (top edge, vertical normal,
+   `h/2 + EXTERNAL_GAP`), so §10's justification reproduces. (was MINOR `mockup-external-arithmetic`)
+6. §9.0's scaffold step now includes both constants and the §9.3 test, so the red run compiles.
+   (was MINOR `red-scaffold-constants`)
+7. The no-7-pt citation is `GraphCanvasPaintShould.java:283-286` and the dangling footnote marker in §5.6
+   is gone. (was MINOR `citation-canvaspaint`)
 
 ## 0. Normative conventions
 
@@ -152,7 +178,8 @@ Measured (§6): leader ink reaches **1.5 px beyond its geometric end** (0.7 px h
 `CAP_ROUND` cap plus antialiasing), and glyph ink reaches to **within 0.03 px of the box's leader-facing
 left edge**, overhanging the right edge by as much as **0.26 px**. A zero clearance therefore puts painted
 leader ink inside the box: the probe reports 4 ink pixel centres inside the box at zoom 1 and 22 at zoom 4
-for today's stroke, and review attempt 1's independent gap-0 sweep found actual shared glyph/leader pixels.
+for today's stroke, and review attempt 1's independent gap-1 sweep found actual shared glyph/leader pixels
+(`Theorem`, 4 pixels).
 Since the leader shares the glyph colour, a flush leader also reads as welded to the first glyph. B fails G1.
 
 ### 4.3 Why not option C (drop the leader for adjacent slots)
@@ -170,14 +197,17 @@ Measured facts (§6):
 |---|---|
 | leader ink beyond the geometric end, screen-constant stroke | `1.5` px |
 | worst glyph ink overhang on a leader-facing side | `0.26` px |
-| clearance 2.0 px: ink pixel centres inside `R`, all zooms, both stroke modes | `0` |
+| clearance 2.0 px: ink pixel centres inside `R`, with the §5.3 screen-constant stroke | `0` at every zoom |
+| clearance 2.0 px: the same, with today's `1.4 · zoom` stroke | `0` up to zoom 2, `8` at zoom 4 |
 | clearance 2.0 px: minimum distance from a leader ink pixel centre to `R` | `0.5` px |
 | clearance 1.0 px: ink pixel centres inside `R` | `1`–`15` (zoom-dependent) |
 | clearance 0.0 px: ink pixel centres inside `R` | `4` (zoom 1) – `22` (zoom 4) |
 
 **2.0 px is the smallest value the measurements clear, and it does clear them**: review attempt 1 repeated
-the probe byte-identically and ran additional independent pixel sweeps (13 fixture texts × 360 approach
-directions, and a 32×8 sub-pixel phase sweep at 2.0/2.5/3.0 px) with `worstOverlap = 0` in every cell.
+the probe byte-identically and ran additional independent pixel sweeps (13 fixture texts × 60 approach
+directions × 2 phases, and a 32×8 sub-pixel phase sweep at 2.0/2.5/3.0 px) with `worstOverlap = 0` in every
+cell. Those sweeps also cover the margins: 2.5 px and 3.0 px pass identically, so 2.0 px is not the only
+passing value.
 
 **3.0 px is pinned as margin.** The separation at 2.0 px is 0.5 px of pixel-centre distance, i.e. half a
 device pixel: it holds for the measured texts, this host and this JDK, but it is not robust to font
@@ -208,9 +238,13 @@ label rectangle:
    nearest boundary point for enclosure-external labels.
 5. If the ray's entry point into `inflate(R, LEADER_CLEARANCE)` does not lie strictly between `S` and `C`,
    the label carries **no** leader (§5.6 also applies).
-6. The values of `LEADER_CLEARANCE` (3.0) and `MIN_VISIBLE_LEADER` (2.0) must stay below `SLOT_GAP` (6.0)
-   and `EXTERNAL_GAP` (4.0) respectively, otherwise the corresponding slots lose their leaders by L1.5;
-   the existing rim assertions (`ScreenLabelPlacementShould.java:293`, `:329`) fail loudly if that happens.
+6. The constants must satisfy `LEADER_CLEARANCE + MIN_VISIBLE_LEADER ≤ SLOT_GAP` (3 + 2 ≤ 6) so that
+   every node near-slot leader survives both L1 and L6; the existing rim assertions
+   (`ScreenLabelPlacementShould.java:293`, `:329`) fail loudly if that ordering is broken. For the
+   enclosure-external source there is no such guarantee: the label is offset `h/2 + EXTERNAL_GAP` along the
+   edge normal (`ScreenLabelPlacement.java:290-291`) while the box's half-extent along that normal is `w/2`
+   for a horizontal normal and `h/2` otherwise (`:283-284`), so lane 0 may lose its leader through L1.5 or
+   L6 depending on the label's own metrics and the normal's direction (§5.6).
 
 ### 5.2 L2 — painted ink separation
 
@@ -258,16 +292,22 @@ segment do not increase; the existing zero-crossing fixtures must stay zero.
 ### 5.6 L6 — minimum visible leader (`MIN_VISIBLE_LEADER = 2.0` px)
 
 A leader is drawn **iff its trimmed length is at least `MIN_VISIBLE_LEADER`** (2.0 px, screen space);
-otherwise the label carries no leader. This is a screen constant* of the same kind as the clearance.
+otherwise the label carries no leader. This is a screen constant of the same kind as the clearance.
 
-Rationale and consequence: a 1.4 px round-capped stroke shorter than 2 px renders as a detached blob rather
-than as a leader. The binding case is the enclosure-external label, whose first candidate lane places its
-box `EXTERNAL_GAP = 4` px from the hull, leaving `4 − 3 = 1` px after trimming: **first-lane
-enclosure-external labels therefore carry no leader**, while lane ≥ 1 (≥ `h + 4` px of room) keeps a
-properly trimmed one. Node labels are unaffected: the shortest trimmed node leader is the axis-aligned near
-slot at `SLOT_GAP − LEADER_CLEARANCE = 3.0` px, and a diagonal near slot enters the inflated box at least
-`(SLOT_GAP − LEADER_CLEARANCE)·√2 ≈ 4.24` px from the rim. §11 R1 records this as a deliberate, visible
-consequence, and the mockup generator implements the same rule.
+Rationale: a 1.4 px round-capped stroke shorter than 2 px renders as a detached blob rather than as a
+leader. Node labels are unaffected: the shortest trimmed node leader is the axis-aligned near slot at
+`SLOT_GAP − LEADER_CLEARANCE = 3.0` px, and a diagonal near slot enters the inflated box at least
+`3·√2 ≈ 4.24` px from the rim, so `3.0 ≥ MIN_VISIBLE_LEADER` holds for every node slot (§5.1.6).
+
+For enclosure-external labels the outcome is **conditional on the label's own metrics and the edge
+normal**, because their room is `h/2 + EXTERNAL_GAP − halfExtentAlongTheNormal` (§5.1.6). Measured by review
+attempt 2 on the real metrics: a vertical edge normal gives `h/2 + 4 − h/2 = 4` px of room, which leaves
+1 px after the clearance → **leaderless**; a horizontal edge normal gives `h/2 + 4 − w/2`, which for the
+narrow name `I` (4.07 × 16.34 px at 12 pt) is 9.25 px → trimmed to 6.25 px and **kept**, while for `ZFC`
+(≈30 px wide) it is 1.83 px → **leaderless via L1.5** (the start is already inside the inflated box). So
+„first-lane enclosure-external labels carry no leader“ is not a general law: wide labels on vertical normals
+and any label whose box reaches within 3 px of the hull lose their leader, narrow ones may keep a short one.
+The mockup shows the first case. §11 R1 records this as a deliberate, visible consequence.
 
 ## 6. Measured evidence
 
@@ -364,11 +404,12 @@ graphics.draw(new Line2D.Double(
     worldX(line.end().x(),   viewport, size), worldY(line.end().y(),   viewport, size)));
 ```
 
-- New package-private seam `static Stroke leaderStroke(GraphTheme theme, double zoom)` returning
+- New package-private seam `static BasicStroke leaderStroke(GraphTheme theme, double zoom)` returning
   `new BasicStroke((float) (theme.edgeStroke().getLineWidth() / zoom),
-  BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)`. The seam exists so the painted-ink test paints with the
-  **production** stroke instead of a mirror of it (§9.2), and so §5.3 is unit-testable. `zoom > 0` is
-  enforced by `GraphViewport`, so the division is safe.
+  BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)`. The concrete return type is deliberate: §9.3 asserts
+  `getLineWidth()`, which `java.awt.Stroke` does not declare. The seam exists so the painted-ink test paints
+  with the **production** stroke instead of a mirror of it (§9.2), and so §5.3 is unit-testable.
+  `zoom > 0` is enforced by `GraphViewport`, so the division is safe.
 - The label font keeps its existing `deriveFont(size / zoom)`; only the leader stroke gains the compensation.
 - Nothing downstream can inherit the stroke: `paintHighlights` and `paintConnectionPreview` run after
   `paintLabels` and set their own.
@@ -400,12 +441,15 @@ graphics.draw(new Line2D.Double(
 Tests written against `leader()`/`leaderStroke(...)` cannot compile against the unmodified tree, and a
 compile error is not a behavioural red phase. The implementation therefore proceeds in three commits:
 
-1. **Scaffold (behaviour-preserving).** Add `LeaderLine`, `PlacedLabel.leader()` with `end = C` (today's
-   geometry), and `GraphPainter.leaderStroke(theme, zoom)` returning the **uncompensated**
-   `theme.edgeStroke()`. The full existing suite must stay green — this is the green baseline.
-2. **Red.** Add §9.1 and §9.2 against the scaffold. Both fail on the scaffold for their stated reasons
-   (L1.2 fails because `distance(end, R) = 0`; the compensation test fails because the stroke is not
-   screen-constant; the painted test fails at every zoom because the leader reaches the centre).
+1. **Scaffold (behaviour-preserving).** Add `LeaderLine`; `PlacedLabel.leader()`; the two
+   `ScreenLabelPlacement` seams `leader(...)`/`nodeLeader(...)` **returning today's geometry**
+   (`end = C`); the two constants `LEADER_CLEARANCE = 3.0` and `MIN_VISIBLE_LEADER = 2.0` (declared at their
+   final values, unused by the scaffold); and `GraphPainter.leaderStroke(theme, zoom)` returning the
+   **uncompensated** `theme.edgeStroke()`. Everything the red tests read therefore compiles. The full
+   existing suite must stay green — this is the green baseline.
+2. **Red.** Add §9.1, §9.2 and §9.3 against the scaffold. They fail on the scaffold for their stated
+   reasons: L1.2 fails because `distance(end, R) = 0`; the painted test fails at every zoom because the
+   leader reaches the centre; the §9.3 compensation test fails because the stroke is not screen-constant.
 3. **Green.** Implement the trim, the minimum visible length and the compensation; all tests pass.
 
 The mutation check for the *painted* clause is separate and stays available afterwards: reverting only the
@@ -414,13 +458,14 @@ clearance), and reverting only the trim must fail §9.1 and §9.2 at every zoom.
 
 ### 9.1 Geometry test (`ScreenLabelPlacementShould`)
 
-`keepsEveryLeaderClearOfItsOwnLabelBox`: over the existing dense and long fixtures plus one
-enclosure-external fixture, at zoom 0.25 / 1 / 2 / 4, for every visible non-hover label with a leader
-assert (a) `end` lies on `[S, C]` strictly between them, (b) `distance(end, R) ≥ LEADER_CLEARANCE − 1e-9`,
-(c) `[S, end] ∩ inflate(R, LEADER_CLEARANCE − 1e-6)` is empty, (d) `[S, end] ∩ R` is empty, (e)
-`|end − S| ≥ MIN_VISIBLE_LEADER` whenever a leader is present. The enclosure fixture is new: the existing
-`denseScene()`/`longScene()` contain nodes only (`ScreenLabelPlacementShould.java:932-948`) and the rim
-helpers skip enclosures (`:284`, `:316`).
+`keepsEveryLeaderClearOfItsOwnLabelBox`: over the existing dense and long fixtures plus the enclosure
+fixtures named in §9.4, at zoom 0.25 / 1 / 2 / 4, for every visible non-hover label with a leader assert
+(a) `end` lies on `[S, C]` strictly between them, (b) `distance(end, R) ≥ LEADER_CLEARANCE − 1e-9`,
+(c) `[S, end] ∩ inflate(R, LEADER_CLEARANCE − 1e-6)` is empty, (d) `[S, end] ∩ R` is empty, and
+(e) `|end − S| ≥ MIN_VISIBLE_LEADER` whenever a leader is present. Additionally assert the absence side:
+the lane-0 enclosure-external fixture carries **no** leader, and a lane-1 fixture carries one satisfying
+(a)–(e). The enclosure fixtures are new: the existing `denseScene()`/`longScene()` contain nodes only
+(`ScreenLabelPlacementShould.java:932-948`) and the rim helpers skip enclosures (`:284`, `:316`).
 
 ### 9.2 Painted-ink test (`ScreenLabelPlacementShould`)
 
@@ -465,6 +510,12 @@ helpers skip enclosures (`:284`, `:316`).
   `assertBounds` (`:675-694`) and the pinned expectations at `:91-92`, `:207`, `:253-254`, `:276`,
   `:694-695`. Since anchors and placement do not change, those pins stay valid — to be confirmed by
   running them, not by reasoning.
+- `placesEmphaticEnclosureLabelsExternallyWithALeader` (`:789-800`) pins the lane-0 enclosure label's
+  placement (`:794-796`) and `leaderStart()` **present** at `:797` with its start coordinates at
+  `:798-799`. Under L6 this label's trimmed leader is 1 px, so the design flips `:797` to
+  `leader().isEmpty()` and moves the start-coordinate assertion to a lane-1 fixture (where the leader still
+  exists and must satisfy §9.1). The placement pins stay; they are the evidence that this change alters
+  the leader only, not the label position.
 - No reference to `leaderStart` exists outside `org.freeplane.plugin.graph.canvas`;
   `GraphWorkspaceModelAcceptanceShould` uses `PlacedLabel` only through `text()`/`mode()`/
   `emphaticAtAnchor()` (`:299-302`) and needs no change.
@@ -483,31 +534,38 @@ helpers skip enclosures (`:284`, `:316`).
   segment marks the part of the stroke that crosses it. Both 2x junctions show the stroke inside
   `Axiom of Choice` and `Replacement Scheme`.
 - **Panel 2 — Option A (chosen)**: the leader ends on the box inflated by 3 px; both junctions are clear,
-  and the first-lane enclosure-external `ZFC` leader is omitted because it would be 1 px long (§5.6).
+  and the enclosure-external `ZFC` label above the hull's top edge is leaderless: its box is
+  `h/2 + EXTERNAL_GAP` from the edge midpoint, i.e. 4 px of room, which L6 drops.
 - **Panel 3 — Option B (rejected, kept for the record)**: the leader ends on the bare box.
 - **Panel 4 — Option C (rejected, kept for the record)**: adjacent slots carry no leader; the displaced
   leader is trimmed like A.
 
-The generator uses the production `slotAnchor` arithmetic and the production 12 pt measurement, and holds
-`OPTION_A_GAP = 3.0` and `MIN_VISIBLE_LEADER = 2.0` in single constants, so the mockup and §5 cannot drift
-apart. The fixture also shows an `ABOVE` label with no leader.
+The generator uses the production `slotAnchor` arithmetic and the production 12 pt measurement for node
+labels, and the production enclosure lane geometry for the external label (anchor at `h/2 + EXTERNAL_GAP`
+along the outward normal of the hull's top edge, leader start at that edge's midpoint,
+`ScreenLabelPlacement.java:290-291`, `:298-305`), and it holds `OPTION_A_GAP = 3.0`, `EXTERNAL_GAP = 4.0`
+and `MIN_VISIBLE_LEADER = 2.0` in single constants, so the mockup and §5 cannot drift apart. The fixture
+also shows an `ABOVE` label with no leader.
 
 ## 11. Risks
 
 - **R1 — short leaders and the enclosure-external case.** An axis-aligned near-slot leader becomes
-  `SLOT_GAP − LEADER_CLEARANCE = 3.0` px (diagonals ≥ 4.24 px), and **first-lane enclosure-external labels
-  lose their leader entirely** (`EXTERNAL_GAP 4 − 3 = 1` px, below `MIN_VISIBLE_LEADER`, §5.6). Recorded,
-  not mitigated: option C (the alternative that removes short leaders by design) was considered and
-  rejected, and *moving* the external label out by `LEADER_CLEARANCE` was rejected because it changes label
-  placement, can push a candidate lane outside the placement area or into another obstacle, and would
-  invalidate the previous run's pinned enclosure fixtures. The mockup shows the omission.
+  `SLOT_GAP − LEADER_CLEARANCE = 3.0` px (diagonals ≥ 4.24 px), and **some enclosure-external labels lose
+  their leader**: their room is `h/2 + EXTERNAL_GAP − halfExtentAlongTheNormal`, so a vertical edge normal
+  leaves 4 px (1 px after the clearance → dropped by L6) and a horizontal normal leaves `h/2 + 4 − w/2`,
+  which for `ZFC` is 1.83 px (dropped by L1.5) but for a narrow name can be 9 px (kept). Recorded, not
+  mitigated: option C (the alternative that removes short leaders by design) was considered and rejected,
+  and *moving* the external label out by `LEADER_CLEARANCE` was rejected because it changes label placement,
+  can push a candidate lane outside the placement area or into another obstacle, and would invalidate the
+  previous run's pinned enclosure fixtures. The mockup shows a dropped case.
 - **R2 — leader weight changes at zoom ≠ 1.** Today the leader is `1.4·zoom` screen px; after §5.3 it is a
   constant `1.4` screen px (thinner when zoomed in, thicker when zoomed out). Required by L2, consistent
   with the constant-screen label text, and the only zoom-visible change in this design. §5.3 records the
   rejected alternative and why it is worse.
-- **R3 — two length constants that must stay ordered.** `LEADER_CLEARANCE` (3.0) must stay below
-  `SLOT_GAP` (6.0) and below the external room (`EXTERNAL_GAP`, 4.0); §5.1.6 states the relation and the
-  existing rim assertions fail loudly if it is broken. No new coupling beyond that ordering.
+- **R3 — the constant ordering.** `LEADER_CLEARANCE + MIN_VISIBLE_LEADER ≤ SLOT_GAP` (3 + 2 ≤ 6) is what
+  keeps every node near-slot leader; §5.1.6 states it and the existing rim assertions fail loudly if it is
+  broken. The enclosure-external source has no equivalent guarantee and is documented as conditional in the
+  same place.
 - **R4 — HiDPI.** Tests rasterize at 1:1 device scale. On a scaled device both the leader and the glyphs
   scale together, so the relative geometry of L2 is preserved; no scaled-back test is planned.
 - **R5 — painted-ink assertions are rasterization-dependent.** The 1.5 px and 0.26 px numbers are host and
@@ -528,7 +586,9 @@ change the contract of §5.
 
 ## 13. Review findings → resolution
 
-Attempt 1: 1 blocker, 4 majors, 5 minors.
+Attempt 1: 1 blocker, 4 majors, 5 minors. Attempt 2: 0 blockers, 2 majors, 5 minors.
+
+### Attempt 1
 
 | id | severity | resolution |
 |---|---|---|
@@ -542,3 +602,15 @@ Attempt 1: 1 blocker, 4 majors, 5 minors.
 | `citations-tests` | MINOR | §9.4 replaced with the reviewer's grep output, including `:275`, `:1199`, `:1202`; `assertRetainedNodeLeadersAtTheRim` `:312-342`; `leaderCrossings` `:1196-1214`; `meanLeader`/`maxLeader` named as users of `leader(...)`. |
 | `l3-alternative` | MINOR | §5.3 compares the zoom-dependent-clearance alternative and rejects it (at `zoom ≥ 6` the required clearance exceeds `SLOT_GAP`, so the leader set would become zoom-dependent). |
 | `inkmask-fidelity` | MINOR | §9.2 introduces a production-faithful `glyphMask`, leaves the legacy `inkMask` untouched, and records its 0.156 px baseline approximation and why it is not migrated. |
+
+### Attempt 2
+
+| id | severity | resolution |
+|---|---|---|
+| `external-pin-conflict` | MAJOR | §9.4 names `placesEmphaticEnclosureLabelsExternallyWithALeader` (`:789-800`), flips its `:797` presence pin to `leader().isEmpty()`, keeps its placement pins and moves its start-coordinate pin to a lane-1 fixture; §9.1 adds the absence assertion for lane 0 and the full assertion set for lane 1. |
+| `leaderstroke-signature` | MAJOR | §7.4's seam is `static BasicStroke leaderStroke(...)`, so §9.3's `getLineWidth()` compiles; §9.0's scaffold adds the seam and the constants so the red run compiles too. |
+| `option-b-evidence-residual` | MINOR | §4.4's clearance-2.0 row is split by stroke mode (screen-constant `0` at every zoom; today's stroke `0` to zoom 2 and `8` at zoom 4); the sweep citation is 60 directions × 2 phases; §4.2 attributes the shared-pixel result to the gap-1 sweep. |
+| `external-consequence-overclaim` | MINOR | §5.6 and R1 state the consequence conditionally with the real room formula and the two measured examples (`ZFC` 1.83 px → dropped, `I` 9.25 px → kept); §5.1.6 and R3 state the ordering that actually protects node leaders. |
+| `mockup-external-arithmetic` | MINOR | the generator's enclosure fixture now uses the production lane geometry (top edge, vertical normal, `h/2 + EXTERNAL_GAP`), so §10's justification reproduces; the figure was regenerated. |
+| `red-scaffold-constants` | MINOR | §9.0's scaffold step lists both constants and the §9.3 test; the red step adds §9.1, §9.2 **and** §9.3. |
+| `citation-canvaspaint` | MINOR | §5.2 cites `GraphCanvasPaintShould.java:283-286`; the dangling marker in §5.6 is removed. |

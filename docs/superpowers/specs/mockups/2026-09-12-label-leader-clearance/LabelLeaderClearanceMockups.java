@@ -43,6 +43,7 @@ public final class LabelLeaderClearanceMockups {
     static final double SLOT_GAP = 6.0;
     static final double DISPLACED_OFFSET = 30.0;
     static final double OPTION_A_GAP = 3.0;
+    static final double EXTERNAL_GAP = 4.0;
     static final double MIN_VISIBLE_LEADER = 2.0;
 
     static final Font FULL = new Font(Font.DIALOG, Font.PLAIN, 12);
@@ -236,8 +237,7 @@ public final class LabelLeaderClearanceMockups {
                 return new String[] {
                     "Option A \u2014 stop 3 px clear of the name's box",
                     "leader keeps its disc-rim start and ends on the box inflated by 3 px; "
-                        + "node labels in every slot keep their leader, enclosure leaders longer than "
-                        + "2 px after trimming keep theirs" };
+                        + "node labels keep theirs, short enclosure leaders are dropped" };
             case B:
                 return new String[] {
                     "Option B \u2014 stop exactly on the name's box edge",
@@ -259,8 +259,12 @@ public final class LabelLeaderClearanceMockups {
         fillHull(g, hexagon(OUTER_HULL_X0, OUTER_HULL_Y0, OUTER_HULL_X1, OUTER_HULL_Y1, 70.0));
         fillHull(g, hexagon(70.0, 108.0, 250.0, 330.0, 40.0));
 
-        // enclosure label, EXTERNAL to the outer hull: keeps a leader in every option
-        drawEnclosureLabel(g, "ZFC", OUTER_HULL_X1, (OUTER_HULL_Y0 + OUTER_HULL_Y1) / 2.0, mode);
+        // enclosure label, EXTERNAL to the outer hull, placed by the production lane geometry:
+        // anchor = top-edge midpoint - (labelHeight/2 + EXTERNAL_GAP), leader start = edge midpoint.
+        final double zfcAnchorY = OUTER_HULL_Y0
+            - (screenBounds("ZFC", FULL).getHeight() / 2.0 + EXTERNAL_GAP);
+        drawEnclosureLabel(g, "ZFC", (OUTER_HULL_X0 + OUTER_HULL_X1) / 2.0, OUTER_HULL_Y0,
+            (OUTER_HULL_X0 + OUTER_HULL_X1) / 2.0, zfcAnchorY, mode);
         // enclosure label above the inner hull: ABOVE has never had a leader
         drawPlainLabel(g, "Basic Definitions and Theorems", 160.0,
             108.0 - 4.0 - screenBounds("Basic Definitions and Theorems", FULL).getHeight() / 2.0);
@@ -294,22 +298,21 @@ public final class LabelLeaderClearanceMockups {
         return p;
     }
 
-    static void drawEnclosureLabel(final Graphics2D g, final String text, final double hullRightX,
-            final double y, final Mode mode) {
+    static void drawEnclosureLabel(final Graphics2D g, final String text, final double startX,
+            final double startY, final double anchorX, final double anchorY, final Mode mode) {
         final Rectangle2D size = screenBounds(text, FULL);
-        final double anchorX = hullRightX + 4.0 + size.getWidth() / 2.0;
         final Rectangle2D rect = new Rectangle2D.Double(anchorX - size.getWidth() / 2.0,
-            y - size.getHeight() / 2.0, size.getWidth(), size.getHeight());
-        final double[] end = leaderEnd(mode, hullRightX, y, anchorX, y, rect);
+            anchorY - size.getHeight() / 2.0, size.getWidth(), size.getHeight());
+        final double[] end = leaderEnd(mode, startX, startY, anchorX, anchorY, rect);
         if (end != null) {
             if (mode == Mode.TODAY) {
-                drawLeader(g, hullRightX, y, new double[] { anchorX, y }, EDGE);
-                drawLeader(g, end[0], end[1], new double[] { anchorX, y }, BAD);
+                drawLeader(g, startX, startY, new double[] { anchorX, anchorY }, EDGE);
+                drawLeader(g, end[0], end[1], new double[] { anchorX, anchorY }, BAD);
             } else {
-                drawLeader(g, hullRightX, y, end, EDGE);
+                drawLeader(g, startX, startY, end, EDGE);
             }
         }
-        drawPlainLabel(g, text, anchorX, y);
+        drawPlainLabel(g, text, anchorX, anchorY);
         if (mode == Mode.TODAY) {
             drawDashedRect(g, rect);
         }
