@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
@@ -18,8 +19,11 @@ import org.freeplane.plugin.graph.geometry.HullGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.geometry.NodeGeometry;
+import org.freeplane.plugin.graph.projection.BoundaryTier;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
+import org.freeplane.plugin.graph.projection.EnclosureKey;
 import org.freeplane.plugin.graph.projection.GraphProjection;
+import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
@@ -507,6 +511,127 @@ public class ScreenLabelPlacementShould {
         assertThat(labelLabelCollisions(fourth)).isZero();
     }
 
+    @Test
+    public void placesEmphaticEnclosureLabelsInTheHullInterior() {
+        Rectangle2D area = area(1128.0, 364.0);
+        PlacedLabel label = placeEnclosure("Axioms", true, area, Collections.<SceneNode>emptyList(),
+            RenderingLevel.FULL).get(0);
+
+        assertThat(label.mode()).isEqualTo(PlacedLabel.Mode.INTERIOR);
+        assertThat(label.font().getSize()).isEqualTo(15);
+        assertThat(label.anchorX() - area.getWidth() * 0.5).isCloseTo(0.0, within(1e-6));
+        assertThat(label.anchorY() - area.getHeight() * 0.5).isCloseTo(0.0, within(1e-6));
+        assertThat(label.width()).isCloseTo(55.065384, within(1e-6));
+        assertThat(label.height()).isCloseTo(20.430143, within(1e-6));
+        assertThat(label.emphaticAtAnchor()).isFalse();
+        assertThat(label.leaderStart()).isEmpty();
+    }
+
+    @Test
+    public void placesEmphaticEnclosureLabelsOnTheLeastPopulatedArc() {
+        Rectangle2D area = area(1128.0, 364.0);
+        List<SceneNode> obstacle = Collections.singletonList(
+            new SceneNode("Theorem", 8.0, false, 0.0, 0.0));
+        PlacedLabel label = placeEnclosure("Axioms", true, area, obstacle, RenderingLevel.FULL).get(0);
+
+        assertThat(label.mode()).isEqualTo(PlacedLabel.Mode.ARC);
+        assertThat(label.anchorX() - area.getWidth() * 0.5).isCloseTo(0.0, within(1e-6));
+        assertThat(label.anchorY() - area.getHeight() * 0.5).isCloseTo(-38.784928, within(1e-6));
+        assertThat(label.width()).isCloseTo(55.065384, within(1e-6));
+        assertThat(label.height()).isCloseTo(20.430143, within(1e-6));
+        assertThat(label.leaderStart()).isEmpty();
+    }
+
+    @Test
+    public void placesEmphaticEnclosureLabelsExternallyWithALeader() {
+        Rectangle2D area = area(320.0, 320.0);
+        PlacedLabel label = placeEnclosure("Basic Definitions and Theorems", true, area,
+            Collections.<SceneNode>emptyList(), RenderingLevel.FULL).get(0);
+
+        assertThat(label.mode()).isEqualTo(PlacedLabel.Mode.EXTERNAL);
+        assertThat(label.anchorX() - area.getWidth() * 0.5).isCloseTo(0.0, within(1e-6));
+        assertThat(label.anchorY() - area.getHeight() * 0.5).isCloseTo(-64.215072, within(1e-6));
+        assertThat(label.leaderStart()).isPresent();
+        assertThat(label.leaderStart().get().x() - area.getWidth() * 0.5).isCloseTo(0.0, within(1e-6));
+        assertThat(label.leaderStart().get().y() - area.getHeight() * 0.5)
+            .isCloseTo(-50.0, within(1e-6));
+    }
+
+    @Test(timeout = 5000)
+    public void forcesAnEmphaticEnclosureLabelAtTheAnchorWhenNoSlotIsAccepted() {
+        Rectangle2D area = area(120.0, 120.0);
+        PlacedLabel label = placeEnclosure("Basic Definitions and Theorems", true, area,
+            Collections.<SceneNode>emptyList(), RenderingLevel.FULL).get(0);
+
+        assertThat(label.mode()).isEqualTo(PlacedLabel.Mode.INTERIOR);
+        assertThat(label.emphaticAtAnchor()).isTrue();
+        assertThat(label.anchorX() - area.getWidth() * 0.5).isCloseTo(0.0, within(1e-6));
+        assertThat(label.anchorY() - area.getHeight() * 0.5).isCloseTo(0.0, within(1e-6));
+        assertThat(label.leaderStart()).isEmpty();
+    }
+
+    @Test(timeout = 5000)
+    public void hidesASubtleEnclosureLabelWhenNoExternalSlotIsAccepted() {
+        Rectangle2D area = area(120.0, 120.0);
+        PlacedLabel label = placeEnclosure("Basic Definitions and Theorems", false, area,
+            Collections.<SceneNode>emptyList(), RenderingLevel.FULL).get(0);
+
+        assertThat(label.mode()).isEqualTo(PlacedLabel.Mode.HOVER_ONLY);
+        assertThat(label.anchorX() - area.getWidth() * 0.5).isCloseTo(0.0, within(1e-6));
+        assertThat(label.anchorY() - area.getHeight() * 0.5).isCloseTo(0.0, within(1e-6));
+        assertThat(label.leaderStart()).isEmpty();
+    }
+
+    @Test
+    public void keepsHullGeometryUnchangedAcrossEnclosurePlacement() {
+        Rectangle2D area = area(320.0, 320.0);
+        LabelPlacementRequest request = enclosureRequest("Basic Definitions and Theorems", true, area,
+            Collections.<SceneNode>emptyList(), RenderingLevel.FULL);
+        Map<EnclosureHullKey, HullGeometry> before =
+            new LinkedHashMap<EnclosureHullKey, HullGeometry>(request.geometry().hulls());
+
+        new ScreenLabelPlacement().place(request, null, fonts(), Collections.<Rectangle2D>emptyList());
+
+        assertThat(request.geometry().hulls()).isEqualTo(before);
+        assertThat(request.geometry().hulls().get(firstHullKey())).isEqualTo(before.get(firstHullKey()));
+    }
+
+    @Test
+    public void placesEmphaticAndSubtleEnclosureLabelsThroughTheLevelFilter() {
+        Rectangle2D area = area(1128.0, 364.0);
+        List<SceneNode> nodes = Collections.singletonList(
+            new SceneNode("Theorem", 8.0, false, 0.0, -80.0));
+
+        List<PlacedLabel> emphatic = placeEnclosure("Axioms", true, area, nodes, RenderingLevel.FULL);
+        assertThat(emphatic).hasSize(2);
+        PlacedLabel enclosure = findEnclosure(emphatic);
+        assertThat(enclosure.mode()).isEqualTo(PlacedLabel.Mode.INTERIOR);
+        assertThat(enclosure.font().getSize()).isEqualTo(15);
+        assertThat(enclosure.width()).isCloseTo(55.065384, within(1e-6));
+        assertThat(enclosure.height()).isCloseTo(20.430143, within(1e-6));
+        assertThat(enclosure.emphaticAtAnchor()).isFalse();
+        assertThat(enclosure.leaderStart()).isEmpty();
+        PlacedLabel node = find(emphatic, "Theorem");
+        assertThat(node.font().getSize()).isEqualTo(12);
+        assertThat(node.width()).isCloseTo(51.060364, within(1e-6));
+        assertThat(node.height()).isCloseTo(16.344114, within(1e-6));
+        assertThat(node.anchorX() - area.getWidth() * 0.5).isCloseTo(0.0, within(1e-6));
+        assertThat(node.anchorY() - area.getHeight() * 0.5).isCloseTo(-102.172057, within(1e-6));
+        assertThat(enclosure.bounds().intersects(node.bounds())).isFalse();
+
+        List<PlacedLabel> overTarget = placeEnclosure("Axioms", true, area, nodes,
+            RenderingLevel.OVER_TARGET);
+        assertThat(overTarget).hasSize(1);
+        assertThat(overTarget.get(0).endpoint().isEnclosure()).isTrue();
+
+        List<PlacedLabel> subtle = placeEnclosure("Axioms", false, area, nodes, RenderingLevel.FULL);
+        assertThat(subtle).hasSize(2);
+        assertThat(findEnclosure(subtle).font().getSize()).isEqualTo(12);
+        assertThat(findEnclosure(subtle).width()).isCloseTo(41.340302, within(1e-6));
+        assertThat(findEnclosure(subtle).height()).isCloseTo(16.344114, within(1e-6));
+        assertThat(placeEnclosure("Axioms", false, area, nodes, RenderingLevel.OVER_TARGET)).isEmpty();
+    }
+
     private static void assertZoomCell(List<SceneNode> scene, Rectangle2D area, double zoom,
             int placedCount, int fullCount, int denseCount, String forcedSlot, double forcedX,
             double forcedY, List<String> hidden) {
@@ -577,6 +702,66 @@ public class ScreenLabelPlacementShould {
             Collections.<EnclosureHullKey, LayoutPoint>emptyMap());
         return LabelPlacementRequest.of(projection, graphGeometry, layoutPositions, zoom, centerX, centerY,
             area, forced, level);
+    }
+
+    static LabelFonts fonts() {
+        return LabelFonts.from(GraphTheme.resolve(CanvasTheme.LIGHT));
+    }
+
+    static List<PlacedLabel> placeEnclosure(String text, boolean emphatic, Rectangle2D area,
+            List<SceneNode> nodes, RenderingLevel level) {
+        return new ScreenLabelPlacement().place(
+            enclosureRequest(text, emphatic, area, nodes, level), null, fonts(),
+            Collections.<Rectangle2D>emptyList());
+    }
+
+    static LabelPlacementRequest enclosureRequest(String text, boolean emphatic, Rectangle2D area,
+            List<SceneNode> nodes, RenderingLevel level) {
+        EnclosureKey endpointKey = EnclosureKey.of(SourceNodeKey.persisted(
+            NodeReference.of(MAP, PersistedNodeId.of("axioms"))));
+        EnclosureHullKey hullKey = EnclosureHullKey.of(Collections.singletonList(endpointKey));
+        List<LayoutPoint> polygon = Arrays.asList(LayoutPoint.of(-50.0, -50.0),
+            LayoutPoint.of(50.0, -50.0), LayoutPoint.of(50.0, 50.0), LayoutPoint.of(-50.0, 50.0));
+        List<ProjectedNodeKey> directNodes = new ArrayList<ProjectedNodeKey>();
+        List<ProjectedNode> projected = new ArrayList<ProjectedNode>();
+        Map<ProjectedNodeKey, NodeGeometry> geometry = new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
+        Map<ProjectedNodeKey, LayoutPoint> positions = new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        for (SceneNode node : nodes) {
+            ProjectedNodeKey nodeKey = key(node.name);
+            projected.add(ProjectedNode.of(nodeKey, SafeNodeLabel.of(node.name, node.name), "Map", false));
+            geometry.put(nodeKey, NodeGeometry.of(LayoutPoint.of(node.x, node.y), node.radius));
+            positions.put(nodeKey, LayoutPoint.of(node.x, node.y));
+            directNodes.add(nodeKey);
+        }
+        ProjectedEnclosure enclosure = ProjectedEnclosure.of(hullKey,
+            Collections.singletonList(endpointKey), Collections.singletonList(SafeNodeLabel.of(text, text)),
+            "Map", Optional.<EnclosureHullKey>empty(), directNodes,
+            Collections.<EnclosureHullKey>emptyList(), true,
+            emphatic ? BoundaryTier.EMPHATIC : BoundaryTier.SUBTLE);
+        GraphProjection projection = GraphProjection.structure(1L, projected,
+            Collections.singletonList(enclosure));
+        Map<EnclosureHullKey, HullGeometry> hulls = new LinkedHashMap<EnclosureHullKey, HullGeometry>();
+        hulls.put(hullKey, HullGeometry.of(polygon, LayoutPoint.of(0.0, 0.0)));
+        GraphGeometry graphGeometry = GraphGeometry.of(geometry, hulls);
+        Map<EnclosureHullKey, LayoutPoint> anchors = new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
+        anchors.put(hullKey, LayoutPoint.of(0.0, 0.0));
+        return LabelPlacementRequest.of(projection, graphGeometry, LayoutPositions.of(positions, anchors),
+            1.0, 0.0, 0.0, area, Collections.<ProjectedEndpointKey>emptySet(), level);
+    }
+
+    static PlacedLabel findEnclosure(List<PlacedLabel> placed) {
+        for (PlacedLabel label : placed) {
+            if (label.endpoint().isEnclosure()) {
+                return label;
+            }
+        }
+        return null;
+    }
+
+    static EnclosureHullKey firstHullKey() {
+        EnclosureKey endpointKey = EnclosureKey.of(SourceNodeKey.persisted(
+            NodeReference.of(MAP, PersistedNodeId.of("axioms"))));
+        return EnclosureHullKey.of(Collections.singletonList(endpointKey));
     }
 
     static List<PlacedLabel> placeShifted(List<SceneNode> scene, double zoom, Rectangle2D area,

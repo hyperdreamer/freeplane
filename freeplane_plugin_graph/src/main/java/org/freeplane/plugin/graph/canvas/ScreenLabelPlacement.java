@@ -14,8 +14,12 @@ import java.util.Optional;
 import java.util.Set;
 
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
+import org.freeplane.plugin.graph.geometry.HullGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.NodeGeometry;
+import org.freeplane.plugin.graph.projection.BoundaryTier;
+import org.freeplane.plugin.graph.projection.EnclosureKey;
+import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
@@ -53,6 +57,7 @@ public final class ScreenLabelPlacement {
         final Map<ProjectedNodeKey, PlacedLabel> previousByNode = indexPrevious(previous);
         final List<PlacedLabel> placed = new ArrayList<PlacedLabel>();
         placeForced(context, previousByNode, placed);
+        placeEnclosures(context, placed);
         placeNodes(context, previousByNode, placed);
         return filterByLevel(request, placed);
     }
@@ -146,6 +151,274 @@ public final class ScreenLabelPlacement {
 
     private static boolean isForced(final Context context, final ProjectedNodeKey key) {
         return context.request.forced().contains(ProjectedEndpointKey.ofNode(key));
+    }
+
+    private static void placeEnclosures(final Context context, final List<PlacedLabel> placed) {
+        for (final ProjectedEnclosure enclosure : context.request.projection().enclosures()) {
+            if (enclosure.boundaryTier() == BoundaryTier.SUPPRESSED) {
+                continue;
+            }
+            final HullGeometry hull = context.request.geometry().hulls().get(enclosure.hullKey());
+            if (hull == null) {
+                continue;
+            }
+            final boolean emphatic = enclosure.boundaryTier() == BoundaryTier.EMPHATIC;
+            final Font font = emphatic ? context.fonts.emphatic() : context.fonts.full();
+            final List<EnclosureKey> endpoints = enclosure.endpointKeys();
+            for (int index = 0; index < endpoints.size(); index++) {
+                final EnclosureKey endpointKey = endpoints.get(index);
+                final ProjectedEndpointKey endpoint = ProjectedEndpointKey.ofEnclosure(endpointKey);
+                final String text = enclosure.labels().get(index).displayText();
+                final boolean forced = context.request.forced().contains(endpoint);
+                placed.add(placeEnclosureLabel(context, endpoint, text, font, emphatic, hull, forced));
+            }
+        }
+    }
+
+    private static PlacedLabel placeEnclosureLabel(final Context context,
+            final ProjectedEndpointKey endpoint, final String text, final Font font, final boolean emphatic,
+            final HullGeometry hull, final boolean forced) {
+        final Rectangle2D size = screenBounds(text, font);
+        final List<LayoutPoint> polygon = screenPolygon(context, hull);
+        final PlacedLabel interior = interiorEnclosureLabel(context, endpoint, text, font, hull, size, forced);
+        if (interior != null) {
+            return interior;
+        }
+        final PlacedLabel arc = arcEnclosureLabel(context, endpoint, text, font, hull, size, forced, polygon);
+        if (arc != null) {
+            return arc;
+        }
+        final PlacedLabel external = externalEnclosureLabel(context, endpoint, text, font, emphatic, hull,
+            size, forced, polygon);
+        if (external != null) {
+            return external;
+        }
+        return anchorTerminal(context, endpoint, text, font, emphatic, hull, size, forced);
+    }
+
+    private static PlacedLabel interiorEnclosureLabel(final Context context,
+            final ProjectedEndpointKey endpoint, final String text, final Font font, final HullGeometry hull,
+            final Rectangle2D size, final boolean forced) {
+        final double anchorX = context.request.screenX(hull.labelAnchor().x());
+        final double anchorY = context.request.screenY(hull.labelAnchor().y());
+        final Rectangle2D candidate = rectangle(anchorX, anchorY, size.getWidth(), size.getHeight());
+        if (!context.request.placementArea().contains(candidate)
+                || !rectInHull(context, hull, candidate)
+                || intersectsAny(context.obstacles, candidate)) {
+            return null;
+        }
+        context.obstacles.add(candidate);
+        return enclosureLabel(endpoint, text, font, PlacedLabel.Mode.INTERIOR, PlacedLabel.Rung.FULL_NEAR,
+            anchorX, anchorY, size, forced, false, Optional.<LayoutPoint>empty());
+    }
+
+    private static PlacedLabel arcEnclosureLabel(final Context context,
+            final ProjectedEndpointKey endpoint, final String text, final Font font, final HullGeometry hull,
+            final Rectangle2D size, final boolean forced, final List<LayoutPoint> polygon) {
+        final int edgeCount = polygon.size();
+        final int[] population = new int[edgeCount];
+        final double[] lengths = new double[edgeCount];
+        for (int index = 0; index < edgeCount; index++) {
+            final LayoutPoint start = polygon.get(index);
+            final LayoutPoint end = polygon.get((index + 1) % edgeCount);
+            population[index] = edgePopulation(polygon, start, end, outwardNormal(polygon, index),
+                context.obstacles, size.getHeight() + ARC_GAP);
+            lengths[index] = Math.hypot(end.x() - start.x(), end.y() - start.y());
+        }
+        final List<Integer> edgeOrder = new ArrayList<Integer>();
+        for (int index = 0; index < edgeCount; index++) {
+            edgeOrder.add(Integer.valueOf(index));
+        }
+        Collections.sort(edgeOrder, new Comparator<Integer>() {
+            @Override
+            public int compare(final Integer first, final Integer second) {
+                final int firstIndex = first.intValue();
+                final int secondIndex = second.intValue();
+                if (population[firstIndex] != population[secondIndex]) {
+                    return population[firstIndex] - population[secondIndex];
+                }
+                if (lengths[firstIndex] != lengths[secondIndex]) {
+                    return Double.compare(lengths[secondIndex], lengths[firstIndex]);
+                }
+                return firstIndex - secondIndex;
+            }
+        });
+        for (final Integer edge : edgeOrder) {
+            final int index = edge.intValue();
+            final LayoutPoint start = polygon.get(index);
+            final LayoutPoint end = polygon.get((index + 1) % edgeCount);
+            final LayoutPoint outward = outwardNormal(polygon, index);
+            final double anchorX = (start.x() + end.x()) * 0.5
+                - outward.x() * (size.getHeight() * 0.5 + ARC_GAP);
+            final double anchorY = (start.y() + end.y()) * 0.5
+                - outward.y() * (size.getHeight() * 0.5 + ARC_GAP);
+            final Rectangle2D candidate = rectangle(anchorX, anchorY, size.getWidth(), size.getHeight());
+            if (context.request.placementArea().contains(candidate)
+                    && rectInHull(context, hull, candidate)
+                    && !intersectsAny(context.obstacles, candidate)) {
+                context.obstacles.add(candidate);
+                return enclosureLabel(endpoint, text, font, PlacedLabel.Mode.ARC, PlacedLabel.Rung.FULL_NEAR,
+                    anchorX, anchorY, size, forced, false, Optional.<LayoutPoint>empty());
+            }
+        }
+        return null;
+    }
+
+    private static PlacedLabel externalEnclosureLabel(final Context context,
+            final ProjectedEndpointKey endpoint, final String text, final Font font, final boolean emphatic,
+            final HullGeometry hull, final Rectangle2D size, final boolean forced,
+            final List<LayoutPoint> polygon) {
+        final int edgeCount = polygon.size();
+        int total = 0;
+        for (int index = 0; index < edgeCount; index++) {
+            final LayoutPoint start = polygon.get(index);
+            final LayoutPoint end = polygon.get((index + 1) % edgeCount);
+            final LayoutPoint outward = outwardNormal(polygon, index);
+            final double areaSupport = areaSupport(context.request.placementArea(), outward);
+            final double halfNormal = outward.x() != 0.0
+                ? size.getWidth() * 0.5 : size.getHeight() * 0.5;
+            final double midpointX = (start.x() + end.x()) * 0.5;
+            final double midpointY = (start.y() + end.y()) * 0.5;
+            for (int lane = 0; ; lane++) {
+                total++;
+                final double distance = size.getHeight() * 0.5 + EXTERNAL_GAP
+                    + lane * (size.getHeight() + EXTERNAL_GAP);
+                final double anchorX = midpointX + outward.x() * distance;
+                final double anchorY = midpointY + outward.y() * distance;
+                final Rectangle2D candidate = rectangle(anchorX, anchorY, size.getWidth(), size.getHeight());
+                if (!hull.contains(worldPoint(context, anchorX, anchorY))
+                        && context.request.placementArea().contains(candidate)
+                        && !intersectsAny(context.obstacles, candidate)) {
+                    final LayoutPoint leaderWorld = hull.nearestBoundaryPoint(
+                        worldPoint(context, anchorX, anchorY));
+                    final LayoutPoint leader = LayoutPoint.of(context.request.screenX(leaderWorld.x()),
+                        context.request.screenY(leaderWorld.y()));
+                    context.obstacles.add(candidate);
+                    return enclosureLabel(endpoint, text, font, PlacedLabel.Mode.EXTERNAL,
+                        PlacedLabel.Rung.FULL_NEAR, anchorX, anchorY, size, forced, false,
+                        Optional.of(leader));
+                }
+                if (!emphatic && total >= SUBTLE_EXTERNAL_CANDIDATE_BUDGET) {
+                    return null;
+                }
+                final double innerEdge = outward.x() * anchorX + outward.y() * anchorY - halfNormal;
+                if (innerEdge > areaSupport) {
+                    break;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static PlacedLabel anchorTerminal(final Context context, final ProjectedEndpointKey endpoint,
+            final String text, final Font font, final boolean emphatic, final HullGeometry hull,
+            final Rectangle2D size, final boolean forced) {
+        final double anchorX = context.request.screenX(hull.labelAnchor().x());
+        final double anchorY = context.request.screenY(hull.labelAnchor().y());
+        if (emphatic) {
+            return enclosureLabel(endpoint, text, font, PlacedLabel.Mode.INTERIOR,
+                PlacedLabel.Rung.FULL_NEAR, anchorX, anchorY, size, forced, true,
+                Optional.<LayoutPoint>empty());
+        }
+        return enclosureLabel(endpoint, text, font, PlacedLabel.Mode.HOVER_ONLY,
+            PlacedLabel.Rung.HOVER_ONLY, anchorX, anchorY, size, forced, false,
+            Optional.<LayoutPoint>empty());
+    }
+
+    private static PlacedLabel enclosureLabel(final ProjectedEndpointKey endpoint, final String text,
+            final Font font, final PlacedLabel.Mode mode, final PlacedLabel.Rung rung, final double anchorX,
+            final double anchorY, final Rectangle2D size, final boolean forced,
+            final boolean emphaticAtAnchor, final Optional<LayoutPoint> leaderStart) {
+        return new PlacedLabel(endpoint, text, font, mode, rung, anchorX, anchorY, size.getWidth(),
+            size.getHeight(), false, forced, emphaticAtAnchor, false, false, leaderStart, Slot.ABOVE);
+    }
+
+    private static List<LayoutPoint> screenPolygon(final Context context, final HullGeometry hull) {
+        final List<LayoutPoint> polygon = new ArrayList<LayoutPoint>();
+        for (final LayoutPoint point : hull.exactPolygon()) {
+            polygon.add(LayoutPoint.of(context.request.screenX(point.x()),
+                context.request.screenY(point.y())));
+        }
+        return polygon;
+    }
+
+    private static LayoutPoint outwardNormal(final List<LayoutPoint> polygon, final int index) {
+        final LayoutPoint start = polygon.get(index);
+        final LayoutPoint end = polygon.get((index + 1) % polygon.size());
+        final double dx = end.x() - start.x();
+        final double dy = end.y() - start.y();
+        final double length = Math.hypot(dx, dy);
+        final double sign = signedArea(polygon) >= 0.0 ? 1.0 : -1.0;
+        return LayoutPoint.of(sign * dy / length, -sign * dx / length);
+    }
+
+    private static double signedArea(final List<LayoutPoint> polygon) {
+        double area = 0.0;
+        for (int index = 0; index < polygon.size(); index++) {
+            final LayoutPoint first = polygon.get(index);
+            final LayoutPoint second = polygon.get((index + 1) % polygon.size());
+            area += first.x() * second.y() - second.x() * first.y();
+        }
+        return area * 0.5;
+    }
+
+    private static boolean rectInHull(final Context context, final HullGeometry hull,
+            final Rectangle2D rectangle) {
+        return hull.contains(worldPoint(context, rectangle.getMinX(), rectangle.getMinY()))
+            && hull.contains(worldPoint(context, rectangle.getMinX(), rectangle.getMaxY()))
+            && hull.contains(worldPoint(context, rectangle.getMaxX(), rectangle.getMinY()))
+            && hull.contains(worldPoint(context, rectangle.getMaxX(), rectangle.getMaxY()));
+    }
+
+    private static LayoutPoint worldPoint(final Context context, final double screenX,
+            final double screenY) {
+        return LayoutPoint.of(context.request.worldX(screenX), context.request.worldY(screenY));
+    }
+
+    private static int edgePopulation(final List<LayoutPoint> polygon, final LayoutPoint start,
+            final LayoutPoint end, final LayoutPoint outward, final List<Rectangle2D> obstacles,
+            final double depth) {
+        final double dx = end.x() - start.x();
+        final double dy = end.y() - start.y();
+        final double length = Math.hypot(dx, dy);
+        final double tangentX = dx / length;
+        final double tangentY = dy / length;
+        final double minT = Math.min(tangentX * start.x() + tangentY * start.y(),
+            tangentX * end.x() + tangentY * end.y());
+        final double maxT = Math.max(tangentX * start.x() + tangentY * start.y(),
+            tangentX * end.x() + tangentY * end.y());
+        double support = Double.NEGATIVE_INFINITY;
+        for (final LayoutPoint point : polygon) {
+            support = Math.max(support, outward.x() * point.x() + outward.y() * point.y());
+        }
+        int count = 0;
+        for (final Rectangle2D obstacle : obstacles) {
+            final double[] onTangent = projection(obstacle, tangentX, tangentY);
+            final double[] onNormal = projection(obstacle, outward.x(), outward.y());
+            if (onTangent[0] <= maxT && onTangent[1] >= minT
+                    && onNormal[0] <= support + depth && onNormal[1] >= support - depth) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private static double[] projection(final Rectangle2D rectangle, final double normalX,
+            final double normalY) {
+        final double first = normalX * rectangle.getMinX() + normalY * rectangle.getMinY();
+        final double second = normalX * rectangle.getMinX() + normalY * rectangle.getMaxY();
+        final double third = normalX * rectangle.getMaxX() + normalY * rectangle.getMinY();
+        final double fourth = normalX * rectangle.getMaxX() + normalY * rectangle.getMaxY();
+        return new double[] { Math.min(Math.min(first, second), Math.min(third, fourth)),
+            Math.max(Math.max(first, second), Math.max(third, fourth)) };
+    }
+
+    private static double areaSupport(final Rectangle2D area, final LayoutPoint normal) {
+        final double first = normal.x() * area.getMinX() + normal.y() * area.getMinY();
+        final double second = normal.x() * area.getMinX() + normal.y() * area.getMaxY();
+        final double third = normal.x() * area.getMaxX() + normal.y() * area.getMinY();
+        final double fourth = normal.x() * area.getMaxX() + normal.y() * area.getMaxY();
+        return Math.max(Math.max(first, second), Math.max(third, fourth));
     }
 
     private static PlacedLabel placeNode(final Context context, final ProjectedNodeKey key,
@@ -262,11 +535,25 @@ public final class ScreenLabelPlacement {
         }
         final List<PlacedLabel> filtered = new ArrayList<PlacedLabel>();
         for (final PlacedLabel label : placed) {
-            if (label.forced()) {
+            if (label.forced() || isRequiredEmphaticEnclosure(request, label)) {
                 filtered.add(label);
             }
         }
         return filtered;
+    }
+
+    private static boolean isRequiredEmphaticEnclosure(final LabelPlacementRequest request,
+            final PlacedLabel label) {
+        if (!label.endpoint().isEnclosure()) {
+            return false;
+        }
+        final EnclosureKey target = label.endpoint().enclosure().get();
+        for (final ProjectedEnclosure enclosure : request.projection().enclosures()) {
+            if (enclosure.endpointKeys().contains(target)) {
+                return enclosure.boundaryTier() == BoundaryTier.EMPHATIC;
+            }
+        }
+        return false;
     }
 
     private enum FontSelector {
