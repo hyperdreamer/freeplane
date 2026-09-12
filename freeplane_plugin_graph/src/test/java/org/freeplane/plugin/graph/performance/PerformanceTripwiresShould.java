@@ -62,8 +62,8 @@ public class PerformanceTripwiresShould {
     @Test
     public void exposeTheCanonicalStageOrderAndThresholds() {
         assertThat(PerformanceMeasurements.Stage.names()).containsExactly(
-            "snapshot", "projection", "diff", "mutation", "force", "correction",
-            "hull", "label", "full-worker", "edt-swap", "repaint", "accepted-batch-first-frame");
+            "snapshot", "projection", "diff", "mutation", "force", "correction", "separation",
+            "hull", "placement", "full-worker", "edt-swap", "repaint", "accepted-batch-first-frame");
         assertThat(PerformanceMeasurements.normalThresholdNanos("reference-2000-5000",
             PerformanceMeasurements.Stage.FORCE)).isEqualTo(250_000_000L);
         assertThat(PerformanceMeasurements.strictThresholdNanos("reference-2000-5000",
@@ -135,6 +135,10 @@ public class PerformanceTripwiresShould {
             "9939eb26768c2be69bd378a97e9afd0af3a455bac767cb9acc2f29754b8a4202");
         historicalHashes.put("reference-2000-5000.fpg",
             "366a7bbe316b9f11b974730f2f063821ddb0d6ed3cf0f1fc6ee67e92766a691c");
+        Map<String, String> currentHashes = new LinkedHashMap<String, String>();
+        currentHashes.put("two-map.fpg", "9d77d6fb92839772b6eb5ac0666354d1d5d098e5484f96791f4f8937d23f0d0a");
+        currentHashes.put("three-map.fpg", "d39c03a85bc5555b81c3451d29919c1e248d8f4984b1628bcdbefdf1d7bf65c1");
+        currentHashes.put("reference-2000-5000.fpg", "5e9ae763c9a5cba1c5337c41c73f332a791c047b83d4f50391ba304cf9c8e508");
 
         for (Map.Entry<String, List<String>> fixture : expectedLabels.entrySet()) {
             byte[] bytes = java.nio.file.Files.readAllBytes(output.resolve(fixture.getKey()));
@@ -143,6 +147,7 @@ public class PerformanceTripwiresShould {
                 assertThat(xml).contains(label);
             }
             assertThat(sha256(bytes)).isNotEqualTo(historicalHashes.get(fixture.getKey()));
+            assertThat(sha256(bytes)).isEqualTo(currentHashes.get(fixture.getKey()));
         }
     }
 
