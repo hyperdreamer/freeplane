@@ -58,7 +58,7 @@ final class WorkspaceToolbar extends javax.swing.JPanel {
         "graph_workspace.tooltip.connect", "connect", "/images/GraphConnect.svg?useAccentColor=true");
     private final JComboBox<RelationshipDirection> directionComboBox =
         new JComboBox<RelationshipDirection>(RelationshipDirection.values());
-    private final JTextField searchField = new JTextField();
+    private final GraphSearchField searchField = new GraphSearchField();
     private final JButton settingsButton = button("graph_workspace.action.settings", "settings");
     private final JButton zoomInButton = iconButton("graph_workspace.action.zoom_in", "zoom-in",
         "/images/ZoomIn24.svg?useAccentColor=true");
@@ -119,7 +119,11 @@ final class WorkspaceToolbar extends javax.swing.JPanel {
         });
         searchField.setName("graph-workspace-search");
         searchField.setToolTipText(TextUtils.getText("graph_workspace.tooltip.search"));
-        searchField.setPreferredSize(new Dimension(160, 26));
+        searchField.getAccessibleContext().setAccessibleName(
+            TextUtils.getText("graph_workspace.tooltip.search"));
+        searchField.setPrompt(TextUtils.getText("graph_workspace.tooltip.search"));
+        searchField.setPromptIcon(ResourceController.getResourceController()
+            .getOptionalIcon("/images/GraphSearch.svg?useAccentColor=true"));
         settingsButton.setToolTipText(TextUtils.getText("graph_workspace.tooltip.settings"));
 
         add(openButton);

@@ -7,11 +7,15 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.Graphics;
 import java.awt.GraphicsEnvironment;
 import java.awt.Graphics2D;
 import java.awt.GridLayout;
+import java.awt.Insets;
 import java.awt.Point;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
@@ -40,11 +44,14 @@ import java.util.stream.Collectors;
 import javax.xml.namespace.QName;
 
 import javax.swing.ButtonGroup;
+import javax.swing.JButton;
+import javax.swing.JFrame;
 import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSeparator;
+import javax.swing.JTextField;
 import javax.swing.JToggleButton;
 import javax.swing.JViewport;
 import javax.swing.Icon;
@@ -117,6 +124,7 @@ import org.mockito.MockedStatic;
 
 public class GraphWorkspaceWindowModelShould {
     private static final Path OPEN_PATH = Paths.get("/tmp/opened.graph-workspace");
+    private static final Color SEARCH_STUB_COLOR = new Color(0xFFFF00FF);
     private static final MapReferenceId ACTIVE_ID = id(1L);
     private static final java.util.List<EdtResources> RESOURCES =
         new java.util.ArrayList<EdtResources>();
@@ -414,6 +422,108 @@ public class GraphWorkspaceWindowModelShould {
         assertThat(model.toolbar().connectButton().isSelected()).isFalse();
         assertThat(tools).containsExactly(InteractionTool.CONNECT, InteractionTool.SELECT);
         model.close();
+    }
+
+    @Test
+    public void keepsTheSearchPromptOutOfTheDocument() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
+        List<String> queries = new ArrayList<String>();
+        model.toolbar().setSearchListener(queries::add);
+
+        assertThat(model.toolbar().searchField().getText()).isEmpty();
+        assertThat(queries).isEmpty();
+        model.toolbar().searchField().setText("Alpha");
+        assertThat(model.toolbar().searchField().getText()).isEqualTo("Alpha");
+        assertThat(queries).containsExactly("Alpha");
+        model.toolbar().searchField().setText("");
+        assertThat(model.toolbar().searchField().getText()).isEmpty();
+        assertThat(queries).containsExactly("Alpha", "");
+        model.close();
+    }
+
+    @Test
+    public void paintsSearchPromptAndMagnifierFromLiveState() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        RecordingPaintingIcon stub = new RecordingPaintingIcon(16, 16, SEARCH_STUB_COLOR);
+        fixture.stubIcon("/images/GraphSearch.svg?useAccentColor=true", stub);
+        GraphWorkspaceWindowModel model = fixture.model();
+        JTextField field = model.toolbar().searchField();
+
+        assertThat(field.getText()).isEmpty();
+        assertThat(field.getPreferredSize().height).isEqualTo(26);
+        assertThat(field.getPreferredSize().width).isEqualTo(Math.max(160, field.getInsets().left
+            + field.getFontMetrics(field.getFont()).stringWidth("graph_workspace.tooltip.search")
+            + field.getInsets().right));
+
+        BufferedImage emptyImage = paintField(field);
+        assertThat(pixelsMatching(emptyImage, SEARCH_STUB_COLOR)).isGreaterThan(0);
+        assertThat(pixelsMatching(emptyImage, field.getDisabledTextColor())).isGreaterThan(0);
+        assertThat(stub.lastX).isEqualTo(field.getInsets().left - field.getMargin().left);
+        assertThat(stub.lastY).isEqualTo((field.getHeight() - stub.getIconHeight()) / 2);
+
+        GraphSearchField tallField = new GraphSearchField();
+        tallField.setPrompt("graph_workspace.tooltip.search");
+        tallField.setPromptIcon(new RecordingPaintingIcon(40, 40, SEARCH_STUB_COLOR));
+        Insets tallMargin = tallField.getMargin();
+        assertThat(tallField.getPreferredSize().height)
+            .isEqualTo(40 + tallMargin.top + tallMargin.bottom)
+            .isGreaterThan(26);
+
+        field.setText("Results");
+        BufferedImage textImage = paintField(field);
+        assertThat(pixelsMatching(textImage, SEARCH_STUB_COLOR)).isGreaterThan(0);
+        assertThat(pixelsMatching(textImage, field.getDisabledTextColor())).isZero();
+        int firstTextPixel = -1;
+        int bandTop = field.getInsets().top;
+        int bandBottom = bandTop + field.getFontMetrics(field.getFont()).getHeight();
+        for (int y = bandTop; y < bandBottom && firstTextPixel < 0; y++) {
+            for (int x = field.getInsets().left; x < field.getWidth() - field.getInsets().right; x++) {
+                int rgb = textImage.getRGB(x, y);
+                if (rgb != field.getBackground().getRGB() && rgb != SEARCH_STUB_COLOR.getRGB()) {
+                    firstTextPixel = x;
+                    break;
+                }
+            }
+        }
+        assertThat(firstTextPixel).isGreaterThanOrEqualTo(stub.lastX + stub.getIconWidth());
+        model.close();
+    }
+
+    @Test
+    public void hidesSearchPromptWhileFocused() {
+        Assume.assumeFalse(GraphicsEnvironment.isHeadless());
+        GraphSearchField field = new GraphSearchField();
+        field.setPrompt("graph_workspace.tooltip.search");
+        RecordingPaintingIcon stub = new RecordingPaintingIcon(16, 16, SEARCH_STUB_COLOR);
+        field.setPromptIcon(stub);
+        BufferedImage[] focusedImage = new BufferedImage[1];
+        int[] recordedX = new int[1];
+        int[] recordedY = new int[1];
+        int[] paintedX = new int[1];
+        int[] paintedY = new int[1];
+        withFocusedField(field, new Runnable() {
+            @Override
+            public void run() {
+                focusedImage[0] = paintField(field);
+                recordedX[0] = field.getInsets().left - field.getMargin().left;
+                recordedY[0] = (field.getHeight() - stub.getIconHeight()) / 2;
+                // The shown frame keeps repainting after this action, so snapshot
+                // the icon position of the focused paint before it can be overwritten.
+                paintedX[0] = stub.lastX;
+                paintedY[0] = stub.lastY;
+            }
+        });
+
+        assertThat(focusedImage[0]).isNotNull();
+        assertThat(pixelsMatching(focusedImage[0], SEARCH_STUB_COLOR)).isGreaterThan(0);
+        assertThat(pixelsMatching(focusedImage[0], field.getDisabledTextColor())).isZero();
+        assertThat(paintedX[0]).isEqualTo(recordedX[0]);
+        assertThat(paintedY[0]).isEqualTo(recordedY[0]);
     }
 
     @Test
@@ -2095,6 +2205,120 @@ public class GraphWorkspaceWindowModelShould {
             }
         }
         return count;
+    }
+
+    private static BufferedImage paintField(final JTextField field) {
+        field.setSize(field.getPreferredSize());
+        BufferedImage image = new BufferedImage(Math.max(1, field.getWidth()),
+            Math.max(1, field.getHeight()), BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = image.createGraphics();
+        try {
+            field.paint(graphics);
+        }
+        finally {
+            graphics.dispose();
+        }
+        return image;
+    }
+
+    private static int pixelsMatching(final BufferedImage image, final Color color) {
+        int expected = color.getRGB();
+        int count = 0;
+        for (int y = 0; y < image.getHeight(); y++) {
+            for (int x = 0; x < image.getWidth(); x++) {
+                if (image.getRGB(x, y) == expected) {
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+
+    private static void withFocusedField(final GraphSearchField field, final Runnable action) {
+        final JFrame[] frame = new JFrame[1];
+        try {
+            GraphWorkspaceWindow.runOnEdt(new Runnable() {
+                @Override
+                public void run() {
+                    JFrame value = new JFrame();
+                    value.setLayout(new BorderLayout());
+                    value.add(field, BorderLayout.CENTER);
+                    value.add(new JButton("Next"), BorderLayout.SOUTH);
+                    value.setSize(500, 400);
+                    value.setVisible(true);
+                    field.requestFocusInWindow();
+                    frame[0] = value;
+                }
+            });
+            waitForFieldFocus(field);
+            GraphWorkspaceWindow.runOnEdt(action);
+        }
+        finally {
+            if (frame[0] != null) {
+                GraphWorkspaceWindow.runOnEdt(new Runnable() {
+                    @Override
+                    public void run() {
+                        frame[0].dispose();
+                    }
+                });
+            }
+        }
+    }
+
+    private static void waitForFieldFocus(final GraphSearchField field) {
+        for (int attempt = 0; attempt < 100; attempt++) {
+            final boolean[] focused = new boolean[1];
+            GraphWorkspaceWindow.runOnEdt(new Runnable() {
+                @Override
+                public void run() {
+                    field.requestFocusInWindow();
+                    focused[0] = field.isFocusOwner();
+                }
+            });
+            if (focused[0]) {
+                return;
+            }
+            try {
+                Thread.sleep(10L);
+            }
+            catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError(exception);
+            }
+        }
+        throw new AssertionError("Search field did not gain focus");
+    }
+
+    private static final class RecordingPaintingIcon implements Icon {
+        private final int width;
+        private final int height;
+        private final Color color;
+        private int lastX = -1;
+        private int lastY = -1;
+
+        private RecordingPaintingIcon(final int width, final int height, final Color color) {
+            this.width = width;
+            this.height = height;
+            this.color = color;
+        }
+
+        @Override
+        public void paintIcon(final Component component, final Graphics graphics, final int x, final int y) {
+            lastX = x;
+            lastY = y;
+            graphics.setColor(color);
+            graphics.fillRect(x, y, width, height);
+        }
+
+        @Override
+        public int getIconWidth() {
+            return width;
+        }
+
+        @Override
+        public int getIconHeight() {
+            return height;
+        }
     }
 
     private static JMenuItem menuItem(final GraphWorkspaceWindowModel model, final String name) {
