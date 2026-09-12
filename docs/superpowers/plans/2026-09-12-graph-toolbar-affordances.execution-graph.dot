@@ -1,0 +1,26 @@
+// Generated from the execution manifest and the parsed source plan. Inspection artifact only; never hand-edited.
+digraph graph_toolbar_affordances {
+  rankdir = LR;
+  node [shape = box, style = rounded];
+
+  subgraph cluster_lane_graph_toolbar_affordances {
+    label = "lane: graph-toolbar-affordances";
+    style = dashed;
+
+    t1 [label = "Task 1 (standard)\nGroup Select and Connect in one styled tool switch\nToolSwitch, configureIcon, applyToolbarSegmentStyle"];
+    t2 [label = "Task 2 (standard)\nPaint the search prompt and magnifier in the toolbar field\nGraphSearchField"];
+    t3 [label = "Task 3 (advanced)\nMake the settings gear an icon toggle that carries panel state\ntoggleSettingsPanel, setSettingsVisible"];
+    t4 [label = "Task 4 (fast)\nAdd the affordance resource values and the source guards\nResources_en.properties, source guards"];
+    t5 [label = "Task 5 (fast)\nShip the four glyphs and prove them inside the OSGi bundle\nGraphSelect/Connect/Settings/Search.svg"];
+    t6 [label = "Task 6 (advanced)\nRecord the row width, regenerate the UI evidence and run the real-application checks\nGraphWorkspaceUiEvidence, build.gradle"];
+
+    t1 -> t2 [label = "same-lane predecessor"];
+    t2 -> t3 [label = "same-lane predecessor"];
+    t3 -> t4 [label = "same-lane predecessor"];
+    t4 -> t5 [label = "same-lane predecessor"];
+    t5 -> t6 [label = "same-lane predecessor"];
+  }
+
+  validation [shape = note, label = "validation vectors\nt1-t3, t6: :freeplane_plugin_graph:test\nt4: format_translation, verifyGraphBundle\nt5: graphOsgiSmoke\nt6: graphUiEvidence"];
+  t6 -> validation [style = dotted, label = "runs"];
+}

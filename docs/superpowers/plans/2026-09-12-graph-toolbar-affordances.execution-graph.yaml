@@ -1,0 +1,142 @@
+schema_version: 1
+topic: graph-toolbar-affordances
+task_identifier: 2026-09-12-graph-toolbar-affordances
+source_plan:
+  path: docs/superpowers/plans/2026-09-12-graph-toolbar-affordances.md
+  sha256: 5da352f32faeeb89c053ec9a1ea76a0726450504d6735d6c2d32222e693e8f66
+  commit_oid: fd3441fa2c9e63a6737d2419c9297a90c08cca12
+  task_numbers: [1, 2, 3, 4, 5, 6]
+specification:
+  path: docs/superpowers/specs/2026-09-12-graph-toolbar-affordances-spec.md
+  sha256: f8b70fee834df2e6e644553da10b8975c7c88678a6292512194358df0ccb0438
+design:
+  path: docs/superpowers/specs/2026-09-12-graph-toolbar-affordances-design.md
+  sha256: c1fa34d15bf60be1ddc24c47c4b92427aea3e480f9b249c79a64cfa3b4872e5f
+lanes:
+  - id: graph-toolbar-affordances
+    sequence: [t1, t2, t3, t4, t5, t6]
+    ownership:
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/**
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindowModelShould.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/GraphPluginIntegrationShould.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/smoke/GraphPluginOsgiSmoke.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/smoke/GraphWorkspaceUiEvidence.java
+      - freeplane_plugin_graph/src/main/resources/images/GraphSelect.svg
+      - freeplane_plugin_graph/src/main/resources/images/GraphConnect.svg
+      - freeplane_plugin_graph/src/main/resources/images/GraphSettings.svg
+      - freeplane_plugin_graph/src/main/resources/images/GraphSearch.svg
+      - freeplane_plugin_graph/build.gradle
+      - freeplane/src/viewer/resources/translations/Resources_en.properties
+      - docs/superpowers/specs/images/2026-08-10-graph-workspace-implemented.png
+exclusive_resources:
+  - gradle-jvm
+tasks:
+  - id: t1
+    plan_task: 1
+    title: Group Select and Connect in one styled tool switch
+    lane: graph-toolbar-affordances
+    sequence: 1
+    implementer_tier: standard
+    depends_on: []
+    ownership:
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/ToolSwitch.java
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/WorkspaceToolbar.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindowModelShould.java
+    resources: [gradle-jvm]
+    consumes: []
+    produces:
+      ToolSwitch: "grid-layout-1-2-zero-gap, owns ButtonGroup, no painting"
+      configureIcon: "labelTextKey, tooltipTextKey, iconPath -> text/icon/tooltip/accessible-name"
+      applyToolbarSegmentStyle: "JButton.buttonType=toolBarButton, exactly selectButton and connectButton"
+    validation:
+      - [gradle, ":freeplane_plugin_graph:test"]
+  - id: t2
+    plan_task: 2
+    title: Paint the search prompt and magnifier in the toolbar field
+    lane: graph-toolbar-affordances
+    sequence: 2
+    implementer_tier: standard
+    depends_on: [t1]
+    ownership:
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/GraphSearchField.java
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/WorkspaceToolbar.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindowModelShould.java
+    resources: [gradle-jvm]
+    consumes: [configureIcon]
+    produces:
+      GraphSearchField: "setPrompt, setPromptIcon, currentMargin, paintComponent glyphX=getInsets().left-margin.left, preferred height max(26, iconHeight+margin)"
+    validation:
+      - [gradle, ":freeplane_plugin_graph:test"]
+  - id: t3
+    plan_task: 3
+    title: Make the settings gear an icon toggle that carries panel state
+    lane: graph-toolbar-affordances
+    sequence: 3
+    implementer_tier: advanced
+    depends_on: [t2]
+    ownership:
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/WorkspaceToolbar.java
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindow.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindowModelShould.java
+    resources: [gradle-jvm]
+    consumes: [configureIcon, GraphSearchField]
+    produces:
+      setSettingsVisible: "boolean visible -> selected state only"
+      toggleSettingsPanel: "reads panel visibility then pushes it to the gear"
+    validation:
+      - [gradle, ":freeplane_plugin_graph:test"]
+  - id: t4
+    plan_task: 4
+    title: Add the affordance resource values and the source guards
+    lane: graph-toolbar-affordances
+    sequence: 4
+    implementer_tier: fast
+    depends_on: [t3]
+    ownership:
+      - freeplane/src/viewer/resources/translations/Resources_en.properties
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/GraphPluginIntegrationShould.java
+    resources: [gradle-jvm]
+    consumes: [configureIcon, applyToolbarSegmentStyle, setSettingsVisible]
+    produces:
+      resource_values: "tooltip.connect, tooltip.search, tooltip.settings, unchanged tool.select/tool.connect/action.settings"
+      source_guards: "GraphPluginIntegrationShould pins literals and the absence of a toolbar-local ButtonGroup"
+    validation:
+      - [gradle, format_translation]
+      - [gradle, ":freeplane_plugin_graph:verifyGraphBundle"]
+  - id: t5
+    plan_task: 5
+    title: Ship the four glyphs and prove them inside the OSGi bundle
+    lane: graph-toolbar-affordances
+    sequence: 5
+    implementer_tier: fast
+    depends_on: [t4]
+    ownership:
+      - freeplane_plugin_graph/src/main/resources/images/GraphSelect.svg
+      - freeplane_plugin_graph/src/main/resources/images/GraphConnect.svg
+      - freeplane_plugin_graph/src/main/resources/images/GraphSettings.svg
+      - freeplane_plugin_graph/src/main/resources/images/GraphSearch.svg
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/smoke/GraphPluginOsgiSmoke.java
+    resources: [gradle-jvm]
+    consumes: [resource_values]
+    produces:
+      graph_assets: "four monochrome #333 SVGs resolvable through Bundle-ClassPath and ResourceController"
+    validation:
+      - [gradle, ":freeplane_plugin_graph:graphOsgiSmoke"]
+  - id: t6
+    plan_task: 6
+    title: Record the row width, regenerate the UI evidence and run the real-application checks
+    lane: graph-toolbar-affordances
+    sequence: 6
+    implementer_tier: advanced
+    depends_on: [t5]
+    ownership:
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/smoke/GraphWorkspaceUiEvidence.java
+      - freeplane_plugin_graph/build.gradle
+      - docs/superpowers/specs/images/2026-08-10-graph-workspace-implemented.png
+    resources: [gradle-jvm]
+    consumes: [graph_assets, GraphSearchField, applyToolbarSegmentStyle]
+    produces:
+      ui_evidence: "painting icon stubs, prompt render, row-width.txt with six label=<int> lines"
+    validation:
+      - [gradle, ":freeplane_plugin_graph:graphUiEvidence"]
+      - [gradle, ":freeplane_plugin_graph:test"]
