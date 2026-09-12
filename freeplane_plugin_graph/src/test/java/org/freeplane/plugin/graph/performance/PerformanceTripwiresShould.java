@@ -275,7 +275,7 @@ public class PerformanceTripwiresShould {
         GraphProjection projection = GraphProjection.structure(0L, Collections.<ProjectedNode>emptyList(),
             Collections.<ProjectedEnclosure>emptyList());
         LayoutFrame frame = LayoutFrame.of(0L,
-            LayoutPositions.of(Collections.emptyMap(), Collections.emptyMap()), false);
+            LayoutPositions.of(Collections.emptyMap(), Collections.emptyMap()), false, 0);
 
         assertThat(diagnostic.clock()).isSameAs(clock);
         CanvasState state = diagnostic.acceptedFirstFrameState(0L, projection, frame,
@@ -339,7 +339,7 @@ public class PerformanceTripwiresShould {
 
     private static LayoutFrame frame(Map<ProjectedNodeKey, LayoutPoint> nodes,
             Map<EnclosureHullKey, LayoutPoint> anchors) {
-        return LayoutFrame.of(0L, LayoutPositions.of(nodes, anchors), false);
+        return LayoutFrame.of(0L, LayoutPositions.of(nodes, anchors), false, 0);
     }
 
     private GraphWorkspacePerformanceDiagnostic diagnostic(NanoClock clock) throws Exception {

@@ -5,9 +5,11 @@ import java.awt.font.FontRenderContext;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
@@ -32,8 +34,11 @@ import org.freeplane.plugin.graph.layout.LayoutConflict;
 import org.freeplane.plugin.graph.layout.LayoutFrame;
 import org.freeplane.plugin.graph.layout.LayoutRequest;
 import org.freeplane.plugin.graph.layout.LayoutWorker;
+import org.freeplane.plugin.graph.layout.NodeSeparationProjection;
+import org.freeplane.plugin.graph.layout.NodeSeparationResult;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.GraphProjection;
+import org.freeplane.plugin.graph.projection.PinProjection;
 import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
@@ -738,13 +743,35 @@ public final class LayoutSettleLoop implements AutoCloseable {
             // A failed worker may not have a readable retained frame.
         }
         final boolean retainedUsable = retained != null && covers(run.projection, retained.positions());
-        final LayoutPositions positions = retainedUsable ? retained.positions() : fallbackPositions(run.projection);
+        final LayoutPositions positions;
+        final int residual;
+        if (retainedUsable) {
+            positions = retained.positions();
+            residual = retained.residualViolations();
+        }
+        else {
+            final NodeSeparationResult separation = new NodeSeparationProjection().project(run.projection,
+                fallbackPositions(run.projection), pinnedNodes(run.request.pins()));
+            positions = separation.positions();
+            residual = separation.residualViolations();
+        }
         final long index = source != null ? source.stepIndex() : retained == null ? 0L : retained.stepIndex();
         if (retained == null) {
-            return LayoutFrame.of(index, positions, true);
+            return LayoutFrame.of(index, positions, true, residual);
         }
         final List<LayoutConflict> conflicts = retained.conflicts();
-        return LayoutFrame.withDiagnostics(LayoutFrame.of(index, positions, true), conflicts, retained.idle());
+        return LayoutFrame.withDiagnostics(LayoutFrame.of(index, positions, true, residual),
+            conflicts, retained.idle());
+    }
+
+    private static Set<ProjectedNodeKey> pinnedNodes(final List<PinProjection> pins) {
+        final Set<ProjectedNodeKey> pinned = new LinkedHashSet<ProjectedNodeKey>();
+        for (final PinProjection pin : pins) {
+            if (pin.active() && pin.projectedNode().isPresent()) {
+                pinned.add(pin.projectedNode().get());
+            }
+        }
+        return pinned;
     }
 
     private void closeWorker(final CompletableFuture<Void> closeFuture) {

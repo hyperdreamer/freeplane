@@ -656,7 +656,7 @@ public class AccessibleGraphCanvasShould {
                 Collections.<EnclosureHullKey, HullGeometry>emptyMap());
             final LayoutFrame frame = LayoutFrame.of(state.generation() + 1L,
                 LayoutPositions.of(Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(),
-                    Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false);
+                    Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false, 0);
             return CanvasState.of(state.generation() + 1L, projection, frame, geometry,
                 OperationalStatus.IDLE);
         }
@@ -787,7 +787,7 @@ public class AccessibleGraphCanvasShould {
                 anchors.put(entry.getKey(), entry.getValue().labelAnchor());
             }
             final LayoutFrame frame = LayoutFrame.of(1L,
-                LayoutPositions.of(positions, anchors), false);
+                LayoutPositions.of(positions, anchors), false, 0);
             final CanvasState state = CanvasState.of(1L, projection, frame, geometry,
                 OperationalStatus.IDLE);
             return new Fixture(state, sourceEndpoint, prominentEndpoint, tieEndpoint, leftEndpoint,

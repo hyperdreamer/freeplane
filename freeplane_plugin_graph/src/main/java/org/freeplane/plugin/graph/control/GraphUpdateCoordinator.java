@@ -132,7 +132,7 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
     private void initializeState() {
         this.projection = emptyProjection();
         final LayoutFrame initialLayout = LayoutFrame.of(0L,
-            LayoutPositions.of(Collections.emptyMap(), Collections.emptyMap()), false);
+            LayoutPositions.of(Collections.emptyMap(), Collections.emptyMap()), false, 0);
         this.state = CanvasState.of(0L, projection, initialLayout,
             GraphGeometry.of(Collections.emptyMap(), Collections.emptyMap()), OperationalStatus.LOADING);
     }

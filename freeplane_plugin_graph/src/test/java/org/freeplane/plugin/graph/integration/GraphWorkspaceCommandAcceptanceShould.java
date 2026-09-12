@@ -778,7 +778,7 @@ public class GraphWorkspaceCommandAcceptanceShould {
     private static CanvasState stateFor(final GraphProjection projection) {
         return CanvasState.of(projection.generation(), projection,
             LayoutFrame.of(projection.generation(), LayoutPositions.of(Collections.emptyMap(), Collections.emptyMap()),
-                false), GraphGeometry.of(Collections.emptyMap(), Collections.emptyMap()), OperationalStatus.IDLE);
+                false, 0), GraphGeometry.of(Collections.emptyMap(), Collections.emptyMap()), OperationalStatus.IDLE);
     }
 
     private static void dispatch(final GraphCanvas canvas, final java.awt.AWTEvent event) {
@@ -1223,7 +1223,7 @@ public class GraphWorkspaceCommandAcceptanceShould {
             anchors.put(secondHull, LayoutPoint.of(40.0, 0.0));
             final CanvasState state = CanvasState.of(7L, projection,
                 LayoutFrame.of(7L, LayoutPositions.of(Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(),
-                    anchors), false),
+                    anchors), false, 0),
                 GraphGeometry.of(Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(), hulls),
                 OperationalStatus.IDLE);
             final GraphCanvas canvas = new GraphCanvas();

@@ -15,6 +15,7 @@ import org.freeplane.plugin.graph.geometry.HullGeometry;
 import org.freeplane.plugin.graph.geometry.HullIntersection;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
+import org.freeplane.plugin.graph.geometry.NodeGeometry;
 import org.freeplane.plugin.graph.projection.BoundaryTier;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.EnclosureKey;
@@ -117,6 +118,45 @@ public class MapTierCorrectionShould {
         assertThat(corrected.nodes().get(NODE_TWO)).isEqualTo(LayoutPoint.of(2.0, 0.0));
         assertThat(corrected.anchors().get(first.hullKey())).isEqualTo(LayoutPoint.of(-1.0, 0.0));
         assertThat(corrected.anchors().get(second.hullKey())).isEqualTo(LayoutPoint.of(2.0, 0.0));
+    }
+
+    @Test
+    public void separatesThreeHullsAtThePinnedThirtyUnitHalfExtent() {
+        ProjectedEnclosure first = root(MAP_ONE, "root-one", NODE_ONE, BoundaryTier.SUBTLE);
+        ProjectedEnclosure second = root(MAP_TWO, "root-two", NODE_TWO, BoundaryTier.SUBTLE);
+        ProjectedEnclosure third = root(MAP_THREE, "root-three", NODE_THREE, BoundaryTier.SUBTLE);
+        GraphProjection projection = GraphProjection.projected(1L,
+            Arrays.asList(node(NODE_ONE), node(NODE_TWO), node(NODE_THREE)),
+            Arrays.asList(first, second, third), Collections.emptyList(), Collections.emptyList(),
+            Collections.<PinProjection>emptyList());
+        Map<ProjectedNodeKey, LayoutPoint> nodes = new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        nodes.put(NODE_ONE, LayoutPoint.of(0.0, 0.0));
+        nodes.put(NODE_TWO, LayoutPoint.of(40.0, 0.0));
+        nodes.put(NODE_THREE, LayoutPoint.of(-40.0, 0.0));
+        Map<EnclosureHullKey, LayoutPoint> anchors = new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
+        anchors.put(first.hullKey(), LayoutPoint.of(0.0, 0.0));
+        anchors.put(second.hullKey(), LayoutPoint.of(40.0, 0.0));
+        anchors.put(third.hullKey(), LayoutPoint.of(-40.0, 0.0));
+        Map<EnclosureHullKey, HullGeometry> hulls = new LinkedHashMap<EnclosureHullKey, HullGeometry>();
+        hulls.put(first.hullKey(), square(0.0, 30.0));
+        hulls.put(second.hullKey(), square(40.0, 30.0));
+        hulls.put(third.hullKey(), square(-40.0, 30.0));
+
+        LayoutPositions corrected = new MapTierCorrection().apply(projection,
+            LayoutPositions.of(nodes, anchors),
+            GraphGeometry.of(Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(), hulls)).positions();
+
+        assertThat(corrected.nodes().get(NODE_ONE)).isEqualTo(LayoutPoint.of(0.0, 0.0));
+        assertThat(corrected.nodes().get(NODE_TWO)).isEqualTo(LayoutPoint.of(50.0, 0.0));
+        assertThat(corrected.nodes().get(NODE_THREE)).isEqualTo(LayoutPoint.of(-50.0, 0.0));
+
+        ProjectedNodeKey secondAfter = NODE_TWO;
+        ProjectedNodeKey firstAfter = NODE_ONE;
+        HullGeometry firstHull = square(corrected.nodes().get(firstAfter).x(), 30.0);
+        HullGeometry secondHull = square(corrected.nodes().get(secondAfter).x(), 30.0);
+        assertThat(HullIntersection.minimumSeparatingTranslation(firstHull, secondHull))
+            .isEqualTo(LayoutPoint.of(10.0, 0.0));
+        assertThat(HullIntersection.siblingOverlap(firstHull, secondHull)).isTrue();
     }
 
     @Test
@@ -266,6 +306,13 @@ public class MapTierCorrectionShould {
         return HullGeometry.of(Arrays.asList(LayoutPoint.of(offset - 1.0, -1.0),
             LayoutPoint.of(offset + 1.0, -1.0), LayoutPoint.of(offset + 1.0, 1.0),
             LayoutPoint.of(offset - 1.0, 1.0)), LayoutPoint.of(offset, 0.0));
+    }
+
+    private static HullGeometry square(double offset, double halfExtent) {
+        return HullGeometry.of(Arrays.asList(LayoutPoint.of(offset - halfExtent, -halfExtent),
+            LayoutPoint.of(offset + halfExtent, -halfExtent),
+            LayoutPoint.of(offset + halfExtent, halfExtent),
+            LayoutPoint.of(offset - halfExtent, halfExtent)), LayoutPoint.of(offset, 0.0));
     }
 
     private static LayoutPoint add(LayoutPoint first, LayoutPoint second) {

@@ -15,7 +15,6 @@ import org.miv.pherd.geom.Point3;
 
 final class TypedSpringBox extends SpringBox {
     static final double CROSS_MAP_DISPLACEMENT_LIMIT = 0.005;
-    static final double REST_LENGTH = 24.0;
     private static final double ATTRACTION_FACTOR = 0.05;
     private static final double REPULSION_FACTOR = 16.0;
     private static final double BASE_SEPARATION_RADIUS = 8.0;

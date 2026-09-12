@@ -5,6 +5,7 @@ import java.awt.font.FontRenderContext;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -26,6 +27,7 @@ import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.layout.graphstream.GraphStreamLayoutFactory;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.GraphProjection;
+import org.freeplane.plugin.graph.projection.PinProjection;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
 
@@ -34,7 +36,7 @@ public final class LayoutWorker implements AutoCloseable {
     private static final LayoutFrame EMPTY_FAILED_FRAME = LayoutFrame.withDiagnostics(
         LayoutFrame.of(0L, LayoutPositions.of(
             Collections.<ProjectedNodeKey, org.freeplane.plugin.graph.geometry.LayoutPoint>emptyMap(),
-            Collections.<EnclosureHullKey, org.freeplane.plugin.graph.geometry.LayoutPoint>emptyMap()), true),
+            Collections.<EnclosureHullKey, org.freeplane.plugin.graph.geometry.LayoutPoint>emptyMap()), true, 0),
         Collections.<LayoutConflict>emptyList(), PerceptualIdlePolicy.IdleMeasurement.initial());
 
     private final Supplier<LayoutEngine> engineFactory;
@@ -286,11 +288,14 @@ public final class LayoutWorker implements AutoCloseable {
             geometryEngine.computeHulls(request.projection(), raw.positions(), defaultMetrics());
         final MapTierCorrection.CorrectionResult correction = mapCorrection.apply(request.projection(),
             raw.positions(), geometry, request.pins());
-        final LayoutPositions corrected = correction.positions();
+        final NodeSeparationResult separation = new NodeSeparationProjection().project(request.projection(),
+            correction.positions(), pinnedNodes(request.pins()));
+        final LayoutPositions corrected = separation.positions();
         final LayoutPositions before = previousCorrectedPositions == null ? corrected : previousCorrectedPositions;
         final PerceptualIdlePolicy.IdleMeasurement idle = idlePolicy.observe(before, corrected);
         final LayoutFrame decorated = LayoutFrame.withDiagnostics(
-            LayoutFrame.of(raw.stepIndex(), corrected, false), correction.conflicts(), idle);
+            LayoutFrame.of(raw.stepIndex(), corrected, false, separation.residualViolations()),
+            correction.conflicts(), idle);
         currentRequest = request;
         hasRequest = true;
         previousCorrectedPositions = corrected;
@@ -310,6 +315,16 @@ public final class LayoutWorker implements AutoCloseable {
         if (!nodeKeys.equals(positions.nodes().keySet()) || !anchorKeys.equals(positions.anchors().keySet())) {
             throw new IllegalArgumentException("Layout frame positions must cover the current projection");
         }
+    }
+
+    private static Set<ProjectedNodeKey> pinnedNodes(final List<PinProjection> pins) {
+        final Set<ProjectedNodeKey> pinned = new LinkedHashSet<ProjectedNodeKey>();
+        for (final PinProjection pin : pins) {
+            if (pin.active() && pin.projectedNode().isPresent()) {
+                pinned.add(pin.projectedNode().get());
+            }
+        }
+        return pinned;
     }
 
     private static GeometryTextMetrics defaultMetrics() {
@@ -343,7 +358,8 @@ public final class LayoutWorker implements AutoCloseable {
             return EMPTY_FAILED_FRAME;
         }
         final long index = requestedIndex >= 0L ? requestedIndex : retained.stepIndex();
-        return LayoutFrame.withDiagnostics(LayoutFrame.of(index, retained.positions(), true),
+        return LayoutFrame.withDiagnostics(
+            LayoutFrame.of(index, retained.positions(), true, retained.residualViolations()),
             retained.conflicts(), retained.idle());
     }
 

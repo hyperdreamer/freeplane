@@ -83,7 +83,8 @@ public class GraphStreamBoundaryShould {
 
     private static List<Class<?>> publicLayoutTypes() {
         return Arrays.<Class<?>>asList(LayoutEngine.class, LayoutCalibration.class, LayoutRequest.class,
-            LayoutFrame.class, GraphStreamLayoutFactory.class);
+            LayoutFrame.class, NodeSeparationProjection.class, NodeSeparationResult.class,
+            GraphStreamLayoutFactory.class);
     }
 
     private static void assertGraphStreamFree(Class<?>[] types, String description) {

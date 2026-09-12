@@ -181,7 +181,7 @@ public class GraphSearchModelShould {
             anchors.put(northHullKey, LayoutPoint.of(0.0, 0.0));
             anchors.put(hullKey, LayoutPoint.of(0.0, 0.0));
             final LayoutPositions positions = LayoutPositions.of(nodePositions, anchors);
-            final LayoutFrame frame = LayoutFrame.of(1L, positions, false);
+            final LayoutFrame frame = LayoutFrame.of(1L, positions, false, 0);
             final CanvasState state = CanvasState.of(1L, projection, frame, geometry,
                 OperationalStatus.IDLE);
             return new Fixture(state, ProjectedEndpointKey.ofNode(northNodeKey),

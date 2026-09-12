@@ -436,7 +436,7 @@ public class WorkspaceDialogsShould {
             Collections.<ProjectedEnclosure>emptyList(), projectedEdges, resolutions,
             Collections.emptyList());
         return CanvasState.of(7L, projection, LayoutFrame.of(7L,
-            LayoutPositions.of(nodePositions, Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false),
+            LayoutPositions.of(nodePositions, Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false, 0),
             GraphGeometry.of(Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(),
                 Collections.<EnclosureHullKey, HullGeometry>emptyMap(), Collections.emptyMap()),
             OperationalStatus.IDLE);
@@ -479,7 +479,7 @@ public class WorkspaceDialogsShould {
             Collections.<ProjectedNode>emptyList(), enclosures, projectedEdges, resolutions,
             Collections.emptyList());
         return CanvasState.of(generation, projection, LayoutFrame.of(generation,
-            LayoutPositions.of(Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(), anchors), false),
+            LayoutPositions.of(Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(), anchors), false, 0),
             GraphGeometry.of(Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(), hullGeometry,
                 Collections.emptyMap()), OperationalStatus.IDLE);
     }
@@ -508,7 +508,7 @@ public class WorkspaceDialogsShould {
             positions.put(node.key(), point);
         }
         CanvasState state = CanvasState.of(generation, projection, LayoutFrame.of(generation,
-            LayoutPositions.of(positions, Collections.emptyMap()), false), GraphGeometry.of(geometry,
+            LayoutPositions.of(positions, Collections.emptyMap()), false, 0), GraphGeometry.of(geometry,
             Collections.emptyMap()), OperationalStatus.IDLE);
         return new ContributorState(state, edge, contributor);
     }
