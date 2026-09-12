@@ -677,6 +677,18 @@ public class ScreenLabelPlacementShould {
         assertThat(subtle.leaderStart()).isEmpty();
     }
 
+    @Test
+    public void skipsSuppressedEnclosureLabels() {
+        Rectangle2D area = area(1128.0, 364.0);
+        LabelPlacementRequest request = enclosureRequest("Axioms", BoundaryTier.SUPPRESSED, area,
+            Collections.<SceneNode>emptyList(), RenderingLevel.FULL);
+
+        List<PlacedLabel> placed = new ScreenLabelPlacement().place(request, null, fonts(),
+            Collections.<Rectangle2D>emptyList());
+
+        assertThat(placed).isEmpty();
+    }
+
     private static void assertZoomCell(List<SceneNode> scene, Rectangle2D area, double zoom,
             int placedCount, int fullCount, int denseCount, String forcedSlot, double forcedX,
             double forcedY, List<String> hidden) {
@@ -762,6 +774,12 @@ public class ScreenLabelPlacementShould {
 
     static LabelPlacementRequest enclosureRequest(String text, boolean emphatic, Rectangle2D area,
             List<SceneNode> nodes, RenderingLevel level) {
+        return enclosureRequest(text, emphatic ? BoundaryTier.EMPHATIC : BoundaryTier.SUBTLE, area, nodes,
+            level);
+    }
+
+    static LabelPlacementRequest enclosureRequest(String text, BoundaryTier tier, Rectangle2D area,
+            List<SceneNode> nodes, RenderingLevel level) {
         EnclosureKey endpointKey = EnclosureKey.of(SourceNodeKey.persisted(
             NodeReference.of(MAP, PersistedNodeId.of("axioms"))));
         EnclosureHullKey hullKey = EnclosureHullKey.of(Collections.singletonList(endpointKey));
@@ -781,8 +799,7 @@ public class ScreenLabelPlacementShould {
         ProjectedEnclosure enclosure = ProjectedEnclosure.of(hullKey,
             Collections.singletonList(endpointKey), Collections.singletonList(SafeNodeLabel.of(text, text)),
             "Map", Optional.<EnclosureHullKey>empty(), directNodes,
-            Collections.<EnclosureHullKey>emptyList(), true,
-            emphatic ? BoundaryTier.EMPHATIC : BoundaryTier.SUBTLE);
+            Collections.<EnclosureHullKey>emptyList(), true, tier);
         GraphProjection projection = GraphProjection.structure(1L, projected,
             Collections.singletonList(enclosure));
         Map<EnclosureHullKey, HullGeometry> hulls = new LinkedHashMap<EnclosureHullKey, HullGeometry>();

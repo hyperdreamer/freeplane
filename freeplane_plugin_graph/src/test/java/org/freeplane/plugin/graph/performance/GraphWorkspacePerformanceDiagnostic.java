@@ -290,13 +290,8 @@ public final class GraphWorkspacePerformanceDiagnostic {
         final long workerHullStart = clock.nanoTime();
         final GraphGeometry workerHull = geometryEngine.computeHulls(current, workerFrame.positions(), textMetrics);
         final long workerHullEnd = clock.nanoTime();
-        final long workerLabelStart = clock.nanoTime();
-        final GraphGeometry workerGeometry = textMetrics == null ? workerHull
-            : new org.freeplane.plugin.graph.geometry.LabelPlacementEngine().place(current, workerHull,
-                textMetrics);
-        final long workerLabelEnd = clock.nanoTime();
 
-        final CanvasState state = acceptedFirstFrameState(generation, current, workerFrame, workerGeometry);
+        final CanvasState state = acceptedFirstFrameState(generation, current, workerFrame, workerHull);
         final long swapStart = clock.nanoTime();
         setCanvasStateBounded(state);
         final long swapEnd = clock.nanoTime();
@@ -304,7 +299,7 @@ public final class GraphWorkspacePerformanceDiagnostic {
         final long acceptedEnd = clock.nanoTime();
         measurements.recordDuration(PerformanceMeasurements.Stage.ACCEPTED_BATCH_FIRST_FRAME,
             accepted.acceptedAtNanos(), acceptedEnd, warmup);
-        if (workerHullEnd < workerHullStart || workerLabelEnd < workerLabelStart) {
+        if (workerHullEnd < workerHullStart) {
             throw new DiagnosticFailure(PerformanceMeasurements.Stage.ACCEPTED_BATCH_FIRST_FRAME,
                 "Worker geometry timing moved backwards");
         }
@@ -350,12 +345,6 @@ public final class GraphWorkspacePerformanceDiagnostic {
             final GraphGeometry correctedHull = geometryEngine.computeHulls(projection, corrected.positions(), textMetrics);
             final long hullEnd = clock.nanoTime();
             measurements.recordDuration(PerformanceMeasurements.Stage.HULL, hullStart, hullEnd, warmup);
-
-            final long labelStart = clock.nanoTime();
-            new org.freeplane.plugin.graph.geometry.LabelPlacementEngine().place(projection, correctedHull,
-                textMetrics);
-            final long labelEnd = clock.nanoTime();
-            measurements.recordDuration(PerformanceMeasurements.Stage.LABEL, labelStart, labelEnd, warmup);
 
             final long forceStart = clock.nanoTime();
             final LayoutFrame forced = engine.step();

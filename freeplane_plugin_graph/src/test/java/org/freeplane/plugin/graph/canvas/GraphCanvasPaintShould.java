@@ -33,7 +33,6 @@ import org.freeplane.plugin.graph.control.CanvasState;
 import org.freeplane.plugin.graph.control.OperationalStatus;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.HullGeometry;
-import org.freeplane.plugin.graph.geometry.LabelPlacement;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.geometry.NodeGeometry;
@@ -333,6 +332,11 @@ public class GraphCanvasPaintShould {
 
     private static List<PlacedLabel> placedLabels(LabelFixture fixture, GraphTheme theme,
             GraphPaintState paintState, RenderingLevel level) {
+        return placedLabels(fixture.state, theme, paintState, level);
+    }
+
+    private static List<PlacedLabel> placedLabels(CanvasState state, GraphTheme theme,
+            GraphPaintState paintState, RenderingLevel level) {
         Set<ProjectedEndpointKey> forced = new LinkedHashSet<ProjectedEndpointKey>();
         if (paintState.selection().isPresent()) {
             forced.add(paintState.selection().get());
@@ -341,8 +345,8 @@ public class GraphCanvasPaintShould {
             forced.add(paintState.hover().get());
         }
         forced.addAll(paintState.searchMatches());
-        LabelPlacementRequest request = LabelPlacementRequest.of(fixture.state.projection(),
-            fixture.state.geometry(), fixture.state.layout().positions(), 1.0, 0.0, 0.0,
+        LabelPlacementRequest request = LabelPlacementRequest.of(state.projection(),
+            state.geometry(), state.layout().positions(), 1.0, 0.0, 0.0,
             new java.awt.geom.Rectangle2D.Double(0.0, 0.0, SIZE.width, SIZE.height), forced, level);
         return new ScreenLabelPlacement().place(request, null, LabelFonts.from(theme),
             Collections.<java.awt.geom.Rectangle2D>emptyList());
@@ -503,13 +507,11 @@ public class GraphCanvasPaintShould {
         assertThat(currentEnclosure.hullKey()).isNotEqualTo(previousEnclosure.hullKey());
         assertThat(replacement.geometry().hulls()).containsKey(previousEnclosure.hullKey());
         assertThat(replacement.geometry().hulls()).doesNotContainKey(currentEnclosure.hullKey());
-        assertThat(replacement.geometry().labels()).containsKey(enclosureEndpoint);
 
-        CanvasState withoutRetainedLabel = withoutEnclosureLabel(replacement, enclosureEndpoint);
-        BufferedImage staleImage = paint(replacement, GraphPaintState.empty(), theme, RenderingLevel.FULL);
-        BufferedImage withoutRetainedLabelImage = paint(withoutRetainedLabel, GraphPaintState.empty(), theme,
+        List<PlacedLabel> placements = placedLabels(replacement, theme, GraphPaintState.empty(),
             RenderingLevel.FULL);
-        assertThat(differentPixels(staleImage, withoutRetainedLabelImage)).isZero();
+        assertThat(placements).noneMatch(label -> label.endpoint().isEnclosure()
+            && currentEnclosure.endpointKeys().contains(label.endpoint().enclosure().get()));
     }
 
     @Test
@@ -725,12 +727,6 @@ public class GraphCanvasPaintShould {
             enclosures.add(enclosure.equals(previous) ? current : enclosure);
         }
         return replacementState(base, base.projection().nodes(), enclosures, base.geometry());
-    }
-
-    private static CanvasState withoutEnclosureLabel(final CanvasState base,
-            final EnclosureKey removed) {
-        return CanvasState.of(base.generation(), base.projection(), base.layout(),
-            GraphGeometry.of(base.geometry().nodes(), base.geometry().hulls()), base.status());
     }
 
     private static ProjectedEdge enclosureToNodeEdge(final ProjectedEndpointKey enclosure,
@@ -1274,12 +1270,7 @@ public class GraphCanvasPaintShould {
         Map<EnclosureHullKey, HullGeometry> hulls = new LinkedHashMap<EnclosureHullKey, HullGeometry>();
         hulls.put(firstHullKey, rectangle(-70.0, -25.0, -20.0, 25.0, LayoutPoint.of(-45.0, 14.0)));
         hulls.put(secondHullKey, rectangle(20.0, -20.0, 70.0, 20.0, LayoutPoint.of(45.0, 12.0)));
-        Map<EnclosureKey, LabelPlacement> labels = new LinkedHashMap<EnclosureKey, LabelPlacement>();
-        labels.put(firstEnclosureKey, LabelPlacement.of("Emphatic", LabelPlacement.Mode.INTERIOR,
-            LayoutPoint.of(-45.0, 14.0), 34.0, 8.0, Optional.<LayoutPoint>empty()));
-        labels.put(secondEnclosureKey, LabelPlacement.of("Subtle", LabelPlacement.Mode.INTERIOR,
-            LayoutPoint.of(45.0, 12.0), 26.0, 8.0, Optional.<LayoutPoint>empty()));
-        GraphGeometry geometry = GraphGeometry.of(nodes, hulls, labels);
+        GraphGeometry geometry = GraphGeometry.of(nodes, hulls);
         GraphProjection projection = GraphProjection.projected(1L, Arrays.asList(first, second),
             Arrays.asList(firstEnclosure, secondEnclosure), Collections.singletonList(edge),
             Collections.<RelationshipResolution>emptyList(), Collections.<PinProjection>emptyList());

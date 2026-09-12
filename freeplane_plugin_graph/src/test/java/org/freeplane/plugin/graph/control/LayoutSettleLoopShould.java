@@ -376,7 +376,7 @@ public class LayoutSettleLoopShould {
 
     @Test
     public void suppressesAQueuedPublicationWhenPausePrecedesEdtDelivery() {
-        GraphProjection projection = populatedProjection(10L);
+        GraphProjection projection = metricsObservedProjection(10L);
         ControlledStepper stepper = new ControlledStepper();
         QueuedEdt edt = new QueuedEdt();
         RecordingMetrics metrics = new RecordingMetrics(edt);
@@ -452,7 +452,7 @@ public class LayoutSettleLoopShould {
 
     @Test
     public void handlesAnAlreadyCompletedFrameOffTheEdt() {
-        GraphProjection projection = populatedProjection(13L);
+        GraphProjection projection = metricsObservedProjection(13L);
         TestStepper stepper = new TestStepper(frame(projection, 0L, true));
         QueuedEdt edt = new QueuedEdt();
         RecordingMetrics metrics = new RecordingMetrics(edt);
@@ -1447,6 +1447,21 @@ public class LayoutSettleLoopShould {
         ProjectedEnclosure enclosure = ProjectedEnclosure.of(hullKey, Collections.singletonList(endpoint),
             Collections.singletonList(SafeNodeLabel.of("Map", "Map")), "Map", Optional.empty(),
             Collections.singletonList(nodeKey), Collections.emptyList(), true, BoundaryTier.SUBTLE);
+        return GraphProjection.projected(generation, Collections.singletonList(node),
+            Collections.singletonList(enclosure), Collections.emptyList(), Collections.emptyList(),
+            Collections.emptyList());
+    }
+
+    private static GraphProjection metricsObservedProjection(long generation) {
+        // GraphGeometryEngine consults its metrics only for a label-sized enclosure without direct
+        // content, so the off-EDT probe needs that shape to observe the layout-path geometry work.
+        ProjectedNodeKey nodeKey = ProjectedNodeKey.of(SourceNodeKey.persisted(reference("node-" + generation)));
+        ProjectedNode node = ProjectedNode.of(nodeKey, SafeNodeLabel.of("Node", "Node"), "Map", false);
+        EnclosureKey endpoint = EnclosureKey.of(SourceNodeKey.persisted(reference("hull-" + generation)));
+        EnclosureHullKey hullKey = EnclosureHullKey.of(Collections.singletonList(endpoint));
+        ProjectedEnclosure enclosure = ProjectedEnclosure.of(hullKey, Collections.singletonList(endpoint),
+            Collections.singletonList(SafeNodeLabel.of("Map", "Map")), "Map", Optional.empty(),
+            Collections.<ProjectedNodeKey>emptyList(), Collections.emptyList(), true, BoundaryTier.SUBTLE);
         return GraphProjection.projected(generation, Collections.singletonList(node),
             Collections.singletonList(enclosure), Collections.emptyList(), Collections.emptyList(),
             Collections.emptyList());
