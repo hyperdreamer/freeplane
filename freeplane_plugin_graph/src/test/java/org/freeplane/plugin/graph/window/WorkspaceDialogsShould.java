@@ -438,7 +438,7 @@ public class WorkspaceDialogsShould {
         return CanvasState.of(7L, projection, LayoutFrame.of(7L,
             LayoutPositions.of(nodePositions, Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false, 0),
             GraphGeometry.of(Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(),
-                Collections.<EnclosureHullKey, HullGeometry>emptyMap(), Collections.emptyMap()),
+                Collections.<EnclosureHullKey, HullGeometry>emptyMap()),
             OperationalStatus.IDLE);
     }
 
@@ -480,8 +480,8 @@ public class WorkspaceDialogsShould {
             Collections.emptyList());
         return CanvasState.of(generation, projection, LayoutFrame.of(generation,
             LayoutPositions.of(Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(), anchors), false, 0),
-            GraphGeometry.of(Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(), hullGeometry,
-                Collections.emptyMap()), OperationalStatus.IDLE);
+            GraphGeometry.of(Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(), hullGeometry),
+            OperationalStatus.IDLE);
     }
 
     private static ContributorState contributorState(long generation) {

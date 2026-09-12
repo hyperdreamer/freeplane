@@ -65,11 +65,15 @@ import org.freeplane.plugin.graph.adapter.MapLease;
 import org.freeplane.plugin.graph.adapter.MapLeaseManager;
 import org.freeplane.plugin.graph.adapter.MapOperationalState;
 import org.freeplane.plugin.graph.adapter.MapSnapshotFactory;
+import org.freeplane.plugin.graph.canvas.GraphTheme;
+import org.freeplane.plugin.graph.canvas.LabelFonts;
+import org.freeplane.plugin.graph.canvas.LabelPlacementRequest;
+import org.freeplane.plugin.graph.canvas.PlacedLabel;
+import org.freeplane.plugin.graph.canvas.RenderingLevel;
+import org.freeplane.plugin.graph.canvas.ScreenLabelPlacement;
 import org.freeplane.plugin.graph.geometry.AwtGeometryTextMetrics;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.GraphGeometryEngine;
-import org.freeplane.plugin.graph.geometry.LabelPlacement;
-import org.freeplane.plugin.graph.geometry.LabelPlacementEngine;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.group.GraphGroupController;
@@ -114,6 +118,7 @@ import org.freeplane.plugin.graph.workspace.io.WorkspaceMigration;
 import org.freeplane.plugin.graph.workspace.io.WorkspaceMigrationRegistry;
 import org.freeplane.plugin.graph.workspace.io.WorkspaceXmlCodec;
 import org.freeplane.plugin.graph.workspace.model.DisplaySettings;
+import org.freeplane.plugin.graph.workspace.model.DisplaySettings.CanvasTheme;
 import org.freeplane.plugin.graph.workspace.model.GraphRelationshipRecord;
 import org.freeplane.plugin.graph.workspace.model.MapReference;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
@@ -272,7 +277,7 @@ public class GraphWorkspaceModelAcceptanceShould {
             registration(MAP_TWO, 2L, true)), firstMap, secondMap);
 
         ProjectedEnclosure mapRoot = enclosure(projection, MAP_ONE, "root");
-        GraphGeometry labeled = labelsFor(projection);
+        List<PlacedLabel> labels = labelsFor(projection);
 
         assertThat(mapRoot.boundaryTier()).isEqualTo(BoundaryTier.EMPHATIC);
         assertThat(projection.enclosures()).hasSize(2);
@@ -290,12 +295,16 @@ public class GraphWorkspaceModelAcceptanceShould {
         assertThat(projection.nodes()).extracting(ProjectedNode::label)
             .extracting(SafeNodeLabel::displayText)
             .containsExactlyInAnyOrder("First interior", "Second interior");
-        assertThat(labeled.labels().values()).extracting(LabelPlacement::displayText)
+        assertThat(labels).filteredOn(label -> label.endpoint().isEnclosure())
+            .extracting(PlacedLabel::text)
             .containsExactlyInAnyOrder("Map fixture", "Second root");
-        assertThat(labeled.labels().values()).filteredOn(placement -> "Map fixture".equals(placement.displayText()))
-            .extracting(LabelPlacement::mode).containsExactly(LabelPlacement.Mode.INTERIOR);
-        assertThat(labeled.labels().values()).filteredOn(placement -> !"Map fixture".equals(placement.displayText()))
-            .extracting(LabelPlacement::mode).containsOnly(LabelPlacement.Mode.INTERIOR);
+        assertThat(labels).allMatch(label ->
+            label.mode() != PlacedLabel.Mode.HOVER_ONLY || label.emphaticAtAnchor());
+        for (int first = 0; first < labels.size(); first++) {
+            for (int second = first + 1; second < labels.size(); second++) {
+                assertThat(labels.get(first).bounds().intersects(labels.get(second).bounds())).isFalse();
+            }
+        }
     }
 
     @Test
@@ -1038,12 +1047,17 @@ public class GraphWorkspaceModelAcceptanceShould {
         throw new AssertionError("Missing enclosure " + expected);
     }
 
-    private static GraphGeometry labelsFor(final GraphProjection projection) {
+    private static List<PlacedLabel> labelsFor(final GraphProjection projection) {
         AwtGeometryTextMetrics metrics = new AwtGeometryTextMetrics(new Font("Dialog", Font.PLAIN, 12),
             new FontRenderContext(new AffineTransform(), false, false));
         GraphGeometry geometry =
             new GraphGeometryEngine().computeHulls(projection, positionsFor(projection), metrics);
-        return new LabelPlacementEngine(metrics).place(projection, geometry);
+        LabelPlacementRequest request = LabelPlacementRequest.of(projection, geometry,
+            positionsFor(projection), 1.0, 0.0, 0.0,
+            new java.awt.geom.Rectangle2D.Double(0.0, 0.0, 1128.0, 364.0),
+            Collections.<ProjectedEndpointKey>emptySet(), RenderingLevel.FULL);
+        return new ScreenLabelPlacement().place(request, null,
+            LabelFonts.from(GraphTheme.resolve(CanvasTheme.LIGHT)));
     }
 
     private static LayoutPositions positionsFor(final GraphProjection projection) {

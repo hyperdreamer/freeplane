@@ -38,7 +38,6 @@ public final class GraphTheme {
     private final Font labelFont;
     private final Font emphaticLabelFont;
     private final Font denseLabelFont;
-    private final Font overTargetLabelFont;
     private final Map<MapReferenceId, Color> mapColors;
 
     private GraphTheme(final Color background, final Color labelColor, final Color edgeColor,
@@ -67,7 +66,6 @@ public final class GraphTheme {
         this.labelFont = new Font(Font.SANS_SERIF, Font.PLAIN, 12);
         this.emphaticLabelFont = new Font(Font.SANS_SERIF, Font.BOLD, 15);
         this.denseLabelFont = new Font(Font.SANS_SERIF, Font.PLAIN, 9);
-        this.overTargetLabelFont = new Font(Font.SANS_SERIF, Font.PLAIN, 7);
         this.mapColors = copyMapColors(mapColors);
     }
 
@@ -253,21 +251,6 @@ public final class GraphTheme {
 
     public Font denseLabelFont() {
         return denseLabelFont;
-    }
-
-    public Font overTargetLabelFont() {
-        return overTargetLabelFont;
-    }
-
-    public Font labelFont(final RenderingLevel level) {
-        final RenderingLevel value = Objects.requireNonNull(level, "level");
-        if (value == RenderingLevel.DENSE) {
-            return denseLabelFont;
-        }
-        if (value == RenderingLevel.OVER_TARGET) {
-            return overTargetLabelFont;
-        }
-        return labelFont;
     }
 
     private Color treatment(final MapReferenceId mapReferenceId, final double baseWeight) {

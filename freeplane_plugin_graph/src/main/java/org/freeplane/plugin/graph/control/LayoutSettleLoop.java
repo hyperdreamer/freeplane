@@ -59,7 +59,6 @@ public final class LayoutSettleLoop implements AutoCloseable {
     private final GraphGeometryEngine geometryEngine;
     private final GeometryTextMetrics metrics;
     private final EdtExecutor edt;
-    private final LabelAssembler labels;
     private final LifecycleDispatcher lifecycle;
     private final Runnable afterRestartRecoveryClaim;
 
@@ -114,7 +113,6 @@ public final class LayoutSettleLoop implements AutoCloseable {
         this.lifecycle = Objects.requireNonNull(lifecycle, "lifecycle");
         this.afterRestartRecoveryClaim = Objects.requireNonNull(afterRestartRecoveryClaim,
             "afterRestartRecoveryClaim");
-        this.labels = new LabelAssembler();
     }
 
     public CompletionStage<Void> start(final AcceptedBatch batch, final GraphProjection projection,
@@ -545,8 +543,8 @@ public final class LayoutSettleLoop implements AutoCloseable {
             return;
         }
         try {
-            final GraphGeometry geometry = labels.place(run.projection,
-                geometryEngine.computeHulls(run.projection, frame.positions(), metrics), metrics);
+            final GraphGeometry geometry =
+                geometryEngine.computeHulls(run.projection, frame.positions(), metrics);
             final OperationalStatus status = isEmpty(run.projection)
                 ? OperationalStatus.EMPTY
                 : frame.idle().idle() ? OperationalStatus.IDLE : OperationalStatus.SETTLING;
@@ -723,8 +721,8 @@ public final class LayoutSettleLoop implements AutoCloseable {
         }
         final LayoutFrame failed = failedFrame(run, source);
         try {
-            final GraphGeometry geometry = labels.place(run.projection,
-                geometryEngine.computeHulls(run.projection, failed.positions(), metrics), metrics);
+            final GraphGeometry geometry =
+                geometryEngine.computeHulls(run.projection, failed.positions(), metrics);
             final CanvasState state = CanvasState.of(run.batch.generation(), run.projection, failed, geometry,
                 OperationalStatus.FAILED);
             publish(run, state, true);
@@ -1004,16 +1002,6 @@ public final class LayoutSettleLoop implements AutoCloseable {
         }
         LayoutFrame lastValidFrame();
         void close();
-    }
-
-    private static final class LabelAssembler {
-        private final org.freeplane.plugin.graph.geometry.LabelPlacementEngine engine =
-            new org.freeplane.plugin.graph.geometry.LabelPlacementEngine();
-
-        private GraphGeometry place(final GraphProjection projection, final GraphGeometry geometry,
-                final GeometryTextMetrics metrics) {
-            return engine.place(projection, geometry, metrics);
-        }
     }
 
     private static final class Run {

@@ -585,8 +585,7 @@ public class GraphInteractionControllerShould {
             new LinkedHashMap<ProjectedNodeKey, NodeGeometry>(fixture.state.geometry().nodes());
         nodes.remove(fixture.firstNodeKey);
         return replacementState(fixture.state, fixture.state.projection().nodes(),
-            fixture.state.projection().enclosures(), GraphGeometry.of(nodes, fixture.state.geometry().hulls(),
-                fixture.state.geometry().labels()));
+            fixture.state.projection().enclosures(), GraphGeometry.of(nodes, fixture.state.geometry().hulls()));
     }
 
     private static CanvasState stateWithSuppressedFirstEnclosure(final Fixture fixture) {

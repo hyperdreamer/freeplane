@@ -6,6 +6,7 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.font.FontRenderContext;
 import java.awt.geom.AffineTransform;
+import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
@@ -17,6 +18,8 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -37,6 +40,10 @@ import org.freeplane.plugin.graph.canvas.GraphCanvas;
 import org.freeplane.plugin.graph.canvas.GraphPaintState;
 import org.freeplane.plugin.graph.canvas.GraphTheme;
 import org.freeplane.plugin.graph.canvas.GraphViewport;
+import org.freeplane.plugin.graph.canvas.LabelFonts;
+import org.freeplane.plugin.graph.canvas.LabelPlacementRequest;
+import org.freeplane.plugin.graph.canvas.RenderingLevel;
+import org.freeplane.plugin.graph.canvas.ScreenLabelPlacementCache;
 import org.freeplane.plugin.graph.control.AcceptedBatch;
 import org.freeplane.plugin.graph.control.CanvasState;
 import org.freeplane.plugin.graph.control.ChangeKind;
@@ -48,6 +55,7 @@ import org.freeplane.plugin.graph.geometry.GeometryTextMetrics;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.GraphGeometryEngine;
 import org.freeplane.plugin.graph.geometry.HullIntersection;
+import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.layout.LayoutCalibration;
 import org.freeplane.plugin.graph.layout.LayoutConflict;
@@ -56,9 +64,14 @@ import org.freeplane.plugin.graph.layout.LayoutFrame;
 import org.freeplane.plugin.graph.layout.LayoutRequest;
 import org.freeplane.plugin.graph.layout.LayoutWorker;
 import org.freeplane.plugin.graph.layout.MapTierCorrection;
+import org.freeplane.plugin.graph.layout.NodeSeparationProjection;
+import org.freeplane.plugin.graph.layout.NodeSeparationResult;
 import org.freeplane.plugin.graph.layout.graphstream.GraphStreamLayoutFactory;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.GraphProjection;
+import org.freeplane.plugin.graph.projection.PinProjection;
+import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
+import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectionDiff;
 import org.freeplane.plugin.graph.projection.ProjectionEngine;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
@@ -71,6 +84,12 @@ public final class GraphWorkspacePerformanceDiagnostic {
     public static final int CANVAS_WIDTH = 1024;
     public static final int CANVAS_HEIGHT = 768;
     public static final String OUTPUT_DIRECTORY_NAME = "graph-performance";
+    private static final int WARMUP_SAMPLES = 20;
+    private static final int TIMED_SAMPLES = 100;
+    private static final int PLACEMENT_TRIGGER_COUNT = 4;
+    private static final int FORCED_SAMPLE_SIZE = 8;
+    private static final double PLACEMENT_AREA_WIDTH = 1128.0;
+    private static final double PLACEMENT_AREA_HEIGHT = 364.0;
 
     private final Path outputDirectory;
     private final boolean strict;
@@ -86,6 +105,7 @@ public final class GraphWorkspacePerformanceDiagnostic {
     private final List<PerformanceMeasurements.Summary> ledgerRows =
         new ArrayList<PerformanceMeasurements.Summary>();
     private boolean preCorrectionOverlapChecked;
+    private boolean placementTriggersSampled;
 
     GraphWorkspacePerformanceDiagnostic(final Path outputDirectory, final boolean strict, final NanoClock clock) {
         this.outputDirectory = outputDirectory;
@@ -224,6 +244,7 @@ public final class GraphWorkspacePerformanceDiagnostic {
     private void runScenario(final GeneratedWorkspace generated) {
         final GeneratedWorkspace.Scenario scenario = generated.scenario();
         preCorrectionOverlapChecked = false;
+        placementTriggersSampled = false;
         final PerformanceMeasurements measurements = new PerformanceMeasurements(scenario.wireName(),
             scenario.warmupCount(), scenario.measuredCount());
         final GraphProjection previousBase = projectionEngine.project(
@@ -290,13 +311,8 @@ public final class GraphWorkspacePerformanceDiagnostic {
         final long workerHullStart = clock.nanoTime();
         final GraphGeometry workerHull = geometryEngine.computeHulls(current, workerFrame.positions(), textMetrics);
         final long workerHullEnd = clock.nanoTime();
-        final long workerLabelStart = clock.nanoTime();
-        final GraphGeometry workerGeometry = textMetrics == null ? workerHull
-            : new org.freeplane.plugin.graph.geometry.LabelPlacementEngine().place(current, workerHull,
-                textMetrics);
-        final long workerLabelEnd = clock.nanoTime();
 
-        final CanvasState state = acceptedFirstFrameState(generation, current, workerFrame, workerGeometry);
+        final CanvasState state = acceptedFirstFrameState(generation, current, workerFrame, workerHull);
         final long swapStart = clock.nanoTime();
         setCanvasStateBounded(state);
         final long swapEnd = clock.nanoTime();
@@ -304,7 +320,7 @@ public final class GraphWorkspacePerformanceDiagnostic {
         final long acceptedEnd = clock.nanoTime();
         measurements.recordDuration(PerformanceMeasurements.Stage.ACCEPTED_BATCH_FIRST_FRAME,
             accepted.acceptedAtNanos(), acceptedEnd, warmup);
-        if (workerHullEnd < workerHullStart || workerLabelEnd < workerLabelStart) {
+        if (workerHullEnd < workerHullStart) {
             throw new DiagnosticFailure(PerformanceMeasurements.Stage.ACCEPTED_BATCH_FIRST_FRAME,
                 "Worker geometry timing moved backwards");
         }
@@ -318,6 +334,7 @@ public final class GraphWorkspacePerformanceDiagnostic {
         }
 
         runDirectProbe(generated, current, request, measurements, warmup);
+        measurePlacement(current, workerHull, workerFrame.positions(), warmup, measurements);
         return current;
     }
 
@@ -346,16 +363,17 @@ public final class GraphWorkspacePerformanceDiagnostic {
             measurements.recordDuration(PerformanceMeasurements.Stage.CORRECTION, correctionStart,
                 correctionEnd, warmup);
 
+            final long separationStart = clock.nanoTime();
+            final NodeSeparationResult separation = new NodeSeparationProjection().project(projection,
+                corrected.positions(), pinnedNodes(request.pins()));
+            final long separationEnd = clock.nanoTime();
+            measurements.recordDuration(PerformanceMeasurements.Stage.SEPARATION, separationStart,
+                separationEnd, warmup);
+
             final long hullStart = clock.nanoTime();
-            final GraphGeometry correctedHull = geometryEngine.computeHulls(projection, corrected.positions(), textMetrics);
+            final GraphGeometry correctedHull = geometryEngine.computeHulls(projection, separation.positions(), textMetrics);
             final long hullEnd = clock.nanoTime();
             measurements.recordDuration(PerformanceMeasurements.Stage.HULL, hullStart, hullEnd, warmup);
-
-            final long labelStart = clock.nanoTime();
-            new org.freeplane.plugin.graph.geometry.LabelPlacementEngine().place(projection, correctedHull,
-                textMetrics);
-            final long labelEnd = clock.nanoTime();
-            measurements.recordDuration(PerformanceMeasurements.Stage.LABEL, labelStart, labelEnd, warmup);
 
             final long forceStart = clock.nanoTime();
             final LayoutFrame forced = engine.step();
@@ -379,6 +397,116 @@ public final class GraphWorkspacePerformanceDiagnostic {
                     "Direct layout engine cleanup failed", failure);
             }
         }
+    }
+
+    private static Set<ProjectedNodeKey> pinnedNodes(final List<PinProjection> pins) {
+        final Set<ProjectedNodeKey> pinned = new LinkedHashSet<ProjectedNodeKey>();
+        for (final PinProjection pin : pins) {
+            if (pin.active() && pin.projectedNode().isPresent()) {
+                pinned.add(pin.projectedNode().get());
+            }
+        }
+        return pinned;
+    }
+
+    private void measurePlacement(final GraphProjection projection, final GraphGeometry geometry,
+            final LayoutPositions positions, final boolean warmup,
+            final PerformanceMeasurements scenarioMeasurements) {
+        final LabelFonts fonts = LabelFonts.from(GraphTheme.resolve(DisplaySettings.CanvasTheme.LIGHT));
+        recordSettleFramePlacement(projection, geometry, positions, warmup, scenarioMeasurements, fonts);
+        if (placementTriggersSampled) {
+            return;
+        }
+        final Rectangle2D area = new Rectangle2D.Double(0.0, 0.0, PLACEMENT_AREA_WIDTH,
+            PLACEMENT_AREA_HEIGHT);
+        final Set<ProjectedEndpointKey> noPins = Collections.<ProjectedEndpointKey>emptySet();
+        measurePlacementTrigger("positions-identity", scenarioMeasurements, projection, geometry, positions,
+            noPins, fonts, area, warmup, 0);
+        measurePlacementTrigger("zoom", scenarioMeasurements, projection, geometry, positions, noPins, fonts,
+            area, warmup, 1);
+        measurePlacementTrigger("viewport", scenarioMeasurements, projection, geometry, positions, noPins,
+            fonts, area, warmup, 2);
+        measurePlacementTrigger("forced-set", scenarioMeasurements, projection, geometry, positions, noPins,
+            fonts, area, warmup, 3);
+        if (!warmup) {
+            placementTriggersSampled = true;
+        }
+    }
+
+    /** One cold-cache placement for the settle frame, recorded as the scenario's placement sample. */
+    private void recordSettleFramePlacement(final GraphProjection projection, final GraphGeometry geometry,
+            final LayoutPositions positions, final boolean warmup,
+            final PerformanceMeasurements measurements, final LabelFonts fonts) {
+        final ScreenLabelPlacementCache cache = new ScreenLabelPlacementCache();
+        final LabelPlacementRequest request = LabelPlacementRequest.of(projection, geometry, positions, 1.0,
+            0.0, 0.0, new Rectangle2D.Double(0.0, 0.0, PLACEMENT_AREA_WIDTH, PLACEMENT_AREA_HEIGHT),
+            Collections.<ProjectedEndpointKey>emptySet(), RenderingLevel.FULL);
+        final long start = clock.nanoTime();
+        cache.place(request, fonts);
+        final long end = clock.nanoTime();
+        measurements.recordDuration(PerformanceMeasurements.Stage.PLACEMENT, start, end, warmup);
+    }
+
+    private void measurePlacementTrigger(final String trigger,
+            final PerformanceMeasurements scenarioMeasurements, final GraphProjection projection,
+            final GraphGeometry geometry, final LayoutPositions positions,
+            final Set<ProjectedEndpointKey> forced, final LabelFonts fonts, final Rectangle2D area,
+            final boolean warmup, final int triggerIndex) {
+        if (warmup) {
+            return;
+        }
+        final ScreenLabelPlacementCache cache = new ScreenLabelPlacementCache();
+        final PerformanceMeasurements triggerMeasurements = new PerformanceMeasurements(
+            scenarioSuffix(scenarioMeasurements, trigger), WARMUP_SAMPLES, TIMED_SAMPLES);
+        for (int sample = 0; sample < WARMUP_SAMPLES + TIMED_SAMPLES; sample++) {
+            final boolean timed = sample >= WARMUP_SAMPLES;
+            final double zoom = triggerIndex == 1 ? 1.0 + sample * 1e-4 : 1.0;
+            final double centerX = triggerIndex == 2 ? sample * 0.5 : 0.0;
+            final double centerY = triggerIndex == 2 ? -sample * 0.25 : 0.0;
+            final LayoutPositions triggerPositions = triggerIndex == 0
+                ? copyPositions(positions) : positions;
+            final Set<ProjectedEndpointKey> triggerForced = triggerIndex == 3
+                ? forcedForSample(projection, sample) : forced;
+            final LabelPlacementRequest request = LabelPlacementRequest.of(projection, geometry,
+                triggerPositions, zoom, centerX, centerY, area, triggerForced, RenderingLevel.FULL);
+            final long start = clock.nanoTime();
+            cache.place(request, fonts);
+            final long end = clock.nanoTime();
+            if (timed) {
+                triggerMeasurements.recordMeasured(PerformanceMeasurements.Stage.PLACEMENT, end - start);
+            }
+            else {
+                triggerMeasurements.recordWarmup(PerformanceMeasurements.Stage.PLACEMENT, end - start);
+            }
+        }
+        ledgerRows.add(triggerMeasurements.summary(PerformanceMeasurements.Stage.PLACEMENT));
+    }
+
+    private static String scenarioSuffix(final PerformanceMeasurements scenarioMeasurements,
+            final String trigger) {
+        return scenarioMeasurements.scenario() + ":placement-" + trigger;
+    }
+
+    private static LayoutPositions copyPositions(final LayoutPositions positions) {
+        return LayoutPositions.of(
+            new LinkedHashMap<ProjectedNodeKey, LayoutPoint>(positions.nodes()),
+            new LinkedHashMap<EnclosureHullKey, LayoutPoint>(positions.anchors()));
+    }
+
+    private static Set<ProjectedEndpointKey> forcedForSample(final GraphProjection projection, final int sample) {
+        final int parity = sample % 2;
+        final Set<ProjectedEndpointKey> forced = new LinkedHashSet<ProjectedEndpointKey>();
+        int nodeIndex = 0;
+        for (final ProjectedNode node : projection.nodes()) {
+            if (nodeIndex >= FORCED_SAMPLE_SIZE) {
+                break;
+            }
+            if (nodeIndex % 2 == parity) {
+                forced.add(ProjectedEndpointKey.ofNode(node.key()));
+            }
+            nodeIndex++;
+        }
+        return forced;
     }
 
     private void validateScenarioLifecycle(final GeneratedWorkspace generated, final LayoutWorker worker,
@@ -518,8 +646,10 @@ public final class GraphWorkspacePerformanceDiagnostic {
     }
 
     private boolean allRowsPass() {
-        if (ledgerRows.size() != GeneratedWorkspace.Scenario.values().length
-                * PerformanceMeasurements.Stage.values().length) {
+        final int scenarioCount = GeneratedWorkspace.Scenario.values().length;
+        final int scenarioRows = scenarioCount * PerformanceMeasurements.Stage.values().length;
+        final int placementTriggerRows = scenarioCount * PLACEMENT_TRIGGER_COUNT;
+        if (ledgerRows.size() != scenarioRows + placementTriggerRows) {
             return false;
         }
         for (final PerformanceMeasurements.Summary row : ledgerRows) {

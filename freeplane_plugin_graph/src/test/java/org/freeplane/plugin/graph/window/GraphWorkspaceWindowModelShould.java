@@ -1909,8 +1909,7 @@ public class GraphWorkspaceWindowModelShould {
             Collections.singletonList(enclosure), Collections.emptyList(), Collections.emptyList(),
             Collections.emptyList());
         GraphGeometry geometry = GraphGeometry.of(Collections.singletonMap(key,
-            NodeGeometry.of(LayoutPoint.of(0.0, 0.0), 10.0)), Collections.singletonMap(hullKey, hull),
-            Collections.emptyMap());
+            NodeGeometry.of(LayoutPoint.of(0.0, 0.0), 10.0)), Collections.singletonMap(hullKey, hull));
         LayoutFrame layout = LayoutFrame.of(0L, LayoutPositions.of(
             Collections.singletonMap(key, LayoutPoint.of(0.0, 0.0)),
             Collections.singletonMap(hullKey, anchor)), false, 0);
@@ -1977,7 +1976,7 @@ public class GraphWorkspaceWindowModelShould {
             Collections.<ProjectedNode>emptyList(), Collections.singletonList(enclosure),
             Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
         GraphGeometry geometry = GraphGeometry.of(Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(),
-            Collections.singletonMap(hullKey, hull), Collections.emptyMap());
+            Collections.singletonMap(hullKey, hull));
         LayoutFrame layout = LayoutFrame.of(0L, LayoutPositions.of(Collections.emptyMap(),
             Collections.singletonMap(hullKey, anchor)), false, 0);
         return CanvasState.of(0L, projection, layout, geometry, OperationalStatus.IDLE);
