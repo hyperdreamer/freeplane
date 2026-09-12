@@ -529,6 +529,36 @@ public class GraphWorkspaceWindowModelShould {
     }
 
     @Test
+    public void paintsTheSearchPromptWithoutAMagnifier() {
+        final GraphSearchField[] field = new GraphSearchField[1];
+        final BufferedImage[] image = new BufferedImage[1];
+        final EdtResources[] edtResources = new EdtResources[1];
+        GraphWorkspaceWindow.runOnEdt(new Runnable() {
+            @Override
+            public void run() {
+                edtResources[0] = new EdtResources();
+                GraphSearchField searchField = new GraphSearchField();
+                searchField.setPrompt("Search nodes and maps");
+                searchField.setPromptIcon(null);
+                searchField.setSize(searchField.getPreferredSize());
+                field[0] = searchField;
+                image[0] = paintField(searchField);
+            }
+        });
+        RESOURCES.add(edtResources[0]);
+
+        assertThat(field[0].getText()).isEmpty();
+        assertThat(field[0].getPreferredSize().height).isEqualTo(26);
+        assertThat(field[0].getPreferredSize().width).isEqualTo(Math.max(160,
+            field[0].getInsets().left
+                + field[0].getFontMetrics(field[0].getFont()).stringWidth("Search nodes and maps")
+                + field[0].getInsets().right));
+        assertThat(pixelsMatching(image[0], SEARCH_STUB_COLOR)).isZero();
+        assertThat(pixelsMatchingAtOrRightOf(image[0], field[0].getDisabledTextColor(),
+            field[0].getInsets().left)).isGreaterThan(0);
+    }
+
+    @Test
     public void resolvesTheToolbarAffordanceIconsThroughTheSharedRoutine() {
         Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
             nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
@@ -2435,6 +2465,20 @@ public class GraphWorkspaceWindowModelShould {
         int count = 0;
         for (int y = 0; y < image.getHeight(); y++) {
             for (int x = 0; x < image.getWidth(); x++) {
+                if (image.getRGB(x, y) == expected) {
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+
+    private static int pixelsMatchingAtOrRightOf(final BufferedImage image, final Color color,
+            final int minimumX) {
+        int expected = color.getRGB();
+        int count = 0;
+        for (int y = 0; y < image.getHeight(); y++) {
+            for (int x = Math.max(0, minimumX); x < image.getWidth(); x++) {
                 if (image.getRGB(x, y) == expected) {
                     count++;
                 }
