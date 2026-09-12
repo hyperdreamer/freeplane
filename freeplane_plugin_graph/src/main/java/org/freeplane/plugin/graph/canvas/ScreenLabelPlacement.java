@@ -154,8 +154,14 @@ public final class ScreenLabelPlacement {
     }
 
     private static void placeEnclosures(final Context context, final List<PlacedLabel> placed) {
+        placeEnclosures(context, placed, BoundaryTier.EMPHATIC);
+        placeEnclosures(context, placed, BoundaryTier.SUBTLE);
+    }
+
+    private static void placeEnclosures(final Context context, final List<PlacedLabel> placed,
+            final BoundaryTier tier) {
         for (final ProjectedEnclosure enclosure : context.request.projection().enclosures()) {
-            if (enclosure.boundaryTier() == BoundaryTier.SUPPRESSED) {
+            if (enclosure.boundaryTier() != tier) {
                 continue;
             }
             final HullGeometry hull = context.request.geometry().hulls().get(enclosure.hullKey());
@@ -458,7 +464,7 @@ public final class ScreenLabelPlacement {
         return new PlacedLabel(previous.endpoint(), previous.text(), previous.font(), previous.mode(),
             previous.rung(), anchor[0], anchor[1], previous.width(), previous.height(),
             previous.truncated(), isForced(context, key), previous.emphaticAtAnchor(),
-            previous.forcedAtBaseSlot(), false, previous.leaderStart(), previous.slot());
+            false, false, previous.leaderStart(), previous.slot());
     }
 
     private static PlacedLabel ladder(final Context context, final ProjectedNodeKey key,

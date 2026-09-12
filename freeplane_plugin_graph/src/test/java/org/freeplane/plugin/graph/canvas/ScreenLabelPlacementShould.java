@@ -173,6 +173,28 @@ public class ScreenLabelPlacementShould {
     }
 
     @Test
+    public void resetsTheBaseSlotFlagWhenRetainingAnO4Label() {
+        List<SceneNode> scene = longScene();
+        Rectangle2D area = area(1128.0, 364.0);
+        List<PlacedLabel> baseline = place(scene, 1.0, area, null, forced(LONG_NAMES[0]),
+            RenderingLevel.FULL, null);
+        PlacedLabel before = find(baseline, LONG_NAMES[0]);
+        assertThat(before.forcedAtBaseSlot()).isTrue();
+
+        List<PlacedLabel> retained = place(scene, 1.0, area, null, forced(LONG_NAMES[0]),
+            RenderingLevel.FULL, baseline);
+
+        PlacedLabel after = find(retained, LONG_NAMES[0]);
+        assertThat(after.forcedAtBaseSlot()).isFalse();
+        assertThat(after.mode()).isEqualTo(before.mode());
+        assertThat(after.rung()).isEqualTo(before.rung());
+        assertThat(after.anchorX()).isEqualTo(before.anchorX());
+        assertThat(after.anchorY()).isEqualTo(before.anchorY());
+        assertThat(after.width()).isEqualTo(before.width());
+        assertThat(after.height()).isEqualTo(before.height());
+    }
+
+    @Test
     public void keepsThePinnedLongHistogramsAtTheSmallerViewports() {
         List<SceneNode> scene = longScene();
 
@@ -632,6 +654,29 @@ public class ScreenLabelPlacementShould {
         assertThat(placeEnclosure("Axioms", false, area, nodes, RenderingLevel.OVER_TARGET)).isEmpty();
     }
 
+    @Test
+    public void keepsTheEmphaticEnclosureInteriorWhenASubtleEnclosureComesFirst() {
+        Rectangle2D area = area(1128.0, 364.0);
+        List<PlacedLabel> placed = new ScreenLabelPlacement().place(twoEnclosureRequest(area), null,
+            fonts(), Collections.<Rectangle2D>emptyList());
+
+        PlacedLabel emphatic = findEnclosureLabel(placed, "Axioms");
+        assertThat(emphatic.mode()).isEqualTo(PlacedLabel.Mode.INTERIOR);
+        assertThat(emphatic.font().getSize()).isEqualTo(15);
+        assertThat(emphatic.anchorX() - area.getWidth() * 0.5).isCloseTo(0.0, within(1e-6));
+        assertThat(emphatic.anchorY() - area.getHeight() * 0.5).isCloseTo(0.0, within(1e-6));
+        assertThat(emphatic.width()).isCloseTo(55.065384, within(1e-6));
+        assertThat(emphatic.height()).isCloseTo(20.430143, within(1e-6));
+        assertThat(emphatic.leaderStart()).isEmpty();
+
+        PlacedLabel subtle = findEnclosureLabel(placed, "Subtle");
+        assertThat(subtle.mode()).isEqualTo(PlacedLabel.Mode.ARC);
+        assertThat(subtle.font().getSize()).isEqualTo(12);
+        assertThat(subtle.anchorX() - area.getWidth() * 0.5).isCloseTo(0.0, within(1e-6));
+        assertThat(subtle.anchorY() - area.getHeight() * 0.5).isCloseTo(-40.827943, within(1e-6));
+        assertThat(subtle.leaderStart()).isEmpty();
+    }
+
     private static void assertZoomCell(List<SceneNode> scene, Rectangle2D area, double zoom,
             int placedCount, int fullCount, int denseCount, String forcedSlot, double forcedX,
             double forcedY, List<String> hidden) {
@@ -762,6 +807,49 @@ public class ScreenLabelPlacementShould {
         EnclosureKey endpointKey = EnclosureKey.of(SourceNodeKey.persisted(
             NodeReference.of(MAP, PersistedNodeId.of("axioms"))));
         return EnclosureHullKey.of(Collections.singletonList(endpointKey));
+    }
+
+    static LabelPlacementRequest twoEnclosureRequest(Rectangle2D area) {
+        EnclosureKey subtleKey = EnclosureKey.of(SourceNodeKey.persisted(
+            NodeReference.of(MAP, PersistedNodeId.of("subtle"))));
+        EnclosureKey emphaticKey = EnclosureKey.of(SourceNodeKey.persisted(
+            NodeReference.of(MAP, PersistedNodeId.of("emphatic"))));
+        EnclosureHullKey subtleHullKey = EnclosureHullKey.of(Collections.singletonList(subtleKey));
+        EnclosureHullKey emphaticHullKey = EnclosureHullKey.of(Collections.singletonList(emphaticKey));
+        List<LayoutPoint> polygon = Arrays.asList(LayoutPoint.of(-50.0, -50.0),
+            LayoutPoint.of(50.0, -50.0), LayoutPoint.of(50.0, 50.0), LayoutPoint.of(-50.0, 50.0));
+        ProjectedEnclosure subtle = ProjectedEnclosure.of(subtleHullKey,
+            Collections.singletonList(subtleKey),
+            Collections.singletonList(SafeNodeLabel.of("Subtle", "Subtle")), "Map",
+            Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(),
+            Collections.<EnclosureHullKey>emptyList(), true, BoundaryTier.SUBTLE);
+        ProjectedEnclosure emphatic = ProjectedEnclosure.of(emphaticHullKey,
+            Collections.singletonList(emphaticKey),
+            Collections.singletonList(SafeNodeLabel.of("Axioms", "Axioms")), "Map",
+            Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(),
+            Collections.<EnclosureHullKey>emptyList(), true, BoundaryTier.EMPHATIC);
+        GraphProjection projection = GraphProjection.structure(1L,
+            Collections.<ProjectedNode>emptyList(), Arrays.asList(subtle, emphatic));
+        Map<EnclosureHullKey, HullGeometry> hulls = new LinkedHashMap<EnclosureHullKey, HullGeometry>();
+        hulls.put(subtleHullKey, HullGeometry.of(polygon, LayoutPoint.of(0.0, 0.0)));
+        hulls.put(emphaticHullKey, HullGeometry.of(polygon, LayoutPoint.of(0.0, 0.0)));
+        GraphGeometry graphGeometry = GraphGeometry.of(
+            Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(), hulls);
+        Map<EnclosureHullKey, LayoutPoint> anchors = new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
+        anchors.put(subtleHullKey, LayoutPoint.of(0.0, 0.0));
+        anchors.put(emphaticHullKey, LayoutPoint.of(0.0, 0.0));
+        return LabelPlacementRequest.of(projection, graphGeometry,
+            LayoutPositions.of(Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(), anchors),
+            1.0, 0.0, 0.0, area, Collections.<ProjectedEndpointKey>emptySet(), RenderingLevel.FULL);
+    }
+
+    static PlacedLabel findEnclosureLabel(List<PlacedLabel> placed, String text) {
+        for (PlacedLabel label : placed) {
+            if (label.endpoint().isEnclosure() && text.equals(label.text())) {
+                return label;
+            }
+        }
+        return null;
     }
 
     static List<PlacedLabel> placeShifted(List<SceneNode> scene, double zoom, Rectangle2D area,
