@@ -1,6 +1,8 @@
 # Graph Workspace Node Separation — Design
 
-- Date: 2026-09-12 (revision 5)
+- Date: 2026-09-12 (revision 5.1)
+- Review status: **approved for specification drafting** — review attempt 5 returned 0 blockers, 2 majors and
+  9 minors; revision 5.1 is editorial only (no design decision changed) and applies those corrections.
 - Topic: graph-node-separation
 - PM run: `pm-run-20260912-012815-01038a52`
 - Delivery target: `refs/heads/plugin/graph-workspace` at `/data/home/guest/Development/freeplane`
@@ -197,8 +199,11 @@ NodeSeparationResult project(GraphProjection projection, LayoutPositions positio
   `GraphStreamLayoutEngine.java:324,336`, `PerceptualIdlePolicy.java:95`).
 - **Stateless**, so a correction is never fed back into the solver.
 
-**Verification is closed over every publication path (revision 5).** Six frame factories
-exist, and the failure path synthesizes positions rather than projecting them:
+**Verification is closed over every publication path (revision 5).** There are seven
+`LayoutFrame.of` call sites, but all published frames originate from `LayoutWorker.accept`,
+`LayoutWorker.failedFrame`, `LayoutSettleLoop.failedFrame` or the empty initial frame, and
+`GraphUpdateCoordinator.publishFailure` republishes `state.layout()`. The worker-failure path
+synthesizes positions rather than projecting them:
 
 | site | requirement |
 |---|---|
@@ -207,10 +212,14 @@ exist, and the failure path synthesizes positions rather than projecting them:
 | `LayoutWorker` `EMPTY_FAILED_FRAME` (`:34-35`) | residual recomputed or explicitly marked unknown, never silently 0 |
 | `LayoutSettleLoop.java:744` / `:747` (worker-failure fallback) | `fallbackPositions` routes through `NodeSeparationProjection` before publication, so the frame carries a real residual |
 | `GraphUpdateCoordinator.java:134-136` (initial frame) | positions come from the projected initial layout or the projection is applied |
-| `GraphUpdateCoordinator.java:561` (failure republish) | republishes a frame whose residual is preserved |
+| `GraphUpdateCoordinator.java:561` (failure republish) | republishes `state.layout()`, so the residual preserved is the one already verified |
 
 `LayoutFrame` gains the residual field beside `conflicts` and `idle`
-(`LayoutFrame.java:16-30`); a frame may not be constructed without one. §8.2.2 asserts
+(`LayoutFrame.java:16-30`); a frame may not be constructed without one.
+`GraphStreamLayoutEngine.java:346` also builds a frame, but engine frames always pass through
+`accept`, which rewraps failed frames (`:280-282`), so it never publishes unverified positions.
+`NodeSeparationResult` must be reachable from the `control` package that publishes frames
+(public, or moved into `layout`). §8.2.2 asserts
 equality between the published residual and an independent recomputation for a normal frame
 **and** for a fallback frame.
 
@@ -218,10 +227,9 @@ equality between the published residual and an independent recomputation for a n
 (`GraphGeometryEngine.java:212`), so hull separation alone is ample for small gaps; the
 hazard is `MapTierCorrection`'s pairwise half-delta summing with zero-translation skipping
 (`MapTierCorrection.java:61-79`), which can under-separate maps — the collinear case
-`(0,0),(40,0),(−40,0)` ends at `(0,0),(50,0),(−50,0)`. Independent sweeps of that algorithm
-find cross-map minima far below the I1 floor, so the hazard is real and unbounded in the
-worst case; revision 4's quoted minima were not reproducible from any committed artifact and
-are deleted. Because the projection runs last and covers all pairs, its result — not the
+`(0,0),(40,0),(−40,0)` with ±30 hulls ends at `(0,0),(50,0),(−50,0)`, leaving hulls A and B
+overlapping by 10. The hazard is real; revision 4's quoted sweep minima were not reproducible
+from any committed artifact and are deleted rather than replaced with unverifiable numbers. Because the projection runs last and covers all pairs, its result — not the
 correction — is what G1 reports. Hull consequences are out of scope (N5).
 
 ### 5.3 `ScreenLabelPlacement` (new, screen space)
@@ -241,9 +249,12 @@ List<PlacedLabel> place(LabelPlacementRequest request, List<PlacedLabel> previou
   **Pan and zoom are inputs**: panning changes the surface and therefore the key, so
   placement is recomputed. Revision 4's pan-invariance claim is dropped — it contradicted
   the pan-dependent surface (`GraphCanvas.java:392-412, 439-449`).
-- **Measurement source pinned.** Rectangles are measured from the same base font and
-  `FontRenderContext` the painter uses, scaled by zoom, so a rectangle matches painted ink
-  at every zoom. The placement result **carries the font it used** and the painter paints
+- **Measurement source pinned, including the space convention.** The painter derives
+  `size/zoom` under a zoom transform (`GraphPainter.java:64, 83-89, 289-298`), so painted ink is
+  ≈ 12 px on screen at every zoom. Placement therefore measures **screen-space** boxes: base
+  font metrics multiplied by zoom, equivalently the base font measured in a screen-space
+  `FontRenderContext` — never the world-size font measured under identity, which would
+  reproduce exactly the under-reserve defect of §1.2. The placement result **carries the font it used** and the painter paints
   that font verbatim. Revision 4 left "carry the font" doing work it cannot do on its own.
 - **Forced state and rendering level are inputs**; the painter loses its independent node
   forced bypass (`GraphPainter.java:301-305`).
@@ -256,12 +267,16 @@ List<PlacedLabel> place(LabelPlacementRequest request, List<PlacedLabel> previou
   → node labels by descending disc radius.
 - **Slots and limits (design parameters).** Eight near slots at a 6 px gap; four displaced
   slots at 30 px. Maximum slot widths: 200 px above/below, 130 px left/right, 150 px
-  diagonal. Because offsets and widths are screen pixels, displacement is bounded **by
-  construction** at `max(2, r·zoom) + 30 + halfBox`, where `halfBox` is half the slot's
-  maximum width and `r` the node's world radius. At zoom 1 with `r = 14` that is ≤ 144 px;
-  the measured maxima are 77.9 px (dense fixture) and 78.7 px (long-label fixture) at zoom 1.
-  At zoom 2 the bound grows with `r·zoom` and is asserted there too (§8.3.6). There is no
-  separate cap: revision 3's 90 px rule was unreachable and is not replaced.
+  diagonal. Two distinct quantities are bounded, both in screen pixels, with `halfBox` the slot's maximum
+  half-extent and `r` the node's world radius:
+  **leader displacement** (disc centre → label anchor) is bounded by
+  `max(2, r·zoom) + 30 + halfBox`, measured at ≤ 78.7 px; and the **label rectangle's farthest
+  corner** (disc centre → corner) is bounded by `max(2, r·zoom) + 30 + halfDiagonal`, where
+  `halfDiagonal = hypot(w, h)/2` for the slot's maximum box (≈ 65 px for a 130 px side slot),
+  giving ≤ ~144 px at zoom 1 with `r = 14`. Measured rectangle-support maxima are 138.7 px
+  (dense fixture) and 143.5 px (long-label fixture), so the corner form is the operative bound.
+  §8.3.6 asserts both forms at zoom 1 and zoom 2. There is no separate cap: revision 3's 90 px
+  rule was unreachable and is not replaced.
 - Leader lines are drawn for every slot other than directly above/below the disc.
 
 ### 5.4 Painting and caching
@@ -280,22 +295,26 @@ List<PlacedLabel> place(LabelPlacementRequest request, List<PlacedLabel> previou
 
 ## 6. Degradation rule and its measured limits
 
-Measured with the committed generator (byte-reproducible), enclosure label in the obstacle set:
+Measured with the committed generator (byte-reproducible). The enclosure label is in the
+obstacle set for the short-name rows; the long-label rows are shown with and without it, because
+including it changes those counts:
 
 | fixture | viewport | result | collisions |
 |---|---|---|---|
 | 12 nodes, short names | 1128×364 … 420×240 | full 11, hidden 1 | 0 / 0 |
 | 12 nodes, short names | 280×170 | full 7, dense 4, hidden 1 | 0 / 0 |
 | 12 nodes, short names | 200×130 | full 2, dense 4, hidden 6 | 0 / 0 |
-| 6 nodes, 40–49-char names | 1128×364 / 500×300 | dense 1, truncated 5 | 0 / 0 |
-| 6 nodes, 40–49-char names | 200×130 | full 1, truncated 2, hidden 3 | 0 / 0 |
+| 6 nodes, 40–49-char names | 1128×364 / 500×300 | dense 1, truncated 5 (6 with the enclosure obstacle) | 0 / 0 |
+| 6 nodes, 40–49-char names | 200×130 | full 1, truncated 2, hidden 3 (4 with the enclosure obstacle) | 0 / 0 |
 
 Truncation is reachable only with long labels; for short names it fires 0 times at every
 size, and displacement-first versus truncation-first ladders produce identical placements
 from 200×130 to 1128×364, because a blocked slot is blocked by occupancy rather than by
 label width. Recorded so it is not "fixed" later by mistake. Displacement carries the load
 for ordinary names: dense fixture mean offset 48.05 px, maximum 77.9 px; long-label fixture
-maximum 78.7 px; leader crossings 0 on the dense fixture. Hover-only marks hidden labels
+maximum 78.7 px; leader crossings 0 on the dense fixture. The mean and maximum come from an
+instrumented probe; the committed generator prints the histogram, collision counts and the
+long-label maximum. Hover-only marks hidden labels
 with a dashed ring.
 
 ## 7. Error handling
@@ -325,9 +344,11 @@ and thresholds that are not measured here are specification inputs (§12).
 3. Already-satisfied positions unchanged — paired with test 1 so it cannot pass vacuously.
 4. Coincident particles separate deterministically; no `NaN`; repeated runs byte-identical.
 5. **Perf bound:** 2000-node / 5000-edge fixture with a numeric p95 budget (spec input),
-   recorded against the measured projection stage (p95 12,161,679 ns / p99 15,233,301 ns,
-   `docs/superpowers/specs/2026-08-10-graph-workspace-performance-report.md:185`), and the
-   pass count ≤ `MAX_PASSES`.
+   recorded against the existing `ProjectionEngine.project` stage (p95 12,161,679 ns /
+   p99 15,233,301 ns, `docs/superpowers/specs/2026-08-10-graph-workspace-performance-report.md:185`,
+   measured at `GraphWorkspacePerformanceDiagnostic.java:271-273`), which is a *different* stage
+   from the new separation pass, so the new stage records its own baseline first. The pass count
+   is bounded by `MAX_PASSES`.
 6. **Non-convergence:** the two-pinned sandwich fixture (spec input) reports
    `residualViolations > 0` for the stated `MAX_PASSES`/`RELAXATION`, returns finite
    positions, and the published frame carries the same count; a solvable fixture asserts
@@ -392,12 +413,14 @@ Method (thresholds are spec inputs):
 
 ### 8.5 Regression
 
-Full module suite. Removal surface: **five** test files reference `LabelPlacement` /
+Full module suite. Removal surface: **seven** test files reference `LabelPlacement` /
 `LabelPlacementEngine` / the 3-arg `GraphGeometry.of` (`LabelPlacementShould` — replaced by
 §8.3 — `GraphCanvasPaintShould`, `GraphInteractionControllerShould`,
-`GraphWorkspaceModelAcceptanceShould`, `GraphWorkspacePerformanceDiagnostic`); four more
+`GraphWorkspaceModelAcceptanceShould`, `GraphWorkspacePerformanceDiagnostic`,
+`GraphWorkspaceWindowModelShould`, `WorkspaceDialogsShould`); four more
 (`ReferenceRepulsionFixture`, `GroupOnlyProjectionShould`, `ProjectionDeterminismShould`,
-`StructuralProjectionShould`) are churn-affected. Production call sites:
+`StructuralProjectionShould`) are churn-affected, thirteen files call `LayoutFrame` factories,
+and `PerformanceTripwiresShould.java:64-67` carries fixture hashes that move. Production call sites:
 `LayoutSettleLoop.java:544`, `:721`, `LabelAssembler` (`:982`); the only reader of
 `GraphGeometry.labels()` is `GraphPainter.java:262`. Settle/idle must not regress: the
 two-map fixture's idle frame count in `LayoutSettleLoopShould` is compared against a
@@ -478,9 +501,10 @@ emphatic terminal behaviour.
 
 ## 12. Specification inputs (deliberately not asserted here)
 
-The specification pins these with exact values, fixtures and thresholds. The design fixes
-their *role*, not their number, so that no claim in this document depends on an unmeasured
-constant:
+The specification pins these with exact values, fixtures and thresholds. `MIN_GAP`,
+`MAX_PASSES` and `RELAXATION` are already proposed in §4 and §5.2, so the specification
+confirms or replaces them against measurement rather than inventing them; the rest are
+genuinely unmeasured here:
 
 - `MIN_GAP`, `MAX_PASSES`, `RELAXATION` and the projection's p95 budget.
 - The placement stage's p95 threshold, sampling population, warm-up and cache states, with
