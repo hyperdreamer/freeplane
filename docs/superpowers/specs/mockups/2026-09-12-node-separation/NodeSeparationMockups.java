@@ -49,6 +49,21 @@ public final class NodeSeparationMockups {
 
     static final FontRenderContext FRC = new FontRenderContext(null, true, true);
 
+    /**
+     * Two connected prominent nodes settle where the relationship spring balances the radius-scaled
+     * repulsion:  0.05*(d - REST_LENGTH) = K2*scale/d^2  with K2 = 16 and scale = 1.75.
+     * Solved numerically; verified against the shipped plugin by the design reviewer (24.90299406686856).
+     */
+    static double settledDistance() {
+        double low = REST_LENGTH, high = 200.0;
+        for (int i = 0; i < 200; i++) {
+            double mid = (low + high) / 2.0;
+            double f = 0.05 * (mid - REST_LENGTH) - (16.0 * MAX_SCALE) / (mid * mid);
+            if (f < 0) low = mid; else high = mid;
+        }
+        return (low + high) / 2.0;
+    }
+
     /** (b) displacement-first: keep the full name and push the label out before shortening it. */
     static final Object[][] LADDER_DISPLACEMENT_FIRST = {
         {FULL, Boolean.FALSE, Boolean.FALSE}, {FULL, Boolean.FALSE, Boolean.TRUE},
@@ -88,6 +103,16 @@ public final class NodeSeparationMockups {
 
     static double orient(double ax, double ay, double bx, double by, double cx, double cy) {
         return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+    }
+
+    /** Maximum screen distance from a node centre to its own label anchor. */
+    static double maxLeaderLength(List<Placed> labels, double zoom, double ox, double oy) {
+        double max = 0;
+        for (Placed label : labels) {
+            double cx = label.node.x * zoom + ox, cy = label.node.y * zoom + oy;
+            max = Math.max(max, Math.hypot(label.x - cx, label.y - cy));
+        }
+        return max;
     }
 
     /** Mean screen distance from a node to its own label. */
@@ -439,7 +464,7 @@ public final class NodeSeparationMockups {
     static Scene connectedPair() {
         List<Node> nodes = new ArrayList<>();
         nodes.add(new Node("Theorem", NODE_RADIUS * MAX_SCALE, false, 0, 0));
-        nodes.add(new Node("Axiom of Choice", NODE_RADIUS * MAX_SCALE, false, REST_LENGTH, 0));
+        nodes.add(new Node("Axiom of Choice", NODE_RADIUS * MAX_SCALE, false, settledDistance(), 0));
         return new Scene(nodes, new int[][]{{0, 1}});
     }
 
@@ -488,12 +513,12 @@ public final class NodeSeparationMockups {
             Rectangle2D right = new Rectangle2D.Double(484, 16, 440, 296);
 
             List<Node> hiddenL = new ArrayList<>();
-            List<Rectangle2D> discsL = discRects(today.nodes, 1.0, left.getCenterX() - REST_LENGTH / 2, left.getCenterY() + 8);
-            drawScene(g, today, currentLabels(today.nodes, 1.0, left.getCenterX() - REST_LENGTH / 2, left.getCenterY() + 8),
-                hiddenL, "TODAY: rest length 24, radii 14 + 14", String.format(Locale.ROOT,
-                "centres %.0f apart, need %.0f: discs overlap by %.0f units\n"
-                + "no non-overlap rule exists in the layout at all", dToday, need, need - dToday),
-                1.0, left.getCenterX() - REST_LENGTH / 2, left.getCenterY() + 8, left, false, BAD);
+            double floor = need + MIN_GAP;
+            drawScene(g, today, currentLabels(today.nodes, 1.0, left.getCenterX() - dToday / 2, left.getCenterY() + 8),
+                hiddenL, "TODAY: settled, radii 14 + 14", String.format(Locale.ROOT,
+                "centres %.2f apart (settled, not the rest length 24)\ndisc sum %.0f -> overlap %.2f    I1 floor %.0f -> shortfall %.2f",
+                dToday, need, need - dToday, floor, floor - dToday),
+                1.0, left.getCenterX() - dToday / 2, left.getCenterY() + 8, left, false, BAD);
 
             List<Node> hiddenR = new ArrayList<>();
             double oxR = right.getCenterX() - dFixed / 2;
@@ -502,15 +527,17 @@ public final class NodeSeparationMockups {
                 new Rectangle2D.Double(right.getX() + 4, right.getY() + 4, right.getWidth() - 8, right.getHeight() - 40),
                 discsR, hiddenR);
             drawScene(g, fixed, labelsR, hiddenR, "PROPOSED: centre distance >= r1 + r2 + gap", String.format(Locale.ROOT,
-                "centres %.0f apart, need %.0f: 0 overlaps, invariant holds\n"
-                + "enforced as a projection on published positions, not stronger repulsion", dFixed, need),
+                "centres %.2f apart, I1 floor %.0f: 0 overlaps, invariant holds\n"
+                + "enforced as a projection on published positions, not stronger repulsion", dFixed, floor),
                 1.0, oxR, right.getCenterY() + 8, right, false, OK);
             g.dispose();
             save(image, dir, "01-disc-invariant.png");
-            System.out.println("01 disc overlaps: today " + countDiscOverlaps(today.nodes)
-                + " -> proposed " + countDiscOverlaps(fixed.nodes)
-                + " | label collisions today " + labelCollisions(currentLabels(today.nodes, 1.0, 0, 0))
-                + " -> proposed " + labelCollisions(labelsR));
+            System.out.println(String.format(Locale.ROOT,
+                "01 settled distance %.8f (reviewer measured 24.90299406686856) | overlaps today %d -> %d"
+                + " | label collisions today %d -> %d | overlap %.3f, I1 shortfall %.3f",
+                settledDistance(), countDiscOverlaps(today.nodes), countDiscOverlaps(fixed.nodes),
+                labelCollisions(currentLabels(today.nodes, 1.0, 0, 0)), labelCollisions(labelsR),
+                need - dToday, floor - dToday));
         }
 
         // ---- 02: sparse ----------------------------------------------------------------------
@@ -699,7 +726,7 @@ public final class NodeSeparationMockups {
                     Rectangle2D view = new Rectangle2D.Double(-viewport[0] / 2, -viewport[1] / 2, viewport[0], viewport[1]);
                     List<Node> hidden = new ArrayList<>();
                     List<Placed> placed = proposedLabels(scene.nodes, 1.0, 0, 0, view,
-                        discRects(scene.nodes, 1.0, 0, 0), hidden, null);
+                        discRects(scene.nodes, 1.0, 0, 0), hidden, hullLabelRect(scene, 1.0, 0, 0));
                     int salvageable = 0;
                     List<Rectangle2D> finalTaken = discRects(scene.nodes, 1.0, 0, 0);
                     for (Placed p : placed) finalTaken.add(p.rect());
@@ -724,13 +751,67 @@ public final class NodeSeparationMockups {
                         if (found) salvageable++;
                     }
                     System.out.println(String.format(Locale.ROOT,
-                        "probe %4.0fx%4.0f %-18s -> %s | hidden %d, salvageable by a truncated label in a FREE slot: %d",
+                        "probe %4.0fx%4.0f %-18s -> %s | collisions %d/%d | hidden %d, salvageable by truncated in FREE slot: %d",
                         viewport[0], viewport[1],
                         ladder == LADDER_TRUNCATION_FIRST ? "truncation-first" : "displacement-first",
-                        histogram(placed, hidden), hidden.size(), salvageable));
+                        histogram(placed, hidden), labelCollisions(placed),
+                        labelDiscCollisions(placed, scene.nodes, 1.0, 0, 0), hidden.size(), salvageable));
                 }
             }
             LADDER = LADDER_DISPLACEMENT_FIRST;
+        }
+        // ---- 07: truncation reachability with long labels --------------------------------
+        {
+            String[] longNames = {
+                "Well-Ordering Theorem of Choice and Regularity",
+                "Axiom Schema of Replacement and Comprehension",
+                "Transfinite Induction over Ordinal Numbers",
+                "Cardinal Arithmetic under the Continuum Hypothesis",
+                "Ultrafilter Lemma and Boolean Prime Ideal Theorem",
+                "Kuratowski Zorn Lemma for Partially Ordered Sets"};
+            List<Node> nodes = new ArrayList<>();
+            double spacing = NODE_RADIUS * 2 + MIN_GAP;
+            for (int i = 0; i < longNames.length; i++) {
+                nodes.add(new Node(longNames[i], NODE_RADIUS, i == 0,
+                    (i % 3 - 1) * spacing, (i / 3) * spacing));
+            }
+            Scene scene = new Scene(nodes, new int[][]{{0, 4}});
+            separate(scene.nodes, 400);
+            for (double[] viewport : new double[][]{{1128, 364}, {500, 300}, {200, 130}}) {
+                List<Node> hidden = new ArrayList<>();
+                Rectangle2D view = new Rectangle2D.Double(-viewport[0] / 2, -viewport[1] / 2, viewport[0], viewport[1]);
+                List<Placed> placed = proposedLabels(scene.nodes, 1.0, 0, 0, view,
+                    discRects(scene.nodes, 1.0, 0, 0), hidden, null);
+                System.out.println(String.format(Locale.ROOT,
+                    "long-labels %4.0fx%4.0f (label lengths 40-49) -> %s | collisions %d/%d | maxOffset %.1f px",
+                    viewport[0], viewport[1], histogram(placed, hidden),
+                    labelCollisions(placed), labelDiscCollisions(placed, scene.nodes, 1.0, 0, 0),
+                    maxLeaderLength(placed, 1.0, 0, 0)));
+            }
+            BufferedImage image = blank(1180, 480);
+            Graphics2D g = graphics(image);
+            Rectangle2D left = new Rectangle2D.Double(16, 16, 566, 440);
+            Rectangle2D right = new Rectangle2D.Double(598, 16, 566, 440);
+            Rectangle2D viewL = new Rectangle2D.Double(left.getX() + 4, left.getY() + 40, left.getWidth() - 8, left.getHeight() - 76);
+            Rectangle2D viewR = new Rectangle2D.Double(right.getX() + 120, right.getY() + 100, right.getWidth() - 240, right.getHeight() - 200);
+            List<Node> hiddenL = new ArrayList<>();
+            List<Placed> placedL = proposedLabels(scene.nodes, 1.0, left.getCenterX(), left.getCenterY(), viewL,
+                discRects(scene.nodes, 1.0, left.getCenterX(), left.getCenterY()), hiddenL, null);
+            drawScene(g, scene, placedL, hiddenL, "long labels, roomy viewport",
+                histogram(placedL, hiddenL) + "\ncollisions " + labelCollisions(placedL) + "/"
+                + labelDiscCollisions(placedL, scene.nodes, 1.0, left.getCenterX(), left.getCenterY())
+                + "   max offset " + String.format(Locale.ROOT, "%.1f px", maxLeaderLength(placedL, 1.0, left.getCenterX(), left.getCenterY())),
+                1.0, left.getCenterX(), left.getCenterY(), left, true, OK);
+            List<Node> hiddenR = new ArrayList<>();
+            List<Placed> placedR = proposedLabels(scene.nodes, 1.0, right.getCenterX(), right.getCenterY(), viewR,
+                discRects(scene.nodes, 1.0, right.getCenterX(), right.getCenterY()), hiddenR, null);
+            drawScene(g, scene, placedR, hiddenR, "long labels, cramped 200x130 viewport",
+                histogram(placedR, hiddenR) + "\ncollisions " + labelCollisions(placedR) + "/"
+                + labelDiscCollisions(placedR, scene.nodes, 1.0, right.getCenterX(), right.getCenterY())
+                + "   max offset " + String.format(Locale.ROOT, "%.1f px", maxLeaderLength(placedR, 1.0, right.getCenterX(), right.getCenterY())),
+                1.0, right.getCenterX(), right.getCenterY(), right, true, WARN);
+            g.dispose();
+            save(image, dir, "07-truncation-reachable.png");
         }
         System.out.println("done");
     }
