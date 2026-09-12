@@ -7,9 +7,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.jar.JarInputStream;
+import java.util.zip.ZipEntry;
 
 import org.knopflerfish.framework.Main;
 import org.osgi.framework.Bundle;
@@ -216,33 +220,7 @@ public final class GraphPluginOsgiSmoke {
             }
         }
 
-        final String[] images = new String[] {
-            "images/GraphSelect.svg",
-            "images/GraphConnect.svg",
-            "images/GraphSettings.svg",
-            "images/GraphSearch.svg"
-        };
-        for (final String image : images) {
-            final URL resource = bundle.getResource(image);
-            if (resource == null) {
-                throw new AssertionError("Graph bundle is missing " + image);
-            }
-            int totalBytes = 0;
-            final InputStream input = resource.openStream();
-            try {
-                final byte[] buffer = new byte[4096];
-                int read;
-                while ((read = input.read(buffer)) != -1) {
-                    totalBytes += read;
-                }
-            }
-            finally {
-                input.close();
-            }
-            if (totalBytes <= 0) {
-                throw new AssertionError("Graph bundle resource is empty: " + image);
-            }
-        }
+        assertGraphBundleImages(bundle);
 
         final String[] classes = new String[] {
             "org.graphstream.graph.Graph",
@@ -260,6 +238,69 @@ public final class GraphPluginOsgiSmoke {
         };
         for (final String className : classes) {
             bundle.loadClass(className);
+        }
+    }
+
+    private static void assertGraphBundleImages(final Bundle bundle) throws Exception {
+        final String pluginJarPath = "lib/plugin-" + bundle.getVersion() + ".jar";
+        final URL pluginJar = bundle.getEntry(pluginJarPath);
+        if (pluginJar == null) {
+            throw new AssertionError("Graph bundle is missing " + pluginJarPath);
+        }
+        final Map<String, Integer> packagedImageSizes = new HashMap<String, Integer>();
+        final JarInputStream jar = new JarInputStream(pluginJar.openStream());
+        try {
+            ZipEntry entry;
+            while ((entry = jar.getNextEntry()) != null) {
+                if (entry.isDirectory() || !entry.getName().startsWith("images/")) {
+                    continue;
+                }
+                int totalBytes = 0;
+                final byte[] buffer = new byte[4096];
+                int read;
+                while ((read = jar.read(buffer)) != -1) {
+                    totalBytes += read;
+                }
+                packagedImageSizes.put(entry.getName(), Integer.valueOf(totalBytes));
+            }
+        }
+        finally {
+            jar.close();
+        }
+
+        final String[] images = new String[] {
+            "images/GraphSelect.svg",
+            "images/GraphConnect.svg",
+            "images/GraphSettings.svg",
+            "images/GraphSearch.svg"
+        };
+        for (final String image : images) {
+            final Integer packagedSize = packagedImageSizes.get(image);
+            if (packagedSize == null) {
+                throw new AssertionError("Graph bundle jar is missing " + image);
+            }
+            if (packagedSize.intValue() <= 0) {
+                throw new AssertionError("Graph bundle jar entry is empty: " + image);
+            }
+            final URL resource = bundle.getResource(image);
+            if (resource == null) {
+                throw new AssertionError("Graph bundle does not expose " + image);
+            }
+            int totalBytes = 0;
+            final InputStream input = resource.openStream();
+            try {
+                final byte[] buffer = new byte[4096];
+                int read;
+                while ((read = input.read(buffer)) != -1) {
+                    totalBytes += read;
+                }
+            }
+            finally {
+                input.close();
+            }
+            if (totalBytes <= 0) {
+                throw new AssertionError("Graph bundle resource is empty: " + image);
+            }
         }
     }
 

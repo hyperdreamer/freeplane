@@ -138,8 +138,11 @@ tasks.register('graphOsgiSmoke', JavaExec) {
     outputs.upToDateWhen { false }
     dependsOn tasks.named('graphSmokeInstallation')
     dependsOn tasks.named('testClasses')
+    // Keep the unpackaged plugin resources off the harness classpath so bundle resource
+    // lookups cannot be satisfied by the application classloader instead of the installed bundle.
+    final File unpackagedPluginResources = sourceSets.main.output.resourcesDir
     classpath = files(rootProject.file('BIN/framework.jar')) + sourceSets.test.runtimeClasspath.filter {
-        !it.name.startsWith('framework-')
+        !it.name.startsWith('framework-') && it.absolutePath != unpackagedPluginResources.absolutePath
     }
     mainClass = 'org.freeplane.plugin.graph.smoke.GraphPluginOsgiSmoke'
     systemProperty 'java.awt.headless', 'true'
