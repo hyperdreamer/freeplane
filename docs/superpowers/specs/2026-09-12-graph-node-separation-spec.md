@@ -62,7 +62,7 @@ recomputation (acceptance 2 in §7). |
 | C14 | Painted-ink overhang | the painter centres on the double-precision `getStringBounds` width; glyph ink may extend beyond the logical rectangle by an antialias fringe of at most `0.7578` px per side; **no ink-containment assertion is made** | **[M]** | Measured over the §5.7 fixture set at the real pinned anchors: per-fixture maximum overhang `0.2151` px (long, stand-in variant) to `0.7578` px (dense z=2); no single-side overhang exceeded `0.7578` px (Appendix A.3). Minimum label–label rectangle gap over the same fixtures is `1.655886` px (dense, zoom 1), and `2 · 0.7578 = 1.5156 < 1.655886`, so painted bitmaps remain pairwise disjoint under the double-precision centring and a containment test would be false. The current integer-`FontMetrics.stringWidth` centring (`GraphPainter.java:307-312`) differs from the fractional-metric C13 width by up to `4.601` px (`2.3005` px per side) on the fixture text ("Foundation / Regularity", 12 pt: `132.600922` vs `stringWidth` `128`), and its measured per-side counterfactual overhang reaches `0.7837` px over the set (dense z=2, "Extensionality"), while the integer/fractional width difference alone displaces the ink centre by up to `2.3005` px; because two adjacent labels can each overhang toward the other, the two-sided worst case is `2 · (0.7578 + 2.3005) = 6.117` px, far above `1.655886` px. The double-precision centring change is therefore mandatory and part of §6. |
 | C15 | Placement-stage p95 threshold | **not pinned** | **[N]** | The paint-path placement stage does not exist, so the baseline design §8.4 demands cannot be recorded without the code change. The sampling method, population, warm-up and cache states are pinned in §4.6. |
 | C16 | Sampling population / warm-up / cache states | population: paint-path placement calls that **miss** the cache, split into four triggers — (a) positions-identity change, (b) zoom change, (c) viewport origin/size change, (d) forced-set change; warm-up 20 discarded samples per trigger; 100 timed samples per trigger; cache state at each timed sample: cold for the measured key, `previous` retained from the immediately preceding call; statistic: nearest-rank p95 per trigger | **[P]** method from design §8.4; numbers pinned here | Warm cache hits are excluded (no work). Pan and zoom each cost one re-placement and are budgeted as one stage. The numeric thresholds follow C15. |
-| C17 | Enclosure placement constants | `ARC_GAP = 1.0` px; `EXTERNAL_GAP = 4.0` px; `SUBTLE_EXTERNAL_CANDIDATE_BUDGET = 8`; plus the finite per-edge lane bound of §2.8 Tier C | **[D]** inherited from the deleted `LabelPlacementEngine` constants (`:22-25`) per design revision 5.2 | The old engine's `MAX_INTERIOR_EXPANSION = 8.0` (`:22`) is **not** inherited: the design deletes hull growth. The engine's `EPSILON = 1e-9` (`:26`) is **not** inherited either — the pinned enclosure rule of §2.8 does not use it. The three constants are the ones the pinned rule inherits; the per-edge lane bound is derived in §2.8 Tier C. |
+| C17 | Enclosure placement constants | `ARC_GAP = 1.0` px; `EXTERNAL_GAP = 4.0` px; `SUBTLE_EXTERNAL_CANDIDATE_BUDGET = 8`; plus the finite per-edge abandonment rule of §2.8 Tier C | **[D]** inherited from the deleted `LabelPlacementEngine` constants (`:22-25`) per design revision 5.2 | The old engine's `MAX_INTERIOR_EXPANSION = 8.0` (`:22`) is **not** inherited: the design deletes hull growth. The engine's `EPSILON = 1e-9` (`:26`) is **not** inherited either — the pinned enclosure rule of §2.8 does not use it. The three constants are the ones the pinned rule inherits; the per-edge abandonment rule is pinned in §2.8 Tier C. |
 
 ## 2. Interfaces and data structures
 
@@ -237,10 +237,12 @@ edge (§2.8, Tier B), including the case where the hull anchor rectangle collide
 `fullTextSlotWasFree()` records whether,
 when the label was processed, any full-text rung candidate the label was allowed to try
 (rungs 1–2 for forced labels, rungs 1–4 for non-forced labels of §2.7 step 5: full font or
-dense font, near or far) was inside `placementArea` and collision-free against the
-then-current obstacle set; it is necessarily `false` for every `truncated()` label (the §5.10
-ordering assertion) and for every O4 base-slot label. `emphaticAtAnchor()` and
-`forcedAtBaseSlot()` are the two I2 exceptions of §3 I2 recorded on the result (design §4
+dense font, near or far) both fit the slot cap
+(`textWidth(fullText, rungFont) <= slotMaxWidth(slot)`) and was inside `placementArea` and
+collision-free against the then-current obstacle set; it is necessarily `false` for every
+`truncated()` label (the §5.10 ordering assertion) and for every O4 base-slot label.
+`emphaticAtAnchor()` and `forcedAtBaseSlot()` are the two I2 exceptions of §3 I2 recorded
+on the result (design §4
 I3/§7; O4); both are never thrown from the paint path, and a label with either flag is
 still a placed label that contributes its rectangle to the obstacle set.
 
@@ -292,17 +294,24 @@ reproduce, extended with the retention rule of I4 and the enclosure rule of §2.
    2. enclosure labels (emphatic → subtle, in `projection.enclosures()` order and, within an
       enclosure, `endpointKeys()` order), then
    3. non-forced node labels.
+   A forced endpoint that is an enclosure endpoint is not processed in the forced group:
+   enclosure endpoints in the forced set are placed by the enclosure rule of §2.8, in the
+   enclosure group (emphatic → subtle, `projection.enclosures()` order, `endpointKeys()`
+   order), and the forced flag affects only the over-target paint filter and inclusion, never
+   the placement rule or order.
    Within the forced group and within the non-forced node-label group, order is descending
    disc radius, ties broken by the `LayoutPositions.nodes()` iteration order of §2.1 step 1
    (this is what §8 O2 pins; "geometry order" in earlier drafts means exactly this order).
    The design's category sub-order "selected → hovered → related" is dropped because the
    request carries a `Set` and cannot recover the categories; the pinned total order is the
    one every §5 fixture reproduces (§8 O14).
-4. Retention (I4). For a label with a `previous` entry whose `mode != HOVER_ONLY`: recompute
-   the previous slot's anchor at the current centre with the previous text/font/rung; if that
-   rectangle is inside `placementArea` and collision-free, keep it (same slot, text, font and
-   rung). Otherwise, or when there is no usable previous entry, run the ladder. A `previous`
-   `HOVER_ONLY` entry is not an obstacle and is not retained; it is re-laddered.
+4. Retention (I4). For a node label with a `previous` entry whose `mode != HOVER_ONLY`:
+   recompute the previous slot's anchor at the current centre with the previous text/font/rung;
+   if that rectangle is inside `placementArea` and collision-free, keep it (same slot, text,
+   font and rung). Otherwise, or when there is no usable previous entry, run the ladder. A
+   `previous` `HOVER_ONLY` entry is not an obstacle and is not retained; it is re-laddered.
+   Enclosure labels are exempt from retention: they are re-placed through the enclosure rule
+   of §2.8 on every pass and are never sticky, regardless of any `previous` entry.
 5. Ladder order (rung → candidate slots):
    1. `FULL_NEAR` — full text, `full()` font, slots `ABOVE, BELOW, RIGHT, LEFT, ABOVE_RIGHT, ABOVE_LEFT, BELOW_RIGHT, BELOW_LEFT`
    2. `FULL_DISPLACED` — full text, `full()` font, slots `ABOVE_FAR, BELOW_FAR, RIGHT_FAR, LEFT_FAR`
@@ -386,7 +395,10 @@ diagonal and `116.796 px` vertical far). The design's single-form bound must not
 The design (revision 5.2) states the shape of the enclosure path and delegates the constants
 to this specification; the rule below inherits the deleted `LabelPlacementEngine`'s constants
 (C17) and drops only hull growth (`MAX_INTERIOR_EXPANSION`). Enclosure labels are processed
-after forced labels and before node labels (§2.7 step 3). For each enclosure label:
+after forced labels and before node labels (§2.7 step 3). An enclosure endpoint that appears
+in the forced set is still placed by this rule in the enclosure group, not by the forced
+ladder; its forced flag affects only the over-target paint filter and inclusion, never the
+placement rule or order. For each enclosure label:
 
 - **Fonts.** Subtle enclosure labels use `LabelFonts.full()`; emphatic enclosure labels use
   `LabelFonts.emphatic()`. Enclosure labels are never truncated and never use `dense()`.
@@ -417,9 +429,10 @@ after forced labels and before node labels (§2.7 step 3). For each enclosure la
   so an edge is abandoned at the first lane whose candidate rectangle lies entirely outside
   `placementArea` on the outward side (the rectangle's inward edge beyond the area's outward
   extent along the outward normal); all later lanes are strictly farther out and cannot be
-  accepted. No edge evaluates more than
-  `ceil((placementArea.width + placementArea.height) / (height + EXTERNAL_GAP)) + 2` lanes,
-  which bounds the whole search for any `placementArea` of finite extent. For **subtle**
+  accepted. The search is finite for any `placementArea` of finite extent: each edge is
+  abandoned by the outward-side rule after finitely many lanes, since the lane spacing
+  `height + EXTERNAL_GAP` is positive and the candidates recede strictly; no candidate that
+  could be accepted is skipped. For **subtle**
   labels the search also stops after `SUBTLE_EXTERNAL_CANDIDATE_BUDGET = 8` candidates in
   total (edge order, then lane order). For **emphatic** labels all edges are searched until
   acceptance or until every edge is abandoned by the outward-side rule; the deleted engine's
@@ -610,6 +623,14 @@ stated otherwise; convert to screen with §0's mapping. Fonts are the screen-spa
 `full = SansSerif plain 12`, `dense = SansSerif plain 9`; line heights measured for this
 environment are `h(12)=16.344114`, `h(9)=12.258085`, `h(10)=13.619987`, `h(15 bold)=20.430143`
 px. Pass counts are asserted through `NodeSeparationResult.passes()` (§2.2).
+
+The committed mockup generator (`NodeSeparationMockups.java`) is a design-time reference that
+implements the pre-O4 rules (every node, including the selected one, runs all rungs) and an
+unchecked forced-label fallback; its stdout is **not** an oracle for these tables. The pinned
+tables below supersede both the generator and design §6's long rows. The committed oracle
+for these tables is
+`docs/superpowers/specs/mockups/2026-09-12-node-separation/FixtureProbe.java`, which
+implements the pinned placement rules and prints the §5.4–§5.7 and §5.9 tables (Appendix A.6).
 
 ### 5.1 Red-phase prominence fixture (`NodeSeparationProjectionShould`)
 
@@ -861,13 +882,14 @@ existing `square()` helper convention; canonical polygon verified as
 - **Emphatic terminal.** "Basic Definitions and Theorems" with
   `placementArea = (−60,−60,120,120)`: every exterior candidate rectangle lies outside the
   area, the arc/interior tiers fail on width, so the finite lane rule of §2.8 Tier C abandons
-  the four edges after 16 candidates in total (bottom 2, right 6, top 2, left 6; the per-edge
-  cap for this area is
-  `ceil((120+120)/(20.430143+4))+2 = 12`), and the emphatic terminal rule applies: anchor
-  exactly `(0,0)`, `emphaticAtAnchor == true`, `leaderStart` empty, no exception.
-- **Subtle terminal.** The same scene with a subtle label: the search stops after the
-  `SUBTLE_EXTERNAL_CANDIDATE_BUDGET = 8` candidates without acceptance; mode `HOVER_ONLY` at
-  `(0,0)`, not an obstacle, `leaderStart` empty.
+  the four edges after 16 candidates in total (bottom 2, right 6, top 2, left 6), and the
+  emphatic terminal rule applies: anchor exactly `(0,0)`, `emphaticAtAnchor == true`,
+  `leaderStart` empty, no exception.
+- **Subtle terminal.** The same scene and the **same 120×120 placement area
+  `(−60,−60,120,120)`** as the emphatic-terminal bullet, with a subtle label (this outcome
+  holds only for that smaller area; the 320×320 external fixture above accepts a candidate):
+  the search stops after the `SUBTLE_EXTERNAL_CANDIDATE_BUDGET = 8` candidates without
+  acceptance; mode `HOVER_ONLY` at `(0,0)`, not an obstacle, `leaderStart` empty.
 - In every case `geometry.hulls()` is unchanged before and after placement.
 
 ### 5.9 Zoom × rendering-level matrix (`ScreenLabelPlacementShould`)
@@ -904,8 +926,9 @@ every cell the returned rectangles are pairwise disjoint.
 - **Truncatable-while-a-full-slot-was-free predicate.** For the §5.5 fixtures (1128×364 and
   500×300, with and without the stand-in), every `truncated()` label must have
   `fullTextSlotWasFree() == false` at the moment it was processed: if any full-text rung
-  candidate had been inside the area and collision-free, the ladder would have placed the
-  full text first. Measured: all four truncated labels (five with the stand-in) report
+  candidate had fit its slot cap, been inside the area and collision-free, the ladder would
+  have placed the full text first. Measured: all four truncated labels (five with the
+  stand-in) report
   `false`. The predicate is observed through `PlacedLabel.fullTextSlotWasFree()` (§2.5).
 - **Hover-only label becoming forced.** Dense fixture at 200×130 (the §5.6 scene): `Union`,
   `Well-Ordering`, `Extensionality`, `Power Set`, `Foundation / Regularity` and
@@ -1137,20 +1160,24 @@ traceability; **no open point remains** (O4 is resolved by the user default).
   "selected → hovered → related", but `LabelPlacementRequest.forced()` is a `Set`, so the
   categories cannot be recovered and the cache key treats the set as order-independent.
   Pinned: forced labels are processed first as one group in descending disc radius, ties by
-  `LayoutPositions.nodes()` order, exactly as the §5 fixtures reproduce (every §5 fixture has
-  one forced label, so no fixture value changes); the cache key keeps set equality because
-  the order is derived deterministically from the set (§2.7 step 3, §2.10).
+  `LayoutPositions.nodes()` order, exactly as the §5 fixtures reproduce (no pinned fixture
+  value depends on the relative order of forced labels); the cache key keeps set equality
+  because the order is derived deterministically from the set (§2.7 step 3, §2.10).
 
 ## Appendix A — Verification log
 
 Environment: `~/.sdkman/candidates/java/21.0.8-zulu` (Java 21.0.8, Linux, 22 cores),
-headless. Working copies of probes under `/tmp`; no repository file other than this
-specification was written during verification.
+headless. Verification probes were run outside the repository; no repository file other than
+this specification and the committed oracle
+`docs/superpowers/specs/mockups/2026-09-12-node-separation/FixtureProbe.java` was written
+during verification.
 
-1. **Mockup reproducibility.** `java -Djava.awt.headless=true NodeSeparationMockups.java /tmp/nsspec/mockups`;
-   all seven PNGs regenerate from the committed generator and the stdout rows quoted here
-   (dense rows, ladder comparison, long-label rows, zoom counts) reproduce. The generator is
-   unchanged by this specification.
+1. **Mockup reproducibility.** `java -Djava.awt.headless=true NodeSeparationMockups.java <output-dir>`;
+   all seven PNGs regenerate from the committed generator. The committed generator is a
+   design-time reference that implements the pre-O4 rules (every node, including the selected
+   one, runs all rungs) and an unchecked fallback; its stdout is **not** an oracle for the
+   pinned fixture tables below, which supersede both the generator and design §6's long rows.
+   The generator is unchanged by this specification.
 2. **Font/space measurements.** `FontProbe`: `h(12)=16.344114`, `h(9)=12.258085`,
    `h(10)=13.619987`, `h(15 bold)=20.430143`; `"Axiom of Choice"` 12 pt logical width
    `91.104675`; `getStringBounds` height equals `getLineMetrics("Ag").getHeight()` for 12/9/15
@@ -1184,8 +1211,12 @@ specification was written during verification.
    solvable pair; dense12 (spacing 34) 1 pass residual 0; long6 1 pass residual 0;
    instrumented perf p95: legal grid `5,130,482 ns`, random area-2000 `220,769,319 ns`,
    dense 64-pass cluster `411,584,311 ns`.
-6. **Placement fixture tables.** Instrumented copy of the committed generator
-   (`/tmp/nsfix2/FixProbe*.java`): the §5.4/§5.5 tables and histograms under the pinned O4
+6. **Placement fixture tables.** The committed oracle
+   `docs/superpowers/specs/mockups/2026-09-12-node-separation/FixtureProbe.java` implements
+   the pinned rules (the pinned total order, the forced full-text-only restriction with the
+   O4 base slot, the ladder, the slot caps and geometry, the O4 obstacle contribution and the
+   per-zoom stand-in rectangle) and prints the pinned §5.4–§5.7 and §5.9 tables: the
+   §5.4/§5.5 tables and histograms under the pinned O4
    base-slot rule (forced label at `ABOVE` with `SLOT_GAP`, contributing to the obstacle
    set), mean `48.046026`, maxima `77.894615`/`78.656464`, zoom counts and per-zoom placements
    of §5.7/§5.9 (per-zoom stand-in reading `hullLabelRect(scene,z,0,0)`; the scaled zoom-1
@@ -1195,12 +1226,13 @@ specification was written during verification.
    `(51,56.172057)`, `Comprehension` → hover-only), per-slot support maxima
    (`138.704698`/`118.655013` dense z1/z2, `143.545734`/`151.533443` long z1/z2), and the
    `fullTextSlotWasFree == false` predicate for every truncated label (4 without, 5 with the
-   stand-in at 1128×364/500×300; 2 without, 1 with at 200×130).
+   stand-in at 1128×364/500×300; 2 without, 1 with at 200×130). The committed mockup
+   generator's stdout is not an oracle for these tables (§5, A.1).
 7. **Enclosure rule.** A probe compiled against the real `HullGeometry`/`LayoutPoint`:
    canonical square polygon `(−50,−50),(50,−50),(50,50),(−50,50)`; interior anchor `(0,0)`;
    arc anchor `(0,−38.784928)` (`−38.78492832183838` exact); exterior anchor `(0,−64.215072)`
    with leader `(0,−50)`; the 120×120 placement area abandons all four edges after 16 exterior
-   candidates (bottom 2, right 6, top 2, left 6; per-edge cap 12) under the finite lane rule
+   candidates (bottom 2, right 6, top 2, left 6) under the finite lane rule
    and then takes the emphatic terminal rule. The deleted engine's "until the lane distance
    stops increasing" form would iterate to floating-point stagnation (about `1e16` lanes);
    the pinned rule is finite for every finite `placementArea`.
