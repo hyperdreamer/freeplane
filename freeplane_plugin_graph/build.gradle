@@ -163,6 +163,7 @@ tasks.register('graphUiEvidence', JavaExec) {
     args rootProject.file('docs/superpowers/specs/images/2026-08-10-graph-workspace-implemented.png').absolutePath,
         rootProject.file('docs/superpowers/specs/images/2026-08-10-graph-group-marker-implemented.png').absolutePath
     outputs.files(
+        rootProject.file('build/graph-ui-evidence/row-width.txt'),
         rootProject.file('docs/superpowers/specs/images/2026-08-10-graph-workspace-implemented.png'),
         rootProject.file('docs/superpowers/specs/images/2026-08-10-graph-group-marker-implemented.png'))
 }
