@@ -3,7 +3,10 @@ package org.freeplane.plugin.graph.window;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.Graphics2D;
 import java.awt.Insets;
+import java.awt.image.BufferedImage;
+import java.awt.image.RescaleOp;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collections;
@@ -17,6 +20,7 @@ import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.Icon;
+import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JList;
@@ -397,10 +401,34 @@ final class WorkspaceToolbar extends javax.swing.JPanel {
         final Icon icon = ResourceController.getResourceController().getOptionalIcon(iconPath);
         if (icon != null) {
             button.setIcon(icon);
+            button.setDisabledIcon(disabledIconOf(icon));
             button.setText(null);
             button.setToolTipText(TextUtils.getText(tooltipTextKey));
             button.getAccessibleContext().setAccessibleName(TextUtils.getText(tooltipTextKey));
         }
+    }
+
+    private static final float DISABLED_ICON_ALPHA = 0.45f;
+
+    private static Icon disabledIconOf(final Icon icon) {
+        final int width = icon.getIconWidth();
+        final int height = icon.getIconHeight();
+        if (width <= 0 || height <= 0) {
+            return icon;
+        }
+        final BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+        final Graphics2D graphics = image.createGraphics();
+        try {
+            icon.paintIcon(null, graphics, 0, 0);
+        }
+        finally {
+            graphics.dispose();
+        }
+        return new ImageIcon(applyAlpha(image, new float[] { 1f, 1f, 1f, DISABLED_ICON_ALPHA }));
+    }
+
+    private static BufferedImage applyAlpha(final BufferedImage image, final float[] scales) {
+        return new RescaleOp(scales, new float[4], null).filter(image, null);
     }
 
     private static void applyToolbarSegmentStyle(final AbstractButton segment) {

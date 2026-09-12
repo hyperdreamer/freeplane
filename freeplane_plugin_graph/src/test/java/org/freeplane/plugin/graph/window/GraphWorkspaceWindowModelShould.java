@@ -43,6 +43,7 @@ import java.util.stream.Collectors;
 
 import javax.xml.namespace.QName;
 
+import javax.swing.AbstractButton;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
 import javax.swing.JFrame;
@@ -125,6 +126,7 @@ import org.mockito.MockedStatic;
 public class GraphWorkspaceWindowModelShould {
     private static final Path OPEN_PATH = Paths.get("/tmp/opened.graph-workspace");
     private static final Color SEARCH_STUB_COLOR = new Color(0xFFFF00FF);
+    private static final Color DISABLED_PROBE_COLOR = new Color(0xFF4080C0);
     private static final MapReferenceId ACTIVE_ID = id(1L);
     private static final java.util.List<EdtResources> RESOURCES =
         new java.util.ArrayList<EdtResources>();
@@ -598,6 +600,27 @@ public class GraphWorkspaceWindowModelShould {
         model.toolbar().settingsButton().doClick();
         assertThat(tools).containsExactly(InteractionTool.SELECT, InteractionTool.CONNECT);
         assertThat(settingsClicks[0]).isEqualTo(1);
+        model.close();
+    }
+
+    @Test
+    public void dimsDisabledToolbarGlyphs() {
+        final Icon stub = paintingIcon(DISABLED_PROBE_COLOR, 16, 16);
+        final Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        fixture.stubIcon("/images/GraphSelect.svg?useAccentColor=true", stub);
+        fixture.stubIcon("/images/GraphConnect.svg?useAccentColor=true", stub);
+        final GraphWorkspaceWindowModel model = fixture.model();
+        final WorkspaceToolbar toolbar = model.toolbar();
+        for (final AbstractButton button : new AbstractButton[] {
+                toolbar.selectButton(), toolbar.connectButton() }) {
+            assertThat(button.getIcon()).isNotNull();
+            assertThat(button.getDisabledIcon()).as("%s disabled icon", button.getName()).isNotNull();
+            assertThat(button.getDisabledIcon()).isNotSameAs(button.getIcon());
+            assertThat(averageLuminance(button.getDisabledIcon())).as("%s dimmed", button.getName())
+                .isLessThan(averageLuminance(button.getIcon()));
+        }
         model.close();
     }
 
@@ -2568,6 +2591,34 @@ public class GraphWorkspaceWindowModelShould {
         when(icon.getIconWidth()).thenReturn(Integer.valueOf(width));
         when(icon.getIconHeight()).thenReturn(Integer.valueOf(height));
         return icon;
+    }
+
+    private static Icon paintingIcon(final Color color, final int width, final int height) {
+        return new RecordingPaintingIcon(width, height, color);
+    }
+
+    private static double averageLuminance(final Icon icon) {
+        final int width = icon.getIconWidth();
+        final int height = icon.getIconHeight();
+        final BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+        final Graphics2D graphics = image.createGraphics();
+        try {
+            icon.paintIcon(null, graphics, 0, 0);
+        }
+        finally {
+            graphics.dispose();
+        }
+        double total = 0.0;
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                final int argb = image.getRGB(x, y);
+                final double alpha = ((argb >>> 24) & 0xFF) / 255.0;
+                final double luminance = (0.2126 * ((argb >> 16) & 0xFF)
+                    + 0.7152 * ((argb >> 8) & 0xFF) + 0.0722 * (argb & 0xFF)) / 255.0;
+                total += alpha * luminance;
+            }
+        }
+        return total / (width * height);
     }
 
     private static final class Fixture {
