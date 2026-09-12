@@ -287,8 +287,8 @@ reproduce, extended with the retention rule of I4 and the enclosure rule of §2.
 1. Disc obstacles: for every `ProjectedNode` with geometry, the screen bounding square of the
    disc, centre `(W/2 + zoom·(x − centerX), H/2 + zoom·(y − centerY))`, half-extent
    `max(2.0, r·zoom)`.
-2. Enclosure-label reservations, seed obstacles supplied to the package-private test overload
-   (§2.7 step 13), and previously accepted labels join the obstacle set.
+2. Seed obstacles supplied to the package-private test overload (§2.7 step 13) and previously
+   accepted labels join the obstacle set.
 3. Process labels in priority order:
    1. forced labels, then
    2. enclosure labels (emphatic → subtle, in `projection.enclosures()` order and, within an
@@ -630,7 +630,8 @@ unchecked forced-label fallback; its stdout is **not** an oracle for these table
 tables below supersede both the generator and design §6's long rows. The committed oracle
 for these tables is
 `docs/superpowers/specs/mockups/2026-09-12-node-separation/FixtureProbe.java`, which
-implements the pinned placement rules and prints the §5.4–§5.7 and §5.9 tables (Appendix A.6).
+implements the pinned rules, prints the §5.4–§5.10 tables and the §5.8 enclosure fixture, and
+checks every pinned value it prints, exiting non-zero on any mismatch (Appendix A.6).
 
 ### 5.1 Red-phase prominence fixture (`NodeSeparationProjectionShould`)
 
@@ -726,8 +727,11 @@ Histogram `full 11 | dense 0 | truncated 0 | hover-only 1`; label/label collisio
 label/disc collisions 0. Other measured rows of the same scene (same stand-in obstacle):
 420×240 → `full 11 / hidden 1`; 280×170 → `full 7 / dense 4 / hidden 1`; 200×130 →
 `full 2 / dense 4 / hidden 6`. Mean leader length at 1128×364 zoom 1 is 48.046026 px,
-maximum 77.894615 px, leader crossings 0; the zoom and level matrix is §5.9 and the measured
-per-slot bounds are in §5.10.
+maximum 77.894615 px. Leader crossings under the generator's `leaderCrossings` metric —
+proper (strict) crossings between the disc-trimmed segments from each label's disc centre to
+its anchor, over the labels whose slot is neither `ABOVE` nor `BELOW` (the directly
+above/below slots) — are 0; the zoom and level matrix is §5.9 and the measured per-slot
+bounds are in §5.10.
 
 ### 5.5 Long-label truncation fixture
 
@@ -1170,7 +1174,9 @@ Environment: `~/.sdkman/candidates/java/21.0.8-zulu` (Java 21.0.8, Linux, 22 cor
 headless. Verification probes were run outside the repository; no repository file other than
 this specification and the committed oracle
 `docs/superpowers/specs/mockups/2026-09-12-node-separation/FixtureProbe.java` was written
-during verification.
+during verification. The probes other than the committed oracle were temporary and are not
+committed; measurements attributed to them below are review-time executions without
+committed backing, and each such item is marked as such.
 
 1. **Mockup reproducibility.** `java -Djava.awt.headless=true NodeSeparationMockups.java <output-dir>`;
    all seven PNGs regenerate from the committed generator. The committed generator is a
@@ -1178,12 +1184,16 @@ during verification.
    one, runs all rungs) and an unchecked fallback; its stdout is **not** an oracle for the
    pinned fixture tables below, which supersede both the generator and design §6's long rows.
    The generator is unchanged by this specification.
-2. **Font/space measurements.** `FontProbe`: `h(12)=16.344114`, `h(9)=12.258085`,
+2. **Font/space measurements (review-time execution, not backed by a committed artifact).**
+   `FontProbe` (source not committed): `h(12)=16.344114`, `h(9)=12.258085`,
    `h(10)=13.619987`, `h(15 bold)=20.430143`; `"Axiom of Choice"` 12 pt logical width
    `91.104675`; `getStringBounds` height equals `getLineMetrics("Ag").getHeight()` for 12/9/15
    pt; screen-FRC vs. derived-world×zoom max delta `2.747e-3` px at zooms 0.25–4. `"Axioms"`
    15 pt bold `55.065384`; `"Basic Definitions and Theorems"` 15 pt bold `235.291611`;
-   `"Basic Definitions and Theorems"` 10 pt `148.289871` (stand-in width).
+   `"Basic Definitions and Theorems"` 10 pt `148.289871` (stand-in width). The committed
+   oracle prints and checks the same line heights and widths in its header and §5.5 table;
+   the `getStringBounds`/`getLineMetrics` identity and the screen-FRC delta are review-time
+   measurements with no committed backing.
 3. **Painted-ink measurement.** Instrumented screen-space renders of the pinned placements
    with double-precision centring at the real anchors (`+W/2,+H/2` translation) and the
    per-zoom stand-in of §5.4/§5.7: maximum per-side overhang `0.7578` px (dense z=2,
@@ -1196,13 +1206,18 @@ during verification.
    Regularity" 12 pt), so the two-sided worst case is `2·(0.7578+2.3005) = 6.117` px.
    Minimum label–label rectangle gaps: dense z=0.25 `2.155886`, dense z=1 `1.655886`, dense
    z=2 `19.921654`, long z=1 none `7.655886` (`7.827943` excluding the O4 label), long z=1
-   with stand-in `5.655886`; the asserted §5.7 set's minimum is `1.655886`.
-4. **Correction characterization.** A probe (`CorrectionProbe`) compiled with the real
+   with stand-in `5.655886`; the asserted §5.7 set's minimum is `1.655886`. The committed
+   oracle reproduces and checks the per-fixture overhang maxima, the minimum gaps and the zero
+   pairwise/disc overlaps; the integer-`stringWidth` counterfactual is a review-time
+   measurement with no committed backing.
+4. **Correction characterization (review-time execution, not backed by a committed
+   artifact).** `CorrectionProbe` (source not committed), compiled with the real
    `HullGeometry` + `HullIntersection`: ±30 pair translations `(20,0)`, `(−20,0)`, `(0,0)`;
    final `(0,50,−50)`; recomputed A/B translation `(10,0)`, hull overlap 10,
    `siblingOverlap == true`; ±24 translations `(8,0)`, `(−8,0)`, `(0,0)` → `(0,44,−44)`;
    ±1 → no-op.
-5. **Projection reference implementation.** `ProjectionProbe`/`PerfProbe` and an independent
+5. **Projection reference implementation (review-time execution, not backed by a committed
+   artifact).** `ProjectionProbe`/`PerfProbe` (sources not committed) and an independent
    Python re-implementation: solvable pair `(0,0),(20,0)` → `(−1,0),(21,0)`, residual 0,
    2 passes; red-phase pair (r=14, d=24) → `(−5,0),(29,0)`, residual 0, 2 passes; S1 sandwich
    order `a,b,m` → `m=(18,0)`, residual 1, 64 passes, order `b,a,m` → `m=(22,0)`; S2 order
@@ -1214,21 +1229,31 @@ during verification.
 6. **Placement fixture tables.** The committed oracle
    `docs/superpowers/specs/mockups/2026-09-12-node-separation/FixtureProbe.java` implements
    the pinned rules (the pinned total order, the forced full-text-only restriction with the
-   O4 base slot, the ladder, the slot caps and geometry, the O4 obstacle contribution and the
-   per-zoom stand-in rectangle) and prints the pinned §5.4–§5.7 and §5.9 tables: the
-   §5.4/§5.5 tables and histograms under the pinned O4
-   base-slot rule (forced label at `ABOVE` with `SLOT_GAP`, contributing to the obstacle
-   set), mean `48.046026`, maxima `77.894615`/`78.656464`, zoom counts and per-zoom placements
-   of §5.7/§5.9 (per-zoom stand-in reading `hullLabelRect(scene,z,0,0)`; the scaled zoom-1
-   rectangle reading would give 8 labels at z=0.25 instead of 6 and is not used), stickiness cases
-   (pan preserved; Infinity RIGHT retained at `(79.877113,−1)`; Alpha re-placed BELOW and
-   Beta retained after the invalidation move), hover-only→forced (`Well-Ordering` → BELOW
-   `(51,56.172057)`, `Comprehension` → hover-only), per-slot support maxima
-   (`138.704698`/`118.655013` dense z1/z2, `143.545734`/`151.533443` long z1/z2), and the
-   `fullTextSlotWasFree == false` predicate for every truncated label (4 without, 5 with the
-   stand-in at 1128×364/500×300; 2 without, 1 with at 200×130). The committed mockup
-   generator's stdout is not an oracle for these tables (§5, A.1).
-7. **Enclosure rule.** A probe compiled against the real `HullGeometry`/`LayoutPoint`:
+   O4 base slot, the ladder, the slot caps and geometry, the O4 obstacle contribution, the
+   per-zoom stand-in rectangle and the §2.8 enclosure rule) and prints the pinned §5.4–§5.10
+   tables plus the §5.8 enclosure fixture. It is self-checking: every printed pinned value is
+   compared against the computed value by a check helper, every mismatch is printed to stderr,
+   and the process exits non-zero when any check fails. On the correct rules it reports 689
+   checks with 0 failures and exits 0. Covered values: the §5.4/§5.5 per-label rows, order and
+   histograms under the pinned O4 base-slot rule (forced label at `ABOVE` with `SLOT_GAP`,
+   contributing to the obstacle set), mean `48.046026`, leader maxima
+   `77.894615`/`78.656464`, leader crossings `0` under the generator's metric, zoom counts and
+   per-zoom placements of §5.7/§5.9 (per-zoom stand-in reading `hullLabelRect(scene,z,0,0)`;
+   the scaled zoom-1 rectangle reading would give 8 labels at z=0.25 instead of 6 and is not
+   used), stickiness cases (pan preserved; Infinity RIGHT retained at `(79.877113,−1)`;
+   Alpha re-placed BELOW and Beta retained after the invalidation move, collisions 0/0),
+   hover-only→forced (`Well-Ordering` → BELOW `(51,56.172057)`, `Comprehension` → hover-only,
+   fixed point), per-slot leader/support maxima and the per-label §2.7 closed forms
+   (`77.894615`/`73.611911` and `138.704698`/`118.655013` dense z1/z2,
+   `78.656464`/`86.656464` and `143.545734`/`151.533443` long z1/z2), the §5.8 enclosure
+   anchors and finite lane counts, the §5.9 emphatic/subtle cells with `OVER_TARGET` derived
+   through the forced-or-required filter, and the `fullTextSlotWasFree == false` predicate
+   for every truncated label (4 without, 5 with the stand-in at 1128×364/500×300; 2 without,
+   1 with at 200×130). The committed mockup generator's stdout is not an oracle for these
+   tables (§5, A.1).
+7. **Enclosure rule (review-time cross-check against the real geometry helpers; the pinned
+   values are reproduced and checked by the committed oracle with its own polygon helper).**
+   A probe (source not committed) compiled against the real `HullGeometry`/`LayoutPoint`:
    canonical square polygon `(−50,−50),(50,−50),(50,50),(−50,50)`; interior anchor `(0,0)`;
    arc anchor `(0,−38.784928)` (`−38.78492832183838` exact); exterior anchor `(0,−64.215072)`
    with leader `(0,−50)`; the 120×120 placement area abandons all four edges after 16 exterior
