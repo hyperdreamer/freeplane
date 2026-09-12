@@ -4,12 +4,14 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Dimension;
+import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.Rectangle;
@@ -100,6 +102,7 @@ public final class GraphWorkspaceUiEvidence {
         SourceNodeKey.persisted(FIRST_REFERENCE));
     private static final ProjectedNodeKey SECOND_KEY = ProjectedNodeKey.of(
         SourceNodeKey.persisted(SECOND_REFERENCE));
+    private static final Color ICON_PIXEL_COLOR = new Color(0x00C853);
 
     private GraphWorkspaceUiEvidence() {
     }
@@ -129,18 +132,24 @@ public final class GraphWorkspaceUiEvidence {
                         })) {
                     final ResourceController controller = mock(ResourceController.class);
                     resourceController.when(ResourceController::getResourceController).thenReturn(controller);
-                    final Icon placeholder = mock(Icon.class);
-                    when(placeholder.getIconWidth()).thenReturn(Integer.valueOf(16));
-                    when(placeholder.getIconHeight()).thenReturn(Integer.valueOf(16));
+                    final Icon glyph = new PaintingIcon();
                     for (final String path : new String[] {
                             "/images/undo.svg?useAccentColor=true",
                             "/images/redo.svg?useAccentColor=true",
                             "/images/ZoomIn24.svg?useAccentColor=true",
-                            "/images/ZoomOut24.svg?useAccentColor=true" }) {
-                        when(controller.getOptionalIcon(path)).thenReturn(placeholder);
+                            "/images/ZoomOut24.svg?useAccentColor=true",
+                            "/images/GraphSelect.svg?useAccentColor=true",
+                            "/images/GraphConnect.svg?useAccentColor=true",
+                            "/images/GraphSettings.svg?useAccentColor=true",
+                            "/images/GraphSearch.svg?useAccentColor=true" }) {
+                        when(controller.getOptionalIcon(path)).thenReturn(glyph);
                     }
                     final EvidenceImages images = new EvidenceImages(desktop, marker);
                     images.capture();
+                    verify(controller).getOptionalIcon("/images/GraphSelect.svg?useAccentColor=true");
+                    verify(controller).getOptionalIcon("/images/GraphConnect.svg?useAccentColor=true");
+                    verify(controller).getOptionalIcon("/images/GraphSettings.svg?useAccentColor=true");
+                    verify(controller).getOptionalIcon("/images/GraphSearch.svg?useAccentColor=true");
                 }
             }
         });
@@ -280,6 +289,36 @@ public final class GraphWorkspaceUiEvidence {
             GraphWorkspacePresentation.MapColor.of(SECOND_MAP, "#E15759")));
     }
 
+    private static final class PaintingIcon implements Icon {
+        private final BufferedImage image = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
+
+        private PaintingIcon() {
+            final Graphics2D graphics = image.createGraphics();
+            try {
+                graphics.setColor(ICON_PIXEL_COLOR);
+                graphics.fillRect(0, 0, 16, 16);
+            }
+            finally {
+                graphics.dispose();
+            }
+        }
+
+        @Override
+        public void paintIcon(final Component component, final Graphics graphics, final int x, final int y) {
+            graphics.drawImage(image, x, y, null);
+        }
+
+        @Override
+        public int getIconWidth() {
+            return 16;
+        }
+
+        @Override
+        public int getIconHeight() {
+            return 16;
+        }
+    }
+
     private static final class EvidenceImages {
         private final Path desktop;
         private final Path marker;
@@ -323,6 +362,9 @@ public final class GraphWorkspaceUiEvidence {
         void capture() {
             root.setSize(new Dimension(1280, 800));
             layoutRecursively(root);
+            verifyToolbarAffordances();
+            verifySearchPromptPaint();
+            recordRowWidth();
             dispatchInteractions();
             verifyPinToggleStates(pinnedTwoMapState());
             paintAndVerify(desktop, root);
@@ -332,6 +374,88 @@ public final class GraphWorkspaceUiEvidence {
             verifyWorkspacePaint(root);
             paintMarkerEvidence(marker);
             modelAccess.close();
+        }
+
+        private void verifyToolbarAffordances() {
+            final AbstractButton select = (AbstractButton) findNamed(root, "graph-workspace-select");
+            final AbstractButton connect = (AbstractButton) findNamed(root, "graph-workspace-connect");
+            final AbstractButton settings = (AbstractButton) findNamed(root, "graph-workspace-settings");
+            requireComponent(select, "select toggle");
+            requireComponent(connect, "connect toggle");
+            requireComponent(settings, "settings toggle");
+            if (select.getIcon() == null || select.getText() != null
+                    || connect.getIcon() == null || connect.getText() != null
+                    || settings.getIcon() == null || settings.getText() != null) {
+                throw new AssertionError("Toolbar affordance icons were not resolved: select="
+                    + select.getText() + ", connect=" + connect.getText()
+                    + ", settings=" + settings.getText());
+            }
+            final BufferedImage image = render(root);
+            if (pixelsMatching(image, ICON_PIXEL_COLOR) <= 0) {
+                throw new AssertionError("Toolbar affordance glyphs were not painted");
+            }
+        }
+
+        private void verifySearchPromptPaint() {
+            final JTextField search = (JTextField) findNamed(root, "graph-workspace-search");
+            requireComponent(search, "search field");
+            final BufferedImage image = renderComponent(search);
+            final int glyphPixels = pixelsMatching(image, ICON_PIXEL_COLOR);
+            final int promptPixels = pixelsMatching(image, search.getDisabledTextColor());
+            if (glyphPixels <= 0 || promptPixels <= 0) {
+                throw new AssertionError("Search prompt/magnifier paint failed: glyph=" + glyphPixels
+                    + ", prompt=" + promptPixels);
+            }
+        }
+
+        private void recordRowWidth() {
+            final JPanel toolbar = (JPanel) modelAccess.invoke("toolbar");
+            final JComponent select = findNamed(root, "graph-workspace-select");
+            final JComponent connect = findNamed(root, "graph-workspace-connect");
+            final JComponent toolSwitch = findNamed(root, "graph-workspace-tool-switch");
+            final JComponent search = findNamed(root, "graph-workspace-search");
+            final JComponent settings = findNamed(root, "graph-workspace-settings");
+            requireComponent(select, "select toggle");
+            requireComponent(connect, "connect toggle");
+            requireComponent(toolSwitch, "tool switch");
+            requireComponent(search, "search field");
+            requireComponent(settings, "settings toggle");
+            final String[] labels = new String[] {
+                "toolbar.layoutPreferredWidth", "select.width", "connect.width", "toolSwitch.width",
+                "search.width", "settings.width"
+            };
+            final int[] values = new int[] {
+                toolbar.getLayout().preferredLayoutSize(toolbar).width,
+                select.getWidth(), connect.getWidth(), toolSwitch.getWidth(), search.getWidth(),
+                settings.getWidth()
+            };
+            final String[] lines = new String[labels.length];
+            for (int index = 0; index < labels.length; index++) {
+                lines[index] = labels[index] + "=" + values[index];
+            }
+            final Path widthFile = Paths.get("build/graph-ui-evidence/row-width.txt");
+            try {
+                Files.createDirectories(widthFile.getParent());
+                Files.write(widthFile, Arrays.asList(lines));
+                final java.util.List<String> written = Files.readAllLines(widthFile);
+                if (written.size() != labels.length) {
+                    throw new AssertionError("Row-width evidence file has " + written.size() + " lines");
+                }
+                for (int index = 0; index < labels.length; index++) {
+                    final String expected = labels[index] + "=";
+                    if (!written.get(index).startsWith(expected)) {
+                        throw new AssertionError("Row-width evidence line " + index + " was "
+                            + written.get(index));
+                    }
+                    Integer.parseInt(written.get(index).substring(expected.length()));
+                }
+            }
+            catch (final java.io.IOException exception) {
+                throw new IllegalStateException("Unable to write row-width evidence " + widthFile, exception);
+            }
+            for (final String line : lines) {
+                System.out.println("Graph row width: " + line);
+            }
         }
 
         private void verifyWorkspacePaint(final JPanel panel) {
@@ -463,6 +587,33 @@ public final class GraphWorkspaceUiEvidence {
             assertNonBlank(image, path);
             assertNoOverlap(panel);
             writeImage(image, path);
+        }
+
+        private static BufferedImage renderComponent(final JComponent component) {
+            component.setSize(component.getPreferredSize());
+            final BufferedImage image = new BufferedImage(Math.max(1, component.getWidth()),
+                Math.max(1, component.getHeight()), BufferedImage.TYPE_INT_ARGB);
+            final Graphics2D graphics = image.createGraphics();
+            try {
+                component.paint(graphics);
+            }
+            finally {
+                graphics.dispose();
+            }
+            return image;
+        }
+
+        private static int pixelsMatching(final BufferedImage image, final Color color) {
+            final int expected = color.getRGB();
+            int count = 0;
+            for (int y = 0; y < image.getHeight(); y++) {
+                for (int x = 0; x < image.getWidth(); x++) {
+                    if (image.getRGB(x, y) == expected) {
+                        count++;
+                    }
+                }
+            }
+            return count;
         }
 
         private static BufferedImage render(final JPanel panel) {

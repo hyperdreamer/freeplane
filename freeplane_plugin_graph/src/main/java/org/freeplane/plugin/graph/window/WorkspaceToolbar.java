@@ -3,7 +3,10 @@ package org.freeplane.plugin.graph.window;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.Graphics2D;
 import java.awt.Insets;
+import java.awt.image.BufferedImage;
+import java.awt.image.RescaleOp;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collections;
@@ -15,9 +18,9 @@ import java.util.function.Supplier;
 
 import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
-import javax.swing.ButtonGroup;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.Icon;
+import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JList;
@@ -53,12 +56,15 @@ final class WorkspaceToolbar extends javax.swing.JPanel {
         "/images/undo.svg?useAccentColor=true");
     private final JButton redoButton = iconButton("graph_workspace.action.redo_workspace", "redo",
         "/images/redo.svg?useAccentColor=true");
-    private final JToggleButton selectButton = toggleButton("graph_workspace.tool.select", "select");
-    private final JToggleButton connectButton = toggleButton("graph_workspace.tool.connect", "connect");
+    private final JToggleButton selectButton = iconToggle("graph_workspace.tool.select",
+        "graph_workspace.tool.select", "select", "/images/GraphSelect.svg?useAccentColor=true");
+    private final JToggleButton connectButton = iconToggle("graph_workspace.tool.connect",
+        "graph_workspace.tooltip.connect", "connect", "/images/GraphConnect.svg?useAccentColor=true");
     private final JComboBox<RelationshipDirection> directionComboBox =
         new JComboBox<RelationshipDirection>(RelationshipDirection.values());
-    private final JTextField searchField = new JTextField();
-    private final JButton settingsButton = button("graph_workspace.action.settings", "settings");
+    private final GraphSearchField searchField = new GraphSearchField();
+    private final JToggleButton settingsButton = iconToggle("graph_workspace.action.settings",
+        "graph_workspace.tooltip.settings", "settings", "/images/GraphSettings.svg?useAccentColor=true");
     private final JButton zoomInButton = iconButton("graph_workspace.action.zoom_in", "zoom-in",
         "/images/ZoomIn24.svg?useAccentColor=true");
     private final JButton zoomOutButton = iconButton("graph_workspace.action.zoom_out", "zoom-out",
@@ -96,9 +102,8 @@ final class WorkspaceToolbar extends javax.swing.JPanel {
         setMinimumSize(new Dimension(0, PREFERRED_SIZE.height));
 
         selectButton.setSelected(true);
-        final ButtonGroup tools = new ButtonGroup();
-        tools.add(selectButton);
-        tools.add(connectButton);
+        applyToolbarSegmentStyle(selectButton);
+        applyToolbarSegmentStyle(connectButton);
         directionComboBox.setName("graph-workspace-direction");
         directionComboBox.setToolTipText(TextUtils.getText("graph_workspace.tooltip.relationship_direction"));
         directionComboBox.setPreferredSize(new Dimension(128, 26));
@@ -119,15 +124,17 @@ final class WorkspaceToolbar extends javax.swing.JPanel {
         });
         searchField.setName("graph-workspace-search");
         searchField.setToolTipText(TextUtils.getText("graph_workspace.tooltip.search"));
-        searchField.setPreferredSize(new Dimension(160, 26));
-        settingsButton.setToolTipText(TextUtils.getText("graph_workspace.tooltip.settings"));
+        searchField.getAccessibleContext().setAccessibleName(
+            TextUtils.getText("graph_workspace.tooltip.search"));
+        searchField.setPrompt(TextUtils.getText("graph_workspace.tooltip.search"));
+        searchField.setPromptIcon(ResourceController.getResourceController()
+            .getOptionalIcon("/images/GraphSearch.svg?useAccentColor=true"));
 
         add(openButton);
         add(saveButton);
         add(undoButton);
         add(redoButton);
-        add(selectButton);
-        add(connectButton);
+        add(new ToolSwitch(selectButton, connectButton));
         add(directionComboBox);
         add(searchField);
         add(settingsButton);
@@ -206,8 +213,12 @@ final class WorkspaceToolbar extends javax.swing.JPanel {
         return searchField;
     }
 
-    JButton settingsButton() {
+    AbstractButton settingsButton() {
         return settingsButton;
+    }
+
+    void setSettingsVisible(final boolean visible) {
+        settingsButton.setSelected(visible);
     }
 
     JButton zoomInButton() {
@@ -371,21 +382,59 @@ final class WorkspaceToolbar extends javax.swing.JPanel {
     private static JButton iconButton(final String textKey, final String name,
             final String iconPath) {
         final JButton button = new JButton(TextUtils.getText(textKey));
-        final Icon icon = ResourceController.getResourceController().getOptionalIcon(iconPath);
-        if (icon != null) {
-            button.setIcon(icon);
-            button.setText(null);
-            button.setToolTipText(TextUtils.getText(textKey));
-            button.getAccessibleContext().setAccessibleName(TextUtils.getText(textKey));
-        }
+        configureIcon(button, textKey, textKey, iconPath);
         configure(button, name);
         return button;
     }
 
-    private static JToggleButton toggleButton(final String textKey, final String name) {
-        final JToggleButton button = new JToggleButton(TextUtils.getText(textKey));
+    private static JToggleButton iconToggle(final String labelTextKey, final String tooltipTextKey,
+            final String name, final String iconPath) {
+        final JToggleButton button = new JToggleButton(TextUtils.getText(labelTextKey));
+        configureIcon(button, labelTextKey, tooltipTextKey, iconPath);
         configure(button, name);
         return button;
+    }
+
+    private static void configureIcon(final AbstractButton button, final String labelTextKey,
+            final String tooltipTextKey, final String iconPath) {
+        button.setText(TextUtils.getText(labelTextKey));
+        final Icon icon = ResourceController.getResourceController().getOptionalIcon(iconPath);
+        if (icon != null) {
+            button.setIcon(icon);
+            button.setDisabledIcon(disabledIconOf(icon));
+            button.setText(null);
+            button.setToolTipText(TextUtils.getText(tooltipTextKey));
+            button.getAccessibleContext().setAccessibleName(TextUtils.getText(tooltipTextKey));
+        }
+    }
+
+    private static final float DISABLED_ICON_ALPHA = 0.45f;
+
+    private static Icon disabledIconOf(final Icon icon) {
+        final int width = icon.getIconWidth();
+        final int height = icon.getIconHeight();
+        if (width <= 0 || height <= 0) {
+            return icon;
+        }
+        final BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+        final Graphics2D graphics = image.createGraphics();
+        try {
+            icon.paintIcon(null, graphics, 0, 0);
+        }
+        finally {
+            graphics.dispose();
+        }
+        return new ImageIcon(applyAlpha(image, new float[] { 1f, 1f, 1f, DISABLED_ICON_ALPHA }));
+    }
+
+    private static BufferedImage applyAlpha(final BufferedImage image, final float[] scales) {
+        return new RescaleOp(scales, new float[4], null).filter(image, null);
+    }
+
+    private static void applyToolbarSegmentStyle(final AbstractButton segment) {
+        if (segment.getIcon() != null) {
+            segment.putClientProperty("JButton.buttonType", "toolBarButton");
+        }
     }
 
     private static void configure(final AbstractButton button, final String name) {
