@@ -105,7 +105,7 @@ tasks:
       signature: '`LayoutFrame.UNVERIFIED = -1`; `LayoutFrame.of(long, LayoutPositions, boolean, int)`; `LayoutFrame.residualViolations()`; `LayoutFrame.verified()`; the `accept` order `MapTierCorrection -> NodeSeparationProjection -> PerceptualIdlePolicy.observe -> LayoutFrame`; a real residual on `LayoutWorker.accept`, `LayoutWorker.failedFrame`, `LayoutSettleLoop.failedFrame` and the initial empty frame; new ...'
       digest: 4f5ba0acbf017c75
     consumes:
-    - from_task: 1
+    - from_task: separation-task-1
       id: iface-task-1-surface
       digest: 46aa1b952b68421a
   validation:
@@ -142,10 +142,10 @@ tasks:
       signature: '`BoundarySizes.contentRingRadius(EnclosureHullKey)`, `BoundarySizes.discRadius(ProjectedNodeKey)`, relation rest length `radiusOf(first) + radiusOf(second) + MIN_GAP`, containment rest length `contentRingRadius(hullKey)`, seed ring radius `contentRingRadius(parentKey)`; deletion of `TypedSpringBox.REST_LENGTH`; re-recorded idle and churn expectations.'
       digest: 1b7b8ea1f8ea2d95
     consumes:
-    - from_task: 1
+    - from_task: separation-task-1
       id: iface-task-1-surface
       digest: 46aa1b952b68421a
-    - from_task: 2
+    - from_task: separation-task-2
       id: iface-task-2-surface
       digest: 4f5ba0acbf017c75
   validation:
@@ -171,10 +171,10 @@ tasks:
       signature: "the test `MapTierCorrectionShould.separatesThreeHullsAtThePinnedThirtyUnitHalfExtent` covering spec \xA75.3 and design \xA78.2.4."
       digest: 7e8412884b541d27
     consumes:
-    - from_task: 1
+    - from_task: separation-task-1
       id: iface-task-1-surface
       digest: 46aa1b952b68421a
-    - from_task: 3
+    - from_task: separation-task-3
       id: iface-task-3-surface
       digest: 1b7b8ea1f8ea2d95
   validation:
@@ -231,7 +231,7 @@ tasks:
       signature: the tests `keepsPlacementsStickyAcrossAPan`, `retainsASlotForAOnePixelMove`, `invalidatesAStaleSlotAndReLadders`, `keepsPaintedInkSeparatedAcrossTheZoomMatrix`, `boundsEveryPlacedLabelByItsSlotForms`, `promotesAHoverOnlyLabelToForcedWithoutCollisions`, `reusesTheCachedPlacementUntilTheKeyChanges`; test helpers `placeShifted(...)`, `assertSamePlacement(...)`, `renderInk(...)`, `inkMask(...)`, `d...
       digest: 5a3f1b8c443fad6b
     consumes:
-    - from_task: 5
+    - from_task: separation-task-5
       id: iface-task-5-surface
       digest: c1d9a2ff7945a458
   validation:
@@ -260,10 +260,10 @@ tasks:
       signature: enclosure placement inside `ScreenLabelPlacement.place` (Tier A `INTERIOR`, Tier B `ARC`, Tier C `EXTERNAL` with the finite lane rule and the subtle budget, the emphatic anchor terminal, the subtle `HOVER_ONLY` terminal), the required-emphatic level filter, and the tests `placesEmphaticEnclosureLabelsInTheHullInterior`, `placesEmphaticEnclosureLabelsOnTheLeastPopulatedArc`, `placesEmphaticEnclo...
       digest: 97feb975c0ed6cf8
     consumes:
-    - from_task: 5
+    - from_task: separation-task-5
       id: iface-task-5-surface
       digest: c1d9a2ff7945a458
-    - from_task: 6
+    - from_task: separation-task-6
       id: iface-task-6-surface
       digest: 5a3f1b8c443fad6b
   validation:
@@ -296,13 +296,13 @@ tasks:
       signature: '`GraphPainter.paint(Graphics2D, CanvasState, GraphPaintState, GraphViewport, Dimension, GraphTheme, List<PlacedLabel>)` and the 9-argument overload with `showArrowheads`/`dimUnrelatedEnabled`; `GraphCanvas.labelsFor(CanvasState, Dimension, RenderingLevel)`; the deleted `GraphPainter.labelFont`/`shouldPaintLabel` and `GraphTheme.overTargetLabelFont()`/`labelFont(RenderingLevel)`; migrated `Graph...'
       digest: d7b6ae412e5ac98e
     consumes:
-    - from_task: 5
+    - from_task: separation-task-5
       id: iface-task-5-surface
       digest: c1d9a2ff7945a458
-    - from_task: 6
+    - from_task: separation-task-6
       id: iface-task-6-surface
       digest: 5a3f1b8c443fad6b
-    - from_task: 7
+    - from_task: separation-task-7
       id: iface-task-7-surface
       digest: 97feb975c0ed6cf8
   validation:
@@ -344,7 +344,7 @@ tasks:
       signature: "the deleted types and members listed in spec \xA76; a `GraphGeometry` without the label surface; `LayoutSettleLoop` without `LabelAssembler`; the migrated tests; the acceptance-5 grep evidence."
       digest: b2d4926d557f4050
     consumes:
-    - from_task: 8
+    - from_task: separation-task-8
       id: iface-task-8-surface
       digest: d7b6ae412e5ac98e
   validation:
@@ -374,16 +374,16 @@ tasks:
       signature: '`PerformanceMeasurements.Stage.SEPARATION("separation")` after `CORRECTION` and `Stage.PLACEMENT("placement")` replacing `LABEL("label")` at the same position; per-trigger `placement` rows in the diagnostic CSV (`warmupCount=20`, `measuredCount=100`, threshold `-1`); a recorded `separation` baseline row; the golden SHA-256 constants in `PerformanceTripwiresShould`.'
       digest: 3819c8fa840c9535
     consumes:
-    - from_task: 2
+    - from_task: separation-task-2
       id: iface-task-2-surface
       digest: 4f5ba0acbf017c75
-    - from_task: 3
+    - from_task: separation-task-3
       id: iface-task-3-surface
       digest: 1b7b8ea1f8ea2d95
-    - from_task: 8
+    - from_task: separation-task-8
       id: iface-task-8-surface
       digest: d7b6ae412e5ac98e
-    - from_task: 9
+    - from_task: separation-task-9
       id: iface-task-9-surface
       digest: b2d4926d557f4050
   validation:
@@ -418,7 +418,7 @@ tasks:
       signature: "the acceptance report mapping specification \xA77.1-\xA77.8 to the exact test names and observed results, the module and repository suite counts, and the removal and persistence evidence."
       digest: 68701574c0ee58aa
     consumes:
-    - from_task: 10
+    - from_task: separation-task-10
       id: iface-task-10-surface
       digest: 3819c8fa840c9535
   validation:
