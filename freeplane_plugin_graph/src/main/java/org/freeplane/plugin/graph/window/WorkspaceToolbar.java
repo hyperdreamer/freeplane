@@ -15,7 +15,6 @@ import java.util.function.Supplier;
 
 import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
-import javax.swing.ButtonGroup;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.Icon;
 import javax.swing.JButton;
@@ -53,8 +52,10 @@ final class WorkspaceToolbar extends javax.swing.JPanel {
         "/images/undo.svg?useAccentColor=true");
     private final JButton redoButton = iconButton("graph_workspace.action.redo_workspace", "redo",
         "/images/redo.svg?useAccentColor=true");
-    private final JToggleButton selectButton = toggleButton("graph_workspace.tool.select", "select");
-    private final JToggleButton connectButton = toggleButton("graph_workspace.tool.connect", "connect");
+    private final JToggleButton selectButton = iconToggle("graph_workspace.tool.select",
+        "graph_workspace.tool.select", "select", "/images/GraphSelect.svg?useAccentColor=true");
+    private final JToggleButton connectButton = iconToggle("graph_workspace.tool.connect",
+        "graph_workspace.tooltip.connect", "connect", "/images/GraphConnect.svg?useAccentColor=true");
     private final JComboBox<RelationshipDirection> directionComboBox =
         new JComboBox<RelationshipDirection>(RelationshipDirection.values());
     private final JTextField searchField = new JTextField();
@@ -96,9 +97,8 @@ final class WorkspaceToolbar extends javax.swing.JPanel {
         setMinimumSize(new Dimension(0, PREFERRED_SIZE.height));
 
         selectButton.setSelected(true);
-        final ButtonGroup tools = new ButtonGroup();
-        tools.add(selectButton);
-        tools.add(connectButton);
+        applyToolbarSegmentStyle(selectButton);
+        applyToolbarSegmentStyle(connectButton);
         directionComboBox.setName("graph-workspace-direction");
         directionComboBox.setToolTipText(TextUtils.getText("graph_workspace.tooltip.relationship_direction"));
         directionComboBox.setPreferredSize(new Dimension(128, 26));
@@ -126,8 +126,7 @@ final class WorkspaceToolbar extends javax.swing.JPanel {
         add(saveButton);
         add(undoButton);
         add(redoButton);
-        add(selectButton);
-        add(connectButton);
+        add(new ToolSwitch(selectButton, connectButton));
         add(directionComboBox);
         add(searchField);
         add(settingsButton);
@@ -371,21 +370,35 @@ final class WorkspaceToolbar extends javax.swing.JPanel {
     private static JButton iconButton(final String textKey, final String name,
             final String iconPath) {
         final JButton button = new JButton(TextUtils.getText(textKey));
-        final Icon icon = ResourceController.getResourceController().getOptionalIcon(iconPath);
-        if (icon != null) {
-            button.setIcon(icon);
-            button.setText(null);
-            button.setToolTipText(TextUtils.getText(textKey));
-            button.getAccessibleContext().setAccessibleName(TextUtils.getText(textKey));
-        }
+        configureIcon(button, textKey, textKey, iconPath);
         configure(button, name);
         return button;
     }
 
-    private static JToggleButton toggleButton(final String textKey, final String name) {
-        final JToggleButton button = new JToggleButton(TextUtils.getText(textKey));
+    private static JToggleButton iconToggle(final String labelTextKey, final String tooltipTextKey,
+            final String name, final String iconPath) {
+        final JToggleButton button = new JToggleButton(TextUtils.getText(labelTextKey));
+        configureIcon(button, labelTextKey, tooltipTextKey, iconPath);
         configure(button, name);
         return button;
+    }
+
+    private static void configureIcon(final AbstractButton button, final String labelTextKey,
+            final String tooltipTextKey, final String iconPath) {
+        button.setText(TextUtils.getText(labelTextKey));
+        final Icon icon = ResourceController.getResourceController().getOptionalIcon(iconPath);
+        if (icon != null) {
+            button.setIcon(icon);
+            button.setText(null);
+            button.setToolTipText(TextUtils.getText(tooltipTextKey));
+            button.getAccessibleContext().setAccessibleName(TextUtils.getText(tooltipTextKey));
+        }
+    }
+
+    private static void applyToolbarSegmentStyle(final AbstractButton segment) {
+        if (segment.getIcon() != null) {
+            segment.putClientProperty("JButton.buttonType", "toolBarButton");
+        }
     }
 
     private static void configure(final AbstractButton button, final String name) {

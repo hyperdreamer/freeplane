@@ -11,6 +11,7 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.GraphicsEnvironment;
 import java.awt.Graphics2D;
+import java.awt.GridLayout;
 import java.awt.Point;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
@@ -34,14 +35,17 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 import javax.xml.namespace.QName;
 
+import javax.swing.ButtonGroup;
 import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSeparator;
+import javax.swing.JToggleButton;
 import javax.swing.JViewport;
 import javax.swing.Icon;
 import javax.swing.UIManager;
@@ -52,6 +56,7 @@ import org.freeplane.plugin.graph.canvas.GraphCanvas;
 import org.freeplane.plugin.graph.canvas.GraphIntent;
 import org.freeplane.plugin.graph.canvas.GraphTheme;
 import org.freeplane.plugin.graph.canvas.GraphViewport;
+import org.freeplane.plugin.graph.canvas.InteractionTool;
 import org.freeplane.plugin.graph.command.GraphCommand;
 import org.freeplane.plugin.graph.command.GraphCommands;
 import org.freeplane.plugin.graph.control.CanvasState;
@@ -346,6 +351,69 @@ public class GraphWorkspaceWindowModelShould {
         readOnlyModel.toolbar().zoomInButton().doClick();
         verify(readOnlyFixture.handle, org.mockito.Mockito.never()).execute(any(GraphCommand.class));
         readOnlyModel.close();
+    }
+
+    @Test
+    public void groupsSelectAndConnectInOneToolSwitch() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
+        WorkspaceToolbar toolbar = model.toolbar();
+        JToggleButton select = toolbar.selectButton();
+        JToggleButton connect = toolbar.connectButton();
+
+        assertThat(select.getParent()).isInstanceOf(ToolSwitch.class);
+        assertThat(connect.getParent()).isSameAs(select.getParent());
+        ToolSwitch toolSwitch = (ToolSwitch) select.getParent();
+        GridLayout layout = (GridLayout) toolSwitch.getLayout();
+        assertThat(layout.getRows()).isEqualTo(1);
+        assertThat(layout.getColumns()).isEqualTo(2);
+        assertThat(layout.getHgap()).isZero();
+        assertThat(layout.getVgap()).isZero();
+        assertThat(toolSwitch.getName()).isEqualTo("graph-workspace-tool-switch");
+        assertThat(toolSwitch.isOpaque()).isFalse();
+        assertThat(toolSwitch.getComponentCount()).isEqualTo(2);
+        assertThat(toolSwitch.getComponent(0)).isSameAs(select);
+        assertThat(toolSwitch.getComponent(1)).isSameAs(connect);
+        ButtonGroup group = select.getModel().getGroup();
+        assertThat(group).isNotNull();
+        assertThat(connect.getModel().getGroup()).isSameAs(group);
+        assertThat(Collections.list(group.getElements()).stream()
+            .map(segment -> segment.getModel())
+            .collect(Collectors.toList()))
+            .containsExactly(select.getModel(), connect.getModel());
+        assertThat(toolbar.approvedControlNames()).containsExactlyInAnyOrder(
+            "open", "save", "add-map", "remove-map", "select", "connect", "direction", "search",
+            "settings", "zoom-in", "zoom-out", "fit-graph", "reset-zoom", "pin");
+        int toolSwitchCount = 0;
+        for (Component component : toolbar.getComponents()) {
+            if (component instanceof ToolSwitch) {
+                toolSwitchCount++;
+            }
+        }
+        assertThat(toolbar.getComponentCount()).isEqualTo(13);
+        assertThat(toolSwitchCount).isEqualTo(1);
+        model.close();
+    }
+
+    @Test
+    public void switchesToolsThroughTheSharedButtonGroup() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
+        List<InteractionTool> tools = new ArrayList<InteractionTool>();
+        model.toolbar().setToolListener(tools::add);
+
+        model.toolbar().connectButton().doClick();
+        assertThat(model.toolbar().connectButton().isSelected()).isTrue();
+        assertThat(model.toolbar().selectButton().isSelected()).isFalse();
+        model.toolbar().selectButton().doClick();
+        assertThat(model.toolbar().selectButton().isSelected()).isTrue();
+        assertThat(model.toolbar().connectButton().isSelected()).isFalse();
+        assertThat(tools).containsExactly(InteractionTool.CONNECT, InteractionTool.SELECT);
+        model.close();
     }
 
     @Test
