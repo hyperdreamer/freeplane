@@ -6,10 +6,13 @@
   plus active-map count; persistence A — per workspace; resize bounds A — 180 px min, 50 % max,
   264 px default, commit on release, double-click reset; read-only behaviour B — usable,
   session-only). Review round 1 raised 4 blockers / 7 major / 8 minor findings, round 2 raised
-  0 blockers / 4 major / 6 minor, round 3 raised 1 blocker / 0 major / 7 minor, and round 4
-  raised 1 blocker (`B4-1`, the effective-divider-width contract) / 1 major (`M4-1`, squeezed
-  regime commit baseline); all are addressed in this revision
-  (`reports/design-review-1.md` … `design-review-4.md`).
+  0 blockers / 4 major / 6 minor, round 3 raised 1 blocker / 0 major / 7 minor, round 4 raised
+  1 blocker (`B4-1`, the effective-divider-width contract) / 1 major (`M4-1`, squeezed-regime
+  commit baseline), and round 5 closed at 0 blockers / 0 majors; its five minor findings were
+  fixed in place. The last of those (m5-1) replaced the gesture-start commit baseline with
+  `appliedSidebarWidth` after round 5 ran, so that single change is verified by the specification
+  review rather than by a further design-review round (`reports/design-review-1.md` …
+  `design-review-5.md`, `reports/spec-review-*.md`).
 - Ticket: none — Task Identifier: `2026-09-12-graph-map-sidebar-resize`
 - Scope: `freeplane_plugin_graph` (delivery branch `plugin/graph-workspace`), plus five new
   keys in `freeplane/src/viewer/resources/translations/Resources_en.properties`
