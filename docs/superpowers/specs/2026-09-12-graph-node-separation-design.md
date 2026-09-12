@@ -1,8 +1,10 @@
 # Graph Workspace Node Separation — Design
 
-- Date: 2026-09-12 (revision 5.1)
-- Review status: **approved for specification drafting** — review attempt 5 returned 0 blockers, 2 majors and
-  9 minors; revision 5.1 is editorial only (no design decision changed) and applies those corrections.
+- Date: 2026-09-12 (revision 5.2)
+- Review status: **approved for specification drafting** (review attempt 5: 0 blockers, 2 majors, 9 minors).
+  Revision 5.2 applies the specification reviewer's design-level findings: it removes revision 4's
+  inward-slot wording and revision 5.1's false single-form corner bound, adds the enclosure-label slot model,
+  and states I2 as a rectangle-level contract with its measured ink fringe.
 - Topic: graph-node-separation
 - PM run: `pm-run-20260912-012815-01038a52`
 - Delivery target: `refs/heads/plugin/graph-workspace` at `/data/home/guest/Development/freeplane`
@@ -122,6 +124,11 @@ evidence settles *where* collision must be solved: in screen space.
   emphatic; the theme's 7 pt face never paints because `shouldPaintLabel`
   (`GraphPainter.java:301-305`) suppresses non-forced labels at `OVER_TARGET`.
   Labels are single-line, so a label box is one line high.
+  I2 is a **rectangle-level contract**: antialiased glyph ink can extend beyond a measured logical box
+  (measured 0.44–0.76 px over the fixture set), while the measured fixtures keep minimum rectangle gaps
+  above twice that fringe (1.66 px at zoom 1), so painted text stays visually disjoint. The specification
+  pins the fringe and the assertion; I2 does **not** require ink ⊆ rectangle, which is unachievable and
+  which this design never required.
 - **I3 — degradation ladder (ordered).** `full@paintedFont → full@displaced → denseFont →
   displaced denseFont → truncated → hover-only`. Forced labels (selected, hovered, related)
   are placement inputs, placed first, never below full text. Emphatic enclosure labels are
@@ -244,8 +251,11 @@ List<PlacedLabel> place(LabelPlacementRequest request, List<PlacedLabel> previou
 ```
 
 - **Placement area = the painted surface**, in screen coordinates at the current zoom.
-  Candidates outside it are rejected, so a placed label is never silently clipped; near the
-  surface edge, inward slots are tried first, in a fixed per-edge order.
+  Candidates outside it are rejected, so a placed label is never silently clipped. Slot order is the single
+  global order pinned by the specification; near a surface edge, out-of-surface candidates are rejected and
+  the ladder falls through to inward slots, so no separate per-edge ordering rule is needed. (Revision 5.2
+  removes revision 4's "inward slots are tried first, in a fixed per-edge order", which contradicted the
+  mockup evidence and every fixture table measured from it.)
   **Pan and zoom are inputs**: panning changes the surface and therefore the key, so
   placement is recomputed. Revision 4's pan-invariance claim is dropped — it contradicted
   the pan-dependent surface (`GraphCanvas.java:392-412, 439-449`).
@@ -265,18 +275,21 @@ List<PlacedLabel> place(LabelPlacementRequest request, List<PlacedLabel> previou
   the new result type.
 - **Priority:** forced (selected → hovered → related) → enclosure labels (emphatic → subtle)
   → node labels by descending disc radius.
+- **Enclosure-label slots.** Interior at the hull label anchor when the rectangle fits and no disc occupies
+  it; otherwise arc slots on the longest hull edges; otherwise exterior slots with a leader line; otherwise
+  hover-only — exempt for emphatic labels, which are forced at the anchor as the documented I2 exception.
+  The specification pins the anchor, the per-tier fonts, the exterior candidate normals, lane spacing, the
+  candidate budget, and the leader start point (nearest boundary point of the anchor's hull), inheriting the
+  deleted engine's constants rather than re-deriving them. (Added in revision 5.2: revision 5 left the
+  enclosure path only implicitly specified, which the specification review flagged.)
 - **Slots and limits (design parameters).** Eight near slots at a 6 px gap; four displaced
   slots at 30 px. Maximum slot widths: 200 px above/below, 130 px left/right, 150 px
-  diagonal. Two distinct quantities are bounded, both in screen pixels, with `halfBox` the slot's maximum
-  half-extent and `r` the node's world radius:
-  **leader displacement** (disc centre → label anchor) is bounded by
-  `max(2, r·zoom) + 30 + halfBox`, measured at ≤ 78.7 px; and the **label rectangle's farthest
-  corner** (disc centre → corner) is bounded by `max(2, r·zoom) + 30 + halfDiagonal`, where
-  `halfDiagonal = hypot(w, h)/2` for the slot's maximum box (≈ 65 px for a 130 px side slot),
-  giving ≤ ~144 px at zoom 1 with `r = 14`. Measured rectangle-support maxima are 138.7 px
-  (dense fixture) and 143.5 px (long-label fixture), so the corner form is the operative bound.
-  §8.3.6 asserts both forms at zoom 1 and zoom 2. There is no separate cap: revision 3's 90 px
-  rule was unreachable and is not replaced.
+  diagonal. Displacement and rectangle support are bounded **by construction**, because every offset and
+  width is a screen-space constant; the exact per-slot closed forms — which depend on the slot's direction,
+  gap and width limit — are pinned by the specification, with measured maxima of 78.7 px leader displacement
+  and 143.5 px rectangle support. Revision 5.2 deletes revision 5.1's single-form
+  `r' + 30 + halfDiagonal` corner bound, which the specification falsified with a 150.2 px counterexample.
+  There is no separate cap: revision 3's 90 px rule was unreachable and is not replaced.
 - Leader lines are drawn for every slot other than directly above/below the disc.
 
 ### 5.4 Painting and caching
