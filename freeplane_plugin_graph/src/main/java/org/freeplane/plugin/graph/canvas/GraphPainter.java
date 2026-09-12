@@ -12,6 +12,8 @@ import java.awt.geom.Ellipse2D;
 import java.awt.geom.Line2D;
 import java.awt.geom.Path2D;
 import java.awt.geom.Point2D;
+import java.awt.geom.Rectangle2D;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -19,7 +21,6 @@ import java.util.Set;
 import org.freeplane.plugin.graph.control.CanvasState;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.HullGeometry;
-import org.freeplane.plugin.graph.geometry.LabelPlacement;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.geometry.NodeGeometry;
@@ -36,19 +37,18 @@ import org.freeplane.plugin.graph.projection.ProjectedNode;
 final class GraphPainter {
     void paint(final Graphics2D graphics, final CanvasState state, final GraphPaintState paintState,
             final GraphViewport viewport, final java.awt.Dimension size, final GraphTheme theme,
-            final RenderingLevel level) {
-        paint(graphics, state, paintState, viewport, size, theme, level, true, true);
+            final List<PlacedLabel> labels) {
+        paint(graphics, state, paintState, viewport, size, theme, labels, true, true);
     }
 
     void paint(final Graphics2D graphics, final CanvasState state, final GraphPaintState paintState,
             final GraphViewport viewport, final java.awt.Dimension size, final GraphTheme theme,
-            final RenderingLevel level, final boolean showArrowheads, final boolean dimUnrelatedEnabled) {
+            final List<PlacedLabel> labels, final boolean showArrowheads, final boolean dimUnrelatedEnabled) {
         Objects.requireNonNull(graphics, "graphics");
         Objects.requireNonNull(paintState, "paintState");
         final GraphViewport currentViewport = Objects.requireNonNull(viewport, "viewport");
         final java.awt.Dimension componentSize = Objects.requireNonNull(size, "size");
         final GraphTheme currentTheme = Objects.requireNonNull(theme, "theme");
-        final RenderingLevel renderingLevel = Objects.requireNonNull(level, "level");
         if (componentSize.width < 0 || componentSize.height < 0) {
             throw new IllegalArgumentException("Component dimensions must not be negative");
         }
@@ -71,7 +71,7 @@ final class GraphPainter {
                 showArrowheads, visibleEndpoints);
             paintNodes(copy, state, paintState, currentTheme, dimUnrelated);
             paintPins(copy, state, paintState, currentTheme, dimUnrelated, visibleEndpoints);
-            paintLabels(copy, state, paintState, currentTheme, renderingLevel, currentViewport, dimUnrelated);
+            paintLabels(copy, labels, paintState, currentTheme, currentViewport, componentSize, dimUnrelated);
             paintHighlights(copy, state, paintState, currentTheme);
             paintConnectionPreview(copy, state, paintState, currentTheme, visibleEndpoints);
         }
@@ -228,88 +228,48 @@ final class GraphPainter {
         }
     }
 
-    private static void paintLabels(final Graphics2D graphics, final CanvasState state,
-            final GraphPaintState paintState, final GraphTheme theme, final RenderingLevel level,
-            final GraphViewport viewport, final boolean dimUnrelated) {
-        final GraphGeometry geometry = state.geometry();
-        for (final ProjectedNode node : state.projection().nodes()) {
-            final NodeGeometry nodeGeometry = geometry.nodes().get(node.key());
-            if (nodeGeometry == null) {
+    private static void paintLabels(final Graphics2D graphics, final List<PlacedLabel> labels,
+            final GraphPaintState paintState, final GraphTheme theme, final GraphViewport viewport,
+            final java.awt.Dimension size, final boolean dimUnrelated) {
+        for (final PlacedLabel label : labels) {
+            if (label.mode() == PlacedLabel.Mode.HOVER_ONLY && !label.forced()) {
                 continue;
             }
-            final ProjectedEndpointKey endpoint = ProjectedEndpointKey.ofNode(node.key());
-            final boolean forced = isRelated(endpoint, paintState);
-            if (!shouldPaintLabel(LabelPlacement.Mode.INTERIOR, forced, level, false)) {
-                continue;
-            }
+            final boolean forced = label.forced() || isRelated(label.endpoint(), paintState);
             final boolean dim = dimUnrelated && !forced;
             final AlphaComposite oldComposite = setOpacity(graphics, dim);
-            final Font font = labelFont(theme, level, forced, false, viewport.zoom());
+            final Font font = label.font().deriveFont(Math.max(1.0f,
+                label.font().getSize2D() / (float) viewport.zoom()));
             graphics.setFont(font);
             graphics.setColor(theme.labelColor());
-            final double labelY = nodeGeometry.center().y() - nodeGeometry.radius() - 8.0 / viewport.zoom();
-            drawCentered(graphics, node.label().displayText(), nodeGeometry.center().x(), labelY);
+            final double anchorX = worldX(label.anchorX(), viewport, size);
+            final double anchorY = worldY(label.anchorY(), viewport, size);
+            if (label.leaderStart().isPresent()) {
+                graphics.setStroke(theme.edgeStroke());
+                graphics.draw(new Line2D.Double(worldX(label.leaderStart().get().x(), viewport, size),
+                    worldY(label.leaderStart().get().y(), viewport, size), anchorX, anchorY));
+            }
+            drawCentered(graphics, font, label.text(), anchorX, anchorY);
             graphics.setComposite(oldComposite);
         }
-        for (final ProjectedEnclosure enclosure : state.projection().enclosures()) {
-            if (enclosure.boundaryTier() == BoundaryTier.SUPPRESSED) {
-                continue;
-            }
-            if (geometry.hulls().get(enclosure.hullKey()) == null) {
-                continue;
-            }
-            for (final EnclosureKey endpointKey : enclosure.endpointKeys()) {
-                final LabelPlacement placement = geometry.labels().get(endpointKey);
-                if (placement == null) {
-                    continue;
-                }
-                final ProjectedEndpointKey endpoint = ProjectedEndpointKey.ofEnclosure(endpointKey);
-                final boolean forced = isRelated(endpoint, paintState);
-                final boolean emphatic = enclosure.boundaryTier() == BoundaryTier.EMPHATIC;
-                final boolean required = emphatic;
-                if (!shouldPaintLabel(placement.mode(), forced, level, required)) {
-                    continue;
-                }
-                final boolean dim = dimUnrelated && !forced;
-                final AlphaComposite oldComposite = setOpacity(graphics, dim);
-                final Font font = labelFont(theme, level, forced, emphatic, viewport.zoom());
-                graphics.setFont(font);
-                graphics.setColor(theme.labelColor());
-                if (placement.leaderStart().isPresent()) {
-                    graphics.setStroke(theme.edgeStroke());
-                    graphics.draw(new Line2D.Double(placement.leaderStart().get().x(),
-                        placement.leaderStart().get().y(), placement.anchor().x(), placement.anchor().y()));
-                }
-                drawCentered(graphics, placement.displayText(), placement.anchor().x(), placement.anchor().y());
-                graphics.setComposite(oldComposite);
-            }
-        }
     }
 
-    private static Font labelFont(final GraphTheme theme, final RenderingLevel level, final boolean forced,
-            final boolean emphatic, final double zoom) {
-        final Font base;
-        if (emphatic) {
-            base = theme.emphaticLabelFont();
-        }
-        else {
-            base = forced ? theme.labelFont() : theme.labelFont(level);
-        }
-        return base.deriveFont(Math.max(1.0f, base.getSize2D() / (float) zoom));
+    private static double worldX(final double screenX, final GraphViewport viewport,
+            final java.awt.Dimension size) {
+        return viewport.centerX() + (screenX - size.getWidth() * 0.5) / viewport.zoom();
     }
 
-    private static boolean shouldPaintLabel(final LabelPlacement.Mode mode, final boolean forced,
-            final RenderingLevel level, final boolean required) {
-        return forced || required || (level != RenderingLevel.OVER_TARGET
-            && mode != LabelPlacement.Mode.HOVER_ONLY);
+    private static double worldY(final double screenY, final GraphViewport viewport,
+            final java.awt.Dimension size) {
+        return viewport.centerY() + (screenY - size.getHeight() * 0.5) / viewport.zoom();
     }
 
-    private static void drawCentered(final Graphics2D graphics, final String text, final double x,
-            final double y) {
-        final java.awt.FontMetrics metrics = graphics.getFontMetrics();
-        final float width = metrics.stringWidth(text);
-        final float baseline = (metrics.getAscent() - metrics.getDescent()) * 0.5f;
-        graphics.drawString(text, (float) (x - width * 0.5f), (float) (y + baseline));
+    private static void drawCentered(final Graphics2D graphics, final Font font, final String text,
+            final double x, final double y) {
+        final Rectangle2D bounds = font.getStringBounds(text, ScreenLabelPlacement.SCREEN_FRC);
+        final java.awt.font.LineMetrics line = font.getLineMetrics(text, ScreenLabelPlacement.SCREEN_FRC);
+        final float baseline = (line.getAscent() - line.getDescent()) * 0.5f;
+        graphics.drawString(text, (float) (x - bounds.getWidth() * 0.5), (float) (y + baseline));
     }
 
     private static void paintHighlights(final Graphics2D graphics, final CanvasState state,

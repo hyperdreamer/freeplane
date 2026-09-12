@@ -7,12 +7,10 @@ import static org.mockito.Mockito.when;
 
 import java.awt.Color;
 import java.awt.Dimension;
-import java.awt.Font;
-import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.awt.Point;
-import java.awt.Rectangle;
 import java.awt.geom.Point2D;
+import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 import java.lang.reflect.Modifier;
 import java.net.URI;
@@ -235,8 +233,8 @@ public class GraphCanvasPaintShould {
             new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
         currentGeometry.put(fixture.first.key(), fixture.state.geometry().nodes().get(fixture.first.key()));
         CanvasState state = CanvasState.of(fixture.state.generation(), fixture.state.projection(),
-            fixture.state.layout(), GraphGeometry.of(currentGeometry, fixture.state.geometry().hulls(),
-                fixture.state.geometry().labels()), fixture.state.status());
+            fixture.state.layout(), GraphGeometry.of(currentGeometry, fixture.state.geometry().hulls()),
+            fixture.state.status());
         CanvasState withoutEdge = stateWithEdges(state, Collections.<ProjectedEdge>emptyList());
         GraphTheme theme = lightTheme();
 
@@ -260,37 +258,111 @@ public class GraphCanvasPaintShould {
     }
 
     @Test
-    public void useDedicatedEmphaticLabelsAndPreserveLevelSpecificVisibility() {
+    public void paintsCarriedPlacementFontsAndPreservesLevelSpecificVisibility() {
         GraphTheme theme = lightTheme();
-        assertThat(theme.emphaticLabelFont().isBold()).isTrue();
-        assertThat(theme.emphaticLabelFont().getSize2D()).isGreaterThan(theme.labelFont().getSize2D());
-
         LabelFixture fullFixture = labelFixture(499);
         LabelFixture denseFixture = labelFixture(2000);
         LabelFixture overTargetFixture = labelFixture(2001);
-        BufferedImage full = paintLabelFixture(fullFixture, theme, forcedOrdinaryPaintState(fullFixture));
-        BufferedImage dense = paintLabelFixture(denseFixture, theme, forcedOrdinaryPaintState(denseFixture));
-        BufferedImage overTarget = paintLabelFixture(overTargetFixture, theme,
-            forcedOrdinaryPaintState(overTargetFixture));
+        List<PlacedLabel> full = placedLabels(fullFixture, theme, GraphPaintState.empty(),
+            RenderingLevel.FULL);
+        List<PlacedLabel> dense = placedLabels(denseFixture, theme, GraphPaintState.empty(),
+            RenderingLevel.DENSE);
+        List<PlacedLabel> overTarget = placedLabels(overTargetFixture, theme, GraphPaintState.empty(),
+            RenderingLevel.OVER_TARGET);
 
-        assertThat(labelPixels(full, theme, 0, 0, 75, 36)).isGreaterThan(0);
-        assertThat(labelPixels(dense, theme, 0, 0, 75, 36)).isGreaterThan(0);
-        assertThat(labelPixels(overTarget, theme, 0, 0, 75, 36)).isEqualTo(0);
-        assertThat(labelPixels(full, theme, 160, 95, 240, 136)).isGreaterThan(0);
-        assertThat(labelPixels(dense, theme, 160, 95, 240, 136)).isGreaterThan(0);
-        assertThat(labelPixels(overTarget, theme, 160, 95, 240, 136)).isEqualTo(0);
-        assertForcedOrdinaryLabelsVisible(full, theme);
-        assertForcedOrdinaryLabelsVisible(dense, theme);
-        assertForcedOrdinaryLabelsVisible(overTarget, theme);
-        assertEmphaticGlyphUsesDedicatedFont(full, theme);
-        assertEmphaticGlyphUsesDedicatedFont(dense, theme);
-        assertEmphaticGlyphUsesDedicatedFont(overTarget, theme);
-        assertForcedOrdinaryGlyphsUseFullDetailFont(overTarget, theme);
+        assertThat(theme.emphaticLabelFont().isBold()).isTrue();
+        assertThat(theme.emphaticLabelFont().getSize2D()).isGreaterThan(theme.labelFont().getSize2D());
+        assertThat(findPlaced(full, "EMPHATIC").font().getSize()).isEqualTo(15);
+        assertThat(findPlaced(full, "ORDINARY").font().getSize()).isEqualTo(12);
+        assertThat(findPlaced(dense, "EMPHATIC").font().getSize()).isEqualTo(15);
+        assertThat(findPlaced(dense, "ORDINARY").font().getSize()).isEqualTo(12);
+        assertThat(overTarget).hasSize(1);
+        assertThat(overTarget.get(0).text()).isEqualTo("EMPHATIC");
+        assertThat(overTarget.get(0).font().getSize()).isEqualTo(15);
+        for (PlacedLabel label : full) {
+            assertThat(label.font().getSize()).isIn(9, 12, 15);
+            assertThat(label.font().getSize()).isNotEqualTo(7);
+        }
 
-        LabelFixture suppressedFixture = labelFixture(499);
-        BufferedImage suppressed = paintLabelFixture(suppressedFixture, theme,
-            forcedSuppressedPaintState(suppressedFixture));
-        assertThat(nonBackgroundPixelsIn(suppressed, theme.background(), 0, 55, 100, 95)).isEqualTo(0);
+        GraphPaintState forcedState = forcedOrdinaryPaintState(overTargetFixture);
+        List<PlacedLabel> forcedOverTarget = placedLabels(overTargetFixture, theme, forcedState,
+            RenderingLevel.OVER_TARGET);
+        assertThat(texts(forcedOverTarget)).contains("SELECTED", "HOVERED", "SEARCH");
+        assertThat(texts(forcedOverTarget)).doesNotContain("ORDINARY");
+
+        BufferedImage image = paintLabelFixture(overTargetFixture, theme, forcedState);
+        for (PlacedLabel label : forcedOverTarget) {
+            Rectangle2D bounds = label.bounds();
+            assertThat(labelPixels(image, theme, (int) Math.floor(bounds.getMinX()),
+                (int) Math.floor(bounds.getMinY()), (int) Math.ceil(bounds.getMaxX()),
+                (int) Math.ceil(bounds.getMaxY()))).as(label.text()).isGreaterThan(0);
+        }
+    }
+
+    @Test
+    public void keepsPublishedGeometryStableAcrossPlacementChanges() {
+        Fixture fixture = fixture(16.0);
+        CanvasState state = fixture.state;
+        Map<ProjectedNodeKey, NodeGeometry> nodesBefore =
+            new LinkedHashMap<ProjectedNodeKey, NodeGeometry>(state.geometry().nodes());
+        Map<EnclosureHullKey, HullGeometry> hullsBefore =
+            new LinkedHashMap<EnclosureHullKey, HullGeometry>(state.geometry().hulls());
+        GraphCanvas canvas = new GraphCanvas();
+        canvas.setSize(SIZE);
+        canvas.setTheme(lightTheme());
+        canvas.setCanvasState(state);
+        canvas.setPaintState(GraphPaintState.empty());
+        canvas.setViewport(GraphViewport.of(0.0, 0.0, 1.0));
+
+        paintCanvas(canvas);
+
+        canvas.setViewport(GraphViewport.of(0.0, 0.0, 2.0));
+        paintCanvas(canvas);
+
+        canvas.setViewport(GraphViewport.of(5.0, -3.0, 1.0));
+        paintCanvas(canvas);
+
+        ProjectedEndpointKey first = ProjectedEndpointKey.ofNode(fixture.first.key());
+        canvas.setPaintState(GraphPaintState.empty().withSelection(first));
+        paintCanvas(canvas);
+
+        assertThat(state.geometry().nodes()).isEqualTo(nodesBefore);
+        assertThat(state.geometry().hulls()).isEqualTo(hullsBefore);
+        assertThat(state.geometry().nodes()).isEqualTo(fixture.state.geometry().nodes());
+    }
+
+    private static List<PlacedLabel> placedLabels(LabelFixture fixture, GraphTheme theme,
+            GraphPaintState paintState, RenderingLevel level) {
+        Set<ProjectedEndpointKey> forced = new LinkedHashSet<ProjectedEndpointKey>();
+        if (paintState.selection().isPresent()) {
+            forced.add(paintState.selection().get());
+        }
+        if (paintState.hover().isPresent()) {
+            forced.add(paintState.hover().get());
+        }
+        forced.addAll(paintState.searchMatches());
+        LabelPlacementRequest request = LabelPlacementRequest.of(fixture.state.projection(),
+            fixture.state.geometry(), fixture.state.layout().positions(), 1.0, 0.0, 0.0,
+            new java.awt.geom.Rectangle2D.Double(0.0, 0.0, SIZE.width, SIZE.height), forced, level);
+        return new ScreenLabelPlacement().place(request, null, LabelFonts.from(theme),
+            Collections.<java.awt.geom.Rectangle2D>emptyList());
+    }
+
+    private static List<String> texts(List<PlacedLabel> labels) {
+        List<String> texts = new ArrayList<String>();
+        for (PlacedLabel label : labels) {
+            texts.add(label.text());
+        }
+        return texts;
+    }
+
+    private static PlacedLabel findPlaced(List<PlacedLabel> labels, String text) {
+        for (PlacedLabel label : labels) {
+            if (text.equals(label.text())) {
+                return label;
+            }
+        }
+        return null;
     }
 
     @Test
@@ -322,8 +394,7 @@ public class GraphCanvasPaintShould {
             new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
         currentGeometry.put(fixture.second.key(), fixture.state.geometry().nodes().get(fixture.second.key()));
         CanvasState withoutFirstNodeGeometry = CanvasState.of(withPin.generation(), withPin.projection(),
-            withPin.layout(), GraphGeometry.of(currentGeometry, withPin.geometry().hulls(),
-                withPin.geometry().labels()), withPin.status());
+            withPin.layout(), GraphGeometry.of(currentGeometry, withPin.geometry().hulls()), withPin.status());
         CanvasState withoutPin = stateWithPins(withoutFirstNodeGeometry,
             Collections.<PinProjection>emptyList());
         GraphTheme theme = lightTheme();
@@ -658,11 +729,8 @@ public class GraphCanvasPaintShould {
 
     private static CanvasState withoutEnclosureLabel(final CanvasState base,
             final EnclosureKey removed) {
-        final Map<EnclosureKey, LabelPlacement> labels =
-            new LinkedHashMap<EnclosureKey, LabelPlacement>(base.geometry().labels());
-        labels.remove(removed);
         return CanvasState.of(base.generation(), base.projection(), base.layout(),
-            GraphGeometry.of(base.geometry().nodes(), base.geometry().hulls(), labels), base.status());
+            GraphGeometry.of(base.geometry().nodes(), base.geometry().hulls()), base.status());
     }
 
     private static ProjectedEdge enclosureToNodeEdge(final ProjectedEndpointKey enclosure,
@@ -681,7 +749,7 @@ public class GraphCanvasPaintShould {
             new LinkedHashMap<ProjectedNodeKey, NodeGeometry>(base.geometry().nodes());
         nodes.remove(removed);
         return replacementState(base, base.projection().nodes(), base.projection().enclosures(),
-            GraphGeometry.of(nodes, base.geometry().hulls(), base.geometry().labels()));
+            GraphGeometry.of(nodes, base.geometry().hulls()));
     }
 
     private static CanvasState replacementState(final CanvasState base, final List<ProjectedNode> nodes,
@@ -702,137 +770,14 @@ public class GraphCanvasPaintShould {
         return ProjectedEdge.of(ProjectedEdgeKey.of(source, target), Collections.singletonList(contributor));
     }
 
-    private static void assertForcedOrdinaryLabelsVisible(final BufferedImage image, final GraphTheme theme) {
-        assertThat(labelPixels(image, theme, 80, 0, 160, 36)).isGreaterThan(0);
-        assertThat(labelPixels(image, theme, 165, 0, 240, 36)).isGreaterThan(0);
-        assertThat(labelPixels(image, theme, 0, 80, 75, 111)).isGreaterThan(0);
-    }
-
-    private static void assertEmphaticGlyphUsesDedicatedFont(final BufferedImage image,
-            final GraphTheme theme) {
-        final Font emphatic = zoomAdjustedFont(theme.emphaticLabelFont(), 1.0);
-        final Font normal = zoomAdjustedFont(theme.labelFont(), 1.0);
-        assertThat(stringWidth(emphatic, "EMPHATIC")).isGreaterThan(stringWidth(normal, "EMPHATIC"));
-        assertThat(fontHeight(emphatic)).isGreaterThan(fontHeight(normal));
-
-        final Rectangle actual = glyphBounds(image, theme.labelColor(), 75, 95, 165, 136);
-        final Rectangle expected = glyphBounds(paintReferenceLabel("EMPHATIC", emphatic, 120.0, 115.0,
-            theme.labelColor()), theme.labelColor(), 75, 95, 165, 136);
-        final Rectangle normalBounds = glyphBounds(paintReferenceLabel("EMPHATIC", normal, 120.0, 115.0,
-            theme.labelColor()), theme.labelColor(), 75, 95, 165, 136);
-        assertThat(actual).isEqualTo(expected);
-        assertThat(actual.width).isGreaterThan(normalBounds.width);
-        assertThat(actual.height).isGreaterThanOrEqualTo(normalBounds.height);
-    }
-
-    private static void assertForcedOrdinaryGlyphsUseFullDetailFont(final BufferedImage image,
-            final GraphTheme theme) {
-        assertGlyphUsesFullDetailFont(image, theme, "SELECTED", 120.0, 29.0, 75, 0, 165, 36);
-        assertGlyphUsesFullDetailFont(image, theme, "HOVERED", 205.0, 29.0, 165, 0, 240, 36);
-        assertGlyphUsesFullDetailFont(image, theme, "SEARCH", 35.0, 99.0, 0, 80, 75, 104);
-    }
-
-    private static void assertGlyphUsesFullDetailFont(final BufferedImage image, final GraphTheme theme,
-            final String text, final double x, final double y, final int minX, final int minY,
-            final int maxX, final int maxY) {
-        final Rectangle actual = glyphBounds(image, theme.labelColor(), minX, minY, maxX, maxY);
-        final Rectangle normal = glyphBounds(paintReferenceLabel(text, zoomAdjustedFont(theme.labelFont(), 1.0), x,
-            y, theme.labelColor()), theme.labelColor(), minX, minY, maxX, maxY);
-        final Rectangle degraded = glyphBounds(paintReferenceLabel(text,
-            zoomAdjustedFont(theme.overTargetLabelFont(), 1.0), x, y, theme.labelColor()), theme.labelColor(),
-            minX, minY, maxX, maxY);
-        assertThat(actual).isEqualTo(normal);
-        assertThat(actual).isNotEqualTo(degraded);
-    }
-
     private static GraphPaintState forcedOrdinaryPaintState(final LabelFixture fixture) {
         return GraphPaintState.empty().withSelection(fixture.selected)
             .withHover(fixture.hovered).withSearchMatches(Collections.singleton(fixture.searchMatched));
     }
 
-    private static GraphPaintState forcedSuppressedPaintState(final LabelFixture fixture) {
-        return GraphPaintState.empty().withSelection(fixture.suppressed)
-            .withHover(fixture.suppressed).withSearchMatches(Collections.singleton(fixture.suppressed));
-    }
-
     private static int labelPixels(final BufferedImage image, final GraphTheme theme, final int minX,
             final int minY, final int maxX, final int maxY) {
         return nearColorPixelsIn(image, theme.labelColor(), minX, minY, maxX, maxY, 100);
-    }
-
-    private static Font zoomAdjustedFont(final Font base, final double zoom) {
-        return base.deriveFont(Math.max(1.0f, base.getSize2D() / (float) zoom));
-    }
-
-    private static int stringWidth(final Font font, final String text) {
-        BufferedImage image = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D graphics = image.createGraphics();
-        try {
-            return graphics.getFontMetrics(font).stringWidth(text);
-        }
-        finally {
-            graphics.dispose();
-        }
-    }
-
-    private static int fontHeight(final Font font) {
-        BufferedImage image = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D graphics = image.createGraphics();
-        try {
-            return graphics.getFontMetrics(font).getHeight();
-        }
-        finally {
-            graphics.dispose();
-        }
-    }
-
-    private static BufferedImage paintReferenceLabel(final String text, final Font font, final double x,
-            final double y, final Color color) {
-        BufferedImage image = new BufferedImage(SIZE.width, SIZE.height, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D graphics = image.createGraphics();
-        try {
-            graphics.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
-                java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
-            graphics.setRenderingHint(java.awt.RenderingHints.KEY_RENDERING,
-                java.awt.RenderingHints.VALUE_RENDER_SPEED);
-            graphics.setColor(new Color(250, 251, 253));
-            graphics.fillRect(0, 0, SIZE.width, SIZE.height);
-            graphics.translate(SIZE.width * 0.5, SIZE.height * 0.5);
-            graphics.setFont(font);
-            graphics.setColor(color);
-            FontMetrics metrics = graphics.getFontMetrics();
-            float width = metrics.stringWidth(text);
-            float baseline = (metrics.getAscent() - metrics.getDescent()) * 0.5f;
-            graphics.drawString(text, (float) (x - SIZE.width * 0.5 - width * 0.5f),
-                (float) (y - SIZE.height * 0.5 + baseline));
-        }
-        finally {
-            graphics.dispose();
-        }
-        return image;
-    }
-
-    private static Rectangle glyphBounds(final BufferedImage image, final Color color, final int minX,
-            final int minY, final int maxX, final int maxY) {
-        int left = maxX;
-        int top = maxY;
-        int right = minX - 1;
-        int bottom = minY - 1;
-        for (int y = Math.max(0, minY); y < Math.min(image.getHeight(), maxY); y++) {
-            for (int x = Math.max(0, minX); x < Math.min(image.getWidth(), maxX); x++) {
-                final int pixel = image.getRGB(x, y);
-                final int red = ((pixel >>> 16) & 0xff) - color.getRed();
-                final int green = ((pixel >>> 8) & 0xff) - color.getGreen();
-                final int blue = (pixel & 0xff) - color.getBlue();
-                if (red * red + green * green + blue * blue <= 10000) {
-                    left = Math.min(left, x);
-                    top = Math.min(top, y);
-                    right = Math.max(right, x);
-                    bottom = Math.max(bottom, y);
-                }
-            }
-        }
-        return right < left ? new Rectangle() : new Rectangle(left, top, right - left + 1, bottom - top + 1);
     }
 
     private static BufferedImage paintLabelFixture(final LabelFixture fixture, final GraphTheme theme,
@@ -885,8 +830,8 @@ public class GraphCanvasPaintShould {
         LayoutFrame layout = LayoutFrame.of(1L, LayoutPositions.of(Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(),
             Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false, 0);
         return CanvasState.of(1L, projection, layout,
-            GraphGeometry.of(Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(), hulls,
-                Collections.<EnclosureKey, LabelPlacement>emptyMap()), OperationalStatus.IDLE);
+            GraphGeometry.of(Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(), hulls),
+            OperationalStatus.IDLE);
     }
 
     private static LabelFixture labelFixture(final int nodeCount) {
@@ -930,21 +875,6 @@ public class GraphCanvasPaintShould {
         hulls.put(emphaticHull, rectangle(-20.0, 25.0, 20.0, 65.0, LayoutPoint.of(0.0, 45.0)));
         hulls.put(subtleHull, rectangle(65.0, 25.0, 105.0, 65.0, LayoutPoint.of(85.0, 45.0)));
         hulls.put(suppressedHull, rectangle(-90.0, -5.0, -55.0, 15.0, LayoutPoint.of(-72.5, 5.0)));
-        Map<EnclosureKey, LabelPlacement> labels = new LinkedHashMap<EnclosureKey, LabelPlacement>();
-        labels.put(ordinaryKey, LabelPlacement.of("ORDINARY", LabelPlacement.Mode.INTERIOR,
-            LayoutPoint.of(-85.0, -41.0), 60.0, 10.0, Optional.<LayoutPoint>empty()));
-        labels.put(selectedKey, LabelPlacement.of("SELECTED", LabelPlacement.Mode.INTERIOR,
-            LayoutPoint.of(0.0, -41.0), 60.0, 10.0, Optional.<LayoutPoint>empty()));
-        labels.put(hoveredKey, LabelPlacement.of("HOVERED", LabelPlacement.Mode.INTERIOR,
-            LayoutPoint.of(85.0, -41.0), 60.0, 10.0, Optional.<LayoutPoint>empty()));
-        labels.put(searchMatchedKey, LabelPlacement.of("SEARCH", LabelPlacement.Mode.INTERIOR,
-            LayoutPoint.of(-85.0, 29.0), 45.0, 10.0, Optional.<LayoutPoint>empty()));
-        labels.put(emphaticKey, LabelPlacement.of("EMPHATIC", LabelPlacement.Mode.INTERIOR,
-            LayoutPoint.of(0.0, 45.0), 60.0, 10.0, Optional.<LayoutPoint>empty()));
-        labels.put(subtleKey, LabelPlacement.of("SUBTLE", LabelPlacement.Mode.INTERIOR,
-            LayoutPoint.of(85.0, 45.0), 45.0, 10.0, Optional.<LayoutPoint>empty()));
-        labels.put(suppressedKey, LabelPlacement.of("SUPPRESSED", LabelPlacement.Mode.INTERIOR,
-            LayoutPoint.of(-72.5, 5.0), 70.0, 10.0, Optional.<LayoutPoint>empty()));
         Map<EnclosureHullKey, LayoutPoint> anchors = new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
         anchors.put(ordinaryHull, LayoutPoint.of(-85.0, -41.0));
         anchors.put(selectedHull, LayoutPoint.of(0.0, -41.0));
@@ -968,7 +898,7 @@ public class GraphCanvasPaintShould {
             Collections.<PinProjection>emptyList());
         CanvasState state = CanvasState.of(1L, projection,
             LayoutFrame.of(1L, LayoutPositions.of(positions, anchors), false, 0),
-            GraphGeometry.of(geometries, hulls, labels),
+            GraphGeometry.of(geometries, hulls),
             OperationalStatus.IDLE);
         return new LabelFixture(state, ProjectedEndpointKey.ofEnclosure(selectedKey),
             ProjectedEndpointKey.ofEnclosure(hoveredKey),
@@ -1222,8 +1152,7 @@ public class GraphCanvasPaintShould {
         CanvasState state = CanvasState.of(1L, projection,
             LayoutFrame.of(1L, LayoutPositions.of(fixture.state.layout().positions().nodes(),
                 fixture.state.layout().positions().anchors()), false, 0),
-            GraphGeometry.of(geometries, fixture.state.geometry().hulls(),
-                fixture.state.geometry().labels()), OperationalStatus.IDLE);
+            GraphGeometry.of(geometries, fixture.state.geometry().hulls()), OperationalStatus.IDLE);
         GraphCanvas canvas = new GraphCanvas();
         canvas.setSize(SIZE);
         canvas.setTheme(lightTheme());
@@ -1250,8 +1179,7 @@ public class GraphCanvasPaintShould {
         nodes.put(fixture.second.key(), NodeGeometry.of(
             LayoutPoint.of(horizontalCoordinate, verticalCoordinate), 10.0));
         return CanvasState.of(fixture.state.generation(), fixture.state.projection(), fixture.state.layout(),
-            GraphGeometry.of(nodes, fixture.state.geometry().hulls(), fixture.state.geometry().labels()),
-            status);
+            GraphGeometry.of(nodes, fixture.state.geometry().hulls()), status);
     }
 
     private static void assertHorizontallyReachable(final JViewport viewport, final double surfaceX) {
