@@ -1,6 +1,7 @@
 package org.freeplane.plugin.graph.smoke;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -212,6 +213,34 @@ public final class GraphPluginOsgiSmoke {
         for (final String entry : entries) {
             if (bundle.getEntry(entry) == null) {
                 throw new AssertionError("Graph bundle is missing " + entry);
+            }
+        }
+
+        final String[] images = new String[] {
+            "images/GraphSelect.svg",
+            "images/GraphConnect.svg",
+            "images/GraphSettings.svg",
+            "images/GraphSearch.svg"
+        };
+        for (final String image : images) {
+            final URL resource = bundle.getResource(image);
+            if (resource == null) {
+                throw new AssertionError("Graph bundle is missing " + image);
+            }
+            int totalBytes = 0;
+            final InputStream input = resource.openStream();
+            try {
+                final byte[] buffer = new byte[4096];
+                int read;
+                while ((read = input.read(buffer)) != -1) {
+                    totalBytes += read;
+                }
+            }
+            finally {
+                input.close();
+            }
+            if (totalBytes <= 0) {
+                throw new AssertionError("Graph bundle resource is empty: " + image);
             }
         }
 
