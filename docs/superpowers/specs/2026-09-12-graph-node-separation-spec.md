@@ -2,13 +2,16 @@
 
 - Date: 2026-09-12
 - Status: implementation-ready specification, derived from the approved design
-  `docs/superpowers/specs/2026-09-12-graph-node-separation-design.md` (revision 5.1,
-  approved by review attempt 5 — 0 blockers, 2 majors, 9 minors applied).
+  `docs/superpowers/specs/2026-09-12-graph-node-separation-design.md` (revision 5.2,
+  approved for specification drafting by review attempt 5 — 0 blockers, 2 majors, 9 minors —
+  and revised to apply the specification reviewer's design-level findings).
 - Review history: `/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20260912-012815-01038a52/reports/design-review-attempt-{1..5}.md`.
 - This specification does not modify the design. Where the design leaves a value, order,
-  encoding or fixture open, this document pins it and states its provenance. Contradictions
-  and gaps that cannot be resolved from the approved design are collected in §8 "Open points"
-  and are not silently resolved.
+  encoding or fixture open, this document pins it and states its provenance. The single
+  contradiction that cannot be resolved from the approved design is O4 (the terminal rule for
+  a forced node label with no full-text slot), which is blocked on a user decision; it is the
+  only open point and no rule is invented for it. All other former open points are resolved
+  and recorded in §8.
 - Every number, coordinate and `file:line` cited below was verified against the repository or
   produced by a command run for this specification (Appendix A). Values marked **[M]** are
   measured, **[D]** derived by arithmetic or from measured data, **[P]** proposed by the design
@@ -33,27 +36,32 @@
   mockup rule; it is adopted because the committed panels reproduce with it.
 - Label rectangles are screen-space logical bounds of the base theme font (§1, "label
   measurement convention"), never world-space font metrics.
+- I2 is a rectangle-level contract. Antialiased glyph ink extends beyond the measured
+  logical rectangle by a bounded fringe (C14); the specification therefore asserts painted
+  ink only through pairwise bitmap disjointness and disc disjointness, never containment.
 
 ## 1. Pinned constants
 
 | # | Constant | Value | Kind | Source / justification |
 |---|---|---|---|---|
-| C1 | `MIN_GAP` | `6.0` world units | **[P]** design §4 | Declared once as `NodeSeparationProjection.MIN_GAP`. Adopted verbatim. Generator constant is `MIN_GAP = 6.0` (`NodeSeparationMockups.java:29`); the disc floor is `14+14+6 = 34`; the red-phase fixture depends on `24 < 34`. No measurement contradicts it; it is a design parameter, not a measured optimum. |
-| C2 | `MAX_PASSES` | `64` | **[P]** design §5.2, confirmed by measurement | Adopted. Reference implementation (Appendix A.4) convergence passes: dense12 = 1, long6 = 1, solvable pair = 2, pinned-pinned adjacent = 2, sandwich = 64 (non-convergent by construction, §5.2 S1). No solvable fixture needed more than 2 passes, so 64 is sufficient and bounds the worst case. Worst-case work bound is derived: `MAX_PASSES · C(n,2)` = `64 · 1,999,000 = 127,936,000` pair tests at the 2000-node perf fixture. |
-| C3 | `RELAXATION` and its arithmetic | `0.5`; displacement per movable node `= RELAXATION · penetration`; with one pinned the movable partner takes the **full** penetration; pinned-pinned pairs take none | **[D]** from the design's own evidence | The design's phrase "separates by half the penetration, scaled by `RELAXATION = 0.5`" is arithmetically ambiguous (see §8 O1). This specification pins the mockup's arithmetic: `push = (need − d)/2` per movable node (`NodeSeparationMockups.java:separate`). Under this reading the solvable pair converges in 2 passes; under the alternative "total = 0.5·penetration" reading it needs 52 passes (Appendix A.4), which would make the design's own "same pass budget" convergence fixture fragile. The pinned reading also matches §8.1.2 "half/half displacement; with one pinned, only the partner moves". |
-| C4 | `SPATIAL_CELL` | `34.0` world units; 3×3 cell query; candidate `j` visited in ascending order | **[D]** | `2·MAX_RENDERED_NODE_RADIUS + MIN_GAP = 2·14 + 6 = 34` (`GraphStreamLayoutEngine.java:492`). Any two centres closer than `r_i+r_j+MIN_GAP ≤ 34` lie in cells with index difference ≤ 1, so a 3×3 query is complete. The ascending-`j` order preserves the fixture expectations in §5.2/§5.6. |
+| C1 | `MIN_GAP` | `6.0` world units | **[P]** design §4 | Declared once as `NodeSeparationProjection.MIN_GAP`. Adopted verbatim. Generator constant is `MIN_GAP = 6.0` (`NodeSeparationMockups.java:32`); the disc floor is `14+14+6 = 34`; the red-phase fixture depends on `24 < 34`. No measurement contradicts it; it is a design parameter, not a measured optimum. |
+| C2 | `MAX_PASSES` | `64` | **[P]** design §5.2, confirmed by measurement | Adopted. Pass counts are observable through `NodeSeparationResult.passes()` (§2.2). Reference implementation (Appendix A.5) convergence passes: dense12 = 1, long6 = 1, red-phase pair = 2, solvable pair = 2, coincident pair = 3, pinned-pinned adjacent = 2, sandwich = 64 (non-convergent by construction, §5.2 S1). No solvable fixture needed more than 3 passes, so 64 is sufficient and bounds the worst case. Worst-case work bound is derived: `MAX_PASSES · C(n,2)` = `64 · 1,999,000 = 127,936,000` pair tests at the 2000-node perf fixture. |
+| C3 | `RELAXATION` and its arithmetic | `0.5`; displacement per movable node `= RELAXATION · penetration`; with one pinned the movable partner takes the **full** penetration; pinned-pinned pairs take none | **[D]** from the design's own evidence | The design's phrase "separates by half the penetration, scaled by `RELAXATION = 0.5`" is arithmetically ambiguous (see §8 O1). This specification pins the mockup's arithmetic: `push = (need − d)/2` per movable node (`NodeSeparationMockups.java:separate`). Under this reading the solvable pair converges in 2 passes; under the alternative "total = 0.5·penetration" reading it needs 50 passes (Appendix A.5; an earlier draft said 52, which is not reproducible), which would make the design's own "same pass budget" convergence fixture fragile. The pinned reading also matches design §8.1.2 "half/half displacement; with one pinned, only the partner moves". |
+| C4 | `SPATIAL_CELL` | `34.0` world units; 3×3 cell query; candidate `j` visited in ascending order | **[D]** | `2·MAX_RENDERED_NODE_RADIUS + MIN_GAP = 2·14 + 6 = 34` (`GraphStreamLayoutEngine.java:492`). Any two centres closer than `r_i+r_j+MIN_GAP ≤ 34` lie in cells with index difference ≤ 1, so a 3×3 query is complete. The ascending-`j` order preserves the fixture expectations in §5.2. |
 | C5 | Node radius in the projection | `8.0 · projection.prominence().get(key).scale()`, default scale `1.0` when absent | **[D]** | `GraphStreamLayoutEngine.java:199-201` uses the same lookup for particle radius. |
-| C6 | Projection residual semantics | count of unordered pairs `i<j` with `hypot < r_i+r_j+MIN_GAP`, strict `<`, over returned node positions; includes pinned-pinned pairs; anchors excluded | **[P]** design §5.2 | Recomputable independently; §8.2.2 asserts equality with an independent recomputation. |
-| C7 | Projection wall-clock p95 budget | **not pinned** | **[N]** | The `NodeSeparationProjection` stage does not exist in the repository, so no production baseline can be recorded without a code change; design §8.1.5 requires exactly that baseline first. Reference-implementation calibration on this host (Java 21.0.8, Linux, 22 cores, Appendix A.4): 2000-node legal grid, 1 pass: p95 5,130,482 ns; 2000-node random cloud in a 2000² area: p95 220,769,319 ns; 2000-node dense cluster, 64 passes, all pairs violating: p95 411,584,311 ns. These are algorithm-only numbers, **not** a stage budget. Implementation duty: add the stage to `GraphWorkspacePerformanceDiagnostic`, record its baseline, then fix the threshold. |
+| C6 | Projection residual semantics | count of unordered pairs `i<j` with `hypot < r_i+r_j+MIN_GAP`, strict `<`, over returned node positions; includes pinned-pinned pairs; anchors excluded | **[P]** design §5.2 | Recomputable independently; design §8.2.2 asserts equality with an independent
+recomputation (acceptance 2 in §7). |
+| C7 | Projection wall-clock p95 budget | **not pinned** | **[N]** | The `NodeSeparationProjection` stage does not exist in the repository, so no production baseline can be recorded without a code change; design §8.1.5 requires exactly that baseline first. Reference-implementation calibration on this host (Java 21.0.8, Linux, 22 cores, Appendix A.5): 2000-node legal grid, 1 pass: p95 5,130,482 ns; 2000-node random cloud in a 2000² area: p95 220,769,319 ns; 2000-node dense cluster, 64 passes, all pairs violating: p95 411,584,311 ns. These are algorithm-only numbers, **not** a stage budget. Implementation duty: add the stage to `GraphWorkspacePerformanceDiagnostic`, record its baseline, then fix the threshold. |
 | C8 | `SLOT_GAP` | `6.0` screen px | **[P]** design §5.3 | Generator `slotAnchor(..., 6.0)`; the fixture tables in §5.4–§5.6 reproduce only with 6.0. |
 | C9 | `DISPLACED_OFFSET` | `30.0` screen px | **[P]** design §5.3 | Generator far anchors add `30.0`; fixtures reproduce only with 30.0. |
-| C10 | Per-slot maximum widths | vertical (ABOVE/BELOW/ABOVE_FAR/BELOW_FAR) `200` px; horizontal (RIGHT/LEFT/RIGHT_FAR/LEFT_FAR) `130` px; diagonal (ABOVE_LEFT/ABOVE_RIGHT/BELOW_LEFT/BELOW_RIGHT) `150` px | **[P]** design §5.3, confirmed by measurement | Generator `slotMaxWidth`. Binding evidence [M]: long fixture names measure 246.722–299.606 px and truncate; dense fixture maximum full-text width is 132.601 px ("Foundation / Regularity"), which exceeds the horizontal cap and is therefore placed vertically — exactly what the generator does. |
-| C11 | Ladder order and slot order | see §2.4/§3 I3 | **[M]** from the committed generator | `LADDER_DISPLACEMENT_FIRST` and `NEAR_SLOTS`/`FAR_SLOTS` (`NodeSeparationMockups.java`); the fixture tables in §5.4–§5.6 depend on them. |
+| C10 | Per-slot maximum widths | vertical (ABOVE/BELOW/ABOVE_FAR/BELOW_FAR) `200` px; horizontal (RIGHT/LEFT/RIGHT_FAR/LEFT_FAR) `130` px; diagonal (ABOVE_LEFT/ABOVE_RIGHT/BELOW_LEFT/BELOW_RIGHT) `150` px | **[P]** design §5.3, confirmed by measurement | Generator `slotMaxWidth`. Binding evidence [M]: long fixture names measure 246.722–299.606 px at 12 pt and truncate; dense fixture maximum full-text width is 132.601 px ("Foundation / Regularity"), which exceeds the horizontal cap and is therefore placed vertically — exactly what the generator does. |
+| C11 | Ladder order and slot order | see §2.7 step 5 and §3 I3 | **[M]** from the committed generator, now also stated in design revision 5.2 | `LADDER_DISPLACEMENT_FIRST` and `NEAR_SLOTS`/`FAR_SLOTS` (`NodeSeparationMockups.java:68-77`, `:186-188`); the fixture tables in §5.4–§5.6 depend on them. Design revision 5.1's "inward slots first, fixed per-edge order" wording was removed in revision 5.2, which adopts the same single global order; there is no per-edge ordering rule (see §8 O12). |
 | C12 | Leader rule | leader line for every slot except `ABOVE` and `BELOW` | **[M]** from the committed generator | `drawScene`: `if (slot == ABOVE || slot == BELOW) continue;`. The design's wording "other than directly above/below" is imprecise for the displaced far slots; this specification pins the generator's observable rule. |
-| C13 | Label measurement convention | `screenBounds(text, font) = font.getStringBounds(text, SCREEN_FRC)` with `SCREEN_FRC = new FontRenderContext(null, true, true)`, using the base theme font at its base size (12/9/15 pt); rect anchor `(x,y)` with `w = screenBounds.width`, `h = screenBounds.height` | **[D]** + **[M]**, design §5.3 | Verified equivalent (max delta 2.747e-3 px, Appendix A.2) to `base.deriveFont(size/zoom).getStringBounds(worldFRC) · zoom`, which is what the painter draws. The rejected literal reading "base metrics × zoom" would reserve `91.104675 · 0.25 = 22.776 px` for "Axiom of Choice" at zoom 0.25 while the painter paints 90 px of ink — the §1.2 under-reserve defect. |
-| C14 | Placed-ink containment rule | the painter must centre with the double-precision `getStringBounds` width; ink must lie inside the placed rectangle | **[M]** | Current `GraphPainter.drawCentered` (`GraphPainter.java:307-312`) centres on the integer `FontMetrics.stringWidth`; measured ink then exceeds the placement rectangle by up to 0.57 px (Appendix A.2). With double-precision centring the measured overhang is ≤0.55 px of antialias fringe; fixture minimum label–label gaps are 1.6559 px (dense) and 7.6559 px (long), so the painted bitmaps remain disjoint. The painter change is part of the migration inventory (§6). |
+| C13 | Label measurement convention | `screenBounds(text, font) = font.getStringBounds(text, SCREEN_FRC)` with `SCREEN_FRC = new FontRenderContext(null, true, true)`, using the base theme font at its base size (12/9/15 pt); rect anchor `(x,y)` with `w = screenBounds.width`, `h = screenBounds.height` | **[D]** + **[M]**, design §5.3 | Verified equivalent (max delta 2.747e-3 px, Appendix A.2) to `base.deriveFont(size/zoom).getStringBounds(worldFRC) · zoom`, which is what the painter draws. `getStringBounds` height equals `getLineMetrics("Ag").getHeight()` exactly (Appendix A.2). The rejected literal reading "base metrics × zoom" would reserve `91.104675 · 0.25 = 22.776 px` for "Axiom of Choice" at zoom 0.25 while the painter paints ≈90 px of ink — the design §1.2 under-reserve defect. |
+| C14 | Painted-ink overhang | the painter centres on the double-precision `getStringBounds` width; glyph ink may extend beyond the logical rectangle by an antialias fringe of at most `0.7578` px per side; **no ink-containment assertion is made** | **[M]** | Measured over the §5.7 fixture set: per-fixture maximum overhang `0.4416` px (long, enclosure variant) to `0.7578` px (dense); no single-side overhang exceeded `0.7578` px (Appendix A.6). Minimum label–label rectangle gap over the same fixtures is `1.655886` px (dense, zoom 1), and `2 · 0.7578 = 1.5156 < 1.655886`, so painted bitmaps remain pairwise disjoint and a containment test would be false. The current integer-`FontMetrics.stringWidth` centring (`GraphPainter.java:307-312`) measures up to `1.5` px of overhang, which can exceed the `1.655886` px fixture gap; the double-precision change is therefore mandatory and part of §6. |
 | C15 | Placement-stage p95 threshold | **not pinned** | **[N]** | The paint-path placement stage does not exist, so the baseline design §8.4 demands cannot be recorded without the code change. The sampling method, population, warm-up and cache states are pinned in §4.6. |
 | C16 | Sampling population / warm-up / cache states | population: paint-path placement calls that **miss** the cache, split into four triggers — (a) positions-identity change, (b) zoom change, (c) viewport origin/size change, (d) forced-set change; warm-up 20 discarded samples per trigger; 100 timed samples per trigger; cache state at each timed sample: cold for the measured key, `previous` retained from the immediately preceding call; statistic: nearest-rank p95 per trigger | **[P]** method from design §8.4; numbers pinned here | Warm cache hits are excluded (no work). Pan and zoom each cost one re-placement and are budgeted as one stage. The numeric thresholds follow C15. |
+| C17 | Enclosure placement constants | `ARC_GAP = 1.0` px; `EXTERNAL_GAP = 4.0` px; `SUBTLE_EXTERNAL_CANDIDATE_BUDGET = 8`; `EPSILON = 1e-9` | **[D]** inherited from the deleted `LabelPlacementEngine` constants (`:22-26`) per design revision 5.2 | The old engine's `MAX_INTERIOR_EXPANSION = 8.0` (`:22`) is **not** inherited: the design deletes hull growth. The remaining constants are the ones the pinned enclosure rule of §2.8 uses. |
 
 ## 2. Interfaces and data structures
 
@@ -76,9 +84,9 @@ public final class NodeSeparationProjection {
 
 Algorithm, pinned to make §5 fixtures derivable:
 
-1. Build the ordered node list from `positions.nodes()` iteration order (a `LinkedHashMap`;
-   this is the deterministic projection order, see §8 O2 for the design's "sorted by
-   projected key" wording). Let `n` be its size.
+1. Build the ordered node list from `positions.nodes()` iteration order (a `LinkedHashMap`,
+   `LayoutPositions.java:26`; this is the deterministic projection order, see §8 O2 for the
+   design's "sorted by projected key" wording). Let `n` be its size.
 2. `radius[i] = 8.0 · prominence_i.scale()` with default `1.0` (C5). `pinned` is the set of
    pinned node keys; keys not present in `positions` are ignored.
 3. For `pass = 1..MAX_PASSES`:
@@ -86,7 +94,7 @@ Algorithm, pinned to make §5 fixtures derivable:
    2. For `i = 0..n-1`, query the 3×3 cells around node `i`; for each candidate node `j`
       with `j > i` in the ordered list and ascending `j`, compute
       `d = hypot(x_j−x_i, y_j−y_i)`, `need = radius_i + radius_j + MIN_GAP`.
-      If `d == 0`, use the deterministic axis `(1,0)` when `i` precedes `j`, else `(−1,0)`,
+      If `d == 0`, use the deterministic axis `(1,0)` (the pair is always visited as `i < j`)
       and `d = 1`. If `d >= need`, continue.
       - both pinned: continue (no movement; the pair remains in the residual).
       - exactly one pinned: the movable node moves by the **full** penetration along the
@@ -95,7 +103,8 @@ Algorithm, pinned to make §5 fixtures derivable:
         from the other (total relative separation increases by exactly `penetration`).
    3. If the pass moved nothing, stop.
 4. Recompute the residual over **all** node pairs on the returned positions (C6); return
-   `NodeSeparationResult.of(projectedPositions, residual)`.
+   `NodeSeparationResult.of(projectedPositions, residual, passes)` where `passes` is the
+   number of iterations executed in step 3 (including the final pass that moved nothing).
 5. Anchor entries are copied through unchanged (I1 covers node pairs only; the design does
    not define anchor movement — §8 O3). Every input coordinate is validated finite; a
    non-finite input throws `IllegalArgumentException` (design §5.2). Every output coordinate
@@ -106,18 +115,25 @@ Algorithm, pinned to make §5 fixtures derivable:
 
 ```java
 public final class NodeSeparationResult {
-    public static NodeSeparationResult of(LayoutPositions positions, int residualViolations);
+    public static NodeSeparationResult of(LayoutPositions positions, int residualViolations,
+            int passes);
     public LayoutPositions positions();
     public int residualViolations();   // invariant: >= 0
+    public int passes();               // invariant: 1 <= passes() <= MAX_PASSES
 }
 ```
 
-Public because `org.freeplane.plugin.graph.control.LayoutSettleLoop` must call the projection
-(review attempt 5, MINOR 2). Never carries `LayoutFrame.UNVERIFIED`.
+`passes()` is the test-visible counter required by the convergence fixtures (§5.1, §5.2): it
+distinguishes "converged early" from "ran to the cap" at the same residual. It counts every
+executed pass, including the final pass that moved nothing. Public because
+`org.freeplane.plugin.graph.control.LayoutSettleLoop` must call the projection, so the
+`layout` types reachable from `control` are declared public (design §5.2). Never carries
+`LayoutFrame.UNVERIFIED`.
 
 ### 2.3 `LayoutFrame` — residual field
 
-`LayoutFrame.java` fields currently at `:13-17`, factories at `:33-43`.
+`LayoutFrame.java` fields currently at `:13-17`, factories at `:33-36` (`of`) and `:38-42`
+(`withDiagnostics`).
 
 ```java
 public final class LayoutFrame {
@@ -132,6 +148,11 @@ public final class LayoutFrame {
 }
 ```
 
+- The three-argument `of` is defined as the four-argument `of` with
+  `residualViolations = UNVERIFIED`, and it is for engine-internal frames only
+  (`GraphStreamLayoutEngine.java:346`); `LayoutWorker.accept` rewraps those frames, so they
+  are never published. Any call site that publishes must use the four-argument factory with
+  the real residual.
 - Constructor invariant: `residualViolations >= UNVERIFIED`; published-frame tests require
   `verified()` and `residualViolations()` equal to an independent all-pair recomputation.
 - `withDiagnostics` preserves the raw frame's residual.
@@ -139,21 +160,24 @@ public final class LayoutFrame {
   `EMPTY_FAILED_FRAME` row). It is allowed only for engine-internal frames; `accept` replaces
   it. `EMPTY_FAILED_FRAME` uses `0`, which is the recomputed value for empty positions.
 
-Frame-factory inventory (all `LayoutFrame.of` sites, verified):
+Publication paths and their residual requirements (all `LayoutFrame.of`/`withDiagnostics`
+sites, verified). The last row is a republish, not a factory:
 
 | Site | Residual requirement |
 |---|---|
-| `GraphStreamLayoutEngine.java:346` (engine) | `UNVERIFIED`; always re-wrapped by `LayoutWorker.accept` (`:280-282`), never published |
-| `LayoutWorker.java:34-35` (`EMPTY_FAILED_FRAME`) | `0` (recomputed over empty positions) |
-| `LayoutWorker.java:292-293` (normal) | real residual from `NodeSeparationResult` |
-| `LayoutWorker.java:346` (failure, retained frame) | retained frame's `residualViolations()` |
-| `LayoutSettleLoop.java:744` (worker-failure fallback, `retained == null`) | real residual from projecting `fallbackPositions` |
-| `LayoutSettleLoop.java:747` (worker-failure fallback) | retained residual when the retained frame is usable; otherwise the residual of the projected `fallbackPositions` |
-| `GraphUpdateCoordinator.java:134-136` (initial empty frame) | `0` |
-| `GraphUpdateCoordinator.java:561` (failure republish) | preserved from `state.layout()` |
+| `GraphStreamLayoutEngine.java:346` (engine factory, 3-arg) | `UNVERIFIED`; always re-wrapped by `LayoutWorker.accept` (`:280-282`), never published |
+| `LayoutWorker.java:34-35` (`EMPTY_FAILED_FRAME`) | `0` (recomputed over empty positions); 4-arg factory |
+| `LayoutWorker.java:292-293` (normal) | real residual from `NodeSeparationResult`; 4-arg factory |
+| `LayoutWorker.java:346` (failure, retained frame) | retained frame's `residualViolations()`; 4-arg factory |
+| `LayoutSettleLoop.java:744` (worker-failure fallback, `retained == null`) | real residual from projecting `fallbackPositions`; 4-arg factory |
+| `LayoutSettleLoop.java:747` (worker-failure fallback) | retained residual when the retained frame is usable; otherwise the residual of the projected `fallbackPositions`; 4-arg factory |
+| `GraphUpdateCoordinator.java:134-136` (initial empty frame) | `0` (recomputed over empty positions); 4-arg factory |
+| `GraphUpdateCoordinator.java:561` (**republish**, not a factory) | preserves the residual already carried by `state.layout()` |
 
-This is the corrected, complete publication-path enumeration (the design's table omitted the
-engine factory and cited the republish as a factory; review attempt 5, MINOR 1).
+This is the corrected, complete publication-path enumeration (the design's §5.2 table
+identifies the construction sites without distinguishing the republish; the engine factory
+at `GraphStreamLayoutEngine.java:346` is re-wrapped by `accept` before publication, and
+`GraphUpdateCoordinator.java:561` republishes rather than constructs).
 
 ### 2.4 `LabelPlacementRequest` (new, `org.freeplane.plugin.graph.canvas`, public)
 
@@ -173,7 +197,8 @@ public final class LabelPlacementRequest {
 
 `LabelPlacementRequest` is the input of one placement pass. Obstacles are derived inside the
 pass from `geometry` (discs) and from enclosure labels placed in the same pass; the request
-itself does not carry an obstacle set.
+itself does not carry an obstacle set. `RenderingLevel` affects only the result filter
+(`OVER_TARGET`, §3 I3); it does not change which fonts the ladder selects.
 
 ### 2.5 `PlacedLabel` — the placement result (new, `org.freeplane.plugin.graph.canvas`, public)
 
@@ -197,6 +222,7 @@ public final class PlacedLabel {
     public boolean truncated();
     public boolean forced();
     public boolean emphaticAtAnchor();          // the I2 exception of design §4 I3/§7
+    public boolean fullTextSlotWasFree();       // predicate input for §5.10
     public Optional<LayoutPoint> leaderStart(); // screen; present iff a leader is drawn
 }
 ```
@@ -204,7 +230,14 @@ public final class PlacedLabel {
 The painter paints `text()` with `font()` verbatim (derived by `/zoom` under the world
 transform) and must not re-select a font; `LabelPlacement.Mode` is deleted with
 `LabelPlacement` and only this enum survives. Single-line labels: `height()` is one line high
-(design §4 I2).
+(design §4 I2). `Mode.ARC` has a producer: an enclosure label placed in an arc slot on a hull
+edge (§2.8, Tier B), including the case where the hull anchor rectangle collides.
+`fullTextSlotWasFree()` records whether,
+when the label was processed, any full-text rung candidate the label was allowed to try
+(rungs 1–2 for forced labels, rungs 1–4 for non-forced labels of §2.7 step 5: full font or
+dense font, near or far) was inside `placementArea` and collision-free against the
+then-current obstacle set; it is necessarily `false` for every `truncated()` label (the §5.10
+ordering assertion).
 
 ### 2.6 `LabelFonts` (new, `org.freeplane.plugin.graph.canvas`, public)
 
@@ -217,10 +250,14 @@ public final class LabelFonts {
 }
 ```
 
-The theme's 7 pt `overTargetLabelFont` (`GraphTheme.java:70`) is never selected: at
-`RenderingLevel.OVER_TARGET` placement returns only forced labels (and required emphatic
-enclosure labels), so no label carries the 7 pt face. The `labelFont(RenderingLevel)` overload
-and `overTargetLabelFont` become unreferenced after the painter migration (§6).
+Node labels use `full()` for rungs 1–2 and 5–6 and `dense()` for rungs 3–4 and 7–8 (§2.7
+step 5). Enclosure labels use `full()` when subtle and `emphatic()` when emphatic; they never
+use `dense()` and never truncate (§2.8). The theme's 7 pt `overTargetLabelFont`
+(`GraphTheme.java:70`) is never selected: at `RenderingLevel.OVER_TARGET` placement returns
+only forced labels (and required emphatic enclosure labels), so no label carries the 7 pt
+face. The `labelFont(RenderingLevel)` overload (`GraphTheme.java:262-270`) and
+`overTargetLabelFont` (`GraphTheme.java:258-260`) become unreferenced after the painter
+migration (§6).
 
 ### 2.7 `ScreenLabelPlacement` and `ScreenLabelPlacementCache`
 
@@ -238,31 +275,41 @@ public final class ScreenLabelPlacementCache {
 `place` is deterministic in `(request, previous)`. `previous` may be `null`/empty.
 
 Placement algorithm (pinned; it is the committed generator's algorithm, which §5 fixtures
-reproduce):
+reproduce, extended with the retention rule of I4 and the enclosure rule of §2.8):
 
 1. Disc obstacles: for every `ProjectedNode` with geometry, the screen bounding square of the
    disc, centre `(W/2 + zoom·(x − centerX), H/2 + zoom·(y − centerY))`, half-extent
    `max(2.0, r·zoom)`.
 2. Enclosure-label reservations and previously accepted labels join the obstacle set.
-3. Process labels in priority order: forced (selected → hovered → related/search) → enclosure
-   labels (emphatic → subtle) → node labels by descending disc radius (stable for equal radii,
-   in geometry order).
-4. For a label with a `previous` entry: recompute the previous slot's anchor at the current
-   centre with the previous text/font/rung; if that rectangle is inside `placementArea` and
-   collision-free, keep it. Otherwise fall through to the ladder.
+3. Process labels in priority order:
+   1. forced labels (selected → hovered → related), then
+   2. enclosure labels (emphatic → subtle, in `projection.enclosures()` order and, within an
+      enclosure, `endpointKeys()` order), then
+   3. node labels by descending disc radius. Within each group, ties are broken by the
+      `LayoutPositions.nodes()` iteration order of §2.1 step 1 (this is what §8 O2 pins;
+      "geometry order" in earlier drafts means exactly this order).
+4. Retention (I4). For a label with a `previous` entry whose `mode != HOVER_ONLY`: recompute
+   the previous slot's anchor at the current centre with the previous text/font/rung; if that
+   rectangle is inside `placementArea` and collision-free, keep it (same slot, text, font and
+   rung). Otherwise, or when there is no usable previous entry, run the ladder. A `previous`
+   `HOVER_ONLY` entry is not an obstacle and is not retained; it is re-laddered.
 5. Ladder order (rung → candidate slots):
-   1. `FULL_NEAR` — full text, base font, slots `ABOVE, BELOW, RIGHT, LEFT, ABOVE_RIGHT, ABOVE_LEFT, BELOW_RIGHT, BELOW_LEFT`
-   2. `FULL_DISPLACED` — full text, base font, slots `ABOVE_FAR, BELOW_FAR, RIGHT_FAR, LEFT_FAR`
-   3. `DENSE_NEAR` — full text, dense font, near slots
-   4. `DENSE_DISPLACED` — full text, dense font, far slots
-   5. `TRUNCATED_NEAR` — truncated, base font, near slots
-   6. `TRUNCATED_DISPLACED` — truncated, base font, far slots
-   7. `TRUNCATED_DENSE_NEAR` — truncated, dense font, near slots
-   8. `TRUNCATED_DENSE_DISPLACED` — truncated, dense font, far slots
+   1. `FULL_NEAR` — full text, `full()` font, slots `ABOVE, BELOW, RIGHT, LEFT, ABOVE_RIGHT, ABOVE_LEFT, BELOW_RIGHT, BELOW_LEFT`
+   2. `FULL_DISPLACED` — full text, `full()` font, slots `ABOVE_FAR, BELOW_FAR, RIGHT_FAR, LEFT_FAR`
+   3. `DENSE_NEAR` — full text, `dense()` font, near slots
+   4. `DENSE_DISPLACED` — full text, `dense()` font, far slots
+   5. `TRUNCATED_NEAR` — truncated, `full()` font, near slots
+   6. `TRUNCATED_DISPLACED` — truncated, `full()` font, far slots
+   7. `TRUNCATED_DENSE_NEAR` — truncated, `dense()` font, near slots
+   8. `TRUNCATED_DENSE_DISPLACED` — truncated, `dense()` font, far slots
+   **Forced labels use only rungs 1–2.** If neither accepts, the label is the O4 case: it is
+   not placed by this specification and no fallback is invented (§8 O4, blocked on the user).
+   Non-forced labels use all eight rungs.
 6. Candidate acceptance: `textWidth(text, font) <= slotMaxWidth(slot)` for non-truncating
    rungs; for truncating rungs `truncateTo(text, font, slotMaxWidth(slot))`; the rectangle must
    lie inside `placementArea` and intersect no obstacle. Accepted rectangles join the obstacle
-   set.
+   set. The `fullTextSlotWasFree()` flag of §2.5 is set from the union of the full-text rungs
+   the label tried (rungs 1–2 for forced labels, rungs 1–4 otherwise).
 7. `truncateTo`: if the full text fits, return it; otherwise try cut lengths from
    `len−1` down to `3`, candidate `text.substring(0,cut).stripTrailing() + "…"`, first that
    fits; fallback `text.substring(0, min(3,len)) + "…"`.
@@ -284,19 +331,22 @@ reproduce):
    | `BELOW_RIGHT` | `(cx + r' + gap + w/2, cy + r' + gap + h/2)` |
    | `BELOW_LEFT` | `(cx − r' − gap − w/2, cy + r' + gap + h/2)` |
 
-9. Terminal rungs. An enclosure label: `INTERIOR` when its rectangle is inside the hull
-   polygon (`HullGeometry.contains` on all four corners), inside `placementArea`, and
-   collision-free; otherwise `EXTERNAL` with a leader (`leaderStart = hull.nearestBoundaryPoint(anchor)`);
-   an **emphatic** enclosure label that finds nothing is placed at `hull.labelAnchor()` with
-   `emphaticAtAnchor = true` (the I2 exception, recorded on the result, never thrown).
-   A subtle enclosure label with nothing left is `HOVER_ONLY`. A non-forced node label with
-   nothing left is `HOVER_ONLY` (no obstacle). Forced node labels have no terminal rule in the
-   design — see §8 O4.
-10. `mode = HOVER_ONLY` labels are returned but are not obstacles and are not painted except
+9. Candidate slots are tried in the fixed order given in step 5; a candidate outside
+   `placementArea` is rejected and the next candidate is tried. There is no per-edge ordering
+   rule and no inward-first rule (C11, §8 O12).
+10. Terminal rules. Enclosure labels follow §2.8, including `INTERIOR`, `ARC`, `EXTERNAL`,
+    `HOVER_ONLY` and the emphatic-anchor exception. A non-forced node label with nothing left
+    is `HOVER_ONLY` (no obstacle, not painted except when forced). Forced node labels have no
+    terminal rule in the design — §8 O4.
+11. `RenderingLevel.OVER_TARGET` filters the result: only forced labels and required emphatic
+    enclosure labels are returned; all other labels are absent. `FULL` and `DENSE` produce the
+    same placement result (the level does not select fonts; `PlacedLabel.font()` does).
+12. `mode = HOVER_ONLY` labels are returned but are not obstacles and are not painted except
     when forced by paint state.
 
-Derived displacement quantities (used by the design §8.3.6 assertion; `r' = max(2, r·zoom)`,
-`w`/`h` the placed logical box):
+Derived displacement quantities (used by the design §8.3.6 assertion, restated in §5.10;
+`r' = max(2, r·zoom)`, `w`/`h` the placed logical box). Enclosure labels are exempt (their
+anchor rules are §2.8):
 
 | Slot | leader length (disc centre → anchor) | corner support (disc centre → farthest corner) |
 |---|---|---|
@@ -308,9 +358,78 @@ Derived displacement quantities (used by the design §8.3.6 assertion; `r' = max
 
 Structural maxima at zoom 1 with the C10 caps (`h = 16.344114`): `r'=8` → corner support
 `≤ 168.199 px` (horizontal far); `r'=14` → `≤ 174.192 px` (horizontal far, vs `173.842 px`
-diagonal and `116.796 px` vertical far). The design's single formula must not be used (O7).
+diagonal and `116.796 px` vertical far). The design's single-form bound must not be used
+(§8 O7); the fixture assertion uses the per-slot forms above.
 
-### 2.8 `ScreenLabelPlacementCache` key
+### 2.8 Enclosure-label placement rule (pinned)
+
+The design (revision 5.2) states the shape of the enclosure path and delegates the constants
+to this specification; the rule below inherits the deleted `LabelPlacementEngine`'s constants
+(C17) and drops only hull growth (`MAX_INTERIOR_EXPANSION`). Enclosure labels are processed
+after forced labels and before node labels (§2.7 step 3). For each enclosure label:
+
+- **Fonts.** Subtle enclosure labels use `LabelFonts.full()`; emphatic enclosure labels use
+  `LabelFonts.emphatic()`. Enclosure labels are never truncated and never use `dense()`.
+- **Tier A — `INTERIOR`.** Candidate rectangle centred on `hull.labelAnchor()`. Accept when it
+  lies inside the hull polygon (all four corners, `HullGeometry.contains`) and intersects no
+  obstacle. Result mode `INTERIOR`, `leaderStart` empty. **No hull growth**: the hull is
+  never expanded, unlike the deleted engine's `MAX_INTERIOR_EXPANSION` path.
+- **Tier B — `ARC`.** Candidates are the hull's edges (`HullGeometry.exactPolygon()` in
+  canonical order), sorted by (population ascending, edge length descending, edge index
+  ascending). The population of an edge is the number of occupied rectangles whose projection
+  on the edge's tangent overlaps `[minT, maxT]` and whose projection on the edge's outward
+  normal overlaps `[support − depth, support + depth]`, where
+  `depth = height + ARC_GAP`. For the chosen edge, candidate anchor =
+  `midpoint(start,end) + inwardNormal · (height/2 + ARC_GAP)`. Accept the first candidate that
+  lies inside the hull (all four corners) and intersects no obstacle. Result mode `ARC`,
+  `leaderStart` empty. This is the producer of `PlacedLabel.Mode.ARC`.
+- **Tier C — `EXTERNAL`.** Edges are visited in canonical polygon order; for each edge, lanes
+  `lane = 0, 1, 2, …` give candidate anchor =
+  `midpoint(start,end) + outwardNormal · (height/2 + EXTERNAL_GAP + lane · (height + EXTERNAL_GAP))`.
+  A candidate is accepted when the anchor is outside the hull, the candidate rectangle lies
+  inside `placementArea`, and the rectangle intersects no obstacle. For **subtle** labels the
+  search stops after `SUBTLE_EXTERNAL_CANDIDATE_BUDGET = 8` candidates in total (edge order,
+  then lane order). For **emphatic** labels all edges and lanes are searched until the lane
+  distance stops increasing. `leaderStart = hull.nearestBoundaryPoint(anchor)`; the result
+  mode is `EXTERNAL` and `leaderStart` is present.
+- **Terminal rules.** A subtle enclosure label with no accepted candidate is `HOVER_ONLY` at
+  `hull.labelAnchor()`, with `leaderStart` empty and not an obstacle. An emphatic enclosure
+  label with no accepted candidate is placed at `hull.labelAnchor()` with
+  `emphaticAtAnchor = true`, `leaderStart` empty and no exception — the I2 exception of
+  design §4 I3, recorded on the result and never thrown.
+- Suppressed enclosures (`BoundaryTier.SUPPRESSED`) have no labels at all.
+
+### 2.9 Spring rest lengths, seeds and calibration (design §5.1)
+
+The design's §5.1 details are restated here because the specification pins them:
+
+- **`max_r`** of an enclosure anchor is the largest disc radius among that anchor's direct
+  node children (`radius = 8.0 · prominence scale`), or `0` when it has none.
+- **Content ring radius**: `R(k) = (2·max_r + MIN_GAP) / (2·sin(π/k))` for `k ≥ 2`, and
+  `R(k) = 0` for `k ≤ 1` (the `k = 0` empty-enclosure ring is undefined but never needed).
+  Verified: the adjacent chord of a regular k-gon is `2R·sin(π/k)`.
+- **Relationship links**: rest length `radiusOf(first) + radiusOf(second) + MIN_GAP`, where
+  `radiusOf` is the disc radius for a node endpoint and `R(k)` for an enclosure-anchor
+  endpoint. This covers node–node, node–anchor and anchor–anchor links with one rule
+  (`GraphStreamLayoutEngine.java:230`). `TypedSpringBox.REST_LENGTH` becomes unused and is
+  deleted.
+- **Containment links** (anchor → direct child) use the same `R(k)`
+  (`GraphStreamLayoutEngine.java:239`). For `k = 1` the child converges onto the anchor: the
+  spring with `restLength = 0` pulls an off-centre child inward (`TypedSpringBox.java:91`,
+  behaviour at `:105-111`) and the zero-distance fallback is the only separator. The pair is
+  not a disc pair, so I1 does not apply and no `NaN` arises.
+- **Calibration multipliers are unchanged.** `LayoutCalibration.containment()`,
+  `hierarchy()` and `sameMap()` keep their current values and ordering; anchor-to-anchor
+  hierarchy links keep `GROUP_SPACING` / `SUB_GROUP_SPACING`.
+- **Seeds** (`GraphStreamLayoutEngine.java:670-687`, currently
+  `sizes.directNodeRingRadius(parentKey)` at `:682`) call the same disc-derived helper, so the
+  label-aware seed (≈134 for "Axiom of Choice") and `R(2) = 17` no longer disagree by 7.9×.
+  `BoundarySizes.directNodeRingRadius` stays for
+  `directNodeReach → sizeOf → boundaryRadius` and `topRingPosition` (N4; `:558`).
+
+Settled positions change, so seeds, step counts and fixture expectations move (design §10).
+
+### 2.10 `ScreenLabelPlacementCache` key
 
 Key equality pins the design's §5.4 list:
 
@@ -346,27 +465,33 @@ violating input was displaced.
 2. every drawn label rectangle is disjoint from every disc's screen bounding rectangle;
 3. every drawn label rectangle is inside `A` (never silently clipped);
 4. rectangles are the screen-space logical bounds of the carried base font (C13).
-   The measurable consequence is tested by painting ink: each label's ink bitmap must lie
-   inside its rectangle and pairwise label ink bitmaps must not intersect, at zooms 0.25, 1.0
-   and 2.0. The only sanctioned violation is the emphatic-enclosure exception of I3,
+   The measurable consequence is tested by painting ink: pairwise label ink bitmaps must not
+   intersect, and each label's ink bitmap must not intersect any disc bitmap, at zooms 0.25,
+   1.0 and 2.0. **Ink is not asserted to lie inside the rectangle** — antialiased glyph ink
+   extends beyond the logical box by the C14 fringe, measured at 0.4416–0.7578 px per side
+   over the fixture set, while the minimum fixture rectangle gap is 1.655886 px
+   (Appendix A.6). The only sanctioned exception is the emphatic-enclosure exception of I3,
    recorded on the `PlacedLabel` (`emphaticAtAnchor == true`). Labels are single-line, so
    `height` is one line.
 
 **I3 — degradation ladder (ordered).**
 `FULL_NEAR → FULL_DISPLACED → DENSE_NEAR → DENSE_DISPLACED → TRUNCATED_NEAR →
 TRUNCATED_DISPLACED → TRUNCATED_DENSE_NEAR → TRUNCATED_DENSE_DISPLACED → HOVER_ONLY`.
-Forced labels (selected, hovered, related) are placement inputs, placed first, and never below
-full text. Emphatic enclosure labels are required; when no slot exists they are forced at the
-hull label anchor as the I2 exception, recorded **on the placement result**
+Forced labels (selected, hovered, related) are placement inputs, placed first, and are
+restricted to the two full-text rungs (`FULL_NEAR`, `FULL_DISPLACED`); a forced label never
+uses the dense or truncated rungs, and its no-full-slot case is the open point O4 (no rule is
+invented here). Emphatic enclosure labels are required; when no slot exists they are forced at
+the hull label anchor as the I2 exception, recorded **on the placement result**
 (`emphaticAtAnchor`) and never thrown from the paint path. At `RenderingLevel.OVER_TARGET`
 only forced labels and required emphatic enclosure labels are placed; all other labels are
 absent from the result (the 7 pt face therefore never paints).
 
 **I4 — stability.** `place(request, previous, fonts)` is deterministic: identical inputs give
 byte-identical results (same anchors, sizes, fonts, texts, slots). A label keeps its previous
-slot while that slot remains collision-free at the current centre/zoom/area; an invalidated
-slot is re-placed through the ladder, and re-running with the new result as `previous` is a
-fixed point while the new slot remains valid.
+slot while that slot remains collision-free and inside `placementArea` at the current
+centre/zoom/area (§2.7 step 4); an invalidated slot is re-placed through the ladder, and
+re-running with the new result as `previous` is a fixed point while the new slot remains
+valid.
 
 ## 4. Pipeline, state transitions and error behaviour
 
@@ -375,7 +500,7 @@ fixed point while the new slot remains valid.
 | Stage | Producer | Positions | Residual |
 |---|---|---|---|
 | solver frame | `GraphStreamLayoutEngine` | particle positions | `UNVERIFIED` |
-| acceptance | `LayoutWorker.accept` (`:276-300`) | validate coverage → compute hulls → `MapTierCorrection` → **`NodeSeparationProjection.project`** | recomputed |
+| acceptance | `LayoutWorker.accept` (`:276-300`) | validate coverage → compute hulls → `MapTierCorrection` → **`NodeSeparationProjection.project`** → `PerceptualIdlePolicy.observe` | recomputed |
 | idle observation | `LayoutWorker.accept` (`:291`) | observes `(previousProjected, projected)` | unchanged |
 | publication state | `LayoutSettleLoop` (`:543-549`, `:721-723`) | hulls recomputed from **published** positions; no label placement here | carried |
 | paint placement | `GraphCanvas.paintComponent` (`:358-365`) | nothing in the geometry | n/a |
@@ -430,16 +555,18 @@ The population, warm-up, samples and cache states are C16. Each timed sample is 
 on the measured trigger with `previous` retained. Recorded and gated per scenario
 (`two-map`, `three-map-clustered`, `reference-2000-5000`) after the new
 `PerformanceMeasurements.Stage.PLACEMENT("placement")` stage replaces the removed worker-side
-`LABEL("label")` stage (`PerformanceMeasurements.java:27-39`; the removed measurement is the
-`GraphWorkspacePerformanceDiagnostic` worker-side label timing at `:355-358`). The stage is
-initially diagnostic-only (`-1`); the threshold is set from the recorded baseline (C15).
+`LABEL("label")` stage (`PerformanceMeasurements.java:27-39`; the removed measurements are the
+`GraphWorkspacePerformanceDiagnostic` worker-side label timing at `:293-297` and the
+direct-probe label timing at `:354-358`). The stage is initially diagnostic-only (`-1`); the
+threshold is set from the recorded baseline (C15).
 
 ## 5. Fixtures and expected values
 
 All fixture coordinates below are world coordinates of the committed mockup generator unless
 stated otherwise; convert to screen with §0's mapping. Fonts are the screen-space base fonts
 `full = SansSerif plain 12`, `dense = SansSerif plain 9`; line heights measured for this
-environment are `h(12)=16.344114`, `h(9)=12.258085` px.
+environment are `h(12)=16.344114`, `h(9)=12.258085`, `h(10)=13.619987`, `h(15 bold)=20.430143`
+px. Pass counts are asserted through `NodeSeparationResult.passes()` (§2.2).
 
 ### 5.1 Red-phase prominence fixture (`NodeSeparationProjectionShould`)
 
@@ -456,31 +583,35 @@ prominence):
 Expected:
 - `violationCount(raw) == 1`.
 - After `project`: `p1 = (−5,0)`, `p2 = (29,0)`, both radii 14, centre distance exactly
-  `34.0`; `result.residualViolations() == 0`; `violationCount(result.positions()) == 0`;
-  passes = 2. The already-satisfied half of the test asserts that an input with distance
-  `≥ 34` is returned unchanged.
+  `34.0`; `result.residualViolations() == 0`; `result.passes() == 2`;
+  `violationCount(result.positions()) == 0`. The already-satisfied half of the test asserts
+  that an input with distance `≥ 34` is returned unchanged.
 
-### 5.2 Sandwich, pinned-pinned and solvable fixtures (`NodeSeparationProjectionShould`)
+### 5.2 Sandwich, pinned-pinned, solvable and coincident fixtures (`NodeSeparationProjectionShould`)
 
 Keys must sort in the listed order under the pinned comparator (same map UUID, ascending
-persisted node id). All radii are 8.
+persisted node id). All radii are 8, so `need = 22`.
 
 | Fixture | Input (world) | Pins | Expected |
 |---|---|---|---|
-| **S1 sandwich (non-convergence)** | `a=(0,0)`, `b=(40,0)`, `m=(20,0)` | `a`, `b` | 64 passes (no early exit); `a=(0,0)`, `b=(40,0)` bit-identical; `m=(18,0)`; `residualViolations == 1` (pair `a`–`m`); all positions finite; the published frame carries the same count (design §8.1.6) |
+| **S1 sandwich (non-convergence)** | `a=(0,0)`, `b=(40,0)`, `m=(20,0)` | `a`, `b` | 64 passes (the cap, no early exit); `a=(0,0)`, `b=(40,0)` bit-identical; `m=(18,0)`; `residualViolations == 1` (pair `a`–`m`); all positions finite; the published frame carries the same count (design §8.1.6) |
 | **S2 pinned-pinned exception** | `a=(0,0)`, `b=(20,0)`, `m=(10,0)` | `a`, `b` | 2 passes; `a=(0,0)`, `b=(20,0)` bit-identical; `m=(42,0)`; `residualViolations == 1` (pair `a`–`b`); pinned pair untouched and counted (design §8.1.2) |
 | **S3 solvable convergence** | `a=(0,0)`, `b=(20,0)` | none | 2 passes; `a=(−1,0)`, `b=(21,0)`; `residualViolations == 0`; distance exactly 22 |
+| **S4 coincident particles** | `a=(0,0)`, `b=(0,0)` | none | 3 passes; the deterministic axis `(1,0)` separates them to `a=(−11,0)`, `b=(11,0)`; `residualViolations == 0`; two repeated runs are byte-identical (design §8.1.4) |
 
-The S1 numbers are derived under the pinned C3 arithmetic and ascending pair order; changing
-either changes `m` (measured alternatives for order `m,a,b` give different outcomes, so the
-comparator is part of the fixture).
+The S1/S2 numbers depend on the processing order of §2.1 step 1 and on C3. Verified: with the
+pinned order `a,b,m` S1 ends at `m=(18,0)` and S2 at `m=(42,0)`, and with order `b,a,m` S1
+ends at `m=(22,0)` and S2 at `m=(−22,0)` (Appendix A.5). The `b,a,m` values are **not** the
+fixture: the fixture keys are constructed so the pinned comparator yields the listed order.
+(An earlier draft claimed order `m,a,b` changes the outcome; it does not, and that claim is
+withdrawn.)
 
 ### 5.3 Three-map correction characterization (design §8.2.4)
 
 - Three root hulls: squares of half-extent **30** centred at `(0,0)`, `(40,0)`, `(−40,0)`;
   one node per map at the hull centre; no pins.
 - Expected correction output (verified against the real `HullGeometry` + `HullIntersection`,
-  Appendix A.3): `(0,0)`, `(50,0)`, `(−50,0)`; recomputed A/B `minimumSeparatingTranslation`
+  Appendix A.4): `(0,0)`, `(50,0)`, `(−50,0)`; recomputed A/B `minimumSeparatingTranslation`
   `= (10,0)`; `siblingOverlap(A,B) == true`; hence hull overlap **10**.
 - Secondary characterization: half-extent **24** gives `(0,44,−44)`; half-extent **1** is a
   no-op. The literal one-node-per-map default half-extent is 24 (design §8.2.4), so the ±30
@@ -500,13 +631,15 @@ World positions (spacing 34; radius 14 for indices 0,3,6,9, else 8; index 1 is s
 | 4 | Pairing | (−51,0) | 10 | Comprehension | (17,34) |
 | 5 | Union | (−17,0) | 11 | Well-Ordering | (51,34) |
 
-Expected placement at zoom 1, viewport 1128×364, enclosure obstacle
-`(−76, −79.619987, 148.289871, 13.619987)` in world-centred coordinates (the committed
-generator's `hullLabelRect` for this scene):
+Expected placement at zoom 1, viewport 1128×364, with the enclosure obstacle
+`(−76, −79.619987, 148.289871, 13.619987)` in world-centred coordinates. This rectangle is
+the committed generator's synthetic `hullLabelRect`, **not** the output of the §2.8 pinned
+enclosure rule; it is a generator-derived stand-in and the assertions below scope it to "node
+labels avoid this fixed rectangle"):
 
 | order | name | slot | font | text | anchor (world-centred) | size (w×h) |
 |---|---|---|---|---|---|---|
-| 1 | Axiom of Choice | ABOVE | 12 | full | (−17, −56.172057) | 91.104675×16.344114 |
+| 1 | Axiom of Choice *(forced, rung 1)* | ABOVE | 12 | full | (−17, −56.172057) | 91.104675×16.344114 |
 | 2 | Theorem | LEFT | 12 | full | (−96.530182, −34) | 51.060364×16.344114 |
 | 3 | Extensionality | RIGHT | 12 | full | (110.216270, −34) | 78.432541×16.344114 |
 | 4 | Power Set | RIGHT_FAR | 12 | full | (89.242210, 0) | 56.484421×16.344114 |
@@ -520,98 +653,202 @@ generator's `hullLabelRect` for this scene):
 | — | Union | — | — | HOVER_ONLY | — | — |
 
 Histogram `full 11 | dense 0 | truncated 0 | hover-only 1`; label/label collisions 0;
-label/disc collisions 0. Other measured rows of the same scene: 420×240 and 280×170 →
-`full 11 / hidden 1` and `full 7 / dense 4 / hidden 1`; 200×130 → `full 2 / dense 4 /
-hidden 6`; zoom 0.25 (1128×364) places 6; zoom 2.0 places 11. Mean leader length at
-1128×364 zoom 1 is 48.046026 px, maximum 77.894615 px, leader crossings 0.
+label/disc collisions 0. Other measured rows of the same scene (same stand-in obstacle):
+420×240 → `full 11 / hidden 1`; 280×170 → `full 7 / dense 4 / hidden 1`; 200×130 →
+`full 2 / dense 4 / hidden 6`. Mean leader length at 1128×364 zoom 1 is 48.046026 px,
+maximum 77.894615 px, leader crossings 0; the zoom and level matrix is §5.9 and the measured
+per-slot bounds are in §5.10.
 
 ### 5.5 Long-label truncation fixture
 
-Six nodes, all radius 8, positions `((i%3−1)·22, (i/3)·22)` for `i=0..5`; node 0 is selected.
-Names and measured 12 pt widths:
+Six nodes, all radius 8, positions `((i%3−1)·22, (i/3)·22)` for `i=0..5`; node 0 is selected
+and therefore **forced**. Names and measured 12 pt widths:
 
 | # | name | width (px) |
 |---|---|---|
 | 0 | Well-Ordering Theorem of Choice and Regularity | 274.130005 |
 | 1 | Axiom Schema of Replacement and Comprehension | 292.586090 |
-| 2 | Transfinite Induction over Ordinal Numbers | 246.722 | 
+| 2 | Transfinite Induction over Ordinal Numbers | 246.722 |
 | 3 | Cardinal Arithmetic under the Continuum Hypothesis | 299.606 |
 | 4 | Ultrafilter Lemma and Boolean Prime Ideal Theorem | 295.478 |
 | 5 | Kuratowski Zorn Lemma for Partially Ordered Sets | 283.034 |
 
-Expected histograms (zoom 1; enclosure variant adds the obstacle rect
-`(−41, −39.619987, 148.289871, 13.619987)`):
+Node 0's full text exceeds every C10 cap, so under I3 (forced labels use only rungs 1–2) it
+has **no full-text slot at any viewport and is the O4 case**: it is excluded from every
+assertion below (the fixture is scoped, not resolved). The remaining five labels place as
+follows at zoom 1. The enclosure variant adds the generator-derived stand-in rectangle
+`(−41, −39.619987, 148.289871, 13.619987)` (not the §2.8 rule).
 
-| viewport | without enclosure obstacle | with enclosure obstacle | max leader | collisions |
-|---|---|---|---|---|
-| 1128×364 | dense 1, truncated 5, hover-only 0 | dense 0, truncated 6, hover-only 0 | 78.6565 px | 0 / 0 |
-| 500×300 | dense 1, truncated 5, hover-only 0 | dense 0, truncated 6, hover-only 0 | 78.6565 px | 0 / 0 |
-| 200×130 | full 1, truncated 2, hover-only 3 | full 1, truncated 1, hover-only 4 | 46.1721 px | 0 / 0 |
-
-The `full 1` at 200×130 is the selected node's forced label placed by the mockup's
-unchecked panic fallback (274.130 px wide on a 200 px surface): it is not I2-conformant and
-is the subject of §8 O4.
-
-Per-label expectations at 1128×364 without enclosure (zoom 1, world-centred):
+Per-label expectations at 1128×364 without the stand-in (zoom 1, world-centred):
 
 | # | slot | font | text | anchor | size |
 |---|---|---|---|---|---|
-| 0 | ABOVE | 12 | `Well-Ordering Theorem of Choice…` | (−22, −22.172057) | 198.493454×16.344114 |
-| 1 | ABOVE_FAR | 12 | `Axiom Schema of Replacement a…` | (0, −46.172057) | 193.873367×16.344114 |
-| 2 | BELOW_FAR | 9 | full | (22, 44.129043) | 185.041336×12.258085 |
+| 1 | ABOVE | 12 | `Axiom Schema of Replacement a…` | (0, −22.172057) | 193.873367×16.344114 |
+| 2 | ABOVE_FAR | 9 | full | (22, −44.129043) | 185.041336×12.258085 |
+| 3 | BELOW | 12 | `Cardinal Arithmetic under the Co…` | (−22, 44.172057) | 194.905396×16.344114 |
+| 4 | BELOW_FAR | 12 | `Ultrafilter Lemma and Boolean Prime Ide…` | (0, 68.172057) | 198.541412×16.344114 |
+| 5 | RIGHT | 12 | `Kuratowski Zorn Lemma for Partially Ord…` | (100.656464, 22) | 129.312927×16.344114 |
+
+Per-label expectations at 1128×364 with the stand-in:
+
+| # | slot | font | text | anchor | size |
+|---|---|---|---|---|---|
+| 1 | BELOW_FAR | 12 | `Axiom Schema of Replacement a…` | (0, 46.172057) | 193.873367×16.344114 |
+| 2 | RIGHT | 12 | `Transfinite Induction…` | (99.558441, 0) | 127.116882×16.344114 |
 | 3 | LEFT | 12 | `Cardinal Arithmetic u…` | (−100.392456, 22) | 128.784912×16.344114 |
-| 4 | BELOW_FAR | 12 | `Ultrafilter Lemma and Boolean Pr…` | (0, 68.172057) | 198.541412×16.344114 |
-| 5 | RIGHT | 12 | `Kuratowski Zorn Lem…` | (100.656464, 22) | 129.312927×16.344114 |
+| 4 | BELOW_FAR | 12 | `Ultrafilter Lemma and Boolean Prime Ide…` | (0, 68.172057) | 198.541412×16.344114 |
+| 5 | RIGHT | 12 | `Kuratowski Zorn Lemma for Partially Ord…` | (100.656464, 22) | 129.312927×16.344114 |
 
-### 5.6 One-pixel stickiness fixture (`ScreenLabelPlacementShould`)
+Histograms (of the five non-forced labels; node 0 is O4 in every row):
 
-**Pan case.** Dense 12-node fixture, 1128×364, enclosure obstacle as in §5.4. Pan the viewport
+| viewport | without stand-in | with stand-in | max leader | collisions |
+|---|---|---|---|---|
+| 1128×364 | dense 1, truncated 4, hover-only 0 | dense 0, truncated 5, hover-only 0 | 78.6565 px | 0 / 0 |
+| 500×300 | dense 1, truncated 4, hover-only 0 | dense 0, truncated 5, hover-only 0 | 78.6565 px | 0 / 0 |
+| 200×130 | truncated 2, hover-only 3 | truncated 1, hover-only 4 | 22.1721 px (none) / 46.1721 px (stand-in) | 0 / 0 |
+
+Note the truncation strings are those produced by `truncateTo` (C10 cap per slot) and the
+ellipsis is `…`. The 200×130 `full 1` row of earlier drafts was the mockup's unchecked
+forced-label fallback; it is O4 and is removed from the fixture rather than asserted.
+
+### 5.6 Stickiness and invalidation fixtures (`ScreenLabelPlacementShould`)
+
+**Pan case.** Dense 12-node fixture, 1128×364, enclosure stand-in as in §5.4. Pan the viewport
 origin by `(+1, 0)` px, re-place with `previous` = the original result. Expected: all 11
 placed labels keep slot, text and font; histogram unchanged; second re-application with the
 new result as `previous` is identical (idempotent).
 
-**Invalidation case.** Dense fixture, viewport 200×130 (world-centred `(−100,−65,200,130)`),
-enclosure obstacle `(−76, −79.619987, 148.289871, 13.619987)`. Baseline placement (zoom 1):
+**One-pixel retention case.** Dense fixture, viewport 200×130 (world-centred
+`(−100,−65,200,130)`), enclosure stand-in `(−76, −79.619987, 148.289871, 13.619987)`.
+Baseline placement (zoom 1):
 
 | name | slot | font | anchor | size |
 |---|---|---|---|---|
-| Axiom of Choice | ABOVE | 12 | (−17, −56.172057) | 91.104675×16.344114 |
+| Axiom of Choice *(forced)* | ABOVE | 12 | (−17, −56.172057) | 91.104675×16.344114 |
 | Theorem | BELOW_FAR | 9 | (−51, 16.129043) | 38.295258×12.258085 |
 | Pairing | LEFT | 9 | (−79.976112, 0) | 29.952225×12.258085 |
 | Infinity | RIGHT | 9 | (79.877113, 0) | 29.754227×12.258085 |
 | Separation | BELOW | 12 | (−51, 56.172057) | 61.260422×16.344114 |
 | Comprehension | BELOW | 9 | (17, 54.129043) | 67.716476×12.258085 |
 
-Move `Infinity` from `(51,0)` to `(51,−1)` and re-place with `previous` = baseline. Expected:
-exactly one assignment changes — `Infinity` becomes `BELOW`, font 9, anchor
-`(51, 19.129043)`, size unchanged; every other label identical; collisions 0/0; re-running
+Move `Infinity` from `(51,0)` to `(51,−1)` and re-place with `previous` = baseline. Under the
+pinned retention rule (I4 / §2.7 step 4) **Infinity keeps its previous slot**: expected
+`RIGHT`, font 9, anchor `(79.877113, −1)`, size unchanged `29.754227×12.258085`; every other
+label is bit-identical to the baseline; collisions 0/0; re-running with the new result as
+`previous` is a fixed point. (A fresh placement — no `previous` — would produce `BELOW`; that
+is not the fixture.)
+
+**Invalidation case.** Two nodes `Alpha` (selected, radius 8) at `(0,0)` and `Beta`
+(radius 8) at `(−40,0)`; viewport 400×300 (world-centred `(−200,−150,400,300)`); no
+enclosure. Baseline (zoom 1): `Alpha` `ABOVE` anchor `(0, −22.172057)`, size
+`32.292221×16.344114`; `Beta` `ABOVE` anchor `(−40, −22.172057)`, size
+`25.632172×16.344114`. Move `Beta` to `(0,−35)` (its disc now intersects `Alpha`'s previous
+rectangle) and re-place with `previous` = baseline. Expected: `Alpha`'s previous slot is
+invalidated by the newly arrived disc, so `Alpha` is re-placed through the ladder to `BELOW`
+anchor `(0, 22.172057)` size `32.292221×16.344114`; `Beta` retains `ABOVE`, recomputed at its
+new centre to anchor `(0, −57.172057)` size `25.632172×16.344114`; collisions 0/0; re-running
 with the new result as `previous` is a fixed point.
 
 ### 5.7 Painted-ink zoom matrix (`ScreenLabelPlacementShould`)
 
-- Fixture: dense 12-node scene (or the long scene) at zoom `z ∈ {0.25, 1.0, 2.0}`; render each
-  `PlacedLabel` alone with `label.font()` at its screen position, antialiasing on, into a
-  transparent layer; compute the ink bounding box.
-- Expected: ink ⊆ `label.bounds()` for every label; pairwise ink bitmaps are disjoint; ink
-  misses every disc bitmap of radius `max(2, r·z)`.
-- Measured zoom invariance: `"Axiom of Choice"` in 12 pt paints `90×10` px of ink at zooms
-  0.25, 0.5, 1.0, 2.0 and 4.0 (the painter's constant screen size). Logical bounds are
-  `91.104675×16.344114` px at every zoom. With double-precision centring the residual
-  overhang is antialias fringe ≤0.55 px; fixture minimum label–label rectangle gaps are
-  1.6559 px (dense, zoom 1) and 7.6559 px (long, zoom 1), so bitmap intersections stay empty.
-- The current integer-`stringWidth` centring (`GraphPainter.java:307-312`) is non-conformant
-  (measured overhang up to 0.57 px); §6 makes the double-precision change mandatory.
+- Fixture: the §5.4 dense 12-node scene with its enclosure stand-in, at
+  `z ∈ {0.25, 1.0, 2.0}` (at `z=2` the forced label is O4 and is excluded, leaving 10
+  labels); plus the §5.5 long fixture at `z=1` with and without the stand-in; render each
+  `PlacedLabel` alone with `label.font()` at its screen position in one common global screen
+  coordinate frame, antialiasing on, into a transparent layer; compute the ink bitmap
+  (non-transparent pixels).
+- Expected: pairwise ink bitmaps are disjoint (no shared pixel); ink misses every disc bitmap
+  of radius `max(2, r·z)`. There is **no** ink-containment assertion (C14).
+- Measured (Appendix A.6): no single-side overhang exceeds `0.7578` px; per-fixture maxima
+  are dense z=0.25 `0.4698`, dense z=1 `0.7578`, dense z=2 `0.7578`, long z=1 `0.4793`,
+  long z=1 with stand-in `0.4416` px. Minimum label–label rectangle gap over the same
+  fixtures is `1.655886` px (dense z=1); `2 · 0.7578 = 1.5156 < 1.655886`, which is why the
+  painted bitmaps stay disjoint.
+- The current integer-`stringWidth` centring (`GraphPainter.java:307-312`) measures up to
+  `1.5` px of overhang on the same fixtures; `2 · 1.5 = 3.0 > 1.655886`, so the
+  double-precision centring change is mandatory (§6).
 
-### 5.8 Enclosure-label fixture (derivable part)
+### 5.8 Enclosure-label fixture (`ScreenLabelPlacementShould`)
 
-Square hull 100×100 centred at `(0,0)` with `labelAnchor = (0,0)`; one emphatic enclosure
-label whose screen rectangle fits inside the hull and is collision-free. Expected: mode
-`INTERIOR`, anchor exactly `(0,0)`, `emphaticAtAnchor == false`, `leaderStart` empty, and
-`geometry.hulls()` unchanged before/after placement. When the anchor rectangle is blocked by
-a disc, `mode == EXTERNAL` with a leader from `hull.nearestBoundaryPoint(anchor)`; the exact
-anchor is not derivable from the approved design (no exterior candidate order is specified)
-and must be recorded by the first implementation run. Emphatic terminal: block every
-candidate; expected `emphaticAtAnchor == true`, anchor exactly `(0,0)`, no exception.
+Hull: square half-extent 50 centred at `(0,0)`, `labelAnchor = (0,0)`, vertices as in the
+existing `square()` helper convention; canonical polygon verified as
+`(−50,−50),(50,−50),(50,50),(−50,50)` (Appendix A.7). Emphatic label text "Axioms" has
+`w = 55.065384`, `h = 20.430143`; emphatic text "Basic Definitions and Theorems" has
+`w = 235.291611`.
+
+- **Interior.** "Axioms", no obstacles: mode `INTERIOR`, anchor exactly `(0,0)`, the
+  rectangle inside the hull, `emphaticAtAnchor == false`, `leaderStart` empty.
+- **Arc.** "Axioms", one disc obstacle at `(0,0)` radius 8: the interior rectangle collides,
+  so the arc tier runs; all four edge populations are 0, the bottom edge (index 0) wins the
+  tie, and the candidate anchor is `(0, −38.784929)` (`h/2 + ARC_GAP = 11.215071` inward from
+  the bottom edge midpoint `(0,−50)`). Expected mode `ARC`, anchor `(0, −38.784929)`,
+  `leaderStart` empty.
+- **External.** "Basic Definitions and Theorems" (width 235.291611 > 2·50, so it cannot fit
+  inside the hull), no obstacles, `placementArea = (−160,−160,320,320)`: expected mode
+  `EXTERNAL`, anchor `(0, −64.215072)` (bottom edge, lane 0:
+  `h/2 + EXTERNAL_GAP = 14.215071` outward), `leaderStart = (0, −50)`.
+- **Emphatic terminal.** "Basic Definitions and Theorems" with
+  `placementArea = (−60,−60,120,120)`: every exterior candidate rectangle lies outside the
+  area, the arc/interior tiers fail on width, so the emphatic terminal rule applies: anchor
+  exactly `(0,0)`, `emphaticAtAnchor == true`, `leaderStart` empty, no exception.
+- **Subtle terminal.** The same scene with a subtle label: mode `HOVER_ONLY` at `(0,0)`,
+  not an obstacle, `leaderStart` empty.
+- In every case `geometry.hulls()` is unchanged before and after placement.
+
+### 5.9 Zoom × rendering-level matrix (`ScreenLabelPlacementShould`)
+
+Fixture: dense 12-node scene (§5.4), viewport 1128×364, **without** the enclosure stand-in
+(the stand-in is a node-label obstacle for §5.4/§5.7; the matrix isolates the level filter).
+`FULL` and `DENSE` produce identical results (§2.7 step 11):
+
+| zoom | `FULL` / `DENSE` | forced label (selected, rung 1–2) |
+|---|---|---|
+| 0.25 | 8 placed (full 7, dense 1), hover-only: Pairing, Union, Infinity, Well-Ordering | ABOVE, anchor `(−4.25, −24.672057)` |
+| 0.5 | 10 placed (full 10), hover-only: Union, Well-Ordering | ABOVE, anchor `(−8.5, −35.172057)` |
+| 1.0 | 11 placed (full 11), hover-only: Union | ABOVE, anchor `(−17, −56.172057)` |
+| 2.0 | 11 placed (full 11), hover-only: Replacement | ABOVE_FAR, anchor `(−34, −122.172057)` |
+
+`OVER_TARGET`: exactly the forced label above (1 label) at zooms 0.25/0.5/1.0/2.0, and every
+non-forced label is absent. At every combination, label/label and label/disc rectangle
+intersections are 0. The design requirement that the scene contain at least one emphatic
+enclosure is covered by the §5.8 fixture (an INTERIOR emphatic enclosure at `(0,0)` with no
+intersections); the matrix's per-zoom assertions are on the dense node-label scene.
+
+### 5.10 Ordering predicate, forced transitions, bounds and wiring
+
+- **Truncatable-while-a-full-slot-was-free predicate.** For the §5.5 fixtures (1128×364 and
+  500×300, with and without the stand-in), every `truncated()` label must have
+  `fullTextSlotWasFree() == false` at the moment it was processed: if any full-text rung
+  candidate had been inside the area and collision-free, the ladder would have placed the
+  full text first. Measured: all four truncated labels (five with the stand-in) report
+  `false`. The predicate is observed through `PlacedLabel.fullTextSlotWasFree()` (§2.5).
+- **Hover-only label becoming forced.** Dense fixture at 200×130 (the §5.6 scene): `Union`,
+  `Well-Ordering`, `Extensionality`, `Power Set`, `Foundation / Regularity` and
+  `Replacement Scheme` are hover-only. Force `Well-Ordering` (add it to the request's forced
+  set, keep `previous` = baseline): expected `Well-Ordering` placed `BELOW`, font 12, anchor
+  `(51, 56.172057)`; `Comprehension` loses its previous `BELOW` slot to the forced label and
+  becomes `HOVER_ONLY`; the other five placed labels (`Axiom of Choice`, `Theorem`, `Pairing`,
+  `Infinity`, `Separation`) keep their slots; collisions 0/0; re-running with the new result
+  as `previous` is a fixed point. The forced label never intersects anything (design §8.3.4).
+- **Per-slot displacement and support bounds.** At zooms 1 and 2, every placed label of the
+  §5.4 and §5.5 fixtures must satisfy the leader-length and corner-support form of §2.7 for
+  its own `(slot, w, h, r')`. Measured maxima (Appendix A.6):
+
+  | fixture | zoom | max leader (px) | max corner support (px) |
+  |---|---|---|---|
+  | dense 12 | 1.0 | 77.894615 | 138.704698 |
+  | dense 12 | 2.0 | 73.611911 | 118.655013 |
+  | long 5 labels (none) | 1.0 | 78.656464 | 143.545734 |
+  | long 4 labels at z=2 | 2.0 | 86.656464 | 151.533443 |
+
+  The design's single-form bound must not be used (design revision 5.2 deleted it after the
+  150.2 px counterexample; §8 O7).
+- **Geometry independence through the paint path (design §8.3.10).** Run placement through
+  the real paint path (`GraphCanvas.paintComponent` → `GraphPainter`) for the dense fixture
+  and assert the published `CanvasState` geometry (node and hull maps) is bit-identical
+  before and after a zoom change, a forced-set change and a placement recomputation, while
+  the returned `List<PlacedLabel>` changes as specified. This pins G4/I2: placement never
+  feeds back into geometry.
 
 ## 6. Removal and migration inventory
 
@@ -619,24 +856,24 @@ candidate; expected `emphaticAtAnchor == true`, anchor exactly `(0,0)`, no excep
 
 | Path | Surface |
 |---|---|
-| `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/LabelPlacementEngine.java` | entire file (560 lines), incl. `MAX_INTERIOR_EXPANSION` (`:22`), hull expansion (interior `:153-249`), `ARC_GAP`, `EXTERNAL_GAP`, `SUBTLE_EXTERNAL_CANDIDATE_BUDGET` |
-| `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/LabelPlacement.java` | entire file (139 lines); `Mode` moves to `PlacedLabel` |
-| `GraphGeometry` label surface | `GraphGeometry.java` label field (`:16`) and constructor parameter (`:26`), 3-arg `of` (`:46-49`), `labels()` (`:60-62`), `copyLabels` (`:101-117`), label parts of `equals/hashCode/toString` |
+| `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/LabelPlacementEngine.java` | entire file (560 lines), incl. `MAX_INTERIOR_EXPANSION` (`:22`), `ARC_GAP`/`EXTERNAL_GAP`/`SUBTLE_EXTERNAL_CANDIDATE_BUDGET` (`:23-25`, constants inherited in §2.8), hull expansion (interior `:153-249`) |
+| `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/LabelPlacement.java` | entire file (143 lines); `Mode` moves to `PlacedLabel` |
+| `GraphGeometry` label surface | `GraphGeometry.java` label field (`:16`) and constructor parameter (`:26`), 3-arg `of` (`:46-49`), `labels()` (`:60-62`), `copyLabels` (`:101-115`), label parts of `equals/hashCode/toString` |
 | `TypedSpringBox.REST_LENGTH` | `TypedSpringBox.java:18`; other uses at `GraphStreamLayoutEngine.java:230` and `:239` |
-| worker-side label stage | `GraphWorkspacePerformanceDiagnostic.java:293-297` and `:355-358`; `PerformanceMeasurements.Stage.LABEL` (`:35`) replaced by `PLACEMENT("placement")` at the same enum position |
+| worker-side label stage | `GraphWorkspacePerformanceDiagnostic.java:293-297` and `:354-358`; `PerformanceMeasurements.Stage.LABEL` (`:35`) replaced by `PLACEMENT("placement")` at the same enum position |
 
 **Update**
 
 | Path | Change |
 |---|---|
-| `.../layout/LayoutFrame.java` | residual field, factories, accessor, validation (§2.3) |
-| `.../layout/LayoutWorker.java` | project after correction in `accept` (`:285-293`); `EMPTY_FAILED_FRAME` residual (`:34-35`); retained residual in `failedFrame` (`:340-348`) |
+| `.../layout/LayoutFrame.java` | residual field, factories (3-arg default `UNVERIFIED`; 4-arg for published residuals), accessor, validation (§2.3) |
+| `.../layout/LayoutWorker.java` | project after correction in `accept` (`:285-293`); `EMPTY_FAILED_FRAME` residual `0` with the 4-arg factory (`:34-35`); retained residual in `failedFrame` (`:340-348`) |
 | `.../control/LayoutSettleLoop.java` | delete `LabelAssembler` (`:982-990`); remove `labels.place` at `:543-544` and `:721-722` (keep `computeHulls`); `failedFrame` (`:732-749`) routes `fallbackPositions` (`:933-948`) through the projection and picks the residual per §4.3 |
 | `.../control/GraphUpdateCoordinator.java` | initial frame residual `0` (`:133-137`); `publishFailure` preserves residual (`:551-566`) |
-| `.../layout/graphstream/GraphStreamLayoutEngine.java` | relationship rest length at `:230` = `radiusOf(first)+radiusOf(second)+MIN_GAP`; containment rest length at `:239` = `R(k)`; new `radiusOf`/`R(k)` helpers from `projection.prominence()`; `Seeds.nodePosition` `:682` uses the disc-derived ring radius `R(k)` = `(2·max_r+MIN_GAP)/(2·sin(π/k))`, `R(k)=0` for `k≤1`; `directNodeRingRadius` stays for `directNodeReach` (`:558`) per N4 |
+| `.../layout/graphstream/GraphStreamLayoutEngine.java` | relationship rest length at `:230` = `radiusOf(first)+radiusOf(second)+MIN_GAP`; containment rest length at `:239` = `R(k)`; new `radiusOf`/`R(k)` helpers from `projection.prominence()`; `Seeds.nodePosition` `:682` uses the disc-derived ring radius `R(k)` = `(2·max_r+MIN_GAP)/(2·sin(π/k))`, `R(k)=0` for `k≤1`; `directNodeRingRadius` stays for `directNodeReach` (`:558`) per N4; calibration multipliers and hierarchy rest lengths unchanged (§2.9) |
 | `.../canvas/GraphPainter.java` | rewrite `paintLabels` (`:231-287`) to consume `List<PlacedLabel>` and paint the carried font; delete `labelFont` (`:289-298`) and `shouldPaintLabel` (`:301-305`); `drawCentered` (`:307-312`) centres on double bounds (C14); the only `GraphGeometry.labels()` reader (`:262`) disappears |
 | `.../canvas/GraphCanvas.java` | own `ScreenLabelPlacementCache`; build `LabelPlacementRequest` in the paint path (`:358-365`) from `canvasState`, `viewport`, `paintState`, `theme`; pass placements to `GraphPainter` |
-| `.../canvas/GraphTheme.java` | `labelFont(RenderingLevel)` (`:262-270`) and `overTargetLabelFont` (`:254-256`) become unreferenced; remove once the tree has no callers |
+| `.../canvas/GraphTheme.java` | `labelFont(RenderingLevel)` (`:262-270`) and `overTargetLabelFont` (`:258-260`) become unreferenced; remove once the tree has no callers |
 | `.../projection/NodeProminence` | unchanged (MAX_SCALE reference only) |
 
 **New files** (all under `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/`):
@@ -649,13 +886,14 @@ candidate; expected `emphaticAtAnchor == true`, anchor exactly `(0,0)`, no excep
 | File | Required work |
 |---|---|
 | `geometry/LabelPlacementShould.java` | replaced by `canvas/ScreenLabelPlacementShould.java` (design §8.3) |
-| `canvas/GraphCanvasPaintShould.java` | 3-arg `GraphGeometry.of` at `:238,:325,:665,:684,:888,:971,:1225,:1253,:1354`; `LabelPlacement.Mode` uses |
+| `canvas/GraphCanvasPaintShould.java` | 3-arg `GraphGeometry.of` at `:238,:325,:665,:684,:888,:971,:1225,:1253,:1354`; `LabelPlacement.Mode` uses; rewrite the label-font/forced-pixel assertions against carried `PlacedLabel.font()` and placement results: `useDedicatedEmphaticLabelsAndPreserveLevelSpecificVisibility` (`:263-292`), `assertForcedOrdinaryLabelsVisible` (`:705-709`), `assertEmphaticGlyphUsesDedicatedFont` (`:711-726`), `assertForcedOrdinaryGlyphsUseFullDetailFont` (`:728-733`), `assertGlyphUsesFullDetailFont` (`:735-746`); the 7 pt `overTargetLabelFont` is never selected (§2.6) |
 | `canvas/GraphInteractionControllerShould.java` | 3-arg `GraphGeometry.of` at `:588` |
 | `window/GraphWorkspaceWindowModelShould.java` | 3-arg `GraphGeometry.of` at `:1911,:1979` |
 | `window/WorkspaceDialogsShould.java` | 3-arg `GraphGeometry.of` at `:440,:483` |
 | `integration/GraphWorkspaceModelAcceptanceShould.java` | `LabelPlacement`/`LabelPlacementEngine` references |
-| `performance/GraphWorkspacePerformanceDiagnostic.java` | remove worker-side label measurement `:293-297,:355-358`; add paint-path `PLACEMENT` stage |
-| `performance/PerformanceTripwiresShould.java` | stage list `:64-66` (`"label"` → `"placement"`); threshold assertions `:67-79`; fixture hashes `:131-137` do **not** move (workspace XML contains no positions) — §8 O5 |
+| `performance/GraphWorkspacePerformanceDiagnostic.java` | remove worker-side label measurements `:293-297` and `:354-358`; add paint-path `PLACEMENT` stage |
+| `performance/PerformanceTripwiresShould.java` | stage list `:64-66` (`"label"` → `"placement"`); threshold assertions `:67-79`; the fixture golden comparison of §7.4 at `:131-145` |
+| `layout/GraphStreamBoundaryShould.java` | extend `publicLayoutTypes()` (`:84-87`) with `NodeSeparationProjection` and `NodeSeparationResult` so the GraphStream-free public-signature check covers the new public layout types |
 | `layout/ReferenceRepulsionFixture.java`, `projection/GroupOnlyProjectionShould.java`, `projection/ProjectionDeterminismShould.java`, `projection/StructuralProjectionShould.java` | churn-affected settled expectations (design §8.5) |
 | `layout/TypedForcesShould.java` | two-map idle gate `:382` (`twoMapWorkspaceSettlesToIdle`); re-record the baseline before the change (design §8.5 says `LayoutSettleLoopShould`; §8 O6 corrects the location) |
 | `layout/MapTierCorrectionShould.java` | add the ±30 hull characterization of §5.3 (existing helper `square()` builds half-extent 1) |
@@ -665,109 +903,143 @@ candidate; expected `emphaticAtAnchor == true`, anchor exactly `(0,0)`, no excep
 Additional churn candidates must be enumerated by running the module suite after the change;
 the spec-authoring sandbox cannot run Gradle (design §10 fixture churn).
 
-## 7. Acceptance criteria
+## 7. Acceptance criteria (traceable to design §8)
 
-1. **I1.** `NodeSeparationProjectionShould` passes §5.1–§5.2; every published-frame test
-   asserts `residualViolations == 0` on the displacing fixture of §5.1.
-2. **Verification closure.** For a normal frame and for a worker-failure fallback frame the
-   published residual equals an independent all-pair recomputation on the published
-   positions; `EMPTY_FAILED_FRAME` and the initial empty frame carry `0`; retained frames
-   carry the retained residual. The omitted-fix guard fails when the projection is disabled.
-3. **I2/I3/I4.** `ScreenLabelPlacementShould` passes §5.4–§5.8, including the painted-ink
-   matrix at zooms 0.25/1.0/2.0, the OVER_TARGET filter, forced-label behaviour, the
-   truncation histogram, the 1 px stickiness fixture and the viewport-change recomputation.
-4. **Persistence.** No workspace XML, pin or position is written by the change; the
-   `PerformanceTripwiresShould` fixture bytes and hashes are unchanged.
-5. **Removal.** No reference to `LabelPlacement`, `LabelPlacementEngine`,
-   `GraphGeometry.labels()`, the 3-arg `GraphGeometry.of`, `TypedSpringBox.REST_LENGTH` or
-   `MAX_INTERIOR_EXPANSION` remains in main or test sources.
-6. **Settle/idle.** `TypedForcesShould.twoMapWorkspaceSettlesToIdle` re-baselined before the
-   change; after the change the recorded idle frame count and the 100 stable frames
-   (rms ≤ 0.05, max ≤ 0.10) still hold.
-7. **Performance.** The `PLACEMENT` stage exists in the diagnostic and records per-trigger
-   p95 with the C16 method; the projection stage baseline is recorded; thresholds are set
-   from those baselines (C7/C15). Until then performance gates for the two new stages are
-   diagnostic-only.
+1. **I1 (design §8.1.1–§8.1.3, §8.2.1–§8.2.4).**
+   `NodeSeparationProjectionShould` passes §5.1–§5.2 and asserts the pass counts through
+   `NodeSeparationResult.passes()`; every published-frame test asserts
+   `residualViolations == 0` on the displacing fixture of §5.1. Coincident-particle
+   determinism (design §8.1.4) is §5.2 S4.
+2. **Verification closure (design §8.2.2).** For a normal frame and for a worker-failure
+   fallback frame the published residual equals an independent all-pair recomputation on the
+   published positions; `EMPTY_FAILED_FRAME` and the initial empty frame carry `0`; retained
+   frames carry the retained residual. The omitted-fix guard (design §8.2.3) fails when the
+   projection is disabled.
+3. **I2/I3/I4 (design §8.3.1–§8.3.10).** `ScreenLabelPlacementShould` passes §5.4–§5.10:
+   painted-ink matrix §5.7 (design §8.3.1); zoom × level matrix §5.9 (design §8.3.2);
+   ordering predicate §5.10 (design §8.3.3); hover-only becoming forced §5.10 (design
+   §8.3.4); stickiness and invalidation §5.6 (design §8.3.5); per-slot bounds at zooms 1
+   and 2 §5.10 (design §8.3.6); viewport-change recomputation §5.6 pan case (design §8.3.7);
+   enclosure fixture §5.8 (design §8.3.8); no silent clipping is asserted by the §5.4–§5.5
+   tables and the `placementArea` checks (design §8.3.9); geometry independence through the
+   paint path §5.10 (design §8.3.10). Forced-label no-slot cases remain O4 and are scoped
+   out of the asserted rows (§5.5, §5.7).
+4. **Persistence.** No workspace XML, pin or position is written by the change. The
+   `PerformanceTripwiresShould` fixture test must additionally pin the **current bytes**:
+   record the SHA-256 of each generated fixture (`two-map.fpg`, `three-map.fpg`,
+   `reference-2000-5000.fpg`) as a golden constant after the change and assert equality; the
+   existing `isNotEqualTo(historical)` assertion (`:145`) alone cannot detect a second
+   change and is not sufficient.
+5. **Removal.** No reference to the deleted types and members — the type `LabelPlacement`,
+   the type `LabelPlacementEngine`, the `GraphGeometry.labels()` method, the 3-arg
+   `GraphGeometry.of`, the field `TypedSpringBox.REST_LENGTH`, and
+   `LabelPlacementEngine.MAX_INTERIOR_EXPANSION` — remains in main or test sources. The new
+   names `LabelPlacementRequest`, `ScreenLabelPlacement`, `ScreenLabelPlacementCache` and
+   `PlacedLabel` are expected and must not be matched by the removal check.
+6. **Settle/idle (design §8.5).** `TypedForcesShould.twoMapWorkspaceSettlesToIdle` (`:382`)
+   re-baselined before the change; after the change the recorded idle frame count and the 100
+   stable frames (rms ≤ 0.05, max ≤ 0.10) still hold.
+7. **Performance (design §8.4).** The `PLACEMENT` stage exists in the diagnostic and records
+   per-trigger p95 with the C16 method; the projection stage baseline is recorded; thresholds
+   are set from those baselines (C7/C15). Until then performance gates for the two new stages
+   are diagnostic-only.
 8. **Build.** `gradle :freeplane_plugin_graph:test` (and the full suite) green with Java 21
    from `~/.sdkman/candidates/java/21.0.8-zulu`; Java 8 target preserved.
 
-## 8. Open points
+## 8. Resolutions and open points
 
-These are contradictions or gaps found while turning revision 5.1 into an implementable
-specification. The specification pins a working resolution where one is derivable and states
-where implementation is blocked.
+The approved design is revision 5.2. Where revision 5.1 left a contradiction, the spec
+records the resolution; where revision 5.2 already resolves it, this specification adopts the
+design's resolution directly. O1–O3 and O5–O13 are resolved historical notes kept for
+traceability; **O4 is the only open point and is blocked on a user decision.**
 
-- **O1 — `RELAXATION` arithmetic is ambiguous.** Design §5.2: "a violating pair separates by
-  half the penetration, scaled by `RELAXATION = 0.5`". Reading A (pinned here): each movable
-  node moves `0.5·penetration`, one pinned partner moves `1.0·penetration`. Reading B: the
-  pair's total displacement is `0.5·penetration`. Reading B needs 52 passes for a two-body
-  fixture (measured) and would make §8.1.6's convergence fixture depend on the cap rather
-  than on convergence. Pinned: A (C3).
+- **O1 — `RELAXATION` arithmetic is ambiguous in design §5.2.** Design §5.2: "a violating pair
+  separates by half the penetration, scaled by `RELAXATION = 0.5`". Reading A (pinned here):
+  each movable node moves `0.5·penetration`, one pinned partner moves `1.0·penetration`.
+  Reading B: the pair's total displacement is `0.5·penetration`. Reading B needs 50 passes
+  for a two-body fixture (re-measured; an earlier draft said 52, which is not reproducible)
+  and would make the design's own convergence fixture depend on the cap rather than on
+  convergence. Pinned: A (C3). This is an implementation
+  detail below the design's abstraction; the design's §8.1.2 wording ("half/half
+  displacement; with one pinned, only the partner moves") matches it.
 - **O2 — "nodes sorted by projected key" is not implementable as written.**
   `ProjectedNodeKey` (`ProjectedNodeKey.java`) implements neither `Comparable` nor a natural
   order. Pinned: process nodes in `LayoutPositions.nodes()` iteration order (the immutable
   `LinkedHashMap` copy preserves the deterministic projection order); pair candidates are
-  visited in ascending index order. If the implementation prefers an explicit comparator, the
-  §5.2 fixture keys are chosen so that ascending `(map UUID, persisted node id)` reproduces
-  the same order, but the comparator must be total and hash-independent.
+  visited in ascending index order. This is also the pinned tie order for equal radii in §2.7
+  step 3. If the implementation prefers an explicit comparator, the §5.2 fixture keys are
+  chosen so that ascending `(map UUID, persisted node id)` reproduces the same order, but the
+  comparator must be total and hash-independent.
 - **O3 — anchors are undefined in the projection.** `project` receives `LayoutPositions`
   (nodes and anchors) and a `Set<ProjectedNodeKey>`, but I1 and the residual cover node pairs
   only. Pinned: anchors are copied through unchanged. No anchor/node or anchor/anchor
   separation is claimed; extend the contract before relying on it.
-- **O4 — forced node labels have no terminal rule, and the mockup's fallback violates I2.**
-  Design I2 lists only the emphatic-enclosure exception, yet I3 requires forced labels never
-  below full text. The committed generator resolves the conflict with an unchecked fallback
-  (full text at gap 5, no collision or surface test); measured consequence: the selected
+- **O4 — forced node labels have no terminal rule (BLOCKED ON USER DECISION).** Design I2
+  lists only the emphatic-enclosure exception, yet I3 requires forced labels never below full
+  text. The committed generator resolves the conflict with an unchecked fallback (full text
+  at gap 5, no collision or surface test); measured consequence: the selected
   274.130 px label on the 200×130 long-label surface extends outside `(0,0,200,130)` (§5.5).
   This specification does not adopt that fallback and does not invent a replacement. The
   implementation is blocked on a design decision for this single case (candidates: place at
   the base slot and record an I2 exception flag on the result, or allow a truncated forced
-  label). All acceptance fixtures avoid the case.
+  label). All affected fixtures are scoped and no expected value depends on the fallback:
+  §5.5 excludes the forced node from its tables and histograms, §5.7 excludes the forced
+  label at zoom 2, and §5.9 removes the enclosure stand-in so the matrix never reaches the
+  no-slot case.
 - **O5 — the design's fixture-hash claim is wrong.** Design §8.5 says
   `PerformanceTripwiresShould.java:64-67` "carries fixture hashes that move". Verified:
   `:64-66` is the exact `Stage.names()` assertion (which does move when `LABEL` becomes
-  `PLACEMENT`), while the fixture SHA-256 values are at `:131-137` and hash workspace XML that
-  contains no layout positions, so they must **not** move (G5). The spec treats the two
-  separately in §6.
+  `PLACEMENT`), while the fixture SHA-256 values are at `:131-136` and hash workspace XML
+  that contains no layout positions. The current test only asserts `isNotEqualTo(historical)`
+  (`:145`); §6/§7.4 require recording the current bytes as golden values.
 - **O6 — idle-baseline location.** Design §8.5 places the two-map idle-frame baseline in
   `LayoutSettleLoopShould`; verified: the two-map settle/idle frame-count gate is
   `layout/TypedForcesShould.java:382` (`twoMapWorkspaceSettlesToIdle`). The spec uses the
   verified location.
-- **O7 — single-form corner bound is false.** Design §5.3 bounds "the label rectangle's
-  farthest corner" by `max(2, r·zoom) + 30 + halfDiagonal`. Verified counterexample: a
-  maximal horizontal label (`r = 14`, `w = 130`, `h = 16.344114`) in a near RIGHT slot has
-  support `hypot(14+6+130, 8.172) = 150.222 px`, above the design's 144 headline and far
-  above the per-slot half-diagonal value. Measured supports 138.7 px (dense) and 143.5 px
-  (long) are real, but the design's formula is not an upper bound. Pinned exact per-slot
-  closed forms (§2.7 derived displacement table) and the measured maxima of §5.4/§5.5; the
-  §8.3.6 assertion must use the per-slot form, not the design's single formula.
-- **O8 — label-measurement space wording is self-contradictory.** Design §5.3 says
-  "base font metrics multiplied by zoom, equivalently the base font measured in a
-  screen-space FRC". These are not equivalent: the former reserves `91.104675·zoom` px
-  (22.776 px at zoom 0.25) while the painter paints ≈90 px of ink. Pinned: screen-space
-  bounds of the base font in an identity FRC; equivalence to the painter's derived font is
-  measured (Appendix A.2).
-- **O9 — paintable ink vs. the reserved rectangle.** The design's I2/§8.3.1 test is only
-  satisfiable if reserved rectangles contain painted ink. The current painter centres on the
-  integer `FontMetrics.stringWidth` (`GraphPainter.java:307-312`); measured ink overhang up
-  to 0.57 px. Pinned: double-precision centring (C14) plus the painted-ink assertion;
-  per-glyph overhangs beyond the logical box must be measured and covered rather than
-  ignored.
-- **O10 — enclosure-label exterior placement is unspecified.** The design deletes
-  `LabelPlacementEngine` and requires EXTERNAL with a leader but pins no candidate order,
-  lane spacing or budget. `INTERIOR` and the emphatic terminal anchor are pinned (§5.8);
-  the exterior anchor must be recorded by the first implementation run.
+- **O7 — the single-form corner bound is false and has been deleted from the design.**
+  Design revision 5.1 bounded "the label rectangle's farthest corner" by
+  `max(2, r·zoom) + 30 + halfDiagonal`; the counterexample (a maximal horizontal label
+  `r=14, w=130, h=16.344114` in a near RIGHT slot has support
+  `hypot(14+6+130, 8.172) = 150.222 px`) falsified it, and design revision 5.2 deletes the
+  single form. Pinned: the exact per-slot leader/support closed forms of §2.7, asserted per
+  label at zooms 1 and 2 with the measured maxima of §5.10.
+- **O8 — label-measurement space wording was self-contradictory; design revision 5.2 adopts
+  the screen-space reading.** Design revision 5.1's "base font metrics multiplied by zoom,
+  equivalently the base font measured in a screen-space FRC" is not equivalence: the former
+  reserves `91.104675·zoom` px (22.776 px at zoom 0.25) while the painter paints ≈90 px of
+  ink. Pinned and confirmed by design revision 5.2: screen-space bounds of the base font in
+  an identity FRC (C13); equivalence to the painter's derived font is measured
+  (Appendix A.2).
+- **O9 — paintable ink vs. the reserved rectangle was unresolved; design revision 5.2 now
+  states the rectangle-level contract.** Revision 5.1's I2 test was unsatisfiable if read as
+  ink containment: the current painter centres on the integer `FontMetrics.stringWidth`
+  (`GraphPainter.java:307-312`) and measured ink overhang is 0.44–0.76 px over the fixture
+  set. Pinned and confirmed by design revision 5.2: double-precision centring (C14) plus
+  pairwise-ink-disjointness and disc-disjointness assertions, with no containment assertion;
+  the integer-centring counterfactual measures up to 1.5 px (§5.7).
+- **O10 — enclosure-label exterior placement is now pinned.** Design revision 5.2 states the
+  enclosure slot model and delegates the constants to this specification. Pinned: the rule of
+  §2.8 (anchor, fonts, interior/arc/exterior tiers, edge ordering and population, lane
+  spacing, subtle candidate budget, leader start) and the derivable fixture of §5.8. The
+  §5.4/§5.5 "with enclosure" rows use the generator's synthetic stand-in rectangle and are
+  scoped accordingly.
 - **O11 — design naming/citation slips carried into implementation.** The design names both
   `NodeSeparation.MIN_GAP` (design §4) and `NodeSeparationProjection` (design §5.2); this
   specification uses `NodeSeparationProjection.MIN_GAP`. `TypedSpringBox.java:84-89`
   (`scaleRepulsion`) is actually `TypedNodeParticle.java:84-89`; `LabelPlacementEngine.java`
-  collision checks are at `:136,:157,:276` (not `:134`); `LayoutFrame` fields are at `:13-17`
-  (design cites `:16-30`); the "six frame factories" table actually lists seven construction
-  sites. These are documentation corrections only; the affected behaviour is pinned in §2–§6.
-- **O12 — the design's "inward slots first, fixed per-edge order" is not what the mockup
-  evidence implements.** The committed generator uses one global slot order (§2.7 step 5).
-  Pinned: the global order, because all §5 fixture values depend on it. If per-edge ordering
-  is required, every placement table in §5 must be re-measured.
+  collision checks are at `:157,:276,:366` (not `:134`); `LayoutFrame` fields are at `:13-17`
+  and factories at `:33-36`/`:38-42` (design cites `:16-30`); `LabelPlacement.java` is 143
+  lines (not 139); `NodeSeparationMockups.java` declares `MIN_GAP` at `:32` (not `:29`);
+  `GraphTheme`'s `overTargetLabelFont` accessor is at `:258-260` (not `:254-256`); and the
+  `GraphWorkspacePerformanceDiagnostic` label timings are `:293-297` and `:354-358`. These
+  are documentation corrections only; the affected behaviour is pinned in §2–§6.
+- **O12 — slot order (resolved: design revision 5.2 agrees with this specification).**
+  Design revision 5.1 said "inward slots are tried first, in a fixed per-edge order"; the
+  committed generator and every fixture value in §5 implement one global slot order, and
+  design revision 5.2 deletes the inward-first wording for exactly that reason: out-of-surface
+  candidates are rejected, so the ladder falls through to inward slots without a separate
+  per-edge rule. Pinned: the single global order of §2.7 step 5. There is no contradiction,
+  and no fixture needs re-measuring.
 - **O13 — projection/placement wall-clock thresholds.** C7/C15 cannot be pinned in a
   read-only specification: both stages must first exist and be measured on the target host,
   as the design itself requires. Reference calibration is provided; no threshold is invented.
@@ -779,34 +1051,49 @@ headless. Working copies of probes under `/tmp`; no repository file other than t
 specification was written during verification.
 
 1. **Mockup reproducibility.** `java -Djava.awt.headless=true NodeSeparationMockups.java /tmp/nsspec/mockups`;
-   all seven PNGs md5-identical to the committed panels (`012b309e…`, `46ee846c…`,
-   `246c36e2…`, `f8c1d2c1…`, `b6ff1064…`, `e23b18be…`, `91927d30…`). Generator stdout
-   reproduces every §6/§9 row quoted in the design (dense rows, ladder comparison, long-label
-   rows, zoom counts).
+   all seven PNGs regenerate from the committed generator and the stdout rows quoted here
+   (dense rows, ladder comparison, long-label rows, zoom counts) reproduce. The generator is
+   unchanged by this specification.
 2. **Font/space measurements.** `FontProbe`: `h(12)=16.344114`, `h(9)=12.258085`,
-   `h(15 bold)=20.430143`; `"Axiom of Choice"` 12 pt logical width `91.104675`;
-   screen-FRC vs. derived-world×zoom max delta `2.747e-3` px at zooms 0.25–4; painted ink
-   `90×10` px at zooms 0.25/0.5/1/2/4; ink/logical ≤ 1.0 with double centring except antialias
-   fringe ≤ 0.55 px.
-3. **Correction characterization.** `TierProbe` compiled with the real `HullGeometry` +
-   `HullIntersection`: pair translations `(20,0)`, `(−20,0)`, `(0,0)`; final
-   `(0,50,−50)`; A/B MST `(10,0)`, overlap 10, `siblingOverlap == true`; ±24 → `(0,44,−44)`;
+   `h(10)=13.619987`, `h(15 bold)=20.430143`; `"Axiom of Choice"` 12 pt logical width
+   `91.104675`; `getStringBounds` height equals `getLineMetrics("Ag").getHeight()` for 12/9/15
+   pt; screen-FRC vs. derived-world×zoom max delta `2.747e-3` px at zooms 0.25–4. `"Axioms"`
+   15 pt bold `55.065384`; `"Basic Definitions and Theorems"` 15 pt bold `235.291611`;
+   `"Basic Definitions and Theorems"` 10 pt `148.289871` (stand-in width).
+3. **Painted-ink measurement.** Instrumented renders of the pinned placements with
+   double-precision centring: maximum per-side overhang `0.7578` px (dense, "Power Set");
+   per-fixture maxima dense z=0.25 `0.4698`, dense z=0.5/1/2 `0.7578`, long z=1 `0.4793`,
+   long z=1 with stand-in `0.4416`. Bitmap checks: pairwise ink overlap 0 px and ink/disc
+   overlap 0 px for the §5.7 fixtures. Integer centring measures up to `1.5` px. Minimum
+   label–label rectangle gaps: dense z=0.25 `2.155886`, dense z=1 `1.655886`, dense z=2
+   `19.921654`, long z=1 `5.827943`, long z=1 with stand-in `5.655886` (all > 2·0.7578 for
+   the asserted §5.7 fixture set, whose minimum is `1.655886`).
+4. **Correction characterization.** A probe (`CorrectionProbe`) compiled with the real
+   `HullGeometry` + `HullIntersection`: ±30 pair translations `(20,0)`, `(−20,0)`, `(0,0)`;
+   final `(0,50,−50)`; recomputed A/B translation `(10,0)`, hull overlap 10,
+   `siblingOverlap == true`; ±24 translations `(8,0)`, `(−8,0)`, `(0,0)` → `(0,44,−44)`;
    ±1 → no-op.
-4. **Projection reference implementation.** `ProjectionProbe`/`PerfProbe`: solvable pair
-   `(0,0),(20,0)` → `(−1,0),(21,0)`, residual 0, 2 passes; red-phase pair (r=14, d=24) →
-   `(−5,0),(29,0)`, residual 0, 2 passes; S1/sandwich r8 20/40 → `m=(18,0)`, residual 1,
-   64 passes; S2/pinned-pinned r8 0/20/10 → `m=(42,0)`, residual 1, 2 passes; variant-B
-   (total-0.5) needs 52 passes for the solvable pair; dense12 (spacing 34) 1 pass residual 0;
-   long6 1 pass residual 0; instrumented perf p95: legal grid `5,130,482 ns`, random area-2000
-   `220,769,319 ns`, dense 64-pass cluster `411,584,311 ns`.
-5. **Placement fixture tables.** Instrumented copy of the committed generator
-   (`/tmp/nsspec/genprobe`): §5.4/§5.5 tables, histograms, mean `48.046026`, maxima
-   `77.894615`/`78.6565`, enclosure-variant counts, stickiness cases (pan preserved;
-   `Infinity` RIGHT→BELOW), minimum label gaps `1.6559`/`7.6559` px, and the inflation probe
-   showing 0.5–2.0 px obstacle margins change the dense histogram (therefore no margin is
-   pinned; containment is achieved by C14 instead).
-6. **Equilibrium.** 50-digit decimal Newton/bisection on `0.05·d³ − 1.2·d² − 28 = 0`:
-   `24.9029940668685734910019045934556374779294569050956460555884`; float 24.902994066868573;
-   overlap 3.0970059331314265, shortfall 9.0970059331314265.
-7. **Repository citations.** All `file:line` values in §2–§6 re-checked with `grep -n`/`sed`
+5. **Projection reference implementation.** `ProjectionProbe`/`PerfProbe` and an independent
+   Python re-implementation: solvable pair `(0,0),(20,0)` → `(−1,0),(21,0)`, residual 0,
+   2 passes; red-phase pair (r=14, d=24) → `(−5,0),(29,0)`, residual 0, 2 passes; S1 sandwich
+   order `a,b,m` → `m=(18,0)`, residual 1, 64 passes, order `b,a,m` → `m=(22,0)`; S2 order
+   `a,b,m` → `m=(42,0)`, residual 1, 2 passes, order `b,a,m` → `m=(−22,0)`; coincident pair
+   → `(−11,0),(11,0)`, residual 0, 3 passes; variant-B (total-0.5) needs 50 passes for the
+   solvable pair; dense12 (spacing 34) 1 pass residual 0; long6 1 pass residual 0;
+   instrumented perf p95: legal grid `5,130,482 ns`, random area-2000 `220,769,319 ns`,
+   dense 64-pass cluster `411,584,311 ns`.
+6. **Placement fixture tables.** Instrumented copy of the committed generator
+   (`/tmp/nsspec/Probe*.java`): §5.4/§5.5 tables and histograms under the pinned forced-label
+   restriction, mean `48.046026`, maxima `77.894615`/`78.656464`, zoom counts and per-zoom
+   placements of §5.9, stickiness cases (pan preserved; Infinity RIGHT retained at
+   `(79.877113,−1)`; Alpha re-placed BELOW and Beta retained after the invalidation move),
+   hover-only→forced (`Well-Ordering` → BELOW `(51,56.172057)`, `Comprehension` → hover-only),
+   per-slot support maxima (`138.704698`/`118.655013` dense z1/z2,
+   `143.545734`/`151.533443` long z1/z2), and the `fullTextSlotWasFree == false` predicate
+   for every truncated label.
+7. **Enclosure rule.** A probe compiled against the real `HullGeometry`/`LayoutPoint`:
+   canonical square polygon `(−50,−50),(50,−50),(50,50),(−50,50)`; interior anchor `(0,0)`;
+   arc anchor `(0,−38.784929)`; exterior anchor `(0,−64.215072)` with leader `(0,−50)`; the
+   120×120 placement area rejects every exterior candidate (emphatic terminal).
+8. **Repository citations.** All `file:line` values in §2–§6 re-checked with `grep -n`/`sed`
    against the integration worktree on the day of writing (see the table rows in §2.3 and §6).
