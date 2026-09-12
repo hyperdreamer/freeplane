@@ -447,7 +447,7 @@ pinned seam bodies, and the implementing lane confirms the same values through t
 |---|---|---|---|
 | post-green (compensated stroke, trimmed ends) | dense + long at 0.25/1/2/4, enclosure lane 1 at 1 | **0** in every cell | **0** in every cell |
 | compensation reverted (M2) | dense/long 0.25/1/2 → 0; **long z=4 → 9** (3 each for Transfinite / Ultrafilter / Kuratowski) | 0 at 0.25/1/2; **9 at z=4** | 0 (clause (a) does not fire) |
-| trim reverted (M1) | every leader-carrying label at 0.25/1/2/4 | nonzero in every cell (e.g. dense z=0.25: 28 for Axiom of Choice; dense z=1: 28–121 per label) | nonzero for every leader-carrying label, with one exception: the `BelOW_FAR` cell of `Ultrafilter Lemma and Boolean Pr…` at z=1 and z=2 is overlap-free (its stroke lands between glyphs). `Axiom Schema of Replacement a…` at z=1 still overlaps — do not treat it as exempt |
+| trim reverted (M1) | every leader-carrying label at 0.25/1/2/4 | nonzero in every cell (e.g. dense z=0.25: 28 for Axiom of Choice; dense z=1: 28–121 per label) | nonzero for every leader-carrying label, with one exception: the `BELOW_FAR` cell of `Ultrafilter Lemma and Boolean Pr…` at z=1 and z=2 is overlap-free (its stroke lands between glyphs). `Axiom Schema of Replacement a…` at z=1 still overlaps — do not treat it as exempt |
 
 The M2 zoom-4 rows are the measured basis of §5.5: `paintedPx = 7.000`, ink `3.500` px past the
 3 px clearance → 0.5 px of coverage inside `R` [M, committed probe `4.00 1.4 7.000 3.500 0.000 3 3.0`
@@ -938,8 +938,10 @@ shape:
   clause (the un-trimmed lane-0 leader is present again).
 - `keepsLeaderInkOutOfItsOwnGlyphInk` fails at **every** zoom: clause (b) `inside > 0` (dense
   z=0.25 `Axiom of Choice` = 28 in the mirror; dense z=1 28–121 per label) and clause (a) overlaps
-  fire for all leaders except the two long `BELOW_FAR` labels at z=1/2, where the un-trimmed stroke
-  lands between glyphs (the z=4 long leaders do overlap).
+  fire for all leaders except one: the `BELOW_FAR` cell of `Ultrafilter Lemma and Boolean Pr…` at z=1
+  and z=2 is overlap-free because its un-trimmed stroke lands between glyphs. The other long
+  `BELOW_FAR` label, `Axiom Schema of Replacement a…` at z=1, **does** overlap — do not treat it as
+  exempt, and the z=4 long leaders also overlap.
 - The four existing rim-calling tests of §5.2 fail at their first §9.1 assertion.
 - `placesEmphaticEnclosureLabelsExternallyInTheSecondLaneWithATrimmedLeader` fails on the `end` pin;
   the flipped `placesEmphaticEnclosureLabelsExternallyWithALeader` fails because its lane-0 leader is
