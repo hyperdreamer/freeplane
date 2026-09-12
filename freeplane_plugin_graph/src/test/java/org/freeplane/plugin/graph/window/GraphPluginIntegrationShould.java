@@ -454,6 +454,37 @@ public class GraphPluginIntegrationShould {
             .isEqualTo("Could not open the recent workspace: {0}");
     }
 
+    @Test
+    public void shipsTheGraphToolbarAffordanceResourceKeys() throws IOException {
+        Properties translations = properties(
+            "freeplane/src/viewer/resources/translations/Resources_en.properties");
+
+        assertThat(translations.getProperty("graph_workspace.tooltip.connect"))
+            .isEqualTo("Connect \u2014 create a cross-map relationship");
+        assertThat(translations.getProperty("graph_workspace.tooltip.settings")).isEqualTo("Graph settings");
+        assertThat(translations.getProperty("graph_workspace.tooltip.search")).isEqualTo("Search nodes and maps");
+        assertThat(translations.getProperty("graph_workspace.tool.select")).isEqualTo("Select");
+        assertThat(translations.getProperty("graph_workspace.tool.connect")).isEqualTo("Connect");
+        assertThat(translations.getProperty("graph_workspace.action.settings")).isEqualTo("Settings");
+    }
+
+    @Test
+    public void keepsTheToolbarSwitchGroupOwnedByToolSwitch() throws IOException {
+        String toolbar = read(
+            "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/WorkspaceToolbar.java");
+
+        assertThat(toolbar).doesNotContain("new ButtonGroup");
+    }
+
+    @Test
+    public void keepsTheToolbarSegmentStylingDependencyFree() throws IOException {
+        String toolbar = read(
+            "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/WorkspaceToolbar.java");
+
+        assertThat(toolbar).contains("putClientProperty(\"JButton.buttonType\", \"toolBarButton\")");
+        assertThat(toolbar).doesNotContain("com.formdev.flatlaf");
+    }
+
     private static ModeController configuredModeController() {
         ModeController modeController = mock(ModeController.class);
         MapController mapController = mock(MapController.class);
