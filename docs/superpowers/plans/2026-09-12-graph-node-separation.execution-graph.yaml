@@ -1,0 +1,429 @@
+schema_version: 1
+topic: graph-node-separation
+run_id: pm-run-20260912-012815-01038a52
+source_plan:
+  path: docs/superpowers/plans/2026-09-12-graph-node-separation.md
+  sha256: 8dddbd9cdbc38a65376474b514d369caa51a7d077b1b99b24112250ef591cb24
+  commit_oid: 898259f489e0f11c0af5115da9011650c65ca853
+  task_numbers:
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+  - 8
+  - 9
+  - 10
+  - 11
+lanes:
+- id: projection-layout
+  sequence: 1
+  task_ids:
+  - separation-task-1
+  - separation-task-2
+  - separation-task-3
+  - separation-task-4
+  exclusive_resources:
+  - gradle-daemon
+- id: screen-placement
+  sequence: 2
+  task_ids:
+  - separation-task-5
+  - separation-task-6
+  - separation-task-7
+  exclusive_resources:
+  - gradle-daemon
+- id: integration
+  sequence: 3
+  task_ids:
+  - separation-task-8
+  - separation-task-9
+  - separation-task-10
+  - separation-task-11
+  exclusive_resources:
+  - gradle-daemon
+tasks:
+- id: separation-task-1
+  plan_task: 1
+  lane: projection-layout
+  sequence: 1
+  depends_on: []
+  owns:
+  - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/NodeSeparationProjection.java
+  - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/NodeSeparationResult.java
+  - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/GraphStreamBoundaryShould.java
+  - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/NodeSeparationProjectionShould.java
+  exclusive_resources:
+  - gradle-daemon
+  interfaces:
+    produces:
+    - id: iface-task-1-surface
+      signature: '`public final class NodeSeparationProjection` with `public static final double MIN_GAP = 6.0`, package-private `static final int MAX_PASSES = 64`, `static final double RELAXATION = 0.5`, `static final double SPATIAL_CELL = 34.0`, and `public NodeSeparationResult project(GraphProjection projection, LayoutPositions positions, Set<ProjectedNodeKey> pinned)`; `public final class NodeSeparationResul...'
+      digest: 46aa1b952b68421a
+    consumes: []
+  validation:
+  - argv:
+    - gradle
+    - :freeplane_plugin_graph:test
+    - --tests
+    - org.freeplane.plugin.graph.layout.NodeSeparationProjectionShould
+    - --tests
+    - org.freeplane.plugin.graph.layout.GraphStreamBoundaryShould
+    - -PTestLoggingFull
+    expect_exit: 0
+- id: separation-task-2
+  plan_task: 2
+  lane: projection-layout
+  sequence: 2
+  depends_on:
+  - separation-task-1
+  owns:
+  - canvas/AccessibleGraphCanvasShould.java
+  - canvas/GraphCanvasPaintShould.java
+  - canvas/GraphInteractionControllerShould.java
+  - canvas/GraphSearchModelShould.java
+  - command/ContributorDeletionPlanShould.java
+  - control/GraphWorkspaceCommandAcceptanceShould.java
+  - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/control/GraphUpdateCoordinator.java
+  - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/control/LayoutSettleLoop.java
+  - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/LayoutFrame.java
+  - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/LayoutWorker.java
+  - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/control/GraphUpdateCoordinatorShould.java
+  - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/control/LayoutSettleLoopShould.java
+  - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/LayoutWorkerShould.java
+  - performance/PerformanceTripwiresShould.java
+  - smoke/GraphWorkspaceUiEvidence.java
+  - window/GraphWorkspaceWindowModelShould.java
+  - window/WorkspaceDialogsShould.java
+  exclusive_resources:
+  - gradle-daemon
+  interfaces:
+    produces:
+    - id: iface-task-2-surface
+      signature: '`LayoutFrame.UNVERIFIED = -1`; `LayoutFrame.of(long, LayoutPositions, boolean, int)`; `LayoutFrame.residualViolations()`; `LayoutFrame.verified()`; the `accept` order `MapTierCorrection -> NodeSeparationProjection -> PerceptualIdlePolicy.observe -> LayoutFrame`; a real residual on `LayoutWorker.accept`, `LayoutWorker.failedFrame`, `LayoutSettleLoop.failedFrame` and the initial empty frame; new ...'
+      digest: 4f5ba0acbf017c75
+    consumes:
+    - from_task: 1
+      id: iface-task-1-surface
+      digest: 46aa1b952b68421a
+  validation:
+  - argv:
+    - gradle
+    - :freeplane_plugin_graph:test
+    - --tests
+    - org.freeplane.plugin.graph.layout.*
+    - --tests
+    - org.freeplane.plugin.graph.control.*
+    - -PTestLoggingFull
+    expect_exit: 0
+- id: separation-task-3
+  plan_task: 3
+  lane: projection-layout
+  sequence: 3
+  depends_on:
+  - separation-task-1
+  - separation-task-2
+  owns:
+  - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/GraphStreamLayoutEngine.java
+  - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/TypedSpringBox.java
+  - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundarySeparationShould.java
+  - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/ReferenceRepulsionFixture.java
+  - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/TypedForcesShould.java
+  - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/projection/GroupOnlyProjectionShould.java
+  - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/projection/ProjectionDeterminismShould.java
+  - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/projection/StructuralProjectionShould.java
+  exclusive_resources:
+  - gradle-daemon
+  interfaces:
+    produces:
+    - id: iface-task-3-surface
+      signature: '`BoundarySizes.contentRingRadius(EnclosureHullKey)`, `BoundarySizes.discRadius(ProjectedNodeKey)`, relation rest length `radiusOf(first) + radiusOf(second) + MIN_GAP`, containment rest length `contentRingRadius(hullKey)`, seed ring radius `contentRingRadius(parentKey)`; deletion of `TypedSpringBox.REST_LENGTH`; re-recorded idle and churn expectations.'
+      digest: 1b7b8ea1f8ea2d95
+    consumes:
+    - from_task: 1
+      id: iface-task-1-surface
+      digest: 46aa1b952b68421a
+    - from_task: 2
+      id: iface-task-2-surface
+      digest: 4f5ba0acbf017c75
+  validation:
+  - argv:
+    - gradle
+    - :freeplane_plugin_graph:test
+    - -PTestLoggingFull
+    expect_exit: 0
+- id: separation-task-4
+  plan_task: 4
+  lane: projection-layout
+  sequence: 4
+  depends_on:
+  - separation-task-1
+  - separation-task-3
+  owns:
+  - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/MapTierCorrectionShould.java
+  exclusive_resources:
+  - gradle-daemon
+  interfaces:
+    produces:
+    - id: iface-task-4-surface
+      signature: "the test `MapTierCorrectionShould.separatesThreeHullsAtThePinnedThirtyUnitHalfExtent` covering spec \xA75.3 and design \xA78.2.4."
+      digest: 7e8412884b541d27
+    consumes:
+    - from_task: 1
+      id: iface-task-1-surface
+      digest: 46aa1b952b68421a
+    - from_task: 3
+      id: iface-task-3-surface
+      digest: 1b7b8ea1f8ea2d95
+  validation:
+  - argv:
+    - gradle
+    - :freeplane_plugin_graph:test
+    - --tests
+    - org.freeplane.plugin.graph.layout.MapTierCorrectionShould
+    - -PTestLoggingFull
+    expect_exit: 0
+- id: separation-task-5
+  plan_task: 5
+  lane: screen-placement
+  sequence: 1
+  depends_on: []
+  owns:
+  - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/LabelFonts.java
+  - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/LabelPlacementRequest.java
+  - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/PlacedLabel.java
+  - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/ScreenLabelPlacement.java
+  - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/ScreenLabelPlacementCache.java
+  - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/ScreenLabelPlacementShould.java
+  exclusive_resources:
+  - gradle-daemon
+  interfaces:
+    produces:
+    - id: iface-task-5-surface
+      signature: '`LabelPlacementRequest.of(GraphProjection, GraphGeometry, LayoutPositions, double zoom, double centerX, double centerY, Rectangle2D placementArea, Set<ProjectedEndpointKey> forced, RenderingLevel)` (G1/G2) with accessors `projection()`, `geometry()`, `positions()`, `zoom()`, `centerX()`, `centerY()`, `placementArea()`, `forced()`, `renderingLevel()`, package-private `screenX(double)`, `screenY(...'
+      digest: c1d9a2ff7945a458
+    consumes: []
+  validation:
+  - argv:
+    - gradle
+    - :freeplane_plugin_graph:test
+    - --tests
+    - org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould
+    - -PTestLoggingFull
+    expect_exit: 0
+- id: separation-task-6
+  plan_task: 6
+  lane: screen-placement
+  sequence: 2
+  depends_on:
+  - separation-task-5
+  owns:
+  - '.../ScreenLabelPlacementCache.java'
+  - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/ScreenLabelPlacement.java
+  - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/ScreenLabelPlacementShould.java
+  exclusive_resources:
+  - gradle-daemon
+  interfaces:
+    produces:
+    - id: iface-task-6-surface
+      signature: the tests `keepsPlacementsStickyAcrossAPan`, `retainsASlotForAOnePixelMove`, `invalidatesAStaleSlotAndReLadders`, `keepsPaintedInkSeparatedAcrossTheZoomMatrix`, `boundsEveryPlacedLabelByItsSlotForms`, `promotesAHoverOnlyLabelToForcedWithoutCollisions`, `reusesTheCachedPlacementUntilTheKeyChanges`; test helpers `placeShifted(...)`, `assertSamePlacement(...)`, `renderInk(...)`, `inkMask(...)`, `d...
+      digest: 5a3f1b8c443fad6b
+    consumes:
+    - from_task: 5
+      id: iface-task-5-surface
+      digest: c1d9a2ff7945a458
+  validation:
+  - argv:
+    - gradle
+    - :freeplane_plugin_graph:test
+    - --tests
+    - org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould
+    - -PTestLoggingFull
+    expect_exit: 0
+- id: separation-task-7
+  plan_task: 7
+  lane: screen-placement
+  sequence: 3
+  depends_on:
+  - separation-task-5
+  - separation-task-6
+  owns:
+  - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/ScreenLabelPlacement.java
+  - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/ScreenLabelPlacementShould.java
+  exclusive_resources:
+  - gradle-daemon
+  interfaces:
+    produces:
+    - id: iface-task-7-surface
+      signature: enclosure placement inside `ScreenLabelPlacement.place` (Tier A `INTERIOR`, Tier B `ARC`, Tier C `EXTERNAL` with the finite lane rule and the subtle budget, the emphatic anchor terminal, the subtle `HOVER_ONLY` terminal), the required-emphatic level filter, and the tests `placesEmphaticEnclosureLabelsInTheHullInterior`, `placesEmphaticEnclosureLabelsOnTheLeastPopulatedArc`, `placesEmphaticEnclo...
+      digest: 97feb975c0ed6cf8
+    consumes:
+    - from_task: 5
+      id: iface-task-5-surface
+      digest: c1d9a2ff7945a458
+    - from_task: 6
+      id: iface-task-6-surface
+      digest: 5a3f1b8c443fad6b
+  validation:
+  - argv:
+    - gradle
+    - :freeplane_plugin_graph:test
+    - --tests
+    - org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould
+    - -PTestLoggingFull
+    expect_exit: 0
+- id: separation-task-8
+  plan_task: 8
+  lane: integration
+  sequence: 1
+  depends_on:
+  - separation-task-4
+  - separation-task-5
+  - separation-task-6
+  - separation-task-7
+  owns:
+  - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/GraphCanvas.java
+  - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/GraphPainter.java
+  - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/GraphTheme.java
+  - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/GraphCanvasPaintShould.java
+  exclusive_resources:
+  - gradle-daemon
+  interfaces:
+    produces:
+    - id: iface-task-8-surface
+      signature: '`GraphPainter.paint(Graphics2D, CanvasState, GraphPaintState, GraphViewport, Dimension, GraphTheme, List<PlacedLabel>)` and the 9-argument overload with `showArrowheads`/`dimUnrelatedEnabled`; `GraphCanvas.labelsFor(CanvasState, Dimension, RenderingLevel)`; the deleted `GraphPainter.labelFont`/`shouldPaintLabel` and `GraphTheme.overTargetLabelFont()`/`labelFont(RenderingLevel)`; migrated `Graph...'
+      digest: d7b6ae412e5ac98e
+    consumes:
+    - from_task: 5
+      id: iface-task-5-surface
+      digest: c1d9a2ff7945a458
+    - from_task: 6
+      id: iface-task-6-surface
+      digest: 5a3f1b8c443fad6b
+    - from_task: 7
+      id: iface-task-7-surface
+      digest: 97feb975c0ed6cf8
+  validation:
+  - argv:
+    - gradle
+    - :freeplane_plugin_graph:test
+    - --tests
+    - org.freeplane.plugin.graph.canvas.*
+    - -PTestLoggingFull
+    expect_exit: 0
+- id: separation-task-9
+  plan_task: 9
+  lane: integration
+  sequence: 2
+  depends_on:
+  - separation-task-8
+  owns:
+  - canvas/AccessibleGraphCanvasShould.java
+  - canvas/GraphInteractionControllerShould.java
+  - canvas/GraphSearchModelShould.java
+  - command/ContributorDeletionPlanShould.java
+  - control/GraphWorkspaceCommandAcceptanceShould.java
+  - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/control/LayoutSettleLoop.java
+  - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/GraphGeometry.java
+  - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/LabelPlacement.java
+  - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/LabelPlacementEngine.java
+  - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/geometry/LabelPlacementShould.java
+  - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/integration/GraphWorkspaceModelAcceptanceShould.java
+  - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/GraphWorkspacePerformanceDiagnostic.java
+  - performance/PerformanceTripwiresShould.java
+  - smoke/GraphWorkspaceUiEvidence.java
+  - window/GraphWorkspaceWindowModelShould.java
+  - window/WorkspaceDialogsShould.java
+  exclusive_resources:
+  - gradle-daemon
+  interfaces:
+    produces:
+    - id: iface-task-9-surface
+      signature: "the deleted types and members listed in spec \xA76; a `GraphGeometry` without the label surface; `LayoutSettleLoop` without `LabelAssembler`; the migrated tests; the acceptance-5 grep evidence."
+      digest: b2d4926d557f4050
+    consumes:
+    - from_task: 8
+      id: iface-task-8-surface
+      digest: d7b6ae412e5ac98e
+  validation:
+  - argv:
+    - gradle
+    - :freeplane_plugin_graph:test
+    - -PTestLoggingFull
+    expect_exit: 0
+- id: separation-task-10
+  plan_task: 10
+  lane: integration
+  sequence: 3
+  depends_on:
+  - separation-task-2
+  - separation-task-3
+  - separation-task-8
+  - separation-task-9
+  owns:
+  - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/GraphWorkspacePerformanceDiagnostic.java
+  - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/PerformanceMeasurements.java
+  - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/PerformanceTripwiresShould.java
+  exclusive_resources:
+  - gradle-daemon
+  interfaces:
+    produces:
+    - id: iface-task-10-surface
+      signature: '`PerformanceMeasurements.Stage.SEPARATION("separation")` after `CORRECTION` and `Stage.PLACEMENT("placement")` replacing `LABEL("label")` at the same position; per-trigger `placement` rows in the diagnostic CSV (`warmupCount=20`, `measuredCount=100`, threshold `-1`); a recorded `separation` baseline row; the golden SHA-256 constants in `PerformanceTripwiresShould`.'
+      digest: 3819c8fa840c9535
+    consumes:
+    - from_task: 2
+      id: iface-task-2-surface
+      digest: 4f5ba0acbf017c75
+    - from_task: 3
+      id: iface-task-3-surface
+      digest: 1b7b8ea1f8ea2d95
+    - from_task: 8
+      id: iface-task-8-surface
+      digest: d7b6ae412e5ac98e
+    - from_task: 9
+      id: iface-task-9-surface
+      digest: b2d4926d557f4050
+  validation:
+  - argv:
+    - gradle
+    - :freeplane_plugin_graph:test
+    - --tests
+    - org.freeplane.plugin.graph.performance.*
+    - -PTestLoggingFull
+    expect_exit: 0
+- id: separation-task-11
+  plan_task: 11
+  lane: integration
+  sequence: 4
+  depends_on:
+  - separation-task-1
+  - separation-task-2
+  - separation-task-3
+  - separation-task-4
+  - separation-task-5
+  - separation-task-6
+  - separation-task-7
+  - separation-task-8
+  - separation-task-9
+  - separation-task-10
+  owns: []
+  exclusive_resources:
+  - gradle-daemon
+  interfaces:
+    produces:
+    - id: iface-task-11-surface
+      signature: "the acceptance report mapping specification \xA77.1-\xA77.8 to the exact test names and observed results, the module and repository suite counts, and the removal and persistence evidence."
+      digest: 68701574c0ee58aa
+    consumes:
+    - from_task: 10
+      id: iface-task-10-surface
+      digest: 3819c8fa840c9535
+  validation:
+  - argv:
+    - gradle
+    - test
+    - -PTestLoggingFull
+    expect_exit: 0

@@ -1,0 +1,68 @@
+digraph graph_node_separation_execution {
+  rankdir=TB;
+  node [shape=box, style=rounded];
+  subgraph cluster_lane_projection_layout {
+    label="lane projection-layout (sequence 1)";
+    "separation-task-1" [label="Task 1: Add the enforcing projection stage and its residual result\nAdvanced"];
+    "separation-task-2" [label="Task 2: Carry the residual through LayoutFrame and every publication path\nAdvanced"];
+    "separation-task-3" [label="Task 3: Align relationship and containment rest lengths with the disc invariant\nAdvanced"];
+    "separation-task-4" [label="Task 4: Pin the three-map correction characterization\nStandard"];
+  }
+  subgraph cluster_lane_screen_placement {
+    label="lane screen-placement (sequence 2)";
+    "separation-task-5" [label="Task 5: Build the screen-space placement core and degradation ladder\nAdvanced"];
+    "separation-task-6" [label="Task 6: Prove retention, invalidation and painted-ink separation\nAdvanced"];
+    "separation-task-7" [label="Task 7: Place enclosure labels through the pinned tier rule\nAdvanced"];
+  }
+  subgraph cluster_lane_integration {
+    label="lane integration (sequence 3)";
+    "separation-task-8" [label="Task 8: Rewrite the painter and wire placement into the paint path\nAdvanced"];
+    "separation-task-9" [label="Task 9: Delete the old label engine and migrate its removal surface\nAdvanced"];
+    "separation-task-10" [label="Task 10: Add the separation baseline, the placement stage and fixture golden hashes\nAdvanced"];
+    "separation-task-11" [label="Task 11: Run the acceptance sweep and close the verification contract\nAdvanced"];
+  }
+  "separation-task-1" -> "separation-task-2";
+  "separation-task-1" -> "separation-task-2" [style=dashed, label="iface-task-1-surface"];
+  "separation-task-1" -> "separation-task-3";
+  "separation-task-2" -> "separation-task-3";
+  "separation-task-1" -> "separation-task-3" [style=dashed, label="iface-task-1-surface"];
+  "separation-task-2" -> "separation-task-3" [style=dashed, label="iface-task-2-surface"];
+  "separation-task-1" -> "separation-task-4";
+  "separation-task-3" -> "separation-task-4";
+  "separation-task-1" -> "separation-task-4" [style=dashed, label="iface-task-1-surface"];
+  "separation-task-3" -> "separation-task-4" [style=dashed, label="iface-task-3-surface"];
+  "separation-task-5" -> "separation-task-6";
+  "separation-task-5" -> "separation-task-6" [style=dashed, label="iface-task-5-surface"];
+  "separation-task-5" -> "separation-task-7";
+  "separation-task-6" -> "separation-task-7";
+  "separation-task-5" -> "separation-task-7" [style=dashed, label="iface-task-5-surface"];
+  "separation-task-6" -> "separation-task-7" [style=dashed, label="iface-task-6-surface"];
+  "separation-task-4" -> "separation-task-8";
+  "separation-task-5" -> "separation-task-8";
+  "separation-task-6" -> "separation-task-8";
+  "separation-task-7" -> "separation-task-8";
+  "separation-task-5" -> "separation-task-8" [style=dashed, label="iface-task-5-surface"];
+  "separation-task-6" -> "separation-task-8" [style=dashed, label="iface-task-6-surface"];
+  "separation-task-7" -> "separation-task-8" [style=dashed, label="iface-task-7-surface"];
+  "separation-task-8" -> "separation-task-9";
+  "separation-task-8" -> "separation-task-9" [style=dashed, label="iface-task-8-surface"];
+  "separation-task-2" -> "separation-task-10";
+  "separation-task-3" -> "separation-task-10";
+  "separation-task-8" -> "separation-task-10";
+  "separation-task-9" -> "separation-task-10";
+  "separation-task-2" -> "separation-task-10" [style=dashed, label="iface-task-2-surface"];
+  "separation-task-3" -> "separation-task-10" [style=dashed, label="iface-task-3-surface"];
+  "separation-task-8" -> "separation-task-10" [style=dashed, label="iface-task-8-surface"];
+  "separation-task-9" -> "separation-task-10" [style=dashed, label="iface-task-9-surface"];
+  "separation-task-1" -> "separation-task-11";
+  "separation-task-2" -> "separation-task-11";
+  "separation-task-3" -> "separation-task-11";
+  "separation-task-4" -> "separation-task-11";
+  "separation-task-5" -> "separation-task-11";
+  "separation-task-6" -> "separation-task-11";
+  "separation-task-7" -> "separation-task-11";
+  "separation-task-8" -> "separation-task-11";
+  "separation-task-9" -> "separation-task-11";
+  "separation-task-10" -> "separation-task-11";
+  "separation-task-10" -> "separation-task-11" [style=dashed, label="iface-task-10-surface"];
+}
