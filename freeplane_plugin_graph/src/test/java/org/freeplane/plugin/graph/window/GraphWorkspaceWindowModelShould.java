@@ -527,6 +527,192 @@ public class GraphWorkspaceWindowModelShould {
     }
 
     @Test
+    public void resolvesTheToolbarAffordanceIconsThroughTheSharedRoutine() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        Icon selectIcon = icon(16, 16);
+        Icon connectIcon = icon(16, 16);
+        Icon settingsIcon = icon(16, 16);
+        Icon searchIcon = icon(16, 16);
+        fixture.stubIcon("/images/GraphSelect.svg?useAccentColor=true", selectIcon);
+        fixture.stubIcon("/images/GraphConnect.svg?useAccentColor=true", connectIcon);
+        fixture.stubIcon("/images/GraphSettings.svg?useAccentColor=true", settingsIcon);
+        fixture.stubIcon("/images/GraphSearch.svg?useAccentColor=true", searchIcon);
+        GraphWorkspaceWindowModel model = fixture.model();
+
+        assertThat(model.toolbar().selectButton().getIcon()).isSameAs(selectIcon);
+        assertThat(model.toolbar().selectButton().getText()).isNull();
+        assertThat(model.toolbar().selectButton().getToolTipText()).isEqualTo("graph_workspace.tool.select");
+        assertThat(model.toolbar().selectButton().getAccessibleContext().getAccessibleName())
+            .isEqualTo("graph_workspace.tool.select");
+        assertThat(model.toolbar().selectButton().getName()).isEqualTo("graph-workspace-select");
+        assertThat(model.toolbar().connectButton().getIcon()).isSameAs(connectIcon);
+        assertThat(model.toolbar().connectButton().getText()).isNull();
+        assertThat(model.toolbar().connectButton().getToolTipText())
+            .isEqualTo("graph_workspace.tooltip.connect");
+        assertThat(model.toolbar().connectButton().getAccessibleContext().getAccessibleName())
+            .isEqualTo("graph_workspace.tooltip.connect");
+        assertThat(model.toolbar().connectButton().getName()).isEqualTo("graph-workspace-connect");
+        assertThat(model.toolbar().settingsButton().getIcon()).isSameAs(settingsIcon);
+        assertThat(model.toolbar().settingsButton().getText()).isNull();
+        assertThat(model.toolbar().settingsButton().getToolTipText())
+            .isEqualTo("graph_workspace.tooltip.settings");
+        assertThat(model.toolbar().settingsButton().getAccessibleContext().getAccessibleName())
+            .isEqualTo("graph_workspace.tooltip.settings");
+        assertThat(model.toolbar().settingsButton().getName()).isEqualTo("graph-workspace-settings");
+        assertThat(model.toolbar().searchField().getToolTipText()).isEqualTo("graph_workspace.tooltip.search");
+        assertThat(model.toolbar().searchField().getAccessibleContext().getAccessibleName())
+            .isEqualTo("graph_workspace.tooltip.search");
+
+        verify(fixture.resourceController()).getOptionalIcon("/images/GraphSelect.svg?useAccentColor=true");
+        verify(fixture.resourceController()).getOptionalIcon("/images/GraphConnect.svg?useAccentColor=true");
+        verify(fixture.resourceController()).getOptionalIcon("/images/GraphSettings.svg?useAccentColor=true");
+        verify(fixture.resourceController()).getOptionalIcon("/images/GraphSearch.svg?useAccentColor=true");
+        model.close();
+    }
+
+    @Test
+    public void keepsToolbarAffordanceTextFallbackWhenIconsDoNotResolve() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
+        List<InteractionTool> tools = new ArrayList<InteractionTool>();
+        model.toolbar().setToolListener(tools::add);
+        int[] settingsClicks = new int[1];
+        model.toolbar().setSettingsAction(() -> settingsClicks[0]++);
+
+        assertThat(model.toolbar().selectButton().getText()).isEqualTo("graph_workspace.tool.select");
+        assertThat(model.toolbar().selectButton().getIcon()).isNull();
+        assertThat(model.toolbar().selectButton().getToolTipText()).isNull();
+        assertThat(model.toolbar().connectButton().getText()).isEqualTo("graph_workspace.tool.connect");
+        assertThat(model.toolbar().connectButton().getIcon()).isNull();
+        assertThat(model.toolbar().connectButton().getToolTipText()).isNull();
+        assertThat(model.toolbar().settingsButton().getText()).isEqualTo("graph_workspace.action.settings");
+        assertThat(model.toolbar().settingsButton().getIcon()).isNull();
+        assertThat(model.toolbar().settingsButton().getToolTipText()).isNull();
+
+        model.toolbar().selectButton().doClick();
+        model.toolbar().connectButton().doClick();
+        model.toolbar().settingsButton().doClick();
+        assertThat(tools).containsExactly(InteractionTool.SELECT, InteractionTool.CONNECT);
+        assertThat(settingsClicks[0]).isEqualTo(1);
+        model.close();
+    }
+
+    @Test
+    public void preservesToolbarEnablementInReadOnlySessions() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false,
+            WorkspaceSessionStatus.empty());
+        GraphWorkspaceWindowModel model = fixture.model();
+
+        assertThat(model.toolbar().selectButton().isEnabled()).isTrue();
+        assertThat(model.toolbar().connectButton().isEnabled()).isTrue();
+        assertThat(model.toolbar().settingsButton().isEnabled()).isTrue();
+        assertThat(model.toolbar().searchField().isEnabled()).isTrue();
+        assertThat(model.toolbar().directionComboBox().isEnabled()).isTrue();
+        assertThat(model.toolbar().undoButton().isEnabled()).isFalse();
+        assertThat(model.toolbar().redoButton().isEnabled()).isFalse();
+        assertThat(model.toolbar().zoomInButton().isEnabled()).isTrue();
+        assertThat(model.toolbar().zoomOutButton().isEnabled()).isTrue();
+        assertThat(model.toolbar().pinButton().isEnabled()).isFalse();
+        model.close();
+
+        Fixture readOnlyFixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), true,
+            WorkspaceSessionStatus.empty());
+        GraphWorkspaceWindowModel readOnlyModel = readOnlyFixture.model();
+
+        assertThat(readOnlyModel.toolbar().selectButton().isEnabled()).isTrue();
+        assertThat(readOnlyModel.toolbar().connectButton().isEnabled()).isFalse();
+        assertThat(readOnlyModel.toolbar().settingsButton().isEnabled()).isTrue();
+        assertThat(readOnlyModel.toolbar().searchField().isEnabled()).isTrue();
+        assertThat(readOnlyModel.toolbar().directionComboBox().isEnabled()).isFalse();
+        assertThat(readOnlyModel.toolbar().undoButton().isEnabled()).isFalse();
+        assertThat(readOnlyModel.toolbar().redoButton().isEnabled()).isFalse();
+        assertThat(readOnlyModel.toolbar().zoomInButton().isEnabled()).isTrue();
+        assertThat(readOnlyModel.toolbar().zoomOutButton().isEnabled()).isTrue();
+        assertThat(readOnlyModel.toolbar().pinButton().isEnabled()).isFalse();
+        readOnlyModel.close();
+    }
+
+    @Test
+    public void keepsTheSettingsGearSynchronizedWithThePanel() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
+
+        assertThat(model.settingsPanel().isVisible()).isTrue();
+        assertThat(model.toolbar().settingsButton().isSelected()).isTrue();
+
+        model.toolbar().settingsButton().doClick();
+        assertThat(model.settingsPanel().isVisible()).isFalse();
+        assertThat(model.toolbar().settingsButton().isSelected()).isFalse();
+
+        menuItem(model, "settings").doClick();
+        assertThat(model.settingsPanel().isVisible()).isTrue();
+        assertThat(model.toolbar().settingsButton().isSelected()).isTrue();
+
+        model.settingsPanel().setVisible(false);
+        assertThat(model.toolbar().settingsButton().isSelected()).isTrue();
+        model.toolbar().settingsButton().doClick();
+        assertThat(model.settingsPanel().isVisible()).isTrue();
+        assertThat(model.toolbar().settingsButton().isSelected()).isTrue();
+
+        model.setReadOnly(true);
+        assertThat(model.toolbar().settingsButton().isEnabled()).isTrue();
+        assertThat(model.toolbar().settingsButton().isSelected())
+            .isEqualTo(model.settingsPanel().isVisible());
+        model.close();
+    }
+
+    @Test
+    public void stylesOnlyTheSwitchSegmentsWhenIconsResolve() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        fixture.stubIcon("/images/GraphSelect.svg?useAccentColor=true", icon(16, 16));
+        fixture.stubIcon("/images/GraphConnect.svg?useAccentColor=true", icon(16, 16));
+        fixture.stubIcon("/images/GraphSettings.svg?useAccentColor=true", icon(16, 16));
+        fixture.stubIcon("/images/GraphSearch.svg?useAccentColor=true", icon(16, 16));
+        fixture.stubIcon("/images/undo.svg?useAccentColor=true", icon(16, 16));
+        fixture.stubIcon("/images/redo.svg?useAccentColor=true", icon(16, 16));
+        fixture.stubIcon("/images/ZoomIn24.svg?useAccentColor=true", icon(16, 16));
+        fixture.stubIcon("/images/ZoomOut24.svg?useAccentColor=true", icon(16, 16));
+        GraphWorkspaceWindowModel model = fixture.model();
+
+        assertThat(model.toolbar().selectButton().getClientProperty("JButton.buttonType"))
+            .isEqualTo("toolBarButton");
+        assertThat(model.toolbar().connectButton().getClientProperty("JButton.buttonType"))
+            .isEqualTo("toolBarButton");
+        assertThat(model.toolbar().settingsButton().getIcon()).isNotNull();
+        assertThat(model.toolbar().undoButton().getIcon()).isNotNull();
+        assertThat(model.toolbar().redoButton().getIcon()).isNotNull();
+        assertThat(model.toolbar().zoomInButton().getIcon()).isNotNull();
+        assertThat(model.toolbar().zoomOutButton().getIcon()).isNotNull();
+        assertThat(model.toolbar().settingsButton().getClientProperty("JButton.buttonType")).isNull();
+        assertThat(model.toolbar().undoButton().getClientProperty("JButton.buttonType")).isNull();
+        assertThat(model.toolbar().redoButton().getClientProperty("JButton.buttonType")).isNull();
+        assertThat(model.toolbar().zoomInButton().getClientProperty("JButton.buttonType")).isNull();
+        assertThat(model.toolbar().zoomOutButton().getClientProperty("JButton.buttonType")).isNull();
+        model.close();
+
+        Fixture fallbackFixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel fallbackModel = fallbackFixture.model();
+
+        assertThat(fallbackModel.toolbar().selectButton().getClientProperty("JButton.buttonType")).isNull();
+        assertThat(fallbackModel.toolbar().connectButton().getClientProperty("JButton.buttonType")).isNull();
+        fallbackModel.close();
+    }
+
+    @Test
     public void growsTheScrollableSurfaceForVisibleWorldGeometry() {
         Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
             emptyState(), Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);

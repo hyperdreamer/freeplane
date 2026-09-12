@@ -455,12 +455,7 @@ final class GraphWorkspaceWindowModel {
         interactionController = new GraphInteractionController(this::handleIntent);
         interactionController.install(canvas);
         toolbar.setInteractionController(interactionController);
-        toolbar.setSettingsAction(new Runnable() {
-            @Override
-            public void run() {
-                settingsPanel.setVisible(!settingsPanel.isVisible());
-            }
-        });
+        toolbar.setSettingsAction(this::toggleSettingsPanel);
         toolbar.setToolListener(tool -> interactionController.setTool(tool));
         toolbar.setDirectionListener(interactionController::setRelationshipDirection);
         toolbar.setSearchListener(this::search);
@@ -502,6 +497,7 @@ final class GraphWorkspaceWindowModel {
         sourceMapUndoAction.setEnabled(false);
         menuBar = createMenuBar();
         content = createContent();
+        toolbar.setSettingsVisible(settingsPanel.isVisible());
 
         currentState = binding.currentCanvasState();
         currentSessionStatus = binding.currentSessionStatus();
@@ -986,6 +982,11 @@ final class GraphWorkspaceWindowModel {
                 interactionController.uninstall();
             }
         });
+    }
+
+    private void toggleSettingsPanel() {
+        settingsPanel.setVisible(!settingsPanel.isVisible());
+        toolbar.setSettingsVisible(settingsPanel.isVisible());
     }
 
     private void setReadOnlyOnEdt(final boolean value) {
