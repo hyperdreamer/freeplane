@@ -1967,7 +1967,7 @@ public class GraphWorkspaceWindowModelShould {
 
     private static CanvasState emptyState() {
         return CanvasState.of(0L, GraphProjection.structure(0L, Collections.emptyList(), Collections.emptyList()),
-            LayoutFrame.of(0L, LayoutPositions.of(Collections.emptyMap(), Collections.emptyMap()), false),
+            LayoutFrame.of(0L, LayoutPositions.of(Collections.emptyMap(), Collections.emptyMap()), false, 0),
             GraphGeometry.of(Collections.emptyMap(), Collections.emptyMap()), OperationalStatus.LOADING);
     }
 
@@ -2257,7 +2257,7 @@ public class GraphWorkspaceWindowModelShould {
         GraphGeometry geometry = GraphGeometry.of(Collections.singletonMap(key, NodeGeometry.of(center, 10.0)),
             Collections.emptyMap());
         LayoutFrame layout = LayoutFrame.of(0L, LayoutPositions.of(
-            Collections.singletonMap(key, center), Collections.emptyMap()), false);
+            Collections.singletonMap(key, center), Collections.emptyMap()), false, 0);
         return CanvasState.of(0L, projection, layout, geometry, OperationalStatus.IDLE);
     }
 
@@ -2275,7 +2275,7 @@ public class GraphWorkspaceWindowModelShould {
         GraphGeometry geometry = GraphGeometry.of(Collections.singletonMap(key, NodeGeometry.of(center, 10.0)),
             Collections.emptyMap());
         LayoutFrame layout = LayoutFrame.of(0L, LayoutPositions.of(
-            Collections.singletonMap(key, center), Collections.emptyMap()), false);
+            Collections.singletonMap(key, center), Collections.emptyMap()), false, 0);
         return CanvasState.of(0L, projection, layout, geometry, OperationalStatus.IDLE);
     }
 
@@ -2287,7 +2287,7 @@ public class GraphWorkspaceWindowModelShould {
         GraphProjection projection = GraphProjection.structure(0L, Collections.singletonList(node),
             Collections.emptyList());
         return CanvasState.of(0L, projection,
-            LayoutFrame.of(0L, LayoutPositions.of(Collections.emptyMap(), Collections.emptyMap()), false),
+            LayoutFrame.of(0L, LayoutPositions.of(Collections.emptyMap(), Collections.emptyMap()), false, 0),
             GraphGeometry.of(Collections.emptyMap(), Collections.emptyMap()), OperationalStatus.IDLE);
     }
 
@@ -2302,7 +2302,7 @@ public class GraphWorkspaceWindowModelShould {
                 PinRecord.of(NodeReference.of(mapId, PersistedNodeId.of("selected")), 2.0, -3.0,
                     Collections.emptyList()), key)));
         return CanvasState.of(0L, projection,
-            LayoutFrame.of(0L, LayoutPositions.of(Collections.emptyMap(), Collections.emptyMap()), false),
+            LayoutFrame.of(0L, LayoutPositions.of(Collections.emptyMap(), Collections.emptyMap()), false, 0),
             GraphGeometry.of(Collections.emptyMap(), Collections.emptyMap()), OperationalStatus.IDLE);
     }
 
@@ -2326,11 +2326,10 @@ public class GraphWorkspaceWindowModelShould {
             Collections.singletonList(enclosure), Collections.emptyList(), Collections.emptyList(),
             Collections.emptyList());
         GraphGeometry geometry = GraphGeometry.of(Collections.singletonMap(key,
-            NodeGeometry.of(LayoutPoint.of(0.0, 0.0), 10.0)), Collections.singletonMap(hullKey, hull),
-            Collections.emptyMap());
+            NodeGeometry.of(LayoutPoint.of(0.0, 0.0), 10.0)), Collections.singletonMap(hullKey, hull));
         LayoutFrame layout = LayoutFrame.of(0L, LayoutPositions.of(
             Collections.singletonMap(key, LayoutPoint.of(0.0, 0.0)),
-            Collections.singletonMap(hullKey, anchor)), false);
+            Collections.singletonMap(hullKey, anchor)), false, 0);
         return CanvasState.of(0L, projection, layout, geometry, OperationalStatus.IDLE);
     }
 
@@ -2343,7 +2342,7 @@ public class GraphWorkspaceWindowModelShould {
         GraphGeometry geometry = GraphGeometry.of(Collections.singletonMap(key, NodeGeometry.of(center, 10.0)),
             Collections.emptyMap());
         LayoutFrame layout = LayoutFrame.of(0L, LayoutPositions.of(
-            Collections.singletonMap(key, center), Collections.emptyMap()), false);
+            Collections.singletonMap(key, center), Collections.emptyMap()), false, 0);
         return CanvasState.of(0L, projection, layout, geometry, OperationalStatus.IDLE);
     }
 
@@ -2374,7 +2373,7 @@ public class GraphWorkspaceWindowModelShould {
         positions.put(leftKey, leftCenter);
         positions.put(rightKey, rightCenter);
         return CanvasState.of(0L, projection,
-            LayoutFrame.of(0L, LayoutPositions.of(positions, Collections.emptyMap()), false),
+            LayoutFrame.of(0L, LayoutPositions.of(positions, Collections.emptyMap()), false, 0),
             GraphGeometry.of(geometry, Collections.emptyMap()), OperationalStatus.IDLE);
     }
 
@@ -2394,9 +2393,9 @@ public class GraphWorkspaceWindowModelShould {
             Collections.<ProjectedNode>emptyList(), Collections.singletonList(enclosure),
             Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
         GraphGeometry geometry = GraphGeometry.of(Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(),
-            Collections.singletonMap(hullKey, hull), Collections.emptyMap());
+            Collections.singletonMap(hullKey, hull));
         LayoutFrame layout = LayoutFrame.of(0L, LayoutPositions.of(Collections.emptyMap(),
-            Collections.singletonMap(hullKey, anchor)), false);
+            Collections.singletonMap(hullKey, anchor)), false, 0);
         return CanvasState.of(0L, projection, layout, geometry, OperationalStatus.IDLE);
     }
 

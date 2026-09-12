@@ -585,8 +585,7 @@ public class GraphInteractionControllerShould {
             new LinkedHashMap<ProjectedNodeKey, NodeGeometry>(fixture.state.geometry().nodes());
         nodes.remove(fixture.firstNodeKey);
         return replacementState(fixture.state, fixture.state.projection().nodes(),
-            fixture.state.projection().enclosures(), GraphGeometry.of(nodes, fixture.state.geometry().hulls(),
-                fixture.state.geometry().labels()));
+            fixture.state.projection().enclosures(), GraphGeometry.of(nodes, fixture.state.geometry().hulls()));
     }
 
     private static CanvasState stateWithSuppressedFirstEnclosure(final Fixture fixture) {
@@ -758,7 +757,7 @@ public class GraphInteractionControllerShould {
                 new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
             anchors.put(hullKey, layoutAnchor);
             final LayoutFrame frame = LayoutFrame.of(1L, LayoutPositions.of(nodePositions, anchors),
-                false);
+                false, 0);
             final CanvasState state = CanvasState.of(1L, projection, frame, geometry,
                 OperationalStatus.IDLE);
             final LayoutPoint firstAttachment = geometry.edgeAttachment(nodeEndpoint, layoutAnchor);
@@ -828,7 +827,7 @@ public class GraphInteractionControllerShould {
             positions.put(first, LayoutPoint.of(firstX, firstY));
             positions.put(second, LayoutPoint.of(secondX, secondY));
             final LayoutFrame frame = LayoutFrame.of(1L,
-                LayoutPositions.of(positions, Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false);
+                LayoutPositions.of(positions, Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false, 0);
             return new CoordinateSegmentFixture(CanvasState.of(1L, projection, frame, geometry,
                 OperationalStatus.IDLE), edgeKey);
         }
@@ -886,7 +885,7 @@ public class GraphInteractionControllerShould {
             positions.put(first, LayoutPoint.of(-8.0e307, 0.0));
             positions.put(second, LayoutPoint.of(8.0e307, 0.0));
             final LayoutFrame frame = LayoutFrame.of(1L,
-                LayoutPositions.of(positions, Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false);
+                LayoutPositions.of(positions, Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false, 0);
             return new ExtremeSpanFixture(CanvasState.of(1L, projection, frame, geometry,
                 OperationalStatus.IDLE), edgeKey);
         }
@@ -1027,7 +1026,7 @@ public class GraphInteractionControllerShould {
             anchors.put(secondHullKey, LayoutPoint.of(40.0, 0.0));
             anchors.put(suppressedHullKey, LayoutPoint.of(95.0, 0.0));
             final LayoutPositions positions = LayoutPositions.of(nodePoints(nodes), anchors);
-            final LayoutFrame frame = LayoutFrame.of(1L, positions, false);
+            final LayoutFrame frame = LayoutFrame.of(1L, positions, false, 0);
             final CanvasState state = CanvasState.of(1L, projection, frame, geometry,
                 OperationalStatus.IDLE);
             return new Fixture(state, first, second, firstEndpoint, secondEndpoint,

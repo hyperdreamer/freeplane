@@ -5,8 +5,12 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.geom.Point2D;
+import java.awt.geom.Rectangle2D;
 import java.lang.reflect.InvocationTargetException;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
@@ -24,6 +28,7 @@ import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.NodeGeometry;
 import org.freeplane.plugin.graph.projection.BoundaryTier;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
+import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
 import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.workspace.model.DisplaySettings.CanvasTheme;
@@ -37,6 +42,7 @@ public final class GraphCanvas extends JComponent implements Accessible {
 
     private final AdaptiveRenderingPolicy renderingPolicy = new AdaptiveRenderingPolicy();
     private final GraphPainter painter = new GraphPainter();
+    private final ScreenLabelPlacementCache labelPlacementCache = new ScreenLabelPlacementCache();
     private volatile CanvasState canvasState;
     private volatile GraphPaintState paintState;
     private volatile GraphViewport viewport;
@@ -361,8 +367,27 @@ public final class GraphCanvas extends JComponent implements Accessible {
         final CanvasState state = canvasState;
         final int nodeCount = state == null ? 0 : state.projection().projectedNodeCount();
         final int edgeCount = state == null ? 0 : state.projection().edges().size();
-        painter.paint((Graphics2D) graphics, state, paintState, viewport, size, theme,
-            renderingPolicy.forCounts(nodeCount, edgeCount), showArrowheads, dimUnrelated);
+        final RenderingLevel level = renderingPolicy.forCounts(nodeCount, edgeCount);
+        final List<PlacedLabel> labels = state == null
+            ? Collections.<PlacedLabel>emptyList() : labelsFor(state, size, level);
+        painter.paint((Graphics2D) graphics, state, paintState, viewport, size, theme, labels,
+            showArrowheads, dimUnrelated);
+    }
+
+    private List<PlacedLabel> labelsFor(final CanvasState state, final Dimension size,
+            final RenderingLevel level) {
+        final Set<ProjectedEndpointKey> forced = new LinkedHashSet<ProjectedEndpointKey>();
+        if (paintState.selection().isPresent()) {
+            forced.add(paintState.selection().get());
+        }
+        if (paintState.hover().isPresent()) {
+            forced.add(paintState.hover().get());
+        }
+        forced.addAll(paintState.searchMatches());
+        final LabelPlacementRequest request = LabelPlacementRequest.of(state.projection(), state.geometry(),
+            state.layout().positions(), viewport.zoom(), viewport.centerX(), viewport.centerY(),
+            new Rectangle2D.Double(0.0, 0.0, size.width, size.height), forced, level);
+        return labelPlacementCache.place(request, LabelFonts.from(theme));
     }
 
     private Bounds visibleBounds(final CanvasState state) {

@@ -51,6 +51,7 @@ public class TypedForcesShould {
     private static final double BOUNDARY_PADDING = 8.0;
     private static final double SIBLING_GAP = 8.0;
     private static final double FRAME_CLEARANCE = 16.0;
+    private static final int TWO_MAP_FIRST_IDLE_STEP = 45;
 
     private static final WorkspaceId WORKSPACE_ONE =
         WorkspaceId.of("00000000-0000-0000-0000-000000000111");
@@ -396,7 +397,7 @@ public class TypedForcesShould {
                 }
             }
             assertThat(firstIdle).isNotNull();
-            assertThat(firstIdleStep).isLessThanOrEqualTo(2000);
+            assertThat(firstIdleStep).isEqualTo(TWO_MAP_FIRST_IDLE_STEP);
             for (int step = 0; step < 100; step++) {
                 LayoutFrame frame = await(worker.step());
                 assertThat(frame.idle().rms()).isLessThanOrEqualTo(0.05);

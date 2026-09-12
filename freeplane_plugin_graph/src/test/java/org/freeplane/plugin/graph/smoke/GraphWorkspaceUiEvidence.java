@@ -279,7 +279,7 @@ public final class GraphWorkspaceUiEvidence {
         positions.put(FIRST_KEY, firstPoint);
         positions.put(SECOND_KEY, secondPoint);
         return CanvasState.of(7L, projection,
-            LayoutFrame.of(0L, LayoutPositions.of(positions, Collections.emptyMap()), false),
+            LayoutFrame.of(0L, LayoutPositions.of(positions, Collections.emptyMap()), false, 0),
             GraphGeometry.of(geometry, Collections.emptyMap()), OperationalStatus.IDLE);
     }
 

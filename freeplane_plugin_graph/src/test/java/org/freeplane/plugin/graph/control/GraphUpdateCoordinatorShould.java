@@ -521,6 +521,22 @@ public class GraphUpdateCoordinatorShould {
     }
 
     @Test
+    public void loadsAnEmptyInitialFrameWithAZeroResidual() {
+        ImmediateEdt edt = new ImmediateEdt();
+        GraphUpdateCoordinator coordinator = coordinator(new TestPipeline(), unusedBatcher(edt),
+            new LayoutSettleLoop(WORKSPACE, new ImmediateStepper(), new GraphGeometryEngine(), edt), edt);
+        try {
+            CanvasState state = coordinator.currentState();
+            assertThat(state.layout().failed()).isFalse();
+            assertThat(state.layout().verified()).isTrue();
+            assertThat(state.layout().residualViolations()).isZero();
+        }
+        finally {
+            coordinator.close();
+        }
+    }
+
+    @Test
     public void retainsFailedStateAndSuppressesDelayedCanvasFromAnOlderAcceptedGeneration() {
         QueuedEdt edt = new QueuedEdt();
         HeldStepper stepper = new HeldStepper();
@@ -538,6 +554,7 @@ public class GraphUpdateCoordinatorShould {
             coordinator.addCanvasStateListener(callbacks::add);
             coordinator.acceptBatch(batch(1L));
             stepper.awaitSubmission();
+            final CanvasState expected = coordinator.currentState();
 
             coordinator.acceptBatch(batch(2L));
             edt.runQueued();
@@ -545,6 +562,9 @@ public class GraphUpdateCoordinatorShould {
             assertThat(failed.status()).isEqualTo(OperationalStatus.FAILED);
             assertThat(failed.generation()).isEqualTo(1L);
             assertThat(failed.projection()).isSameAs(coordinator.currentProjection());
+            assertThat(failed.layout().verified()).isTrue();
+            assertThat(failed.layout().residualViolations())
+                .isEqualTo(expected.layout().residualViolations());
             callbacks.clear();
 
             stepper.release(1L);
@@ -1171,7 +1191,7 @@ public class GraphUpdateCoordinatorShould {
 
     private static LayoutFrame idleFrame(final long index) {
         return LayoutFrame.withDiagnostics(LayoutFrame.of(index,
-            LayoutPositions.of(Collections.emptyMap(), Collections.emptyMap()), false),
+            LayoutPositions.of(Collections.emptyMap(), Collections.emptyMap()), false, 0),
             Collections.emptyList(), new PerceptualIdlePolicy.IdleMeasurement(0.0, 0.0, 8, true));
     }
 
@@ -1581,7 +1601,7 @@ public class GraphUpdateCoordinatorShould {
             anchorIndex++;
         }
         return LayoutFrame.withDiagnostics(LayoutFrame.of(generation,
-            LayoutPositions.of(nodes, anchors), false), Collections.emptyList(),
+            LayoutPositions.of(nodes, anchors), false, 0), Collections.emptyList(),
             new PerceptualIdlePolicy.IdleMeasurement(0.0, 0.0, 8, true));
     }
 
@@ -1623,7 +1643,7 @@ public class GraphUpdateCoordinatorShould {
 
         private static LayoutFrame frame(final long generation) {
             return LayoutFrame.withDiagnostics(LayoutFrame.of(generation,
-                LayoutPositions.of(Collections.emptyMap(), Collections.emptyMap()), false),
+                LayoutPositions.of(Collections.emptyMap(), Collections.emptyMap()), false, 0),
                 Collections.emptyList(), new PerceptualIdlePolicy.IdleMeasurement(0.0, 0.0, 8, true));
         }
     }

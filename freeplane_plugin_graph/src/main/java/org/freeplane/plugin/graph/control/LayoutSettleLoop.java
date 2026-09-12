@@ -5,9 +5,11 @@ import java.awt.font.FontRenderContext;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
@@ -32,8 +34,11 @@ import org.freeplane.plugin.graph.layout.LayoutConflict;
 import org.freeplane.plugin.graph.layout.LayoutFrame;
 import org.freeplane.plugin.graph.layout.LayoutRequest;
 import org.freeplane.plugin.graph.layout.LayoutWorker;
+import org.freeplane.plugin.graph.layout.NodeSeparationProjection;
+import org.freeplane.plugin.graph.layout.NodeSeparationResult;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.GraphProjection;
+import org.freeplane.plugin.graph.projection.PinProjection;
 import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
@@ -54,7 +59,6 @@ public final class LayoutSettleLoop implements AutoCloseable {
     private final GraphGeometryEngine geometryEngine;
     private final GeometryTextMetrics metrics;
     private final EdtExecutor edt;
-    private final LabelAssembler labels;
     private final LifecycleDispatcher lifecycle;
     private final Runnable afterRestartRecoveryClaim;
 
@@ -109,7 +113,6 @@ public final class LayoutSettleLoop implements AutoCloseable {
         this.lifecycle = Objects.requireNonNull(lifecycle, "lifecycle");
         this.afterRestartRecoveryClaim = Objects.requireNonNull(afterRestartRecoveryClaim,
             "afterRestartRecoveryClaim");
-        this.labels = new LabelAssembler();
     }
 
     public CompletionStage<Void> start(final AcceptedBatch batch, final GraphProjection projection,
@@ -540,8 +543,8 @@ public final class LayoutSettleLoop implements AutoCloseable {
             return;
         }
         try {
-            final GraphGeometry geometry = labels.place(run.projection,
-                geometryEngine.computeHulls(run.projection, frame.positions(), metrics), metrics);
+            final GraphGeometry geometry =
+                geometryEngine.computeHulls(run.projection, frame.positions(), metrics);
             final OperationalStatus status = isEmpty(run.projection)
                 ? OperationalStatus.EMPTY
                 : frame.idle().idle() ? OperationalStatus.IDLE : OperationalStatus.SETTLING;
@@ -718,8 +721,8 @@ public final class LayoutSettleLoop implements AutoCloseable {
         }
         final LayoutFrame failed = failedFrame(run, source);
         try {
-            final GraphGeometry geometry = labels.place(run.projection,
-                geometryEngine.computeHulls(run.projection, failed.positions(), metrics), metrics);
+            final GraphGeometry geometry =
+                geometryEngine.computeHulls(run.projection, failed.positions(), metrics);
             final CanvasState state = CanvasState.of(run.batch.generation(), run.projection, failed, geometry,
                 OperationalStatus.FAILED);
             publish(run, state, true);
@@ -738,13 +741,35 @@ public final class LayoutSettleLoop implements AutoCloseable {
             // A failed worker may not have a readable retained frame.
         }
         final boolean retainedUsable = retained != null && covers(run.projection, retained.positions());
-        final LayoutPositions positions = retainedUsable ? retained.positions() : fallbackPositions(run.projection);
+        final LayoutPositions positions;
+        final int residual;
+        if (retainedUsable) {
+            positions = retained.positions();
+            residual = retained.residualViolations();
+        }
+        else {
+            final NodeSeparationResult separation = new NodeSeparationProjection().project(run.projection,
+                fallbackPositions(run.projection), pinnedNodes(run.request.pins()));
+            positions = separation.positions();
+            residual = separation.residualViolations();
+        }
         final long index = source != null ? source.stepIndex() : retained == null ? 0L : retained.stepIndex();
         if (retained == null) {
-            return LayoutFrame.of(index, positions, true);
+            return LayoutFrame.of(index, positions, true, residual);
         }
         final List<LayoutConflict> conflicts = retained.conflicts();
-        return LayoutFrame.withDiagnostics(LayoutFrame.of(index, positions, true), conflicts, retained.idle());
+        return LayoutFrame.withDiagnostics(LayoutFrame.of(index, positions, true, residual),
+            conflicts, retained.idle());
+    }
+
+    private static Set<ProjectedNodeKey> pinnedNodes(final List<PinProjection> pins) {
+        final Set<ProjectedNodeKey> pinned = new LinkedHashSet<ProjectedNodeKey>();
+        for (final PinProjection pin : pins) {
+            if (pin.active() && pin.projectedNode().isPresent()) {
+                pinned.add(pin.projectedNode().get());
+            }
+        }
+        return pinned;
     }
 
     private void closeWorker(final CompletableFuture<Void> closeFuture) {
@@ -977,16 +1002,6 @@ public final class LayoutSettleLoop implements AutoCloseable {
         }
         LayoutFrame lastValidFrame();
         void close();
-    }
-
-    private static final class LabelAssembler {
-        private final org.freeplane.plugin.graph.geometry.LabelPlacementEngine engine =
-            new org.freeplane.plugin.graph.geometry.LabelPlacementEngine();
-
-        private GraphGeometry place(final GraphProjection projection, final GraphGeometry geometry,
-                final GeometryTextMetrics metrics) {
-            return engine.place(projection, geometry, metrics);
-        }
     }
 
     private static final class Run {
