@@ -1168,6 +1168,29 @@ traceability; **no open point remains** (O4 is resolved by the user default).
   value depends on the relative order of forced labels); the cache key keeps set equality
   because the order is derived deterministically from the set (§2.7 step 3, §2.10).
 
+## Appendix B — Planning-time corrigenda (no design change)
+
+The implementation planner found seven places where this specification was not self-contained:
+each was resolved deterministically and recorded in the plan's Global Constraints, which are
+injected verbatim into every implementer brief. No requirement, invariant, constant or fixture
+value changes; these are interface completions an implementer would otherwise have had to invent.
+
+| # | Gap | Resolution (plan Global Constraints) |
+|---|---|---|
+| G1 | `LabelPlacementRequest` carries no viewport centre although the world-to-screen mapping needs one | append `double centerX, double centerY` |
+| G2 | the cache keys on `LayoutPositions` identity and the label order follows its iteration order, but the request did not carry the positions | append `LayoutPositions positions` |
+| G3 | `rung()` and the terminal `Mode` are defined only for the node ladder | pin `FULL_NEAR`/`HOVER_ONLY` for enclosure labels and `Mode.INTERIOR` for the emphatic anchor terminal |
+| G4 | no anchor is defined for a hidden (`HOVER_ONLY`) node label, yet the API requires a finite anchor and size | pin the `ABOVE` base slot |
+| G5 | the enclosure rule mixes world-space hull geometry with screen-pixel label heights | run the rule on the screen-mapped hull polygon without mutating the hull |
+| G6 | "full text" is ambiguous between `displayText()` and `fullText()` | pin `displayText()` |
+| G7 | C7 requires a recorded projection baseline but names no performance stage | add `SEPARATION("separation")` after `CORRECTION` |
+
+Two coverage notes: the §5.8 finite-lane candidate counts are asserted through the committed
+oracle only, because the pinned `PlacedLabel` API exposes no candidate counter, and the unit tests
+guard termination with a timeout; and the §2.3 `GraphUpdateCoordinator` republish row is covered by
+an added assertion on the existing failure test rather than a code change. C7/C15 thresholds remain
+deliberately unpinned as recorded in §8.
+
 ## Appendix A — Verification log
 
 Environment: `~/.sdkman/candidates/java/21.0.8-zulu` (Java 21.0.8, Linux, 22 cores),
