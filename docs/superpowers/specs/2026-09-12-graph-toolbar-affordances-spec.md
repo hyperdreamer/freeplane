@@ -536,11 +536,11 @@ Gear selected state (`isSelected()`):
 | # | Situation | Required observable | Proven by |
 | --- | --- | --- | --- |
 | E1 | Icon asset missing/unresolvable (Select, Connect, Settings) | `getIcon() == null`; `getText()` is the label-key value (never the long tooltip key); `getToolTipText() == null`; accessible name unset; `doClick()` still fires the tool/settings listener. No control is blank. | test 3 |
-| E2 | Search asset missing | No stub-colour pixels; the prompt is still painted at `getInsets().left`; the field still accepts text. | test 5 (no-icon variant) |
+| E2 | Search asset missing | No stub-colour pixels; the prompt is still painted at `getInsets().left`; the field still accepts text. | test 5 (no-icon variant); `paintsTheSearchPromptWithoutAMagnifier` (Amendment 1, F-14) |
 | E3 | Prompt and magnifier both unavailable (null/empty prompt, null icon) | The field paints nothing extra; `getText()` still tracks edits; no exception. | tests 4, 5 |
 | E4 | Field empty and focused | Prompt pixels (`getDisabledTextColor()`) == 0; magnifier stub pixels > 0; glyph x/y unchanged. | test 5 (focus case, non-headless) |
 | E5 | Field has text | Magnifier stub pixels > 0; prompt pixels == 0; first text pixel x >= glyph x + icon width (text begins right of the glyph). | test 5 |
-| E6 | Read-only session | Connect disabled; Select and gear enabled; `gear.isSelected() == settingsPanel.isVisible()`; Connect glyph uses the LaF's disabled treatment (real-app evidence). | tests 6, 7; §7.5 |
+| E6 | Read-only session | Connect disabled; Select and gear enabled; `gear.isSelected() == settingsPanel.isVisible()`; the disabled glyph is dimmed by the explicit disabled icon (Amendment 1, F-10), not by the Look-and-Feel. | tests 6, 7; `dimsDisabledToolbarGlyphs`; §7.5 |
 | E7 | Panel hidden/shown programmatically before the action runs | The action derives the new value from `settingsPanel.isVisible()`, so gear and panel cannot diverge. | test 7 |
 | E8 | Unscaled (default) margin | Glyph x == `getInsets().left - margin.left` == the border lead; typed text starts at `getInsets().left` == glyph x + iconWidth + `GAP`. | test 5 |
 | E9 | LaF that scales the content margin (FlatLaf `flatlaf.uiScale` / font-derived scale) | Non-overlap still holds exactly (glyph right edge stays `GAP` left of the text origin); the glyph may sit a few pixels inside its reserved slot. Reviewed in the HiDPI real-app check, not unit-pinned (the slot width is LaF state the field does not own). | §7.5 |
@@ -879,8 +879,10 @@ completion report. Cover:
 Falsifier: any check that shows a wrong/unreadable glyph, no accent adaptation
 in light or dark, a clipped magnifier, overlapping glyph/text at HiDPI, a
 visibly undimmed disabled Connect glyph, or a gear state that does not match the
-panel is a review blocker. In particular, if the LaF does not dim the disabled
-Connect glyph, the design is amended rather than shipped silently (design §9).
+panel is a review blocker. The parent lane's run of this check found the
+disabled Connect glyph undimmed; the user chose to fix it, so the expectation is
+now the explicit disabled icon (Amendment 1, F-10) and the `flatlaf.uiScale=2`
+prompt clipping is the accepted residual F-11.
 
 ## 8. Design questions
 
@@ -952,3 +954,29 @@ Cross-task constants fixed by this specification:
 | Icon lookup strings | four `/images/Graph*.svg?useAccentColor=true` paths (§4.2) |
 | Resource keys | §4.1, including the new `graph_workspace.tooltip.connect` with `\u2014` |
 | Row-width evidence file | `build/graph-ui-evidence/row-width.txt` (declared output), `label=<int>` lines |
+
+## Amendment 1 — 2026-09-12, after the parent lane's final frontier review
+
+This specification is amended by the parent lane's final review findings; the
+remediation plan implements the two in-lane ones.
+
+- **E6 (F-10, Important):** the read-only disabled Connect glyph is no longer
+  expected to rely on the Look-and-Feel. `WorkspaceToolbar.configureIcon(...)`
+  installs a disabled icon derived from the same icon by alpha reduction
+  (`DISABLED_ICON_ALPHA = 0.45f`) for every icon-only control it builds, and
+  `GraphWorkspaceWindowModelShould.dimsDisabledToolbarGlyphs` pins a non-null,
+  distinct, measurably dimmer disabled icon for the Select and Connect toggles.
+  The enabled icon, control names, tooltips, accessible names and `configure(...)`
+  behaviour are unchanged.
+- **E2 (F-14, Minor):** the no-icon prompt paint variant is pinned by
+  `GraphWorkspaceWindowModelShould.paintsTheSearchPromptWithoutAMagnifier`, so the
+  fallback path (prompt painted without a magnifier) is no longer correct by
+  inspection only.
+- **F-11 (Minor, accepted residual):** at `flatlaf.uiScale=2` the prompt's lower
+  half clips because the height rule `max(26, iconHeight + margin.top + margin.bottom)`
+  scales the glyph but not the font; E9/E10 as written still hold. Freeplane forces
+  `sun.java2d.uiScale=1` on Linux; recorded, not fixed.
+- **F-12 (Minor, plan text):** corrected counts are 910 suite / 13
+  `GraphPluginIntegrationShould` before this plan, and 912 / 13 after it.
+- **F-13 (Minor, out of lane):** the OSGi smoke's `loadClass` assertions can be
+  satisfied by the harness classpath (pre-existing); follow-up outside this feature.

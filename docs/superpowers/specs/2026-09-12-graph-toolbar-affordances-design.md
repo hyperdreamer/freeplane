@@ -346,7 +346,7 @@ resolve through the same resource path
 | Field focused while empty | Prompt hidden, magnifier stays; typing shows text; clearing text re-shows the prompt once focus leaves. |
 | Field has text | Magnifier stays painted; prompt absent; typed text begins at the content margin, i.e. right of the glyph (R7). |
 | L&F font or `toolbar_icon_height` large enough to exceed the 42 px toolbar row | Both the field's width and its height follow the measurement (R7, R15), so the field itself does not clip; the residual is the row height alone — the pre-existing limit recorded in §9. |
-| Read-only session | Select/Connect/Settings enablement exactly as today; the gear stays enabled and still reflects panel visibility. Connect's glyph is painted in the LaF's disabled treatment — the real-app read-only check (§10 item 5) is the evidence for its legibility. |
+| Read-only session | Select/Connect/Settings enablement exactly as today; the gear stays enabled and still reflects panel visibility. Connect's glyph is dimmed by the explicit disabled icon added in remediation task 1 (see Amendment 1), because the Look-and-Feel leaves custom SVG icons unchanged when a button is disabled — the real-app read-only check (§10 item 5) is the evidence. |
 | Settings panel toggled from the `View` menu | It calls `settingsButton().doClick()`, i.e. the same action, so the gear's state follows (R9). |
 | Panel made visible/hidden by code before the action runs | The action derives the new value from `settingsPanel.isVisible()`, so gear and panel cannot diverge (R9). |
 
@@ -475,7 +475,7 @@ Evidence and integration:
 | Gear `JToggleButton` churn breaks the accessor's callers | Accessor type widened to `AbstractButton`; its only callers use `setEnabled`/`doClick`; the test at `GraphWorkspaceWindowModelShould.java:941` keeps compiling. |
 | Gear/panel divergence at startup or after programmatic panel changes | Construction sync plus panel-derived action (R9), pinned by test 7. |
 | Search field grows by the prompt's width | Width rule is explicit (§6.2), the row width is measured and recorded, and the three removed labels outweigh it at default metrics. |
-| Disabled Connect glyph may look like the enabled one | No assumption made: the real-app read-only check (§10 item 5) is the evidence, and if the LaF does not dim the icon, the design is amended rather than silently shipped. |
+| Disabled Connect glyph may look like the enabled one | The parent lane's real-app check showed the Look-and-Feel does not dim custom SVG icons, so the design is amended (Amendment 1) *and* the behaviour is fixed: `configureIcon` now sets a derived disabled icon, pinned by `GraphWorkspaceWindowModelShould.dimsDisabledToolbarGlyphs`. |
 | A Look-and-Feel that does not know the client property shows two adjacent plain toggles instead of the grouped treatment | Accepted minimum, decided with the user (option A, R16): the exclusivity is still visible through the selected segment, and no custom painting is introduced to compensate. The bundled FlatLaf, which the application uses, honours it. |
 | Row height still clips at large `toolbar_icon_height` | Pre-existing and explicitly out of scope; the residual is recorded rather than silently inherited. Distinct from the field's own sizing, which follows the glyph (R7). |
 | A Look-and-Feel that scales the content margin (FlatLaf with `flatlaf.uiScale` or a font-derived scale factor) widens the reserved glyph slot beyond `iconWidth + GAP`, so the glyph sits a few pixels inside the slot instead of flush at its leading edge | Non-overlap still holds exactly — the glyph's right edge stays `GAP` left of the text origin — and the default configuration (Metal's unscaled margin, Freeplane's `sun.java2d.uiScale=1` on Linux) is exact. The scaled case is reviewed in §10 item 5 and pinned by the HiDPI check rather than by a unit assertion, because the width of the slot is Look-and-Feel state the field does not own. |
@@ -499,3 +499,33 @@ Evidence and integration:
    appearance, search prompt show/hide and dimming behaviour, gear open/close
    from both the button and the `View` menu, and the switch's state across a
    read-only transition.
+
+## Amendment 1 — 2026-09-12, after the parent lane's final frontier review
+
+The parent lane's final review (`report-final-review.md`: SPEC FAIL, QUALITY
+CHANGES_REQUESTED) produced five residuals. The user chose to fix the load-bearing
+one rather than accept it.
+
+- **F-10 (Important, load-bearing) — fixed, not accepted.** In read-only sessions the
+  disabled Connect glyph was not visibly dimmed: `configureIcon` set only the enabled
+  icon, and the SVG pipeline returns non-`ImageIcon` instances that the Look-and-Feel
+  leaves unchanged when a button is disabled (pixel-identical glyphs and background
+  between read-only and writable crops). The design's §7 read-only row and §9 risk row
+  are superseded: `WorkspaceToolbar.configureIcon(...)` now also installs a disabled
+  icon derived from the same icon by alpha reduction, applied to every icon-only
+  control it builds, and pinned by
+  `GraphWorkspaceWindowModelShould.dimsDisabledToolbarGlyphs`. The §10 real-app
+  falsifier now expects a visibly dimmed glyph.
+- **F-11 (Minor, accepted residual).** At `flatlaf.uiScale=2` the search prompt's
+  lower half clips, because the pinned height rule scales the glyph but not the font.
+  Freeplane forces `sun.java2d.uiScale=1` on Linux, so the residual is recorded here
+  and re-checked in the real-application run rather than fixed.
+- **F-12 (Minor, plan-text defect).** The parent plan states 909 suite / 12
+  `GraphPluginIntegrationShould` tests; the actual counts are 910 / 13 because its own
+  task 4 prescribes three guards. More verification, nothing weakened; the parent plan
+  is left byte-identical and the remediation plan carries the corrected counts.
+- **F-13 (Minor, out of lane).** The OSGi smoke's `loadClass` assertions can be
+  satisfied by the harness classpath, the same shape as the fixed F-1. Recorded as a
+  follow-up outside this feature; the lane's own asset gate is bundle-scoped.
+- **F-14 (Minor, test gap) — fixed.** The specification's no-icon prompt paint
+  variant (§5 E2/E3) had no test; the remediation plan's task 2 pins it.
