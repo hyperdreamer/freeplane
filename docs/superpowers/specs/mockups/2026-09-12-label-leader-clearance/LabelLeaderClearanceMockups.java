@@ -43,6 +43,7 @@ public final class LabelLeaderClearanceMockups {
     static final double SLOT_GAP = 6.0;
     static final double DISPLACED_OFFSET = 30.0;
     static final double OPTION_A_GAP = 3.0;
+    static final double MIN_VISIBLE_LEADER = 2.0;
 
     static final Font FULL = new Font(Font.DIALOG, Font.PLAIN, 12);
     static final Font TITLE = new Font(Font.DIALOG, Font.BOLD, 17);
@@ -235,7 +236,8 @@ public final class LabelLeaderClearanceMockups {
                 return new String[] {
                     "Option A \u2014 stop 3 px clear of the name's box",
                     "leader keeps its disc-rim start and ends on the box inflated by 3 px; "
-                        + "every slot keeps its leader" };
+                        + "node labels in every slot keep their leader, enclosure leaders longer than "
+                        + "2 px after trimming keep theirs" };
             case B:
                 return new String[] {
                     "Option B \u2014 stop exactly on the name's box edge",
@@ -365,6 +367,13 @@ public final class LabelLeaderClearanceMockups {
         }
         final double[] clip = clipToRect(new double[] { startX, startY },
             new double[] { anchorX, anchorY }, mode == Mode.A ? inflate(rect, OPTION_A_GAP) : rect);
+        if (clip == null) {
+            return null;
+        }
+        if (mode == Mode.A
+                && Math.hypot(clip[0] - startX, clip[1] - startY) < MIN_VISIBLE_LEADER) {
+            return null;
+        }
         return clip;
     }
 
