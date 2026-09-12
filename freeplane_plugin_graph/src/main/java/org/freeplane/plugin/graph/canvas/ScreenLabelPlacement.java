@@ -501,13 +501,66 @@ public final class ScreenLabelPlacement {
                     continue;
                 }
                 context.obstacles.add(candidate);
+                final boolean truncated = rung.truncating && !candidateText.equals(fullText);
+                final boolean fullTextWasFree = rung.truncating
+                    ? fullTextCandidateWasFree(context, fullText, forced, centerX, centerY, radius)
+                    : fullTextSlotWasFree;
                 return new PlacedLabel(endpoint, candidateText, font, PlacedLabel.Mode.INTERIOR,
                     rung.rung, anchor[0], anchor[1], size.getWidth(), size.getHeight(),
-                    rung.truncating && !candidateText.equals(fullText), forced, false, false,
-                    fullTextSlotWasFree, Optional.<LayoutPoint>empty(), slot);
+                    truncated, forced, false, false,
+                    fullTextWasFree, leaderStart(slot, centerX, centerY, radius, anchor[0], anchor[1]), slot);
             }
         }
         return null;
+    }
+
+    /**
+     * Design §8.3.3 predicate: whether, at the moment this label is processed, some full-text
+     * rung candidate the label is allowed to try would have been accepted (cap, area, obstacles).
+     */
+    private static boolean fullTextCandidateWasFree(final Context context, final String fullText,
+            final boolean forced, final double centerX, final double centerY, final double radius) {
+        for (final LadderRung rung : LADDER) {
+            if (rung.truncating) {
+                continue;
+            }
+            if (forced && rung.rung != PlacedLabel.Rung.FULL_NEAR
+                    && rung.rung != PlacedLabel.Rung.FULL_DISPLACED) {
+                continue;
+            }
+            for (final Slot slot : rung.far ? FAR_SLOTS : NEAR_SLOTS) {
+                final Font font = rung.font(context.fonts);
+                if (textWidth(fullText, font) > slotMaxWidth(slot)) {
+                    continue;
+                }
+                final Rectangle2D size = screenBounds(fullText, font);
+                final double[] anchor = slotAnchor(slot, centerX, centerY, radius,
+                    size.getWidth(), size.getHeight());
+                final Rectangle2D candidate = rectangle(anchor[0], anchor[1], size.getWidth(),
+                    size.getHeight());
+                if (context.request.placementArea().contains(candidate)
+                        && !intersectsAny(context.obstacles, candidate)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Spec C12: a leader line exists for every slot except ABOVE and BELOW. Its start is the
+     * disc-rim point on the centre -> anchor direction, matching the committed generator.
+     */
+    private static Optional<LayoutPoint> leaderStart(final Slot slot, final double centerX,
+            final double centerY, final double radius, final double anchorX, final double anchorY) {
+        if (slot == Slot.ABOVE || slot == Slot.BELOW) {
+            return Optional.empty();
+        }
+        final double dx = anchorX - centerX;
+        final double dy = anchorY - centerY;
+        final double distance = Math.max(1e-6, Math.hypot(dx, dy));
+        return Optional.of(LayoutPoint.of(centerX + dx / distance * radius,
+            centerY + dy / distance * radius));
     }
 
     private static PlacedLabel baseSlot(final Context context, final ProjectedNodeKey key,

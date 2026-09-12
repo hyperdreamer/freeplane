@@ -244,6 +244,72 @@ public class ScreenLabelPlacementShould {
     }
 
     @Test
+    public void drawsNodeLeadersForEverySlotExceptAboveAndBelow() {
+        List<SceneNode> scene = denseScene();
+        Rectangle2D area = area(1128.0, 364.0);
+        List<PlacedLabel> placed = place(scene, 1.0, area, standIn(scene, 1.0),
+            forced("Axiom of Choice"), RenderingLevel.FULL, null);
+
+        assertThat(meanLeader(placed, scene, 1.0)).isCloseTo(48.046026, within(1e-4));
+        assertThat(maxLeader(placed, scene, 1.0)).isCloseTo(77.894615, within(1e-4));
+        assertThat(leaderCrossings(placed)).isZero();
+        assertNodeLeadersAtTheRim(placed, scene, 1.0, area);
+
+        PlacedLabel theorem = find(placed, "Theorem");
+        assertThat(slotOf(theorem, scene, 1.0)).isEqualTo("LEFT");
+        assertThat(theorem.leaderStart()).isPresent();
+        assertThat(theorem.leaderStart().get().x()).isCloseTo(513.0 - 14.0, within(1e-9));
+        assertThat(theorem.leaderStart().get().y()).isCloseTo(148.0, within(1e-9));
+        PlacedLabel powerSet = find(placed, "Power Set");
+        assertThat(slotOf(powerSet, scene, 1.0)).isEqualTo("RIGHT_FAR");
+        assertThat(powerSet.leaderStart()).isPresent();
+        assertThat(powerSet.leaderStart().get().x()).isCloseTo(581.0 + 14.0, within(1e-9));
+        assertThat(powerSet.leaderStart().get().y()).isCloseTo(182.0, within(1e-9));
+        PlacedLabel replacement = find(placed, "Replacement Scheme");
+        assertThat(slotOf(replacement, scene, 1.0)).isEqualTo("ABOVE_RIGHT");
+        assertThat(replacement.leaderStart()).isPresent();
+
+        List<PlacedLabel> longPlaced = place(longScene(), 1.0, area, standIn(longScene(), 1.0),
+            forced(LONG_NAMES[0]), RenderingLevel.FULL, null);
+        PlacedLabel longForced = find(longPlaced, LONG_NAMES[0]);
+        assertThat(longForced.leaderStart()).isEmpty();
+        assertThat(maxLeader(longPlaced, longScene(), 1.0)).isCloseTo(78.656464, within(1e-4));
+        assertThat(leaderCrossings(longPlaced)).isZero();
+        assertNodeLeadersAtTheRim(longPlaced, longScene(), 1.0, area);
+    }
+
+    private static void assertNodeLeadersAtTheRim(List<PlacedLabel> placed, List<SceneNode> scene,
+            double zoom, Rectangle2D area) {
+        for (PlacedLabel label : placed) {
+            if (label.mode() == PlacedLabel.Mode.HOVER_ONLY || label.endpoint().isEnclosure()) {
+                continue;
+            }
+            String slot = slotOf(label, scene, zoom, area);
+            assertThat(slot).as(label.text()).isNotNull();
+            if ("ABOVE".equals(slot) || "BELOW".equals(slot)) {
+                assertThat(label.leaderStart()).as(slot + " " + label.text()).isEmpty();
+                continue;
+            }
+            assertThat(label.leaderStart()).as(slot + " " + label.text()).isPresent();
+            SceneNode node = sceneNode(scene, nodeName(label.endpoint()));
+            double centerX = node.x * zoom + area.getWidth() * 0.5;
+            double centerY = node.y * zoom + area.getHeight() * 0.5;
+            double radius = Math.max(2.0, node.radius * zoom);
+            LayoutPoint start = label.leaderStart().get();
+            double dx = start.x() - centerX;
+            double dy = start.y() - centerY;
+            double ax = label.anchorX() - centerX;
+            double ay = label.anchorY() - centerY;
+            assertThat(Math.hypot(dx, dy)).as(slot + " rim " + label.text())
+                .isCloseTo(radius, within(1e-9));
+            assertThat(dx * ay - dy * ax).as(slot + " collinear " + label.text())
+                .isCloseTo(0.0, within(1e-9));
+            assertThat(dx * ax + dy * ay).as(slot + " forward " + label.text())
+                .isGreaterThan(0.0);
+        }
+    }
+
+    @Test
     public void neverTruncatesWhileAFullTextSlotWasFree() {
         List<SceneNode> scene = longScene();
         for (double width : new double[] { 1128.0, 500.0 }) {
@@ -263,6 +329,81 @@ public class ScreenLabelPlacementShould {
                 }
             }
         }
+    }
+
+    @Test
+    public void recomputesTheFullTextSlotPredicateIndependently() {
+        List<SceneNode> scene = longScene();
+        for (double width : new double[] { 1128.0, 500.0 }) {
+            Rectangle2D area = area(width, 364.0);
+            for (Rectangle2D standIn : new Rectangle2D[] { null, standIn(scene, 1.0, area) }) {
+                List<Rectangle2D> seeds = standIn == null
+                    ? Collections.<Rectangle2D>emptyList() : Collections.singletonList(standIn);
+                List<PlacedLabel> placed = new ScreenLabelPlacement().place(
+                    request(scene, 1.0, area, forced(LONG_NAMES[0]), RenderingLevel.FULL), null,
+                    fonts(), seeds);
+                List<Rectangle2D> obstacles = new ArrayList<Rectangle2D>();
+                for (SceneNode node : scene) {
+                    double radius = Math.max(2.0, node.radius);
+                    obstacles.add(new Rectangle2D.Double(node.x - radius + area.getWidth() * 0.5,
+                        node.y - radius + area.getHeight() * 0.5, 2.0 * radius, 2.0 * radius));
+                }
+                obstacles.addAll(seeds);
+                for (PlacedLabel label : placed) {
+                    boolean recomputed = independentlyFullTextSlotWasFree(label, scene, area, obstacles);
+                    assertThat(label.fullTextSlotWasFree()).as(label.text()).isEqualTo(recomputed);
+                    if (label.truncated()) {
+                        assertThat(label.fullTextSlotWasFree()).as(label.text()).isFalse();
+                    }
+                    if (label.mode() != PlacedLabel.Mode.HOVER_ONLY) {
+                        obstacles.add(label.bounds());
+                    }
+                }
+            }
+        }
+    }
+
+    private static boolean independentlyFullTextSlotWasFree(PlacedLabel label, List<SceneNode> scene,
+            Rectangle2D area, List<Rectangle2D> obstacles) {
+        SceneNode node = sceneNode(scene, nodeName(label.endpoint()));
+        double centerX = node.x + area.getWidth() * 0.5;
+        double centerY = node.y + area.getHeight() * 0.5;
+        double radius = Math.max(2.0, node.radius);
+        LabelFonts fonts = fonts();
+        for (int pass = 0; pass < 4; pass++) {
+            boolean dense = pass >= 2;
+            if (dense && label.forced()) {
+                continue;
+            }
+            boolean far = pass % 2 == 1;
+            java.awt.Font font = dense ? fonts.dense() : fonts.full();
+            ScreenLabelPlacement.Slot[] slots = far
+                ? ScreenLabelPlacement.FAR_SLOTS : ScreenLabelPlacement.NEAR_SLOTS;
+            for (ScreenLabelPlacement.Slot slot : slots) {
+                if (ScreenLabelPlacement.textWidth(node.name, font)
+                        > ScreenLabelPlacement.slotMaxWidth(slot)) {
+                    continue;
+                }
+                Rectangle2D size = ScreenLabelPlacement.screenBounds(node.name, font);
+                double[] anchor = ScreenLabelPlacement.slotAnchor(slot, centerX, centerY, radius,
+                    size.getWidth(), size.getHeight());
+                Rectangle2D candidate = ScreenLabelPlacement.rectangle(anchor[0], anchor[1],
+                    size.getWidth(), size.getHeight());
+                if (area.contains(candidate) && !intersectsAnyObstacle(obstacles, candidate)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static boolean intersectsAnyObstacle(List<Rectangle2D> obstacles, Rectangle2D candidate) {
+        for (Rectangle2D obstacle : obstacles) {
+            if (obstacle.intersects(candidate)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Test
@@ -954,6 +1095,53 @@ public class ScreenLabelPlacementShould {
             }
         }
         return null;
+    }
+
+    static String slotOf(PlacedLabel label, List<SceneNode> scene, double zoom, Rectangle2D area) {
+        SceneNode node = sceneNode(scene, nodeName(label.endpoint()));
+        double centerX = node.x * zoom + area.getWidth() * 0.5;
+        double centerY = node.y * zoom + area.getHeight() * 0.5;
+        double radius = Math.max(2.0, node.radius * zoom);
+        for (ScreenLabelPlacement.Slot slot : ScreenLabelPlacement.Slot.values()) {
+            double[] anchor = ScreenLabelPlacement.slotAnchor(slot, centerX, centerY, radius,
+                label.width(), label.height());
+            if (Math.abs(anchor[0] - label.anchorX()) <= 1e-6
+                    && Math.abs(anchor[1] - label.anchorY()) <= 1e-6) {
+                return slot.name();
+            }
+        }
+        return null;
+    }
+
+    static int leaderCrossings(List<PlacedLabel> placed) {
+        List<double[]> segments = new ArrayList<double[]>();
+        for (PlacedLabel label : placed) {
+            if (label.mode() == PlacedLabel.Mode.HOVER_ONLY || !label.leaderStart().isPresent()) {
+                continue;
+            }
+            LayoutPoint start = label.leaderStart().get();
+            segments.add(new double[] { start.x(), start.y(), label.anchorX(), label.anchorY() });
+        }
+        int crossings = 0;
+        for (int first = 0; first < segments.size(); first++) {
+            for (int second = first + 1; second < segments.size(); second++) {
+                if (properCross(segments.get(first), segments.get(second))) {
+                    crossings++;
+                }
+            }
+        }
+        return crossings;
+    }
+
+    private static boolean properCross(double[] first, double[] second) {
+        return orient(first[0], first[1], first[2], first[3], second[0], second[1])
+                * orient(first[0], first[1], first[2], first[3], second[2], second[3]) < 0
+            && orient(second[0], second[1], second[2], second[3], first[0], first[1])
+                * orient(second[0], second[1], second[2], second[3], first[2], first[3]) < 0;
+    }
+
+    private static double orient(double ax, double ay, double bx, double by, double cx, double cy) {
+        return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
     }
 
     static SceneNode sceneNode(List<SceneNode> scene, String name) {

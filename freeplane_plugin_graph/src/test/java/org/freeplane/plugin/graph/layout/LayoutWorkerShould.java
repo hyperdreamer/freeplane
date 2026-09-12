@@ -383,6 +383,25 @@ public class LayoutWorkerShould {
     }
 
     @Test
+    public void publishesTheRecomputedResidualForATwoPinnedSandwich() throws Exception {
+        PinProjection firstPin = PinProjection.active(pinRecord(MAP_ONE, "one"), NODE_ONE);
+        PinProjection secondPin = PinProjection.active(pinRecord(MAP_TWO, "two"), NODE_TWO);
+        LayoutWorker worker = new LayoutWorker(new FixedEngineSupplier(new TwoPinnedSandwichEngine()),
+            new PerceptualIdlePolicy(2, 0.1, 0.1));
+        try {
+            LayoutFrame frame = await(worker.submit(request(Arrays.asList(firstPin, secondPin))));
+
+            assertThat(frame.failed()).isFalse();
+            assertThat(frame.verified()).isTrue();
+            assertThat(frame.residualViolations()).isEqualTo(1);
+            assertFinitePositions(frame.positions());
+        }
+        finally {
+            worker.close();
+        }
+    }
+
+    @Test
     public void carriesTheRetainedResidualIntoAFailedFrame() throws Exception {
         CountingEngine engine = new CountingEngine(new AtomicInteger(), new AtomicInteger());
         LayoutWorker worker = new LayoutWorker(new FixedEngineSupplier(engine),
@@ -423,6 +442,17 @@ public class LayoutWorkerShould {
         }
         finally {
             worker.close();
+        }
+    }
+
+    private static void assertFinitePositions(final LayoutPositions positions) {
+        for (Map.Entry<ProjectedNodeKey, LayoutPoint> entry : positions.nodes().entrySet()) {
+            assertThat(Double.isFinite(entry.getValue().x())).as(entry.getKey().toString()).isTrue();
+            assertThat(Double.isFinite(entry.getValue().y())).as(entry.getKey().toString()).isTrue();
+        }
+        for (Map.Entry<EnclosureHullKey, LayoutPoint> entry : positions.anchors().entrySet()) {
+            assertThat(Double.isFinite(entry.getValue().x())).as(entry.getKey().toString()).isTrue();
+            assertThat(Double.isFinite(entry.getValue().y())).as(entry.getKey().toString()).isTrue();
         }
     }
 
@@ -716,6 +746,45 @@ public class LayoutWorkerShould {
         @Override
         public LayoutFrame step() {
             throw new IllegalStateException("step failed");
+        }
+    }
+
+    private static final class TwoPinnedSandwichEngine implements LayoutEngine {
+        private LayoutRequest currentRequest;
+
+        @Override
+        public LayoutFrame apply(final LayoutRequest request) {
+            currentRequest = request;
+            return frame(request.projection());
+        }
+
+        @Override
+        public LayoutFrame step() {
+            return frame(currentRequest.projection());
+        }
+
+        @Override
+        public void reset() {
+        }
+
+        @Override
+        public void close() {
+        }
+
+        private static LayoutFrame frame(final GraphProjection projection) {
+            Map<ProjectedNodeKey, LayoutPoint> nodes = new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+            for (ProjectedNode node : projection.nodes()) {
+                final double x = MAP_ONE.equals(node.mapReferenceId()) ? 0.0 : 20.0;
+                final double y = node.key().equals(NODE_ONE_OTHER) || node.key().equals(NODE_TWO_OTHER)
+                    ? 40.0 : 0.0;
+                nodes.put(node.key(), LayoutPoint.of(x, y));
+            }
+            Map<EnclosureHullKey, LayoutPoint> anchors = new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
+            for (ProjectedEnclosure enclosure : projection.enclosures()) {
+                anchors.put(enclosure.hullKey(), LayoutPoint.of(
+                    MAP_ONE.equals(enclosure.mapReferenceId()) ? 0.0 : 20.0, 0.0));
+            }
+            return LayoutFrame.of(1L, LayoutPositions.of(nodes, anchors), false);
         }
     }
 
