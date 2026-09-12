@@ -309,6 +309,38 @@ public class ScreenLabelPlacementShould {
         }
     }
 
+    private static void assertRetainedNodeLeadersAtTheRim(List<PlacedLabel> placed,
+            List<SceneNode> scene, double zoom, Rectangle2D area, double viewportCenterX,
+            double viewportCenterY) {
+        for (PlacedLabel label : placed) {
+            if (label.mode() == PlacedLabel.Mode.HOVER_ONLY || label.endpoint().isEnclosure()) {
+                continue;
+            }
+            SceneNode node = sceneNode(scene, nodeName(label.endpoint()));
+            double centerX = node.x * zoom + area.getWidth() * 0.5 - viewportCenterX * zoom;
+            double centerY = node.y * zoom + area.getHeight() * 0.5 - viewportCenterY * zoom;
+            double radius = Math.max(2.0, node.radius * zoom);
+            String slot = slotOfAt(label, centerX, centerY, radius);
+            assertThat(slot).as("retained slot " + label.text()).isNotNull();
+            if ("ABOVE".equals(slot) || "BELOW".equals(slot)) {
+                assertThat(label.leaderStart()).as(slot + " " + label.text()).isEmpty();
+                continue;
+            }
+            assertThat(label.leaderStart()).as(slot + " " + label.text()).isPresent();
+            LayoutPoint start = label.leaderStart().get();
+            double dx = start.x() - centerX;
+            double dy = start.y() - centerY;
+            double ax = label.anchorX() - centerX;
+            double ay = label.anchorY() - centerY;
+            assertThat(Math.hypot(dx, dy)).as(slot + " retained rim " + label.text())
+                .isCloseTo(radius, within(1e-9));
+            assertThat(dx * ay - dy * ax).as(slot + " retained collinear " + label.text())
+                .isCloseTo(0.0, within(1e-9));
+            assertThat(dx * ax + dy * ay).as(slot + " retained forward " + label.text())
+                .isGreaterThan(0.0);
+        }
+    }
+
     @Test
     public void neverTruncatesWhileAFullTextSlotWasFree() {
         List<SceneNode> scene = longScene();
@@ -430,9 +462,57 @@ public class ScreenLabelPlacementShould {
             assertThat(after.text()).isEqualTo(label.text());
             assertThat(after.font()).isEqualTo(label.font());
         }
+        assertRetainedNodeLeadersAtTheRim(panned, scene, 1.0, area, 1.0, 0.0);
+
         List<PlacedLabel> reapplied = placeShifted(scene, 1.0, area, shiftedStandIn,
             forced("Axiom of Choice"), RenderingLevel.FULL, panned, 1.0, 0.0);
         assertSamePlacement(panned, reapplied);
+    }
+
+    @Test
+    public void recomputesTheLeaderStartOfRetainedLabelsAfterALargePan() {
+        List<SceneNode> scene = denseScene();
+        Rectangle2D area = area(1128.0, 364.0);
+        Rectangle2D standIn = standIn(scene, 1.0);
+        List<PlacedLabel> baseline = place(scene, 1.0, area, standIn, forced("Axiom of Choice"),
+            RenderingLevel.FULL, null);
+        double pan = 100.0;
+        Rectangle2D shiftedStandIn = new Rectangle2D.Double(standIn.getX() - pan, standIn.getY(),
+            standIn.getWidth(), standIn.getHeight());
+
+        List<PlacedLabel> panned = placeShifted(scene, 1.0, area, shiftedStandIn,
+            forced("Axiom of Choice"), RenderingLevel.FULL, baseline, pan, 0.0);
+
+        assertThat(countVisible(panned)).isEqualTo(11);
+        PlacedLabel theorem = find(panned, "Theorem");
+        PlacedLabel beforePan = find(baseline, "Theorem");
+        assertThat(theorem.leaderStart()).isPresent();
+        assertThat(theorem.leaderStart().get().x())
+            .as("retained leader x after pan")
+            .isCloseTo(beforePan.leaderStart().get().x() - pan, within(1e-9));
+        assertThat(theorem.leaderStart().get().y()).as("retained leader y after pan")
+            .isCloseTo(beforePan.leaderStart().get().y(), within(1e-9));
+        assertRetainedNodeLeadersAtTheRim(panned, scene, 1.0, area, pan, 0.0);
+    }
+
+    @Test
+    public void recomputesTheLeaderStartOfRetainedLabelsAfterAZoomChange() {
+        List<SceneNode> scene = denseScene();
+        Rectangle2D area = area(1128.0, 364.0);
+        List<PlacedLabel> baseline = place(scene, 1.0, area, standIn(scene, 1.0),
+            forced("Axiom of Choice"), RenderingLevel.FULL, null);
+
+        List<PlacedLabel> zoomed = placeShifted(scene, 2.0, area, standIn(scene, 2.0),
+            forced("Axiom of Choice"), RenderingLevel.FULL, baseline, 0.0, 0.0);
+
+        int leaders = 0;
+        for (PlacedLabel label : zoomed) {
+            if (label.mode() != PlacedLabel.Mode.HOVER_ONLY && label.leaderStart().isPresent()) {
+                leaders++;
+            }
+        }
+        assertThat(leaders).as("leader-carrying labels after zoom").isGreaterThan(0);
+        assertRetainedNodeLeadersAtTheRim(zoomed, scene, 2.0, area, 0.0, 0.0);
     }
 
     @Test

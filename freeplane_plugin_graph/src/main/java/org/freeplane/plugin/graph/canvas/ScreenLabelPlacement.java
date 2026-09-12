@@ -464,7 +464,8 @@ public final class ScreenLabelPlacement {
         return new PlacedLabel(previous.endpoint(), previous.text(), previous.font(), previous.mode(),
             previous.rung(), anchor[0], anchor[1], previous.width(), previous.height(),
             previous.truncated(), isForced(context, key), previous.emphaticAtAnchor(),
-            false, false, previous.leaderStart(), previous.slot());
+            false, false, leaderStart(previous.slot(), centerX, centerY, radius, anchor[0], anchor[1]),
+            previous.slot());
     }
 
     private static PlacedLabel ladder(final Context context, final ProjectedNodeKey key,
