@@ -1,6 +1,7 @@
 package org.freeplane.plugin.graph.window;
 
 import java.awt.BorderLayout;
+import java.awt.Component;
 import java.awt.Dialog;
 import java.awt.Dimension;
 import java.awt.GraphicsEnvironment;
@@ -10,6 +11,10 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.nio.file.Path;
@@ -643,6 +648,53 @@ final class GraphWorkspaceWindowModel {
         applySidebarSettings(currentPresentation.displaySettings());
     }
 
+    private void commitSidebarWidth(final int location) {
+        final int splitWidth = splitWidth();
+        final int dividerWidth = effectiveDividerWidth();
+        final Insets insets = splitInsets();
+        if (sidebar.isCollapsed()) {
+            return;
+        }
+        if (MapSidebarLayout.effectiveMinimum(splitWidth, dividerWidth, insets) < MapSidebarLayout.MIN_WIDTH) {
+            return;
+        }
+        final int clamped = MapSidebarLayout.clampWidth(location, splitWidth, dividerWidth, insets);
+        if (clamped == appliedSidebarWidth) {
+            return;
+        }
+        if (!readOnly) {
+            commitSidebarDisplaySettings(clamped, currentPresentation.displaySettings().mapSidebarHidden());
+        }
+        applySidebarSettings(currentPresentation.displaySettings());
+    }
+
+    private void resetSidebarWidth() {
+        final int splitWidth = splitWidth();
+        final int dividerWidth = effectiveDividerWidth();
+        final Insets insets = splitInsets();
+        if (sidebar.isCollapsed() || sidebarGestureActive) {
+            return;
+        }
+        if (MapSidebarLayout.effectiveMinimum(splitWidth, dividerWidth, insets) < MapSidebarLayout.MIN_WIDTH) {
+            return;
+        }
+        final int clamped = MapSidebarLayout.clampWidth(MapSidebarLayout.DEFAULT_WIDTH, splitWidth, dividerWidth,
+            insets);
+        if (clamped == appliedSidebarWidth) {
+            return;
+        }
+        if (!readOnly) {
+            commitSidebarDisplaySettings(clamped, currentPresentation.displaySettings().mapSidebarHidden());
+        }
+        applySidebarSettings(currentPresentation.displaySettings());
+    }
+
+    private void runPendingSidebarApply() {
+        if (sidebarApplyPending) {
+            applySidebarSettings(currentPresentation.displaySettings());
+        }
+    }
+
     private void commitSidebarDisplaySettings(final int width, final boolean hidden) {
         final DisplaySettings current = currentPresentation.displaySettings();
         executeCommand(GraphCommands.display(DisplaySettings.of(current.showArrowheads(), current.canvasTheme(),
@@ -1164,6 +1216,80 @@ final class GraphWorkspaceWindowModel {
             @Override
             public void componentResized(final ComponentEvent event) {
                 applySidebarSettings(currentPresentation.displaySettings());
+            }
+        });
+        final Component divider = ((BasicSplitPaneUI) splitPane.getUI()).getDivider();
+        if (divider != null) {
+            divider.addMouseListener(new MouseAdapter() {
+                @Override
+                public void mousePressed(final MouseEvent event) {
+                    if (event.getButton() != MouseEvent.BUTTON1) {
+                        return;
+                    }
+                    if (event.getClickCount() == 2) {
+                        sidebarGestureActive = false;
+                        resetSidebarWidth();
+                        return;
+                    }
+                    sidebarGestureActive = true;
+                }
+
+                @Override
+                public void mouseReleased(final MouseEvent event) {
+                    if (event.getButton() != MouseEvent.BUTTON1 || !sidebarGestureActive) {
+                        return;
+                    }
+                    sidebarGestureActive = false;
+                    commitSidebarWidth(splitPane.getDividerLocation());
+                    runPendingSidebarApply();
+                }
+            });
+        }
+        splitPane.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, event -> {
+            if (sidebarApplying) {
+                return;
+            }
+            final int splitWidth = splitWidth();
+            final int dividerWidth = effectiveDividerWidth();
+            final Insets insets = splitInsets();
+            final int location = splitPane.getDividerLocation();
+            if (sidebar.isCollapsed()) {
+                if (location != MapSidebarLayout.RAIL_WIDTH) {
+                    runWithSidebarGuard(new Runnable() {
+                        @Override
+                        public void run() {
+                            splitPane.setDividerLocation(MapSidebarLayout.RAIL_WIDTH);
+                        }
+                    });
+                }
+                return;
+            }
+            if (sidebarGestureActive) {
+                return;
+            }
+            if (MapSidebarLayout.effectiveMinimum(splitWidth, dividerWidth, insets) < MapSidebarLayout.MIN_WIDTH) {
+                return;
+            }
+            final int clamped = MapSidebarLayout.clampWidth(location, splitWidth, dividerWidth, insets);
+            if (clamped != location) {
+                runWithSidebarGuard(new Runnable() {
+                    @Override
+                    public void run() {
+                        splitPane.setDividerLocation(clamped);
+                    }
+                });
+            }
+        });
+        splitPane.addFocusListener(new FocusAdapter() {
+            @Override
+            public void focusLost(final FocusEvent event) {
+                if (sidebarGestureActive) {
+                    sidebarGestureActive = false;
+                    runPendingSidebarApply();
+                    return;
+                }
+                commitSidebarWidth(splitPane.getDividerLocation());
+                runPendingSidebarApply();
             }
         });
     }
