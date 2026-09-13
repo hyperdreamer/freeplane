@@ -114,8 +114,10 @@ forward-compatibility mechanism.
   graph area).
 - While collapsed the divider is locked: `setDividerSize(0)` and `setEnabled(false)`, so it
   cannot be grabbed and no resize cursor appears.
-- Double-clicking the divider (expanded, gesture not in flight) resets the width to 264 px and
-  commits it.
+- Double-clicking the divider (expanded, gesture not in flight) resets the width to the default
+  264 px **clamped into the current allowed range** and commits it, so at a ceiling below 264 the
+  committed value is the ceiling (the specification's §9.1 S9 resolves the original "resets to
+  264" wording, which is out of range for split widths between 360 and 527 px).
 - `View → Maps sidebar` is a checkable item; checked means expanded; selecting it toggles the
   state. Its checked state is set in the single apply path (6.5), so chevron, rail, undo/redo and
   workspace open all agree. It stays enabled in every state, including read-only workspaces.
