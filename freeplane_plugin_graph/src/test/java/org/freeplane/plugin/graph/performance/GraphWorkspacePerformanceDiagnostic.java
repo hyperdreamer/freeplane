@@ -59,8 +59,8 @@ import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.layout.BoundaryConflict;
 import org.freeplane.plugin.graph.layout.BoundarySeparationCorrection;
+import org.freeplane.plugin.graph.layout.BoundarySeparationDiagnostics;
 import org.freeplane.plugin.graph.layout.BoundarySeparationResult;
-import org.freeplane.plugin.graph.layout.BoundarySeparationTimings;
 import org.freeplane.plugin.graph.layout.LayoutCalibration;
 import org.freeplane.plugin.graph.layout.LayoutEngine;
 import org.freeplane.plugin.graph.layout.LayoutFrame;
@@ -69,6 +69,7 @@ import org.freeplane.plugin.graph.layout.LayoutWorker;
 import org.freeplane.plugin.graph.layout.graphstream.GraphStreamLayoutFactory;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.GraphProjection;
+import org.freeplane.plugin.graph.projection.PinProjection;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectionDiff;
@@ -89,6 +90,12 @@ public final class GraphWorkspacePerformanceDiagnostic {
     private static final int FORCED_SAMPLE_SIZE = 8;
     private static final double PLACEMENT_AREA_WIDTH = 1128.0;
     private static final double PLACEMENT_AREA_HEIGHT = 364.0;
+
+    /**
+     * Golden conflict count for the TWO_PINNED_MAPS scenario under generalized enforcement.
+     * Captured from the first measured run and updated only from a measured run; see the task step.
+     */
+    private static final int TWO_PINNED_MAPS_EXPECTED_CONFLICTS = 1;
 
     private final Path outputDirectory;
     private final boolean strict;
@@ -306,6 +313,7 @@ public final class GraphWorkspacePerformanceDiagnostic {
             warmup);
         requireUsableFrame(workerFrame, current, "full worker", PerformanceMeasurements.Stage.FULL_WORKER);
         validatePinConflicts(generated, workerFrame);
+        validateBoundaryDiagnostics(workerFrame.boundaryDiagnostics(), PerformanceMeasurements.Stage.FULL_WORKER);
 
         final long workerHullStart = clock.nanoTime();
         final GraphGeometry workerHull = geometryEngine.computeHulls(current, workerFrame.positions(), textMetrics);
@@ -357,12 +365,13 @@ public final class GraphWorkspacePerformanceDiagnostic {
 
             final BoundarySeparationResult corrected = correctionEngine.apply(projection, applied.positions(),
                 textMetrics, request.pins());
-            final BoundarySeparationTimings timings = corrected.timings();
-            recordTiming(measurements, PerformanceMeasurements.Stage.CORRECTION,
-                timings.planNanos() + timings.applyNanos(), warmup);
-            recordTiming(measurements, PerformanceMeasurements.Stage.SEPARATION, timings.separationNanos(),
+            recordTiming(measurements, PerformanceMeasurements.Stage.SEPARATION,
+                corrected.timings().separationNanos(), warmup);
+            recordTiming(measurements, PerformanceMeasurements.Stage.HULL, corrected.timings().hullNanos(),
                 warmup);
-            recordTiming(measurements, PerformanceMeasurements.Stage.HULL, timings.hullNanos(), warmup);
+            recordTiming(measurements, PerformanceMeasurements.Stage.CORRECTION,
+                corrected.timings().planNanos() + corrected.timings().applyNanos(), warmup);
+            validateBoundaryDiagnostics(corrected.diagnostics(), PerformanceMeasurements.Stage.CORRECTION);
 
             final long forceStart = clock.nanoTime();
             final LayoutFrame forced = engine.step();
@@ -389,12 +398,31 @@ public final class GraphWorkspacePerformanceDiagnostic {
     }
 
     private static void recordTiming(final PerformanceMeasurements measurements,
-            final PerformanceMeasurements.Stage stage, final long durationNanos, final boolean warmup) {
+            final PerformanceMeasurements.Stage stage, final long nanos, final boolean warmup) {
         if (warmup) {
-            measurements.recordWarmup(stage, durationNanos);
+            measurements.recordWarmup(stage, nanos);
         }
         else {
-            measurements.recordMeasured(stage, durationNanos);
+            measurements.recordMeasured(stage, nanos);
+        }
+    }
+
+    private static void validateBoundaryDiagnostics(final BoundarySeparationDiagnostics diagnostics,
+            final PerformanceMeasurements.Stage stage) {
+        if (diagnostics.rounds() < 0
+                || diagnostics.rounds() > BoundarySeparationCorrection.MAX_DISPLACEMENT_ROUNDS) {
+            throw new DiagnosticFailure(stage, "Boundary displacement rounds outside the production bound: "
+                + diagnostics.rounds());
+        }
+        if (!diagnostics.boundaryVerified() && !diagnostics.boundaryCovered()) {
+            throw new DiagnosticFailure(stage,
+                "Boundary diagnostics are neither verified nor covered; rounds=" + diagnostics.rounds()
+                    + " detected=" + diagnostics.hullViolationsDetected()
+                    + " residual=" + diagnostics.hullResidualViolations()
+                    + " residualPairs=" + diagnostics.residualHullPairs()
+                    + " displacementRms=" + diagnostics.displacementRms()
+                    + " displacementMax=" + diagnostics.displacementMax()
+                    + " worstMapDisplacement=" + diagnostics.worstMapDisplacement());
         }
     }
 
@@ -526,17 +554,27 @@ public final class GraphWorkspacePerformanceDiagnostic {
         if (scenario != GeneratedWorkspace.Scenario.TWO_PINNED_MAPS) {
             return;
         }
-        if (frame.conflicts().size() != 1) {
+        if (frame.conflicts().size() != TWO_PINNED_MAPS_EXPECTED_CONFLICTS) {
             throw new DiagnosticFailure(PerformanceMeasurements.Stage.FULL_WORKER,
-                "Two-pinned-maps must produce exactly one rigid conflict, got "
-                    + frame.conflicts().size());
+                "Two-pinned-maps conflict count changed: expected " + TWO_PINNED_MAPS_EXPECTED_CONFLICTS
+                    + " but measured " + frame.conflicts().size());
         }
-        final BoundaryConflict conflict = frame.conflicts().get(0);
-        if (conflict.blockingPins().size() != 2
-                || !conflict.blockingPins().get(0).source().nodeId().value().equals("m00-n0001")
-                || !conflict.blockingPins().get(1).source().nodeId().value().equals("m01-n0001")) {
-            throw new DiagnosticFailure(PerformanceMeasurements.Stage.FULL_WORKER,
-                "Two-pinned-maps conflict did not retain both pin identities");
+        for (final BoundaryConflict conflict : frame.conflicts()) {
+            if (conflict.firstMap().equals(conflict.secondMap())) {
+                for (final PinProjection pin : conflict.blockingPins()) {
+                    if (!pin.source().mapReferenceId().equals(conflict.firstMap())) {
+                        throw new DiagnosticFailure(PerformanceMeasurements.Stage.FULL_WORKER,
+                            "A same-map conflict listed a pin from another map");
+                    }
+                }
+                continue;
+            }
+            if (conflict.blockingPins().size() != 2
+                    || !conflict.blockingPins().get(0).source().nodeId().value().equals("m00-n0001")
+                    || !conflict.blockingPins().get(1).source().nodeId().value().equals("m01-n0001")) {
+                throw new DiagnosticFailure(PerformanceMeasurements.Stage.FULL_WORKER,
+                    "Two-pinned-maps conflict did not retain both pin identities");
+            }
         }
     }
 
