@@ -1804,6 +1804,33 @@ public class GraphWorkspaceWindowModelShould {
     }
 
     @Test
+    public void suppressesSqueezedSidebarCommitsWhenTheDividerLocationChanged() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            emptyState(), Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)),
+            false).answerSidebarRoundTrip();
+        GraphWorkspaceWindowModel model = fixture.model();
+        layoutSidebarAt(model, 150);
+        final int storedWidth = fixture.binding.currentPresentation().displaySettings().mapSidebarWidth();
+        assertThat(model.appliedSidebarWidth()).isEqualTo(MapSidebarLayout.MIN_WIDTH);
+
+        GraphWorkspaceWindow.runOnEdt(() -> {
+            dispatchFocus(model, FocusEvent.FOCUS_GAINED);
+            splitPane(model).getActionMap().get("selectMin").actionPerformed(
+                new java.awt.event.ActionEvent(splitPane(model), java.awt.event.ActionEvent.ACTION_PERFORMED,
+                    "selectMin"));
+        });
+
+        assertThat(splitPane(model).getDividerLocation()).isNotEqualTo(model.appliedSidebarWidth());
+
+        GraphWorkspaceWindow.runOnEdt(() -> dispatchFocus(model, FocusEvent.FOCUS_LOST));
+
+        assertThat(displayCommandCount(fixture)).isZero();
+        assertThat(fixture.binding.currentPresentation().displaySettings().mapSidebarWidth())
+            .isEqualTo(storedWidth);
+        model.close();
+    }
+
+    @Test
     public void commitsTheKeyboardAdjustedSidebarWidthOnceOnFocusLoss() {
         Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
             emptyState(), Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)),
