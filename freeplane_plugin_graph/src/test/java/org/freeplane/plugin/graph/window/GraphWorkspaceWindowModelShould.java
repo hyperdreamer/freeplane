@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.GraphicsEnvironment;
@@ -46,11 +47,13 @@ import javax.xml.namespace.QName;
 import javax.swing.AbstractButton;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
+import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JFrame;
 import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JSplitPane;
 import javax.swing.JSeparator;
 import javax.swing.JTextField;
 import javax.swing.JToggleButton;
@@ -193,7 +196,9 @@ public class GraphWorkspaceWindowModelShould {
         assertThat(model.toolbar().openButton().getText()).isEqualTo("graph_workspace.action.open");
         assertThat(model.toolbar().saveButton().getText()).isEqualTo("graph_workspace.action.save");
         assertThat(model.settingsPanel().getComponent(0).getName()).isEqualTo("graph-workspace-settings-heading");
-        assertThat(model.mapList().getComponent(0).getName()).isEqualTo("graph-workspace-map-list-heading");
+        JPanel headingRow = (JPanel) componentByName(model.mapList(), "graph-workspace-map-list-heading-row");
+        assertThat(componentByName(headingRow, "graph-workspace-map-list-heading").getName())
+            .isEqualTo("graph-workspace-map-list-heading");
         model.close();
     }
 
@@ -225,15 +230,101 @@ public class GraphWorkspaceWindowModelShould {
         assertThat(model.settingsPanel().getComponentCount()).isGreaterThan(0);
         assertThat(UIManager.getLookAndFeel()).isNotNull();
 
-        JPanel graphArea = (JPanel) model.content().getComponent(1);
         assertThat(model.content().getComponentCount()).isEqualTo(3);
-        assertThat(graphArea.getComponentCount()).isEqualTo(3);
-        assertThat(graphArea.getComponent(0)).isSameAs(model.mapList());
-        assertThat(graphArea.getComponent(1)).isInstanceOf(JScrollPane.class);
-        JScrollPane graphScrollPane = (JScrollPane) graphArea.getComponent(1);
-        assertThat(graphScrollPane.getName()).isEqualTo("graph-workspace-scroll-pane");
-        assertThat(graphScrollPane.getViewport().getView()).isSameAs(model.canvas());
-        assertThat(graphArea.getComponent(2)).isSameAs(model.settingsPanel());
+        JPanel graphArea = graphArea(model);
+        assertThat(graphArea.getComponentCount()).isEqualTo(2);
+        assertThat(componentByName(graphArea, "graph-workspace-settings")).isSameAs(model.settingsPanel());
+        JSplitPane splitPane = splitPane(model);
+        assertThat(sidebarPanel(model)).isNotSameAs(graphArea.getComponent(0));
+        assertThat(sidebarPanel(model).mapList()).isSameAs(model.mapList());
+        assertThat(splitPane.getRightComponent()).isSameAs(canvasScrollPane(model));
+        assertThat(canvasScrollPane(model).getName()).isEqualTo("graph-workspace-scroll-pane");
+        assertThat(canvasScrollPane(model).getViewport().getView()).isSameAs(model.canvas());
+        model.close();
+    }
+
+    @Test
+    public void preservesSidebarFieldsWhenADisplayCheckboxIsToggled() {
+        DisplaySettings settings = DisplaySettings.of(true, CanvasTheme.FOLLOW_FREEPLANE, true, true, 400, true,
+            emptyUnknownXml());
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            emptyState(), Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)),
+            false, WorkspaceSessionStatus.empty(), presentation(settings, ACTIVE_ID)).answerSidebarRoundTrip();
+        GraphWorkspaceWindowModel model = fixture.model();
+
+        model.settingsPanel().showArrowheads().doClick();
+
+        assertThat(displayCommandCount(fixture)).isEqualTo(1);
+        DisplaySettings committed = lastDisplaySettings(fixture);
+        assertThat(committed.showArrowheads()).isFalse();
+        assertThat(committed.mapSidebarWidth()).isEqualTo(400);
+        assertThat(committed.mapSidebarHidden()).isTrue();
+        model.close();
+    }
+
+    @Test
+    public void appliesStoredSidebarStateWithoutEmittingACommand() {
+        DisplaySettings initial = DisplaySettings.of(true, CanvasTheme.FOLLOW_FREEPLANE, true, true, 264, false,
+            emptyUnknownXml());
+        DisplaySettings changed = DisplaySettings.of(true, CanvasTheme.FOLLOW_FREEPLANE, true, true, 500, false,
+            emptyUnknownXml());
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            emptyState(), Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)),
+            false, WorkspaceSessionStatus.empty(), presentation(initial, ACTIVE_ID)).answerSidebarRoundTrip();
+        GraphWorkspaceWindowModel model = fixture.model();
+        GraphWorkspaceWindow.runOnEdt(() -> {
+            splitPane(model).setSize(1000, 300);
+            splitPane(model).doLayout();
+        });
+        GraphWorkspaceWindow.runOnEdt(() -> { });
+
+        model.execute(GraphCommands.display(changed));
+        int afterCommand = displayCommandCount(fixture);
+        model.acceptCanvasState(emptyState());
+
+        assertThat(afterCommand).isEqualTo(1);
+        assertThat(splitPane(model).getDividerLocation()).isEqualTo(500);
+        assertThat(mapsSidebarMenuItem(model).isSelected()).isTrue();
+        assertThat(displayCommandCount(fixture)).isEqualTo(1);
+        model.close();
+    }
+
+    @Test
+    public void showsTheStoredSidebarWidthOnOpenInsteadOfTheMinimum() {
+        DisplaySettings settings = DisplaySettings.of(true, CanvasTheme.FOLLOW_FREEPLANE, true, true, 400, false,
+            emptyUnknownXml());
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            emptyState(), Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)),
+            false, WorkspaceSessionStatus.empty(), presentation(settings, ACTIVE_ID)).answerSidebarRoundTrip();
+        GraphWorkspaceWindowModel model = fixture.model();
+
+        assertThat(splitPane(model).getWidth()).isZero();
+        GraphWorkspaceWindow.runOnEdt(() -> {
+            splitPane(model).setSize(1000, 300);
+            splitPane(model).doLayout();
+        });
+        GraphWorkspaceWindow.runOnEdt(() -> { });
+
+        assertThat(splitPane(model).getDividerLocation()).isEqualTo(400);
+        model.close();
+    }
+
+    @Test
+    public void hostsTheMapSidebarInASplitPaneInsideTheGraphArea() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
+
+        assertThat(model.content().getComponentCount()).isEqualTo(3);
+        JPanel graphArea = graphArea(model);
+        assertThat(graphArea.getComponentCount()).isEqualTo(2);
+        assertThat(componentByName(graphArea, "graph-workspace-settings")).isSameAs(model.settingsPanel());
+        assertThat(sidebarPanel(model).getName()).isEqualTo("graph-workspace-map-sidebar");
+        assertThat(sidebarPanel(model).mapList()).isSameAs(model.mapList());
+        assertThat(sidebarPanel(model)).isNotSameAs(graphArea.getComponent(0));
+        assertThat(canvasScrollPane(model).getName()).isEqualTo("graph-workspace-scroll-pane");
+        assertThat(canvasScrollPane(model).getViewport().getView()).isSameAs(model.canvas());
         model.close();
     }
 
@@ -770,8 +861,7 @@ public class GraphWorkspaceWindowModelShould {
         Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
             emptyState(), Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
         GraphWorkspaceWindowModel model = fixture.model();
-        JPanel graphArea = (JPanel) model.content().getComponent(1);
-        JScrollPane graphScrollPane = (JScrollPane) graphArea.getComponent(1);
+        JScrollPane graphScrollPane = canvasScrollPane(model);
 
         model.acceptCanvasState(wideNodeState(ACTIVE_ID));
 
@@ -786,8 +876,7 @@ public class GraphWorkspaceWindowModelShould {
             wideNodeState(ACTIVE_ID),
             Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
         GraphWorkspaceWindowModel model = fixture.model();
-        JPanel graphArea = (JPanel) model.content().getComponent(1);
-        JScrollPane graphScrollPane = (JScrollPane) graphArea.getComponent(1);
+        JScrollPane graphScrollPane = canvasScrollPane(model);
         graphScrollPane.setSize(new Dimension(420, 300));
         graphScrollPane.doLayout();
         javax.swing.JViewport viewport = graphScrollPane.getViewport();
@@ -1565,7 +1654,7 @@ public class GraphWorkspaceWindowModelShould {
     }
 
     private static JViewport scrollViewport(final GraphWorkspaceWindowModel model, final Dimension size) {
-        JScrollPane graphScrollPane = graphScrollPane(model);
+        JScrollPane graphScrollPane = canvasScrollPane(model);
         graphScrollPane.setSize(size);
         graphScrollPane.doLayout();
         return graphScrollPane.getViewport();
@@ -1599,9 +1688,69 @@ public class GraphWorkspaceWindowModelShould {
         }
     }
 
-    private static JScrollPane graphScrollPane(final GraphWorkspaceWindowModel model) {
-        JPanel graphArea = (JPanel) model.content().getComponent(1);
-        return (JScrollPane) graphArea.getComponent(1);
+    private static JPanel graphArea(final GraphWorkspaceWindowModel model) {
+        return (JPanel) componentByName(model.content(), "graph-workspace-graph-area");
+    }
+
+    private static JSplitPane splitPane(final GraphWorkspaceWindowModel model) {
+        return (JSplitPane) componentByName(graphArea(model), "graph-workspace-split");
+    }
+
+    private static MapSidebarPanel sidebarPanel(final GraphWorkspaceWindowModel model) {
+        return (MapSidebarPanel) splitPane(model).getLeftComponent();
+    }
+
+    private static JScrollPane canvasScrollPane(final GraphWorkspaceWindowModel model) {
+        return (JScrollPane) splitPane(model).getRightComponent();
+    }
+
+    private static JCheckBoxMenuItem mapsSidebarMenuItem(final GraphWorkspaceWindowModel model) {
+        return (JCheckBoxMenuItem) menuItemByName(model, "graph-workspace-maps-sidebar-menu-item");
+    }
+
+    private static Component componentByName(final Container parent, final String name) {
+        for (final Component component : parent.getComponents()) {
+            if (name.equals(component.getName())) {
+                return component;
+            }
+        }
+        throw new AssertionError("Missing component " + name);
+    }
+
+    private static JMenuItem menuItemByName(final GraphWorkspaceWindowModel model, final String name) {
+        for (int menuIndex = 0; menuIndex < model.menuBar().getMenuCount(); menuIndex++) {
+            final JMenu menu = model.menuBar().getMenu(menuIndex);
+            for (final Component component : menu.getMenuComponents()) {
+                if (component instanceof JMenuItem && name.equals(component.getName())) {
+                    return (JMenuItem) component;
+                }
+            }
+        }
+        throw new AssertionError("Missing menu item " + name);
+    }
+
+    private static int displayCommandCount(final Fixture fixture) {
+        final ArgumentCaptor<GraphCommand> commands = ArgumentCaptor.forClass(GraphCommand.class);
+        verify(fixture.handle, org.mockito.Mockito.atLeast(0)).execute(commands.capture());
+        int count = 0;
+        for (final GraphCommand command : commands.getAllValues()) {
+            if (command instanceof GraphCommands.Display) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private static DisplaySettings lastDisplaySettings(final Fixture fixture) {
+        final ArgumentCaptor<GraphCommand> commands = ArgumentCaptor.forClass(GraphCommand.class);
+        verify(fixture.handle, org.mockito.Mockito.atLeast(0)).execute(commands.capture());
+        DisplaySettings result = null;
+        for (final GraphCommand command : commands.getAllValues()) {
+            if (command instanceof GraphCommands.Display) {
+                result = ((GraphCommands.Display) command).settings();
+            }
+        }
+        return result;
     }
     @Test
     public void placesRecentWorkspacesMenuBetweenSaveAsAndClose() {
@@ -2690,6 +2839,20 @@ public class GraphWorkspaceWindowModelShould {
 
         private Fixture stubIcon(final String path, final Icon icon) {
             iconStubs.put(path, icon);
+            return this;
+        }
+
+        private Fixture answerSidebarRoundTrip() {
+            final DisplaySettings[] committed = { binding.currentPresentation().displaySettings() };
+            when(handle.execute(any(GraphCommand.class))).thenAnswer(invocation -> {
+                final GraphCommand command = invocation.getArgument(0);
+                if (command instanceof GraphCommands.Display) {
+                    committed[0] = ((GraphCommands.Display) command).settings();
+                }
+                return null;
+            });
+            when(binding.currentPresentation())
+                .thenAnswer(invocation -> presentation(committed[0], ACTIVE_ID));
             return this;
         }
 
