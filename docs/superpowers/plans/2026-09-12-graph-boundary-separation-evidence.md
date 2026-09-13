@@ -33,12 +33,20 @@
    (<= 0.10), `deltaRms = deltaMax = 0.0015358157166929232` (<= 0.05 / 0.10); `ROUND_LIMIT` never
    appears on the corpus and no `BoundarySeparationException` occurs.
 4. Cross-map compactness: worstMapDisplacement = 13.570231901702556.
-5. Strict performance gate: `reference-2000-5000` full-worker p50/p95/p99/max = 29,121,155 / 52,334,029 / 81,235,776 / 84,632,594 ns; correction overhead split = plan p50/p95/max = 91,294,643 / 123,866,731 / 155,878,250 ns, apply p50/p95/max = 0 / 0 / 0 ns.
-   Recorded ledger `freeplane_plugin_graph/build/graph-performance/performance-ledger.csv`
-   (`reference-2000-5000,full-worker,400,300,29121155,52334029,81235776,84632594,500000000,100000000,0,0,true`;
-   ledger SHA-256 `735a466bd46837223d22a0793d4020af130d2a2fba322a120f91c05280ec2ef3`). The row passes
-   on the strict-budget limb; the supplementary baseline comparison is 0.67% above the 51,985,400 ns
-   baseline. `accepted-batch-first-frame` (p95 81,250,040 ns) also passes its 150,000,000 ns strict
+5. Strict performance gate (re-run in the audit-fix wave with the corrected hull/plan attribution):
+   `reference-2000-5000` full-worker p50/p95/p99/max = 28,918,550 / 53,250,728 / 77,344,782 /
+   83,424,105 ns; ledger `correction` row p50/p95/p99/max = 3,673,673 / 8,971,692 / 9,503,972 /
+   17,312,519 ns, which is `CORRECTION = plan + apply`; the corrected remediated per-stage split is
+   plan p50/p95/max = 3,837,962 / 7,926,286 / 11,365,830 ns, hull p50/p95/max = 931,140 /
+   1,553,285 / 2,934,923 ns, apply 0 / 0 / 0 ns (focused profile). The previously quoted
+   "plan p50/p95/max = 91,294,643 / 123,866,731 / 155,878,250 ns" split was the pre-remediation
+   Task-1 measurement with the pre-fix attribution (`plan` included `computeHulls`) and is superseded.
+   Recorded ledger `freeplane_plugin_graph/build/graph-performance/performance-ledger.csv`, archived at
+   `archives/latest-strict-gate/performance-ledger.csv`
+   (`reference-2000-5000,full-worker,400,300,28918550,53250728,77344782,83424105,500000000,100000000,0,0,true`;
+   ledger SHA-256 `c8af6527b0a97e6eb620c1cb717218e93170f2c60ca9f907875a2bb4011d0991`). The row passes
+   on the strict-budget limb; the supplementary baseline comparison is 2.4% above the 51,985,400 ns
+   baseline. `accepted-batch-first-frame` (p95 85,176,227 ns) also passes its 150,000,000 ns strict
    budget. `force` and `edt-swap` remain the documented pre-existing environment waivers (they fail
    the same way on the untouched baseline `aa6ac48b02`), not boundary-separation regressions. The
    ledger's `correction` stage meters the plan + apply split recorded in the focused profile in
@@ -47,11 +55,11 @@
 
 ## Full-suite verification
 - Command: `gradle :freeplane_plugin_graph:test` (Zulu 21.0.8, Gradle 9.0.0).
-- Result: BUILD SUCCESSFUL; 83 test classes, 1001 tests, 0 failures, 0 errors, 3 environment skips
+- Result: BUILD SUCCESSFUL; 83 test classes, 1002 tests, 0 failures, 0 errors, 3 environment skips
   (`GraphPluginIntegrationShould` method-level headless assumption in
   `passesTheSharedListIntoTheCreatedHeadlessView`, `GraphPluginIntegrationShould.java:219-220`;
   `WorkspaceUriResolverShould` Windows-path and two-filesystem-roots assumptions).
-- Required classes all present and green: `BoundarySeparationCorrectionShould` (33 tests),
+- Required classes all present and green: `BoundarySeparationCorrectionShould` (34 tests),
   `BoundaryConflictShould`, `BoundarySeparationDiagnosticsShould`, `CanonicalLayoutKeysShould`,
   `BoundaryInvariantAssertionsShould`, `LayoutWorkerShould`, `LayoutSettleLoopShould`,
   `GraphUpdateCoordinatorShould`, `GraphWorkspaceCommandAcceptanceShould`, `GraphStreamBoundaryShould`,
