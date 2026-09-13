@@ -454,6 +454,7 @@ public class WorkspaceCommandsShould {
     public void replaceCompleteDisplaySettingsAndTreatEqualSettingsAsNoChange() {
         WorkspaceDocument before = emptyDocument();
         DisplaySettings settings = DisplaySettings.of(false, DisplaySettings.CanvasTheme.DARK, false, false,
+            DisplaySettings.DEFAULT_MAP_SIDEBAR_WIDTH, false,
             Collections.singletonList(unknown("display", "kept")));
 
         WorkspaceTransition updated = WorkspaceCommands.setDisplaySettings(settings).apply(before);
@@ -465,6 +466,16 @@ public class WorkspaceCommandsShould {
         WorkspaceTransition unchanged = WorkspaceCommands.setDisplaySettings(settings).apply(updated.after());
         assertThat(unchanged.status()).isEqualTo(WorkspaceTransition.Status.NO_OP);
         assertThat(unchanged.messageArguments()).containsExactly("setDisplaySettings");
+
+        DisplaySettings wider = DisplaySettings.of(settings.showArrowheads(), settings.canvasTheme(),
+            settings.rememberViewport(), settings.dimUnrelatedNodes(), 400, settings.mapSidebarHidden(),
+            settings.unknownXml());
+        WorkspaceTransition widthOnly = WorkspaceCommands.setDisplaySettings(wider).apply(updated.after());
+        assertThat(widthOnly.status()).isEqualTo(WorkspaceTransition.Status.APPLIED);
+        assertThat(widthOnly.after().displaySettings().mapSidebarWidth()).isEqualTo(400);
+
+        WorkspaceTransition repeatedWidth = WorkspaceCommands.setDisplaySettings(wider).apply(widthOnly.after());
+        assertThat(repeatedWidth.status()).isEqualTo(WorkspaceTransition.Status.NO_OP);
     }
 
     @Test

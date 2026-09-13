@@ -1202,7 +1202,7 @@ public class GraphWorkspaceWindowModelShould {
     @Test
     public void startsWithPersistedPresentationValuesAndAppliesThePersistedThemeBeforePainting() {
         DisplaySettings settings = DisplaySettings.of(false, CanvasTheme.DARK, false, false,
-            emptyUnknownXml());
+            DisplaySettings.DEFAULT_MAP_SIDEBAR_WIDTH, false, emptyUnknownXml());
         Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
             nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
             Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false,
@@ -1222,9 +1222,9 @@ public class GraphWorkspaceWindowModelShould {
     @Test
     public void refreshesCanvasPresentationAfterADisplayCommandWithoutResettingOtherSettings() {
         DisplaySettings initial = DisplaySettings.of(true, CanvasTheme.LIGHT, true, true,
-            emptyUnknownXml());
+            DisplaySettings.DEFAULT_MAP_SIDEBAR_WIDTH, false, emptyUnknownXml());
         DisplaySettings changed = DisplaySettings.of(false, CanvasTheme.DARK, true, false,
-            emptyUnknownXml());
+            DisplaySettings.DEFAULT_MAP_SIDEBAR_WIDTH, false, emptyUnknownXml());
         Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
             nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
             Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false,
@@ -1262,7 +1262,7 @@ public class GraphWorkspaceWindowModelShould {
     @Test
     public void fitsWhenRememberViewportIsDisabledEvenIfThePersistedViewportOverlaps() {
         DisplaySettings settings = DisplaySettings.of(true, CanvasTheme.LIGHT, false, true,
-            emptyUnknownXml());
+            DisplaySettings.DEFAULT_MAP_SIDEBAR_WIDTH, false, emptyUnknownXml());
         Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
             nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
             Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false,
