@@ -182,7 +182,7 @@ public class GraphWorkspaceModelAcceptanceShould {
             assertApplied(store.execute(WorkspaceCommands.addMap(MAP_TWO, URI.create("maps/two.mm"))));
             Viewport viewport = Viewport.of(120.0, -45.0, 1.75, noUnknownXml());
             DisplaySettings settings = DisplaySettings.of(false, DisplaySettings.CanvasTheme.DARK, false, false,
-                noUnknownXml());
+                DisplaySettings.DEFAULT_MAP_SIDEBAR_WIDTH, false, noUnknownXml());
             NodeReference pinnedNode = reference(MAP_ONE, "pin-one");
 
             assertApplied(store.updateViewport(viewport));

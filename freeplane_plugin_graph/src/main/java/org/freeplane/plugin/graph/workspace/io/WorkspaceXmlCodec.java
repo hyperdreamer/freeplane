@@ -314,6 +314,8 @@ public final class WorkspaceXmlCodec {
             enumValue(DisplaySettings.CanvasTheme.class, requiredAttribute(element, "canvas-theme"), "canvas-theme"),
             booleanValue(requiredAttribute(element, "remember-viewport"), "remember-viewport"),
             booleanValue(requiredAttribute(element, "dim-unrelated-nodes"), "dim-unrelated-nodes"),
+            DisplaySettings.DEFAULT_MAP_SIDEBAR_WIDTH,
+            false,
             unknownXml);
     }
 

@@ -234,7 +234,7 @@ public class WorkspaceXmlCodecShould {
                 unknownAttribute(UnknownXml.Owner.RECORD, "viewport-attribute", "viewport"),
                 unknownElement(UnknownXml.Owner.RECORD, 0, "viewport-element", "viewport")));
         DisplaySettings settings = DisplaySettings.of(false, DisplaySettings.CanvasTheme.DARK, false, true,
-            Arrays.asList(
+            DisplaySettings.DEFAULT_MAP_SIDEBAR_WIDTH, false, Arrays.asList(
                 unknownAttribute(UnknownXml.Owner.RECORD, "display-attribute", "display"),
                 unknownElement(UnknownXml.Owner.RECORD, 0, "display-element", "display")));
 

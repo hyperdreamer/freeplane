@@ -108,7 +108,7 @@ public class WorkspaceHistoryShould {
         WorkspaceDocument before = document();
         WorkspaceDocument after = before.toBuilder()
             .displaySettings(DisplaySettings.of(false, DisplaySettings.CanvasTheme.DARK, true, true,
-                Collections.<UnknownXml>emptyList()))
+                DisplaySettings.DEFAULT_MAP_SIDEBAR_WIDTH, false, Collections.<UnknownXml>emptyList()))
             .build();
         AtomicInteger invocations = new AtomicInteger();
         WorkspaceCommand applied = new WorkspaceCommand() {
@@ -159,7 +159,8 @@ public class WorkspaceHistoryShould {
         WorkspaceTransition undone = history.undo(first.after());
 
         WorkspaceTransition second = history.execute(WorkspaceCommands.setDisplaySettings(DisplaySettings.of(false,
-            DisplaySettings.CanvasTheme.LIGHT, true, true, Collections.<UnknownXml>emptyList())), undone.after());
+            DisplaySettings.CanvasTheme.LIGHT, true, true, DisplaySettings.DEFAULT_MAP_SIDEBAR_WIDTH, false,
+            Collections.<UnknownXml>emptyList())), undone.after());
         WorkspaceTransition redo = history.redo(second.after());
 
         assertThat(second.status()).isEqualTo(WorkspaceTransition.Status.APPLIED);
@@ -179,7 +180,7 @@ public class WorkspaceHistoryShould {
         WorkspaceDocument after = WorkspaceCommands.addMap(MAP_ONE, URI.create("maps/one.mm")).apply(before).after()
             .toBuilder()
             .displaySettings(DisplaySettings.of(false, DisplaySettings.CanvasTheme.DARK, false, false,
-                Collections.<UnknownXml>emptyList()))
+                DisplaySettings.DEFAULT_MAP_SIDEBAR_WIDTH, false, Collections.<UnknownXml>emptyList()))
             .unknownXml(Collections.singletonList(afterUnknown))
             .build();
         WorkspaceHistory history = new WorkspaceHistory();
@@ -222,6 +223,26 @@ public class WorkspaceHistoryShould {
         assertThat(redone.after().maps()).hasSize(1);
         assertThat(redone.after().displaySettings()).isEqualTo(after.displaySettings());
         assertThat(redone.after().unknownXml()).containsExactly(afterUnknown);
+    }
+
+    @Test
+    public void restoresSidebarWidthWithTheWholeDisplaySettingsSnapshot() {
+        DisplaySettings before = DisplaySettings.of(true, DisplaySettings.CanvasTheme.LIGHT, true, true,
+            DisplaySettings.DEFAULT_MAP_SIDEBAR_WIDTH, false, Collections.<UnknownXml>emptyList());
+        DisplaySettings after = DisplaySettings.of(true, DisplaySettings.CanvasTheme.LIGHT, true, true, 400, true,
+            Collections.<UnknownXml>emptyList());
+        WorkspaceDocument document = document().toBuilder().displaySettings(before).build();
+        WorkspaceHistory history = new WorkspaceHistory();
+
+        WorkspaceTransition applied = history.execute(WorkspaceCommands.setDisplaySettings(after), document);
+        assertThat(applied.status()).isEqualTo(WorkspaceTransition.Status.APPLIED);
+        assertThat(applied.after().displaySettings().mapSidebarWidth()).isEqualTo(400);
+        assertThat(applied.after().displaySettings().mapSidebarHidden()).isTrue();
+
+        WorkspaceTransition undone = history.undo(applied.after());
+
+        assertThat(undone.status()).isEqualTo(WorkspaceTransition.Status.APPLIED);
+        assertThat(undone.after().displaySettings()).isEqualTo(before);
     }
 
     @Test

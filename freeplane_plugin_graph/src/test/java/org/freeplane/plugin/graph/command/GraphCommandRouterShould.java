@@ -163,6 +163,7 @@ public class GraphCommandRouterShould {
         NodeReference relationshipTarget = node(MAP_TWO, "target");
         NodeReference pinnedNode = node(MAP_ONE, "pinned");
         DisplaySettings settings = DisplaySettings.of(false, DisplaySettings.CanvasTheme.DARK, false, true,
+            DisplaySettings.DEFAULT_MAP_SIDEBAR_WIDTH, false,
             Collections.singletonList(UnknownXml.attribute(UnknownXml.Owner.RECORD,
                 new QName("urn:test", "display-flag"), "on")));
         Viewport viewport = Viewport.of(11.5, -4.25, 2.75, Collections.emptyList());
