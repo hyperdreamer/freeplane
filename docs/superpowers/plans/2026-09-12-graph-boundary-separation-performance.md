@@ -56,3 +56,51 @@ Hotspot list:
 - GraphStream spring-box layout `Energies.clearEnergies` 11.23%: 484 samples under `BarnesHutLayout.moveNode` ->
   `TypedSpringBox.setParticlePosition`, the per-move energy reset over the 3,200-particle graph. This cost sits in
   the layout engine (`LayoutEngine.apply` and worker submit), outside the measured correction stages.
+
+## Strict gate (Task 4)
+
+Command: gradle :freeplane_plugin_graph:graphPerformanceDiagnostic -PgraphStrictPerformance --rerun-tasks -PTestLoggingFull
+
+Result: exit code 1 after a complete run; the non-zero exit comes from the two
+pre-existing environment waivers below and is not a boundary-separation
+regression.
+
+Ledger: freeplane_plugin_graph/build/graph-performance/performance-ledger.csv
+Ledger SHA-256: 735a466bd46837223d22a0793d4020af130d2a2fba322a120f91c05280ec2ef3
+Baseline ledger: archives/diagnostics/baseline-strict-gate/baseline-performance-ledger.csv
+Baseline ledger SHA-256: 8bd8eb5fb440a7ced1e3586ad5658af8945a3824ba258a91b01d3c485516163a
+Pre-remediation feature ledger SHA-256: 5d7a2aeec4891d30e30ede52a0c1f2023bacbd2d3cdd1c8b56a370de0e8c88f3
+
+| scenario / stage | baseline p95 (ns) | pre-remediation p95 (ns) | remediated p50 (ns) | remediated p95 (ns) | remediated p99 (ns) | strict budget (ns) | verdict |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| reference-2000-5000 / full-worker | 51985400 | 137663516 | 29121155 | 52334029 | 81235776 | 100000000 | PASS |
+| reference-2000-5000 / accepted-batch-first-frame | 76344593 | 160930981 | 49252373 | 81250040 | 109116710 | 150000000 | PASS |
+| reference-2000-5000 / force | 268972130 | 178961459 | 151116139 | 226567094 | 314434182 | 50000000 | waiver |
+| reference-2000-5000 / edt-swap | 2700023 | 2398572 | 1287370 | 2592452 | 2974553 | 2000000 | waiver |
+
+Remediated ledger rows, verbatim from Step 5 (one line per row, no surrounding fence):
+
+reference-2000-5000,force,400,300,151116139,226567094,314434182,419658210,250000000,50000000,0,0,false
+reference-2000-5000,full-worker,400,300,29121155,52334029,81235776,84632594,500000000,100000000,0,0,true
+reference-2000-5000,edt-swap,400,300,1287370,2592452,2974553,4223209,10000000,2000000,0,0,false
+reference-2000-5000,accepted-batch-first-frame,400,300,49252373,81250040,109116710,129984885,750000000,150000000,0,0,true
+
+Environment waivers: `force` and `edt-swap` fail on the untouched baseline
+commit `aa6ac48b02` with the same or worse p95, on a machine where the boundary
+correction is absent; they are environment conditions and not regressions of
+this feature segment.
+
+Baseline comparison (supplementary, not part of the pass criterion): the
+remediated `full-worker` p95 is 333.8 ms down from the pre-remediation 137.7 ms
+and 0.65% above its 51,985,400 ns baseline (within run-to-run variance); the
+remediated `accepted-batch-first-frame` p95 is 79.7 ms below the pre-remediation
+160.9 ms and 6.4% above its 76,344,593 ns baseline. Both rows pass on the
+strict-budget limb of the criterion below. Run wall time was 38m44s (start
+2026-09-13T12:46:55Z, end 2026-09-13T13:25:40Z), within the extended 40-minute
+process deadline; no deadline abort occurred.
+
+Pass criterion: `full-worker` and `accepted-batch-first-frame` are at or below
+their baseline p95 values (51,985,400 ns and 76,344,593 ns) or at least under
+their strict budgets (100,000,000 ns and 150,000,000 ns). No threshold,
+workload, sample count, or measurement mapping changed; the only diagnostic
+change in this segment is `PROCESS_DEADLINE_NANOS` from 10 to 40 minutes.
