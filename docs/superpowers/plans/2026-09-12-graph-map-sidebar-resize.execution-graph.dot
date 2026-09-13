@@ -1,0 +1,40 @@
+digraph execution_graph {
+    rankdir=LR;
+    node [shape=box, style=rounded, fontname="Helvetica"];
+    subgraph cluster_model_format {
+        label="model-format";
+        style=dashed;
+        T1 [label="T1\nDisplaySettings sidebar fields and the atomic call-site migration\n[Standard]"];
+        T2 [label="T2\nPersist the two sidebar attributes in WorkspaceXmlCodec\n[Standard]"];
+    }
+    subgraph cluster_resources_assets {
+        label="resources-assets";
+        style=dashed;
+        T6 [label="T6\nTranslation keys and chevron assets\n[Fast]"];
+    }
+    subgraph cluster_sidebar_ui {
+        label="sidebar-ui";
+        style=dashed;
+        T3 [label="T3\nMapSidebarLayout clamp arithmetic\n[Fast]"];
+        T4 [label="T4\nMapSidebarPanel, MapSidebarRail and the MapListPanel heading row\n[Advanced]"];
+        T5 [label="T5\nMapSidebarSplitClampShould L&F harness\n[Standard]"];
+    }
+    subgraph cluster_window_wiring {
+        label="window-wiring";
+        style=dashed;
+        T7 [label="T7\nSplit-pane wiring and the single sidebar apply path\n[Advanced]"];
+        T8 [label="T8\nDivider gesture commit protocol\n[Advanced]"];
+        T9 [label="T9\nCollapsed hold, rail restore and the read-only session overlay\n[Advanced]"];
+        T10 [label="T10\nRail active-map badge and menu enablement pinning\n[Advanced]"];
+    }
+    T1 -> T2 [style=solid];
+    T1 -> T3 [style=bold];
+    T3 -> T4 [style=solid];
+    T3 -> T5 [style=solid];
+    T4 -> T5 [style=solid];
+    T1 -> T7 [style=bold];
+    T4 -> T7 [style=bold];
+    T7 -> T8 [style=solid];
+    T8 -> T9 [style=solid];
+    T9 -> T10 [style=solid];
+}
