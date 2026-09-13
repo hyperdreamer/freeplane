@@ -92,7 +92,7 @@ import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.geometry.NodeGeometry;
-import org.freeplane.plugin.graph.layout.LayoutConflict;
+import org.freeplane.plugin.graph.layout.BoundaryConflict;
 import org.freeplane.plugin.graph.layout.LayoutFrame;
 import org.freeplane.plugin.graph.projection.ContributorKey;
 import org.freeplane.plugin.graph.projection.EdgeContributor;
@@ -419,7 +419,13 @@ public class GraphWorkspaceCommandAcceptanceShould {
             assertApplied(handle.execute(GraphCommands.pin(pinned, 12.0, -8.0)));
             final PinProjection pin = PinProjection.active(PinRecord.of(pinned, 12.0, -8.0,
                 Collections.emptyList()), ProjectedNodeKey.of(SourceNodeKey.persisted(pinned)));
-            final LayoutConflict conflict = LayoutConflict.of(MAP_ONE, MAP_TWO, Collections.singletonList(pin));
+            final EnclosureHullKey firstHull = EnclosureHullKey.of(Collections.singletonList(
+                EnclosureKey.of(SourceNodeKey.persisted(node(MAP_ONE, "root-one")))));
+            final EnclosureHullKey secondHull = EnclosureHullKey.of(Collections.singletonList(
+                EnclosureKey.of(SourceNodeKey.persisted(node(MAP_TWO, "root-two")))));
+            final BoundaryConflict conflict = new BoundaryConflict(firstHull, secondHull,
+                BoundaryConflict.Kind.SIBLING_CROSSING, BoundaryConflict.Reason.IMMOVABLE_SIDES,
+                Collections.singletonList(pin));
 
             assertThat(conflict.blockingPins()).containsExactly(pin);
             assertThat(scope.store.currentDocument().pins()).hasSize(1);

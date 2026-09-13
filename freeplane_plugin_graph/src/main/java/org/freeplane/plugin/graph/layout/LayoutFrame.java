@@ -1,7 +1,5 @@
 package org.freeplane.plugin.graph.layout;
 
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -16,11 +14,11 @@ public final class LayoutFrame {
     private final LayoutPositions positions;
     private final boolean failed;
     private final int residualViolations;
-    private final List<LayoutConflict> conflicts;
+    private final BoundarySeparationDiagnostics boundaryDiagnostics;
     private final PerceptualIdlePolicy.IdleMeasurement idle;
 
     private LayoutFrame(final long stepIndex, final LayoutPositions positions, final boolean failed,
-            final int residualViolations, final List<LayoutConflict> conflicts,
+            final int residualViolations, final BoundarySeparationDiagnostics boundaryDiagnostics,
             final PerceptualIdlePolicy.IdleMeasurement idle) {
         if (stepIndex < 0) {
             throw new IllegalArgumentException("Layout frame index must be nonnegative");
@@ -34,7 +32,7 @@ public final class LayoutFrame {
         validateFinite(positions.anchors(), "anchor");
         this.failed = failed;
         this.residualViolations = residualViolations;
-        this.conflicts = copyConflicts(conflicts);
+        this.boundaryDiagnostics = Objects.requireNonNull(boundaryDiagnostics, "boundaryDiagnostics");
         this.idle = Objects.requireNonNull(idle, "idle");
     }
 
@@ -46,14 +44,15 @@ public final class LayoutFrame {
     public static LayoutFrame of(final long stepIndex, final LayoutPositions positions, final boolean failed,
             final int residualViolations) {
         return new LayoutFrame(stepIndex, positions, failed, residualViolations,
-            Collections.<LayoutConflict>emptyList(), PerceptualIdlePolicy.IdleMeasurement.initial());
+            BoundarySeparationDiagnostics.empty(), PerceptualIdlePolicy.IdleMeasurement.initial());
     }
 
-    public static LayoutFrame withDiagnostics(final LayoutFrame raw, final List<LayoutConflict> conflicts,
+    public static LayoutFrame withDiagnostics(final LayoutFrame raw,
+            final BoundarySeparationDiagnostics diagnostics,
             final PerceptualIdlePolicy.IdleMeasurement idle) {
         final LayoutFrame value = Objects.requireNonNull(raw, "raw");
         return new LayoutFrame(value.stepIndex, value.positions, value.failed, value.residualViolations,
-            conflicts, idle);
+            diagnostics, idle);
     }
 
     public long stepIndex() {
@@ -76,21 +75,16 @@ public final class LayoutFrame {
         return residualViolations >= 0;
     }
 
-    public List<LayoutConflict> conflicts() {
-        return conflicts;
+    public BoundarySeparationDiagnostics boundaryDiagnostics() {
+        return boundaryDiagnostics;
+    }
+
+    public List<BoundaryConflict> conflicts() {
+        return boundaryDiagnostics.conflicts();
     }
 
     public PerceptualIdlePolicy.IdleMeasurement idle() {
         return idle;
-    }
-
-    private static List<LayoutConflict> copyConflicts(final List<LayoutConflict> values) {
-        Objects.requireNonNull(values, "conflicts");
-        final List<LayoutConflict> copy = new ArrayList<LayoutConflict>(values.size());
-        for (final LayoutConflict value : values) {
-            copy.add(Objects.requireNonNull(value, "conflicts entry"));
-        }
-        return Collections.unmodifiableList(copy);
     }
 
     private static <K> void validateFinite(final Map<K, LayoutPoint> values, final String kind) {

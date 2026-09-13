@@ -29,8 +29,8 @@ import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.GraphGeometryEngine;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
+import org.freeplane.plugin.graph.layout.BoundarySeparationDiagnostics;
 import org.freeplane.plugin.graph.layout.LayoutCalibration;
-import org.freeplane.plugin.graph.layout.LayoutConflict;
 import org.freeplane.plugin.graph.layout.LayoutFrame;
 import org.freeplane.plugin.graph.layout.LayoutRequest;
 import org.freeplane.plugin.graph.layout.LayoutWorker;
@@ -757,9 +757,9 @@ public final class LayoutSettleLoop implements AutoCloseable {
         if (retained == null) {
             return LayoutFrame.of(index, positions, true, residual);
         }
-        final List<LayoutConflict> conflicts = retained.conflicts();
-        return LayoutFrame.withDiagnostics(LayoutFrame.of(index, positions, true, residual),
-            conflicts, retained.idle());
+        final BoundarySeparationDiagnostics diagnostics = retained.boundaryDiagnostics();
+        return LayoutFrame.withDiagnostics(LayoutFrame.of(index, positions, true, residual), diagnostics,
+            retained.idle());
     }
 
     private static Set<ProjectedNodeKey> pinnedNodes(final List<PinProjection> pins) {
