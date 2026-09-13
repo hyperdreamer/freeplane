@@ -755,4 +755,141 @@ public class BoundarySeparationCorrectionShould {
             this.hullB = hullB;
         }
     }
+
+    @Test
+    public void resolvesTheMixedComplementarySplitWithATieMove() {
+        final ProjectedNodeKey aFree = key("a-free");
+        final ProjectedNodeKey aPin = key("a-pin");
+        final ProjectedNodeKey bFree = key("b-free");
+        final ProjectedNodeKey bPin = key("b-pin");
+        final SiblingFixture fixture = siblingFixture(Arrays.asList(aFree, aPin), Arrays.asList(bFree, bPin),
+            Arrays.asList(nodeEntry(aFree, 0.0, 0.0), nodeEntry(aPin, -3.0, 30.0), nodeEntry(bFree, 38.0, 0.0),
+                nodeEntry(bPin, 47.0, 30.0)),
+            Arrays.asList(pin(aPin, -3.0, 30.0), pin(bPin, 47.0, 30.0)));
+
+        final BoundarySeparationResult result = apply(fixture);
+
+        assertThat(result.diagnostics().rounds()).isEqualTo(1);
+        assertThat(result.diagnostics().boundaryVerified()).isTrue();
+        assertThat(result.appliedDisplacements().get(CanonicalLayoutKeys.nodeField(aFree)))
+            .isEqualTo(LayoutPoint.of(-3.0, 0.0));
+        assertThat(result.appliedDisplacements().get(CanonicalLayoutKeys.nodeField(bFree)))
+            .isEqualTo(LayoutPoint.of(7.0, 0.0));
+        assertThat(result.positions().nodes().get(aPin)).isEqualTo(LayoutPoint.of(-3.0, 30.0));
+        assertThat(result.positions().nodes().get(bPin)).isEqualTo(LayoutPoint.of(47.0, 30.0));
+        assertThat(result.positions().nodes().get(aFree)).isEqualTo(LayoutPoint.of(-3.0, 0.0));
+        assertThat(result.positions().nodes().get(bFree)).isEqualTo(LayoutPoint.of(45.0, 0.0));
+    }
+
+    @Test
+    public void aTieAtTheAppliedMagnitudeIsValidAndTheTiedPinIsNotDisplaced() {
+        final ProjectedNodeKey aFree = key("a-free");
+        final ProjectedNodeKey aPin = key("a-pin");
+        final ProjectedNodeKey bFree = key("b-free");
+        final ProjectedNodeKey bPin = key("b-pin");
+        final SiblingFixture fixture = siblingFixture(Arrays.asList(aFree, aPin), Arrays.asList(bFree, bPin),
+            Arrays.asList(nodeEntry(aFree, 0.0, 0.0), nodeEntry(aPin, -3.0, 30.0), nodeEntry(bFree, 38.0, 0.0),
+                nodeEntry(bPin, 47.0, 30.0)),
+            Arrays.asList(pin(aPin, -3.0, 30.0), pin(bPin, 47.0, 30.0)));
+
+        final BoundarySeparationResult result = apply(fixture);
+
+        assertThat(result.appliedDisplacements()).containsOnlyKeys(
+            CanonicalLayoutKeys.nodeField(aFree), CanonicalLayoutKeys.nodeField(bFree),
+            CanonicalLayoutKeys.anchorField(fixture.hullA), CanonicalLayoutKeys.anchorField(fixture.hullB),
+            CanonicalLayoutKeys.anchorField(hull("root")));
+        assertThat(result.appliedDisplacements().keySet())
+            .doesNotContain(CanonicalLayoutKeys.nodeField(aPin))
+            .doesNotContain(CanonicalLayoutKeys.nodeField(bPin));
+        assertThat(result.positions().nodes().get(aPin)).isEqualTo(LayoutPoint.of(-3.0, 30.0));
+        assertThat(result.positions().nodes().get(bPin)).isEqualTo(LayoutPoint.of(47.0, 30.0));
+    }
+
+    @Test
+    public void pinnedMaximumContributorsOnBothSidesReportImmovableSides() {
+        final ProjectedNodeKey aPin = key("a-pin");
+        final ProjectedNodeKey bPin = key("b-pin");
+        final SiblingFixture fixture = siblingFixture(Collections.singletonList(aPin),
+            Collections.singletonList(bPin),
+            Arrays.asList(nodeEntry(aPin, 0.0, 30.0), nodeEntry(bPin, 38.0, 30.0)),
+            Arrays.asList(pin(aPin, 0.0, 30.0), pin(bPin, 38.0, 30.0)));
+
+        final BoundarySeparationResult result = apply(fixture);
+
+        assertThat(result.positions()).isEqualTo(fixture.positions);
+        assertThat(result.diagnostics().rounds()).isZero();
+        assertThat(result.diagnostics().hullResidualViolations()).isEqualTo(1);
+        assertThat(result.diagnostics().boundaryCovered()).isTrue();
+        assertThat(result.diagnostics().boundaryVerified()).isFalse();
+        assertThat(result.diagnostics().conflicts()).hasSize(1);
+        assertThat(result.diagnostics().conflicts().get(0).reason())
+            .isEqualTo(BoundaryConflict.Reason.IMMOVABLE_SIDES);
+        assertThat(result.diagnostics().conflicts().get(0).blockingPins()).hasSize(2);
+        assertThat(result.diagnostics().residualHullPairs()).containsExactly(
+            result.diagnostics().conflicts().get(0).pairKey());
+    }
+
+    @Test
+    public void recursiveCapabilityFindsTheNestedPinDepth() {
+        final ProjectedNodeKey a1Free = key("a1-free");
+        final ProjectedNodeKey a1Pin = key("a1-pin");
+        final ProjectedNodeKey bFree = key("b-free");
+        final ProjectedNodeKey bPin = key("b-pin");
+        final EnclosureHullKey rootHull = hull("root");
+        final EnclosureHullKey aHull = hull("a");
+        final EnclosureHullKey a1Hull = hull("a1");
+        final EnclosureHullKey bHull = hull("b");
+        final GraphProjection projection = projection(Arrays.asList(a1Free, a1Pin, bFree, bPin),
+            Arrays.asList(parent(rootHull, "root", Arrays.asList(aHull, bHull)),
+                nestedChild(aHull, "a", rootHull, Collections.singletonList(a1Hull)),
+                child(a1Hull, "a1", aHull, Arrays.asList(a1Free, a1Pin)),
+                child(bHull, "b", rootHull, Arrays.asList(bFree, bPin))));
+        final LayoutPositions positions = positions(
+            Arrays.asList(nodeEntry(a1Free, 0.0, 0.0), nodeEntry(a1Pin, -3.0, 30.0),
+                nodeEntry(bFree, 54.0, 0.0), nodeEntry(bPin, 63.0, 30.0)),
+            Arrays.asList(anchorEntry(rootHull, 0.0, 0.0), anchorEntry(aHull, 0.0, 0.0),
+                anchorEntry(a1Hull, 0.0, 0.0), anchorEntry(bHull, 54.0, 0.0)));
+        final List<PinProjection> pins = Arrays.asList(pin(a1Pin, -3.0, 30.0), pin(bPin, 63.0, 30.0));
+
+        final BoundarySeparationResult result = new BoundarySeparationCorrection().apply(projection, positions,
+            METRICS, pins);
+
+        assertThat(result.diagnostics().rounds()).isEqualTo(1);
+        assertThat(result.diagnostics().boundaryVerified()).isTrue();
+        assertThat(result.appliedDisplacements().get(CanonicalLayoutKeys.nodeField(a1Free)))
+            .isEqualTo(LayoutPoint.of(-3.0, 0.0));
+        assertThat(result.appliedDisplacements().get(CanonicalLayoutKeys.nodeField(bFree)))
+            .isEqualTo(LayoutPoint.of(7.0, 0.0));
+        assertThat(result.positions().nodes().get(a1Pin)).isEqualTo(LayoutPoint.of(-3.0, 30.0));
+        assertThat(result.positions().nodes().get(bPin)).isEqualTo(LayoutPoint.of(63.0, 30.0));
+    }
+
+    @Test
+    public void repeatedRunsAreDeterministic() {
+        final ProjectedNodeKey aFree = key("a-free");
+        final ProjectedNodeKey aPin = key("a-pin");
+        final ProjectedNodeKey bFree = key("b-free");
+        final ProjectedNodeKey bPin = key("b-pin");
+        final SiblingFixture fixture = siblingFixture(Arrays.asList(aFree, aPin), Arrays.asList(bFree, bPin),
+            Arrays.asList(nodeEntry(aFree, 0.0, 0.0), nodeEntry(aPin, -3.0, 30.0), nodeEntry(bFree, 38.0, 0.0),
+                nodeEntry(bPin, 47.0, 30.0)),
+            Arrays.asList(pin(aPin, -3.0, 30.0), pin(bPin, 47.0, 30.0)));
+
+        final BoundarySeparationResult first = new BoundarySeparationCorrection().apply(fixture.projection,
+            fixture.positions, METRICS, fixture.pins);
+        final BoundarySeparationResult second = new BoundarySeparationCorrection().apply(fixture.projection,
+            fixture.positions, METRICS, fixture.pins);
+
+        assertThat(second.positions()).isEqualTo(first.positions());
+        assertThat(second.diagnostics().rounds()).isEqualTo(first.diagnostics().rounds());
+        assertThat(second.diagnostics().hullViolationsDetected())
+            .isEqualTo(first.diagnostics().hullViolationsDetected());
+        assertThat(second.diagnostics().hullResidualViolations())
+            .isEqualTo(first.diagnostics().hullResidualViolations());
+        assertThat(second.diagnostics().appliedDisplacements())
+            .isEqualTo(first.diagnostics().appliedDisplacements());
+        assertThat(second.diagnostics().conflicts().size()).isEqualTo(first.diagnostics().conflicts().size());
+        assertThat(second.diagnostics().residualHullPairs())
+            .isEqualTo(first.diagnostics().residualHullPairs());
+    }
 }

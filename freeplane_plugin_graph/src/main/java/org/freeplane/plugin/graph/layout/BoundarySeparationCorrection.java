@@ -433,6 +433,32 @@ public final class BoundarySeparationCorrection {
             pinnedNodes)) {
             return new Candidate(firstUnit, 0.0, LayoutPoint.of(0.0, 0.0), secondUnit, magnitude, translation);
         }
+        final Double firstDepth = complementaryDepth(violation.first, firstUnit, magnitude, projection,
+            enclosuresByHull, hulls, positions, metrics, pinnedNodes);
+        if (firstDepth != null && firstDepth.doubleValue() > 0.0 && firstDepth.doubleValue() < magnitude) {
+            final double firstMagnitude = firstDepth.doubleValue();
+            final double secondMagnitude = magnitude - firstMagnitude;
+            if (valid(violation.first, firstUnit, firstMagnitude, projection, enclosuresByHull, hulls, positions,
+                    metrics, pinnedNodes)
+                    && valid(violation.second, secondUnit, secondMagnitude, projection, enclosuresByHull, hulls,
+                        positions, metrics, pinnedNodes)) {
+                return new Candidate(firstUnit, firstMagnitude, scale(translation, -firstMagnitude / magnitude),
+                    secondUnit, secondMagnitude, scale(translation, secondMagnitude / magnitude));
+            }
+        }
+        final Double secondDepth = complementaryDepth(violation.second, secondUnit, magnitude, projection,
+            enclosuresByHull, hulls, positions, metrics, pinnedNodes);
+        if (secondDepth != null && secondDepth.doubleValue() > 0.0 && secondDepth.doubleValue() < magnitude) {
+            final double secondMagnitude = secondDepth.doubleValue();
+            final double firstMagnitude = magnitude - secondMagnitude;
+            if (valid(violation.first, firstUnit, firstMagnitude, projection, enclosuresByHull, hulls, positions,
+                    metrics, pinnedNodes)
+                    && valid(violation.second, secondUnit, secondMagnitude, projection, enclosuresByHull, hulls,
+                        positions, metrics, pinnedNodes)) {
+                return new Candidate(firstUnit, firstMagnitude, scale(translation, -firstMagnitude / magnitude),
+                    secondUnit, secondMagnitude, scale(translation, secondMagnitude / magnitude));
+            }
+        }
         return null;
     }
 
@@ -452,6 +478,22 @@ public final class BoundarySeparationCorrection {
             }
         }
         return true;
+    }
+
+    private static Double complementaryDepth(final EnclosureHullKey hull, final LayoutPoint unit,
+            final double magnitude, final GraphProjection projection,
+            final Map<EnclosureHullKey, ProjectedEnclosure> enclosuresByHull,
+            final Map<EnclosureHullKey, HullGeometry> hulls, final LayoutPositions positions,
+            final GeometryTextMetrics metrics, final Set<ProjectedNodeKey> pinnedNodes) {
+        final Traversal traversal = traverse(hull, unit, magnitude, projection, enclosuresByHull, hulls,
+            positions, metrics, pinnedNodes);
+        double best = Double.POSITIVE_INFINITY;
+        for (final PinDepth pin : traversal.pins) {
+            if (pin.depth > 0.0 && pin.depth < magnitude) {
+                best = Math.min(best, pin.depth);
+            }
+        }
+        return best == Double.POSITIVE_INFINITY ? null : Double.valueOf(best);
     }
 
     private static Traversal traverse(final EnclosureHullKey hull, final LayoutPoint unit, final double band,
