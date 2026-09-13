@@ -122,6 +122,21 @@ tasks.register('graphPerformanceDiagnostic', JavaExec) {
     args file("$buildDir/graph-performance").absolutePath
 }
 
+final File boundaryProfileDirectory = file("$buildDir/boundary-correction-profile")
+tasks.register('boundaryCorrectionProfile', JavaExec) {
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'org.freeplane.plugin.graph.performance.BoundaryCorrectionProfile'
+    systemProperty 'java.awt.headless', 'true'
+    jvmArgs '-Xmx2g'
+    jvmArgs('-XX:StartFlightRecording=filename='
+        + new File(boundaryProfileDirectory, 'correction-profile.jfr').absolutePath + ',settings=profile')
+    doFirst {
+        boundaryProfileDirectory.mkdirs()
+    }
+    outputs.dir(boundaryProfileDirectory)
+}
+
 tasks.register('graphSmokeInstallation') {
     dependsOn tasks.named('jar')
     dependsOn tasks.named('copyOSGiJars')

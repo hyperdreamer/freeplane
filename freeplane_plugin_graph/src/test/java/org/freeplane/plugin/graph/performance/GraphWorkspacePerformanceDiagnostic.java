@@ -80,7 +80,7 @@ import org.freeplane.plugin.graph.workspace.model.WorkspaceId;
 
 public final class GraphWorkspacePerformanceDiagnostic {
     public static final long OPERATION_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(5L);
-    public static final long PROCESS_DEADLINE_NANOS = TimeUnit.MINUTES.toNanos(10L);
+    public static final long PROCESS_DEADLINE_NANOS = TimeUnit.MINUTES.toNanos(40L);
     public static final int CANVAS_WIDTH = 1024;
     public static final int CANVAS_HEIGHT = 768;
     public static final String OUTPUT_DIRECTORY_NAME = "graph-performance";
