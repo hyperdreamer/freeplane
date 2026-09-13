@@ -766,4 +766,55 @@ public class BoundarySeparationShould {
         return EnclosureHullKey.of(Collections.singletonList(
             EnclosureKey.of(SourceNodeKey.persisted(NodeReference.of(PIPELINE_MAP, PersistedNodeId.of(id))))));
     }
+
+    @Test
+    public void reproducedCaseSettleSequenceReachesIdleWithStableCorrectionDeltas() throws Exception {
+        final GraphProjection projection = pipelineProjection();
+        final LayoutWorker worker = new LayoutWorker(LayoutCalibration.spikeDefaults());
+        try {
+            await(worker.submit(pipelineRequest(projection, pipelineAllPins())));
+            for (int step = 0; step < 1500; step++) {
+                await(worker.step());
+            }
+            await(worker.submit(pipelineRequest(projection, pipelineRealPins())));
+            LayoutFrame idleFrame = null;
+            double worstWorstMapDisplacement = 0.0;
+            int worstRounds = 0;
+            int observedDetections = 0;
+            for (int step = 1; step <= 1000; step++) {
+                final LayoutFrame frame = await(worker.step());
+                assertThat(frame.failed()).isFalse();
+                assertThat(frame.boundaryDiagnostics().boundaryVerified()
+                    || frame.boundaryDiagnostics().boundaryCovered()).isTrue();
+                assertThat(frame.boundaryDiagnostics().rounds()).isLessThanOrEqualTo(2);
+                worstRounds = Math.max(worstRounds, frame.boundaryDiagnostics().rounds());
+                observedDetections = Math.max(observedDetections,
+                    frame.boundaryDiagnostics().hullViolationsDetected());
+                for (final BoundaryConflict conflict : frame.boundaryDiagnostics().conflicts()) {
+                    assertThat(conflict.reason()).isNotEqualTo(BoundaryConflict.Reason.ROUND_LIMIT);
+                }
+                worstWorstMapDisplacement = Math.max(worstWorstMapDisplacement,
+                    frame.boundaryDiagnostics().worstMapDisplacement());
+                BoundaryInvariantAssertions.assertBijection(frame.boundaryDiagnostics());
+                if (frame.idle().idle()) {
+                    idleFrame = frame;
+                    break;
+                }
+            }
+            assertThat(idleFrame).as("the settle sequence must reach idle within the step budget").isNotNull();
+            assertThat(idleFrame.boundaryDiagnostics().boundaryVerified()).isTrue();
+            assertThat(idleFrame.boundaryDiagnostics().hullResidualViolations()).isZero();
+            assertThat(idleFrame.boundaryDiagnostics().residualHullPairs()).isEmpty();
+            assertThat(idleFrame.idle().rms()).isLessThanOrEqualTo(0.0505);
+            assertThat(idleFrame.idle().max()).isLessThanOrEqualTo(0.10);
+            assertThat(idleFrame.boundaryDiagnostics().deltaRms()).isLessThanOrEqualTo(0.05);
+            assertThat(idleFrame.boundaryDiagnostics().deltaMax()).isLessThanOrEqualTo(0.10);
+            assertThat(worstRounds).isLessThanOrEqualTo(2);
+            assertThat(observedDetections).isGreaterThanOrEqualTo(1);
+            assertThat(worstWorstMapDisplacement).isGreaterThan(0.0);
+        }
+        finally {
+            worker.close();
+        }
+    }
 }
