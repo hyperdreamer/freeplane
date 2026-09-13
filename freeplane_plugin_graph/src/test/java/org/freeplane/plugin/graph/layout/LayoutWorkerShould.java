@@ -7,7 +7,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -858,8 +857,10 @@ public class LayoutWorkerShould {
             LayoutFrame restored = await(worker.submit(request()));
 
             assertThat(restored.failed()).isFalse();
-            assertThat(restored.boundaryDiagnostics().boundaryVerified()
-                || restored.boundaryDiagnostics().boundaryCovered()).isTrue();
+            assertThat(restored.boundaryDiagnostics()).isNotSameAs(first.boundaryDiagnostics());
+            assertThat(restored.boundaryDiagnostics().displacementMax()).isGreaterThan(0.0);
+            assertThat(restored.boundaryDiagnostics().displacementMax())
+                .isEqualTo(first.boundaryDiagnostics().displacementMax());
         }
         finally {
             worker.close();
@@ -873,18 +874,27 @@ public class LayoutWorkerShould {
         try {
             LayoutFrame first = await(worker.submit(request()));
 
+            // The frozen fixture separates two root hulls whose x-extents overlap by exactly 8.0.
+            // The correction splits that translation evenly, so the six applied displacement
+            // vectors (four nodes plus two anchors, three per map) all have magnitude 4.0 and the
+            // first frame has no predecessor to diff against.
+            assertThat(first.boundaryDiagnostics().appliedDisplacements()).hasSize(6);
+            assertThat(first.boundaryDiagnostics().deltaMax()).isEqualTo(4.0);
             assertThat(first.boundaryDiagnostics().deltaMax())
                 .isEqualTo(first.boundaryDiagnostics().displacementMax());
+            assertThat(first.boundaryDiagnostics().deltaRms()).isEqualTo(4.0);
             assertThat(first.boundaryDiagnostics().deltaRms())
                 .isEqualTo(first.boundaryDiagnostics().displacementRms());
 
             LayoutFrame stepped = await(worker.step());
-            double[] expected = expectedDeltas(first.boundaryDiagnostics().appliedDisplacements(),
-                stepped.boundaryDiagnostics().appliedDisplacements());
 
-            assertThat(stepped.boundaryDiagnostics().deltaMax()).isGreaterThan(0.0);
-            assertThat(stepped.boundaryDiagnostics().deltaMax()).isEqualTo(expected[1]);
-            assertThat(stepped.boundaryDiagnostics().deltaRms()).isEqualTo(expected[0]);
+            // ShiftingEngine moves map ONE by +5.0 before correction. The overlap grows from 8.0 to
+            // 13.0 and the split translations grow from -4.0/+4.0 to -6.5/+6.5, so all six vectors
+            // change by exactly 2.5 in x: rms = sqrt(6 * 2.5^2 / 6) = 2.5 and max = 2.5. These
+            // literals are derived from the fixture geometry, not from LayoutWorker's own formula.
+            assertThat(stepped.boundaryDiagnostics().appliedDisplacements()).hasSize(6);
+            assertThat(stepped.boundaryDiagnostics().deltaMax()).isEqualTo(2.5);
+            assertThat(stepped.boundaryDiagnostics().deltaRms()).isEqualTo(2.5);
         }
         finally {
             worker.close();
@@ -915,27 +925,6 @@ public class LayoutWorkerShould {
         finally {
             worker.close();
         }
-    }
-
-    private static double[] expectedDeltas(Map<String, LayoutPoint> previous,
-            Map<String, LayoutPoint> current) {
-        Set<String> keys = new LinkedHashSet<String>(previous.keySet());
-        keys.addAll(current.keySet());
-        if (keys.isEmpty()) {
-            return new double[] {0.0, 0.0};
-        }
-        double sumSquares = 0.0;
-        double maximum = 0.0;
-        for (String key : keys) {
-            LayoutPoint before = previous.get(key);
-            LayoutPoint after = current.get(key);
-            double deltaX = (after == null ? 0.0 : after.x()) - (before == null ? 0.0 : before.x());
-            double deltaY = (after == null ? 0.0 : after.y()) - (before == null ? 0.0 : before.y());
-            double squared = deltaX * deltaX + deltaY * deltaY;
-            sumSquares += squared;
-            maximum = Math.max(maximum, Math.sqrt(squared));
-        }
-        return new double[] {Math.sqrt(sumSquares / keys.size()), maximum};
     }
 
     private static final class ShiftingEngine implements LayoutEngine {
