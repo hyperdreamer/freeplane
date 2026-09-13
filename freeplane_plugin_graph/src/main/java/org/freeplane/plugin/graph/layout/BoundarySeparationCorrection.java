@@ -124,7 +124,9 @@ public final class BoundarySeparationCorrection {
             final long planStart = System.nanoTime();
             final PlanOutcome terminalPlan = plan(projection, enclosuresByHull, terminalHulls, current, metrics, pins,
                 pinnedNodes, terminalViolations);
-            conflicts = terminalConflicts(terminalViolations, terminalPlan, projection, enclosuresByHull, pins);
+            final boolean boundExhausted = rounds >= maxDisplacementRounds;
+            conflicts = terminalConflicts(terminalViolations, terminalPlan, boundExhausted, projection,
+                enclosuresByHull, pins);
             planNanos += System.nanoTime() - planStart;
         }
         final Map<String, LayoutPoint> applied = sortedNonZero(field);
@@ -739,13 +741,18 @@ public final class BoundarySeparationCorrection {
     }
 
     private static List<BoundaryConflict> terminalConflicts(final List<Violation> violations,
-            final PlanOutcome plan, final GraphProjection projection,
+            final PlanOutcome plan, final boolean boundExhausted, final GraphProjection projection,
             final Map<EnclosureHullKey, ProjectedEnclosure> enclosuresByHull, final List<PinProjection> pins) {
         final List<BoundaryConflict> result = new ArrayList<BoundaryConflict>();
         for (final Violation violation : violations) {
             final BoundaryConflict existing = plan.conflicts.get(violation.pairKey);
             if (existing != null) {
                 result.add(existing);
+                continue;
+            }
+            if (boundExhausted && plan.movedPairs.contains(violation.pairKey)) {
+                result.add(conflict(violation, BoundaryConflict.Reason.ROUND_LIMIT,
+                    blockingPins(violation, enclosuresByHull, pins)));
                 continue;
             }
             final BoundaryConflict.Reason reason = violation.kind == BoundaryConflict.Kind.ANCESTOR_ESCAPE

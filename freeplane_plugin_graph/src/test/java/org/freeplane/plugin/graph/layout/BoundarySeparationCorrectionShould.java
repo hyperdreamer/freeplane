@@ -892,4 +892,44 @@ public class BoundarySeparationCorrectionShould {
         assertThat(second.diagnostics().residualHullPairs())
             .isEqualTo(first.diagnostics().residualHullPairs());
     }
+
+    @Test
+    public void roundLimitCoverageRecomputesReasonsOnTheFinalResidualSet() {
+        final EnclosureHullKey rootHull = hull("root");
+        final EnclosureHullKey aHull = hull("a");
+        final EnclosureHullKey bHull = hull("b");
+        final EnclosureHullKey cHull = hull("c");
+        final ProjectedNodeKey aNode = key("a-node");
+        final ProjectedNodeKey bNode = key("b-node");
+        final ProjectedNodeKey cNode = key("c-node");
+        final GraphProjection projection = projection(Arrays.asList(aNode, bNode, cNode),
+            Arrays.asList(parent(rootHull, "root", Arrays.asList(aHull, bHull, cHull)),
+                child(aHull, "a", rootHull, Collections.singletonList(aNode)),
+                child(bHull, "b", rootHull, Collections.singletonList(bNode)),
+                child(cHull, "c", rootHull, Collections.singletonList(cNode))));
+        final LayoutPositions positions = positions(
+            Arrays.asList(nodeEntry(aNode, 0.0, 0.0), nodeEntry(bNode, 38.0, 0.0), nodeEntry(cNode, 76.0, 0.0)),
+            Arrays.asList(anchorEntry(rootHull, 0.0, 0.0), anchorEntry(aHull, 0.0, 0.0),
+                anchorEntry(bHull, 38.0, 0.0), anchorEntry(cHull, 76.0, 0.0)));
+
+        final BoundarySeparationResult result = new BoundarySeparationCorrection(1).apply(projection, positions,
+            METRICS, Collections.<PinProjection>emptyList());
+
+        assertThat(result.diagnostics().rounds()).isEqualTo(1);
+        assertThat(result.diagnostics().hullViolationsDetected()).isEqualTo(2);
+        assertThat(result.diagnostics().hullResidualViolations()).isEqualTo(2);
+        assertThat(result.diagnostics().boundaryVerified()).isFalse();
+        assertThat(result.diagnostics().boundaryCovered()).isTrue();
+        assertThat(result.diagnostics().conflicts()).hasSize(2);
+        assertThat(result.diagnostics().conflicts().get(0).reason())
+            .isEqualTo(BoundaryConflict.Reason.ROUND_LIMIT);
+        assertThat(result.diagnostics().conflicts().get(1).reason())
+            .isEqualTo(BoundaryConflict.Reason.ROUND_LIMIT);
+        assertThat(result.diagnostics().residualHullPairs()).containsExactly(
+            result.diagnostics().conflicts().get(0).pairKey(),
+            result.diagnostics().conflicts().get(1).pairKey());
+        assertThat(result.positions().nodes().get(aNode)).isEqualTo(LayoutPoint.of(-5.0, 0.0));
+        assertThat(result.positions().nodes().get(bNode)).isEqualTo(LayoutPoint.of(38.0, 0.0));
+        assertThat(result.positions().nodes().get(cNode)).isEqualTo(LayoutPoint.of(81.0, 0.0));
+    }
 }
