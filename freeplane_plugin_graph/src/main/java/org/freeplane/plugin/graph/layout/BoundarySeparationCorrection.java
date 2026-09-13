@@ -113,7 +113,6 @@ public final class BoundarySeparationCorrection {
             current = separation.positions();
             terminalNodeResidual = separation.residualViolations();
 
-            final long planStart = System.nanoTime();
             final long hullStart = System.nanoTime();
             if (geometry == null) {
                 geometry = geometryEngine.computeHulls(projection, current, metrics);
@@ -125,6 +124,9 @@ public final class BoundarySeparationCorrection {
             final Map<EnclosureHullKey, HullGeometry> hulls = geometry.hulls();
             hullPositions = current;
             hullNanos += System.nanoTime() - hullStart;
+            // R13: plan covers detection, candidate evaluation and conflict construction only;
+            // hull measurement is attributed to the hull stage above.
+            final long planStart = System.nanoTime();
             final List<Violation> violations = detect(projection, enclosuresByHull, parents, hulls);
             if (rounds == 0) {
                 detected = violations.size();

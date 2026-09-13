@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.awt.Font;
 import java.awt.font.FontRenderContext;
+import java.awt.geom.Dimension2D;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -73,6 +74,40 @@ public class BoundarySeparationCorrectionShould {
         assertThat(result.diagnostics().boundaryVerified()).isTrue();
         assertThat(result.diagnostics().conflicts()).isEmpty();
         assertThat(result.diagnostics().residualHullPairs()).isEmpty();
+    }
+
+    @Test
+    public void stageTimingsAttributeHullMeasurementOutsideThePlanStage() {
+        final SleepingMetrics metrics = new SleepingMetrics(METRICS, 10L);
+        final EnclosureHullKey firstHull = hull("timing-first");
+        final EnclosureHullKey secondHull = hull("timing-second");
+        final EnclosureHullKey thirdHull = hull("timing-third");
+        final GraphProjection projection = projection(Collections.<ProjectedNodeKey>emptyList(),
+            Arrays.asList(root(firstHull, "first", Collections.<ProjectedNodeKey>emptyList()),
+                root(secondHull, "second", Collections.<ProjectedNodeKey>emptyList()),
+                root(thirdHull, "third", Collections.<ProjectedNodeKey>emptyList())));
+        final LayoutPositions positions = positions(
+            Collections.<Map.Entry<ProjectedNodeKey, LayoutPoint>>emptyList(),
+            Arrays.asList(anchorEntry(firstHull, 0.0, 0.0), anchorEntry(secondHull, 200.0, 0.0),
+                anchorEntry(thirdHull, 400.0, 0.0)));
+
+        final long start = System.nanoTime();
+        final BoundarySeparationResult result = new BoundarySeparationCorrection().apply(projection, positions,
+            metrics, Collections.<PinProjection>emptyList());
+        final long elapsed = System.nanoTime() - start;
+        final BoundarySeparationTimings timings = result.timings();
+
+        // Three empty root enclosures measure one label each, so the hull stage must contain every
+        // sleep and the plan stage must contain none of them (R13: hull and plan are disjoint).
+        assertThat(metrics.measuredNanos()).isGreaterThan(15_000_000L);
+        assertThat(timings.hullNanos()).isGreaterThanOrEqualTo(metrics.measuredNanos());
+        assertThat(timings.planNanos()).isLessThan(metrics.measuredNanos());
+        assertThat(timings.separationNanos()).isLessThanOrEqualTo(elapsed);
+        assertThat(timings.hullNanos()).isLessThanOrEqualTo(elapsed);
+        assertThat(timings.planNanos()).isLessThanOrEqualTo(elapsed);
+        assertThat(timings.applyNanos()).isLessThanOrEqualTo(elapsed);
+        assertThat(timings.separationNanos() + timings.hullNanos() + timings.planNanos() + timings.applyNanos())
+            .isLessThanOrEqualTo(elapsed);
     }
 
     @Test
@@ -285,6 +320,35 @@ public class BoundarySeparationCorrectionShould {
     private static EnclosureHullKey hull(String id) {
         return EnclosureHullKey.of(Collections.singletonList(
             EnclosureKey.of(SourceNodeKey.persisted(NodeReference.of(MAP, PersistedNodeId.of(id))))));
+    }
+
+    private static final class SleepingMetrics implements GeometryTextMetrics {
+        private final GeometryTextMetrics delegate;
+        private final long sleepMillis;
+        private long measuredNanos;
+
+        private SleepingMetrics(final GeometryTextMetrics delegate, final long sleepMillis) {
+            this.delegate = delegate;
+            this.sleepMillis = sleepMillis;
+        }
+
+        @Override
+        public Dimension2D measure(final String displayText, final BoundaryTier tier) {
+            final long start = System.nanoTime();
+            try {
+                Thread.sleep(sleepMillis);
+            }
+            catch (final InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("Interrupted while measuring a hull label", exception);
+            }
+            measuredNanos += System.nanoTime() - start;
+            return delegate.measure(displayText, tier);
+        }
+
+        private long measuredNanos() {
+            return measuredNanos;
+        }
     }
 
     @Test
