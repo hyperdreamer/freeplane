@@ -224,6 +224,31 @@ public class WorkspaceDomainShould {
             .isEqualTo(DisplaySettings.CanvasTheme.FOLLOW_FREEPLANE);
         assertThat(DisplaySettings.defaults().rememberViewport()).isTrue();
         assertThat(DisplaySettings.defaults().dimUnrelatedNodes()).isTrue();
+        assertThat(DisplaySettings.defaults().mapSidebarWidth()).isEqualTo(264);
+        assertThat(DisplaySettings.defaults().mapSidebarHidden()).isFalse();
+    }
+
+    @Test
+    public void defaultsTheMapSidebarPresentationState() {
+        assertThat(DisplaySettings.defaults().mapSidebarWidth()).isEqualTo(264);
+        assertThat(DisplaySettings.defaults().mapSidebarWidth())
+            .isEqualTo(DisplaySettings.DEFAULT_MAP_SIDEBAR_WIDTH);
+        assertThat(DisplaySettings.defaults().mapSidebarHidden()).isFalse();
+    }
+
+    @Test
+    public void includesTheMapSidebarFieldsInEqualityHashCodeAndToString() {
+        DisplaySettings base = DisplaySettings.defaults();
+        DisplaySettings wider = DisplaySettings.of(base.showArrowheads(), base.canvasTheme(),
+            base.rememberViewport(), base.dimUnrelatedNodes(), 400, base.mapSidebarHidden(), base.unknownXml());
+        DisplaySettings hidden = DisplaySettings.of(base.showArrowheads(), base.canvasTheme(),
+            base.rememberViewport(), base.dimUnrelatedNodes(), base.mapSidebarWidth(), true, base.unknownXml());
+
+        assertThat(wider).isNotEqualTo(base);
+        assertThat(hidden).isNotEqualTo(base);
+        assertThat(wider.hashCode()).isNotEqualTo(base.hashCode());
+        assertThat(hidden.hashCode()).isNotEqualTo(base.hashCode());
+        assertThat(base.toString()).contains("mapSidebarWidth=264").contains("mapSidebarHidden=false");
     }
 
     @Test

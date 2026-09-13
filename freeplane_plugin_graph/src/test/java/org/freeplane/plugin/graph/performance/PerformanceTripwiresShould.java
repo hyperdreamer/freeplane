@@ -136,9 +136,9 @@ public class PerformanceTripwiresShould {
         historicalHashes.put("reference-2000-5000.fpg",
             "366a7bbe316b9f11b974730f2f063821ddb0d6ed3cf0f1fc6ee67e92766a691c");
         Map<String, String> currentHashes = new LinkedHashMap<String, String>();
-        currentHashes.put("two-map.fpg", "9d77d6fb92839772b6eb5ac0666354d1d5d098e5484f96791f4f8937d23f0d0a");
-        currentHashes.put("three-map.fpg", "d39c03a85bc5555b81c3451d29919c1e248d8f4984b1628bcdbefdf1d7bf65c1");
-        currentHashes.put("reference-2000-5000.fpg", "5e9ae763c9a5cba1c5337c41c73f332a791c047b83d4f50391ba304cf9c8e508");
+        currentHashes.put("two-map.fpg", "bee4fd6f4ba185b83267b040732bbf9830bb492f95fc9a3815cff51ac3f11353");
+        currentHashes.put("three-map.fpg", "35b6f0322c49db4a77025838a2bba90a1cf98009b7f70965ed4d69ade213ef5f");
+        currentHashes.put("reference-2000-5000.fpg", "19ea6e8347a8b20166edb17a4d0114d8d3859918a2307c3b642fcedc1eb98006");
 
         for (Map.Entry<String, List<String>> fixture : expectedLabels.entrySet()) {
             byte[] bytes = java.nio.file.Files.readAllBytes(output.resolve(fixture.getKey()));

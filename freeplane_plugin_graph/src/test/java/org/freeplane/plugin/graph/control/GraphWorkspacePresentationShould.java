@@ -27,7 +27,7 @@ public class GraphWorkspacePresentationShould {
         UnknownXml unknown = UnknownXml.attribute(UnknownXml.Owner.RECORD,
             new QName("urn:test", "display"), "preserved");
         DisplaySettings settings = DisplaySettings.of(false, CanvasTheme.DARK, false, false,
-            Collections.singletonList(unknown));
+            DisplaySettings.DEFAULT_MAP_SIDEBAR_WIDTH, false, Collections.singletonList(unknown));
         List<GraphWorkspacePresentation.MapColor> input = new ArrayList<GraphWorkspacePresentation.MapColor>(
             Arrays.asList(color(SECOND_ID, "#E15759"), color(FIRST_ID, "#4E79A7")));
 

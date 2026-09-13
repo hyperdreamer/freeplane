@@ -1,0 +1,288 @@
+manifest_version: 1
+topic_slug: graph-map-sidebar-resize
+source_plan:
+  path: docs/superpowers/plans/2026-09-12-graph-map-sidebar-resize.md
+  sha256: 55dce474da8b3d2797b20e8ef435b20d9ecb51a9706120d86d9a8e75a9d27354
+  commit_oid: 0300e389a74fdc5129051b71b00869061d7410e3
+  task_count: 10
+resources:
+  test-slot:
+    capacity: 2
+    note: "Gradle test execution for one lane; two lanes may test concurrently"
+interfaces:
+  DisplaySettings.sidebar-fields:
+    digest: dc75d24820a0899c11323f7f0759c2f4aa8d43d6fdbacd5c1eb91194e7482e0f
+    signature: "DisplaySettings.DEFAULT_MAP_SIDEBAR_WIDTH:int=264; of(boolean,CanvasTheme,boolean,boolean,int,boolean,List<UnknownXml>):DisplaySettings; mapSidebarWidth():int; mapSidebarHidden():boolean; defaults():DisplaySettings"
+  GraphWorkspaceWindowModel.split-accessors:
+    digest: ecf2efa926d3af5e82ef6bf23a9b401371cbab3397bfb1ee69c980721f12974c
+    signature: "splitWidth():int; effectiveDividerWidth():int; splitInsets():Insets (effective divider width from ((BasicSplitPaneUI) splitPane.getUI()).getDivider().getDividerSize(), 0 when null)"
+  GraphWorkspaceWindowModel.wiring:
+    digest: be7c6bd2383e366853e59e28c4ffeb70b7b5e9bf50ebc7bd95e20d486aae353a
+    signature: "applySidebarSettings(DisplaySettings):void; setSidebarCollapsed(boolean):void; commitSidebarWidth(int):void; resetSidebarWidth():void; runPendingSidebarApply():void; runWithSidebarGuard(Runnable):void; commitSidebarDisplaySettings(int,boolean):void; appliedSidebarWidth():int; split pane name graph-workspace-split; sidebar panel name graph-workspace-map-sidebar; View item name graph-workspace-maps-sidebar-menu-item"
+  MapListPanel.heading:
+    digest: 6aad05f0a6ff29b91b9ad8d2b45ea6ceadec3caa6d18ef5208ad570def0f67be
+    signature: "collapseButton():JButton (name graph-workspace-map-sidebar-collapse); syncListWidths():void; heading row name graph-workspace-map-list-heading-row; PANEL_WIDTH removed, setMinimumSize (0,0)"
+  MapSidebarLayout.geometry:
+    digest: 2892b73b828add94876fd6eb863154a12ad15324de01a4365c660e1d288db76d
+    signature: "DEFAULT_WIDTH:int=264; MIN_WIDTH:int=180; RAIL_WIDTH:int=26; maximumWidth(int):int; effectiveMinimum(int,int,Insets):int; clampWidth(int,int,int,Insets):int; canvasMinimumWidth(int,int,Insets):int"
+  MapSidebarPanel.api:
+    digest: ebd19dcc45db2548ada44dc7228cb55c5ee2b76911a51fe8b820c5fcff7547fb
+    signature: "MapSidebarPanel(MapListPanel,CollapsedListener); setCollapsed(boolean):void; isCollapsed():boolean; setActiveMapCount(int):void; setReadOnly(boolean):void; mapList():MapListPanel; rail():MapSidebarRail; collapseButton():JButton"
+  MapSidebarRail.api:
+    digest: 2449665d3a6cb800025f3302ca050788a3264f085602a54ed5ba27750096527f
+    signature: "MapSidebarRail(); getPreferredSize():Dimension; setActiveMapCount(int):void; restoreButton():JButton; countBadge():JLabel; names graph-workspace-map-sidebar-rail, graph-workspace-map-sidebar-count, graph-workspace-map-sidebar-expand, graph-workspace-map-sidebar-label"
+  Resources.sidebar-keys:
+    digest: 1cb3f2f45ebeb4800b387b6d7a7b786182262c025745cb565e813835d9ab1354
+    signature: "graph_workspace.action.maps_sidebar=Maps sidebar; graph_workspace.map_list.collapse=Hide maps sidebar; graph_workspace.map_list.expand=Show maps sidebar; graph_workspace.map_list.rail_label=MAPS; graph_workspace.map_list.rail_count={0} active maps; images/MapSidebarCollapse.svg; images/MapSidebarExpand.svg"
+  WorkspaceXmlCodec.sidebar-attributes:
+    digest: 4ce1803059764923b0cb8e3c8dd665f6f36ef15eacfb652da55aadc300dda5a7
+    signature: "parseDisplaySettings: optional map-sidebar-width (positive int, absent->264, empty/non-numeric/<=0 malformed), optional map-sidebar-hidden (true|false, absent->false); displaySettingsXml writes both attributes; CURRENT_FORMAT_VERSION stays 1"
+lanes:
+  - id: model-format
+    task_ids: [T1, T2]
+    sequence: [1, 2]
+  - id: resources-assets
+    task_ids: [T6]
+    sequence: [1]
+  - id: sidebar-ui
+    task_ids: [T3, T4, T5]
+    sequence: [1, 2, 3]
+  - id: window-wiring
+    task_ids: [T7, T8, T9, T10]
+    sequence: [1, 2, 3, 4]
+tasks:
+  - id: T1
+    plan_task: 1
+    title: "DisplaySettings sidebar fields and the atomic call-site migration"
+    lane: model-format
+    sequence: 1
+    implementer_tier: standard
+    depends_on: []
+    ownership_patterns:
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/WorkspaceSettingsPanel.java
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/workspace/io/WorkspaceXmlCodec.java
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/workspace/model/DisplaySettings.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/command/GraphCommandRouterShould.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/control/GraphWorkspacePresentationShould.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/integration/GraphWorkspaceModelAcceptanceShould.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/GeneratedWorkspace.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindowModelShould.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/workspace/WorkspaceCommandsShould.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/workspace/WorkspaceHistoryShould.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/workspace/io/WorkspaceXmlCodecShould.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/workspace/model/WorkspaceDomainShould.java
+    exclusive_resources: [test-slot]
+    produces:
+      - id: DisplaySettings.sidebar-fields
+        digest: dc75d24820a0899c11323f7f0759c2f4aa8d43d6fdbacd5c1eb91194e7482e0f
+    consumes:
+      []
+    validation_vectors:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.workspace.model.WorkspaceDomainShould"]
+  - id: T2
+    plan_task: 2
+    title: "Persist the two sidebar attributes in WorkspaceXmlCodec"
+    lane: model-format
+    sequence: 2
+    implementer_tier: standard
+    depends_on: [T1]
+    ownership_patterns:
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/workspace/io/WorkspaceXmlCodec.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/workspace/io/WorkspaceXmlCodecShould.java
+    exclusive_resources: [test-slot]
+    produces:
+      - id: WorkspaceXmlCodec.sidebar-attributes
+        digest: 4ce1803059764923b0cb8e3c8dd665f6f36ef15eacfb652da55aadc300dda5a7
+    consumes:
+      - id: DisplaySettings.sidebar-fields
+        digest: dc75d24820a0899c11323f7f0759c2f4aa8d43d6fdbacd5c1eb91194e7482e0f
+    validation_vectors:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.workspace.io.WorkspaceXmlCodecShould"]
+  - id: T3
+    plan_task: 3
+    title: "MapSidebarLayout clamp arithmetic"
+    lane: sidebar-ui
+    sequence: 1
+    implementer_tier: fast
+    depends_on: [T1]
+    ownership_patterns:
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/MapSidebarLayout.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/MapSidebarLayoutShould.java
+    exclusive_resources: [test-slot]
+    produces:
+      - id: MapSidebarLayout.geometry
+        digest: 2892b73b828add94876fd6eb863154a12ad15324de01a4365c660e1d288db76d
+    consumes:
+      - id: DisplaySettings.sidebar-fields
+        digest: dc75d24820a0899c11323f7f0759c2f4aa8d43d6fdbacd5c1eb91194e7482e0f
+    validation_vectors:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.window.MapSidebarLayoutShould"]
+  - id: T4
+    plan_task: 4
+    title: "MapSidebarPanel, MapSidebarRail and the MapListPanel heading row"
+    lane: sidebar-ui
+    sequence: 2
+    implementer_tier: advanced
+    depends_on: [T3]
+    ownership_patterns:
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/MapListPanel.java
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/MapSidebarPanel.java
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/MapSidebarRail.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/MapListPanelShould.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/MapSidebarPanelShould.java
+    exclusive_resources: [test-slot]
+    produces:
+      - id: MapSidebarPanel.api
+        digest: ebd19dcc45db2548ada44dc7228cb55c5ee2b76911a51fe8b820c5fcff7547fb
+      - id: MapSidebarRail.api
+        digest: 2449665d3a6cb800025f3302ca050788a3264f085602a54ed5ba27750096527f
+      - id: MapListPanel.heading
+        digest: 6aad05f0a6ff29b91b9ad8d2b45ea6ceadec3caa6d18ef5208ad570def0f67be
+    consumes:
+      - id: MapSidebarLayout.geometry
+        digest: 2892b73b828add94876fd6eb863154a12ad15324de01a4365c660e1d288db76d
+      - id: DisplaySettings.sidebar-fields
+        digest: dc75d24820a0899c11323f7f0759c2f4aa8d43d6fdbacd5c1eb91194e7482e0f
+    validation_vectors:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.window.MapSidebarPanelShould"]
+  - id: T5
+    plan_task: 5
+    title: "MapSidebarSplitClampShould L&F harness"
+    lane: sidebar-ui
+    sequence: 3
+    implementer_tier: standard
+    depends_on: [T3, T4]
+    ownership_patterns:
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/MapSidebarSplitClampShould.java
+    exclusive_resources: [test-slot]
+    produces:
+      []
+    consumes:
+      - id: MapSidebarLayout.geometry
+        digest: 2892b73b828add94876fd6eb863154a12ad15324de01a4365c660e1d288db76d
+      - id: MapSidebarPanel.api
+        digest: ebd19dcc45db2548ada44dc7228cb55c5ee2b76911a51fe8b820c5fcff7547fb
+    validation_vectors:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.window.MapSidebarSplitClampShould"]
+  - id: T6
+    plan_task: 6
+    title: "Translation keys and chevron assets"
+    lane: resources-assets
+    sequence: 1
+    implementer_tier: fast
+    depends_on: []
+    ownership_patterns:
+      - freeplane/src/viewer/resources/translations/Resources_en.properties
+      - freeplane_plugin_graph/src/main/resources/images/MapSidebarCollapse.svg
+      - freeplane_plugin_graph/src/main/resources/images/MapSidebarExpand.svg
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/smoke/GraphPluginOsgiSmoke.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/GraphPluginIntegrationShould.java
+    exclusive_resources: [test-slot]
+    produces:
+      - id: Resources.sidebar-keys
+        digest: 1cb3f2f45ebeb4800b387b6d7a7b786182262c025745cb565e813835d9ab1354
+    consumes:
+      []
+    validation_vectors:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.window.GraphPluginIntegrationShould"]
+      - argv: ["gradle", "format_translation"]
+  - id: T7
+    plan_task: 7
+    title: "Split-pane wiring and the single sidebar apply path"
+    lane: window-wiring
+    sequence: 1
+    implementer_tier: advanced
+    depends_on: [T1, T4]
+    ownership_patterns:
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindow.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindowModelShould.java
+    exclusive_resources: [test-slot]
+    produces:
+      - id: GraphWorkspaceWindowModel.wiring
+        digest: be7c6bd2383e366853e59e28c4ffeb70b7b5e9bf50ebc7bd95e20d486aae353a
+      - id: GraphWorkspaceWindowModel.split-accessors
+        digest: ecf2efa926d3af5e82ef6bf23a9b401371cbab3397bfb1ee69c980721f12974c
+    consumes:
+      - id: DisplaySettings.sidebar-fields
+        digest: dc75d24820a0899c11323f7f0759c2f4aa8d43d6fdbacd5c1eb91194e7482e0f
+      - id: MapSidebarPanel.api
+        digest: ebd19dcc45db2548ada44dc7228cb55c5ee2b76911a51fe8b820c5fcff7547fb
+      - id: MapSidebarRail.api
+        digest: 2449665d3a6cb800025f3302ca050788a3264f085602a54ed5ba27750096527f
+      - id: MapListPanel.heading
+        digest: 6aad05f0a6ff29b91b9ad8d2b45ea6ceadec3caa6d18ef5208ad570def0f67be
+      - id: Resources.sidebar-keys
+        digest: 1cb3f2f45ebeb4800b387b6d7a7b786182262c025745cb565e813835d9ab1354
+    validation_vectors:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.window.GraphWorkspaceWindowModelShould"]
+      - argv: ["gradle", ":freeplane:test"]
+  - id: T8
+    plan_task: 8
+    title: "Divider gesture commit protocol"
+    lane: window-wiring
+    sequence: 2
+    implementer_tier: advanced
+    depends_on: [T7]
+    ownership_patterns:
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindowModelShould.java
+    exclusive_resources: [test-slot]
+    produces:
+      []
+    consumes:
+      - id: GraphWorkspaceWindowModel.wiring
+        digest: be7c6bd2383e366853e59e28c4ffeb70b7b5e9bf50ebc7bd95e20d486aae353a
+      - id: GraphWorkspaceWindowModel.split-accessors
+        digest: ecf2efa926d3af5e82ef6bf23a9b401371cbab3397bfb1ee69c980721f12974c
+      - id: MapSidebarLayout.geometry
+        digest: 2892b73b828add94876fd6eb863154a12ad15324de01a4365c660e1d288db76d
+    validation_vectors:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.window.GraphWorkspaceWindowModelShould"]
+      - argv: ["gradle", ":freeplane:test"]
+  - id: T9
+    plan_task: 9
+    title: "Collapsed hold, rail restore and the read-only session overlay"
+    lane: window-wiring
+    sequence: 3
+    implementer_tier: advanced
+    depends_on: [T8]
+    ownership_patterns:
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindow.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindowModelShould.java
+    exclusive_resources: [test-slot]
+    produces:
+      []
+    consumes:
+      - id: GraphWorkspaceWindowModel.wiring
+        digest: be7c6bd2383e366853e59e28c4ffeb70b7b5e9bf50ebc7bd95e20d486aae353a
+      - id: GraphWorkspaceWindowModel.split-accessors
+        digest: ecf2efa926d3af5e82ef6bf23a9b401371cbab3397bfb1ee69c980721f12974c
+      - id: MapSidebarPanel.api
+        digest: ebd19dcc45db2548ada44dc7228cb55c5ee2b76911a51fe8b820c5fcff7547fb
+    validation_vectors:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.window.GraphWorkspaceWindowModelShould"]
+      - argv: ["gradle", ":freeplane:test"]
+  - id: T10
+    plan_task: 10
+    title: "Rail active-map badge and menu enablement pinning"
+    lane: window-wiring
+    sequence: 4
+    implementer_tier: advanced
+    depends_on: [T9]
+    ownership_patterns:
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindow.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindowModelShould.java
+    exclusive_resources: [test-slot]
+    produces:
+      []
+    consumes:
+      - id: GraphWorkspaceWindowModel.wiring
+        digest: be7c6bd2383e366853e59e28c4ffeb70b7b5e9bf50ebc7bd95e20d486aae353a
+      - id: MapSidebarPanel.api
+        digest: ebd19dcc45db2548ada44dc7228cb55c5ee2b76911a51fe8b820c5fcff7547fb
+      - id: MapSidebarRail.api
+        digest: 2449665d3a6cb800025f3302ca050788a3264f085602a54ed5ba27750096527f
+      - id: DisplaySettings.sidebar-fields
+        digest: dc75d24820a0899c11323f7f0759c2f4aa8d43d6fdbacd5c1eb91194e7482e0f
+    validation_vectors:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.window.GraphWorkspaceWindowModelShould"]
+      - argv: ["gradle", ":freeplane:test"]

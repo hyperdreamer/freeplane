@@ -409,7 +409,7 @@ public final class GeneratedWorkspace {
             .pins(pins)
             .viewport(Viewport.of(0.0, 0.0, 1.0, NO_UNKNOWN_XML))
             .displaySettings(DisplaySettings.of(true, DisplaySettings.CanvasTheme.LIGHT, true, false,
-                NO_UNKNOWN_XML))
+                DisplaySettings.DEFAULT_MAP_SIDEBAR_WIDTH, false, NO_UNKNOWN_XML))
             .unknownXml(generatedLabelXml(snapshots))
             .build();
         return new BuildResult(document, snapshots, availability);

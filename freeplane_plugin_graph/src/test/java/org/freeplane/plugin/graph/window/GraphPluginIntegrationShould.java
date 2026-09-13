@@ -455,6 +455,17 @@ public class GraphPluginIntegrationShould {
     }
 
     @Test
+    public void shipsTheGraphMapSidebarResourceKeys() throws IOException {
+        Properties translations = properties("freeplane/src/viewer/resources/translations/Resources_en.properties");
+
+        assertThat(translations.getProperty("graph_workspace.action.maps_sidebar")).isEqualTo("Maps sidebar");
+        assertThat(translations.getProperty("graph_workspace.map_list.collapse")).isEqualTo("Hide maps sidebar");
+        assertThat(translations.getProperty("graph_workspace.map_list.expand")).isEqualTo("Show maps sidebar");
+        assertThat(translations.getProperty("graph_workspace.map_list.rail_label")).isEqualTo("MAPS");
+        assertThat(translations.getProperty("graph_workspace.map_list.rail_count")).isEqualTo("{0} active maps");
+    }
+
+    @Test
     public void shipsTheGraphToolbarAffordanceResourceKeys() throws IOException {
         Properties translations = properties(
             "freeplane/src/viewer/resources/translations/Resources_en.properties");

@@ -5,10 +5,17 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+import java.awt.Component;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import javax.swing.Icon;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.ListCellRenderer;
 
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.util.TextUtils;
@@ -29,12 +36,14 @@ public class MapListPanelShould {
 
     private MockedStatic<TextUtils> textUtils;
     private MockedStatic<ResourceController> resourceController;
+    private ResourceController controller;
 
     @Before
     public void setUp() {
+        controller = mock(ResourceController.class);
         resourceController = org.mockito.Mockito.mockStatic(ResourceController.class);
         resourceController.when(ResourceController::getResourceController)
-            .thenReturn(mock(ResourceController.class));
+            .thenReturn(controller);
         textUtils = org.mockito.Mockito.mockStatic(TextUtils.class);
         textUtils.when(() -> TextUtils.getText(any(String.class)))
             .thenAnswer(invocation -> invocation.getArgument(0));
@@ -52,6 +61,20 @@ public class MapListPanelShould {
     public void tearDown() {
         textUtils.close();
         resourceController.close();
+    }
+
+    private MapListPanel panel() {
+        GraphWorkspaceHandle handle = mock(GraphWorkspaceHandle.class);
+        return new MapListPanel(handle, () -> Paths.get("/tmp/map.mm"), (parent, name) -> true);
+    }
+
+    private static Component componentByName(final java.awt.Container parent, final String name) {
+        for (final Component component : parent.getComponents()) {
+            if (name.equals(component.getName())) {
+                return component;
+            }
+        }
+        throw new AssertionError("Missing component " + name);
     }
 
     private static String formattedText(final org.mockito.invocation.InvocationOnMock invocation) {
@@ -210,5 +233,71 @@ public class MapListPanelShould {
         // When updated after deletion, selection is cleared
         panelConfirmed.setRows(Arrays.asList());
         assertThat(panelConfirmed.selectedRow()).isNull();
+    }
+
+    @Test
+    public void hostsTheHeadingLabelAndTheNamedCollapseButton() {
+        MapListPanel panel = panel();
+
+        JPanel headingRow = (JPanel) componentByName(panel, "graph-workspace-map-list-heading-row");
+        assertThat(componentByName(headingRow, "graph-workspace-map-list-heading")).isInstanceOf(JLabel.class);
+        assertThat(panel.collapseButton().getName()).isEqualTo("graph-workspace-map-sidebar-collapse");
+        assertThat(panel.collapseButton().getText()).isEqualTo("graph_workspace.map_list.collapse");
+    }
+
+    @Test
+    public void resolvesTheCollapseChevronIconAndFallsBackToText() {
+        Icon icon = mock(Icon.class);
+        when(controller.getOptionalIcon("/images/MapSidebarCollapse.svg?useAccentColor=true")).thenReturn(icon);
+        MapListPanel panel = panel();
+
+        assertThat(panel.collapseButton().getIcon()).isSameAs(icon);
+        assertThat(panel.collapseButton().getText()).isNull();
+        assertThat(panel.collapseButton().getToolTipText()).isEqualTo("graph_workspace.map_list.collapse");
+        assertThat(panel.collapseButton().getAccessibleContext().getAccessibleName())
+            .isEqualTo("graph_workspace.map_list.collapse");
+    }
+
+    @Test
+    public void tracksTheListWidthWithThePanelContentWidthOnSetRows() {
+        MapListPanel panel = panel();
+        panel.setSize(400, 600);
+        panel.setRows(Arrays.asList(
+            MapListPanel.MapRow.of(ACTIVE_MAP, "Active Map", MapListPanel.RowState.ACTIVE, MapPartition.ACTIVE, 5, false),
+            MapListPanel.MapRow.of(INACTIVE_MAP, "Inactive Map", MapListPanel.RowState.INACTIVE, MapPartition.INACTIVE, 0, false)));
+
+        int contentWidth = 400 - panel.getInsets().left - panel.getInsets().right;
+        assertThat(panel.activeList().getPreferredSize().width).isEqualTo(contentWidth);
+        assertThat(panel.inactiveList().getPreferredSize().width).isEqualTo(contentWidth);
+        assertThat(panel.activeList().getPreferredSize().height).isEqualTo(MapListPanel.ROW_HEIGHT);
+    }
+
+    @Test
+    public void tracksTheListWidthOnAPanelResizeWithoutSetRows() {
+        MapListPanel panel = panel();
+        panel.setSize(264, 600);
+        panel.setRows(Arrays.asList(
+            MapListPanel.MapRow.of(ACTIVE_MAP, "Active Map", MapListPanel.RowState.ACTIVE, MapPartition.ACTIVE, 5, false)));
+
+        panel.setSize(500, 600);
+        GraphWorkspaceWindow.runOnEdt(() -> { });
+        GraphWorkspaceWindow.runOnEdt(() -> { });
+
+        assertThat(panel.activeList().getPreferredSize().width)
+            .isEqualTo(500 - panel.getInsets().left - panel.getInsets().right);
+    }
+
+    @Test
+    public void derivesTheRowRendererCellWidthFromTheListWidth() {
+        MapListPanel panel = panel();
+        panel.activeList().setSize(400, 300);
+        ListCellRenderer renderer = panel.activeList().getCellRenderer();
+        MapListPanel.MapRow row = MapListPanel.MapRow.of(ACTIVE_MAP, "Active Map",
+            MapListPanel.RowState.ACTIVE, MapPartition.ACTIVE, 5, false);
+
+        Component rendered = renderer.getListCellRendererComponent(panel.activeList(), row, 0, false, false);
+
+        assertThat(rendered.getPreferredSize().width).isEqualTo(400);
+        assertThat(rendered.getPreferredSize().height).isEqualTo(MapListPanel.ROW_HEIGHT);
     }
 }

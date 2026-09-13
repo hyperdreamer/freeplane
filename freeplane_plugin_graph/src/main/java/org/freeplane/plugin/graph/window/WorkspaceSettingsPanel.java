@@ -148,7 +148,8 @@ final class WorkspaceSettingsPanel extends JPanel {
         }
         settings = DisplaySettings.of(showArrowheads.isSelected(),
             (CanvasTheme) canvasTheme.getSelectedItem(), rememberViewport.isSelected(),
-            dimUnrelated.isSelected(), settings.unknownXml());
+            dimUnrelated.isSelected(), settings.mapSidebarWidth(), settings.mapSidebarHidden(),
+            settings.unknownXml());
         handle.execute(GraphCommands.display(settings));
     }
 }
