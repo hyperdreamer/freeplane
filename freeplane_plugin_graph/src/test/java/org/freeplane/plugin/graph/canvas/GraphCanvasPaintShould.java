@@ -2,6 +2,7 @@ package org.freeplane.plugin.graph.canvas;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.within;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -943,6 +944,16 @@ public class GraphCanvasPaintShould {
         canvas.setPaintState(paintState);
         canvas.setViewport(GraphViewport.of(0.0, 0.0, 1.0));
         return paintCanvas(canvas);
+    }
+
+    @Test
+    public void keepsTheLeaderStrokeScreenConstant() {
+        GraphTheme theme = lightTheme();
+        for (double zoom : new double[] { 0.25, 1.0, 2.0, 4.0 }) {
+            assertThat((double) GraphPainter.leaderStroke(theme, zoom).getLineWidth() * zoom)
+                .as("leader stroke screen width at zoom " + zoom)
+                .isCloseTo(theme.edgeStroke().getLineWidth(), within(1e-6));
+        }
     }
 
     private static GraphTheme lightTheme() {

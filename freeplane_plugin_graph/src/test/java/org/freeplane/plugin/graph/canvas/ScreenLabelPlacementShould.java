@@ -291,6 +291,7 @@ public class ScreenLabelPlacementShould {
                 continue;
             }
             assertThat(label.leader()).as(slot + " " + label.text()).isPresent();
+            assertLeaderClearsBox(label);
             SceneNode node = sceneNode(scene, nodeName(label.endpoint()));
             double centerX = node.x * zoom + area.getWidth() * 0.5;
             double centerY = node.y * zoom + area.getHeight() * 0.5;
@@ -327,6 +328,7 @@ public class ScreenLabelPlacementShould {
                 continue;
             }
             assertThat(label.leader()).as(slot + " " + label.text()).isPresent();
+            assertLeaderClearsBox(label);
             LayoutPoint start = label.leader().get().start();
             double dx = start.x() - centerX;
             double dy = start.y() - centerY;
@@ -1568,6 +1570,247 @@ public class ScreenLabelPlacementShould {
     static ProjectedNodeKey key(String name) {
         return ProjectedNodeKey.of(SourceNodeKey.persisted(
             NodeReference.of(MAP, PersistedNodeId.of(name))));
+    }
+
+    @Test
+    public void keepsEveryLeaderClearOfItsOwnLabelBox() {
+        double[] zooms = { 0.25, 1.0, 2.0, 4.0 };
+        int[] expectedLeaders = { 7, 14, 5, 3 };
+        for (int index = 0; index < zooms.length; index++) {
+            double zoom = zooms[index];
+            int leaders = assertLeadersClear(denseScene(), zoom, standIn(denseScene(), zoom),
+                "Axiom of Choice");
+            leaders += assertLeadersClear(longScene(), zoom, standIn(longScene(), zoom), LONG_NAMES[0]);
+            assertThat(leaders).as("leader-carrying labels at zoom " + zoom)
+                .isEqualTo(expectedLeaders[index]);
+        }
+
+        Rectangle2D area = area(320.0, 320.0);
+        List<PlacedLabel> lane0 = placeEnclosure("Basic Definitions and Theorems", true, area,
+            Collections.<SceneNode>emptyList(), RenderingLevel.FULL);
+        assertThat(lane0).hasSize(1);
+        assertThat(lane0.get(0).mode()).isEqualTo(PlacedLabel.Mode.EXTERNAL);
+        assertThat(lane0.get(0).anchorY() - area.getHeight() * 0.5).isCloseTo(-64.215072, within(1e-6));
+        assertThat(lane0.get(0).leader()).isEmpty();
+
+        assertLeaderClearsBox(secondLaneEnclosureLabel(area));
+    }
+
+    private static int assertLeadersClear(List<SceneNode> scene, double zoom, Rectangle2D standIn,
+            String forcedName) {
+        Rectangle2D area = area(1128.0, 364.0);
+        List<PlacedLabel> placed = place(scene, zoom, area, standIn, forced(forcedName),
+            RenderingLevel.FULL, null);
+        int leaders = 0;
+        for (PlacedLabel label : placed) {
+            if (label.mode() == PlacedLabel.Mode.HOVER_ONLY || !label.leader().isPresent()) {
+                continue;
+            }
+            assertLeaderClearsBox(label);
+            leaders++;
+        }
+        return leaders;
+    }
+
+    static void assertLeaderClearsBox(PlacedLabel label) {
+        assertThat(label.leader()).as(label.text()).isPresent();
+        LeaderLine line = label.leader().get();
+        LayoutPoint start = line.start();
+        LayoutPoint end = line.end();
+        double anchorX = label.anchorX();
+        double anchorY = label.anchorY();
+        Rectangle2D box = label.bounds();
+
+        // (b) distance(end, R) >= LEADER_CLEARANCE - 1e-9
+        double gapX = Math.max(0.0, Math.max(box.getMinX() - end.x(), end.x() - box.getMaxX()));
+        double gapY = Math.max(0.0, Math.max(box.getMinY() - end.y(), end.y() - box.getMaxY()));
+        assertThat(Math.hypot(gapX, gapY)).as(label.text() + " end clearance")
+            .isGreaterThanOrEqualTo(ScreenLabelPlacement.LEADER_CLEARANCE - 1e-9);
+
+        // (a) end lies on [S, C] strictly between them
+        double ux = anchorX - start.x();
+        double uy = anchorY - start.y();
+        double t = ((end.x() - start.x()) * ux + (end.y() - start.y()) * uy) / (ux * ux + uy * uy);
+        assertThat(t).as(label.text() + " entry parameter").isStrictlyBetween(0.0, 1.0);
+        assertThat(end.x()).as(label.text() + " collinear x").isCloseTo(start.x() + t * ux, within(1e-9));
+        assertThat(end.y()).as(label.text() + " collinear y").isCloseTo(start.y() + t * uy, within(1e-9));
+
+        // (c) [S, end] does not meet inflate(R, LEADER_CLEARANCE - 1e-6)
+        double slack = ScreenLabelPlacement.LEADER_CLEARANCE - 1e-6;
+        Rectangle2D inner = new Rectangle2D.Double(box.getMinX() - slack, box.getMinY() - slack,
+            box.getWidth() + 2.0 * slack, box.getHeight() + 2.0 * slack);
+        assertThat(inner.intersectsLine(start.x(), start.y(), end.x(), end.y()))
+            .as(label.text() + " inner clearance").isFalse();
+
+        // (d) [S, end] does not meet R
+        assertThat(box.intersectsLine(start.x(), start.y(), end.x(), end.y()))
+            .as(label.text() + " box intersection").isFalse();
+
+        // (e) |end - S| >= MIN_VISIBLE_LEADER
+        assertThat(Math.hypot(end.x() - start.x(), end.y() - start.y()))
+            .as(label.text() + " visible leader")
+            .isGreaterThanOrEqualTo(ScreenLabelPlacement.MIN_VISIBLE_LEADER);
+    }
+
+    @Test
+    public void keepsLeaderInkOutOfItsOwnGlyphInk() {
+        GraphTheme theme = GraphTheme.resolve(CanvasTheme.LIGHT);
+        for (double zoom : new double[] { 0.25, 1.0, 2.0, 4.0 }) {
+            assertPaintedSeparation(theme, denseScene(), zoom, standIn(denseScene(), zoom),
+                "Axiom of Choice");
+            assertPaintedSeparation(theme, longScene(), zoom, standIn(longScene(), zoom), LONG_NAMES[0]);
+        }
+        assertEnclosurePaintedSeparation(theme, area(320.0, 320.0));
+    }
+
+    private static void assertPaintedSeparation(GraphTheme theme, List<SceneNode> scene, double zoom,
+            Rectangle2D standIn, String forcedName) {
+        Rectangle2D area = area(1128.0, 364.0);
+        List<PlacedLabel> placed = place(scene, zoom, area, standIn, forced(forcedName),
+            RenderingLevel.FULL, null);
+        int width = (int) area.getWidth();
+        int height = (int) area.getHeight();
+        for (PlacedLabel label : placed) {
+            if (label.mode() == PlacedLabel.Mode.HOVER_ONLY || !label.leader().isPresent()) {
+                continue;
+            }
+            boolean[] leaderMask = leaderMask(label, theme, zoom, width, height);
+            boolean[] glyphMask = glyphMask(label, zoom, width, height);
+            Rectangle2D box = label.bounds();
+            int inside = 0;
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    if (leaderMask[y * width + x] && box.contains(x + 0.5, y + 0.5)) {
+                        inside++;
+                    }
+                }
+            }
+            assertThat(inside).as(label.text() + " leader ink centres inside the box at zoom " + zoom)
+                .isZero();
+            assertThat(overlaps(leaderMask, glyphMask))
+                .as(label.text() + " leader/glyph ink overlap at zoom " + zoom).isFalse();
+        }
+    }
+
+    private static void assertEnclosurePaintedSeparation(GraphTheme theme, Rectangle2D area) {
+        PlacedLabel label = secondLaneEnclosureLabel(area);
+        int width = (int) area.getWidth();
+        int height = (int) area.getHeight();
+        boolean[] leaderMask = leaderMask(label, theme, 1.0, width, height);
+        boolean[] glyphMask = glyphMask(label, 1.0, width, height);
+        Rectangle2D box = label.bounds();
+        int inside = 0;
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                if (leaderMask[y * width + x] && box.contains(x + 0.5, y + 0.5)) {
+                    inside++;
+                }
+            }
+        }
+        assertThat(inside).as("enclosure lane-1 leader ink centres inside the box").isZero();
+        assertThat(overlaps(leaderMask, glyphMask)).as("enclosure lane-1 leader/glyph ink").isFalse();
+    }
+
+    static boolean[] leaderMask(PlacedLabel label, GraphTheme theme, double zoom, int width, int height) {
+        java.awt.image.BufferedImage image = new java.awt.image.BufferedImage(width, height,
+            java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        java.awt.Graphics2D graphics = image.createGraphics();
+        try {
+            graphics.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
+                java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+            graphics.setRenderingHint(java.awt.RenderingHints.KEY_RENDERING,
+                java.awt.RenderingHints.VALUE_RENDER_SPEED);
+            java.awt.geom.AffineTransform world = new java.awt.geom.AffineTransform();
+            world.translate(width * 0.5, height * 0.5);
+            world.scale(zoom, zoom);
+            graphics.transform(world);
+            graphics.setColor(java.awt.Color.BLACK);
+            graphics.setStroke(GraphPainter.leaderStroke(theme, zoom));
+            LeaderLine line = label.leader().get();
+            graphics.draw(new java.awt.geom.Line2D.Double(
+                (line.start().x() - width * 0.5) / zoom, (line.start().y() - height * 0.5) / zoom,
+                (line.end().x() - width * 0.5) / zoom, (line.end().y() - height * 0.5) / zoom));
+        }
+        finally {
+            graphics.dispose();
+        }
+        return inkPixels(image, width, height);
+    }
+
+    static boolean[] glyphMask(PlacedLabel label, double zoom, int width, int height) {
+        java.awt.image.BufferedImage image = new java.awt.image.BufferedImage(width, height,
+            java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        java.awt.Graphics2D graphics = image.createGraphics();
+        try {
+            graphics.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
+                java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+            graphics.setRenderingHint(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING,
+                java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+            graphics.setRenderingHint(java.awt.RenderingHints.KEY_RENDERING,
+                java.awt.RenderingHints.VALUE_RENDER_SPEED);
+            java.awt.geom.AffineTransform world = new java.awt.geom.AffineTransform();
+            world.translate(width * 0.5, height * 0.5);
+            world.scale(zoom, zoom);
+            graphics.transform(world);
+            java.awt.Font font = label.font().deriveFont(
+                Math.max(1.0f, label.font().getSize2D() / (float) zoom));
+            graphics.setFont(font);
+            graphics.setColor(java.awt.Color.BLACK);
+            Rectangle2D bounds = font.getStringBounds(label.text(), ScreenLabelPlacement.SCREEN_FRC);
+            java.awt.font.LineMetrics metrics = font.getLineMetrics(label.text(),
+                ScreenLabelPlacement.SCREEN_FRC);
+            float baseline = (metrics.getAscent() - metrics.getDescent()) * 0.5f;
+            graphics.drawString(label.text(),
+                (float) ((label.anchorX() - width * 0.5) / zoom - bounds.getWidth() * 0.5),
+                (float) ((label.anchorY() - height * 0.5) / zoom + baseline));
+        }
+        finally {
+            graphics.dispose();
+        }
+        return inkPixels(image, width, height);
+    }
+
+    static boolean[] inkPixels(java.awt.image.BufferedImage image, int width, int height) {
+        boolean[] mask = new boolean[width * height];
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                if ((image.getRGB(x, y) >>> 24) != 0) {
+                    mask[y * width + x] = true;
+                }
+            }
+        }
+        return mask;
+    }
+
+    @Test
+    public void placesEmphaticEnclosureLabelsExternallyInTheSecondLaneWithATrimmedLeader() {
+        Rectangle2D area = area(320.0, 320.0);
+        PlacedLabel label = secondLaneEnclosureLabel(area);
+
+        assertThat(label.mode()).isEqualTo(PlacedLabel.Mode.EXTERNAL);
+        assertThat(label.anchorX() - area.getWidth() * 0.5).isCloseTo(0.0, within(1e-6));
+        assertThat(label.anchorY() - area.getHeight() * 0.5).isCloseTo(-88.645215, within(1e-6));
+        assertThat(label.width()).isCloseTo(235.291611, within(1e-6));
+        assertThat(label.height()).isCloseTo(20.430143, within(1e-6));
+        assertThat(label.leader()).isPresent();
+        LayoutPoint start = label.leader().get().start();
+        LayoutPoint end = label.leader().get().end();
+        assertThat(start.x() - area.getWidth() * 0.5).isCloseTo(0.0, within(1e-6));
+        assertThat(start.y() - area.getHeight() * 0.5).isCloseTo(-50.0, within(1e-6));
+        assertThat(end.x() - area.getWidth() * 0.5).isCloseTo(0.0, within(1e-6));
+        assertThat(end.y() - area.getHeight() * 0.5).isCloseTo(-75.430143, within(1e-6));
+        assertThat(Math.hypot(end.x() - start.x(), end.y() - start.y()))
+            .isCloseTo(25.430143, within(1e-6));
+        assertLeaderClearsBox(label);
+    }
+
+    static PlacedLabel secondLaneEnclosureLabel(Rectangle2D area) {
+        LabelPlacementRequest request = enclosureRequest("Basic Definitions and Theorems", true, area,
+            Collections.<SceneNode>emptyList(), RenderingLevel.FULL);
+        Rectangle2D seed = new Rectangle2D.Double(100.0, 84.0, 120.0, 24.0);
+        List<PlacedLabel> placed = new ScreenLabelPlacement().place(request, null, fonts(),
+            Collections.singletonList(seed));
+        return findEnclosure(placed);
     }
 
     static final class SceneNode {
