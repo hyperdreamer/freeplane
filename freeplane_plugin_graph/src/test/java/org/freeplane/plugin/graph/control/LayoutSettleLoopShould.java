@@ -28,7 +28,8 @@ import org.freeplane.plugin.graph.geometry.GeometryTextMetrics;
 import org.freeplane.plugin.graph.geometry.GraphGeometryEngine;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
-import org.freeplane.plugin.graph.layout.LayoutConflict;
+import org.freeplane.plugin.graph.layout.BoundaryConflict;
+import org.freeplane.plugin.graph.layout.BoundarySeparationDiagnostics;
 import org.freeplane.plugin.graph.layout.LayoutFrame;
 import org.freeplane.plugin.graph.layout.PerceptualIdlePolicy;
 import org.freeplane.plugin.graph.projection.BoundaryTier;
@@ -1190,11 +1191,17 @@ public class LayoutSettleLoopShould {
         ImmediateEdt edt = new ImmediateEdt();
         LayoutSettleLoop loop = new LayoutSettleLoop(WORKSPACE, stepper, new GraphGeometryEngine(), edt, dispatcher);
         GraphProjection projection = populatedProjection(471L);
-        MapReferenceId otherMap = MapReferenceId.of("00000000-0000-0000-0000-000000000103");
-        LayoutConflict conflict = LayoutConflict.of(MAP, otherMap, Collections.emptyList());
+        BoundaryConflict conflict = new BoundaryConflict(projection.enclosures().get(0).hullKey(),
+            EnclosureHullKey.of(Collections.singletonList(
+                EnclosureKey.of(SourceNodeKey.persisted(reference("conflict-hull"))))),
+            BoundaryConflict.Kind.SIBLING_CROSSING, BoundaryConflict.Reason.ROUND_LIMIT,
+            Collections.emptyList());
+        BoundarySeparationDiagnostics diagnostics = new BoundarySeparationDiagnostics(
+            Collections.singletonList(conflict), Collections.singletonList(conflict.pairKey()), 1, 1, 0, 0.0,
+            0.0, Collections.<String, org.freeplane.plugin.graph.geometry.LayoutPoint>emptyMap(), 0.0, 0.0);
         PerceptualIdlePolicy.IdleMeasurement idle = new PerceptualIdlePolicy.IdleMeasurement(1.5, 2.5, 7, true);
         LayoutFrame retained = LayoutFrame.withDiagnostics(LayoutFrame.of(9L, positions(projection, 123.5), false, 0),
-            Collections.singletonList(conflict), idle);
+            diagnostics, idle);
         CompletableFuture<CanvasState> failedPublication = new CompletableFuture<CanvasState>();
 
         try {
@@ -1401,7 +1408,7 @@ public class LayoutSettleLoopShould {
 
     private static LayoutFrame frame(long index, LayoutPositions positions, boolean failed, boolean idle) {
         return LayoutFrame.withDiagnostics(LayoutFrame.of(index, positions, failed, 0),
-            Collections.emptyList(), new PerceptualIdlePolicy.IdleMeasurement(0.0, 0.0,
+            BoundarySeparationDiagnostics.empty(), new PerceptualIdlePolicy.IdleMeasurement(0.0, 0.0,
                 idle ? 8 : 1, idle));
     }
 

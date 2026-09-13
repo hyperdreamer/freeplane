@@ -41,6 +41,7 @@ import org.freeplane.plugin.graph.adapter.MapSnapshotFactory;
 import org.freeplane.plugin.graph.geometry.GraphGeometryEngine;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
+import org.freeplane.plugin.graph.layout.BoundarySeparationDiagnostics;
 import org.freeplane.plugin.graph.layout.LayoutFrame;
 import org.freeplane.plugin.graph.layout.LayoutRequest;
 import org.freeplane.plugin.graph.layout.PerceptualIdlePolicy;
@@ -1192,7 +1193,7 @@ public class GraphUpdateCoordinatorShould {
     private static LayoutFrame idleFrame(final long index) {
         return LayoutFrame.withDiagnostics(LayoutFrame.of(index,
             LayoutPositions.of(Collections.emptyMap(), Collections.emptyMap()), false, 0),
-            Collections.emptyList(), new PerceptualIdlePolicy.IdleMeasurement(0.0, 0.0, 8, true));
+            BoundarySeparationDiagnostics.empty(), new PerceptualIdlePolicy.IdleMeasurement(0.0, 0.0, 8, true));
     }
 
     private static final class SourceFixture {
@@ -1601,7 +1602,7 @@ public class GraphUpdateCoordinatorShould {
             anchorIndex++;
         }
         return LayoutFrame.withDiagnostics(LayoutFrame.of(generation,
-            LayoutPositions.of(nodes, anchors), false, 0), Collections.emptyList(),
+            LayoutPositions.of(nodes, anchors), false, 0), BoundarySeparationDiagnostics.empty(),
             new PerceptualIdlePolicy.IdleMeasurement(0.0, 0.0, 8, true));
     }
 
@@ -1644,7 +1645,7 @@ public class GraphUpdateCoordinatorShould {
         private static LayoutFrame frame(final long generation) {
             return LayoutFrame.withDiagnostics(LayoutFrame.of(generation,
                 LayoutPositions.of(Collections.emptyMap(), Collections.emptyMap()), false, 0),
-                Collections.emptyList(), new PerceptualIdlePolicy.IdleMeasurement(0.0, 0.0, 8, true));
+                BoundarySeparationDiagnostics.empty(), new PerceptualIdlePolicy.IdleMeasurement(0.0, 0.0, 8, true));
         }
     }
 
