@@ -18,5 +18,11 @@ public class BoundarySeparationExceptionShould {
         assertThat(exception).isInstanceOf(RuntimeException.class);
         assertThatThrownBy(() -> new BoundarySeparationException((String) null))
             .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> new BoundarySeparationException((String) null, cause))
+            .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> new BoundarySeparationException("mst failed", null))
+            .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> new BoundarySeparationException((Throwable) null))
+            .isInstanceOf(NullPointerException.class);
     }
 }

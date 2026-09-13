@@ -16,5 +16,11 @@ public class BoundarySeparationTimingsShould {
         assertThat(timings.applyNanos()).isEqualTo(44L);
         assertThatThrownBy(() -> new BoundarySeparationTimings(-1L, 0L, 0L, 0L))
             .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new BoundarySeparationTimings(0L, -1L, 0L, 0L))
+            .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new BoundarySeparationTimings(0L, 0L, -1L, 0L))
+            .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new BoundarySeparationTimings(0L, 0L, 0L, -1L))
+            .isInstanceOf(IllegalArgumentException.class);
     }
 }
