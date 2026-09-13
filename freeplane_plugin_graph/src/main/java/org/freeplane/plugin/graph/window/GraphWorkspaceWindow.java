@@ -366,6 +366,8 @@ final class GraphWorkspaceWindowModel {
     private boolean sidebarGestureActive;
     private boolean sidebarApplyPending;
     private boolean sidebarApplying;
+    private Integer sessionSidebarWidth;
+    private Boolean sessionSidebarHidden;
 
     GraphWorkspaceWindowModel(final GraphWorkspaceHandle handle, final GraphWorkspaceViewBinding binding,
             final GraphWorkspaceController applicationController, final Supplier<java.nio.file.Path> pathChooser,
@@ -597,8 +599,10 @@ final class GraphWorkspaceWindowModel {
     }
 
     private void applySidebarSettings(final DisplaySettings settings) {
-        final boolean hidden = settings.mapSidebarHidden();
-        final int width = settings.mapSidebarWidth();
+        final boolean hidden = readOnly && sessionSidebarHidden != null
+            ? sessionSidebarHidden.booleanValue() : settings.mapSidebarHidden();
+        final int width = readOnly && sessionSidebarWidth != null
+            ? sessionSidebarWidth.intValue() : settings.mapSidebarWidth();
         if (sidebarGestureActive) {
             sidebarApplyPending = true;
             return;
@@ -642,6 +646,7 @@ final class GraphWorkspaceWindowModel {
                 sidebar.setCollapsed(collapsed);
             }
         });
+        sessionSidebarHidden = Boolean.valueOf(collapsed);
         if (!readOnly) {
             commitSidebarDisplaySettings(currentPresentation.displaySettings().mapSidebarWidth(), collapsed);
         }
@@ -662,6 +667,7 @@ final class GraphWorkspaceWindowModel {
         if (clamped == appliedSidebarWidth) {
             return;
         }
+        sessionSidebarWidth = Integer.valueOf(clamped);
         if (!readOnly) {
             commitSidebarDisplaySettings(clamped, currentPresentation.displaySettings().mapSidebarHidden());
         }
@@ -683,6 +689,7 @@ final class GraphWorkspaceWindowModel {
         if (clamped == appliedSidebarWidth) {
             return;
         }
+        sessionSidebarWidth = Integer.valueOf(clamped);
         if (!readOnly) {
             commitSidebarDisplaySettings(clamped, currentPresentation.displaySettings().mapSidebarHidden());
         }
@@ -1161,6 +1168,10 @@ final class GraphWorkspaceWindowModel {
         }
         updateMapRows(currentState);
         updateStatusBar();
+        if (!value) {
+            sessionSidebarWidth = null;
+            sessionSidebarHidden = null;
+        }
     }
 
     private void updateMenuEnablement() {

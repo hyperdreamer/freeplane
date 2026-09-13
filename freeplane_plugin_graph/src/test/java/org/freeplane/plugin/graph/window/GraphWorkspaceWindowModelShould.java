@@ -1828,6 +1828,161 @@ public class GraphWorkspaceWindowModelShould {
         model.close();
     }
 
+    @Test
+    public void keepsTheViewMenuSidebarItemInSyncWithEveryToggle() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            emptyState(), Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)),
+            false).answerSidebarRoundTrip();
+        GraphWorkspaceWindowModel model = fixture.model();
+        layoutSidebarAt(model, 1000);
+
+        assertThat(mapsSidebarMenuItem(model).isSelected()).isTrue();
+
+        GraphWorkspaceWindow.runOnEdt(() -> sidebarPanel(model).collapseButton().doClick());
+        assertThat(sidebarPanel(model).isCollapsed()).isTrue();
+        assertThat(mapsSidebarMenuItem(model).isSelected()).isFalse();
+        assertThat(displayCommandCount(fixture)).isEqualTo(1);
+        assertThat(lastDisplaySettings(fixture).mapSidebarHidden()).isTrue();
+
+        GraphWorkspaceWindow.runOnEdt(() -> sidebarPanel(model).rail().restoreButton().doClick());
+        assertThat(sidebarPanel(model).isCollapsed()).isFalse();
+        assertThat(mapsSidebarMenuItem(model).isSelected()).isTrue();
+        assertThat(displayCommandCount(fixture)).isEqualTo(2);
+        assertThat(lastDisplaySettings(fixture).mapSidebarHidden()).isFalse();
+
+        GraphWorkspaceWindow.runOnEdt(() -> mapsSidebarMenuItem(model).doClick());
+        assertThat(sidebarPanel(model).isCollapsed()).isTrue();
+        assertThat(mapsSidebarMenuItem(model).isSelected()).isFalse();
+        assertThat(displayCommandCount(fixture)).isEqualTo(3);
+
+        Fixture stored = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            emptyState(), Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)),
+            false, WorkspaceSessionStatus.empty(),
+            presentation(DisplaySettings.of(true, CanvasTheme.FOLLOW_FREEPLANE, true, true, 264, true,
+                emptyUnknownXml()), ACTIVE_ID)).answerSidebarRoundTrip();
+        GraphWorkspaceWindowModel storedModel = stored.model();
+        layoutSidebarAt(storedModel, 1000);
+
+        assertThat(sidebarPanel(storedModel).isCollapsed()).isTrue();
+        assertThat(mapsSidebarMenuItem(storedModel).isSelected()).isFalse();
+        model.close();
+        storedModel.close();
+    }
+
+    @Test
+    public void commitsNothingFromAGestureThatEndsWhileCollapsed() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            emptyState(), Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)),
+            false).answerSidebarRoundTrip();
+        GraphWorkspaceWindowModel model = fixture.model();
+        layoutSidebarAt(model, 1000);
+
+        GraphWorkspaceWindow.runOnEdt(() -> {
+            divider(model).dispatchEvent(dividerEvent(model, MouseEvent.MOUSE_PRESSED, 1));
+            mapsSidebarMenuItem(model).doClick();
+        });
+
+        assertThat(displayCommandCount(fixture)).isEqualTo(1);
+        assertThat(lastDisplaySettings(fixture).mapSidebarHidden()).isTrue();
+        assertThat(sidebarPanel(model).isCollapsed()).isTrue();
+        assertThat(splitPane(model).getDividerSize()).isZero();
+        assertThat(splitPane(model).isEnabled()).isFalse();
+
+        GraphWorkspaceWindow.runOnEdt(() -> {
+            splitPane(model).setDividerLocation(400);
+            divider(model).dispatchEvent(dividerEvent(model, MouseEvent.MOUSE_RELEASED, 1));
+        });
+
+        assertThat(displayCommandCount(fixture)).isEqualTo(1);
+        assertThat(splitPane(model).getDividerLocation()).isEqualTo(26);
+        model.close();
+    }
+
+    @Test
+    public void keepsReadOnlySidebarInteractionsSessionOnly() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            emptyState(), Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)),
+            true).answerSidebarRoundTrip();
+        GraphWorkspaceWindowModel model = fixture.model();
+        layoutSidebarAt(model, 1000);
+
+        dragSidebarTo(model, 400);
+        GraphWorkspaceWindow.runOnEdt(() -> mapsSidebarMenuItem(model).doClick());
+
+        assertThat(displayCommandCount(fixture)).isZero();
+        assertThat(model.appliedSidebarWidth()).isEqualTo(26);
+        assertThat(mapsSidebarMenuItem(model).isEnabled()).isTrue();
+        assertThat(sidebarPanel(model).collapseButton().isEnabled()).isTrue();
+        assertThat(sidebarPanel(model).rail().restoreButton().isEnabled()).isTrue();
+
+        GraphWorkspaceWindow.runOnEdt(() -> mapsSidebarMenuItem(model).doClick());
+        assertThat(sidebarPanel(model).isCollapsed()).isFalse();
+
+        layoutSidebarAt(model, 800);
+        assertThat(splitPane(model).getDividerLocation()).isEqualTo(400);
+        assertThat(displayCommandCount(fixture)).isZero();
+
+        model.setReadOnly(false);
+        layoutSidebarAt(model, 900);
+
+        assertThat(sidebarPanel(model).isCollapsed()).isFalse();
+        assertThat(splitPane(model).getDividerLocation()).isEqualTo(264);
+        assertThat(displayCommandCount(fixture)).isZero();
+        model.close();
+    }
+
+    @Test
+    public void restoresTheLastExpandedWidthOnExpand() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            emptyState(), Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)),
+            false).answerSidebarRoundTrip();
+        GraphWorkspaceWindowModel model = fixture.model();
+        layoutSidebarAt(model, 1000);
+        dragSidebarTo(model, 400);
+        assertThat(displayCommandCount(fixture)).isEqualTo(1);
+
+        GraphWorkspaceWindow.runOnEdt(() -> sidebarPanel(model).collapseButton().doClick());
+
+        assertThat(sidebarPanel(model).isCollapsed()).isTrue();
+        assertThat(model.appliedSidebarWidth()).isEqualTo(26);
+        assertThat(splitPane(model).getDividerSize()).isZero();
+        assertThat(splitPane(model).isEnabled()).isFalse();
+        assertThat(displayCommandCount(fixture)).isEqualTo(2);
+
+        GraphWorkspaceWindow.runOnEdt(() -> sidebarPanel(model).rail().restoreButton().doClick());
+
+        assertThat(sidebarPanel(model).isCollapsed()).isFalse();
+        assertThat(splitPane(model).getDividerLocation()).isEqualTo(400);
+        assertThat(splitPane(model).getDividerSize()).isEqualTo(6);
+        assertThat(splitPane(model).isEnabled()).isTrue();
+        assertThat(displayCommandCount(fixture)).isEqualTo(3);
+        model.close();
+    }
+
+    @Test
+    public void expandsFromCollapsedWithTheRestoredDividerWidthInOneReadOnlyApply() {
+        DisplaySettings settings = DisplaySettings.of(true, CanvasTheme.FOLLOW_FREEPLANE, true, true, 400, true,
+            emptyUnknownXml());
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            emptyState(), Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)),
+            true, WorkspaceSessionStatus.empty(), presentation(settings, ACTIVE_ID)).answerSidebarRoundTrip();
+        GraphWorkspaceWindowModel model = fixture.model();
+        layoutSidebarAt(model, 400);
+
+        assertThat(sidebarPanel(model).isCollapsed()).isTrue();
+
+        GraphWorkspaceWindow.runOnEdt(() -> mapsSidebarMenuItem(model).doClick());
+
+        assertThat(displayCommandCount(fixture)).isZero();
+        assertThat(sidebarPanel(model).isCollapsed()).isFalse();
+        assertThat(splitPane(model).getDividerLocation()).isEqualTo(200);
+        assertThat(sidebarPanel(model).getMinimumSize().width).isEqualTo(180);
+        assertThat(canvasScrollPane(model).getMinimumSize().width).isEqualTo(193);
+        assertThat(((BasicSplitPaneUI) splitPane(model).getUI()).getMaximumDividerLocation(splitPane(model)))
+            .isEqualTo(200);
+        model.close();
+    }
+
     private static void assertViewportCommandCountAfterExternalScroll(final int expectedCount,
             final CanvasState initialState, final Consumer<GraphWorkspaceWindowModel> operation) {
         Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()), initialState,
