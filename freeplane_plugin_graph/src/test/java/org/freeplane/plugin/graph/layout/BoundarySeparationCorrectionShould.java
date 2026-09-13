@@ -15,6 +15,8 @@ import java.util.Optional;
 
 import org.freeplane.plugin.graph.geometry.AwtGeometryTextMetrics;
 import org.freeplane.plugin.graph.geometry.GeometryTextMetrics;
+import org.freeplane.plugin.graph.geometry.GraphGeometry;
+import org.freeplane.plugin.graph.geometry.GraphGeometryEngine;
 import org.freeplane.plugin.graph.geometry.HullGeometry;
 import org.freeplane.plugin.graph.geometry.HullIntersection;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
@@ -151,6 +153,41 @@ public class BoundarySeparationCorrectionShould {
         assertThat(HullIntersection.siblingOverlap(first, second)).isTrue();
         assertThat(HullIntersection.minimumSeparatingTranslation(first, second))
             .isEqualTo(LayoutPoint.of(0.0, 0.0));
+    }
+
+    @Test
+    public void subEpsilonOverlappingEnclosuresAreContactByTolerance() {
+        final EnclosureHullKey firstHull = hull("first-hull");
+        final EnclosureHullKey secondHull = hull("second-hull");
+        final GraphProjection projection = projection(Collections.<ProjectedNodeKey>emptyList(),
+            Arrays.asList(root(firstHull, "contact", Collections.<ProjectedNodeKey>emptyList()),
+                root(secondHull, "contact", Collections.<ProjectedNodeKey>emptyList())));
+        final GraphGeometry unplaced = new GraphGeometryEngine().computeHulls(projection,
+            positions(Collections.<Map.Entry<ProjectedNodeKey, LayoutPoint>>emptyList(),
+                Arrays.asList(anchorEntry(firstHull, 0.0, 0.0), anchorEntry(secondHull, 0.0, 0.0))),
+            METRICS);
+        final double subEpsilonOverlap = 1.0e-12;
+        final double secondAnchorX = unplaced.hulls().get(firstHull).maxX()
+            - unplaced.hulls().get(secondHull).minX() - subEpsilonOverlap;
+        final LayoutPositions positions = positions(
+            Collections.<Map.Entry<ProjectedNodeKey, LayoutPoint>>emptyList(),
+            Arrays.asList(anchorEntry(firstHull, 0.0, 0.0), anchorEntry(secondHull, secondAnchorX, 0.0)));
+        final GraphGeometry placed = new GraphGeometryEngine().computeHulls(projection, positions, METRICS);
+        assertThat(HullIntersection.siblingOverlap(placed.hulls().get(firstHull),
+            placed.hulls().get(secondHull))).isTrue();
+        assertThat(HullIntersection.minimumSeparatingTranslation(placed.hulls().get(firstHull),
+            placed.hulls().get(secondHull))).isEqualTo(LayoutPoint.of(0.0, 0.0));
+
+        final BoundarySeparationResult result = new BoundarySeparationCorrection().apply(projection, positions,
+            METRICS, Collections.<PinProjection>emptyList());
+
+        assertThat(result.positions()).isEqualTo(positions);
+        assertThat(result.diagnostics().rounds()).isZero();
+        assertThat(result.diagnostics().hullViolationsDetected()).isZero();
+        assertThat(result.diagnostics().hullResidualViolations()).isZero();
+        assertThat(result.diagnostics().boundaryVerified()).isTrue();
+        assertThat(result.diagnostics().conflicts()).isEmpty();
+        assertThat(result.diagnostics().residualHullPairs()).isEmpty();
     }
 
     @Test
