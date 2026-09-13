@@ -6,7 +6,7 @@
 - After: rounds=1, hullResidualViolations=0, both pins exact, mst=(0.0, 0.0), ancestor containment holds.
 - Test: `:freeplane_plugin_graph:test --tests org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould`.
 - Recorded by source-plan Task 12 (`frozenRealCaseViolatesBeforeAndSettlesInOneRoundAfterCorrection`,
-  plus `canonicalKeysUseTheCapturedRealHullStrings`); class result on the full-suite run: 33 tests,
+  plus `canonicalKeysUseTheCapturedRealHullStrings`); class result on the full-suite run: 34 tests,
   0 failures, 0 errors.
 
 ## Pipeline adversarial fixture (red before / green after)
