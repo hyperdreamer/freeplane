@@ -796,10 +796,7 @@ public class ScreenLabelPlacementShould {
         assertThat(label.mode()).isEqualTo(PlacedLabel.Mode.EXTERNAL);
         assertThat(label.anchorX() - area.getWidth() * 0.5).isCloseTo(0.0, within(1e-6));
         assertThat(label.anchorY() - area.getHeight() * 0.5).isCloseTo(-64.215072, within(1e-6));
-        assertThat(label.leader()).isPresent();
-        assertThat(label.leader().get().start().x() - area.getWidth() * 0.5).isCloseTo(0.0, within(1e-6));
-        assertThat(label.leader().get().start().y() - area.getHeight() * 0.5)
-            .isCloseTo(-50.0, within(1e-6));
+        assertThat(label.leader()).isEmpty();
     }
 
     @Test(timeout = 5000)

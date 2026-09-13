@@ -557,12 +557,36 @@ public final class ScreenLabelPlacement {
      * Core trim: any start (disc rim, hull boundary). End = first entry of [start -> anchor] into
      * inflate(R, LEADER_CLEARANCE), when that entry is strictly between start and the centre and the
      * surviving segment is at least MIN_VISIBLE_LEADER long.
-     *
-     * Scaffold: returns today's geometry (end == anchor); the trim lands in the clearance commit.
      */
     private static Optional<LeaderLine> leader(final LayoutPoint start, final double anchorX,
             final double anchorY, final double width, final double height) {
-        return Optional.of(new LeaderLine(start, LayoutPoint.of(anchorX, anchorY)));
+        final double dx = anchorX - start.x();
+        final double dy = anchorY - start.y();
+        final double minX = anchorX - width * 0.5 - LEADER_CLEARANCE;
+        final double maxX = anchorX + width * 0.5 + LEADER_CLEARANCE;
+        final double minY = anchorY - height * 0.5 - LEADER_CLEARANCE;
+        final double maxY = anchorY + height * 0.5 + LEADER_CLEARANCE;
+        double entry = Double.NEGATIVE_INFINITY;
+        if (dx > 0.0) {
+            entry = Math.max(entry, (minX - start.x()) / dx);
+        }
+        else if (dx < 0.0) {
+            entry = Math.max(entry, (maxX - start.x()) / dx);
+        }
+        if (dy > 0.0) {
+            entry = Math.max(entry, (minY - start.y()) / dy);
+        }
+        else if (dy < 0.0) {
+            entry = Math.max(entry, (maxY - start.y()) / dy);
+        }
+        if (!(entry > 0.0) || !(entry < 1.0)) {
+            return Optional.empty();
+        }
+        final LayoutPoint end = LayoutPoint.of(start.x() + entry * dx, start.y() + entry * dy);
+        if (Math.hypot(end.x() - start.x(), end.y() - start.y()) < MIN_VISIBLE_LEADER) {
+            return Optional.empty();
+        }
+        return Optional.of(new LeaderLine(start, end));
     }
 
     /** Node labels: computes the rim start, then delegates to the core. */

@@ -258,7 +258,8 @@ final class GraphPainter {
     }
 
     static BasicStroke leaderStroke(final GraphTheme theme, final double zoom) {
-        return theme.edgeStroke();
+        return new BasicStroke((float) (theme.edgeStroke().getLineWidth() / zoom),
+            BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND);
     }
 
     private static double worldX(final double screenX, final GraphViewport viewport,
