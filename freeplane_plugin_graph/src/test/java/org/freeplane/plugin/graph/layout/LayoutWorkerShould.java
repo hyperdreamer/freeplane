@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -832,6 +833,162 @@ public class LayoutWorkerShould {
         @Override
         public LayoutFrame step() {
             throw new IllegalStateException("step failed");
+        }
+    }
+
+    @Test
+    public void retainBoundaryDiagnosticsWhenTheComponentFailsClosed() throws Exception {
+        ThrowingBoundaryEngine throwing = new ThrowingBoundaryEngine();
+        CountingEngine recovered = new CountingEngine(new AtomicInteger(), new AtomicInteger());
+        LayoutWorker worker = new LayoutWorker(
+            new SequenceEngineSupplier(Arrays.<LayoutEngine>asList(throwing, recovered)),
+            PerceptualIdlePolicy.spikeDefaults());
+        try {
+            LayoutFrame first = await(worker.submit(request()));
+            assertThat(first.failed()).isFalse();
+
+            LayoutFrame failed = await(worker.step());
+
+            assertThat(failed.failed()).isTrue();
+            assertThat(failed.positions()).isEqualTo(first.positions());
+            assertThat(failed.residualViolations()).isEqualTo(first.residualViolations());
+            assertThat(failed.boundaryDiagnostics()).isSameAs(first.boundaryDiagnostics());
+
+            worker.restart();
+            LayoutFrame restored = await(worker.submit(request()));
+
+            assertThat(restored.failed()).isFalse();
+            assertThat(restored.boundaryDiagnostics().boundaryVerified()
+                || restored.boundaryDiagnostics().boundaryCovered()).isTrue();
+        }
+        finally {
+            worker.close();
+        }
+    }
+
+    @Test
+    public void decorateConsecutiveFramesWithDisplacementDeltas() throws Exception {
+        LayoutWorker worker = new LayoutWorker(new FixedEngineSupplier(new ShiftingEngine()),
+            PerceptualIdlePolicy.spikeDefaults());
+        try {
+            LayoutFrame first = await(worker.submit(request()));
+
+            assertThat(first.boundaryDiagnostics().deltaMax())
+                .isEqualTo(first.boundaryDiagnostics().displacementMax());
+            assertThat(first.boundaryDiagnostics().deltaRms())
+                .isEqualTo(first.boundaryDiagnostics().displacementRms());
+
+            LayoutFrame stepped = await(worker.step());
+            double[] expected = expectedDeltas(first.boundaryDiagnostics().appliedDisplacements(),
+                stepped.boundaryDiagnostics().appliedDisplacements());
+
+            assertThat(stepped.boundaryDiagnostics().deltaMax()).isGreaterThan(0.0);
+            assertThat(stepped.boundaryDiagnostics().deltaMax()).isEqualTo(expected[1]);
+            assertThat(stepped.boundaryDiagnostics().deltaRms()).isEqualTo(expected[0]);
+        }
+        finally {
+            worker.close();
+        }
+    }
+
+    @Test
+    public void restartResetsTheDisplacementField() throws Exception {
+        ThrowingBoundaryEngine throwing = new ThrowingBoundaryEngine();
+        CountingEngine recovered = new CountingEngine(new AtomicInteger(), new AtomicInteger());
+        LayoutWorker worker = new LayoutWorker(
+            new SequenceEngineSupplier(Arrays.<LayoutEngine>asList(throwing, recovered)),
+            PerceptualIdlePolicy.spikeDefaults());
+        try {
+            LayoutFrame first = await(worker.submit(request()));
+            assertThat(first.boundaryDiagnostics().displacementMax()).isGreaterThan(0.0);
+            assertThat(await(worker.step()).failed()).isTrue();
+
+            worker.restart();
+            LayoutFrame restored = await(worker.submit(request()));
+
+            assertThat(restored.failed()).isFalse();
+            assertThat(restored.boundaryDiagnostics().deltaMax())
+                .isEqualTo(restored.boundaryDiagnostics().displacementMax());
+            assertThat(restored.boundaryDiagnostics().deltaRms())
+                .isEqualTo(restored.boundaryDiagnostics().displacementRms());
+        }
+        finally {
+            worker.close();
+        }
+    }
+
+    private static double[] expectedDeltas(Map<String, LayoutPoint> previous,
+            Map<String, LayoutPoint> current) {
+        Set<String> keys = new LinkedHashSet<String>(previous.keySet());
+        keys.addAll(current.keySet());
+        if (keys.isEmpty()) {
+            return new double[] {0.0, 0.0};
+        }
+        double sumSquares = 0.0;
+        double maximum = 0.0;
+        for (String key : keys) {
+            LayoutPoint before = previous.get(key);
+            LayoutPoint after = current.get(key);
+            double deltaX = (after == null ? 0.0 : after.x()) - (before == null ? 0.0 : before.x());
+            double deltaY = (after == null ? 0.0 : after.y()) - (before == null ? 0.0 : before.y());
+            double squared = deltaX * deltaX + deltaY * deltaY;
+            sumSquares += squared;
+            maximum = Math.max(maximum, Math.sqrt(squared));
+        }
+        return new double[] {Math.sqrt(sumSquares / keys.size()), maximum};
+    }
+
+    private static final class ShiftingEngine implements LayoutEngine {
+        private GraphProjection projection;
+        private int step;
+
+        @Override
+        public LayoutFrame apply(LayoutRequest request) {
+            projection = request.projection();
+            step = 0;
+            return frame(0.0);
+        }
+
+        @Override
+        public LayoutFrame step() {
+            step++;
+            return frame(step * 5.0);
+        }
+
+        @Override
+        public void reset() {
+        }
+
+        @Override
+        public void close() {
+        }
+
+        private LayoutFrame frame(double shift) {
+            LayoutPositions raw = rawPositions(projection);
+            Map<ProjectedNodeKey, LayoutPoint> nodes = new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+            for (Map.Entry<ProjectedNodeKey, LayoutPoint> entry : raw.nodes().entrySet()) {
+                double x = entry.getKey().mapReferenceId().equals(MAP_ONE)
+                    ? entry.getValue().x() + shift : entry.getValue().x();
+                nodes.put(entry.getKey(), LayoutPoint.of(x, entry.getValue().y()));
+            }
+            Map<EnclosureHullKey, LayoutPoint> anchors = new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
+            for (Map.Entry<EnclosureHullKey, LayoutPoint> entry : raw.anchors().entrySet()) {
+                double x = entry.getKey().mapReferenceId().equals(MAP_ONE)
+                    ? entry.getValue().x() + shift : entry.getValue().x();
+                anchors.put(entry.getKey(), LayoutPoint.of(x, entry.getValue().y()));
+            }
+            return LayoutFrame.of(step, LayoutPositions.of(nodes, anchors), false);
+        }
+    }
+
+    private static final class ThrowingBoundaryEngine extends CountingEngine {
+        ThrowingBoundaryEngine() {
+            super(new AtomicInteger(), new AtomicInteger());
+        }
+
+        @Override
+        public LayoutFrame step() {
+            throw new BoundarySeparationException("fake MST failure");
         }
     }
 }
