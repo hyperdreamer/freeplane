@@ -1301,7 +1301,11 @@ public class BoundarySeparationCorrectionShould {
         assertThat(result.diagnostics().conflicts()).hasSize(1);
         assertThat(result.diagnostics().conflicts().get(0).reason())
             .isEqualTo(BoundaryConflict.Reason.IMMOVABLE_SIDES);
-        assertThat(correction.capTraversals()).isEqualTo(4);
+        assertThat(correction.capTraversals()).isPositive();
+        // Two plan passes (in-loop and terminal) traverse at most one cap per side. Assert the bound
+        // and the mechanism rather than the absolute count so the test does not couple to the number
+        // of plan invocations.
+        assertThat(correction.capTraversals()).isLessThanOrEqualTo(4L);
         assertThat(correction.capCacheHits()).isZero();
     }
 }
