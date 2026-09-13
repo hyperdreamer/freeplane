@@ -390,6 +390,11 @@ public class GraphCanvasPaintShould {
 
     private static List<PlacedLabel> placedLabels(CanvasState state, GraphTheme theme,
             GraphPaintState paintState, RenderingLevel level, int width, int height) {
+        return placedLabels(state, theme, paintState, level, 1.0, width, height);
+    }
+
+    private static List<PlacedLabel> placedLabels(CanvasState state, GraphTheme theme,
+            GraphPaintState paintState, RenderingLevel level, double zoom, int width, int height) {
         Set<ProjectedEndpointKey> forced = new LinkedHashSet<ProjectedEndpointKey>();
         if (paintState.selection().isPresent()) {
             forced.add(paintState.selection().get());
@@ -399,7 +404,7 @@ public class GraphCanvasPaintShould {
         }
         forced.addAll(paintState.searchMatches());
         LabelPlacementRequest request = LabelPlacementRequest.of(state.projection(),
-            state.geometry(), state.layout().positions(), 1.0, 0.0, 0.0,
+            state.geometry(), state.layout().positions(), zoom, 0.0, 0.0,
             new java.awt.geom.Rectangle2D.Double(0.0, 0.0, width, height), forced, level);
         return new ScreenLabelPlacement().place(request, null, LabelFonts.from(theme),
             Collections.<java.awt.geom.Rectangle2D>emptyList());
@@ -956,6 +961,61 @@ public class GraphCanvasPaintShould {
         }
     }
 
+    @Test
+    public void paintsTheLeaderStrokeScreenConstantThroughTheProductionCallSite() {
+        CanvasState state = leaderStrokeState();
+        GraphPaintState paintState = GraphPaintState.empty();
+        GraphTheme theme = lightTheme();
+        double zoom = 4.0;
+        List<PlacedLabel> placed = placedLabels(state, theme, paintState, RenderingLevel.FULL,
+            zoom, SIZE.width, SIZE.height);
+        PlacedLabel carried = null;
+        for (PlacedLabel label : placed) {
+            if (label.leader().isPresent()) {
+                carried = label;
+                break;
+            }
+        }
+        assertThat(carried).as("label carrying a leader at zoom " + zoom).isNotNull();
+        LeaderLine line = carried.leader().get();
+        assertThat(line.start().y()).as("horizontal leader for a column scan")
+            .isCloseTo(line.end().y(), within(1e-9));
+
+        BufferedImage image = paintAtZoom(state, paintState, theme, zoom);
+        int column = (int) Math.floor((line.start().x() + line.end().x()) * 0.5);
+        int rows = leaderInkRows(image, theme, column,
+            (int) Math.floor(line.start().y()) - 12, (int) Math.ceil(line.start().y()) + 12);
+        // The production call site must draw with GraphPainter.leaderStroke: 1.4 screen px
+        // covers at most two device rows by >50% at any subpixel offset, while the
+        // uncompensated theme.edgeStroke() paints 1.4 * zoom = 5.6 device px at zoom 4 and
+        // can never cover fewer than five rows by more than 50%.
+        assertThat(rows).as("painted leader thickness in device rows at zoom " + zoom)
+            .isBetween(1, 3);
+    }
+
+    private static int leaderInkRows(final BufferedImage image, final GraphTheme theme,
+            final int column, final int minY, final int maxY) {
+        int rows = 0;
+        for (int y = Math.max(0, minY); y < Math.min(image.getHeight(), maxY); y++) {
+            final Color pixel = new Color(image.getRGB(column, y), true);
+            final double toLabel = colorDistanceSquared(pixel, theme.labelColor());
+            // A row counts as leader ink when it is closer to the leader colour than to the
+            // background or to the node stroke the leader overlaps at zoom 4.
+            if (toLabel < colorDistanceSquared(pixel, theme.background())
+                    && toLabel < colorDistanceSquared(pixel, theme.nodeStroke())) {
+                rows++;
+            }
+        }
+        return rows;
+    }
+
+    private static double colorDistanceSquared(final Color first, final Color second) {
+        final double red = first.getRed() - second.getRed();
+        final double green = first.getGreen() - second.getGreen();
+        final double blue = first.getBlue() - second.getBlue();
+        return red * red + green * green + blue * blue;
+    }
+
     private static GraphTheme lightTheme() {
         return GraphTheme.resolve(CanvasTheme.LIGHT, registeredMaps());
     }
@@ -1098,6 +1158,21 @@ public class GraphCanvasPaintShould {
         return CanvasState.of(1L, projection,
             LayoutFrame.of(1L, LayoutPositions.of(positions, anchors), false, 0),
             GraphGeometry.of(nodes, hulls), OperationalStatus.IDLE);
+    }
+
+    private static CanvasState leaderStrokeState() {
+        ProjectedNode carried = node(FIRST_MAP, "Axiom of Choice", LayoutPoint.of(-25.0, 0.0));
+        Map<ProjectedNodeKey, NodeGeometry> nodes = new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
+        nodes.put(carried.key(), NodeGeometry.of(LayoutPoint.of(-25.0, 0.0), 8.0));
+        Map<ProjectedNodeKey, LayoutPoint> positions = new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        positions.put(carried.key(), LayoutPoint.of(-25.0, 0.0));
+        GraphProjection projection = GraphProjection.structure(1L, Collections.singletonList(carried),
+            Collections.<ProjectedEnclosure>emptyList());
+        LayoutFrame layout = LayoutFrame.of(1L, LayoutPositions.of(positions,
+            Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false, 0);
+        return CanvasState.of(1L, projection, layout,
+            GraphGeometry.of(nodes, Collections.<EnclosureHullKey, HullGeometry>emptyMap()),
+            OperationalStatus.IDLE);
     }
 
     private static CanvasState hoverOnlyLabelState() {
@@ -1441,6 +1516,17 @@ public class GraphCanvasPaintShould {
         canvas.setCanvasState(state);
         canvas.setPaintState(paintState);
         canvas.setViewport(GraphViewport.of(0.0, 0.0, 1.0));
+        return paintCanvas(canvas);
+    }
+
+    private static BufferedImage paintAtZoom(final CanvasState state, final GraphPaintState paintState,
+            final GraphTheme theme, final double zoom) {
+        GraphCanvas canvas = new GraphCanvas();
+        canvas.setSize(SIZE);
+        canvas.setTheme(theme);
+        canvas.setCanvasState(state);
+        canvas.setPaintState(paintState);
+        canvas.setViewport(GraphViewport.of(0.0, 0.0, zoom));
         return paintCanvas(canvas);
     }
 

@@ -1652,21 +1652,29 @@ public class ScreenLabelPlacementShould {
     @Test
     public void keepsLeaderInkOutOfItsOwnGlyphInk() {
         GraphTheme theme = GraphTheme.resolve(CanvasTheme.LIGHT);
-        for (double zoom : new double[] { 0.25, 1.0, 2.0, 4.0 }) {
-            assertPaintedSeparation(theme, denseScene(), zoom, standIn(denseScene(), zoom),
+        double[] zooms = { 0.25, 1.0, 2.0, 4.0 };
+        int[] expectedLeaders = { 7, 14, 5, 3 };
+        for (int index = 0; index < zooms.length; index++) {
+            double zoom = zooms[index];
+            int painted = assertPaintedSeparation(theme, denseScene(), zoom, standIn(denseScene(), zoom),
                 "Axiom of Choice");
-            assertPaintedSeparation(theme, longScene(), zoom, standIn(longScene(), zoom), LONG_NAMES[0]);
+            painted += assertPaintedSeparation(theme, longScene(), zoom, standIn(longScene(), zoom),
+                LONG_NAMES[0]);
+            assertThat(painted).as("painted leader-carrying labels at zoom " + zoom)
+                .isEqualTo(expectedLeaders[index]);
         }
-        assertEnclosurePaintedSeparation(theme, area(320.0, 320.0));
+        assertThat(assertEnclosurePaintedSeparation(theme, area(320.0, 320.0)))
+            .as("painted enclosure lane-1 label").isEqualTo(1);
     }
 
-    private static void assertPaintedSeparation(GraphTheme theme, List<SceneNode> scene, double zoom,
+    private static int assertPaintedSeparation(GraphTheme theme, List<SceneNode> scene, double zoom,
             Rectangle2D standIn, String forcedName) {
         Rectangle2D area = area(1128.0, 364.0);
         List<PlacedLabel> placed = place(scene, zoom, area, standIn, forced(forcedName),
             RenderingLevel.FULL, null);
         int width = (int) area.getWidth();
         int height = (int) area.getHeight();
+        int painted = 0;
         for (PlacedLabel label : placed) {
             if (label.mode() == PlacedLabel.Mode.HOVER_ONLY || !label.leader().isPresent()) {
                 continue;
@@ -1686,10 +1694,12 @@ public class ScreenLabelPlacementShould {
                 .isZero();
             assertThat(overlaps(leaderMask, glyphMask))
                 .as(label.text() + " leader/glyph ink overlap at zoom " + zoom).isFalse();
+            painted++;
         }
+        return painted;
     }
 
-    private static void assertEnclosurePaintedSeparation(GraphTheme theme, Rectangle2D area) {
+    private static int assertEnclosurePaintedSeparation(GraphTheme theme, Rectangle2D area) {
         PlacedLabel label = secondLaneEnclosureLabel(area);
         int width = (int) area.getWidth();
         int height = (int) area.getHeight();
@@ -1706,6 +1716,7 @@ public class ScreenLabelPlacementShould {
         }
         assertThat(inside).as("enclosure lane-1 leader ink centres inside the box").isZero();
         assertThat(overlaps(leaderMask, glyphMask)).as("enclosure lane-1 leader/glyph ink").isFalse();
+        return 1;
     }
 
     static boolean[] leaderMask(PlacedLabel label, GraphTheme theme, double zoom, int width, int height) {
