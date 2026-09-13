@@ -272,7 +272,9 @@ public final class GraphPluginOsgiSmoke {
             "images/GraphSelect.svg",
             "images/GraphConnect.svg",
             "images/GraphSettings.svg",
-            "images/GraphSearch.svg"
+            "images/GraphSearch.svg",
+            "images/MapSidebarCollapse.svg",
+            "images/MapSidebarExpand.svg"
         };
         for (final String image : images) {
             final Integer packagedSize = packagedImageSizes.get(image);
