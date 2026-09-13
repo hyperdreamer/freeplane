@@ -91,8 +91,8 @@ correction is absent; they are environment conditions and not regressions of
 this feature segment.
 
 Baseline comparison (supplementary, not part of the pass criterion): the
-remediated `full-worker` p95 is 333.8 ms down from the pre-remediation 137.7 ms
-and 0.65% above its 51,985,400 ns baseline (within run-to-run variance); the
+remediated `full-worker` p95 is 85.3 ms down from the pre-remediation 137.7 ms
+and 0.67% above its 51,985,400 ns baseline (within run-to-run variance); the
 remediated `accepted-batch-first-frame` p95 is 79.7 ms below the pre-remediation
 160.9 ms and 6.4% above its 76,344,593 ns baseline. Both rows pass on the
 strict-budget limb of the criterion below. Run wall time was 38m44s (start
