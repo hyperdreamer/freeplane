@@ -231,6 +231,7 @@ final class GraphPainter {
     private static void paintLabels(final Graphics2D graphics, final List<PlacedLabel> labels,
             final GraphPaintState paintState, final GraphTheme theme, final GraphViewport viewport,
             final java.awt.Dimension size, final boolean dimUnrelated) {
+        final BasicStroke leaderStroke = leaderStroke(theme, viewport.zoom());
         for (final PlacedLabel label : labels) {
             if (label.mode() == PlacedLabel.Mode.HOVER_ONLY && !label.forced()) {
                 continue;
@@ -244,14 +245,21 @@ final class GraphPainter {
             graphics.setColor(theme.labelColor());
             final double anchorX = worldX(label.anchorX(), viewport, size);
             final double anchorY = worldY(label.anchorY(), viewport, size);
-            if (label.leaderStart().isPresent()) {
-                graphics.setStroke(theme.edgeStroke());
-                graphics.draw(new Line2D.Double(worldX(label.leaderStart().get().x(), viewport, size),
-                    worldY(label.leaderStart().get().y(), viewport, size), anchorX, anchorY));
+            if (label.leader().isPresent()) {
+                final LeaderLine line = label.leader().get();
+                graphics.setStroke(leaderStroke);
+                graphics.draw(new Line2D.Double(
+                    worldX(line.start().x(), viewport, size), worldY(line.start().y(), viewport, size),
+                    worldX(line.end().x(), viewport, size), worldY(line.end().y(), viewport, size)));
             }
             drawCentered(graphics, font, label.text(), anchorX, anchorY);
             graphics.setComposite(oldComposite);
         }
+    }
+
+    static BasicStroke leaderStroke(final GraphTheme theme, final double zoom) {
+        return new BasicStroke((float) (theme.edgeStroke().getLineWidth() / zoom),
+            BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND);
     }
 
     private static double worldX(final double screenX, final GraphViewport viewport,

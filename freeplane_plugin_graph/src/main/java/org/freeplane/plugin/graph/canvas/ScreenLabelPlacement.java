@@ -29,6 +29,8 @@ public final class ScreenLabelPlacement {
     static final double DISPLACED_OFFSET = 30.0;
     static final double ARC_GAP = 1.0;
     static final double EXTERNAL_GAP = 4.0;
+    static final double LEADER_CLEARANCE = 3.0;
+    static final double MIN_VISIBLE_LEADER = 2.0;
     static final int SUBTLE_EXTERNAL_CANDIDATE_BUDGET = 8;
     private static final double MIN_DISC_RADIUS = 2.0;
     private static final double VERTICAL_MAX_WIDTH = 200.0;
@@ -215,7 +217,7 @@ public final class ScreenLabelPlacement {
         }
         context.obstacles.add(candidate);
         return enclosureLabel(endpoint, text, font, PlacedLabel.Mode.INTERIOR, PlacedLabel.Rung.FULL_NEAR,
-            anchorX, anchorY, size, forced, false, Optional.<LayoutPoint>empty());
+            anchorX, anchorY, size, forced, false, Optional.<LeaderLine>empty());
     }
 
     private static PlacedLabel arcEnclosureLabel(final Context context,
@@ -264,7 +266,7 @@ public final class ScreenLabelPlacement {
                     && !intersectsAny(context.obstacles, candidate)) {
                 context.obstacles.add(candidate);
                 return enclosureLabel(endpoint, text, font, PlacedLabel.Mode.ARC, PlacedLabel.Rung.FULL_NEAR,
-                    anchorX, anchorY, size, forced, false, Optional.<LayoutPoint>empty());
+                    anchorX, anchorY, size, forced, false, Optional.<LeaderLine>empty());
             }
         }
         return null;
@@ -297,12 +299,13 @@ public final class ScreenLabelPlacement {
                         && !intersectsAny(context.obstacles, candidate)) {
                     final LayoutPoint leaderWorld = hull.nearestBoundaryPoint(
                         worldPoint(context, anchorX, anchorY));
-                    final LayoutPoint leader = LayoutPoint.of(context.request.screenX(leaderWorld.x()),
+                    final LayoutPoint boundaryStart = LayoutPoint.of(
+                        context.request.screenX(leaderWorld.x()),
                         context.request.screenY(leaderWorld.y()));
                     context.obstacles.add(candidate);
                     return enclosureLabel(endpoint, text, font, PlacedLabel.Mode.EXTERNAL,
                         PlacedLabel.Rung.FULL_NEAR, anchorX, anchorY, size, forced, false,
-                        Optional.of(leader));
+                        leader(boundaryStart, anchorX, anchorY, size.getWidth(), size.getHeight()));
                 }
                 if (!emphatic && total >= SUBTLE_EXTERNAL_CANDIDATE_BUDGET) {
                     return null;
@@ -324,19 +327,19 @@ public final class ScreenLabelPlacement {
         if (emphatic) {
             return enclosureLabel(endpoint, text, font, PlacedLabel.Mode.INTERIOR,
                 PlacedLabel.Rung.FULL_NEAR, anchorX, anchorY, size, forced, true,
-                Optional.<LayoutPoint>empty());
+                Optional.<LeaderLine>empty());
         }
         return enclosureLabel(endpoint, text, font, PlacedLabel.Mode.HOVER_ONLY,
             PlacedLabel.Rung.HOVER_ONLY, anchorX, anchorY, size, forced, false,
-            Optional.<LayoutPoint>empty());
+            Optional.<LeaderLine>empty());
     }
 
     private static PlacedLabel enclosureLabel(final ProjectedEndpointKey endpoint, final String text,
             final Font font, final PlacedLabel.Mode mode, final PlacedLabel.Rung rung, final double anchorX,
             final double anchorY, final Rectangle2D size, final boolean forced,
-            final boolean emphaticAtAnchor, final Optional<LayoutPoint> leaderStart) {
+            final boolean emphaticAtAnchor, final Optional<LeaderLine> leader) {
         return new PlacedLabel(endpoint, text, font, mode, rung, anchorX, anchorY, size.getWidth(),
-            size.getHeight(), false, forced, emphaticAtAnchor, false, false, leaderStart, Slot.ABOVE);
+            size.getHeight(), false, forced, emphaticAtAnchor, false, false, leader, Slot.ABOVE);
     }
 
     private static List<LayoutPoint> screenPolygon(final Context context, final HullGeometry hull) {
@@ -464,7 +467,8 @@ public final class ScreenLabelPlacement {
         return new PlacedLabel(previous.endpoint(), previous.text(), previous.font(), previous.mode(),
             previous.rung(), anchor[0], anchor[1], previous.width(), previous.height(),
             previous.truncated(), isForced(context, key), previous.emphaticAtAnchor(),
-            false, false, leaderStart(previous.slot(), centerX, centerY, radius, anchor[0], anchor[1]),
+            false, false, nodeLeader(previous.slot(), centerX, centerY, radius, anchor[0], anchor[1],
+                previous.width(), previous.height()),
             previous.slot());
     }
 
@@ -509,7 +513,8 @@ public final class ScreenLabelPlacement {
                 return new PlacedLabel(endpoint, candidateText, font, PlacedLabel.Mode.INTERIOR,
                     rung.rung, anchor[0], anchor[1], size.getWidth(), size.getHeight(),
                     truncated, forced, false, false,
-                    fullTextWasFree, leaderStart(slot, centerX, centerY, radius, anchor[0], anchor[1]), slot);
+                    fullTextWasFree, nodeLeader(slot, centerX, centerY, radius, anchor[0], anchor[1],
+                        size.getWidth(), size.getHeight()), slot);
             }
         }
         return null;
@@ -549,19 +554,54 @@ public final class ScreenLabelPlacement {
     }
 
     /**
-     * Spec C12: a leader line exists for every slot except ABOVE and BELOW. Its start is the
-     * disc-rim point on the centre -> anchor direction, matching the committed generator.
+     * Core trim: any start (disc rim, hull boundary). End = first entry of [start -> anchor] into
+     * inflate(R, LEADER_CLEARANCE), when that entry is strictly between start and the centre and the
+     * surviving segment is at least MIN_VISIBLE_LEADER long.
      */
-    private static Optional<LayoutPoint> leaderStart(final Slot slot, final double centerX,
-            final double centerY, final double radius, final double anchorX, final double anchorY) {
+    private static Optional<LeaderLine> leader(final LayoutPoint start, final double anchorX,
+            final double anchorY, final double width, final double height) {
+        final double dx = anchorX - start.x();
+        final double dy = anchorY - start.y();
+        final double minX = anchorX - width * 0.5 - LEADER_CLEARANCE;
+        final double maxX = anchorX + width * 0.5 + LEADER_CLEARANCE;
+        final double minY = anchorY - height * 0.5 - LEADER_CLEARANCE;
+        final double maxY = anchorY + height * 0.5 + LEADER_CLEARANCE;
+        double entry = Double.NEGATIVE_INFINITY;
+        if (dx > 0.0) {
+            entry = Math.max(entry, (minX - start.x()) / dx);
+        }
+        else if (dx < 0.0) {
+            entry = Math.max(entry, (maxX - start.x()) / dx);
+        }
+        if (dy > 0.0) {
+            entry = Math.max(entry, (minY - start.y()) / dy);
+        }
+        else if (dy < 0.0) {
+            entry = Math.max(entry, (maxY - start.y()) / dy);
+        }
+        if (!(entry > 0.0) || !(entry < 1.0)) {
+            return Optional.empty();
+        }
+        final LayoutPoint end = LayoutPoint.of(start.x() + entry * dx, start.y() + entry * dy);
+        if (Math.hypot(end.x() - start.x(), end.y() - start.y()) < MIN_VISIBLE_LEADER) {
+            return Optional.empty();
+        }
+        return Optional.of(new LeaderLine(start, end));
+    }
+
+    /** Node labels: computes the rim start, then delegates to the core. */
+    private static Optional<LeaderLine> nodeLeader(final Slot slot, final double centerX,
+            final double centerY, final double radius, final double anchorX, final double anchorY,
+            final double width, final double height) {
         if (slot == Slot.ABOVE || slot == Slot.BELOW) {
             return Optional.empty();
         }
         final double dx = anchorX - centerX;
         final double dy = anchorY - centerY;
         final double distance = Math.max(1e-6, Math.hypot(dx, dy));
-        return Optional.of(LayoutPoint.of(centerX + dx / distance * radius,
-            centerY + dy / distance * radius));
+        final LayoutPoint start = LayoutPoint.of(centerX + dx / distance * radius,
+            centerY + dy / distance * radius);
+        return leader(start, anchorX, anchorY, width, height);
     }
 
     private static PlacedLabel baseSlot(final Context context, final ProjectedNodeKey key,
@@ -574,7 +614,7 @@ public final class ScreenLabelPlacement {
         context.obstacles.add(candidate);
         return new PlacedLabel(endpoint, fullText, font, PlacedLabel.Mode.INTERIOR,
             PlacedLabel.Rung.FULL_NEAR, anchor[0], anchor[1], size.getWidth(), size.getHeight(),
-            false, forced, false, true, false, Optional.<LayoutPoint>empty(), Slot.ABOVE);
+            false, forced, false, true, false, Optional.<LeaderLine>empty(), Slot.ABOVE);
     }
 
     private static PlacedLabel hoverOnly(final Context context, final ProjectedNodeKey key,
@@ -585,7 +625,7 @@ public final class ScreenLabelPlacement {
             context.radius(key), size.getWidth(), size.getHeight());
         return new PlacedLabel(endpoint, fullText, font, PlacedLabel.Mode.HOVER_ONLY,
             PlacedLabel.Rung.HOVER_ONLY, anchor[0], anchor[1], size.getWidth(), size.getHeight(),
-            false, false, false, false, false, Optional.<LayoutPoint>empty(), Slot.ABOVE);
+            false, false, false, false, false, Optional.<LeaderLine>empty(), Slot.ABOVE);
     }
 
     private static List<PlacedLabel> filterByLevel(final LabelPlacementRequest request,

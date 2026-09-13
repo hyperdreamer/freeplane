@@ -5,7 +5,6 @@ import java.awt.geom.Rectangle2D;
 import java.util.Objects;
 import java.util.Optional;
 
-import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
 
 public final class PlacedLabel {
@@ -32,14 +31,14 @@ public final class PlacedLabel {
     private final boolean emphaticAtAnchor;
     private final boolean forcedAtBaseSlot;
     private final boolean fullTextSlotWasFree;
-    private final Optional<LayoutPoint> leaderStart;
+    private final Optional<LeaderLine> leader;
     private final ScreenLabelPlacement.Slot slot;
 
     PlacedLabel(final ProjectedEndpointKey endpoint, final String text, final Font font, final Mode mode,
             final Rung rung, final double anchorX, final double anchorY, final double width,
             final double height, final boolean truncated, final boolean forced,
             final boolean emphaticAtAnchor, final boolean forcedAtBaseSlot,
-            final boolean fullTextSlotWasFree, final Optional<LayoutPoint> leaderStart,
+            final boolean fullTextSlotWasFree, final Optional<LeaderLine> leader,
             final ScreenLabelPlacement.Slot slot) {
         this.endpoint = Objects.requireNonNull(endpoint, "endpoint");
         this.text = Objects.requireNonNull(text, "text");
@@ -59,7 +58,7 @@ public final class PlacedLabel {
         this.emphaticAtAnchor = emphaticAtAnchor;
         this.forcedAtBaseSlot = forcedAtBaseSlot;
         this.fullTextSlotWasFree = fullTextSlotWasFree;
-        this.leaderStart = Objects.requireNonNull(leaderStart, "leaderStart");
+        this.leader = Objects.requireNonNull(leader, "leader");
         this.slot = slot;
     }
 
@@ -123,8 +122,8 @@ public final class PlacedLabel {
         return fullTextSlotWasFree;
     }
 
-    public Optional<LayoutPoint> leaderStart() {
-        return leaderStart;
+    public Optional<LeaderLine> leader() {
+        return leader;
     }
 
     ScreenLabelPlacement.Slot slot() {
