@@ -257,22 +257,22 @@ public class ScreenLabelPlacementShould {
 
         PlacedLabel theorem = find(placed, "Theorem");
         assertThat(slotOf(theorem, scene, 1.0)).isEqualTo("LEFT");
-        assertThat(theorem.leaderStart()).isPresent();
-        assertThat(theorem.leaderStart().get().x()).isCloseTo(513.0 - 14.0, within(1e-9));
-        assertThat(theorem.leaderStart().get().y()).isCloseTo(148.0, within(1e-9));
+        assertThat(theorem.leader()).isPresent();
+        assertThat(theorem.leader().get().start().x()).isCloseTo(513.0 - 14.0, within(1e-9));
+        assertThat(theorem.leader().get().start().y()).isCloseTo(148.0, within(1e-9));
         PlacedLabel powerSet = find(placed, "Power Set");
         assertThat(slotOf(powerSet, scene, 1.0)).isEqualTo("RIGHT_FAR");
-        assertThat(powerSet.leaderStart()).isPresent();
-        assertThat(powerSet.leaderStart().get().x()).isCloseTo(581.0 + 14.0, within(1e-9));
-        assertThat(powerSet.leaderStart().get().y()).isCloseTo(182.0, within(1e-9));
+        assertThat(powerSet.leader()).isPresent();
+        assertThat(powerSet.leader().get().start().x()).isCloseTo(581.0 + 14.0, within(1e-9));
+        assertThat(powerSet.leader().get().start().y()).isCloseTo(182.0, within(1e-9));
         PlacedLabel replacement = find(placed, "Replacement Scheme");
         assertThat(slotOf(replacement, scene, 1.0)).isEqualTo("ABOVE_RIGHT");
-        assertThat(replacement.leaderStart()).isPresent();
+        assertThat(replacement.leader()).isPresent();
 
         List<PlacedLabel> longPlaced = place(longScene(), 1.0, area, standIn(longScene(), 1.0),
             forced(LONG_NAMES[0]), RenderingLevel.FULL, null);
         PlacedLabel longForced = find(longPlaced, LONG_NAMES[0]);
-        assertThat(longForced.leaderStart()).isEmpty();
+        assertThat(longForced.leader()).isEmpty();
         assertThat(maxLeader(longPlaced, longScene(), 1.0)).isCloseTo(78.656464, within(1e-4));
         assertThat(leaderCrossings(longPlaced)).isZero();
         assertNodeLeadersAtTheRim(longPlaced, longScene(), 1.0, area);
@@ -287,15 +287,15 @@ public class ScreenLabelPlacementShould {
             String slot = slotOf(label, scene, zoom, area);
             assertThat(slot).as(label.text()).isNotNull();
             if ("ABOVE".equals(slot) || "BELOW".equals(slot)) {
-                assertThat(label.leaderStart()).as(slot + " " + label.text()).isEmpty();
+                assertThat(label.leader()).as(slot + " " + label.text()).isEmpty();
                 continue;
             }
-            assertThat(label.leaderStart()).as(slot + " " + label.text()).isPresent();
+            assertThat(label.leader()).as(slot + " " + label.text()).isPresent();
             SceneNode node = sceneNode(scene, nodeName(label.endpoint()));
             double centerX = node.x * zoom + area.getWidth() * 0.5;
             double centerY = node.y * zoom + area.getHeight() * 0.5;
             double radius = Math.max(2.0, node.radius * zoom);
-            LayoutPoint start = label.leaderStart().get();
+            LayoutPoint start = label.leader().get().start();
             double dx = start.x() - centerX;
             double dy = start.y() - centerY;
             double ax = label.anchorX() - centerX;
@@ -323,11 +323,11 @@ public class ScreenLabelPlacementShould {
             String slot = slotOfAt(label, centerX, centerY, radius);
             assertThat(slot).as("retained slot " + label.text()).isNotNull();
             if ("ABOVE".equals(slot) || "BELOW".equals(slot)) {
-                assertThat(label.leaderStart()).as(slot + " " + label.text()).isEmpty();
+                assertThat(label.leader()).as(slot + " " + label.text()).isEmpty();
                 continue;
             }
-            assertThat(label.leaderStart()).as(slot + " " + label.text()).isPresent();
-            LayoutPoint start = label.leaderStart().get();
+            assertThat(label.leader()).as(slot + " " + label.text()).isPresent();
+            LayoutPoint start = label.leader().get().start();
             double dx = start.x() - centerX;
             double dy = start.y() - centerY;
             double ax = label.anchorX() - centerX;
@@ -486,12 +486,12 @@ public class ScreenLabelPlacementShould {
         assertThat(countVisible(panned)).isEqualTo(11);
         PlacedLabel theorem = find(panned, "Theorem");
         PlacedLabel beforePan = find(baseline, "Theorem");
-        assertThat(theorem.leaderStart()).isPresent();
-        assertThat(theorem.leaderStart().get().x())
+        assertThat(theorem.leader()).isPresent();
+        assertThat(theorem.leader().get().start().x())
             .as("retained leader x after pan")
-            .isCloseTo(beforePan.leaderStart().get().x() - pan, within(1e-9));
-        assertThat(theorem.leaderStart().get().y()).as("retained leader y after pan")
-            .isCloseTo(beforePan.leaderStart().get().y(), within(1e-9));
+            .isCloseTo(beforePan.leader().get().start().x() - pan, within(1e-9));
+        assertThat(theorem.leader().get().start().y()).as("retained leader y after pan")
+            .isCloseTo(beforePan.leader().get().start().y(), within(1e-9));
         assertRetainedNodeLeadersAtTheRim(panned, scene, 1.0, area, pan, 0.0);
     }
 
@@ -507,7 +507,7 @@ public class ScreenLabelPlacementShould {
 
         int leaders = 0;
         for (PlacedLabel label : zoomed) {
-            if (label.mode() != PlacedLabel.Mode.HOVER_ONLY && label.leaderStart().isPresent()) {
+            if (label.mode() != PlacedLabel.Mode.HOVER_ONLY && label.leader().isPresent()) {
                 leaders++;
             }
         }
@@ -767,7 +767,7 @@ public class ScreenLabelPlacementShould {
         assertThat(label.width()).isCloseTo(55.065384, within(1e-6));
         assertThat(label.height()).isCloseTo(20.430143, within(1e-6));
         assertThat(label.emphaticAtAnchor()).isFalse();
-        assertThat(label.leaderStart()).isEmpty();
+        assertThat(label.leader()).isEmpty();
     }
 
     @Test
@@ -782,7 +782,7 @@ public class ScreenLabelPlacementShould {
         assertThat(label.anchorY() - area.getHeight() * 0.5).isCloseTo(-38.784928, within(1e-6));
         assertThat(label.width()).isCloseTo(55.065384, within(1e-6));
         assertThat(label.height()).isCloseTo(20.430143, within(1e-6));
-        assertThat(label.leaderStart()).isEmpty();
+        assertThat(label.leader()).isEmpty();
     }
 
     @Test
@@ -794,9 +794,9 @@ public class ScreenLabelPlacementShould {
         assertThat(label.mode()).isEqualTo(PlacedLabel.Mode.EXTERNAL);
         assertThat(label.anchorX() - area.getWidth() * 0.5).isCloseTo(0.0, within(1e-6));
         assertThat(label.anchorY() - area.getHeight() * 0.5).isCloseTo(-64.215072, within(1e-6));
-        assertThat(label.leaderStart()).isPresent();
-        assertThat(label.leaderStart().get().x() - area.getWidth() * 0.5).isCloseTo(0.0, within(1e-6));
-        assertThat(label.leaderStart().get().y() - area.getHeight() * 0.5)
+        assertThat(label.leader()).isPresent();
+        assertThat(label.leader().get().start().x() - area.getWidth() * 0.5).isCloseTo(0.0, within(1e-6));
+        assertThat(label.leader().get().start().y() - area.getHeight() * 0.5)
             .isCloseTo(-50.0, within(1e-6));
     }
 
@@ -810,7 +810,7 @@ public class ScreenLabelPlacementShould {
         assertThat(label.emphaticAtAnchor()).isTrue();
         assertThat(label.anchorX() - area.getWidth() * 0.5).isCloseTo(0.0, within(1e-6));
         assertThat(label.anchorY() - area.getHeight() * 0.5).isCloseTo(0.0, within(1e-6));
-        assertThat(label.leaderStart()).isEmpty();
+        assertThat(label.leader()).isEmpty();
     }
 
     @Test(timeout = 5000)
@@ -822,7 +822,7 @@ public class ScreenLabelPlacementShould {
         assertThat(label.mode()).isEqualTo(PlacedLabel.Mode.HOVER_ONLY);
         assertThat(label.anchorX() - area.getWidth() * 0.5).isCloseTo(0.0, within(1e-6));
         assertThat(label.anchorY() - area.getHeight() * 0.5).isCloseTo(0.0, within(1e-6));
-        assertThat(label.leaderStart()).isEmpty();
+        assertThat(label.leader()).isEmpty();
     }
 
     @Test
@@ -853,7 +853,7 @@ public class ScreenLabelPlacementShould {
         assertThat(enclosure.width()).isCloseTo(55.065384, within(1e-6));
         assertThat(enclosure.height()).isCloseTo(20.430143, within(1e-6));
         assertThat(enclosure.emphaticAtAnchor()).isFalse();
-        assertThat(enclosure.leaderStart()).isEmpty();
+        assertThat(enclosure.leader()).isEmpty();
         PlacedLabel node = find(emphatic, "Theorem");
         assertThat(node.font().getSize()).isEqualTo(12);
         assertThat(node.width()).isCloseTo(51.060364, within(1e-6));
@@ -888,14 +888,14 @@ public class ScreenLabelPlacementShould {
         assertThat(emphatic.anchorY() - area.getHeight() * 0.5).isCloseTo(0.0, within(1e-6));
         assertThat(emphatic.width()).isCloseTo(55.065384, within(1e-6));
         assertThat(emphatic.height()).isCloseTo(20.430143, within(1e-6));
-        assertThat(emphatic.leaderStart()).isEmpty();
+        assertThat(emphatic.leader()).isEmpty();
 
         PlacedLabel subtle = findEnclosureLabel(placed, "Subtle");
         assertThat(subtle.mode()).isEqualTo(PlacedLabel.Mode.ARC);
         assertThat(subtle.font().getSize()).isEqualTo(12);
         assertThat(subtle.anchorX() - area.getWidth() * 0.5).isCloseTo(0.0, within(1e-6));
         assertThat(subtle.anchorY() - area.getHeight() * 0.5).isCloseTo(-40.827943, within(1e-6));
-        assertThat(subtle.leaderStart()).isEmpty();
+        assertThat(subtle.leader()).isEmpty();
     }
 
     @Test
@@ -1196,11 +1196,12 @@ public class ScreenLabelPlacementShould {
     static int leaderCrossings(List<PlacedLabel> placed) {
         List<double[]> segments = new ArrayList<double[]>();
         for (PlacedLabel label : placed) {
-            if (label.mode() == PlacedLabel.Mode.HOVER_ONLY || !label.leaderStart().isPresent()) {
+            if (label.mode() == PlacedLabel.Mode.HOVER_ONLY || !label.leader().isPresent()) {
                 continue;
             }
-            LayoutPoint start = label.leaderStart().get();
-            segments.add(new double[] { start.x(), start.y(), label.anchorX(), label.anchorY() });
+            LayoutPoint start = label.leader().get().start();
+            LayoutPoint end = label.leader().get().end();
+            segments.add(new double[] { start.x(), start.y(), end.x(), end.y() });
         }
         int crossings = 0;
         for (int first = 0; first < segments.size(); first++) {
