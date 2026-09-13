@@ -37,7 +37,6 @@ import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 
 final class MapListPanel extends JPanel {
     static final int ROW_HEIGHT = 52;
-    private static final int PANEL_WIDTH = 264;
 
     @FunctionalInterface
     interface DeleteConfirmationPrompt {
@@ -169,6 +168,7 @@ final class MapListPanel extends JPanel {
     private final JList<MapRow> inactiveList = new JList<MapRow>(inactiveModel);
     private final JLabel activeHeader = new JLabel();
     private final JLabel inactiveHeader = new JLabel();
+    private final JButton collapseButton;
     private final JButton actionButton1 = button("graph_workspace.action.add_map", "add-map");
     private final JButton actionButton2 = button("graph_workspace.action.deactivate_map", "remove-map");
     private final JButton retryButton = button("graph_workspace.action.retry_map", "retry-map");
@@ -193,13 +193,19 @@ final class MapListPanel extends JPanel {
         setName("graph-workspace-map-list");
         setLayout(new BorderLayout(0, 4));
         setBorder(new EmptyBorder(6, 6, 6, 6));
-        setPreferredSize(new Dimension(PANEL_WIDTH, 0));
-        setMinimumSize(new Dimension(PANEL_WIDTH, 0));
+        setPreferredSize(new Dimension(MapSidebarLayout.DEFAULT_WIDTH, 0));
+        setMinimumSize(new Dimension(0, 0));
 
         final JLabel heading = new JLabel(TextUtils.getText("graph_workspace.map_list.heading"));
         heading.setName("graph-workspace-map-list-heading");
         heading.setBorder(new EmptyBorder(0, 2, 2, 2));
-        add(heading, BorderLayout.NORTH);
+        collapseButton = MapSidebarPanel.chevronButton("graph_workspace.map_list.collapse",
+            "graph-workspace-map-sidebar-collapse", "/images/MapSidebarCollapse.svg?useAccentColor=true");
+        final JPanel headingRow = new JPanel(new BorderLayout());
+        headingRow.setName("graph-workspace-map-list-heading-row");
+        headingRow.add(heading, BorderLayout.WEST);
+        headingRow.add(collapseButton, BorderLayout.EAST);
+        add(headingRow, BorderLayout.NORTH);
 
         activeHeader.setName("graph-workspace-active-header");
         activeHeader.setBorder(new EmptyBorder(4, 2, 2, 2));
@@ -278,6 +284,12 @@ final class MapListPanel extends JPanel {
         retryButton.addActionListener(event -> retrySelected());
         locateButton.addActionListener(event -> locateSelected());
         updateButtons();
+        addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override
+            public void componentResized(final java.awt.event.ComponentEvent event) {
+                syncListWidths();
+            }
+        });
     }
 
     private static DeleteConfirmationPrompt defaultDeleteConfirmationPrompt() {
@@ -333,8 +345,7 @@ final class MapListPanel extends JPanel {
             activeHeader.setText(TextUtils.format("graph_workspace.map_list.active_heading", activeModel.size()));
             inactiveHeader.setText(TextUtils.format("graph_workspace.map_list.inactive_heading", inactiveModel.size()));
 
-            activeList.setPreferredSize(new Dimension(PANEL_WIDTH, activeModel.size() * ROW_HEIGHT));
-            inactiveList.setPreferredSize(new Dimension(PANEL_WIDTH, inactiveModel.size() * ROW_HEIGHT));
+            syncListWidths();
 
             if (selectedActiveIndex >= 0) {
                 activeList.setSelectedIndex(selectedActiveIndex);
@@ -428,6 +439,18 @@ final class MapListPanel extends JPanel {
 
     int rowHeight() {
         return ROW_HEIGHT;
+    }
+
+    JButton collapseButton() {
+        return collapseButton;
+    }
+
+    void syncListWidths() {
+        final int width = Math.max(0, getWidth() - getInsets().left - getInsets().right);
+        activeList.setPreferredSize(new Dimension(width, activeModel.size() * ROW_HEIGHT));
+        inactiveList.setPreferredSize(new Dimension(width, inactiveModel.size() * ROW_HEIGHT));
+        activeList.revalidate();
+        inactiveList.revalidate();
     }
 
     void setReadOnly(final boolean value) {
@@ -591,7 +614,7 @@ final class MapListPanel extends JPanel {
             status.setText(labelFor(value.state()));
             count.setText(TextUtils.format("graph_workspace.map_list.node_count", Integer.valueOf(
                 value.projectedNodeCount())));
-            setPreferredSize(new Dimension(PANEL_WIDTH - 24, ROW_HEIGHT));
+            setPreferredSize(new Dimension(list.getWidth(), ROW_HEIGHT));
             return this;
         }
 
