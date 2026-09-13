@@ -1465,7 +1465,14 @@ final class GraphWorkspaceWindowModel {
             rows.add(MapListPanel.MapRow.of(accumulator.mapReferenceId, accumulator.displayName,
                 rowState, partition, accumulator.projectedNodeCount, isSelected));
         }
+        int activeCount = 0;
+        for (final MapListPanel.MapRow row : rows) {
+            if (row.partition() == MapPartition.ACTIVE) {
+                activeCount++;
+            }
+        }
         mapList.setRows(rows);
+        sidebar.setActiveMapCount(activeCount);
         updateMenuEnablement();
     }
 

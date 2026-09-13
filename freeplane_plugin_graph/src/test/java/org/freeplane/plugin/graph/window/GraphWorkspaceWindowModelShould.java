@@ -1870,6 +1870,62 @@ public class GraphWorkspaceWindowModelShould {
     }
 
     @Test
+    public void mapsTheActivePartitionCountToTheRailBadge() {
+        MapReferenceId activeId = id(201L);
+        MapReferenceId inactiveId = id(202L);
+        List<GraphWorkspaceViewBinding.MapRegistration> registrations = Arrays.asList(
+            registration(activeId, "Active", MapAvailability.AVAILABLE),
+            registration(inactiveId, "Inactive", MapAvailability.INACTIVE));
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            emptyState(), registrations, false).answerSidebarRoundTrip();
+        GraphWorkspaceWindowModel model = fixture.model();
+
+        assertThat(sidebarPanel(model).rail().countBadge().getText()).isEqualTo("1");
+        assertThat(sidebarPanel(model).rail().countBadge().getToolTipText())
+            .isEqualTo("graph_workspace.map_list.rail_count[1]");
+
+        List<GraphWorkspaceViewBinding.MapRegistration> allInactive = Collections.singletonList(
+            registration(inactiveId, "Inactive", MapAvailability.INACTIVE));
+        Fixture empty = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            emptyState(), allInactive, false).answerSidebarRoundTrip();
+        GraphWorkspaceWindowModel emptyModel = empty.model();
+
+        assertThat(sidebarPanel(emptyModel).rail().countBadge().getText()).isEmpty();
+        assertThat(sidebarPanel(emptyModel).rail().countBadge().getToolTipText())
+            .isEqualTo("graph_workspace.map_list.rail_count[0]");
+
+        GraphWorkspaceWindow.runOnEdt(() -> sidebarPanel(emptyModel).collapseButton().doClick());
+        GraphWorkspaceWindow.runOnEdt(() -> emptyModel.acceptCanvasState(emptyState()));
+
+        assertThat(sidebarPanel(emptyModel).rail().countBadge().getText()).isEmpty();
+        assertThat(displayCommandCount(empty)).isEqualTo(1);
+        model.close();
+        emptyModel.close();
+    }
+
+    @Test
+    public void keepsTheMapsMenuActionsEnabledWhileCollapsed() {
+        MapReferenceId activeId = id(301L);
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            emptyState(), Collections.singletonList(registration(activeId, "Active", MapAvailability.AVAILABLE)),
+            false).answerSidebarRoundTrip();
+        GraphWorkspaceWindowModel model = fixture.model();
+        layoutSidebarAt(model, 1000);
+        model.mapList().selectMap(activeId);
+        boolean addBefore = menuItem(model, "add-map").isEnabled();
+        boolean deactivateBefore = menuItem(model, "deactivate-map").isEnabled();
+
+        GraphWorkspaceWindow.runOnEdt(() -> mapsSidebarMenuItem(model).doClick());
+
+        assertThat(sidebarPanel(model).isCollapsed()).isTrue();
+        assertThat(menuItem(model, "add-map").isEnabled()).isEqualTo(addBefore);
+        assertThat(menuItem(model, "deactivate-map").isEnabled()).isEqualTo(deactivateBefore);
+        assertThat(mapsSidebarMenuItem(model).isEnabled()).isTrue();
+        assertThat(mapsSidebarMenuItem(model).isSelected()).isFalse();
+        model.close();
+    }
+
+    @Test
     public void commitsNothingFromAGestureThatEndsWhileCollapsed() {
         Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
             emptyState(), Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)),
