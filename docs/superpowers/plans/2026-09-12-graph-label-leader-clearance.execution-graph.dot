@@ -1,0 +1,11 @@
+digraph execution {
+    rankdir=TB;
+    node [shape=box, style=rounded, fontname="Helvetica"];
+    label="graph-label-leader-clearance — task graph";
+    labelloc="t";
+    "T1" [label="Task 1\nScaffold the LeaderLine API over today's leader geometry\nlane leader-clearance / advanced"];
+    "T2" [label="Task 2\nProve the clearance with red tests, then trim the leaders\nlane leader-clearance / advanced"];
+    "T3" [label="Task 3\nFalsify the trim and the stroke, then close the acceptance sweep\nlane leader-clearance / standard"];
+    "T1" -> "T2";
+    "T2" -> "T3";
+}
