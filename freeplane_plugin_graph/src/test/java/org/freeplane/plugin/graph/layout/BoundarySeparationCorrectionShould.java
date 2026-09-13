@@ -505,6 +505,22 @@ public class BoundarySeparationCorrectionShould {
                     .isEqualTo(difference(result.positions().anchors().get(root),
                         fixtureAnchorPoint(points[index][0], points[index][1])));
         }
+
+        // The component computes rms/max from the applied field: recompute them independently from
+        // the known rigid per-map deltas (one node and one equal anchor vector per map).
+        final Map<String, LayoutPoint> applied = result.appliedDisplacements();
+        double sumSquares = 0.0;
+        double maximum = 0.0;
+        for (final LayoutPoint vector : applied.values()) {
+            final double squared = vector.x() * vector.x() + vector.y() * vector.y();
+            sumSquares += squared;
+            maximum = Math.max(maximum, Math.sqrt(squared));
+        }
+        assertThat(applied).hasSize(6);
+        assertThat(result.diagnostics().displacementRms()).isEqualTo(Math.sqrt(sumSquares / applied.size()));
+        assertThat(result.diagnostics().displacementMax()).isEqualTo(maximum);
+        assertThat(result.diagnostics().displacementMax())
+            .isGreaterThan(result.diagnostics().displacementRms());
     }
 
     @Test
