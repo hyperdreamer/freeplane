@@ -1146,4 +1146,98 @@ public class BoundarySeparationCorrectionShould {
             this.definitionsHull = definitionsHull;
         }
     }
+
+    @Test
+    public void ancestorContainmentIsMemoizedAcrossIdenticalFrames() {
+        final FrozenFixture fixture = frozenFixture();
+        final BoundarySeparationCorrection correction = new BoundarySeparationCorrection();
+
+        final BoundarySeparationResult first = correction.apply(fixture.projection, fixture.positions, METRICS,
+            fixture.pins);
+        final long checksAfterFirstFrame = correction.ancestorExactContainmentChecks();
+
+        final BoundarySeparationResult second = correction.apply(fixture.projection, fixture.positions, METRICS,
+            fixture.pins);
+
+        assertThat(checksAfterFirstFrame).isGreaterThan(0);
+        assertThat(correction.ancestorExactContainmentChecks()).isEqualTo(checksAfterFirstFrame);
+        assertThat(correction.ancestorContainmentMemoHits()).isGreaterThan(0);
+        assertThat(second.positions()).isEqualTo(first.positions());
+        assertThat(second.diagnostics().rounds()).isEqualTo(first.diagnostics().rounds());
+        assertThat(second.diagnostics().hullResidualViolations())
+            .isEqualTo(first.diagnostics().hullResidualViolations());
+        assertThat(second.diagnostics().conflicts().size()).isEqualTo(first.diagnostics().conflicts().size());
+        assertThat(second.diagnostics().residualHullPairs())
+            .isEqualTo(first.diagnostics().residualHullPairs());
+    }
+
+    @Test
+    public void ancestorContainmentMemoRechecksAHullWhoseGeometryChanged() {
+        final ProjectedNodeKey childNode = key("memo-child-node");
+        final EnclosureHullKey rootHull = hull("memo-root");
+        final EnclosureHullKey childHull = hull("memo-child");
+        final GraphProjection projection = projection(Collections.singletonList(childNode),
+            Arrays.asList(parent(rootHull, "root", Collections.singletonList(childHull)),
+                child(childHull, "child", rootHull, Collections.singletonList(childNode))));
+        final BoundarySeparationCorrection correction = new BoundarySeparationCorrection();
+
+        correction.apply(projection,
+            positions(Collections.singletonList(nodeEntry(childNode, 0.0, 0.0)),
+                Arrays.asList(anchorEntry(rootHull, 0.0, 0.0), anchorEntry(childHull, 0.0, 0.0))),
+            METRICS, Collections.<PinProjection>emptyList());
+        final long checksAfterFirstFrame = correction.ancestorExactContainmentChecks();
+
+        correction.apply(projection,
+            positions(Collections.singletonList(nodeEntry(childNode, 5.0, 0.0)),
+                Arrays.asList(anchorEntry(rootHull, 0.0, 0.0), anchorEntry(childHull, 0.0, 0.0))),
+            METRICS, Collections.<PinProjection>emptyList());
+
+        assertThat(checksAfterFirstFrame).isEqualTo(1);
+        assertThat(correction.ancestorExactContainmentChecks()).isEqualTo(2);
+        assertThat(correction.ancestorContainmentMemoHits()).isZero();
+    }
+
+    @Test
+    public void capSetsAreReusedWithinAFrame() {
+        final ProjectedNodeKey aFree = key("a-free");
+        final ProjectedNodeKey aPin = key("a-pin");
+        final ProjectedNodeKey bFree = key("b-free");
+        final ProjectedNodeKey bPin = key("b-pin");
+        final SiblingFixture fixture = siblingFixture(Arrays.asList(aFree, aPin), Arrays.asList(bFree, bPin),
+            Arrays.asList(nodeEntry(aFree, 0.0, 0.0), nodeEntry(aPin, -3.0, 30.0), nodeEntry(bFree, 38.0, 0.0),
+                nodeEntry(bPin, 47.0, 30.0)),
+            Arrays.asList(pin(aPin, -3.0, 30.0), pin(bPin, 47.0, 30.0)));
+        final BoundarySeparationCorrection correction = new BoundarySeparationCorrection();
+
+        final BoundarySeparationResult result = correction.apply(fixture.projection, fixture.positions, METRICS,
+            fixture.pins);
+        final BoundarySeparationResult fresh = new BoundarySeparationCorrection().apply(fixture.projection,
+            fixture.positions, METRICS, fixture.pins);
+
+        assertThat(result.diagnostics().rounds()).isEqualTo(1);
+        assertThat(result.diagnostics().boundaryVerified()).isTrue();
+        assertThat(correction.capCacheHits()).isGreaterThan(0);
+        assertThat(result.positions()).isEqualTo(fresh.positions());
+        assertThat(result.appliedDisplacements()).isEqualTo(fresh.appliedDisplacements());
+    }
+
+    @Test
+    public void candidateSelectionStopsWhenNoSideHasAMovableContributor() {
+        final ProjectedNodeKey aPin = key("a-pin");
+        final ProjectedNodeKey bPin = key("b-pin");
+        final SiblingFixture fixture = siblingFixture(Collections.singletonList(aPin),
+            Collections.singletonList(bPin),
+            Arrays.asList(nodeEntry(aPin, 0.0, 30.0), nodeEntry(bPin, 38.0, 30.0)),
+            Arrays.asList(pin(aPin, 0.0, 30.0), pin(bPin, 38.0, 30.0)));
+        final BoundarySeparationCorrection correction = new BoundarySeparationCorrection();
+
+        final BoundarySeparationResult result = correction.apply(fixture.projection, fixture.positions, METRICS,
+            fixture.pins);
+
+        assertThat(result.diagnostics().conflicts()).hasSize(1);
+        assertThat(result.diagnostics().conflicts().get(0).reason())
+            .isEqualTo(BoundaryConflict.Reason.IMMOVABLE_SIDES);
+        assertThat(correction.capTraversals()).isEqualTo(4);
+        assertThat(correction.capCacheHits()).isZero();
+    }
 }
