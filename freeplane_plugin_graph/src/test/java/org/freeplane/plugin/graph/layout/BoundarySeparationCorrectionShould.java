@@ -569,4 +569,190 @@ public class BoundarySeparationCorrectionShould {
             this.secondHull = secondHull;
         }
     }
+
+    @Test
+    public void resolvesTheAttemptFiveBothSidesHalfCase() {
+        final ProjectedNodeKey aFree = key("a-free");
+        final ProjectedNodeKey aPin = key("a-pin");
+        final ProjectedNodeKey bFree = key("b-free");
+        final ProjectedNodeKey bPin = key("b-pin");
+        final SiblingFixture fixture = siblingFixture(Arrays.asList(aFree, aPin), Arrays.asList(bFree, bPin),
+            Arrays.asList(nodeEntry(aFree, 0.0, 0.0), nodeEntry(aPin, -6.0, 30.0), nodeEntry(bFree, 38.0, 0.0),
+                nodeEntry(bPin, 44.0, 30.0)),
+            Arrays.asList(pin(aPin, -6.0, 30.0), pin(bPin, 44.0, 30.0)));
+
+        final BoundarySeparationResult result = apply(fixture);
+
+        assertThat(result.diagnostics().rounds()).isEqualTo(1);
+        assertThat(result.diagnostics().boundaryVerified()).isTrue();
+        assertThat(result.appliedDisplacements().get(CanonicalLayoutKeys.nodeField(aFree)))
+            .isEqualTo(LayoutPoint.of(-5.0, 0.0));
+        assertThat(result.appliedDisplacements().get(CanonicalLayoutKeys.nodeField(bFree)))
+            .isEqualTo(LayoutPoint.of(5.0, 0.0));
+        assertThat(result.positions().nodes().get(aPin)).isEqualTo(LayoutPoint.of(-6.0, 30.0));
+        assertThat(result.positions().nodes().get(bPin)).isEqualTo(LayoutPoint.of(44.0, 30.0));
+        assertThat(result.positions().nodes().get(aFree)).isEqualTo(LayoutPoint.of(-5.0, 0.0));
+        assertThat(result.positions().nodes().get(bFree)).isEqualTo(LayoutPoint.of(43.0, 0.0));
+    }
+
+    @Test
+    public void resolvesAPinnedMaximumContributorWithTheSecondSideFullCandidate() {
+        final ProjectedNodeKey aPin = key("a-pin");
+        final ProjectedNodeKey bFree = key("b-free");
+        final SiblingFixture fixture = siblingFixture(Collections.singletonList(aPin),
+            Collections.singletonList(bFree),
+            Arrays.asList(nodeEntry(aPin, 0.0, 0.0), nodeEntry(bFree, 38.0, 0.0)),
+            Collections.singletonList(pin(aPin, 0.0, 0.0)));
+
+        final BoundarySeparationResult result = apply(fixture);
+
+        assertThat(result.diagnostics().rounds()).isEqualTo(1);
+        assertThat(result.diagnostics().boundaryVerified()).isTrue();
+        assertThat(result.appliedDisplacements().get(CanonicalLayoutKeys.nodeField(bFree)))
+            .isEqualTo(LayoutPoint.of(10.0, 0.0));
+        assertThat(result.positions().nodes().get(aPin)).isEqualTo(LayoutPoint.of(0.0, 0.0));
+        assertThat(result.positions().nodes().get(bFree)).isEqualTo(LayoutPoint.of(48.0, 0.0));
+        assertThat(result.appliedDisplacements().keySet())
+            .doesNotContain(CanonicalLayoutKeys.nodeField(aPin));
+    }
+
+    @Test
+    public void recursesIntoNestedChildHullsWhenMoving() {
+        final ProjectedNodeKey a1Free = key("a1-free");
+        final ProjectedNodeKey bFree = key("b-free");
+        final GraphProjection projection = nestedProjection(Arrays.asList(a1Free, bFree),
+            Collections.singletonList(a1Free), Collections.singletonList(bFree));
+        final LayoutPositions positions = positions(
+            Arrays.asList(nodeEntry(a1Free, 0.0, 0.0), nodeEntry(bFree, 54.0, 0.0)),
+            Arrays.asList(anchorEntry(hull("root"), 0.0, 0.0), anchorEntry(hull("a"), 0.0, 0.0),
+                anchorEntry(hull("a1"), 0.0, 0.0), anchorEntry(hull("b"), 54.0, 0.0)));
+
+        final BoundarySeparationResult result = new BoundarySeparationCorrection().apply(projection, positions,
+            METRICS, Collections.<PinProjection>emptyList());
+
+        assertThat(result.diagnostics().rounds()).isEqualTo(1);
+        assertThat(result.diagnostics().boundaryVerified()).isTrue();
+        assertThat(result.appliedDisplacements().get(CanonicalLayoutKeys.nodeField(a1Free)))
+            .isEqualTo(LayoutPoint.of(-5.0, 0.0));
+        assertThat(result.appliedDisplacements().get(CanonicalLayoutKeys.nodeField(bFree)))
+            .isEqualTo(LayoutPoint.of(5.0, 0.0));
+    }
+
+    @Test
+    public void movesAnEmptyEnclosureByItsAnchor() {
+        final ProjectedNodeKey aFree = key("a-free");
+        final EnclosureHullKey rootHull = hull("root");
+        final EnclosureHullKey aHull = hull("a");
+        final EnclosureHullKey bHull = hull("b");
+        final GraphProjection projection = projection(Collections.singletonList(aFree),
+            Arrays.asList(parent(rootHull, "root", Arrays.asList(aHull, bHull)),
+                child(aHull, "a", rootHull, Collections.singletonList(aFree)),
+                child(bHull, "B", rootHull, Collections.<ProjectedNodeKey>emptyList())));
+        final LayoutPositions positions = positions(Collections.singletonList(nodeEntry(aFree, 0.0, 0.0)),
+            Arrays.asList(anchorEntry(rootHull, 10.0, 0.0), anchorEntry(aHull, 0.0, 0.0),
+                anchorEntry(bHull, 20.0, 0.0)));
+        final HullGeometry rawFirst = new org.freeplane.plugin.graph.geometry.GraphGeometryEngine()
+            .computeHulls(projection, positions, METRICS).hulls().get(aHull);
+        final HullGeometry rawSecond = new org.freeplane.plugin.graph.geometry.GraphGeometryEngine()
+            .computeHulls(projection, positions, METRICS).hulls().get(bHull);
+        final LayoutPoint translation = HullIntersection.minimumSeparatingTranslation(rawFirst, rawSecond);
+
+        final BoundarySeparationResult result = new BoundarySeparationCorrection().apply(projection, positions,
+            METRICS, Collections.<PinProjection>emptyList());
+
+        assertThat(result.diagnostics().rounds()).isEqualTo(1);
+        assertThat(result.diagnostics().boundaryVerified()).isTrue();
+        assertThat(result.appliedDisplacements().get(CanonicalLayoutKeys.anchorField(bHull)))
+            .isEqualTo(LayoutPoint.of(translation.x() * 0.5, translation.y() * 0.5));
+        assertThat(result.appliedDisplacements().get(CanonicalLayoutKeys.nodeField(aFree)))
+            .isEqualTo(LayoutPoint.of(-translation.x() * 0.5, -translation.y() * 0.5));
+        assertThat(result.positions().anchors().get(bHull)).isEqualTo(LayoutPoint.of(
+            20.0 + translation.x() * 0.5, translation.y() * 0.5));
+    }
+
+    @Test
+    public void movesEveryContributorInTheCapSetByTheSameVector() {
+        final ProjectedNodeKey aLow = key("a-low");
+        final ProjectedNodeKey aHigh = key("a-high");
+        final ProjectedNodeKey bFree = key("b-free");
+        final SiblingFixture fixture = siblingFixture(Arrays.asList(aLow, aHigh),
+            Collections.singletonList(bFree),
+            Arrays.asList(nodeEntry(aLow, 0.0, 0.0), nodeEntry(aHigh, 0.0, 10.0), nodeEntry(bFree, 38.0, 0.0)),
+            Collections.<PinProjection>emptyList());
+
+        final BoundarySeparationResult result = apply(fixture);
+
+        assertThat(result.diagnostics().rounds()).isEqualTo(1);
+        assertThat(result.appliedDisplacements().get(CanonicalLayoutKeys.nodeField(aLow)))
+            .isEqualTo(LayoutPoint.of(-5.0, 0.0));
+        assertThat(result.appliedDisplacements().get(CanonicalLayoutKeys.nodeField(aHigh)))
+            .isEqualTo(LayoutPoint.of(-5.0, 0.0));
+    }
+
+    private static BoundarySeparationResult apply(SiblingFixture fixture) {
+        return new BoundarySeparationCorrection().apply(fixture.projection, fixture.positions, METRICS,
+            fixture.pins);
+    }
+
+    private static SiblingFixture siblingFixture(List<ProjectedNodeKey> aNodes, List<ProjectedNodeKey> bNodes,
+            List<Map.Entry<ProjectedNodeKey, LayoutPoint>> nodeEntries, List<PinProjection> pins) {
+        final EnclosureHullKey rootHull = hull("root");
+        final EnclosureHullKey aHull = hull("a");
+        final EnclosureHullKey bHull = hull("b");
+        final List<ProjectedNodeKey> allNodes = new ArrayList<ProjectedNodeKey>(aNodes);
+        allNodes.addAll(bNodes);
+        final List<Map.Entry<EnclosureHullKey, LayoutPoint>> anchorEntries =
+            new ArrayList<Map.Entry<EnclosureHullKey, LayoutPoint>>();
+        anchorEntries.add(anchorEntry(rootHull, 0.0, 0.0));
+        anchorEntries.add(anchorEntry(aHull, 0.0, 0.0));
+        anchorEntries.add(anchorEntry(bHull, 38.0, 0.0));
+        final GraphProjection projection = projection(allNodes,
+            Arrays.asList(parent(rootHull, "root", Arrays.asList(aHull, bHull)),
+                child(aHull, "a", rootHull, aNodes), child(bHull, "b", rootHull, bNodes)));
+        return new SiblingFixture(projection, positions(nodeEntries, anchorEntries), pins, aHull, bHull);
+    }
+
+    private static GraphProjection nestedProjection(List<ProjectedNodeKey> allNodes,
+            List<ProjectedNodeKey> a1Nodes, List<ProjectedNodeKey> bNodes) {
+        final EnclosureHullKey rootHull = hull("root");
+        final EnclosureHullKey aHull = hull("a");
+        final EnclosureHullKey a1Hull = hull("a1");
+        final EnclosureHullKey bHull = hull("b");
+        return projection(allNodes,
+            Arrays.asList(parent(rootHull, "root", Arrays.asList(aHull, bHull)),
+                nestedChild(aHull, "a", rootHull, Collections.singletonList(a1Hull)),
+                child(a1Hull, "a1", aHull, a1Nodes), child(bHull, "b", rootHull, bNodes)));
+    }
+
+    private static ProjectedEnclosure nestedChild(EnclosureHullKey hull, String label, EnclosureHullKey parent,
+            List<EnclosureHullKey> children) {
+        return ProjectedEnclosure.of(hull, hull.endpointKeys(),
+            Collections.singletonList(SafeNodeLabel.of(label, label)), "m", Optional.of(parent),
+            Collections.<ProjectedNodeKey>emptyList(), children, false, BoundaryTier.SUBTLE);
+    }
+
+    private static ProjectedEnclosure parent(EnclosureHullKey hull, String label,
+            List<EnclosureHullKey> children) {
+        return ProjectedEnclosure.of(hull, hull.endpointKeys(),
+            Collections.singletonList(SafeNodeLabel.of(label, label)), "m",
+            Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(), children, true,
+            BoundaryTier.EMPHATIC);
+    }
+
+    private static final class SiblingFixture {
+        final GraphProjection projection;
+        final LayoutPositions positions;
+        final List<PinProjection> pins;
+        final EnclosureHullKey hullA;
+        final EnclosureHullKey hullB;
+
+        SiblingFixture(GraphProjection projection, LayoutPositions positions, List<PinProjection> pins,
+                EnclosureHullKey hullA, EnclosureHullKey hullB) {
+            this.projection = projection;
+            this.positions = positions;
+            this.pins = pins;
+            this.hullA = hullA;
+            this.hullB = hullB;
+        }
+    }
 }

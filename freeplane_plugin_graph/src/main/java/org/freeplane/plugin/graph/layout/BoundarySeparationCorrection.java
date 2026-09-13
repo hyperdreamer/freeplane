@@ -323,9 +323,8 @@ public final class BoundarySeparationCorrection {
                 planCrossMap(violation, rigidMaps, enclosuresByHull, pins, outcome);
             }
             else {
-                outcome.conflicts.put(violation.pairKey, conflict(violation,
-                    BoundaryConflict.Reason.IMMOVABLE_SIDES,
-                    blockingPins(violation, enclosuresByHull, pins)));
+                planSameMap(violation, projection, enclosuresByHull, hulls, positions, metrics, pins,
+                    pinnedNodes, outcome);
             }
         }
         return outcome;
@@ -371,6 +370,243 @@ public final class BoundarySeparationCorrection {
         final LayoutPoint previous = deltas.get(map);
         deltas.put(map, previous == null ? delta : add(previous, delta));
     }
+
+    private static void planSameMap(final Violation violation, final GraphProjection projection,
+            final Map<EnclosureHullKey, ProjectedEnclosure> enclosuresByHull,
+            final Map<EnclosureHullKey, HullGeometry> hulls, final LayoutPositions positions,
+            final GeometryTextMetrics metrics, final List<PinProjection> pins,
+            final Set<ProjectedNodeKey> pinnedNodes, final PlanOutcome outcome) {
+        final Candidate candidate = selectCandidate(violation, projection, enclosuresByHull, hulls, positions,
+            metrics, pinnedNodes);
+        if (candidate == null) {
+            outcome.conflicts.put(violation.pairKey, conflict(violation,
+                BoundaryConflict.Reason.IMMOVABLE_SIDES, blockingPins(violation, enclosuresByHull, pins)));
+            return;
+        }
+        if (candidate.firstMagnitude > 0.0) {
+            final Traversal moves = traverse(violation.first, candidate.firstUnit, candidate.firstMagnitude,
+                projection, enclosuresByHull, hulls, positions, metrics, pinnedNodes);
+            addMoves(outcome, moves, candidate.firstVector);
+        }
+        if (candidate.secondMagnitude > 0.0) {
+            final Traversal moves = traverse(violation.second, candidate.secondUnit, candidate.secondMagnitude,
+                projection, enclosuresByHull, hulls, positions, metrics, pinnedNodes);
+            addMoves(outcome, moves, candidate.secondVector);
+        }
+        outcome.movedPairs.add(violation.pairKey);
+    }
+
+    private static void addMoves(final PlanOutcome outcome, final Traversal moves, final LayoutPoint vector) {
+        if (moves.movedNodes.isEmpty() && moves.movedAnchors.isEmpty()) {
+            throw new BoundarySeparationException("A valid candidate must have a non-empty displacement set");
+        }
+        for (final ProjectedNodeKey node : moves.movedNodes) {
+            addVector(outcome.nodeFields, node, vector);
+        }
+        for (final EnclosureHullKey anchor : moves.movedAnchors) {
+            addVector(outcome.anchorFields, anchor, vector);
+        }
+    }
+
+    private static Candidate selectCandidate(final Violation violation, final GraphProjection projection,
+            final Map<EnclosureHullKey, ProjectedEnclosure> enclosuresByHull,
+            final Map<EnclosureHullKey, HullGeometry> hulls, final LayoutPositions positions,
+            final GeometryTextMetrics metrics, final Set<ProjectedNodeKey> pinnedNodes) {
+        final LayoutPoint translation = violation.translation;
+        final double magnitude = Math.hypot(translation.x(), translation.y());
+        final LayoutPoint firstUnit = LayoutPoint.of(translation.x() / magnitude, translation.y() / magnitude);
+        final LayoutPoint secondUnit = negate(firstUnit);
+        final double half = magnitude / 2.0;
+        if (valid(violation.first, firstUnit, half, projection, enclosuresByHull, hulls, positions, metrics,
+                pinnedNodes)
+                && valid(violation.second, secondUnit, half, projection, enclosuresByHull, hulls, positions,
+                    metrics, pinnedNodes)) {
+            return new Candidate(firstUnit, half, scale(translation, -0.5), secondUnit, half,
+                scale(translation, 0.5));
+        }
+        if (valid(violation.first, firstUnit, magnitude, projection, enclosuresByHull, hulls, positions, metrics,
+            pinnedNodes)) {
+            return new Candidate(firstUnit, magnitude, negate(translation), secondUnit, 0.0,
+                LayoutPoint.of(0.0, 0.0));
+        }
+        if (valid(violation.second, secondUnit, magnitude, projection, enclosuresByHull, hulls, positions, metrics,
+            pinnedNodes)) {
+            return new Candidate(firstUnit, 0.0, LayoutPoint.of(0.0, 0.0), secondUnit, magnitude, translation);
+        }
+        return null;
+    }
+
+    private static boolean valid(final EnclosureHullKey hull, final LayoutPoint unit, final double magnitude,
+            final GraphProjection projection,
+            final Map<EnclosureHullKey, ProjectedEnclosure> enclosuresByHull,
+            final Map<EnclosureHullKey, HullGeometry> hulls, final LayoutPositions positions,
+            final GeometryTextMetrics metrics, final Set<ProjectedNodeKey> pinnedNodes) {
+        final Traversal traversal = traverse(hull, unit, magnitude, projection, enclosuresByHull, hulls,
+            positions, metrics, pinnedNodes);
+        if (traversal.movedNodes.isEmpty() && traversal.movedAnchors.isEmpty()) {
+            return false;
+        }
+        for (final PinDepth pin : traversal.pins) {
+            if (pin.depth < magnitude) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static Traversal traverse(final EnclosureHullKey hull, final LayoutPoint unit, final double band,
+            final GraphProjection projection,
+            final Map<EnclosureHullKey, ProjectedEnclosure> enclosuresByHull,
+            final Map<EnclosureHullKey, HullGeometry> hulls, final LayoutPositions positions,
+            final GeometryTextMetrics metrics, final Set<ProjectedNodeKey> pinnedNodes) {
+        final Traversal traversal = new Traversal();
+        collectCap(hull, unit, band, projection, enclosuresByHull, hulls, positions, metrics, pinnedNodes,
+            traversal);
+        return traversal;
+    }
+
+    private static void collectCap(final EnclosureHullKey hull, final LayoutPoint unit, final double band,
+            final GraphProjection projection,
+            final Map<EnclosureHullKey, ProjectedEnclosure> enclosuresByHull,
+            final Map<EnclosureHullKey, HullGeometry> hulls, final LayoutPositions positions,
+            final GeometryTextMetrics metrics, final Set<ProjectedNodeKey> pinnedNodes,
+            final Traversal traversal) {
+        final ProjectedEnclosure enclosure = enclosuresByHull.get(hull);
+        if (enclosure == null) {
+            throw new BoundarySeparationException("Missing enclosure for hull " + CanonicalLayoutKeys.hull(hull));
+        }
+        final boolean empty = enclosure.directNodes().isEmpty() && enclosure.directEnclosures().isEmpty();
+        final double support = support(hull, unit, projection, enclosuresByHull, hulls, positions, metrics);
+        if (empty) {
+            traversal.movedAnchors.add(hull);
+            return;
+        }
+        for (final ProjectedNodeKey node : enclosure.directNodes()) {
+            final double contribution = nodeContribution(node, unit, positions, projection);
+            if (inBand(contribution, support, band)) {
+                if (pinnedNodes.contains(node)) {
+                    traversal.pins.add(new PinDepth(node, support - contribution));
+                }
+                else {
+                    traversal.movedNodes.add(node);
+                }
+            }
+        }
+        for (final EnclosureHullKey child : enclosure.directEnclosures()) {
+            final double contribution = polySupport(child, unit, hulls) + HULL_CLEARANCE;
+            if (inBand(contribution, support, band)) {
+                collectCap(child, unit, band, projection, enclosuresByHull, hulls, positions, metrics,
+                    pinnedNodes, traversal);
+            }
+        }
+    }
+
+    private static boolean inBand(final double contribution, final double support, final double band) {
+        final double epsilon = SUPPORT_COMPARISON_EPSILON * Math.max(Math.abs(contribution),
+            Math.max(Math.abs(support), Math.abs(support - band)));
+        return contribution >= support - band - epsilon;
+    }
+
+    private static double support(final EnclosureHullKey hull, final LayoutPoint unit,
+            final GraphProjection projection,
+            final Map<EnclosureHullKey, ProjectedEnclosure> enclosuresByHull,
+            final Map<EnclosureHullKey, HullGeometry> hulls, final LayoutPositions positions,
+            final GeometryTextMetrics metrics) {
+        final ProjectedEnclosure enclosure = enclosuresByHull.get(hull);
+        if (enclosure == null) {
+            throw new BoundarySeparationException("Missing enclosure for hull " + CanonicalLayoutKeys.hull(hull));
+        }
+        final boolean empty = enclosure.directNodes().isEmpty() && enclosure.directEnclosures().isEmpty();
+        if (empty) {
+            final LayoutPoint anchor = positions.anchors().get(hull);
+            if (anchor == null) {
+                throw new BoundarySeparationException("Missing anchor for hull " + CanonicalLayoutKeys.hull(hull));
+            }
+            final java.awt.geom.Dimension2D label = labelSize(enclosure, metrics);
+            final double halfWidth = label.getWidth() * 0.5 + BOUNDARY_PADDING;
+            final double halfHeight = label.getHeight() * 0.5 + BOUNDARY_PADDING;
+            return unit.x() * anchor.x() + unit.y() * anchor.y()
+                + Math.max(Math.abs(unit.x()) * halfWidth, Math.abs(unit.y()) * halfHeight);
+        }
+        double best = Double.NEGATIVE_INFINITY;
+        for (final ProjectedNodeKey node : enclosure.directNodes()) {
+            final LayoutPoint center = positions.nodes().get(node);
+            if (center == null) {
+                throw new BoundarySeparationException("Missing node position for " + node);
+            }
+            best = Math.max(best, unit.x() * center.x() + unit.y() * center.y() + nodeRadius(node, projection));
+        }
+        for (final EnclosureHullKey child : enclosure.directEnclosures()) {
+            best = Math.max(best, polySupport(child, unit, hulls));
+        }
+        return best + HULL_CLEARANCE;
+    }
+
+    private static double nodeContribution(final ProjectedNodeKey node, final LayoutPoint unit,
+            final LayoutPositions positions, final GraphProjection projection) {
+        final LayoutPoint center = positions.nodes().get(node);
+        if (center == null) {
+            throw new BoundarySeparationException("Missing node position for " + node);
+        }
+        return unit.x() * center.x() + unit.y() * center.y() + nodeRadius(node, projection) + HULL_CLEARANCE;
+    }
+
+    private static double nodeRadius(final ProjectedNodeKey node, final GraphProjection projection) {
+        final org.freeplane.plugin.graph.projection.NodeProminence prominence =
+            projection.prominence().get(node);
+        final double scale = prominence == null ? 1.0 : prominence.scale();
+        return BASE_RADIUS * scale;
+    }
+
+    private static double polySupport(final EnclosureHullKey hull, final LayoutPoint unit,
+            final Map<EnclosureHullKey, HullGeometry> hulls) {
+        final HullGeometry geometry = hulls.get(hull);
+        if (geometry == null) {
+            throw new BoundarySeparationException("Missing hull " + CanonicalLayoutKeys.hull(hull));
+        }
+        double best = Double.NEGATIVE_INFINITY;
+        for (final LayoutPoint vertex : geometry.exactPolygon()) {
+            best = Math.max(best, unit.x() * vertex.x() + unit.y() * vertex.y());
+        }
+        return best;
+    }
+
+    private static java.awt.geom.Dimension2D labelSize(final ProjectedEnclosure enclosure,
+            final GeometryTextMetrics metrics) {
+        if (enclosure.boundaryTier() == BoundaryTier.SUPPRESSED) {
+            return ZERO_SIZE;
+        }
+        java.awt.geom.Dimension2D largest = null;
+        for (final org.freeplane.plugin.graph.projection.input.SafeNodeLabel label : enclosure.labels()) {
+            final java.awt.geom.Dimension2D measured = metrics.measure(label.displayText(),
+                enclosure.boundaryTier());
+            if (largest == null || measured.getWidth() * measured.getHeight() > largest.getWidth()
+                    * largest.getHeight()) {
+                largest = measured;
+            }
+        }
+        if (largest == null) {
+            throw new BoundarySeparationException("Enclosures must carry at least one label");
+        }
+        return largest;
+    }
+
+    private static final java.awt.geom.Dimension2D ZERO_SIZE = new java.awt.geom.Dimension2D() {
+        @Override
+        public double getWidth() {
+            return 0.0;
+        }
+
+        @Override
+        public double getHeight() {
+            return 0.0;
+        }
+
+        @Override
+        public void setSize(final double width, final double height) {
+            throw new UnsupportedOperationException("Geometry sizes are immutable");
+        }
+    };
 
     private LayoutPositions applyRound(final GraphProjection projection,
             final Map<EnclosureHullKey, ProjectedEnclosure> enclosuresByHull, final LayoutPositions positions,
@@ -655,6 +891,42 @@ public final class BoundarySeparationCorrection {
 
         private boolean isEmpty() {
             return mapDeltas.isEmpty() && nodeFields.isEmpty() && anchorFields.isEmpty();
+        }
+    }
+
+    private static final class Traversal {
+        private final List<ProjectedNodeKey> movedNodes = new ArrayList<ProjectedNodeKey>();
+        private final List<EnclosureHullKey> movedAnchors = new ArrayList<EnclosureHullKey>();
+        private final List<PinDepth> pins = new ArrayList<PinDepth>();
+    }
+
+    private static final class PinDepth {
+        private final ProjectedNodeKey node;
+        private final double depth;
+
+        private PinDepth(final ProjectedNodeKey node, final double depth) {
+            this.node = node;
+            this.depth = depth;
+        }
+    }
+
+    private static final class Candidate {
+        private final LayoutPoint firstUnit;
+        private final double firstMagnitude;
+        private final LayoutPoint firstVector;
+        private final LayoutPoint secondUnit;
+        private final double secondMagnitude;
+        private final LayoutPoint secondVector;
+
+        private Candidate(final LayoutPoint firstUnit, final double firstMagnitude,
+                final LayoutPoint firstVector, final LayoutPoint secondUnit, final double secondMagnitude,
+                final LayoutPoint secondVector) {
+            this.firstUnit = firstUnit;
+            this.firstMagnitude = firstMagnitude;
+            this.firstVector = firstVector;
+            this.secondUnit = secondUnit;
+            this.secondMagnitude = secondMagnitude;
+            this.secondVector = secondVector;
         }
     }
 }
