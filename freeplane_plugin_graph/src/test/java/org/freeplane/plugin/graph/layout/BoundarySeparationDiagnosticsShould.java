@@ -28,9 +28,11 @@ public class BoundarySeparationDiagnosticsShould {
         final BoundaryConflict conflict = new BoundaryConflict(first, second,
             BoundaryConflict.Kind.SIBLING_CROSSING, BoundaryConflict.Reason.ROUND_LIMIT,
             Collections.emptyList());
+        // The largest vector (magnitude 5.0) is deliberately neither first nor last.
         final Map<String, LayoutPoint> field = new LinkedHashMap<String, LayoutPoint>();
-        field.put("n:m:" + MAP_ONE.value() + "|p:a", LayoutPoint.of(3.0, 4.0));
         field.put("a:m:" + MAP_TWO.value() + "|p:h", LayoutPoint.of(2.0, 0.0));
+        field.put("n:m:" + MAP_ONE.value() + "|p:a", LayoutPoint.of(3.0, 4.0));
+        field.put("a:m:" + MAP_TWO.value() + "|p:g", LayoutPoint.of(0.0, 1.0));
         final BoundarySeparationDiagnostics diagnostics = new BoundarySeparationDiagnostics(
             Collections.singletonList(conflict), Collections.singletonList(conflict.pairKey()),
             2, 1, 3, 5.0, 5.0, field, 0.0, 0.0);
@@ -46,6 +48,24 @@ public class BoundarySeparationDiagnosticsShould {
         assertThat(diagnostics.appliedDisplacements()).isEqualTo(field);
         assertThat(diagnostics.conflicts()).containsExactly(conflict);
         assertThat(diagnostics.residualHullPairs()).containsExactly(conflict.pairKey());
+    }
+
+    @Test
+    public void boundaryCoverageRequiresExactConflictAndResidualPairSets() {
+        final BoundaryConflict first = conflict(MAP_ONE, "a", "b");
+        final BoundaryConflict second = conflict(MAP_ONE, "a", "c");
+        final Map<String, LayoutPoint> noDisplacements = Collections.emptyMap();
+        assertThat(first.pairKey()).isNotEqualTo(second.pairKey());
+
+        final BoundarySeparationDiagnostics missingResiduals = new BoundarySeparationDiagnostics(
+            Arrays.asList(first, second), Collections.singletonList(first.pairKey()),
+            2, 1, 1, 0.0, 0.0, noDisplacements, 0.0, 0.0);
+        final BoundarySeparationDiagnostics extraResiduals = new BoundarySeparationDiagnostics(
+            Collections.singletonList(first), Arrays.asList(first.pairKey(), second.pairKey()),
+            2, 1, 1, 0.0, 0.0, noDisplacements, 0.0, 0.0);
+
+        assertThat(missingResiduals.boundaryCovered()).isFalse();
+        assertThat(extraResiduals.boundaryCovered()).isFalse();
     }
 
     @Test
@@ -80,6 +100,12 @@ public class BoundarySeparationDiagnosticsShould {
             Collections.emptyList(), 0, 0, 0, Double.NaN, 0.0,
             Collections.<String, LayoutPoint>emptyMap(), 0.0, 0.0))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    private static BoundaryConflict conflict(MapReferenceId map, String firstId, String secondId) {
+        return new BoundaryConflict(hull(map, firstId), hull(map, secondId),
+            BoundaryConflict.Kind.SIBLING_CROSSING, BoundaryConflict.Reason.ROUND_LIMIT,
+            Collections.emptyList());
     }
 
     private static EnclosureHullKey hull(MapReferenceId map, String id) {
