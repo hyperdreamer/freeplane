@@ -22,14 +22,20 @@ import org.freeplane.plugin.graph.geometry.HullIntersection;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.projection.BoundaryTier;
+import org.freeplane.plugin.graph.projection.EdgeContributor;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.EnclosureKey;
 import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.projection.PinProjection;
+import org.freeplane.plugin.graph.projection.ProjectedEdge;
+import org.freeplane.plugin.graph.projection.ProjectedEdgeKey;
 import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
+import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
 import org.freeplane.plugin.graph.projection.RelationshipResolution;
+import org.freeplane.plugin.graph.projection.input.ConnectorDescriptor;
+import org.freeplane.plugin.graph.projection.input.ConnectorSnapshot;
 import org.freeplane.plugin.graph.projection.input.SafeNodeLabel;
 import org.freeplane.plugin.graph.projection.input.SourceNodeKey;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
@@ -931,5 +937,213 @@ public class BoundarySeparationCorrectionShould {
         assertThat(result.positions().nodes().get(aNode)).isEqualTo(LayoutPoint.of(-5.0, 0.0));
         assertThat(result.positions().nodes().get(bNode)).isEqualTo(LayoutPoint.of(38.0, 0.0));
         assertThat(result.positions().nodes().get(cNode)).isEqualTo(LayoutPoint.of(81.0, 0.0));
+    }
+
+    private static final MapReferenceId FROZEN_MAP =
+        MapReferenceId.of("8055d8c8-d71e-40f3-a8ed-5bf2502f2cad");
+    private static final String FROZEN_REGULARITY = "ID_1133378501";
+    private static final String FROZEN_REPLACEMENT = "ID_822182441";
+    private static final String FROZEN_CHOICE = "ID_130337169";
+    private static final String FROZEN_PINNED_THEOREM = "ID_1901523076";
+    private static final String FROZEN_FREE_THEOREM = "ID_1387156674";
+    private static final String FROZEN_SUPPRESSED_ROOT = "ID_435635462";
+    private static final String FROZEN_ZFC = "ID_1675547143";
+    private static final String FROZEN_AXIOMS = "ID_1912952190";
+    private static final String FROZEN_DEFINITIONS = "ID_978732953";
+    private static final double FROZEN_MST_X = -13.548086052416210;
+    private static final double FROZEN_REGULARITY_DELTA_X = 13.54808605241621;
+
+    @Test
+    public void frozenRealCaseViolatesBeforeAndSettlesInOneRoundAfterCorrection() {
+        final FrozenFixture fixture = frozenFixture();
+
+        assertThat(fixture.projection.prominence().get(fixture.regularity).visibleOutgoingTargets())
+            .isEqualTo(2);
+        assertThat(fixture.projection.prominence().get(fixture.replacement).visibleOutgoingTargets())
+            .isEqualTo(0);
+        final GraphGeometryEngine engine = new GraphGeometryEngine();
+        final HullGeometry rawAxioms = engine.computeHulls(fixture.projection, fixture.positions, METRICS)
+            .hulls().get(fixture.axiomsHull);
+        final HullGeometry rawDefinitions = engine.computeHulls(fixture.projection, fixture.positions, METRICS)
+            .hulls().get(fixture.definitionsHull);
+        assertThat(HullIntersection.siblingOverlap(rawAxioms, rawDefinitions)).isTrue();
+        assertThat(HullIntersection.minimumSeparatingTranslation(rawAxioms, rawDefinitions))
+            .isEqualTo(LayoutPoint.of(FROZEN_MST_X, 0.0));
+        assertThat(containsAll(rawAxioms, rawDefinitions)).isFalse();
+        assertThat(containsAll(rawDefinitions, rawAxioms)).isFalse();
+
+        final GraphGeometry rawGeometry = engine.computeHulls(fixture.projection, fixture.positions, METRICS);
+        assertThat(containsAll(rawGeometry.hulls().get(fixture.zfcHull), rawAxioms)).isTrue();
+        assertThat(containsAll(rawGeometry.hulls().get(fixture.zfcHull), rawDefinitions)).isTrue();
+
+        final BoundarySeparationResult result = new BoundarySeparationCorrection().apply(fixture.projection,
+            fixture.positions, METRICS, fixture.pins);
+
+        assertThat(result.diagnostics().rounds()).isEqualTo(1);
+        assertThat(result.diagnostics().hullViolationsDetected()).isGreaterThanOrEqualTo(1);
+        assertThat(result.diagnostics().hullResidualViolations()).isZero();
+        assertThat(result.diagnostics().boundaryVerified()).isTrue();
+        assertThat(result.diagnostics().conflicts()).isEmpty();
+        assertThat(result.diagnostics().residualHullPairs()).isEmpty();
+        assertThat(result.positions().nodes().get(fixture.choice))
+            .isEqualTo(LayoutPoint.of(-24.832420395427746, -34.920469854404410));
+        assertThat(result.positions().nodes().get(fixture.pinnedTheorem))
+            .isEqualTo(LayoutPoint.of(-209.31397564145126, 9.820904009249132));
+        assertThat(result.appliedDisplacements().get(CanonicalLayoutKeys.nodeField(fixture.regularity)))
+            .isEqualTo(LayoutPoint.of(FROZEN_REGULARITY_DELTA_X, 0.0));
+        assertThat(result.appliedDisplacements().keySet())
+            .doesNotContain(CanonicalLayoutKeys.nodeField(fixture.choice))
+            .doesNotContain(CanonicalLayoutKeys.nodeField(fixture.pinnedTheorem));
+
+        final GraphGeometry correctedGeometry = engine.computeHulls(fixture.projection, result.positions(),
+            METRICS);
+        assertThat(HullIntersection.siblingOverlap(correctedGeometry.hulls().get(fixture.axiomsHull),
+            correctedGeometry.hulls().get(fixture.definitionsHull))).isFalse();
+        assertThat(HullIntersection.minimumSeparatingTranslation(
+            correctedGeometry.hulls().get(fixture.axiomsHull),
+            correctedGeometry.hulls().get(fixture.definitionsHull))).isEqualTo(LayoutPoint.of(0.0, 0.0));
+        assertThat(containsAll(correctedGeometry.hulls().get(fixture.zfcHull),
+            correctedGeometry.hulls().get(fixture.axiomsHull))).isTrue();
+        assertThat(containsAll(correctedGeometry.hulls().get(fixture.zfcHull),
+            correctedGeometry.hulls().get(fixture.definitionsHull))).isTrue();
+
+        final LayoutPoint regularityDelta = LayoutPoint.of(FROZEN_REGULARITY_DELTA_X, 0.0);
+        assertThat(result.positions().anchors().get(fixture.axiomsHull)).isEqualTo(regularityDelta);
+        assertThat(result.positions().anchors().get(fixture.zfcHull)).isEqualTo(regularityDelta);
+        assertThat(result.positions().anchors().get(fixture.rootHull)).isEqualTo(regularityDelta);
+        assertThat(result.positions().anchors().get(fixture.definitionsHull))
+            .isEqualTo(LayoutPoint.of(0.0, 0.0));
+
+        final BoundarySeparationResult second = new BoundarySeparationCorrection().apply(fixture.projection,
+            fixture.positions, METRICS, fixture.pins);
+        assertThat(second.positions()).isEqualTo(result.positions());
+        assertThat(second.diagnostics().rounds()).isEqualTo(result.diagnostics().rounds());
+        assertThat(second.diagnostics().hullResidualViolations())
+            .isEqualTo(result.diagnostics().hullResidualViolations());
+        assertThat(second.diagnostics().conflicts()).hasSize(result.diagnostics().conflicts().size());
+    }
+
+    @Test
+    public void canonicalKeysUseTheCapturedRealHullStrings() {
+        assertThat(CanonicalLayoutKeys.hull(hull(FROZEN_MAP, FROZEN_AXIOMS)))
+            .isEqualTo("m:" + FROZEN_MAP.value() + "|p:" + FROZEN_AXIOMS);
+        assertThat(CanonicalLayoutKeys.pair(hull(FROZEN_MAP, FROZEN_AXIOMS),
+            hull(FROZEN_MAP, FROZEN_DEFINITIONS)))
+                .isEqualTo("m:" + FROZEN_MAP.value() + "|p:" + FROZEN_AXIOMS + "|m:" + FROZEN_MAP.value()
+                    + "|p:" + FROZEN_DEFINITIONS);
+    }
+
+    private static boolean containsAll(HullGeometry outer, HullGeometry inner) {
+        for (final LayoutPoint vertex : inner.exactPolygon()) {
+            if (!outer.contains(vertex)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static FrozenFixture frozenFixture() {
+        final ProjectedNodeKey regularity = frozenKey(FROZEN_REGULARITY);
+        final ProjectedNodeKey replacement = frozenKey(FROZEN_REPLACEMENT);
+        final ProjectedNodeKey choice = frozenKey(FROZEN_CHOICE);
+        final ProjectedNodeKey pinnedTheorem = frozenKey(FROZEN_PINNED_THEOREM);
+        final ProjectedNodeKey freeTheorem = frozenKey(FROZEN_FREE_THEOREM);
+        final EnclosureHullKey rootHull = hull(FROZEN_MAP, FROZEN_SUPPRESSED_ROOT);
+        final EnclosureHullKey zfcHull = hull(FROZEN_MAP, FROZEN_ZFC);
+        final EnclosureHullKey axiomsHull = hull(FROZEN_MAP, FROZEN_AXIOMS);
+        final EnclosureHullKey definitionsHull = hull(FROZEN_MAP, FROZEN_DEFINITIONS);
+        final List<ProjectedNode> nodes = Arrays.asList(
+            frozenNode(regularity, "Fundation / Regularity"), frozenNode(replacement, "Replacement Scheme"),
+            frozenNode(choice, "Axiom of Choice"), frozenNode(pinnedTheorem, "Theorem"),
+            frozenNode(freeTheorem, "Theorem"));
+        final List<ProjectedEnclosure> enclosures = Arrays.asList(
+            frozenEnclosure(rootHull, "Axiomatic Set Theory", Optional.<EnclosureHullKey>empty(),
+                Collections.<ProjectedNodeKey>emptyList(), Collections.singletonList(zfcHull), true,
+                BoundaryTier.SUPPRESSED),
+            frozenEnclosure(zfcHull, "ZFC", Optional.of(rootHull), Collections.<ProjectedNodeKey>emptyList(),
+                Arrays.asList(axiomsHull, definitionsHull), false, BoundaryTier.EMPHATIC),
+            frozenEnclosure(axiomsHull, "Axioms", Optional.of(zfcHull),
+                Arrays.asList(regularity, replacement, choice), Collections.<EnclosureHullKey>emptyList(), false,
+                BoundaryTier.SUBTLE),
+            frozenEnclosure(definitionsHull, "Basic Definitions and Theorems", Optional.of(zfcHull),
+                Arrays.asList(pinnedTheorem, freeTheorem), Collections.<EnclosureHullKey>emptyList(), false,
+                BoundaryTier.SUBTLE));
+        final List<ProjectedEdge> edges = Arrays.asList(frozenEdge(regularity, freeTheorem, 0),
+            frozenEdge(regularity, pinnedTheorem, 1));
+        final PinProjection choicePin = pin(choice, -24.832420395427746, -34.920469854404410);
+        final PinProjection theoremPin = pin(pinnedTheorem, -209.31397564145126, 9.820904009249132);
+        final List<PinProjection> pins = Arrays.asList(choicePin, theoremPin);
+        final GraphProjection projection = GraphProjection.projected(1L, nodes, enclosures, edges,
+            Collections.<RelationshipResolution>emptyList(), pins);
+        final LayoutPositions positions = positions(
+            Arrays.asList(nodeEntry(regularity, -173.26206169386748, 1.8301628933959680),
+                nodeEntry(replacement, 248.60834750232004, -59.339657536064465),
+                nodeEntry(choice, -24.832420395427746, -34.920469854404410),
+                nodeEntry(pinnedTheorem, -209.31397564145126, 9.820904009249132),
+                nodeEntry(freeTheorem, -241.79904871734790, 14.381230674273278)),
+            Arrays.asList(anchorEntry(rootHull, 0.0, 0.0), anchorEntry(zfcHull, 0.0, 0.0),
+                anchorEntry(axiomsHull, 0.0, 0.0), anchorEntry(definitionsHull, 0.0, 0.0)));
+        return new FrozenFixture(projection, positions, pins, regularity, replacement, choice, pinnedTheorem,
+            freeTheorem, rootHull, zfcHull, axiomsHull, definitionsHull);
+    }
+
+    private static ProjectedNode frozenNode(ProjectedNodeKey key, String label) {
+        return ProjectedNode.of(key, SafeNodeLabel.of(label, label), "map", false);
+    }
+
+    private static ProjectedEnclosure frozenEnclosure(EnclosureHullKey hull, String label,
+            Optional<EnclosureHullKey> parent, List<ProjectedNodeKey> nodes,
+            List<EnclosureHullKey> children, boolean mapRoot, BoundaryTier tier) {
+        return ProjectedEnclosure.of(hull, hull.endpointKeys(),
+            Collections.singletonList(SafeNodeLabel.of(label, label)), "map", parent, nodes, children, mapRoot,
+            tier);
+    }
+
+    private static ProjectedEdge frozenEdge(ProjectedNodeKey source, ProjectedNodeKey target, int occurrence) {
+        final ProjectedEndpointKey first = ProjectedEndpointKey.ofNode(source);
+        final ProjectedEndpointKey second = ProjectedEndpointKey.ofNode(target);
+        final ConnectorDescriptor descriptor = ConnectorDescriptor.of(source.source(),
+            target.source().persistedReference().get(), false, true, "", "", "");
+        final EdgeContributor contributor = EdgeContributor.nativeConnector(
+            ConnectorSnapshot.of(occurrence, descriptor), first, second);
+        return ProjectedEdge.of(ProjectedEdgeKey.of(first, second), Collections.singletonList(contributor));
+    }
+
+    private static ProjectedNodeKey frozenKey(String id) {
+        return ProjectedNodeKey.of(SourceNodeKey.persisted(
+            NodeReference.of(FROZEN_MAP, PersistedNodeId.of(id))));
+    }
+
+    private static final class FrozenFixture {
+        final GraphProjection projection;
+        final LayoutPositions positions;
+        final List<PinProjection> pins;
+        final ProjectedNodeKey regularity;
+        final ProjectedNodeKey replacement;
+        final ProjectedNodeKey choice;
+        final ProjectedNodeKey pinnedTheorem;
+        final ProjectedNodeKey freeTheorem;
+        final EnclosureHullKey rootHull;
+        final EnclosureHullKey zfcHull;
+        final EnclosureHullKey axiomsHull;
+        final EnclosureHullKey definitionsHull;
+
+        FrozenFixture(GraphProjection projection, LayoutPositions positions, List<PinProjection> pins,
+                ProjectedNodeKey regularity, ProjectedNodeKey replacement, ProjectedNodeKey choice,
+                ProjectedNodeKey pinnedTheorem, ProjectedNodeKey freeTheorem, EnclosureHullKey rootHull,
+                EnclosureHullKey zfcHull, EnclosureHullKey axiomsHull, EnclosureHullKey definitionsHull) {
+            this.projection = projection;
+            this.positions = positions;
+            this.pins = pins;
+            this.regularity = regularity;
+            this.replacement = replacement;
+            this.choice = choice;
+            this.pinnedTheorem = pinnedTheorem;
+            this.freeTheorem = freeTheorem;
+            this.rootHull = rootHull;
+            this.zfcHull = zfcHull;
+            this.axiomsHull = axiomsHull;
+            this.definitionsHull = definitionsHull;
+        }
     }
 }
