@@ -13,15 +13,20 @@ import java.util.concurrent.TimeUnit;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.layout.graphstream.GraphStreamLayoutFactory;
 import org.freeplane.plugin.graph.projection.BoundaryTier;
+import org.freeplane.plugin.graph.projection.EdgeContributor;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.EnclosureKey;
 import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.projection.PinProjection;
 import org.freeplane.plugin.graph.projection.ProjectedEdge;
+import org.freeplane.plugin.graph.projection.ProjectedEdgeKey;
 import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
+import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
 import org.freeplane.plugin.graph.projection.ProjectionDiff;
+import org.freeplane.plugin.graph.projection.input.ConnectorDescriptor;
+import org.freeplane.plugin.graph.projection.input.ConnectorSnapshot;
 import org.freeplane.plugin.graph.projection.input.SafeNodeLabel;
 import org.freeplane.plugin.graph.projection.input.SourceNodeKey;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
@@ -576,5 +581,189 @@ public class BoundarySeparationShould {
             this.hulls = hulls;
             this.labels = labels;
         }
+    }
+
+    private static final MapReferenceId PIPELINE_MAP =
+        MapReferenceId.of("8055d8c8-d71e-40f3-a8ed-5bf2502f2cad");
+    private static final WorkspaceId PIPELINE_WORKSPACE =
+        WorkspaceId.of("1df8f60e-2643-4661-b126-ab13064f4091");
+    private static final String PIPELINE_REGULARITY = "ID_1133378501";
+    private static final String PIPELINE_REPLACEMENT = "ID_822182441";
+    private static final String PIPELINE_CHOICE = "ID_130337169";
+    private static final String PIPELINE_PINNED_THEOREM = "ID_1901523076";
+    private static final String PIPELINE_FREE_THEOREM = "ID_1387156674";
+    private static final String PIPELINE_ROOT = "ID_435635462";
+    private static final String PIPELINE_ZFC = "ID_1675547143";
+    private static final String PIPELINE_AXIOMS = "ID_1912952190";
+    private static final String PIPELINE_DEFINITIONS = "ID_978732953";
+    private static final org.freeplane.plugin.graph.geometry.GeometryTextMetrics PIPELINE_METRICS =
+        new org.freeplane.plugin.graph.geometry.AwtGeometryTextMetrics(
+            new java.awt.Font(java.awt.Font.DIALOG, java.awt.Font.PLAIN, 12),
+            new java.awt.font.FontRenderContext(null, true, true));
+
+    @Test
+    public void reproducedCasePipelineFixtureCrossesAtTheRawSettle() {
+        final GraphProjection projection = pipelineProjection();
+        try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
+            engine.apply(pipelineRequest(projection, pipelineAllPins()));
+            for (int step = 0; step < 1500; step++) {
+                engine.step();
+            }
+            final LayoutFrame raw = engine.apply(pipelineRequest(projection, pipelineRealPins()));
+            final org.freeplane.plugin.graph.geometry.GraphGeometry geometry =
+                new org.freeplane.plugin.graph.geometry.GraphGeometryEngine().computeHulls(projection,
+                    raw.positions(), PIPELINE_METRICS);
+            final org.freeplane.plugin.graph.geometry.HullGeometry first = geometry.hulls()
+                .get(pipelineHull(PIPELINE_AXIOMS));
+            final org.freeplane.plugin.graph.geometry.HullGeometry second = geometry.hulls()
+                .get(pipelineHull(PIPELINE_DEFINITIONS));
+
+            assertThat(raw.positions().nodes().get(pipelineKey(PIPELINE_REGULARITY)))
+                .isEqualTo(LayoutPoint.of(-173.26206169386748, 1.8301628933959680));
+            assertThat(org.freeplane.plugin.graph.geometry.HullIntersection.siblingOverlap(first, second))
+                .isTrue();
+            final LayoutPoint translation =
+                org.freeplane.plugin.graph.geometry.HullIntersection.minimumSeparatingTranslation(first,
+                    second);
+            assertThat(translation).isEqualTo(LayoutPoint.of(-13.548086052416210, 0.0));
+        }
+    }
+
+    @Test
+    public void reproducedCasePipelineFixturePublishesRepairedFrames() throws Exception {
+        final GraphProjection projection = pipelineProjection();
+        final LayoutWorker worker = new LayoutWorker(LayoutCalibration.spikeDefaults());
+        try {
+            await(worker.submit(pipelineRequest(projection, pipelineAllPins())));
+            for (int step = 0; step < 1500; step++) {
+                final LayoutFrame pinnedFrame = await(worker.step());
+                BoundaryInvariantAssertions.assertBijection(pinnedFrame.boundaryDiagnostics());
+            }
+            final LayoutFrame crossing = await(worker.submit(pipelineRequest(projection,
+                pipelineRealPins())));
+
+            assertThat(crossing.failed()).isFalse();
+            assertThat(crossing.boundaryDiagnostics().hullViolationsDetected()).isGreaterThanOrEqualTo(1);
+            assertThat(crossing.boundaryDiagnostics().rounds()).isEqualTo(1);
+            assertThat(crossing.boundaryDiagnostics().boundaryVerified()).isTrue();
+            assertThat(crossing.boundaryDiagnostics().appliedDisplacements().keySet())
+                .contains(CanonicalLayoutKeys.nodeField(pipelineKey(PIPELINE_REGULARITY)))
+                .doesNotContain(CanonicalLayoutKeys.nodeField(pipelineKey(PIPELINE_CHOICE)))
+                .doesNotContain(CanonicalLayoutKeys.nodeField(pipelineKey(PIPELINE_PINNED_THEOREM)));
+            BoundaryInvariantAssertions.assertVerifiedFrame(projection, crossing,
+                crossing.boundaryDiagnostics(), PIPELINE_METRICS, pipelineRealPins());
+
+            LayoutFrame frame = crossing;
+            for (int step = 1; step <= 1000; step++) {
+                frame = await(worker.step());
+                assertThat(frame.failed()).isFalse();
+                assertThat(frame.boundaryDiagnostics().rounds()).isLessThanOrEqualTo(2);
+                assertThat(frame.boundaryDiagnostics().hullResidualViolations()).isZero();
+                BoundaryInvariantAssertions.assertBijection(frame.boundaryDiagnostics());
+                if (frame.boundaryDiagnostics().boundaryVerified()) {
+                    BoundaryInvariantAssertions.assertVerifiedFrame(projection, frame,
+                        frame.boundaryDiagnostics(), PIPELINE_METRICS, pipelineRealPins());
+                }
+                if (frame.idle().idle()) {
+                    break;
+                }
+            }
+            assertThat(frame.boundaryDiagnostics().boundaryVerified()).isTrue();
+            BoundaryInvariantAssertions.assertVerifiedFrame(projection, frame,
+                frame.boundaryDiagnostics(), PIPELINE_METRICS, pipelineRealPins());
+        }
+        finally {
+            worker.close();
+        }
+    }
+
+    private static GraphProjection pipelineProjection() {
+        return GraphProjection.projected(1L,
+            Arrays.asList(pipelineNode(PIPELINE_REGULARITY, "Fundation / Regularity"),
+                pipelineNode(PIPELINE_REPLACEMENT, "Replacement Scheme"),
+                pipelineNode(PIPELINE_CHOICE, "Axiom of Choice"),
+                pipelineNode(PIPELINE_PINNED_THEOREM, "Theorem"),
+                pipelineNode(PIPELINE_FREE_THEOREM, "Theorem")),
+            Arrays.asList(
+                pipelineEnclosure(PIPELINE_ROOT, "Axiomatic Set Theory", Optional.<EnclosureHullKey>empty(),
+                    Collections.<ProjectedNodeKey>emptyList(),
+                    Collections.singletonList(pipelineHull(PIPELINE_ZFC)), true, BoundaryTier.SUPPRESSED),
+                pipelineEnclosure(PIPELINE_ZFC, "ZFC", Optional.of(pipelineHull(PIPELINE_ROOT)),
+                    Collections.<ProjectedNodeKey>emptyList(),
+                    Arrays.asList(pipelineHull(PIPELINE_AXIOMS), pipelineHull(PIPELINE_DEFINITIONS)), false,
+                    BoundaryTier.EMPHATIC),
+                pipelineEnclosure(PIPELINE_AXIOMS, "Axioms", Optional.of(pipelineHull(PIPELINE_ZFC)),
+                    Arrays.asList(pipelineKey(PIPELINE_REGULARITY), pipelineKey(PIPELINE_REPLACEMENT),
+                        pipelineKey(PIPELINE_CHOICE)),
+                    Collections.<EnclosureHullKey>emptyList(), false, BoundaryTier.SUBTLE),
+                pipelineEnclosure(PIPELINE_DEFINITIONS, "Basic Definitions and Theorems",
+                    Optional.of(pipelineHull(PIPELINE_ZFC)),
+                    Arrays.asList(pipelineKey(PIPELINE_PINNED_THEOREM), pipelineKey(PIPELINE_FREE_THEOREM)),
+                    Collections.<EnclosureHullKey>emptyList(), false, BoundaryTier.SUBTLE)),
+            Arrays.asList(pipelineEdge(PIPELINE_REGULARITY, PIPELINE_FREE_THEOREM, 0),
+                pipelineEdge(PIPELINE_REGULARITY, PIPELINE_PINNED_THEOREM, 1)),
+            Collections.<org.freeplane.plugin.graph.projection.RelationshipResolution>emptyList(),
+            Collections.<PinProjection>emptyList());
+    }
+
+    private static LayoutRequest pipelineRequest(GraphProjection projection, List<PinProjection> pins) {
+        return LayoutRequest.of(PIPELINE_WORKSPACE, projection,
+            ProjectionDiff.between(projection, projection), pins);
+    }
+
+    private static List<PinProjection> pipelineAllPins() {
+        return Arrays.asList(
+            pipelinePin(PIPELINE_REGULARITY, -173.26206169386748, 1.8301628933959680),
+            pipelinePin(PIPELINE_REPLACEMENT, 248.60834750232004, -59.339657536064465),
+            pipelinePin(PIPELINE_CHOICE, -24.832420395427746, -34.920469854404410),
+            pipelinePin(PIPELINE_PINNED_THEOREM, -209.31397564145126, 9.820904009249132),
+            pipelinePin(PIPELINE_FREE_THEOREM, -241.79904871734790, 14.381230674273278));
+    }
+
+    private static List<PinProjection> pipelineRealPins() {
+        return Arrays.asList(
+            pipelinePin(PIPELINE_CHOICE, -24.832420395427746, -34.920469854404410),
+            pipelinePin(PIPELINE_PINNED_THEOREM, -209.31397564145126, 9.820904009249132));
+    }
+
+    private static PinProjection pipelinePin(String id, double x, double y) {
+        final ProjectedNodeKey key = pipelineKey(id);
+        return PinProjection.active(PinRecord.of(key.source().persistedReference().get(), x, y,
+            Collections.<org.freeplane.plugin.graph.workspace.model.UnknownXml>emptyList()), key);
+    }
+
+    private static ProjectedNode pipelineNode(String id, String label) {
+        return ProjectedNode.of(pipelineKey(id), SafeNodeLabel.of(label, label), "Pipeline", false);
+    }
+
+    private static ProjectedEnclosure pipelineEnclosure(String id, String label,
+            Optional<EnclosureHullKey> parent, List<ProjectedNodeKey> nodes, List<EnclosureHullKey> children,
+            boolean mapRoot, BoundaryTier tier) {
+        final EnclosureHullKey hull = pipelineHull(id);
+        return ProjectedEnclosure.of(hull, hull.endpointKeys(),
+            Collections.singletonList(SafeNodeLabel.of(label, label)), "Pipeline", parent, nodes, children,
+            mapRoot, tier);
+    }
+
+    private static ProjectedEdge pipelineEdge(String sourceId, String targetId, int occurrence) {
+        final ProjectedNodeKey source = pipelineKey(sourceId);
+        final ProjectedNodeKey target = pipelineKey(targetId);
+        final ProjectedEndpointKey first = ProjectedEndpointKey.ofNode(source);
+        final ProjectedEndpointKey second = ProjectedEndpointKey.ofNode(target);
+        final ConnectorDescriptor descriptor = ConnectorDescriptor.of(source.source(),
+            target.source().persistedReference().get(), false, true, "", "", "");
+        final EdgeContributor contributor = EdgeContributor.nativeConnector(
+            ConnectorSnapshot.of(occurrence, descriptor), first, second);
+        return ProjectedEdge.of(ProjectedEdgeKey.of(first, second), Collections.singletonList(contributor));
+    }
+
+    private static ProjectedNodeKey pipelineKey(String id) {
+        return ProjectedNodeKey.of(SourceNodeKey.persisted(
+            NodeReference.of(PIPELINE_MAP, PersistedNodeId.of(id))));
+    }
+
+    private static EnclosureHullKey pipelineHull(String id) {
+        return EnclosureHullKey.of(Collections.singletonList(
+            EnclosureKey.of(SourceNodeKey.persisted(NodeReference.of(PIPELINE_MAP, PersistedNodeId.of(id))))));
     }
 }
