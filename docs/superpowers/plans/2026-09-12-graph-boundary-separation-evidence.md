@@ -48,8 +48,9 @@
 ## Full-suite verification
 - Command: `gradle :freeplane_plugin_graph:test` (Zulu 21.0.8, Gradle 9.0.0).
 - Result: BUILD SUCCESSFUL; 83 test classes, 1001 tests, 0 failures, 0 errors, 3 environment skips
-  (`GraphPluginIntegrationShould` class assumption; `WorkspaceUriResolverShould` Windows-path and
-  two-filesystem-roots assumptions).
+  (`GraphPluginIntegrationShould` method-level headless assumption in
+  `passesTheSharedListIntoTheCreatedHeadlessView`, `GraphPluginIntegrationShould.java:219-220`;
+  `WorkspaceUriResolverShould` Windows-path and two-filesystem-roots assumptions).
 - Required classes all present and green: `BoundarySeparationCorrectionShould` (33 tests),
   `BoundaryConflictShould`, `BoundarySeparationDiagnosticsShould`, `CanonicalLayoutKeysShould`,
   `BoundaryInvariantAssertionsShould`, `LayoutWorkerShould`, `LayoutSettleLoopShould`,
