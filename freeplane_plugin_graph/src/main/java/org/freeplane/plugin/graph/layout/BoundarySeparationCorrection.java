@@ -311,19 +311,153 @@ public final class BoundarySeparationCorrection {
             final GeometryTextMetrics metrics, final List<PinProjection> pins,
             final Set<ProjectedNodeKey> pinnedNodes, final List<Violation> violations) {
         final PlanOutcome outcome = new PlanOutcome();
+        final Set<MapReferenceId> rigidMaps = rigidMaps(pins);
         for (final Violation violation : violations) {
-            final BoundaryConflict.Reason reason = violation.kind == BoundaryConflict.Kind.ANCESTOR_ESCAPE
-                ? BoundaryConflict.Reason.STRUCTURAL_ESCAPE : BoundaryConflict.Reason.IMMOVABLE_SIDES;
-            outcome.conflicts.put(violation.pairKey, conflict(violation, reason,
-                blockingPins(violation, enclosuresByHull, pins)));
+            if (violation.kind == BoundaryConflict.Kind.ANCESTOR_ESCAPE) {
+                outcome.conflicts.put(violation.pairKey, conflict(violation,
+                    BoundaryConflict.Reason.STRUCTURAL_ESCAPE,
+                    blockingPins(violation, enclosuresByHull, pins)));
+                continue;
+            }
+            if (!violation.first.mapReferenceId().equals(violation.second.mapReferenceId())) {
+                planCrossMap(violation, rigidMaps, enclosuresByHull, pins, outcome);
+            }
+            else {
+                outcome.conflicts.put(violation.pairKey, conflict(violation,
+                    BoundaryConflict.Reason.IMMOVABLE_SIDES,
+                    blockingPins(violation, enclosuresByHull, pins)));
+            }
         }
         return outcome;
+    }
+
+    private static void planCrossMap(final Violation violation, final Set<MapReferenceId> rigidMaps,
+            final Map<EnclosureHullKey, ProjectedEnclosure> enclosuresByHull, final List<PinProjection> pins,
+            final PlanOutcome outcome) {
+        final boolean firstRigid = rigidMaps.contains(violation.first.mapReferenceId());
+        final boolean secondRigid = rigidMaps.contains(violation.second.mapReferenceId());
+        if (firstRigid && secondRigid) {
+            outcome.conflicts.put(violation.pairKey, conflict(violation,
+                BoundaryConflict.Reason.IMMOVABLE_SIDES, blockingPins(violation, enclosuresByHull, pins)));
+            return;
+        }
+        if (firstRigid) {
+            addMapDelta(outcome.mapDeltas, violation.second.mapReferenceId(), violation.translation);
+        }
+        else if (secondRigid) {
+            addMapDelta(outcome.mapDeltas, violation.first.mapReferenceId(), negate(violation.translation));
+        }
+        else {
+            addMapDelta(outcome.mapDeltas, violation.first.mapReferenceId(),
+                scale(negate(violation.translation), 0.5));
+            addMapDelta(outcome.mapDeltas, violation.second.mapReferenceId(),
+                scale(violation.translation, 0.5));
+        }
+        outcome.movedPairs.add(violation.pairKey);
+    }
+
+    private static Set<MapReferenceId> rigidMaps(final List<PinProjection> pins) {
+        final Set<MapReferenceId> result = new LinkedHashSet<MapReferenceId>();
+        for (final PinProjection pin : pins) {
+            if (pin.active()) {
+                result.add(pin.projectedNode().get().mapReferenceId());
+            }
+        }
+        return result;
+    }
+
+    private static void addMapDelta(final Map<MapReferenceId, LayoutPoint> deltas, final MapReferenceId map,
+            final LayoutPoint delta) {
+        final LayoutPoint previous = deltas.get(map);
+        deltas.put(map, previous == null ? delta : add(previous, delta));
     }
 
     private LayoutPositions applyRound(final GraphProjection projection,
             final Map<EnclosureHullKey, ProjectedEnclosure> enclosuresByHull, final LayoutPositions positions,
             final PlanOutcome plan, final Map<String, LayoutPoint> field) {
-        return positions;
+        final Map<EnclosureHullKey, LayoutPoint> anchorDeltas = anchorDeltas(projection, enclosuresByHull, plan);
+        final Map<ProjectedNodeKey, LayoutPoint> nodes = new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        for (final Map.Entry<ProjectedNodeKey, LayoutPoint> entry : positions.nodes().entrySet()) {
+            final ProjectedNodeKey key = entry.getKey();
+            final LayoutPoint delta = sum(plan.nodeFields.get(key), plan.mapDeltas.get(key.mapReferenceId()));
+            nodes.put(key, translated(entry.getValue(), delta));
+            if (!isZero(delta)) {
+                addField(field, CanonicalLayoutKeys.nodeField(key), delta);
+            }
+        }
+        final Map<EnclosureHullKey, LayoutPoint> anchors = new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
+        for (final Map.Entry<EnclosureHullKey, LayoutPoint> entry : positions.anchors().entrySet()) {
+            final EnclosureHullKey key = entry.getKey();
+            final LayoutPoint delta = sum(anchorDeltas.get(key), plan.mapDeltas.get(key.mapReferenceId()));
+            anchors.put(key, translated(entry.getValue(), delta));
+            if (!isZero(delta)) {
+                addField(field, CanonicalLayoutKeys.anchorField(key), delta);
+            }
+        }
+        return LayoutPositions.of(nodes, anchors);
+    }
+
+    private static Map<EnclosureHullKey, LayoutPoint> anchorDeltas(final GraphProjection projection,
+            final Map<EnclosureHullKey, ProjectedEnclosure> enclosuresByHull, final PlanOutcome plan) {
+        final Map<EnclosureHullKey, LayoutPoint> result = new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
+        for (final Map.Entry<EnclosureHullKey, LayoutPoint> entry : plan.anchorFields.entrySet()) {
+            result.put(entry.getKey(), entry.getValue());
+        }
+        for (final ProjectedEnclosure enclosure : projection.enclosures()) {
+            final EnclosureHullKey hull = enclosure.hullKey();
+            if (result.containsKey(hull)) {
+                continue;
+            }
+            double sumX = 0.0;
+            double sumY = 0.0;
+            int count = 0;
+            for (final ProjectedNodeKey node : subtreeNodes(enclosure, enclosuresByHull)) {
+                final LayoutPoint delta = plan.nodeFields.get(node);
+                if (delta != null && !isZero(delta)) {
+                    sumX += delta.x();
+                    sumY += delta.y();
+                    count++;
+                }
+            }
+            if (count > 0) {
+                result.put(hull, LayoutPoint.of(sumX / count, sumY / count));
+            }
+        }
+        return result;
+    }
+
+    private static <K> void addVector(final Map<K, LayoutPoint> field, final K key, final LayoutPoint delta) {
+        final LayoutPoint previous = field.get(key);
+        field.put(key, previous == null ? delta : add(previous, delta));
+    }
+
+    private static void addField(final Map<String, LayoutPoint> field, final String key,
+            final LayoutPoint delta) {
+        final LayoutPoint previous = field.get(key);
+        field.put(key, previous == null ? delta : add(previous, delta));
+    }
+
+    private static LayoutPoint sum(final LayoutPoint first, final LayoutPoint second) {
+        if (first == null) {
+            return second == null ? LayoutPoint.of(0.0, 0.0) : second;
+        }
+        return second == null ? first : add(first, second);
+    }
+
+    private static LayoutPoint translated(final LayoutPoint point, final LayoutPoint delta) {
+        return isZero(delta) ? point : add(point, delta);
+    }
+
+    private static LayoutPoint add(final LayoutPoint first, final LayoutPoint second) {
+        return LayoutPoint.of(first.x() + second.x(), first.y() + second.y());
+    }
+
+    private static LayoutPoint negate(final LayoutPoint value) {
+        return LayoutPoint.of(-value.x(), -value.y());
+    }
+
+    private static LayoutPoint scale(final LayoutPoint value, final double factor) {
+        return LayoutPoint.of(value.x() * factor, value.y() * factor);
     }
 
     private static List<BoundaryConflict> terminalConflicts(final List<Violation> violations,

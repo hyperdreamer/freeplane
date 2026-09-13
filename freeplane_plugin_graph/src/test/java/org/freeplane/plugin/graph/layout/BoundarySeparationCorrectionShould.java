@@ -280,4 +280,293 @@ public class BoundarySeparationCorrectionShould {
         return EnclosureHullKey.of(Collections.singletonList(
             EnclosureKey.of(SourceNodeKey.persisted(NodeReference.of(MAP, PersistedNodeId.of(id))))));
     }
+
+    @Test
+    public void translatesBothFreeMapsByHalfTheMinimumTranslation() {
+        final CrossMapFixture fixture = crossMapFixture(false, false);
+
+        final BoundarySeparationResult result = apply(fixture);
+
+        assertThat(result.diagnostics().rounds()).isEqualTo(1);
+        assertThat(result.diagnostics().boundaryVerified()).isTrue();
+        assertThat(result.positions().nodes().get(fixture.firstNode)).isEqualTo(LayoutPoint.of(-5.0, 0.0));
+        assertThat(result.positions().nodes().get(fixture.secondNode)).isEqualTo(LayoutPoint.of(43.0, 0.0));
+        assertThat(result.positions().anchors().get(fixture.firstHull)).isEqualTo(LayoutPoint.of(-5.0, 0.0));
+        assertThat(result.positions().anchors().get(fixture.secondHull)).isEqualTo(LayoutPoint.of(43.0, 0.0));
+    }
+
+    @Test
+    public void movesOnlyTheOtherMapWhenTheFirstMapHasAnActivePin() {
+        final CrossMapFixture fixture = crossMapFixture(true, false);
+
+        final BoundarySeparationResult result = apply(fixture);
+
+        assertThat(result.positions().nodes().get(fixture.firstNode)).isEqualTo(LayoutPoint.of(0.0, 0.0));
+        assertThat(result.positions().nodes().get(fixture.secondNode)).isEqualTo(LayoutPoint.of(48.0, 0.0));
+        assertThat(result.positions().anchors().get(fixture.firstHull)).isEqualTo(LayoutPoint.of(0.0, 0.0));
+        assertThat(result.positions().anchors().get(fixture.secondHull)).isEqualTo(LayoutPoint.of(48.0, 0.0));
+        assertThat(result.diagnostics().rounds()).isEqualTo(1);
+    }
+
+    @Test
+    public void movesOnlyTheFirstMapWhenTheSecondMapHasAnActivePin() {
+        final CrossMapFixture fixture = crossMapFixture(false, true);
+
+        final BoundarySeparationResult result = apply(fixture);
+
+        assertThat(result.positions().nodes().get(fixture.firstNode)).isEqualTo(LayoutPoint.of(-10.0, 0.0));
+        assertThat(result.positions().nodes().get(fixture.secondNode)).isEqualTo(LayoutPoint.of(38.0, 0.0));
+        assertThat(result.diagnostics().rounds()).isEqualTo(1);
+    }
+
+    @Test
+    public void bothRigidMapsReportOneImmovableConflictWithBothPins() {
+        final CrossMapFixture fixture = crossMapFixture(true, true);
+
+        final BoundarySeparationResult result = apply(fixture);
+
+        assertThat(result.positions()).isEqualTo(fixture.positions);
+        assertThat(result.diagnostics().rounds()).isZero();
+        assertThat(result.diagnostics().hullResidualViolations()).isEqualTo(1);
+        assertThat(result.diagnostics().boundaryCovered()).isTrue();
+        assertThat(result.diagnostics().conflicts()).hasSize(1);
+        assertThat(result.diagnostics().conflicts().get(0).reason())
+            .isEqualTo(BoundaryConflict.Reason.IMMOVABLE_SIDES);
+        assertThat(result.diagnostics().conflicts().get(0).blockingPins()).hasSize(2);
+    }
+
+    @Test
+    public void dormantPinsDoNotCreateRigidity() {
+        final CrossMapFixture fixture = crossMapFixture(false, false);
+        final PinProjection dormant = PinProjection.dormant(PinRecord.of(
+            fixture.firstNode.source().persistedReference().get(), 0.0, 0.0, Collections.<UnknownXml>emptyList()));
+        final BoundarySeparationResult result = new BoundarySeparationCorrection().apply(fixture.projection,
+            fixture.positions, METRICS, Arrays.asList(dormant));
+
+        assertThat(result.diagnostics().rounds()).isEqualTo(1);
+        assertThat(result.positions().nodes().get(fixture.firstNode)).isEqualTo(LayoutPoint.of(-5.0, 0.0));
+        assertThat(result.positions().nodes().get(fixture.secondNode)).isEqualTo(LayoutPoint.of(43.0, 0.0));
+    }
+
+    @Test
+    public void translatesTheWholeFreeMapForANonRootCrossMapPair() {
+        final MapReferenceId mapOne = MapReferenceId.of("00000000-0000-0000-0000-000000000001");
+        final MapReferenceId mapTwo = MapReferenceId.of("00000000-0000-0000-0000-000000000002");
+        final ProjectedNodeKey a = key(mapOne, "a-node");
+        final ProjectedNodeKey c = key(mapOne, "c-node");
+        final ProjectedNodeKey b = key(mapTwo, "b-node");
+        final ProjectedNodeKey d = key(mapTwo, "d-node");
+        final EnclosureHullKey rootOne = hull(mapOne, "root");
+        final EnclosureHullKey aHull = hull(mapOne, "a");
+        final EnclosureHullKey cHull = hull(mapOne, "c");
+        final EnclosureHullKey rootTwo = hull(mapTwo, "root");
+        final EnclosureHullKey bHull = hull(mapTwo, "b");
+        final EnclosureHullKey dHull = hull(mapTwo, "d");
+        final GraphProjection projection = projection(Arrays.asList(a, c, b, d), Arrays.asList(
+            suppressedRoot(rootOne, Arrays.asList(aHull, cHull)),
+            child(aHull, "a", rootOne, Collections.singletonList(a)),
+            child(cHull, "c", rootOne, Collections.singletonList(c)),
+            suppressedRoot(rootTwo, Arrays.asList(bHull, dHull)),
+            child(bHull, "b", rootTwo, Collections.singletonList(b)),
+            child(dHull, "d", rootTwo, Collections.singletonList(d))));
+        final LayoutPositions positions = positions(
+            Arrays.asList(nodeEntry(a, 0.0, 0.0), nodeEntry(c, 500.0, 0.0), nodeEntry(b, 38.0, 0.0),
+                nodeEntry(d, 500.0, 500.0)),
+            Arrays.asList(anchorEntry(rootOne, 0.0, 0.0), anchorEntry(aHull, 0.0, 0.0),
+                anchorEntry(cHull, 500.0, 0.0), anchorEntry(rootTwo, 38.0, 0.0), anchorEntry(bHull, 38.0, 0.0),
+                anchorEntry(dHull, 500.0, 500.0)));
+
+        final BoundarySeparationResult result = new BoundarySeparationCorrection().apply(projection, positions,
+            METRICS, Collections.<PinProjection>emptyList());
+
+        assertThat(result.diagnostics().hullViolationsDetected()).isEqualTo(1);
+        assertThat(result.diagnostics().rounds()).isEqualTo(1);
+        assertThat(result.positions().nodes().get(a)).isEqualTo(LayoutPoint.of(-5.0, 0.0));
+        assertThat(result.positions().nodes().get(c)).isEqualTo(LayoutPoint.of(495.0, 0.0));
+        assertThat(result.positions().nodes().get(b)).isEqualTo(LayoutPoint.of(43.0, 0.0));
+        assertThat(result.positions().nodes().get(d)).isEqualTo(LayoutPoint.of(505.0, 500.0));
+        assertThat(result.positions().anchors().get(cHull)).isEqualTo(LayoutPoint.of(495.0, 0.0));
+        assertThat(result.positions().anchors().get(dHull)).isEqualTo(LayoutPoint.of(505.0, 500.0));
+    }
+
+    @Test
+    public void accumulatesAllPairDeltasFromTheRoundSnapshot() {
+        final List<MapReferenceId> maps = Arrays.asList(
+            MapReferenceId.of("00000000-0000-0000-0000-000000000001"),
+            MapReferenceId.of("00000000-0000-0000-0000-000000000002"),
+            MapReferenceId.of("00000000-0000-0000-0000-000000000003"));
+        final double side = 38.0;
+        final double height = side * Math.sqrt(3.0) / 2.0;
+        final double[][] points = {{0.0, 0.0}, {side, 0.0}, {side / 2.0, height}};
+        final List<ProjectedNodeKey> nodes = new ArrayList<ProjectedNodeKey>();
+        final List<ProjectedEnclosure> enclosures = new ArrayList<ProjectedEnclosure>();
+        final List<Map.Entry<ProjectedNodeKey, LayoutPoint>> nodeEntries =
+            new ArrayList<Map.Entry<ProjectedNodeKey, LayoutPoint>>();
+        final List<Map.Entry<EnclosureHullKey, LayoutPoint>> anchorEntries =
+            new ArrayList<Map.Entry<EnclosureHullKey, LayoutPoint>>();
+        for (int index = 0; index < maps.size(); index++) {
+            final ProjectedNodeKey node = key(maps.get(index), "n");
+            final EnclosureHullKey root = hull(maps.get(index), "root");
+            nodes.add(node);
+            enclosures.add(root(root, "root", Collections.singletonList(node)));
+            nodeEntries.add(nodeEntry(node, points[index][0], points[index][1]));
+            anchorEntries.add(anchorEntry(root, points[index][0], points[index][1]));
+        }
+
+        final BoundarySeparationResult result = new BoundarySeparationCorrection().apply(
+            projection(nodes, enclosures), positions(nodeEntries, anchorEntries), METRICS,
+            Collections.<PinProjection>emptyList());
+
+        assertThat(result.diagnostics().hullViolationsDetected()).isEqualTo(3);
+        assertThat(result.diagnostics().boundaryVerified()).isTrue();
+        assertThat(result.diagnostics().rounds()).isEqualTo(1);
+        assertThat(result.positions().nodes().get(nodes.get(0)))
+            .isEqualTo(LayoutPoint.of(-8.993321412524974, -3.993321412524973));
+        assertThat(result.positions().nodes().get(nodes.get(1)))
+            .isEqualTo(LayoutPoint.of(46.99332141252498, -3.993321412524976));
+        assertThat(result.positions().nodes().get(nodes.get(2)))
+            .isEqualTo(LayoutPoint.of(19.0, 40.895608168858615));
+        for (int index = 0; index < maps.size(); index++) {
+            final ProjectedNodeKey node = nodes.get(index);
+            final EnclosureHullKey root = enclosures.get(index).hullKey();
+            assertThat(difference(result.positions().nodes().get(node),
+                fixtureNodePoint(points[index][0], points[index][1])))
+                    .as("map %s translates rigidly", maps.get(index))
+                    .isEqualTo(difference(result.positions().anchors().get(root),
+                        fixtureAnchorPoint(points[index][0], points[index][1])));
+        }
+    }
+
+    @Test
+    public void reportsOneConflictPerRigidMapPairInViolationOrder() {
+        final List<MapReferenceId> maps = Arrays.asList(
+            MapReferenceId.of("00000000-0000-0000-0000-000000000001"),
+            MapReferenceId.of("00000000-0000-0000-0000-000000000002"),
+            MapReferenceId.of("00000000-0000-0000-0000-000000000003"));
+        final double side = 38.0;
+        final double height = side * Math.sqrt(3.0) / 2.0;
+        final double[][] points = {{0.0, 0.0}, {side, 0.0}, {side / 2.0, height}};
+        final List<ProjectedNodeKey> nodes = new ArrayList<ProjectedNodeKey>();
+        final List<ProjectedEnclosure> enclosures = new ArrayList<ProjectedEnclosure>();
+        final List<PinProjection> pins = new ArrayList<PinProjection>();
+        final List<Map.Entry<ProjectedNodeKey, LayoutPoint>> nodeEntries =
+            new ArrayList<Map.Entry<ProjectedNodeKey, LayoutPoint>>();
+        final List<Map.Entry<EnclosureHullKey, LayoutPoint>> anchorEntries =
+            new ArrayList<Map.Entry<EnclosureHullKey, LayoutPoint>>();
+        for (int index = 0; index < maps.size(); index++) {
+            final ProjectedNodeKey node = key(maps.get(index), "n");
+            final EnclosureHullKey root = hull(maps.get(index), "root");
+            nodes.add(node);
+            enclosures.add(root(root, "root", Collections.singletonList(node)));
+            pins.add(pin(node, points[index][0], points[index][1]));
+            nodeEntries.add(nodeEntry(node, points[index][0], points[index][1]));
+            anchorEntries.add(anchorEntry(root, points[index][0], points[index][1]));
+        }
+        final LayoutPositions positions = positions(nodeEntries, anchorEntries);
+        final GraphProjection projection = projection(nodes, enclosures);
+
+        final BoundarySeparationResult result = new BoundarySeparationCorrection().apply(projection, positions,
+            METRICS, pins);
+
+        assertThat(result.positions()).isEqualTo(positions);
+        assertThat(result.diagnostics().rounds()).isZero();
+        assertThat(result.diagnostics().hullResidualViolations()).isEqualTo(3);
+        assertThat(result.diagnostics().conflicts()).hasSize(3);
+        assertThat(result.diagnostics().conflicts().get(0).pairKey()).isEqualTo(
+            CanonicalLayoutKeys.pair(hull(maps.get(1), "root"), hull(maps.get(2), "root")));
+        assertThat(result.diagnostics().conflicts().get(1).pairKey()).isEqualTo(
+            CanonicalLayoutKeys.pair(hull(maps.get(0), "root"), hull(maps.get(2), "root")));
+        assertThat(result.diagnostics().conflicts().get(2).pairKey()).isEqualTo(
+            CanonicalLayoutKeys.pair(hull(maps.get(0), "root"), hull(maps.get(1), "root")));
+        for (final BoundaryConflict conflict : result.diagnostics().conflicts()) {
+            assertThat(conflict.reason()).isEqualTo(BoundaryConflict.Reason.IMMOVABLE_SIDES);
+            assertThat(conflict.blockingPins()).hasSize(2);
+        }
+        assertThat(result.diagnostics().boundaryCovered()).isTrue();
+    }
+
+    private static BoundarySeparationResult apply(CrossMapFixture fixture) {
+        return new BoundarySeparationCorrection().apply(fixture.projection, fixture.positions, METRICS,
+            fixture.pins);
+    }
+
+    private static CrossMapFixture crossMapFixture(boolean firstPinned, boolean secondPinned) {
+        final MapReferenceId mapOne = MapReferenceId.of("00000000-0000-0000-0000-000000000001");
+        final MapReferenceId mapTwo = MapReferenceId.of("00000000-0000-0000-0000-000000000002");
+        final ProjectedNodeKey firstNode = key(mapOne, "n");
+        final ProjectedNodeKey secondNode = key(mapTwo, "n");
+        final EnclosureHullKey firstHull = hull(mapOne, "root");
+        final EnclosureHullKey secondHull = hull(mapTwo, "root");
+        final GraphProjection projection = projection(Arrays.asList(firstNode, secondNode),
+            Arrays.asList(root(firstHull, "root", Collections.singletonList(firstNode)),
+                root(secondHull, "root", Collections.singletonList(secondNode))));
+        final LayoutPositions positions = positions(
+            Arrays.asList(nodeEntry(firstNode, 0.0, 0.0), nodeEntry(secondNode, 38.0, 0.0)),
+            Arrays.asList(anchorEntry(firstHull, 0.0, 0.0), anchorEntry(secondHull, 38.0, 0.0)));
+        final List<PinProjection> pins = new ArrayList<PinProjection>();
+        if (firstPinned) {
+            pins.add(pin(firstNode, 0.0, 0.0));
+        }
+        if (secondPinned) {
+            pins.add(pin(secondNode, 38.0, 0.0));
+        }
+        return new CrossMapFixture(projection, positions, pins, firstNode, secondNode, firstHull, secondHull);
+    }
+
+    private static ProjectedEnclosure suppressedRoot(EnclosureHullKey hull, List<EnclosureHullKey> children) {
+        return ProjectedEnclosure.of(hull, hull.endpointKeys(),
+            Collections.singletonList(SafeNodeLabel.of("root", "root")), "m",
+            Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(), children, true,
+            BoundaryTier.SUPPRESSED);
+    }
+
+    private static ProjectedEnclosure child(EnclosureHullKey hull, String label, EnclosureHullKey parent,
+            List<ProjectedNodeKey> nodes) {
+        return ProjectedEnclosure.of(hull, hull.endpointKeys(),
+            Collections.singletonList(SafeNodeLabel.of(label, label)), "m", Optional.of(parent), nodes,
+            Collections.<EnclosureHullKey>emptyList(), false, BoundaryTier.SUBTLE);
+    }
+
+    private static ProjectedNodeKey key(MapReferenceId map, String id) {
+        return ProjectedNodeKey.of(SourceNodeKey.persisted(NodeReference.of(map, PersistedNodeId.of(id))));
+    }
+
+    private static EnclosureHullKey hull(MapReferenceId map, String id) {
+        return EnclosureHullKey.of(Collections.singletonList(
+            EnclosureKey.of(SourceNodeKey.persisted(NodeReference.of(map, PersistedNodeId.of(id))))));
+    }
+
+    private static LayoutPoint fixtureNodePoint(double x, double y) {
+        return LayoutPoint.of(x, y);
+    }
+
+    private static LayoutPoint fixtureAnchorPoint(double x, double y) {
+        return LayoutPoint.of(x, y);
+    }
+
+    private static LayoutPoint difference(LayoutPoint after, LayoutPoint before) {
+        return LayoutPoint.of(after.x() - before.x(), after.y() - before.y());
+    }
+
+    private static final class CrossMapFixture {
+        final GraphProjection projection;
+        final LayoutPositions positions;
+        final List<PinProjection> pins;
+        final ProjectedNodeKey firstNode;
+        final ProjectedNodeKey secondNode;
+        final EnclosureHullKey firstHull;
+        final EnclosureHullKey secondHull;
+
+        CrossMapFixture(GraphProjection projection, LayoutPositions positions, List<PinProjection> pins,
+                ProjectedNodeKey firstNode, ProjectedNodeKey secondNode, EnclosureHullKey firstHull,
+                EnclosureHullKey secondHull) {
+            this.projection = projection;
+            this.positions = positions;
+            this.pins = pins;
+            this.firstNode = firstNode;
+            this.secondNode = secondNode;
+            this.firstHull = firstHull;
+            this.secondHull = secondHull;
+        }
+    }
 }
