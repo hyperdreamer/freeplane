@@ -307,15 +307,20 @@ public final class WorkspaceXmlCodec {
 
     private static DisplaySettings parseDisplaySettings(final Element element) {
         final List<UnknownXml> unknownXml = recordUnknownXml(element,
-            new String[] { "show-arrowheads", "canvas-theme", "remember-viewport", "dim-unrelated-nodes" },
+            new String[] { "show-arrowheads", "canvas-theme", "remember-viewport", "dim-unrelated-nodes",
+                "map-sidebar-width", "map-sidebar-hidden" },
             Collections.<String>emptyList());
         return DisplaySettings.of(
             booleanValue(requiredAttribute(element, "show-arrowheads"), "show-arrowheads"),
             enumValue(DisplaySettings.CanvasTheme.class, requiredAttribute(element, "canvas-theme"), "canvas-theme"),
             booleanValue(requiredAttribute(element, "remember-viewport"), "remember-viewport"),
             booleanValue(requiredAttribute(element, "dim-unrelated-nodes"), "dim-unrelated-nodes"),
-            DisplaySettings.DEFAULT_MAP_SIDEBAR_WIDTH,
-            false,
+            element.hasAttribute("map-sidebar-width")
+                ? positiveInt(requiredAttribute(element, "map-sidebar-width"), "map-sidebar-width")
+                : DisplaySettings.DEFAULT_MAP_SIDEBAR_WIDTH,
+            element.hasAttribute("map-sidebar-hidden")
+                ? booleanValue(requiredAttribute(element, "map-sidebar-hidden"), "map-sidebar-hidden")
+                : false,
             unknownXml);
     }
 
@@ -570,7 +575,9 @@ public final class WorkspaceXmlCodec {
             "show-arrowheads", Boolean.toString(settings.showArrowheads()),
             "canvas-theme", settings.canvasTheme().name(),
             "remember-viewport", Boolean.toString(settings.rememberViewport()),
-            "dim-unrelated-nodes", Boolean.toString(settings.dimUnrelatedNodes())),
+            "dim-unrelated-nodes", Boolean.toString(settings.dimUnrelatedNodes()),
+            "map-sidebar-width", Integer.toString(settings.mapSidebarWidth()),
+            "map-sidebar-hidden", Boolean.toString(settings.mapSidebarHidden())),
             unknownAttributes(settings.unknownXml(), UnknownXml.Owner.RECORD), parent);
         appendChildren(output, Collections.<String>emptyList(),
             unknownElements(settings.unknownXml(), UnknownXml.Owner.RECORD), scope);

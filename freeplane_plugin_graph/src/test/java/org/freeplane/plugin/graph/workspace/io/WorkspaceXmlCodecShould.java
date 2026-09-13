@@ -176,6 +176,89 @@ public class WorkspaceXmlCodecShould {
         }
     }
 
+    @Test
+    public void roundTripsNonDefaultMapSidebarAttributes() throws Exception {
+        DisplaySettings settings = DisplaySettings.of(false, DisplaySettings.CanvasTheme.DARK, false, true,
+            400, true, Collections.<UnknownXml>emptyList());
+        WorkspaceDocument document = WorkspaceDocument.createVersion1(WORKSPACE_ID).toBuilder()
+            .displaySettings(settings)
+            .build();
+        Path location = temporaryFolder.newFolder("sidebar-round-trip").toPath().resolve("workspace.fpg");
+
+        byte[] firstWrite = codec().write(document, location);
+        String xml = new String(firstWrite, StandardCharsets.UTF_8);
+        assertThat(xml).contains("map-sidebar-width=\"400\"").contains("map-sidebar-hidden=\"true\"");
+
+        Files.write(location, firstWrite);
+        WorkspaceDocument reread = codec().read(location);
+        assertThat(reread.displaySettings().mapSidebarWidth()).isEqualTo(400);
+        assertThat(reread.displaySettings().mapSidebarHidden()).isTrue();
+        assertThat(codec().write(reread, location)).isEqualTo(firstWrite);
+    }
+
+    @Test
+    public void defaultsAbsentMapSidebarAttributesTo264AndExpanded() throws Exception {
+        WorkspaceDocument document = codec().read(resource("format-1-full.fpg"));
+
+        assertThat(document.displaySettings().mapSidebarWidth())
+            .isEqualTo(DisplaySettings.DEFAULT_MAP_SIDEBAR_WIDTH);
+        assertThat(document.displaySettings().mapSidebarHidden()).isFalse();
+        assertThat(document).isEqualTo(fullDocument());
+    }
+
+    @Test
+    public void writesTheMapSidebarAttributesOnEverySave() throws Exception {
+        WorkspaceDocument document = codec().read(resource("format-1-full.fpg"));
+        Path location = temporaryFolder.newFolder("sidebar-defaults").toPath().resolve("workspace.fpg");
+
+        String xml = new String(codec().write(document, location), StandardCharsets.UTF_8);
+
+        assertThat(xml).containsOnlyOnce("map-sidebar-width=\"264\"");
+        assertThat(xml).containsOnlyOnce("map-sidebar-hidden=\"false\"");
+    }
+
+    @Test
+    public void preservesForeignDisplaySettingsAttributesAlongsideTheKnownMapSidebarAttributes() throws Exception {
+        WorkspaceDocument document = codec().read(resource("format-1-full.fpg"));
+        Path location = temporaryFolder.newFolder("sidebar-foreign").toPath().resolve("workspace.fpg");
+
+        byte[] written = codec().write(document, location);
+        String xml = new String(written, StandardCharsets.UTF_8);
+
+        assertThat(xml).containsOnlyOnce("future:display-attribute=\"display-value\"");
+        Files.write(location, written);
+        assertThat(codec().read(location).displaySettings().unknownXml()).contains(
+            unknownAttribute(UnknownXml.Owner.RECORD, "display-attribute", "display"));
+    }
+
+    @Test
+    public void rejectsMalformedMapSidebarAttributes() throws Exception {
+        String[] malformedWidths = { "", "abc", "0", "-1" };
+        for (final String width : malformedWidths) {
+            Path location = temporaryFolder.newFile("malformed-width-" + Math.abs(width.hashCode()) + ".fpg")
+                .toPath();
+            Files.write(location,
+                displaySettingsDocument(" map-sidebar-width=\"" + width + "\"").getBytes(StandardCharsets.UTF_8));
+            assertThatThrownBy(() -> codec().read(location)).isInstanceOf(WorkspaceFormatException.class)
+                .hasMessageContaining("map-sidebar-width");
+        }
+        Path hidden = temporaryFolder.newFile("malformed-hidden.fpg").toPath();
+        Files.write(hidden,
+            displaySettingsDocument(" map-sidebar-hidden=\"yes\"").getBytes(StandardCharsets.UTF_8));
+        assertThatThrownBy(() -> codec().read(hidden)).isInstanceOf(WorkspaceFormatException.class)
+            .hasMessageContaining("map-sidebar-hidden");
+    }
+
+    private static String displaySettingsDocument(final String extraAttribute) {
+        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+            + "<graph-workspace format-version=\"1\" id=\"" + WORKSPACE_ID + "\">"
+            + "<maps></maps><relationships></relationships><pins></pins>"
+            + "<viewport center-x=\"0\" center-y=\"0\" zoom=\"1\"/>"
+            + "<display-settings show-arrowheads=\"true\" canvas-theme=\"FOLLOW_FREEPLANE\" "
+            + "remember-viewport=\"true\" dim-unrelated-nodes=\"true\"" + extraAttribute + "/>"
+            + "</graph-workspace>";
+    }
+
     private static Thread sentinelListener(final ServerSocket sentinel, final AtomicBoolean requested) {
         Thread listener = new Thread(new Runnable() {
             @Override
