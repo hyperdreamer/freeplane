@@ -1,0 +1,288 @@
+version: 1
+run_id: "pm-run-20260912-211532-f0569035"
+topic: "graph-boundary-separation"
+source_plan:
+  path: "docs/superpowers/plans/2026-09-12-graph-boundary-separation.md"
+  sha256: "b210225dd31d054d9d29258b793a9b8879eebd860505bd908201803a7a576af6"
+  commit_oid: "10bbcf4fc2cc3718f5d3eb90d480423e121cfa5a"
+  task_count: 19
+lanes:
+  - id: "types"
+    task_ids: ["t1", "t2", "t3", "t4", "t5", "t6"]
+  - id: "correction"
+    task_ids: ["t7", "t8", "t9", "t10", "t11", "t12"]
+  - id: "integration"
+    task_ids: ["t13", "t14", "t15", "t16"]
+  - id: "pipeline"
+    task_ids: ["t17", "t18", "t19"]
+tasks:
+  - id: "t1"
+    plan_task: 1
+    title: "Canonical layout keys"
+    lane: "types"
+    sequence: 1
+    implementer_tier: "standard"
+    depends_on: []
+    ownership:
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/CanonicalLayoutKeys.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/CanonicalLayoutKeysShould.java"
+    resources: []
+    produces: [{"name":"CanonicalLayoutKeys"},{"name":"escape","digest":"c1f7eb74a2f80c7ad4658bc0bc338caf2140e9d15bad20a0ba07abe10ac2a463"},{"name":"endpoint","digest":"eead9bd7b769d24c0022b4a3a9a445ca9383ea148f3eede62e505dbd2a70826e"},{"name":"hull","digest":"ef1134a7de9d583b15096a8e160550a3872f527120a6301a46cdb03482415f61"},{"name":"nodeField","digest":"bd4a52308ffdb409bf516fa910fa3b3ad107424422d9b09ade9715796c68e639"},{"name":"anchorField","digest":"281dcb3eed467109abb5128f516e57db4ae18cba41f7ab30a3d3c759601b590d"},{"name":"pair","digest":"b39ac2526d707f7ff544632a72e47c205ffd486ad3e4fef64e91670cef3a47ca"},{"name":"mapOfField","digest":"617fc005d2632b24916bb72abf4d39751fa412c8846813ca34552e934d66ab70"}]
+    consumes: [{"name":"SourceNodeKey","external":true},{"name":"persistent","external":true},{"name":"persistedReference","external":true},{"name":"structuralPath","external":true},{"name":"mapReferenceId","external":true},{"name":"source","external":true},{"name":"endpointKeys","external":true},{"name":"source","external":true},{"name":"of","external":true}]
+    validation: [["gradle",":freeplane_plugin_graph:test","--tests","org.freeplane.plugin.graph.layout.CanonicalLayoutKeysShould"]]
+  - id: "t2"
+    plan_task: 2
+    title: "Boundary separation exception and timings"
+    lane: "types"
+    sequence: 2
+    implementer_tier: "fast"
+    depends_on: ["t1"]
+    ownership:
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/BoundarySeparationException.java"
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/BoundarySeparationTimings.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundarySeparationExceptionShould.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundarySeparationTimingsShould.java"
+    resources: []
+    produces: [{"name":"BoundarySeparationException"},{"name":"BoundarySeparationTimings"}]
+    consumes: []
+    validation: [["gradle",":freeplane_plugin_graph:test","--tests","org.freeplane.plugin.graph.layout.BoundarySeparationExceptionShould","--tests","org.freeplane.plugin.graph.layout.BoundarySeparationTimingsShould"]]
+  - id: "t3"
+    plan_task: 3
+    title: "Boundary conflict"
+    lane: "types"
+    sequence: 3
+    implementer_tier: "standard"
+    depends_on: ["t2"]
+    ownership:
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/BoundaryConflict.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundaryConflictShould.java"
+    resources: []
+    produces: [{"name":"BoundaryConflict"},{"name":"BoundaryConflict","digest":"89407c229158fe5edf3673784a4cb98c265a1fc0b80dfba2d0c358efb9ddebd8"},{"name":"firstHull","digest":"ff7415c75953813653bcf85302ff79f061810dad57e75efe8e7cdd3247460c72"},{"name":"secondHull","digest":"62688a70968f60afc15f34d4df81ce7f5f92427d426a26dd99c7c24f3daa13a7"},{"name":"firstMap","digest":"0590407e4cd8966c09f41b104e99ce0f1b5194ee6d73cabe090c46974d38d65b"},{"name":"secondMap","digest":"ab276d8ccb87bd72ccaddc4aec088f0f11b113f880f9b38e5debdb113be055d9"},{"name":"pairKey","digest":"f4ea115496939d18e9690b9bf80a785d2f4d7b60b79c0b810a270452bea50f39"},{"name":"kind","digest":"0e4dd307b31f9a47a785ad4206dac035b6100eb13c42316e4e3ae0dc5c2a0561"},{"name":"reason","digest":"dbe5f68b61bed555cd03d38457dd4a8d0bc14df595276adf96c4bdaa17c37619"},{"name":"blockingPins","digest":"921220dae1e79db632da4fa9f6d20c0416786944f96999d8a36ddef1dc5bb560"},{"name":"Kind"},{"name":"Reason"}]
+    consumes: [{"name":"hull","from":"t1"},{"name":"pair","from":"t1"},{"name":"active","external":true},{"name":"source","external":true},{"name":"projectedNode","external":true},{"name":"mapReferenceId","external":true}]
+    validation: [["gradle",":freeplane_plugin_graph:test","--tests","org.freeplane.plugin.graph.layout.BoundaryConflictShould"]]
+  - id: "t4"
+    plan_task: 4
+    title: "Boundary separation diagnostics"
+    lane: "types"
+    sequence: 4
+    implementer_tier: "standard"
+    depends_on: ["t3"]
+    ownership:
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/BoundarySeparationDiagnostics.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundarySeparationDiagnosticsShould.java"
+    resources: []
+    produces: [{"name":"BoundarySeparationDiagnostics"},{"name":"empty","digest":"b7d3357cb55759d4f45046ff8897ce07a4ab67bfddefaae5383826979f1d686e"},{"name":"boundaryVerified","digest":"6ba2969b3cdfd363ff37b3d195077707de6e3221578b16cc131c0188a91a08be"},{"name":"boundaryCovered","digest":"6762b60029fc487f3dd46c142e628aa385fa7ed4be573068806e10997d0aedef"},{"name":"worstMapDisplacement","digest":"b00db0702a3d050c115dafc6dce93da839bbf88ad81e852458bc94be0026bfe2"},{"name":"withDeltas","digest":"89eb48997e2bddf26c5d6d9eb183e168b91ca348fc9157a28f93f67fbb0a6658"}]
+    consumes: [{"name":"pairKey","from":"t3"},{"name":"mapOfField","from":"t1"},{"name":"LayoutPoint","external":true},{"name":"x","external":true},{"name":"y","external":true}]
+    validation: [["gradle",":freeplane_plugin_graph:test","--tests","org.freeplane.plugin.graph.layout.BoundarySeparationDiagnosticsShould"]]
+  - id: "t5"
+    plan_task: 5
+    title: "Boundary separation result"
+    lane: "types"
+    sequence: 5
+    implementer_tier: "fast"
+    depends_on: ["t4"]
+    ownership:
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/BoundarySeparationResult.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundarySeparationResultShould.java"
+    resources: []
+    produces: [{"name":"BoundarySeparationResult"},{"name":"positions","digest":"b32454410d2490a62b3d6782accc7bb2b11772a7655c58b116d0d5357bd1ff23"},{"name":"diagnostics","digest":"2405c8f49f040325fbc27e115e041149358f904ba44ab9603803fcf133af90b6"},{"name":"nodeResidualViolations","digest":"21c72f911fb72e3f72980b9c338615ea0716abbbe9dfcd5468e74a781c2c5ec3"},{"name":"appliedDisplacements","digest":"432c17a9b19cd700de39351a63b39c60cf3ff0cdacdf0fd6cec8bb55f237f417"},{"name":"timings","digest":"46d197c4266ab6b012eefa25439dfa227902048a28b334985d7aea9bfa6dec20"}]
+    consumes: [{"name":"BoundarySeparationDiagnostics","from":"t4"},{"name":"BoundarySeparationTimings","from":"t2"},{"name":"LayoutPositions","external":true},{"name":"LayoutPoint","external":true}]
+    validation: [["gradle",":freeplane_plugin_graph:test","--tests","org.freeplane.plugin.graph.layout.BoundarySeparationResultShould"]]
+  - id: "t6"
+    plan_task: 6
+    title: "Boundary invariant assertion helper"
+    lane: "types"
+    sequence: 6
+    implementer_tier: "standard"
+    depends_on: ["t5"]
+    ownership:
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundaryInvariantAssertions.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundaryInvariantAssertionsShould.java"
+    resources: []
+    produces: [{"name":"BoundaryInvariantAssertions"},{"name":"assertVerifiedFrame","digest":"49cc9f36b5b3eb903e0ca831436d22000790ef6861d517de2e381862742c3350"},{"name":"assertBijection","digest":"0ce75915806250e19f119f6d7969accb160f930e041201dbf19484214ad7c0a4"}]
+    consumes: [{"name":"LayoutFrame","external":true},{"name":"positions","from":"t5"},{"name":"failed","external":true},{"name":"residualViolations","external":true},{"name":"of","external":true},{"name":"BoundarySeparationDiagnostics","from":"t4"},{"name":"GraphGeometryEngine","external":true},{"name":"HullIntersection","external":true},{"name":"HullGeometry","external":true},{"name":"NodeSeparationProjection","external":true},{"name":"PinProjection","external":true},{"name":"LayoutFrame","external":true}]
+    validation: [["gradle",":freeplane_plugin_graph:test","--tests","org.freeplane.plugin.graph.layout.BoundaryInvariantAssertionsShould"]]
+  - id: "t7"
+    plan_task: 7
+    title: "Boundary separation component skeleton, detection, and terminal coverage"
+    lane: "correction"
+    sequence: 1
+    implementer_tier: "advanced"
+    depends_on: ["t5"]
+    ownership:
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/BoundarySeparationCorrection.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundarySeparationCorrectionShould.java"
+    resources: []
+    produces: [{"name":"BoundarySeparationCorrection"},{"name":"MAX_DISPLACEMENT_ROUNDS"},{"name":"BoundarySeparationCorrection","digest":"8da9728980a6bde700fe0ed6bc80d650c6cfae27a4bae7e5b1c36ced93ccf68f"},{"name":"BoundarySeparationCorrection","digest":"d64a214c19f083eb8c7727f605fa2525d4f20e6fdf83258ccec35537817c28fa"},{"name":"apply","digest":"c6195683f49ae1ec32b64ff07f32a0a63856762663196cb6dc7351026bcc0222"},{"name":"guardedMinimumSeparatingTranslation","digest":"54a4303661c6a8fc5d8d85d429358ecec7d2355ef9b7ee3b1cab59ead97fbfec"},{"name":"ancestorEscapePairKeys","digest":"bc855ddd93d2cb2f221db98b1815fe18960445a7acefe067da5d457f16ba764c"},{"name":"isEmpty","digest":"0847e867aa86f13ae0ed82ab8c8617e44e1c10ed033520a22ea3af7c7c5adf0e"},{"name":"rounds"}]
+    consumes: [{"name":"BoundarySeparationResult","from":"t5"},{"name":"BoundarySeparationDiagnostics","from":"t4"},{"name":"BoundaryConflict","from":"t3"},{"name":"BoundarySeparationException","from":"t2"},{"name":"BoundarySeparationTimings","from":"t2"},{"name":"CanonicalLayoutKeys","from":"t1"},{"name":"project","external":true},{"name":"computeHulls","external":true},{"name":"HullIntersection","external":true},{"name":"HullGeometry","external":true},{"name":"PinProjection","external":true},{"name":"BoundaryTier","external":true}]
+    validation: [["gradle",":freeplane_plugin_graph:test","--tests","org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould"]]
+  - id: "t8"
+    plan_task: 8
+    title: "Cross-map rigid map translation"
+    lane: "correction"
+    sequence: 2
+    implementer_tier: "advanced"
+    depends_on: ["t7"]
+    ownership:
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/BoundarySeparationCorrection.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundarySeparationCorrectionShould.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/MapTierCorrectionShould.java"
+    resources: []
+    produces: [{"name":"planCrossMap"},{"name":"rigidMaps"},{"name":"applyRound"},{"name":"anchorDeltas"},{"name":"t"},{"name":"t"},{"name":"t"},{"name":"t"},{"name":"IMMOVABLE_SIDES"}]
+    consumes: [{"name":"active","external":true},{"name":"MapReferenceId","external":true}]
+    validation: [["gradle",":freeplane_plugin_graph:test","--tests","org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould"]]
+  - id: "t9"
+    plan_task: 9
+    title: "Same-map support, cap sets, and both-sides/full candidates"
+    lane: "correction"
+    sequence: 3
+    implementer_tier: "capable"
+    depends_on: ["t8"]
+    ownership:
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/BoundarySeparationCorrection.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundarySeparationCorrectionShould.java"
+    resources: []
+    produces: [{"name":"planSameMap"},{"name":"Traversal"},{"name":"movedNodes"},{"name":"movedAnchors"},{"name":"pins"},{"name":"depth"},{"name":"support","digest":"f730d34b2a39cbe7a001ef80a19fbbf807d98d55d1ac3a60417cb3efdcb50ab0"},{"name":"nodeContribution"},{"name":"polySupport"},{"name":"labelSize"},{"name":"Candidate"},{"name":"selectCandidate"},{"name":"null"},{"name":"IMMOVABLE_SIDES"}]
+    consumes: [{"name":"directNodes","external":true},{"name":"displayText","external":true},{"name":"measure","external":true},{"name":"prominence","external":true},{"name":"scale","external":true}]
+    validation: [["gradle",":freeplane_plugin_graph:test","--tests","org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould"]]
+  - id: "t10"
+    plan_task: 10
+    title: "Complementary splits, ties, and immovable sides"
+    lane: "correction"
+    sequence: 4
+    implementer_tier: "capable"
+    depends_on: ["t9"]
+    ownership:
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/BoundarySeparationCorrection.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundarySeparationCorrectionShould.java"
+    resources: []
+    produces: [{"name":"complementaryDepth","digest":"65053cac6d78a86cd6d54663c94fabc01bc1ccd369e33639c7350f8ea9d2c60d"},{"name":"band"},{"name":"null"},{"name":"selectCandidate"},{"name":"d_A"},{"name":"m"},{"name":"depth"},{"name":"depth"},{"name":"IMMOVABLE_SIDES"}]
+    consumes: [{"name":"valid","external":true},{"name":"traverse","external":true},{"name":"Traversal","from":"t9"},{"name":"PinDepth","external":true}]
+    validation: [["gradle",":freeplane_plugin_graph:test","--tests","org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould"]]
+  - id: "t11"
+    plan_task: 11
+    title: "Bounded loop, ROUND_LIMIT reasons, and the I6 bijection"
+    lane: "correction"
+    sequence: 5
+    implementer_tier: "advanced"
+    depends_on: ["t10"]
+    ownership:
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/BoundarySeparationCorrection.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundarySeparationCorrectionShould.java"
+    resources: []
+    produces: [{"name":"terminalConflicts","digest":"425510bd0c47fcb8569f22d47a542fdc3710004ab2337b79a7e9641cccd5ef9a"},{"name":"ROUND_LIMIT"}]
+    consumes: [{"name":"PlanOutcome","external":true},{"name":"plan","external":true},{"name":"pairKeys","external":true},{"name":"applyRound","from":"t8"}]
+    validation: [["gradle",":freeplane_plugin_graph:test","--tests","org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould"]]
+  - id: "t12"
+    plan_task: 12
+    title: "Frozen real-case fixture and one-round regression"
+    lane: "correction"
+    sequence: 6
+    implementer_tier: "advanced"
+    depends_on: ["t11"]
+    ownership:
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundarySeparationCorrectionShould.java"
+    resources: []
+    produces: []
+    consumes: [{"name":"projected","external":true},{"name":"nativeConnector","external":true},{"name":"of","external":true},{"name":"of","external":true},{"name":"GraphGeometryEngine","external":true},{"name":"HullIntersection","external":true},{"name":"BoundarySeparationCorrection","from":"t7"}]
+    validation: [["gradle",":freeplane_plugin_graph:test","--tests","org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould"]]
+  - id: "t13"
+    plan_task: 13
+    title: "Migrate production call sites to BoundarySeparationCorrection"
+    lane: "integration"
+    sequence: 1
+    implementer_tier: "advanced"
+    depends_on: ["t12"]
+    ownership:
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/LayoutFrame.java"
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/LayoutWorker.java"
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/control/LayoutSettleLoop.java"
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/MapTierCorrection.java"
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/LayoutConflict.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/GraphStreamBoundaryShould.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/control/LayoutSettleLoopShould.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/control/GraphUpdateCoordinatorShould.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/integration/GraphWorkspaceCommandAcceptanceShould.java"
+    resources: []
+    produces: [{"name":"boundaryDiagnostics","digest":"0b66103d4e56144a0289dad14fa7104683cde002b0e76a449166bbb84fcfca00"},{"name":"conflicts","digest":"d01597a2fa9892b0d74b758367ca2369a15906e555a9e01006bc4334fb918294"},{"name":"withDiagnostics","digest":"e945e1537e626e69b5771584318c2c8db413469c759426fded757aa9dff003e3"},{"name":"LayoutWorker"},{"name":"previousAppliedDisplacements"},{"name":"restart","digest":"dce654077d3eb8a713fdaab0175aa5c363390e49eef566e2318bf9feb70b94bc"},{"name":"LayoutSettleLoop"},{"name":"publicLayoutTypes","digest":"c6d37be287006dd5e5a7043641c82b44eb47284a686e7c2be2331c75153032e7"}]
+    consumes: [{"name":"apply","from":"t7"},{"name":"positions","from":"t5"},{"name":"boundaryVerified","from":"t4"},{"name":"BoundaryConflict","from":"t3"},{"name":"BoundarySeparationException","from":"t2"}]
+    validation: [["gradle",":freeplane_plugin_graph:test","--tests","org.freeplane.plugin.graph.layout.LayoutWorkerShould","--tests","org.freeplane.plugin.graph.control.LayoutSettleLoopShould","--tests","org.freeplane.plugin.graph.control.GraphUpdateCoordinatorShould","--tests","org.freeplane.plugin.graph.integration.GraphWorkspaceCommandAcceptanceShould","--tests","org.freeplane.plugin.graph.layout.GraphStreamBoundaryShould"]]
+  - id: "t14"
+    plan_task: 14
+    title: "Worker failure channel, displacement deltas, and restart reset"
+    lane: "integration"
+    sequence: 2
+    implementer_tier: "standard"
+    depends_on: ["t13"]
+    ownership:
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/LayoutWorkerShould.java"
+    resources: []
+    produces: []
+    consumes: [{"name":"LayoutWorker","from":"t13"},{"name":"boundaryDiagnostics","from":"t13"},{"name":"appliedDisplacements","from":"t5"},{"name":"BoundarySeparationException","from":"t2"},{"name":"CountingEngine","external":true},{"name":"FixedEngineSupplier","external":true},{"name":"SequenceEngineSupplier","external":true},{"name":"request","external":true}]
+    validation: [["gradle",":freeplane_plugin_graph:test","--tests","org.freeplane.plugin.graph.layout.LayoutWorkerShould"]]
+  - id: "t15"
+    plan_task: 15
+    title: "Performance diagnostic stage mapping and golden conflict expectations"
+    lane: "integration"
+    sequence: 3
+    implementer_tier: "advanced"
+    depends_on: ["t14"]
+    ownership:
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/GraphWorkspacePerformanceDiagnostic.java"
+    resources: []
+    produces: [{"name":"SEPARATION"},{"name":"timings","digest":"46d197c4266ab6b012eefa25439dfa227902048a28b334985d7aea9bfa6dec20"},{"name":"HULL"},{"name":"timings","digest":"46d197c4266ab6b012eefa25439dfa227902048a28b334985d7aea9bfa6dec20"},{"name":"CORRECTION"},{"name":"planNanos","digest":"83e8cd08297f52b6374e76cea450d3b2a422aaff55048fdabae11e0253e1562b"},{"name":"TWO_PINNED_MAPS"}]
+    consumes: [{"name":"BoundarySeparationCorrection","from":"t7"},{"name":"BoundarySeparationResult","from":"t5"},{"name":"BoundarySeparationDiagnostics","from":"t4"},{"name":"BoundaryConflict","from":"t3"}]
+    validation: [["gradle",":freeplane_plugin_graph:graphPerformanceDiagnostic","--rerun-tasks"]]
+  - id: "t16"
+    plan_task: 16
+    title: "Performance gate measurement and evidence"
+    lane: "integration"
+    sequence: 4
+    implementer_tier: "standard"
+    depends_on: ["t15"]
+    ownership:
+      - "docs/superpowers/plans/2026-09-12-graph-boundary-separation-performance.md"
+    resources: []
+    produces: []
+    consumes: [{"name":"freeplane_plugin_graph","external":true}]
+    validation: [["gradle",":freeplane_plugin_graph:graphPerformanceDiagnostic","-PgraphStrictPerformance","--rerun-tasks","-PTestLoggingFull"]]
+  - id: "t17"
+    plan_task: 17
+    title: "Reproduced-case pipeline fixture with red-before/green-after"
+    lane: "pipeline"
+    sequence: 1
+    implementer_tier: "capable"
+    depends_on: ["t13", "t6"]
+    ownership:
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundarySeparationShould.java"
+    resources: []
+    produces: [{"name":"math"}]
+    consumes: [{"name":"create","external":true},{"name":"LayoutEngine","external":true},{"name":"LayoutWorker","from":"t13"},{"name":"boundaryDiagnostics","from":"t13"},{"name":"BoundaryInvariantAssertions","from":"t6"},{"name":"GraphGeometryEngine","external":true},{"name":"HullIntersection","external":true},{"name":"CanonicalLayoutKeys","from":"t1"}]
+    validation: [["gradle",":freeplane_plugin_graph:test","--tests","org.freeplane.plugin.graph.layout.BoundarySeparationShould"]]
+  - id: "t18"
+    plan_task: 18
+    title: "Settle-sequence measurement and section-7 diagnostics gates"
+    lane: "pipeline"
+    sequence: 2
+    implementer_tier: "advanced"
+    depends_on: ["t17"]
+    ownership:
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundarySeparationShould.java"
+    resources: []
+    produces: [{"name":"ROUND_LIMIT"},{"name":"worstMapDisplacement"}]
+    consumes: [{"name":"pipelineProjection","external":true},{"name":"pipelineRequest","external":true},{"name":"pipelineAllPins","external":true},{"name":"pipelineRealPins","external":true},{"name":"spikeDefaults","external":true},{"name":"SPIKE_CONSECUTIVE","external":true},{"name":"SPIKE_RMS","external":true},{"name":"SPIKE_MAX","external":true},{"name":"BoundarySeparationShould","external":true}]
+    validation: [["gradle",":freeplane_plugin_graph:test","--tests","org.freeplane.plugin.graph.layout.BoundarySeparationShould"]]
+  - id: "t19"
+    plan_task: 19
+    title: "Final acceptance evidence and full-suite verification"
+    lane: "pipeline"
+    sequence: 3
+    implementer_tier: "standard"
+    depends_on: ["t16", "t18"]
+    ownership:
+      - "docs/superpowers/plans/2026-09-12-graph-boundary-separation-evidence.md"
+    resources: []
+    produces: []
+    consumes: [{"name":"freeplane_plugin_graph","external":true}]
+    validation: [["gradle",":freeplane_plugin_graph:test"]]
+manifest_digest: "88ec5bb3f5cda112b8882d39cf7ef959391141687f7351140a5fdd084348d85a" 

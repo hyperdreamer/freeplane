@@ -4,6 +4,7 @@ import java.awt.geom.Dimension2D;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -110,6 +111,102 @@ public final class GraphGeometryEngine {
         final GraphGeometry result = GraphGeometry.of(nodeGeometry, hulls);
         rememberGeometry(projection, positions, result);
         return result;
+    }
+
+    /**
+     * Recomputes only the hulls whose subtree changed since {@code previous}, reusing every other
+     * hull. The result is equal to {@link #computeHulls} for the same inputs.
+     *
+     * @param previous geometry computed for the same projection; null, or a geometry whose node or
+     *     enclosure keys do not match the projection, falls back to a full computation
+     * @param directlyAffectedHulls hulls whose own anchor or direct nodes moved since
+     *     {@code previous}; every ancestor of such a hull is recomputed as well
+     */
+    public GraphGeometry recomputeHulls(final GraphProjection projection, final LayoutPositions positions,
+            final GeometryTextMetrics metrics, final GraphGeometry previous,
+            final Set<EnclosureHullKey> directlyAffectedHulls) {
+        Objects.requireNonNull(projection, "projection");
+        Objects.requireNonNull(positions, "positions");
+        Objects.requireNonNull(metrics, "metrics");
+        Objects.requireNonNull(directlyAffectedHulls, "directlyAffectedHulls");
+        final GraphGeometry cached = cachedGeometry(projection, positions);
+        if (cached != null) {
+            return cached;
+        }
+        final Map<ProjectedNodeKey, ProjectedNode> nodesByKey =
+            new LinkedHashMap<ProjectedNodeKey, ProjectedNode>();
+        for (final ProjectedNode node : projection.nodes()) {
+            if (nodesByKey.put(node.key(), node) != null) {
+                throw new IllegalArgumentException("Duplicate projected node key " + node.key());
+            }
+        }
+        final Map<EnclosureHullKey, ProjectedEnclosure> enclosuresByKey =
+            new LinkedHashMap<EnclosureHullKey, ProjectedEnclosure>();
+        for (final ProjectedEnclosure enclosure : projection.enclosures()) {
+            if (enclosuresByKey.put(enclosure.hullKey(), enclosure) != null) {
+                throw new IllegalArgumentException("Duplicate projected enclosure hull key "
+                    + enclosure.hullKey());
+            }
+        }
+        if (!positions.nodes().keySet().equals(nodesByKey.keySet())) {
+            throw new IllegalArgumentException("Layout positions must cover exactly the projected nodes");
+        }
+        if (!positions.anchors().keySet().equals(enclosuresByKey.keySet())) {
+            throw new IllegalArgumentException("Layout anchors must cover exactly the projected enclosures");
+        }
+        if (!projection.prominence().keySet().equals(nodesByKey.keySet())) {
+            throw new IllegalArgumentException("Prominence must cover exactly the projected nodes");
+        }
+        if (previous == null || !previous.nodes().keySet().equals(nodesByKey.keySet())
+                || !previous.hulls().keySet().equals(enclosuresByKey.keySet())) {
+            return computeHulls(projection, positions, metrics);
+        }
+        final Map<ProjectedNodeKey, NodeGeometry> nodeGeometry =
+            new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
+        for (final ProjectedNode node : projection.nodes()) {
+            final LayoutPoint center = positions.nodes().get(node.key());
+            final double radius = BASE_RADIUS * projection.prominence().get(node.key()).scale();
+            nodeGeometry.put(node.key(), NodeGeometry.of(center, radius));
+        }
+        final Set<EnclosureHullKey> recomputed = ancestorsOf(enclosuresByKey, directlyAffectedHulls);
+        final Map<EnclosureHullKey, HullGeometry> computed =
+            new LinkedHashMap<EnclosureHullKey, HullGeometry>(previous.hulls());
+        final Set<EnclosureHullKey> complete = new HashSet<EnclosureHullKey>(previous.hulls().keySet());
+        complete.removeAll(recomputed);
+        final Set<EnclosureHullKey> visiting = new HashSet<EnclosureHullKey>();
+        for (final EnclosureHullKey hullKey : recomputed) {
+            computeHull(hullKey, enclosuresByKey, positions, nodeGeometry, metrics, computed, complete,
+                visiting);
+        }
+        final Map<EnclosureHullKey, HullGeometry> hulls = new LinkedHashMap<EnclosureHullKey, HullGeometry>();
+        for (final ProjectedEnclosure enclosure : projection.enclosures()) {
+            hulls.put(enclosure.hullKey(), computed.get(enclosure.hullKey()));
+        }
+        final GraphGeometry result = GraphGeometry.of(nodeGeometry, hulls);
+        rememberGeometry(projection, positions, result);
+        return result;
+    }
+
+    private static Set<EnclosureHullKey> ancestorsOf(
+            final Map<EnclosureHullKey, ProjectedEnclosure> enclosuresByKey,
+            final Set<EnclosureHullKey> directlyAffectedHulls) {
+        final Set<EnclosureHullKey> affected = new LinkedHashSet<EnclosureHullKey>();
+        for (final EnclosureHullKey hullKey : directlyAffectedHulls) {
+            if (!enclosuresByKey.containsKey(hullKey)) {
+                throw new IllegalArgumentException("Unknown affected hull " + hullKey);
+            }
+            affected.add(hullKey);
+        }
+        for (final EnclosureHullKey hullKey : directlyAffectedHulls) {
+            EnclosureHullKey current = hullKey;
+            while (enclosuresByKey.get(current).parentHull().isPresent()) {
+                current = enclosuresByKey.get(current).parentHull().get();
+                if (!affected.add(current)) {
+                    break;
+                }
+            }
+        }
+        return affected;
     }
 
     private synchronized GraphGeometry cachedGeometry(final GraphProjection projection,

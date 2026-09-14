@@ -7,6 +7,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -21,13 +22,11 @@ import java.util.function.Supplier;
 
 import org.freeplane.plugin.graph.geometry.AwtGeometryTextMetrics;
 import org.freeplane.plugin.graph.geometry.GeometryTextMetrics;
-import org.freeplane.plugin.graph.geometry.GraphGeometry;
-import org.freeplane.plugin.graph.geometry.GraphGeometryEngine;
+import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.layout.graphstream.GraphStreamLayoutFactory;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.GraphProjection;
-import org.freeplane.plugin.graph.projection.PinProjection;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
 
@@ -35,9 +34,9 @@ public final class LayoutWorker implements AutoCloseable {
     private static final AtomicInteger WORKER_IDS = new AtomicInteger();
     private static final LayoutFrame EMPTY_FAILED_FRAME = LayoutFrame.withDiagnostics(
         LayoutFrame.of(0L, LayoutPositions.of(
-            Collections.<ProjectedNodeKey, org.freeplane.plugin.graph.geometry.LayoutPoint>emptyMap(),
-            Collections.<EnclosureHullKey, org.freeplane.plugin.graph.geometry.LayoutPoint>emptyMap()), true, 0),
-        Collections.<LayoutConflict>emptyList(), PerceptualIdlePolicy.IdleMeasurement.initial());
+            Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(),
+            Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), true, 0),
+        BoundarySeparationDiagnostics.empty(), PerceptualIdlePolicy.IdleMeasurement.initial());
 
     private final Supplier<LayoutEngine> engineFactory;
     private final PerceptualIdlePolicy idlePolicy;
@@ -45,8 +44,7 @@ public final class LayoutWorker implements AutoCloseable {
     private final Object lifecycleLock = new Object();
     private final Set<CompletableFuture<LayoutFrame>> pending =
         Collections.synchronizedSet(new HashSet<CompletableFuture<LayoutFrame>>());
-    private final GraphGeometryEngine geometryEngine = new GraphGeometryEngine();
-    private final MapTierCorrection mapCorrection = new MapTierCorrection();
+    private final BoundarySeparationCorrection boundaryCorrection = new BoundarySeparationCorrection();
 
     private volatile LayoutFrame lastValidFrame = EMPTY_FAILED_FRAME;
     private volatile boolean paused;
@@ -59,6 +57,7 @@ public final class LayoutWorker implements AutoCloseable {
     private LayoutEngine engine;
     private LayoutRequest currentRequest;
     private LayoutPositions previousCorrectedPositions;
+    private Map<String, LayoutPoint> previousAppliedDisplacements = Collections.emptyMap();
 
     public LayoutWorker(final LayoutCalibration calibration) {
         final LayoutCalibration value = Objects.requireNonNull(calibration, "calibration");
@@ -284,23 +283,47 @@ public final class LayoutWorker implements AutoCloseable {
             return failedFrame(raw.stepIndex());
         }
         validateCoverage(request.projection(), raw.positions());
-        final GraphGeometry geometry =
-            geometryEngine.computeHulls(request.projection(), raw.positions(), defaultMetrics());
-        final MapTierCorrection.CorrectionResult correction = mapCorrection.apply(request.projection(),
-            raw.positions(), geometry, request.pins());
-        final NodeSeparationResult separation = new NodeSeparationProjection().project(request.projection(),
-            correction.positions(), pinnedNodes(request.pins()));
-        final LayoutPositions corrected = separation.positions();
-        final LayoutPositions before = previousCorrectedPositions == null ? corrected : previousCorrectedPositions;
+        final BoundarySeparationResult result = boundaryCorrection.apply(request.projection(), raw.positions(),
+            defaultMetrics(), request.pins());
+        if (!result.diagnostics().boundaryVerified() && !result.diagnostics().boundaryCovered()) {
+            throw new BoundarySeparationException("Boundary separation did not cover every residual pair");
+        }
+        final LayoutPositions corrected = result.positions();
+        final LayoutPositions before = previousCorrectedPositions == null ? corrected
+            : previousCorrectedPositions;
         final PerceptualIdlePolicy.IdleMeasurement idle = idlePolicy.observe(before, corrected);
+        final double[] deltas = displacementDeltas(previousAppliedDisplacements,
+            result.appliedDisplacements());
         final LayoutFrame decorated = LayoutFrame.withDiagnostics(
-            LayoutFrame.of(raw.stepIndex(), corrected, false, separation.residualViolations()),
-            correction.conflicts(), idle);
+            LayoutFrame.of(raw.stepIndex(), corrected, false, result.nodeResidualViolations()),
+            result.diagnostics().withDeltas(deltas[0], deltas[1]), idle);
+        previousAppliedDisplacements = result.appliedDisplacements();
         currentRequest = request;
         hasRequest = true;
         previousCorrectedPositions = corrected;
         lastValidFrame = decorated;
         return decorated;
+    }
+
+    private static double[] displacementDeltas(final Map<String, LayoutPoint> previous,
+            final Map<String, LayoutPoint> current) {
+        final Set<String> keys = new LinkedHashSet<String>(previous.keySet());
+        keys.addAll(current.keySet());
+        if (keys.isEmpty()) {
+            return new double[] {0.0, 0.0};
+        }
+        double sumSquares = 0.0;
+        double maximum = 0.0;
+        for (final String key : keys) {
+            final LayoutPoint before = previous.get(key);
+            final LayoutPoint after = current.get(key);
+            final double deltaX = (after == null ? 0.0 : after.x()) - (before == null ? 0.0 : before.x());
+            final double deltaY = (after == null ? 0.0 : after.y()) - (before == null ? 0.0 : before.y());
+            final double squared = deltaX * deltaX + deltaY * deltaY;
+            sumSquares += squared;
+            maximum = Math.max(maximum, Math.sqrt(squared));
+        }
+        return new double[] {Math.sqrt(sumSquares / keys.size()), maximum};
     }
 
     private void validateCoverage(final GraphProjection projection, final LayoutPositions positions) {
@@ -315,16 +338,6 @@ public final class LayoutWorker implements AutoCloseable {
         if (!nodeKeys.equals(positions.nodes().keySet()) || !anchorKeys.equals(positions.anchors().keySet())) {
             throw new IllegalArgumentException("Layout frame positions must cover the current projection");
         }
-    }
-
-    private static Set<ProjectedNodeKey> pinnedNodes(final List<PinProjection> pins) {
-        final Set<ProjectedNodeKey> pinned = new LinkedHashSet<ProjectedNodeKey>();
-        for (final PinProjection pin : pins) {
-            if (pin.active() && pin.projectedNode().isPresent()) {
-                pinned.add(pin.projectedNode().get());
-            }
-        }
-        return pinned;
     }
 
     private static GeometryTextMetrics defaultMetrics() {
@@ -344,6 +357,7 @@ public final class LayoutWorker implements AutoCloseable {
         currentRequest = null;
         hasRequest = false;
         failedEngine = false;
+        previousAppliedDisplacements = Collections.emptyMap();
         try {
             engine = newEngine();
         }
@@ -360,7 +374,7 @@ public final class LayoutWorker implements AutoCloseable {
         final long index = requestedIndex >= 0L ? requestedIndex : retained.stepIndex();
         return LayoutFrame.withDiagnostics(
             LayoutFrame.of(index, retained.positions(), true, retained.residualViolations()),
-            retained.conflicts(), retained.idle());
+            retained.boundaryDiagnostics(), retained.idle());
     }
 
     private void closeEngine() {
