@@ -870,7 +870,7 @@ those captured values and must not read Dropbox paths.
    root's ZFC link is out of scope). Assert exactly those two ancestor pairs are contained
    (I2) before correction directly, using the same inclusive-containment predicate as §3.2
    (every vertex of the child hull inside the parent hull via `hull(P).contains`); the shared
-   `assertBoundaryInvariants` helper (§7.1) is scoped to `boundaryVerified()` frames and is
+   `BoundaryInvariantAssertions.assertVerifiedFrame` helper (§7.1) is scoped to `boundaryVerified()` frames and is
    used only for the post-correction assertions.
 2. **Correction.** `apply(...)` returns `rounds() == 1`, `hullViolationsDetected() >= 1`,
    `hullResidualViolations() == 0`, `boundaryVerified() == true`, `conflicts().isEmpty()`,
@@ -1084,7 +1084,7 @@ Test structure:
   on at least one accepted frame (the raw crossing was observed and repaired; the crossing may
   emerge during settling rather than on the first accepted frame). For every published
   non-failed frame that is `boundaryVerified()`, assert I1/I2/I3 via the shared
-  `assertBoundaryInvariants` helper (§7.1); `assertBoundaryInvariants` is scoped to verified
+  `BoundaryInvariantAssertions.assertVerifiedFrame` helper (§7.1); `BoundaryInvariantAssertions.assertVerifiedFrame` is scoped to verified
   frames, so a covered frame (none expected in this fixture) asserts the I6 bijection from
   `residualHullPairs()` and `conflicts()` instead of I1. On the pre-fix commit, part 2 fails
   because same-map hulls are never corrected; the implementation step records that red run
@@ -1154,7 +1154,7 @@ measurement/escalation criteria are restated, not extended.
    frame and the engine closed (failed frame copies the retained diagnostics; `restart()`
    recovers).
 3. **Ancestor containment.** I2 verified across the existing suite (`directNodesLieInside…`,
-   the reference fixtures) and the new fixtures via the shared `assertBoundaryInvariants`
+   the reference fixtures) and the new fixtures via the shared `BoundaryInvariantAssertions.assertVerifiedFrame`
    helper, which recomputes all enforced pairs with the §3.2 predicate and tolerance and asserts
    I1, I2, I3 (pins) and I4 (frame node residual), plus the I6 bijection both ways. The helper
    is scoped to `boundaryVerified()` frames; fixtures whose residual pairs are legitimately

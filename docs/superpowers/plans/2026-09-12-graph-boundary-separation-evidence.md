@@ -70,3 +70,22 @@
 - [ ] Open the workspace containing `math.fpg`, open Graph Workspace, select the ZFC map.
 - [ ] Inspect the `ZFC -> Basic Definitions and Theorems` region: the Axioms and Basic Definitions hulls must not cross.
 - [ ] Confirm the layout reaches idle and both pins are at their stored positions.
+
+
+---
+
+## Reconciliation re-measurement (delivery candidate, target tip 82acecfc48)
+
+The delivery target advanced with the `graph-map-sidebar-resize` and `graph-label-leader-clearance`
+features; the boundary-separation branch was merged into a delivery candidate against that tip with
+zero conflicts (verbatim union; independently reproduced merge tree). Measurements on the combined
+tree supersede the pre-merge figures above:
+
+- `:freeplane_plugin_graph:test`: 86 classes, 1057 tests, 0 failures/errors, 3 environment skips.
+- `:freeplane:test`: 684 tests, 0 failures/errors.
+- Strict performance gate re-run on the combined tree: 102 ledger rows, only the two documented
+  pre-existing environment waivers fail (`force`, `edt-swap`); gated `full-worker` p95 61.7 ms
+  (budget 100 ms) and `accepted-batch-first-frame` p95 88.8 ms (budget 150 ms).
+- Reconciliation ledger: `freeplane_plugin_graph/build/graph-performance/performance-ledger.csv`, sha256 `789bf01faac87ab8d8ccc2238409b42bbf4fc283057c0da3026980329b2fa401`.
+- Acceptance criteria 1-5 and 7 verified on the combined tree; criterion 6 (manual `math.fpg` check)
+  remains an operator action.

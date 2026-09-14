@@ -313,7 +313,7 @@ return covered(positions, conflictsFor(violations, boundExhausted=true))
 
 ### 6.3 Invariants and evidence
 
-- Shared helper `assertBoundaryInvariants`: recomputes all enforced pairs with the **same predicate and tolerance** used by detection and coverage, asserts I1 + I2, asserts I3 for pins, asserts I4 via the frame's node residual, and asserts the I6 bijection both directions from `residualHullPairs` and `conflicts`.
+- Shared helper `BoundaryInvariantAssertions.assertVerifiedFrame`: recomputes all enforced pairs with the **same predicate and tolerance** used by detection and coverage, asserts I1 + I2, asserts I3 for pins, asserts I4 via the frame's node residual, and asserts the I6 bijection both directions from `residualHullPairs` and `conflicts`.
 - Numeric equilibrium expectations live in `BoundarySeparationShould` and the repulsion fixtures and must keep their values; `GraphStreamBoundaryShould` is the GraphStream-freedom signature gate (including the new public layout types in `publicLayoutTypes()`), not a numeric fixture.
 - Manual acceptance: after a full build, open `math.fpg` in `BIN/freeplane.sh`, inspect the `ZFC → Basic Definitions and Theorems` region, and confirm the sibling hulls no longer cross and the layout reaches idle. Automated tests never read the user's Dropbox paths; all fixtures embed their data.
 
