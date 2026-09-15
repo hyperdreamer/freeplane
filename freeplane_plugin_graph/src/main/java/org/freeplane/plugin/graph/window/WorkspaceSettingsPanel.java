@@ -3,14 +3,14 @@ package org.freeplane.plugin.graph.window;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
-import java.awt.FlowLayout;
-import java.awt.GridLayout;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Set;
 
+import javax.swing.Box;
+import javax.swing.BoxLayout;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
@@ -55,8 +55,9 @@ final class WorkspaceSettingsPanel extends JPanel {
         heading.setName("graph-workspace-settings-heading");
         add(heading, BorderLayout.NORTH);
 
-        final JPanel controls = new JPanel(new GridLayout(0, 1, 0, 6));
+        final JPanel controls = new JPanel();
         controls.setName("graph-workspace-settings-controls");
+        controls.setLayout(new BoxLayout(controls, BoxLayout.Y_AXIS));
         showArrowheads.setName("graph-workspace-show-arrowheads");
         canvasTheme.setName("graph-workspace-canvas-theme");
         rememberViewport.setName("graph-workspace-remember-viewport");
@@ -76,14 +77,23 @@ final class WorkspaceSettingsPanel extends JPanel {
                 return result;
             }
         });
-        final JPanel themeRow = new JPanel(new FlowLayout(FlowLayout.LEADING, 0, 0));
-        themeRow.add(new JLabel(TextUtils.getText("graph_workspace.settings.canvas_theme")));
-        themeRow.add(canvasTheme);
+        final JPanel themeRow = new JPanel(new BorderLayout(0, 2));
+        themeRow.add(new JLabel(TextUtils.getText("graph_workspace.settings.canvas_theme")), BorderLayout.NORTH);
+        themeRow.add(canvasTheme, BorderLayout.CENTER);
+        showArrowheads.setAlignmentX(Component.LEFT_ALIGNMENT);
+        themeRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        rememberViewport.setAlignmentX(Component.LEFT_ALIGNMENT);
+        dimUnrelated.setAlignmentX(Component.LEFT_ALIGNMENT);
         controls.add(showArrowheads);
+        controls.add(Box.createVerticalStrut(6));
         controls.add(themeRow);
+        controls.add(Box.createVerticalStrut(6));
         controls.add(rememberViewport);
+        controls.add(Box.createVerticalStrut(6));
         controls.add(dimUnrelated);
-        add(controls, BorderLayout.CENTER);
+        final JPanel packedControls = new JPanel(new BorderLayout());
+        packedControls.add(controls, BorderLayout.NORTH);
+        add(packedControls, BorderLayout.CENTER);
 
         showArrowheads.addActionListener(event -> publishSettings());
         canvasTheme.addActionListener(event -> publishSettings());

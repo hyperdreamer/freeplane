@@ -50,6 +50,7 @@ import javax.swing.AbstractButton;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
 import javax.swing.JCheckBoxMenuItem;
+import javax.swing.JComboBox;
 import javax.swing.JFrame;
 import javax.swing.JMenu;
 import javax.swing.JMenuItem;
@@ -202,6 +203,53 @@ public class GraphWorkspaceWindowModelShould {
         JPanel headingRow = (JPanel) componentByName(model.mapList(), "graph-workspace-map-list-heading-row");
         assertThat(componentByName(headingRow, "graph-workspace-map-list-heading").getName())
             .isEqualTo("graph-workspace-map-list-heading");
+        model.close();
+    }
+
+    @Test
+    public void keepsDisplaySettingsControlsPackedAtTheTopOfATallPanel() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
+
+        GraphWorkspaceWindow.runOnEdt(() -> {
+            model.settingsPanel().setSize(244, 1000);
+            layoutRecursively(model.settingsPanel());
+        });
+
+        AbstractButton firstControl = model.settingsPanel().showArrowheads();
+        AbstractButton lastControl = model.settingsPanel().dimUnrelated();
+        assertThat(lastControl.getY() - firstControl.getY()).isLessThan(200);
+        model.close();
+    }
+
+    private static void layoutRecursively(final Container container) {
+        container.doLayout();
+        for (Component child : container.getComponents()) {
+            if (child instanceof Container) {
+                layoutRecursively((Container) child);
+            }
+        }
+    }
+
+    @Test
+    public void showsTheFullCanvasThemeSelectorInsideTheSettingsPanel() {
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(ACTIVE_ID, "Active", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
+
+        GraphWorkspaceWindow.runOnEdt(() -> {
+            model.settingsPanel().setSize(244, 1000);
+            layoutRecursively(model.settingsPanel());
+        });
+
+        JComboBox<?> canvasTheme = model.settingsPanel().canvasTheme();
+        Container themeRow = canvasTheme.getParent();
+        assertThat(canvasTheme.getY() + canvasTheme.getHeight())
+            .isLessThanOrEqualTo(themeRow.getHeight());
+        assertThat(canvasTheme.getHeight()).isGreaterThanOrEqualTo(canvasTheme.getPreferredSize().height);
         model.close();
     }
 
