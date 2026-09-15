@@ -64,6 +64,10 @@ final class MapSidebarRail extends JPanel {
         return countBadge;
     }
 
+    JLabel label() {
+        return label;
+    }
+
     private static final class VerticalLabel extends JLabel {
         private static final long serialVersionUID = 1L;
 
@@ -73,6 +77,20 @@ final class MapSidebarRail extends JPanel {
 
         @Override
         public Dimension getPreferredSize() {
+            return rotatedSize();
+        }
+
+        @Override
+        public Dimension getMinimumSize() {
+            return rotatedSize();
+        }
+
+        @Override
+        public Dimension getMaximumSize() {
+            return rotatedSize();
+        }
+
+        private Dimension rotatedSize() {
             final FontMetrics metrics = getFontMetrics(getFont());
             return new Dimension(metrics.getAscent() + metrics.getDescent(), metrics.stringWidth(getText()));
         }
@@ -81,8 +99,13 @@ final class MapSidebarRail extends JPanel {
         protected void paintComponent(final Graphics graphics) {
             final Graphics2D copy = (Graphics2D) graphics.create();
             try {
-                copy.rotate(Math.toRadians(90), getWidth() / 2.0, getHeight() / 2.0);
-                super.paintComponent(copy);
+                final FontMetrics metrics = getFontMetrics(getFont());
+                copy.translate(getWidth() / 2.0, getHeight() / 2.0);
+                copy.rotate(Math.toRadians(90));
+                copy.setColor(getForeground());
+                copy.setFont(getFont());
+                copy.drawString(getText(), -metrics.stringWidth(getText()) / 2,
+                    (metrics.getAscent() - metrics.getDescent()) / 2);
             }
             finally {
                 copy.dispose();

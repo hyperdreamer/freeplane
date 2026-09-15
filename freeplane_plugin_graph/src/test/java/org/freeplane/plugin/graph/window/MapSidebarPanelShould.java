@@ -4,10 +4,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 
+import java.awt.Dimension;
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+
+import javax.swing.JLabel;
 
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.util.TextUtils;
@@ -83,6 +88,59 @@ public class MapSidebarPanelShould {
         panel.setCollapsed(true);
         assertThat(panel.getPreferredSize().width).isEqualTo(26);
         assertThat(panel.getMinimumSize().width).isEqualTo(26);
+    }
+
+    @Test
+    public void givesTheRotatedRailLabelItsFullRotatedSizeDuringLayout() {
+        MapSidebarPanel panel = panel();
+        panel.setCollapsed(true);
+        JLabel label = panel.rail().label();
+        assertThat(label.getMinimumSize()).isEqualTo(label.getPreferredSize());
+        assertThat(label.getMaximumSize()).isEqualTo(label.getPreferredSize());
+
+        panel.setSize(panel.getPreferredSize().width, 400);
+        panel.doLayout();
+        panel.rail().doLayout();
+
+        assertThat(label.getWidth()).isEqualTo(label.getPreferredSize().width);
+        assertThat(label.getHeight()).isEqualTo(label.getPreferredSize().height);
+    }
+
+    @Test
+    public void paintsTheRotatedRailLabelAcrossItsFullHeight() {
+        MapSidebarPanel panel = panel();
+        panel.setCollapsed(true);
+        JLabel label = panel.rail().label();
+        Dimension size = label.getPreferredSize();
+        label.setSize(size);
+        BufferedImage image = new BufferedImage(size.width, size.height, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = image.createGraphics();
+        try {
+            label.paint(graphics);
+        }
+        finally {
+            graphics.dispose();
+        }
+
+        int minX = Integer.MAX_VALUE;
+        int minY = Integer.MAX_VALUE;
+        int maxX = -1;
+        int maxY = -1;
+        for (int y = 0; y < size.height; y++) {
+            for (int x = 0; x < size.width; x++) {
+                if ((image.getRGB(x, y) >>> 24) != 0) {
+                    minX = Math.min(minX, x);
+                    minY = Math.min(minY, y);
+                    maxX = Math.max(maxX, x);
+                    maxY = Math.max(maxY, y);
+                }
+            }
+        }
+
+        assertThat(minX).isGreaterThanOrEqualTo(0);
+        assertThat(maxX).isLessThan(size.width);
+        assertThat(maxY).isGreaterThanOrEqualTo(size.height - 3);
+        assertThat(maxY - minY).isGreaterThanOrEqualTo(size.height - 4);
     }
 
     @Test
