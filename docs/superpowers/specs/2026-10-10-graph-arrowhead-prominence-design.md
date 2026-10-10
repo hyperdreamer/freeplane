@@ -197,21 +197,31 @@ be seen by a non-exact predicate.
    enclosure and nothing overpaints it; `d = 6` world, zoom 1.0, node radius 8 world, threshold
    `max(3.0, 1.4 × zoom + 1.0)` = 3.0 px. A node source cannot pin this: the source disc overpaints
    any overshoot that lands inside it, so the scan would read the same value either way.
+   The fixture is pinned in screen space, because these measurements are sub-pixel dependent: with
+   `GraphViewport.of(0, 0, 1.0)` and a 240 × 140 px image the world origin is screen (120, 70), so put
+   the edge along world `y = 0` (screen `y = 70`), the enclosure boundary at world `x = 0`
+   (screen `x = 120`) and the target node centre at world `x = 14` with radius 8, its boundary — the
+   head tip — at world `x = 6` (screen `x = 126`). Then `d = 6` world = 6 px and the capped base plane
+   lands exactly on screen `x = 120`; a 5.04 px base covers four whole pixel rows (68–71), giving an
+   exact-colour run of 4 and a measured head length of 6. Shifted by 0.25 px the same head produces no
+   run ≥ 3 at all, so the alignment is part of the specification, not an implementation detail.
    - **Cap:** the measured head length is 6 ± 1.5 px. Without the cap it measures about 12.5 px.
    - **Base follows the capped length:** the largest perpendicular run of exactly edge-coloured pixels
-     at the capped base is in `[3.5, 6]` px. The capped base is 5.04 px nominal (about 4 px measured);
-     building the half-base from the rule length would show 10.5 px nominal (about 8 px measured) and
-     fail the upper bound, and a slimmer base fails the lower bound.
+     at the capped base is in `[3.5, 6]` px. The capped base is 5.04 px nominal (4 px measured at the
+     pinned alignment); building the half-base from the rule length would show 10.5 px nominal (about
+     8 px measured) and fail the upper bound, and a slimmer base fails the lower bound.
    - **Bidirectional split:** repeat with a two-headed edge at the same `d`. Each head is capped at
-     `a = d / 2 = 3` world, i.e. 3 px long with a 2.52 px base, so no perpendicular run reaches the
-     3.0 px threshold; assert the maximum run stays below 3 px. An implementation that does not
-     propagate the two arrow flags draws two 6 px heads with about 4 px runs and fails. That bound
-     alone would also pass a render with no head at all, so the same two-headed render must
-     additionally show more ink in the enclosure half of the gap than the same edge painted with
-     `showArrowheads` off — but **not** by exact matching: a 3 px head adds only sub-pixel coverage
-     beyond the line, so the exact edge-colour count is 3 in both renders and that assertion cannot
-     pass. Count `nonBackgroundPixelsIn` instead (10 with heads, 9 without), or
-     `nearColorPixelsIn(..., 80)` (5 versus 3), where the difference is real.
+     `a = d / 2 = 3` world, i.e. 3 px long with a 2.52 px base, so the exact-colour run never reaches
+     the 3.0 px threshold; assert the maximum run stays below 3 px. An implementation that does not
+     propagate the two arrow flags draws two 6 px heads with a 4 px run and fails. That bound alone
+     would also pass a render with no head at all, so the same two-headed render must additionally
+     show strictly more near-edge ink in the enclosure half of the gap (screen `x` 120–123,
+     `y` 66–74) than the same edge painted with `showArrowheads` off. This one comparison must not use
+     exact RGB matching: a 3 px head adds only sub-pixel coverage beyond the line, so the exact
+     edge-colour count is equal in both renders. Use `nearColorPixelsIn(..., 80)` on that window and
+     assert a strict `>`; the window also contains the enclosure's stroked boundary, which is present
+     in both renders and, at its hull-stroke colour, lies far outside a distance of 80 from the edge
+     colour. The implementer records the measured counts in the test rather than here.
 6. **Theme fill.** Paint the roomy fixture of item 3 (head length 12.5 px at zoom 1.0) with the dark
    theme and assert the head interior matches `GraphTheme`'s dark edge colour rather than the node
    fill or ring colour. Sample off-axis at `+ 0.1 L = 1.25` px perpendicular, inside the clear band
@@ -265,7 +275,13 @@ be seen by a non-exact predicate.
   matching (3 exact pixels with and without heads; `nonBackgroundPixelsIn` gives 10 versus 9), the
   item-2 expected doubles were not the computed doubles (`6.0 × 0.6` is `3.5999999999999996`), the
   item-6 offset was mis-described as halfway, the helper unit clause was still imprecise, and the
-  item-3 radius belonged to the wrong node. All are addressed above.
+  item-3 radius belonged to the wrong node.
+- Round 9 review (which re-implemented the design in a scratch copy and ran the real paint path)
+  raised 2 findings: item 5's exact-run assertions were sub-pixel dependent, so a 0.25 px shift made
+  a correct head fail them while a no-split mutant passed, and the quoted ink counts came from a
+  stroke-free raster rather than the painted enclosure fixture. The fixture is now pinned in screen
+  space and the ink guard is stated as a strict `>` on the near-colour predicate. All are addressed
+  above.
 
 ## Rollout
 
