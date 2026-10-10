@@ -86,7 +86,7 @@ edge.
 4. Head half-base, screen px: `0.42 × L`, i.e. base `0.84 × L`. The aspect is always 0.84 : 1: when
    the cap shortens a head, the base shrinks with it instead of turning the head into a bar. The
    capped base is at least as wide as the `1.4 × zoom` line whenever `a ≥ 1.667` world units; at the
-   enforced separation gap (`NodeSeparationProjection.MIN_GAP = 6` world) it is 5.04 world units with
+   target separation gap (`NodeSeparationProjection.MIN_GAP = 6` world) it is 5.04 world units with
    one head and 2.52 with two, i.e. 3.6× and 1.8× the line width.
 5. The path is built in world units: length `L / zoom`, half-base `0.42 × L / zoom`.
 6. Head fill: unchanged, `theme.edgeColor()`. Gap between line and head: none, as today; the line is
@@ -101,13 +101,15 @@ The change is confined to `org.freeplane.plugin.graph.canvas.GraphPainter`.
 - Four package-private static helpers, in screen px, hold the whole rule and are unit-testable
   without painting:
   - `static double arrowHeadLengthPx(double zoom)` → `max(12.5, 8.68 × zoom)`
-  - `static double availableArrowHeadWorldLength(double attachmentDistanceWorld, boolean sharedEdge)`
-    → `sharedEdge ? attachmentDistanceWorld / 2 : attachmentDistanceWorld`
+  - `static double availableArrowHeadWorldLength(double attachmentDistanceWorld, boolean arrowAtFirst,
+    boolean arrowAtSecond)` → `arrowAtFirst && arrowAtSecond ? d / 2 : d`, called from `paintEdges`
+    with the edge's own flags
   - `static double effectiveArrowHeadLengthPx(double zoom, double availableWorldLength)` →
     `min(arrowHeadLengthPx(zoom), availableWorldLength × zoom)`
   - `static double arrowHeadHalfBasePx(double lengthPx)` → `0.42 × lengthPx`
-- The `d` versus `d / 2` decision exists only inside `availableArrowHeadWorldLength`, so a
-  regression that overlaps bidirectional heads is caught by a unit assertion rather than by pixels.
+- The `d` versus `d / 2` decision exists only inside `availableArrowHeadWorldLength`, and both the
+  helper itself and the wiring that feeds it are pinned: the helper by a unit assertion, the wiring
+  by the two-headed paint probe in test item 6, which fails if the flags are not propagated.
 - Named constants replace the inline literals: the 12.5 px floor, the `8.68` growth term
   (documented as `0.62 × 14`) and the `0.42` half-base ratio.
 - `paintEdges` computes `edge.arrowAtFirst() && edge.arrowAtSecond()` once and passes it to both
@@ -143,8 +145,9 @@ fallback, per the repository's legacy-removal policy.
   invariant — residual violations are recorded rather than rejected, and pinned pairs are skipped —
   so smaller `d` is reachable. For `d` below about `1.667` world units the capped base `0.84 · a`
   is narrower than the `1.4`-world-unit line and the head reads as a small nub merged into the line.
-  That is accepted: such an edge is shorter than the enforced node separation, so the two nodes are
-  effectively touching.
+  The crossover is on `a`, not on `d`: with two heads `a = d / 2`, so a head is sub-line-width for
+  `d < 1.667` world with one head and for `d < 3.333` with two. That is accepted: such an edge is far
+  shorter than the target node separation, so its two endpoints are effectively touching.
 - The previous literal `8.0 / zoom` head already overshot short edges at low zoom; where that
   overshoot landed inside the source node it was hidden by the node disc, and where it landed
   outside it was visible as a head protruding behind the source node.
@@ -160,13 +163,14 @@ near-colour variant.
 1. **Rule (unit, no pixels).** `arrowHeadLengthPx` is 12.5 at zooms 0.6, 1.0 and 1.44, is 26.04 at
    zoom 3.0, and increases strictly above the exact crossover `12.5 / 8.68 ≈ 1.4401` (sample 1.45).
    `arrowHeadHalfBasePx(12.5)` is 5.25.
-2. **Cap wiring (unit, no pixels).** `availableArrowHeadWorldLength(6.0, false)` is 6.0,
-   `(6.0, true)` is 3.0, `(64.0, false)` is 64.0, so the bidirectional split lives in exactly one
-   testable place. `effectiveArrowHeadLengthPx(1.0, 100.0)` is 12.5, so the rule binds when there is
-   room; `effectiveArrowHeadLengthPx(0.6, 6.0)` is 3.6, so the cap binds when there is not;
-   `effectiveArrowHeadLengthPx(1.0, 3.0)` is 3.0, the bidirectional case; and
-   `arrowHeadHalfBasePx(effectiveArrowHeadLengthPx(0.6, 6.0))` is 1.512, pinning that the base
-   follows the effective length rather than the requested one.
+2. **Cap wiring (unit, no pixels).** `availableArrowHeadWorldLength(6.0, false, false)` is 6.0,
+   `(6.0, true, true)` is 3.0, `(6.0, true, false)` is 6.0, `(64.0, false, false)` is 64.0, so the
+   bidirectional split lives in exactly one testable place. `effectiveArrowHeadLengthPx(1.0, 100.0)`
+   is 12.5, so the rule binds when there is room; `effectiveArrowHeadLengthPx(0.6, 6.0)` is 3.6, so the
+   cap binds when there is not; `effectiveArrowHeadLengthPx(1.0, 3.0)` is 3.0, the bidirectional case;
+   and `arrowHeadHalfBasePx(effectiveArrowHeadLengthPx(0.6, 6.0))` is 1.512. Helper composition alone
+   cannot pin the paint path, so item 6 repeats the length, base and split checks against painted
+   pixels.
 3. **Painted head length.** Paint one directed edge with room, and measure the head by its width
    profile: walking from the **geometry attachment point** outwards along the edge axis, count the
    perpendicular run of exactly edge-coloured pixels at each distance; the head length is the largest
@@ -182,11 +186,23 @@ near-colour variant.
 4. **Floor.** The measured head length at 0.6× equals the 1.0× measurement within 1.5 px, and both
    are at least 11 px. The previous 8 px head fails this at zoom 1.0, so the assertion discriminates.
 5. **Growth.** The measured head length at 3× is at least 1.8× the 1.0× measurement.
-6. **Cap at paint level.** Use a fixture whose *source* endpoint is an enclosure, so the head sits at
-   the node target while the space behind it belongs to the enclosure and nothing overpaints it.
-   With `d = 6` world at zoom 1.0 the capped head measures about 6 px, while an implementation that
-   skipped the cap would measure about 12.5 px. A node source cannot pin this: the source disc
-   overpaints any overshoot inside it, so the scan would read the same value either way.
+6. **Cap, base and split at paint level.** Use a fixture whose *source* endpoint is an enclosure and
+   whose target is a node, so the head sits at the node while the space behind it belongs to the
+   enclosure and nothing overpaints it; `d = 6` world, zoom 1.0, node radius 8 world, threshold
+   `max(3.0, 1.4 × zoom + 1.0)` = 3.0 px. A node source cannot pin this: the source disc overpaints
+   any overshoot that lands inside it, so the scan would read the same value either way.
+   - **Cap:** the measured head length is 6 ± 1.5 px and below 10 px. Without the cap it measures
+     about 12.5 px.
+   - **Base follows the capped length:** the largest perpendicular run of exactly edge-coloured pixels
+     in the head region stays below 6 px. The capped base is 5.04 px nominal (about 4 px measured); a
+     `paintArrow` that capped the length but built the half-base from the rule length would show
+     10.5 px nominal (about 8 px measured) and fail.
+   - **Bidirectional split:** repeat with a two-headed edge at the same `d`. Each head is capped at
+     `a = d / 2 = 3` world, i.e. 3 px long with a 2.52 px base, so no perpendicular run reaches the
+     3.0 px threshold (measured about 1 px); assert the maximum run stays below 3 px. An
+     implementation that does not propagate the two arrow flags draws two 6 px heads with about 4 px
+     runs and fails. This probe is paired with the cap assertion above, so it cannot pass vacuously
+     for a missing head.
 7. **Theme fill.** Painting the same fixture with the dark theme leaves the head interior matching
    `GraphTheme`'s dark edge colour, not the node fill or ring colour.
 8. **No regression.** `suppressAndRestoreDirectionalArrowheadsInThePaintedCanvas` keeps passing
@@ -219,7 +235,9 @@ near-colour variant.
   measurement anchor was unstated (which invalidated the 3× expectation), the "no pixel cap test"
   rationale was too broad because an enclosure source is not overpainted, the chosen mockup was
   rendered at the floor length rather than the rule, and the `d = 6` claim was scoped too tightly.
-  All are addressed above.
+- Round 5 review raised 3 findings: the bidirectional split was still selected at the call site and
+  untested by pixels, the capped base was pinned only by helper composition, and the sub-line-width
+  crossover was stated on `d` instead of `a`. All are addressed above.
 
 ## Rollout
 
