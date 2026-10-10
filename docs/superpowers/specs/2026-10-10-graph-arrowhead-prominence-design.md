@@ -98,8 +98,8 @@ Resulting head lengths on an edge with room: 12.5 px at 0.6× and 1.0×, 13.9 px
 
 The change is confined to `org.freeplane.plugin.graph.canvas.GraphPainter`.
 
-- Four package-private static helpers, in screen px, hold the whole rule and are unit-testable
-  without painting:
+- Four package-private static helpers hold the whole rule and are unit-testable without painting:
+  three take and return screen px, one takes and returns world units:
   - `static double arrowHeadLengthPx(double zoom)` → `max(12.5, 8.68 × zoom)`
   - `static double availableArrowHeadWorldLength(double attachmentDistanceWorld, boolean arrowAtFirst,
     boolean arrowAtSecond)` → `arrowAtFirst && arrowAtSecond ? d / 2 : d`, called from `paintEdges`
@@ -109,13 +109,16 @@ The change is confined to `org.freeplane.plugin.graph.canvas.GraphPainter`.
   - `static double arrowHeadHalfBasePx(double lengthPx)` → `0.42 × lengthPx`
 - The `d` versus `d / 2` decision exists only inside `availableArrowHeadWorldLength`, and both the
   helper itself and the wiring that feeds it are pinned: the helper by a unit assertion, the wiring
-  by the two-headed paint probe in test item 6, which fails if the flags are not propagated.
+  by the two-headed paint probe in test item 5, which fails if the flags are not propagated.
 - Named constants replace the inline literals: the 12.5 px floor, the `8.68` growth term
   (documented as `0.62 × 14`) and the `0.42` half-base ratio.
-- `paintEdges` computes `edge.arrowAtFirst() && edge.arrowAtSecond()` once and passes it to both
-  `paintArrow` calls, so the call sites do change. `paintArrow` already computes
-  `length = |tip − from|`, which is exactly `d`; it derives `a`, then `L`, then the world-space
-  length and half-base from `L`.
+- The wiring is fixed: `paintArrow(graphics, tip, from, color, zoom, boolean arrowAtFirst,
+  boolean arrowAtSecond)`, with `paintEdges` passing `edge.arrowAtFirst()` and `edge.arrowAtSecond()`
+  at both call sites, so the call sites do change. `paintArrow` already computes
+  `length = |tip − from|`, which is exactly `d`; it derives
+  `a = availableArrowHeadWorldLength(length, arrowAtFirst, arrowAtSecond)`, then
+  `L = effectiveArrowHeadLengthPx(zoom, a)`, then the world-space length `L / zoom` and half-base
+  `arrowHeadHalfBasePx(L) / zoom`.
 - The finite-length guard, the axis and perpendicular derivation, and the path construction are
   unchanged. The guard runs before sizing, so a degenerate direction never reaches the cap.
 - `GraphTheme`, `DisplaySettings`, `CanvasTheme` and the workspace XML codec are untouched.
@@ -169,7 +172,7 @@ near-colour variant.
    is 12.5, so the rule binds when there is room; `effectiveArrowHeadLengthPx(0.6, 6.0)` is 3.6, so the
    cap binds when there is not; `effectiveArrowHeadLengthPx(1.0, 3.0)` is 3.0, the bidirectional case;
    and `arrowHeadHalfBasePx(effectiveArrowHeadLengthPx(0.6, 6.0))` is 1.512. Helper composition alone
-   cannot pin the paint path, so item 6 repeats the length, base and split checks against painted
+   cannot pin the paint path, so item 5 repeats the length, base and split checks against painted
    pixels.
 3. **Painted head length.** Paint one directed edge with room, and measure the head by its width
    profile: walking from the **geometry attachment point** outwards along the edge axis, count the
@@ -179,14 +182,14 @@ near-colour variant.
    would under-measure by that amount. The zoom-aware threshold is required because the line is
    `1.4 × zoom` px wide (4.2 px at 3×, which a fixed 3 px threshold would treat as head). Use a
    fixture with a node radius of 14 world units (42 px at 3×) and an attachment distance that leaves
-   the cap unbound; assert 12.5 ± 1.5 px at zoom 1.0 and 26 ± 2 px at zoom 3.0. Also assert the
+   the cap unbound; assert 12.5 ± 1.5 px at zoom 1.0 and 26 ± 2 px at zoom 3.0, which rejects both
+   the previous 8 px head and the constant-screen-size rule (which would measure 12.5 px at 3×). Also assert the
    threshold stays below the head's base width (`0.84 × L`: 10.5 px at 1×, 21.9 px at 3×) and that
    the measured profile just beyond the head base falls below the threshold, where the continuing
    line is.
 4. **Floor.** The measured head length at 0.6× equals the 1.0× measurement within 1.5 px, and both
    are at least 11 px. The previous 8 px head fails this at zoom 1.0, so the assertion discriminates.
-5. **Growth.** The measured head length at 3× is at least 1.8× the 1.0× measurement.
-6. **Cap, base and split at paint level.** Use a fixture whose *source* endpoint is an enclosure and
+5. **Cap, base and split at paint level.** Use a fixture whose *source* endpoint is an enclosure and
    whose target is a node, so the head sits at the node while the space behind it belongs to the
    enclosure and nothing overpaints it; `d = 6` world, zoom 1.0, node radius 8 world, threshold
    `max(3.0, 1.4 × zoom + 1.0)` = 3.0 px. A node source cannot pin this: the source disc overpaints
@@ -194,18 +197,21 @@ near-colour variant.
    - **Cap:** the measured head length is 6 ± 1.5 px and below 10 px. Without the cap it measures
      about 12.5 px.
    - **Base follows the capped length:** the largest perpendicular run of exactly edge-coloured pixels
-     in the head region stays below 6 px. The capped base is 5.04 px nominal (about 4 px measured); a
-     `paintArrow` that capped the length but built the half-base from the rule length would show
-     10.5 px nominal (about 8 px measured) and fail.
+     at the capped base is in `[3.5, 6]` px. The capped base is 5.04 px nominal (about 4 px measured);
+     building the half-base from the rule length would show 10.5 px nominal (about 8 px measured) and
+     fail the upper bound, and a slimmer base fails the lower bound.
    - **Bidirectional split:** repeat with a two-headed edge at the same `d`. Each head is capped at
      `a = d / 2 = 3` world, i.e. 3 px long with a 2.52 px base, so no perpendicular run reaches the
      3.0 px threshold (measured about 1 px); assert the maximum run stays below 3 px. An
      implementation that does not propagate the two arrow flags draws two 6 px heads with about 4 px
-     runs and fails. This probe is paired with the cap assertion above, so it cannot pass vacuously
-     for a missing head.
-7. **Theme fill.** Painting the same fixture with the dark theme leaves the head interior matching
-   `GraphTheme`'s dark edge colour, not the node fill or ring colour.
-8. **No regression.** `suppressAndRestoreDirectionalArrowheadsInThePaintedCanvas` keeps passing
+     runs and fails. Since that bound alone would also pass a render with no head at all, the same
+     two-headed render must additionally show more edge-coloured ink in the enclosure half of the gap
+     than the same edge painted with `showArrowheads` off.
+6. **Theme fill.** Painting the same fixture with the dark theme leaves the head interior matching
+   `GraphTheme`'s dark edge colour, not the node fill or ring colour. Sample off-axis inside the head
+   (tip + `L / 2` along the axis, `+ 0.2 L` perpendicular): on the axis the line under the head is
+   edge-coloured even if no head is drawn.
+7. **No regression.** `suppressAndRestoreDirectionalArrowheadsInThePaintedCanvas` keeps passing
    unchanged, and so does every existing paint test, since the head is the only changed geometry.
 
 ## Acceptance evidence
@@ -237,7 +243,12 @@ near-colour variant.
   rendered at the floor length rather than the rule, and the `d = 6` claim was scoped too tightly.
 - Round 5 review raised 3 findings: the bidirectional split was still selected at the call site and
   untested by pixels, the capped base was pinned only by helper composition, and the sub-line-width
-  crossover was stated on `d` instead of `a`. All are addressed above.
+  crossover was stated on `d` instead of `a`.
+- Round 6 review raised 6 findings: the architecture paragraph contradicted itself about the
+  `paintArrow` wiring, the two-headed probe could pass with no head drawn at all, the capped base
+  bound was one-sided, the theme-fill sample sat on the line under the head, the helper unit clause
+  was wrong for the world-length helper, and the growth item was redundant with the zoom assertions.
+  All are addressed above.
 
 ## Rollout
 
