@@ -13,7 +13,11 @@ java ArrowheadMockups.java png
 
 | File | Shows |
 | --- | --- |
-| `before-detail-*.png` | Today: 8 px head, base 7 px, edge colour, no separation (4x magnified) |
-| `halo-detail-*.png` | Chosen: 12.5 px head, base 10.5 px, canvas-colour halo (4x magnified) |
-| `zoom-uniform-*.png` | Chosen sizing rule `max(12.5, 8.68 x zoom)` at 0.6x, 1.6x, 3x |
-| `zoom-constant-3p0.png` | Rejected constant-screen-size rule at 3x |
+| `before-detail-*.png` | Today: 8 px head, base 7 px (4x magnified) |
+| `bigger-detail-*.png` | Chosen treatment B: 12.5 px head, base 10.5 px, edge colour, no gap |
+| `zoom-b-uniform-*.png` | Chosen sizing rule `max(12.5, 8.68 x zoom)` at 0.6x, 1.6x, 3x |
+| `zoom-b-constant-3p0.png` | Rejected constant-screen-size rule at 3x |
+
+Rejected treatments rendered by the same program, not kept here: a canvas-colour halo around the
+head (paints a notch through enclosure fills and border strokes, and loses most of its contrast in
+the dim state), an emphasis ink for the head, and a stealth concave head.

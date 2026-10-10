@@ -107,8 +107,8 @@ public final class ArrowheadMockups {
         for (final double zoom : new double[] { 0.6, 1.6, 3.0 }) {
             for (final String mode : new String[] { "constant", "uniform", "hybrid" }) {
                 final double length = headLengthPx(zoom, mode);
-                final Variant variant = new Variant("zoom-" + mode, "", length,
-                    length * 0.42, Shape.TRIANGLE, true, false, "");
+                final Variant variant = new Variant("zoom-b-" + mode, "", length,
+                    length * 0.42, Shape.TRIANGLE, false, false, "");
                 final BufferedImage image = new BufferedImage(ZW * ZS, ZH * ZS, BufferedImage.TYPE_INT_RGB);
                 final Graphics2D g = image.createGraphics();
                 g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -116,7 +116,7 @@ public final class ArrowheadMockups {
                 g.scale(ZS, ZS);
                 paintZoomPanel(g, zoom, variant);
                 g.dispose();
-                write(image, new File(out, "zoom-" + mode + "-" + tag(zoom) + ".png"));
+                write(image, new File(out, "zoom-b-" + mode + "-" + tag(zoom) + ".png"));
             }
         }
     }
