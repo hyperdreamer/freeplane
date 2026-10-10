@@ -203,7 +203,7 @@ Ordered steps:
 | 1.6 | 13.888 | 13.888 (13.9 rounded) | 5.83296 (5.83) | 11.66592 (11.67) |
 | 3.0 | 26.04 | 26.04 | 10.9368 (10.94) | 21.8736 (21.87) |
 
-The exact crossover is `12.5 / 8.68 ≈ 1.4400921658986176`: the floor is active for
+The exact crossover is `12.5 / 8.68 ≈ 1.4400921658986177`: the floor is active for
 `zoom ≤ 12.5 / 8.68`, and the length grows strictly above it.
 
 ### 4.2 Cap behaviour at `d = 6` world
@@ -354,6 +354,7 @@ Fixture: none.
         assertThat(GraphPainter.availableArrowHeadWorldLength(6.0, false, false)).isCloseTo(6.0, within(1e-9));
         assertThat(GraphPainter.availableArrowHeadWorldLength(6.0, true, true)).isCloseTo(3.0, within(1e-9));
         assertThat(GraphPainter.availableArrowHeadWorldLength(6.0, true, false)).isCloseTo(6.0, within(1e-9));
+        assertThat(GraphPainter.availableArrowHeadWorldLength(6.0, false, true)).isCloseTo(6.0, within(1e-9));
         assertThat(GraphPainter.effectiveArrowHeadLengthPx(1.0, 100.0)).isCloseTo(12.5, within(1e-9));
         assertThat(GraphPainter.effectiveArrowHeadLengthPx(0.6, 6.0)).isCloseTo(6.0 * 0.6, within(1e-9));
         assertThat(GraphPainter.effectiveArrowHeadLengthPx(1.0, 3.0)).isCloseTo(3.0, within(1e-9));
@@ -362,7 +363,9 @@ Fixture: none.
 ```
 
 Tolerance: `within(1e-9)`, never exact equality. `6.0 * 0.6` is `3.5999999999999996` in double
-arithmetic, so an exact `3.6` literal would fail a correct implementation. Composition of helpers
+arithmetic, so an exact `3.6` literal would fail a correct implementation. Both flags are pinned
+individually: `(6.0, true, false)` and `(6.0, false, true)` both stay 6.0, so a helper that halves
+on a single flag is caught here rather than only by item 5. Composition of helpers
 alone cannot pin the paint path, which is why item 5 repeats the length, base and split checks
 against painted pixels.
 
@@ -430,7 +433,9 @@ source whose nearest boundary point is at world `x = 0` (screen `x = 120`), and 
 centre at world `x = 14` with radius 8, so its boundary — the head tip — is at world `x = 6`
 (screen `x = 126`). Then `d = 6` world = 6 px and the capped base plane lands exactly on screen
 `x = 120`; the 5.04 px base covers four whole pixel rows (68–71), giving an exact-colour run of 4
-and a measured head length of 6. Shifted by 0.25 px the same head produces no run ≥ 3 at all. Do
+and a measured head length of 6. The alignment is direction-sensitive: a shift of −0.25 px (base
+plane at screen 120.25) or +0.5 px drops the run below 3 and the measured length to 0, while a
++0.25 px shift (base plane at 119.75) still measures 6 with run 4. Do
 not snap, round, or translate this fixture.
 
 Fixture builder, returning the canvas state for one-headed (`bidirectional = false`) and
