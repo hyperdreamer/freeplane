@@ -68,17 +68,16 @@ public final class ArrowheadMockups {
 
     public static void main(final String[] args) throws Exception {
         final File out = new File(args[0]);
+        final File rejected = new File(out, "rejected");
         out.mkdirs();
+        rejected.mkdirs();
         for (final Variant variant : VARIANTS) {
-            write(render(variant, false), new File(out, variant.id() + "-light.png"));
-            write(render(variant, true), new File(out, variant.id() + "-dark.png"));
-            write(renderDetail(variant, false), new File(out, variant.id() + "-detail-light.png"));
-            write(renderDetail(variant, true), new File(out, variant.id() + "-detail-dark.png"));
-        }
-        // zoom ladder for the baseline and for variant C, to reason about scale behaviour
-        for (final double zoom : new double[] { 0.6, 1.6 }) {
-            write(renderScale(VARIANTS[0], false, zoom), new File(out, "scale-before-" + tag(zoom) + ".png"));
-            write(renderScale(VARIANTS[2], false, zoom), new File(out, "scale-halo-" + tag(zoom) + ".png"));
+            final boolean kept = "before".equals(variant.id()) || "bigger".equals(variant.id());
+            final File dir = kept ? out : rejected;
+            write(render(variant, false), new File(dir, variant.id() + "-light.png"));
+            write(render(variant, true), new File(dir, variant.id() + "-dark.png"));
+            write(renderDetail(variant, false), new File(dir, variant.id() + "-detail-light.png"));
+            write(renderDetail(variant, true), new File(dir, variant.id() + "-detail-dark.png"));
         }
         renderZoomComparison(out);
         System.out.println("rendered into " + out);
@@ -88,24 +87,22 @@ public final class ArrowheadMockups {
         return String.valueOf(zoom).replace('.', 'p');
     }
 
-    /** Head length in screen px per sizing mode. */
+    /** Head length in screen px per sizing mode: the chosen uniform rule, or the rejected constant rule. */
     static double headLengthPx(final double zoom, final String mode) {
         final double constant = 12.5;
-        if ("hybrid".equals(mode)) {
-            return Math.max(constant, 0.62 * NODE_RADIUS_WORLD * zoom);
+        if ("constant".equals(mode)) {
+            return constant;
         }
-        if ("uniform".equals(mode)) {
-            return Math.max(constant, UNIFORM_WORLD_LENGTH * zoom);
-        }
-        return constant;
+        return Math.max(constant, UNIFORM_WORLD_LENGTH * zoom);
     }
 
     /** World length at which a head matches 0.62 x a maximum-prominence node radius. */
     static final double UNIFORM_WORLD_LENGTH = 0.62 * NODE_RADIUS_WORLD;
 
     static void renderZoomComparison(final File out) throws Exception {
+        final File rejected = new File(out, "rejected");
         for (final double zoom : new double[] { 0.6, 1.6, 3.0 }) {
-            for (final String mode : new String[] { "constant", "uniform", "hybrid" }) {
+            for (final String mode : new String[] { "uniform", "constant" }) {
                 final double length = headLengthPx(zoom, mode);
                 final Variant variant = new Variant("zoom-b-" + mode, "", length,
                     length * 0.42, Shape.TRIANGLE, false, false, "");
@@ -116,7 +113,8 @@ public final class ArrowheadMockups {
                 g.scale(ZS, ZS);
                 paintZoomPanel(g, zoom, variant);
                 g.dispose();
-                write(image, new File(out, "zoom-b-" + mode + "-" + tag(zoom) + ".png"));
+                final File dir = "uniform".equals(mode) ? out : rejected;
+                write(image, new File(dir, "zoom-b-" + mode + "-" + tag(zoom) + ".png"));
             }
         }
     }
@@ -130,7 +128,7 @@ public final class ArrowheadMockups {
         g.setColor(L_BG);
         g.fillRect(0, 0, ZW, ZH);
         g.setColor(L_EDGE);
-        g.setStroke(new BasicStroke(EDGE_STROKE, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g.setStroke(new BasicStroke((float) (EDGE_STROKE * zoom), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
         final double radius = NODE_RADIUS_WORLD * zoom;
         final double cx = 205;
         final double cy = 110;
@@ -140,7 +138,7 @@ public final class ArrowheadMockups {
         g.setColor(L_NODE_FILL);
         g.fill(new Ellipse2D.Double(cx - radius, cy - radius, radius * 2.0, radius * 2.0));
         g.setColor(L_NODE_STROKE);
-        g.setStroke(new BasicStroke(EDGE_STROKE, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g.setStroke(new BasicStroke((float) (EDGE_STROKE * zoom), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
         g.draw(new Ellipse2D.Double(cx - radius, cy - radius, radius * 2.0, radius * 2.0));
     }
 
@@ -199,9 +197,11 @@ public final class ArrowheadMockups {
         final double cy = 118;
         final double[][] sources = { { 40, 118 }, { 26, 246 } };
 
-        // edges first (GraphPainter paints hulls -> edges -> nodes)
+        // edges first (GraphPainter paints hulls -> edges -> nodes); both the edge line and the node
+        // ring are stroked with theme.edgeStroke() inside the world transform, so they scale with zoom
+        final float strokeWidth = (float) (EDGE_STROKE * zoom);
         g.setColor(edgeColor);
-        g.setStroke(new BasicStroke(EDGE_STROKE, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g.setStroke(new BasicStroke(strokeWidth, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
         for (final double[] source : sources) {
             final double[] tip = attachment(source[0], source[1], cx, cy, radius);
             g.draw(new Line2D.Double(source[0], source[1], tip[0], tip[1]));
@@ -215,7 +215,7 @@ public final class ArrowheadMockups {
         g.setColor(nodeFill);
         g.fill(new Ellipse2D.Double(cx - radius, cy - radius, radius * 2.0, radius * 2.0));
         g.setColor(nodeStroke);
-        g.setStroke(new BasicStroke(EDGE_STROKE, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g.setStroke(new BasicStroke(strokeWidth, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
         g.draw(new Ellipse2D.Double(cx - radius, cy - radius, radius * 2.0, radius * 2.0));
     }
 
