@@ -205,7 +205,8 @@ be seen by a non-exact predicate.
    lands exactly on screen `x = 120`; a 5.04 px base covers four whole pixel rows (68–71), giving an
    exact-colour run of 4 and a measured head length of 6. Shifted by 0.25 px the same head produces no
    run ≥ 3 at all, so the alignment is part of the specification, not an implementation detail.
-   - **Cap:** the measured head length is 6 ± 1.5 px. Without the cap it measures about 12.5 px.
+   - **Cap:** the measured head length is 6 ± 1.5 px. Without the cap it measures about 12 px (its base
+     plane lands off-grid, so treat this as rationale for the probe, never as a tight assertion).
    - **Base follows the capped length:** the largest perpendicular run of exactly edge-coloured pixels
      at the capped base is in `[3.5, 6]` px. The capped base is 5.04 px nominal (4 px measured at the
      pinned alignment); building the half-base from the rule length would show 10.5 px nominal (about
@@ -280,8 +281,12 @@ be seen by a non-exact predicate.
   raised 2 findings: item 5's exact-run assertions were sub-pixel dependent, so a 0.25 px shift made
   a correct head fail them while a no-split mutant passed, and the quoted ink counts came from a
   stroke-free raster rather than the painted enclosure fixture. The fixture is now pinned in screen
-  space and the ink guard is stated as a strict `>` on the near-colour predicate. All are addressed
-  above.
+  space and the ink guard is stated as a strict `>` on the near-colour predicate.
+- Round 10 review reproduced the pinned fixture against the real paint path and returned CLEAN: a
+  correct capped head measures 6 px with a 4 px base run, a no-split mutant measures 4 and fails, a
+  0.25 px shift inverts the results (confirming the pin is load-bearing), and the near-edge ink guard
+  measures 6 versus 3. Its one refinement — the uncapped reference measures 12 px, not 12.5 — is
+  applied above.
 
 ## Rollout
 
