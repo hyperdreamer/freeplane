@@ -102,8 +102,7 @@ The change is confined to `org.freeplane.plugin.graph.canvas.GraphPainter`.
   three take and return screen px, one takes and returns world units:
   - `static double arrowHeadLengthPx(double zoom)` → `max(12.5, 8.68 × zoom)`
   - `static double availableArrowHeadWorldLength(double attachmentDistanceWorld, boolean arrowAtFirst,
-    boolean arrowAtSecond)` → `arrowAtFirst && arrowAtSecond ? d / 2 : d`, called from `paintEdges`
-    with the edge's own flags
+    boolean arrowAtSecond)` → `arrowAtFirst && arrowAtSecond ? d / 2 : d`
   - `static double effectiveArrowHeadLengthPx(double zoom, double availableWorldLength)` →
     `min(arrowHeadLengthPx(zoom), availableWorldLength × zoom)`
   - `static double arrowHeadHalfBasePx(double lengthPx)` → `0.42 × lengthPx`
@@ -207,10 +206,13 @@ near-colour variant.
      runs and fails. Since that bound alone would also pass a render with no head at all, the same
      two-headed render must additionally show more edge-coloured ink in the enclosure half of the gap
      than the same edge painted with `showArrowheads` off.
-6. **Theme fill.** Painting the same fixture with the dark theme leaves the head interior matching
-   `GraphTheme`'s dark edge colour, not the node fill or ring colour. Sample off-axis inside the head
-   (tip + `L / 2` along the axis, `+ 0.2 L` perpendicular): on the axis the line under the head is
-   edge-coloured even if no head is drawn.
+6. **Theme fill.** Paint the roomy fixture of item 3 (head length 12.5 px at zoom 1.0) with the dark
+   theme and assert the head interior matches `GraphTheme`'s dark edge colour rather than the node
+   fill or ring colour. Sample off-axis at `+ 0.1 L` perpendicular, halfway between the `0.7` px line
+   under the head and the `0.21 L = 2.625` px half-width of the head at `L / 2`: that pixel is fully
+   inside the head and clear of the line, so exact RGB matching holds. A larger offset is
+   antialiased — `0.2 L` leaves only `0.01 L` (0.125 px) of head outside the sample and would fail —
+   and a smaller one falls back onto the line, which is edge-coloured even with no head drawn.
 7. **No regression.** `suppressAndRestoreDirectionalArrowheadsInThePaintedCanvas` keeps passing
    unchanged, and so does every existing paint test, since the head is the only changed geometry.
 
