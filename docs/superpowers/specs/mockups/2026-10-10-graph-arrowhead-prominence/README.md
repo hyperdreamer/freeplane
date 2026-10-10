@@ -1,10 +1,10 @@
 # Directional arrowhead prominence mockups
 
 Renders used to choose the arrowhead treatment. `ArrowheadMockups.java` mirrors
-`GraphPainter.paintArrow` geometry, `GraphTheme` light and dark colours, and the real paint order
-(edges and arrowheads first, node fill and ring painted over them afterwards). The edge line and the
-node ring are stroked at `1.4 x zoom` px, as the real painter does inside its world transform; the
-head is a constant-screen-size triangle, as the design specifies.
+`GraphPainter.paintArrow` geometry, `GraphTheme` light and dark colours, the `1.4 x zoom` edge and
+node-ring strokes, and the real paint order (edges and arrowheads first, node fill and ring painted
+over them afterwards). The head length follows the design rule `max(12.5, 8.68 x zoom)` screen px,
+which is 13.9 px at the rendered zoom of 1.6.
 
 Regenerate:
 
@@ -17,9 +17,9 @@ Chosen treatment and sizes are written to `png/`; rejected alternatives are writ
 
 | File | Shows |
 | --- | --- |
-| `before-detail-*.png` | Today: 8 px head, base 7 px (4x magnified) |
-| `bigger-detail-*.png` | Chosen treatment B: 12.5 px head, base 10.5 px, edge colour, no gap |
-| `zoom-b-uniform-*.png` | Chosen sizing rule `max(12.5, 8.68 x zoom)` at 0.6x, 1.6x, 3x |
+| `png/before-detail-*.png` | Today: 8 px head, base 7 px (4x magnified) |
+| `png/bigger-detail-*.png` | Chosen treatment B at zoom 1.6: 13.9 px head, 11.7 px base, edge colour, no gap |
+| `png/zoom-b-uniform-*.png` | Chosen sizing rule `max(12.5, 8.68 x zoom)` at 0.6x (12.5 px), 1.6x (13.9 px) and 3x (26.0 px) |
 
 Rejected, under `png/rejected/`: a canvas-colour halo around the head (paints a notch through
 enclosure fills and border strokes, and loses most of its contrast in the dim state), an emphasis
