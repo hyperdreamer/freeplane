@@ -27,8 +27,10 @@ The relevant paint facts, all verified in the source:
 - The tip is the geometry attachment point of the target endpoint: a node boundary
   (`NodeGeometry.boundaryToward`) or, for an edge ending at an enclosure, the nearest hull point
   (`GraphGeometry.edgeAttachment` → `hull.nearestBoundaryPoint`).
-- Edges are painted before nodes, so the node disc and ring paint over the last `0.7 * zoom` px of
-  the tip — and over any part of a head that overshoots a short edge into the source node.
+- Edges are painted before nodes, so a node disc and ring paint over the last `0.7 * zoom` px of
+  the tip, and over any part of a head that overshoots a short edge into the source node. An
+  enclosure does not: hulls are filled before the edges, so nothing overpaints an overshoot that
+  points at an enclosure source.
 - The head is filled with `theme.edgeColor()` and inherits the active composite, in particular
   `AlphaComposite 0.28f` in the dim-unrelated state.
 
@@ -70,21 +72,24 @@ ring strokes, and the real paint order (edges and heads first, node fill and rin
 
 The head tip does not move: it stays at the geometry attachment point described above, pointing
 along the edge line. Let `d` be the distance in world units between the two attachment points of the
-edge, and let `a = d` when only one end carries a head and `a = d / 2` when both ends do.
+edge.
 
-1. Requested head length, screen px: `max(12.5, 8.68 × zoom)`. The floor holds the head at 12.5 px
+1. Available edge length, world units: `a = d` when only one end carries a head, and `a = d / 2`
+   when both ends do. Halving keeps two heads on a short bidirectional edge from overlapping: they
+   meet base to base at the midpoint.
+2. Requested head length, screen px: `max(12.5, 8.68 × zoom)`. The floor holds the head at 12.5 px
    up to zoom 1.44; above that it grows linearly with the node. `8.68` is `0.62 × 14`, the maximum
    node radius in world units.
-2. Effective head length, screen px: `L = min(max(12.5, 8.68 × zoom), a × zoom)`. The cap keeps a
+3. Effective head length, screen px: `L = min(max(12.5, 8.68 × zoom), a × zoom)`. The cap keeps a
    head inside the space its edge actually has, so it can never overshoot the far endpoint's
-   boundary; `a = d / 2` for a bidirectional edge makes the two heads meet base to base instead of
-   overlapping.
-3. Head half-base, screen px: `0.42 × L`, i.e. base `0.84 × L`. The aspect is always 0.84 : 1: when
-   the cap shortens a head, the base shrinks with it instead of turning the head into a bar. At the
-   tightest layout condition (`d = 6` world, both ends arrowed, 0.6× zoom) the base is 2.52 world
-   units, still 1.8× the 1.4-world-unit line, so the head remains a visible pointer.
-4. The path is built in world units: length `L / zoom`, half-base `0.42 × L / zoom`.
-5. Head fill: unchanged, `theme.edgeColor()`. Gap between line and head: none, as today; the line is
+   boundary.
+4. Head half-base, screen px: `0.42 × L`, i.e. base `0.84 × L`. The aspect is always 0.84 : 1: when
+   the cap shortens a head, the base shrinks with it instead of turning the head into a bar. The
+   capped base is at least as wide as the `1.4 × zoom` line whenever `a ≥ 1.667` world units; at the
+   enforced separation gap (`NodeSeparationProjection.MIN_GAP = 6` world) it is 5.04 world units with
+   one head and 2.52 with two, i.e. 3.6× and 1.8× the line width.
+5. The path is built in world units: length `L / zoom`, half-base `0.42 × L / zoom`.
+6. Head fill: unchanged, `theme.edgeColor()`. Gap between line and head: none, as today; the line is
    drawn under the head.
 
 Resulting head lengths on an edge with room: 12.5 px at 0.6× and 1.0×, 13.9 px at 1.6×, 26 px at 3×.
@@ -93,18 +98,22 @@ Resulting head lengths on an edge with room: 12.5 px at 0.6× and 1.0×, 13.9 px
 
 The change is confined to `org.freeplane.plugin.graph.canvas.GraphPainter`.
 
-- Three package-private static helpers, in screen px, hold the whole rule and are unit-testable
+- Four package-private static helpers, in screen px, hold the whole rule and are unit-testable
   without painting:
   - `static double arrowHeadLengthPx(double zoom)` → `max(12.5, 8.68 × zoom)`
+  - `static double availableArrowHeadWorldLength(double attachmentDistanceWorld, boolean sharedEdge)`
+    → `sharedEdge ? attachmentDistanceWorld / 2 : attachmentDistanceWorld`
   - `static double effectiveArrowHeadLengthPx(double zoom, double availableWorldLength)` →
     `min(arrowHeadLengthPx(zoom), availableWorldLength × zoom)`
   - `static double arrowHeadHalfBasePx(double lengthPx)` → `0.42 × lengthPx`
+- The `d` versus `d / 2` decision exists only inside `availableArrowHeadWorldLength`, so a
+  regression that overlaps bidirectional heads is caught by a unit assertion rather than by pixels.
 - Named constants replace the inline literals: the 12.5 px floor, the `8.68` growth term
   (documented as `0.62 × 14`) and the `0.42` half-base ratio.
 - `paintEdges` computes `edge.arrowAtFirst() && edge.arrowAtSecond()` once and passes it to both
   `paintArrow` calls, so the call sites do change. `paintArrow` already computes
-  `length = |tip − from|`, which is exactly `d`; it derives `a` from that and the shared flag, then
-  `L`, then the world-space length and half-base from `L`.
+  `length = |tip − from|`, which is exactly `d`; it derives `a`, then `L`, then the world-space
+  length and half-base from `L`.
 - The finite-length guard, the axis and perpendicular derivation, and the path construction are
   unchanged. The guard runs before sizing, so a degenerate direction never reaches the cap.
 - `GraphTheme`, `DisplaySettings`, `CanvasTheme` and the workspace XML codec are untouched.
@@ -130,9 +139,15 @@ fallback, per the repository's legacy-removal policy.
 - Large zoom: the head grows linearly and unbounded (there is no zoom clamp in `GraphViewport`).
   At 3× the head is 26 px against a minimum node radius of 24 px (48 px diameter), i.e. about 54% of
   the smallest node's diameter, and 31% of the largest (42 px radius).
-- Short edges: the cap shortens the head and the base together, keeping the aspect. The previous
-  literal `8.0 / zoom` head already overshot at low zoom; that is what the cap fixes, and the
-  overhang it removes was itself partly hidden by the source node disc painted on top.
+- Short edges: `NodeSeparationProjection.MIN_GAP = 6` world is a separation target, not a hard
+  invariant — residual violations are recorded rather than rejected, and pinned pairs are skipped —
+  so smaller `d` is reachable. For `d` below about `1.667` world units the capped base `0.84 · a`
+  is narrower than the `1.4`-world-unit line and the head reads as a small nub merged into the line.
+  That is accepted: such an edge is shorter than the enforced node separation, so the two nodes are
+  effectively touching.
+- The previous literal `8.0 / zoom` head already overshot short edges at low zoom; where that
+  overshoot landed inside the source node it was hidden by the node disc, and where it landed
+  outside it was visible as a head protruding behind the source node.
 - Fractional zoom: the triangle path scales with the head length rather than being rasterised at a
   fixed size, so the head does not develop ragged edges.
 
@@ -145,29 +160,36 @@ near-colour variant.
 1. **Rule (unit, no pixels).** `arrowHeadLengthPx` is 12.5 at zooms 0.6, 1.0 and 1.44, is 26.04 at
    zoom 3.0, and increases strictly above the exact crossover `12.5 / 8.68 ≈ 1.4401` (sample 1.45).
    `arrowHeadHalfBasePx(12.5)` is 5.25.
-2. **Cap and aspect (unit, no pixels).** `effectiveArrowHeadLengthPx(1.0, 100)` is 12.5, so the rule
-   binds when there is room; `effectiveArrowHeadLengthPx(0.6, 6.0)` is 3.6, so the cap binds when
-   there is not; `effectiveArrowHeadLengthPx(1.0, 3.0)` is 3.0, the bidirectional `d / 2` case; and
+2. **Cap wiring (unit, no pixels).** `availableArrowHeadWorldLength(6.0, false)` is 6.0,
+   `(6.0, true)` is 3.0, `(64.0, false)` is 64.0, so the bidirectional split lives in exactly one
+   testable place. `effectiveArrowHeadLengthPx(1.0, 100.0)` is 12.5, so the rule binds when there is
+   room; `effectiveArrowHeadLengthPx(0.6, 6.0)` is 3.6, so the cap binds when there is not;
+   `effectiveArrowHeadLengthPx(1.0, 3.0)` is 3.0, the bidirectional case; and
    `arrowHeadHalfBasePx(effectiveArrowHeadLengthPx(0.6, 6.0))` is 1.512, pinning that the base
-   follows the effective length rather than the requested one. These are pure-function assertions:
-   they fail if the cap is removed or if the base ignores it. A pixel-level cap test is deliberately
-   not used, because the source node disc overpaints an overshoot and a scan of the final image would
-   measure `min(L, a × zoom)` with or without the cap.
-3. **Painted head length.** Paint one directed edge with room, at zoom 1.0, and measure the head by
-   its width profile: walking back from the tip along the edge axis, count the perpendicular run of
-   exactly edge-coloured pixels at each distance; the head length is the largest distance whose width
-   is at least `max(3.0, 1.4 × zoom + 1.0)` px. That threshold is required because the line is
-   `1.4 × zoom` px wide (4.2 px at 3×, which a fixed 3 px threshold would treat as head). Assert
-   12.5 ± 1.5 px at zoom 1.0 and 26 ± 2 px at zoom 3.0, with the node radius reaching 42 px inside
-   the 240 × 140 px test image; also assert the threshold stays below the head's base width
-   (`0.84 × L`, i.e. 10.5 px at 1× and 21.9 px at 3×) and that the measured profile just beyond the
-   head base falls below the threshold.
+   follows the effective length rather than the requested one.
+3. **Painted head length.** Paint one directed edge with room, and measure the head by its width
+   profile: walking from the **geometry attachment point** outwards along the edge axis, count the
+   perpendicular run of exactly edge-coloured pixels at each distance; the head length is the largest
+   distance whose width is at least `max(3.0, 1.4 × zoom + 1.0)` px. The anchor matters: the ring
+   hides the first `0.7 × zoom` px (2.1 px at 3×), and anchoring at the first visible pixel instead
+   would under-measure by that amount. The zoom-aware threshold is required because the line is
+   `1.4 × zoom` px wide (4.2 px at 3×, which a fixed 3 px threshold would treat as head). Use a
+   fixture with a node radius of 14 world units (42 px at 3×) and an attachment distance that leaves
+   the cap unbound; assert 12.5 ± 1.5 px at zoom 1.0 and 26 ± 2 px at zoom 3.0. Also assert the
+   threshold stays below the head's base width (`0.84 × L`: 10.5 px at 1×, 21.9 px at 3×) and that
+   the measured profile just beyond the head base falls below the threshold, where the continuing
+   line is.
 4. **Floor.** The measured head length at 0.6× equals the 1.0× measurement within 1.5 px, and both
    are at least 11 px. The previous 8 px head fails this at zoom 1.0, so the assertion discriminates.
 5. **Growth.** The measured head length at 3× is at least 1.8× the 1.0× measurement.
-6. **Theme fill.** Painting the same fixture with the dark theme leaves the head interior matching
+6. **Cap at paint level.** Use a fixture whose *source* endpoint is an enclosure, so the head sits at
+   the node target while the space behind it belongs to the enclosure and nothing overpaints it.
+   With `d = 6` world at zoom 1.0 the capped head measures about 6 px, while an implementation that
+   skipped the cap would measure about 12.5 px. A node source cannot pin this: the source disc
+   overpaints any overshoot inside it, so the scan would read the same value either way.
+7. **Theme fill.** Painting the same fixture with the dark theme leaves the head interior matching
    `GraphTheme`'s dark edge colour, not the node fill or ring colour.
-7. **No regression.** `suppressAndRestoreDirectionalArrowheadsInThePaintedCanvas` keeps passing
+8. **No regression.** `suppressAndRestoreDirectionalArrowheadsInThePaintedCanvas` keeps passing
    unchanged, and so does every existing paint test, since the head is the only changed geometry.
 
 ## Acceptance evidence
@@ -175,7 +197,8 @@ near-colour variant.
 - The mockup renderer and its renders committed under
   `docs/superpowers/specs/mockups/2026-10-10-graph-arrowhead-prominence/`, chosen renders in `png/`
   and rejected alternatives in `png/rejected/`, matching the layout the documented regeneration
-  command produces.
+  command produces. The chosen detail renders use the design's own length rule at the rendered zoom
+  (13.9 px at 1.6×).
 - One screenshot of the running application showing a directed edge in the Graph Workspace with the
   larger arrowheads, captured through the repository's established headless/virtual-display evidence
   procedure.
@@ -190,8 +213,13 @@ near-colour variant.
   nodes, heads protruding behind the source node on short edges, and mockup hygiene.
 - Round 3 review raised 7 findings: the space cap was untestable at pixel level, the bidirectional
   cap overlapped instead of meeting base to base, the cap broke the head aspect, the pixel predicate
-  was unpinned, the crossover precision, the mockup directory layout, and contradictory wording
-  about the `paintArrow` signature. All are addressed above.
+  was unpinned, crossover precision, the mockup directory layout, and contradictory wording about
+  the `paintArrow` signature.
+- Round 4 review raised 5 findings: the cap assertions never exercised the call-site wiring, the
+  measurement anchor was unstated (which invalidated the 3× expectation), the "no pixel cap test"
+  rationale was too broad because an enclosure source is not overpainted, the chosen mockup was
+  rendered at the floor length rather than the rule, and the `d = 6` claim was scoped too tightly.
+  All are addressed above.
 
 ## Rollout
 

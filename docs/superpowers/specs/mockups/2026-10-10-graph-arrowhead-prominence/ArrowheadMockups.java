@@ -15,7 +15,9 @@ import javax.imageio.ImageIO;
  * (edges and arrowheads first, node fill + ring painted over them afterwards).
  *
  * Screen-space scene: node radius 14 world units at zoom 1.6 => 22.4 px, matching the
- * reported screenshot; arrowheads are drawn at a constant screen size (length / zoom).
+ * reported screenshot. The edge line and the node ring are stroked at 1.4 x zoom px, as the real
+ * painter does inside its world transform; the arrowhead length follows the design rule
+ * max(12.5, 8.68 x zoom) screen px = 13.9 px at zoom 1.6.
  */
 public final class ArrowheadMockups {
 
@@ -50,8 +52,8 @@ public final class ArrowheadMockups {
     static final Variant[] VARIANTS = {
         new Variant("before", "A. Current", 8.0, 3.5, Shape.TRIANGLE, false, false,
             "length 8 px, base 7 px, edge colour, no separation"),
-        new Variant("bigger", "B. Larger only", 12.5, 5.25, Shape.TRIANGLE, false, false,
-            "length 12.5 px, base 10.5 px, same edge colour"),
+        new Variant("bigger", "B. Larger only", 13.9, 5.838, Shape.TRIANGLE, false, false,
+            "length max(12.5, 8.68 x zoom) = 13.9 px at zoom 1.6, base 0.84 x length, same edge colour"),
         new Variant("halo", "C. Larger + background halo", 12.5, 5.25, Shape.TRIANGLE, true, false,
             "larger head outlined in the canvas colour so it never merges with the line"),
         new Variant("halo-emphasis", "D. Larger + halo + emphasis colour", 13.0, 5.5, Shape.TRIANGLE, true, true,
