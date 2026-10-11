@@ -1,0 +1,17 @@
+digraph graph_arrowhead_prominence {
+    rankdir=TB;
+    node [shape=box, style=rounded, fontname="Helvetica"];
+    subgraph cluster_graph_arrowhead_painting {
+        label="graph-arrowhead-painting";
+        "t1-helpers" [label="Task 1: Add the arrowhead rule constants and helpers to GraphPainter\nStandard"];
+        "t2-paint-wiring" [label="Task 2: Rewire paintArrow and pin the painted head with pixel probes\nAdvanced"];
+        "t3-dark-fill" [label="Task 3: Add the dark-theme fill sample and run the module regression gate\nStandard"];
+    }
+    subgraph cluster_graph_arrowhead_evidence {
+        label="graph-arrowhead-evidence";
+        "t4-evidence" [label="Task 4: Capture running-application acceptance evidence\nCapable"];
+    }
+    "t1-helpers" -> "t2-paint-wiring";
+    "t2-paint-wiring" -> "t3-dark-fill";
+    "t3-dark-fill" -> "t4-evidence";
+}
