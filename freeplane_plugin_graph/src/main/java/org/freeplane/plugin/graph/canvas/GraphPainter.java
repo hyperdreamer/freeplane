@@ -141,10 +141,12 @@ final class GraphPainter {
             graphics.setStroke(theme.edgeStroke());
             graphics.draw(new Line2D.Double(first.x(), first.y(), second.x(), second.y()));
             if (showArrowheads && edge.arrowAtFirst()) {
-                paintArrow(graphics, first, second, theme.edgeColor(), viewport.zoom());
+                paintArrow(graphics, first, second, theme.edgeColor(), viewport.zoom(),
+                    edge.arrowAtFirst(), edge.arrowAtSecond());
             }
             if (showArrowheads && edge.arrowAtSecond()) {
-                paintArrow(graphics, second, first, theme.edgeColor(), viewport.zoom());
+                paintArrow(graphics, second, first, theme.edgeColor(), viewport.zoom(),
+                    edge.arrowAtFirst(), edge.arrowAtSecond());
             }
             if (edge.hasMultiplicityCue()) {
                 paintMultiplicity(graphics, first, second, edge.contributorCount(), theme, viewport.zoom());
@@ -175,7 +177,7 @@ final class GraphPainter {
     }
 
     private static void paintArrow(final Graphics2D graphics, final LayoutPoint tip, final LayoutPoint from,
-            final Color color, final double zoom) {
+            final Color color, final double zoom, final boolean arrowAtFirst, final boolean arrowAtSecond) {
         final double dx = tip.x() - from.x();
         final double dy = tip.y() - from.y();
         final double length = Math.sqrt(dx * dx + dy * dy);
@@ -186,8 +188,11 @@ final class GraphPainter {
         final double unitY = dy / length;
         final double perpendicularX = -unitY;
         final double perpendicularY = unitX;
-        final double arrowLength = 8.0 / zoom;
-        final double arrowWidth = 3.5 / zoom;
+        final double availableWorldLength =
+            availableArrowHeadWorldLength(length, arrowAtFirst, arrowAtSecond);
+        final double arrowLengthPx = effectiveArrowHeadLengthPx(zoom, availableWorldLength);
+        final double arrowLength = arrowLengthPx / zoom;
+        final double arrowWidth = arrowHeadHalfBasePx(arrowLengthPx) / zoom;
         final Path2D.Double arrow = new Path2D.Double();
         arrow.moveTo(tip.x(), tip.y());
         arrow.lineTo(tip.x() - unitX * arrowLength + perpendicularX * arrowWidth,
