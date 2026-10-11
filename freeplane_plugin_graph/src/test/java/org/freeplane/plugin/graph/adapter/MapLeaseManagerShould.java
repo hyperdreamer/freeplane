@@ -48,8 +48,10 @@ import org.freeplane.core.util.Compat;
 import org.freeplane.features.map.EncryptionModel;
 import org.freeplane.features.map.IMapChangeListener;
 import org.freeplane.features.map.IMapLifeCycleListener;
+import org.freeplane.features.map.INodeChangeListener;
 import org.freeplane.features.map.INodeDuplicator;
 import org.freeplane.features.map.MapModel;
+import org.freeplane.features.map.NodeChangeEvent;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.map.mindmapmode.MMapController;
 import org.freeplane.features.mode.Controller;
@@ -83,6 +85,58 @@ public class MapLeaseManagerShould {
         for (MapLeaseManager manager : managers) {
             manager.close();
         }
+    }
+
+    @Test
+    public void publishesAdapterEventForNodeChangesOnLeasedModels() throws Exception {
+        TestEdt edt = new TestEdt();
+        TestEnvironment environment = environment(edt);
+        MapLeaseManager manager = manager(environment, edt, environment::newMap);
+        List<MapAdapterEvent> events = eventsFrom(manager);
+        MapLease lease = acquire(manager, environment, edt);
+        int acquisitionEvents = events.size();
+        assertThat(acquisitionEvents).isEqualTo(2);
+
+        environment.fireNodeChange(environment.model.getRootNode());
+        edt.runAll();
+
+        assertThat(events).hasSize(acquisitionEvents + 1);
+        assertThat(events.get(acquisitionEvents).mapReferenceId()).isEqualTo(environment.reference().id());
+        assertThat(events.get(acquisitionEvents).state()).isEqualTo(MapOperationalState.AVAILABLE);
+        lease.close();
+    }
+
+    @Test
+    public void ignoresNodeChangesForUnleasedAndInactiveModels() throws Exception {
+        TestEdt edt = new TestEdt();
+        TestEnvironment environment = environment(edt);
+        MapLeaseManager manager = manager(environment, edt, environment::newMap);
+        List<MapAdapterEvent> events = eventsFrom(manager);
+
+        FakeMapModel neverLeased = environment.newMap(
+            temporaryFolder.newFile("unleased.mm").toPath().toUri().toURL());
+        environment.fireNodeChange(neverLeased.getRootNode());
+        edt.runAll();
+        assertThat(events).isEmpty();
+
+        MapLease lease = acquire(manager, environment, edt);
+        lease.close();
+        int afterClose = events.size();
+        environment.fireNodeChange(environment.model.getRootNode());
+        edt.runAll();
+        assertThat(events).hasSize(afterClose);
+    }
+
+    @Test
+    public void removesNodeChangeListenerOnClose() throws Exception {
+        TestEdt edt = new TestEdt();
+        TestEnvironment environment = environment(edt);
+        MapLeaseManager manager = manager(environment, edt, environment::newMap);
+        assertThat(environment.nodeChangeListeners).hasSize(1);
+
+        manager.close();
+
+        assertThat(environment.nodeChangeListeners).isEmpty();
     }
 
     @Test
@@ -2654,6 +2708,7 @@ public class MapLeaseManagerShould {
         private final IMapViewManager viewManager = mock(IMapViewManager.class);
         private final Map<URL, MapModel> loaded = new java.util.HashMap<URL, MapModel>();
         private final List<IMapLifeCycleListener> lifecycleListeners = new ArrayList<IMapLifeCycleListener>();
+        private final List<INodeChangeListener> nodeChangeListeners = new ArrayList<INodeChangeListener>();
         private final List<FakeMapModel> createdModels = new ArrayList<FakeMapModel>();
         private final Set<MapModel> visibleModels = Collections.newSetFromMap(new IdentityHashMap<MapModel, Boolean>());
         private final AtomicInteger loadCount = new AtomicInteger();
@@ -2676,6 +2731,14 @@ public class MapLeaseManagerShould {
                 lifecycleListeners.remove(invocation.getArgument(0));
                 return null;
             }).when(mapController).removeMapLifeCycleListener(any(IMapLifeCycleListener.class));
+            doAnswer(invocation -> {
+                nodeChangeListeners.add(invocation.getArgument(0));
+                return null;
+            }).when(mapController).addNodeChangeListener(any(INodeChangeListener.class));
+            doAnswer(invocation -> {
+                nodeChangeListeners.remove(invocation.getArgument(0));
+                return null;
+            }).when(mapController).removeNodeChangeListener(any(INodeChangeListener.class));
             doAnswer(invocation -> {
                 closeCount.incrementAndGet();
                 MapModel closing = invocation.getArgument(0);
@@ -2725,6 +2788,14 @@ public class MapLeaseManagerShould {
         private void notifyRemoved(MapModel map) {
             for (IMapLifeCycleListener listener : new ArrayList<IMapLifeCycleListener>(lifecycleListeners)) {
                 listener.onRemove(map);
+            }
+        }
+
+        private void fireNodeChange(final NodeModel node) {
+            final NodeChangeEvent event =
+                new NodeChangeEvent(node, NodeModel.NODE_TEXT, "before", "after", true, true);
+            for (INodeChangeListener listener : new ArrayList<INodeChangeListener>(nodeChangeListeners)) {
+                listener.nodeChanged(event);
             }
         }
 
