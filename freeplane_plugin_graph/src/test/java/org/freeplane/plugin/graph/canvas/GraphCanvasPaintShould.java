@@ -1040,6 +1040,147 @@ public class GraphCanvasPaintShould {
             .isCloseTo(0.42 * 6.0 * 0.6, within(1e-9));
     }
 
+    private static int perpendicularRunPx(final BufferedImage image, final Color edgeColor,
+            final int column, final int baselineY) {
+        return colorPixelsIn(image, edgeColor, column, baselineY - 32, column + 1, baselineY + 32);
+    }
+
+    private static double measuredHeadLengthPx(final BufferedImage image, final Point2D tipScreen,
+            final Color edgeColor, final double zoom) {
+        final double threshold = Math.max(3.0, 1.4 * zoom + 1.0);
+        final int tipColumn = (int) Math.round(tipScreen.getX());
+        final int baselineY = (int) Math.round(tipScreen.getY());
+        double measured = 0.0;
+        for (int distance = 0; distance <= 64; distance++) {
+            if (perpendicularRunPx(image, edgeColor, tipColumn - distance, baselineY) >= threshold) {
+                measured = distance;
+            }
+        }
+        return measured;
+    }
+
+    private static int maximumPerpendicularRunPx(final BufferedImage image, final Color edgeColor,
+            final int firstColumn, final int lastColumn, final int baselineY) {
+        int maximum = 0;
+        for (int column = Math.min(firstColumn, lastColumn); column <= Math.max(firstColumn, lastColumn);
+                column++) {
+            maximum = Math.max(maximum, perpendicularRunPx(image, edgeColor, column, baselineY));
+        }
+        return maximum;
+    }
+
+    @Test
+    public void paintedArrowHeadLengthTracksTheZoomRule() {
+        Fixture fixture = fixture(14.0, 14.0);
+        GraphTheme theme = lightTheme();
+        BufferedImage imageOne = paintAtZoom(fixture.state, GraphPaintState.empty(), theme, 1.0);
+        BufferedImage imageThree = paintAtZoom(fixture.state, GraphPaintState.empty(), theme, 3.0);
+        Point2D tipOne = GraphViewport.of(0.0, 0.0, 1.0).toScreen(
+            fixture.state.geometry().edgeAttachment(fixture.edge.second(),
+                fixture.state.geometry().nodes().get(fixture.first.key()).center()),
+            SIZE);
+        Point2D tipThree = GraphViewport.of(0.0, 0.0, 3.0).toScreen(
+            fixture.state.geometry().edgeAttachment(fixture.edge.second(),
+                fixture.state.geometry().nodes().get(fixture.first.key()).center()),
+            SIZE);
+
+        assertThat(measuredHeadLengthPx(imageOne, tipOne, theme.edgeColor(), 1.0))
+            .isCloseTo(12.5, within(1.5));
+        assertThat(measuredHeadLengthPx(imageThree, tipThree, theme.edgeColor(), 3.0))
+            .isCloseTo(26.0, within(2.0));
+        assertThat(Math.max(3.0, 1.4 * 1.0 + 1.0)).isLessThan(0.84 * 12.5);
+        assertThat(Math.max(3.0, 1.4 * 3.0 + 1.0)).isLessThan(0.84 * 26.04);
+        assertThat((double) perpendicularRunPx(imageOne, theme.edgeColor(),
+            (int) Math.round(tipOne.getX()) - 14, (int) Math.round(tipOne.getY())))
+            .isLessThan(Math.max(3.0, 1.4 * 1.0 + 1.0));
+        assertThat((double) perpendicularRunPx(imageThree, theme.edgeColor(),
+            (int) Math.round(tipThree.getX()) - 28, (int) Math.round(tipThree.getY())))
+            .isLessThan(Math.max(3.0, 1.4 * 3.0 + 1.0));
+    }
+
+    @Test
+    public void paintedArrowHeadFloorHoldsAtLowZoom() {
+        Fixture fixture = fixture(14.0, 14.0);
+        GraphTheme theme = lightTheme();
+        BufferedImage imageAt06 = paintAtZoom(fixture.state, GraphPaintState.empty(), theme, 0.6);
+        BufferedImage imageAt10 = paintAtZoom(fixture.state, GraphPaintState.empty(), theme, 1.0);
+        LayoutPoint attachment = fixture.state.geometry().edgeAttachment(fixture.edge.second(),
+            fixture.state.geometry().nodes().get(fixture.first.key()).center());
+        Point2D tipAt06 = GraphViewport.of(0.0, 0.0, 0.6).toScreen(attachment, SIZE);
+        Point2D tipAt10 = GraphViewport.of(0.0, 0.0, 1.0).toScreen(attachment, SIZE);
+
+        double measuredAt06 = measuredHeadLengthPx(imageAt06, tipAt06, theme.edgeColor(), 0.6);
+        double measuredAt10 = measuredHeadLengthPx(imageAt10, tipAt10, theme.edgeColor(), 1.0);
+        assertThat(measuredAt06).isCloseTo(measuredAt10, within(1.5));
+        assertThat(measuredAt06).isGreaterThanOrEqualTo(11.0);
+        assertThat(measuredAt10).isGreaterThanOrEqualTo(11.0);
+    }
+
+    private static CanvasState capFixture(final boolean bidirectional) {
+        ProjectedNode target = node(FIRST_MAP, "cap-target", LayoutPoint.of(14.0, 0.0));
+        EnclosureKey enclosureKey = EnclosureKey.of(source(FIRST_MAP, "cap-enclosure"));
+        EnclosureHullKey hullKey = EnclosureHullKey.of(Collections.singletonList(enclosureKey));
+        ProjectedEndpointKey enclosureEndpoint = ProjectedEndpointKey.ofEnclosure(enclosureKey);
+        ProjectedEndpointKey nodeEndpoint = ProjectedEndpointKey.ofNode(target.key());
+        ProjectedEnclosure enclosure = ProjectedEnclosure.of(hullKey, Collections.singletonList(enclosureKey),
+            Collections.singletonList(SafeNodeLabel.of("cap-enclosure", "cap-enclosure")), "Map",
+            Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(),
+            Collections.<EnclosureHullKey>emptyList(), false, BoundaryTier.SUBTLE);
+
+        Map<ProjectedNodeKey, NodeGeometry> nodes = new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
+        nodes.put(target.key(), NodeGeometry.of(LayoutPoint.of(14.0, 0.0), 8.0));
+        Map<EnclosureHullKey, HullGeometry> hulls = new LinkedHashMap<EnclosureHullKey, HullGeometry>();
+        hulls.put(hullKey, rectangle(-50.0, -20.0, 0.0, 20.0, LayoutPoint.of(-25.0, 0.0)));
+
+        ConnectorDescriptor descriptor = ConnectorDescriptor.of(
+            SourceNodeKey.persisted(reference(FIRST_MAP, "cap-source")),
+            reference(FIRST_MAP, "cap-target"), bidirectional, true, "source", "middle", "target");
+        EdgeContributor contributor = EdgeContributor.nativeConnector(
+            ConnectorSnapshot.of(0, descriptor), enclosureEndpoint, nodeEndpoint);
+        ProjectedEdge edge = ProjectedEdge.of(ProjectedEdgeKey.of(enclosureEndpoint, nodeEndpoint),
+            Collections.singletonList(contributor));
+        GraphProjection projection = GraphProjection.projected(1L, Collections.singletonList(target),
+            Collections.singletonList(enclosure), Collections.singletonList(edge),
+            Collections.<RelationshipResolution>emptyList(), Collections.<PinProjection>emptyList());
+        Map<ProjectedNodeKey, LayoutPoint> positions = new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        positions.put(target.key(), LayoutPoint.of(14.0, 0.0));
+        Map<EnclosureHullKey, LayoutPoint> anchors = new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
+        anchors.put(hullKey, LayoutPoint.of(-25.0, 0.0));
+        return CanvasState.of(1L, projection,
+            LayoutFrame.of(1L, LayoutPositions.of(positions, anchors), false, 0),
+            GraphGeometry.of(nodes, hulls), OperationalStatus.IDLE);
+    }
+
+    @Test
+    public void paintedArrowHeadCapBaseAndBidirectionalSplitAtPaintLevel() {
+        GraphTheme theme = lightTheme();
+        BufferedImage oneHead = paint(capFixture(false), GraphPaintState.empty(), theme, RenderingLevel.FULL);
+        BufferedImage twoHeads = paint(capFixture(true), GraphPaintState.empty(), theme, RenderingLevel.FULL);
+
+        GraphCanvas canvas = new GraphCanvas();
+        canvas.setSize(SIZE);
+        canvas.setTheme(theme);
+        canvas.setCanvasState(capFixture(true));
+        canvas.setPaintState(GraphPaintState.empty());
+        canvas.setViewport(GraphViewport.of(0.0, 0.0, 1.0));
+        canvas.setShowArrowheads(false);
+        BufferedImage plainLine = paintCanvas(canvas);
+
+        // Cap: the node-end head is 6 world = 6 px long, not 12.5.
+        assertThat(measuredHeadLengthPx(oneHead, new Point2D.Double(126.0, 70.0), theme.edgeColor(), 1.0))
+            .isCloseTo(6.0, within(1.5));
+        // Base follows the capped length: 5.04 px nominal, 4 px measured at the pinned alignment.
+        assertThat((double) maximumPerpendicularRunPx(oneHead, theme.edgeColor(), 118, 126, 70))
+            .isBetween(3.5, 6.0);
+        // Bidirectional split: a = d / 2 = 3 world, so each base is 2.52 px and no run reaches 3.0.
+        assertThat((double) maximumPerpendicularRunPx(twoHeads, theme.edgeColor(), 114, 126, 70))
+            .isLessThan(3.0);
+        // Pinned-fixture measurement (recorded, not asserted): twoHeads=5, plainLine=3.
+        // Non-vacuity: the enclosure-side head adds near-edge ink vs. the same edge with arrowheads off.
+        assertThat(nearColorPixelsIn(twoHeads, theme.edgeColor(), 120, 66, 123, 74, 80))
+            .isGreaterThan(nearColorPixelsIn(plainLine, theme.edgeColor(), 120, 66, 123, 74, 80));
+    }
+
     private static GraphTheme lightTheme() {
         return GraphTheme.resolve(CanvasTheme.LIGHT, registeredMaps());
     }
@@ -1567,6 +1708,10 @@ public class GraphCanvasPaintShould {
     }
 
     private static Fixture fixture(final double firstRadius) {
+        return fixture(firstRadius, 10.0);
+    }
+
+    private static Fixture fixture(final double firstRadius, final double secondRadius) {
         ProjectedNode first = node(FIRST_MAP, "first", LayoutPoint.of(-45.0, 0.0));
         ProjectedNode second = node(SECOND_MAP, "second", LayoutPoint.of(45.0, 0.0));
         ProjectedEndpointKey firstEndpoint = ProjectedEndpointKey.ofNode(first.key());
@@ -1590,7 +1735,7 @@ public class GraphCanvasPaintShould {
 
         Map<ProjectedNodeKey, NodeGeometry> nodes = new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
         nodes.put(first.key(), NodeGeometry.of(firstLabelAnchor(first), firstRadius));
-        nodes.put(second.key(), NodeGeometry.of(secondLabelAnchor(second), 10.0));
+        nodes.put(second.key(), NodeGeometry.of(secondLabelAnchor(second), secondRadius));
         Map<EnclosureHullKey, HullGeometry> hulls = new LinkedHashMap<EnclosureHullKey, HullGeometry>();
         hulls.put(firstHullKey, rectangle(-70.0, -25.0, -20.0, 25.0, LayoutPoint.of(-45.0, 14.0)));
         hulls.put(secondHullKey, rectangle(20.0, -20.0, 70.0, 20.0, LayoutPoint.of(45.0, 12.0)));
