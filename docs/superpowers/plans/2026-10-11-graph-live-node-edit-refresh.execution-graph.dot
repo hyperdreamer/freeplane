@@ -1,0 +1,12 @@
+digraph graph_live_node_edit_refresh {
+    rankdir=TB;
+    node [shape=box, style=rounded, fontname="Helvetica"];
+    subgraph cluster_graph_live_node_refresh {
+        label="graph-live-node-refresh";
+        "glnr-t1" [label="Task 1: Publish adapter events for node changes on leased maps\nStandard"];
+        "glnr-t2" [label="Task 2: Pin live refresh with headless integration tests\nAdvanced"];
+        "glnr-t3" [label="Task 3: Run the module gate and prove the live refresh test is falsifiable\nStandard"];
+    }
+    "glnr-t1" -> "glnr-t2";
+    "glnr-t2" -> "glnr-t3";
+}
