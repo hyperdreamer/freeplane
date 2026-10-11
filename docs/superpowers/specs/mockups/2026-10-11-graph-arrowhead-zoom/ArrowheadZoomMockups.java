@@ -118,7 +118,7 @@ public final class ArrowheadZoomMockups {
     }
 
     static BufferedImage renderRow(final String mode) {
-        final int width = GAP + ZOOMS.length * (PANEL_W + GAP);
+        final int width = GUTTER + GAP + ZOOMS.length * (PANEL_W + GAP);
         final int height = TITLE_H + PANEL_H + LABEL_H;
         final BufferedImage image = new BufferedImage(width * 3, height * 3, BufferedImage.TYPE_INT_RGB);
         final Graphics2D g = image.createGraphics();
@@ -164,7 +164,7 @@ public final class ArrowheadZoomMockups {
         final double cx = left + PANEL_W * 0.5;
         final double cy = top + PANEL_H * 0.55;
         final double radius = MAX_NODE_RADIUS_WORLD * zoom;
-        final double reach = 600.0; // world units, so the edge crosses the whole panel; cap unbound
+        final double reach = 4000.0; // world units, so every edge enters the panel; cap stays unbound
 
         final float stroke = (float) Math.max(0.1, EDGE_STROKE_WORLD * zoom);
         g.setStroke(new BasicStroke(stroke, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
@@ -187,6 +187,8 @@ public final class ArrowheadZoomMockups {
         g.setStroke(new BasicStroke(stroke, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
         g.draw(new Ellipse2D.Double(cx - radius, cy - radius, radius * 2.0, radius * 2.0));
 
+        g.setColor(new Color(255, 255, 255, 220));
+        g.fillRect(left + 2, top + 2, 96, 58);
         g.setColor(TEXT);
         g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 10));
         g.drawString(String.format("z=%.4f", zoom), left + 6, top + 14);
