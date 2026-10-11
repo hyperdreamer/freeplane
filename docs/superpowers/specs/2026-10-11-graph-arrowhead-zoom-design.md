@@ -34,8 +34,8 @@ The relevant paint facts, all verified in the source:
 - Node radius is `GraphGeometryEngine.BASE_RADIUS * NodeProminence.scale()` = `8.0 * scale` with
   `scale` in `[1.0, 1.75]`, so the node diameter in screen px is `16 * zoom` to `28 * zoom`.
 - The head is filled with `theme.edgeColor()` and is painted before the nodes. The head tip is the
-  node boundary point, so the fill does not cover the head; the `1.4`-world node ring (half-width
-  `0.7`) overpaints the first `0.7 * zoom` screen px by the tip.
+  node boundary point, so the node fill (disc interior) does not cover the head; the `1.4`-world
+  node ring (half-width `0.7`) overpaints the first `0.7 * zoom` screen px by the tip.
 - The edge line and the node ring are stroked with `theme.edgeStroke()`, a `BasicStroke(1.4f)`,
   inside the world transform, so both are `1.4 * zoom` screen px wide.
 - `paintEdges` already propagates `edge.arrowAtFirst()` and `edge.arrowAtSecond()` into
@@ -94,12 +94,14 @@ line. Let `d` be the distance in world units between the two attachment points o
    edges at every zoom: a single head is capped when `a < 12.5` world and a bidirectional pair
    when `d < 25` world.
 4. Head half-base: `0.42 x L`, i.e. base `0.84 x L`. The aspect is always 0.84 : 1; when the cap
-   shortens a head, the base shrinks with it. `NodeSeparationProjection.MIN_GAP = 6` is a target
-   surface gap between node boundaries, so the smallest nominal attachment distance is exactly 6
-   world; at that distance - the pinned cap fixture `d = 6` - the capped base is 5.04 world with
-   one head and 2.52 with two, i.e. 3.6x and 1.8x the 1.4-world line width, and such an edge is
-   always capped. The target is not a hard invariant: residual violations are recorded rather
-   than rejected and pinned pairs are skipped, so smaller `d` is reachable.
+   shortens a head, the base shrinks with it. For node-to-node edges,
+   `NodeSeparationProjection.MIN_GAP = 6` is a target surface gap between node boundaries, so the
+   smallest nominal attachment distance is exactly 6 world; at that distance - the pinned cap
+   fixture `d = 6` - the capped base is 5.04 world with one head and 2.52 with two, i.e. 3.6x and
+   1.8x the 1.4-world line width, and such an edge is always capped. The target is not a hard
+   invariant: residual violations are recorded rather than rejected and pinned pairs are skipped,
+   so smaller `d` is reachable for node-to-node edges. Enclosure endpoints take part in no such
+   separation pass, so a hull-to-node edge can have any distance at or below 6 world.
 5. The path is built in world units: length `L / zoom`, half-base `0.42 x L / zoom`.
 6. Head fill, gap between line and head, paint order and dimming: unchanged.
 
@@ -165,8 +167,9 @@ The change is confined to `org.freeplane.plugin.graph.canvas.GraphPainter`.
   unchanged at every zoom; between `8.68` and `12.5` world above the shipped `1.44` crossover the
   new rule keeps `a x zoom` instead of the shipped `8.68 x zoom`. For `a` below about `1.667`
   world units the capped base `0.84 x a` is narrower than the `1.4`-world line and the head reads
-  as a small nub merged into the line; that is far below the nominal 6-world surface-gap target
-  and only reachable as a recorded residual violation. The crossover is on `a`, not on `d`.
+  as a small nub merged into the line; that is far below the nominal 6-world surface-gap target,
+  so for node-to-node edges it is only reachable as a recorded residual violation, and for
+  enclosure endpoints it is not bound by that target at all. The crossover is on `a`, not on `d`.
 - Node overlap at the tip: unchanged; the ring covers up to `0.7 x zoom` screen px.
 - Enclosure endpoints: the tip can lie on a hull boundary rather than a node disc; head
   orientation and size depend only on the line direction, the zoom and `a`, so both endpoint
@@ -206,8 +209,9 @@ pixel predicates keep the exact-RGB and near-colour conventions of the current t
    (`d = 6` world) at zoom 1.0 is unchanged: the rule value is 12.5 px at zoom 1.0 in both the
    old and the new rule, so the existing 6 px cap, 4 px base run and sub-threshold bidirectional
    assertions stay valid and continue to pin the call-site flag propagation. Add one capped paint
-   run at a zoom above the shipped crossover, where the two rules diverge: an attachment distance
-   of 10 world (the cap fixture with the target centre at world `x = 18`, tip at world `x = 10`)
+   run at a zoom above the shipped crossover, where the two rules diverge: a parameterized variant
+   of the cap fixture with an attachment distance of 10 world (target centre at world `x = 18`,
+   tip at world `x = 10`; the `d = 6` fixture stays unchanged for the zoom-1.0 assertions),
    painted at zoom 3.0, measured with item 3's geometry-attachment anchor (not the first visible
    pixel: at zoom 3.0 the node ring painted over the head covers 2.1 px by the tip). The new rule
    draws `min(12.5, 10) x 3 = 30` px; the shipped rule draws
@@ -227,14 +231,17 @@ pixel predicates keep the exact-RGB and near-colour conventions of the current t
 - Screenshots of the running application with the reporter's map (`Axiomatic_Set_Theory.mm`) in
   the light theme, captured through the repository's established headless/virtual-display
   evidence procedure, recorded with the integration revision and the build command:
-  - a low-zoom capture reproducing the reported view. The exact zoom in the reported screenshot
-    is not recorded, so the evidence seeds an isolated workspace copy whose viewport is the
-    reported candidate `0.37809529736878794`, and the evidence records the actually applied zoom
-    rather than assuming it;
-  - a `zoom = 1.0` capture at the same centre, showing the pixel-identical-at-1x property.
-- Where feasible, the "before" capture is taken from a copy of the shipped `BIN` before the
-  change is built, at the same seeded viewports, so the acceptance record holds a same-scene
-  pair.
+  - low-zoom captures reproducing the reported regime. The exact zoom in the reported screenshot
+    is not recorded, so the evidence seeds an isolated workspace copy at the recorded low-zoom
+    viewports `0.14846481908261` (the live workspace state) and `0.37809529736878794`, and the
+    evidence records the actually applied zoom rather than assuming it;
+  - a `zoom = 1.0` capture at the same centre, showing the pixel-identical-at-1x property. The
+    evidence records an image diff of the before/after 1.0 pair (ImageMagick `compare -metric AE`
+    on a cropped canvas region, expected 0) rather than asserting identity;
+  - a pixel-measured head length in each low-zoom capture (the measurement the shipped rule
+    fails), reported with the capture.
+- Where feasible, the "before" captures are taken from a copy of the shipped `BIN` before the
+  change is built, at the same seeded viewports, so the acceptance record holds same-scene pairs.
 
 ## Design history
 
@@ -267,9 +274,15 @@ pixel predicates keep the exact-RGB and near-colour conventions of the current t
   "far shorter than the target separation" wording was wrong); the mockup README still asserted
   the 0.378 reported view; and the three single-row renders clipped the last panel because the row
   canvas omitted the gutter. All three are fixed (the row canvas now matches the grid canvas, the
-  renderer's reach was raised so every edge enters its panel, and each label block sits on an
-  opaque plate), and the history measurement units, the reported-zoom ambiguity and the item-5
-  measurement anchor were made explicit.
+  renderer's reach was raised so every edge enters its panel, and the caption blocks sit below
+  their panels rather than over the scene), and the history measurement units, the reported-zoom
+  ambiguity and the item-5 measurement anchor were made explicit.
+- Frontier design review round 4 returned CLEAN with 6 NOTE findings, folded in: the `MIN_GAP`
+  statement and the sub-nub reachability note are qualified to node-to-node edges (enclosure
+  endpoints are not separated by that pass), the acceptance evidence seeds `0.1485` as well as
+  `0.3781` and requires an image diff for the 1.0 pair plus a pixel-measured low-zoom head, the
+  test item 5 fixture is a parameterized variant that leaves the `d = 6` fixture unchanged, and
+  the overpaint wording names the node fill explicitly.
 
 ## Rollout
 
