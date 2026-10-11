@@ -35,6 +35,13 @@ import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 
 final class GraphPainter {
+    // Screen px. Floor that keeps a head legible below the growth crossover.
+    private static final double ARROW_HEAD_MINIMUM_LENGTH_PX = 12.5;
+    // 0.62 x the maximum node radius in world units:
+    // GraphGeometryEngine.BASE_RADIUS 8.0 x NodeProminence.MAX_SCALE 1.75 = 14.0 world.
+    private static final double ARROW_HEAD_LENGTH_PER_ZOOM = 0.62 * 14.0;
+    // Head base is 0.84 x length; the aspect is preserved when the cap shrinks a head.
+    private static final double ARROW_HEAD_HALF_BASE_RATIO = 0.42;
     void paint(final Graphics2D graphics, final CanvasState state, final GraphPaintState paintState,
             final GraphViewport viewport, final java.awt.Dimension size, final GraphTheme theme,
             final List<PlacedLabel> labels) {
@@ -134,10 +141,12 @@ final class GraphPainter {
             graphics.setStroke(theme.edgeStroke());
             graphics.draw(new Line2D.Double(first.x(), first.y(), second.x(), second.y()));
             if (showArrowheads && edge.arrowAtFirst()) {
-                paintArrow(graphics, first, second, theme.edgeColor(), viewport.zoom());
+                paintArrow(graphics, first, second, theme.edgeColor(), viewport.zoom(),
+                    edge.arrowAtFirst(), edge.arrowAtSecond());
             }
             if (showArrowheads && edge.arrowAtSecond()) {
-                paintArrow(graphics, second, first, theme.edgeColor(), viewport.zoom());
+                paintArrow(graphics, second, first, theme.edgeColor(), viewport.zoom(),
+                    edge.arrowAtFirst(), edge.arrowAtSecond());
             }
             if (edge.hasMultiplicityCue()) {
                 paintMultiplicity(graphics, first, second, edge.contributorCount(), theme, viewport.zoom());
@@ -146,8 +155,29 @@ final class GraphPainter {
         }
     }
 
+    // Screen px.
+    static double arrowHeadLengthPx(final double zoom) {
+        return Math.max(ARROW_HEAD_MINIMUM_LENGTH_PX, ARROW_HEAD_LENGTH_PER_ZOOM * zoom);
+    }
+
+    // World units in, world units out.
+    static double availableArrowHeadWorldLength(final double attachmentDistanceWorld,
+            final boolean arrowAtFirst, final boolean arrowAtSecond) {
+        return arrowAtFirst && arrowAtSecond ? attachmentDistanceWorld / 2.0 : attachmentDistanceWorld;
+    }
+
+    // Screen px.
+    static double effectiveArrowHeadLengthPx(final double zoom, final double availableWorldLength) {
+        return Math.min(arrowHeadLengthPx(zoom), availableWorldLength * zoom);
+    }
+
+    // Screen px.
+    static double arrowHeadHalfBasePx(final double lengthPx) {
+        return ARROW_HEAD_HALF_BASE_RATIO * lengthPx;
+    }
+
     private static void paintArrow(final Graphics2D graphics, final LayoutPoint tip, final LayoutPoint from,
-            final Color color, final double zoom) {
+            final Color color, final double zoom, final boolean arrowAtFirst, final boolean arrowAtSecond) {
         final double dx = tip.x() - from.x();
         final double dy = tip.y() - from.y();
         final double length = Math.sqrt(dx * dx + dy * dy);
@@ -158,8 +188,11 @@ final class GraphPainter {
         final double unitY = dy / length;
         final double perpendicularX = -unitY;
         final double perpendicularY = unitX;
-        final double arrowLength = 8.0 / zoom;
-        final double arrowWidth = 3.5 / zoom;
+        final double availableWorldLength =
+            availableArrowHeadWorldLength(length, arrowAtFirst, arrowAtSecond);
+        final double arrowLengthPx = effectiveArrowHeadLengthPx(zoom, availableWorldLength);
+        final double arrowLength = arrowLengthPx / zoom;
+        final double arrowWidth = arrowHeadHalfBasePx(arrowLengthPx) / zoom;
         final Path2D.Double arrow = new Path2D.Double();
         arrow.moveTo(tip.x(), tip.y());
         arrow.lineTo(tip.x() - unitX * arrowLength + perpendicularX * arrowWidth,
