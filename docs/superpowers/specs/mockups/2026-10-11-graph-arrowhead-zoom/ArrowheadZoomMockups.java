@@ -198,7 +198,7 @@ public final class ArrowheadZoomMockups {
         g.setClip(oldClip);
     }
 
-    /** Mirrors GraphPainter.paintArrow for a one-headed long edge. */
+    /** Mirrors GraphPainter.paintArrow for a one-headed long edge, in panel (screen) px. */
     static void paintHead(final Graphics2D g, final double tipX, final double tipY, final double fromX,
             final double fromY, final double zoom, final String mode) {
         final double dx = tipX - fromX;
@@ -209,9 +209,9 @@ public final class ArrowheadZoomMockups {
         }
         final double ux = dx / length;
         final double uy = dy / length;
-        final double arrowLengthPx = headLengthPx(zoom, mode);
-        final double arrowLength = arrowLengthPx / zoom;
-        final double arrowWidth = HALF_BASE_RATIO * arrowLengthPx / zoom;
+        // The panel is drawn in screen px, so the rule's screen length and half-base are used as-is.
+        final double arrowLength = headLengthPx(zoom, mode);
+        final double arrowWidth = HALF_BASE_RATIO * arrowLength;
         final Path2D.Double arrow = new Path2D.Double();
         arrow.moveTo(tipX, tipY);
         arrow.lineTo(tipX - ux * arrowLength - uy * arrowWidth, tipY - uy * arrowLength + ux * arrowWidth);

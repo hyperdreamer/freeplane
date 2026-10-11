@@ -20,13 +20,14 @@ three maps at four viewport zooms: `0.14846481908261` (current `math.fpg`),
 `0.37809529736878794` (`math.sync-conflict-20261011-131807-QPOKO56 (Arch-MSSD0's conflicted copy
 2026-10-11).fpg`), `0.7487174552196292` (the two 2026-10-11 15:47 files) and
 `2.7979997032776502` (`math.sync-conflict-20261011-131807-QPOKO56.fpg`). The reported
-screenshot's head is a 13 x 10 px bounding box, which pins it to the 12.5 px floor; the scene
-does not match the 0.7487 state (whose node discs would be 12-21 px across), so the reported view
-is the 0.3781 state, where the head/node-diameter ratio is 1.2-2.1 against the derived node
-diameter range below. The exact viewport of the screenshot is not recorded in the image, and the
-disc sizes are derived from `16 x zoom .. 28 x zoom`, not pixel-measured: at that zoom the disc
-pixels are heavily antialiased. At `0.1485` the same rule gives 12.5 px heads against 2.4-4.2 px
-node discs, a ratio of 3.0-5.2.
+screenshot's head is a 13 x 10 px bounding box, which pins it to the 12.5 px floor at an
+unrecorded zoom below the 1.4401 crossover, so the exact reported zoom is unknown and only
+bounded above by the crossover. The defect is present at every recorded low zoom: the node
+diameter is `16 x zoom .. 28 x zoom`, so the 12.5 px floor head is 1.2-2.1x the node diameter at
+`0.3781` and 3.0-5.3x at `0.1485`, and it stays 12.5 px while the nodes keep shrinking. Those
+disc ranges are derived from the node radius model, not pixel-measured: the screenshot's disc
+pixels are heavily antialiased (only two exactly node-fill-coloured pixels appear in the whole
+image, consistent with discs a few px across).
 
 The relevant paint facts, all verified in the source:
 
@@ -65,13 +66,12 @@ Decisions were taken against rendered mockups
 (`docs/superpowers/specs/mockups/2026-10-11-graph-arrowhead-zoom/`), which mirror
 `GraphPainter.paintArrow` triangle geometry and paint order for one-headed long edges (the cap is
 not exercised: every rendered edge is long enough that `a > 12.5` world and the cap stays
-unbound), and show the same world scene at the reporter's workspace zooms (`2.8` in the renderer
-is the rounded `2.7979997032776502`).
+unbound), and show the same world scene at the reporter's workspace zooms.
 
 | Question | Chosen | Rejected alternatives |
 | --- | --- | --- |
 | Size across zoom | **B: constant world length 12.5** (`L = min(12.5, a) x zoom` px) | **A: `8.68 x zoom` px**, the shipped growth term (0.62 x max node radius): also removes the floor, but shrinks the head to 8.68 px at `1x`, below the size approved in the 2026-10-10 design. **A small screen-space floor** (for example 4 px on top of a proportional rule): keeps heads perceptible at the `0.1485` overview zoom, but restores node-sized heads there, which is the reported defect |
-| Constant provenance | 12.5 world = `0.893 x 14.0`, the maximum node radius (`BASE_RADIUS 8.0 x MAX_SCALE 1.75`); the literal 12.5 is the old 1x floor length, kept as a world constant | Tying the head to the actual projected maximum node radius (view-dependent head sizes) |
+| Constant provenance | 12.5 world = `0.8929 x 14.0`, the maximum node radius (`BASE_RADIUS 8.0 x MAX_SCALE 1.75`); the literal 12.5 is the old 1x floor length, kept as a world constant | Tying the head to the actual projected maximum node radius (view-dependent head sizes) |
 
 Chosen renders are in `png/` (`chosen-rule-b.png`, `before-shipped-rule.png`,
 `zoom-rule-comparison.png`), rejected renders under `png/rejected/`.
@@ -84,7 +84,7 @@ line. Let `d` be the distance in world units between the two attachment points o
 1. Available edge length, world units: `a = d` when only one end carries a head, and `a = d / 2`
    when both ends do. Halving keeps two heads on a short bidirectional edge from overlapping;
    they meet base to base at the midpoint.
-2. Requested head length: a constant `12.5` world units, i.e. `0.893 x` the maximum node radius
+2. Requested head length: a constant `12.5` world units, i.e. `0.8929 x` the maximum node radius
    of 14 world. In screen px this is exactly `12.5 x zoom`, with no floor and no crossover. The
    literal 12.5 is the old 1x floor length, reinterpreted as a world constant so that the
    approved 1x appearance is preserved exactly.
@@ -94,9 +94,12 @@ line. Let `d` be the distance in world units between the two attachment points o
    edges at every zoom: a single head is capped when `a < 12.5` world and a bidirectional pair
    when `d < 25` world.
 4. Head half-base: `0.42 x L`, i.e. base `0.84 x L`. The aspect is always 0.84 : 1; when the cap
-   shortens a head, the base shrinks with it. At the target separation gap
-   (`NodeSeparationProjection.MIN_GAP = 6` world) the capped base is 5.04 world with one head
-   and 2.52 with two, i.e. 3.6x and 1.8x the 1.4-world line width.
+   shortens a head, the base shrinks with it. At an attachment distance of 6 world - the smallest
+   space the cap can meet, and the pinned cap fixture `d = 6` - the capped base is 5.04 world with
+   one head and 2.52 with two, i.e. 3.6x and 1.8x the 1.4-world line width. This is not the layout
+   minimum: `NodeSeparationProjection.MIN_GAP = 6` is a surface gap between two nodes, so a node
+   pair at that minimum has an attachment distance of at least `6 + 8 + 8 = 22` world and is
+   never capped.
 5. The path is built in world units: length `L / zoom`, half-base `0.42 x L / zoom`.
 6. Head fill, gap between line and head, paint order and dimming: unchanged.
 
@@ -121,10 +124,10 @@ length, not a bound on the screen size.
 The change is confined to `org.freeplane.plugin.graph.canvas.GraphPainter`.
 
 - Two constants become one named constant replacing both obsolete literals:
-  `ARROW_HEAD_WORLD_LENGTH = 12.5`, documented as `0.89 x 14.0`, the maximum node radius in
-  world units. `ARROW_HEAD_MINIMUM_LENGTH_PX` and `ARROW_HEAD_LENGTH_PER_ZOOM` are removed, not
-  retained behind a fallback, per the repository's legacy-removal policy. The aspect constant
-  `ARROW_HEAD_HALF_BASE_RATIO = 0.42` is unchanged.
+  `ARROW_HEAD_WORLD_LENGTH = 12.5`, documented as `12.5 / 14.0 ~ 0.8929` of the maximum node
+  radius in world units. `ARROW_HEAD_MINIMUM_LENGTH_PX` and `ARROW_HEAD_LENGTH_PER_ZOOM` are
+  removed, not retained behind a fallback, per the repository's legacy-removal policy. The aspect
+  constant `ARROW_HEAD_HALF_BASE_RATIO = 0.42` is unchanged.
 - The package-private static helpers keep their names, units and roles, so the rule stays
   unit-testable without painting; the existing assertions that encode the floor and the 8.68
   growth term are invalidated and are replaced as described under Test strategy:
@@ -202,7 +205,12 @@ pixel predicates keep the exact-RGB and near-colour conventions of the current t
 5. **Cap, base and bidirectional split at paint level.** The pinned enclosure-source fixture
    (`d = 6` world) at zoom 1.0 is unchanged: the rule value is 12.5 px at zoom 1.0 in both the
    old and the new rule, so the existing 6 px cap, 4 px base run and sub-threshold bidirectional
-   assertions stay valid and continue to pin the call-site flag propagation.
+   assertions stay valid and continue to pin the call-site flag propagation. Add one capped paint
+   run at a zoom above the shipped crossover, where the two rules diverge: an attachment distance
+   of 10 world (the cap fixture with the target centre at world `x = 18`, tip at world `x = 10`)
+   painted at zoom 3.0. The new rule draws `min(12.5, 10) x 3 = 30` px; the shipped rule draws
+   `min(max(12.5, 8.68 x 3), 10 x 3) = 26.04` px, so a `30 +/- 1.5` px assertion fails on the
+   shipped code and pins the capped path at a non-1.0 zoom.
 6. **Theme fill.** The dark-theme interior sample at zoom 1.0 is unchanged, because the head
    length at 1.0 is unchanged; keep the existing sample offset.
 7. **No regression.** `suppressAndRestoreDirectionalArrowheadsInThePaintedCanvas` and the paint
@@ -228,9 +236,9 @@ pixel predicates keep the exact-RGB and near-colour conventions of the current t
 
 ## Design history
 
-- Reported by the user on 2026-10-11 with a screenshot at about zoom 0.378; diagnosis located
-  the 12.5 px screen floor as the cause of the low-zoom clutter.
-- Rule chosen collaboratively from rendered mockups at the reporter's real workspace zooms:
+- Reported by the user on 2026-10-11 with a screenshot at an unrecorded low zoom; diagnosis
+  located the 12.5 px screen floor as the cause of the low-zoom clutter.
+- Rule chosen collaboratively from rendered mockups at the reporter's workspace zooms:
   treatment B (`12.5 x zoom`), preserving the approved 1x appearance; treatment A (`8.68 x zoom`)
   and a small-floor variant rejected.
 - Frontier design review round 1 returned DEFECTS with 4 RISK and 10 NOTE findings, all folded
@@ -239,8 +247,17 @@ pixel predicates keep the exact-RGB and near-colour conventions of the current t
   corrected to the sync-conflict files and the screenshot measurements relabelled as derived,
   the acceptance-evidence mechanism was made explicit, the mockup fidelity and palette claims
   were narrowed, the cap and overpaint statements were corrected, the helper composition and the
-  `0.893` factor were corrected, and the reported-zoom uncertainty is recorded rather than
+  `0.8929` factor were corrected, and the reported-zoom uncertainty is recorded rather than
   assumed.
+- The user re-confirmed treatment B on 2026-10-11 after reviewing the corrected mockup renders,
+  with the small-floor variant declined.
+- Frontier design review round 2 returned DEFECTS with 1 BLOCKER, 2 RISK and 4 NOTE findings: the
+  committed mockups did not depict the documented rule because the renderer divided the screen
+  length by zoom while drawing in screen space (fixed: the head is drawn at its screen length;
+  the renders were regenerated and re-measured at 5.6/14.2/37.5 px for rule B at 0.1485/0.378/1.0
+  and a constant 12.5 px for the shipped rule); the reported-zoom claim was unsupported and is now
+  recorded as unknown; and the constant provenance, the stale renderer note, the 0.1485 ratio
+  bound, the `MIN_GAP` conflation, and the missing non-1.0 capped paint probe were corrected.
 
 ## Rollout
 
