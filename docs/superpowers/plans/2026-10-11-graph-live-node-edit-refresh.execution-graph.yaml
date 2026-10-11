@@ -1,0 +1,90 @@
+schema_version: 1
+topic: graph-live-node-edit-refresh
+source_plan:
+  path: docs/superpowers/plans/2026-10-11-graph-live-node-edit-refresh.md
+  sha256: 8ddc605b0958237503eaf398ccd5fe48af053de995a06a3a72d2c7c478ca5508
+  tasks: [1, 2, 3]
+validation_env:
+  JAVA_HOME: ~/.sdkman/candidates/java/21.0.8-zulu
+  note: Prefix every validation command with JAVA_HOME and PATH so the toolchain matches the plan.
+lanes:
+  - id: graph-live-node-refresh
+    task_ids: [glnr-t1, glnr-t2, glnr-t3]
+tasks:
+  - id: glnr-t1
+    plan_task: 1
+    title: "Publish adapter events for node changes on leased maps"
+    implementer_tier: standard
+    lane: graph-live-node-refresh
+    sequence: 1
+    depends_on: []
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/adapter/MapLeaseManager.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/adapter/MapLeaseManagerShould.java
+    resources: []
+    interfaces:
+      produces:
+        - id: i-nodeChangeListener
+          digest: 393e1404eded1fd8
+        - id: i-nodeListenerRegistered
+          digest: 6bc66ddde81fd1c7
+        - id: i-handleNodeChangedOnEdt
+          digest: db7b4d3304a3d1ac
+        - id: i-nodeListenerRegistration
+          digest: 4c010e23d24c69fd
+        - id: i-unitNodeEventCapture
+          digest: 5721562d678fa7a3
+      consumes: []
+    validation:
+      - [gradle, ":freeplane_plugin_graph:test", --tests, org.freeplane.plugin.graph.adapter.MapLeaseManagerShould, "-PTestLoggingFull"]
+  - id: glnr-t2
+    plan_task: 2
+    title: "Pin live refresh with headless integration tests"
+    implementer_tier: advanced
+    lane: graph-live-node-refresh
+    sequence: 2
+    depends_on: [glnr-t1]
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/integration/GraphWorkspaceLiveNodeRefreshShould.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/integration/GraphWorkspaceColdReloadShould.java
+    resources: []
+    interfaces:
+      produces:
+        - id: i-liveRefreshTestClass
+          digest: e17fd06cc9f9f850
+        - id: i-awaitIdle
+          digest: 140dff100b1a755d
+        - id: i-hasNodeLabel
+          digest: 039cb8deaea6fb6e
+        - id: i-nodeKeyByLabel
+          digest: 0009d7cca1802af3
+        - id: i-resourceBaselineNodeListeners
+          digest: 8fa62dcb91a81721
+      consumes:
+        - id: i-nodeChangeListener
+        - id: i-handleNodeChangedOnEdt
+        - id: i-nodeListenerRegistration
+    validation:
+      - [gradle, ":freeplane_plugin_graph:test", --tests, org.freeplane.plugin.graph.integration.GraphWorkspaceLiveNodeRefreshShould, "-PTestLoggingFull"]
+  - id: glnr-t3
+    plan_task: 3
+    title: "Run the module gate and prove the live refresh test is falsifiable"
+    implementer_tier: standard
+    lane: graph-live-node-refresh
+    sequence: 3
+    depends_on: [glnr-t2]
+    ownership:
+      paths:
+        - docs/superpowers/plans/2026-10-11-graph-live-node-edit-refresh-evidence.md
+    resources: []
+    interfaces:
+      produces:
+        - id: i-evidenceNote
+          digest: d79d320f14dce030
+      consumes:
+        - id: i-liveRefreshTestClass
+        - id: i-nodeListenerRegistration
+    validation:
+      - [gradle, ":freeplane_plugin_graph:test", "-PTestLoggingFull"]
