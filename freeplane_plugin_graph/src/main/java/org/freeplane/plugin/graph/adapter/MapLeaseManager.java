@@ -30,8 +30,10 @@ import javax.swing.SwingUtilities;
 import org.freeplane.features.map.EncryptionModel;
 import org.freeplane.features.map.IMapChangeListener;
 import org.freeplane.features.map.IMapLifeCycleListener;
+import org.freeplane.features.map.INodeChangeListener;
 import org.freeplane.features.map.MapController;
 import org.freeplane.features.map.MapModel;
+import org.freeplane.features.map.NodeChangeEvent;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.map.mindmapmode.MMapController;
 import org.freeplane.features.mode.ModeController;
@@ -94,10 +96,12 @@ public final class MapLeaseManager implements AutoCloseable {
         new IdentityHashMap<MapModel, Boolean>());
     private final List<DeferredOperation> deferredOperations = new ArrayList<DeferredOperation>();
     private final IMapLifeCycleListener lifecycleListener = new LifecycleListener();
+    private final INodeChangeListener nodeChangeListener = new NodeChangeListener();
     private ScheduledFuture<?> externalCheck;
     private DeferredDrainRetry deferredDrainRetry;
     private ScheduledFuture<?> deferredDrainRetryFuture;
     private boolean lifecycleListenerRegistered;
+    private boolean nodeListenerRegistered;
     private boolean deferredDrainScheduled;
     private boolean deferredDrainRunning;
     private boolean closed;
@@ -235,8 +239,10 @@ public final class MapLeaseManager implements AutoCloseable {
                 @Override
                 public void run() {
                     mapController.addMapLifeCycleListener(lifecycleListener);
+                    mapController.addNodeChangeListener(nodeChangeListener);
                     synchronized (monitor) {
                         lifecycleListenerRegistered = true;
+                        nodeListenerRegistered = true;
                     }
                 }
             });
@@ -442,6 +448,7 @@ public final class MapLeaseManager implements AutoCloseable {
         ScheduledFuture<?> scheduledCheck;
         ScheduledFuture<?> scheduledDeferredDrainRetry;
         boolean removeLifecycle;
+        boolean removeNodeListener;
         settlementLock.lock();
         try {
             synchronized (monitor) {
@@ -456,6 +463,8 @@ public final class MapLeaseManager implements AutoCloseable {
                 deferredDrainRetry = null;
                 removeLifecycle = lifecycleListenerRegistered;
                 lifecycleListenerRegistered = false;
+                removeNodeListener = nodeListenerRegistered;
+                nodeListenerRegistered = false;
                 for (Entry entry : entries.values()) {
                     entry.generation++;
                     entry.loading = false;
@@ -493,12 +502,15 @@ public final class MapLeaseManager implements AutoCloseable {
             if (scheduledDeferredDrainRetry != null) {
                 scheduledDeferredDrainRetry.cancel(false);
             }
-            if (removeLifecycle || !detachments.isEmpty()) {
+            if (removeLifecycle || removeNodeListener || !detachments.isEmpty()) {
                 runOnEdtAndWait(new Runnable() {
                     @Override
                     public void run() {
                         if (removeLifecycle) {
                             mapController.removeMapLifeCycleListener(lifecycleListener);
+                        }
+                        if (removeNodeListener) {
+                            mapController.removeNodeChangeListener(nodeChangeListener);
                         }
                         for (Detachment detachment : detachments) {
                             detachOnEdt(detachment);
@@ -983,6 +995,29 @@ public final class MapLeaseManager implements AutoCloseable {
                 handleMapChanged(entry, map, generation);
             }
         };
+    }
+
+    private void handleNodeChangedOnEdt(final MapModel map) {
+        if (map == null) {
+            return;
+        }
+        Entry match = null;
+        long generation = 0L;
+        synchronized (monitor) {
+            if (closed) {
+                return;
+            }
+            for (Entry entry : entries.values()) {
+                if (entry.model == map && entry.leaseCount > 0 && !entry.loading) {
+                    match = entry;
+                    generation = entry.generation;
+                    break;
+                }
+            }
+        }
+        if (match != null) {
+            handleMapChanged(match, map, generation);
+        }
     }
 
     private void loadOnEdt(final Entry entry, final long generation, final MapModel replacedModel) {
@@ -1483,6 +1518,40 @@ public final class MapLeaseManager implements AutoCloseable {
                 catch (RuntimeException ignored) {
                     // Manager close invalidates lifecycle callbacks.
                 }
+            }
+        }
+    }
+
+    private final class NodeChangeListener implements INodeChangeListener {
+        @Override
+        public void nodeChanged(final NodeChangeEvent event) {
+            try {
+                if (event == null) {
+                    return;
+                }
+                final NodeModel node = event.getNode();
+                if (node == null) {
+                    return;
+                }
+                if (edt.isEdt()) {
+                    handleNodeChangedOnEdt(node.getMap());
+                }
+                else {
+                    try {
+                        edt.execute(new Runnable() {
+                            @Override
+                            public void run() {
+                                handleNodeChangedOnEdt(node.getMap());
+                            }
+                        });
+                    }
+                    catch (RuntimeException ignored) {
+                        // Manager close invalidates node change callbacks.
+                    }
+                }
+            }
+            catch (RuntimeException ignored) {
+                // Node change processing must never fail an editor operation.
             }
         }
     }
