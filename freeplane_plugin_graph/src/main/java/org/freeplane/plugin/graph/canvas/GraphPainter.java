@@ -35,6 +35,13 @@ import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 
 final class GraphPainter {
+    // Screen px. Floor that keeps a head legible below the growth crossover.
+    private static final double ARROW_HEAD_MINIMUM_LENGTH_PX = 12.5;
+    // 0.62 x the maximum node radius in world units:
+    // GraphGeometryEngine.BASE_RADIUS 8.0 x NodeProminence.MAX_SCALE 1.75 = 14.0 world.
+    private static final double ARROW_HEAD_LENGTH_PER_ZOOM = 0.62 * 14.0;
+    // Head base is 0.84 x length; the aspect is preserved when the cap shrinks a head.
+    private static final double ARROW_HEAD_HALF_BASE_RATIO = 0.42;
     void paint(final Graphics2D graphics, final CanvasState state, final GraphPaintState paintState,
             final GraphViewport viewport, final java.awt.Dimension size, final GraphTheme theme,
             final List<PlacedLabel> labels) {
@@ -144,6 +151,27 @@ final class GraphPainter {
             }
             graphics.setComposite(oldComposite);
         }
+    }
+
+    // Screen px.
+    static double arrowHeadLengthPx(final double zoom) {
+        return Math.max(ARROW_HEAD_MINIMUM_LENGTH_PX, ARROW_HEAD_LENGTH_PER_ZOOM * zoom);
+    }
+
+    // World units in, world units out.
+    static double availableArrowHeadWorldLength(final double attachmentDistanceWorld,
+            final boolean arrowAtFirst, final boolean arrowAtSecond) {
+        return arrowAtFirst && arrowAtSecond ? attachmentDistanceWorld / 2.0 : attachmentDistanceWorld;
+    }
+
+    // Screen px.
+    static double effectiveArrowHeadLengthPx(final double zoom, final double availableWorldLength) {
+        return Math.min(arrowHeadLengthPx(zoom), availableWorldLength * zoom);
+    }
+
+    // Screen px.
+    static double arrowHeadHalfBasePx(final double lengthPx) {
+        return ARROW_HEAD_HALF_BASE_RATIO * lengthPx;
     }
 
     private static void paintArrow(final Graphics2D graphics, final LayoutPoint tip, final LayoutPoint from,

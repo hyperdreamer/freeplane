@@ -1016,6 +1016,30 @@ public class GraphCanvasPaintShould {
         return red * red + green * green + blue * blue;
     }
 
+    @Test
+    public void arrowHeadLengthIsFlooredUntilTheCrossoverAndGrowsStrictlyAboveIt() {
+        assertThat(GraphPainter.arrowHeadLengthPx(0.6)).isCloseTo(12.5, within(1e-9));
+        assertThat(GraphPainter.arrowHeadLengthPx(1.0)).isCloseTo(12.5, within(1e-9));
+        assertThat(GraphPainter.arrowHeadLengthPx(1.44)).isCloseTo(12.5, within(1e-9));
+        assertThat(GraphPainter.arrowHeadLengthPx(3.0)).isCloseTo(26.04, within(1e-9));
+        assertThat(GraphPainter.arrowHeadLengthPx(1.45))
+            .isGreaterThan(GraphPainter.arrowHeadLengthPx(12.5 / 8.68));
+        assertThat(GraphPainter.arrowHeadHalfBasePx(12.5)).isCloseTo(5.25, within(1e-9));
+    }
+
+    @Test
+    public void arrowHeadRuleCapAndBidirectionalSplitAreSelectedInTheHelpers() {
+        assertThat(GraphPainter.availableArrowHeadWorldLength(6.0, false, false)).isCloseTo(6.0, within(1e-9));
+        assertThat(GraphPainter.availableArrowHeadWorldLength(6.0, true, true)).isCloseTo(3.0, within(1e-9));
+        assertThat(GraphPainter.availableArrowHeadWorldLength(6.0, true, false)).isCloseTo(6.0, within(1e-9));
+        assertThat(GraphPainter.availableArrowHeadWorldLength(6.0, false, true)).isCloseTo(6.0, within(1e-9));
+        assertThat(GraphPainter.effectiveArrowHeadLengthPx(1.0, 100.0)).isCloseTo(12.5, within(1e-9));
+        assertThat(GraphPainter.effectiveArrowHeadLengthPx(0.6, 6.0)).isCloseTo(6.0 * 0.6, within(1e-9));
+        assertThat(GraphPainter.effectiveArrowHeadLengthPx(1.0, 3.0)).isCloseTo(3.0, within(1e-9));
+        assertThat(GraphPainter.arrowHeadHalfBasePx(GraphPainter.effectiveArrowHeadLengthPx(0.6, 6.0)))
+            .isCloseTo(0.42 * 6.0 * 0.6, within(1e-9));
+    }
+
     private static GraphTheme lightTheme() {
         return GraphTheme.resolve(CanvasTheme.LIGHT, registeredMaps());
     }
