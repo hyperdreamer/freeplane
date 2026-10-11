@@ -664,6 +664,30 @@ final class GraphWorkspaceIntegrationSupport {
         assertThat(condition.getAsBoolean()).as(failureMessage).isTrue();
     }
 
+    static boolean hasNodeLabel(final GraphProjection projection, final String label) {
+        for (final ProjectedNode node : projection.nodes()) {
+            if (label.equals(node.label().displayText()) || label.equals(node.label().fullText())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    static ProjectedNodeKey nodeKeyByLabel(final GraphProjection projection, final String label) {
+        for (final ProjectedNode node : projection.nodes()) {
+            if (label.equals(node.label().displayText()) || label.equals(node.label().fullText())) {
+                return node.key();
+            }
+        }
+        throw new AssertionError("Missing projected node with label " + label);
+    }
+
+    static void awaitIdle(final GraphWorkspaceViewBinding binding, final long timeoutMillis)
+            throws Exception {
+        awaitCondition(() -> binding.currentCanvasState().status() == OperationalStatus.IDLE,
+            timeoutMillis, "graph workspace did not reach OperationalStatus.IDLE");
+    }
+
     static void deleteRecursively(final Path path) throws IOException {
         if (!Files.exists(path)) {
             return;
@@ -693,7 +717,8 @@ final class GraphWorkspaceIntegrationSupport {
 
     static ResourceBaseline baseline(final FreeplaneScope freeplane, final Path root) throws Exception {
         return new ResourceBaseline(freeplane.mapLifecycleListenerCount(), freeplane.mapChangeListenerCount(),
-            freeplane.viewCount(), freeplane.timerCount(), graphThreadProfile(), temporaryArtifacts(root));
+            freeplane.mapNodeChangeListenerCount(), freeplane.viewCount(), freeplane.timerCount(),
+            graphThreadProfile(), temporaryArtifacts(root));
     }
 
     static void awaitBaseline(final FreeplaneScope freeplane, final Path root, final ResourceBaseline expected)
@@ -702,6 +727,7 @@ final class GraphWorkspaceIntegrationSupport {
             "graph workspace resources did not return to baseline");
         assertThat(freeplane.mapLifecycleListenerCount()).isEqualTo(expected.mapLifecycleListeners);
         assertThat(freeplane.mapChangeListenerCount()).isEqualTo(expected.mapChangeListeners);
+        assertThat(freeplane.mapNodeChangeListenerCount()).isEqualTo(expected.nodeChangeListeners);
         assertThat(freeplane.viewCount()).isEqualTo(expected.views);
         assertThat(freeplane.timerCount()).isEqualTo(expected.timers);
         assertThat(graphThreadProfile()).isEqualTo(expected.threads);
@@ -885,15 +911,18 @@ final class GraphWorkspaceIntegrationSupport {
     static final class ResourceBaseline {
         final int mapLifecycleListeners;
         private final int mapChangeListeners;
+        private final int nodeChangeListeners;
         private final int views;
         private final int timers;
         private final Map<String, Integer> threads;
         private final Set<String> temporaryArtifacts;
 
-        private ResourceBaseline(final int mapLifecycleListeners, final int mapChangeListeners, final int views,
-                final int timers, final Map<String, Integer> threads, final Set<String> temporaryArtifacts) {
+        private ResourceBaseline(final int mapLifecycleListeners, final int mapChangeListeners,
+                final int nodeChangeListeners, final int views, final int timers,
+                final Map<String, Integer> threads, final Set<String> temporaryArtifacts) {
             this.mapLifecycleListeners = mapLifecycleListeners;
             this.mapChangeListeners = mapChangeListeners;
+            this.nodeChangeListeners = nodeChangeListeners;
             this.views = views;
             this.timers = timers;
             this.threads = threads;
@@ -904,6 +933,7 @@ final class GraphWorkspaceIntegrationSupport {
             try {
                 return mapLifecycleListeners == freeplane.mapLifecycleListenerCount()
                     && mapChangeListeners == freeplane.mapChangeListenerCount()
+                    && nodeChangeListeners == freeplane.mapNodeChangeListenerCount()
                     && views == freeplane.viewCount() && timers == freeplane.timerCount()
                     && threads.equals(graphThreadProfile())
                     && temporaryArtifacts.equals(temporaryArtifacts(root));
@@ -1189,6 +1219,10 @@ final class GraphWorkspaceIntegrationSupport {
 
         int mapLifecycleListenerCount() {
             return mapController.getMapLifeCycleListeners().size();
+        }
+
+        int mapNodeChangeListenerCount() {
+            return mapController.getNodeChangeListeners().size();
         }
 
         int mapChangeListenerCount() throws Exception {
