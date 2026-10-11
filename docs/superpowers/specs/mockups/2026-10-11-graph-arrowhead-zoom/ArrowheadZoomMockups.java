@@ -50,7 +50,8 @@ public final class ArrowheadZoomMockups {
     static final int PANEL_W = 168;
     static final int PANEL_H = 150;
     static final int GAP = 10;
-    static final int LABEL_H = 26;
+    // Caption block below each panel, so labels never occlude the rendered scene.
+    static final int CAPTION_H = 58;
     static final int GUTTER = 132;
     static final int TITLE_H = 30;
 
@@ -92,7 +93,7 @@ public final class ArrowheadZoomMockups {
 
     static BufferedImage renderAll() {
         final int width = GUTTER + GAP + ZOOMS.length * (PANEL_W + GAP);
-        final int height = TITLE_H + 3 * (PANEL_H + LABEL_H);
+        final int height = TITLE_H + 3 * (PANEL_H + CAPTION_H) + 2 * GAP;
         final BufferedImage image = new BufferedImage(width * 2, height * 2, BufferedImage.TYPE_INT_RGB);
         final Graphics2D g = image.createGraphics();
         try {
@@ -108,7 +109,7 @@ public final class ArrowheadZoomMockups {
             int y = TITLE_H;
             for (final String mode : MODES) {
                 paintRow(g, mode, y);
-                y += PANEL_H + LABEL_H;
+                y += PANEL_H + CAPTION_H + GAP;
             }
         }
         finally {
@@ -119,7 +120,7 @@ public final class ArrowheadZoomMockups {
 
     static BufferedImage renderRow(final String mode) {
         final int width = GUTTER + GAP + ZOOMS.length * (PANEL_W + GAP);
-        final int height = TITLE_H + PANEL_H + LABEL_H;
+        final int height = TITLE_H + PANEL_H + CAPTION_H;
         final BufferedImage image = new BufferedImage(width * 3, height * 3, BufferedImage.TYPE_INT_RGB);
         final Graphics2D g = image.createGraphics();
         try {
@@ -186,18 +187,18 @@ public final class ArrowheadZoomMockups {
         g.setColor(NODE_STROKE);
         g.setStroke(new BasicStroke(stroke, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
         g.draw(new Ellipse2D.Double(cx - radius, cy - radius, radius * 2.0, radius * 2.0));
+        g.setClip(oldClip);
 
-        g.setColor(new Color(255, 255, 255, 220));
-        g.fillRect(left + 2, top + 2, 96, 58);
+        // Captions live below the panel rectangle and never paint over the scene.
         g.setColor(TEXT);
         g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 10));
-        g.drawString(String.format("z=%.4f", zoom), left + 6, top + 14);
+        g.drawString(String.format("z=%.4f", zoom), left + 2, top + PANEL_H + 14);
         g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 9));
-        g.drawString(String.format("head %.2f px", headLengthPx(zoom, mode)), left + 6, top + 26);
-        g.drawString(String.format("node d %.1f px", radius * 2.0), left + 6, top + 37);
+        g.drawString(String.format("head %.2f px", headLengthPx(zoom, mode)), left + 2,
+            top + PANEL_H + 27);
+        g.drawString(String.format("node d %.1f px", radius * 2.0), left + 2, top + PANEL_H + 39);
         g.drawString(String.format("ratio %.2f", headLengthPx(zoom, mode) / (radius * 2.0)),
-            left + 6, top + 48);
-        g.setClip(oldClip);
+            left + 2, top + PANEL_H + 51);
     }
 
     /** Mirrors GraphPainter.paintArrow for a one-headed long edge, in panel (screen) px. */
