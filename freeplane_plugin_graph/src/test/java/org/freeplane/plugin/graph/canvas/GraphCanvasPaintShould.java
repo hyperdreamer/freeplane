@@ -1181,6 +1181,17 @@ public class GraphCanvasPaintShould {
             .isGreaterThan(nearColorPixelsIn(plainLine, theme.edgeColor(), 120, 66, 123, 74, 80));
     }
 
+    @Test
+    public void paintedArrowHeadInteriorUsesTheDarkThemeEdgeColour() {
+        Fixture fixture = fixture(14.0, 14.0);
+        GraphTheme darkTheme = GraphTheme.resolve(CanvasTheme.DARK, registeredMaps());
+        BufferedImage image = paint(fixture.state, GraphPaintState.empty(), darkTheme, RenderingLevel.FULL);
+
+        assertThat(image.getRGB(144, 71)).isEqualTo(darkTheme.edgeColor().getRGB());
+        assertThat(image.getRGB(144, 71)).isNotEqualTo(darkTheme.nodeFill().getRGB());
+        assertThat(image.getRGB(144, 71)).isNotEqualTo(darkTheme.nodeStroke().getRGB());
+    }
+
     private static GraphTheme lightTheme() {
         return GraphTheme.resolve(CanvasTheme.LIGHT, registeredMaps());
     }
