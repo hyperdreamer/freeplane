@@ -11,8 +11,11 @@ cap or the bidirectional split. Panels are magnified uniformly by the final imag
 head : node ratios are exact.
 
 The zoom levels are the ones recorded for the reporter's workspace file `math.fpg` and its
-Dropbox sync-conflict siblings (0.1485, 0.378, 0.75, 2.798), plus 1.0. The reported view is the
-0.378 state, where the shipped rule draws 12.5 px heads against 6.0-10.6 px node discs.
+Dropbox sync-conflict siblings (0.1485, 0.378, 0.75, 2.798), plus 1.0. The reported screenshot's
+zoom is not recoverable from the image (its head is 12.5 px of screen length, which the shipped
+rule produces both at the floor below the 1.4401 crossover and by the cap on a short edge); 0.378
+and 0.1485 are the recorded low-zoom states seeded for the acceptance captures, where the shipped
+rule draws 12.5 px heads against 6.0-10.6 px and 2.4-4.2 px node discs respectively.
 
 Regenerate:
 
