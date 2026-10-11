@@ -20,9 +20,9 @@ three maps at four viewport zooms: `0.14846481908261` (current `math.fpg`),
 `0.37809529736878794` (`math.sync-conflict-20261011-131807-QPOKO56 (Arch-MSSD0's conflicted copy
 2026-10-11).fpg`), `0.7487174552196292` (the two 2026-10-11 15:47 files) and
 `2.7979997032776502` (`math.sync-conflict-20261011-131807-QPOKO56.fpg`). The reported
-screenshot's head is a 13 x 10 px bounding box, which pins it to the 12.5 px floor at an
-unrecorded zoom below the 1.4401 crossover, so the exact reported zoom is unknown and only
-bounded above by the crossover. The defect is present at every recorded low zoom: the node
+screenshot's head is a 13 x 10 px bounding box, i.e. 12.5 px of screen length - produced either by
+the floor below the 1.4401 crossover or by the cap on a short edge at any zoom - so the reported
+zoom is not recoverable from the image. The defect is present at every recorded low zoom: the node
 diameter is `16 x zoom .. 28 x zoom`, so the 12.5 px floor head is 1.2-2.1x the node diameter at
 `0.3781` and 3.0-5.3x at `0.1485`, and it stays 12.5 px while the nodes keep shrinking. Those
 disc ranges are derived from the node radius model, not pixel-measured: the screenshot's disc
@@ -94,12 +94,12 @@ line. Let `d` be the distance in world units between the two attachment points o
    edges at every zoom: a single head is capped when `a < 12.5` world and a bidirectional pair
    when `d < 25` world.
 4. Head half-base: `0.42 x L`, i.e. base `0.84 x L`. The aspect is always 0.84 : 1; when the cap
-   shortens a head, the base shrinks with it. At an attachment distance of 6 world - the smallest
-   space the cap can meet, and the pinned cap fixture `d = 6` - the capped base is 5.04 world with
-   one head and 2.52 with two, i.e. 3.6x and 1.8x the 1.4-world line width. This is not the layout
-   minimum: `NodeSeparationProjection.MIN_GAP = 6` is a surface gap between two nodes, so a node
-   pair at that minimum has an attachment distance of at least `6 + 8 + 8 = 22` world and is
-   never capped.
+   shortens a head, the base shrinks with it. `NodeSeparationProjection.MIN_GAP = 6` is a target
+   surface gap between node boundaries, so the smallest nominal attachment distance is exactly 6
+   world; at that distance - the pinned cap fixture `d = 6` - the capped base is 5.04 world with
+   one head and 2.52 with two, i.e. 3.6x and 1.8x the 1.4-world line width, and such an edge is
+   always capped. The target is not a hard invariant: residual violations are recorded rather
+   than rejected and pinned pairs are skipped, so smaller `d` is reachable.
 5. The path is built in world units: length `L / zoom`, half-base `0.42 x L / zoom`.
 6. Head fill, gap between line and head, paint order and dimming: unchanged.
 
@@ -165,8 +165,8 @@ The change is confined to `org.freeplane.plugin.graph.canvas.GraphPainter`.
   unchanged at every zoom; between `8.68` and `12.5` world above the shipped `1.44` crossover the
   new rule keeps `a x zoom` instead of the shipped `8.68 x zoom`. For `a` below about `1.667`
   world units the capped base `0.84 x a` is narrower than the `1.4`-world line and the head reads
-  as a small nub merged into the line; such an edge is far shorter than the target node
-  separation. The crossover is on `a`, not on `d`.
+  as a small nub merged into the line; that is far below the nominal 6-world surface-gap target
+  and only reachable as a recorded residual violation. The crossover is on `a`, not on `d`.
 - Node overlap at the tip: unchanged; the ring covers up to `0.7 x zoom` screen px.
 - Enclosure endpoints: the tip can lie on a hull boundary rather than a node disc; head
   orientation and size depend only on the line direction, the zoom and `a`, so both endpoint
@@ -208,7 +208,9 @@ pixel predicates keep the exact-RGB and near-colour conventions of the current t
    assertions stay valid and continue to pin the call-site flag propagation. Add one capped paint
    run at a zoom above the shipped crossover, where the two rules diverge: an attachment distance
    of 10 world (the cap fixture with the target centre at world `x = 18`, tip at world `x = 10`)
-   painted at zoom 3.0. The new rule draws `min(12.5, 10) x 3 = 30` px; the shipped rule draws
+   painted at zoom 3.0, measured with item 3's geometry-attachment anchor (not the first visible
+   pixel: at zoom 3.0 the node ring painted over the head covers 2.1 px by the tip). The new rule
+   draws `min(12.5, 10) x 3 = 30` px; the shipped rule draws
    `min(max(12.5, 8.68 x 3), 10 x 3) = 26.04` px, so a `30 +/- 1.5` px assertion fails on the
    shipped code and pins the capped path at a non-1.0 zoom.
 6. **Theme fill.** The dark-theme interior sample at zoom 1.0 is unchanged, because the head
@@ -254,10 +256,20 @@ pixel predicates keep the exact-RGB and near-colour conventions of the current t
 - Frontier design review round 2 returned DEFECTS with 1 BLOCKER, 2 RISK and 4 NOTE findings: the
   committed mockups did not depict the documented rule because the renderer divided the screen
   length by zoom while drawing in screen space (fixed: the head is drawn at its screen length;
-  the renders were regenerated and re-measured at 5.6/14.2/37.5 px for rule B at 0.1485/0.378/1.0
-  and a constant 12.5 px for the shipped rule); the reported-zoom claim was unsupported and is now
-  recorded as unknown; and the constant provenance, the stale renderer note, the 0.1485 ratio
-  bound, the `MIN_GAP` conflation, and the missing non-1.0 capped paint probe were corrected.
+  the renders were regenerated and re-measured: rule B is 1.86/4.73/12.5 panel px at
+  0.1485/0.378/1.0, i.e. 5.6/14.2/37.5 px in the 3x row images, and the shipped rule is 12.5
+  panel px at all three); the reported-zoom claim was unsupported and is now recorded as unknown;
+  and the constant provenance, the stale renderer note, the 0.1485 ratio bound, the `MIN_GAP`
+  conflation, and the missing non-1.0 capped paint probe were corrected.
+- Frontier design review round 3 returned DEFECTS with 3 RISK and 4 NOTE findings: the `MIN_GAP`
+  correction itself was inverted (the 6-world gap is the minimum boundary-to-boundary attachment
+  distance, so the `d = 6` fixture is the layout minimum and is always capped, and the
+  "far shorter than the target separation" wording was wrong); the mockup README still asserted
+  the 0.378 reported view; and the three single-row renders clipped the last panel because the row
+  canvas omitted the gutter. All three are fixed (the row canvas now matches the grid canvas, the
+  renderer's reach was raised so every edge enters its panel, and each label block sits on an
+  opaque plate), and the history measurement units, the reported-zoom ambiguity and the item-5
+  measurement anchor were made explicit.
 
 ## Rollout
 
