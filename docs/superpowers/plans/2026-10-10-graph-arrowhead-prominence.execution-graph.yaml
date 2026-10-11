@@ -1,0 +1,115 @@
+schema_version: 1
+topic: graph-arrowhead-prominence
+source_plan:
+  path: docs/superpowers/plans/2026-10-10-graph-arrowhead-prominence.md
+  sha256: fb3105d570405ffa41d3f7e55563dd705038d93c7da07ab797105a9141f98463
+  commit_oid: 9862694da8990b1078712644ca8927ed22eece7f
+  tasks: [1, 2, 3, 4]
+validation_env:
+  JAVA_HOME: ~/.sdkman/candidates/java/21.0.8-zulu
+  note: Prefix every validation command with JAVA_HOME and PATH so the toolchain matches the plan.
+lanes:
+  - id: graph-arrowhead-painting
+    task_ids: [t1-helpers, t2-paint-wiring, t3-dark-fill]
+  - id: graph-arrowhead-evidence
+    task_ids: [t4-evidence]
+tasks:
+  - id: t1-helpers
+    plan_task: 1
+    title: Add the arrowhead rule constants and helpers to GraphPainter
+    implementer_tier: standard
+    lane: graph-arrowhead-painting
+    sequence: 1
+    depends_on: []
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/GraphPainter.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/GraphCanvasPaintShould.java
+    resources: []
+    interfaces:
+      produces:
+        - id: i-arrowHeadLengthPx
+          digest: ccbdc974cceca6a9
+        - id: i-availableArrowHeadWorldLength
+          digest: e8c5b592b04e52b4
+        - id: i-effectiveArrowHeadLengthPx
+          digest: 75f548ccab41c397
+        - id: i-arrowHeadHalfBasePx
+          digest: af50ff23bd0a83f7
+      consumes: []
+    validation:
+      - [gradle, ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould", "-PTestLoggingFull"]
+  - id: t2-paint-wiring
+    plan_task: 2
+    title: Rewire paintArrow and pin the painted head with pixel probes
+    implementer_tier: advanced
+    lane: graph-arrowhead-painting
+    sequence: 2
+    depends_on: [t1-helpers]
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/GraphPainter.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/GraphCanvasPaintShould.java
+    resources: []
+    interfaces:
+      produces:
+        - id: i-paintArrow
+          digest: df0085c81741e438
+        - id: i-fixtureTwoRadii
+          digest: 158b917d4221d4bb
+        - id: i-perpendicularRunPx
+          digest: 28248ed9e63a86fb
+        - id: i-measuredHeadLengthPx
+          digest: 7253cbdeb532e543
+        - id: i-maximumPerpendicularRunPx
+          digest: be8b7481be24b1df
+        - id: i-capFixture
+          digest: a77c7db8c9dcfc49
+      consumes:
+        - id: i-arrowHeadLengthPx
+        - id: i-availableArrowHeadWorldLength
+        - id: i-effectiveArrowHeadLengthPx
+        - id: i-arrowHeadHalfBasePx
+    validation:
+      - [gradle, ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould", "-PTestLoggingFull"]
+  - id: t3-dark-fill
+    plan_task: 3
+    title: Add the dark-theme fill sample and run the module regression gate
+    implementer_tier: standard
+    lane: graph-arrowhead-painting
+    sequence: 3
+    depends_on: [t2-paint-wiring]
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/GraphPainter.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/GraphCanvasPaintShould.java
+    resources: []
+    interfaces:
+      produces:
+        - id: i-darkFillTest
+          digest: df22ff1bc067b81b
+      consumes:
+        - id: i-fixtureTwoRadii
+        - id: i-paintArrow
+    validation:
+      - [gradle, ":freeplane_plugin_graph:test"]
+  - id: t4-evidence
+    plan_task: 4
+    title: Capture running-application acceptance evidence
+    implementer_tier: capable
+    lane: graph-arrowhead-evidence
+    sequence: 1
+    depends_on: [t3-dark-fill]
+    ownership:
+      paths:
+        - docs/superpowers/specs/images/2026-10-10-graph-arrowhead-prominence-graph-workspace.png
+        - docs/superpowers/plans/2026-10-10-graph-arrowhead-prominence-evidence.md
+    resources: []
+    interfaces:
+      produces:
+        - id: i-evidencePng
+          digest: d1637eb5e111725e
+      consumes:
+        - id: i-paintArrow
+    validation:
+      - [test, "-s", "docs/superpowers/specs/images/2026-10-10-graph-arrowhead-prominence-graph-workspace.png"]
