@@ -19,10 +19,10 @@ import java.util.Optional;
 import java.util.Set;
 
 import org.freeplane.plugin.graph.control.CanvasState;
+import org.freeplane.plugin.graph.geometry.EdgePath;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.HullGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
-import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.geometry.NodeGeometry;
 import org.freeplane.plugin.graph.projection.BoundaryTier;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
@@ -123,36 +123,42 @@ final class GraphPainter {
             final GraphPaintState paintState, final GraphViewport viewport, final GraphTheme theme,
             final boolean dimUnrelated, final boolean showArrowheads,
             final Set<ProjectedEndpointKey> visibleEndpoints) {
-        final GraphGeometry geometry = state.geometry();
         for (final ProjectedEdge edge : state.projection().edges()) {
             if (!visibleEndpoints.contains(edge.first()) || !visibleEndpoints.contains(edge.second())) {
                 continue;
             }
-            final LayoutPoint firstTarget = endpointAnchor(edge.second(), state);
-            final LayoutPoint secondTarget = endpointAnchor(edge.first(), state);
-            if (firstTarget == null || secondTarget == null) {
+            final EdgePath path = state.edgePaths().path(edge.key()).orElse(null);
+            if (path == null) {
                 continue;
             }
-            final LayoutPoint first = geometry.edgeAttachment(edge.first(), firstTarget);
-            final LayoutPoint second = geometry.edgeAttachment(edge.second(), secondTarget);
             final boolean related = isRelated(edge.first(), paintState) || isRelated(edge.second(), paintState);
             final AlphaComposite oldComposite = setOpacity(graphics, dimUnrelated && !related);
             graphics.setColor(theme.edgeColor());
             graphics.setStroke(theme.edgeStroke());
-            graphics.draw(new Line2D.Double(first.x(), first.y(), second.x(), second.y()));
+            graphics.draw(polyline(path.samples()));
             if (showArrowheads && edge.arrowAtFirst()) {
-                paintArrow(graphics, first, second, theme.edgeColor(), viewport.zoom(),
-                    edge.arrowAtFirst(), edge.arrowAtSecond());
+                paintArrow(graphics, path.start(), path.arrowAnchor(true), theme.edgeColor(), viewport.zoom(),
+                    edge.arrowAtFirst(), edge.arrowAtSecond(), path.terminalSegmentLength(true));
             }
             if (showArrowheads && edge.arrowAtSecond()) {
-                paintArrow(graphics, second, first, theme.edgeColor(), viewport.zoom(),
-                    edge.arrowAtFirst(), edge.arrowAtSecond());
+                paintArrow(graphics, path.end(), path.arrowAnchor(false), theme.edgeColor(), viewport.zoom(),
+                    edge.arrowAtFirst(), edge.arrowAtSecond(), path.terminalSegmentLength(false));
             }
             if (edge.hasMultiplicityCue()) {
-                paintMultiplicity(graphics, first, second, edge.contributorCount(), theme, viewport.zoom());
+                paintMultiplicity(graphics, path.arcLengthMidpoint(), edge.contributorCount(), theme,
+                    viewport.zoom());
             }
             graphics.setComposite(oldComposite);
         }
+    }
+
+    private static Shape polyline(final List<LayoutPoint> samples) {
+        final Path2D.Double path = new Path2D.Double();
+        path.moveTo(samples.get(0).x(), samples.get(0).y());
+        for (int index = 1; index < samples.size(); index++) {
+            path.lineTo(samples.get(index).x(), samples.get(index).y());
+        }
+        return path;
     }
 
     // Screen px.
@@ -177,7 +183,8 @@ final class GraphPainter {
     }
 
     private static void paintArrow(final Graphics2D graphics, final LayoutPoint tip, final LayoutPoint from,
-            final Color color, final double zoom, final boolean arrowAtFirst, final boolean arrowAtSecond) {
+            final Color color, final double zoom, final boolean arrowAtFirst, final boolean arrowAtSecond,
+            final double terminalSegmentLength) {
         final double dx = tip.x() - from.x();
         final double dy = tip.y() - from.y();
         final double length = Math.sqrt(dx * dx + dy * dy);
@@ -189,7 +196,7 @@ final class GraphPainter {
         final double perpendicularX = -unitY;
         final double perpendicularY = unitX;
         final double availableWorldLength =
-            availableArrowHeadWorldLength(length, arrowAtFirst, arrowAtSecond);
+            availableArrowHeadWorldLength(terminalSegmentLength, arrowAtFirst, arrowAtSecond);
         final double arrowLengthPx = effectiveArrowHeadLengthPx(zoom, availableWorldLength);
         final double arrowLength = arrowLengthPx / zoom;
         final double arrowWidth = arrowHeadHalfBasePx(arrowLengthPx) / zoom;
@@ -204,14 +211,13 @@ final class GraphPainter {
         graphics.fill(arrow);
     }
 
-    private static void paintMultiplicity(final Graphics2D graphics, final LayoutPoint first,
-            final LayoutPoint second, final int count, final GraphTheme theme, final double zoom) {
-        final double x = (first.x() + second.x()) * 0.5;
-        final double y = (first.y() + second.y()) * 0.5;
+    private static void paintMultiplicity(final Graphics2D graphics, final LayoutPoint midpoint,
+            final int count, final GraphTheme theme, final double zoom) {
         final Font font = theme.denseLabelFont().deriveFont(Math.max(1.0f, 9.0f / (float) zoom));
         graphics.setFont(font);
         graphics.setColor(theme.labelColor());
-        graphics.drawString("x" + count, (float) (x + 4.0 / zoom), (float) (y - 4.0 / zoom));
+        graphics.drawString("x" + count, (float) (midpoint.x() + 4.0 / zoom),
+            (float) (midpoint.y() - 4.0 / zoom));
     }
 
     private static void paintNodes(final Graphics2D graphics, final CanvasState state,
@@ -405,31 +411,6 @@ final class GraphPainter {
                 return null;
             }
             final LayoutPoint position = state.layout().positions().anchors().get(hullKey);
-            return position == null ? hull.labelAnchor() : position;
-        }
-        return null;
-    }
-
-    private static LayoutPoint endpointAnchor(final ProjectedEndpointKey endpoint, final CanvasState state) {
-        final GraphGeometry geometry = state.geometry();
-        final LayoutPositions positions = state.layout().positions();
-        if (endpoint.isNode()) {
-            final NodeGeometry node = geometry.nodes().get(endpoint.node().get());
-            if (node != null) {
-                return node.center();
-            }
-            return null;
-        }
-        final EnclosureKey enclosureKey = endpoint.enclosure().get();
-        for (final ProjectedEnclosure enclosure : state.projection().enclosures()) {
-            if (!enclosure.endpointKeys().contains(enclosureKey)) {
-                continue;
-            }
-            final HullGeometry hull = geometry.hulls().get(enclosure.hullKey());
-            if (hull == null) {
-                return null;
-            }
-            final LayoutPoint position = positions.anchors().get(enclosure.hullKey());
             return position == null ? hull.labelAnchor() : position;
         }
         return null;
