@@ -271,7 +271,7 @@ public final class EdgeConflictDiagnostics {
     public int crossingsResolved();                    // detected C1 minus residual C1
     public int edgeOverNodeResolved();                 // detected C2 minus residual C2
     public List<String> conflictsResidual();           // ascending distinct identity keys on positions()
-    public List<Repair> repairsApplied();              // application order
+    public List<Repair> repairsApplied();              // one per accepted candidate, application order
     public int rounds();
     public int verifications();                        // every batch or single attempt counted
     public boolean verificationBudgetExhausted();
@@ -713,8 +713,10 @@ no post-relocation re-gating. The rebuilt record is informational for the publis
 - `crossingsDetected` / `edgeOverNodeDetected`: first detection pass counts.
 - `crossingsResolved` / `edgeOverNodeResolved`: subtract the final residual counts.
 - `conflictsResidual`: ascending distinct identity keys on the published positions.
-- `repairsApplied`: one `Repair` per accepted attempt, in application order; `kind` from the accepted candidate,
-  `nodeKeys` ascending, `fromCentres`/`toCentres` from the pre/post attempt positions, `batchIndex = rounds − 1`.
+- `repairsApplied`: one `Repair` per accepted candidate, in candidate order within each accepted attempt
+  (application order across attempts); `kind` from that candidate, `nodeKeys` ascending,
+  `fromCentres`/`toCentres` from the pre/post candidate positions, `batchIndex = rounds − 1` (all candidates of one
+  accepted attempt share the attempt's index, so a mixed-kind batch reports one `Repair` per kind).
 - `rounds`, `verifications`, both exhaustion flags and the §4 counted work.
 - `EdgeConflictTimings`: `detectionNanos` (all `detectConflicts` passes plus rebuild detection),
   `indexNanos` (index build/query), `verificationNanos` (A1–A4 except hull recompute), `rebuildNanos` (describe + node
@@ -1132,7 +1134,7 @@ Each probe breaks exactly one mechanism and shows the covering test fails; the n
 
 | class | package | scope (per design §10.3) |
 | --- | --- | --- |
-| `EdgeConflictCorrectionShould` | `layout` | reported convex quad (batch rejection, single retry, exact `verifications = 2`), both adjacent swaps evaluated, mirrors individually, mixed/hull-endpoint conflicts produce no candidate and no anchor movement (N8), pinned candidate discard (active pins only, `BoundarySeparationCorrection.pinnedNodes` filtering), disjoint later repairs, C2 normal direction, visibility, A4 membership assertion, disc-gap veto, sibling-hull-overlap veto, pair-set monotonicity, determinism across runs and permuted input order, residual reporting, round/verification bounds, `visibleEndpoints` participation, extreme spans and the 65-chord subdivision cap |
+| `EdgeConflictCorrectionShould` | `layout` | reported convex quad (batch rejection, single retry, exact `verifications = 2`), both adjacent swaps evaluated, mirrors individually, mixed/hull-endpoint conflicts produce no candidate and no anchor movement (N8), pinned candidate discard (active pins only, `BoundarySeparationCorrection.pinnedNodes` filtering), disjoint later repairs, one `Repair` per candidate of an accepted mixed-kind batch, C2 normal direction, visibility, A4 membership assertion, disc-gap veto, sibling-hull-overlap veto, pair-set subset semantics against an equal-count replacement pair, determinism across runs and permuted input order, residual reporting, round/verification bounds, `visibleEndpoints` participation, extreme spans and the 65-chord subdivision cap |
 | `BoundaryInvariantsShould` | `layout` | frozen characterization of the extracted `detect` **and** terminal classification against `BoundarySeparationCorrection`'s pre-extraction output (injected-hull-map hull-nesting/escape cases included), the bound-exhausted `ROUND_LIMIT` case (`new BoundarySeparationCorrection(1)`, `BoundarySeparationCorrectionShould.java:1000-1013`), the memo/counter characterization (`ancestorContainmentIsMemoizedAcrossIdenticalFrames` 1231-1244, `ancestorContainmentMemoRechecksAHullWhoseGeometryChanged` 1262-1277, `capSetsAreReusedWithinAFrame` 1281-1299, `candidateSelectionStopsWhenNoSideHasAMovableContributor` 1310-1325), `describe` field policy and `baselineResidualKeys` guard |
 | `EdgeRouterShould` | `geometry` | straight when clear, bow for a disc on the chord, dogleg when a bow is blocked, later-chord obstacle, fan exemption region, proper crossing rejected inside/outside the fan region, sampled-polyline tolerance bound, `ROUTE_LENGTH_CAP` fallback and rung exclusion, attachment tangency, terminal-segment arrowhead values, canonical order, determinism and order permutation |
 | `EdgePathShould` | `geometry` | value equality of the three shapes, sample-count formula, `length()`, `arcLengthMidpoint()`, `arrowAnchor`/`terminalSegmentLength` for all three shapes |
