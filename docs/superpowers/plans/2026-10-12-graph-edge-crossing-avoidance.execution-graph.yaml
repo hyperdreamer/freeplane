@@ -352,6 +352,7 @@ tasks:
       paths:
         - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrection.java
         - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrectionShould.java
+        - docs/superpowers/specs/2026-10-12-graph-edge-crossing-avoidance-spec.md
     resources: []
     interfaces:
       produces:
