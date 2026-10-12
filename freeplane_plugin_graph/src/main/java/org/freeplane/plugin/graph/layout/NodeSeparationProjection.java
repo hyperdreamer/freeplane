@@ -2,6 +2,7 @@ package org.freeplane.plugin.graph.layout;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -11,6 +12,7 @@ import java.util.Set;
 
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
+import org.freeplane.plugin.graph.projection.CanonicalKeys;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.projection.NodeProminence;
@@ -110,7 +112,43 @@ public final class NodeSeparationProjection {
             projected.put(keys.get(index), LayoutPoint.of(x[index], y[index]));
         }
         final LayoutPositions result = LayoutPositions.of(projected, positions.anchors());
-        return NodeSeparationResult.of(result, residualViolations(x, y, radius, count), passes);
+        return NodeSeparationResult.of(result, violatingPairs(projection, result).size(), passes);
+    }
+
+    /** The canonical node-pair keys of every unordered disc pair below the minimum gap. */
+    public static List<String> violatingPairs(final GraphProjection projection,
+            final LayoutPositions positions) {
+        Objects.requireNonNull(projection, "projection");
+        Objects.requireNonNull(positions, "positions");
+        final List<ProjectedNodeKey> keys = new ArrayList<ProjectedNodeKey>(positions.nodes().keySet());
+        Collections.sort(keys, new Comparator<ProjectedNodeKey>() {
+            @Override
+            public int compare(final ProjectedNodeKey first, final ProjectedNodeKey second) {
+                return CanonicalKeys.node(first).compareTo(CanonicalKeys.node(second));
+            }
+        });
+        final List<String> result = new ArrayList<String>();
+        for (int first = 0; first < keys.size(); first++) {
+            for (int second = first + 1; second < keys.size(); second++) {
+                final ProjectedNodeKey firstKey = keys.get(first);
+                final ProjectedNodeKey secondKey = keys.get(second);
+                if (CanonicalKeys.node(firstKey).compareTo(CanonicalKeys.node(secondKey)) > 0) {
+                    continue;
+                }
+                final LayoutPoint firstPoint = positions.nodes().get(firstKey);
+                final LayoutPoint secondPoint = positions.nodes().get(secondKey);
+                if (firstPoint == null || secondPoint == null) {
+                    continue;
+                }
+                final double need = NODE_RADIUS * prominenceScale(projection, firstKey)
+                    + NODE_RADIUS * prominenceScale(projection, secondKey) + MIN_GAP;
+                if (Math.hypot(secondPoint.x() - firstPoint.x(), secondPoint.y() - firstPoint.y()) < need) {
+                    result.add(CanonicalKeys.nodePair(firstKey, secondKey));
+                }
+            }
+        }
+        Collections.sort(result);
+        return Collections.unmodifiableList(result);
     }
 
     private static void move(final Map<Long, List<Integer>> cells, final int index, final double[] x,
@@ -162,20 +200,6 @@ public final class NodeSeparationProjection {
 
     private static int cell(final double value) {
         return (int) Math.floor(value / SPATIAL_CELL);
-    }
-
-    private static int residualViolations(final double[] x, final double[] y, final double[] radius,
-            final int count) {
-        int violations = 0;
-        for (int first = 0; first < count; first++) {
-            for (int second = first + 1; second < count; second++) {
-                final double need = radius[first] + radius[second] + MIN_GAP;
-                if (Math.hypot(x[second] - x[first], y[second] - y[first]) < need) {
-                    violations++;
-                }
-            }
-        }
-        return violations;
     }
 
     private static double prominenceScale(final GraphProjection projection, final ProjectedNodeKey key) {

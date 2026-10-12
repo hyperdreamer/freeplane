@@ -145,11 +145,10 @@ public final class BoundarySeparationCorrection {
             rounds++;
         }
 
+        final GraphGeometry terminalGeometry = GraphGeometry.of(geometry.nodes(), terminalHulls);
         List<BoundaryConflict> conflicts = Collections.emptyList();
         if (!terminalViolations.isEmpty()) {
             final long planStart = System.nanoTime();
-            final GraphGeometry terminalGeometry =
-                GraphGeometry.of(geometry.nodes(), terminalHulls);
             conflicts = boundaryInvariants.terminalConflicts(projection, current, metrics, pins,
                 terminalGeometry, terminalViolations, rounds >= maxDisplacementRounds);
             planNanos += System.nanoTime() - planStart;
@@ -162,7 +161,7 @@ public final class BoundarySeparationCorrection {
         if (!diagnostics.boundaryVerified() && !diagnostics.boundaryCovered()) {
             throw new BoundarySeparationException("Boundary separation did not cover every residual pair");
         }
-        return new BoundarySeparationResult(current, diagnostics, terminalNodeResidual,
+        return new BoundarySeparationResult(current, terminalGeometry, diagnostics, terminalNodeResidual,
             new BoundarySeparationTimings(separationNanos, hullNanos, planNanos, applyNanos));
     }
 

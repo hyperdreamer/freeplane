@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeSet;
 
 import org.freeplane.plugin.graph.geometry.GeometryTextMetrics;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
@@ -179,6 +180,33 @@ public final class BoundaryInvariants {
             }
         });
         return Collections.unmodifiableList(ordered);
+    }
+
+    public Set<String> detectPairKeys(final GraphProjection projection, final GraphGeometry geometry) {
+        final Set<String> sorted = new TreeSet<String>();
+        for (final Violation violation : detect(projection, geometry)) {
+            sorted.add(violation.pairKey());
+        }
+        return Collections.unmodifiableSet(new LinkedHashSet<String>(sorted));
+    }
+
+    public BoundarySeparationDiagnostics describe(final GraphProjection projection,
+            final LayoutPositions positions, final GeometryTextMetrics metrics, final List<PinProjection> pins,
+            final GraphGeometry geometry, final List<String> baselineResidualKeys,
+            final BoundarySeparationDiagnostics stageBaseline) {
+        final Set<String> present = detectPairKeys(projection, geometry);
+        if (!baselineResidualKeys.containsAll(present)) {
+            throw new BoundarySeparationException(
+                "Rebuilt boundary record contains a pair absent from the boundary baseline");
+        }
+        final List<Violation> violations = detect(projection, geometry);
+        final List<BoundaryConflict> conflicts = terminalConflicts(projection, positions, metrics, pins,
+            geometry, violations, false);
+        final List<String> residualHullPairs = new ArrayList<String>(new TreeSet<String>(present));
+        return new BoundarySeparationDiagnostics(conflicts, residualHullPairs,
+            stageBaseline.hullViolationsDetected(), violations.size(), stageBaseline.rounds(),
+            stageBaseline.displacementRms(), stageBaseline.displacementMax(),
+            stageBaseline.appliedDisplacements(), stageBaseline.deltaRms(), stageBaseline.deltaMax());
     }
 
     PlanOutcome plan(final GraphProjection projection,

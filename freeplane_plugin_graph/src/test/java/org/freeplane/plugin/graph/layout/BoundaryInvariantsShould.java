@@ -1,6 +1,7 @@
 package org.freeplane.plugin.graph.layout;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.awt.Font;
 import java.awt.font.FontRenderContext;
@@ -119,6 +120,64 @@ public class BoundaryInvariantsShould {
         // One classification pass re-queries cap keys (the pin-depth rule re-reads the full magnitude),
         // so the frame cap cache reports reuse within the pass as well.
         assertThat(invariants.capCacheHits()).isPositive();
+    }
+
+    @Test
+    public void describePreservesStageFieldsAndRecomputesResiduals() {
+        final ProjectedNodeKey a = nodeKey("a");
+        final ProjectedNodeKey b = nodeKey("b");
+        final EnclosureHullKey aHull = hull("a");
+        final EnclosureHullKey bHull = hull("b");
+        final GraphProjection projection = projection(Arrays.asList(a, b), Arrays.asList(
+            enclosure(aHull, Collections.singletonList(a), BoundaryTier.EMPHATIC),
+            enclosure(bHull, Collections.singletonList(b), BoundaryTier.EMPHATIC)));
+        // 100 exceeds the widest possible hull reach (2 x (radius 14 + clearance 16)), so the rebuild
+        // has an empty terminal pair set; the overlapping 38.0 fixture is kept by the guard test below.
+        final LayoutPositions positions = LayoutPositions.of(
+            pointMap(a, 0.0, 0.0, b, 100.0, 0.0),
+            anchorMap(aHull, 0.0, 0.0, bHull, 100.0, 0.0));
+        final BoundarySeparationDiagnostics stageBaseline = new BoundarySeparationDiagnostics(
+            Collections.<BoundaryConflict>emptyList(), Collections.<String>emptyList(), 7, 0, 3,
+            1.5, 2.5, Collections.<String, LayoutPoint>emptyMap(), 0.5, 0.75);
+        final org.freeplane.plugin.graph.geometry.GraphGeometry geometry =
+            new GraphGeometryEngine().computeHulls(projection, positions, METRICS);
+
+        final BoundarySeparationDiagnostics rebuilt = new BoundaryInvariants().describe(projection,
+            positions, METRICS, Collections.<PinProjection>emptyList(), geometry,
+            Collections.<String>emptyList(), stageBaseline);
+
+        assertThat(rebuilt.hullViolationsDetected()).isEqualTo(7);
+        assertThat(rebuilt.rounds()).isEqualTo(3);
+        assertThat(rebuilt.displacementRms()).isEqualTo(1.5);
+        assertThat(rebuilt.displacementMax()).isEqualTo(2.5);
+        assertThat(rebuilt.deltaRms()).isEqualTo(0.5);
+        assertThat(rebuilt.deltaMax()).isEqualTo(0.75);
+        assertThat(rebuilt.appliedDisplacements()).isEmpty();
+        assertThat(rebuilt.residualHullPairs()).isEqualTo(rebuilt.conflicts().isEmpty()
+            ? Collections.<String>emptyList() : rebuilt.residualHullPairs());
+        assertThat(rebuilt.residualHullPairs()).isSorted();
+    }
+
+    @Test
+    public void describeRejectsAPairAbsentFromTheBaseline() {
+        final ProjectedNodeKey a = nodeKey("a");
+        final ProjectedNodeKey b = nodeKey("b");
+        final EnclosureHullKey aHull = hull("a");
+        final EnclosureHullKey bHull = hull("b");
+        final GraphProjection projection = projection(Arrays.asList(a, b), Arrays.asList(
+            enclosure(aHull, Collections.singletonList(a), BoundaryTier.EMPHATIC),
+            enclosure(bHull, Collections.singletonList(b), BoundaryTier.EMPHATIC)));
+        final LayoutPositions positions = LayoutPositions.of(
+            pointMap(a, 0.0, 0.0, b, 38.0, 0.0),
+            anchorMap(aHull, 0.0, 0.0, bHull, 38.0, 0.0));
+        final org.freeplane.plugin.graph.geometry.GraphGeometry geometry =
+            new GraphGeometryEngine().computeHulls(projection, positions, METRICS);
+
+        assertThatThrownBy(() -> new BoundaryInvariants().describe(projection, positions, METRICS,
+            Collections.<PinProjection>emptyList(), geometry, Collections.<String>emptyList(),
+            BoundarySeparationDiagnostics.empty()))
+            .isInstanceOf(Exception.class)
+            .hasMessageContaining("baseline");
     }
 
     private static GraphProjection projection(final List<ProjectedNodeKey> nodeKeys,
