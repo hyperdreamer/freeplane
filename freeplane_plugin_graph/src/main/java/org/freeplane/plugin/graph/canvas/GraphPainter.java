@@ -35,11 +35,9 @@ import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 
 final class GraphPainter {
-    // Screen px. Floor that keeps a head legible below the growth crossover.
-    private static final double ARROW_HEAD_MINIMUM_LENGTH_PX = 12.5;
-    // 0.62 x the maximum node radius in world units:
+    // World units. 12.5 / 14.0 ~ 0.8929 of the maximum node radius:
     // GraphGeometryEngine.BASE_RADIUS 8.0 x NodeProminence.MAX_SCALE 1.75 = 14.0 world.
-    private static final double ARROW_HEAD_LENGTH_PER_ZOOM = 0.62 * 14.0;
+    private static final double ARROW_HEAD_WORLD_LENGTH = 12.5;
     // Head base is 0.84 x length; the aspect is preserved when the cap shrinks a head.
     private static final double ARROW_HEAD_HALF_BASE_RATIO = 0.42;
     void paint(final Graphics2D graphics, final CanvasState state, final GraphPaintState paintState,
@@ -157,7 +155,7 @@ final class GraphPainter {
 
     // Screen px.
     static double arrowHeadLengthPx(final double zoom) {
-        return Math.max(ARROW_HEAD_MINIMUM_LENGTH_PX, ARROW_HEAD_LENGTH_PER_ZOOM * zoom);
+        return ARROW_HEAD_WORLD_LENGTH * zoom;
     }
 
     // World units in, world units out.
