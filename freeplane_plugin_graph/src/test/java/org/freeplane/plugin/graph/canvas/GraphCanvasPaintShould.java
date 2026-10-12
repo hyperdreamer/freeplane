@@ -1017,13 +1017,14 @@ public class GraphCanvasPaintShould {
     }
 
     @Test
-    public void arrowHeadLengthIsFlooredUntilTheCrossoverAndGrowsStrictlyAboveIt() {
-        assertThat(GraphPainter.arrowHeadLengthPx(0.6)).isCloseTo(12.5, within(1e-9));
+    public void arrowHeadLengthIsProportionalToZoom() {
+        assertThat(GraphPainter.arrowHeadLengthPx(0.6)).isCloseTo(7.5, within(1e-9));
+        assertThat(GraphPainter.arrowHeadLengthPx(0.378)).isCloseTo(4.725, within(1e-9));
         assertThat(GraphPainter.arrowHeadLengthPx(1.0)).isCloseTo(12.5, within(1e-9));
-        assertThat(GraphPainter.arrowHeadLengthPx(1.44)).isCloseTo(12.5, within(1e-9));
-        assertThat(GraphPainter.arrowHeadLengthPx(3.0)).isCloseTo(26.04, within(1e-9));
-        assertThat(GraphPainter.arrowHeadLengthPx(1.45))
-            .isGreaterThan(GraphPainter.arrowHeadLengthPx(12.5 / 8.68));
+        assertThat(GraphPainter.arrowHeadLengthPx(1.44)).isCloseTo(18.0, within(1e-9));
+        assertThat(GraphPainter.arrowHeadLengthPx(3.0)).isCloseTo(37.5, within(1e-9));
+        assertThat(GraphPainter.arrowHeadLengthPx(0.5))
+            .isLessThan(GraphPainter.arrowHeadLengthPx(1.0));
         assertThat(GraphPainter.arrowHeadHalfBasePx(12.5)).isCloseTo(5.25, within(1e-9));
     }
 
@@ -1034,6 +1035,8 @@ public class GraphCanvasPaintShould {
         assertThat(GraphPainter.availableArrowHeadWorldLength(6.0, true, false)).isCloseTo(6.0, within(1e-9));
         assertThat(GraphPainter.availableArrowHeadWorldLength(6.0, false, true)).isCloseTo(6.0, within(1e-9));
         assertThat(GraphPainter.effectiveArrowHeadLengthPx(1.0, 100.0)).isCloseTo(12.5, within(1e-9));
+        assertThat(GraphPainter.effectiveArrowHeadLengthPx(0.6, 100.0)).isCloseTo(7.5, within(1e-9));
+        assertThat(GraphPainter.effectiveArrowHeadLengthPx(3.0, 100.0)).isCloseTo(37.5, within(1e-9));
         assertThat(GraphPainter.effectiveArrowHeadLengthPx(0.6, 6.0)).isCloseTo(6.0 * 0.6, within(1e-9));
         assertThat(GraphPainter.effectiveArrowHeadLengthPx(1.0, 3.0)).isCloseTo(3.0, within(1e-9));
         assertThat(GraphPainter.arrowHeadHalfBasePx(GraphPainter.effectiveArrowHeadLengthPx(0.6, 6.0)))
@@ -1087,19 +1090,19 @@ public class GraphCanvasPaintShould {
         assertThat(measuredHeadLengthPx(imageOne, tipOne, theme.edgeColor(), 1.0))
             .isCloseTo(12.5, within(1.5));
         assertThat(measuredHeadLengthPx(imageThree, tipThree, theme.edgeColor(), 3.0))
-            .isCloseTo(26.0, within(2.0));
+            .isCloseTo(37.5, within(2.0));
         assertThat(Math.max(3.0, 1.4 * 1.0 + 1.0)).isLessThan(0.84 * 12.5);
-        assertThat(Math.max(3.0, 1.4 * 3.0 + 1.0)).isLessThan(0.84 * 26.04);
+        assertThat(Math.max(3.0, 1.4 * 3.0 + 1.0)).isLessThan(0.84 * 37.5);
         assertThat((double) perpendicularRunPx(imageOne, theme.edgeColor(),
             (int) Math.round(tipOne.getX()) - 14, (int) Math.round(tipOne.getY())))
             .isLessThan(Math.max(3.0, 1.4 * 1.0 + 1.0));
         assertThat((double) perpendicularRunPx(imageThree, theme.edgeColor(),
-            (int) Math.round(tipThree.getX()) - 28, (int) Math.round(tipThree.getY())))
+            (int) Math.round(tipThree.getX()) - 39, (int) Math.round(tipThree.getY())))
             .isLessThan(Math.max(3.0, 1.4 * 3.0 + 1.0));
     }
 
     @Test
-    public void paintedArrowHeadFloorHoldsAtLowZoom() {
+    public void paintedArrowHeadShrinksWhenZoomedOut() {
         Fixture fixture = fixture(14.0, 14.0);
         GraphTheme theme = lightTheme();
         BufferedImage imageAt06 = paintAtZoom(fixture.state, GraphPaintState.empty(), theme, 0.6);
@@ -1111,13 +1114,17 @@ public class GraphCanvasPaintShould {
 
         double measuredAt06 = measuredHeadLengthPx(imageAt06, tipAt06, theme.edgeColor(), 0.6);
         double measuredAt10 = measuredHeadLengthPx(imageAt10, tipAt10, theme.edgeColor(), 1.0);
-        assertThat(measuredAt06).isCloseTo(measuredAt10, within(1.5));
-        assertThat(measuredAt06).isGreaterThanOrEqualTo(11.0);
-        assertThat(measuredAt10).isGreaterThanOrEqualTo(11.0);
+        assertThat(measuredAt06).isCloseTo(7.5, within(1.5));
+        assertThat(measuredAt10).isCloseTo(12.5, within(1.5));
+        assertThat(measuredAt06).isLessThan(measuredAt10);
     }
 
     private static CanvasState capFixture(final boolean bidirectional) {
-        ProjectedNode target = node(FIRST_MAP, "cap-target", LayoutPoint.of(14.0, 0.0));
+        return capFixture(bidirectional, 14.0);
+    }
+
+    private static CanvasState capFixture(final boolean bidirectional, final double targetCenterX) {
+        ProjectedNode target = node(FIRST_MAP, "cap-target", LayoutPoint.of(targetCenterX, 0.0));
         EnclosureKey enclosureKey = EnclosureKey.of(source(FIRST_MAP, "cap-enclosure"));
         EnclosureHullKey hullKey = EnclosureHullKey.of(Collections.singletonList(enclosureKey));
         ProjectedEndpointKey enclosureEndpoint = ProjectedEndpointKey.ofEnclosure(enclosureKey);
@@ -1128,7 +1135,7 @@ public class GraphCanvasPaintShould {
             Collections.<EnclosureHullKey>emptyList(), false, BoundaryTier.SUBTLE);
 
         Map<ProjectedNodeKey, NodeGeometry> nodes = new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
-        nodes.put(target.key(), NodeGeometry.of(LayoutPoint.of(14.0, 0.0), 8.0));
+        nodes.put(target.key(), NodeGeometry.of(LayoutPoint.of(targetCenterX, 0.0), 8.0));
         Map<EnclosureHullKey, HullGeometry> hulls = new LinkedHashMap<EnclosureHullKey, HullGeometry>();
         hulls.put(hullKey, rectangle(-50.0, -20.0, 0.0, 20.0, LayoutPoint.of(-25.0, 0.0)));
 
@@ -1143,7 +1150,7 @@ public class GraphCanvasPaintShould {
             Collections.singletonList(enclosure), Collections.singletonList(edge),
             Collections.<RelationshipResolution>emptyList(), Collections.<PinProjection>emptyList());
         Map<ProjectedNodeKey, LayoutPoint> positions = new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
-        positions.put(target.key(), LayoutPoint.of(14.0, 0.0));
+        positions.put(target.key(), LayoutPoint.of(targetCenterX, 0.0));
         Map<EnclosureHullKey, LayoutPoint> anchors = new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
         anchors.put(hullKey, LayoutPoint.of(-25.0, 0.0));
         return CanvasState.of(1L, projection,
@@ -1179,6 +1186,13 @@ public class GraphCanvasPaintShould {
         // Non-vacuity: the enclosure-side head adds near-edge ink vs. the same edge with arrowheads off.
         assertThat(nearColorPixelsIn(twoHeads, theme.edgeColor(), 120, 66, 123, 74, 80))
             .isGreaterThan(nearColorPixelsIn(plainLine, theme.edgeColor(), 120, 66, 123, 74, 80));
+
+        // Capped rule at a zoom above the shipped 12.5 / 8.68 ~ 1.4401 crossover:
+        // d = 10 world, a = 10 world < 12.5, so L = min(12.5, 10) x 3.0 = 30 px.
+        // The shipped rule draws min(max(12.5, 8.68 x 3.0), 10 x 3.0) = 26.04 px.
+        BufferedImage cappedAtThree = paintAtZoom(capFixture(false, 18.0), GraphPaintState.empty(), theme, 3.0);
+        assertThat(measuredHeadLengthPx(cappedAtThree, new Point2D.Double(150.0, 70.0),
+            theme.edgeColor(), 3.0)).isCloseTo(30.0, within(1.5));
     }
 
     @Test

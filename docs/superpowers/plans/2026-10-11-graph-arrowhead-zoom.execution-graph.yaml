@@ -1,0 +1,89 @@
+schema_version: 1
+topic: graph-arrowhead-zoom
+source_plan:
+  path: docs/superpowers/plans/2026-10-11-graph-arrowhead-zoom.md
+  sha256: b468cfe16a7932e2ce426d8152347639044037977789a21245699a68f1c1ff81
+  commit_oid: e99679c2e0edec9f65433b06461cb2fb6cee02a7
+  tasks: [1, 2, 3]
+validation_env:
+  JAVA_HOME: ~/.sdkman/candidates/java/21.0.8-zulu
+  note: Prefix every validation command with JAVA_HOME and PATH so the toolchain matches the plan.
+lanes:
+  - id: graph-arrowhead-zoom
+    task_ids: [t1-freeze-before-binary, t2-rule-and-tests, t3-acceptance-evidence]
+tasks:
+  - id: t1-freeze-before-binary
+    plan_task: 1
+    title: Freeze the pre-change launcher binary
+    implementer_tier: standard
+    lane: graph-arrowhead-zoom
+    sequence: 1
+    depends_on: []
+    ownership:
+      paths:
+        - BIN/**
+    resources: []
+    interfaces:
+      produces:
+        - id: i-before-binary
+          digest: 945d9838f568aec9
+      consumes: []
+    validation:
+      - [test, "-s", /tmp/pm-arrowhead-zoom/BIN-before/gitinfo.txt]
+      - [test, "-s", /tmp/pm-arrowhead-zoom/BIN-before/freeplane.sh]
+  - id: t2-rule-and-tests
+    plan_task: 2
+    title: Replace the arrowhead rule and update the canvas paint tests
+    implementer_tier: standard
+    lane: graph-arrowhead-zoom
+    sequence: 2
+    depends_on: [t1-freeze-before-binary]
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/GraphPainter.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/GraphCanvasPaintShould.java
+    resources: []
+    interfaces:
+      produces:
+        - id: i-arrow-head-rule
+          digest: d4e02d369fcb3291
+        - id: i-after-binary
+          digest: 139e56ee4eeb5758
+      consumes: []
+    validation:
+      - [gradle, ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould", "-PTestLoggingFull"]
+      - [gradle, ":freeplane_plugin_graph:test"]
+  - id: t3-acceptance-evidence
+    plan_task: 3
+    title: Capture the running-application acceptance evidence
+    implementer_tier: capable
+    lane: graph-arrowhead-zoom
+    sequence: 3
+    depends_on: [t2-rule-and-tests]
+    ownership:
+      paths:
+        - docs/superpowers/specs/images/2026-10-11-graph-arrowhead-zoom-before-01485.png
+        - docs/superpowers/specs/images/2026-10-11-graph-arrowhead-zoom-after-01485.png
+        - docs/superpowers/specs/images/2026-10-11-graph-arrowhead-zoom-before-03781.png
+        - docs/superpowers/specs/images/2026-10-11-graph-arrowhead-zoom-after-03781.png
+        - docs/superpowers/specs/images/2026-10-11-graph-arrowhead-zoom-before-100.png
+        - docs/superpowers/specs/images/2026-10-11-graph-arrowhead-zoom-after-100.png
+        - docs/superpowers/specs/images/2026-10-11-graph-arrowhead-zoom-after-01485-head-8x.png
+        - docs/superpowers/specs/images/2026-10-11-graph-arrowhead-zoom-after-03781-head-8x.png
+    resources: []
+    interfaces:
+      produces:
+        - id: i-evidence-pngs
+          digest: 22db61337fabbe4a
+      consumes:
+        - id: i-before-binary
+        - id: i-after-binary
+    validation:
+      - [test, "-s", docs/superpowers/specs/images/2026-10-11-graph-arrowhead-zoom-before-01485.png]
+      - [test, "-s", docs/superpowers/specs/images/2026-10-11-graph-arrowhead-zoom-after-01485.png]
+      - [test, "-s", docs/superpowers/specs/images/2026-10-11-graph-arrowhead-zoom-before-03781.png]
+      - [test, "-s", docs/superpowers/specs/images/2026-10-11-graph-arrowhead-zoom-after-03781.png]
+      - [test, "-s", docs/superpowers/specs/images/2026-10-11-graph-arrowhead-zoom-before-100.png]
+      - [test, "-s", docs/superpowers/specs/images/2026-10-11-graph-arrowhead-zoom-after-100.png]
+      - [test, "-s", docs/superpowers/specs/images/2026-10-11-graph-arrowhead-zoom-after-01485-head-8x.png]
+      - [test, "-s", docs/superpowers/specs/images/2026-10-11-graph-arrowhead-zoom-after-03781-head-8x.png]
