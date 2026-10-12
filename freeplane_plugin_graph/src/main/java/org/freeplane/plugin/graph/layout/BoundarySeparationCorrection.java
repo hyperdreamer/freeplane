@@ -19,6 +19,7 @@ import org.freeplane.plugin.graph.geometry.HullIntersection;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.projection.BoundaryTier;
+import org.freeplane.plugin.graph.projection.CanonicalKeys;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.projection.PinProjection;
@@ -200,7 +201,7 @@ public final class BoundarySeparationCorrection {
             }
             for (final LayoutPoint vertex : childHull.exactPolygon()) {
                 if (!parentHull.contains(vertex)) {
-                    result.add(CanonicalLayoutKeys.pair(child, parent));
+                    result.add(CanonicalKeys.pair(child, parent));
                     break;
                 }
             }
@@ -223,7 +224,7 @@ public final class BoundarySeparationCorrection {
             if (!hulls.containsKey(hull)) {
                 continue;
             }
-            final String canonical = CanonicalLayoutKeys.hull(hull);
+            final String canonical = CanonicalKeys.hull(hull);
             if (enforcedByCanonical.put(canonical, hull) != null) {
                 ambiguous.add(canonical);
             }
@@ -249,7 +250,7 @@ public final class BoundarySeparationCorrection {
                 if (result != 0) {
                     return result;
                 }
-                return CanonicalLayoutKeys.hull(left).compareTo(CanonicalLayoutKeys.hull(right));
+                return CanonicalKeys.hull(left).compareTo(CanonicalKeys.hull(right));
             }
         });
         final List<EnclosureHullKey> active = new ArrayList<EnclosureHullKey>();
@@ -270,7 +271,7 @@ public final class BoundarySeparationCorrection {
                 }
                 final EnclosureHullKey first;
                 final EnclosureHullKey second;
-                if (CanonicalLayoutKeys.hull(other).compareTo(CanonicalLayoutKeys.hull(current)) <= 0) {
+                if (CanonicalKeys.hull(other).compareTo(CanonicalKeys.hull(current)) <= 0) {
                     first = other;
                     second = current;
                 }
@@ -291,7 +292,7 @@ public final class BoundarySeparationCorrection {
                 }
                 final BoundaryConflict.Kind kind = crossing ? BoundaryConflict.Kind.SIBLING_CROSSING
                     : BoundaryConflict.Kind.SIBLING_CONTAINMENT;
-                violations.put(CanonicalLayoutKeys.pair(first, second), new Violation(first, second, kind,
+                violations.put(CanonicalKeys.pair(first, second), new Violation(first, second, kind,
                     Math.hypot(translation.x(), translation.y()), translation));
             }
             active.add(current);
@@ -310,7 +311,7 @@ public final class BoundarySeparationCorrection {
             if (!ancestorContainment.isContained(parentHull, childHull)) {
                 final EnclosureHullKey first;
                 final EnclosureHullKey second;
-                if (CanonicalLayoutKeys.hull(child).compareTo(CanonicalLayoutKeys.hull(parent)) <= 0) {
+                if (CanonicalKeys.hull(child).compareTo(CanonicalKeys.hull(parent)) <= 0) {
                     first = child;
                     second = parent;
                 }
@@ -318,7 +319,7 @@ public final class BoundarySeparationCorrection {
                     first = parent;
                     second = child;
                 }
-                violations.put(CanonicalLayoutKeys.pair(child, parent), new Violation(first, second,
+                violations.put(CanonicalKeys.pair(child, parent), new Violation(first, second,
                     BoundaryConflict.Kind.ANCESTOR_ESCAPE, 0.0, null));
             }
         }
@@ -524,13 +525,13 @@ public final class BoundarySeparationCorrection {
             final GeometryTextMetrics metrics) {
         final ProjectedEnclosure enclosure = enclosuresByHull.get(hull);
         if (enclosure == null) {
-            throw new BoundarySeparationException("Missing enclosure for hull " + CanonicalLayoutKeys.hull(hull));
+            throw new BoundarySeparationException("Missing enclosure for hull " + CanonicalKeys.hull(hull));
         }
         final boolean empty = enclosure.directNodes().isEmpty() && enclosure.directEnclosures().isEmpty();
         if (empty) {
             final LayoutPoint anchor = positions.anchors().get(hull);
             if (anchor == null) {
-                throw new BoundarySeparationException("Missing anchor for hull " + CanonicalLayoutKeys.hull(hull));
+                throw new BoundarySeparationException("Missing anchor for hull " + CanonicalKeys.hull(hull));
             }
             final java.awt.geom.Dimension2D label = labelSize(enclosure, metrics);
             final double halfWidth = label.getWidth() * 0.5 + BOUNDARY_PADDING;
@@ -572,7 +573,7 @@ public final class BoundarySeparationCorrection {
             final Map<EnclosureHullKey, HullGeometry> hulls) {
         final HullGeometry geometry = hulls.get(hull);
         if (geometry == null) {
-            throw new BoundarySeparationException("Missing hull " + CanonicalLayoutKeys.hull(hull));
+            throw new BoundarySeparationException("Missing hull " + CanonicalKeys.hull(hull));
         }
         double best = Double.NEGATIVE_INFINITY;
         for (final LayoutPoint vertex : geometry.exactPolygon()) {
@@ -628,7 +629,7 @@ public final class BoundarySeparationCorrection {
             final LayoutPoint delta = sum(plan.nodeFields.get(key), plan.mapDeltas.get(key.mapReferenceId()));
             nodes.put(key, translated(entry.getValue(), delta));
             if (!isZero(delta)) {
-                addField(field, CanonicalLayoutKeys.nodeField(key), delta);
+                addField(field, CanonicalKeys.nodeField(key), delta);
             }
         }
         final Map<EnclosureHullKey, LayoutPoint> anchors = new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
@@ -637,7 +638,7 @@ public final class BoundarySeparationCorrection {
             final LayoutPoint delta = sum(anchorDeltas.get(key), plan.mapDeltas.get(key.mapReferenceId()));
             anchors.put(key, translated(entry.getValue(), delta));
             if (!isZero(delta)) {
-                addField(field, CanonicalLayoutKeys.anchorField(key), delta);
+                addField(field, CanonicalKeys.anchorField(key), delta);
             }
         }
         return LayoutPositions.of(nodes, anchors);
@@ -928,7 +929,7 @@ public final class BoundarySeparationCorrection {
             this.kind = kind;
             this.penetration = penetration;
             this.translation = translation;
-            this.pairKey = CanonicalLayoutKeys.pair(first, second);
+            this.pairKey = CanonicalKeys.pair(first, second);
         }
     }
 
@@ -1098,7 +1099,7 @@ public final class BoundarySeparationCorrection {
             final ProjectedEnclosure enclosure = enclosuresByHull.get(hull);
             if (enclosure == null) {
                 throw new BoundarySeparationException("Missing enclosure for hull "
-                    + CanonicalLayoutKeys.hull(hull));
+                    + CanonicalKeys.hull(hull));
             }
             final boolean empty = enclosure.directNodes().isEmpty() && enclosure.directEnclosures().isEmpty();
             final double support = support(hull, unit);

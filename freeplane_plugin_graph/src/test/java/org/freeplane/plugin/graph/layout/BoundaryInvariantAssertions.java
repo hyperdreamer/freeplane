@@ -15,6 +15,7 @@ import org.freeplane.plugin.graph.geometry.HullGeometry;
 import org.freeplane.plugin.graph.geometry.HullIntersection;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.projection.BoundaryTier;
+import org.freeplane.plugin.graph.projection.CanonicalKeys;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.projection.PinProjection;
@@ -50,7 +51,7 @@ final class BoundaryInvariantAssertions {
                     || containsInclusive(secondGeometry, firstGeometry);
                 assertThat(overlap && !(translation.x() == 0.0 && translation.y() == 0.0))
                     .as("non-nested hull pair must not cross: %s <-> %s",
-                        CanonicalLayoutKeys.hull(firstHull), CanonicalLayoutKeys.hull(secondHull))
+                        CanonicalKeys.hull(firstHull), CanonicalKeys.hull(secondHull))
                     .isFalse();
             }
         }
@@ -66,7 +67,7 @@ final class BoundaryInvariantAssertions {
             for (final LayoutPoint vertex : geometry.hulls().get(child).exactPolygon()) {
                 assertThat(geometry.hulls().get(parent).contains(vertex))
                     .as("child vertex must lie inside its parent hull: %s in %s",
-                        CanonicalLayoutKeys.hull(child), CanonicalLayoutKeys.hull(parent))
+                        CanonicalKeys.hull(child), CanonicalKeys.hull(parent))
                     .isTrue();
             }
         }
