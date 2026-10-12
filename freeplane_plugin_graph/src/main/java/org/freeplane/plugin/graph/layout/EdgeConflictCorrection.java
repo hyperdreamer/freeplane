@@ -80,6 +80,21 @@ public final class EdgeConflictCorrection {
         Objects.requireNonNull(pins, "pins");
         Objects.requireNonNull(visibleEndpoints, "visibleEndpoints");
         Objects.requireNonNull(boundaryResult, "boundaryResult");
+        try {
+            return relocate(projection, positions, metrics, pins, visibleEndpoints, boundaryResult);
+        }
+        catch (final EdgeConflictException exception) {
+            throw exception;
+        }
+        catch (final RuntimeException exception) {
+            throw new EdgeConflictException("Edge conflict correction failed", exception);
+        }
+    }
+
+    private EdgeConflictResult relocate(final GraphProjection projection, final LayoutPositions positions,
+            final GeometryTextMetrics metrics, final List<PinProjection> pins,
+            final Set<ProjectedEndpointKey> visibleEndpoints,
+            final BoundarySeparationResult boundaryResult) {
         resetIndexCounters();
         final Set<ProjectedNodeKey> pinned = pinnedNodes(pins);
         final Map<ProjectedNodeKey, List<EnclosureHullKey>> nodeHullsByKey =
@@ -160,9 +175,60 @@ public final class EdgeConflictCorrection {
             crossingsDetected - residual.crossings(), edgeOverNodeDetected - residual.edgeOverNodes(),
             residual.keys(), repairs, rounds, verifications, verificationBudgetExhausted,
             indexBudgetExhausted, indexInsertedItems, indexPairChecks, indexSubdivisions);
-        return new EdgeConflictResult(currentPositions, diagnostics, new EdgeConflictTimings(0L, 0L, 0L, 0L),
-            boundaryResult.diagnostics(), boundaryResult.nodeResidualViolations(),
-            Collections.<String, LayoutPoint>emptyMap());
+        BoundarySeparationDiagnostics boundaryDiagnostics = boundaryResult.diagnostics();
+        int nodeResidualViolations = boundaryResult.nodeResidualViolations();
+        long rebuildNanos = 0L;
+        if (rounds > 0) {
+            final LayoutPositions published = canonicallySorted(currentPositions);
+            final long rebuildStart = System.nanoTime();
+            boundaryDiagnostics = boundaryInvariants.describe(projection, published, metrics, pins,
+                currentGeometry, boundaryResult.diagnostics().residualHullPairs(),
+                boundaryResult.diagnostics());
+            nodeResidualViolations = new NodeSeparationProjection().project(projection, published,
+                pinned).residualViolations();
+            rebuildNanos = System.nanoTime() - rebuildStart;
+        }
+        return new EdgeConflictResult(currentPositions, diagnostics,
+            new EdgeConflictTimings(0L, 0L, 0L, rebuildNanos), boundaryDiagnostics,
+            nodeResidualViolations, appliedDisplacements(repairs));
+    }
+
+    private static LayoutPositions canonicallySorted(final LayoutPositions positions) {
+        final List<ProjectedNodeKey> keys = new ArrayList<ProjectedNodeKey>(positions.nodes().keySet());
+        Collections.sort(keys, NODE_ORDER);
+        final Map<ProjectedNodeKey, LayoutPoint> nodes =
+            new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        for (final ProjectedNodeKey key : keys) {
+            nodes.put(key, positions.nodes().get(key));
+        }
+        return LayoutPositions.of(nodes, positions.anchors());
+    }
+
+    private static Map<String, LayoutPoint> appliedDisplacements(
+            final List<EdgeConflictDiagnostics.Repair> repairs) {
+        final Map<String, LayoutPoint> field = new TreeMap<String, LayoutPoint>();
+        for (final EdgeConflictDiagnostics.Repair repair : repairs) {
+            for (final ProjectedNodeKey key : repair.nodeKeys()) {
+                final LayoutPoint from = repair.fromCentres().get(key);
+                final LayoutPoint to = repair.toCentres().get(key);
+                final String fieldKey = CanonicalKeys.nodeField(key);
+                final LayoutPoint delta = LayoutPoint.of(to.x() - from.x(), to.y() - from.y());
+                final LayoutPoint previous = field.get(fieldKey);
+                field.put(fieldKey, previous == null ? delta
+                    : LayoutPoint.of(previous.x() + delta.x(), previous.y() + delta.y()));
+            }
+        }
+        final Map<String, LayoutPoint> result = new LinkedHashMap<String, LayoutPoint>();
+        for (final Map.Entry<String, LayoutPoint> entry : field.entrySet()) {
+            if (!isZero(entry.getValue())) {
+                result.put(entry.getKey(), entry.getValue());
+            }
+        }
+        return Collections.unmodifiableMap(result);
+    }
+
+    private static boolean isZero(final LayoutPoint value) {
+        return value.x() == 0.0 && value.y() == 0.0;
     }
 
     private static Set<ProjectedNodeKey> pinnedNodes(final List<PinProjection> pins) {
