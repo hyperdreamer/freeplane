@@ -8,6 +8,7 @@ import java.awt.font.FontRenderContext;
 import java.awt.geom.Dimension2D;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.LinkedHashMap;
@@ -24,6 +25,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.freeplane.plugin.graph.adapter.EdtExecutor;
 import org.freeplane.plugin.graph.geometry.AwtGeometryTextMetrics;
+import org.freeplane.plugin.graph.geometry.EdgePaths;
+import org.freeplane.plugin.graph.geometry.EdgeRouter;
 import org.freeplane.plugin.graph.geometry.GeometryTextMetrics;
 import org.freeplane.plugin.graph.geometry.GraphGeometryEngine;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
@@ -34,13 +37,22 @@ import org.freeplane.plugin.graph.layout.EdgeConflictDiagnostics;
 import org.freeplane.plugin.graph.layout.LayoutFrame;
 import org.freeplane.plugin.graph.layout.PerceptualIdlePolicy;
 import org.freeplane.plugin.graph.projection.BoundaryTier;
+import org.freeplane.plugin.graph.projection.EdgeContributor;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.EnclosureKey;
 import org.freeplane.plugin.graph.projection.GraphProjection;
+import org.freeplane.plugin.graph.projection.PinProjection;
 import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
+import org.freeplane.plugin.graph.projection.ProjectedEdge;
+import org.freeplane.plugin.graph.projection.ProjectedEdgeKey;
+import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
+import org.freeplane.plugin.graph.projection.ProjectedEndpointVisibility;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
 import org.freeplane.plugin.graph.projection.ProjectionDiff;
+import org.freeplane.plugin.graph.projection.RelationshipResolution;
+import org.freeplane.plugin.graph.projection.input.ConnectorDescriptor;
+import org.freeplane.plugin.graph.projection.input.ConnectorSnapshot;
 import org.freeplane.plugin.graph.projection.input.SafeNodeLabel;
 import org.freeplane.plugin.graph.projection.input.SourceNodeKey;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
@@ -1378,13 +1390,76 @@ public class LayoutSettleLoopShould {
             new GraphGeometryEngine().computeHulls(projection, LayoutPositions.of(
                 Collections.emptyMap(), Collections.emptyMap()),
                 new AwtGeometryTextMetrics(new Font("Dialog", Font.PLAIN, 12),
-                    new FontRenderContext(null, true, true))), OperationalStatus.IDLE);
+                    new FontRenderContext(null, true, true))), EdgePaths.empty(), OperationalStatus.IDLE);
 
         assertThat(state.generation()).isEqualTo(9L);
         assertThat(state.projection()).isSameAs(projection);
         assertThat(state.layout().positions().nodes()).isEmpty();
         assertThat(state.geometry().nodes()).isEmpty();
         assertThat(state.status()).isEqualTo(OperationalStatus.IDLE);
+    }
+
+    @Test
+    public void publishTheFramesOwnRoutedEdgePaths() throws Exception {
+        CanvasState state = publishTwoEdgeFrame();
+
+        assertThat(state.edgePaths().byEdge()).isNotEmpty();
+        assertThat(state.edgePaths().diagnostics().edgesStraight()
+            + state.edgePaths().diagnostics().edgesBow()
+            + state.edgePaths().diagnostics().edgesDogleg()
+            + state.edgePaths().diagnostics().edgesFallback())
+            .isEqualTo(state.edgePaths().byEdge().size());
+        assertThat(state.edgePaths()).isSameAs(state.withStatus(OperationalStatus.FAILED).edgePaths());
+        assertThat(publishTwoEdgeFailedFrame().edgePaths().byEdge()).isNotEmpty();
+    }
+
+    private static CanvasState publishTwoEdgeFrame() {
+        GraphProjection projection = twoEdgeProjection(9L);
+        TestStepper stepper = new TestStepper(frame(projection, 0L, true));
+        LayoutSettleLoop loop = new LayoutSettleLoop(WORKSPACE, stepper, new GraphGeometryEngine(),
+            new ImmediateEdt());
+        List<CanvasState> states = new ArrayList<CanvasState>();
+        await(loop.start(batch(9L), projection,
+            ProjectionDiff.between(emptyProjection(8L), projection), states::add));
+        loop.close();
+        return states.get(0);
+    }
+
+    private static CanvasState publishTwoEdgeFailedFrame() {
+        GraphProjection projection = twoEdgeProjection(9L);
+        TestStepper stepper = new TestStepper(failedFrame(0L, positions(projection)));
+        LayoutSettleLoop loop = new LayoutSettleLoop(WORKSPACE, stepper, new GraphGeometryEngine(),
+            new ImmediateEdt());
+        CompletableFuture<CanvasState> failedPublication = new CompletableFuture<CanvasState>();
+        CompletionStage<Void> completion = loop.start(batch(9L), projection,
+            ProjectionDiff.between(emptyProjection(8L), projection), state -> failedPublication.complete(state));
+        CanvasState state = await(failedPublication);
+        loop.close();
+        await(completion);
+        return state;
+    }
+
+    private static GraphProjection twoEdgeProjection(long generation) {
+        ProjectedNodeKey first = ProjectedNodeKey.of(SourceNodeKey.persisted(reference("edge-a")));
+        ProjectedNodeKey second = ProjectedNodeKey.of(SourceNodeKey.persisted(reference("edge-b")));
+        ProjectedNodeKey third = ProjectedNodeKey.of(SourceNodeKey.persisted(reference("edge-c")));
+        ProjectedNode firstNode = ProjectedNode.of(first, SafeNodeLabel.of("A", "A"), "Map", false);
+        ProjectedNode secondNode = ProjectedNode.of(second, SafeNodeLabel.of("B", "B"), "Map", false);
+        ProjectedNode thirdNode = ProjectedNode.of(third, SafeNodeLabel.of("C", "C"), "Map", false);
+        return GraphProjection.projected(generation, Arrays.asList(firstNode, secondNode, thirdNode),
+            Collections.<ProjectedEnclosure>emptyList(),
+            Arrays.asList(nativeEdge(first, "edge-b"), nativeEdge(first, "edge-c")),
+            Collections.<RelationshipResolution>emptyList(), Collections.<PinProjection>emptyList());
+    }
+
+    private static ProjectedEdge nativeEdge(final ProjectedNodeKey sourceKey, final String targetId) {
+        ProjectedNodeKey targetKey = ProjectedNodeKey.of(SourceNodeKey.persisted(reference(targetId)));
+        ProjectedEndpointKey source = ProjectedEndpointKey.ofNode(sourceKey);
+        ProjectedEndpointKey target = ProjectedEndpointKey.ofNode(targetKey);
+        ConnectorDescriptor descriptor = ConnectorDescriptor.of(sourceKey.source(), reference(targetId),
+            false, false, "source", "middle", "target");
+        return ProjectedEdge.of(ProjectedEdgeKey.of(source, target), Collections.singletonList(
+            EdgeContributor.nativeConnector(ConnectorSnapshot.of(0, descriptor), source, target)));
     }
 
     private static AcceptedBatch batch(long generation) {

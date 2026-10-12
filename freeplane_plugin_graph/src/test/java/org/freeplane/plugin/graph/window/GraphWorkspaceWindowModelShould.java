@@ -85,6 +85,7 @@ import org.freeplane.plugin.graph.control.OperationalStatus;
 import org.freeplane.plugin.graph.control.WorkspaceCloseController;
 import org.freeplane.plugin.graph.control.WorkspaceSessionStatus;
 import org.freeplane.plugin.graph.control.WorkspaceSessionStatusListener;
+import org.freeplane.plugin.graph.geometry.EdgePaths;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.HullGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
@@ -2617,7 +2618,8 @@ public class GraphWorkspaceWindowModelShould {
     private static CanvasState emptyState() {
         return CanvasState.of(0L, GraphProjection.structure(0L, Collections.emptyList(), Collections.emptyList()),
             LayoutFrame.of(0L, LayoutPositions.of(Collections.emptyMap(), Collections.emptyMap()), false, 0),
-            GraphGeometry.of(Collections.emptyMap(), Collections.emptyMap()), OperationalStatus.LOADING);
+            GraphGeometry.of(Collections.emptyMap(), Collections.emptyMap()), EdgePaths.empty(),
+            OperationalStatus.LOADING);
     }
 
     @Test
@@ -2907,7 +2909,7 @@ public class GraphWorkspaceWindowModelShould {
             Collections.emptyMap());
         LayoutFrame layout = LayoutFrame.of(0L, LayoutPositions.of(
             Collections.singletonMap(key, center), Collections.emptyMap()), false, 0);
-        return CanvasState.of(0L, projection, layout, geometry, OperationalStatus.IDLE);
+        return CanvasState.of(0L, projection, layout, geometry, EdgePaths.empty(), OperationalStatus.IDLE);
     }
 
     private static CanvasState persistedPinnedNodeState(MapReferenceId mapId, LayoutPoint center,
@@ -2925,7 +2927,7 @@ public class GraphWorkspaceWindowModelShould {
             Collections.emptyMap());
         LayoutFrame layout = LayoutFrame.of(0L, LayoutPositions.of(
             Collections.singletonMap(key, center), Collections.emptyMap()), false, 0);
-        return CanvasState.of(0L, projection, layout, geometry, OperationalStatus.IDLE);
+        return CanvasState.of(0L, projection, layout, geometry, EdgePaths.empty(), OperationalStatus.IDLE);
     }
 
     private static CanvasState persistedNodeStateWithoutGeometry(MapReferenceId mapId) {
@@ -2937,7 +2939,8 @@ public class GraphWorkspaceWindowModelShould {
             Collections.emptyList());
         return CanvasState.of(0L, projection,
             LayoutFrame.of(0L, LayoutPositions.of(Collections.emptyMap(), Collections.emptyMap()), false, 0),
-            GraphGeometry.of(Collections.emptyMap(), Collections.emptyMap()), OperationalStatus.IDLE);
+            GraphGeometry.of(Collections.emptyMap(), Collections.emptyMap()), EdgePaths.empty(),
+            OperationalStatus.IDLE);
     }
 
     private static CanvasState persistedPinnedNodeStateWithoutGeometry(MapReferenceId mapId) {
@@ -2952,7 +2955,8 @@ public class GraphWorkspaceWindowModelShould {
                     Collections.emptyList()), key)));
         return CanvasState.of(0L, projection,
             LayoutFrame.of(0L, LayoutPositions.of(Collections.emptyMap(), Collections.emptyMap()), false, 0),
-            GraphGeometry.of(Collections.emptyMap(), Collections.emptyMap()), OperationalStatus.IDLE);
+            GraphGeometry.of(Collections.emptyMap(), Collections.emptyMap()), EdgePaths.empty(),
+            OperationalStatus.IDLE);
     }
 
     private static CanvasState boundaryWithNodeState() {
@@ -2979,7 +2983,7 @@ public class GraphWorkspaceWindowModelShould {
         LayoutFrame layout = LayoutFrame.of(0L, LayoutPositions.of(
             Collections.singletonMap(key, LayoutPoint.of(0.0, 0.0)),
             Collections.singletonMap(hullKey, anchor)), false, 0);
-        return CanvasState.of(0L, projection, layout, geometry, OperationalStatus.IDLE);
+        return CanvasState.of(0L, projection, layout, geometry, EdgePaths.empty(), OperationalStatus.IDLE);
     }
 
     private static CanvasState nodeState(MapReferenceId mapId, LayoutPoint center) {
@@ -2992,7 +2996,7 @@ public class GraphWorkspaceWindowModelShould {
             Collections.emptyMap());
         LayoutFrame layout = LayoutFrame.of(0L, LayoutPositions.of(
             Collections.singletonMap(key, center), Collections.emptyMap()), false, 0);
-        return CanvasState.of(0L, projection, layout, geometry, OperationalStatus.IDLE);
+        return CanvasState.of(0L, projection, layout, geometry, EdgePaths.empty(), OperationalStatus.IDLE);
     }
 
     private static CanvasState wideNodeState(MapReferenceId mapId) {
@@ -3023,7 +3027,7 @@ public class GraphWorkspaceWindowModelShould {
         positions.put(rightKey, rightCenter);
         return CanvasState.of(0L, projection,
             LayoutFrame.of(0L, LayoutPositions.of(positions, Collections.emptyMap()), false, 0),
-            GraphGeometry.of(geometry, Collections.emptyMap()), OperationalStatus.IDLE);
+            GraphGeometry.of(geometry, Collections.emptyMap()), EdgePaths.empty(), OperationalStatus.IDLE);
     }
 
     private static CanvasState enclosureState(MapReferenceId mapId) {
@@ -3045,7 +3049,7 @@ public class GraphWorkspaceWindowModelShould {
             Collections.singletonMap(hullKey, hull));
         LayoutFrame layout = LayoutFrame.of(0L, LayoutPositions.of(Collections.emptyMap(),
             Collections.singletonMap(hullKey, anchor)), false, 0);
-        return CanvasState.of(0L, projection, layout, geometry, OperationalStatus.IDLE);
+        return CanvasState.of(0L, projection, layout, geometry, EdgePaths.empty(), OperationalStatus.IDLE);
     }
 
 
