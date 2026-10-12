@@ -758,7 +758,8 @@ public final class LayoutSettleLoop implements AutoCloseable {
             return LayoutFrame.of(index, positions, true, residual);
         }
         final BoundarySeparationDiagnostics diagnostics = retained.boundaryDiagnostics();
-        return LayoutFrame.withDiagnostics(LayoutFrame.of(index, positions, true, residual), diagnostics,
+        return LayoutFrame.withDiagnostics(LayoutFrame.of(index, positions, true, residual),
+            retained.residualViolations(), diagnostics, retained.edgeConflictDiagnostics(),
             retained.idle());
     }
 
