@@ -1410,7 +1410,7 @@ public class LayoutSettleLoopShould {
             + state.edgePaths().diagnostics().edgesFallback())
             .isEqualTo(state.edgePaths().byEdge().size());
         assertThat(state.edgePaths()).isSameAs(state.withStatus(OperationalStatus.FAILED).edgePaths());
-        assertThat(publishTwoEdgeFailedFrame().edgePaths()).isNotNull();
+        assertThat(publishTwoEdgeFailedFrame().edgePaths().byEdge()).isNotEmpty();
     }
 
     private static CanvasState publishTwoEdgeFrame() {
