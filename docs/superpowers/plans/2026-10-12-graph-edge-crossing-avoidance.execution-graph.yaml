@@ -155,6 +155,8 @@ tasks:
       paths:
         - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/EdgeRouter.java
         - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/geometry/EdgeRouterShould.java
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/EdgeRouteDiagnostics.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/geometry/EdgeRouterFixture.java
     resources: []
     interfaces:
       produces:
@@ -274,6 +276,7 @@ tasks:
           digest: 302578030ac0e033
     validation:
       - [gradle, ":freeplane_plugin_graph:test", "-PTestLoggingFull"]
+      # expect: red-phase - EdgeConflictCorrectionShould 6 tests, exactly 5 mandated failures, scaffold test green
   - id: geca-t11
     plan_task: 11
     title: "Add the red-phase router fixtures (spec \u00a78.2 and \u00a78.3)"
