@@ -88,6 +88,8 @@ import org.freeplane.plugin.graph.control.WorkspaceCloseController;
 import org.freeplane.plugin.graph.control.WorkspaceMapCoordinator;
 import org.freeplane.plugin.graph.control.WorkspaceSessionId;
 import org.freeplane.plugin.graph.control.WorkspaceSessionRegistry;
+import org.freeplane.plugin.graph.geometry.EdgePaths;
+import org.freeplane.plugin.graph.geometry.EdgeRouter;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
@@ -105,6 +107,7 @@ import org.freeplane.plugin.graph.projection.ProjectedEdge;
 import org.freeplane.plugin.graph.projection.ProjectedEdgeKey;
 import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
+import org.freeplane.plugin.graph.projection.ProjectedEndpointVisibility;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
 import org.freeplane.plugin.graph.projection.RecoverableReason;
@@ -329,6 +332,7 @@ public class GraphWorkspaceCommandAcceptanceShould {
                 new GraphIntent.RevealSourceNode(fixture.firstEndpoint),
                 new GraphIntent.OpenSourceNode(fixture.firstEndpoint),
                 new GraphIntent.InspectEdge(fixture.edge.key()));
+            assertThat(fixture.state.edgePaths().byEdge()).containsKey(fixture.edge.key());
         }
         finally {
             interaction.uninstall();
@@ -784,7 +788,8 @@ public class GraphWorkspaceCommandAcceptanceShould {
     private static CanvasState stateFor(final GraphProjection projection) {
         return CanvasState.of(projection.generation(), projection,
             LayoutFrame.of(projection.generation(), LayoutPositions.of(Collections.emptyMap(), Collections.emptyMap()),
-                false, 0), GraphGeometry.of(Collections.emptyMap(), Collections.emptyMap()), OperationalStatus.IDLE);
+                false, 0), GraphGeometry.of(Collections.emptyMap(), Collections.emptyMap()), EdgePaths.empty(),
+            OperationalStatus.IDLE);
     }
 
     private static void dispatch(final GraphCanvas canvas, final java.awt.AWTEvent event) {
@@ -1227,10 +1232,15 @@ public class GraphWorkspaceCommandAcceptanceShould {
                 new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
             anchors.put(firstHull, LayoutPoint.of(-40.0, 0.0));
             anchors.put(secondHull, LayoutPoint.of(40.0, 0.0));
+            final LayoutPositions layoutPositions = LayoutPositions.of(
+                Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(), anchors);
+            final GraphGeometry geometry = GraphGeometry.of(
+                Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(), hulls);
             final CanvasState state = CanvasState.of(7L, projection,
-                LayoutFrame.of(7L, LayoutPositions.of(Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(),
-                    anchors), false, 0),
-                GraphGeometry.of(Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(), hulls),
+                LayoutFrame.of(7L, layoutPositions, false, 0), geometry,
+                new EdgeRouter().route(projection, layoutPositions, geometry,
+                    ProjectedEndpointVisibility.visibleEndpoints(projection.nodes(),
+                        projection.enclosures())),
                 OperationalStatus.IDLE);
             final GraphCanvas canvas = new GraphCanvas();
             canvas.setSize(new Dimension(400, 300));

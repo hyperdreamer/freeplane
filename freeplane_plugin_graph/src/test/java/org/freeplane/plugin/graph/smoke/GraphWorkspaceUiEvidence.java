@@ -60,6 +60,7 @@ import org.freeplane.plugin.graph.control.GraphWorkspaceViewBinding;
 import org.freeplane.plugin.graph.control.OperationalStatus;
 import org.freeplane.plugin.graph.control.WorkspaceCloseController;
 import org.freeplane.plugin.graph.control.WorkspaceSessionStatus;
+import org.freeplane.plugin.graph.geometry.EdgePaths;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
@@ -280,7 +281,7 @@ public final class GraphWorkspaceUiEvidence {
         positions.put(SECOND_KEY, secondPoint);
         return CanvasState.of(7L, projection,
             LayoutFrame.of(0L, LayoutPositions.of(positions, Collections.emptyMap()), false, 0),
-            GraphGeometry.of(geometry, Collections.emptyMap()), OperationalStatus.IDLE);
+            GraphGeometry.of(geometry, Collections.emptyMap()), EdgePaths.empty(), OperationalStatus.IDLE);
     }
 
     private static GraphWorkspacePresentation presentation() {

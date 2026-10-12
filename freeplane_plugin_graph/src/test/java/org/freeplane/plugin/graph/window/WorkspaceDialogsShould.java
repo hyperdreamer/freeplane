@@ -39,6 +39,7 @@ import org.freeplane.plugin.graph.control.GraphWorkspaceHandle;
 import org.freeplane.plugin.graph.control.WorkspaceSessionStatus;
 import org.freeplane.plugin.graph.control.WorkspaceSessionStatusListener;
 import org.freeplane.plugin.graph.control.GraphWorkspaceViewBinding;
+import org.freeplane.plugin.graph.geometry.EdgePaths;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
@@ -439,7 +440,7 @@ public class WorkspaceDialogsShould {
             LayoutPositions.of(nodePositions, Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false, 0),
             GraphGeometry.of(Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(),
                 Collections.<EnclosureHullKey, HullGeometry>emptyMap()),
-            OperationalStatus.IDLE);
+            EdgePaths.empty(), OperationalStatus.IDLE);
     }
 
     private static CanvasState stateWithCounts(long generation, int nodes, int edges,
@@ -481,7 +482,7 @@ public class WorkspaceDialogsShould {
         return CanvasState.of(generation, projection, LayoutFrame.of(generation,
             LayoutPositions.of(Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(), anchors), false, 0),
             GraphGeometry.of(Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(), hullGeometry),
-            OperationalStatus.IDLE);
+            EdgePaths.empty(), OperationalStatus.IDLE);
     }
 
     private static ContributorState contributorState(long generation) {
@@ -509,7 +510,7 @@ public class WorkspaceDialogsShould {
         }
         CanvasState state = CanvasState.of(generation, projection, LayoutFrame.of(generation,
             LayoutPositions.of(positions, Collections.emptyMap()), false, 0), GraphGeometry.of(geometry,
-            Collections.emptyMap()), OperationalStatus.IDLE);
+            Collections.emptyMap()), EdgePaths.empty(), OperationalStatus.IDLE);
         return new ContributorState(state, edge, contributor);
     }
 

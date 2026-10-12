@@ -22,6 +22,8 @@ import java.util.UUID;
 
 import org.freeplane.plugin.graph.control.CanvasState;
 import org.freeplane.plugin.graph.control.OperationalStatus;
+import org.freeplane.plugin.graph.geometry.EdgePaths;
+import org.freeplane.plugin.graph.geometry.EdgeRouter;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
@@ -36,6 +38,7 @@ import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.projection.ProjectedEdge;
 import org.freeplane.plugin.graph.projection.ProjectedEdgeKey;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
+import org.freeplane.plugin.graph.projection.ProjectedEndpointVisibility;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
 import org.freeplane.plugin.graph.projection.PinProjection;
@@ -339,7 +342,9 @@ public class GraphInteractionControllerShould {
             fixture.state.projection().nodes(), fixture.state.projection().enclosures(), edges,
             fixture.state.projection().relationshipResolutions(), fixture.state.projection().pins());
         final CanvasState state = CanvasState.of(1L, projection, fixture.state.layout(),
-            fixture.state.geometry(), fixture.state.status());
+            fixture.state.geometry(),
+            routedPaths(projection, fixture.state.layout().positions(), fixture.state.geometry()),
+            fixture.state.status());
         final LayoutPoint sourceCenter = fixture.state.geometry().nodes().get(fixture.firstNodeKey).center();
         final LayoutPoint targetAnchor = LayoutPoint.of(95.0, 0.0);
         final LayoutPoint first = fixture.state.geometry().edgeAttachment(fixture.firstEndpoint, targetAnchor);
@@ -614,7 +619,17 @@ public class GraphInteractionControllerShould {
         final GraphProjection projection = GraphProjection.projected(base.generation(), nodes, enclosures,
             Collections.<ProjectedEdge>emptyList(), base.projection().relationshipResolutions(),
             Collections.<PinProjection>emptyList());
-        return CanvasState.of(base.generation(), projection, base.layout(), geometry, base.status());
+        return CanvasState.of(base.generation(), projection, base.layout(), geometry,
+            routedPaths(projection, base.layout().positions(), geometry), base.status());
+    }
+
+    private static EdgePaths routedPaths(final GraphProjection projection, final LayoutPositions positions,
+            final GraphGeometry geometry) {
+        if (projection.edges().isEmpty()) {
+            return EdgePaths.empty();
+        }
+        return new EdgeRouter().route(projection, positions, geometry,
+            ProjectedEndpointVisibility.visibleEndpoints(projection.nodes(), projection.enclosures()));
     }
 
     private static void dispatch(GraphCanvas canvas, AWTEvent event) {
@@ -759,7 +774,7 @@ public class GraphInteractionControllerShould {
             final LayoutFrame frame = LayoutFrame.of(1L, LayoutPositions.of(nodePositions, anchors),
                 false, 0);
             final CanvasState state = CanvasState.of(1L, projection, frame, geometry,
-                OperationalStatus.IDLE);
+                routedPaths(projection, frame.positions(), geometry), OperationalStatus.IDLE);
             final LayoutPoint firstAttachment = geometry.edgeAttachment(nodeEndpoint, layoutAnchor);
             final LayoutPoint secondAttachment = geometry.edgeAttachment(enclosureEndpoint,
                 nodeCenter);
@@ -829,7 +844,7 @@ public class GraphInteractionControllerShould {
             final LayoutFrame frame = LayoutFrame.of(1L,
                 LayoutPositions.of(positions, Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false, 0);
             return new CoordinateSegmentFixture(CanvasState.of(1L, projection, frame, geometry,
-                OperationalStatus.IDLE), edgeKey);
+                routedPaths(projection, frame.positions(), geometry), OperationalStatus.IDLE), edgeKey);
         }
     }
 
@@ -887,7 +902,7 @@ public class GraphInteractionControllerShould {
             final LayoutFrame frame = LayoutFrame.of(1L,
                 LayoutPositions.of(positions, Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false, 0);
             return new ExtremeSpanFixture(CanvasState.of(1L, projection, frame, geometry,
-                OperationalStatus.IDLE), edgeKey);
+                routedPaths(projection, frame.positions(), geometry), OperationalStatus.IDLE), edgeKey);
         }
     }
 
@@ -1028,7 +1043,7 @@ public class GraphInteractionControllerShould {
             final LayoutPositions positions = LayoutPositions.of(nodePoints(nodes), anchors);
             final LayoutFrame frame = LayoutFrame.of(1L, positions, false, 0);
             final CanvasState state = CanvasState.of(1L, projection, frame, geometry,
-                OperationalStatus.IDLE);
+                routedPaths(projection, frame.positions(), geometry), OperationalStatus.IDLE);
             return new Fixture(state, first, second, firstEndpoint, secondEndpoint,
                 hullKey, secondHullKey, ProjectedEndpointKey.ofEnclosure(enclosureKey),
                 ProjectedEndpointKey.ofEnclosure(secondEnclosureKey),
