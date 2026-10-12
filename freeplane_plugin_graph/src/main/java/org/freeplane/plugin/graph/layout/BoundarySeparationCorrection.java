@@ -2,8 +2,6 @@ package org.freeplane.plugin.graph.layout;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -15,17 +13,14 @@ import org.freeplane.plugin.graph.geometry.GeometryTextMetrics;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.GraphGeometryEngine;
 import org.freeplane.plugin.graph.geometry.HullGeometry;
-import org.freeplane.plugin.graph.geometry.HullIntersection;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
-import org.freeplane.plugin.graph.projection.BoundaryTier;
 import org.freeplane.plugin.graph.projection.CanonicalKeys;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.projection.PinProjection;
 import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
-import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 
 public final class BoundarySeparationCorrection {
     public static final int MAX_DISPLACEMENT_ROUNDS = 4;
@@ -35,9 +30,7 @@ public final class BoundarySeparationCorrection {
     static final double SUPPORT_COMPARISON_EPSILON = 1e-9;
 
     private final GraphGeometryEngine geometryEngine = new GraphGeometryEngine();
-    private final AncestorContainmentMemo ancestorContainment = new AncestorContainmentMemo();
-    private long capTraversals;
-    private long capCacheHits;
+    private final BoundaryInvariants boundaryInvariants = new BoundaryInvariants();
     private final int maxDisplacementRounds;
 
     public BoundarySeparationCorrection() {
@@ -52,19 +45,19 @@ public final class BoundarySeparationCorrection {
     }
 
     long ancestorExactContainmentChecks() {
-        return ancestorContainment.exactChecks;
+        return boundaryInvariants.ancestorExactContainmentChecks();
     }
 
     long ancestorContainmentMemoHits() {
-        return ancestorContainment.memoHits;
+        return boundaryInvariants.ancestorContainmentMemoHits();
     }
 
     long capTraversals() {
-        return capTraversals;
+        return boundaryInvariants.capTraversals();
     }
 
     long capCacheHits() {
-        return capCacheHits;
+        return boundaryInvariants.capCacheHits();
     }
 
     public BoundarySeparationResult apply(final GraphProjection projection, final LayoutPositions positions,
@@ -86,10 +79,9 @@ public final class BoundarySeparationCorrection {
 
     private BoundarySeparationResult separate(final GraphProjection projection, final LayoutPositions positions,
             final GeometryTextMetrics metrics, final List<PinProjection> pins) {
-        final Map<EnclosureHullKey, ProjectedEnclosure> enclosuresByHull = enclosuresByHull(projection);
-        final Map<EnclosureHullKey, EnclosureHullKey> parents = parents(projection);
         final Set<ProjectedNodeKey> pinnedNodes = pinnedNodes(pins);
-        final Map<ProjectedNodeKey, List<EnclosureHullKey>> nodeHullsByKey = nodeHulls(projection);
+        final Map<ProjectedNodeKey, List<EnclosureHullKey>> nodeHullsByKey =
+            BoundaryInvariants.nodeHullsByKey(projection);
 
         long separationNanos = 0L;
         long hullNanos = 0L;
@@ -103,7 +95,7 @@ public final class BoundarySeparationCorrection {
         int rounds = 0;
         int detected = 0;
         int terminalNodeResidual = 0;
-        List<Violation> terminalViolations = Collections.emptyList();
+        List<BoundaryInvariants.Violation> terminalViolations = Collections.emptyList();
         Map<EnclosureHullKey, HullGeometry> terminalHulls = Collections.emptyMap();
 
         while (true) {
@@ -120,7 +112,7 @@ public final class BoundarySeparationCorrection {
             }
             else {
                 geometry = geometryEngine.recomputeHulls(projection, current, metrics, geometry,
-                    changedHulls(nodeHullsByKey, hullPositions, current));
+                    BoundaryInvariants.changedHulls(nodeHullsByKey, hullPositions, current));
             }
             final Map<EnclosureHullKey, HullGeometry> hulls = geometry.hulls();
             hullPositions = current;
@@ -128,7 +120,7 @@ public final class BoundarySeparationCorrection {
             // R13: plan covers detection, candidate evaluation and conflict construction only;
             // hull measurement is attributed to the hull stage above.
             final long planStart = System.nanoTime();
-            final List<Violation> violations = detect(projection, enclosuresByHull, parents, hulls);
+            final List<BoundaryInvariants.Violation> violations = boundaryInvariants.detect(projection, geometry);
             if (rounds == 0) {
                 detected = violations.size();
             }
@@ -138,7 +130,8 @@ public final class BoundarySeparationCorrection {
                 planNanos += System.nanoTime() - planStart;
                 break;
             }
-            final PlanOutcome plan = plan(projection, enclosuresByHull, hulls, current, metrics, pins, pinnedNodes,
+            final BoundaryInvariants.PlanOutcome plan = boundaryInvariants.plan(projection,
+                BoundaryInvariants.enclosuresByHull(projection), hulls, current, metrics, pins, pinnedNodes,
                 violations);
             planNanos += System.nanoTime() - planStart;
             if (plan.isEmpty()) {
@@ -147,7 +140,7 @@ public final class BoundarySeparationCorrection {
                 break;
             }
             final long applyStart = System.nanoTime();
-            current = applyRound(projection, enclosuresByHull, current, plan, field);
+            current = applyRound(projection, BoundaryInvariants.enclosuresByHull(projection), current, plan, field);
             applyNanos += System.nanoTime() - applyStart;
             rounds++;
         }
@@ -155,11 +148,10 @@ public final class BoundarySeparationCorrection {
         List<BoundaryConflict> conflicts = Collections.emptyList();
         if (!terminalViolations.isEmpty()) {
             final long planStart = System.nanoTime();
-            final PlanOutcome terminalPlan = plan(projection, enclosuresByHull, terminalHulls, current, metrics, pins,
-                pinnedNodes, terminalViolations);
-            final boolean boundExhausted = rounds >= maxDisplacementRounds;
-            conflicts = terminalConflicts(terminalViolations, terminalPlan, boundExhausted, projection,
-                enclosuresByHull, pins);
+            final GraphGeometry terminalGeometry =
+                GraphGeometry.of(geometry.nodes(), terminalHulls);
+            conflicts = boundaryInvariants.terminalConflicts(projection, current, metrics, pins,
+                terminalGeometry, terminalViolations, rounds >= maxDisplacementRounds);
             planNanos += System.nanoTime() - planStart;
         }
         final Map<String, LayoutPoint> applied = sortedNonZero(field);
@@ -175,453 +167,17 @@ public final class BoundarySeparationCorrection {
     }
 
     static LayoutPoint guardedMinimumSeparatingTranslation(final HullGeometry first, final HullGeometry second) {
-        try {
-            return HullIntersection.minimumSeparatingTranslation(first, second);
-        }
-        catch (final RuntimeException exception) {
-            throw new BoundarySeparationException("Minimum separating translation failed", exception);
-        }
+        return BoundaryInvariants.guardedMinimumSeparatingTranslation(first, second);
     }
 
     static List<String> ancestorEscapePairKeys(final GraphProjection projection,
             final Map<EnclosureHullKey, HullGeometry> hulls) {
-        Objects.requireNonNull(projection, "projection");
-        Objects.requireNonNull(hulls, "hulls");
-        final List<String> result = new ArrayList<String>();
-        for (final ProjectedEnclosure enclosure : projection.enclosures()) {
-            if (enclosure.boundaryTier() == BoundaryTier.SUPPRESSED || !enclosure.parentHull().isPresent()) {
-                continue;
-            }
-            final EnclosureHullKey child = enclosure.hullKey();
-            final EnclosureHullKey parent = enclosure.parentHull().get();
-            final HullGeometry childHull = hulls.get(child);
-            final HullGeometry parentHull = hulls.get(parent);
-            if (childHull == null || parentHull == null) {
-                continue;
-            }
-            for (final LayoutPoint vertex : childHull.exactPolygon()) {
-                if (!parentHull.contains(vertex)) {
-                    result.add(CanonicalKeys.pair(child, parent));
-                    break;
-                }
-            }
-        }
-        Collections.sort(result);
-        return Collections.unmodifiableList(result);
+        return BoundaryInvariants.ancestorEscapePairKeys(projection, hulls);
     }
-
-    private List<Violation> detect(final GraphProjection projection,
-            final Map<EnclosureHullKey, ProjectedEnclosure> enclosuresByHull,
-            final Map<EnclosureHullKey, EnclosureHullKey> parents,
-            final Map<EnclosureHullKey, HullGeometry> hulls) {
-        final Map<String, EnclosureHullKey> enforcedByCanonical = new LinkedHashMap<String, EnclosureHullKey>();
-        final Set<String> ambiguous = new LinkedHashSet<String>();
-        for (final ProjectedEnclosure enclosure : projection.enclosures()) {
-            if (enclosure.boundaryTier() == BoundaryTier.SUPPRESSED) {
-                continue;
-            }
-            final EnclosureHullKey hull = enclosure.hullKey();
-            if (!hulls.containsKey(hull)) {
-                continue;
-            }
-            final String canonical = CanonicalKeys.hull(hull);
-            if (enforcedByCanonical.put(canonical, hull) != null) {
-                ambiguous.add(canonical);
-            }
-        }
-        final Set<EnclosureHullKey> enforced = new LinkedHashSet<EnclosureHullKey>();
-        for (final Map.Entry<String, EnclosureHullKey> entry : enforcedByCanonical.entrySet()) {
-            if (!ambiguous.contains(entry.getKey())) {
-                enforced.add(entry.getValue());
-            }
-        }
-        final Map<String, Violation> violations = new LinkedHashMap<String, Violation>();
-        final List<EnclosureHullKey> sorted = new ArrayList<EnclosureHullKey>(enforced);
-        Collections.sort(sorted, new Comparator<EnclosureHullKey>() {
-            @Override
-            public int compare(final EnclosureHullKey left, final EnclosureHullKey right) {
-                final HullGeometry leftHull = hulls.get(left);
-                final HullGeometry rightHull = hulls.get(right);
-                int result = Double.compare(leftHull.minX(), rightHull.minX());
-                if (result != 0) {
-                    return result;
-                }
-                result = Double.compare(leftHull.minY(), rightHull.minY());
-                if (result != 0) {
-                    return result;
-                }
-                return CanonicalKeys.hull(left).compareTo(CanonicalKeys.hull(right));
-            }
-        });
-        final List<EnclosureHullKey> active = new ArrayList<EnclosureHullKey>();
-        for (final EnclosureHullKey current : sorted) {
-            final HullGeometry currentHull = hulls.get(current);
-            for (final Iterator<EnclosureHullKey> iterator = active.iterator(); iterator.hasNext();) {
-                if (hulls.get(iterator.next()).maxX() < currentHull.minX()) {
-                    iterator.remove();
-                }
-            }
-            for (final EnclosureHullKey other : active) {
-                final HullGeometry otherHull = hulls.get(other);
-                if (!(otherHull.minY() <= currentHull.maxY() && currentHull.minY() <= otherHull.maxY())) {
-                    continue;
-                }
-                if (related(parents, other, current)) {
-                    continue;
-                }
-                final EnclosureHullKey first;
-                final EnclosureHullKey second;
-                if (CanonicalKeys.hull(other).compareTo(CanonicalKeys.hull(current)) <= 0) {
-                    first = other;
-                    second = current;
-                }
-                else {
-                    first = current;
-                    second = other;
-                }
-                final HullGeometry firstHull = hulls.get(first);
-                final HullGeometry secondHull = hulls.get(second);
-                final boolean crossing = HullIntersection.siblingOverlap(firstHull, secondHull);
-                if (!crossing && !containsInclusive(firstHull, secondHull)
-                        && !containsInclusive(secondHull, firstHull)) {
-                    continue;
-                }
-                final LayoutPoint translation = guardedMinimumSeparatingTranslation(firstHull, secondHull);
-                if (isZero(translation)) {
-                    continue;
-                }
-                final BoundaryConflict.Kind kind = crossing ? BoundaryConflict.Kind.SIBLING_CROSSING
-                    : BoundaryConflict.Kind.SIBLING_CONTAINMENT;
-                violations.put(CanonicalKeys.pair(first, second), new Violation(first, second, kind,
-                    Math.hypot(translation.x(), translation.y()), translation));
-            }
-            active.add(current);
-        }
-        for (final ProjectedEnclosure enclosure : projection.enclosures()) {
-            if (enclosure.boundaryTier() == BoundaryTier.SUPPRESSED || !enclosure.parentHull().isPresent()) {
-                continue;
-            }
-            final EnclosureHullKey child = enclosure.hullKey();
-            final EnclosureHullKey parent = enclosure.parentHull().get();
-            if (!enforced.contains(child) || !enforced.contains(parent)) {
-                continue;
-            }
-            final HullGeometry childHull = hulls.get(child);
-            final HullGeometry parentHull = hulls.get(parent);
-            if (!ancestorContainment.isContained(parentHull, childHull)) {
-                final EnclosureHullKey first;
-                final EnclosureHullKey second;
-                if (CanonicalKeys.hull(child).compareTo(CanonicalKeys.hull(parent)) <= 0) {
-                    first = child;
-                    second = parent;
-                }
-                else {
-                    first = parent;
-                    second = child;
-                }
-                violations.put(CanonicalKeys.pair(child, parent), new Violation(first, second,
-                    BoundaryConflict.Kind.ANCESTOR_ESCAPE, 0.0, null));
-            }
-        }
-        final List<Violation> ordered = new ArrayList<Violation>(violations.values());
-        Collections.sort(ordered, new Comparator<Violation>() {
-            @Override
-            public int compare(final Violation left, final Violation right) {
-                final int byPenetration = Double.compare(right.penetration, left.penetration);
-                if (byPenetration != 0) {
-                    return byPenetration;
-                }
-                return left.pairKey.compareTo(right.pairKey);
-            }
-        });
-        return Collections.unmodifiableList(ordered);
-    }
-
-    private PlanOutcome plan(final GraphProjection projection,
-            final Map<EnclosureHullKey, ProjectedEnclosure> enclosuresByHull,
-            final Map<EnclosureHullKey, HullGeometry> hulls, final LayoutPositions positions,
-            final GeometryTextMetrics metrics, final List<PinProjection> pins,
-            final Set<ProjectedNodeKey> pinnedNodes, final List<Violation> violations) {
-        final PlanOutcome outcome = new PlanOutcome();
-        final Set<MapReferenceId> rigidMaps = rigidMaps(pins);
-        final FrameCapCache cache = new FrameCapCache(projection, enclosuresByHull, hulls, positions, metrics,
-            pinnedNodes);
-        for (final Violation violation : violations) {
-            if (violation.kind == BoundaryConflict.Kind.ANCESTOR_ESCAPE) {
-                outcome.conflicts.put(violation.pairKey, conflict(violation,
-                    BoundaryConflict.Reason.STRUCTURAL_ESCAPE,
-                    blockingPins(violation, enclosuresByHull, pins)));
-                continue;
-            }
-            if (!violation.first.mapReferenceId().equals(violation.second.mapReferenceId())) {
-                planCrossMap(violation, rigidMaps, enclosuresByHull, pins, outcome);
-            }
-            else {
-                planSameMap(violation, enclosuresByHull, pins, outcome, cache);
-            }
-        }
-        capTraversals += cache.traversalsComputed;
-        capCacheHits += cache.traversalHits;
-        return outcome;
-    }
-
-    private static void planCrossMap(final Violation violation, final Set<MapReferenceId> rigidMaps,
-            final Map<EnclosureHullKey, ProjectedEnclosure> enclosuresByHull, final List<PinProjection> pins,
-            final PlanOutcome outcome) {
-        final boolean firstRigid = rigidMaps.contains(violation.first.mapReferenceId());
-        final boolean secondRigid = rigidMaps.contains(violation.second.mapReferenceId());
-        if (firstRigid && secondRigid) {
-            outcome.conflicts.put(violation.pairKey, conflict(violation,
-                BoundaryConflict.Reason.IMMOVABLE_SIDES, blockingPins(violation, enclosuresByHull, pins)));
-            return;
-        }
-        if (firstRigid) {
-            addMapDelta(outcome.mapDeltas, violation.second.mapReferenceId(), violation.translation);
-        }
-        else if (secondRigid) {
-            addMapDelta(outcome.mapDeltas, violation.first.mapReferenceId(), negate(violation.translation));
-        }
-        else {
-            addMapDelta(outcome.mapDeltas, violation.first.mapReferenceId(),
-                scale(negate(violation.translation), 0.5));
-            addMapDelta(outcome.mapDeltas, violation.second.mapReferenceId(),
-                scale(violation.translation, 0.5));
-        }
-        outcome.movedPairs.add(violation.pairKey);
-    }
-
-    private static Set<MapReferenceId> rigidMaps(final List<PinProjection> pins) {
-        final Set<MapReferenceId> result = new LinkedHashSet<MapReferenceId>();
-        for (final PinProjection pin : pins) {
-            if (pin.active()) {
-                result.add(pin.projectedNode().get().mapReferenceId());
-            }
-        }
-        return result;
-    }
-
-    private static void addMapDelta(final Map<MapReferenceId, LayoutPoint> deltas, final MapReferenceId map,
-            final LayoutPoint delta) {
-        final LayoutPoint previous = deltas.get(map);
-        deltas.put(map, previous == null ? delta : add(previous, delta));
-    }
-
-    private static void planSameMap(final Violation violation,
-            final Map<EnclosureHullKey, ProjectedEnclosure> enclosuresByHull, final List<PinProjection> pins,
-            final PlanOutcome outcome, final FrameCapCache cache) {
-        final Candidate candidate = selectCandidate(violation, cache);
-        if (candidate == null) {
-            outcome.conflicts.put(violation.pairKey, conflict(violation,
-                BoundaryConflict.Reason.IMMOVABLE_SIDES, blockingPins(violation, enclosuresByHull, pins)));
-            return;
-        }
-        if (candidate.firstMagnitude > 0.0) {
-            final Traversal moves = cache.traversal(violation.first, candidate.firstUnit,
-                candidate.firstMagnitude);
-            addMoves(outcome, moves, candidate.firstVector);
-        }
-        if (candidate.secondMagnitude > 0.0) {
-            final Traversal moves = cache.traversal(violation.second, candidate.secondUnit,
-                candidate.secondMagnitude);
-            addMoves(outcome, moves, candidate.secondVector);
-        }
-        outcome.movedPairs.add(violation.pairKey);
-    }
-
-    private static void addMoves(final PlanOutcome outcome, final Traversal moves, final LayoutPoint vector) {
-        if (moves.movedNodes.isEmpty() && moves.movedAnchors.isEmpty()) {
-            throw new BoundarySeparationException("A valid candidate must have a non-empty displacement set");
-        }
-        for (final ProjectedNodeKey node : moves.movedNodes) {
-            addVector(outcome.nodeFields, node, vector);
-        }
-        for (final EnclosureHullKey anchor : moves.movedAnchors) {
-            addVector(outcome.anchorFields, anchor, vector);
-        }
-    }
-
-    private static Candidate selectCandidate(final Violation violation, final FrameCapCache cache) {
-        final LayoutPoint translation = violation.translation;
-        final double magnitude = Math.hypot(translation.x(), translation.y());
-        final LayoutPoint firstUnit = LayoutPoint.of(translation.x() / magnitude, translation.y() / magnitude);
-        final LayoutPoint secondUnit = negate(firstUnit);
-        final Traversal firstFull = cache.traversal(violation.first, firstUnit, magnitude);
-        final Traversal secondFull = cache.traversal(violation.second, secondUnit, magnitude);
-        if (firstFull.movedNodes.isEmpty() && firstFull.movedAnchors.isEmpty()
-                && secondFull.movedNodes.isEmpty() && secondFull.movedAnchors.isEmpty()) {
-            return null;
-        }
-        final double half = magnitude / 2.0;
-        if (valid(violation.first, firstUnit, half, cache) && valid(violation.second, secondUnit, half, cache)) {
-            return new Candidate(firstUnit, half, scale(translation, -0.5), secondUnit, half,
-                scale(translation, 0.5));
-        }
-        if (valid(violation.first, firstUnit, magnitude, cache)) {
-            return new Candidate(firstUnit, magnitude, negate(translation), secondUnit, 0.0,
-                LayoutPoint.of(0.0, 0.0));
-        }
-        if (valid(violation.second, secondUnit, magnitude, cache)) {
-            return new Candidate(firstUnit, 0.0, LayoutPoint.of(0.0, 0.0), secondUnit, magnitude, translation);
-        }
-        final Double firstDepth = complementaryDepth(violation.first, firstUnit, magnitude, cache);
-        if (firstDepth != null && firstDepth.doubleValue() > 0.0 && firstDepth.doubleValue() < magnitude) {
-            final double firstMagnitude = firstDepth.doubleValue();
-            final double secondMagnitude = magnitude - firstMagnitude;
-            if (valid(violation.first, firstUnit, firstMagnitude, cache)
-                    && valid(violation.second, secondUnit, secondMagnitude, cache)) {
-                return new Candidate(firstUnit, firstMagnitude, scale(translation, -firstMagnitude / magnitude),
-                    secondUnit, secondMagnitude, scale(translation, secondMagnitude / magnitude));
-            }
-        }
-        final Double secondDepth = complementaryDepth(violation.second, secondUnit, magnitude, cache);
-        if (secondDepth != null && secondDepth.doubleValue() > 0.0 && secondDepth.doubleValue() < magnitude) {
-            final double secondMagnitude = secondDepth.doubleValue();
-            final double firstMagnitude = magnitude - secondMagnitude;
-            if (valid(violation.first, firstUnit, firstMagnitude, cache)
-                    && valid(violation.second, secondUnit, secondMagnitude, cache)) {
-                return new Candidate(firstUnit, firstMagnitude, scale(translation, -firstMagnitude / magnitude),
-                    secondUnit, secondMagnitude, scale(translation, secondMagnitude / magnitude));
-            }
-        }
-        return null;
-    }
-
-    private static boolean valid(final EnclosureHullKey hull, final LayoutPoint unit, final double magnitude,
-            final FrameCapCache cache) {
-        final Traversal traversal = cache.traversal(hull, unit, magnitude);
-        if (traversal.movedNodes.isEmpty() && traversal.movedAnchors.isEmpty()) {
-            return false;
-        }
-        for (final PinDepth pin : traversal.pins) {
-            if (pin.depth < magnitude) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private static Double complementaryDepth(final EnclosureHullKey hull, final LayoutPoint unit,
-            final double magnitude, final FrameCapCache cache) {
-        final Traversal traversal = cache.traversal(hull, unit, magnitude);
-        double best = Double.POSITIVE_INFINITY;
-        for (final PinDepth pin : traversal.pins) {
-            if (pin.depth > 0.0 && pin.depth < magnitude) {
-                best = Math.min(best, pin.depth);
-            }
-        }
-        return best == Double.POSITIVE_INFINITY ? null : Double.valueOf(best);
-    }
-
-    private static boolean inBand(final double contribution, final double support, final double band) {
-        final double epsilon = SUPPORT_COMPARISON_EPSILON * Math.max(Math.abs(contribution),
-            Math.max(Math.abs(support), Math.abs(support - band)));
-        return contribution >= support - band - epsilon;
-    }
-
-    private static double support(final EnclosureHullKey hull, final LayoutPoint unit,
-            final GraphProjection projection,
-            final Map<EnclosureHullKey, ProjectedEnclosure> enclosuresByHull,
-            final Map<EnclosureHullKey, HullGeometry> hulls, final LayoutPositions positions,
-            final GeometryTextMetrics metrics) {
-        final ProjectedEnclosure enclosure = enclosuresByHull.get(hull);
-        if (enclosure == null) {
-            throw new BoundarySeparationException("Missing enclosure for hull " + CanonicalKeys.hull(hull));
-        }
-        final boolean empty = enclosure.directNodes().isEmpty() && enclosure.directEnclosures().isEmpty();
-        if (empty) {
-            final LayoutPoint anchor = positions.anchors().get(hull);
-            if (anchor == null) {
-                throw new BoundarySeparationException("Missing anchor for hull " + CanonicalKeys.hull(hull));
-            }
-            final java.awt.geom.Dimension2D label = labelSize(enclosure, metrics);
-            final double halfWidth = label.getWidth() * 0.5 + BOUNDARY_PADDING;
-            final double halfHeight = label.getHeight() * 0.5 + BOUNDARY_PADDING;
-            return unit.x() * anchor.x() + unit.y() * anchor.y()
-                + Math.max(Math.abs(unit.x()) * halfWidth, Math.abs(unit.y()) * halfHeight);
-        }
-        double best = Double.NEGATIVE_INFINITY;
-        for (final ProjectedNodeKey node : enclosure.directNodes()) {
-            final LayoutPoint center = positions.nodes().get(node);
-            if (center == null) {
-                throw new BoundarySeparationException("Missing node position for " + node);
-            }
-            best = Math.max(best, unit.x() * center.x() + unit.y() * center.y() + nodeRadius(node, projection));
-        }
-        for (final EnclosureHullKey child : enclosure.directEnclosures()) {
-            best = Math.max(best, polySupport(child, unit, hulls));
-        }
-        return best + HULL_CLEARANCE;
-    }
-
-    private static double nodeContribution(final ProjectedNodeKey node, final LayoutPoint unit,
-            final LayoutPositions positions, final GraphProjection projection) {
-        final LayoutPoint center = positions.nodes().get(node);
-        if (center == null) {
-            throw new BoundarySeparationException("Missing node position for " + node);
-        }
-        return unit.x() * center.x() + unit.y() * center.y() + nodeRadius(node, projection) + HULL_CLEARANCE;
-    }
-
-    private static double nodeRadius(final ProjectedNodeKey node, final GraphProjection projection) {
-        final org.freeplane.plugin.graph.projection.NodeProminence prominence =
-            projection.prominence().get(node);
-        final double scale = prominence == null ? 1.0 : prominence.scale();
-        return BASE_RADIUS * scale;
-    }
-
-    private static double polySupport(final EnclosureHullKey hull, final LayoutPoint unit,
-            final Map<EnclosureHullKey, HullGeometry> hulls) {
-        final HullGeometry geometry = hulls.get(hull);
-        if (geometry == null) {
-            throw new BoundarySeparationException("Missing hull " + CanonicalKeys.hull(hull));
-        }
-        double best = Double.NEGATIVE_INFINITY;
-        for (final LayoutPoint vertex : geometry.exactPolygon()) {
-            best = Math.max(best, unit.x() * vertex.x() + unit.y() * vertex.y());
-        }
-        return best;
-    }
-
-    private static java.awt.geom.Dimension2D labelSize(final ProjectedEnclosure enclosure,
-            final GeometryTextMetrics metrics) {
-        if (enclosure.boundaryTier() == BoundaryTier.SUPPRESSED) {
-            return ZERO_SIZE;
-        }
-        java.awt.geom.Dimension2D largest = null;
-        for (final org.freeplane.plugin.graph.projection.input.SafeNodeLabel label : enclosure.labels()) {
-            final java.awt.geom.Dimension2D measured = metrics.measure(label.displayText(),
-                enclosure.boundaryTier());
-            if (largest == null || measured.getWidth() * measured.getHeight() > largest.getWidth()
-                    * largest.getHeight()) {
-                largest = measured;
-            }
-        }
-        if (largest == null) {
-            throw new BoundarySeparationException("Enclosures must carry at least one label");
-        }
-        return largest;
-    }
-
-    private static final java.awt.geom.Dimension2D ZERO_SIZE = new java.awt.geom.Dimension2D() {
-        @Override
-        public double getWidth() {
-            return 0.0;
-        }
-
-        @Override
-        public double getHeight() {
-            return 0.0;
-        }
-
-        @Override
-        public void setSize(final double width, final double height) {
-            throw new UnsupportedOperationException("Geometry sizes are immutable");
-        }
-    };
 
     private LayoutPositions applyRound(final GraphProjection projection,
             final Map<EnclosureHullKey, ProjectedEnclosure> enclosuresByHull, final LayoutPositions positions,
-            final PlanOutcome plan, final Map<String, LayoutPoint> field) {
+            final BoundaryInvariants.PlanOutcome plan, final Map<String, LayoutPoint> field) {
         final Map<EnclosureHullKey, LayoutPoint> anchorDeltas = anchorDeltas(projection, enclosuresByHull, plan);
         final Map<ProjectedNodeKey, LayoutPoint> nodes = new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
         for (final Map.Entry<ProjectedNodeKey, LayoutPoint> entry : positions.nodes().entrySet()) {
@@ -645,7 +201,8 @@ public final class BoundarySeparationCorrection {
     }
 
     private static Map<EnclosureHullKey, LayoutPoint> anchorDeltas(final GraphProjection projection,
-            final Map<EnclosureHullKey, ProjectedEnclosure> enclosuresByHull, final PlanOutcome plan) {
+            final Map<EnclosureHullKey, ProjectedEnclosure> enclosuresByHull,
+            final BoundaryInvariants.PlanOutcome plan) {
         final Map<EnclosureHullKey, LayoutPoint> result = new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
         for (final Map.Entry<EnclosureHullKey, LayoutPoint> entry : plan.anchorFields.entrySet()) {
             result.put(entry.getKey(), entry.getValue());
@@ -673,11 +230,6 @@ public final class BoundarySeparationCorrection {
         return result;
     }
 
-    private static <K> void addVector(final Map<K, LayoutPoint> field, final K key, final LayoutPoint delta) {
-        final LayoutPoint previous = field.get(key);
-        field.put(key, previous == null ? delta : add(previous, delta));
-    }
-
     private static void addField(final Map<String, LayoutPoint> field, final String key,
             final LayoutPoint delta) {
         final LayoutPoint previous = field.get(key);
@@ -699,122 +251,16 @@ public final class BoundarySeparationCorrection {
         return LayoutPoint.of(first.x() + second.x(), first.y() + second.y());
     }
 
-    private static LayoutPoint negate(final LayoutPoint value) {
-        return LayoutPoint.of(-value.x(), -value.y());
+    private static boolean isZero(final LayoutPoint value) {
+        return value == null || value.x() == 0.0 && value.y() == 0.0;
     }
 
-    private static LayoutPoint scale(final LayoutPoint value, final double factor) {
-        return LayoutPoint.of(value.x() * factor, value.y() * factor);
-    }
-
-    private static List<BoundaryConflict> terminalConflicts(final List<Violation> violations,
-            final PlanOutcome plan, final boolean boundExhausted, final GraphProjection projection,
-            final Map<EnclosureHullKey, ProjectedEnclosure> enclosuresByHull, final List<PinProjection> pins) {
-        final List<BoundaryConflict> result = new ArrayList<BoundaryConflict>();
-        for (final Violation violation : violations) {
-            final BoundaryConflict existing = plan.conflicts.get(violation.pairKey);
-            if (existing != null) {
-                result.add(existing);
-                continue;
-            }
-            if (boundExhausted && plan.movedPairs.contains(violation.pairKey)) {
-                result.add(conflict(violation, BoundaryConflict.Reason.ROUND_LIMIT,
-                    blockingPins(violation, enclosuresByHull, pins)));
-                continue;
-            }
-            final BoundaryConflict.Reason reason = violation.kind == BoundaryConflict.Kind.ANCESTOR_ESCAPE
-                ? BoundaryConflict.Reason.STRUCTURAL_ESCAPE : BoundaryConflict.Reason.IMMOVABLE_SIDES;
-            result.add(conflict(violation, reason, blockingPins(violation, enclosuresByHull, pins)));
+    private static List<String> pairKeys(final List<BoundaryInvariants.Violation> violations) {
+        final List<String> result = new ArrayList<String>(violations.size());
+        for (final BoundaryInvariants.Violation violation : violations) {
+            result.add(violation.pairKey());
         }
         return Collections.unmodifiableList(result);
-    }
-
-    private static List<PinProjection> blockingPins(final Violation violation,
-            final Map<EnclosureHullKey, ProjectedEnclosure> enclosuresByHull, final List<PinProjection> pins) {
-        final boolean sameMap = violation.first.mapReferenceId().equals(violation.second.mapReferenceId());
-        final Set<ProjectedNodeKey> subtree = new LinkedHashSet<ProjectedNodeKey>();
-        if (sameMap) {
-            subtree.addAll(subtreeNodes(enclosuresByHull.get(violation.first), enclosuresByHull));
-            subtree.addAll(subtreeNodes(enclosuresByHull.get(violation.second), enclosuresByHull));
-        }
-        final Set<PinProjection> unique = new LinkedHashSet<PinProjection>();
-        for (final PinProjection pin : pins) {
-            if (!pin.active()) {
-                continue;
-            }
-            final ProjectedNodeKey node = pin.projectedNode().get();
-            if (sameMap) {
-                if (subtree.contains(node)) {
-                    unique.add(pin);
-                }
-            }
-            else {
-                final MapReferenceId map = node.mapReferenceId();
-                if (map.equals(violation.first.mapReferenceId())
-                        || map.equals(violation.second.mapReferenceId())) {
-                    unique.add(pin);
-                }
-            }
-        }
-        return new ArrayList<PinProjection>(unique);
-    }
-
-    private static Map<EnclosureHullKey, ProjectedEnclosure> enclosuresByHull(final GraphProjection projection) {
-        final Map<EnclosureHullKey, ProjectedEnclosure> result =
-            new LinkedHashMap<EnclosureHullKey, ProjectedEnclosure>();
-        for (final ProjectedEnclosure enclosure : projection.enclosures()) {
-            result.put(enclosure.hullKey(), enclosure);
-        }
-        return result;
-    }
-
-    private static Map<EnclosureHullKey, EnclosureHullKey> parents(final GraphProjection projection) {
-        final Map<EnclosureHullKey, EnclosureHullKey> result =
-            new LinkedHashMap<EnclosureHullKey, EnclosureHullKey>();
-        for (final ProjectedEnclosure enclosure : projection.enclosures()) {
-            if (enclosure.parentHull().isPresent()) {
-                result.put(enclosure.hullKey(), enclosure.parentHull().get());
-            }
-        }
-        return result;
-    }
-
-    private static Map<ProjectedNodeKey, List<EnclosureHullKey>> nodeHulls(final GraphProjection projection) {
-        final Map<ProjectedNodeKey, List<EnclosureHullKey>> result =
-            new LinkedHashMap<ProjectedNodeKey, List<EnclosureHullKey>>();
-        for (final ProjectedEnclosure enclosure : projection.enclosures()) {
-            for (final ProjectedNodeKey node : enclosure.directNodes()) {
-                List<EnclosureHullKey> hulls = result.get(node);
-                if (hulls == null) {
-                    hulls = new ArrayList<EnclosureHullKey>(1);
-                    result.put(node, hulls);
-                }
-                hulls.add(enclosure.hullKey());
-            }
-        }
-        return result;
-    }
-
-    private static Set<EnclosureHullKey> changedHulls(
-            final Map<ProjectedNodeKey, List<EnclosureHullKey>> nodeHullsByKey, final LayoutPositions before,
-            final LayoutPositions after) {
-        final Set<EnclosureHullKey> changed = new LinkedHashSet<EnclosureHullKey>();
-        for (final Map.Entry<ProjectedNodeKey, LayoutPoint> entry : after.nodes().entrySet()) {
-            final LayoutPoint previous = before.nodes().get(entry.getKey());
-            if (previous != null && !previous.equals(entry.getValue())) {
-                final List<EnclosureHullKey> hulls = nodeHullsByKey.get(entry.getKey());
-                if (hulls != null) {
-                    changed.addAll(hulls);
-                }
-            }
-        }
-        for (final Map.Entry<EnclosureHullKey, LayoutPoint> entry : after.anchors().entrySet()) {
-            final LayoutPoint previous = before.anchors().get(entry.getKey());
-            if (previous != null && !previous.equals(entry.getValue())) {
-                changed.add(entry.getKey());
-            }
-        }
-        return changed;
     }
 
     private static Set<ProjectedNodeKey> pinnedNodes(final List<PinProjection> pins) {
@@ -825,30 +271,6 @@ public final class BoundarySeparationCorrection {
             }
         }
         return result;
-    }
-
-    private static boolean related(final Map<EnclosureHullKey, EnclosureHullKey> parents,
-            final EnclosureHullKey first, final EnclosureHullKey second) {
-        for (EnclosureHullKey current = parents.get(first); current != null; current = parents.get(current)) {
-            if (current.equals(second)) {
-                return true;
-            }
-        }
-        for (EnclosureHullKey current = parents.get(second); current != null; current = parents.get(current)) {
-            if (current.equals(first)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static boolean containsInclusive(final HullGeometry outer, final HullGeometry inner) {
-        for (final LayoutPoint vertex : inner.exactPolygon()) {
-            if (!outer.contains(vertex)) {
-                return false;
-            }
-        }
-        return true;
     }
 
     private static List<ProjectedNodeKey> subtreeNodes(final ProjectedEnclosure enclosure,
@@ -868,23 +290,6 @@ public final class BoundarySeparationCorrection {
         for (final EnclosureHullKey child : enclosure.directEnclosures()) {
             collectSubtreeNodes(enclosuresByHull.get(child), enclosuresByHull, visited, result);
         }
-    }
-
-    private static BoundaryConflict conflict(final Violation violation, final BoundaryConflict.Reason reason,
-            final List<PinProjection> pins) {
-        return new BoundaryConflict(violation.first, violation.second, violation.kind, reason, pins);
-    }
-
-    private static boolean isZero(final LayoutPoint value) {
-        return value == null || value.x() == 0.0 && value.y() == 0.0;
-    }
-
-    private static List<String> pairKeys(final List<Violation> violations) {
-        final List<String> result = new ArrayList<String>(violations.size());
-        for (final Violation violation : violations) {
-            result.add(violation.pairKey);
-        }
-        return Collections.unmodifiableList(result);
     }
 
     private static Map<String, LayoutPoint> sortedNonZero(final Map<String, LayoutPoint> field) {
@@ -912,285 +317,5 @@ public final class BoundarySeparationCorrection {
             maximum = Math.max(maximum, Math.sqrt(squared));
         }
         return new double[] {Math.sqrt(sumSquares / field.size()), maximum};
-    }
-
-    private static final class Violation {
-        private final EnclosureHullKey first;
-        private final EnclosureHullKey second;
-        private final BoundaryConflict.Kind kind;
-        private final double penetration;
-        private final LayoutPoint translation;
-        private final String pairKey;
-
-        private Violation(final EnclosureHullKey first, final EnclosureHullKey second,
-                final BoundaryConflict.Kind kind, final double penetration, final LayoutPoint translation) {
-            this.first = first;
-            this.second = second;
-            this.kind = kind;
-            this.penetration = penetration;
-            this.translation = translation;
-            this.pairKey = CanonicalKeys.pair(first, second);
-        }
-    }
-
-    private static final class PlanOutcome {
-        private final Map<MapReferenceId, LayoutPoint> mapDeltas =
-            new LinkedHashMap<MapReferenceId, LayoutPoint>();
-        private final Map<ProjectedNodeKey, LayoutPoint> nodeFields =
-            new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
-        private final Map<EnclosureHullKey, LayoutPoint> anchorFields =
-            new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
-        private final Map<String, BoundaryConflict> conflicts = new LinkedHashMap<String, BoundaryConflict>();
-        private final Set<String> movedPairs = new LinkedHashSet<String>();
-
-        private boolean isEmpty() {
-            return mapDeltas.isEmpty() && nodeFields.isEmpty() && anchorFields.isEmpty();
-        }
-    }
-
-    private static final class Traversal {
-        private final List<ProjectedNodeKey> movedNodes = new ArrayList<ProjectedNodeKey>();
-        private final List<EnclosureHullKey> movedAnchors = new ArrayList<EnclosureHullKey>();
-        private final List<PinDepth> pins = new ArrayList<PinDepth>();
-    }
-
-    private static final class PinDepth {
-        private final ProjectedNodeKey node;
-        private final double depth;
-
-        private PinDepth(final ProjectedNodeKey node, final double depth) {
-            this.node = node;
-            this.depth = depth;
-        }
-    }
-
-    private static final class Candidate {
-        private final LayoutPoint firstUnit;
-        private final double firstMagnitude;
-        private final LayoutPoint firstVector;
-        private final LayoutPoint secondUnit;
-        private final double secondMagnitude;
-        private final LayoutPoint secondVector;
-
-        private Candidate(final LayoutPoint firstUnit, final double firstMagnitude,
-                final LayoutPoint firstVector, final LayoutPoint secondUnit, final double secondMagnitude,
-                final LayoutPoint secondVector) {
-            this.firstUnit = firstUnit;
-            this.firstMagnitude = firstMagnitude;
-            this.firstVector = firstVector;
-            this.secondUnit = secondUnit;
-            this.secondMagnitude = secondMagnitude;
-            this.secondVector = secondVector;
-        }
-    }
-
-    private static final class AncestorContainmentMemo {
-        private final Map<HullPair, Boolean> contained = new ContainmentCache();
-        private long exactChecks;
-        private long memoHits;
-
-        private synchronized boolean isContained(final HullGeometry parent, final HullGeometry child) {
-            final HullPair key = new HullPair(parent, child);
-            final Boolean cached = contained.get(key);
-            if (cached != null) {
-                memoHits++;
-                return cached.booleanValue();
-            }
-            exactChecks++;
-            final boolean result = containsInclusive(parent, child);
-            contained.put(key, Boolean.valueOf(result));
-            return result;
-        }
-    }
-
-    private static final class ContainmentCache extends LinkedHashMap<HullPair, Boolean> {
-        private static final long serialVersionUID = 1L;
-        private static final int MAXIMUM_ENTRIES = 8192;
-
-        private ContainmentCache() {
-            super(1024, 0.75f, true);
-        }
-
-        @Override
-        protected boolean removeEldestEntry(final Map.Entry<HullPair, Boolean> eldest) {
-            return size() > MAXIMUM_ENTRIES;
-        }
-    }
-
-    private static final class HullPair {
-        private final HullGeometry parent;
-        private final HullGeometry child;
-
-        private HullPair(final HullGeometry parent, final HullGeometry child) {
-            this.parent = parent;
-            this.child = child;
-        }
-
-        @Override
-        public boolean equals(final Object other) {
-            if (this == other) {
-                return true;
-            }
-            if (!(other instanceof HullPair)) {
-                return false;
-            }
-            final HullPair that = (HullPair) other;
-            return parent.equals(that.parent) && child.equals(that.child);
-        }
-
-        @Override
-        public int hashCode() {
-            return 31 * parent.hashCode() + child.hashCode();
-        }
-    }
-
-    private static final class FrameCapCache {
-        private final GraphProjection projection;
-        private final Map<EnclosureHullKey, ProjectedEnclosure> enclosuresByHull;
-        private final Map<EnclosureHullKey, HullGeometry> hulls;
-        private final LayoutPositions positions;
-        private final GeometryTextMetrics metrics;
-        private final Set<ProjectedNodeKey> pinnedNodes;
-        private final Map<SupportKey, Double> supports = new LinkedHashMap<SupportKey, Double>();
-        private final Map<CapKey, Traversal> traversals = new LinkedHashMap<CapKey, Traversal>();
-        private long traversalsComputed;
-        private long traversalHits;
-
-        private FrameCapCache(final GraphProjection projection,
-                final Map<EnclosureHullKey, ProjectedEnclosure> enclosuresByHull,
-                final Map<EnclosureHullKey, HullGeometry> hulls, final LayoutPositions positions,
-                final GeometryTextMetrics metrics, final Set<ProjectedNodeKey> pinnedNodes) {
-            this.projection = projection;
-            this.enclosuresByHull = enclosuresByHull;
-            this.hulls = hulls;
-            this.positions = positions;
-            this.metrics = metrics;
-            this.pinnedNodes = pinnedNodes;
-        }
-
-        private double support(final EnclosureHullKey hull, final LayoutPoint unit) {
-            final SupportKey key = new SupportKey(hull, unit);
-            final Double cached = supports.get(key);
-            if (cached != null) {
-                return cached.doubleValue();
-            }
-            final double value = BoundarySeparationCorrection.support(hull, unit, projection, enclosuresByHull,
-                hulls, positions, metrics);
-            supports.put(key, Double.valueOf(value));
-            return value;
-        }
-
-        private Traversal traversal(final EnclosureHullKey hull, final LayoutPoint unit, final double band) {
-            final CapKey key = new CapKey(hull, unit, band);
-            final Traversal cached = traversals.get(key);
-            if (cached != null) {
-                traversalHits++;
-                return cached;
-            }
-            traversalsComputed++;
-            final Traversal computed = new Traversal();
-            collectCap(hull, unit, band, computed);
-            traversals.put(key, computed);
-            return computed;
-        }
-
-        private void collectCap(final EnclosureHullKey hull, final LayoutPoint unit, final double band,
-                final Traversal traversal) {
-            final ProjectedEnclosure enclosure = enclosuresByHull.get(hull);
-            if (enclosure == null) {
-                throw new BoundarySeparationException("Missing enclosure for hull "
-                    + CanonicalKeys.hull(hull));
-            }
-            final boolean empty = enclosure.directNodes().isEmpty() && enclosure.directEnclosures().isEmpty();
-            final double support = support(hull, unit);
-            if (empty) {
-                traversal.movedAnchors.add(hull);
-                return;
-            }
-            for (final ProjectedNodeKey node : enclosure.directNodes()) {
-                final double contribution = nodeContribution(node, unit, positions, projection);
-                if (inBand(contribution, support, band)) {
-                    if (pinnedNodes.contains(node)) {
-                        traversal.pins.add(new PinDepth(node, support - contribution));
-                    }
-                    else {
-                        traversal.movedNodes.add(node);
-                    }
-                }
-            }
-            for (final EnclosureHullKey child : enclosure.directEnclosures()) {
-                final double contribution = polySupport(child, unit, hulls) + HULL_CLEARANCE;
-                if (inBand(contribution, support, band)) {
-                    collectCap(child, unit, band, traversal);
-                }
-            }
-        }
-    }
-
-    private static final class SupportKey {
-        private final EnclosureHullKey hull;
-        private final long unitX;
-        private final long unitY;
-
-        private SupportKey(final EnclosureHullKey hull, final LayoutPoint unit) {
-            this.hull = hull;
-            this.unitX = Double.doubleToLongBits(unit.x());
-            this.unitY = Double.doubleToLongBits(unit.y());
-        }
-
-        @Override
-        public boolean equals(final Object other) {
-            if (this == other) {
-                return true;
-            }
-            if (!(other instanceof SupportKey)) {
-                return false;
-            }
-            final SupportKey that = (SupportKey) other;
-            return unitX == that.unitX && unitY == that.unitY && hull.equals(that.hull);
-        }
-
-        @Override
-        public int hashCode() {
-            int result = hull.hashCode();
-            result = 31 * result + (int) (unitX ^ (unitX >>> 32));
-            result = 31 * result + (int) (unitY ^ (unitY >>> 32));
-            return result;
-        }
-    }
-
-    private static final class CapKey {
-        private final EnclosureHullKey hull;
-        private final long unitX;
-        private final long unitY;
-        private final long band;
-
-        private CapKey(final EnclosureHullKey hull, final LayoutPoint unit, final double band) {
-            this.hull = hull;
-            this.unitX = Double.doubleToLongBits(unit.x());
-            this.unitY = Double.doubleToLongBits(unit.y());
-            this.band = Double.doubleToLongBits(band);
-        }
-
-        @Override
-        public boolean equals(final Object other) {
-            if (this == other) {
-                return true;
-            }
-            if (!(other instanceof CapKey)) {
-                return false;
-            }
-            final CapKey that = (CapKey) other;
-            return unitX == that.unitX && unitY == that.unitY && band == that.band && hull.equals(that.hull);
-        }
-
-        @Override
-        public int hashCode() {
-            int result = hull.hashCode();
-            result = 31 * result + (int) (unitX ^ (unitX >>> 32));
-            result = 31 * result + (int) (unitY ^ (unitY >>> 32));
-            result = 31 * result + (int) (band ^ (band >>> 32));
-            return result;
-        }
     }
 }
