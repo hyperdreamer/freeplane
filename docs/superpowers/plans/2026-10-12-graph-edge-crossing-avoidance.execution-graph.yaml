@@ -128,7 +128,7 @@ tasks:
     implementer_tier: advanced
     lane: edge-routing
     sequence: 1
-    depends_on: []
+    depends_on: [geca-t1]
     ownership:
       paths:
         - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/EdgePath.java
@@ -260,7 +260,7 @@ tasks:
     implementer_tier: standard
     lane: edge-relocation
     sequence: 2
-    depends_on: [geca-t3, geca-t4]
+    depends_on: [geca-t3, geca-t4, geca-t7]
     ownership:
       paths:
         - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrectionShould.java
@@ -283,7 +283,7 @@ tasks:
     implementer_tier: standard
     lane: edge-routing
     sequence: 3
-    depends_on: [geca-t6]
+    depends_on: [geca-t6, geca-t9]
     ownership:
       paths:
         - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/geometry/EdgeRouterShould.java
@@ -328,7 +328,7 @@ tasks:
     implementer_tier: advanced
     lane: edge-relocation
     sequence: 3
-    depends_on: [geca-t10]
+    depends_on: [geca-t1, geca-t3, geca-t10]
     ownership:
       paths:
         - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrection.java
@@ -393,7 +393,7 @@ tasks:
     implementer_tier: advanced
     lane: edge-routing
     sequence: 4
-    depends_on: [geca-t5, geca-t11]
+    depends_on: [geca-t5, geca-t11, geca-t14]
     ownership:
       paths:
         - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/EdgeRouter.java
@@ -414,7 +414,7 @@ tasks:
     implementer_tier: advanced
     lane: edge-publication
     sequence: 5
-    depends_on: [geca-t12]
+    depends_on: [geca-t9, geca-t12, geca-t16]
     ownership:
       paths:
         - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/GraphPainter.java
@@ -434,7 +434,7 @@ tasks:
     implementer_tier: advanced
     lane: edge-publication
     sequence: 6
-    depends_on: [geca-t17]
+    depends_on: [geca-t14, geca-t15, geca-t16, geca-t17]
     ownership:
       paths:
         - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/PerformanceMeasurements.java
@@ -454,7 +454,7 @@ tasks:
     implementer_tier: standard
     lane: edge-publication
     sequence: 7
-    depends_on: [geca-t12, geca-t16, geca-t18]
+    depends_on: [geca-t12, geca-t16, geca-t17, geca-t18]
     ownership:
       paths:
         - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/GraphCanvasPaintShould.java
@@ -477,7 +477,7 @@ tasks:
     implementer_tier: standard
     lane: edge-foundation
     sequence: 4
-    depends_on: [geca-t3]
+    depends_on: [geca-t3, geca-t8, geca-t15]
     ownership:
       paths:
         - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundarySeparationShould.java
