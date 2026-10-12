@@ -9,6 +9,7 @@ import org.freeplane.plugin.graph.adapter.EdtExecutor;
 import org.freeplane.plugin.graph.adapter.MapAdapterEvent;
 import org.freeplane.plugin.graph.adapter.MapAdapterListener;
 import org.freeplane.plugin.graph.adapter.MapLeaseManager;
+import org.freeplane.plugin.graph.geometry.EdgePaths;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.layout.LayoutFrame;
@@ -134,7 +135,8 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
         final LayoutFrame initialLayout = LayoutFrame.of(0L,
             LayoutPositions.of(Collections.emptyMap(), Collections.emptyMap()), false, 0);
         this.state = CanvasState.of(0L, projection, initialLayout,
-            GraphGeometry.of(Collections.emptyMap(), Collections.emptyMap()), OperationalStatus.LOADING);
+            GraphGeometry.of(Collections.emptyMap(), Collections.emptyMap()), EdgePaths.empty(),
+            OperationalStatus.LOADING);
     }
 
     private ListenerRegistration registerLeaseAttachmentListener() {
@@ -559,7 +561,7 @@ public final class GraphUpdateCoordinator implements AutoCloseable {
             }
             else {
                 failed = CanvasState.of(projection.generation(), projection, state.layout(), state.geometry(),
-                    OperationalStatus.FAILED);
+                    state.edgePaths(), OperationalStatus.FAILED);
             }
         }
         publishCanvasState(failed, generation);

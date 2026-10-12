@@ -2,6 +2,7 @@ package org.freeplane.plugin.graph.control;
 
 import java.util.Objects;
 
+import org.freeplane.plugin.graph.geometry.EdgePaths;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.layout.LayoutFrame;
 import org.freeplane.plugin.graph.projection.GraphProjection;
@@ -11,10 +12,11 @@ public final class CanvasState {
     private final GraphProjection projection;
     private final LayoutFrame layout;
     private final GraphGeometry geometry;
+    private final EdgePaths edgePaths;
     private final OperationalStatus status;
 
     private CanvasState(final long generation, final GraphProjection projection, final LayoutFrame layout,
-            final GraphGeometry geometry, final OperationalStatus status) {
+            final GraphGeometry geometry, final EdgePaths edgePaths, final OperationalStatus status) {
         if (generation < 0L) {
             throw new IllegalArgumentException("Generation must be nonnegative");
         }
@@ -22,12 +24,14 @@ public final class CanvasState {
         this.projection = Objects.requireNonNull(projection, "projection");
         this.layout = Objects.requireNonNull(layout, "layout");
         this.geometry = Objects.requireNonNull(geometry, "geometry");
+        this.edgePaths = Objects.requireNonNull(edgePaths, "edgePaths");
         this.status = Objects.requireNonNull(status, "status");
     }
 
     public static CanvasState of(final long generation, final GraphProjection projection,
-            final LayoutFrame layout, final GraphGeometry geometry, final OperationalStatus status) {
-        return new CanvasState(generation, projection, layout, geometry, status);
+            final LayoutFrame layout, final GraphGeometry geometry, final EdgePaths edgePaths,
+            final OperationalStatus status) {
+        return new CanvasState(generation, projection, layout, geometry, edgePaths, status);
     }
 
     public long generation() {
@@ -46,11 +50,15 @@ public final class CanvasState {
         return geometry;
     }
 
+    public EdgePaths edgePaths() {
+        return edgePaths;
+    }
+
     public OperationalStatus status() {
         return status;
     }
 
     CanvasState withStatus(final OperationalStatus nextStatus) {
-        return new CanvasState(generation, projection, layout, geometry, nextStatus);
+        return new CanvasState(generation, projection, layout, geometry, edgePaths, nextStatus);
     }
 }
