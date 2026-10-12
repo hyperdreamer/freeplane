@@ -758,8 +758,8 @@ public final class LayoutSettleLoop implements AutoCloseable {
             return LayoutFrame.of(index, positions, true, residual);
         }
         final BoundarySeparationDiagnostics diagnostics = retained.boundaryDiagnostics();
-        return LayoutFrame.withDiagnostics(LayoutFrame.of(index, positions, true, residual), diagnostics,
-            retained.idle());
+        return LayoutFrame.withDiagnostics(LayoutFrame.of(index, positions, true, residual),
+            residual, diagnostics, retained.edgeConflictDiagnostics(), retained.idle());
     }
 
     private static Set<ProjectedNodeKey> pinnedNodes(final List<PinProjection> pins) {
