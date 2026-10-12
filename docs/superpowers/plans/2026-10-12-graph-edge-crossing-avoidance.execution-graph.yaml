@@ -1,0 +1,490 @@
+schema_version: 1
+topic: graph-edge-crossing-avoidance
+source_plan:
+  path: docs/superpowers/plans/2026-10-12-graph-edge-crossing-avoidance.md
+  sha256: 3e0ae8099378d04de3505cc300eb6cf997e250502363b7a06972c55e443c8004
+  tasks: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+validation_env:
+  JAVA_HOME: ~/.sdkman/candidates/java/21.0.8-zulu
+  note: Prefix every validation command with JAVA_HOME and PATH so the toolchain matches the plan.
+lanes:
+  - id: edge-foundation
+    task_ids: [geca-t1, geca-t2, geca-t3, geca-t20]
+  - id: edge-relocation
+    task_ids: [geca-t4, geca-t10, geca-t13, geca-t14, geca-t15]
+  - id: edge-routing
+    task_ids: [geca-t5, geca-t6, geca-t11, geca-t16]
+  - id: edge-publication
+    task_ids: [geca-t7, geca-t8, geca-t9, geca-t12, geca-t17, geca-t18, geca-t19]
+tasks:
+  - id: geca-t1
+    plan_task: 1
+    title: "Extract projection/CanonicalKeys as the one canonical encoding path"
+    implementer_tier: standard
+    lane: edge-foundation
+    sequence: 1
+    depends_on: []
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/projection/CanonicalKeys.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/projection/CanonicalKeysShould.java
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/CanonicalLayoutKeys.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/CanonicalLayoutKeysShould.java
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/BoundaryConflict.java
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/BoundarySeparationCorrection.java
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/BoundarySeparationDiagnostics.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundaryInvariantAssertions.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundaryConflictShould.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundarySeparationShould.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundarySeparationCorrectionShould.java
+    resources: []
+    interfaces:
+      produces:
+        - id: i-geca-t1-produces
+          digest: 854b96c1892e898b
+      consumes:
+    validation:
+      - [gradle, ":freeplane_plugin_graph:test", "-PTestLoggingFull"]
+  - id: geca-t2
+    plan_task: 2
+    title: "Extract layout/BoundaryInvariants with the preserved memo and counters"
+    implementer_tier: advanced
+    lane: edge-foundation
+    sequence: 2
+    depends_on: [geca-t1]
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/BoundaryInvariants.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundaryInvariantsShould.java
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/BoundarySeparationCorrection.java
+    resources: []
+    interfaces:
+      produces:
+        - id: i-geca-t2-produces
+          digest: c7caafab00762299
+      consumes:
+        - id: i-geca-t1-produces
+          digest: 854b96c1892e898b
+    validation:
+      - [gradle, ":freeplane_plugin_graph:test", "-PTestLoggingFull"]
+  - id: geca-t3
+    plan_task: 3
+    title: "Add BoundaryInvariants.describe, BoundarySeparationResult.geometry() and NodeSeparationProjection.violatingPairs"
+    implementer_tier: advanced
+    lane: edge-foundation
+    sequence: 3
+    depends_on: [geca-t1, geca-t2]
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/BoundaryInvariants.java
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/BoundarySeparationResult.java
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/BoundarySeparationCorrection.java
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/NodeSeparationProjection.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundaryInvariantsShould.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundarySeparationResultShould.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/NodeSeparationProjectionShould.java
+    resources: []
+    interfaces:
+      produces:
+        - id: i-geca-t3-produces
+          digest: 9f6c16c5209dce29
+      consumes:
+        - id: i-geca-t1-produces
+          digest: 854b96c1892e898b
+        - id: i-geca-t2-produces
+          digest: c7caafab00762299
+    validation:
+      - [gradle, ":freeplane_plugin_graph:test", "-PTestLoggingFull"]
+  - id: geca-t4
+    plan_task: 4
+    title: "Add the EdgeConflict value types and the behaviour-preserving correction scaffold"
+    implementer_tier: standard
+    lane: edge-relocation
+    sequence: 1
+    depends_on: [geca-t1, geca-t3]
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/EdgeConflictException.java
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/EdgeConflictTimings.java
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/EdgeConflictDiagnostics.java
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/EdgeConflictResult.java
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrection.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrectionShould.java
+    resources: []
+    interfaces:
+      produces:
+        - id: i-geca-t4-produces
+          digest: 302578030ac0e033
+      consumes:
+        - id: i-geca-t1-produces
+          digest: 854b96c1892e898b
+        - id: i-geca-t3-produces
+          digest: 9f6c16c5209dce29
+    validation:
+      - [gradle, ":freeplane_plugin_graph:test", "-PTestLoggingFull"]
+  - id: geca-t5
+    plan_task: 5
+    title: "Add the EdgePath, EdgePaths, route diagnostics and route timings value types"
+    implementer_tier: advanced
+    lane: edge-routing
+    sequence: 1
+    depends_on: []
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/EdgePath.java
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/EdgePaths.java
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/EdgeRouteDiagnostics.java
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/EdgeRouteTimings.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/geometry/EdgePathShould.java
+    resources: []
+    interfaces:
+      produces:
+        - id: i-geca-t5-produces
+          digest: 2e4fc30553a43106
+      consumes:
+    validation:
+      - [gradle, ":freeplane_plugin_graph:test", "-PTestLoggingFull"]
+  - id: geca-t6
+    plan_task: 6
+    title: "Add the straight-only EdgeRouter scaffold and the crossing predicate"
+    implementer_tier: standard
+    lane: edge-routing
+    sequence: 2
+    depends_on: [geca-t1, geca-t5]
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/EdgeRouter.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/geometry/EdgeRouterShould.java
+    resources: []
+    interfaces:
+      produces:
+        - id: i-geca-t6-produces
+          digest: 1f082df94faab321
+      consumes:
+        - id: i-geca-t1-produces
+          digest: 854b96c1892e898b
+        - id: i-geca-t5-produces
+          digest: 2e4fc30553a43106
+    validation:
+      - [gradle, ":freeplane_plugin_graph:test", "-PTestLoggingFull"]
+  - id: geca-t7
+    plan_task: 7
+    title: "Plumb EdgeConflict diagnostics through LayoutFrame and LayoutWorker"
+    implementer_tier: advanced
+    lane: edge-publication
+    sequence: 1
+    depends_on: [geca-t4]
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/LayoutFrame.java
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/LayoutWorker.java
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/control/LayoutSettleLoop.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/control/GraphUpdateCoordinatorShould.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/control/LayoutSettleLoopShould.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/LayoutWorkerShould.java
+    resources: []
+    interfaces:
+      produces:
+        - id: i-geca-t7-produces
+          digest: facab8af2c33e024
+      consumes:
+        - id: i-geca-t4-produces
+          digest: 302578030ac0e033
+    validation:
+      - [gradle, ":freeplane_plugin_graph:test", "-PTestLoggingFull"]
+  - id: geca-t8
+    plan_task: 8
+    title: "Move CanvasState to the EdgePaths-taking factory and route at publish"
+    implementer_tier: advanced
+    lane: edge-publication
+    sequence: 2
+    depends_on: [geca-t5, geca-t6, geca-t7]
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/control/CanvasState.java
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/control/LayoutSettleLoop.java
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/control/GraphUpdateCoordinator.java
+        - control/LayoutSettleLoopShould.java
+        - command/ContributorDeletionPlanShould.java
+        - integration/GraphWorkspaceCommandAcceptanceShould.java
+        - smoke/GraphWorkspaceUiEvidence.java
+        - window/GraphWorkspaceWindowModelShould.java
+        - window/WorkspaceDialogsShould.java
+        - canvas/AccessibleGraphCanvasShould.java
+        - canvas/GraphInteractionControllerShould.java
+        - canvas/GraphCanvasPaintShould.java
+        - canvas/GraphSearchModelShould.java
+        - performance/GraphWorkspacePerformanceDiagnostic.java
+    resources: []
+    interfaces:
+      produces:
+        - id: i-geca-t8-produces
+          digest: 807dcfcd24d64cbf
+      consumes:
+        - id: i-geca-t5-produces
+          digest: 2e4fc30553a43106
+        - id: i-geca-t6-produces
+          digest: 1f082df94faab321
+    validation:
+      - [gradle, ":freeplane_plugin_graph:test", "-PTestLoggingFull"]
+  - id: geca-t9
+    plan_task: 9
+    title: "Draw and hit-test the published EdgePaths"
+    implementer_tier: advanced
+    lane: edge-publication
+    sequence: 3
+    depends_on: [geca-t5, geca-t8]
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/GraphPainter.java
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/GraphHitIndex.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/GraphCanvasPaintShould.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/GraphInteractionControllerShould.java
+    resources: []
+    interfaces:
+      produces:
+        - id: i-geca-t9-produces
+          digest: c994ddcaa195480b
+      consumes:
+        - id: i-geca-t5-produces
+          digest: 2e4fc30553a43106
+        - id: i-geca-t8-produces
+          digest: 807dcfcd24d64cbf
+    validation:
+      - [gradle, ":freeplane_plugin_graph:test", "-PTestLoggingFull"]
+  - id: geca-t10
+    plan_task: 10
+    title: "Add the red-phase relocation fixtures (spec \u00a78.1 and \u00a78.5)"
+    implementer_tier: standard
+    lane: edge-relocation
+    sequence: 2
+    depends_on: [geca-t3, geca-t4]
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrectionShould.java
+    resources: []
+    interfaces:
+      produces:
+        - id: i-geca-t10-produces
+          digest: f02885f5387248b0
+      consumes:
+        - id: i-geca-t3-produces
+          digest: 9f6c16c5209dce29
+        - id: i-geca-t4-produces
+          digest: 302578030ac0e033
+    validation:
+      - [gradle, ":freeplane_plugin_graph:test", "-PTestLoggingFull"]
+  - id: geca-t11
+    plan_task: 11
+    title: "Add the red-phase router fixtures (spec \u00a78.2 and \u00a78.3)"
+    implementer_tier: standard
+    lane: edge-routing
+    sequence: 3
+    depends_on: [geca-t6]
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/geometry/EdgeRouterShould.java
+    resources: []
+    interfaces:
+      produces:
+        - id: i-geca-t11-produces
+          digest: 119d92f31b1dabcb
+      consumes:
+        - id: i-geca-t6-produces
+          digest: 1f082df94faab321
+    validation:
+      - [gradle, ":freeplane_plugin_graph:test", "-PTestLoggingFull"]
+  - id: geca-t12
+    plan_task: 12
+    title: "Add the red-phase painter and rebuild fixtures"
+    implementer_tier: standard
+    lane: edge-publication
+    sequence: 4
+    depends_on: [geca-t7, geca-t9, geca-t10]
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/GraphCanvasPaintShould.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/LayoutWorkerShould.java
+    resources: []
+    interfaces:
+      produces:
+        - id: i-geca-t12-produces
+          digest: 92bb391a8f3359b2
+      consumes:
+        - id: i-geca-t7-produces
+          digest: facab8af2c33e024
+        - id: i-geca-t9-produces
+          digest: c994ddcaa195480b
+        - id: i-geca-t10-produces
+          digest: f02885f5387248b0
+    validation:
+      - [gradle, ":freeplane_plugin_graph:test", "-PTestLoggingFull"]
+  - id: geca-t13
+    plan_task: 13
+    title: "Implement C1/C2 conflict detection and the subdividing conflict index"
+    implementer_tier: advanced
+    lane: edge-relocation
+    sequence: 3
+    depends_on: [geca-t10]
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrection.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrectionShould.java
+    resources: []
+    interfaces:
+      produces:
+        - id: i-geca-t13-produces
+          digest: e3b0c44298fc1c14
+      consumes:
+    validation:
+      - [gradle, ":freeplane_plugin_graph:test", "-PTestLoggingFull"]
+  - id: geca-t14
+    plan_task: 14
+    title: "Implement the candidate ladder, A1-A4 and rejection-retry"
+    implementer_tier: advanced
+    lane: edge-relocation
+    sequence: 4
+    depends_on: [geca-t3, geca-t13]
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrection.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrectionShould.java
+    resources: []
+    interfaces:
+      produces:
+        - id: i-geca-t14-produces
+          digest: 2c6ebed655eb65d5
+      consumes:
+        - id: i-geca-t3-produces
+          digest: 9f6c16c5209dce29
+    validation:
+      - [gradle, ":freeplane_plugin_graph:test", "-PTestLoggingFull"]
+  - id: geca-t15
+    plan_task: 15
+    title: "Rebuild the boundary record on the published positions"
+    implementer_tier: advanced
+    lane: edge-relocation
+    sequence: 5
+    depends_on: [geca-t1, geca-t3, geca-t4, geca-t14]
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrection.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrectionShould.java
+    resources: []
+    interfaces:
+      produces:
+        - id: i-geca-t15-produces
+          digest: 5365dcb4106af80b
+      consumes:
+        - id: i-geca-t1-produces
+          digest: 854b96c1892e898b
+        - id: i-geca-t3-produces
+          digest: 9f6c16c5209dce29
+        - id: i-geca-t4-produces
+          digest: 302578030ac0e033
+    validation:
+      - [gradle, ":freeplane_plugin_graph:test", "-PTestLoggingFull"]
+  - id: geca-t16
+    plan_task: 16
+    title: "Implement the routing ladder, clearance rules and route diagnostics"
+    implementer_tier: advanced
+    lane: edge-routing
+    sequence: 4
+    depends_on: [geca-t5, geca-t11]
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/EdgeRouter.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/geometry/EdgeRouterShould.java
+    resources: []
+    interfaces:
+      produces:
+        - id: i-geca-t16-produces
+          digest: 216a5f2fc1e1f6e7
+      consumes:
+        - id: i-geca-t5-produces
+          digest: 2e4fc30553a43106
+    validation:
+      - [gradle, ":freeplane_plugin_graph:test", "-PTestLoggingFull"]
+  - id: geca-t17
+    plan_task: 17
+    title: "Complete the painter, arrowhead, multiplicity and hit-test coverage"
+    implementer_tier: advanced
+    lane: edge-publication
+    sequence: 5
+    depends_on: [geca-t12]
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/GraphPainter.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/GraphCanvasPaintShould.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/GraphInteractionControllerShould.java
+    resources: []
+    interfaces:
+      produces:
+        - id: i-geca-t17-produces
+          digest: 005a70d6a8dbbf93
+      consumes:
+    validation:
+      - [gradle, ":freeplane_plugin_graph:test", "-PTestLoggingFull"]
+  - id: geca-t18
+    plan_task: 18
+    title: "Add the edge-conflict and edge-routing performance stages and thresholds"
+    implementer_tier: advanced
+    lane: edge-publication
+    sequence: 6
+    depends_on: [geca-t17]
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/PerformanceMeasurements.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/PerformanceTripwiresShould.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/GraphWorkspacePerformanceDiagnostic.java
+    resources: []
+    interfaces:
+      produces:
+        - id: i-geca-t18-produces
+          digest: 16c6f966b787b4c0
+      consumes:
+    validation:
+      - [gradle, ":freeplane_plugin_graph:test", "-PTestLoggingFull"]
+  - id: geca-t19
+    plan_task: 19
+    title: "Pin the acceptance surface and run the module and core gates"
+    implementer_tier: standard
+    lane: edge-publication
+    sequence: 7
+    depends_on: [geca-t12, geca-t16, geca-t18]
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/GraphCanvasPaintShould.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/GraphInteractionControllerShould.java
+    resources: []
+    interfaces:
+      produces:
+        - id: i-geca-t19-produces
+          digest: 5ffa4208d81581fa
+      consumes:
+        - id: i-geca-t12-produces
+          digest: 92bb391a8f3359b2
+        - id: i-geca-t16-produces
+          digest: 216a5f2fc1e1f6e7
+    validation:
+      - [gradle, ":freeplane_plugin_graph:test", "-PTestLoggingFull"]
+  - id: geca-t20
+    plan_task: 20
+    title: "Pin the rebuilt-record composition in BoundarySeparationShould"
+    implementer_tier: standard
+    lane: edge-foundation
+    sequence: 4
+    depends_on: [geca-t3]
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundarySeparationShould.java
+    resources: []
+    interfaces:
+      produces:
+        - id: i-geca-t20-produces
+          digest: 63d55160f1a12c69
+      consumes:
+        - id: i-geca-t3-produces
+          digest: 9f6c16c5209dce29
+    validation:
+      - [gradle, ":freeplane_plugin_graph:test", "-PTestLoggingFull"]
