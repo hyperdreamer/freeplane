@@ -14,6 +14,7 @@ import java.util.Set;
 
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
+import org.freeplane.plugin.graph.projection.CanonicalKeys;
 import org.freeplane.plugin.graph.projection.EdgeContributor;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.EnclosureKey;
@@ -161,6 +162,25 @@ public class NodeSeparationProjectionShould {
 
         assertThat(result.positions().anchors()).isEqualTo(raw.anchors());
         assertThat(result.positions().anchors().get(hull)).isEqualTo(LayoutPoint.of(7.5, -3.25));
+    }
+
+    @Test
+    public void reportsTheGapPredicateKeysAndMatchesTheProjectedResidualCount() {
+        GraphProjection projection = projection("a", "b");
+        double rawDistance = radius(projection, key("a")) + radius(projection, key("b"))
+            + NodeSeparationProjection.MIN_GAP - 0.001;
+        LayoutPositions raw = positions(projection, orderedPoints(new String[] { "a", "b" },
+            new LayoutPoint[] { LayoutPoint.of(0.0, 0.0), LayoutPoint.of(rawDistance, 0.0) }));
+
+        assertThat(NodeSeparationProjection.violatingPairs(projection, raw))
+            .containsExactly(CanonicalKeys.nodePair(key("a"), key("b")))
+            .isSorted();
+
+        NodeSeparationResult result = new NodeSeparationProjection().project(projection, raw,
+            Collections.<ProjectedNodeKey>emptySet());
+
+        assertThat(result.residualViolations())
+            .isEqualTo(NodeSeparationProjection.violatingPairs(projection, result.positions()).size());
     }
 
     @Test
