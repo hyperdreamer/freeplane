@@ -69,6 +69,28 @@ public final class EdgeRouteDiagnostics {
         return pathHullPenetrations;
     }
 
+    @Override
+    public boolean equals(final Object other) {
+        if (this == other) {
+            return true;
+        }
+        if (!(other instanceof EdgeRouteDiagnostics)) {
+            return false;
+        }
+        final EdgeRouteDiagnostics that = (EdgeRouteDiagnostics) other;
+        return edgesStraight == that.edgesStraight && edgesBow == that.edgesBow
+            && edgesDogleg == that.edgesDogleg && edgesFallback == that.edgesFallback
+            && pathCrossingsDetected == that.pathCrossingsDetected
+            && pathHullPenetrations == that.pathHullPenetrations
+            && pathCrossingsResidual.equals(that.pathCrossingsResidual);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(edgesStraight, edgesBow, edgesDogleg, edgesFallback, pathCrossingsDetected,
+            pathCrossingsResidual, pathHullPenetrations);
+    }
+
     private static void requireNonnegative(final int value, final String role) {
         if (value < 0) {
             throw new IllegalArgumentException(role + " must be nonnegative but was " + value);
