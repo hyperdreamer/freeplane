@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -14,6 +15,7 @@ import java.util.TreeSet;
 
 import org.freeplane.plugin.graph.geometry.GeometryTextMetrics;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
+import org.freeplane.plugin.graph.geometry.GraphGeometryEngine;
 import org.freeplane.plugin.graph.geometry.HullGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
@@ -39,9 +41,27 @@ public final class EdgeConflictCorrection {
     static final int CONFLICT_MAX_SUBDIVISION_DEPTH = 4;
     static final int OUTERMOST_CELL_INDEX = Integer.MAX_VALUE;
     static final double ROUTE_EPSILON = 1e-9;
+    static final double CROSSING_CLEARANCE = 16.0;
+    static final int MAX_RELOCATION_ROUNDS = 4;
+    static final int MAX_VERIFICATIONS_PER_FRAME = 64;
 
     private static final double OUTERMOST_CELL_INDEX_DOUBLE = OUTERMOST_CELL_INDEX;
+    private static final Comparator<ProjectedNodeKey> NODE_ORDER =
+        new Comparator<ProjectedNodeKey>() {
+            @Override
+            public int compare(final ProjectedNodeKey first, final ProjectedNodeKey second) {
+                return CanonicalKeys.node(first).compareTo(CanonicalKeys.node(second));
+            }
+        };
+    private static final Comparator<EnclosureHullKey> HULL_ORDER =
+        new Comparator<EnclosureHullKey>() {
+            @Override
+            public int compare(final EnclosureHullKey first, final EnclosureHullKey second) {
+                return CanonicalKeys.hull(first).compareTo(CanonicalKeys.hull(second));
+            }
+        };
 
+    private final GraphGeometryEngine geometryEngine = new GraphGeometryEngine();
     private long indexInsertedItems;
     private long indexPairChecks;
     private int indexSubdivisions;
@@ -61,26 +81,414 @@ public final class EdgeConflictCorrection {
         Objects.requireNonNull(visibleEndpoints, "visibleEndpoints");
         Objects.requireNonNull(boundaryResult, "boundaryResult");
         resetIndexCounters();
-        final IndexedDetection detection = detect(projection, positions, boundaryResult.geometry(),
-            visibleEndpoints);
+        final Set<ProjectedNodeKey> pinned = pinnedNodes(pins);
+        final Map<ProjectedNodeKey, List<EnclosureHullKey>> nodeHullsByKey =
+            BoundaryInvariants.nodeHullsByKey(projection);
+        final Map<ProjectedNodeKey, List<EnclosureHullKey>> enclosurePaths = enclosurePaths(projection);
+        final BoundaryInvariants boundaryInvariants = new BoundaryInvariants();
+
+        LayoutPositions currentPositions = positions;
+        GraphGeometry currentGeometry = boundaryResult.geometry();
+        Detection conflicts = detect(projection, currentPositions, currentGeometry, visibleEndpoints)
+            .detection();
+        final int conflictsDetected = conflicts.keys().size();
+        final int crossingsDetected = conflicts.crossings();
+        final int edgeOverNodeDetected = conflicts.edgeOverNodes();
+        final List<EdgeConflictDiagnostics.Repair> repairs =
+            new ArrayList<EdgeConflictDiagnostics.Repair>();
+        int rounds = 0;
+        int verifications = 0;
+        boolean verificationBudgetExhausted = false;
+
+        while (rounds < MAX_RELOCATION_ROUNDS && verifications < MAX_VERIFICATIONS_PER_FRAME) {
+            if (conflicts.keys().isEmpty()) {
+                break;
+            }
+            final List<Candidate> pool = generateCandidates(conflicts, currentPositions, pinned,
+                enclosurePaths);
+            boolean acceptedThisRound = false;
+            while (!pool.isEmpty() && verifications < MAX_VERIFICATIONS_PER_FRAME) {
+                final List<Candidate> batch = greedyDisjoint(pool);
+                if (batch.isEmpty()) {
+                    break;
+                }
+                pool.removeAll(batch);
+                final List<List<Candidate>> attempts = new ArrayList<List<Candidate>>();
+                attempts.add(batch);
+                if (batch.size() > 1) {
+                    for (final Candidate candidate : batch) {
+                        attempts.add(Collections.singletonList(candidate));
+                    }
+                }
+                for (final List<Candidate> attempt : attempts) {
+                    verifications++;
+                    final Evaluation evaluation = verify(attempt, projection, currentPositions,
+                        currentGeometry, metrics, visibleEndpoints, conflicts, boundaryInvariants,
+                        nodeHullsByKey, enclosurePaths);
+                    if (evaluation.accepted) {
+                        recordRepair(repairs, attempt, rounds);
+                        currentPositions = evaluation.positions;
+                        currentGeometry = evaluation.geometry;
+                        rounds++;
+                        acceptedThisRound = true;
+                        break;
+                    }
+                    if (verifications == MAX_VERIFICATIONS_PER_FRAME) {
+                        verificationBudgetExhausted = true;
+                        break;
+                    }
+                }
+                if (acceptedThisRound) {
+                    break;
+                }
+            }
+            if (!acceptedThisRound) {
+                break;
+            }
+            conflicts = detect(projection, currentPositions, currentGeometry, visibleEndpoints)
+                .detection();
+        }
+
+        final Detection residual = rounds > 0
+            ? detect(projection, currentPositions, currentGeometry, visibleEndpoints).detection()
+            : conflicts;
+        if (verifications == MAX_VERIFICATIONS_PER_FRAME && !residual.keys().isEmpty()) {
+            verificationBudgetExhausted = true;
+        }
         final EdgeConflictDiagnostics diagnostics = new EdgeConflictDiagnostics(
-            detection.detection().keys().size(),
-            detection.detection().crossings(),
-            detection.detection().edgeOverNodes(),
-            0,
-            0,
-            detection.detection().keys(),
-            Collections.<EdgeConflictDiagnostics.Repair>emptyList(),
-            0,
-            0,
-            false,
-            indexBudgetExhausted,
-            indexInsertedItems,
-            indexPairChecks,
-            indexSubdivisions);
-        return new EdgeConflictResult(positions, diagnostics, new EdgeConflictTimings(0L, 0L, 0L, 0L),
+            conflictsDetected, crossingsDetected, edgeOverNodeDetected,
+            crossingsDetected - residual.crossings(), edgeOverNodeDetected - residual.edgeOverNodes(),
+            residual.keys(), repairs, rounds, verifications, verificationBudgetExhausted,
+            indexBudgetExhausted, indexInsertedItems, indexPairChecks, indexSubdivisions);
+        return new EdgeConflictResult(currentPositions, diagnostics, new EdgeConflictTimings(0L, 0L, 0L, 0L),
             boundaryResult.diagnostics(), boundaryResult.nodeResidualViolations(),
             Collections.<String, LayoutPoint>emptyMap());
+    }
+
+    private static Set<ProjectedNodeKey> pinnedNodes(final List<PinProjection> pins) {
+        final Set<ProjectedNodeKey> result = new LinkedHashSet<ProjectedNodeKey>();
+        for (final PinProjection pin : pins) {
+            if (pin.active()) {
+                result.add(pin.projectedNode().get());
+            }
+        }
+        return result;
+    }
+
+    private static Map<ProjectedNodeKey, List<EnclosureHullKey>> enclosurePaths(
+            final GraphProjection projection) {
+        final Map<EnclosureHullKey, ProjectedEnclosure> enclosuresByHull =
+            BoundaryInvariants.enclosuresByHull(projection);
+        final Map<ProjectedNodeKey, List<EnclosureHullKey>> paths =
+            new LinkedHashMap<ProjectedNodeKey, List<EnclosureHullKey>>();
+        for (final ProjectedNode node : projection.nodes()) {
+            paths.put(node.key(), new ArrayList<EnclosureHullKey>());
+        }
+        for (final ProjectedEnclosure enclosure : projection.enclosures()) {
+            for (final ProjectedNodeKey node : subtreeNodes(enclosure, enclosuresByHull)) {
+                final List<EnclosureHullKey> path = paths.get(node);
+                if (path != null) {
+                    path.add(enclosure.hullKey());
+                }
+            }
+        }
+        for (final List<EnclosureHullKey> path : paths.values()) {
+            Collections.sort(path, HULL_ORDER);
+        }
+        return paths;
+    }
+
+    private static List<ProjectedNodeKey> subtreeNodes(final ProjectedEnclosure enclosure,
+            final Map<EnclosureHullKey, ProjectedEnclosure> enclosuresByHull) {
+        final List<ProjectedNodeKey> result = new ArrayList<ProjectedNodeKey>();
+        collectSubtreeNodes(enclosure, enclosuresByHull, new LinkedHashSet<EnclosureHullKey>(), result);
+        return result;
+    }
+
+    private static void collectSubtreeNodes(final ProjectedEnclosure enclosure,
+            final Map<EnclosureHullKey, ProjectedEnclosure> enclosuresByHull,
+            final Set<EnclosureHullKey> visited, final List<ProjectedNodeKey> result) {
+        if (enclosure == null || !visited.add(enclosure.hullKey())) {
+            return;
+        }
+        result.addAll(enclosure.directNodes());
+        for (final EnclosureHullKey child : enclosure.directEnclosures()) {
+            collectSubtreeNodes(enclosuresByHull.get(child), enclosuresByHull, visited, result);
+        }
+    }
+
+    private static List<Candidate> generateCandidates(final Detection conflicts,
+            final LayoutPositions positions, final Set<ProjectedNodeKey> pinned,
+            final Map<ProjectedNodeKey, List<EnclosureHullKey>> enclosurePaths) {
+        final List<Candidate> candidates = new ArrayList<Candidate>();
+        for (final Conflict conflict : conflicts.conflicts()) {
+            if (conflict.isCrossing()) {
+                addCrossingCandidates(candidates, conflict, positions, pinned, enclosurePaths);
+            }
+            else {
+                addEdgeOverNodeCandidate(candidates, conflict, positions, pinned);
+            }
+        }
+        return candidates;
+    }
+
+    private static void addCrossingCandidates(final List<Candidate> candidates, final Conflict conflict,
+            final LayoutPositions positions, final Set<ProjectedNodeKey> pinned,
+            final Map<ProjectedNodeKey, List<EnclosureHullKey>> enclosurePaths) {
+        final Chord first = conflict.firstChord();
+        final Chord second = conflict.secondChord();
+        if (first.firstNode == null || first.secondNode == null || second.firstNode == null
+                || second.secondNode == null) {
+            return;
+        }
+        final TreeSet<ProjectedNodeKey> sorted = new TreeSet<ProjectedNodeKey>(NODE_ORDER);
+        sorted.add(first.firstNode);
+        sorted.add(first.secondNode);
+        sorted.add(second.firstNode);
+        sorted.add(second.secondNode);
+        if (sorted.size() != 4) {
+            return;
+        }
+        final List<ProjectedNodeKey> keys = new ArrayList<ProjectedNodeKey>(sorted);
+        final LayoutPoint[] centres = new LayoutPoint[keys.size()];
+        double centroidX = 0.0;
+        double centroidY = 0.0;
+        for (int index = 0; index < keys.size(); index++) {
+            centres[index] = positions.nodes().get(keys.get(index));
+            if (centres[index] == null) {
+                return;
+            }
+            centroidX += centres[index].x() / 4.0;
+            centroidY += centres[index].y() / 4.0;
+        }
+        final Map<ProjectedNodeKey, Double> angles = new LinkedHashMap<ProjectedNodeKey, Double>();
+        for (int index = 0; index < keys.size(); index++) {
+            angles.put(keys.get(index), Double.valueOf(Math.atan2(centres[index].y() - centroidY,
+                centres[index].x() - centroidX)));
+        }
+        final List<ProjectedNodeKey> cycle = new ArrayList<ProjectedNodeKey>(keys);
+        Collections.sort(cycle, new Comparator<ProjectedNodeKey>() {
+            @Override
+            public int compare(final ProjectedNodeKey left, final ProjectedNodeKey right) {
+                final int byAngle = Double.compare(angles.get(left).doubleValue(),
+                    angles.get(right).doubleValue());
+                if (byAngle != 0) {
+                    return byAngle;
+                }
+                return NODE_ORDER.compare(left, right);
+            }
+        });
+        final int start = cycle.indexOf(keys.get(0));
+        final List<ProjectedNodeKey> corners = new ArrayList<ProjectedNodeKey>(4);
+        for (int index = 0; index < 4; index++) {
+            corners.add(cycle.get((start + index) % 4));
+        }
+        addSwapCandidate(candidates, corners.get(0), corners.get(1), positions, pinned, enclosurePaths);
+        addSwapCandidate(candidates, corners.get(2), corners.get(3), positions, pinned, enclosurePaths);
+        for (int index = 0; index < 4; index++) {
+            addMirrorCandidate(candidates, corners.get(index), corners.get((index + 1) % 4),
+                corners.get((index + 3) % 4), positions, pinned);
+        }
+    }
+
+    private static void addSwapCandidate(final List<Candidate> candidates, final ProjectedNodeKey first,
+            final ProjectedNodeKey second, final LayoutPositions positions,
+            final Set<ProjectedNodeKey> pinned,
+            final Map<ProjectedNodeKey, List<EnclosureHullKey>> enclosurePaths) {
+        if (pinned.contains(first) || pinned.contains(second)) {
+            return;
+        }
+        final List<EnclosureHullKey> firstPath = enclosurePaths.get(first);
+        final List<EnclosureHullKey> secondPath = enclosurePaths.get(second);
+        if (firstPath == null || secondPath == null || !firstPath.equals(secondPath)) {
+            return;
+        }
+        final LayoutPoint firstCentre = positions.nodes().get(first);
+        final LayoutPoint secondCentre = positions.nodes().get(second);
+        if (firstCentre == null || secondCentre == null) {
+            return;
+        }
+        final Map<ProjectedNodeKey, LayoutPoint> from =
+            new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        from.put(first, firstCentre);
+        from.put(second, secondCentre);
+        final Map<ProjectedNodeKey, LayoutPoint> to =
+            new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        to.put(first, secondCentre);
+        to.put(second, firstCentre);
+        final List<ProjectedNodeKey> moved = new ArrayList<ProjectedNodeKey>(2);
+        moved.add(first);
+        moved.add(second);
+        candidates.add(new Candidate(EdgeConflictDiagnostics.RepairKind.SWAP, moved, from, to));
+    }
+
+    private static void addMirrorCandidate(final List<Candidate> candidates, final ProjectedNodeKey node,
+            final ProjectedNodeKey lineFirst, final ProjectedNodeKey lineSecond,
+            final LayoutPositions positions, final Set<ProjectedNodeKey> pinned) {
+        if (pinned.contains(node)) {
+            return;
+        }
+        final LayoutPoint centre = positions.nodes().get(node);
+        final LayoutPoint lineA = positions.nodes().get(lineFirst);
+        final LayoutPoint lineB = positions.nodes().get(lineSecond);
+        if (centre == null || lineA == null || lineB == null) {
+            return;
+        }
+        final double deltaX = lineB.x() - lineA.x();
+        final double deltaY = lineB.y() - lineA.y();
+        final double length = Math.hypot(deltaX, deltaY);
+        if (!(length > 0.0) || !Double.isFinite(length)) {
+            return;
+        }
+        double normalX = -deltaY / length;
+        double normalY = deltaX / length;
+        if (Double.compare(normalX, -normalX) > 0 || Double.compare(normalX, -normalX) == 0
+                && Double.compare(normalY, -normalY) > 0) {
+            normalX = -normalX;
+            normalY = -normalY;
+        }
+        final double projection = (centre.x() - lineA.x()) * normalX
+            + (centre.y() - lineA.y()) * normalY;
+        final double reflectedX = centre.x() - 2.0 * projection * normalX;
+        final double reflectedY = centre.y() - 2.0 * projection * normalY;
+        final double outward = projection < 0.0 ? 1.0 : -1.0;
+        final LayoutPoint target = LayoutPoint.of(
+            reflectedX + outward * CROSSING_CLEARANCE * normalX,
+            reflectedY + outward * CROSSING_CLEARANCE * normalY);
+        final List<ProjectedNodeKey> moved = new ArrayList<ProjectedNodeKey>(1);
+        moved.add(node);
+        final Map<ProjectedNodeKey, LayoutPoint> from =
+            new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        from.put(node, centre);
+        final Map<ProjectedNodeKey, LayoutPoint> to =
+            new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        to.put(node, target);
+        candidates.add(new Candidate(EdgeConflictDiagnostics.RepairKind.MIRROR, moved, from, to));
+    }
+
+    private static void addEdgeOverNodeCandidate(final List<Candidate> candidates,
+            final Conflict conflict, final LayoutPositions positions,
+            final Set<ProjectedNodeKey> pinned) {
+        final Chord chord = conflict.firstChord();
+        final Disc disc = conflict.disc();
+        if (pinned.contains(disc.key)) {
+            return;
+        }
+        final double deltaX = chord.second.x() - chord.first.x();
+        final double deltaY = chord.second.y() - chord.first.y();
+        final double length = Math.hypot(deltaX, deltaY);
+        if (!(length > 0.0) || !Double.isFinite(length)) {
+            return;
+        }
+        double normalX = -deltaY / length;
+        double normalY = deltaX / length;
+        if (Double.compare(normalX, -normalX) > 0 || Double.compare(normalX, -normalX) == 0
+                && Double.compare(normalY, -normalY) > 0) {
+            normalX = -normalX;
+            normalY = -normalY;
+        }
+        final LayoutPoint known = positions.nodes().get(disc.key);
+        final LayoutPoint centre = known == null ? disc.center : known;
+        final double projection = (centre.x() - chord.first.x()) * normalX
+            + (centre.y() - chord.first.y()) * normalY;
+        final double shift = disc.radius + EDGE_NODE_CLEARANCE - projection;
+        final LayoutPoint target = LayoutPoint.of(centre.x() + shift * normalX,
+            centre.y() + shift * normalY);
+        final List<ProjectedNodeKey> moved = new ArrayList<ProjectedNodeKey>(1);
+        moved.add(disc.key);
+        final Map<ProjectedNodeKey, LayoutPoint> from =
+            new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        from.put(disc.key, centre);
+        final Map<ProjectedNodeKey, LayoutPoint> to =
+            new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        to.put(disc.key, target);
+        candidates.add(new Candidate(EdgeConflictDiagnostics.RepairKind.TRANSLATION, moved, from, to));
+    }
+
+    private static List<Candidate> greedyDisjoint(final List<Candidate> pool) {
+        final List<Candidate> batch = new ArrayList<Candidate>();
+        final Set<ProjectedNodeKey> moved = new LinkedHashSet<ProjectedNodeKey>();
+        for (final Candidate candidate : pool) {
+            boolean disjoint = true;
+            for (final ProjectedNodeKey node : candidate.movedNodes) {
+                if (moved.contains(node)) {
+                    disjoint = false;
+                    break;
+                }
+            }
+            if (disjoint) {
+                batch.add(candidate);
+                moved.addAll(candidate.movedNodes);
+            }
+        }
+        return batch;
+    }
+
+    private Evaluation verify(final List<Candidate> attempt, final GraphProjection projection,
+            final LayoutPositions currentPositions, final GraphGeometry currentGeometry,
+            final GeometryTextMetrics metrics, final Set<ProjectedEndpointKey> visibleEndpoints,
+            final Detection currentConflicts, final BoundaryInvariants boundaryInvariants,
+            final Map<ProjectedNodeKey, List<EnclosureHullKey>> nodeHullsByKey,
+            final Map<ProjectedNodeKey, List<EnclosureHullKey>> enclosurePaths) {
+        final Map<ProjectedNodeKey, LayoutPoint> toCentres =
+            new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        for (final Candidate candidate : attempt) {
+            toCentres.putAll(candidate.toCentres);
+        }
+        final LayoutPositions candidatePositions = withCentres(currentPositions, toCentres);
+        final GraphGeometry candidateGeometry = geometryEngine.recomputeHulls(projection, candidatePositions,
+            metrics, currentGeometry, BoundaryInvariants.changedHulls(nodeHullsByKey, currentPositions,
+                candidatePositions));
+        final Detection candidateConflicts = detectConflicts(projection, candidatePositions,
+            candidateGeometry, visibleEndpoints);
+        if (candidateConflicts.keys().size() >= currentConflicts.keys().size()
+                || !new LinkedHashSet<String>(currentConflicts.keys())
+                    .containsAll(candidateConflicts.keys())) {
+            return Evaluation.rejected();
+        }
+        if (!new LinkedHashSet<String>(NodeSeparationProjection.violatingPairs(projection, currentPositions))
+                .containsAll(NodeSeparationProjection.violatingPairs(projection, candidatePositions))) {
+            return Evaluation.rejected();
+        }
+        if (!boundaryInvariants.detectPairKeys(projection, currentGeometry)
+                .containsAll(boundaryInvariants.detectPairKeys(projection, candidateGeometry))) {
+            return Evaluation.rejected();
+        }
+        for (final Candidate candidate : attempt) {
+            for (final ProjectedNodeKey node : candidate.movedNodes) {
+                final List<EnclosureHullKey> path = enclosurePaths.get(node);
+                if (path == null) {
+                    return Evaluation.rejected();
+                }
+                for (final EnclosureHullKey hull : path) {
+                    if (!candidateGeometry.hulls().containsKey(hull)) {
+                        return Evaluation.rejected();
+                    }
+                }
+            }
+        }
+        return new Evaluation(candidatePositions, candidateGeometry);
+    }
+
+    private static LayoutPositions withCentres(final LayoutPositions positions,
+            final Map<ProjectedNodeKey, LayoutPoint> centres) {
+        final Map<ProjectedNodeKey, LayoutPoint> nodes =
+            new LinkedHashMap<ProjectedNodeKey, LayoutPoint>(positions.nodes());
+        for (final Map.Entry<ProjectedNodeKey, LayoutPoint> entry : centres.entrySet()) {
+            nodes.put(entry.getKey(), entry.getValue());
+        }
+        return LayoutPositions.of(nodes, positions.anchors());
+    }
+
+    private static void recordRepair(final List<EdgeConflictDiagnostics.Repair> repairs,
+            final List<Candidate> attempt, final int roundIndex) {
+        for (final Candidate candidate : attempt) {
+            // One Repair per candidate keeps `kind` exact even when a greedy batch combines
+            // candidates of different repair kinds.
+            repairs.add(new EdgeConflictDiagnostics.Repair(candidate.kind,
+                new ArrayList<ProjectedNodeKey>(candidate.toCentres.keySet()), candidate.fromCentres,
+                candidate.toCentres, roundIndex));
+        }
     }
 
     private void resetIndexCounters() {
@@ -164,7 +572,7 @@ public final class EdgeConflictCorrection {
             }
         }
         return new Detection(new ArrayList<String>(accumulator.keys), accumulator.crossings,
-            accumulator.edgeOverNodes);
+            accumulator.edgeOverNodes, new ArrayList<Conflict>(accumulator.conflicts.values()));
     }
 
     private static List<Chord> chords(final GraphProjection projection, final LayoutPositions positions,
@@ -495,16 +903,20 @@ public final class EdgeConflictCorrection {
     }
 
     static final class Detection {
-        private static final Detection EMPTY = new Detection(Collections.<String>emptyList(), 0, 0);
+        private static final Detection EMPTY = new Detection(Collections.<String>emptyList(), 0, 0,
+            Collections.<Conflict>emptyList());
 
         private final List<String> keys;
         private final int crossings;
         private final int edgeOverNodes;
+        private final List<Conflict> conflicts;
 
-        private Detection(final List<String> keys, final int crossings, final int edgeOverNodes) {
+        private Detection(final List<String> keys, final int crossings, final int edgeOverNodes,
+                final List<Conflict> conflicts) {
             this.keys = Collections.unmodifiableList(new ArrayList<String>(keys));
             this.crossings = crossings;
             this.edgeOverNodes = edgeOverNodes;
+            this.conflicts = Collections.unmodifiableList(new ArrayList<Conflict>(conflicts));
         }
 
         static Detection empty() {
@@ -521,6 +933,10 @@ public final class EdgeConflictCorrection {
 
         int edgeOverNodes() {
             return edgeOverNodes;
+        }
+
+        List<Conflict> conflicts() {
+            return conflicts;
         }
     }
 
@@ -616,6 +1032,83 @@ public final class EdgeConflictCorrection {
         }
     }
 
+    private static final class Conflict {
+        private final Chord firstChord;
+        private final Chord secondChord;
+        private final Disc disc;
+
+        private Conflict(final Chord firstChord, final Chord secondChord, final Disc disc) {
+            this.firstChord = firstChord;
+            this.secondChord = secondChord;
+            this.disc = disc;
+        }
+
+        static Conflict crossing(final Chord first, final Chord second) {
+            return new Conflict(first, second, null);
+        }
+
+        static Conflict edgeOverNode(final Chord chord, final Disc disc) {
+            return new Conflict(chord, null, disc);
+        }
+
+        boolean isCrossing() {
+            return secondChord != null;
+        }
+
+        Chord firstChord() {
+            return firstChord;
+        }
+
+        Chord secondChord() {
+            return secondChord;
+        }
+
+        Disc disc() {
+            return disc;
+        }
+    }
+
+    private static final class Candidate {
+        private final EdgeConflictDiagnostics.RepairKind kind;
+        private final List<ProjectedNodeKey> movedNodes;
+        private final Map<ProjectedNodeKey, LayoutPoint> fromCentres;
+        private final Map<ProjectedNodeKey, LayoutPoint> toCentres;
+
+        private Candidate(final EdgeConflictDiagnostics.RepairKind kind,
+                final List<ProjectedNodeKey> movedNodes,
+                final Map<ProjectedNodeKey, LayoutPoint> fromCentres,
+                final Map<ProjectedNodeKey, LayoutPoint> toCentres) {
+            this.kind = kind;
+            this.movedNodes = Collections.unmodifiableList(
+                new ArrayList<ProjectedNodeKey>(movedNodes));
+            this.fromCentres = Collections.unmodifiableMap(
+                new LinkedHashMap<ProjectedNodeKey, LayoutPoint>(fromCentres));
+            this.toCentres = Collections.unmodifiableMap(
+                new LinkedHashMap<ProjectedNodeKey, LayoutPoint>(toCentres));
+        }
+    }
+
+    private static final class Evaluation {
+        private final boolean accepted;
+        private final LayoutPositions positions;
+        private final GraphGeometry geometry;
+
+        private Evaluation(final boolean accepted, final LayoutPositions positions,
+                final GraphGeometry geometry) {
+            this.accepted = accepted;
+            this.positions = positions;
+            this.geometry = geometry;
+        }
+
+        static Evaluation rejected() {
+            return new Evaluation(false, null, null);
+        }
+
+        private Evaluation(final LayoutPositions positions, final GraphGeometry geometry) {
+            this(true, positions, geometry);
+        }
+    }
+
     private static final class Primitive {
         private final Chord chord;
         private final Disc disc;
@@ -641,6 +1134,7 @@ public final class EdgeConflictCorrection {
         private final ConflictIndex index;
         private final Set<String> examined = new HashSet<String>();
         private final TreeSet<String> keys = new TreeSet<String>();
+        private final Map<String, Conflict> conflicts = new TreeMap<String, Conflict>();
         private int crossings;
         private int edgeOverNodes;
 
@@ -666,8 +1160,11 @@ public final class EdgeConflictCorrection {
                 return;
             }
             index.pairChecks++;
-            if (properlyCross(first.first, first.second, second.first, second.second) && keys.add(key)) {
-                crossings++;
+            if (properlyCross(first.first, first.second, second.first, second.second)) {
+                if (keys.add(key)) {
+                    crossings++;
+                    conflicts.put(key, Conflict.crossing(first, second));
+                }
             }
         }
 
@@ -681,8 +1178,11 @@ public final class EdgeConflictCorrection {
             }
             index.pairChecks++;
             if (segmentDistance(chord.first, chord.second, disc.center) - disc.radius
-                    < EDGE_NODE_CLEARANCE - ROUTE_EPSILON && keys.add(key)) {
-                edgeOverNodes++;
+                    < EDGE_NODE_CLEARANCE - ROUTE_EPSILON) {
+                if (keys.add(key)) {
+                    edgeOverNodes++;
+                    conflicts.put(key, Conflict.edgeOverNode(chord, disc));
+                }
             }
         }
     }
