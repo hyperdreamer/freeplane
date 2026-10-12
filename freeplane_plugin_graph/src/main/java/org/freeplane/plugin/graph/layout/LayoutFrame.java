@@ -15,10 +15,12 @@ public final class LayoutFrame {
     private final boolean failed;
     private final int residualViolations;
     private final BoundarySeparationDiagnostics boundaryDiagnostics;
+    private final EdgeConflictDiagnostics edgeConflictDiagnostics;
     private final PerceptualIdlePolicy.IdleMeasurement idle;
 
     private LayoutFrame(final long stepIndex, final LayoutPositions positions, final boolean failed,
             final int residualViolations, final BoundarySeparationDiagnostics boundaryDiagnostics,
+            final EdgeConflictDiagnostics edgeConflictDiagnostics,
             final PerceptualIdlePolicy.IdleMeasurement idle) {
         if (stepIndex < 0) {
             throw new IllegalArgumentException("Layout frame index must be nonnegative");
@@ -33,6 +35,8 @@ public final class LayoutFrame {
         this.failed = failed;
         this.residualViolations = residualViolations;
         this.boundaryDiagnostics = Objects.requireNonNull(boundaryDiagnostics, "boundaryDiagnostics");
+        this.edgeConflictDiagnostics = Objects.requireNonNull(edgeConflictDiagnostics,
+            "edgeConflictDiagnostics");
         this.idle = Objects.requireNonNull(idle, "idle");
     }
 
@@ -44,15 +48,17 @@ public final class LayoutFrame {
     public static LayoutFrame of(final long stepIndex, final LayoutPositions positions, final boolean failed,
             final int residualViolations) {
         return new LayoutFrame(stepIndex, positions, failed, residualViolations,
-            BoundarySeparationDiagnostics.empty(), PerceptualIdlePolicy.IdleMeasurement.initial());
+            BoundarySeparationDiagnostics.empty(), EdgeConflictDiagnostics.empty(),
+            PerceptualIdlePolicy.IdleMeasurement.initial());
     }
 
-    public static LayoutFrame withDiagnostics(final LayoutFrame raw,
-            final BoundarySeparationDiagnostics diagnostics,
+    public static LayoutFrame withDiagnostics(final LayoutFrame raw, final int residualViolations,
+            final BoundarySeparationDiagnostics boundaryDiagnostics,
+            final EdgeConflictDiagnostics edgeConflictDiagnostics,
             final PerceptualIdlePolicy.IdleMeasurement idle) {
         final LayoutFrame value = Objects.requireNonNull(raw, "raw");
-        return new LayoutFrame(value.stepIndex, value.positions, value.failed, value.residualViolations,
-            diagnostics, idle);
+        return new LayoutFrame(value.stepIndex, value.positions, value.failed, residualViolations,
+            boundaryDiagnostics, edgeConflictDiagnostics, idle);
     }
 
     public long stepIndex() {
@@ -77,6 +83,10 @@ public final class LayoutFrame {
 
     public BoundarySeparationDiagnostics boundaryDiagnostics() {
         return boundaryDiagnostics;
+    }
+
+    public EdgeConflictDiagnostics edgeConflictDiagnostics() {
+        return edgeConflictDiagnostics;
     }
 
     public List<BoundaryConflict> conflicts() {
