@@ -51,6 +51,8 @@ import org.freeplane.plugin.graph.control.LayoutSettleLoop;
 import org.freeplane.plugin.graph.control.NanoClock;
 import org.freeplane.plugin.graph.control.OperationalStatus;
 import org.freeplane.plugin.graph.geometry.AwtGeometryTextMetrics;
+import org.freeplane.plugin.graph.geometry.EdgePaths;
+import org.freeplane.plugin.graph.geometry.EdgeRouter;
 import org.freeplane.plugin.graph.geometry.GeometryTextMetrics;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.GraphGeometryEngine;
@@ -71,6 +73,7 @@ import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.projection.PinProjection;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
+import org.freeplane.plugin.graph.projection.ProjectedEndpointVisibility;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectionDiff;
 import org.freeplane.plugin.graph.projection.ProjectionEngine;
@@ -840,7 +843,10 @@ public final class GraphWorkspacePerformanceDiagnostic {
 
     CanvasState acceptedFirstFrameState(final long generation, final GraphProjection projection,
             final LayoutFrame frame, final GraphGeometry geometry) {
-        return CanvasState.of(generation, projection, frame, geometry, OperationalStatus.SETTLING);
+        return CanvasState.of(generation, projection, frame, geometry,
+            new EdgeRouter().route(projection, frame.positions(), geometry,
+                ProjectedEndpointVisibility.visibleEndpoints(projection.nodes(), projection.enclosures())),
+            OperationalStatus.SETTLING);
     }
 
     void validateFrameCoverage(final LayoutFrame frame, final GraphProjection projection,
