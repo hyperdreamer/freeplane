@@ -60,6 +60,7 @@ public final class EdgeConflictCorrection {
         Objects.requireNonNull(pins, "pins");
         Objects.requireNonNull(visibleEndpoints, "visibleEndpoints");
         Objects.requireNonNull(boundaryResult, "boundaryResult");
+        resetIndexCounters();
         final IndexedDetection detection = detect(projection, positions, boundaryResult.geometry(),
             visibleEndpoints);
         final EdgeConflictDiagnostics diagnostics = new EdgeConflictDiagnostics(
@@ -80,6 +81,13 @@ public final class EdgeConflictCorrection {
         return new EdgeConflictResult(positions, diagnostics, new EdgeConflictTimings(0L, 0L, 0L, 0L),
             boundaryResult.diagnostics(), boundaryResult.nodeResidualViolations(),
             Collections.<String, LayoutPoint>emptyMap());
+    }
+
+    private void resetIndexCounters() {
+        indexInsertedItems = 0L;
+        indexPairChecks = 0L;
+        indexSubdivisions = 0;
+        indexBudgetExhausted = false;
     }
 
     static Detection detectConflicts(final GraphProjection projection, final LayoutPositions positions,
