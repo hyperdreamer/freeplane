@@ -1,0 +1,12 @@
+digraph graph_arrowhead_zoom {
+    rankdir=TB;
+    node [shape=box, style=rounded, fontname="Helvetica"];
+    subgraph cluster_graph_arrowhead_zoom {
+        label="graph-arrowhead-zoom";
+        "t1-freeze-before-binary" [label="Task 1: Freeze the pre-change launcher binary\nStandard"];
+        "t2-rule-and-tests" [label="Task 2: Replace the arrowhead rule and update the canvas paint tests\nStandard"];
+        "t3-acceptance-evidence" [label="Task 3: Capture the running-application acceptance evidence\nCapable"];
+    }
+    "t1-freeze-before-binary" -> "t2-rule-and-tests";
+    "t2-rule-and-tests" -> "t3-acceptance-evidence";
+}
