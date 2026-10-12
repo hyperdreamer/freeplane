@@ -826,6 +826,16 @@ load_last_maps=false
 Set `graph_workspace_recent_workspaces` to the `.fpg` for the capture being taken (re-seed a fresh
 copy of the file for every run, because `remember-viewport="true"` can rewrite it on exit).
 
+**Superseded for the 0.1485 pair by the task-3 ruling:** the committed
+`before-01485.png` / `after-01485.png` use the same zoom `0.14846481908261` but centre
+`-920.3025170052431, -422.47416434224544` (the Axiomatic Set Theory scene). At the centre in
+the table above, the 0.1485 pair was pixel-identical (`compare -metric AE` = `0 (0)`) because
+that view contains no uncapped directional head, so the head measurement and the 8x crop were
+unattainable there. The ruling, the applied centre, and the resulting measurements are recorded
+in the lane run archive (`task-3-context-1.md`, `task-3-implementer-report-2.md`). Likewise, the
+1.0 pair records the absence of a visible node disc and rests the applied-zoom confirmation on
+the workspace viewport read-back plus the canvas pixel identity.
+
 ### 9.3 Capture procedure
 
 For each of the six runs (before/after × `before-01485.fpg`, `before-03781.fpg`,
