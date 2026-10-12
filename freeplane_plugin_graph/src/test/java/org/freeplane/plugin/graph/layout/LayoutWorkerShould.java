@@ -445,6 +445,24 @@ public class LayoutWorkerShould {
         }
     }
 
+    @Test
+    public void decoratePublishedFramesWithEmptyEdgeConflictDiagnosticsInTheScaffold() {
+        LayoutWorker worker = new LayoutWorker(fixedEngine(), PerceptualIdlePolicy.spikeDefaults());
+        try {
+            LayoutFrame frame = worker.submit(twoNodeRequest()).toCompletableFuture().get();
+
+            assertThat(frame.edgeConflictDiagnostics()).isEqualTo(EdgeConflictDiagnostics.empty());
+            assertThat(frame.boundaryDiagnostics().rounds()).isEqualTo(0);
+            assertThat(frame.verified()).isTrue();
+        }
+        catch (Exception failure) {
+            throw new AssertionError(failure);
+        }
+        finally {
+            worker.close();
+        }
+    }
+
     private static void assertFinitePositions(final LayoutPositions positions) {
         for (Map.Entry<ProjectedNodeKey, LayoutPoint> entry : positions.nodes().entrySet()) {
             assertThat(Double.isFinite(entry.getValue().x())).as(entry.getKey().toString()).isTrue();
@@ -463,6 +481,23 @@ public class LayoutWorkerShould {
     private static LayoutRequest request(List<PinProjection> pins) {
         GraphProjection projection = projection(pins);
         return LayoutRequest.of(WORKSPACE, projection, ProjectionDiff.between(projection, projection), pins);
+    }
+
+    private static Supplier<LayoutEngine> fixedEngine() {
+        return new FixedEngineSupplier(new CountingEngine(new AtomicInteger(), new AtomicInteger()));
+    }
+
+    /** Two nodes and no enclosures, so the scaffold boundary stage reports zero rounds. */
+    private static LayoutRequest twoNodeRequest() {
+        ProjectedNodeKey first = nodeKey(MAP_ONE, "frame-first");
+        ProjectedNodeKey second = nodeKey(MAP_TWO, "frame-second");
+        GraphProjection projection = GraphProjection.projected(1L,
+            Arrays.asList(node(first), node(second)), Collections.<ProjectedEnclosure>emptyList(),
+            Collections.<ProjectedEdge>emptyList(),
+            Collections.<org.freeplane.plugin.graph.projection.RelationshipResolution>emptyList(),
+            Collections.<PinProjection>emptyList());
+        return LayoutRequest.of(WORKSPACE, projection, ProjectionDiff.between(projection, projection),
+            Collections.<PinProjection>emptyList());
     }
 
     private static GraphProjection projection(List<PinProjection> pins) {
