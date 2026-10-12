@@ -3,6 +3,8 @@ package org.freeplane.plugin.graph.canvas;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -12,6 +14,9 @@ import java.awt.Font;
 import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.Rectangle;
+import java.awt.Shape;
+import java.awt.geom.Path2D;
+import java.awt.geom.PathIterator;
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
@@ -34,7 +39,10 @@ import org.freeplane.core.resources.ResourceController;
 import org.freeplane.main.application.ApplicationResourceController;
 import org.freeplane.plugin.graph.control.CanvasState;
 import org.freeplane.plugin.graph.control.OperationalStatus;
+import org.freeplane.plugin.graph.geometry.EdgePath;
 import org.freeplane.plugin.graph.geometry.EdgePaths;
+import org.freeplane.plugin.graph.geometry.EdgeRouteDiagnostics;
+import org.freeplane.plugin.graph.geometry.EdgeRouteTimings;
 import org.freeplane.plugin.graph.geometry.EdgeRouter;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.HullGeometry;
@@ -75,6 +83,8 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.MockedStatic;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
 
 public class GraphCanvasPaintShould {
     private static final MapReferenceId FIRST_MAP =
@@ -1035,6 +1045,137 @@ public class GraphCanvasPaintShould {
         final double green = first.getGreen() - second.getGreen();
         final double blue = first.getBlue() - second.getBlue();
         return red * red + green * green + blue * blue;
+    }
+
+    @Test
+    public void drawThePublishedSamplesForABowAndKeepArrowheadsOnTheTerminalSegment() {
+        PaintFixture fixture = bowFixture();
+        EdgePath path = fixture.state.edgePaths().path(fixture.edgeKey).get();
+
+        assertThat(paintedPathSampleCount(fixture)).isEqualTo(path.samples().size());
+        LayoutPoint paintedFrom = paintedArrowFrom(fixture, false);
+        assertThat(paintedFrom).isNotNull();
+        assertThat(paintedFrom.x()).isCloseTo(path.arrowAnchor(false).x(), within(1e-9));
+        assertThat(paintedFrom.y()).isCloseTo(path.arrowAnchor(false).y(), within(1e-9));
+    }
+
+    private static PaintFixture bowFixture() {
+        ProjectedNode first = node(FIRST_MAP, "bow-first", LayoutPoint.of(-90.0, 0.0));
+        ProjectedNode second = node(FIRST_MAP, "bow-second", LayoutPoint.of(90.0, 0.0));
+        ProjectedEndpointKey firstEndpoint = ProjectedEndpointKey.ofNode(first.key());
+        ProjectedEndpointKey secondEndpoint = ProjectedEndpointKey.ofNode(second.key());
+        ProjectedEdge edge = directedEdge(firstEndpoint, secondEndpoint, "bow-first", "bow-second");
+        Map<ProjectedNodeKey, NodeGeometry> nodes = new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
+        nodes.put(first.key(), NodeGeometry.of(LayoutPoint.of(-90.0, 0.0), 8.0));
+        nodes.put(second.key(), NodeGeometry.of(LayoutPoint.of(90.0, 0.0), 8.0));
+        GraphGeometry geometry = GraphGeometry.of(nodes,
+            Collections.<EnclosureHullKey, HullGeometry>emptyMap());
+        LayoutPoint start = geometry.edgeAttachment(firstEndpoint, LayoutPoint.of(90.0, 0.0));
+        LayoutPoint end = geometry.edgeAttachment(secondEndpoint, LayoutPoint.of(-90.0, 0.0));
+        Map<ProjectedEdgeKey, EdgePath> byEdge = new LinkedHashMap<ProjectedEdgeKey, EdgePath>();
+        byEdge.put(edge.key(), EdgePath.bow(start, LayoutPoint.of(0.0, 90.0), end));
+        EdgePaths edgePaths = EdgePaths.of(byEdge, EdgeRouteDiagnostics.empty(),
+            new EdgeRouteTimings(0L, 0L, 0L));
+        GraphProjection projection = GraphProjection.projected(1L, Arrays.asList(first, second),
+            Collections.<ProjectedEnclosure>emptyList(), Collections.singletonList(edge),
+            Collections.<RelationshipResolution>emptyList(), Collections.<PinProjection>emptyList());
+        Map<ProjectedNodeKey, LayoutPoint> positions =
+            new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        positions.put(first.key(), LayoutPoint.of(-90.0, 0.0));
+        positions.put(second.key(), LayoutPoint.of(90.0, 0.0));
+        LayoutFrame layout = LayoutFrame.of(1L, LayoutPositions.of(positions,
+            Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false, 0);
+        CanvasState state = CanvasState.of(1L, projection, layout, geometry, edgePaths,
+            OperationalStatus.IDLE);
+        return new PaintFixture(state, edge.key());
+    }
+
+    private static int paintedPathSampleCount(final PaintFixture fixture) {
+        List<Shape> drawn = new ArrayList<Shape>();
+        recordPaint(fixture, drawn, new ArrayList<Shape>());
+        for (Shape shape : drawn) {
+            if (shape instanceof Path2D) {
+                return pathVertices((Path2D) shape).size();
+            }
+        }
+        return -1;
+    }
+
+    private static LayoutPoint paintedArrowFrom(final PaintFixture fixture, final boolean atStart) {
+        EdgePath path = fixture.state.edgePaths().path(fixture.edgeKey).get();
+        LayoutPoint tip = atStart ? path.start() : path.end();
+        List<Shape> filled = new ArrayList<Shape>();
+        recordPaint(fixture, new ArrayList<Shape>(), filled);
+        for (Shape shape : filled) {
+            if (!(shape instanceof Path2D)) {
+                continue;
+            }
+            List<LayoutPoint> vertices = pathVertices((Path2D) shape);
+            if (vertices.size() < 3 || !vertices.get(0).equals(tip)) {
+                continue;
+            }
+            LayoutPoint baseMidpoint = LayoutPoint.of(
+                (vertices.get(1).x() + vertices.get(2).x()) * 0.5,
+                (vertices.get(1).y() + vertices.get(2).y()) * 0.5);
+            double baseDistance = Math.hypot(baseMidpoint.x() - tip.x(),
+                baseMidpoint.y() - tip.y());
+            if (!(baseDistance > 0.0)) {
+                return tip;
+            }
+            // The painter emits only the head triangle, so recover the from point by
+            // extending the recorded head axis by the published terminal segment length.
+            double scale = path.terminalSegmentLength(atStart) / baseDistance;
+            return LayoutPoint.of(tip.x() + (baseMidpoint.x() - tip.x()) * scale,
+                tip.y() + (baseMidpoint.y() - tip.y()) * scale);
+        }
+        return null;
+    }
+
+    private static List<LayoutPoint> pathVertices(final Path2D path) {
+        List<LayoutPoint> vertices = new ArrayList<LayoutPoint>();
+        PathIterator iterator = path.getPathIterator(null);
+        double[] coordinates = new double[6];
+        while (!iterator.isDone()) {
+            int segment = iterator.currentSegment(coordinates);
+            if (segment == PathIterator.SEG_MOVETO || segment == PathIterator.SEG_LINETO) {
+                vertices.add(LayoutPoint.of(coordinates[0], coordinates[1]));
+            }
+            iterator.next();
+        }
+        return vertices;
+    }
+
+    private static void recordPaint(final PaintFixture fixture, final List<Shape> drawn,
+            final List<Shape> filled) {
+        Graphics2D graphics = mock(Graphics2D.class);
+        when(graphics.create()).thenReturn(graphics);
+        doAnswer(new Answer<Void>() {
+            @Override
+            public Void answer(final InvocationOnMock invocation) {
+                drawn.add((Shape) invocation.getArguments()[0]);
+                return null;
+            }
+        }).when(graphics).draw(any(Shape.class));
+        doAnswer(new Answer<Void>() {
+            @Override
+            public Void answer(final InvocationOnMock invocation) {
+                filled.add((Shape) invocation.getArguments()[0]);
+                return null;
+            }
+        }).when(graphics).fill(any(Shape.class));
+        new GraphPainter().paint(graphics, fixture.state, GraphPaintState.empty(),
+            GraphViewport.of(0.0, 0.0, 1.0), SIZE, lightTheme(),
+            Collections.<PlacedLabel>emptyList());
+    }
+
+    private static final class PaintFixture {
+        private final CanvasState state;
+        private final ProjectedEdgeKey edgeKey;
+
+        private PaintFixture(final CanvasState state, final ProjectedEdgeKey edgeKey) {
+            this.state = state;
+            this.edgeKey = edgeKey;
+        }
     }
 
     @Test

@@ -3,14 +3,14 @@ package org.freeplane.plugin.graph.canvas;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
 import org.freeplane.plugin.graph.control.CanvasState;
+import org.freeplane.plugin.graph.geometry.EdgePath;
+import org.freeplane.plugin.graph.geometry.EdgePaths;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.HullGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
@@ -45,8 +45,6 @@ final class GraphHitIndex {
         final GraphGeometry geometry = state.geometry();
         final List<EndpointEntry> nodeEntries = new ArrayList<EndpointEntry>();
         final List<EndpointEntry> hullEntries = new ArrayList<EndpointEntry>();
-        final Map<ProjectedEndpointKey, LayoutPoint> centers =
-            new HashMap<ProjectedEndpointKey, LayoutPoint>();
         final Set<ProjectedEndpointKey> visibleEndpoints =
             ProjectedEndpointVisibility.visibleEndpoints(state.projection().nodes(),
                 state.projection().enclosures());
@@ -63,7 +61,6 @@ final class GraphHitIndex {
                 continue;
             }
             nodeEntries.add(EndpointEntry.forNode(endpoint, nodeGeometry));
-            centers.put(endpoint, nodeGeometry.center());
         }
 
         for (final ProjectedEnclosure enclosure : state.projection().enclosures()) {
@@ -77,33 +74,20 @@ final class GraphHitIndex {
                     continue;
                 }
                 hullEntries.add(EndpointEntry.forHull(endpoint, hull));
-                final LayoutPoint anchor = enclosureAnchor(state, enclosure, hull);
-                if (anchor != null) {
-                    centers.put(endpoint, anchor);
-                }
             }
         }
 
+        final EdgePaths paths = state.edgePaths();
         final List<EdgeEntry> edgeEntries = new ArrayList<EdgeEntry>();
         for (final ProjectedEdge edge : state.projection().edges()) {
             if (!visibleEndpoints.contains(edge.first()) || !visibleEndpoints.contains(edge.second())) {
                 continue;
             }
-            final LayoutPoint firstCenter = centers.get(edge.first());
-            final LayoutPoint secondCenter = centers.get(edge.second());
-            if (firstCenter == null || secondCenter == null) {
+            final EdgePath path = paths.path(edge.key()).orElse(null);
+            if (path == null) {
                 continue;
             }
-            try {
-                final LayoutPoint first = geometry.edgeAttachment(edge.first(), secondCenter);
-                final LayoutPoint second = geometry.edgeAttachment(edge.second(), firstCenter);
-                if (isFinite(first) && isFinite(second)) {
-                    edgeEntries.add(new EdgeEntry(edge.key(), first, second));
-                }
-            }
-            catch (final IllegalArgumentException exception) {
-                // A partially rendered endpoint cannot provide a hit-testable edge.
-            }
+            edgeEntries.add(new EdgeEntry(edge.key(), path));
         }
         return new GraphHitIndex(nodeEntries, hullEntries, edgeEntries);
     }
@@ -127,15 +111,26 @@ final class GraphHitIndex {
         DistanceValue bestDistance = null;
         ProjectedEdgeKey best = null;
         for (final EdgeEntry edge : edges) {
-            final DistanceValue distance = pointToSegmentDistance(point, edge.first, edge.second);
-            if (!distance.isFinite() || distance.compareToSquared(toleranceSquared) > 0) {
+            DistanceValue bestPathDistance = null;
+            for (int index = 0; index + 1 < edge.path.samples().size(); index++) {
+                final DistanceValue distance = pointToSegmentDistance(point,
+                    edge.path.samples().get(index), edge.path.samples().get(index + 1));
+                if (distance.isFinite() && (bestPathDistance == null
+                        || distance.compareTo(bestPathDistance) < 0)) {
+                    bestPathDistance = distance;
+                }
+            }
+            if (bestPathDistance == null) {
                 continue;
             }
-            if (best == null || distance.compareTo(bestDistance) < 0
-                    || (distance.compareTo(bestDistance) == 0
+            if (bestPathDistance.compareToSquared(toleranceSquared) > 0) {
+                continue;
+            }
+            if (best == null || bestPathDistance.compareTo(bestDistance) < 0
+                    || (bestPathDistance.compareTo(bestDistance) == 0
                         && edge.key.compareTo(best) < 0)) {
                 best = edge.key;
-                bestDistance = distance;
+                bestDistance = bestPathDistance;
             }
         }
         return best == null ? Optional.<ProjectedEdgeKey>empty() : Optional.of(best);
@@ -337,16 +332,6 @@ final class GraphHitIndex {
         return match;
     }
 
-    private static LayoutPoint enclosureAnchor(final CanvasState state,
-            final ProjectedEnclosure enclosure, final HullGeometry hull) {
-        final LayoutPoint layoutAnchor = state.layout().positions().anchors().get(enclosure.hullKey());
-        if (isFinite(layoutAnchor)) {
-            return layoutAnchor;
-        }
-        final LayoutPoint labelAnchor = hull.labelAnchor();
-        return isFinite(labelAnchor) ? labelAnchor : null;
-    }
-
     private static boolean isFinite(final LayoutPoint point) {
         return point != null && Double.isFinite(point.x()) && Double.isFinite(point.y());
     }
@@ -380,14 +365,11 @@ final class GraphHitIndex {
 
     private static final class EdgeEntry {
         private final ProjectedEdgeKey key;
-        private final LayoutPoint first;
-        private final LayoutPoint second;
+        private final EdgePath path;
 
-        private EdgeEntry(final ProjectedEdgeKey key, final LayoutPoint first,
-                final LayoutPoint second) {
+        private EdgeEntry(final ProjectedEdgeKey key, final EdgePath path) {
             this.key = key;
-            this.first = first;
-            this.second = second;
+            this.path = path;
         }
     }
 }
