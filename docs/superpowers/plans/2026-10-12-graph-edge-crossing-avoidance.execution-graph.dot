@@ -1,0 +1,70 @@
+digraph graph_edge_crossing_avoidance {
+    rankdir=TB;
+    node [shape=box, style=rounded, fontname="Helvetica"];
+    subgraph cluster_edge_foundation {
+        label="edge-foundation";
+        "geca-t1" [label="Task 1: Extract projection/CanonicalKeys as the one canonical encoding path\nStandard"];
+        "geca-t2" [label="Task 2: Extract layout/BoundaryInvariants with the preserved memo and counters\nAdvanced"];
+        "geca-t3" [label="Task 3: Add BoundaryInvariants.describe, BoundarySeparationResult.geometry() and NodeSeparationProjection.violatingPairs\nAdvanced"];
+        "geca-t20" [label="Task 20: Pin the rebuilt-record composition in BoundarySeparationShould\nStandard"];
+    }
+    subgraph cluster_edge_relocation {
+        label="edge-relocation";
+        "geca-t4" [label="Task 4: Add the EdgeConflict value types and the behaviour-preserving correction scaffold\nStandard"];
+        "geca-t10" [label="Task 10: Add the red-phase relocation fixtures (spec §8.1 and §8.5)\nStandard"];
+        "geca-t13" [label="Task 13: Implement C1/C2 conflict detection and the subdividing conflict index\nAdvanced"];
+        "geca-t14" [label="Task 14: Implement the candidate ladder, A1-A4 and rejection-retry\nAdvanced"];
+        "geca-t15" [label="Task 15: Rebuild the boundary record on the published positions\nAdvanced"];
+    }
+    subgraph cluster_edge_routing {
+        label="edge-routing";
+        "geca-t5" [label="Task 5: Add the EdgePath, EdgePaths, route diagnostics and route timings value types\nAdvanced"];
+        "geca-t6" [label="Task 6: Add the straight-only EdgeRouter scaffold and the crossing predicate\nStandard"];
+        "geca-t11" [label="Task 11: Add the red-phase router fixtures (spec §8.2 and §8.3)\nStandard"];
+        "geca-t16" [label="Task 16: Implement the routing ladder, clearance rules and route diagnostics\nAdvanced"];
+    }
+    subgraph cluster_edge_publication {
+        label="edge-publication";
+        "geca-t7" [label="Task 7: Plumb EdgeConflict diagnostics through LayoutFrame and LayoutWorker\nAdvanced"];
+        "geca-t8" [label="Task 8: Move CanvasState to the EdgePaths-taking factory and route at publish\nAdvanced"];
+        "geca-t9" [label="Task 9: Draw and hit-test the published EdgePaths\nAdvanced"];
+        "geca-t12" [label="Task 12: Add the red-phase painter and rebuild fixtures\nStandard"];
+        "geca-t17" [label="Task 17: Complete the painter, arrowhead, multiplicity and hit-test coverage\nAdvanced"];
+        "geca-t18" [label="Task 18: Add the edge-conflict and edge-routing performance stages and thresholds\nAdvanced"];
+        "geca-t19" [label="Task 19: Pin the acceptance surface and run the module and core gates\nStandard"];
+    }
+    "geca-t1" -> "geca-t2";
+    "geca-t1" -> "geca-t3";
+    "geca-t2" -> "geca-t3";
+    "geca-t1" -> "geca-t4";
+    "geca-t3" -> "geca-t4";
+    "geca-t1" -> "geca-t6";
+    "geca-t5" -> "geca-t6";
+    "geca-t4" -> "geca-t7";
+    "geca-t5" -> "geca-t8";
+    "geca-t6" -> "geca-t8";
+    "geca-t7" -> "geca-t8";
+    "geca-t5" -> "geca-t9";
+    "geca-t8" -> "geca-t9";
+    "geca-t3" -> "geca-t10";
+    "geca-t4" -> "geca-t10";
+    "geca-t6" -> "geca-t11";
+    "geca-t7" -> "geca-t12";
+    "geca-t9" -> "geca-t12";
+    "geca-t10" -> "geca-t12";
+    "geca-t10" -> "geca-t13";
+    "geca-t3" -> "geca-t14";
+    "geca-t13" -> "geca-t14";
+    "geca-t1" -> "geca-t15";
+    "geca-t3" -> "geca-t15";
+    "geca-t4" -> "geca-t15";
+    "geca-t14" -> "geca-t15";
+    "geca-t5" -> "geca-t16";
+    "geca-t11" -> "geca-t16";
+    "geca-t12" -> "geca-t17";
+    "geca-t17" -> "geca-t18";
+    "geca-t12" -> "geca-t19";
+    "geca-t16" -> "geca-t19";
+    "geca-t18" -> "geca-t19";
+    "geca-t3" -> "geca-t20";
+}
