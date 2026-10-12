@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.util.Arrays;
 import java.util.Collections;
 
+import org.freeplane.plugin.graph.projection.CanonicalKeys;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.EnclosureKey;
 import org.freeplane.plugin.graph.projection.PinProjection;
@@ -33,7 +34,7 @@ public class BoundaryConflictShould {
 
         assertThat(conflict.firstHull()).isEqualTo(smaller);
         assertThat(conflict.secondHull()).isEqualTo(larger);
-        assertThat(conflict.pairKey()).isEqualTo(CanonicalLayoutKeys.pair(smaller, larger));
+        assertThat(conflict.pairKey()).isEqualTo(CanonicalKeys.pair(smaller, larger));
         assertThat(conflict.firstMap()).isEqualTo(MAP_ONE);
         assertThat(conflict.secondMap()).isEqualTo(MAP_TWO);
         assertThat(conflict.kind()).isEqualTo(BoundaryConflict.Kind.SIBLING_CROSSING);

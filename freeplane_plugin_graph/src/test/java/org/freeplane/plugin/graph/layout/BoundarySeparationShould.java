@@ -13,6 +13,7 @@ import java.util.concurrent.TimeUnit;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.layout.graphstream.GraphStreamLayoutFactory;
 import org.freeplane.plugin.graph.projection.BoundaryTier;
+import org.freeplane.plugin.graph.projection.CanonicalKeys;
 import org.freeplane.plugin.graph.projection.EdgeContributor;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.EnclosureKey;
@@ -647,9 +648,9 @@ public class BoundarySeparationShould {
             assertThat(crossing.boundaryDiagnostics().rounds()).isEqualTo(1);
             assertThat(crossing.boundaryDiagnostics().boundaryVerified()).isTrue();
             assertThat(crossing.boundaryDiagnostics().appliedDisplacements().keySet())
-                .contains(CanonicalLayoutKeys.nodeField(pipelineKey(PIPELINE_REGULARITY)))
-                .doesNotContain(CanonicalLayoutKeys.nodeField(pipelineKey(PIPELINE_CHOICE)))
-                .doesNotContain(CanonicalLayoutKeys.nodeField(pipelineKey(PIPELINE_PINNED_THEOREM)));
+                .contains(CanonicalKeys.nodeField(pipelineKey(PIPELINE_REGULARITY)))
+                .doesNotContain(CanonicalKeys.nodeField(pipelineKey(PIPELINE_CHOICE)))
+                .doesNotContain(CanonicalKeys.nodeField(pipelineKey(PIPELINE_PINNED_THEOREM)));
             BoundaryInvariantAssertions.assertVerifiedFrame(projection, crossing,
                 crossing.boundaryDiagnostics(), PIPELINE_METRICS, pipelineRealPins());
 
