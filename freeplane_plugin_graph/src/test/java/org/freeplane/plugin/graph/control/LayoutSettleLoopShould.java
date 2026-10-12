@@ -30,6 +30,7 @@ import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.layout.BoundaryConflict;
 import org.freeplane.plugin.graph.layout.BoundarySeparationDiagnostics;
+import org.freeplane.plugin.graph.layout.EdgeConflictDiagnostics;
 import org.freeplane.plugin.graph.layout.LayoutFrame;
 import org.freeplane.plugin.graph.layout.PerceptualIdlePolicy;
 import org.freeplane.plugin.graph.projection.BoundaryTier;
@@ -1201,7 +1202,7 @@ public class LayoutSettleLoopShould {
             0.0, Collections.<String, org.freeplane.plugin.graph.geometry.LayoutPoint>emptyMap(), 0.0, 0.0);
         PerceptualIdlePolicy.IdleMeasurement idle = new PerceptualIdlePolicy.IdleMeasurement(1.5, 2.5, 7, true);
         LayoutFrame retained = LayoutFrame.withDiagnostics(LayoutFrame.of(9L, positions(projection, 123.5), false, 0),
-            diagnostics, idle);
+            0, diagnostics, EdgeConflictDiagnostics.empty(), idle);
         CompletableFuture<CanvasState> failedPublication = new CompletableFuture<CanvasState>();
 
         try {
@@ -1408,8 +1409,8 @@ public class LayoutSettleLoopShould {
 
     private static LayoutFrame frame(long index, LayoutPositions positions, boolean failed, boolean idle) {
         return LayoutFrame.withDiagnostics(LayoutFrame.of(index, positions, failed, 0),
-            BoundarySeparationDiagnostics.empty(), new PerceptualIdlePolicy.IdleMeasurement(0.0, 0.0,
-                idle ? 8 : 1, idle));
+            0, BoundarySeparationDiagnostics.empty(), EdgeConflictDiagnostics.empty(),
+            new PerceptualIdlePolicy.IdleMeasurement(0.0, 0.0, idle ? 8 : 1, idle));
     }
 
     private static LayoutPositions positions(GraphProjection projection) {
