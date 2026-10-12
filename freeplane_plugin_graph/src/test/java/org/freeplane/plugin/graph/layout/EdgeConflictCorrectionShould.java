@@ -174,8 +174,10 @@ public class EdgeConflictCorrectionShould {
 
     @Test
     public void ignoresAnInvisibleEdgeForC2() {
-        final Fixture fixture = fixture(1L, new String[] {"A", "B"},
-            new double[] {0.0, 0.0, 100.0, 0.0}, new int[][] {{0, 1}});
+        // C=(50,0) is a non-endpoint disc on the A-B chord: without the visibility guard the
+        // chord is drawn and C produces the C2 key CanonicalKeys.edgeNodePair(A-B, C).
+        final Fixture fixture = fixture(1L, new String[] {"A", "B", "C"},
+            new double[] {0.0, 0.0, 100.0, 0.0, 50.0, 0.0}, new int[][] {{0, 1}});
         final Set<org.freeplane.plugin.graph.projection.ProjectedEndpointKey> visible =
             Collections.emptySet();
 
