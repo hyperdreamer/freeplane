@@ -129,9 +129,11 @@ public class LayoutSettleLoopShould {
     @Test
     public void publishesAFallbackFrameWithARecomputedResidual() throws Exception {
         GraphProjection projection = populatedProjection(6L);
-        TestStepper stepper = new TestStepper(failedFrame(0L, LayoutPositions.of(
+        final LayoutPositions uncovered = LayoutPositions.of(
             Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(),
-            Collections.<EnclosureHullKey, LayoutPoint>emptyMap())));
+            Collections.<EnclosureHullKey, LayoutPoint>emptyMap());
+        TestStepper stepper = new TestStepper(failedFrame(0L, uncovered));
+        stepper.retain(LayoutFrame.of(0L, uncovered, false, 1));
         LayoutSettleLoop loop = new LayoutSettleLoop(WORKSPACE, stepper, new GraphGeometryEngine(), new ImmediateEdt());
         List<CanvasState> states = new ArrayList<CanvasState>();
         CompletableFuture<CanvasState> failedPublication = new CompletableFuture<CanvasState>();
@@ -1593,11 +1595,16 @@ public class LayoutSettleLoopShould {
 
     private static final class TestStepper implements LayoutSettleLoop.FrameStepper {
         private final Deque<LayoutFrame> frames = new ArrayDeque<LayoutFrame>();
+        private LayoutFrame retained;
         private int submitCount;
         private int stepCount;
 
         private TestStepper(LayoutFrame... values) {
             Collections.addAll(frames, values);
+        }
+
+        private void retain(final LayoutFrame frame) {
+            retained = frame;
         }
 
         @Override
@@ -1622,7 +1629,7 @@ public class LayoutSettleLoopShould {
 
         @Override
         public LayoutFrame lastValidFrame() {
-            return frame(0L, true);
+            return retained == null ? frame(0L, true) : retained;
         }
 
         @Override
