@@ -12,6 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TreeSet;
 
 import org.freeplane.plugin.graph.geometry.AwtGeometryTextMetrics;
 import org.freeplane.plugin.graph.geometry.GeometryTextMetrics;
@@ -19,6 +20,7 @@ import org.freeplane.plugin.graph.geometry.GraphGeometryEngine;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.projection.BoundaryTier;
+import org.freeplane.plugin.graph.projection.CanonicalKeys;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.EnclosureKey;
 import org.freeplane.plugin.graph.projection.GraphProjection;
@@ -131,30 +133,40 @@ public class BoundaryInvariantsShould {
         final GraphProjection projection = projection(Arrays.asList(a, b), Arrays.asList(
             enclosure(aHull, Collections.singletonList(a), BoundaryTier.EMPHATIC),
             enclosure(bHull, Collections.singletonList(b), BoundaryTier.EMPHATIC)));
-        // 100 exceeds the widest possible hull reach (2 x (radius 14 + clearance 16)), so the rebuild
-        // has an empty terminal pair set; the overlapping 38.0 fixture is kept by the guard test below.
+        // The overlapping 38.0 fixture rebuilds a non-empty terminal pair set, so a regression that
+        // re-emits the stage baseline instead of the rebuilt record cannot pass by accident.
         final LayoutPositions positions = LayoutPositions.of(
-            pointMap(a, 0.0, 0.0, b, 100.0, 0.0),
-            anchorMap(aHull, 0.0, 0.0, bHull, 100.0, 0.0));
-        final BoundarySeparationDiagnostics stageBaseline = new BoundarySeparationDiagnostics(
-            Collections.<BoundaryConflict>emptyList(), Collections.<String>emptyList(), 7, 0, 3,
-            1.5, 2.5, Collections.<String, LayoutPoint>emptyMap(), 0.5, 0.75);
+            pointMap(a, 0.0, 0.0, b, 38.0, 0.0),
+            anchorMap(aHull, 0.0, 0.0, bHull, 38.0, 0.0));
+        final BoundaryInvariants invariants = new BoundaryInvariants();
         final org.freeplane.plugin.graph.geometry.GraphGeometry geometry =
             new GraphGeometryEngine().computeHulls(projection, positions, METRICS);
+        final List<String> rebuiltPairKeys = new ArrayList<String>(
+            new TreeSet<String>(invariants.detectPairKeys(projection, geometry)));
+        final int rebuiltViolations = invariants.detect(projection, geometry).size();
+        assertThat(rebuiltPairKeys).isNotEmpty();
+        assertThat(rebuiltViolations).isPositive();
+        // The boundary baseline is a superset of the rebuilt record: it still carries one stale pair
+        // that the rebuilt terminal geometry no longer detects.
+        final List<String> boundaryBaselinePairs = new ArrayList<String>(rebuiltPairKeys);
+        boundaryBaselinePairs.add(CanonicalKeys.hullPair(hull("stale-left"), hull("stale-right")));
+        final BoundarySeparationDiagnostics stageBaseline = new BoundarySeparationDiagnostics(
+            Collections.<BoundaryConflict>emptyList(), boundaryBaselinePairs, 7, 9, 3,
+            1.5, 2.5, Collections.<String, LayoutPoint>emptyMap(), 0.5, 0.75);
 
-        final BoundarySeparationDiagnostics rebuilt = new BoundaryInvariants().describe(projection,
+        final BoundarySeparationDiagnostics rebuilt = invariants.describe(projection,
             positions, METRICS, Collections.<PinProjection>emptyList(), geometry,
-            Collections.<String>emptyList(), stageBaseline);
+            boundaryBaselinePairs, stageBaseline);
 
         assertThat(rebuilt.hullViolationsDetected()).isEqualTo(7);
+        assertThat(rebuilt.hullResidualViolations()).isEqualTo(rebuiltViolations);
         assertThat(rebuilt.rounds()).isEqualTo(3);
         assertThat(rebuilt.displacementRms()).isEqualTo(1.5);
         assertThat(rebuilt.displacementMax()).isEqualTo(2.5);
         assertThat(rebuilt.deltaRms()).isEqualTo(0.5);
         assertThat(rebuilt.deltaMax()).isEqualTo(0.75);
         assertThat(rebuilt.appliedDisplacements()).isEmpty();
-        assertThat(rebuilt.residualHullPairs()).isEqualTo(rebuilt.conflicts().isEmpty()
-            ? Collections.<String>emptyList() : rebuilt.residualHullPairs());
+        assertThat(rebuilt.residualHullPairs()).isEqualTo(rebuiltPairKeys);
         assertThat(rebuilt.residualHullPairs()).isSorted();
     }
 
