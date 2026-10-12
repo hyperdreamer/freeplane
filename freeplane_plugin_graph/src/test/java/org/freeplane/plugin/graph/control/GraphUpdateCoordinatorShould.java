@@ -42,6 +42,7 @@ import org.freeplane.plugin.graph.geometry.GraphGeometryEngine;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.layout.BoundarySeparationDiagnostics;
+import org.freeplane.plugin.graph.layout.EdgeConflictDiagnostics;
 import org.freeplane.plugin.graph.layout.LayoutFrame;
 import org.freeplane.plugin.graph.layout.LayoutRequest;
 import org.freeplane.plugin.graph.layout.PerceptualIdlePolicy;
@@ -1193,7 +1194,8 @@ public class GraphUpdateCoordinatorShould {
     private static LayoutFrame idleFrame(final long index) {
         return LayoutFrame.withDiagnostics(LayoutFrame.of(index,
             LayoutPositions.of(Collections.emptyMap(), Collections.emptyMap()), false, 0),
-            BoundarySeparationDiagnostics.empty(), new PerceptualIdlePolicy.IdleMeasurement(0.0, 0.0, 8, true));
+            0, BoundarySeparationDiagnostics.empty(), EdgeConflictDiagnostics.empty(),
+            new PerceptualIdlePolicy.IdleMeasurement(0.0, 0.0, 8, true));
     }
 
     private static final class SourceFixture {
@@ -1602,8 +1604,8 @@ public class GraphUpdateCoordinatorShould {
             anchorIndex++;
         }
         return LayoutFrame.withDiagnostics(LayoutFrame.of(generation,
-            LayoutPositions.of(nodes, anchors), false, 0), BoundarySeparationDiagnostics.empty(),
-            new PerceptualIdlePolicy.IdleMeasurement(0.0, 0.0, 8, true));
+            LayoutPositions.of(nodes, anchors), false, 0), 0, BoundarySeparationDiagnostics.empty(),
+            EdgeConflictDiagnostics.empty(), new PerceptualIdlePolicy.IdleMeasurement(0.0, 0.0, 8, true));
     }
 
     private static final class TestPipeline implements GraphUpdateCoordinator.RebuildPipeline {
@@ -1645,7 +1647,8 @@ public class GraphUpdateCoordinatorShould {
         private static LayoutFrame frame(final long generation) {
             return LayoutFrame.withDiagnostics(LayoutFrame.of(generation,
                 LayoutPositions.of(Collections.emptyMap(), Collections.emptyMap()), false, 0),
-                BoundarySeparationDiagnostics.empty(), new PerceptualIdlePolicy.IdleMeasurement(0.0, 0.0, 8, true));
+                0, BoundarySeparationDiagnostics.empty(), EdgeConflictDiagnostics.empty(),
+                new PerceptualIdlePolicy.IdleMeasurement(0.0, 0.0, 8, true));
         }
     }
 
