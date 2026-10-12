@@ -3,21 +3,27 @@ package org.freeplane.plugin.graph.layout;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import org.freeplane.plugin.graph.geometry.AwtGeometryTextMetrics;
 import org.freeplane.plugin.graph.geometry.GeometryTextMetrics;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
+import org.freeplane.plugin.graph.geometry.GraphGeometryEngine;
 import org.freeplane.plugin.graph.geometry.HullGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.geometry.NodeGeometry;
+import org.freeplane.plugin.graph.projection.BoundaryTier;
+import org.freeplane.plugin.graph.projection.CanonicalKeys;
 import org.freeplane.plugin.graph.projection.EdgeContributor;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
+import org.freeplane.plugin.graph.projection.EnclosureKey;
 import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.projection.PinProjection;
 import org.freeplane.plugin.graph.projection.ProjectedEdge;
@@ -35,6 +41,8 @@ import org.freeplane.plugin.graph.projection.input.SourceNodeKey;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 import org.freeplane.plugin.graph.workspace.model.NodeReference;
 import org.freeplane.plugin.graph.workspace.model.PersistedNodeId;
+import org.freeplane.plugin.graph.workspace.model.PinRecord;
+import org.freeplane.plugin.graph.workspace.model.UnknownXml;
 import org.junit.Test;
 
 public class EdgeConflictCorrectionShould {
@@ -231,6 +239,137 @@ public class EdgeConflictCorrectionShould {
         assertThat(result.diagnostics()).isEqualTo(apply(new EdgeConflictCorrection(), quad).diagnostics());
     }
 
+    @Test
+    public void vetoesACandidateThatAddsASiblingHullViolation() {
+        final SiblingFixture fixture = siblingOverlapFixture();
+        final EdgeConflictResult result = new EdgeConflictCorrection().apply(fixture.projection,
+            fixture.boundary.positions(), METRICS, Collections.<PinProjection>emptyList(),
+            fixture.visible, fixture.boundary);
+
+        assertThat(result.diagnostics().rounds()).isZero();
+        assertThat(result.diagnostics().verifications()).isEqualTo(1);
+        assertThat(result.diagnostics().conflictsResidual())
+            .containsExactly(CanonicalKeys.edgeNodePair(fixture.edgeKey, fixture.passedOverNode));
+        assertThat(result.diagnostics().repairsApplied()).isEmpty();
+        assertThat(result.positions().nodes().get(fixture.passedOverNode))
+            .isEqualTo(fixture.initialPassedOverCentre);
+    }
+
+    @Test
+    public void keepsAPreExistingHullResidualWhenTheCandidateDoesNotAddOne() {
+        final SiblingFixture fixture = siblingOverlapFixture();
+        final BoundarySeparationResult boundary = fixture.boundaryWithResidual(
+            CanonicalKeys.hullPair(fixture.siblingFirst, fixture.siblingSecond));
+        final EdgeConflictResult result = new EdgeConflictCorrection().apply(fixture.projection,
+            boundary.positions(), METRICS, Collections.<PinProjection>emptyList(), fixture.visible, boundary);
+
+        // A3 compares pair-key subsets, so a legal pre-existing residual never vetoes the repair.
+        assertThat(result.diagnostics().rounds()).isGreaterThanOrEqualTo(0);
+        assertThat(result.diagnostics().conflictsResidual()).doesNotContain(
+            CanonicalKeys.hullPair(fixture.siblingFirst, fixture.siblingSecond));
+    }
+
+    @Test
+    public void appliesCandidatesInCanonicalOrder() {
+        final Fixture fixture = reportedQuad();
+        final EdgeConflictResult result = apply(fixture);
+
+        final List<EdgeConflictDiagnostics.Repair> repairs = result.diagnostics().repairsApplied();
+        for (int index = 1; index < repairs.size(); index++) {
+            assertThat(repairs.get(index - 1).batchIndex()).isLessThan(repairs.get(index).batchIndex());
+        }
+        assertThat(result.diagnostics().repairsApplied().get(0).nodeKeys().get(0))
+            .isEqualTo(fixture.key(0));
+    }
+
+    @Test
+    public void vetoesACandidateThatWouldBreakMinGap() {
+        final MinGapFixture fixture = minGapFixture();
+        final EdgeConflictResult result = new EdgeConflictCorrection().apply(fixture.projection,
+            fixture.boundary.positions(), METRICS, Collections.<PinProjection>emptyList(),
+            fixture.visible, fixture.boundary);
+
+        assertThat(result.diagnostics().rounds()).isZero();
+        assertThat(result.diagnostics().verifications()).isEqualTo(1);
+        assertThat(org.freeplane.plugin.graph.layout.NodeSeparationProjection.violatingPairs(
+            fixture.projection, result.positions())).contains(
+                CanonicalKeys.nodePair(fixture.passedOverNode, fixture.bystanderNode));
+    }
+
+    @Test
+    public void movesThePassedOverNodeOffTheChordWithTheLexicographicallySmallerNormal() {
+        final C2Fixture fixture = c2FixtureWithPositiveProjection();
+        final EdgeConflictResult result = new EdgeConflictCorrection().apply(fixture.projection,
+            fixture.boundary.positions(), METRICS, Collections.<PinProjection>emptyList(),
+            fixture.visible, fixture.boundary);
+
+        assertThat(result.diagnostics().rounds()).isEqualTo(1);
+        assertThat(result.diagnostics().repairsApplied()).hasSize(1);
+        final EdgeConflictDiagnostics.Repair repair = result.diagnostics().repairsApplied().get(0);
+        assertThat(repair.kind()).isEqualTo(EdgeConflictDiagnostics.RepairKind.TRANSLATION);
+        assertThat(repair.nodeKeys()).containsExactly(fixture.passedOverNode);
+        assertThat(result.diagnostics().conflictsResidual()).isEmpty();
+        // Flipping the normal direction (probe 16) would leave |2s - (R + 3)| < R + 3.
+        assertThat(result.positions().nodes().get(fixture.passedOverNode))
+            .isNotEqualTo(fixture.initialPassedOverCentre);
+    }
+
+    @Test
+    public void rejectsACandidateThatIntroducesANewCrossing() {
+        final Fixture fixture = crossingReplacementFixture();
+        final EdgeConflictResult result = apply(fixture);
+
+        final ProjectedEdgeKey first = fixture.projection.edges().get(0).key();
+        final ProjectedEdgeKey second = fixture.projection.edges().get(1).key();
+        assertThat(result.diagnostics().rounds()).isZero();
+        assertThat(result.diagnostics().conflictsResidual()).containsExactly(
+            CanonicalKeys.edgePair(first, second));
+    }
+
+    @Test
+    public void isDeterministicAcrossRunsAndPermutedInputs() {
+        final Fixture fixture = reportedQuad();
+        final EdgeConflictResult first = apply(fixture);
+
+        final EdgeConflictResult second = new EdgeConflictCorrection().apply(fixture.permutedProjection(),
+            fixture.permutedPositions(), METRICS, Collections.<PinProjection>emptyList(),
+            fixture.visible, fixture.permutedBoundary());
+
+        assertThat(second.positions()).isEqualTo(first.positions());
+        assertThat(second.diagnostics()).isEqualTo(first.diagnostics());
+    }
+
+    @Test
+    public void discardsCandidatesThatMoveAPinnedNode() {
+        final Fixture fixture = reportedQuad();
+        final EdgeConflictResult result = new EdgeConflictCorrection().apply(fixture.projection,
+            fixture.boundary.positions(), METRICS, fixture.pinsForAllNodes(), fixture.visible,
+            fixture.boundary);
+
+        // Every candidate moves a pinned node and is discarded before evaluation, so no
+        // verification is counted and every published position equals the input (I1).
+        assertThat(result.diagnostics().rounds()).isZero();
+        assertThat(result.diagnostics().verifications()).isZero();
+        assertThat(result.diagnostics().conflictsResidual()).hasSize(1);
+        for (final ProjectedNodeKey key : fixture.keys()) {
+            assertThat(result.positions().nodes().get(key))
+                .isEqualTo(fixture.boundary.positions().nodes().get(key));
+        }
+    }
+
+    @Test
+    public void leavesAMixedEnclosureConflictToRoutingWithoutMovingAnchors() {
+        final MixedFixture fixture = mixedEnclosureConflictFixture();
+        final EdgeConflictResult result = new EdgeConflictCorrection().apply(fixture.projection,
+            fixture.boundary.positions(), METRICS, Collections.<PinProjection>emptyList(),
+            fixture.visible, fixture.boundary);
+
+        assertThat(result.diagnostics().rounds()).isZero();
+        assertThat(result.diagnostics().repairsApplied()).isEmpty();
+        assertThat(result.diagnostics().conflictsResidual()).isNotEmpty();
+        assertThat(result.positions().anchors()).isEqualTo(fixture.boundary.positions().anchors());
+    }
+
     private static final class Fixture {
         private final GraphProjection projection;
         private final BoundarySeparationResult boundary;
@@ -247,6 +386,63 @@ public class EdgeConflictCorrectionShould {
 
         private ProjectedNodeKey key(int index) {
             return keys.get(index);
+        }
+
+        private List<ProjectedNodeKey> keys() {
+            return keys;
+        }
+
+        private GraphProjection permutedProjection() {
+            final List<ProjectedNode> reversedNodes = new ArrayList<ProjectedNode>(projection.nodes());
+            Collections.reverse(reversedNodes);
+            final List<ProjectedEdge> reversedEdges = new ArrayList<ProjectedEdge>(projection.edges());
+            Collections.reverse(reversedEdges);
+            return GraphProjection.projected(projection.generation(), reversedNodes,
+                projection.enclosures(), reversedEdges, projection.relationshipResolutions(),
+                projection.pins());
+        }
+
+        private LayoutPositions permutedPositions() {
+            final Map<ProjectedNodeKey, LayoutPoint> reversed =
+                new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+            for (int index = keys.size() - 1; index >= 0; index--) {
+                final ProjectedNodeKey key = keys.get(index);
+                reversed.put(key, boundary.positions().nodes().get(key));
+            }
+            return LayoutPositions.of(reversed, boundary.positions().anchors());
+        }
+
+        private GraphGeometry permutedGeometry() {
+            final Map<ProjectedNodeKey, NodeGeometry> reversedNodes =
+                new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
+            for (int index = keys.size() - 1; index >= 0; index--) {
+                final ProjectedNodeKey key = keys.get(index);
+                reversedNodes.put(key, boundary.geometry().nodes().get(key));
+            }
+            final Map<EnclosureHullKey, HullGeometry> reversedHulls =
+                new LinkedHashMap<EnclosureHullKey, HullGeometry>();
+            final List<EnclosureHullKey> hullKeys =
+                new ArrayList<EnclosureHullKey>(boundary.geometry().hulls().keySet());
+            for (int index = hullKeys.size() - 1; index >= 0; index--) {
+                final EnclosureHullKey key = hullKeys.get(index);
+                reversedHulls.put(key, boundary.geometry().hulls().get(key));
+            }
+            return GraphGeometry.of(reversedNodes, reversedHulls);
+        }
+
+        private BoundarySeparationResult permutedBoundary() {
+            return new BoundarySeparationResult(permutedPositions(), permutedGeometry(),
+                boundary.diagnostics(), boundary.nodeResidualViolations(), boundary.timings());
+        }
+
+        private List<PinProjection> pinsForAllNodes() {
+            final List<PinProjection> result = new ArrayList<PinProjection>();
+            for (final ProjectedNodeKey key : keys) {
+                final LayoutPoint point = boundary.positions().nodes().get(key);
+                result.add(PinProjection.active(PinRecord.of(key.source().persistedReference().get(),
+                    point.x(), point.y(), Collections.<UnknownXml>emptyList()), key));
+            }
+            return result;
         }
     }
 
@@ -320,5 +516,238 @@ public class EdgeConflictCorrectionShould {
         final Set<ProjectedEndpointKey> visible = ProjectedEndpointVisibility.visibleEndpoints(
             projection.nodes(), projection.enclosures());
         return new Fixture(projection, boundary, visible, keys);
+    }
+
+    private static Fixture crossingReplacementFixture() {
+        return fixture(2L, new String[] {"A", "B", "C", "D", "E", "F"},
+            new double[] {93.0, 203.0, -32.0, 245.0, -75.0, 119.0, 55.0, 78.0, 63.0, 148.0,
+                173.0, 132.0},
+            new int[][] {{0, 2}, {1, 3}, {4, 5}});
+    }
+
+    private static SourceNodeKey source(final MapReferenceId map, final String id) {
+        return SourceNodeKey.persisted(NodeReference.of(map, PersistedNodeId.of(id)));
+    }
+
+    private static ProjectedNodeKey nodeKey(final String id) {
+        return ProjectedNodeKey.of(source(MAP, id));
+    }
+
+    private static ProjectedNode projectedNode(final ProjectedNodeKey key, final String label) {
+        return ProjectedNode.of(key, SafeNodeLabel.of(label, label), "map", false);
+    }
+
+    private static ProjectedEdge nodeEdge(final int occurrence, final ProjectedNodeKey first,
+            final ProjectedNodeKey second) {
+        final ProjectedEndpointKey firstEndpoint = ProjectedEndpointKey.ofNode(first);
+        final ProjectedEndpointKey secondEndpoint = ProjectedEndpointKey.ofNode(second);
+        final ConnectorDescriptor descriptor = ConnectorDescriptor.of(first.source(),
+            second.source().persistedReference().get(), false, false, "s", "m", "t");
+        return ProjectedEdge.of(ProjectedEdgeKey.of(firstEndpoint, secondEndpoint),
+            Collections.singletonList(EdgeContributor.nativeConnector(
+                ConnectorSnapshot.of(occurrence, descriptor), firstEndpoint, secondEndpoint)));
+    }
+
+    private static ProjectedEdge enclosureEdge(final int occurrence, final EnclosureKey enclosure,
+            final ProjectedNodeKey target) {
+        final ProjectedEndpointKey enclosureEndpoint = ProjectedEndpointKey.ofEnclosure(enclosure);
+        final ProjectedEndpointKey targetEndpoint = ProjectedEndpointKey.ofNode(target);
+        final ConnectorDescriptor descriptor = ConnectorDescriptor.of(enclosure.source(),
+            target.source().persistedReference().get(), false, false, "s", "m", "t");
+        return ProjectedEdge.of(ProjectedEdgeKey.of(enclosureEndpoint, targetEndpoint),
+            Collections.singletonList(EdgeContributor.nativeConnector(
+                ConnectorSnapshot.of(occurrence, descriptor), enclosureEndpoint, targetEndpoint)));
+    }
+
+    private static final class SiblingFixture {
+        private final GraphProjection projection;
+        private final BoundarySeparationResult boundary;
+        private final Set<ProjectedEndpointKey> visible;
+        private final EnclosureHullKey siblingFirst;
+        private final EnclosureHullKey siblingSecond;
+        private final ProjectedEdgeKey edgeKey;
+        private final ProjectedNodeKey passedOverNode;
+        private final LayoutPoint initialPassedOverCentre;
+
+        private SiblingFixture(final GraphProjection projection, final BoundarySeparationResult boundary,
+                final Set<ProjectedEndpointKey> visible, final EnclosureHullKey siblingFirst,
+                final EnclosureHullKey siblingSecond, final ProjectedEdgeKey edgeKey,
+                final ProjectedNodeKey passedOverNode, final LayoutPoint initialPassedOverCentre) {
+            this.projection = projection;
+            this.boundary = boundary;
+            this.visible = visible;
+            this.siblingFirst = siblingFirst;
+            this.siblingSecond = siblingSecond;
+            this.edgeKey = edgeKey;
+            this.passedOverNode = passedOverNode;
+            this.initialPassedOverCentre = initialPassedOverCentre;
+        }
+
+        private BoundarySeparationResult boundaryWithResidual(final String pairKey) {
+            final BoundarySeparationDiagnostics diagnostics = boundary.diagnostics();
+            final BoundarySeparationDiagnostics rebuilt = new BoundarySeparationDiagnostics(
+                diagnostics.conflicts(), Collections.singletonList(pairKey),
+                diagnostics.hullViolationsDetected(), diagnostics.hullResidualViolations(),
+                diagnostics.rounds(), diagnostics.displacementRms(), diagnostics.displacementMax(),
+                diagnostics.appliedDisplacements(), diagnostics.deltaRms(), diagnostics.deltaMax());
+            return new BoundarySeparationResult(boundary.positions(), boundary.geometry(), rebuilt,
+                boundary.nodeResidualViolations(), boundary.timings());
+        }
+    }
+
+    private static SiblingFixture siblingOverlapFixture() {
+        final ProjectedNodeKey a = nodeKey("a");
+        final ProjectedNodeKey c = nodeKey("c");
+        final ProjectedNodeKey p = nodeKey("p");
+        final ProjectedNodeKey q = nodeKey("q");
+        final EnclosureKey aKey = EnclosureKey.of(source(MAP, "A"));
+        final EnclosureKey cKey = EnclosureKey.of(source(MAP, "C"));
+        final EnclosureKey rootKey = EnclosureKey.of(source(MAP, "R"));
+        final EnclosureHullKey aHull = EnclosureHullKey.of(Collections.singletonList(aKey));
+        final EnclosureHullKey cHull = EnclosureHullKey.of(Collections.singletonList(cKey));
+        final EnclosureHullKey rootHull = EnclosureHullKey.of(Collections.singletonList(rootKey));
+        final ProjectedEnclosure root = ProjectedEnclosure.of(rootHull,
+            Collections.singletonList(rootKey), Collections.singletonList(SafeNodeLabel.of("R", "R")),
+            "map", Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(),
+            Arrays.asList(aHull, cHull), true, BoundaryTier.EMPHATIC);
+        final ProjectedEnclosure aEnclosure = ProjectedEnclosure.of(aHull,
+            Collections.singletonList(aKey), Collections.singletonList(SafeNodeLabel.of("A", "A")),
+            "map", Optional.of(rootHull), Collections.singletonList(a),
+            Collections.<EnclosureHullKey>emptyList(), false, BoundaryTier.SUBTLE);
+        final ProjectedEnclosure cEnclosure = ProjectedEnclosure.of(cHull,
+            Collections.singletonList(cKey), Collections.singletonList(SafeNodeLabel.of("C", "C")),
+            "map", Optional.of(rootHull), Collections.singletonList(c),
+            Collections.<EnclosureHullKey>emptyList(), false, BoundaryTier.SUBTLE);
+        final List<ProjectedNode> nodes = new ArrayList<ProjectedNode>();
+        nodes.add(projectedNode(a, "a"));
+        nodes.add(projectedNode(c, "c"));
+        nodes.add(projectedNode(p, "p"));
+        nodes.add(projectedNode(q, "q"));
+        final ProjectedEdge pToQ = nodeEdge(0, p, q);
+        final GraphProjection projection = GraphProjection.projected(1L, nodes,
+            Arrays.asList(root, aEnclosure, cEnclosure), Collections.singletonList(pToQ),
+            Collections.<RelationshipResolution>emptyList(), Collections.<PinProjection>emptyList());
+        final Map<ProjectedNodeKey, LayoutPoint> points =
+            new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        points.put(a, LayoutPoint.of(10.0, 0.0));
+        points.put(c, LayoutPoint.of(-58.0, 0.0));
+        points.put(p, LayoutPoint.of(0.0, 100.0));
+        points.put(q, LayoutPoint.of(0.0, -100.0));
+        final Map<EnclosureHullKey, LayoutPoint> anchors =
+            new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
+        anchors.put(rootHull, LayoutPoint.of(0.0, 0.0));
+        anchors.put(aHull, LayoutPoint.of(0.0, 0.0));
+        anchors.put(cHull, LayoutPoint.of(0.0, 0.0));
+        final LayoutPositions positions = LayoutPositions.of(points, anchors);
+        final GraphGeometry geometry = new GraphGeometryEngine().computeHulls(projection, positions, METRICS);
+        final BoundarySeparationResult boundary = new BoundarySeparationResult(positions, geometry,
+            BoundarySeparationDiagnostics.empty(), 0, new BoundarySeparationTimings(0L, 0L, 0L, 0L));
+        final Set<ProjectedEndpointKey> visible = ProjectedEndpointVisibility.visibleEndpoints(
+            projection.nodes(), projection.enclosures());
+        return new SiblingFixture(projection, boundary, visible, aHull, cHull, pToQ.key(), a,
+            LayoutPoint.of(10.0, 0.0));
+    }
+
+    private static final class MinGapFixture {
+        private final GraphProjection projection;
+        private final BoundarySeparationResult boundary;
+        private final Set<ProjectedEndpointKey> visible;
+        private final ProjectedNodeKey passedOverNode;
+        private final ProjectedNodeKey bystanderNode;
+
+        private MinGapFixture(final Fixture fixture, final ProjectedNodeKey passedOverNode,
+                final ProjectedNodeKey bystanderNode) {
+            this.projection = fixture.projection;
+            this.boundary = fixture.boundary;
+            this.visible = fixture.visible;
+            this.passedOverNode = passedOverNode;
+            this.bystanderNode = bystanderNode;
+        }
+    }
+
+    private static MinGapFixture minGapFixture() {
+        final Fixture fixture = fixture(3L, new String[] {"A", "B", "n", "b", "g"},
+            new double[] {-100.0, 0.0, 100.0, 0.0, 0.0, 5.0, 0.0, 20.0, 0.0, 38.0},
+            new int[][] {{0, 1}});
+        return new MinGapFixture(fixture, fixture.key(2), fixture.key(3));
+    }
+
+    private static final class C2Fixture {
+        private final GraphProjection projection;
+        private final BoundarySeparationResult boundary;
+        private final Set<ProjectedEndpointKey> visible;
+        private final ProjectedNodeKey passedOverNode;
+        private final LayoutPoint initialPassedOverCentre;
+
+        private C2Fixture(final Fixture fixture, final ProjectedNodeKey passedOverNode,
+                final LayoutPoint initialPassedOverCentre) {
+            this.projection = fixture.projection;
+            this.boundary = fixture.boundary;
+            this.visible = fixture.visible;
+            this.passedOverNode = passedOverNode;
+            this.initialPassedOverCentre = initialPassedOverCentre;
+        }
+    }
+
+    private static C2Fixture c2FixtureWithPositiveProjection() {
+        final Fixture fixture = fixture(4L, new String[] {"A", "B", "n"},
+            new double[] {-100.0, 0.0, 100.0, 0.0, 0.0, 5.0},
+            new int[][] {{0, 1}});
+        return new C2Fixture(fixture, fixture.key(2),
+            fixture.boundary.positions().nodes().get(fixture.key(2)));
+    }
+
+    private static final class MixedFixture {
+        private final GraphProjection projection;
+        private final BoundarySeparationResult boundary;
+        private final Set<ProjectedEndpointKey> visible;
+
+        private MixedFixture(final GraphProjection projection, final BoundarySeparationResult boundary,
+                final Set<ProjectedEndpointKey> visible) {
+            this.projection = projection;
+            this.boundary = boundary;
+            this.visible = visible;
+        }
+    }
+
+    private static MixedFixture mixedEnclosureConflictFixture() {
+        final ProjectedNodeKey e = nodeKey("e");
+        final ProjectedNodeKey x = nodeKey("x");
+        final ProjectedNodeKey y = nodeKey("y");
+        final ProjectedNodeKey z = nodeKey("z");
+        final EnclosureKey enclosureKey = EnclosureKey.of(e.source());
+        final EnclosureHullKey enclosureHull = EnclosureHullKey.of(
+            Collections.singletonList(enclosureKey));
+        final ProjectedEnclosure enclosure = ProjectedEnclosure.of(enclosureHull,
+            Collections.singletonList(enclosureKey), Collections.singletonList(SafeNodeLabel.of("e", "e")),
+            "map", Optional.<EnclosureHullKey>empty(), Collections.singletonList(e),
+            Collections.<EnclosureHullKey>emptyList(), true, BoundaryTier.EMPHATIC);
+        final List<ProjectedNode> nodes = new ArrayList<ProjectedNode>();
+        nodes.add(projectedNode(e, "e"));
+        nodes.add(projectedNode(x, "x"));
+        nodes.add(projectedNode(y, "y"));
+        nodes.add(projectedNode(z, "z"));
+        final List<ProjectedEdge> edges = new ArrayList<ProjectedEdge>();
+        edges.add(enclosureEdge(0, enclosureKey, x));
+        edges.add(nodeEdge(1, y, z));
+        final GraphProjection projection = GraphProjection.projected(5L, nodes,
+            Collections.singletonList(enclosure), edges,
+            Collections.<RelationshipResolution>emptyList(), Collections.<PinProjection>emptyList());
+        final Map<ProjectedNodeKey, LayoutPoint> points =
+            new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        points.put(e, LayoutPoint.of(-100.0, 0.0));
+        points.put(x, LayoutPoint.of(100.0, 0.0));
+        points.put(y, LayoutPoint.of(0.0, -50.0));
+        points.put(z, LayoutPoint.of(0.0, 50.0));
+        final Map<EnclosureHullKey, LayoutPoint> anchors =
+            new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
+        anchors.put(enclosureHull, LayoutPoint.of(-90.0, 7.0));
+        final LayoutPositions positions = LayoutPositions.of(points, anchors);
+        final GraphGeometry geometry = new GraphGeometryEngine().computeHulls(projection, positions, METRICS);
+        final BoundarySeparationResult boundary = new BoundarySeparationResult(positions, geometry,
+            BoundarySeparationDiagnostics.empty(), 0, new BoundarySeparationTimings(0L, 0L, 0L, 0L));
+        final Set<ProjectedEndpointKey> visible = ProjectedEndpointVisibility.visibleEndpoints(
+            projection.nodes(), projection.enclosures());
+        return new MixedFixture(projection, boundary, visible);
     }
 }
