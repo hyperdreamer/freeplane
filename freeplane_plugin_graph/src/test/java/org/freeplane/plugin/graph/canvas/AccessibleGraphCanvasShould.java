@@ -40,6 +40,8 @@ import javax.swing.SwingUtilities;
 
 import org.freeplane.plugin.graph.control.CanvasState;
 import org.freeplane.plugin.graph.control.OperationalStatus;
+import org.freeplane.plugin.graph.geometry.EdgePaths;
+import org.freeplane.plugin.graph.geometry.EdgeRouter;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.HullGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
@@ -54,6 +56,7 @@ import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.projection.ProjectedEdge;
 import org.freeplane.plugin.graph.projection.ProjectedEdgeKey;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
+import org.freeplane.plugin.graph.projection.ProjectedEndpointVisibility;
 import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
@@ -658,14 +661,15 @@ public class AccessibleGraphCanvasShould {
                 LayoutPositions.of(Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(),
                     Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false, 0);
             return CanvasState.of(state.generation() + 1L, projection, frame, geometry,
-                OperationalStatus.IDLE);
+                EdgePaths.empty(), OperationalStatus.IDLE);
         }
 
         private CanvasState geometrylessState() {
             final GraphGeometry geometry = GraphGeometry.of(state.geometry().nodes(),
                 Collections.<EnclosureHullKey, HullGeometry>emptyMap());
             return CanvasState.of(state.generation() + 1L, state.projection(), state.layout(),
-                geometry, OperationalStatus.IDLE);
+                geometry, routedPaths(state.projection(), state.layout().positions(), geometry),
+                OperationalStatus.IDLE);
         }
 
         private List<ProjectedEndpointKey> visibleEndpointsSorted() {
@@ -789,7 +793,7 @@ public class AccessibleGraphCanvasShould {
             final LayoutFrame frame = LayoutFrame.of(1L,
                 LayoutPositions.of(positions, anchors), false, 0);
             final CanvasState state = CanvasState.of(1L, projection, frame, geometry,
-                OperationalStatus.IDLE);
+                routedPaths(projection, frame.positions(), geometry), OperationalStatus.IDLE);
             return new Fixture(state, sourceEndpoint, prominentEndpoint, tieEndpoint, leftEndpoint,
                 upEndpoint, enclosureEndpoint, suppressedEndpoint, geometrylessEndpoint);
         }
@@ -799,6 +803,15 @@ public class AccessibleGraphCanvasShould {
             return HullGeometry.of(Arrays.asList(LayoutPoint.of(minX, minY),
                 LayoutPoint.of(maxX, minY), LayoutPoint.of(maxX, maxY), LayoutPoint.of(minX, maxY)),
                 LayoutPoint.of(anchorX, anchorY));
+        }
+
+        private static EdgePaths routedPaths(final GraphProjection projection,
+                final LayoutPositions positions, final GraphGeometry geometry) {
+            if (projection.edges().isEmpty()) {
+                return EdgePaths.empty();
+            }
+            return new EdgeRouter().route(projection, positions, geometry,
+                ProjectedEndpointVisibility.visibleEndpoints(projection.nodes(), projection.enclosures()));
         }
 
         private static NodeReference reference(final MapReferenceId map, final String id) {

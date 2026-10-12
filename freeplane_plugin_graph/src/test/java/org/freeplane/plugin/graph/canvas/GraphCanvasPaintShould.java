@@ -34,6 +34,8 @@ import org.freeplane.core.resources.ResourceController;
 import org.freeplane.main.application.ApplicationResourceController;
 import org.freeplane.plugin.graph.control.CanvasState;
 import org.freeplane.plugin.graph.control.OperationalStatus;
+import org.freeplane.plugin.graph.geometry.EdgePaths;
+import org.freeplane.plugin.graph.geometry.EdgeRouter;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.HullGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
@@ -49,6 +51,7 @@ import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.projection.ProjectedEdge;
 import org.freeplane.plugin.graph.projection.ProjectedEdgeKey;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
+import org.freeplane.plugin.graph.projection.ProjectedEndpointVisibility;
 import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
@@ -119,7 +122,7 @@ public class GraphCanvasPaintShould {
             Collections.singletonMap(retained.key(), LayoutPoint.of(-45.0, 0.0)),
             Collections.singletonMap(boundaryHull, LayoutPoint.of(0.0, 0.0))), false, 0);
         CanvasState state = CanvasState.of(1L, projection, layout,
-            GraphGeometry.of(nodeGeometry, hulls), OperationalStatus.IDLE);
+            GraphGeometry.of(nodeGeometry, hulls), EdgePaths.empty(), OperationalStatus.IDLE);
         GraphTheme theme = lightTheme();
         BufferedImage image = paint(state, GraphPaintState.empty(), theme, RenderingLevel.FULL);
 
@@ -157,7 +160,7 @@ public class GraphCanvasPaintShould {
             Collections.singletonMap(retained.key(), LayoutPoint.of(-45.0, 0.0)),
             Collections.singletonMap(boundaryHull, LayoutPoint.of(0.0, 0.0))), false, 0);
         CanvasState state = CanvasState.of(1L, projection, layout,
-            GraphGeometry.of(nodeGeometry, hulls), OperationalStatus.IDLE);
+            GraphGeometry.of(nodeGeometry, hulls), EdgePaths.empty(), OperationalStatus.IDLE);
         GraphTheme theme = lightTheme();
         BufferedImage image = paint(state, GraphPaintState.empty(), theme, RenderingLevel.FULL);
 
@@ -178,6 +181,7 @@ public class GraphCanvasPaintShould {
             fixture.state.projection().enclosures(), fixture.state.projection().edges(),
             fixture.state.projection().relationshipResolutions(), Arrays.asList(active));
         CanvasState state = CanvasState.of(1L, projection, fixture.state.layout(), fixture.state.geometry(),
+            routedPaths(projection, fixture.state.layout().positions(), fixture.state.geometry()),
             OperationalStatus.IDLE);
         GraphTheme theme = lightTheme();
         BufferedImage selected = paint(state,
@@ -234,8 +238,10 @@ public class GraphCanvasPaintShould {
         Map<ProjectedNodeKey, NodeGeometry> currentGeometry =
             new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
         currentGeometry.put(fixture.first.key(), fixture.state.geometry().nodes().get(fixture.first.key()));
+        GraphGeometry geometry = GraphGeometry.of(currentGeometry, fixture.state.geometry().hulls());
         CanvasState state = CanvasState.of(fixture.state.generation(), fixture.state.projection(),
-            fixture.state.layout(), GraphGeometry.of(currentGeometry, fixture.state.geometry().hulls()),
+            fixture.state.layout(), geometry,
+            routedPaths(fixture.state.projection(), fixture.state.layout().positions(), geometry),
             fixture.state.status());
         CanvasState withoutEdge = stateWithEdges(state, Collections.<ProjectedEdge>emptyList());
         GraphTheme theme = lightTheme();
@@ -438,6 +444,7 @@ public class GraphCanvasPaintShould {
             fixture.state.projection().enclosures(), fixture.state.projection().edges(),
             fixture.state.projection().relationshipResolutions(), Arrays.asList(active, dormant));
         CanvasState state = CanvasState.of(1L, projection, fixture.state.layout(), fixture.state.geometry(),
+            routedPaths(projection, fixture.state.layout().positions(), fixture.state.geometry()),
             OperationalStatus.IDLE);
         GraphTheme theme = lightTheme();
         BufferedImage image = paint(state, GraphPaintState.empty(), theme, RenderingLevel.FULL);
@@ -455,8 +462,10 @@ public class GraphCanvasPaintShould {
         Map<ProjectedNodeKey, NodeGeometry> currentGeometry =
             new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
         currentGeometry.put(fixture.second.key(), fixture.state.geometry().nodes().get(fixture.second.key()));
+        GraphGeometry geometry = GraphGeometry.of(currentGeometry, withPin.geometry().hulls());
         CanvasState withoutFirstNodeGeometry = CanvasState.of(withPin.generation(), withPin.projection(),
-            withPin.layout(), GraphGeometry.of(currentGeometry, withPin.geometry().hulls()), withPin.status());
+            withPin.layout(), geometry,
+            routedPaths(withPin.projection(), withPin.layout().positions(), geometry), withPin.status());
         CanvasState withoutPin = stateWithPins(withoutFirstNodeGeometry,
             Collections.<PinProjection>emptyList());
         GraphTheme theme = lightTheme();
@@ -724,14 +733,16 @@ public class GraphCanvasPaintShould {
         GraphProjection projection = GraphProjection.projected(base.generation(), base.projection().nodes(),
             base.projection().enclosures(), edges, base.projection().relationshipResolutions(),
             base.projection().pins());
-        return CanvasState.of(base.generation(), projection, base.layout(), base.geometry(), base.status());
+        return CanvasState.of(base.generation(), projection, base.layout(), base.geometry(),
+            routedPaths(projection, base.layout().positions(), base.geometry()), base.status());
     }
 
     private static CanvasState stateWithPins(final CanvasState base, final List<PinProjection> pins) {
         GraphProjection projection = GraphProjection.projected(base.generation(), base.projection().nodes(),
             base.projection().enclosures(), base.projection().edges(), base.projection().relationshipResolutions(),
             pins);
-        return CanvasState.of(base.generation(), projection, base.layout(), base.geometry(), base.status());
+        return CanvasState.of(base.generation(), projection, base.layout(), base.geometry(),
+            routedPaths(projection, base.layout().positions(), base.geometry()), base.status());
     }
 
     private static void assertPreviewColorAbsent(final CanvasState state,
@@ -811,7 +822,17 @@ public class GraphCanvasPaintShould {
         final GraphProjection projection = GraphProjection.projected(base.generation(), nodes, enclosures,
             Collections.<ProjectedEdge>emptyList(), base.projection().relationshipResolutions(),
             Collections.<PinProjection>emptyList());
-        return CanvasState.of(base.generation(), projection, base.layout(), geometry, base.status());
+        return CanvasState.of(base.generation(), projection, base.layout(), geometry, EdgePaths.empty(),
+            base.status());
+    }
+
+    private static EdgePaths routedPaths(final GraphProjection projection, final LayoutPositions positions,
+            final GraphGeometry geometry) {
+        if (projection.edges().isEmpty()) {
+            return EdgePaths.empty();
+        }
+        return new EdgeRouter().route(projection, positions, geometry,
+            ProjectedEndpointVisibility.visibleEndpoints(projection.nodes(), projection.enclosures()));
     }
 
     private static ProjectedEdge directedEdge(final ProjectedEndpointKey source,
@@ -1146,9 +1167,10 @@ public class GraphCanvasPaintShould {
         positions.put(target.key(), LayoutPoint.of(14.0, 0.0));
         Map<EnclosureHullKey, LayoutPoint> anchors = new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
         anchors.put(hullKey, LayoutPoint.of(-25.0, 0.0));
-        return CanvasState.of(1L, projection,
-            LayoutFrame.of(1L, LayoutPositions.of(positions, anchors), false, 0),
-            GraphGeometry.of(nodes, hulls), OperationalStatus.IDLE);
+        LayoutFrame layout = LayoutFrame.of(1L, LayoutPositions.of(positions, anchors), false, 0);
+        GraphGeometry geometry = GraphGeometry.of(nodes, hulls);
+        return CanvasState.of(1L, projection, layout, geometry,
+            routedPaths(projection, layout.positions(), geometry), OperationalStatus.IDLE);
     }
 
     @Test
@@ -1232,7 +1254,7 @@ public class GraphCanvasPaintShould {
             Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false, 0);
         return CanvasState.of(1L, projection, layout,
             GraphGeometry.of(Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(), hulls),
-            OperationalStatus.IDLE);
+            EdgePaths.empty(), OperationalStatus.IDLE);
     }
 
     private static LabelFixture labelFixture(final int nodeCount) {
@@ -1300,7 +1322,7 @@ public class GraphCanvasPaintShould {
         CanvasState state = CanvasState.of(1L, projection,
             LayoutFrame.of(1L, LayoutPositions.of(positions, anchors), false, 0),
             GraphGeometry.of(geometries, hulls),
-            OperationalStatus.IDLE);
+            EdgePaths.empty(), OperationalStatus.IDLE);
         return new LabelFixture(state, ProjectedEndpointKey.ofEnclosure(selectedKey),
             ProjectedEndpointKey.ofEnclosure(hoveredKey),
             ProjectedEndpointKey.ofEnclosure(searchMatchedKey),
@@ -1333,7 +1355,7 @@ public class GraphCanvasPaintShould {
             Collections.<RelationshipResolution>emptyList(), Collections.<PinProjection>emptyList());
         return CanvasState.of(1L, projection,
             LayoutFrame.of(1L, LayoutPositions.of(positions, anchors), false, 0),
-            GraphGeometry.of(nodes, hulls), OperationalStatus.IDLE);
+            GraphGeometry.of(nodes, hulls), EdgePaths.empty(), OperationalStatus.IDLE);
     }
 
     private static CanvasState leaderStrokeState() {
@@ -1348,7 +1370,7 @@ public class GraphCanvasPaintShould {
             Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false, 0);
         return CanvasState.of(1L, projection, layout,
             GraphGeometry.of(nodes, Collections.<EnclosureHullKey, HullGeometry>emptyMap()),
-            OperationalStatus.IDLE);
+            EdgePaths.empty(), OperationalStatus.IDLE);
     }
 
     private static CanvasState hoverOnlyLabelState() {
@@ -1364,6 +1386,7 @@ public class GraphCanvasPaintShould {
             LayoutFrame.of(1L, LayoutPositions.of(positions,
                 Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false, 0),
             GraphGeometry.of(nodes, Collections.<EnclosureHullKey, HullGeometry>emptyMap()),
+            EdgePaths.empty(),
             OperationalStatus.IDLE);
     }
 
@@ -1613,7 +1636,8 @@ public class GraphCanvasPaintShould {
         CanvasState state = CanvasState.of(1L, projection,
             LayoutFrame.of(1L, LayoutPositions.of(fixture.state.layout().positions().nodes(),
                 fixture.state.layout().positions().anchors()), false, 0),
-            GraphGeometry.of(geometries, fixture.state.geometry().hulls()), OperationalStatus.IDLE);
+            GraphGeometry.of(geometries, fixture.state.geometry().hulls()), EdgePaths.empty(),
+            OperationalStatus.IDLE);
         GraphCanvas canvas = new GraphCanvas();
         canvas.setSize(SIZE);
         canvas.setTheme(lightTheme());
@@ -1639,8 +1663,10 @@ public class GraphCanvasPaintShould {
             LayoutPoint.of(-horizontalCoordinate, -verticalCoordinate), 10.0));
         nodes.put(fixture.second.key(), NodeGeometry.of(
             LayoutPoint.of(horizontalCoordinate, verticalCoordinate), 10.0));
+        GraphGeometry geometry = GraphGeometry.of(nodes, fixture.state.geometry().hulls());
         return CanvasState.of(fixture.state.generation(), fixture.state.projection(), fixture.state.layout(),
-            GraphGeometry.of(nodes, fixture.state.geometry().hulls()), status);
+            geometry, routedPaths(fixture.state.projection(), fixture.state.layout().positions(), geometry),
+            status);
     }
 
     private static void assertHorizontallyReachable(final JViewport viewport, final double surfaceX) {
@@ -1675,7 +1701,7 @@ public class GraphCanvasPaintShould {
             Collections.singletonMap(retained.key(), LayoutPoint.of(-45.0, 0.0)),
             Collections.singletonMap(rootHull, LayoutPoint.of(0.0, 0.0))), false, 0);
         CanvasState state = CanvasState.of(1L, projection, layout,
-            GraphGeometry.of(nodeGeometry, hulls), OperationalStatus.IDLE);
+            GraphGeometry.of(nodeGeometry, hulls), EdgePaths.empty(), OperationalStatus.IDLE);
 
         assertThat(state.geometry().hulls()).containsKey(rootHull);
         final GraphHitIndex index = GraphHitIndex.from(state);
@@ -1761,7 +1787,8 @@ public class GraphCanvasPaintShould {
         anchors.put(firstHullKey, LayoutPoint.of(-45.0, 14.0));
         anchors.put(secondHullKey, LayoutPoint.of(45.0, 12.0));
         LayoutFrame layout = LayoutFrame.of(1L, LayoutPositions.of(positions, anchors), false, 0);
-        CanvasState state = CanvasState.of(1L, projection, layout, geometry, OperationalStatus.IDLE);
+        CanvasState state = CanvasState.of(1L, projection, layout, geometry,
+            routedPaths(projection, layout.positions(), geometry), OperationalStatus.IDLE);
         return new Fixture(state, first, second, edge, firstEndpoint, secondEndpoint, firstHullKey,
             secondHullKey, ProjectedEndpointKey.ofEnclosure(firstEnclosureKey),
             ProjectedEndpointKey.ofEnclosure(secondEnclosureKey));

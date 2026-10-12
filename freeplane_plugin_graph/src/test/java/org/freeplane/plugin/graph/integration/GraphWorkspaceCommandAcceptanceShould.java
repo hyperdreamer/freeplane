@@ -88,6 +88,7 @@ import org.freeplane.plugin.graph.control.WorkspaceCloseController;
 import org.freeplane.plugin.graph.control.WorkspaceMapCoordinator;
 import org.freeplane.plugin.graph.control.WorkspaceSessionId;
 import org.freeplane.plugin.graph.control.WorkspaceSessionRegistry;
+import org.freeplane.plugin.graph.geometry.EdgePaths;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
@@ -784,7 +785,8 @@ public class GraphWorkspaceCommandAcceptanceShould {
     private static CanvasState stateFor(final GraphProjection projection) {
         return CanvasState.of(projection.generation(), projection,
             LayoutFrame.of(projection.generation(), LayoutPositions.of(Collections.emptyMap(), Collections.emptyMap()),
-                false, 0), GraphGeometry.of(Collections.emptyMap(), Collections.emptyMap()), OperationalStatus.IDLE);
+                false, 0), GraphGeometry.of(Collections.emptyMap(), Collections.emptyMap()), EdgePaths.empty(),
+            OperationalStatus.IDLE);
     }
 
     private static void dispatch(final GraphCanvas canvas, final java.awt.AWTEvent event) {
@@ -1231,7 +1233,7 @@ public class GraphWorkspaceCommandAcceptanceShould {
                 LayoutFrame.of(7L, LayoutPositions.of(Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(),
                     anchors), false, 0),
                 GraphGeometry.of(Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(), hulls),
-                OperationalStatus.IDLE);
+                EdgePaths.empty(), OperationalStatus.IDLE);
             final GraphCanvas canvas = new GraphCanvas();
             canvas.setSize(new Dimension(400, 300));
             canvas.setCanvasState(state);

@@ -31,6 +31,7 @@ import org.freeplane.plugin.graph.adapter.EdtExecutor;
 import org.freeplane.plugin.graph.control.CanvasState;
 import org.freeplane.plugin.graph.control.GraphUpdateCoordinator;
 import org.freeplane.plugin.graph.control.OperationalStatus;
+import org.freeplane.plugin.graph.geometry.EdgePaths;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.layout.LayoutFrame;
@@ -855,7 +856,8 @@ public class ContributorDeletionPlanShould {
     private static CanvasState availableState() {
         return CanvasState.of(0L, projection(0L),
             LayoutFrame.of(0L, LayoutPositions.of(Collections.emptyMap(), Collections.emptyMap()), false, 0),
-            GraphGeometry.of(Collections.emptyMap(), Collections.emptyMap()), OperationalStatus.IDLE);
+            GraphGeometry.of(Collections.emptyMap(), Collections.emptyMap()), EdgePaths.empty(),
+            OperationalStatus.IDLE);
     }
 
     private static WorkspaceDocument document(GraphRelationshipRecord... records) {
