@@ -482,16 +482,13 @@ public final class EdgeConflictCorrection {
 
     private static void recordRepair(final List<EdgeConflictDiagnostics.Repair> repairs,
             final List<Candidate> attempt, final int roundIndex) {
-        final Map<ProjectedNodeKey, LayoutPoint> from =
-            new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
-        final Map<ProjectedNodeKey, LayoutPoint> to =
-            new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
         for (final Candidate candidate : attempt) {
-            from.putAll(candidate.fromCentres);
-            to.putAll(candidate.toCentres);
+            // One Repair per candidate keeps `kind` exact even when a greedy batch combines
+            // candidates of different repair kinds.
+            repairs.add(new EdgeConflictDiagnostics.Repair(candidate.kind,
+                new ArrayList<ProjectedNodeKey>(candidate.toCentres.keySet()), candidate.fromCentres,
+                candidate.toCentres, roundIndex));
         }
-        repairs.add(new EdgeConflictDiagnostics.Repair(attempt.get(0).kind,
-            new ArrayList<ProjectedNodeKey>(to.keySet()), from, to, roundIndex));
     }
 
     private void resetIndexCounters() {

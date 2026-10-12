@@ -270,6 +270,98 @@ public class EdgeConflictCorrectionShould {
     }
 
     @Test
+    public void acceptsAPreExistingSiblingHullResidualWhenTheCandidateKeepsTheSamePair() {
+        // V_in = {pair(A, C)} is a real pre-existing residual of the published geometry, and the
+        // candidate repairs the C2 conflict without changing that pair, so A3 accepts it.
+        final A3SubsetFixture fixture = preExistingSiblingResidualFixture(0.0, 30.0, 100.0);
+        assertThat(new BoundaryInvariants().detectPairKeys(fixture.projection,
+            fixture.boundary.geometry()))
+            .containsExactly(CanonicalKeys.hullPair(fixture.aHull, fixture.cHull));
+
+        final EdgeConflictResult result = new EdgeConflictCorrection().apply(fixture.projection,
+            fixture.boundary.positions(), METRICS, Collections.<PinProjection>emptyList(),
+            fixture.visible, fixture.boundary);
+
+        assertThat(result.diagnostics().rounds()).isEqualTo(1);
+        assertThat(result.diagnostics().verifications()).isEqualTo(1);
+        assertThat(result.diagnostics().repairsApplied()).hasSize(1);
+        final EdgeConflictDiagnostics.Repair repair = result.diagnostics().repairsApplied().get(0);
+        assertThat(repair.kind()).isEqualTo(EdgeConflictDiagnostics.RepairKind.TRANSLATION);
+        assertThat(repair.nodeKeys()).containsExactly(fixture.aKey);
+        assertThat(repair.toCentres().get(fixture.aKey)).isEqualTo(LayoutPoint.of(-6.0, 0.0));
+        assertThat(result.diagnostics().conflictsResidual()).isEmpty();
+    }
+
+    @Test
+    public void rejectsACandidateThatReplacesAPreExistingHullResidualWithAnEqualCountPair() {
+        // V_in = {pair(A, C)} and V_out = {pair(A, D)} have equal violation counts, so only the
+        // pair-key subset comparison rejects the candidate; a count comparison would accept it.
+        final A3SubsetFixture fixture = preExistingSiblingResidualFixture(0.0, 45.0, -53.0);
+        final BoundaryInvariants invariants = new BoundaryInvariants();
+        assertThat(invariants.detectPairKeys(fixture.projection, fixture.boundary.geometry()))
+            .containsExactly(CanonicalKeys.hullPair(fixture.aHull, fixture.cHull));
+
+        final Map<ProjectedNodeKey, LayoutPoint> candidateNodes =
+            new LinkedHashMap<ProjectedNodeKey, LayoutPoint>(fixture.boundary.positions().nodes());
+        candidateNodes.put(fixture.aKey, LayoutPoint.of(-6.0, 0.0));
+        final LayoutPositions candidatePositions = LayoutPositions.of(candidateNodes,
+            fixture.boundary.positions().anchors());
+        final GraphGeometry candidateGeometry = new GraphGeometryEngine().recomputeHulls(
+            fixture.projection, candidatePositions, METRICS, fixture.boundary.geometry(),
+            BoundaryInvariants.changedHulls(BoundaryInvariants.nodeHullsByKey(fixture.projection),
+                fixture.boundary.positions(), candidatePositions));
+        assertThat(invariants.detectPairKeys(fixture.projection, candidateGeometry))
+            .containsExactly(CanonicalKeys.hullPair(fixture.aHull, fixture.dHull));
+
+        final EdgeConflictResult result = new EdgeConflictCorrection().apply(fixture.projection,
+            fixture.boundary.positions(), METRICS, Collections.<PinProjection>emptyList(),
+            fixture.visible, fixture.boundary);
+
+        assertThat(result.diagnostics().rounds()).isZero();
+        assertThat(result.diagnostics().verifications()).isEqualTo(1);
+        assertThat(result.diagnostics().repairsApplied()).isEmpty();
+        assertThat(result.diagnostics().conflictsResidual()).containsExactly(
+            CanonicalKeys.edgeNodePair(fixture.edgeKey, fixture.aKey));
+        assertThat(result.positions().nodes().get(fixture.aKey)).isEqualTo(fixture.aCentre);
+    }
+
+    @Test
+    public void recordsOneRepairPerCandidateForAnAcceptedMixedKindBatch() {
+        // Greedy batching accepts {swap01, translation-n} as one mixed-kind attempt; each
+        // candidate must be reported separately so its kind labels only its own moved nodes.
+        final Fixture fixture = mixedKindBatchFixture();
+        final EdgeConflictResult result = new EdgeConflictCorrection().apply(fixture.projection,
+            fixture.boundary.positions(), METRICS, fixture.pinsFor(2, 3), fixture.visible,
+            fixture.boundary);
+
+        assertThat(result.diagnostics().rounds()).isEqualTo(1);
+        assertThat(result.diagnostics().verifications()).isEqualTo(1);
+        assertThat(result.diagnostics().repairsApplied()).hasSize(2);
+        final EdgeConflictDiagnostics.Repair swap = repairOfKind(result,
+            EdgeConflictDiagnostics.RepairKind.SWAP);
+        final EdgeConflictDiagnostics.Repair translation = repairOfKind(result,
+            EdgeConflictDiagnostics.RepairKind.TRANSLATION);
+        assertThat(swap.nodeKeys()).containsExactly(fixture.key(0), fixture.key(1));
+        assertThat(swap.fromCentres().get(fixture.key(0))).isEqualTo(LayoutPoint.of(272.0, 170.0));
+        assertThat(swap.toCentres().get(fixture.key(0))).isEqualTo(LayoutPoint.of(307.0, 202.0));
+        assertThat(translation.nodeKeys()).containsExactly(fixture.key(6));
+        assertThat(translation.fromCentres().get(fixture.key(6)))
+            .isEqualTo(LayoutPoint.of(1005.0, 1050.0));
+        assertThat(translation.toCentres().get(fixture.key(6))).isEqualTo(LayoutPoint.of(983.0, 1050.0));
+        assertThat(result.diagnostics().conflictsResidual()).isEmpty();
+    }
+
+    private static EdgeConflictDiagnostics.Repair repairOfKind(final EdgeConflictResult result,
+            final EdgeConflictDiagnostics.RepairKind kind) {
+        for (final EdgeConflictDiagnostics.Repair repair : result.diagnostics().repairsApplied()) {
+            if (repair.kind() == kind) {
+                return repair;
+            }
+        }
+        throw new AssertionError("No repair of kind " + kind);
+    }
+
+    @Test
     public void appliesCandidatesInCanonicalOrder() {
         final Fixture fixture = reportedQuad();
         final EdgeConflictResult result = apply(fixture);
@@ -444,6 +536,17 @@ public class EdgeConflictCorrectionShould {
             }
             return result;
         }
+
+        private List<PinProjection> pinsFor(final int... indices) {
+            final List<PinProjection> result = new ArrayList<PinProjection>();
+            for (final int index : indices) {
+                final ProjectedNodeKey key = keys.get(index);
+                final LayoutPoint point = boundary.positions().nodes().get(key);
+                result.add(PinProjection.active(PinRecord.of(key.source().persistedReference().get(),
+                    point.x(), point.y(), Collections.<UnknownXml>emptyList()), key));
+            }
+            return result;
+        }
     }
 
     private static EdgeConflictResult apply(final Fixture fixture) {
@@ -460,6 +563,18 @@ public class EdgeConflictCorrectionShould {
         return fixture(1L, new String[] {"ID_A", "ID_B", "ID_C", "ID_D"},
             new double[] {272.0, 170.0, 307.0, 202.0, 275.0, 240.0, 240.0, 208.0},
             new int[][] {{0, 2}, {1, 3}});
+    }
+
+    /**
+     * The reported quad plus a far-away C2 conflict on node n, with C and D pinned so the
+     * crossing offers only swap01 and M(A)/M(B) and the C2 offers only translation-n: the first
+     * greedy batch is the mixed-kind pair {swap01, translation-n}.
+     */
+    private static Fixture mixedKindBatchFixture() {
+        return fixture(6L, new String[] {"ID_A", "ID_B", "ID_C", "ID_D", "ID_P", "ID_Q", "ID_N"},
+            new double[] {272.0, 170.0, 307.0, 202.0, 275.0, 240.0, 240.0, 208.0, 1000.0, 1000.0,
+                1000.0, 1100.0, 1005.0, 1050.0},
+            new int[][] {{0, 2}, {1, 3}, {4, 5}});
     }
 
     private static Fixture fixture(final long generation, final String[] ids, final double[] coordinates,
@@ -646,6 +761,93 @@ public class EdgeConflictCorrectionShould {
             projection.nodes(), projection.enclosures());
         return new SiblingFixture(projection, boundary, visible, aHull, cHull, pToQ.key(), a,
             LayoutPoint.of(10.0, 0.0));
+    }
+
+    private static final class A3SubsetFixture {
+        private final GraphProjection projection;
+        private final BoundarySeparationResult boundary;
+        private final Set<ProjectedEndpointKey> visible;
+        private final ProjectedNodeKey aKey;
+        private final EnclosureHullKey aHull;
+        private final EnclosureHullKey cHull;
+        private final EnclosureHullKey dHull;
+        private final ProjectedEdgeKey edgeKey;
+        private final LayoutPoint aCentre;
+
+        private A3SubsetFixture(final GraphProjection projection, final BoundarySeparationResult boundary,
+                final Set<ProjectedEndpointKey> visible, final ProjectedNodeKey aKey,
+                final EnclosureHullKey aHull, final EnclosureHullKey cHull,
+                final EnclosureHullKey dHull, final ProjectedEdgeKey edgeKey,
+                final LayoutPoint aCentre) {
+            this.projection = projection;
+            this.boundary = boundary;
+            this.visible = visible;
+            this.aKey = aKey;
+            this.aHull = aHull;
+            this.cHull = cHull;
+            this.dHull = dHull;
+            this.edgeKey = edgeKey;
+            this.aCentre = aCentre;
+        }
+    }
+
+    /**
+     * Three sibling enclosures A, C and D under no common parent, each holding one node on the
+     * x-axis, plus the vertical edge p-q: the C2 conflict on node a drives a single TRANSLATION
+     * candidate that moves a from (aX, 0) to (-6, 0). The sibling hull distance is chosen by the
+     * caller, so aX/cX/dX select the pre-existing residual state A3 must judge.
+     */
+    private static A3SubsetFixture preExistingSiblingResidualFixture(final double aX, final double cX,
+            final double dX) {
+        final ProjectedNodeKey a = nodeKey("a");
+        final ProjectedNodeKey c = nodeKey("c");
+        final ProjectedNodeKey d = nodeKey("d");
+        final ProjectedNodeKey p = nodeKey("p");
+        final ProjectedNodeKey q = nodeKey("q");
+        final EnclosureKey aKey = EnclosureKey.of(source(MAP, "A"));
+        final EnclosureKey cKey = EnclosureKey.of(source(MAP, "C"));
+        final EnclosureKey dKey = EnclosureKey.of(source(MAP, "D"));
+        final EnclosureHullKey aHull = EnclosureHullKey.of(Collections.singletonList(aKey));
+        final EnclosureHullKey cHull = EnclosureHullKey.of(Collections.singletonList(cKey));
+        final EnclosureHullKey dHull = EnclosureHullKey.of(Collections.singletonList(dKey));
+        final ProjectedEnclosure aEnclosure = ProjectedEnclosure.of(aHull,
+            Collections.singletonList(aKey), Collections.singletonList(SafeNodeLabel.of("A", "A")),
+            "map", Optional.<EnclosureHullKey>empty(), Collections.singletonList(a),
+            Collections.<EnclosureHullKey>emptyList(), false, BoundaryTier.SUBTLE);
+        final ProjectedEnclosure cEnclosure = ProjectedEnclosure.of(cHull,
+            Collections.singletonList(cKey), Collections.singletonList(SafeNodeLabel.of("C", "C")),
+            "map", Optional.<EnclosureHullKey>empty(), Collections.singletonList(c),
+            Collections.<EnclosureHullKey>emptyList(), false, BoundaryTier.SUBTLE);
+        final ProjectedEnclosure dEnclosure = ProjectedEnclosure.of(dHull,
+            Collections.singletonList(dKey), Collections.singletonList(SafeNodeLabel.of("D", "D")),
+            "map", Optional.<EnclosureHullKey>empty(), Collections.singletonList(d),
+            Collections.<EnclosureHullKey>emptyList(), false, BoundaryTier.SUBTLE);
+        final List<ProjectedNode> nodes = Arrays.asList(projectedNode(a, "a"), projectedNode(c, "c"),
+            projectedNode(d, "d"), projectedNode(p, "p"), projectedNode(q, "q"));
+        final GraphProjection projection = GraphProjection.projected(10L, nodes,
+            Arrays.asList(aEnclosure, cEnclosure, dEnclosure), Collections.singletonList(nodeEdge(0, p, q)),
+            Collections.<RelationshipResolution>emptyList(), Collections.<PinProjection>emptyList());
+        final Map<ProjectedNodeKey, LayoutPoint> points =
+            new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        points.put(a, LayoutPoint.of(aX, 0.0));
+        points.put(c, LayoutPoint.of(cX, 0.0));
+        points.put(d, LayoutPoint.of(dX, 0.0));
+        points.put(p, LayoutPoint.of(5.0, 100.0));
+        points.put(q, LayoutPoint.of(5.0, -100.0));
+        final Map<EnclosureHullKey, LayoutPoint> anchors =
+            new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
+        anchors.put(aHull, LayoutPoint.of(aX, 0.0));
+        anchors.put(cHull, LayoutPoint.of(cX, 0.0));
+        anchors.put(dHull, LayoutPoint.of(dX, 0.0));
+        final LayoutPositions positions = LayoutPositions.of(points, anchors);
+        final GraphGeometry geometry = new GraphGeometryEngine().computeHulls(projection, positions,
+            METRICS);
+        final BoundarySeparationResult boundary = new BoundarySeparationResult(positions, geometry,
+            BoundarySeparationDiagnostics.empty(), 0, new BoundarySeparationTimings(0L, 0L, 0L, 0L));
+        final Set<ProjectedEndpointKey> visible = ProjectedEndpointVisibility.visibleEndpoints(
+            projection.nodes(), projection.enclosures());
+        return new A3SubsetFixture(projection, boundary, visible, a, aHull, cHull, dHull,
+            projection.edges().get(0).key(), LayoutPoint.of(aX, 0.0));
     }
 
     private static final class MinGapFixture {
