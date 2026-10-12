@@ -158,6 +158,79 @@ public class EdgeConflictCorrectionShould {
         assertThat(result.diagnostics().indexPairChecks()).isGreaterThanOrEqualTo(2080L);
     }
 
+    @Test
+    public void reportsTheReportedFixtureCountsBeforeRepair() {
+        final Fixture fixture = reportedQuad();
+        final EdgeConflictCorrection.Detection detection = EdgeConflictCorrection.detectConflicts(
+            fixture.projection, fixture.boundary.positions(), fixture.boundary.geometry(),
+            fixture.visible);
+
+        assertThat(detection.keys()).hasSize(1);
+        assertThat(detection.crossings()).isEqualTo(1);
+        assertThat(detection.edgeOverNodes()).isZero();
+        assertThat(detection.keys().get(0)).isEqualTo(org.freeplane.plugin.graph.projection.CanonicalKeys
+            .edgePair(fixture.projection.edges().get(0).key(), fixture.projection.edges().get(1).key()));
+    }
+
+    @Test
+    public void ignoresAnInvisibleEdgeForC2() {
+        // C=(50,0) is a non-endpoint disc on the A-B chord: without the visibility guard the
+        // chord is drawn and C produces the C2 key CanonicalKeys.edgeNodePair(A-B, C).
+        final Fixture fixture = fixture(1L, new String[] {"A", "B", "C"},
+            new double[] {0.0, 0.0, 100.0, 0.0, 50.0, 0.0}, new int[][] {{0, 1}});
+        final Set<org.freeplane.plugin.graph.projection.ProjectedEndpointKey> visible =
+            Collections.emptySet();
+
+        final EdgeConflictCorrection.Detection detection = EdgeConflictCorrection.detectConflicts(
+            fixture.projection, fixture.boundary.positions(), fixture.boundary.geometry(), visible);
+
+        assertThat(detection.keys()).isEmpty();
+    }
+
+    @Test
+    public void detectConflictsIsAscendingDeduplicatedAndDeterministic() {
+        final Fixture fixture = reportedQuad();
+        final List<String> first = EdgeConflictCorrection.detectConflicts(fixture.projection,
+            fixture.boundary.positions(), fixture.boundary.geometry(), fixture.visible).keys();
+        final List<String> second = EdgeConflictCorrection.detectConflicts(fixture.projection,
+            fixture.boundary.positions(), fixture.boundary.geometry(), fixture.visible).keys();
+
+        assertThat(first).isSorted();
+        assertThat(first).isEqualTo(second);
+    }
+
+    @Test
+    public void resetsTheIndexCountersOnEveryApply() {
+        final Fixture fixture = reportedQuad();
+        final EdgeConflictCorrection correction = new EdgeConflictCorrection();
+
+        final EdgeConflictResult first = apply(correction, fixture);
+        final EdgeConflictResult second = apply(correction, fixture);
+
+        assertThat(second.diagnostics().indexInsertedItems())
+            .isEqualTo(first.diagnostics().indexInsertedItems());
+        assertThat(second.diagnostics().indexPairChecks())
+            .isEqualTo(first.diagnostics().indexPairChecks());
+        assertThat(second.diagnostics().indexSubdivisions())
+            .isEqualTo(first.diagnostics().indexSubdivisions());
+        assertThat(second.diagnostics()).isEqualTo(first.diagnostics());
+    }
+
+    @Test
+    public void clearsTheExhaustedIndexBudgetBeforeTheNextFrame() {
+        final Fixture exhausted = fixture(1L, new String[] {"A", "B", "C", "D"},
+            new double[] {-1e300, -1e300, 1e300, 1e300, -1e300, 1e300, 1e300, -1e300},
+            new int[][] {{0, 1}, {2, 3}});
+        final Fixture quad = reportedQuad();
+        final EdgeConflictCorrection correction = new EdgeConflictCorrection();
+
+        apply(correction, exhausted);
+        final EdgeConflictResult result = apply(correction, quad);
+
+        assertThat(result.diagnostics().indexBudgetExhausted()).isFalse();
+        assertThat(result.diagnostics()).isEqualTo(apply(new EdgeConflictCorrection(), quad).diagnostics());
+    }
+
     private static final class Fixture {
         private final GraphProjection projection;
         private final BoundarySeparationResult boundary;
@@ -178,8 +251,13 @@ public class EdgeConflictCorrectionShould {
     }
 
     private static EdgeConflictResult apply(final Fixture fixture) {
-        return new EdgeConflictCorrection().apply(fixture.projection, fixture.boundary.positions(),
-            METRICS, Collections.<PinProjection>emptyList(), fixture.visible, fixture.boundary);
+        return apply(new EdgeConflictCorrection(), fixture);
+    }
+
+    private static EdgeConflictResult apply(final EdgeConflictCorrection correction,
+            final Fixture fixture) {
+        return correction.apply(fixture.projection, fixture.boundary.positions(), METRICS,
+            Collections.<PinProjection>emptyList(), fixture.visible, fixture.boundary);
     }
 
     private static Fixture reportedQuad() {
