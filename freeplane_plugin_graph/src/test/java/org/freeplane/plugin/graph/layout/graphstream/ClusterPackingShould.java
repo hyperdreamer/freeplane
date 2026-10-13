@@ -8,9 +8,18 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Random;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.TimeUnit;
 
+import org.freeplane.plugin.graph.layout.LayoutCalibration;
+import org.freeplane.plugin.graph.layout.LayoutFrame;
+import org.freeplane.plugin.graph.layout.LayoutRequest;
+import org.freeplane.plugin.graph.layout.LayoutWorker;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.EnclosureKey;
+import org.freeplane.plugin.graph.projection.GraphProjection;
+import org.freeplane.plugin.graph.projection.PinProjection;
+import org.freeplane.plugin.graph.projection.ProjectionDiff;
 import org.freeplane.plugin.graph.projection.input.SourceNodeKey;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 import org.freeplane.plugin.graph.workspace.model.NodeReference;
@@ -322,6 +331,27 @@ public class ClusterPackingShould {
         assertThatThrownBy(() -> ClusterPacking.packItems(
             Collections.singletonList(content(10.0, 10.0, 0)), Double.POSITIVE_INFINITY))
             .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    public void twoHundredChildrenPackWithinThreeSeconds() throws Exception {
+        final GraphProjection projection = ClusterProximityShould.wideProjection(1L);
+        final LayoutWorker worker = new LayoutWorker(LayoutCalibration.spikeDefaults());
+        try {
+            final long start = System.nanoTime();
+            await(worker.submit(LayoutRequest.of(ClusterProximityShould.WORKSPACE, projection,
+                ProjectionDiff.between(projection, projection), Collections.<PinProjection>emptyList())));
+            final double submitSeconds = (System.nanoTime() - start) / 1.0e9;
+            System.out.printf("wideProjection submit (apply + packing): %.3f s%n", submitSeconds);
+            assertThat(submitSeconds).isLessThanOrEqualTo(3.0);
+        }
+        finally {
+            worker.close();
+        }
+    }
+
+    private static LayoutFrame await(final CompletionStage<LayoutFrame> stage) throws Exception {
+        return stage.toCompletableFuture().get(5L, TimeUnit.SECONDS);
     }
 
     private static void assertInvalidDimensions(double width, double height) {
