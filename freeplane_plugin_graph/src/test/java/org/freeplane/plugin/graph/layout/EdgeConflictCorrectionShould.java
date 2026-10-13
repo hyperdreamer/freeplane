@@ -161,9 +161,235 @@ public class EdgeConflictCorrectionShould {
         final EdgeConflictResult result = apply(fixture);
 
         assertThat(result.diagnostics().crossingsDetected()).isEqualTo(2080);
-        assertThat(result.diagnostics().indexSubdivisions()).isEqualTo(4);
+        // The initial detection subdivides through all four levels (4 split triggers); the
+        // first verification detection adds one more split trigger before the frame-total
+        // detected-key budget stops it at the accumulated lower bound.
+        assertThat(result.diagnostics().indexSubdivisions()).isEqualTo(5);
         assertThat(result.diagnostics().indexBudgetExhausted()).isTrue();
+        assertThat(result.diagnostics().detectionTruncated()).isFalse();
+        assertThat(result.diagnostics().verificationBudgetExhausted()).isTrue();
         assertThat(result.diagnostics().indexPairChecks()).isGreaterThanOrEqualTo(2080L);
+    }
+
+    @Test
+    public void boundsTheCountedRelocationWorkOnADenseWideSpanFrame() {
+        final Fixture fixture = referenceScaleFan(500);
+        final EdgeConflictResult result = apply(fixture);
+
+        assertThat(result.diagnostics().indexInsertedItems())
+            .isLessThanOrEqualTo(EdgeConflictCorrection.EDGE_CONFLICT_MAX_INDEX_ITEMS_PER_FRAME);
+        assertThat(result.diagnostics().indexPairChecks())
+            .isLessThanOrEqualTo(EdgeConflictCorrection.EDGE_CONFLICT_MAX_PAIR_CHECKS_PER_FRAME);
+        assertThat(result.diagnostics().verificationWork())
+            .isLessThanOrEqualTo(EdgeConflictCorrection.EDGE_CONFLICT_MAX_VERIFICATION_WORK_PER_FRAME);
+        assertThat(result.diagnostics().verifications())
+            .isLessThanOrEqualTo(EdgeConflictCorrection.MAX_VERIFICATIONS_PER_FRAME);
+    }
+
+    @Test
+    public void truncatesDetectionAtTheItemBudget() {
+        final Fixture fixture = referenceScaleFan(500);
+        final EdgeConflictResult result = apply(fixture);
+        final EdgeConflictCorrection.Detection bruteForce = EdgeConflictCorrection.detectConflicts(
+            fixture.projection, fixture.boundary.positions(), fixture.boundary.geometry(),
+            fixture.visible);
+
+        assertThat(result.diagnostics().detectionTruncated()).isTrue();
+        assertThat(result.diagnostics().indexBudgetExhausted()).isFalse();
+        assertThat(result.diagnostics().indexInsertedItems())
+            .isLessThanOrEqualTo(EdgeConflictCorrection.EDGE_CONFLICT_MAX_INDEX_ITEMS_PER_FRAME);
+        assertThat(result.diagnostics().indexPairChecks())
+            .isLessThan(EdgeConflictCorrection.EDGE_CONFLICT_MAX_PAIR_CHECKS_PER_FRAME);
+        assertThat(result.diagnostics().crossingsDetected()).isLessThan(bruteForce.crossings());
+        assertThat(result.diagnostics().rounds()).isZero();
+        assertThat(result.diagnostics().verifications()).isZero();
+        assertThat(result.diagnostics().repairsApplied()).isEmpty();
+        assertThat(new java.util.TreeSet<String>(bruteForce.keys()))
+            .containsAll(result.diagnostics().conflictsResidual());
+        assertThat(result.diagnostics().conflictsResidual()).isSorted();
+        assertThat(new java.util.LinkedHashSet<String>(result.diagnostics().conflictsResidual()))
+            .hasSize(result.diagnostics().conflictsResidual().size());
+    }
+
+    @Test
+    public void truncatesDetectionAtThePairBudget() {
+        final Fixture fixture = sharedLeafFan(513);
+        final EdgeConflictResult result = apply(fixture);
+        final EdgeConflictCorrection.Detection bruteForce = EdgeConflictCorrection.detectConflicts(
+            fixture.projection, fixture.boundary.positions(), fixture.boundary.geometry(),
+            fixture.visible);
+
+        assertThat(result.diagnostics().detectionTruncated()).isTrue();
+        assertThat(result.diagnostics().indexPairChecks())
+            .isLessThanOrEqualTo(EdgeConflictCorrection.EDGE_CONFLICT_MAX_PAIR_CHECKS_PER_FRAME);
+        assertThat(result.diagnostics().indexInsertedItems())
+            .isLessThan(EdgeConflictCorrection.EDGE_CONFLICT_MAX_INDEX_ITEMS_PER_FRAME);
+        assertThat(result.diagnostics().conflictsDetected())
+            .isLessThan(EdgeConflictCorrection.EDGE_CONFLICT_MAX_DETECTED_PER_FRAME);
+        assertThat(result.diagnostics().rounds()).isZero();
+        assertThat(result.diagnostics().verifications()).isZero();
+        assertThat(result.diagnostics().repairsApplied()).isEmpty();
+        assertThat(new java.util.TreeSet<String>(bruteForce.keys()))
+            .containsAll(result.diagnostics().conflictsResidual());
+        assertThat(result.diagnostics().conflictsResidual()).isSorted();
+    }
+
+    @Test
+    public void truncatesDetectionAtTheVolumeBudget() {
+        final Fixture fixture = concurrentDiameters(92);
+        final EdgeConflictResult result = apply(fixture);
+
+        assertThat(result.diagnostics().detectionTruncated()).isTrue();
+        assertThat(result.diagnostics().conflictsDetected())
+            .isEqualTo(EdgeConflictCorrection.EDGE_CONFLICT_MAX_DETECTED_PER_FRAME);
+        assertThat(result.diagnostics().crossingsDetected())
+            .isEqualTo(EdgeConflictCorrection.EDGE_CONFLICT_MAX_DETECTED_PER_FRAME);
+        assertThat(result.diagnostics().conflictsResidual()).hasSize(
+            EdgeConflictCorrection.EDGE_CONFLICT_MAX_DETECTED_PER_FRAME);
+        assertThat(result.diagnostics().rounds()).isZero();
+        assertThat(result.diagnostics().verifications()).isZero();
+        assertThat(result.diagnostics().repairsApplied()).isEmpty();
+        assertThat(result.diagnostics().conflictsResidual()).isSorted();
+    }
+
+    @Test
+    public void rejectsTheAttemptWhenVerificationWorkExhausts() {
+        final Fixture fixture = wideNodeFieldWithOneCrossing(512);
+        final EdgeConflictResult result = apply(fixture);
+        final EdgeConflictCorrection.Detection expected = EdgeConflictCorrection.detectConflicts(
+            fixture.projection, fixture.boundary.positions(), fixture.boundary.geometry(),
+            fixture.visible);
+
+        assertThat(result.diagnostics().verificationBudgetExhausted()).isTrue();
+        assertThat(result.diagnostics().detectionTruncated()).isFalse();
+        assertThat(result.diagnostics().rounds()).isZero();
+        assertThat(result.diagnostics().verificationWork())
+            .isLessThanOrEqualTo(EdgeConflictCorrection.EDGE_CONFLICT_MAX_VERIFICATION_WORK_PER_FRAME);
+        assertThat(result.diagnostics().conflictsResidual()).isEqualTo(expected.keys());
+    }
+
+    @Test
+    public void rejectsTheAttemptWhenAVerificationDetectionStops() {
+        final Fixture fixture = verificationDetectionStopFixture();
+        final EdgeConflictResult result = apply(fixture);
+        final EdgeConflictCorrection.Detection expected = EdgeConflictCorrection.detectConflicts(
+            fixture.projection, fixture.boundary.positions(), fixture.boundary.geometry(),
+            fixture.visible);
+
+        assertThat(result.diagnostics().verificationBudgetExhausted()).isTrue();
+        assertThat(result.diagnostics().detectionTruncated()).isFalse();
+        assertThat(result.diagnostics().conflictsResidual()).isEqualTo(expected.keys());
+    }
+
+    private static Fixture referenceScaleFan(final int chords) {
+        return diameters(chords, 600000.0);
+    }
+
+    private static Fixture concurrentDiameters(final int chords) {
+        return diameters(chords, 1000.0);
+    }
+
+    private static Fixture verificationDetectionStopFixture() {
+        return diameters(65, 1600.0);
+    }
+
+    /**
+     * The superseded archived reference-scale shape: {@code chords} diameters of a circle of
+     * the given radius. With the span-adaptive level-0 cell size the shared origin cell is
+     * re-collected at every subdivision level, so the item writes alone reach the frame cap.
+     */
+    private static Fixture diameters(final int chords, final double radius) {
+        final String[] ids = new String[chords * 2];
+        final double[] x = new double[chords * 2];
+        final double[] y = new double[chords * 2];
+        for (int index = 0; index < chords; index++) {
+            final double theta = Math.PI * index / (double) chords;
+            x[index * 2] = radius * Math.cos(theta);
+            y[index * 2] = radius * Math.sin(theta);
+            x[index * 2 + 1] = -x[index * 2];
+            y[index * 2 + 1] = -y[index * 2];
+            ids[index * 2] = "C" + index + "A";
+            ids[index * 2 + 1] = "C" + index + "B";
+        }
+        final int[][] edges = new int[chords][];
+        for (int index = 0; index < chords; index++) {
+            edges[index] = new int[] {index * 2, index * 2 + 1};
+        }
+        return fixture(1L, ids, x, y, edges, 14.0);
+    }
+
+    /**
+     * {@code chords} fan chords sharing the radius-tiny hub {@code H_0}, so every chord starts
+     * in the hub's leaf cell and the leaf's pairs consume the pair-check budget, plus two
+     * corner chords that properly cross and keep the accumulated lower bound non-empty. The
+     * tip discs stay far apart and are never reached before the counted stop.
+     */
+    private static Fixture sharedLeafFan(final int chords) {
+        final int nodeCount = chords + 5;
+        final String[] ids = new String[nodeCount];
+        final double[] x = new double[nodeCount];
+        final double[] y = new double[nodeCount];
+        ids[0] = "A_0";
+        x[0] = -5.0;
+        y[0] = -5.0;
+        ids[1] = "A_1";
+        x[1] = 5.0;
+        y[1] = 5.0;
+        ids[2] = "A_2";
+        x[2] = -5.0;
+        y[2] = 5.0;
+        ids[3] = "A_3";
+        x[3] = 5.0;
+        y[3] = -5.0;
+        ids[4] = "H_0";
+        x[4] = 0.0;
+        y[4] = 0.0;
+        final double radius = 200.0;
+        for (int index = 0; index < chords; index++) {
+            final double theta = Math.toRadians(-85.0 + 170.0 * index / (double) (chords - 1));
+            ids[index + 5] = "T" + index;
+            x[index + 5] = radius * Math.cos(theta);
+            y[index + 5] = radius * Math.sin(theta);
+        }
+        final int[][] edges = new int[chords + 2][];
+        edges[0] = new int[] {0, 1};
+        edges[1] = new int[] {2, 3};
+        for (int index = 0; index < chords; index++) {
+            edges[index + 2] = new int[] {index + 5, 4};
+        }
+        return fixture(1L, ids, x, y, edges, 0.001);
+    }
+
+    /**
+     * Well-separated leaf discs plus the four corners of one reported X: the initial detection
+     * is one crossing, the first candidate reaches A2, and the first counted predicate call
+     * exhausts the verification-work cap mid-scan.
+     */
+    private static Fixture wideNodeFieldWithOneCrossing(final int nodes) {
+        final int leaves = nodes - 4;
+        final String[] ids = new String[nodes];
+        final double[] x = new double[nodes];
+        final double[] y = new double[nodes];
+        for (int index = 0; index < leaves; index++) {
+            final double theta = 2.0 * Math.PI * index / (double) leaves;
+            ids[index] = "F" + index;
+            x[index] = 5000.0 * Math.cos(theta);
+            y[index] = 5000.0 * Math.sin(theta);
+        }
+        ids[leaves] = "X_A";
+        x[leaves] = -50.0;
+        y[leaves] = -50.0;
+        ids[leaves + 1] = "X_B";
+        x[leaves + 1] = 50.0;
+        y[leaves + 1] = 50.0;
+        ids[leaves + 2] = "X_C";
+        x[leaves + 2] = -50.0;
+        y[leaves + 2] = 50.0;
+        ids[leaves + 3] = "X_D";
+        x[leaves + 3] = 50.0;
+        y[leaves + 3] = -50.0;
+        final int[][] edges = new int[][] {{leaves, leaves + 1}, {leaves + 2, leaves + 3}};
+        return fixture(1L, ids, x, y, edges, 14.0);
     }
 
     @Test

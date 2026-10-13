@@ -57,6 +57,87 @@ public final class BoundaryInvariants {
     }
 
     public List<Violation> detect(final GraphProjection projection, final GraphGeometry geometry) {
+        return detect(projection, geometry, null);
+    }
+
+    /**
+     * The counted A3 pair-key set: the ascending canonical hull-pair keys, the number of
+     * hull-pair comparisons consumed from the shared verification allowance, and whether the
+     * allowance stopped the comparison before the set was complete.
+     */
+    static final class CountedPairKeys {
+        private final Set<String> pairKeys;
+        private final long work;
+        private final boolean truncated;
+
+        private CountedPairKeys(final Set<String> pairKeys, final long work, final boolean truncated) {
+            this.pairKeys = Collections.unmodifiableSet(new LinkedHashSet<String>(pairKeys));
+            this.work = work;
+            this.truncated = truncated;
+        }
+
+        Set<String> pairKeys() {
+            return pairKeys;
+        }
+
+        long work() {
+            return work;
+        }
+
+        boolean truncated() {
+            return truncated;
+        }
+    }
+
+    /** One hull-pair comparison consumes one unit of the caller's verification allowance. */
+    private static final class HullPairWork {
+        private long remaining;
+        private long consumed;
+
+        private HullPairWork(final long allowance) {
+            remaining = allowance;
+        }
+
+        private void consume() {
+            if (remaining == 0L) {
+                throw new WorkStop();
+            }
+            remaining--;
+            consumed++;
+        }
+    }
+
+    private static final class WorkStop extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
+        private WorkStop() {
+            super(null, null, false, false);
+        }
+    }
+
+    /**
+     * The counted A3 variant used by {@code EdgeConflictCorrection}: every hull-pair comparison
+     * consumes one unit of {@code allowance}; a stop returns an incomplete set with
+     * {@code truncated() == true} so the in-flight attempt is rejected instead of accepted
+     * against a partial {@code V_out}. The public unbudgeted form keeps the memo and counters.
+     */
+    CountedPairKeys detectPairKeys(final GraphProjection projection, final GraphGeometry geometry,
+            final long allowance) {
+        final HullPairWork work = new HullPairWork(allowance);
+        try {
+            final TreeSet<String> sorted = new TreeSet<String>();
+            for (final Violation violation : detect(projection, geometry, work)) {
+                sorted.add(violation.pairKey());
+            }
+            return new CountedPairKeys(new LinkedHashSet<String>(sorted), work.consumed, false);
+        }
+        catch (final WorkStop stop) {
+            return new CountedPairKeys(Collections.<String>emptySet(), work.consumed, true);
+        }
+    }
+
+    private List<Violation> detect(final GraphProjection projection, final GraphGeometry geometry,
+            final HullPairWork work) {
         final Map<EnclosureHullKey, EnclosureHullKey> parents = parents(projection);
         final Map<EnclosureHullKey, HullGeometry> hulls = geometry.hulls();
         final Map<String, EnclosureHullKey> enforcedByCanonical = new LinkedHashMap<String, EnclosureHullKey>();
@@ -107,6 +188,9 @@ public final class BoundaryInvariants {
                 }
             }
             for (final EnclosureHullKey other : active) {
+                if (work != null) {
+                    work.consume();
+                }
                 final HullGeometry otherHull = hulls.get(other);
                 if (!(otherHull.minY() <= currentHull.maxY() && currentHull.minY() <= otherHull.maxY())) {
                     continue;
@@ -150,6 +234,9 @@ public final class BoundaryInvariants {
             final EnclosureHullKey parent = enclosure.parentHull().get();
             if (!enforced.contains(child) || !enforced.contains(parent)) {
                 continue;
+            }
+            if (work != null) {
+                work.consume();
             }
             final HullGeometry childHull = hulls.get(child);
             final HullGeometry parentHull = hulls.get(parent);

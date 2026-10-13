@@ -335,6 +335,54 @@ public class EdgeRouterShould {
         assertThat(paths.diagnostics().pathHullPenetrations()).isZero();
     }
 
+    @Test
+    public void boundsTheRouterCountedWorkOnADenseFrame() {
+        final EdgeRouterFixture fixture = EdgeRouterFixture.referenceScaleFan(500);
+        final EdgePaths paths = new EdgeRouter().route(fixture.projection, fixture.positions,
+            fixture.geometry, fixture.visibleEndpoints);
+
+        assertThat(paths.diagnostics().routeIndexItems())
+            .isLessThanOrEqualTo(EdgeRouter.EDGE_ROUTING_MAX_INDEX_ITEMS_PER_FRAME);
+        assertThat(paths.diagnostics().routeObstacleChecks())
+            .isLessThanOrEqualTo(EdgeRouter.EDGE_ROUTING_MAX_OBSTACLE_CHECKS_PER_FRAME);
+        assertThat(paths.diagnostics().routePairChecks())
+            .isLessThanOrEqualTo(EdgeRouter.EDGE_ROUTING_MAX_PAIR_CHECKS_PER_FRAME);
+    }
+
+    @Test
+    public void fallsBackWhenTheObstacleBudgetExhausts() {
+        final EdgeRouterFixture fixture = EdgeRouterFixture.denseObstacleFan(400);
+        final EdgePaths paths = new EdgeRouter().route(fixture.projection, fixture.positions,
+            fixture.geometry, fixture.visibleEndpoints);
+
+        assertThat(paths.diagnostics().routeBudgetExhausted()).isTrue();
+        assertThat(paths.diagnostics().edgesStraight() + paths.diagnostics().edgesBow()
+            + paths.diagnostics().edgesDogleg() + paths.diagnostics().edgesFallback())
+            .isEqualTo(paths.byEdge().size());
+        assertThat(paths.diagnostics().routeObstacleChecks())
+            .isLessThanOrEqualTo(EdgeRouter.EDGE_ROUTING_MAX_OBSTACLE_CHECKS_PER_FRAME);
+    }
+
+    @Test
+    public void truncatesTheResidualPassAndPublishesALowerBound() {
+        // 500 diameters keep the detected-crossing pass inside its budget (124,750 straight-chord
+        // pairs); the residual pass on the published paths then trips the shared pair-check cap,
+        // so its set is a strict lower bound. A 513-diameter fan would trip during the detected
+        // pass itself and make probe 19 unfalsifiable.
+        final EdgeRouterFixture fixture = EdgeRouterFixture.referenceScaleFan(500);
+        final EdgePaths paths = new EdgeRouter().route(fixture.projection, fixture.positions,
+            fixture.geometry, fixture.visibleEndpoints);
+        final EdgePaths bruteForce = EdgeRouter.routeUnbounded(fixture.projection, fixture.positions,
+            fixture.geometry, fixture.visibleEndpoints);
+
+        assertThat(paths.diagnostics().detectionTruncated()).isTrue();
+        assertThat(paths.diagnostics().routePairChecks())
+            .isLessThanOrEqualTo(EdgeRouter.EDGE_ROUTING_MAX_PAIR_CHECKS_PER_FRAME);
+        assertThat(new java.util.TreeSet<String>(bruteForce.diagnostics().pathCrossingsResidual()))
+            .containsAll(paths.diagnostics().pathCrossingsResidual());
+        assertThat(paths.byEdge()).isEqualTo(bruteForce.byEdge());
+    }
+
     private static List<String> bruteForceCrossingKeys(final EdgePaths paths) {
         final List<ProjectedEdgeKey> keys = new ArrayList<ProjectedEdgeKey>(paths.byEdge().keySet());
         final Set<String> crossings = new TreeSet<String>();
