@@ -60,6 +60,14 @@ final class TypedSpringBox extends SpringBox {
         }
     }
 
+    void configureAnchorExtents(final String id, final double halfWidth, final double halfHeight,
+            final double offsetX, final double offsetY) {
+        final TypedNodeParticle particle = typedParticles.get(id);
+        if (particle != null) {
+            particle.configureExtents(halfWidth, halfHeight, offsetX, offsetY);
+        }
+    }
+
     void setParticlePosition(final String id, final double x, final double y) {
         moveNode(id, x, y, 0.0);
     }
@@ -168,23 +176,31 @@ final class TypedSpringBox extends SpringBox {
             }
             final Point3 own = particle.getPosition();
             final Point3 position = other.getPosition();
-            double dx = own.x - position.x;
-            double dy = own.y - position.y;
-            double distance = Math.sqrt(dx * dx + dy * dy);
-            if (distance == 0.0) {
-                dx = particle.getId().toString().compareTo(other.getId().toString()) < 0 ? 1.0 : -1.0;
-                dy = 0.0;
-                distance = 1.0;
-            }
-            final double extent = particle.boundaryRadius() + other.boundaryRadius()
-                + GraphStreamLayoutEngine.BoundarySizes.SIBLING_GAP;
-            final double penetration = extent - distance;
-            if (penetration <= 0.0) {
+            final double ownCentreX = own.x + particle.separationOffsetX();
+            final double ownCentreY = own.y + particle.separationOffsetY();
+            final double otherCentreX = position.x + other.separationOffsetX();
+            final double otherCentreY = position.y + other.separationOffsetY();
+            final double forceGapX = Math.abs(ownCentreX - otherCentreX)
+                - (particle.separationHalfWidth() + other.separationHalfWidth()
+                    + GraphStreamLayoutEngine.BoundarySizes.SIBLING_GAP);
+            final double forceGapY = Math.abs(ownCentreY - otherCentreY)
+                - (particle.separationHalfHeight() + other.separationHalfHeight()
+                    + GraphStreamLayoutEngine.BoundarySizes.SIBLING_GAP);
+            if (forceGapX >= 0.0 || forceGapY >= 0.0) {
                 continue;
             }
-            final double force = penetration * BOUNDARY_REPULSION_FACTOR;
-            displacement.set(0, displacement.at(0) + dx / distance * force);
-            displacement.set(1, displacement.at(1) + dy / distance * force);
+            if (-forceGapX <= -forceGapY) {
+                // Equal overlaps resolve along x; the push is away from the other
+                // footprint-box centre (anchor - offset), not the other anchor.
+                final double push = (ownCentreX >= otherCentreX ? 1.0 : -1.0)
+                    * (-forceGapX) * BOUNDARY_REPULSION_FACTOR;
+                displacement.set(0, displacement.at(0) + push);
+            }
+            else {
+                final double push = (ownCentreY >= otherCentreY ? 1.0 : -1.0)
+                    * (-forceGapY) * BOUNDARY_REPULSION_FACTOR;
+                displacement.set(1, displacement.at(1) + push);
+            }
         }
     }
 
