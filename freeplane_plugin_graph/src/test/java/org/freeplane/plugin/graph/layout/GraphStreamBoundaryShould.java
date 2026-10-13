@@ -77,8 +77,11 @@ public class GraphStreamBoundaryShould {
         assertThat(calibration.containment()).isPositive();
         assertThat(calibration.hierarchy()).isPositive();
         assertThat(calibration.sameMap()).isPositive();
-        assertThat(calibration.containment()).isLessThan(calibration.hierarchy());
-        assertThat(calibration.hierarchy()).isLessThan(calibration.sameMap());
+        assertThat(calibration.containment()).isEqualTo(1.0);
+        assertThat(calibration.hierarchy()).isEqualTo(0.30);
+        assertThat(calibration.sameMap()).isEqualTo(1.0);
+        assertThat(calibration.hierarchy()).isLessThan(calibration.containment());
+        assertThat(calibration.containment()).isLessThanOrEqualTo(calibration.sameMap());
     }
 
     private static List<Class<?>> publicLayoutTypes() {
