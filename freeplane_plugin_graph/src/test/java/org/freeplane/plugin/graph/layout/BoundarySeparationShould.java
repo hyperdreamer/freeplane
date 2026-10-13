@@ -18,6 +18,7 @@ import org.freeplane.plugin.graph.geometry.GraphGeometryEngine;
 import org.freeplane.plugin.graph.geometry.HullGeometry;
 import org.freeplane.plugin.graph.geometry.HullIntersection;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
+import org.freeplane.plugin.graph.layout.graphstream.ClusterProximityShould;
 import org.freeplane.plugin.graph.layout.graphstream.GraphStreamLayoutFactory;
 import org.freeplane.plugin.graph.projection.BoundaryTier;
 import org.freeplane.plugin.graph.projection.EdgeContributor;
@@ -49,6 +50,11 @@ public class BoundarySeparationShould {
     // box is `max(16, textLength * 16 + 16)` wide and `40` high, and a map root
     // adds 2 * 16 clearance per axis around its single 128 x 40 group child.
     private static final double PACKED_LABEL_HEIGHT = 40.0;
+    // Per-axis footprint containment tolerance for settled direct parent/child anchors
+    // (specification section 7.3). The measured worst overflow on fixture A is 0.0: the
+    // children settle 47.0-68.2 units inside the parent footprint intervals, and the
+    // measured overflow is printed by the test (not asserted at a 4-unit bound).
+    private static final double SETTLED_FOOTPRINT_TOLERANCE = 0.0;
 
     private static final WorkspaceId WORKSPACE_ONE =
         WorkspaceId.of("00000000-0000-0000-0000-000000000111");
@@ -316,9 +322,7 @@ public class BoundarySeparationShould {
     public void directParentChildAnchorsSatisfyTheProximityInvariantAfterSettling() {
         GraphProjection projection = ReferenceRepulsionFixture.referenceProjection(1L);
         LayoutFrame frame = settle(ReferenceRepulsionFixture.WORKSPACE, projection);
-        GraphGeometry geometry = new GraphGeometryEngine().computeHulls(projection, frame.positions(),
-            new AwtGeometryTextMetrics(new Font(Font.SANS_SERIF, Font.PLAIN, 12),
-                new FontRenderContext(null, true, true)));
+        double worstOverflow = 0.0;
         for (ProjectedEnclosure enclosure : projection.enclosures()) {
             if (!enclosure.parentHull().isPresent()) {
                 continue;
@@ -327,15 +331,29 @@ public class BoundarySeparationShould {
             EnclosureHullKey parentHull = enclosure.parentHull().get();
             LayoutPoint childAnchor = frame.positions().anchors().get(childHull);
             LayoutPoint parentAnchor = frame.positions().anchors().get(parentHull);
-            HullGeometry parentGeometry = geometry.hulls().get(parentHull);
-            assertThat(parentGeometry).as("painted parent hull %s", parentHull).isNotNull();
-            assertThat(parentGeometry.contains(childAnchor))
-                .as("anchor of %s inside painted hull of %s", childHull, parentHull)
-                .isTrue();
+            // Per-axis footprint containment of the child anchor (specification section
+            // 7.3): the parent footprint interval in world coordinates is
+            // parentAnchor - footprintAnchorOffset +- half extent.
+            double[] footprint = ClusterProximityShould.footprint(projection, parentHull);
+            double halfWidth = footprint[0] * 0.5;
+            double halfHeight = footprint[1] * 0.5;
+            double left = parentAnchor.x() - footprint[2] - halfWidth;
+            double right = parentAnchor.x() - footprint[2] + halfWidth;
+            double bottom = parentAnchor.y() - footprint[3] - halfHeight;
+            double top = parentAnchor.y() - footprint[3] + halfHeight;
+            double overflow = Math.max(
+                Math.max(left - childAnchor.x(), childAnchor.x() - right),
+                Math.max(bottom - childAnchor.y(), childAnchor.y() - top));
+            worstOverflow = Math.max(worstOverflow, overflow);
             System.out.println("settled anchor offset child=" + enclosure.labels().get(0).displayText()
                 + " dx=" + (childAnchor.x() - parentAnchor.x())
-                + " dy=" + (childAnchor.y() - parentAnchor.y()));
+                + " dy=" + (childAnchor.y() - parentAnchor.y())
+                + " footprintOverflow=" + overflow);
         }
+        System.out.println("worst footprint overflow=" + worstOverflow);
+        assertThat(worstOverflow)
+            .as("settled child anchors inside the per-axis parent footprint interval")
+            .isLessThanOrEqualTo(SETTLED_FOOTPRINT_TOLERANCE);
     }
 
     @Test
