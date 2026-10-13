@@ -1,0 +1,16 @@
+LABEL-GATE fixture=A zoom=1.0 labels=7 overlappingLabelPairs=0 maxLeaderLength=3.0 meanLeaderLength=3.0 leaderLengthOverFootprint=0.19
+LABEL-GATE fixture=A zoom=4.0 labels=7 overlappingLabelPairs=0 maxLeaderLength=0.0 meanLeaderLength=0.0 leaderLengthOverFootprint=0.00
+LABEL-GATE fixture=B zoom=1.0 labels=12 overlappingLabelPairs=8 maxLeaderLength=648.1 meanLeaderLength=648.0 leaderLengthOverFootprint=6.34
+LABEL-GATE fixture=B zoom=4.0 labels=12 overlappingLabelPairs=3 maxLeaderLength=4727.7 meanLeaderLength=4703.4 leaderLengthOverFootprint=46.05
+LABEL-GATE fixture=C zoom=1.0 labels=12 overlappingLabelPairs=4 maxLeaderLength=403.8 meanLeaderLength=272.9 leaderLengthOverFootprint=2.66
+LABEL-GATE fixture=C zoom=4.0 labels=12 overlappingLabelPairs=0 maxLeaderLength=3775.1 meanLeaderLength=3091.0 leaderLengthOverFootprint=29.19
+LABEL-GATE fixture=D zoom=1.0 labels=12 overlappingLabelPairs=9 maxLeaderLength=403.8 meanLeaderLength=391.4 leaderLengthOverFootprint=3.62
+LABEL-GATE fixture=D zoom=4.0 labels=12 overlappingLabelPairs=3 maxLeaderLength=3701.8 meanLeaderLength=3701.7 leaderLengthOverFootprint=34.19
+LABEL-GATE fixture=E zoom=1.0 labels=6 overlappingLabelPairs=0 maxLeaderLength=27.0 meanLeaderLength=17.3 leaderLengthOverFootprint=0.95
+LABEL-GATE fixture=E zoom=4.0 labels=6 overlappingLabelPairs=0 maxLeaderLength=3.0 meanLeaderLength=3.0 leaderLengthOverFootprint=0.19
+LABEL-GATE fixture=F zoom=1.0 labels=22 overlappingLabelPairs=12 maxLeaderLength=1369.1 meanLeaderLength=1249.3 leaderLengthOverFootprint=12.09
+LABEL-GATE fixture=F zoom=4.0 labels=22 overlappingLabelPairs=4 maxLeaderLength=6841.4 meanLeaderLength=6709.5 leaderLengthOverFootprint=65.22
+LABEL-GATE fixture=G zoom=1.0 labels=13 overlappingLabelPairs=4 maxLeaderLength=0.0 meanLeaderLength=0.0 leaderLengthOverFootprint=0.00
+LABEL-GATE fixture=G zoom=4.0 labels=13 overlappingLabelPairs=1 maxLeaderLength=0.0 meanLeaderLength=0.0 leaderLengthOverFootprint=0.00
+LABEL-GATE fixture=H zoom=1.0 labels=11 overlappingLabelPairs=7 maxLeaderLength=392.7 meanLeaderLength=392.7 leaderLengthOverFootprint=4.91
+LABEL-GATE fixture=H zoom=4.0 labels=11 overlappingLabelPairs=6 maxLeaderLength=3666.3 meanLeaderLength=3666.3 leaderLengthOverFootprint=45.83
