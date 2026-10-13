@@ -2,6 +2,8 @@ package org.freeplane.plugin.graph.layout;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.awt.Font;
+import java.awt.font.FontRenderContext;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -10,6 +12,11 @@ import java.util.Optional;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.TimeUnit;
 
+import org.freeplane.plugin.graph.geometry.AwtGeometryTextMetrics;
+import org.freeplane.plugin.graph.geometry.GraphGeometry;
+import org.freeplane.plugin.graph.geometry.GraphGeometryEngine;
+import org.freeplane.plugin.graph.geometry.HullGeometry;
+import org.freeplane.plugin.graph.geometry.HullIntersection;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.layout.graphstream.GraphStreamLayoutFactory;
 import org.freeplane.plugin.graph.projection.BoundaryTier;
@@ -297,11 +304,13 @@ public class BoundarySeparationShould {
     public void siblingAnchorsRemainSeparatedAfterSettling() {
         GraphProjection projection = ReferenceRepulsionFixture.referenceProjection(1L);
         LayoutFrame frame = settle(ReferenceRepulsionFixture.WORKSPACE, projection);
-        assertNoSiblingOverlap(frame,
-            Arrays.asList(ReferenceRepulsionFixture.axiomsHull(),
-                ReferenceRepulsionFixture.definitionsHull()),
-            Arrays.asList(SafeNodeLabel.of("Axioms", "Axioms"),
-                SafeNodeLabel.of("Basic Definitions and Theorems", "Basic Definitions and Theorems")));
+        GraphGeometry geometry = new GraphGeometryEngine().computeHulls(projection, frame.positions(),
+            new AwtGeometryTextMetrics(new Font(Font.SANS_SERIF, Font.PLAIN, 12),
+                new FontRenderContext(null, true, true)));
+        HullGeometry axioms = geometry.hulls().get(ReferenceRepulsionFixture.axiomsHull());
+        HullGeometry definitions = geometry.hulls().get(ReferenceRepulsionFixture.definitionsHull());
+        assertThat(HullIntersection.siblingOverlap(axioms, definitions)).isFalse();
+        assertThat(geometry.hulls().get(ReferenceRepulsionFixture.zfcHull())).isNotNull();
         List<EnclosureHullKey> hulls = Arrays.asList(ReferenceRepulsionFixture.rootHull(),
             ReferenceRepulsionFixture.zfcHull(), ReferenceRepulsionFixture.axiomsHull(),
             ReferenceRepulsionFixture.definitionsHull());
