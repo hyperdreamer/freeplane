@@ -7,13 +7,17 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
+import org.freeplane.plugin.graph.projection.BoundaryTier;
 import org.freeplane.plugin.graph.projection.EdgeContributor;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
+import org.freeplane.plugin.graph.projection.EnclosureKey;
 import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.projection.ProjectedEdge;
 import org.freeplane.plugin.graph.projection.ProjectedEdgeKey;
+import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointVisibility;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
@@ -46,6 +50,12 @@ final class EdgeRouterFixture {
 
     private EdgeRouterFixture(final GraphProjection projection, final LayoutPositions positions,
             final Map<ProjectedNodeKey, Double> radii) {
+        this(projection, positions, radii, Collections.<EnclosureHullKey, HullGeometry>emptyMap());
+    }
+
+    private EdgeRouterFixture(final GraphProjection projection, final LayoutPositions positions,
+            final Map<ProjectedNodeKey, Double> radii,
+            final Map<EnclosureHullKey, HullGeometry> hulls) {
         this.projection = projection;
         this.positions = positions;
         final Map<ProjectedNodeKey, NodeGeometry> nodeGeometry =
@@ -59,8 +69,7 @@ final class EdgeRouterFixture {
             nodeGeometry.put(node.key(), NodeGeometry.of(center,
                 radius == null ? PINNED_RADIUS : radius.doubleValue()));
         }
-        this.geometry = GraphGeometry.of(nodeGeometry,
-            Collections.<EnclosureHullKey, HullGeometry>emptyMap());
+        this.geometry = GraphGeometry.of(nodeGeometry, hulls);
         this.visibleEndpoints = ProjectedEndpointVisibility.visibleEndpoints(projection.nodes(),
             projection.enclosures());
     }
@@ -164,6 +173,93 @@ final class EdgeRouterFixture {
     }
 
     /**
+     * F-1 index fixture: antipodal node pairs whose chords all meet exactly at the frame
+     * centre, which is a query-grid cell corner (extent {@code 828 = 128 * 6.46875}, origin
+     * {@code -414}); the traversal must keep the fifteen crossings.
+     */
+    static EdgeRouterFixture cellCornerFan() {
+        final double[][] directions = {
+            {400.0, 0.0}, {0.0, 400.0}, {300.0, 400.0},
+            {400.0, -300.0}, {200.0, -380.0}, {380.0, 200.0}
+        };
+        final List<ProjectedNodeKey> keys = new ArrayList<ProjectedNodeKey>();
+        final List<ProjectedEdgeKey> edges = new ArrayList<ProjectedEdgeKey>();
+        final Object[] coordinates = new Object[directions.length * 6];
+        int cursor = 0;
+        for (int index = 0; index < directions.length; index++) {
+            final ProjectedNodeKey positive = node("D" + index + "P");
+            final ProjectedNodeKey negative = node("D" + index + "N");
+            keys.add(positive);
+            keys.add(negative);
+            edges.add(edge(positive, negative));
+            coordinates[cursor++] = positive;
+            coordinates[cursor++] = Double.valueOf(directions[index][0]);
+            coordinates[cursor++] = Double.valueOf(directions[index][1]);
+            coordinates[cursor++] = negative;
+            coordinates[cursor++] = Double.valueOf(-directions[index][0]);
+            coordinates[cursor++] = Double.valueOf(-directions[index][1]);
+        }
+        return new EdgeRouterFixture(projection(keys, edges), LayoutPositions.of(
+            points(coordinates), Collections.<EnclosureHullKey, LayoutPoint>emptyMap()),
+            Collections.<ProjectedNodeKey, Double>emptyMap());
+    }
+
+    /**
+     * F-1 proximity fixture: two parallel chords 2.9 world units apart, less than
+     * {@code EDGE_CLEARANCE} but in adjacent cells of a one-unit grid; only a traversal
+     * widened by the clearance ring sees the other path, so the first chord cannot stay
+     * straight. Its endpoints are more than the disc clearance away from the other chord, so
+     * the path rule is the only rule that can reject its straight rung.
+     */
+    static EdgeRouterFixture closeParallelPaths() {
+        final ProjectedNodeKey a = node("A");
+        final ProjectedNodeKey b = node("B");
+        final ProjectedNodeKey c = node("C");
+        final ProjectedNodeKey d = node("D");
+        return new EdgeRouterFixture(projection(Arrays.asList(a, b, c, d), Arrays.asList(
+            edge(a, b), edge(c, d))), LayoutPositions.of(
+            points(a, 0.0, 0.0, b, 300.0, 0.0, c, -50.0, 2.9, d, 350.0, 2.9),
+            Collections.<EnclosureHullKey, LayoutPoint>emptyMap()),
+            Collections.<ProjectedNodeKey, Double>emptyMap());
+    }
+
+    /**
+     * F-2 positive fixture: one hand-built hull the only edge's chord properly crosses
+     * while neither endpoint is contained by it.
+     */
+    static EdgeRouterFixture hullCrossing() {
+        return hullCrossing(Collections.<ProjectedEnclosure>emptyList());
+    }
+
+    /**
+     * F-2 negative fixture: the same crossing chord, but the first endpoint is a direct child
+     * of the crossed hull's enclosure, so spec 6.9 clause (b) marks it contained.
+     */
+    static EdgeRouterFixture hullCrossingWithContainedEndpoint() {
+        final EnclosureHullKey hull = hull("HULL");
+        final ProjectedEnclosure enclosure = ProjectedEnclosure.of(hull, hull.endpointKeys(),
+            Collections.singletonList(SafeNodeLabel.of("hull", "hull")), "map",
+            Optional.<EnclosureHullKey>empty(), Collections.singletonList(node("ID_A")),
+            Collections.<EnclosureHullKey>emptyList(), false, BoundaryTier.EMPHATIC);
+        return hullCrossing(Collections.singletonList(enclosure));
+    }
+
+    private static EdgeRouterFixture hullCrossing(final List<ProjectedEnclosure> enclosures) {
+        final ProjectedNodeKey a = node("ID_A");
+        final ProjectedNodeKey b = node("ID_B");
+        final EnclosureHullKey hull = hull("HULL");
+        final Map<EnclosureHullKey, HullGeometry> hulls =
+            new LinkedHashMap<EnclosureHullKey, HullGeometry>();
+        hulls.put(hull, HullGeometry.of(Arrays.asList(LayoutPoint.of(-30.0, -20.0),
+            LayoutPoint.of(30.0, -20.0), LayoutPoint.of(30.0, 20.0),
+            LayoutPoint.of(-30.0, 20.0)), LayoutPoint.of(0.0, 0.0)));
+        return new EdgeRouterFixture(projection(Arrays.asList(a, b), Arrays.asList(edge(a, b)),
+            enclosures), LayoutPositions.of(points(a, -100.0, 0.0, b, 100.0, 0.0),
+            Collections.<EnclosureHullKey, LayoutPoint>emptyMap()),
+            Collections.<ProjectedNodeKey, Double>emptyMap(), hulls);
+    }
+
+    /**
      * The same projection content with the edges list reversed, for the input-order
      * determinism test. The geometry stays keyed by the unchanged node keys.
      */
@@ -232,6 +328,11 @@ final class EdgeRouterFixture {
 
     private static GraphProjection projection(final List<ProjectedNodeKey> keys,
             final List<ProjectedEdgeKey> edges) {
+        return projection(keys, edges, Collections.<ProjectedEnclosure>emptyList());
+    }
+
+    private static GraphProjection projection(final List<ProjectedNodeKey> keys,
+            final List<ProjectedEdgeKey> edges, final List<ProjectedEnclosure> enclosures) {
         final List<ProjectedNode> nodes = new ArrayList<ProjectedNode>();
         for (final ProjectedNodeKey key : keys) {
             nodes.add(ProjectedNode.of(key, SafeNodeLabel.of(key.source().toString(),
@@ -249,10 +350,14 @@ final class EdgeRouterFixture {
                 EdgeContributor.nativeConnector(ConnectorSnapshot.of(0, descriptor), edge.first(),
                     edge.second()))));
         }
-        return GraphProjection.projected(1L, nodes,
-            Collections.<org.freeplane.plugin.graph.projection.ProjectedEnclosure>emptyList(),
-            projectedEdges, Collections.<org.freeplane.plugin.graph.projection.RelationshipResolution>emptyList(),
+        return GraphProjection.projected(1L, nodes, enclosures, projectedEdges,
+            Collections.<org.freeplane.plugin.graph.projection.RelationshipResolution>emptyList(),
             Collections.<org.freeplane.plugin.graph.projection.PinProjection>emptyList());
+    }
+
+    private static EnclosureHullKey hull(final String id) {
+        return EnclosureHullKey.of(Collections.singletonList(
+            EnclosureKey.of(SourceNodeKey.persisted(NodeReference.of(MAP, PersistedNodeId.of(id))))));
     }
 
     private static ProjectedEdgeKey edge(final ProjectedNodeKey first, final ProjectedNodeKey second) {

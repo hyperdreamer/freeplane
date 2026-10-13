@@ -2,10 +2,14 @@ package org.freeplane.plugin.graph.geometry;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 
+import org.freeplane.plugin.graph.projection.CanonicalKeys;
 import org.freeplane.plugin.graph.projection.ProjectedEdgeKey;
 import org.junit.Test;
 
@@ -278,5 +282,70 @@ public class EdgeRouterShould {
 
         assertThat(second.byEdge()).isEqualTo(first.byEdge());
         assertThat(second.diagnostics()).isEqualTo(first.diagnostics());
+    }
+
+    @Test
+    public void findEveryCrossingWhenAllChordsMeetAtTheSameCellCorner() {
+        final EdgeRouterFixture fixture = EdgeRouterFixture.cellCornerFan();
+        final EdgePaths paths = new EdgeRouter().route(fixture.projection, fixture.positions,
+            fixture.geometry, fixture.visibleEndpoints);
+
+        assertThat(paths.diagnostics().pathCrossingsDetected()).isEqualTo(15);
+        assertThat(paths.diagnostics().pathCrossingsResidual()).isEqualTo(
+            bruteForceCrossingKeys(paths));
+    }
+
+    @Test
+    public void keepClearOfAParallelPathInTheNeighbouringCell() {
+        final EdgeRouterFixture fixture = EdgeRouterFixture.closeParallelPaths();
+        final EdgePaths paths = new EdgeRouter().route(fixture.projection, fixture.positions,
+            fixture.geometry, fixture.visibleEndpoints);
+        final EdgePath first = paths.byEdge().get(EdgeRouterFixture.exitEdge("A", "B"));
+
+        // The 2.9-unit separation is below EDGE_CLEARANCE but sits in the next grid cell; a
+        // query without the clearance ring would accept the straight chord, so the accepted
+        // bow pins the ring.
+        assertThat(first.shape()).isEqualTo(EdgePath.Shape.BOW);
+        assertThat(paths.diagnostics().edgesBow()).isEqualTo(1);
+        assertThat(paths.diagnostics().edgesStraight()).isZero();
+        assertThat(paths.diagnostics().pathCrossingsResidual()).isEmpty();
+    }
+
+    @Test
+    public void countAPathCrossingAHullWhenNeitherEndpointIsContained() {
+        final EdgeRouterFixture fixture = EdgeRouterFixture.hullCrossing();
+        final EdgePaths paths = new EdgeRouter().route(fixture.projection, fixture.positions,
+            fixture.geometry, fixture.visibleEndpoints);
+
+        assertThat(paths.byEdge()).hasSize(1);
+        assertThat(paths.byEdge().get(EdgeRouterFixture.exitEdge("ID_A", "ID_B")).shape())
+            .isEqualTo(EdgePath.Shape.STRAIGHT);
+        assertThat(paths.diagnostics().pathHullPenetrations()).isEqualTo(1);
+    }
+
+    @Test
+    public void exemptAPathWhoseEndpointTheHullContains() {
+        final EdgeRouterFixture fixture = EdgeRouterFixture.hullCrossingWithContainedEndpoint();
+        final EdgePaths paths = new EdgeRouter().route(fixture.projection, fixture.positions,
+            fixture.geometry, fixture.visibleEndpoints);
+
+        assertThat(paths.byEdge()).hasSize(1);
+        assertThat(paths.byEdge().get(EdgeRouterFixture.exitEdge("ID_A", "ID_B")).shape())
+            .isEqualTo(EdgePath.Shape.STRAIGHT);
+        assertThat(paths.diagnostics().pathHullPenetrations()).isZero();
+    }
+
+    private static List<String> bruteForceCrossingKeys(final EdgePaths paths) {
+        final List<ProjectedEdgeKey> keys = new ArrayList<ProjectedEdgeKey>(paths.byEdge().keySet());
+        final Set<String> crossings = new TreeSet<String>();
+        for (int first = 0; first < keys.size(); first++) {
+            for (int second = first + 1; second < keys.size(); second++) {
+                if (EdgeRouter.properlyCross(paths.byEdge().get(keys.get(first)),
+                        paths.byEdge().get(keys.get(second)))) {
+                    crossings.add(CanonicalKeys.edgePair(keys.get(first), keys.get(second)));
+                }
+            }
+        }
+        return new ArrayList<String>(crossings);
     }
 }

@@ -1,8 +1,11 @@
 package org.freeplane.plugin.graph.geometry;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -63,6 +66,17 @@ public final class EdgeRouter {
 
     /** Below this squared length a sample segment is treated as a point. */
     private static final double SEGMENT_EPSILON = 1e-30;
+    /**
+     * Coordinate bound below which a direct orientation product cannot overflow: differences
+     * stay at most {@code 2 * limit}, products at most {@code 4 * limit^2 < Double.MAX_VALUE}.
+     */
+    private static final double FAST_ORIENTATION_LIMIT = 1e150;
+    /** Cells per axis of the per-frame router query grid (design 9). */
+    private static final int GRID_DIMENSION = 128;
+    /** Largest cell index after clamping; keeps the traversal and its step bound finite. */
+    private static final int MAX_CELL_INDEX = 4 * GRID_DIMENSION;
+    /** Above this box size a disc is checked directly instead of being inserted into cells. */
+    private static final int MAX_GRID_CELLS_PER_PRIMITIVE = 4096;
 
     public EdgeRouter() {
     }
@@ -85,12 +99,8 @@ public final class EdgeRouter {
                 resolved.add(value);
             }
         }
-        final Map<ProjectedEdgeKey, EdgePath> straightChords =
-            new LinkedHashMap<ProjectedEdgeKey, EdgePath>();
-        for (final Resolved value : resolved) {
-            straightChords.put(value.edge.key(), value.straight);
-        }
-        final Set<String> detectedCrossings = crossingPairKeys(straightChords);
+        final QueryGrid grid = new QueryGrid(resolved, geometry);
+        final Set<String> detectedCrossings = grid.crossingPairs(false);
         final long indexEnd = System.nanoTime();
 
         final long selectionStart = System.nanoTime();
@@ -101,40 +111,35 @@ public final class EdgeRouter {
         int edgesFallback = 0;
         for (int index = 0; index < resolved.size(); index++) {
             final Resolved current = resolved.get(index);
-            final List<PathObstacle> obstacles = new ArrayList<PathObstacle>();
-            for (int previous = 0; previous < index; previous++) {
-                final Resolved earlier = resolved.get(previous);
-                obstacles.add(new PathObstacle(earlier.edge, byEdge.get(earlier.edge.key())));
-            }
-            for (int later = index + 1; later < resolved.size(); later++) {
-                final Resolved next = resolved.get(later);
-                obstacles.add(new PathObstacle(next.edge, next.straight));
-            }
-            if (clears(current.straight, current.edge, obstacles, geometry)) {
+            if (clears(current.straight, current.edge, grid, geometry)) {
+                grid.publish(current.edge.key(), current.straight);
                 byEdge.put(current.edge.key(), current.straight);
                 edgesStraight++;
                 continue;
             }
-            final EdgePath bow = bestRung(current, obstacles, geometry, BOW_FRACTIONS, true);
+            final EdgePath bow = bestRung(current, grid, geometry, BOW_FRACTIONS, true);
             if (bow != null) {
+                grid.publish(current.edge.key(), bow);
                 byEdge.put(current.edge.key(), bow);
                 edgesBow++;
                 continue;
             }
-            final EdgePath dogleg = bestRung(current, obstacles, geometry, DOGLEG_FRACTIONS, false);
+            final EdgePath dogleg = bestRung(current, grid, geometry, DOGLEG_FRACTIONS, false);
             if (dogleg != null) {
+                grid.publish(current.edge.key(), dogleg);
                 byEdge.put(current.edge.key(), dogleg);
                 edgesDogleg++;
                 continue;
             }
+            grid.publish(current.edge.key(), current.straight);
             byEdge.put(current.edge.key(), current.straight);
             edgesFallback++;
         }
         final long selectionEnd = System.nanoTime();
 
         final long residualStart = System.nanoTime();
-        final Set<String> residualCrossings = crossingPairKeys(byEdge);
-        final int hullPenetrations = hullPenetrations(resolved, byEdge, geometry, nodeHulls, parents);
+        final Set<String> residualCrossings = grid.crossingPairs(true);
+        final int hullPenetrations = grid.hullPenetrations(nodeHulls, parents);
         final long residualEnd = System.nanoTime();
 
         final EdgeRouteDiagnostics diagnostics = new EdgeRouteDiagnostics(edgesStraight, edgesBow,
@@ -151,7 +156,7 @@ public final class EdgeRouter {
         return properlyCrossSamples(first.samples(), second.samples());
     }
 
-    private static EdgePath bestRung(final Resolved current, final List<PathObstacle> obstacles,
+    private static EdgePath bestRung(final Resolved current, final QueryGrid grid,
             final GraphGeometry geometry, final double[] fractions, final boolean bow) {
         final double chordLength = distance(current.firstAnchor, current.secondAnchor);
         if (chordLength == 0.0) {
@@ -170,7 +175,7 @@ public final class EdgeRouter {
                     || candidate.length() > ROUTE_LENGTH_CAP * chordLength) {
                 continue;
             }
-            if (clears(candidate, current.edge, obstacles, geometry)) {
+            if (clears(candidate, current.edge, grid, geometry)) {
                 return candidate;
             }
         }
@@ -247,12 +252,20 @@ public final class EdgeRouter {
     }
 
     private static boolean clears(final EdgePath candidate, final ProjectedEdge edge,
-            final List<PathObstacle> obstacles, final GraphGeometry geometry) {
-        if (!clearsDiscs(candidate, edge, geometry)) {
+            final QueryGrid grid, final GraphGeometry geometry) {
+        if (!clearsDiscs(candidate, edge, grid, geometry)) {
             return false;
         }
-        for (final PathObstacle obstacle : obstacles) {
-            if (!clearsPath(candidate, edge, obstacle, geometry)) {
+        for (final ProjectedEdgeKey key : grid.pathsNear(candidate.samples())) {
+            if (key.equals(edge.key())) {
+                continue;
+            }
+            final Resolved obstacle = grid.resolved(key);
+            final EdgePath obstaclePath = grid.pathFor(key);
+            if (obstacle == null || obstaclePath == null) {
+                continue;
+            }
+            if (!clearsPath(candidate, edge, obstacle.edge, obstaclePath, geometry)) {
                 return false;
             }
         }
@@ -260,15 +273,18 @@ public final class EdgeRouter {
     }
 
     private static boolean clearsDiscs(final EdgePath candidate, final ProjectedEdge edge,
-            final GraphGeometry geometry) {
+            final QueryGrid grid, final GraphGeometry geometry) {
         final Set<ProjectedNodeKey> attached = attachedNodes(edge);
         final double limit = EDGE_NODE_CLEARANCE - ROUTE_EPSILON;
         final List<LayoutPoint> samples = candidate.samples();
-        for (final Map.Entry<ProjectedNodeKey, NodeGeometry> entry : geometry.nodes().entrySet()) {
-            if (attached.contains(entry.getKey())) {
+        for (final ProjectedNodeKey key : grid.discsNear(samples)) {
+            if (attached.contains(key)) {
                 continue;
             }
-            final NodeGeometry node = entry.getValue();
+            final NodeGeometry node = geometry.nodes().get(key);
+            if (node == null) {
+                continue;
+            }
             final double threshold = node.radius() + limit;
             for (int index = 0; index + 1 < samples.size(); index++) {
                 if (pointSegmentDistance(node.center(), samples.get(index),
@@ -292,16 +308,17 @@ public final class EdgeRouter {
     }
 
     private static boolean clearsPath(final EdgePath candidate, final ProjectedEdge edge,
-            final PathObstacle obstacle, final GraphGeometry geometry) {
-        if (properlyCrossSamples(candidate.samples(), obstacle.path.samples())) {
+            final ProjectedEdge obstacleEdge, final EdgePath obstaclePath,
+            final GraphGeometry geometry) {
+        if (properlyCrossSamples(candidate.samples(), obstaclePath.samples())) {
             return false;
         }
         final double limit = EDGE_CLEARANCE - ROUTE_EPSILON;
-        final List<Disc> region = fanRegion(candidate, edge, obstacle, geometry);
+        final List<Disc> region = fanRegion(candidate, edge, obstacleEdge, obstaclePath, geometry);
         if (region.isEmpty()) {
-            return polylineDistance(candidate.samples(), obstacle.path.samples()) >= limit;
+            return polylineDistance(candidate.samples(), obstaclePath.samples()) >= limit;
         }
-        return outsideDistance(candidate.samples(), obstacle.path.samples(), region) >= limit;
+        return outsideDistance(candidate.samples(), obstaclePath.samples(), region) >= limit;
     }
 
     /**
@@ -311,25 +328,27 @@ public final class EdgeRouter {
      * endpoint.
      */
     private static List<Disc> fanRegion(final EdgePath candidate, final ProjectedEdge edge,
-            final PathObstacle obstacle, final GraphGeometry geometry) {
+            final ProjectedEdge obstacleEdge, final EdgePath obstaclePath,
+            final GraphGeometry geometry) {
         final List<Disc> region = new ArrayList<Disc>();
-        addFanDiscs(region, edge.first(), candidate.start(), obstacle, geometry);
-        addFanDiscs(region, edge.second(), candidate.end(), obstacle, geometry);
+        addFanDiscs(region, edge.first(), candidate.start(), obstacleEdge, obstaclePath, geometry);
+        addFanDiscs(region, edge.second(), candidate.end(), obstacleEdge, obstaclePath, geometry);
         return region;
     }
 
     private static void addFanDiscs(final List<Disc> region, final ProjectedEndpointKey endpoint,
-            final LayoutPoint attachment, final PathObstacle obstacle, final GraphGeometry geometry) {
-        if (!endpoint.equals(obstacle.edge.first()) && !endpoint.equals(obstacle.edge.second())) {
+            final LayoutPoint attachment, final ProjectedEdge obstacleEdge,
+            final EdgePath obstaclePath, final GraphGeometry geometry) {
+        if (!endpoint.equals(obstacleEdge.first()) && !endpoint.equals(obstacleEdge.second())) {
             return;
         }
         final double radius = endpointClearanceRadius(endpoint, geometry) + EDGE_CLEARANCE;
         region.add(new Disc(attachment, radius));
-        if (endpoint.equals(obstacle.edge.first())) {
-            region.add(new Disc(obstacle.path.start(), radius));
+        if (endpoint.equals(obstacleEdge.first())) {
+            region.add(new Disc(obstaclePath.start(), radius));
         }
-        if (endpoint.equals(obstacle.edge.second())) {
-            region.add(new Disc(obstacle.path.end(), radius));
+        if (endpoint.equals(obstacleEdge.second())) {
+            region.add(new Disc(obstaclePath.end(), radius));
         }
     }
 
@@ -577,27 +596,6 @@ public final class EdgeRouter {
         return LayoutPoint.of(Math.scalb(point.x(), -exponent), Math.scalb(point.y(), -exponent));
     }
 
-    private static int hullPenetrations(final List<Resolved> resolved,
-            final Map<ProjectedEdgeKey, EdgePath> byEdge, final GraphGeometry geometry,
-            final Map<ProjectedNodeKey, List<EnclosureHullKey>> nodeHulls,
-            final Map<EnclosureHullKey, EnclosureHullKey> parents) {
-        int penetrations = 0;
-        for (final Resolved current : resolved) {
-            final EdgePath path = byEdge.get(current.edge.key());
-            for (final Map.Entry<EnclosureHullKey, HullGeometry> entry : geometry.hulls().entrySet()) {
-                final EnclosureHullKey hullKey = entry.getKey();
-                if (containedByHull(current.edge.first(), hullKey, nodeHulls, parents)
-                        || containedByHull(current.edge.second(), hullKey, nodeHulls, parents)) {
-                    continue;
-                }
-                if (crossesPolygon(path.samples(), entry.getValue().exactPolygon())) {
-                    penetrations++;
-                }
-            }
-        }
-        return penetrations;
-    }
-
     /**
      * Spec 6.9 containment: an endpoint is contained by a hull iff (a) an enclosure
      * endpoint is one of the hull's endpoint keys, (b) the endpoint source node's
@@ -704,19 +702,6 @@ public final class EdgeRouter {
         return new ArrayList<ProjectedEdge>(ordered.values());
     }
 
-    private static Set<String> crossingPairKeys(final Map<ProjectedEdgeKey, EdgePath> byEdge) {
-        final List<ProjectedEdgeKey> keys = new ArrayList<ProjectedEdgeKey>(byEdge.keySet());
-        final Set<String> crossings = new TreeSet<String>();
-        for (int first = 0; first < keys.size(); first++) {
-            for (int second = first + 1; second < keys.size(); second++) {
-                if (properlyCross(byEdge.get(keys.get(first)), byEdge.get(keys.get(second)))) {
-                    crossings.add(CanonicalKeys.edgePair(keys.get(first), keys.get(second)));
-                }
-            }
-        }
-        return crossings;
-    }
-
     private static boolean properlyCrossSamples(final List<LayoutPoint> first,
             final List<LayoutPoint> second) {
         for (int a = 0; a + 1 < first.size(); a++) {
@@ -762,9 +747,26 @@ public final class EdgeRouter {
 
     private static boolean properlyCrossSegments(final LayoutPoint a, final LayoutPoint b,
             final LayoutPoint c, final LayoutPoint d) {
+        if (isFastOrientationSafe(a) && isFastOrientationSafe(b)
+                && isFastOrientationSafe(c) && isFastOrientationSafe(d)) {
+            return orientationSignDirect(a, b, c) * orientationSignDirect(a, b, d) < 0
+                && orientationSignDirect(c, d, a) * orientationSignDirect(c, d, b) < 0;
+        }
         final int exponent = commonExponent(a, b, c, d);
         return orientationSign(exponent, a, b, c) * orientationSign(exponent, a, b, d) < 0
             && orientationSign(exponent, c, d, a) * orientationSign(exponent, c, d, b) < 0;
+    }
+
+    private static boolean isFastOrientationSafe(final LayoutPoint point) {
+        return Math.abs(point.x()) <= FAST_ORIENTATION_LIMIT
+            && Math.abs(point.y()) <= FAST_ORIENTATION_LIMIT;
+    }
+
+    private static int orientationSignDirect(final LayoutPoint p, final LayoutPoint q,
+            final LayoutPoint r) {
+        final double cross = (q.x() - p.x()) * (r.y() - p.y())
+            - (q.y() - p.y()) * (r.x() - p.x());
+        return cross == 0.0 ? 0 : Double.compare(cross, 0.0);
     }
 
     private static double distance(final LayoutPoint first, final LayoutPoint second) {
@@ -791,14 +793,509 @@ public final class EdgeRouter {
         }
     }
 
-    /** An already-decided obstacle for the current edge: its edge and its drawn path. */
-    private static final class PathObstacle {
-        private final ProjectedEdge edge;
-        private final EdgePath path;
+    /**
+     * The per-frame router query index of design 9: one uniform grid over disc bounding boxes
+     * and path sample segments, built once per {@code route} call and reused for every
+     * clearance and residual query of that published frame. Paths and hull polygon edges are
+     * inserted into every cell their segments traverse, discs into every cell of their inflated
+     * bounding box, and a proximity query widens the traversed cells by the smallest ring that
+     * still shares a cell with every primitive within the pinned clearance. Published paths are
+     * inserted as they are decided, so a query sees the already-published path of an earlier
+     * edge and the straight chord of a later one.
+     */
+    private static final class QueryGrid {
+        private final List<Resolved> resolved;
+        private final GraphGeometry geometry;
+        private final Map<ProjectedEdgeKey, Integer> idsByKey =
+            new LinkedHashMap<ProjectedEdgeKey, Integer>();
+        private final Resolved[] resolvedById;
+        private final ProjectedEdgeKey[] keysById;
+        private final EdgePath[] straightById;
+        private final EdgePath[] publishedById;
+        private final Map<Long, List<Integer>> pathCells = new HashMap<Long, List<Integer>>();
+        private final Map<Long, LinkedHashSet<ProjectedNodeKey>> discCells =
+            new HashMap<Long, LinkedHashSet<ProjectedNodeKey>>();
+        private final Map<Long, LinkedHashSet<EnclosureHullKey>> hullCells =
+            new HashMap<Long, LinkedHashSet<EnclosureHullKey>>();
+        private final LinkedHashSet<ProjectedNodeKey> oversizedDiscs =
+            new LinkedHashSet<ProjectedNodeKey>();
+        private final LinkedHashSet<EnclosureHullKey> oversizedHulls =
+            new LinkedHashSet<EnclosureHullKey>();
+        private final double originX;
+        private final double originY;
+        private final double cellSize;
+        private final int pathRing;
+        /** Reused candidate stamp array; {@code seen[id] == edge + 1} means already gathered. */
+        private final int[] seen;
+        /** Per-id stamp array for one {@code collectIds} call; reset lazily by stamp value. */
+        private final int[] collectedStamp;
+        private int nextCollectStamp = 1;
+        private int[] stack;
 
-        private PathObstacle(final ProjectedEdge edge, final EdgePath path) {
-            this.edge = edge;
-            this.path = path;
+        private QueryGrid(final List<Resolved> resolved, final GraphGeometry geometry) {
+            this.resolved = resolved;
+            this.geometry = geometry;
+            resolvedById = new Resolved[resolved.size()];
+            keysById = new ProjectedEdgeKey[resolved.size()];
+            straightById = new EdgePath[resolved.size()];
+            publishedById = new EdgePath[resolved.size()];
+            seen = new int[resolved.size()];
+            collectedStamp = new int[resolved.size()];
+            stack = new int[Math.max(16, resolved.size())];
+            for (int index = 0; index < resolved.size(); index++) {
+                final Resolved value = resolved.get(index);
+                resolvedById[index] = value;
+                keysById[index] = value.edge.key();
+                straightById[index] = value.straight;
+                idsByKey.put(value.edge.key(), Integer.valueOf(index));
+            }
+            final double[] bounds = frameBounds(resolved, geometry);
+            if (bounds == null) {
+                originX = 0.0;
+                originY = 0.0;
+                cellSize = 1.0;
+            }
+            else {
+                originX = bounds[0];
+                originY = bounds[1];
+                final double extent = Math.max(bounds[2] - bounds[0], bounds[3] - bounds[1]);
+                final double candidate = extent > 0.0 ? extent / (double) GRID_DIMENSION : 0.0;
+                cellSize = Double.isFinite(candidate) && candidate > 0.0 ? candidate : 1.0;
+            }
+            pathRing = Math.max(1,
+                (int) Math.floor((EDGE_CLEARANCE - ROUTE_EPSILON) / cellSize) + 1);
+            insertDiscs();
+            insertHulls();
+            for (int index = 0; index < resolved.size(); index++) {
+                insertPath(keysById[index], straightById[index]);
+            }
+        }
+
+        private void publish(final ProjectedEdgeKey key, final EdgePath path) {
+            final Integer id = idsByKey.get(key);
+            if (id != null) {
+                publishedById[id.intValue()] = path;
+            }
+            insertPath(key, path);
+        }
+
+        private Resolved resolved(final ProjectedEdgeKey key) {
+            final Integer id = idsByKey.get(key);
+            return id == null ? null : resolvedById[id.intValue()];
+        }
+
+        private EdgePath pathFor(final ProjectedEdgeKey key) {
+            final Integer id = idsByKey.get(key);
+            return id == null ? null : pathFor(id.intValue());
+        }
+
+        private EdgePath pathFor(final int id) {
+            final EdgePath publishedPath = publishedById[id];
+            return publishedPath != null ? publishedPath : straightById[id];
+        }
+
+        private LinkedHashSet<ProjectedNodeKey> discsNear(final List<LayoutPoint> samples) {
+            final LinkedHashSet<ProjectedNodeKey> found = new LinkedHashSet<ProjectedNodeKey>();
+            collect(samples, discCells, found, 0);
+            found.addAll(oversizedDiscs);
+            return found;
+        }
+
+        private LinkedHashSet<ProjectedEdgeKey> pathsNear(final List<LayoutPoint> samples) {
+            final LinkedHashSet<ProjectedEdgeKey> found = new LinkedHashSet<ProjectedEdgeKey>();
+            for (final Integer id : collectIds(samples, pathRing)) {
+                found.add(keysById[id.intValue()]);
+            }
+            return found;
+        }
+
+        /**
+         * Every unordered pair of resolved edges whose paths properly cross, found through the
+         * grid: for each edge in canonical order the ids in the cells its samples traverse are
+         * deduplicated with a stamp array, then each pair is tested exactly once with the
+         * sign-only predicate of spec 3.2. The traversal steps one axis at a time, so two
+         * segments crossing at a cell corner still share the corner cell.
+         */
+        private Set<String> crossingPairs(final boolean publishedPaths) {
+            Arrays.fill(seen, 0);
+            final Set<String> crossings = new TreeSet<String>();
+            for (int first = 0; first < resolvedById.length; first++) {
+                final EdgePath firstPath = publishedPaths ? pathFor(first) : straightById[first];
+                if (firstPath == null) {
+                    continue;
+                }
+                final int stamp = first + 1;
+                int count = 0;
+                for (final Integer candidate : collectIds(firstPath.samples(), 0)) {
+                    final int second = candidate.intValue();
+                    if (second == first || seen[second] == stamp) {
+                        continue;
+                    }
+                    seen[second] = stamp;
+                    if (count == stack.length) {
+                        final int[] grown = new int[stack.length * 2];
+                        System.arraycopy(stack, 0, grown, 0, stack.length);
+                        stack = grown;
+                    }
+                    stack[count++] = second;
+                }
+                for (int index = 0; index < count; index++) {
+                    final int second = stack[index];
+                    if (second <= first) {
+                        continue;
+                    }
+                    final EdgePath secondPath = publishedPaths ? pathFor(second)
+                        : straightById[second];
+                    if (secondPath == null) {
+                        continue;
+                    }
+                    if (properlyCrossSamples(firstPath.samples(), secondPath.samples())) {
+                        crossings.add(CanonicalKeys.edgePair(keysById[first], keysById[second]));
+                    }
+                }
+            }
+            return crossings;
+        }
+
+        private int hullPenetrations(final Map<ProjectedNodeKey, List<EnclosureHullKey>> nodeHulls,
+                final Map<EnclosureHullKey, EnclosureHullKey> parents) {
+            int penetrations = 0;
+            for (final Resolved current : resolved) {
+                final EdgePath path = pathFor(current.edge.key());
+                final LinkedHashSet<EnclosureHullKey> hulls = new LinkedHashSet<EnclosureHullKey>();
+                collect(path.samples(), hullCells, hulls, 0);
+                hulls.addAll(oversizedHulls);
+                for (final EnclosureHullKey hullKey : hulls) {
+                    final HullGeometry hull = geometry.hulls().get(hullKey);
+                    if (hull == null) {
+                        continue;
+                    }
+                    if (containedByHull(current.edge.first(), hullKey, nodeHulls, parents)
+                            || containedByHull(current.edge.second(), hullKey, nodeHulls, parents)) {
+                        continue;
+                    }
+                    if (crossesPolygon(path.samples(), hull.exactPolygon())) {
+                        penetrations++;
+                    }
+                }
+            }
+            return penetrations;
+        }
+
+        private void insertDiscs() {
+            final double limit = EDGE_NODE_CLEARANCE - ROUTE_EPSILON;
+            for (final Map.Entry<ProjectedNodeKey, NodeGeometry> entry : geometry.nodes().entrySet()) {
+                final NodeGeometry node = entry.getValue();
+                if (!isFinite(node.center())) {
+                    continue;
+                }
+                final double radius = node.radius() + limit;
+                final double minX = node.center().x() - radius;
+                final double minY = node.center().y() - radius;
+                final double maxX = node.center().x() + radius;
+                final double maxY = node.center().y() + radius;
+                if (cellCount(minX, minY, maxX, maxY) > MAX_GRID_CELLS_PER_PRIMITIVE) {
+                    oversizedDiscs.add(entry.getKey());
+                }
+                else {
+                    insertBox(discCells, entry.getKey(), minX, minY, maxX, maxY);
+                }
+            }
+        }
+
+        private void insertHulls() {
+            for (final Map.Entry<EnclosureHullKey, HullGeometry> entry : geometry.hulls().entrySet()) {
+                final List<LayoutPoint> polygon = entry.getValue().exactPolygon();
+                if (polygon.isEmpty()) {
+                    continue;
+                }
+                if (!allFinite(polygon)) {
+                    oversizedHulls.add(entry.getKey());
+                    continue;
+                }
+                for (int index = 0; index < polygon.size(); index++) {
+                    insertPolygonSegment(entry.getKey(), polygon.get(index),
+                        polygon.get((index + 1) % polygon.size()));
+                }
+            }
+        }
+
+        private void insertPath(final ProjectedEdgeKey key, final EdgePath path) {
+            final Integer id = idsByKey.get(key);
+            if (id == null) {
+                return;
+            }
+            final List<LayoutPoint> samples = path.samples();
+            for (int index = 0; index + 1 < samples.size(); index++) {
+                insertPathSegment(id.intValue(), samples.get(index), samples.get(index + 1));
+            }
+        }
+
+        private void insertPathSegment(final int id, final LayoutPoint start, final LayoutPoint end) {
+            if (!isFinite(start) || !isFinite(end)) {
+                return;
+            }
+            for (final Long cell : traversedCellKeys(start, end)) {
+                addPathValue(pathCells, cell.longValue(), id);
+            }
+        }
+
+        private void insertPolygonSegment(final EnclosureHullKey key, final LayoutPoint start,
+                final LayoutPoint end) {
+            if (!isFinite(start) || !isFinite(end)) {
+                return;
+            }
+            for (final Long cell : traversedCellKeys(start, end)) {
+                addValue(hullCells, cell.longValue(), key);
+            }
+        }
+
+        private <T> void insertBox(final Map<Long, LinkedHashSet<T>> cells, final T value,
+                final double minX, final double minY, final double maxX, final double maxY) {
+            final int firstX = cellX(minX);
+            final int lastX = cellX(maxX);
+            final int firstY = cellY(minY);
+            final int lastY = cellY(maxY);
+            for (int x = firstX; x <= lastX; x++) {
+                for (int y = firstY; y <= lastY; y++) {
+                    addValue(cells, pack(x, y), value);
+                }
+            }
+        }
+
+        private <T> void collect(final List<LayoutPoint> samples,
+                final Map<Long, LinkedHashSet<T>> cells, final Set<T> found, final int ring) {
+            for (int index = 0; index + 1 < samples.size(); index++) {
+                final LayoutPoint start = samples.get(index);
+                final LayoutPoint end = samples.get(index + 1);
+                if (!isFinite(start) || !isFinite(end)) {
+                    continue;
+                }
+                for (final Long cell : traversedCellKeys(start, end)) {
+                    for (int dx = -ring; dx <= ring; dx++) {
+                        for (int dy = -ring; dy <= ring; dy++) {
+                            final LinkedHashSet<T> members = cells.get(Long.valueOf(
+                                pack(clampCell(unpackX(cell.longValue()) + dx),
+                                    clampCell(unpackY(cell.longValue()) + dy))));
+                            if (members != null) {
+                                found.addAll(members);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        /** The distinct path ids in the cell ring of the sample polyline, in first-seen order. */
+        private List<Integer> collectIds(final List<LayoutPoint> samples, final int ring) {
+            final List<Integer> found = new ArrayList<Integer>();
+            if (nextCollectStamp == Integer.MAX_VALUE) {
+                Arrays.fill(collectedStamp, 0);
+                nextCollectStamp = 1;
+            }
+            final int stamp = nextCollectStamp++;
+            for (int index = 0; index + 1 < samples.size(); index++) {
+                final LayoutPoint start = samples.get(index);
+                final LayoutPoint end = samples.get(index + 1);
+                if (!isFinite(start) || !isFinite(end)) {
+                    continue;
+                }
+                for (final Long cell : traversedCellKeys(start, end)) {
+                    for (int dx = -ring; dx <= ring; dx++) {
+                        for (int dy = -ring; dy <= ring; dy++) {
+                            final List<Integer> members = pathCells.get(Long.valueOf(
+                                pack(clampCell(unpackX(cell.longValue()) + dx),
+                                    clampCell(unpackY(cell.longValue()) + dy))));
+                            if (members != null) {
+                                for (final Integer member : members) {
+                                    final int id = member.intValue();
+                                    if (collectedStamp[id] != stamp) {
+                                        collectedStamp[id] = stamp;
+                                        found.add(member);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return found;
+        }
+
+        /**
+         * The cells the closed segment {@code start..end} touches, walked by the standard
+         * unit-cell DDA. Only one axis is stepped at a time, so a segment passing exactly
+         * through a cell corner visits the corner cell (and its two axial neighbours), which is
+         * also the cell an endpoint on that corner is indexed into; two segments crossing at a
+         * corner therefore always share a cell without inflating every traversal.
+         */
+        private List<Long> traversedCellKeys(final LayoutPoint start, final LayoutPoint end) {
+            final List<Long> cells = new ArrayList<Long>();
+            final int startX = cellX(start.x());
+            final int startY = cellY(start.y());
+            final int endX = cellX(end.x());
+            final int endY = cellY(end.y());
+            int x = startX;
+            int y = startY;
+            cells.add(Long.valueOf(pack(x, y)));
+            final int stepX = endX > startX ? 1 : (endX < startX ? -1 : 0);
+            final int stepY = endY > startY ? 1 : (endY < startY ? -1 : 0);
+            if (stepX == 0 && stepY == 0) {
+                return cells;
+            }
+            final double dx = end.x() - start.x();
+            final double dy = end.y() - start.y();
+            final double offsetX = (start.x() - originX) - (double) startX * cellSize;
+            final double offsetY = (start.y() - originY) - (double) startY * cellSize;
+            double tMaxX = stepX == 0 ? Double.POSITIVE_INFINITY
+                : stepX > 0 ? (cellSize - offsetX) / dx : offsetX / -dx;
+            double tMaxY = stepY == 0 ? Double.POSITIVE_INFINITY
+                : stepY > 0 ? (cellSize - offsetY) / dy : offsetY / -dy;
+            final double tDeltaX = stepX == 0 ? Double.POSITIVE_INFINITY : Math.abs(cellSize / dx);
+            final double tDeltaY = stepY == 0 ? Double.POSITIVE_INFINITY : Math.abs(cellSize / dy);
+            final int maximumSteps = 2 * MAX_CELL_INDEX + 8;
+            int steps = 0;
+            while ((x != endX || y != endY) && steps < maximumSteps) {
+                if (tMaxX < tMaxY) {
+                    x += stepX;
+                    tMaxX += tDeltaX;
+                }
+                else {
+                    y += stepY;
+                    tMaxY += tDeltaY;
+                }
+                cells.add(Long.valueOf(pack(x, y)));
+                steps++;
+            }
+            return cells;
+        }
+
+        private int cellX(final double coordinate) {
+            return cellIndex(coordinate - originX);
+        }
+
+        private int cellY(final double coordinate) {
+            return cellIndex(coordinate - originY);
+        }
+
+        private int cellIndex(final double offset) {
+            if (!Double.isFinite(offset)) {
+                return 0;
+            }
+            final double scaled = offset / cellSize;
+            if (!(scaled > 0.0)) {
+                return 0;
+            }
+            if (scaled >= (double) MAX_CELL_INDEX) {
+                return MAX_CELL_INDEX;
+            }
+            return (int) Math.floor(scaled);
+        }
+
+        private int cellCount(final double minX, final double minY, final double maxX,
+                final double maxY) {
+            final long width = (long) cellX(maxX) - (long) cellX(minX) + 1L;
+            final long height = (long) cellY(maxY) - (long) cellY(minY) + 1L;
+            final long count = width * height;
+            return count > (long) Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) count;
+        }
+
+        private static double[] frameBounds(final List<Resolved> resolved,
+                final GraphGeometry geometry) {
+            final double[] bounds = {Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
+                Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY};
+            for (final Resolved value : resolved) {
+                for (final LayoutPoint point : value.straight.samples()) {
+                    extend(bounds, point);
+                }
+            }
+            for (final Map.Entry<ProjectedNodeKey, NodeGeometry> entry : geometry.nodes().entrySet()) {
+                final NodeGeometry node = entry.getValue();
+                if (!isFinite(node.center())) {
+                    continue;
+                }
+                bounds[0] = Math.min(bounds[0], node.center().x() - node.radius());
+                bounds[1] = Math.min(bounds[1], node.center().y() - node.radius());
+                bounds[2] = Math.max(bounds[2], node.center().x() + node.radius());
+                bounds[3] = Math.max(bounds[3], node.center().y() + node.radius());
+            }
+            for (final Map.Entry<EnclosureHullKey, HullGeometry> entry : geometry.hulls().entrySet()) {
+                for (final LayoutPoint point : entry.getValue().exactPolygon()) {
+                    extend(bounds, point);
+                }
+            }
+            return bounds[0] > bounds[2] ? null : bounds;
+        }
+
+        private static void extend(final double[] bounds, final LayoutPoint point) {
+            if (!isFinite(point)) {
+                return;
+            }
+            if (point.x() < bounds[0]) {
+                bounds[0] = point.x();
+            }
+            if (point.y() < bounds[1]) {
+                bounds[1] = point.y();
+            }
+            if (point.x() > bounds[2]) {
+                bounds[2] = point.x();
+            }
+            if (point.y() > bounds[3]) {
+                bounds[3] = point.y();
+            }
+        }
+
+        private static boolean allFinite(final List<LayoutPoint> points) {
+            for (final LayoutPoint point : points) {
+                if (!isFinite(point)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private static void addPathValue(final Map<Long, List<Integer>> cells, final long key,
+                final int value) {
+            final Long boxed = Long.valueOf(key);
+            List<Integer> members = cells.get(boxed);
+            if (members == null) {
+                members = new ArrayList<Integer>();
+                cells.put(boxed, members);
+            }
+            members.add(Integer.valueOf(value));
+        }
+
+        private static <T> void addValue(final Map<Long, LinkedHashSet<T>> cells,
+                final long key, final T value) {
+            final Long boxed = Long.valueOf(key);
+            LinkedHashSet<T> members = cells.get(boxed);
+            if (members == null) {
+                members = new LinkedHashSet<T>();
+                cells.put(boxed, members);
+            }
+            members.add(value);
+        }
+
+        private static int clampCell(final int value) {
+            if (value < 0) {
+                return 0;
+            }
+            if (value > MAX_CELL_INDEX) {
+                return MAX_CELL_INDEX;
+            }
+            return value;
+        }
+
+        private static long pack(final int x, final int y) {
+            return ((long) x << 32) | (y & 0xffffffffL);
+        }
+
+        private static int unpackX(final long key) {
+            return (int) (key >> 32);
+        }
+
+        private static int unpackY(final long key) {
+            return (int) key;
         }
     }
 
