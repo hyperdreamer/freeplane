@@ -1,0 +1,507 @@
+schema_version: 1
+topic: graph-cluster-initial-proximity
+
+source_plan:
+  path: docs/superpowers/plans/2026-10-13-graph-cluster-initial-proximity.md
+  sha256: 1e24118caaa29dd66c21937050deea4fd40315341234c0255e40f7e4ee74f579
+  commit_oid: 6a6b3dbdbaed820e398cdca63c169f45af87dedd
+  task_numbers: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+# Lanes are the plan's suggested projection groups (Execution Notes).
+# Task 1 is dependency-free and may run concurrently with the packing lane;
+# T-004 carries an explicit interface edge on T-001 so the engine lane is
+# serialized behind the raised containment calibration it consumes.
+lanes:
+  - id: calibration
+    task_ids: [T-001]
+    sequence: [T-001]
+  - id: packing
+    task_ids: [T-002]
+    sequence: [T-002]
+  - id: footprint
+    task_ids: [T-003]
+    sequence: [T-003]
+  - id: engine
+    task_ids: [T-004]
+    sequence: [T-004]
+  - id: acceptance
+    task_ids: [T-005, T-006]
+    sequence: [T-005, T-006]
+  - id: regression
+    task_ids: [T-007, T-008]
+    sequence: [T-007, T-008]
+  - id: evidence
+    task_ids: [T-009, T-010]
+    sequence: [T-009, T-010]
+
+tasks:
+  - id: T-001
+    plan_task: 1
+    task_id: T-001
+    title: "Raise the containment calibration and re-order the calibration assertion"
+    implementer_tier: Fast
+    lane: calibration
+    sequence: 1
+    depends_on: []
+    owns:
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/LayoutCalibration.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/GraphStreamBoundaryShould.java
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/LayoutCalibration.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/GraphStreamBoundaryShould.java
+    resources: []
+    exclusive_resources: []
+    produces:
+      - id: iface.containment-calibration
+        signature: "LayoutCalibration.spikeDefaults(): containment() == 1.0, hierarchy() == 0.30, sameMap() == 1.0; containment springs as stiff as same-map links"
+        sha256: 6cb8fc7dd29b18cbb36f57eed425fbc6639db7c8bf3f8bdbdbd44353e12a3bc5
+    consumes: []
+    interfaces:
+      produces:
+        - id: iface.containment-calibration
+          signature: "LayoutCalibration.spikeDefaults(): containment() == 1.0, hierarchy() == 0.30, sameMap() == 1.0; containment springs as stiff as same-map links"
+          sha256: 6cb8fc7dd29b18cbb36f57eed425fbc6639db7c8bf3f8bdbdbd44353e12a3bc5
+      consumes: []
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.layout.GraphStreamBoundaryShould"]
+        cwd: lane
+        timeout_seconds: 600
+  - id: T-002
+    plan_task: 2
+    task_id: T-002
+    title: "Deterministic cluster packer with unit tests"
+    implementer_tier: Standard
+    lane: packing
+    sequence: 1
+    depends_on: []
+    owns:
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/ClusterPacking.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/ClusterPackingShould.java
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/ClusterPacking.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/ClusterPackingShould.java
+    resources: []
+    exclusive_resources: []
+    produces:
+      - id: iface.cluster-packing
+        signature: "ClusterPacking.packItems(List<ClusterItem>, double): List<ClusterPlacement>; ClusterItem(EnclosureHullKey anchorKey, double width, double height, double anchorX, double anchorY, int order); ClusterPlacement(ClusterItem item, double x, double y) with List<ClusterItem> contacts; CANDIDATE_EPSILON = 1e-9; CONTACT_GAP_TOLERANCE = 0.75; anchorKey == null marks the content item"
+        sha256: a30a426ba9369911962a2df689c9a05bab387ae075a636934f250ee3ca30d559
+    consumes: []
+    interfaces:
+      produces:
+        - id: iface.cluster-packing
+          signature: "ClusterPacking.packItems(List<ClusterItem>, double): List<ClusterPlacement>; ClusterItem(EnclosureHullKey anchorKey, double width, double height, double anchorX, double anchorY, int order); ClusterPlacement(ClusterItem item, double x, double y) with List<ClusterItem> contacts; CANDIDATE_EPSILON = 1e-9; CONTACT_GAP_TOLERANCE = 0.75; anchorKey == null marks the content item"
+          sha256: a30a426ba9369911962a2df689c9a05bab387ae075a636934f250ee3ca30d559
+      consumes: []
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.layout.graphstream.ClusterPackingShould"]
+        cwd: lane
+        timeout_seconds: 600
+  - id: T-003
+    plan_task: 3
+    task_id: T-003
+    title: "Anchor-centred per-axis footprints and packed placements in BoundarySizes"
+    implementer_tier: Standard
+    lane: footprint
+    sequence: 1
+    depends_on: [T-002]
+    owns:
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/GraphStreamLayoutEngine.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/BoundaryFootprintShould.java
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/GraphStreamLayoutEngine.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/BoundaryFootprintShould.java
+    resources: []
+    exclusive_resources: []
+    produces:
+      - id: iface.boundary-footprint
+        signature: "BoundarySizes.Footprint(double width, double height, double anchorX, double anchorY); BoundarySizes.footprint(EnclosureHullKey): Footprint; BoundarySizes.placements(EnclosureHullKey): List<ClusterPacking.ClusterPlacement>; BoundarySizes.placementOf(EnclosureHullKey parentKey, EnclosureHullKey childKey): ClusterPacking.ClusterPlacement; BoundarySizes.topLevelPlacements(): List<ClusterPacking.ClusterPlacement>; BoundarySizes.topLevelPlacementOf(EnclosureHullKey): ClusterPacking.ClusterPlacement; NODE_SETTLE_MARGIN = 8.0"
+        sha256: 489039355009ec12990d259ca496346502166fb9a12342269e1eb58deb9250b1
+    consumes:
+      - producer_task: T-002
+        interface_id: iface.cluster-packing
+        signature: "ClusterPacking.packItems(List<ClusterItem>, double): List<ClusterPlacement>; ClusterItem(EnclosureHullKey anchorKey, double width, double height, double anchorX, double anchorY, int order); ClusterPlacement(ClusterItem item, double x, double y) with List<ClusterItem> contacts; CANDIDATE_EPSILON = 1e-9; CONTACT_GAP_TOLERANCE = 0.75; anchorKey == null marks the content item"
+        sha256: a30a426ba9369911962a2df689c9a05bab387ae075a636934f250ee3ca30d559
+    interfaces:
+      produces:
+        - id: iface.boundary-footprint
+          signature: "BoundarySizes.Footprint(double width, double height, double anchorX, double anchorY); BoundarySizes.footprint(EnclosureHullKey): Footprint; BoundarySizes.placements(EnclosureHullKey): List<ClusterPacking.ClusterPlacement>; BoundarySizes.placementOf(EnclosureHullKey parentKey, EnclosureHullKey childKey): ClusterPacking.ClusterPlacement; BoundarySizes.topLevelPlacements(): List<ClusterPacking.ClusterPlacement>; BoundarySizes.topLevelPlacementOf(EnclosureHullKey): ClusterPacking.ClusterPlacement; NODE_SETTLE_MARGIN = 8.0"
+          sha256: 489039355009ec12990d259ca496346502166fb9a12342269e1eb58deb9250b1
+      consumes:
+        - producer_task: T-002
+          interface_id: iface.cluster-packing
+          signature: "ClusterPacking.packItems(List<ClusterItem>, double): List<ClusterPlacement>; ClusterItem(EnclosureHullKey anchorKey, double width, double height, double anchorX, double anchorY, int order); ClusterPlacement(ClusterItem item, double x, double y) with List<ClusterItem> contacts; CANDIDATE_EPSILON = 1e-9; CONTACT_GAP_TOLERANCE = 0.75; anchorKey == null marks the content item"
+          sha256: a30a426ba9369911962a2df689c9a05bab387ae075a636934f250ee3ca30d559
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.layout.graphstream.BoundaryFootprintShould"]
+        cwd: lane
+        timeout_seconds: 900
+  - id: T-004
+    plan_task: 4
+    task_id: T-004
+    title: "Seed from packed placements, packed hierarchy rests, offset-aware separation, legacy removal"
+    implementer_tier: Advanced
+    lane: engine
+    sequence: 1
+    depends_on: [T-001, T-002, T-003]
+    owns:
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/GraphStreamLayoutEngine.java
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/TypedSpringBox.java
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/TypedNodeParticle.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/TypedForcesShould.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundarySeparationShould.java
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/GraphStreamLayoutEngine.java
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/TypedSpringBox.java
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/TypedNodeParticle.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/TypedForcesShould.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundarySeparationShould.java
+    resources: []
+    exclusive_resources: []
+    produces:
+      - id: iface.engine-extents
+        signature: "LayoutEngine.apply(LayoutRequest): LayoutFrame and LayoutWorker.submit(LayoutRequest) seed anchors and direct nodes from the memoized packed composition; TypedSpringBox.configureAnchorExtents(String id, double halfWidth, double halfHeight, double offsetX, double offsetY); TypedNodeParticle.configureExtents(double halfWidth, double halfHeight, double offsetX, double offsetY) with separationHalfWidth(), separationHalfHeight(), separationOffsetX(), separationOffsetY(); TypedSpringBox.addBoundaryRepulsion(TypedNodeParticle, Vector3) keeps its two-argument signature"
+        sha256: 3fe6cb5a15b0758c6d15116eca68011369536935f0b0ab96386647b7557c7f2b
+    consumes:
+      - producer_task: T-001
+        interface_id: iface.containment-calibration
+        signature: "LayoutCalibration.spikeDefaults(): containment() == 1.0, hierarchy() == 0.30, sameMap() == 1.0; containment springs as stiff as same-map links"
+        sha256: 6cb8fc7dd29b18cbb36f57eed425fbc6639db7c8bf3f8bdbdbd44353e12a3bc5
+      - producer_task: T-003
+        interface_id: iface.boundary-footprint
+        signature: "BoundarySizes.Footprint(double width, double height, double anchorX, double anchorY); BoundarySizes.footprint(EnclosureHullKey): Footprint; BoundarySizes.placements(EnclosureHullKey): List<ClusterPacking.ClusterPlacement>; BoundarySizes.placementOf(EnclosureHullKey parentKey, EnclosureHullKey childKey): ClusterPacking.ClusterPlacement; BoundarySizes.topLevelPlacements(): List<ClusterPacking.ClusterPlacement>; BoundarySizes.topLevelPlacementOf(EnclosureHullKey): ClusterPacking.ClusterPlacement; NODE_SETTLE_MARGIN = 8.0"
+        sha256: 489039355009ec12990d259ca496346502166fb9a12342269e1eb58deb9250b1
+    interfaces:
+      produces:
+        - id: iface.engine-extents
+          signature: "LayoutEngine.apply(LayoutRequest): LayoutFrame and LayoutWorker.submit(LayoutRequest) seed anchors and direct nodes from the memoized packed composition; TypedSpringBox.configureAnchorExtents(String id, double halfWidth, double halfHeight, double offsetX, double offsetY); TypedNodeParticle.configureExtents(double halfWidth, double halfHeight, double offsetX, double offsetY) with separationHalfWidth(), separationHalfHeight(), separationOffsetX(), separationOffsetY(); TypedSpringBox.addBoundaryRepulsion(TypedNodeParticle, Vector3) keeps its two-argument signature"
+          sha256: 3fe6cb5a15b0758c6d15116eca68011369536935f0b0ab96386647b7557c7f2b
+      consumes:
+        - producer_task: T-001
+          interface_id: iface.containment-calibration
+          signature: "LayoutCalibration.spikeDefaults(): containment() == 1.0, hierarchy() == 0.30, sameMap() == 1.0; containment springs as stiff as same-map links"
+          sha256: 6cb8fc7dd29b18cbb36f57eed425fbc6639db7c8bf3f8bdbdbd44353e12a3bc5
+        - producer_task: T-003
+          interface_id: iface.boundary-footprint
+          signature: "BoundarySizes.Footprint(double width, double height, double anchorX, double anchorY); BoundarySizes.footprint(EnclosureHullKey): Footprint; BoundarySizes.placements(EnclosureHullKey): List<ClusterPacking.ClusterPlacement>; BoundarySizes.placementOf(EnclosureHullKey parentKey, EnclosureHullKey childKey): ClusterPacking.ClusterPlacement; BoundarySizes.topLevelPlacements(): List<ClusterPacking.ClusterPlacement>; BoundarySizes.topLevelPlacementOf(EnclosureHullKey): ClusterPacking.ClusterPlacement; NODE_SETTLE_MARGIN = 8.0"
+          sha256: 489039355009ec12990d259ca496346502166fb9a12342269e1eb58deb9250b1
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test"]
+        cwd: lane
+        timeout_seconds: 1800
+  - id: T-005
+    plan_task: 5
+    task_id: T-005
+    title: "Fixtures A-H and the exact initial-frame acceptance tests"
+    implementer_tier: Standard
+    lane: acceptance
+    sequence: 1
+    depends_on: [T-003, T-004]
+    owns:
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/ClusterProximityShould.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/BoundaryFootprintShould.java
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/ClusterProximityShould.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/BoundaryFootprintShould.java
+    resources: []
+    exclusive_resources: []
+    produces:
+      - id: iface.acceptance-fixtures
+        signature: "ClusterProximityShould.fixture(char): GraphProjection; ClusterProximityShould.fixturePins(char): List<PinProjection>; ClusterProximityShould.wideProjection(long): GraphProjection; ClusterProximityShould.composeAnchors(GraphProjection): Map<EnclosureHullKey, LayoutPoint>; ClusterProximityShould.engineFrame(GraphProjection, List<PinProjection>): LayoutFrame; ClusterProximityShould.workerFrame(GraphProjection, List<PinProjection>): LayoutFrame; WORKSPACE = WorkspaceId.of(00000000-0000-0000-0000-0000000000aa)"
+        sha256: 53413daf80e49eb44afc017135209e73f2a9bb04bf1e964fc6737e73a9c2c66c
+    consumes:
+      - producer_task: T-004
+        interface_id: iface.engine-extents
+        signature: "LayoutEngine.apply(LayoutRequest): LayoutFrame and LayoutWorker.submit(LayoutRequest) seed anchors and direct nodes from the memoized packed composition; TypedSpringBox.configureAnchorExtents(String id, double halfWidth, double halfHeight, double offsetX, double offsetY); TypedNodeParticle.configureExtents(double halfWidth, double halfHeight, double offsetX, double offsetY) with separationHalfWidth(), separationHalfHeight(), separationOffsetX(), separationOffsetY(); TypedSpringBox.addBoundaryRepulsion(TypedNodeParticle, Vector3) keeps its two-argument signature"
+        sha256: 3fe6cb5a15b0758c6d15116eca68011369536935f0b0ab96386647b7557c7f2b
+    interfaces:
+      produces:
+        - id: iface.acceptance-fixtures
+          signature: "ClusterProximityShould.fixture(char): GraphProjection; ClusterProximityShould.fixturePins(char): List<PinProjection>; ClusterProximityShould.wideProjection(long): GraphProjection; ClusterProximityShould.composeAnchors(GraphProjection): Map<EnclosureHullKey, LayoutPoint>; ClusterProximityShould.engineFrame(GraphProjection, List<PinProjection>): LayoutFrame; ClusterProximityShould.workerFrame(GraphProjection, List<PinProjection>): LayoutFrame; WORKSPACE = WorkspaceId.of(00000000-0000-0000-0000-0000000000aa)"
+          sha256: 53413daf80e49eb44afc017135209e73f2a9bb04bf1e964fc6737e73a9c2c66c
+      consumes:
+        - producer_task: T-004
+          interface_id: iface.engine-extents
+          signature: "LayoutEngine.apply(LayoutRequest): LayoutFrame and LayoutWorker.submit(LayoutRequest) seed anchors and direct nodes from the memoized packed composition; TypedSpringBox.configureAnchorExtents(String id, double halfWidth, double halfHeight, double offsetX, double offsetY); TypedNodeParticle.configureExtents(double halfWidth, double halfHeight, double offsetX, double offsetY) with separationHalfWidth(), separationHalfHeight(), separationOffsetX(), separationOffsetY(); TypedSpringBox.addBoundaryRepulsion(TypedNodeParticle, Vector3) keeps its two-argument signature"
+          sha256: 3fe6cb5a15b0758c6d15116eca68011369536935f0b0ab96386647b7557c7f2b
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.layout.graphstream.ClusterProximityShould", "--tests", "org.freeplane.plugin.graph.layout.graphstream.BoundaryFootprintShould"]
+        cwd: lane
+        timeout_seconds: 1200
+  - id: T-006
+    plan_task: 6
+    task_id: T-006
+    title: "Settled acceptance, evidence block, and the 200-child wall clock"
+    implementer_tier: Standard
+    lane: acceptance
+    sequence: 2
+    depends_on: [T-002, T-005]
+    owns:
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/ClusterProximityShould.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/ClusterPackingShould.java
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/ClusterProximityShould.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/ClusterPackingShould.java
+    resources: []
+    exclusive_resources: []
+    produces:
+      - id: iface.acceptance-evidence
+        signature: "ClusterProximityShould settled evidence lines (idle, endpointStep, packed, settled, windowMaxHoldDeviation, paintedGap, minSeparation, containmentOverflow, marginalOverlap) and the ClusterPackingShould.twoHundredChildrenPackWithinThreeSeconds timing line"
+        sha256: a521059158e43fb15e8f2e38709f3138cbaf57920f33f516f2f5e6af80894f60
+    consumes:
+      - producer_task: T-005
+        interface_id: iface.acceptance-fixtures
+        signature: "ClusterProximityShould.fixture(char): GraphProjection; ClusterProximityShould.fixturePins(char): List<PinProjection>; ClusterProximityShould.wideProjection(long): GraphProjection; ClusterProximityShould.composeAnchors(GraphProjection): Map<EnclosureHullKey, LayoutPoint>; ClusterProximityShould.engineFrame(GraphProjection, List<PinProjection>): LayoutFrame; ClusterProximityShould.workerFrame(GraphProjection, List<PinProjection>): LayoutFrame; WORKSPACE = WorkspaceId.of(00000000-0000-0000-0000-0000000000aa)"
+        sha256: 53413daf80e49eb44afc017135209e73f2a9bb04bf1e964fc6737e73a9c2c66c
+      - producer_task: T-004
+        interface_id: iface.engine-extents
+        signature: "LayoutEngine.apply(LayoutRequest): LayoutFrame and LayoutWorker.submit(LayoutRequest) seed anchors and direct nodes from the memoized packed composition; TypedSpringBox.configureAnchorExtents(String id, double halfWidth, double halfHeight, double offsetX, double offsetY); TypedNodeParticle.configureExtents(double halfWidth, double halfHeight, double offsetX, double offsetY) with separationHalfWidth(), separationHalfHeight(), separationOffsetX(), separationOffsetY(); TypedSpringBox.addBoundaryRepulsion(TypedNodeParticle, Vector3) keeps its two-argument signature"
+        sha256: 3fe6cb5a15b0758c6d15116eca68011369536935f0b0ab96386647b7557c7f2b
+    interfaces:
+      produces:
+        - id: iface.acceptance-evidence
+          signature: "ClusterProximityShould settled evidence lines (idle, endpointStep, packed, settled, windowMaxHoldDeviation, paintedGap, minSeparation, containmentOverflow, marginalOverlap) and the ClusterPackingShould.twoHundredChildrenPackWithinThreeSeconds timing line"
+          sha256: a521059158e43fb15e8f2e38709f3138cbaf57920f33f516f2f5e6af80894f60
+      consumes:
+        - producer_task: T-005
+          interface_id: iface.acceptance-fixtures
+          signature: "ClusterProximityShould.fixture(char): GraphProjection; ClusterProximityShould.fixturePins(char): List<PinProjection>; ClusterProximityShould.wideProjection(long): GraphProjection; ClusterProximityShould.composeAnchors(GraphProjection): Map<EnclosureHullKey, LayoutPoint>; ClusterProximityShould.engineFrame(GraphProjection, List<PinProjection>): LayoutFrame; ClusterProximityShould.workerFrame(GraphProjection, List<PinProjection>): LayoutFrame; WORKSPACE = WorkspaceId.of(00000000-0000-0000-0000-0000000000aa)"
+          sha256: 53413daf80e49eb44afc017135209e73f2a9bb04bf1e964fc6737e73a9c2c66c
+        - producer_task: T-004
+          interface_id: iface.engine-extents
+          signature: "LayoutEngine.apply(LayoutRequest): LayoutFrame and LayoutWorker.submit(LayoutRequest) seed anchors and direct nodes from the memoized packed composition; TypedSpringBox.configureAnchorExtents(String id, double halfWidth, double halfHeight, double offsetX, double offsetY); TypedNodeParticle.configureExtents(double halfWidth, double halfHeight, double offsetX, double offsetY) with separationHalfWidth(), separationHalfHeight(), separationOffsetX(), separationOffsetY(); TypedSpringBox.addBoundaryRepulsion(TypedNodeParticle, Vector3) keeps its two-argument signature"
+          sha256: 3fe6cb5a15b0758c6d15116eca68011369536935f0b0ab96386647b7557c7f2b
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.layout.graphstream.ClusterProximityShould", "--tests", "org.freeplane.plugin.graph.layout.graphstream.ClusterPackingShould"]
+        cwd: lane
+        timeout_seconds: 1200
+  - id: T-007
+    plan_task: 7
+    task_id: T-007
+    title: "Re-baseline TypedForcesShould against the packed contract"
+    implementer_tier: Standard
+    lane: regression
+    sequence: 1
+    depends_on: [T-004, T-006]
+    owns:
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/TypedForcesShould.java
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/TypedForcesShould.java
+    resources: []
+    exclusive_resources: []
+    produces:
+      - id: iface.force-regression-dispositions
+        signature: "TypedForcesShould section 7.3 dispositions finalized: 16 tests with re-baselined values recorded and the hard movement bounds preserved"
+        sha256: ebf595ec150ca67aaf4dd55cc490efe72e6bec9eac855253964547906a0667f5
+    consumes:
+      - producer_task: T-004
+        interface_id: iface.engine-extents
+        signature: "LayoutEngine.apply(LayoutRequest): LayoutFrame and LayoutWorker.submit(LayoutRequest) seed anchors and direct nodes from the memoized packed composition; TypedSpringBox.configureAnchorExtents(String id, double halfWidth, double halfHeight, double offsetX, double offsetY); TypedNodeParticle.configureExtents(double halfWidth, double halfHeight, double offsetX, double offsetY) with separationHalfWidth(), separationHalfHeight(), separationOffsetX(), separationOffsetY(); TypedSpringBox.addBoundaryRepulsion(TypedNodeParticle, Vector3) keeps its two-argument signature"
+        sha256: 3fe6cb5a15b0758c6d15116eca68011369536935f0b0ab96386647b7557c7f2b
+    interfaces:
+      produces:
+        - id: iface.force-regression-dispositions
+          signature: "TypedForcesShould section 7.3 dispositions finalized: 16 tests with re-baselined values recorded and the hard movement bounds preserved"
+          sha256: ebf595ec150ca67aaf4dd55cc490efe72e6bec9eac855253964547906a0667f5
+      consumes:
+        - producer_task: T-004
+          interface_id: iface.engine-extents
+          signature: "LayoutEngine.apply(LayoutRequest): LayoutFrame and LayoutWorker.submit(LayoutRequest) seed anchors and direct nodes from the memoized packed composition; TypedSpringBox.configureAnchorExtents(String id, double halfWidth, double halfHeight, double offsetX, double offsetY); TypedNodeParticle.configureExtents(double halfWidth, double halfHeight, double offsetX, double offsetY) with separationHalfWidth(), separationHalfHeight(), separationOffsetX(), separationOffsetY(); TypedSpringBox.addBoundaryRepulsion(TypedNodeParticle, Vector3) keeps its two-argument signature"
+          sha256: 3fe6cb5a15b0758c6d15116eca68011369536935f0b0ab96386647b7557c7f2b
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.layout.TypedForcesShould"]
+        cwd: lane
+        timeout_seconds: 900
+  - id: T-008
+    plan_task: 8
+    task_id: T-008
+    title: "Re-baseline BoundarySeparationShould and delete the ReferenceRepulsionFixture estimator mirror"
+    implementer_tier: Advanced
+    lane: regression
+    sequence: 2
+    depends_on: [T-004, T-007]
+    owns:
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundarySeparationShould.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/ReferenceRepulsionFixture.java
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundarySeparationShould.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/ReferenceRepulsionFixture.java
+    resources: []
+    exclusive_resources: []
+    produces:
+      - id: iface.boundary-regression-dispositions
+        signature: "BoundarySeparationShould final dispositions and ReferenceRepulsionFixture without Sizes, boundaryRadius(GraphProjection, EnclosureHullKey), MAX_RENDERED_NODE_RADIUS and their constants"
+        sha256: b5c4c26f1deed7fe5701921ec19c6e039e7dc339176ce4cd1cb12660a0a3bab1
+    consumes:
+      - producer_task: T-004
+        interface_id: iface.engine-extents
+        signature: "LayoutEngine.apply(LayoutRequest): LayoutFrame and LayoutWorker.submit(LayoutRequest) seed anchors and direct nodes from the memoized packed composition; TypedSpringBox.configureAnchorExtents(String id, double halfWidth, double halfHeight, double offsetX, double offsetY); TypedNodeParticle.configureExtents(double halfWidth, double halfHeight, double offsetX, double offsetY) with separationHalfWidth(), separationHalfHeight(), separationOffsetX(), separationOffsetY(); TypedSpringBox.addBoundaryRepulsion(TypedNodeParticle, Vector3) keeps its two-argument signature"
+        sha256: 3fe6cb5a15b0758c6d15116eca68011369536935f0b0ab96386647b7557c7f2b
+    interfaces:
+      produces:
+        - id: iface.boundary-regression-dispositions
+          signature: "BoundarySeparationShould final dispositions and ReferenceRepulsionFixture without Sizes, boundaryRadius(GraphProjection, EnclosureHullKey), MAX_RENDERED_NODE_RADIUS and their constants"
+          sha256: b5c4c26f1deed7fe5701921ec19c6e039e7dc339176ce4cd1cb12660a0a3bab1
+      consumes:
+        - producer_task: T-004
+          interface_id: iface.engine-extents
+          signature: "LayoutEngine.apply(LayoutRequest): LayoutFrame and LayoutWorker.submit(LayoutRequest) seed anchors and direct nodes from the memoized packed composition; TypedSpringBox.configureAnchorExtents(String id, double halfWidth, double halfHeight, double offsetX, double offsetY); TypedNodeParticle.configureExtents(double halfWidth, double halfHeight, double offsetX, double offsetY) with separationHalfWidth(), separationHalfHeight(), separationOffsetX(), separationOffsetY(); TypedSpringBox.addBoundaryRepulsion(TypedNodeParticle, Vector3) keeps its two-argument signature"
+          sha256: 3fe6cb5a15b0758c6d15116eca68011369536935f0b0ab96386647b7557c7f2b
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.layout.BoundarySeparationShould"]
+        cwd: lane
+        timeout_seconds: 1200
+  - id: T-009
+    plan_task: 9
+    task_id: T-009
+    title: "Full-suite acceptance and evidence recording"
+    implementer_tier: Advanced
+    lane: evidence
+    sequence: 1
+    depends_on: [T-007, T-008]
+    owns: []
+    ownership:
+      paths: []
+    resources: [repo-wide-test-suite]
+    exclusive_resources: [repo-wide-test-suite]
+    produces:
+      - id: iface.full-suite-evidence
+        signature: "Full-suite acceptance evidence: module and project suite commands and counts, per-class counts, failure sets, reported-vs-asserted summary"
+        sha256: 71fea100d3183f8015f9f697496629419d0a49e5f9d02c84f9121681400b90a8
+    consumes:
+      - producer_task: T-001
+        interface_id: iface.containment-calibration
+        signature: "LayoutCalibration.spikeDefaults(): containment() == 1.0, hierarchy() == 0.30, sameMap() == 1.0; containment springs as stiff as same-map links"
+        sha256: 6cb8fc7dd29b18cbb36f57eed425fbc6639db7c8bf3f8bdbdbd44353e12a3bc5
+      - producer_task: T-002
+        interface_id: iface.cluster-packing
+        signature: "ClusterPacking.packItems(List<ClusterItem>, double): List<ClusterPlacement>; ClusterItem(EnclosureHullKey anchorKey, double width, double height, double anchorX, double anchorY, int order); ClusterPlacement(ClusterItem item, double x, double y) with List<ClusterItem> contacts; CANDIDATE_EPSILON = 1e-9; CONTACT_GAP_TOLERANCE = 0.75; anchorKey == null marks the content item"
+        sha256: a30a426ba9369911962a2df689c9a05bab387ae075a636934f250ee3ca30d559
+      - producer_task: T-003
+        interface_id: iface.boundary-footprint
+        signature: "BoundarySizes.Footprint(double width, double height, double anchorX, double anchorY); BoundarySizes.footprint(EnclosureHullKey): Footprint; BoundarySizes.placements(EnclosureHullKey): List<ClusterPacking.ClusterPlacement>; BoundarySizes.placementOf(EnclosureHullKey parentKey, EnclosureHullKey childKey): ClusterPacking.ClusterPlacement; BoundarySizes.topLevelPlacements(): List<ClusterPacking.ClusterPlacement>; BoundarySizes.topLevelPlacementOf(EnclosureHullKey): ClusterPacking.ClusterPlacement; NODE_SETTLE_MARGIN = 8.0"
+        sha256: 489039355009ec12990d259ca496346502166fb9a12342269e1eb58deb9250b1
+      - producer_task: T-004
+        interface_id: iface.engine-extents
+        signature: "LayoutEngine.apply(LayoutRequest): LayoutFrame and LayoutWorker.submit(LayoutRequest) seed anchors and direct nodes from the memoized packed composition; TypedSpringBox.configureAnchorExtents(String id, double halfWidth, double halfHeight, double offsetX, double offsetY); TypedNodeParticle.configureExtents(double halfWidth, double halfHeight, double offsetX, double offsetY) with separationHalfWidth(), separationHalfHeight(), separationOffsetX(), separationOffsetY(); TypedSpringBox.addBoundaryRepulsion(TypedNodeParticle, Vector3) keeps its two-argument signature"
+        sha256: 3fe6cb5a15b0758c6d15116eca68011369536935f0b0ab96386647b7557c7f2b
+      - producer_task: T-005
+        interface_id: iface.acceptance-fixtures
+        signature: "ClusterProximityShould.fixture(char): GraphProjection; ClusterProximityShould.fixturePins(char): List<PinProjection>; ClusterProximityShould.wideProjection(long): GraphProjection; ClusterProximityShould.composeAnchors(GraphProjection): Map<EnclosureHullKey, LayoutPoint>; ClusterProximityShould.engineFrame(GraphProjection, List<PinProjection>): LayoutFrame; ClusterProximityShould.workerFrame(GraphProjection, List<PinProjection>): LayoutFrame; WORKSPACE = WorkspaceId.of(00000000-0000-0000-0000-0000000000aa)"
+        sha256: 53413daf80e49eb44afc017135209e73f2a9bb04bf1e964fc6737e73a9c2c66c
+      - producer_task: T-006
+        interface_id: iface.acceptance-evidence
+        signature: "ClusterProximityShould settled evidence lines (idle, endpointStep, packed, settled, windowMaxHoldDeviation, paintedGap, minSeparation, containmentOverflow, marginalOverlap) and the ClusterPackingShould.twoHundredChildrenPackWithinThreeSeconds timing line"
+        sha256: a521059158e43fb15e8f2e38709f3138cbaf57920f33f516f2f5e6af80894f60
+      - producer_task: T-007
+        interface_id: iface.force-regression-dispositions
+        signature: "TypedForcesShould section 7.3 dispositions finalized: 16 tests with re-baselined values recorded and the hard movement bounds preserved"
+        sha256: ebf595ec150ca67aaf4dd55cc490efe72e6bec9eac855253964547906a0667f5
+      - producer_task: T-008
+        interface_id: iface.boundary-regression-dispositions
+        signature: "BoundarySeparationShould final dispositions and ReferenceRepulsionFixture without Sizes, boundaryRadius(GraphProjection, EnclosureHullKey), MAX_RENDERED_NODE_RADIUS and their constants"
+        sha256: b5c4c26f1deed7fe5701921ec19c6e039e7dc339176ce4cd1cb12660a0a3bab1
+    interfaces:
+      produces:
+        - id: iface.full-suite-evidence
+          signature: "Full-suite acceptance evidence: module and project suite commands and counts, per-class counts, failure sets, reported-vs-asserted summary"
+          sha256: 71fea100d3183f8015f9f697496629419d0a49e5f9d02c84f9121681400b90a8
+      consumes:
+        - producer_task: T-001
+          interface_id: iface.containment-calibration
+          signature: "LayoutCalibration.spikeDefaults(): containment() == 1.0, hierarchy() == 0.30, sameMap() == 1.0; containment springs as stiff as same-map links"
+          sha256: 6cb8fc7dd29b18cbb36f57eed425fbc6639db7c8bf3f8bdbdbd44353e12a3bc5
+        - producer_task: T-002
+          interface_id: iface.cluster-packing
+          signature: "ClusterPacking.packItems(List<ClusterItem>, double): List<ClusterPlacement>; ClusterItem(EnclosureHullKey anchorKey, double width, double height, double anchorX, double anchorY, int order); ClusterPlacement(ClusterItem item, double x, double y) with List<ClusterItem> contacts; CANDIDATE_EPSILON = 1e-9; CONTACT_GAP_TOLERANCE = 0.75; anchorKey == null marks the content item"
+          sha256: a30a426ba9369911962a2df689c9a05bab387ae075a636934f250ee3ca30d559
+        - producer_task: T-003
+          interface_id: iface.boundary-footprint
+          signature: "BoundarySizes.Footprint(double width, double height, double anchorX, double anchorY); BoundarySizes.footprint(EnclosureHullKey): Footprint; BoundarySizes.placements(EnclosureHullKey): List<ClusterPacking.ClusterPlacement>; BoundarySizes.placementOf(EnclosureHullKey parentKey, EnclosureHullKey childKey): ClusterPacking.ClusterPlacement; BoundarySizes.topLevelPlacements(): List<ClusterPacking.ClusterPlacement>; BoundarySizes.topLevelPlacementOf(EnclosureHullKey): ClusterPacking.ClusterPlacement; NODE_SETTLE_MARGIN = 8.0"
+          sha256: 489039355009ec12990d259ca496346502166fb9a12342269e1eb58deb9250b1
+        - producer_task: T-004
+          interface_id: iface.engine-extents
+          signature: "LayoutEngine.apply(LayoutRequest): LayoutFrame and LayoutWorker.submit(LayoutRequest) seed anchors and direct nodes from the memoized packed composition; TypedSpringBox.configureAnchorExtents(String id, double halfWidth, double halfHeight, double offsetX, double offsetY); TypedNodeParticle.configureExtents(double halfWidth, double halfHeight, double offsetX, double offsetY) with separationHalfWidth(), separationHalfHeight(), separationOffsetX(), separationOffsetY(); TypedSpringBox.addBoundaryRepulsion(TypedNodeParticle, Vector3) keeps its two-argument signature"
+          sha256: 3fe6cb5a15b0758c6d15116eca68011369536935f0b0ab96386647b7557c7f2b
+        - producer_task: T-005
+          interface_id: iface.acceptance-fixtures
+          signature: "ClusterProximityShould.fixture(char): GraphProjection; ClusterProximityShould.fixturePins(char): List<PinProjection>; ClusterProximityShould.wideProjection(long): GraphProjection; ClusterProximityShould.composeAnchors(GraphProjection): Map<EnclosureHullKey, LayoutPoint>; ClusterProximityShould.engineFrame(GraphProjection, List<PinProjection>): LayoutFrame; ClusterProximityShould.workerFrame(GraphProjection, List<PinProjection>): LayoutFrame; WORKSPACE = WorkspaceId.of(00000000-0000-0000-0000-0000000000aa)"
+          sha256: 53413daf80e49eb44afc017135209e73f2a9bb04bf1e964fc6737e73a9c2c66c
+        - producer_task: T-006
+          interface_id: iface.acceptance-evidence
+          signature: "ClusterProximityShould settled evidence lines (idle, endpointStep, packed, settled, windowMaxHoldDeviation, paintedGap, minSeparation, containmentOverflow, marginalOverlap) and the ClusterPackingShould.twoHundredChildrenPackWithinThreeSeconds timing line"
+          sha256: a521059158e43fb15e8f2e38709f3138cbaf57920f33f516f2f5e6af80894f60
+        - producer_task: T-007
+          interface_id: iface.force-regression-dispositions
+          signature: "TypedForcesShould section 7.3 dispositions finalized: 16 tests with re-baselined values recorded and the hard movement bounds preserved"
+          sha256: ebf595ec150ca67aaf4dd55cc490efe72e6bec9eac855253964547906a0667f5
+        - producer_task: T-008
+          interface_id: iface.boundary-regression-dispositions
+          signature: "BoundarySeparationShould final dispositions and ReferenceRepulsionFixture without Sizes, boundaryRadius(GraphProjection, EnclosureHullKey), MAX_RENDERED_NODE_RADIUS and their constants"
+          sha256: b5c4c26f1deed7fe5701921ec19c6e039e7dc339176ce4cd1cb12660a0a3bab1
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "-PTestLoggingFull"]
+        cwd: lane
+        timeout_seconds: 3600
+      - argv: ["gradle", "test", "-PTestLoggingFull"]
+        cwd: lane
+        timeout_seconds: 7200
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.layout.GraphStreamBoundaryShould", "--tests", "org.freeplane.plugin.graph.layout.TypedForcesShould", "--tests", "org.freeplane.plugin.graph.layout.BoundarySeparationShould", "--tests", "org.freeplane.plugin.graph.layout.graphstream.ClusterPackingShould", "--tests", "org.freeplane.plugin.graph.layout.graphstream.BoundaryFootprintShould", "--tests", "org.freeplane.plugin.graph.layout.graphstream.ClusterProximityShould", "-PTestLoggingFull"]
+        cwd: lane
+        timeout_seconds: 1800
+  - id: T-010
+    plan_task: 10
+    task_id: T-010
+    title: "Label readability gate (baseline vs post-change)"
+    implementer_tier: Advanced
+    lane: evidence
+    sequence: 2
+    depends_on: [T-009]
+    owns:
+      - docs/superpowers/plans/2026-10-13-graph-cluster-initial-proximity-label-gate.md
+      - docs/superpowers/specs/mockups/2026-10-13-graph-cluster-initial-proximity/label-gate/baseline/**
+      - docs/superpowers/specs/mockups/2026-10-13-graph-cluster-initial-proximity/label-gate/post/**
+    ownership:
+      paths:
+        - docs/superpowers/plans/2026-10-13-graph-cluster-initial-proximity-label-gate.md
+        - docs/superpowers/specs/mockups/2026-10-13-graph-cluster-initial-proximity/label-gate/baseline/**
+        - docs/superpowers/specs/mockups/2026-10-13-graph-cluster-initial-proximity/label-gate/post/**
+    resources: [x-display]
+    exclusive_resources: [x-display]
+    produces:
+      - id: iface.label-gate-evidence
+        signature: "Label readability gate: baseline and post-change headless crowding metrics plus screenshots under docs/superpowers/specs/mockups/2026-10-13-graph-cluster-initial-proximity/label-gate"
+        sha256: 8b28511a8338760d1498a787e15424102bacc9ac73dedaa5116316d76cae674f
+    consumes:
+      - producer_task: T-009
+        interface_id: iface.full-suite-evidence
+        signature: "Full-suite acceptance evidence: module and project suite commands and counts, per-class counts, failure sets, reported-vs-asserted summary"
+        sha256: 71fea100d3183f8015f9f697496629419d0a49e5f9d02c84f9121681400b90a8
+    interfaces:
+      produces:
+        - id: iface.label-gate-evidence
+          signature: "Label readability gate: baseline and post-change headless crowding metrics plus screenshots under docs/superpowers/specs/mockups/2026-10-13-graph-cluster-initial-proximity/label-gate"
+          sha256: 8b28511a8338760d1498a787e15424102bacc9ac73dedaa5116316d76cae674f
+      consumes:
+        - producer_task: T-009
+          interface_id: iface.full-suite-evidence
+          signature: "Full-suite acceptance evidence: module and project suite commands and counts, per-class counts, failure sets, reported-vs-asserted summary"
+          sha256: 71fea100d3183f8015f9f697496629419d0a49e5f9d02c84f9121681400b90a8
+    validation:
+      - argv: ["test", "-s", "docs/superpowers/plans/2026-10-13-graph-cluster-initial-proximity-label-gate.md"]
+        cwd: lane
+        timeout_seconds: 60
+      - argv: ["test", "-d", "docs/superpowers/specs/mockups/2026-10-13-graph-cluster-initial-proximity/label-gate/baseline"]
+        cwd: lane
+        timeout_seconds: 60
+      - argv: ["test", "-d", "docs/superpowers/specs/mockups/2026-10-13-graph-cluster-initial-proximity/label-gate/post"]
+        cwd: lane
+        timeout_seconds: 60
