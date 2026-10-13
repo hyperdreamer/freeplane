@@ -527,6 +527,17 @@ public class EdgeConflictCorrectionShould {
                 boundary.diagnostics(), boundary.nodeResidualViolations(), boundary.timings());
         }
 
+        private BoundarySeparationResult boundaryWithNodeRadius(final double radius) {
+            final Map<ProjectedNodeKey, NodeGeometry> nodeGeometry =
+                new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
+            for (final ProjectedNodeKey key : keys) {
+                nodeGeometry.put(key, NodeGeometry.of(boundary.positions().nodes().get(key), radius));
+            }
+            return new BoundarySeparationResult(boundary.positions(),
+                GraphGeometry.of(nodeGeometry, boundary.geometry().hulls()), boundary.diagnostics(),
+                boundary.nodeResidualViolations(), boundary.timings());
+        }
+
         private List<PinProjection> pinsForAllNodes() {
             final List<PinProjection> result = new ArrayList<PinProjection>();
             for (final ProjectedNodeKey key : keys) {
@@ -843,7 +854,10 @@ public class EdgeConflictCorrectionShould {
         final GraphGeometry geometry = new GraphGeometryEngine().computeHulls(projection, positions,
             METRICS);
         final BoundarySeparationResult boundary = new BoundarySeparationResult(positions, geometry,
-            BoundarySeparationDiagnostics.empty(), 0, new BoundarySeparationTimings(0L, 0L, 0L, 0L));
+            new BoundarySeparationDiagnostics(Collections.<BoundaryConflict>emptyList(),
+                Collections.singletonList(CanonicalKeys.hullPair(aHull, cHull)), 0, 0, 0, 0.0, 0.0,
+                Collections.<String, LayoutPoint>emptyMap(), 0.0, 0.0),
+            0, new BoundarySeparationTimings(0L, 0L, 0L, 0L));
         final Set<ProjectedEndpointKey> visible = ProjectedEndpointVisibility.visibleEndpoints(
             projection.nodes(), projection.enclosures());
         return new A3SubsetFixture(projection, boundary, visible, a, aHull, cHull, dHull,
@@ -951,5 +965,36 @@ public class EdgeConflictCorrectionShould {
         final Set<ProjectedEndpointKey> visible = ProjectedEndpointVisibility.visibleEndpoints(
             projection.nodes(), projection.enclosures());
         return new MixedFixture(projection, boundary, visible);
+    }
+
+    @Test
+    public void rebuildsTheBoundaryRecordForThePublishedPositions() {
+        final Fixture fixture = reportedQuad();
+        final EdgeConflictResult result = apply(fixture);
+
+        assertThat(result.boundaryDiagnostics()).isNotSameAs(fixture.boundary.diagnostics());
+        assertThat(result.boundaryDiagnostics().hullViolationsDetected())
+            .isEqualTo(fixture.boundary.diagnostics().hullViolationsDetected());
+        assertThat(result.boundaryDiagnostics().rounds())
+            .isEqualTo(fixture.boundary.diagnostics().rounds());
+        assertThat(result.boundaryDiagnostics().appliedDisplacements())
+            .isEqualTo(fixture.boundary.diagnostics().appliedDisplacements());
+        assertThat(result.boundaryDiagnostics().residualHullPairs()).isSorted();
+        assertThat(result.nodeResidualViolations()).isZero();
+        assertThat(result.appliedDisplacements()).isNotEmpty();
+        assertThat(result.timings().rebuildNanos()).isGreaterThanOrEqualTo(0L);
+    }
+
+    @Test
+    public void reusesTheBoundaryTerminalGeometry() {
+        final Fixture fixture = reportedQuad();
+        final BoundarySeparationResult poisoned = fixture.boundaryWithNodeRadius(40.0);
+        final EdgeConflictResult result = new EdgeConflictCorrection().apply(fixture.projection,
+            poisoned.positions(), METRICS, Collections.<PinProjection>emptyList(), fixture.visible, poisoned);
+
+        // A fresh computeHulls would rebuild radius 8.0/14.0 discs from prominence, and the
+        // reported fixture's chords sit ~33.6 from every unrelated centre, so only detection
+        // against the supplied terminal geometry (radius 40.0) sees the C2 conflict.
+        assertThat(result.diagnostics().edgeOverNodeDetected()).isGreaterThanOrEqualTo(1);
     }
 }
