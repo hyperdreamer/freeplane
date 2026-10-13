@@ -1,7 +1,5 @@
 package org.freeplane.plugin.graph.geometry;
 
-import java.awt.Font;
-import java.awt.font.FontRenderContext;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -28,20 +26,41 @@ import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 import org.freeplane.plugin.graph.workspace.model.NodeReference;
 import org.freeplane.plugin.graph.workspace.model.PersistedNodeId;
 
+/**
+ * Shared routing fixture. The drawn radii are pinned to the values the specification's
+ * exact router fixtures assume (§8.1-§8.3): 14.0 world units, the largest drawn radius
+ * ({@code BASE_RADIUS * MAX_SCALE}), and 12.0/14.0 for the fan-crossing fixture. The
+ * engine's prominence-derived radii are not used because the fixture's undirected
+ * connectors give every node the base scale.
+ */
 final class EdgeRouterFixture {
     private static final MapReferenceId MAP = MapReferenceId.of("8055d8c8-d71e-40f3-a8ed-5bf2502f2cad");
-    private static final GeometryTextMetrics METRICS = new AwtGeometryTextMetrics(
-        new Font("Dialog", Font.PLAIN, 12), new FontRenderContext(null, true, true));
+    private static final double PINNED_RADIUS = 14.0;
+    private static final double FAN_NODE_RADIUS = 12.0;
+    private static final double FAN_OBSTACLE_RADIUS = 14.0;
 
     final GraphProjection projection;
     final LayoutPositions positions;
     final GraphGeometry geometry;
     final Set<ProjectedEndpointKey> visibleEndpoints;
 
-    private EdgeRouterFixture(final GraphProjection projection, final LayoutPositions positions) {
+    private EdgeRouterFixture(final GraphProjection projection, final LayoutPositions positions,
+            final Map<ProjectedNodeKey, Double> radii) {
         this.projection = projection;
         this.positions = positions;
-        this.geometry = new GraphGeometryEngine().computeHulls(projection, positions, METRICS);
+        final Map<ProjectedNodeKey, NodeGeometry> nodeGeometry =
+            new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
+        for (final ProjectedNode node : projection.nodes()) {
+            final LayoutPoint center = positions.nodes().get(node.key());
+            if (center == null) {
+                continue;
+            }
+            final Double radius = radii.get(node.key());
+            nodeGeometry.put(node.key(), NodeGeometry.of(center,
+                radius == null ? PINNED_RADIUS : radius.doubleValue()));
+        }
+        this.geometry = GraphGeometry.of(nodeGeometry,
+            Collections.<EnclosureHullKey, HullGeometry>emptyMap());
         this.visibleEndpoints = ProjectedEndpointVisibility.visibleEndpoints(projection.nodes(),
             projection.enclosures());
     }
@@ -51,7 +70,8 @@ final class EdgeRouterFixture {
             Collections.<ProjectedNode>emptyList(),
             Collections.<org.freeplane.plugin.graph.projection.ProjectedEnclosure>emptyList()),
             LayoutPositions.of(Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(),
-                Collections.<EnclosureHullKey, LayoutPoint>emptyMap()));
+                Collections.<EnclosureHullKey, LayoutPoint>emptyMap()),
+            Collections.<ProjectedNodeKey, Double>emptyMap());
     }
 
     static EdgeRouterFixture reportedConvexQuad() {
@@ -62,7 +82,8 @@ final class EdgeRouterFixture {
         return new EdgeRouterFixture(projection(Arrays.asList(a, b, c, d), Arrays.asList(
             edge(a, c), edge(b, d))), LayoutPositions.of(
             points(a, 272.0, 170.0, b, 307.0, 202.0, c, 275.0, 240.0, d, 240.0, 208.0),
-            Collections.<EnclosureHullKey, LayoutPoint>emptyMap()));
+            Collections.<EnclosureHullKey, LayoutPoint>emptyMap()),
+            Collections.<ProjectedNodeKey, Double>emptyMap());
     }
 
     static EdgeRouterFixture laterChordBow() {
@@ -73,7 +94,8 @@ final class EdgeRouterFixture {
         return new EdgeRouterFixture(projection(Arrays.asList(one, two, three, four), Arrays.asList(
             edge(one, two), edge(three, four))), LayoutPositions.of(
             points(one, -90.0, 0.0, two, 90.0, 0.0, three, 0.0, -25.0, four, 0.0, 25.0),
-            Collections.<EnclosureHullKey, LayoutPoint>emptyMap()));
+            Collections.<EnclosureHullKey, LayoutPoint>emptyMap()),
+            Collections.<ProjectedNodeKey, Double>emptyMap());
     }
 
     static EdgeRouterFixture fanCrossing() {
@@ -81,10 +103,15 @@ final class EdgeRouterFixture {
         final ProjectedNodeKey a = node("A");
         final ProjectedNodeKey b = node("B");
         final ProjectedNodeKey o = node("O");
+        final Map<ProjectedNodeKey, Double> radii = new LinkedHashMap<ProjectedNodeKey, Double>();
+        radii.put(x, Double.valueOf(FAN_NODE_RADIUS));
+        radii.put(a, Double.valueOf(FAN_NODE_RADIUS));
+        radii.put(b, Double.valueOf(FAN_NODE_RADIUS));
+        radii.put(o, Double.valueOf(FAN_OBSTACLE_RADIUS));
         return new EdgeRouterFixture(projection(Arrays.asList(x, a, b, o), Arrays.asList(
             edge(x, a), edge(x, b))), LayoutPositions.of(
             points(x, 0.0, 0.0, a, 12.997, 48.089, b, 38.39, 23.412, o, 4.808, 23.714),
-            Collections.<EnclosureHullKey, LayoutPoint>emptyMap()));
+            Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), radii);
     }
 
     static EdgeRouterFixture oneResolvableEdgeAndOneBrokenEdge() {
@@ -93,7 +120,25 @@ final class EdgeRouterFixture {
         final ProjectedNodeKey missing = node("MISSING");
         return new EdgeRouterFixture(projection(Arrays.asList(a, b), Arrays.asList(
             edge(a, b), edge(a, missing))), LayoutPositions.of(
-            points(a, 0.0, 0.0, b, 100.0, 0.0), Collections.<EnclosureHullKey, LayoutPoint>emptyMap()));
+            points(a, 0.0, 0.0, b, 100.0, 0.0), Collections.<EnclosureHullKey, LayoutPoint>emptyMap()),
+            Collections.<ProjectedNodeKey, Double>emptyMap());
+    }
+
+    /**
+     * The same projection content with the edges list reversed, for the input-order
+     * determinism test. The geometry stays keyed by the unchanged node keys.
+     */
+    GraphProjection permutedProjection() {
+        final List<ProjectedNodeKey> keys = new ArrayList<ProjectedNodeKey>();
+        for (final ProjectedNode node : projection.nodes()) {
+            keys.add(node.key());
+        }
+        final List<ProjectedEdgeKey> edges = new ArrayList<ProjectedEdgeKey>();
+        for (final ProjectedEdge edge : projection.edges()) {
+            edges.add(edge.key());
+        }
+        Collections.reverse(edges);
+        return projection(keys, edges);
     }
 
     static ProjectedEdgeKey exitEdge(final String first, final String second) {
@@ -103,6 +148,47 @@ final class EdgeRouterFixture {
 
     static ProjectedNodeKey node(final String id) {
         return ProjectedNodeKey.of(SourceNodeKey.persisted(NodeReference.of(MAP, PersistedNodeId.of(id))));
+    }
+
+    /** Signed area (cross product) of two edge vectors; used to pin the dogleg side rule. */
+    static double side(final LayoutPoint first, final LayoutPoint second, final LayoutPoint third) {
+        return (second.x() - first.x()) * (third.y() - first.y())
+            - (second.y() - first.y()) * (third.x() - first.x());
+    }
+
+    static double distance(final LayoutPoint first, final LayoutPoint second) {
+        return Math.hypot(second.x() - first.x(), second.y() - first.y());
+    }
+
+    /**
+     * The largest deviation between the true published quadratic and the sampled polyline,
+     * evaluated at the parameter midpoint of every sample segment.
+     */
+    static double maxSagitta(final EdgePath path) {
+        final List<LayoutPoint> points = path.definingPoints();
+        final List<LayoutPoint> samples = path.samples();
+        if (points.size() != 3 || samples.size() < 2) {
+            return 0.0;
+        }
+        final LayoutPoint start = points.get(0);
+        final LayoutPoint control = points.get(1);
+        final LayoutPoint end = points.get(2);
+        final int segments = samples.size() - 1;
+        double worst = 0.0;
+        for (int index = 0; index < segments; index++) {
+            final double t = (index + 0.5) / (double) segments;
+            final double oneMinusT = 1.0 - t;
+            final LayoutPoint curve = LayoutPoint.of(
+                oneMinusT * oneMinusT * start.x() + 2.0 * oneMinusT * t * control.x()
+                    + t * t * end.x(),
+                oneMinusT * oneMinusT * start.y() + 2.0 * oneMinusT * t * control.y()
+                    + t * t * end.y());
+            final LayoutPoint chordMidpoint = LayoutPoint.of(
+                (samples.get(index).x() + samples.get(index + 1).x()) / 2.0,
+                (samples.get(index).y() + samples.get(index + 1).y()) / 2.0);
+            worst = Math.max(worst, distance(curve, chordMidpoint));
+        }
+        return worst;
     }
 
     private static GraphProjection projection(final List<ProjectedNodeKey> keys,
