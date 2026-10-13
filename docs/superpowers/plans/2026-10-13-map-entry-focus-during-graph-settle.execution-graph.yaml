@@ -1,0 +1,83 @@
+schema_version: 1
+topic: map-entry-focus-during-graph-settle
+source_plan:
+  path: docs/superpowers/plans/2026-10-13-map-entry-focus-during-graph-settle.md
+  sha256: 79b578f8b66ce8d71f6fa822805daf7166927c073e7599bc5f5ea5101eb0cc7d
+  commit_oid: 24f5ae9dcf66413a41474057916cd926e05f6ab1
+  tasks: [1, 2, 3]
+validation_env:
+  JAVA_HOME: ~/.sdkman/candidates/java/21.0.8-zulu
+  note: Prefix every validation command with JAVA_HOME and PATH so the toolchain matches the plan.
+lanes:
+  - id: map-entry-focus
+    task_ids: [t1-panel-focus-and-tests, t2-graph-selection-application, t3-acceptance-evidence]
+tasks:
+  - id: t1-panel-focus-and-tests
+    plan_task: 1
+    title: Preserve the map-list row focus across neutral rebuilds
+    implementer_tier: standard
+    lane: map-entry-focus
+    sequence: 1
+    depends_on: []
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/MapListPanel.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/MapListSelectionPersistenceShould.java
+    resources: []
+    interfaces:
+      produces:
+        - id: i-map-list-selection-api
+          digest: d38a08bb9959ffe9
+      consumes: []
+    validation:
+      - [gradle, ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.window.MapListSelectionPersistenceShould", "--tests", "org.freeplane.plugin.graph.window.MapListPanelShould", "-PTestLoggingFull"]
+  - id: t2-graph-selection-application
+    plan_task: 2
+    title: Apply the graph selection explicitly on change selection
+    implementer_tier: advanced
+    lane: map-entry-focus
+    sequence: 2
+    depends_on: [t1-panel-focus-and-tests]
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindow.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindowModelShould.java
+    resources: []
+    interfaces:
+      produces:
+        - id: i-graph-selection-application
+          digest: b18f1d7a0687470f
+      consumes:
+        - id: i-map-list-selection-api
+          digest: d38a08bb9959ffe9
+    validation:
+      - [gradle, ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.window.GraphWorkspaceWindowModelShould", "-PTestLoggingFull"]
+      - [gradle, ":freeplane_plugin_graph:test"]
+  - id: t3-acceptance-evidence
+    plan_task: 3
+    title: Record running-application mid-settle acceptance evidence
+    implementer_tier: capable
+    lane: map-entry-focus
+    sequence: 3
+    depends_on: [t2-graph-selection-application]
+    ownership:
+      paths:
+        - docs/superpowers/evidence/2026-10-13-map-entry-focus-during-graph-settle/**
+    resources: []
+    interfaces:
+      produces:
+        - id: i-mid-settle-evidence
+          digest: 20e6d0be6a49bffb
+      consumes:
+        - id: i-map-list-selection-api
+          digest: d38a08bb9959ffe9
+        - id: i-graph-selection-application
+          digest: b18f1d7a0687470f
+    validation:
+      - [test, "-s", docs/superpowers/evidence/2026-10-13-map-entry-focus-during-graph-settle/README.md]
+      - [test, "-s", docs/superpowers/evidence/2026-10-13-map-entry-focus-during-graph-settle/combined-annotated.png]
+      - [test, "-s", docs/superpowers/evidence/2026-10-13-map-entry-focus-during-graph-settle/C1.png]
+      - [test, "-s", docs/superpowers/evidence/2026-10-13-map-entry-focus-during-graph-settle/C2.png]
+      - [test, "-s", docs/superpowers/evidence/2026-10-13-map-entry-focus-during-graph-settle/C3.png]
+      - [test, "-s", docs/superpowers/evidence/2026-10-13-map-entry-focus-during-graph-settle/C4.png]
+      - [test, "-s", docs/superpowers/evidence/2026-10-13-map-entry-focus-during-graph-settle/C5.png]
