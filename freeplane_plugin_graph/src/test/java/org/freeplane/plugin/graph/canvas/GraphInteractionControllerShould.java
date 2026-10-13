@@ -2,9 +2,11 @@ package org.freeplane.plugin.graph.canvas;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.within;
 
 import java.awt.AWTEvent;
 import java.awt.Dimension;
+import java.awt.Point;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.awt.event.MouseEvent;
@@ -20,9 +22,12 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import javax.swing.JScrollPane;
+
 import org.freeplane.plugin.graph.control.CanvasState;
 import org.freeplane.plugin.graph.control.OperationalStatus;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
+import org.freeplane.plugin.graph.geometry.HullGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.geometry.NodeGeometry;
@@ -35,6 +40,7 @@ import org.freeplane.plugin.graph.projection.EnclosureKey;
 import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.projection.ProjectedEdge;
 import org.freeplane.plugin.graph.projection.ProjectedEdgeKey;
+import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
@@ -184,6 +190,107 @@ public class GraphInteractionControllerShould {
         assertThat(canvas.viewport().centerX()).isNotEqualTo(beforeCenterX);
         assertThat(listener.intents).isEmpty();
         controller.uninstall();
+    }
+
+    private static ScrolledFixture scrolledFixture(final CanvasState state, final double zoom,
+            final double centerX, final double centerY, final int scrollWidth, final int scrollHeight) {
+        final GraphCanvas canvas = new GraphCanvas();
+        final JScrollPane scrollPane = new JScrollPane(canvas);
+        final RecordingListener listener = new RecordingListener();
+        final GraphInteractionController controller = new GraphInteractionController(listener);
+        controller.install(canvas);
+        scrollPane.setSize(scrollWidth, scrollHeight);
+        scrollPane.doLayout();
+        scrollPane.getViewport().doLayout();
+        canvas.setCanvasState(state);
+        canvas.setViewport(GraphViewport.of(centerX, centerY, zoom));
+        scrollPane.doLayout();
+        scrollPane.getViewport().doLayout();
+        return new ScrolledFixture(canvas, scrollPane, controller, listener);
+    }
+
+    private static final class ScrolledFixture {
+        private final GraphCanvas canvas;
+        private final JScrollPane scrollPane;
+        private final GraphInteractionController controller;
+        private final RecordingListener listener;
+
+        private ScrolledFixture(final GraphCanvas canvas, final JScrollPane scrollPane,
+                final GraphInteractionController controller, final RecordingListener listener) {
+            this.canvas = canvas;
+            this.scrollPane = scrollPane;
+            this.controller = controller;
+            this.listener = listener;
+        }
+    }
+
+    private static final String PAN_MAP_ID = "00000000-0000-0000-0000-0000000000ff";
+    private static final double PAN_NODE_RADIUS = 20.0;
+    private static final double[][] PAN_NODE_CENTERS = {
+        { -300.0, -80.0 }, { -150.0, 60.0 }, { 0.0, -60.0 },
+        { 120.0, 80.0 }, { 300.0, 0.0 }, { 60.0, 140.0 }
+    };
+
+    private static CanvasState panFixtureState() {
+        final MapReferenceId map = MapReferenceId.of(UUID.fromString(PAN_MAP_ID));
+        final List<ProjectedNode> nodes = new ArrayList<ProjectedNode>();
+        final Map<ProjectedNodeKey, NodeGeometry> geometry =
+            new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
+        final Map<ProjectedNodeKey, LayoutPoint> positions =
+            new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        for (int index = 0; index < PAN_NODE_CENTERS.length; index++) {
+            final NodeReference reference = NodeReference.of(map,
+                PersistedNodeId.of("node-" + index));
+            final ProjectedNodeKey key = ProjectedNodeKey.of(SourceNodeKey.persisted(reference));
+            final LayoutPoint point =
+                LayoutPoint.of(PAN_NODE_CENTERS[index][0], PAN_NODE_CENTERS[index][1]);
+            nodes.add(ProjectedNode.of(key, SafeNodeLabel.of("Node " + index, "Node " + index),
+                "Map", false));
+            geometry.put(key, NodeGeometry.of(point, PAN_NODE_RADIUS));
+            positions.put(key, point);
+        }
+        final GraphProjection projection = GraphProjection.projected(1L, nodes,
+            Collections.<ProjectedEnclosure>emptyList(), Collections.<ProjectedEdge>emptyList(),
+            Collections.emptyList(), Collections.<PinProjection>emptyList());
+        final GraphGeometry graphGeometry = GraphGeometry.of(geometry,
+            Collections.<EnclosureHullKey, HullGeometry>emptyMap());
+        final LayoutFrame frame = LayoutFrame.of(1L, LayoutPositions.of(positions,
+            Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false, 0);
+        return CanvasState.of(1L, projection, frame, graphGeometry, OperationalStatus.IDLE);
+    }
+
+    private static ScrolledFixture scrolledPanFixture(final double zoom) {
+        return scrolledFixture(panFixtureState(), zoom, 0.0, 0.0, 900, 700);
+    }
+
+    @Test
+    public void applyTheViewPositionWhenConvertingComponentPointToViewportCoordinates() {
+        final ScrolledFixture fixture = scrolledPanFixture(1.5);
+        try {
+            fixture.scrollPane.getViewport().setViewPosition(new Point(60, 20));
+            assertThat(fixture.scrollPane.getViewport().getViewPosition())
+                .isEqualTo(new Point(60, 20));
+            assertThat(fixture.canvas.viewportPoint(new Point(200, 150)))
+                .isEqualTo(new Point(140, 130));
+        }
+        finally {
+            fixture.controller.uninstall();
+        }
+    }
+
+    @Test
+    public void returnTheSamePointWhenConvertingWithoutAViewportAncestor() {
+        final GraphCanvas canvas = new GraphCanvas();
+        final Point point = new Point(7, 9);
+        assertThat(canvas.viewportPoint(point)).isSameAs(point);
+    }
+
+    @Test
+    public void rejectANullComponentPoint() {
+        final GraphCanvas canvas = new GraphCanvas();
+        assertThatThrownBy(() -> canvas.viewportPoint(null))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessageContaining("componentPoint");
     }
 
     @Test
