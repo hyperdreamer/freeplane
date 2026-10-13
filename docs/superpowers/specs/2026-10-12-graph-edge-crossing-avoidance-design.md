@@ -74,9 +74,13 @@ fallback that keeps the renderer honest when no legal move exists.
   cross-frame state participates.
 - **G5** Straight edges stay the default. An edge is routed only when a bounded detour from §6.3 provably
   clears every obstacle of §6.2.
-- **G6** Residual conflicts are counted and published, never hidden: relocation residuals in
-  `EdgeConflictDiagnostics`, drawn-path crossings in `EdgeRouteDiagnostics` (§6.10), fallback paths in
-  `edgesFallback`.
+- **G6** Residual conflicts are counted and published, never hidden on a **non-truncated** frame:
+  relocation residuals in `EdgeConflictDiagnostics`, drawn-path crossings in `EdgeRouteDiagnostics`
+  (§6.10), fallback paths in `edgesFallback`. A frame whose **initial** detection was stopped by a
+  bounded-work budget publishes the ascending set of distinct conflict keys accumulated up to the counted
+  stop — a lower bound — and sets `detectionTruncated`; a stop inside a verification detection instead
+  rejects the attempt and is reported as `verificationBudgetExhausted` with an exact residual.
+  `detectionTruncated` is the only signal of an incomplete published residual (§14.2).
 - **G7** The existing interaction contract is unchanged otherwise: selection, hover, dimming, search, pins,
   viewport, hit-testing, undo, persistence, and the 2,000-node/5,000-edge commitment.
 
@@ -245,7 +249,10 @@ pairwise disjoint. The batch is applied to a copy of the positions and verified 
 - **A1 monotonicity, pair-set form:** let `C_in` and `C_out` be the conflict pair-key sets before and after
   the batch. Accept only if `C_out ⊆ C_in` (no new pair of either kind) **and** `|C_out| < |C_in|`.
 - **A2 disc separation:** no disc pair falls below `NodeSeparationProjection.MIN_GAP` that was not already
-  below it, using the same predicate as `NodeSeparationProjection`.
+  below it, using the budget-aware `NodeSeparationProjection.violatingPairsCounted` predicate (one
+  verification-work unit per node-pair test, checked before each test, §14.2); a `truncated()` pair set is
+  a `DETECTION_STOP` (the attempt is rejected, `C_out` is never accepted partially); the predicate
+  implementation is shared with `NodeSeparationProjection.project`.
 - **A3 hull invariants, subset form:** let `V_in` be the hull-violation **pair-key set** of the current
   (pre-batch) positions and `V_out` that of the candidate positions, both produced by the shared
   `BoundaryInvariants.detect` predicate set — sibling overlap, sibling containment in both directions,
@@ -258,12 +265,27 @@ pairwise disjoint. The batch is applied to a copy of the positions and verified 
   `layout/BoundaryInvariants`, which also owns the terminal classification entry point (§5.5).
 - **A4 membership:** every moved node keeps its enclosure path.
 
+**Per-frame work budgets (pinned).** Detection and verification work is counted under per-frame total
+budgets whose check points and units are pinned in §14.2: the index-item budget is checked before every
+cell write and inside every subdivision re-collect, the pair-check budget before every `properlyCross` /
+`segmentDistance` test (including the outermost direct pass), the detected-key volume budget when a
+distinct key is added, and the verification-work budget before every A2 node-pair test, A3 hull-pair
+comparison and recomputed hull. Counts accumulate over the initial detection, every verification
+detection, the final detection and the §5.5 rebuild. A detection-side stop on the **initial** detection
+publishes the accumulated keys as a lower bound and sets `detectionTruncated`; a detection-side stop
+inside a **verification** detection rejects that attempt and is reported as a verification-phase stop
+(`verificationBudgetExhausted`, `detectionTruncated` false, exact residual); a verification-phase stop
+reaches a complete final detection and sets `verificationBudgetExhausted`.
+
 **Rejection-retry semantics (pinned).** When a batch is rejected, the stage re-evaluates the rejected
 batch's candidates **individually** in canonical order and accepts the first single candidate that passes
 A1-A4. Only if none passes does it discard the whole batch and continue the greedy selection over the
-remaining unused candidates. Every verification attempt (batch or single) is counted; the total is bounded
-by `MAX_VERIFICATIONS_PER_FRAME`, and when that bound is hit the stage stops, reports its residual and sets
-`verificationBudgetExhausted`. A viable single repair can never be discarded because a sibling in its batch failed.
+remaining unused candidates. Every verification attempt (batch or single) is counted; the ladder is
+additionally bounded by `MAX_VERIFICATIONS_PER_FRAME` and by the per-frame verification-work budget. A
+verification-phase stop **rejects** the in-flight attempt — it is never accepted with a truncated `C_out`
+— leaves the positions unchanged, reaches a complete detection on the published positions and sets
+`verificationBudgetExhausted` (§14.2). A viable single repair can never be discarded because a sibling in
+its batch failed.
 
 Accepted batches repeat until no batch is accepted, `MAX_RELOCATION_ROUNDS` is reached, or no conflicts
 remain. Because A1 is a strict set-decrease, the conflict set shrinks with every accepted round and the
@@ -275,7 +297,8 @@ The stage is a pure function of
 `(projection, positions, metrics, pins, visibleEndpoints, boundaryTerminalGeometry)`. There is no
 cross-frame state and no hysteresis: the draft's "previous repair set" was removed because it contradicted
 G4. Consecutive frames can differ only because their inputs differ. Timings are not part of the diagnostics
-(they live in `EdgeConflictTimings`, mirroring `BoundarySeparationTimings`).
+(they live in `EdgeConflictTimings`, mirroring `BoundarySeparationTimings`). The Revision 7 budget counters and
+their stop points are counted functions of the inputs (§14.2), so the bounded policy preserves this purity.
 
 ### 5.5 Verification of the published positions
 
@@ -302,7 +325,8 @@ so no post-relocation re-gating is required. When no batch is accepted, position
 boundary diagnostics already describe the published frame.
 
 The rebuild's cost — one `detect`, one terminal plan and one `NodeSeparationProjection.project` per frame
-that changed positions — is budgeted in the `edge-conflict` stage tier (§9), not hidden.
+that changed positions — is counted under the per-frame verification-work budget (§14.2) and covered by
+the `edge-conflict` stage tier (§9), not hidden.
 
 ### 5.6 Diagnostics and frame plumbing
 
@@ -312,8 +336,10 @@ A new immutable `EdgeConflictDiagnostics` (no timings) is attached to the publis
 - `crossingsResolved`, `edgeOverNodeResolved`;
 - `conflictsResidual` with their canonical pair keys;
 - `repairsApplied` (kind, node keys, from/to centres, batch index);
-- `rounds`, `verifications`, `verificationBudgetExhausted`, `indexBudgetExhausted` (§9's distinct
-  index-work flag and the counted work).
+- `rounds`, `verifications`, the counted work (`indexInsertedItems`, `indexPairChecks`,
+  `indexSubdivisions`, `verificationWork`) and the three conflict-stage flags `indexBudgetExhausted`
+  (direct full enumeration ran, no pair dropped), `verificationBudgetExhausted` (verification-phase stop,
+  detection complete) and `detectionTruncated` (detection-side stop, residual lower bound).
 
 `LayoutFrame` gains
 `withDiagnostics(frame, int residualViolations, BoundarySeparationDiagnostics, EdgeConflictDiagnostics,
@@ -458,8 +484,9 @@ Two counters exist and are never conflated:
   paths**, with no region exclusion. The §6.4 fan region affects only the router's **clearance acceptance
   rule**; it never removes a visible crossing from the residual count. This is the residual the user sees.
 
-G6 is satisfied when the drawn-path residual is reported and equals the paths that no relocation or detour
-could clear.
+G6 is satisfied when the drawn-path residual is reported for a non-truncated frame and equals the paths
+that no relocation or detour could clear; on a truncated frame the published residual is a lower bound and
+`detectionTruncated` is set (G6, §14.2).
 
 ## 7. Invariants
 
@@ -531,19 +558,54 @@ The harness is the existing gate, not a new one: `PerformanceMeasurements.Stage`
   - **Enumeration cap:** the per-cell cap is a **work budget on inserted items** (chords plus inflated
     discs), not on pairs — counting pairs would require the quadratic enumeration the cap exists to bound.
     When a cell's inserted-item count exceeds the pinned cap the cell **subdivides**, never truncates; when
-    subdivision is exhausted at the pinned minimum cell size the remaining pairs are still enumerated (no
-    pair is ever dropped) and the frame sets `indexBudgetExhausted` with the counted work. Verification
-    exhaustion from §5.3 sets `verificationBudgetExhausted` instead; the two flags stay distinct in
-    `EdgeConflictDiagnostics`.
+    subdivision is exhausted at its floor the remaining pairs are still enumerated (no pair is dropped on a
+    non-truncated frame) and the frame sets `indexBudgetExhausted` with the counted work.
+    `indexBudgetExhausted` therefore means “the index fell back to direct full enumeration (subdivision
+    floor/depth reached, or the outermost direct pass ran), every pair was examined, none was dropped” — it
+    never signals truncation. The separate per-frame **index-item** and **pair-check** budgets (§14.2)
+    truncate detection: the published detected/residual sets become the ascending distinct keys accumulated
+    up to the counted stop and `detectionTruncated` is set. A verification-phase stop from §5.3 sets
+    `verificationBudgetExhausted` with detection complete. The four flags stay distinct in
+    `EdgeConflictDiagnostics`/`EdgeRouteDiagnostics` (N4).
+  - **Span-adaptive level-0 cell size:** the level-0 cell size is
+    `max(CONFLICT_CELL_SIZE, min(span / CONFLICT_GRID_DIMENSION, CONFLICT_MAX_CELL_SIZE))` computed from the
+    frame's primitive span; the pinned `48.0` grid is the small-frame floor,
+    `CONFLICT_GRID_DIMENSION = 128` bounds the cells per axis on wide frames, and
+    `CONFLICT_MAX_CELL_SIZE = 1.0e9` keeps the outermost-ring sentinel reachable by the 64-bit encoding. A
+    primitive whose traversal (or inflated-disc bounding box) exceeds
+    `CONFLICT_MAX_CELLS_PER_PRIMITIVE = 4096` cells at a level is checked by the direct outermost pass
+    instead of being rasterised; no pair is dropped. Fixtures: the 65-chord fixture keeps the `48.0` grid
+    and its pinned values; the `(±1e300)` fixture still clamps to the outermost ring.
   - **Cell origin and normalisation:** cell index `i = floor((x - originX) / cellSize)` with the frame's
     minimum coordinate as origin; the specification pins the encoding and the outermost-ring fallback.
 - Per frame the detection runs at most `1 + accepted rounds + rejected-batch verifications + 1 rebuild`
-  times when conflicts exist, bounded by `MAX_VERIFICATIONS_PER_FRAME`; it runs once when no conflicts
-  exist. A3 verification reuses `recomputeHulls(..., changedHulls(...))` per candidate batch; the only
-  full hull computations per frame are the boundary stage's own and the publish-time one in
-  `LayoutSettleLoop` (§4.3), not an extra one inside the edge-conflict stage.
+  times when conflicts exist, bounded by `MAX_VERIFICATIONS_PER_FRAME` and by the per-frame work budgets
+  (§14.2); it runs once when no conflicts exist. The work counters are per-frame totals over the initial
+  detection, every verification detection, the final detection and the rebuild; the final publication
+  detection and the rebuild always run to completion (a detection-side stop can only truncate the initial
+  detection or reject a verification attempt), so the published residual is exact on every frame that
+  stops in the verification phase. A3 verification reuses `recomputeHulls(..., changedHulls(...))` per
+  candidate batch; the only full hull computations per frame are the boundary stage's own and the
+  publish-time one in `LayoutSettleLoop` (§4.3), not an extra one inside the edge-conflict stage.
 - The router uses a grid over disc and path bounding boxes for its clearance queries and caches its result
-  per published frame.
+  per published frame. Its index build, its obstacle checks and its detected-crossing/residual/hull passes
+  run under separate per-frame counted budgets (§14.3). On obstacle-budget exhaustion the remaining
+  canonical-order edges are straight fallbacks and fallback edges consume no further obstacle budget; a
+  residual-pass stop publishes a lower-bound residual and sets `detectionTruncated`.
+- Budgets are calibrated, not assumed. Every budget has one defined counted unit (§14.2/§14.3); the
+  implementation change records, on the saturated in-budget frame, the measured per-unit cost and fixed
+  overhead and must satisfy `budget × per-unit cost + overhead ≤ f × threshold` with `f = 0.5` for the
+  `edge-conflict` (25 ms) and `edge-routing` (10 ms) stages, verification/A2 work included. The measured
+  worst-in-budget stage time is recorded in the specification change; only tightening is allowed.
+- Per-frame total: the budgets bound the two new stages at their `f × threshold` caps (12.5 ms + 5 ms);
+  the non-edge stages keep their measured bounds (force p95 17.9 ms, correction p95 1.5 ms, hull p95
+  1.3 ms, worker p95 4.8 ms) and the reference accepted-batch baseline was 131.5 ms p95 / 138.4 ms p99
+  (`2026-08-10-graph-workspace-performance-report.md`). A bounded reference frame is therefore bounded
+  by `baseline + 12.5 ms + 5 ms` ≈ 149 ms p95 (inside `STRICT_FIRST_FRAME_P95_NANOS` = 150 ms) and
+  ≈ 156 ms p99 (inside 300 ms); the worker path stays inside `STRICT_FULL_WORKER_NANOS` (100 ms). The
+  calibration records the measured total and any breaching sample blocks the feature. The measurement
+  window, the per-sample window and the harness deadline are pinned in §14.4; the direct probe is
+  time-limited and covered by the process deadline.
 
 ## 10. Test strategy
 
@@ -576,7 +638,15 @@ Each mechanism is probed by breaking exactly it and showing the covering test fa
 14. replace the §4.2 terminal-geometry reuse with a fresh full `computeHulls` and show the budget tripwire
     catches the difference;
 15. remove the §9 outermost-ring fallback and show the extreme-span fixture collapses to one hub cell;
-16. flip the §5.2 C2 normal direction and show the disc does not clear the chord.
+16. flip the §5.2 C2 normal direction and show the disc does not clear the chord;
+17. move the index-item check after a whole cell/collect write (check-after-collect) and show the item-budget
+    fixture no longer truncates at the cap;
+18. move the pair-check check after the predicate (check-after-predicate) and show the pair-budget fixture
+    no longer truncates at the cap;
+19. leave the router residual pass unbounded (drop its pair-check budget) and show the residual-truncation
+    fixture no longer publishes the lower bound;
+20. truncate `C_out` instead of rejecting the attempt when the verification-work budget is exhausted and
+    show the verification-budget fixture fails.
 
 ### 10.3 Test suites
 
@@ -585,12 +655,16 @@ Each mechanism is probed by breaking exactly it and showing the covering test fa
   and no node movement; pinned endpoint blocks the swap; rejection of one batch still allows later disjoint
   repairs, including the single-candidate retry; enclosure membership; disc-gap veto;
   hull-nesting-without-overlap veto; pair-set monotonicity; determinism across runs and across permuted
-  input order; residual reporting; round and verification bounds; `visibleEndpoints` participation.
+  input order; residual reporting; round/verification/work bounds; `visibleEndpoints` participation;
+  bounded-work fixtures for the item, pair-check, detected-key volume and verification-work budgets
+  (truncation semantics, lower-bound residual, `detectionTruncated`/`verificationBudgetExhausted`) and the
+  counted-work accessors bounded by their pins.
 - `EdgeRouterShould` — straight when clear; bow for a disc on the chord; dogleg when a bow is blocked;
   later-chord obstacle (the attempt-1 reviewer's counterexample, inverted into a test); fan exemption
   region; clearance invariants including the sampled-polyline tolerance bound; `ROUTE_LENGTH_CAP` fallback
   and rung exclusion; attachment tangency; terminal-segment arrowhead cap; canonical order; determinism and
-  order permutation.
+  order permutation; obstacle-budget exhaustion to fallbacks, residual-pass truncation with a lower-bound
+  `pathCrossingsResidual` and `detectionTruncated`, and the counted-work accessors bounded by their pins.
 - `GraphCanvasPaintShould` — routed path painted through the production call site using the same sample
   list that was verified; arrowhead along the arrival tangent; multiplicity at the arc-length midpoint;
   selection/hover/dimming unchanged.
@@ -604,14 +678,17 @@ Each mechanism is probed by breaking exactly it and showing the covering test fa
   merged relocation displacements.
 - `BoundaryInvariantsShould` — the extracted predicate set is the one `BoundarySeparationCorrection` used
   before the extraction (characterization test on a frozen fixture set, including the hull-nesting case).
-- `PerformanceTripwiresShould` — the two new stages and their thresholds; the reference 2000/5000 fixture
-  stays inside `STRICT_FULL_WORKER_NANOS` and the first-frame p95/p99 bounds; a hub/star fixture and the
-  geometry-suite extreme coordinates exercise the grid encoding and the subdivision cap.
+- `PerformanceTripwiresShould` — the two new stages and their thresholds, measured on the settled worker
+  frame with zero budget-exhaustion events (§14.4); the reference 2000/5000 fixture stays inside
+  `STRICT_FULL_WORKER_NANOS` and the first-frame p95/p99 bounds; a hub/star fixture and the geometry-suite
+  extreme coordinates exercise the grid encoding and the subdivision cap.
 
 ## 11. Rollout and legacy removal
 
 - No feature flag: the correction and router are active by default, consistent with the previous graph
-  features.
+  features. The Revision 7 bounded policy (§14) ships in the same change; the two performance samples are
+  measured on the settled published worker frame (§14.4), not on the direct-probe seed frame, and there is
+  exactly one measurement path.
 - The straight-line drawing branch in `GraphPainter.paintEdges` is replaced by the path draw in the same
   change; the edge hit-test's segment distance is replaced by path distance. No parallel implementation is
   retained.
@@ -724,8 +801,175 @@ not design defects:
 | `ROUTE_LENGTH_CAP` | ratio | defines the live ladder: a rung is live iff its analytic ratio is `≤` the cap. Measured ratios: bow 0.15/0.30/0.50 = 1.014804/1.057116/1.147794; same-side dogleg 0.15/0.30/0.50 = 1.064390/1.230242/1.535184 |
 | detection epsilon | world units | pinned; the crossing predicate is exact-sign based, the epsilon covers only degenerate touch |
 | `MAX_RELOCATION_ROUNDS` | count | `≥ 1` (draft 4); each accepted round strictly shrinks the conflict set |
-| `MAX_VERIFICATIONS_PER_FRAME` | count | bounds every A1-A4 verification attempt including the §5.3 single-candidate retries; on exhaustion the stage stops with `verificationBudgetExhausted` (distinct from §9's `indexBudgetExhausted`) |
+| `MAX_VERIFICATIONS_PER_FRAME` | count | bounds every A1-A4 verification attempt including the §5.3 single-candidate retries; on exhaustion the ladder stops with `verificationBudgetExhausted` and detection complete (distinct from `indexBudgetExhausted`) |
 | bow sampling tolerance | world units | maximum sagitta of the sampled polyline; `≤ min(EDGE_NODE_CLEARANCE, EDGE_CLEARANCE) / 2`. It is a **fidelity bound**, not a safety margin: §6.5 makes the same sample list both verified and painted, so the bound keeps the drawn curve indistinguishable from the verified one at the clearances in play |
 | `FAN_HULL_RADIUS` | world units | `> 0`; the hull-endpoint part of `endpointClearanceRadius` (§6.4) |
-| conflict-index cell size | world units | `> 0`; with the 64-bit cell-key encoding and outermost-ring fallback of §9 |
-| conflict-index per-cell work cap | inserted-item count | triggers cell subdivision, never truncation (§9); exhaustion sets `indexBudgetExhausted` |
+| conflict-index cell size | world units | `> 0`; the small-frame level-0 floor `CONFLICT_CELL_SIZE` (48.0), with the 64-bit cell-key encoding and outermost-ring fallback of §9 |
+| `CONFLICT_GRID_DIMENSION` | count | `> 0`; level-0 grid dimension per axis: `baseCellSize = max(CONFLICT_CELL_SIZE, min(span / CONFLICT_GRID_DIMENSION, CONFLICT_MAX_CELL_SIZE))`; proven by the 65-chord fixture (floor preserved) and the reference-scale fixture (adaptive cell) |
+| `CONFLICT_MAX_CELL_SIZE` | world units | `≥ CONFLICT_CELL_SIZE`; cap on the adaptive level-0 cell size so the outermost-ring sentinel stays reachable for spans beyond the 64-bit index range; proven by the `(±1e300)` fixture |
+| `CONFLICT_MAX_CELLS_PER_PRIMITIVE` | cells | `> 0`; a chord traversal (or disc bounding box) larger than this is diverted to the direct outermost pass; no pair dropped; proven by the dense wide-span fixture (spec §8.5) |
+| `CONFLICT_MIN_CELL_SIZE` | world units | the subdivision floor for the pinned 48.0 base; for an adaptive base the fixed `CONFLICT_MAX_SUBDIVISION_DEPTH` binds first and an over-cap leaf still enumerates every pair (`indexBudgetExhausted`) |
+| conflict-index per-cell work cap | inserted-item count | triggers cell subdivision, never truncation (§9); a direct-enumeration fallback (subdivision floor/depth or outermost pass) sets `indexBudgetExhausted` with every pair examined |
+| `EDGE_CONFLICT_MAX_INDEX_ITEMS_PER_FRAME` | count | per-frame index-item budget; checked before every cell write and inside the subdivision re-collect; a stop truncates detection and sets `detectionTruncated` (§14.2) |
+| `EDGE_CONFLICT_MAX_PAIR_CHECKS_PER_FRAME` | count | per-frame pair-check budget; checked before every `properlyCross`/`segmentDistance` test including the outermost direct pass; a stop truncates detection and sets `detectionTruncated` |
+| `EDGE_CONFLICT_MAX_DETECTED_PER_FRAME` | count | per-frame detected-key volume budget; a stop truncates detection and sets `detectionTruncated` |
+| `EDGE_CONFLICT_MAX_VERIFICATION_WORK_PER_FRAME` | count | per-frame verification-work budget (A2 node-pair tests, A3 hull-pair comparisons, recomputed hulls); exhaustion rejects the in-flight attempt and sets `verificationBudgetExhausted` with detection complete |
+| `EDGE_ROUTING_MAX_INDEX_ITEMS_PER_FRAME` | count | router index-item budget; exhaustion makes the remaining edges fallbacks and sets `routeBudgetExhausted` |
+| `EDGE_ROUTING_MAX_OBSTACLE_CHECKS_PER_FRAME` | count | one `(candidate rung, obstacle)` clearance evaluation; exhaustion makes the remaining canonical-order edges straight fallbacks and sets `routeBudgetExhausted` |
+| `EDGE_ROUTING_MAX_PAIR_CHECKS_PER_FRAME` | count | router detected-crossing/residual/hull sample-pair tests; a stop publishes a lower-bound residual and sets `detectionTruncated` |
+| calibration factor `f` | ratio | `0.5`; every budget must satisfy `budget × per-unit cost + overhead ≤ f × threshold` on the saturated in-budget frame (§14.2) |
+
+## 14. Revision 7 — bounded-effort stages and the settled-frame measurement window
+
+Added by the PM after the Step 8 design pivot (2026-10-13, user decision A+B).
+**Full footprint:** this revision changes G6 (§2); §5.3 (budgeted verification and the four flags);
+§5.4–§5.6 (per-frame totals, rebuild accounting and diagnostics); §6.10 (residual lower bound);
+§9 (budgets, check points, calibration, per-frame total and measurement); §10.2–§10.3 (mutation
+probes and test suites); §11 (single measurement path); §13 (grid and budget constants); and the
+appendix sections below. No other section changes, and no pinned strict threshold changes.
+
+### 14.1 The pivot
+
+The reference `reference-2000-5000` fixture's generated frames are pathological before the force
+layout converges: the measured seed frame carried 516,400 proper crossings (514,968 C1 + 1,432 C2).
+One detection pass cost 13,430 ms with 2,925,332 inserted items and 677,272 pair checks; one
+relocation `apply` ~860 s (64 verifications, 0 rounds); publish routing ~5,177 ms; the A2 predicate
+alone measured 1,344 ms per 1,999,000-pair call. The cost is conflict volume, not lookup, so no index
+can bring an unbounded volume inside the pinned stage, worker and first-frame budgets. The feature must
+therefore stay *bounded on every input* while still doing full work on the ordinary frames it targets.
+
+### 14.2 Bounded-effort relocation policy (§5.3, §9 extension)
+
+**Counted units and budgets.** All budgets are per-frame totals that accumulate over the initial
+detection, every verification detection, A1–A4 (the counted A2 predicate, the A3 hull comparisons and
+every hull recompute), the final detection and the §5.5 rebuild; they are never reset between phases.
+Each budget has exactly one counted unit:
+
+| budget | counted unit | check point | stop semantics |
+| --- | --- | --- | --- |
+| index-item | one inserted index item (one primitive-cell write) or one direct outermost examination | before every cell write and inside every subdivision re-collect | detection truncated at the counted stop |
+| pair-check | one `properlyCross` / `segmentDistance` test | before every test, including the outermost direct pass | detection truncated at the counted stop |
+| detected-key volume | one distinct conflict identity key | when a key is added to the accumulating set | detection truncated at the counted stop |
+| verification-work | one verification-phase predicate evaluation: one A2 node-pair test, one A3 hull-pair comparison or one recomputed hull | before every counted verification sub-step | the in-flight attempt is rejected; the ladder stops with detection complete |
+| verification attempts (`MAX_VERIFICATIONS_PER_FRAME`) | one batch or single A1–A4 evaluation | before each attempt | the ladder stops with detection complete |
+
+- The published set on a detection stop is the ascending set of distinct conflict keys accumulated up
+to the counted stop (“detected so far”), not a set derived from full enumeration; enumeration is in
+cell order, so that accumulated set is exactly what determinism and the lower-bound contract pin.
+Detection truncation sets `detectionTruncated`; the flag is the only signal of incompleteness.
+- A detection-side stop on the **initial** detection leaves no attempts and no §5.5 rebuild for the
+frame: `rounds = 0`, `verifications = 0`, `repairsApplied` empty, `crossingsResolved = 0`,
+`edgeOverNodeResolved = 0`, and the accumulated set is the published detected and residual set.
+- A detection-side stop **inside a verification detection** rejects that attempt; the last complete
+detection still describes the unchanged published positions, so the ladder stops with
+`verificationBudgetExhausted`, `detectionTruncated` false, and a complete residual. A verification-work
+stop does the same and never truncates `C_out`; `C_out` is only ever accepted in full.
+- A **verification-phase stop** (`MAX_VERIFICATIONS_PER_FRAME` or the verification-work budget) runs the
+final publication detection to completion on the published positions and sets
+`verificationBudgetExhausted`; this residual is exact. The final detection and the §5.5 rebuild always
+run to completion and their counted work is part of the per-frame total; because A1 strictly shrinks
+the conflict set, the final detection's volume is no larger than the initial detection's.
+- **Flags (four, distinct).** `indexBudgetExhausted` keeps its meaning: the index fell back to direct
+full enumeration (subdivision floor/depth reached, or a direct outermost pass) with every pair examined
+and none dropped. `verificationBudgetExhausted`: a verification-phase stop; detection complete.
+`detectionTruncated`: a detection-side budget stopped detection before enumeration completed; the
+published `conflictsResidual`/`pathCrossingsResidual` is a lower bound. `routeBudgetExhausted`: the
+router's obstacle/index budget stopped routing and the remaining edges are fallbacks (§14.3). At every
+stop point all counters are evaluated and every flag whose counter is at or beyond its cap is set (the
+both-flags rule); a frame may therefore carry e.g. `indexBudgetExhausted` and `detectionTruncated`
+together when a direct-enumeration fallback is itself truncated by the pair budget.
+- **Determinism.** Budget stops are counted stops on canonical-order enumerations, so identical inputs
+still produce identical published diagnostics.
+- **Calibration.** Each budget must be calibrated against its stage threshold (spec §13.1): record the
+measured per-unit cost `c_B` and fixed overhead `o` on the saturated in-budget frame (all budgets at
+their caps) and satisfy `cap(B) × c_B + o ≤ f × threshold` with `f = 0.5`; A2 and all verification
+work counts as either a unit or fixed overhead; the measured worst-in-budget stage time is recorded in
+the specification change. A later change may only tighten a budget or a threshold, never raise one
+(spec §7.1).
+
+### 14.3 Bounded-effort router policy (§6, §6.9 extension)
+
+- The router runs under three per-frame budgets: an **index-item** budget for the query-grid build and
+every path/disc/hull insertion during selection; an **obstacle-check** budget whose unit is one
+obstacle clearance evaluation per (candidate rung or straight chord, obstacle); and a **pair-check**
+budget whose unit is one sample-segment pair test in the detected-crossing pass, the residual pass and
+the hull-penetration pass.
+- On obstacle-budget exhaustion the remaining canonical-order edges are published as straight fallbacks:
+`edgesFallback` counts them, their crossings appear in `pathCrossingsResidual`, and the classification
+identity of §6.9 still holds. **Fallback edges consume no obstacle budget** — they are published
+without further obstacle checks.
+- On index-item exhaustion no further index items are inserted; the remaining edges are fallbacks and
+the residual passes use the partial index. On pair-check exhaustion the running detected-crossing/
+residual/hull pass stops; `pathCrossingsDetected`, `pathCrossingsResidual` and `pathHullPenetrations`
+become lower bounds, the truncation is visible through `detectionTruncated`, and routing selection
+itself is unaffected (it is bounded by the obstacle budget). The router index-item and obstacle-budget
+stops set `routeBudgetExhausted`; the flags may coexist with router `detectionTruncated`.
+- No partially drawn geometry is ever published: a budget stop is a fallback or a marked lower-bound
+diagnostic, not an error, and the already-routed edges keep their paths.
+- The router's per-frame result stays cached on the published `CanvasState` (§7.2).
+
+### 14.4 Settled-frame measurement window and deadline (§9 extension)
+
+- The pinned strict thresholds are steady-state gates; warmup samples never contribute to p50/p95/p99.
+- **Measurement input (pinned).** The `edge-conflict` and `edge-routing` samples are recorded on the
+**settled worker frame the application publishes**, never on `runDirectProbe`'s fresh-engine seed frame.
+The diagnostic re-runs the stage on the published worker frame's positions and times that call — the
+same deterministic code path:
+  - `edge-conflict`: run `BoundarySeparationCorrection.apply` on `workerFrame.positions()` and time
+    `EdgeConflictCorrection.apply` on the returned boundary result;
+  - `edge-routing`: time `EdgeRouter.route(projection, workerFrame.positions(), workerHulls, visible)`;
+  - the `EDGE_CONFLICT`/`EDGE_ROUTING` recordings inside `runDirectProbe` are removed.
+- **Zero-exhaustion rule.** A7 is satisfied only when the measured samples have zero budget-exhaustion
+events for the two stages: every sample must report `detectionTruncated == false`,
+`verificationBudgetExhausted == false`, `indexBudgetExhausted == false` and
+`routeBudgetExhausted == false`. A sample that hits a budget or falls back to direct full enumeration is
+a budget-stop time; counting it would make the gate vacuous.
+- **Reference window (pinned).** `GeneratedWorkspace.Scenario.REFERENCE_2000_5000` pins **400 warmups /
+300 measured** (700 samples). The `20` / `100` constants are the placement-trigger sub-measurement
+counts only (`WARMUP_SAMPLES`, `TIMED_SAMPLES`) and are unchanged. The measured window is the
+post-expansion steady state already recorded by the closed 2026-08-10 performance report; the
+convergence criterion is a stable p95 across the window plus the zero-exhaustion rule. Raising the
+window remains a measurement-window change, never a threshold change.
+- **Per-frame total and deadline.** With every budget saturated, the two new stages are capped at their
+  `f × threshold` values, 12.5 ms (`edge-conflict`) and 5 ms (`edge-routing`). The measured non-edge
+  stages are unchanged (force p95 17.9 ms, correction p95 1.5 ms, hull p95 1.3 ms, worker p95 4.8 ms)
+  and the reference accepted-batch baseline was 131.5 ms p95 / 138.4 ms p99 (2026-08-10 performance
+  report). A bounded reference frame is therefore bounded by `baseline + 12.5 ms + 5 ms` ≈ 149 ms p95
+  (inside `STRICT_FIRST_FRAME_P95_NANOS` = 150 ms) and ≈ 156 ms p99 (inside 300 ms), and the worker
+  path stays inside `STRICT_FULL_WORKER_NANOS` (100 ms); the calibration records the measured total and
+  any breaching sample blocks the feature. The direct-probe measurement and the settled-frame stage
+  re-runs are wrapped in the harness's bounded-operation wrapper (`invokeBounded`) with the
+  per-operation expected time pinned in the implementation change; until that wrapper is in place their
+  bounded per-frame work is the practical bound. The reference window is budgeted at 2 s per sample
+  (700 × 2 s = 23.3 min), the other five
+  scenarios at 250 × 2 s = 8.3 min and the placement triggers at ≤ 6 min, so the whole process fits the
+  pinned **40-minute** `PROCESS_DEADLINE_NANOS`; the deadline message must read “Forty-minute diagnostic
+  process deadline exceeded” (the current “Ten-minute” message is the inconsistency to fix). If the
+  measured window ever exceeds the deadline, the deadline is raised as a measurement-window value in the
+  same change.
+- No strict threshold is raised. A measured miss inside the settled, exhaustion-free window still blocks
+the feature and forces a further design revision.
+
+### 14.5 Testability
+
+- The bounded claims are asserted by **counted work**, never wall clock: `indexInsertedItems`,
+`indexPairChecks`, `verificationWork`, `routeObstacleChecks` and `routePairChecks` are each bounded by
+their pins on a dense wide-span frame, together with the flag and residual assertions below.
+- **Item-budget fixture:** a dedicated frame whose `detectionTruncated == true` is caused only by the
+index-item budget (pair and volume counters stay below their caps) and whose detected set is incomplete
+against a brute-force baseline of the same frame; the published set is exactly the ascending keys
+accumulated up to the counted stop.
+- **Pair-budget fixture:** the same shape with `detectionTruncated` caused only by the pair-check budget.
+- **Volume-budget fixture:** a hub/star frame with more than the volume-budget keys asserts `rounds == 0`,
+`verifications == 0`, empty `repairsApplied`, `detectionTruncated == true` and the accumulated set.
+- **Verification-budget fixture:** a frame whose verification work reaches its cap asserts the attempt
+was rejected (no `C_out` truncation), `verificationBudgetExhausted == true` and an exact residual.
+- **Router fixtures:** the obstacle-budget fixture asserts fallback classification plus
+`routeBudgetExhausted`; the residual-pass fixture asserts a lower-bound `pathCrossingsResidual` plus
+router `detectionTruncated`.
+- The archived `1b5e22c460` test
+`EdgeConflictCorrectionShould.boundsTheConflictIndexForReferenceScaleSpansAndStillDetectsEveryCrossing`
+(500 chords, 124,750 crossings) is **superseded**: below the budgets every crossing is still detected,
+and above them the accumulated truncated set plus `detectionTruncated` is the pinned behaviour, so the
+test is reshaped to assert the pinned semantics and the counted work instead of the all-124,750
+assertion.

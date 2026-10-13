@@ -61,10 +61,13 @@ for the chosen number.
 | `MAX_VERIFICATIONS_PER_FRAME` | `EdgeConflictCorrection` | `64` | count | bounds every A1–A4 attempt including retries | Equals `NodeSeparationProjection.MAX_PASSES = 64`; the per-frame detection count is bounded by `1 + MAX_RELOCATION_ROUNDS + MAX_VERIFICATIONS_PER_FRAME + 1`, and one batch of six candidates plus its six singles never exhausts the budget for a frame with a handful of conflicts. Exhaustion sets `verificationBudgetExhausted`, never an exception. |
 | `BOW_SAMPLE_TOLERANCE` | `EdgePath` | `0.75` | world units | max sagitta `≤ min(EDGE_NODE_CLEARANCE, EDGE_CLEARANCE) / 2 = 1.5` | Half the allowed fidelity bound (safety margin for the §6.5 single-sample-list contract): the drawn polyline deviates from the true quadratic by at most `0.75`, i.e. a quarter of the `3.0` clearance. |
 | `FAN_HULL_RADIUS` | `EdgeRouter` | `16.0` | world units | `> 0`; hull-endpoint part of `endpointClearanceRadius` | Equals `BoundarySeparationCorrection.HULL_CLEARANCE = 16.0`: a hull endpoint has no drawn disc, and its fan region uses exactly the hull padding the boundary stage reserves, so the two stages agree on hull scale. |
-| `CONFLICT_CELL_SIZE` | `EdgeConflictCorrection` | `48.0` | world units | `> 0`; 64-bit cell-key encoding + outermost-ring fallback | `48.0 > 34.0 = 2 × (14.0 + EDGE_NODE_CLEARANCE)`, the largest inflated-disc diameter: at the root level every inflated disc overlaps at most a 2 × 2 cell block, bounding insertion cost. Larger than `NodeSeparationProjection.SPATIAL_CELL = 34.0` (the house grid) for the same reason. |
-| `CONFLICT_MIN_CELL_SIZE` | `EdgeConflictCorrection` | `3.0` | world units | subdivision floor | Equals `EDGE_NODE_CLEARANCE`: a cell smaller than the smallest clearance cannot separate obstacles any better, so subdivision stops and direct enumeration continues with `indexBudgetExhausted`. |
+| `CONFLICT_CELL_SIZE` | `EdgeConflictCorrection` | `48.0` | world units | `> 0`; the level-0 floor of the span-adaptive cell size with 64-bit cell-key encoding + outermost-ring fallback | `48.0 > 34.0 = 2 × (14.0 + EDGE_NODE_CLEARANCE)`, the largest inflated-disc diameter: at the root level every inflated disc overlaps at most a 2 × 2 cell block, bounding insertion cost. Larger than `NodeSeparationProjection.SPATIAL_CELL = 34.0` (the house grid) for the same reason. Frames wider than `CONFLICT_GRID_DIMENSION × 48.0` grow the cell instead (next row), so the floor is preserved exactly for the small frames that keep it. |
+| `CONFLICT_GRID_DIMENSION` | `EdgeConflictCorrection` | `128` | count | level-0 grid dimension per frame axis | `baseCellSize = max(CONFLICT_CELL_SIZE, min(span / CONFLICT_GRID_DIMENSION, CONFLICT_MAX_CELL_SIZE))`, `span = max(maxX − originX, maxY − originY)` over the inserted primitives (non-positive/non-finite span falls back to `CONFLICT_CELL_SIZE`). A wide frame keeps ~128 cells per axis instead of one cell per 48 units, so a long chord costs O(traversed cells) after adaptation. Proven by the 65-chord fixture (span ≈ 235, base stays `48.0`) and the reference-scale fixture (adaptive base). |
+| `CONFLICT_MAX_CELL_SIZE` | `EdgeConflictCorrection` | `1.0e9` | world units | `≥ CONFLICT_CELL_SIZE`; cap on the adaptive level-0 cell size | Keeps the 64-bit cell-key encoding and the outermost-ring sentinel meaningful for spans beyond ~2.1e18: the `(±1e300)` fixture still clamps to the outermost ring and takes the direct outermost pass. Proven by that fixture. |
+| `CONFLICT_MAX_CELLS_PER_PRIMITIVE` | `EdgeConflictCorrection` | `4096` | cells | `> 0`; per-level bound on the cells one primitive may occupy | A chord whose traversal `max(\|dX\|, \|dY\|) + 1` (or an inflated disc whose closed-cell bounding-box count) exceeds the cap is recorded in the outermost set and paired directly against every other primitive at the level instead of being rasterised; no pair is dropped, and index memory is bounded for intermediate spans. Proven by the dense wide-span fixture of §8.5. |
 | `CONFLICT_CELL_CAP` | `EdgeConflictCorrection` | `64` | inserted items | triggers subdivision, never truncation | A cell at or below the cap (at most `64` items) enumerates at most `64 × 63 / 2 = 2016` candidate pairs; a cell above the cap (at least `65` items) starts at `65 × 64 / 2 = 2080` pairs before subdivision, so §8.5's `2080` is exactly the first over-cap count; `64` matches `MAX_VERIFICATIONS_PER_FRAME` and keeps the cap contract testable. |
-| `CONFLICT_MAX_SUBDIVISION_DEPTH` | `EdgeConflictCorrection` | `4` | count | derived from the two cell sizes | `48.0 → 24.0 → 12.0 → 6.0 → 3.0 = CONFLICT_MIN_CELL_SIZE`; four halvings are exactly the depth at which the pinned minimum is reached. |
+| `CONFLICT_MIN_CELL_SIZE` | `EdgeConflictCorrection` | `3.0` | world units | subdivision floor for the pinned base | Equals `EDGE_NODE_CLEARANCE`: a cell smaller than the smallest clearance cannot separate obstacles any better. For `baseCellSize = 48.0` the four halvings reach `3.0`; for an adaptive base the fixed `CONFLICT_MAX_SUBDIVISION_DEPTH` binds first, and an over-cap leaf still enumerates every pair (`indexBudgetExhausted`). |
+| `CONFLICT_MAX_SUBDIVISION_DEPTH` | `EdgeConflictCorrection` | `4` | count | fixed halving depth | For the pinned `48.0` base the levels are `48.0 → 24.0 → 12.0 → 6.0 → 3.0 = CONFLICT_MIN_CELL_SIZE`; for an adaptive base larger than `48.0` the depth cap binds first, and an over-cap leaf still enumerates every pair (`indexBudgetExhausted`). |
 | `OUTERMOST_CELL_INDEX` | `EdgeConflictCorrection` | `2147483647` (`Integer.MAX_VALUE`) | cell index | outermost-ring fallback | The largest nonnegative `int` representable in the 32-bit half of the 64-bit cell key; coordinates whose index would exceed it are clamped here (§4.2). |
 | `DRAWN_BASE_RADIUS` | `EdgeConflictCorrection`, `EdgeRouter` | `8.0` | world units | must equal the engine rule | Same numeric rule as `GraphGeometryEngine` (`BASE_RADIUS = 8.0`) and `NodeSeparationProjection.NODE_RADIUS`; both stages read the actual drawn radius from `GraphGeometry.nodes().get(key).radius()` whenever geometry is available and use this constant only for conflict-index/ordering fallbacks. |
 
@@ -274,11 +277,13 @@ public final class EdgeConflictDiagnostics {
     public List<Repair> repairsApplied();              // one per accepted candidate, application order
     public int rounds();
     public int verifications();                        // every batch or single attempt counted
-    public boolean verificationBudgetExhausted();
-    public boolean indexBudgetExhausted();
-    public long indexInsertedItems();                  // counted work, §4.2
-    public long indexPairChecks();                     // counted work, §4.2
-    public int indexSubdivisions();                    // counted work, §4.2
+    public boolean verificationBudgetExhausted();      // verification-phase stop; detection complete
+    public boolean indexBudgetExhausted();             // direct full enumeration ran; no pair dropped
+    public boolean detectionTruncated();               // detection-side stop; residual lower bound
+    public long indexInsertedItems();                  // counted work, §4.3
+    public long indexPairChecks();                     // counted work, §4.3
+    public long verificationWork();                    // A2 tests + A3 comparisons + hull recomputes, §4.3
+    public int indexSubdivisions();                    // counted work, §4.3
 }
 
 public final class EdgeConflictTimings {
@@ -291,9 +296,13 @@ public final class EdgeConflictTimings {
 }
 ```
 
-`EdgeConflictDiagnostics.empty()` returns all counts zero, empty lists, both flags `false`. `conflictsResidual()` is
+`EdgeConflictDiagnostics.empty()` returns all counts zero, empty lists, all flags `false`. `conflictsResidual()` is
 computed on the returned `positions()`, not on the pre-batch state. `crossingsResolved = crossingsDetected − residualC1`
-and `edgeOverNodeResolved = edgeOverNodeDetected − residualC2` on the first-round detection.
+and `edgeOverNodeResolved = edgeOverNodeDetected − residualC2` on the first-round detection. On a frame stopped by a
+detection-side budget, `conflictsDetected` and `conflictsResidual` are the ascending set of distinct keys accumulated up
+to the counted stop — a lower bound — and `crossingsResolved`/`edgeOverNodeResolved` are 0; `detectionTruncated()` is
+the only signal of incompleteness. On a verification-phase stop (`verificationBudgetExhausted()`), detection is
+complete and the residual is exact.
 
 ### 2.4 `geometry/EdgePath`, `EdgePaths`, `EdgeRouter`, route diagnostics and timings
 
@@ -339,9 +348,14 @@ public final class EdgeRouteDiagnostics {
     public int edgesBow();
     public int edgesDogleg();
     public int edgesFallback();
-    public int pathCrossingsDetected();                // straight-chord proper crossings before routing
-    public List<String> pathCrossingsResidual();       // ascending distinct CanonicalKeys.edgePair keys after routing
-    public int pathHullPenetrations();                 // (edge, hull) pairs, §6.9
+    public int pathCrossingsDetected();                // straight-chord crossings before routing; lower bound on a truncated pass
+    public List<String> pathCrossingsResidual();       // ascending distinct CanonicalKeys.edgePair keys after routing; lower bound on a truncated pass
+    public int pathHullPenetrations();                 // (edge, hull) pairs, §6.9; lower bound on a truncated pass
+    public boolean routeBudgetExhausted();             // obstacle/index budget stopped routing; remaining edges fallback
+    public boolean detectionTruncated();               // detected-crossing/residual/hull pair budget stopped a pass
+    public long routeIndexItems();                     // counted work, §6.2
+    public long routeObstacleChecks();                 // counted work, §6.2
+    public long routePairChecks();                     // counted work, §6.9
 }
 
 public final class EdgeRouteTimings {
@@ -405,12 +419,22 @@ To give A2 pair identities without duplicating the gap predicate:
 
 ```java
 public static List<String> violatingPairs(GraphProjection projection, LayoutPositions positions);
+public static CountedViolatingPairs violatingPairsCounted(GraphProjection projection, LayoutPositions positions,
+        int pairBudget);
 ```
 
-returns the ascending `CanonicalKeys.nodePair(a, b)` list for every unordered node pair with
+`CountedViolatingPairs` is a new immutable value type with `pairs()`, `pairEvaluations()` and `truncated()`. `violatingPairsCounted`
+returns the same ascending `CanonicalKeys.nodePair(a, b)` list for every unordered node pair with
 `Math.hypot(ax−bx, ay−by) < radius(a) + radius(b) + MIN_GAP`, using the same `NODE_RADIUS × prominenceScale` rule as
-`NodeSeparationProjection.project`, excluding nothing. `project` computes `residualViolations()` as the size of this list
-(computed on its final relaxed positions), so the predicate has exactly one implementation.
+`NodeSeparationProjection.project`, consuming at most `pairBudget` node-pair tests: the loop decrements the remaining
+allowance before each test and stops at zero, returning the pairs examined so far with `truncated() == true`. The
+`pairEvaluations()` count is the number of node pairs examined, counted as `verificationWork` (§4.3).
+`violatingPairs(...)` delegates to the counted variant with an unbounded allowance (`Integer.MAX_VALUE`), so the
+predicate has exactly one implementation and unbudgeted callers keep today's behaviour; `project` computes
+`residualViolations()` as the size of the list (computed on its final
+relaxed positions). `EdgeConflictCorrection`'s A2 uses the counted variant for **both** the current and the candidate
+position sets and adds each call's `pairEvaluations()` to `verificationWork`, so the O(n²) predicate is inside the
+verification-work budget.
 
 ## 3. Canonical Conflict Detection (design §5.1, C1/C2)
 
@@ -494,38 +518,70 @@ order. A pair found in several cells is emitted once.
 - Origin: `originX = min` over every inserted primitive's bounding-box `x` (chord endpoints; inflated-disc
   `center.x − radius(n) − EDGE_NODE_CLEARANCE`); `originY` likewise. With the origin at the frame minimum, every cell
   index is `≥ 0` by construction.
-- Normalisation: `cellX(x) = clamp(floor((x − originX) / cellSize))` where `cellSize = CONFLICT_CELL_SIZE / 2^level`,
-  `level ∈ [0, CONFLICT_MAX_SUBDIVISION_DEPTH]`; `clamp(v) = min(v, OUTERMOST_CELL_INDEX)` for finite `v ≥ 0`.
-  `floor(−0.0) = 0`.
+- Normalisation: `cellX(x) = clamp(floor((x − originX) / cellSize))` where `cellSize = baseCellSize / 2^level`,
+  `baseCellSize` is the span-adaptive level-0 size of §4.3 and `level ∈ [0, CONFLICT_MAX_SUBDIVISION_DEPTH]`;
+  `clamp(v) = min(v, OUTERMOST_CELL_INDEX)` for finite `v ≥ 0`. `floor(−0.0) = 0`.
 - 64-bit key: `key = ((long) cellX << 32) | (cellY & 0xffffffffL)`. Because `cellX, cellY ∈ [0, 2^31−1]` the key is
   injective.
-- **Outermost-ring fallback:** a primitive whose `cellX` or `cellY` is clamped to `OUTERMOST_CELL_INDEX` is recorded in
-  the `outermost` set for its level and is **not inserted into any cell**: if either chord endpoint clamps (or either
-  bounding-box corner of an inflated disc clamps), cell insertion for that primitive is skipped entirely, so a segment
-  whose real span would cross a ~2^31-cell range is never rasterised. At the end of the level's enumeration, every
-  primitive in `outermost` is paired **directly** against all other primitives it can conflict with (C1 against the
-  chords, C2 against the inflated discs), without relying on cell locality. This guarantees the design's rule that extreme
-  spans cannot silently collapse the grid to a single hub cell: coordinates outside the representable index range are
-  still checked, at a work bound of `O(|outermost| × (chords + inflated discs))` primitive-pair examinations before
-  canonical-key deduplication, and the frame sets `indexBudgetExhausted` when the direct pass runs.
+- **Outermost-ring fallback:** a primitive whose `cellX` or `cellY` is clamped to `OUTERMOST_CELL_INDEX`, or whose
+  traversal/bbox cell count exceeds `CONFLICT_MAX_CELLS_PER_PRIMITIVE`, is recorded in the `outermost` set for its level
+  and is **not inserted into any cell**: if either chord endpoint clamps (or either bounding-box corner of an inflated
+  disc clamps), cell insertion for that primitive is skipped entirely, so a segment whose real span would cross a
+  ~2^31-cell range is never rasterised. At the end of the level's enumeration, every primitive in `outermost` is paired
+  **directly** against all other primitives it can conflict with (C1 against the chords, C2 against the inflated discs),
+  without relying on cell locality. This guarantees the design's rule that extreme spans cannot silently collapse the
+  grid to a single hub cell: coordinates outside the representable index range are still checked, at a work bound of
+  `O(|outermost| × (chords + inflated discs))` primitive-pair examinations before canonical-key deduplication, and the
+  frame sets `indexBudgetExhausted` when the direct pass runs (the direct pass itself is charged to the index-item and
+  pair-check budgets of §4.3).
 
-### 4.3 Subdivision cap and counted work
+### 4.3 Span-adaptive grid, subdivision cap and counted work
 
+- **Level-0 cell size (span-adaptive).** `baseCellSize` is chosen once per detection pass:
+  `span = max(maxX − originX, maxY − originY)` over the inserted primitives and
+  `baseCellSize = max(CONFLICT_CELL_SIZE, min(span / CONFLICT_GRID_DIMENSION, CONFLICT_MAX_CELL_SIZE))`; a
+  non-positive or non-finite span falls back to `CONFLICT_CELL_SIZE`. Small frames keep the pinned `48.0` grid; wide
+  frames keep `CONFLICT_GRID_DIMENSION` cells per axis instead of one cell per 48 units; the `CONFLICT_MAX_CELL_SIZE`
+  cap keeps the outermost-ring sentinel reachable by the 64-bit encoding. The fixtures prove the invariants: the
+  65-chord fixture keeps `baseCellSize = 48.0` and its pinned `indexSubdivisions = 4`, and the `(±1e300)` fixture
+  still clamps to the outermost ring.
+- **Per-primitive cell cap.** A chord whose traversal length `max(|dX|, |dY|) + 1` exceeds
+  `CONFLICT_MAX_CELLS_PER_PRIMITIVE`, or an inflated disc whose bounding-box cell count exceeds it, is recorded in the
+  level's `outermost` set and checked directly against every other primitive at that level; no pair is dropped.
 - Choose the level once per detection pass: start at `level = 0`; while any occupied cell's inserted-item count exceeds
   `CONFLICT_CELL_CAP` and `level < CONFLICT_MAX_SUBDIVISION_DEPTH`, increment the level and recount. Subdivision never
   truncates: a cell that subdivides is replaced by its four children, and every primitive inserted in it is re-inserted in
   every child it traverses/overlaps.
-- If a cell at `level == CONFLICT_MAX_SUBDIVISION_DEPTH` still exceeds the cap, the pass **enumerates its pairs in full**
-  (no pair is dropped) and sets `indexBudgetExhausted = true` on the frame diagnostics.
-- Counted work: `indexInsertedItems` increments once per primitive per cell accepted at the final level plus once per
-  direct outermost check; `indexPairChecks` increments once per examined primitive pair (chord–chord and chord–disc, after
-  canonical-key deduplication); `indexSubdivisions` increments once per **over-cap trigger cell that was split** — a
-  `(cell, level)` whose inserted-item count exceeded `CONFLICT_CELL_CAP` and was therefore replaced by its children; a
-  cell at or below the cap that is merely superseded by the level change does not increment the counter. Counts accumulate
-  over all detection passes of the frame.
+- If a cell at the deepest level still exceeds the cap, the pass **enumerates its pairs in full** (no pair is dropped) and
+  sets `indexBudgetExhausted = true` on the frame diagnostics.
+- Counted work and budget check points (§13.1):
+  - `indexInsertedItems` increments once per primitive per cell written (at every level, including every recount) plus
+    once per direct outermost examination. The index-item budget is checked **before every cell write and inside every
+    subdivision re-collect**, so a recount cannot insert past the cap unnoticed.
+  - `indexPairChecks` increments once per examined primitive pair after canonical-key deduplication. The pair-check
+    budget is checked **before every `properlyCross` / `segmentDistance` test, including the outermost direct pass**.
+  - `verificationWork` increments once per A2 node-pair test (the counted predicate of §2.6), once per A3 hull-pair
+    comparison and once per recomputed hull. The verification-work budget is checked before every counted sub-step.
+  - `indexSubdivisions` increments once per **over-cap trigger cell that was split** — a `(cell, level)` whose
+    inserted-item count exceeded `CONFLICT_CELL_CAP` and was therefore replaced by its children; a cell at or below the
+    cap that is merely superseded by the level change does not increment the counter.
+  - All counters are **per-frame totals**: they accumulate over the initial detection, every verification detection,
+    the final detection and the §5.4 rebuild and are never reset between passes.
+- **Stop semantics.** An index-item, pair-check or detected-key stop on the **initial (published-position) detection**
+  truncates that detection: the ascending distinct keys accumulated so far are published as the detected and residual
+  sets, the ladder does not start and `detectionTruncated = true`. A detection-side stop inside a **verification
+  detection** rejects that attempt (a truncated `C_out` is never accepted) and stops the ladder as a
+  verification-phase stop with `verificationBudgetExhausted = true` and `detectionTruncated` **false**: the last
+  complete published-position detection describes the unchanged positions, so the published residual is exact. A
+  verification-work stop rejects the in-flight attempt and stops the ladder the same way; detection stays complete.
+  `indexBudgetExhausted` keeps the different meaning above (direct full enumeration, all pairs examined, no drop).
+  The both-flags rule applies at a single stop point: all counters are evaluated there and every flag whose counter
+  is at or beyond its cap is set; it therefore sets `detectionTruncated` only for an initial-detection stop, and a
+  verification-detection stop always reports `detectionTruncated = false`.
 - Per frame, detection runs once when no conflicts exist and otherwise at most `1 initial + acceptedRounds + rejectedAttempts
   + 1 conditional final detection (only when at least one attempt was accepted) + 1 rebuild` times, bounded by
-  `MAX_VERIFICATIONS_PER_FRAME`; no full hull computation is performed by the index.
+  `MAX_VERIFICATIONS_PER_FRAME` and the work budgets; the final publication detection and the rebuild always run to
+  completion. No full hull computation is performed by the index.
 
 ## 5. Relocation Stage `EdgeConflictCorrection` (design §5)
 
@@ -601,10 +657,13 @@ the accumulated set; the result is the batch. Verification of an attempt (the ba
   `|C_out| < |C_in|`. Both C1 (`edgePair`) and C2 (`edgeNodePair`) keys live in the same set; the formats are disjoint
   (N1), so a new crossing and a new edge-over-node both veto, and two C2 conflicts on one edge are distinguished.
 - **A2 — disc separation.** Accept only if
-  `NodeSeparationProjection.violatingPairs(projection, candidatePositions) ⊆
-  NodeSeparationProjection.violatingPairs(projection, currentPositions)` compared as key sets; no pair may fall below
-  `MIN_GAP` that was not already below it. Disc radii are the same `NODE_RADIUS × prominenceScale` rule as the boundary
-  stage.
+  `NodeSeparationProjection.violatingPairsCounted(projection, candidatePositions, remainingWork).pairs() ⊆
+  NodeSeparationProjection.violatingPairsCounted(projection, currentPositions, remainingWork').pairs()` compared as key sets; no pair
+  may fall below `MIN_GAP` that was not already below it. Disc radii are the same `NODE_RADIUS × prominenceScale` rule
+  as the boundary stage. Each call receives the frame's remaining verification-work allowance, decrements it before
+  every node-pair test and stops at zero; a `truncated()` result is a `DETECTION_STOP` for the attempt, so `C_out` is
+  never accepted partially. Both calls add their `pairEvaluations()` to `verificationWork`, so the O(n²) predicate
+  cannot run unbounded.
 - **A3 — hull invariants, subset form.** `V_in = boundaryInvariants.detectPairKeys(projection, currentGeometry)` is
   **re-derived from the current positions each round**, never frozen from the boundary stage. `V_out` is computed from
   `candidateGeometry = recomputeHulls(..., changedHulls(nodeHullsByKey, currentPositions, candidatePositions))`. Accept
@@ -625,55 +684,96 @@ repair is never discarded because a sibling in its batch failed. `batch.singlesI
 batch's candidates in canonical order; a one-candidate batch needs no separate retry (its batch evaluation **is** that
 candidate's individual evaluation), so its retry list is empty.
 
-**Budget exhaustion (pinned).** `verificationBudgetExhausted` means "the budget of `MAX_VERIFICATIONS_PER_FRAME` was
-reached and work remains", and is set on the transition to the cap: a rejected attempt that increments
-`verificationCount` to the cap leaves the current conflict set non-empty, so the flag is set immediately; an accepted
-attempt that reaches the cap is followed by the final detection below, and the flag is set iff that detection still finds
-residual conflicts. If the accepted cap attempt clears every conflict, the flag stays `false`. The flag never suppresses
-reporting: `conflictsResidual` is always the post-loop residual list.
+**Budget accounting (pinned).** The frame runs under four counted budgets whose units, check points and stop
+semantics are:
+
+| budget | counted unit | check point | stop |
+| --- | --- | --- | --- |
+| `EDGE_CONFLICT_MAX_INDEX_ITEMS_PER_FRAME` | one inserted index item (one primitive-cell write) or one direct outermost examination | before every cell write and inside every subdivision re-collect | detection truncation |
+| `EDGE_CONFLICT_MAX_PAIR_CHECKS_PER_FRAME` | one `properlyCross` / `segmentDistance` test | before every test, including the outermost direct pass | detection truncation |
+| `EDGE_CONFLICT_MAX_DETECTED_PER_FRAME` | one distinct conflict identity key | when a key is added to the accumulating set | detection truncation |
+| `EDGE_CONFLICT_MAX_VERIFICATION_WORK_PER_FRAME` | one A2 node-pair test, one A3 hull-pair comparison or one recomputed hull | before every counted verification sub-step | the in-flight attempt is rejected; verification-phase stop |
+
+The counters are **per-frame totals** over the initial detection, every verification detection, A1–A4 (including A2
+and every `recomputeHulls`), the final detection and the §5.4 rebuild; a pass never resets them.
+`MAX_VERIFICATIONS_PER_FRAME` remains the attempt counter. The flags are distinct:
+
+- a **detection-side stop on the initial detection** sets `detectionTruncated`, publishes the ascending distinct keys
+  accumulated up to the counted stop as `conflictsDetected`/`conflictsResidual`, leaves `rounds = 0`,
+  `verifications = 0`, `repairsApplied` empty and `crossingsResolved = edgeOverNodeResolved = 0`, and performs no
+  relocation and no §5.4 rebuild;
+- a **detection-side stop inside a verification detection** (computing `C_out`) rejects that attempt rather than
+  accepting a truncated `C_out`; the last complete detection describes the unchanged positions, so the ladder stops with
+  `verificationBudgetExhausted` and the published residual is exact;
+- a **verification-phase stop** (`MAX_VERIFICATIONS_PER_FRAME` reached or the verification-work budget exhausted)
+  rejects the in-flight attempt, sets `verificationBudgetExhausted`, and reaches a complete final detection on the
+  published positions; the flag is set on the transition to the attempt cap (a rejected cap attempt leaves conflicts)
+  and after the final detection when an accepted cap attempt still leaves conflicts. When the accepted cap attempt
+  clears every conflict the flag stays `false`;
+- `indexBudgetExhausted` is unrelated to stops: it records a direct full-enumeration fallback (subdivision floor/depth
+  reached, or the outermost direct pass) with every pair examined and none dropped.
+
+At every stop point all counters are evaluated and every flag whose counter is at or beyond its cap is set (the
+both-flags rule). The final publication detection and the §5.4 rebuild always run to completion and their work is
+counted in the frame totals; because A1 strictly shrinks the conflict set, the final detection's volume is no larger
+than the initial detection's.
 
 **Round loop.** Pinned control flow:
 
 ```
+detectionTruncated = false; verificationStopped = false
 round = 0; acceptedAny = false; verificationBudgetExhausted = false
-while (round < MAX_RELOCATION_ROUNDS && verificationCount < MAX_VERIFICATIONS_PER_FRAME) {
-    conflicts = detectConflicts(currentPositions, currentGeometry)     // counted
-    if conflicts.isEmpty() break
+while (round < MAX_RELOCATION_ROUNDS && !detectionTruncated && !verificationStopped
+        && verificationCount < MAX_VERIFICATIONS_PER_FRAME) {
+    conflicts = detectConflicts(currentPositions, currentGeometry)     // counted; a detection-side
+                                                                       // stop sets detectionTruncated
+    if (detectionTruncated || conflicts.isEmpty()) break
     pool = generateCandidates(conflicts)                                // canonical order
     acceptedThisRound = false
-    while (pool not empty && verificationCount < MAX_VERIFICATIONS_PER_FRAME) {
+    while (pool not empty && !verificationStopped
+            && verificationCount < MAX_VERIFICATIONS_PER_FRAME) {
         batch = greedyDisjoint(pool); pool -= batch
         if (batch empty) break
         attempts = [batch] + batch.singlesInCanonicalOrder()
         for attempt in attempts {
-            verificationCount++
-            if (acceptsA1A2A3A4(attempt)) {
+            verificationCount++                                         // counted before evaluation
+            outcome = acceptsA1A2A3A4(attempt)                          // counted; DETECTION_STOP
+                                                                        // rejects the attempt
+            if (outcome == ACCEPT) {
                 apply(attempt); currentPositions = result; currentGeometry = recomputedGeometry
                 rounds++; acceptedAny = true; acceptedThisRound = true
-                recordRepair(attempt); break
+                recordRepair(attempt)
+                if (verificationCount >= MAX_VERIFICATIONS_PER_FRAME) {
+                    verificationStopped = true      // accepted cap attempt; the final detection
+                                                    // below sets the flag if conflicts remain
+                }
+                break
             }
-            if (verificationCount == MAX_VERIFICATIONS_PER_FRAME) {
-                verificationBudgetExhausted = true    // rejected cap attempt: conflicts remain
+            if (outcome == DETECTION_STOP || verificationWorkAtCap) {
+                verificationStopped = true; verificationBudgetExhausted = true  // rejected attempt;
+                                                                                // C_out never truncated
                 break
             }
         }
-        if (acceptedThisRound) break        // re-detect for the next round
+        if (acceptedThisRound || verificationStopped) break
     }
-    if (!acceptedThisRound) break           // no batch of the current conflict set is repairable
+    if (!acceptedThisRound) break
 }
-residual = rounds > 0 ? detectConflicts(currentPositions, currentGeometry) : conflicts
-// final detection on the published positions; when no attempt was accepted the initial detection
-// already describes them, so a conflict-free frame performs exactly one detection pass
-if (verificationCount == MAX_VERIFICATIONS_PER_FRAME && !residual.isEmpty()) {
-    verificationBudgetExhausted = true      // accepted cap attempt that left conflicts
+residual = detectionTruncated ? conflicts                                  // accumulated lower bound
+         : rounds > 0 ? detectConflicts(currentPositions, currentGeometry) // complete final detection
+         : conflicts
+if (verificationStopped && !residual.isEmpty() && !detectionTruncated) {
+    verificationBudgetExhausted = true
 }
 ```
 
 Each accepted attempt is one round; A1's strict decrease guarantees termination; `rounds` records accepted attempts and is
-also the accepted-attempt index (`repairsApplied` order). The final detection after the loop is the source of
-`conflictsResidual`, `crossingsResolved` and `edgeOverNodeResolved`, so those diagnostics are measured on the published
-positions even when the loop exits at `MAX_RELOCATION_ROUNDS` or on budget exhaustion. If `rounds` reaches
-`MAX_RELOCATION_ROUNDS` with conflicts remaining, those are residuals; an unsatisfiable conflict is never an exception.
+also the accepted-attempt index (`repairsApplied` order). For a non-truncated frame the final detection after the loop is
+the source of `conflictsResidual`, `crossingsResolved` and `edgeOverNodeResolved`, so those diagnostics are measured on
+the published positions even when the loop exits at `MAX_RELOCATION_ROUNDS` or on a verification-phase budget stop. When
+the initial detection is truncated, `conflictsResidual` and the resolved counts come from the accumulated detection
+instead and `detectionTruncated` is set. If `rounds` reaches `MAX_RELOCATION_ROUNDS` with conflicts remaining, those are
+residuals; an unsatisfiable conflict is never an exception.
 
 ### 5.4 Rebuilt boundary record (design §5.5, N3) and rebuild data path
 
@@ -717,7 +817,9 @@ no post-relocation re-gating. The rebuilt record is informational for the publis
   (application order across attempts); `kind` from that candidate, `nodeKeys` ascending,
   `fromCentres`/`toCentres` from the pre/post candidate positions, `batchIndex = rounds − 1` (all candidates of one
   accepted attempt share the attempt's index, so a mixed-kind batch reports one `Repair` per kind).
-- `rounds`, `verifications`, both exhaustion flags and the §4 counted work.
+- `rounds`, `verifications`, `verificationWork`, the three conflict-stage flags (`indexBudgetExhausted`,
+  `verificationBudgetExhausted`, `detectionTruncated`) and the §4.3 counted work (`indexInsertedItems`,
+  `indexPairChecks`, `indexSubdivisions`).
 - `EdgeConflictTimings`: `detectionNanos` (all `detectConflicts` passes plus rebuild detection),
   `indexNanos` (index build/query), `verificationNanos` (A1–A4 except hull recompute), `rebuildNanos` (describe + node
   residual). Timings never enter `EdgeConflictDiagnostics`.
@@ -802,6 +904,15 @@ Canonical order decides only which edge pays a detour; it never decides what cou
 itself an obstacle for later edges. An edge whose endpoints are visible but whose node/hull geometry cannot be resolved is
 omitted from `EdgePaths` and is also excluded from every other edge's obstacle set: it contributes neither a published
 path nor a straight chord. The painter draws nothing for it, exactly as today's null-geometry skip.
+
+The per-frame router budgets of §13.1 are independent of this model: one **obstacle-check** unit per (candidate rung or
+straight chord, obstacle) clearance evaluation, checked before each evaluation; the index build and every path/disc/hull
+insertion during selection are charged to the router **index-item** budget; the detected-crossing/residual/hull
+sample-pair tests are charged to the router **pair-check** budget. On obstacle-budget exhaustion the remaining
+canonical-order edges are straight fallbacks published without further obstacle checks — fallbacks consume no obstacle
+budget. On index-item exhaustion the remaining edges are fallbacks and the residual passes use the partial index, with
+`routeBudgetExhausted` set; on pair-check exhaustion the running pass stops and publishes lower bounds with router
+`detectionTruncated` set (§6.9).
 
 ### 6.3 Candidate ladder
 
@@ -913,6 +1024,15 @@ and three segments; a bow tests its sample list, the same list that was verified
   or (c) the hull is an ancestor (via `BoundaryInvariants.parents`) of a hull key on that path. Clause (c) keeps an
   ancestor hull of an enclosed endpoint from being counted as penetrated: an edge into an enclosed node must cross its
   ancestor boundaries, and those crossings are not penetrations.
+- `routeIndexItems`, `routeObstacleChecks`, `routePairChecks`: the counted work of the three budgets of §6.2/§13.1. The
+  index-item counter increments once per primitive-cell insertion (path sample segment, disc box, hull segment); the
+  obstacle counter once per (candidate rung or straight chord, obstacle) clearance evaluation; the pair counter once per
+  tested sample-segment pair in the detected-crossing pass, the residual pass or the hull-penetration pass. Each counter
+  is checked before its counted operation (insertion or test), so a stop can never overshoot the cap by a whole pass.
+- `routeBudgetExhausted`: the router index-item or obstacle budget stopped selection; the remaining canonical-order
+  edges are fallbacks. `detectionTruncated`: the router pair-check budget stopped the detected-crossing, residual or
+  hull-penetration pass; `pathCrossingsDetected`, `pathCrossingsResidual` and `pathHullPenetrations` are lower bounds
+  and routing selection itself is unaffected.
 
 ### 6.10 Determinism
 
@@ -953,14 +1073,34 @@ harness on the reference 2000/5000 fixture. A first measurement above a pinned s
 forces the design revision stated above (no feature flag); the threshold must not be silently raised, and the only
 permitted constant change is a tightening applied to the specification and to the tripwire test in the same change.
 
-### 7.2 Budget composition
+The two new stage samples are recorded on the **settled worker frame the application publishes** (§13.4): the diagnostic
+re-runs each stage on the worker frame's own positions and times that call, and the direct-probe seed-frame recordings
+are removed. A7 is satisfied only when every measured sample has zero budget-exhaustion events for the two stages
+(`detectionTruncated`, `verificationBudgetExhausted`, `indexBudgetExhausted`, `routeBudgetExhausted` all `false`);
+otherwise the sample is a budget-stop time and the gate would be vacuous. The budgets are calibrated per §7.2/§13.1:
+with the measured per-unit cost and fixed overhead on the saturated in-budget frame,
+`budget × cost + overhead ≤ 0.5 × threshold` for the `edge-conflict` 12.5 ms allowance and the `edge-routing` 5 ms
+allowance.
+
+### 7.2 Budget composition and calibration
 
 Per frame the relocation stage performs at most `1 + MAX_RELOCATION_ROUNDS + MAX_VERIFICATIONS_PER_FRAME + 1` detection
 passes and one `BoundaryInvariants.describe` rebuild, reusing `recomputeHulls(..., changedHulls(...))`; the only full
 `computeHulls` calls per frame remain the boundary stage's own and the publish-time one in `LayoutSettleLoop`. The
-`edge-conflict` stage tier covers detection, the conflict index, A1–A4 verification and the §5.5 rebuild. The router tier
-covers the disc/path query index, the candidate ladder and the residual computation; the router's per-frame result is
-cached on the published CanvasState.
+`edge-conflict` stage tier covers detection, the conflict index, A1–A4 verification (including the counted A2 predicate
+and every hull recompute) and the §5.5 rebuild. The router tier covers the query-index build, the candidate ladder, the
+detected-crossing pass and the residual/hull passes; the router's per-frame result is cached on the published
+`CanvasState`.
+
+The budgets of §13.1 are **per-frame totals over every counted event** of the tier: the initial detection, every
+verification detection, A1–A4, the final detection and the rebuild for `edge-conflict`; the index build, every obstacle
+evaluation and the detected/residual/hull passes for `edge-routing`. A verification-phase stop rejects the in-flight
+attempt and sets `verificationBudgetExhausted` with detection complete; a detection-side stop truncates detection and
+sets `detectionTruncated` (lower-bound residual). The calibration obligation is binding: each budget has exactly one
+counted unit (table §13.1), and the implementation change records the measured per-unit cost and fixed overhead on the
+saturated in-budget frame and must satisfy `budget × per-unit cost + overhead ≤ f × threshold` with `f = 0.5` for both
+stages (12.5 ms / 5 ms allowances); verification and A2 work is included. The measured worst-in-budget stage time is
+recorded in this specification in the same change; only tightening is allowed.
 
 ## 8. Test Fixtures and Exact Expected Values
 
@@ -1091,6 +1231,28 @@ counts.
   `indexPairChecks ≥ 65 × 64 / 2 = 2080`, and `crossingsDetected = 2080`. No pair is dropped. With the traversal pinned
   to this radius, no grid boundary at any level passes through `(0, 0)`, so the origin leaf contains all 65 chords at
   every level.
+- **Adaptive-grid value proof:** the 65-chord fixture keeps `baseCellSize = 48.0` (span ≈ 235 < 128 × 48) and, with the
+  pinned traversal and recount semantics, totals ≈ 39,440 `indexInsertedItems` across its five collection levels and
+  2,080 `indexPairChecks`; the item and pair budgets must admit both so the fixture still detects every pair. The
+  reference-scale fixture (500 chords of radius 600,000) stays on the adaptive branch (base cell ≈ 9,375; the level-4
+  traversal is ≈ 2,048 cells per chord, below the 4,096 cap), and the per-primitive cap is exercised by the dense
+  wide-span fixtures below.
+- **Item-budget truncation:** a dense wide-span fixture whose counted `indexInsertedItems` alone reaches the cap before
+  enumeration completes asserts `detectionTruncated == true`, `indexBudgetExhausted == false`, the pair and volume
+  counters below their caps, `rounds == 0`, `verifications == 0`, and a `crossingsDetected` strictly smaller than a
+  brute-force baseline of the same frame; the published residual is exactly the ascending keys accumulated up to the
+  item stop.
+- **Pair-budget truncation:** the same shape with `indexInsertedItems` below the item cap and `indexPairChecks` — not
+  the volume counter — the only counter at its cap.
+- **Volume-budget truncation:** a hub/star frame with more than 4,096 detectable keys asserts `detectionTruncated == true`,
+  `rounds == 0`, `verifications == 0`, empty `repairsApplied`, and the accumulated ascending set.
+- **Verification-work truncation:** a frame whose A2/verification work reaches the verification-work cap asserts the
+  in-flight attempt was rejected (`rounds` unchanged at the stop point), `verificationBudgetExhausted == true`,
+  `detectionTruncated == false`, and a residual equal to the last complete detection on the published positions.
+- **Router truncation:** a fixture whose obstacle demand exceeds `EDGE_ROUTING_MAX_OBSTACLE_CHECKS_PER_FRAME` asserts
+  `routeBudgetExhausted == true`, the fallback classification identity and every remaining edge straight; a second
+  fixture whose residual pass exceeds `EDGE_ROUTING_MAX_PAIR_CHECKS_PER_FRAME` asserts `detectionTruncated == true` and
+  a `pathCrossingsResidual` that is a lower bound of the brute-force residual.
 
 ### 8.6 Scaffold-then-red sequence (design §10.1)
 
@@ -1105,7 +1267,7 @@ counts.
 3. **Implementation commit:** turns them green. The scaffold is the only scaffold; after step 3 there is one active
    execution path (no parallel old renderer, design §11).
 
-### 8.7 Named mutation probes (design §10.2, all sixteen)
+### 8.7 Named mutation probes (design §10.2, all twenty)
 
 Each probe breaks exactly one mechanism and shows the covering test fails; the named test is the first one that must fail.
 
@@ -1126,7 +1288,11 @@ Each probe breaks exactly one mechanism and shows the covering test fails; the n
 | 13 | drop the §5.5 rebuilt-record field preservation | `LayoutWorkerShould.preservesBoundaryStageFieldsAcrossTheRebuild` |
 | 14 | replace terminal-geometry reuse with a fresh `computeHulls` | `EdgeConflictCorrectionShould.reusesTheBoundaryTerminalGeometry` + the `edge-conflict` budget tripwire |
 | 15 | remove the outermost-ring fallback | `EdgeConflictCorrectionShould.detectsACrossingAtExtremeSpans` (§8.5) |
-| 16 | flip the C2 normal direction | `EdgeConflictCorrectionShould.movesThePassedOverNodeOffTheChord` (fixture with `s > 0`: flipped distance `|2s − (R + EDGE_NODE_CLEARANCE)| < R + EDGE_NODE_CLEARANCE`) |
+| 16 | flip the C2 normal direction | `EdgeConflictCorrectionShould.movesThePassedOverNodeOffTheChord` (fixture with `s > 0`: flipped distance `\|2s − (R + EDGE_NODE_CLEARANCE)\| < R + EDGE_NODE_CLEARANCE`) |
+| 17 | move the index-item cap check after a whole cell/collect write (check-after-collect) | `EdgeConflictCorrectionShould.truncatesDetectionAtTheItemBudget` |
+| 18 | move the pair-check cap check after the predicate (check-after-predicate) | `EdgeConflictCorrectionShould.truncatesDetectionAtThePairBudget` |
+| 19 | leave the router residual pass unbounded (no pair-check budget) | `EdgeRouterShould.truncatesTheResidualPassAndPublishesALowerBound` |
+| 20 | truncate `C_out` instead of rejecting the attempt when the verification-work cap is reached | `EdgeConflictCorrectionShould.rejectsTheAttemptWhenVerificationWorkExhausts` |
 
 ## 9. Test Coverage Delta
 
@@ -1134,9 +1300,9 @@ Each probe breaks exactly one mechanism and shows the covering test fails; the n
 
 | class | package | scope (per design §10.3) |
 | --- | --- | --- |
-| `EdgeConflictCorrectionShould` | `layout` | reported convex quad (batch rejection, single retry, exact `verifications = 2`), both adjacent swaps evaluated, mirrors individually, mixed/hull-endpoint conflicts produce no candidate and no anchor movement (N8), pinned candidate discard (active pins only, `BoundarySeparationCorrection.pinnedNodes` filtering), disjoint later repairs, one `Repair` per candidate of an accepted mixed-kind batch, C2 normal direction, visibility, A4 membership assertion, disc-gap veto, sibling-hull-overlap veto, pair-set subset semantics against an equal-count replacement pair, determinism across runs and permuted input order, residual reporting, round/verification bounds, `visibleEndpoints` participation, extreme spans and the 65-chord subdivision cap |
+| `EdgeConflictCorrectionShould` | `layout` | reported convex quad (batch rejection, single retry, exact `verifications = 2`), both adjacent swaps evaluated, mirrors individually, mixed/hull-endpoint conflicts produce no candidate and no anchor movement (N8), pinned candidate discard (active pins only, `BoundarySeparationCorrection.pinnedNodes` filtering), disjoint later repairs, one `Repair` per candidate of an accepted mixed-kind batch, C2 normal direction, visibility, A4 membership assertion, disc-gap veto, sibling-hull-overlap veto, pair-set subset semantics against an equal-count replacement pair, determinism across runs and permuted input order, residual reporting, round/verification/work bounds, `visibleEndpoints` participation, extreme spans and the 65-chord subdivision cap, the item/pair/volume/verification truncation fixtures and the counted-work accessors bounded by their pins |
 | `BoundaryInvariantsShould` | `layout` | frozen characterization of the extracted `detect` **and** terminal classification against `BoundarySeparationCorrection`'s pre-extraction output (injected-hull-map hull-nesting/escape cases included), the bound-exhausted `ROUND_LIMIT` case (`new BoundarySeparationCorrection(1)`, `BoundarySeparationCorrectionShould.java:1000-1013`), the memo/counter characterization (`ancestorContainmentIsMemoizedAcrossIdenticalFrames` 1231-1244, `ancestorContainmentMemoRechecksAHullWhoseGeometryChanged` 1262-1277, `capSetsAreReusedWithinAFrame` 1281-1299, `candidateSelectionStopsWhenNoSideHasAMovableContributor` 1310-1325), `describe` field policy and `baselineResidualKeys` guard |
-| `EdgeRouterShould` | `geometry` | straight when clear, bow for a disc on the chord, dogleg when a bow is blocked, later-chord obstacle, fan exemption region, proper crossing rejected inside/outside the fan region, sampled-polyline tolerance bound, `ROUTE_LENGTH_CAP` fallback and rung exclusion, attachment tangency, terminal-segment arrowhead values, canonical order, determinism and order permutation |
+| `EdgeRouterShould` | `geometry` | straight when clear, bow for a disc on the chord, dogleg when a bow is blocked, later-chord obstacle, fan exemption region, proper crossing rejected inside/outside the fan region, sampled-polyline tolerance bound, `ROUTE_LENGTH_CAP` fallback and rung exclusion, attachment tangency, terminal-segment arrowhead values, canonical order, determinism and order permutation, obstacle-budget fallback and residual-pass truncation with the counted-work bounds |
 | `EdgePathShould` | `geometry` | value equality of the three shapes, sample-count formula, `length()`, `arcLengthMidpoint()`, `arrowAnchor`/`terminalSegmentLength` for all three shapes |
 | `CanonicalKeysShould` | `projection` | the encoding of §2.1 including `edgePair`, `edgeNodePair` uniqueness, hull keys, `mapOfField`, and `~`-containing node ids staying injective without `~` escaping (replaces `layout/CanonicalLayoutKeysShould`, which is deleted) |
 
@@ -1191,9 +1357,9 @@ Each probe breaks exactly one mechanism and shows the covering test fails; the n
 | A3 | The fan region waives only the distance requirement; a proper crossing is never accepted, inside or outside the region | `EdgeRouterShould.waivesTheDistanceRequirementInsideTheFanRegion`; `EdgeRouterShould.rejectsAProperCrossingInsideTheFanRegion` |
 | A4 | A3 uses pair-key subset semantics with a per-round baseline; a legal pre-existing residual never vetoes | `EdgeConflictCorrectionShould.keepsAPreExistingHullResidualWhenTheCandidateDoesNotAddOne` |
 | A5 | The §5.5 rebuild preserves boundary stage-level fields and recomputes residuals on the published positions, order-independently | `LayoutWorkerShould.preservesBoundaryStageFieldsAcrossTheRebuild`; `BoundaryInvariantsShould.characterizesDescribeAgainstTheExtractedBoundaryStage` |
-| A6 | The conflict index detects every pair at extreme spans, subdivides under the cap without truncation, and reports counted work | `EdgeConflictCorrectionShould.detectsACrossingAtExtremeSpans`; `EdgeConflictCorrectionShould.enumeratesEveryPairWhenSubdivisionExhausts` |
-| A7 | The two new performance stages are in the pinned order with 25 ms / 10 ms strict thresholds, and the reference fixture stays inside the worker and first-frame gates | `PerformanceTripwiresShould.exposeTheCanonicalStageOrderAndThresholds`; `PerformanceTripwiresShould.referenceFixtureStaysInsideTheStrictWorkerAndFirstFrameGates` |
-| A8 | Every §8.7 mutation probe is falsified by its named test | probe table §8.7 |
+| A6 | On a non-truncated frame the conflict index detects every pair (extreme spans, subdivision at the cap, direct outermost pass) and reports counted work bounded by its pins; an index-item, pair-check or volume stop truncates detection, publishes a lower-bound residual and sets `detectionTruncated` | `EdgeConflictCorrectionShould.detectsACrossingAtExtremeSpans`; `EdgeConflictCorrectionShould.enumeratesEveryPairWhenSubdivisionExhausts`; `EdgeConflictCorrectionShould.truncatesDetectionAtTheItemBudget`; `EdgeConflictCorrectionShould.truncatesDetectionAtThePairBudget` |
+| A7 | The two new performance stages are in the pinned order with 25 ms / 10 ms strict thresholds, measured on the settled published worker frame with zero budget-exhaustion events, calibrated so `budget × per-unit cost + overhead ≤ 0.5 × threshold`, and the reference fixture stays inside the worker and first-frame gates | `PerformanceTripwiresShould.exposeTheCanonicalStageOrderAndThresholds`; `PerformanceTripwiresShould.referenceFixtureStaysInsideTheStrictWorkerAndFirstFrameGates`; `PerformanceTripwiresShould.referenceFixtureUsesTheSettledFrameAndNoBudgetStops` |
+| A8 | Every §8.7 mutation probe (all twenty, including the check-after-collect, check-after-predicate and unbounded-residual-pass probes) is falsified by its named test | probe table §8.7 |
 | A9 | Determinism: identical inputs produce identical positions, paths and diagnostics across runs and permuted input order | `EdgeConflictCorrectionShould.isDeterministicAcrossRunsAndPermutedInputs`; `EdgeRouterShould.isDeterministicAcrossRunsAndPermutedEdgeOrder` |
 | A10 | Core gate: no file under `freeplane/` or `freeplane_api/` is modified; `gradle :freeplane_plugin_graph:test` passes with the Java 21 Zulu toolchain | `git diff --stat`; module suite |
 
@@ -1204,7 +1370,7 @@ Each probe breaks exactly one mechanism and shows the covering test fails; the n
 | N1 — C2 identity key | §2.1 `CanonicalKeys.edgeNodePair(edge, node)`; §3.3, §5.3 A1; §8.7 probe 16/2 |
 | N2 — `BoundaryInvariants.describe` `baselineResidualKeys` | §2.2 (role, format, guard, seventh `stageBaseline` parameter); §5.4 |
 | N3 — accessor carrying the rebuilt diagnostics | §2.3 `EdgeConflictResult.boundaryDiagnostics()`; §5.4 field policy; §5.6 `LayoutWorker.accept` |
-| N4 — exhaustion flag names | `verificationBudgetExhausted` and `indexBudgetExhausted` in §2.3, §4.3, §5.3, §7; no other names appear |
+| N4 — exhaustion flag names | `indexBudgetExhausted` (direct full enumeration, no pair dropped), `verificationBudgetExhausted` (verification-phase stop, detection complete), `detectionTruncated` (detection-side truncation, lower-bound residual) and `routeBudgetExhausted` (router obstacle/index budget, remaining edges fallback) in §2.3, §2.4, §4.3, §5.3, §5.5, §6.2, §6.9, §7; no other names appear |
 | N5 — remaining `CanvasState` construction sites | §2.5 (`GraphUpdateCoordinator.java:136,561`, `CanvasState.withStatus`, all `LayoutSettleLoop` sites, all test fixtures in §9.2) |
 | N6 — three-argument `withDiagnostics` call sites | §2.5 (removed form; `LayoutWorker.EMPTY_FAILED_FRAME`, `LayoutSettleLoopShould.java:1203,1410`, `GraphUpdateCoordinatorShould.java:1194,1604,1646`) |
 | N7 — negative tests for the subdivision cap/encoding and the "proper crossing is never accepted anywhere" rule | §8.5, §8.3; `EdgeConflictCorrectionShould`, `EdgeRouterShould` |
@@ -1227,3 +1393,151 @@ Each probe breaks exactly one mechanism and shows the covering test fails; the n
 | §9 performance | §7 | `PerformanceTripwiresShould` |
 | §10 test strategy | §8, §9 | all named classes |
 | §13 constants | §1.3–§1.5 | `EdgePathShould`, `EdgeRouterShould`, `EdgeConflictCorrectionShould` |
+| §14.2 bounded relocation budgets | §4.3, §5.3, §7.2, §13 | `EdgeConflictCorrectionShould` bounded-work fixtures |
+| §14.3 bounded router budgets | §6.2, §6.9, §7.2, §13 | `EdgeRouterShould` truncation fixtures |
+| §14.4 settled-frame measurement window | §7.1, §13.4 | `PerformanceTripwiresShould` |
+| §14.5 bounded-policy fixtures | §8.5, §8.7, §10 | the named truncated fixtures |
+
+## 13. Revision 7 — bounded-effort pins, calibration and the settled-frame measurement window
+
+Added by the PM after the Step 8 design pivot (2026-10-13, user decision A+B).
+**Full footprint:** this revision changes §1.3, §2.3–§2.4, §2.6, §4.2–§4.3, §5.3–§5.5, §6.2, §6.9,
+§7.1–§7.2, §8.5, §8.7, §9.1, §10 (A6–A8), §11 (N4), §12 and this appendix. No other section changes,
+and the §7.1 thresholds are unchanged.
+
+### 13.1 Pinned budgets, units and check points
+
+| pin | value | counted unit | check point | stop |
+| --- | --- | --- | --- | --- |
+| `EDGE_CONFLICT_MAX_INDEX_ITEMS_PER_FRAME` | `262_144` | one inserted index item (one primitive-cell write) or one direct outermost examination | before every cell write and inside every subdivision re-collect | `detectionTruncated`; ladder does not start; lower-bound residual |
+| `EDGE_CONFLICT_MAX_PAIR_CHECKS_PER_FRAME` | `131_072` | one `properlyCross` / `segmentDistance` test | before every test, including the outermost direct pass | `detectionTruncated`; lower-bound residual |
+| `EDGE_CONFLICT_MAX_DETECTED_PER_FRAME` | `4_096` | one distinct conflict identity key | when a key is added to the accumulating set | `detectionTruncated`; lower-bound residual |
+| `EDGE_CONFLICT_MAX_VERIFICATION_WORK_PER_FRAME` | `65_536` | one verification-phase predicate evaluation: one A2 node-pair test, one A3 hull-pair comparison or one recomputed hull | before every counted verification sub-step | attempt rejected; `verificationBudgetExhausted`; detection complete |
+| `MAX_VERIFICATIONS_PER_FRAME` | `64` (§1.3) | one batch or single A1–A4 evaluation | before each attempt | `verificationBudgetExhausted`; detection complete |
+| `EDGE_ROUTING_MAX_INDEX_ITEMS_PER_FRAME` | `262_144` | one query-index primitive-cell insertion (path sample segment, disc box, hull segment) | before every insertion | remaining edges fallback; `routeBudgetExhausted` |
+| `EDGE_ROUTING_MAX_OBSTACLE_CHECKS_PER_FRAME` | `131_072` | one `(candidate rung or straight chord, obstacle)` clearance evaluation | before every evaluation | remaining edges fallback; `routeBudgetExhausted`; fallbacks consume no obstacle budget |
+| `EDGE_ROUTING_MAX_PAIR_CHECKS_PER_FRAME` | `131_072` | one sample-segment pair test in the detected-crossing, residual or hull-penetration pass | before every test | running pass stops; lower-bound diagnostics; router `detectionTruncated` |
+
+All counters are **per-frame totals**: the conflict-stage counters accumulate over the initial detection,
+every verification detection, A1–A4 (including the counted A2 predicate and every recomputed hull), the
+final detection and the §5.4 rebuild; the router counters accumulate over the index build, every obstacle
+evaluation and every detected/residual/hull pass. No pass resets a counter. At every stop point all
+counters are evaluated and every flag whose counter is at or beyond its cap is set (the both-flags rule);
+the flags are the four distinct names of §11 N4. Detection-side stops publish the ascending distinct keys
+accumulated up to the counted stop (“detected so far”) — never a set derived from full enumeration — and
+set `detectionTruncated`; `indexBudgetExhausted` is never used for a truncation and keeps its §4.3 meaning
+(direct full enumeration, every pair examined, no pair dropped).
+
+**Calibration (binding).** Every budget is calibrated against the stage threshold it protects, with
+`f = 0.5`:
+
+- Recorded baseline (attempt 7, 2000 nodes; the unbounded seed-frame pass retained as the initial calibration
+  basis, to be superseded by the bounded implementation's own saturated-frame measurement): one detection
+  pass 13,430 ms with 2,925,332 inserted items and 677,272 pair checks;
+  `NodeSeparationProjection.violatingPairs` 1,344 ms per 1,999,000-pair call; one `EdgeRouter.route`
+  5,177 ms.
+- For each budget `B`, measure the per-unit cost `c_B` and fixed overhead `o` on the saturated in-budget
+  frame (all budgets at their caps, including the final detection and the §5.4 rebuild) using the counted
+  unit above, and set the pin so that `cap(B) × c_B + o ≤ f × threshold` — the `edge-conflict` threshold
+  is 25 ms (12.5 ms allowance) and the `edge-routing` threshold is 10 ms (5 ms allowance); verification
+  and A2 work counts as either units or fixed overhead. The measured total stage time of that saturated
+  frame must also stay within the same allowance. The implementation change records the measured values
+  and replaces any ceiling above its calibrated cap with the calibrated value in the same change; the
+  measured worst-in-budget stage time is recorded here. Only tightening is allowed (§7.1).
+
+### 13.2 Budget-exhausted relocation semantics
+
+- **Initial-detection stop.** When an index-item, pair-check or detected-key budget trips during the
+  initial detection, `apply` performs no relocation attempts and no §5.4 rebuild for that frame. It
+  publishes `conflictsDetected` and `conflictsResidual` as the ascending distinct keys accumulated up to
+  the counted stop, `rounds = 0`, `verifications = 0`, empty `repairsApplied`,
+  `crossingsResolved = edgeOverNodeResolved = 0`, and `detectionTruncated = true`. The published residual
+  is a **lower bound**; the flag is the only signal of incompleteness.
+- **Verification stop.** A detection-side stop inside a verification detection rejects that attempt. A
+  verification-work stop likewise rejects the in-flight attempt; `C_out` is never truncated and never
+  accepted partially. Both stop the ladder with `verificationBudgetExhausted = true` and leave
+  `detectionTruncated = false` (the stop is reported as a verification-phase stop); because the last
+  complete detection still describes the published positions, the residual is exact. An initial
+  (published-position) detection stop is the only stop that sets `detectionTruncated`. The attempt-cap
+  branch keeps its §5.3 semantics: the flag is set on the transition to the cap when conflicts remain
+  after the rejected cap attempt and after the final detection when an accepted cap attempt still leaves
+  conflicts; an accepted cap attempt that clears every conflict leaves the flag `false`.
+- `indexBudgetExhausted` stays `false` for every truncated frame unless the index also completed a direct
+  full-enumeration fallback at the same stop point; `indexBudgetExhausted` alone never truncates.
+- The §5.4 rebuilt boundary record is not recomputed for an out-of-budget frame: the rebuild path is
+  skipped and the frame's boundary diagnostics are **the boundary result's own diagnostics for this frame
+  (no rebuild; positions are unchanged)**; no stale previous-frame diagnostics are retained.
+- Frames inside every budget keep every §5.3 rule, every counter, and the §5.4 rebuild exactly as
+  specified.
+
+### 13.3 Budget-exhausted routing semantics
+
+- On index-item or obstacle-budget exhaustion the router stops the corresponding work, publishes every
+  remaining canonical-order edge as a straight fallback, keeps the classification identity
+  `edgesStraight + edgesBow + edgesDogleg + edgesFallback == routed visible edges`, and sets
+  `routeBudgetExhausted = true`. **Fallback edges consume no obstacle budget.**
+- On pair-check exhaustion the running detected-crossing, residual or hull-penetration pass stops and
+  sets router `detectionTruncated = true`; `pathCrossingsDetected`, `pathCrossingsResidual` and
+  `pathHullPenetrations` are lower bounds over the published paths, and routing selection itself is
+  unaffected (it is bounded by the obstacle budget). A fallback's crossings are simply residual.
+- No partially drawn geometry is published; the router index-item/obstacle stops and the pair-check stop
+  may coexist as flags.
+
+### 13.4 Settled-frame measurement window and process deadline
+
+- **Input.** The §7.1 strict thresholds are measured on the **settled worker frame the application
+  publishes**, never on `runDirectProbe`'s fresh-engine seed frame. The diagnostic re-runs the stage on
+  `workerFrame.positions()` and times that call, on the same deterministic code path:
+  - `edge-conflict`: run `BoundarySeparationCorrection.apply` on the worker frame positions and time
+    `EdgeConflictCorrection.apply` on the returned boundary result;
+  - `edge-routing`: time `EdgeRouter.route(projection, workerFrame.positions(), workerHulls, visible)`;
+  - the `EDGE_CONFLICT`/`EDGE_ROUTING` recordings inside `runDirectProbe` are removed.
+- **Zero-exhaustion rule.** A7 is satisfied only when every measured sample reports
+  `detectionTruncated == false`, `verificationBudgetExhausted == false`, `indexBudgetExhausted == false`
+  and `routeBudgetExhausted == false` for the two stages. A sample that hits a budget or falls back to
+  direct full enumeration is a budget-stop time; counting it would make the gate vacuous.
+- **Window.** `GeneratedWorkspace.Scenario.REFERENCE_2000_5000` pins 400 warmups / 300 measured (700
+  samples). `WARMUP_SAMPLES = 20` and `TIMED_SAMPLES = 100` are the placement-trigger sub-measurement
+  counts and are unchanged. Convergence means a stable p95 across the measured window plus the
+  zero-exhaustion rule; raising the window remains a measurement-window value, never a threshold change.
+- **Per-frame total and deadline.** With every budget saturated, the two new stages are capped at their
+  `f × threshold` values, 12.5 ms (`edge-conflict`) and 5 ms (`edge-routing`). The measured non-edge
+  stages are unchanged (force p95 17.9 ms, correction p95 1.5 ms, hull p95 1.3 ms, worker p95 4.8 ms)
+  and the reference accepted-batch baseline was 131.5 ms p95 / 138.4 ms p99 (2026-08-10 performance
+  report). A bounded reference frame is therefore bounded by `baseline + 12.5 ms + 5 ms` ≈ 149 ms p95
+  (inside `STRICT_FIRST_FRAME_P95_NANOS` = 150 ms) and ≈ 156 ms p99 (inside 300 ms), and the worker path
+  stays inside `STRICT_FULL_WORKER_NANOS` (100 ms); the calibration records the measured total and any
+  breaching sample blocks the feature. The direct probe and the settled-frame stage re-runs are wrapped
+  in the harness's bounded-operation wrapper (`invokeBounded`) with the per-operation expected time
+  pinned in the implementation change; until that wrapper is in place their bounded per-frame work is the
+  practical bound. The reference
+  window is budgeted at 2 s per sample (700 × 2 s = 23.3 min), the other five scenarios at 250 × 2 s =
+  8.3 min and the placement triggers at ≤ 6 min, so the whole process fits the pinned 40-minute
+  `PROCESS_DEADLINE_NANOS`; `checkDeadline`'s message must read “Forty-minute diagnostic process deadline
+  exceeded” (the current “Ten-minute” text is the inconsistency to fix). If a measured window exceeds the
+  deadline, the deadline is raised as a measurement-window value in the same change.
+
+### 13.5 Bounded-policy fixtures (extends §8.5) and the superseded archived test
+
+- All bounded claims are asserted by counted work, never wall clock: `indexInsertedItems`,
+  `indexPairChecks`, `verificationWork`, `routeObstacleChecks` and `routePairChecks` are each bounded by
+  their pins on a dense wide-span frame, together with the flag and residual assertions.
+- Item-budget fixture: `detectionTruncated` caused only by
+  `EDGE_CONFLICT_MAX_INDEX_ITEMS_PER_FRAME`, with the detected set incomplete against a brute-force
+  baseline and the published set exactly the ascending keys accumulated up to the stop; pair-budget
+  fixture: the same with only `EDGE_CONFLICT_MAX_PAIR_CHECKS_PER_FRAME` at its cap; volume fixture: the
+  accumulated-set semantics; verification fixture: rejected attempt, `verificationBudgetExhausted`,
+  exact residual; router fixtures: obstacle-budget fallback with `routeBudgetExhausted` and residual-pass
+  lower bound with router `detectionTruncated`.
+- Verification-detection stop: a fixture whose `C_out` detection hits the pair-check or index-item budget
+  asserts `verificationBudgetExhausted = true`, `detectionTruncated = false`, and a residual equal to a
+  brute-force detection on the unchanged published positions.
+- The `65`-chord and `(±1e300)` fixtures keep their pinned values (§8.5), including the adaptive-grid
+  value proof; the item and pair budgets admit the 65-chord fixture's ≈ 39,440 item writes and 2,080 pair
+  checks.
+- The archived `1b5e22c460` test
+  `EdgeConflictCorrectionShould.boundsTheConflictIndexForReferenceScaleSpansAndStillDetectsEveryCrossing`
+  (500 chords, 124,750 crossings) is **superseded**: below the budgets every crossing is still detected,
+  and above them the accumulated truncated set plus `detectionTruncated` is the pinned behaviour. The
+  test is reshaped to assert the pinned semantics and the counted-work bounds instead of the
+  all-124,750 assertion.
