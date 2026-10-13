@@ -78,11 +78,34 @@ public final class EdgeRouter {
     /** Above this box size a disc is checked directly instead of being inserted into cells. */
     private static final int MAX_GRID_CELLS_PER_PRIMITIVE = 4096;
 
+    static final long EDGE_ROUTING_MAX_INDEX_ITEMS_PER_FRAME = 262_144L;
+    static final long EDGE_ROUTING_MAX_OBSTACLE_CHECKS_PER_FRAME = 131_072L;
+    static final long EDGE_ROUTING_MAX_PAIR_CHECKS_PER_FRAME = 131_072L;
+
+    private static final int CROSSING = 1;
+    private static final int CLEAR = 0;
+    private static final int STOPPED = -1;
+
     public EdgeRouter() {
     }
 
     public EdgePaths route(final GraphProjection projection, final LayoutPositions positions,
             final GraphGeometry geometry, final Set<ProjectedEndpointKey> visibleEndpoints) {
+        return route(projection, positions, geometry, visibleEndpoints,
+            new RouterBudget(EDGE_ROUTING_MAX_INDEX_ITEMS_PER_FRAME,
+                EDGE_ROUTING_MAX_OBSTACLE_CHECKS_PER_FRAME, EDGE_ROUTING_MAX_PAIR_CHECKS_PER_FRAME));
+    }
+
+    /** The same {@code route} code path with the budget caps raised out of reach. */
+    static EdgePaths routeUnbounded(final GraphProjection projection, final LayoutPositions positions,
+            final GraphGeometry geometry, final Set<ProjectedEndpointKey> visibleEndpoints) {
+        return new EdgeRouter().route(projection, positions, geometry, visibleEndpoints,
+            new RouterBudget(Long.MAX_VALUE, Long.MAX_VALUE, Long.MAX_VALUE));
+    }
+
+    private EdgePaths route(final GraphProjection projection, final LayoutPositions positions,
+            final GraphGeometry geometry, final Set<ProjectedEndpointKey> visibleEndpoints,
+            final RouterBudget budget) {
         Objects.requireNonNull(projection, "projection");
         Objects.requireNonNull(positions, "positions");
         Objects.requireNonNull(geometry, "geometry");
@@ -99,8 +122,8 @@ public final class EdgeRouter {
                 resolved.add(value);
             }
         }
-        final QueryGrid grid = new QueryGrid(resolved, geometry);
-        final Set<String> detectedCrossings = grid.crossingPairs(false);
+        final QueryGrid grid = new QueryGrid(resolved, geometry, budget);
+        final Set<String> detectedCrossings = grid.crossingPairs(false, budget);
         final long indexEnd = System.nanoTime();
 
         final long selectionStart = System.nanoTime();
@@ -111,20 +134,38 @@ public final class EdgeRouter {
         int edgesFallback = 0;
         for (int index = 0; index < resolved.size(); index++) {
             final Resolved current = resolved.get(index);
-            if (clears(current.straight, current.edge, grid, geometry)) {
+            if (budget.routeBudgetExhausted()) {
+                grid.publish(current.edge.key(), current.straight);
+                byEdge.put(current.edge.key(), current.straight);
+                edgesFallback++;
+                continue;
+            }
+            if (clears(current.straight, current.edge, grid, geometry, budget)) {
                 grid.publish(current.edge.key(), current.straight);
                 byEdge.put(current.edge.key(), current.straight);
                 edgesStraight++;
                 continue;
             }
-            final EdgePath bow = bestRung(current, grid, geometry, BOW_FRACTIONS, true);
+            if (budget.routeBudgetExhausted()) {
+                grid.publish(current.edge.key(), current.straight);
+                byEdge.put(current.edge.key(), current.straight);
+                edgesFallback++;
+                continue;
+            }
+            final EdgePath bow = bestRung(current, grid, geometry, BOW_FRACTIONS, true, budget);
             if (bow != null) {
                 grid.publish(current.edge.key(), bow);
                 byEdge.put(current.edge.key(), bow);
                 edgesBow++;
                 continue;
             }
-            final EdgePath dogleg = bestRung(current, grid, geometry, DOGLEG_FRACTIONS, false);
+            if (budget.routeBudgetExhausted()) {
+                grid.publish(current.edge.key(), current.straight);
+                byEdge.put(current.edge.key(), current.straight);
+                edgesFallback++;
+                continue;
+            }
+            final EdgePath dogleg = bestRung(current, grid, geometry, DOGLEG_FRACTIONS, false, budget);
             if (dogleg != null) {
                 grid.publish(current.edge.key(), dogleg);
                 byEdge.put(current.edge.key(), dogleg);
@@ -138,16 +179,84 @@ public final class EdgeRouter {
         final long selectionEnd = System.nanoTime();
 
         final long residualStart = System.nanoTime();
-        final Set<String> residualCrossings = grid.crossingPairs(true);
-        final int hullPenetrations = grid.hullPenetrations(nodeHulls, parents);
+        final Set<String> residualCrossings = grid.crossingPairs(true, budget);
+        final int hullPenetrations = grid.hullPenetrations(nodeHulls, parents, budget);
         final long residualEnd = System.nanoTime();
 
         final EdgeRouteDiagnostics diagnostics = new EdgeRouteDiagnostics(edgesStraight, edgesBow,
             edgesDogleg, edgesFallback, detectedCrossings.size(),
-            new ArrayList<String>(residualCrossings), hullPenetrations);
+            new ArrayList<String>(residualCrossings), hullPenetrations,
+            budget.routeBudgetExhausted(), budget.detectionTruncated(), budget.indexItems(),
+            budget.obstacleChecks(), budget.pairChecks());
         final EdgeRouteTimings timings = new EdgeRouteTimings(indexEnd - indexStart,
             selectionEnd - selectionStart, residualEnd - residualStart);
         return EdgePaths.of(byEdge, diagnostics, timings);
+    }
+
+    /** The three per-frame router budgets and their stop flags (spec 13.1, 13.3). */
+    private static final class RouterBudget {
+        private final long indexItemCap;
+        private final long obstacleCheckCap;
+        private final long pairCheckCap;
+        private long indexItems;
+        private long obstacleChecks;
+        private long pairChecks;
+        private boolean routeBudgetExhausted;
+        private boolean detectionTruncated;
+
+        private RouterBudget(final long indexItemCap, final long obstacleCheckCap,
+                final long pairCheckCap) {
+            this.indexItemCap = indexItemCap;
+            this.obstacleCheckCap = obstacleCheckCap;
+            this.pairCheckCap = pairCheckCap;
+        }
+
+        private boolean insertItem() {
+            if (indexItems >= indexItemCap) {
+                routeBudgetExhausted = true;
+                return false;
+            }
+            indexItems++;
+            return true;
+        }
+
+        private boolean obstacleCheck() {
+            if (obstacleChecks >= obstacleCheckCap) {
+                routeBudgetExhausted = true;
+                return false;
+            }
+            obstacleChecks++;
+            return true;
+        }
+
+        private boolean pairCheck() {
+            if (pairChecks >= pairCheckCap) {
+                detectionTruncated = true;
+                return false;
+            }
+            pairChecks++;
+            return true;
+        }
+
+        private long indexItems() {
+            return indexItems;
+        }
+
+        private long obstacleChecks() {
+            return obstacleChecks;
+        }
+
+        private long pairChecks() {
+            return pairChecks;
+        }
+
+        private boolean routeBudgetExhausted() {
+            return routeBudgetExhausted;
+        }
+
+        private boolean detectionTruncated() {
+            return detectionTruncated;
+        }
     }
 
     public static boolean properlyCross(final EdgePath first, final EdgePath second) {
@@ -157,7 +266,8 @@ public final class EdgeRouter {
     }
 
     private static EdgePath bestRung(final Resolved current, final QueryGrid grid,
-            final GraphGeometry geometry, final double[] fractions, final boolean bow) {
+            final GraphGeometry geometry, final double[] fractions, final boolean bow,
+            final RouterBudget budget) {
         final double chordLength = distance(current.firstAnchor, current.secondAnchor);
         if (chordLength == 0.0) {
             return null;
@@ -175,8 +285,11 @@ public final class EdgeRouter {
                     || candidate.length() > ROUTE_LENGTH_CAP * chordLength) {
                 continue;
             }
-            if (clears(candidate, current.edge, grid, geometry)) {
+            if (clears(candidate, current.edge, grid, geometry, budget)) {
                 return candidate;
+            }
+            if (budget.routeBudgetExhausted()) {
+                return null;
             }
         }
         return null;
@@ -252,8 +365,8 @@ public final class EdgeRouter {
     }
 
     private static boolean clears(final EdgePath candidate, final ProjectedEdge edge,
-            final QueryGrid grid, final GraphGeometry geometry) {
-        if (!clearsDiscs(candidate, edge, grid, geometry)) {
+            final QueryGrid grid, final GraphGeometry geometry, final RouterBudget budget) {
+        if (!clearsDiscs(candidate, edge, grid, geometry, budget)) {
             return false;
         }
         for (final ProjectedEdgeKey key : grid.pathsNear(candidate.samples())) {
@@ -265,6 +378,9 @@ public final class EdgeRouter {
             if (obstacle == null || obstaclePath == null) {
                 continue;
             }
+            if (!budget.obstacleCheck()) {
+                return false;
+            }
             if (!clearsPath(candidate, edge, obstacle.edge, obstaclePath, geometry)) {
                 return false;
             }
@@ -273,7 +389,7 @@ public final class EdgeRouter {
     }
 
     private static boolean clearsDiscs(final EdgePath candidate, final ProjectedEdge edge,
-            final QueryGrid grid, final GraphGeometry geometry) {
+            final QueryGrid grid, final GraphGeometry geometry, final RouterBudget budget) {
         final Set<ProjectedNodeKey> attached = attachedNodes(edge);
         final double limit = EDGE_NODE_CLEARANCE - ROUTE_EPSILON;
         final List<LayoutPoint> samples = candidate.samples();
@@ -284,6 +400,9 @@ public final class EdgeRouter {
             final NodeGeometry node = geometry.nodes().get(key);
             if (node == null) {
                 continue;
+            }
+            if (!budget.obstacleCheck()) {
+                return false;
             }
             final double threshold = node.radius() + limit;
             for (int index = 0; index + 1 < samples.size(); index++) {
@@ -624,18 +743,22 @@ public final class EdgeRouter {
         return false;
     }
 
-    private static boolean crossesPolygon(final List<LayoutPoint> samples, final List<LayoutPoint> polygon) {
+    private static int crossesPolygon(final List<LayoutPoint> samples, final List<LayoutPoint> polygon,
+            final RouterBudget budget) {
         final int count = polygon.size();
         for (int vertex = 0; vertex < count; vertex++) {
             final LayoutPoint start = polygon.get(vertex);
             final LayoutPoint end = polygon.get((vertex + 1) % count);
             for (int index = 0; index + 1 < samples.size(); index++) {
+                if (!budget.pairCheck()) {
+                    return STOPPED;
+                }
                 if (properlyCrossSegments(samples.get(index), samples.get(index + 1), start, end)) {
-                    return true;
+                    return CROSSING;
                 }
             }
         }
-        return false;
+        return CLEAR;
     }
 
     private static Resolved resolve(final ProjectedEdge edge,
@@ -806,6 +929,7 @@ public final class EdgeRouter {
     private static final class QueryGrid {
         private final List<Resolved> resolved;
         private final GraphGeometry geometry;
+        private final RouterBudget budget;
         private final Map<ProjectedEdgeKey, Integer> idsByKey =
             new LinkedHashMap<ProjectedEdgeKey, Integer>();
         private final Resolved[] resolvedById;
@@ -832,9 +956,11 @@ public final class EdgeRouter {
         private int nextCollectStamp = 1;
         private int[] stack;
 
-        private QueryGrid(final List<Resolved> resolved, final GraphGeometry geometry) {
+        private QueryGrid(final List<Resolved> resolved, final GraphGeometry geometry,
+                final RouterBudget budget) {
             this.resolved = resolved;
             this.geometry = geometry;
+            this.budget = budget;
             resolvedById = new Resolved[resolved.size()];
             keysById = new ProjectedEdgeKey[resolved.size()];
             straightById = new EdgePath[resolved.size()];
@@ -916,7 +1042,7 @@ public final class EdgeRouter {
          * sign-only predicate of spec 3.2. The traversal steps one axis at a time, so two
          * segments crossing at a cell corner still share the corner cell.
          */
-        private Set<String> crossingPairs(final boolean publishedPaths) {
+        private Set<String> crossingPairs(final boolean publishedPaths, final RouterBudget budget) {
             Arrays.fill(seen, 0);
             final Set<String> crossings = new TreeSet<String>();
             for (int first = 0; first < resolvedById.length; first++) {
@@ -949,7 +1075,11 @@ public final class EdgeRouter {
                     if (secondPath == null) {
                         continue;
                     }
-                    if (properlyCrossSamples(firstPath.samples(), secondPath.samples())) {
+                    final int result = crossingResult(firstPath.samples(), secondPath.samples(), budget);
+                    if (result == STOPPED) {
+                        return crossings;
+                    }
+                    if (result == CROSSING) {
                         crossings.add(CanonicalKeys.edgePair(keysById[first], keysById[second]));
                     }
                 }
@@ -957,8 +1087,24 @@ public final class EdgeRouter {
             return crossings;
         }
 
+        private static int crossingResult(final List<LayoutPoint> first,
+                final List<LayoutPoint> second, final RouterBudget budget) {
+            for (int a = 0; a + 1 < first.size(); a++) {
+                for (int b = 0; b + 1 < second.size(); b++) {
+                    if (!budget.pairCheck()) {
+                        return STOPPED;
+                    }
+                    if (properlyCrossSegments(first.get(a), first.get(a + 1), second.get(b),
+                            second.get(b + 1))) {
+                        return CROSSING;
+                    }
+                }
+            }
+            return CLEAR;
+        }
+
         private int hullPenetrations(final Map<ProjectedNodeKey, List<EnclosureHullKey>> nodeHulls,
-                final Map<EnclosureHullKey, EnclosureHullKey> parents) {
+                final Map<EnclosureHullKey, EnclosureHullKey> parents, final RouterBudget budget) {
             int penetrations = 0;
             for (final Resolved current : resolved) {
                 final EdgePath path = pathFor(current.edge.key());
@@ -974,7 +1120,11 @@ public final class EdgeRouter {
                             || containedByHull(current.edge.second(), hullKey, nodeHulls, parents)) {
                         continue;
                     }
-                    if (crossesPolygon(path.samples(), hull.exactPolygon())) {
+                    final int result = crossesPolygon(path.samples(), hull.exactPolygon(), budget);
+                    if (result == STOPPED) {
+                        return penetrations;
+                    }
+                    if (result == CROSSING) {
                         penetrations++;
                     }
                 }
@@ -1254,8 +1404,11 @@ public final class EdgeRouter {
             return true;
         }
 
-        private static void addPathValue(final Map<Long, List<Integer>> cells, final long key,
+        private void addPathValue(final Map<Long, List<Integer>> cells, final long key,
                 final int value) {
+            if (!budget.insertItem()) {
+                return;
+            }
             final Long boxed = Long.valueOf(key);
             List<Integer> members = cells.get(boxed);
             if (members == null) {
@@ -1265,8 +1418,11 @@ public final class EdgeRouter {
             members.add(Integer.valueOf(value));
         }
 
-        private static <T> void addValue(final Map<Long, LinkedHashSet<T>> cells,
+        private <T> void addValue(final Map<Long, LinkedHashSet<T>> cells,
                 final long key, final T value) {
+            if (!budget.insertItem()) {
+                return;
+            }
             final Long boxed = Long.valueOf(key);
             LinkedHashSet<T> members = cells.get(boxed);
             if (members == null) {

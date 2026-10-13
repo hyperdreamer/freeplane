@@ -162,6 +162,83 @@ final class EdgeRouterFixture {
             Collections.<ProjectedNodeKey, Double>emptyMap());
     }
 
+    /**
+     * The superseded reference-scale shape: {@code chords} diameters of a radius-600000 circle.
+     * The adaptive query grid keeps the index and obstacle counters bounded while the straight
+     * chords' pair tests reach the router pair-check cap.
+     */
+    static EdgeRouterFixture referenceScaleFan(final int chords) {
+        return scaledDiameters(chords, 600000.0);
+    }
+
+    /** The same wide-span diameters with every rim disc examined by every straight chord. */
+    static EdgeRouterFixture denseObstacleFan(final int chords) {
+        final int side = (int) Math.ceil(Math.sqrt((double) chords));
+        final List<ProjectedNodeKey> keys = new ArrayList<ProjectedNodeKey>();
+        final List<ProjectedEdgeKey> edges = new ArrayList<ProjectedEdgeKey>();
+        final List<Object> coordinates = new ArrayList<Object>();
+        final double spacing = 40.0;
+        int created = 0;
+        for (int row = 0; row < side && created < chords; row++) {
+            for (int column = 0; column < side && created < chords; column++) {
+                final ProjectedNodeKey first = node("D" + created + "A");
+                final ProjectedNodeKey second = node("D" + created + "B");
+                keys.add(first);
+                keys.add(second);
+                edges.add(edge(first, second));
+                final double x = column * spacing;
+                final double y = row * spacing;
+                coordinates.add(first);
+                coordinates.add(Double.valueOf(x));
+                coordinates.add(Double.valueOf(y));
+                coordinates.add(second);
+                coordinates.add(Double.valueOf(x));
+                coordinates.add(Double.valueOf(y + 5.0));
+                created++;
+            }
+        }
+        for (int index = 0; index < chords; index++) {
+            final ProjectedNodeKey key = node("O" + index);
+            keys.add(key);
+            coordinates.add(key);
+            coordinates.add(Double.valueOf(1000.0 + (index % side) * spacing));
+            coordinates.add(Double.valueOf((index / side) * spacing));
+        }
+        final ProjectedNodeKey far = node("Z_FAR");
+        keys.add(far);
+        coordinates.add(far);
+        coordinates.add(Double.valueOf(243000.0));
+        coordinates.add(Double.valueOf(243000.0));
+        return new EdgeRouterFixture(projection(keys, edges),
+            LayoutPositions.of(points(coordinates.toArray()),
+                Collections.<EnclosureHullKey, LayoutPoint>emptyMap()),
+            Collections.<ProjectedNodeKey, Double>emptyMap());
+    }
+
+    private static EdgeRouterFixture scaledDiameters(final int chords, final double radius) {
+        final List<ProjectedNodeKey> keys = new ArrayList<ProjectedNodeKey>();
+        final List<ProjectedEdgeKey> edges = new ArrayList<ProjectedEdgeKey>();
+        final Object[] coordinates = new Object[chords * 6];
+        int cursor = 0;
+        for (int index = 0; index < chords; index++) {
+            final double theta = Math.PI * index / (double) chords;
+            final ProjectedNodeKey first = node("C" + index + "A");
+            final ProjectedNodeKey second = node("C" + index + "B");
+            keys.add(first);
+            keys.add(second);
+            edges.add(edge(first, second));
+            coordinates[cursor++] = first;
+            coordinates[cursor++] = Double.valueOf(radius * Math.cos(theta));
+            coordinates[cursor++] = Double.valueOf(radius * Math.sin(theta));
+            coordinates[cursor++] = second;
+            coordinates[cursor++] = Double.valueOf(-radius * Math.cos(theta));
+            coordinates[cursor++] = Double.valueOf(-radius * Math.sin(theta));
+        }
+        return new EdgeRouterFixture(projection(keys, edges), LayoutPositions.of(points(coordinates),
+            Collections.<EnclosureHullKey, LayoutPoint>emptyMap()),
+            Collections.<ProjectedNodeKey, Double>emptyMap());
+    }
+
     static EdgeRouterFixture oneResolvableEdgeAndOneBrokenEdge() {
         final ProjectedNodeKey a = node("A");
         final ProjectedNodeKey b = node("B");

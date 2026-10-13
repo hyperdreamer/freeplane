@@ -118,8 +118,20 @@ public final class NodeSeparationProjection {
     /** The canonical node-pair keys of every unordered disc pair below the minimum gap. */
     public static List<String> violatingPairs(final GraphProjection projection,
             final LayoutPositions positions) {
+        return violatingPairsCounted(projection, positions, Integer.MAX_VALUE).pairs();
+    }
+
+    /**
+     * The canonical node-pair keys of every pair below the minimum gap, or the prefix examined
+     * before the pair budget reaches zero; the loop decrements the allowance before each test.
+     */
+    public static CountedViolatingPairs violatingPairsCounted(final GraphProjection projection,
+            final LayoutPositions positions, final int pairBudget) {
         Objects.requireNonNull(projection, "projection");
         Objects.requireNonNull(positions, "positions");
+        if (pairBudget < 0) {
+            throw new IllegalArgumentException("pairBudget must be nonnegative");
+        }
         final List<ProjectedNodeKey> keys = new ArrayList<ProjectedNodeKey>(positions.nodes().keySet());
         Collections.sort(keys, new Comparator<ProjectedNodeKey>() {
             @Override
@@ -128,6 +140,8 @@ public final class NodeSeparationProjection {
             }
         });
         final List<String> result = new ArrayList<String>();
+        int remaining = pairBudget;
+        long evaluations = 0L;
         for (int first = 0; first < keys.size(); first++) {
             for (int second = first + 1; second < keys.size(); second++) {
                 final ProjectedNodeKey firstKey = keys.get(first);
@@ -140,6 +154,11 @@ public final class NodeSeparationProjection {
                 if (firstPoint == null || secondPoint == null) {
                     continue;
                 }
+                if (remaining == 0) {
+                    return CountedViolatingPairs.of(result, evaluations, true);
+                }
+                remaining--;
+                evaluations++;
                 final double need = NODE_RADIUS * prominenceScale(projection, firstKey)
                     + NODE_RADIUS * prominenceScale(projection, secondKey) + MIN_GAP;
                 if (Math.hypot(secondPoint.x() - firstPoint.x(), secondPoint.y() - firstPoint.y()) < need) {
@@ -148,7 +167,7 @@ public final class NodeSeparationProjection {
             }
         }
         Collections.sort(result);
-        return Collections.unmodifiableList(result);
+        return CountedViolatingPairs.of(result, evaluations, remaining == 0);
     }
 
     private static void move(final Map<Long, List<Integer>> cells, final int index, final double[] x,
