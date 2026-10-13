@@ -9,6 +9,10 @@ final class TypedNodeParticle extends SpringBoxNodeParticle {
     private final Vector3 rawBudgetedRepulsion = new Vector3();
     private final Vector3 preScaleDisplacement = new Vector3();
     private double separationRadius = 8.0;
+    private double separationHalfWidth = -1.0;
+    private double separationHalfHeight = -1.0;
+    private double separationOffsetX = 0.0;
+    private double separationOffsetY = 0.0;
     private boolean activelyPinned;
 
     TypedNodeParticle(final TypedSpringBox box, final String id) {
@@ -21,12 +25,32 @@ final class TypedNodeParticle extends SpringBoxNodeParticle {
         activelyPinned = pinned;
     }
 
+    void configureExtents(final double halfWidth, final double halfHeight, final double offsetX,
+            final double offsetY) {
+        separationHalfWidth = halfWidth;
+        separationHalfHeight = halfHeight;
+        separationOffsetX = offsetX;
+        separationOffsetY = offsetY;
+    }
+
     double separationRadius() {
         return separationRadius;
     }
 
-    double boundaryRadius() {
-        return separationRadius;
+    double separationHalfWidth() {
+        return separationHalfWidth;
+    }
+
+    double separationHalfHeight() {
+        return separationHalfHeight;
+    }
+
+    double separationOffsetX() {
+        return separationOffsetX;
+    }
+
+    double separationOffsetY() {
+        return separationOffsetY;
     }
 
     @Override
