@@ -6,8 +6,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
+import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.projection.BoundaryTier;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.EnclosureKey;
@@ -222,6 +224,75 @@ public class BoundaryFootprintShould {
         assertThat(sizes.topLevelPlacementOf(nested)).isNull();
         assertThat(sizes.topLevelPlacementOf(root)).isNotNull();
         assertThat(sizes.topLevelPlacementOf(parentless)).isNotNull();
+    }
+
+    @Test
+    public void contentItemIsPlacedAtTheAnchor() {
+        for (final char name : new char[] {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'}) {
+            final GraphProjection projection = ClusterProximityShould.fixture(name);
+            final GraphStreamLayoutEngine.BoundarySizes sizes =
+                new GraphStreamLayoutEngine.BoundarySizes(projection);
+            for (final ProjectedEnclosure enclosure : projection.enclosures()) {
+                if (enclosure.directNodes().isEmpty()) {
+                    continue;
+                }
+                final List<ClusterPacking.ClusterPlacement> placements =
+                    sizes.placements(enclosure.hullKey());
+                assertThat(placements).as("fixture %s hull %s", Character.valueOf(name),
+                    enclosure.hullKey()).isNotEmpty();
+                final ClusterPacking.ClusterPlacement first = placements.get(0);
+                assertThat(first.item.anchorKey).as("fixture %s content item of %s",
+                    Character.valueOf(name), enclosure.hullKey()).isNull();
+                assertThat(first.x).isEqualTo(0.0);
+                assertThat(first.y).isEqualTo(0.0);
+            }
+        }
+    }
+
+    @Test
+    public void packedFootprintBoxesDoNotOverlapAcrossTheFixtureSet() {
+        final List<GraphProjection> projections = new ArrayList<GraphProjection>();
+        for (final char name : new char[] {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'}) {
+            projections.add(ClusterProximityShould.fixture(name));
+        }
+        projections.add(ClusterProximityShould.wideProjection(1L));
+        for (final GraphProjection projection : projections) {
+            final GraphStreamLayoutEngine.BoundarySizes sizes =
+                new GraphStreamLayoutEngine.BoundarySizes(projection);
+            final Map<EnclosureHullKey, LayoutPoint> anchors =
+                ClusterProximityShould.composeAnchors(projection);
+            final List<EnclosureHullKey> keys = new ArrayList<EnclosureHullKey>(anchors.keySet());
+            for (int first = 0; first < keys.size(); first++) {
+                for (int second = first + 1; second < keys.size(); second++) {
+                    final EnclosureHullKey firstKey = keys.get(first);
+                    final EnclosureHullKey secondKey = keys.get(second);
+                    if (ClusterProximityShould.related(projection, firstKey, secondKey)) {
+                        continue;
+                    }
+                    final GraphStreamLayoutEngine.BoundarySizes.Footprint firstFootprint =
+                        sizes.footprint(firstKey);
+                    final GraphStreamLayoutEngine.BoundarySizes.Footprint secondFootprint =
+                        sizes.footprint(secondKey);
+                    final LayoutPoint firstAnchor = anchors.get(firstKey);
+                    final LayoutPoint secondAnchor = anchors.get(secondKey);
+                    final double centreX1 = firstAnchor.x() - firstFootprint.anchorX;
+                    final double centreY1 = firstAnchor.y() - firstFootprint.anchorY;
+                    final double centreX2 = secondAnchor.x() - secondFootprint.anchorX;
+                    final double centreY2 = secondAnchor.y() - secondFootprint.anchorY;
+                    final double forceGapX = Math.abs(centreX1 - centreX2)
+                        - (firstFootprint.width + secondFootprint.width) * 0.5
+                        - GraphStreamLayoutEngine.BoundarySizes.SIBLING_GAP;
+                    final double forceGapY = Math.abs(centreY1 - centreY2)
+                        - (firstFootprint.height + secondFootprint.height) * 0.5
+                        - GraphStreamLayoutEngine.BoundarySizes.SIBLING_GAP;
+                    assertThat(forceGapX >= -ClusterPacking.CANDIDATE_EPSILON
+                        || forceGapY >= -ClusterPacking.CANDIDATE_EPSILON)
+                        .as("packed boxes of %s and %s (forceGapX %s, forceGapY %s)", firstKey, secondKey,
+                            Double.valueOf(forceGapX), Double.valueOf(forceGapY))
+                        .isTrue();
+                }
+            }
+        }
     }
 
     @Test
