@@ -2,6 +2,7 @@ package org.freeplane.plugin.graph.canvas;
 
 import java.awt.AWTKeyStroke;
 import java.awt.KeyboardFocusManager;
+import java.awt.Point;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
@@ -294,14 +295,15 @@ public final class GraphInteractionController {
             return;
         }
         final DragState current = drag;
-        final double dx = event.getX() - current.lastX;
-        final double dy = event.getY() - current.lastY;
-        if (Math.hypot(event.getX() - current.startX, event.getY() - current.startY)
+        final Point pointer = canvas.viewportPoint(event.getPoint());
+        final double dx = pointer.x - current.lastX;
+        final double dy = pointer.y - current.lastY;
+        if (Math.hypot(pointer.x - current.startX, pointer.y - current.startY)
                 >= DRAG_THRESHOLD_PIXELS) {
             current.moved = true;
         }
-        current.lastX = event.getX();
-        current.lastY = event.getY();
+        current.lastX = pointer.x;
+        current.lastY = pointer.y;
         final LayoutPoint world = canvas.worldAt(event.getPoint());
         if (current.connect) {
             if (previewSource != null) {
@@ -444,7 +446,8 @@ public final class GraphInteractionController {
         final ProjectedEndpointKey value = endpoint.orElse(null);
         final boolean pinCandidate = value != null && value.isNode()
             && !PinProjection.isPinned(state.projection(), value.node().get());
-        drag = DragState.select(value, pinCandidate, event.getX(), event.getY());
+        final Point pointer = canvas.viewportPoint(event.getPoint());
+        drag = DragState.select(value, pinCandidate, pointer.x, pointer.y);
     }
 
     private void beginConnect(final CanvasState state,
@@ -456,7 +459,8 @@ public final class GraphInteractionController {
         }
         previewSource = endpoint.get();
         previewFrom = previewStart(state, previewSource, world);
-        drag = DragState.connect(previewSource, event.getX(), event.getY());
+        final Point pointer = canvas.viewportPoint(event.getPoint());
+        drag = DragState.connect(previewSource, pointer.x, pointer.y);
         updatePreview(world);
     }
 
@@ -464,8 +468,9 @@ public final class GraphInteractionController {
         if (!current.pinCandidate) {
             return;
         }
+        final Point pointer = canvas.viewportPoint(event.getPoint());
         final boolean moved = current.moved
-            || Math.hypot(event.getX() - current.startX, event.getY() - current.startY)
+            || Math.hypot(pointer.x - current.startX, pointer.y - current.startY)
                 >= DRAG_THRESHOLD_PIXELS;
         if (!moved || current.endpoint == null || !current.endpoint.isNode()) {
             return;
