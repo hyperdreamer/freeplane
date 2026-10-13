@@ -6,9 +6,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.TimeUnit;
@@ -843,6 +845,7 @@ public class BoundarySeparationShould {
         assertThat(published.boundaryDiagnostics().appliedDisplacements())
             .isEqualTo(pipeline.boundaryBaseline.appliedDisplacements());
         assertThat(published.boundaryDiagnostics().residualHullPairs()).isSorted();
+        assertThat(pipeline.boundaryBaseline.residualHullPairs()).isNotEmpty();
         assertThat(published.boundaryDiagnostics().residualHullPairs())
             .isEqualTo(new ArrayList<String>(new TreeSet<String>(new BoundaryInvariants().detectPairKeys(
                 pipeline.request.projection(), pipeline.publishedGeometry))));
@@ -852,12 +855,14 @@ public class BoundarySeparationShould {
     public void rebuiltNodeResidualIsOrderIndependent() {
         final RebuildPipeline pipeline = rebuildPipeline();
         final LayoutPositions published = pipeline.publishedPositions;
+        final Set<ProjectedNodeKey> pinned = pinnedKeys(pipeline.request.pins());
 
         final int first = new NodeSeparationProjection().project(pipeline.request.projection(),
-            published, Collections.<ProjectedNodeKey>emptySet()).residualViolations();
+            published, pinned).residualViolations();
         final int second = new NodeSeparationProjection().project(pipeline.request.projection(),
-            reversedNodeOrder(published), Collections.<ProjectedNodeKey>emptySet()).residualViolations();
+            reversedNodeOrder(published), pinned).residualViolations();
 
+        assertThat(first).isGreaterThan(0);
         assertThat(first).isEqualTo(second);
     }
 
@@ -880,13 +885,28 @@ public class BoundarySeparationShould {
     }
 
     /**
-     * Pins only Choice, leaving the passed-over Theorem unpinned so the composed edge stage can
-     * apply its C2 translation repair (design section 5.2); with the full real-pin set the passed-over
-     * node is pinned and the conflict is correctly left as a residual with zero edge rounds.
+     * Pins the whole Axioms hull at the reproduced settle positions and keeps the passed-over
+     * Theorem unpinned so the composed edge stage applies its C2 translation repair (design
+     * section 5.2); with the full real-pin set the passed-over node is pinned and the conflict is
+     * correctly left as a residual with zero edge rounds. Choice is pinned 18 px from Replacement,
+     * below the node minimum gap, so the published frame carries a pinned node residual that the
+     * order-independence assertion can actually observe.
      */
     private static List<PinProjection> pipelineRelocationPins() {
-        return Collections.singletonList(pipelinePin(PIPELINE_CHOICE,
-            -24.832420395427746, -34.920469854404410));
+        return Arrays.asList(
+            pipelinePin(PIPELINE_REGULARITY, -173.26206169386748, 1.8301628933959680),
+            pipelinePin(PIPELINE_REPLACEMENT, 248.60834750232004, -59.339657536064465),
+            pipelinePin(PIPELINE_CHOICE, 248.60834750232004 + 18.0, -59.339657536064465));
+    }
+
+    private static Set<ProjectedNodeKey> pinnedKeys(final List<PinProjection> pins) {
+        final Set<ProjectedNodeKey> result = new LinkedHashSet<ProjectedNodeKey>();
+        for (final PinProjection pin : pins) {
+            if (pin.active() && pin.projectedNode().isPresent()) {
+                result.add(pin.projectedNode().get());
+            }
+        }
+        return result;
     }
 
     private RebuildPipeline rebuildPipeline() {
