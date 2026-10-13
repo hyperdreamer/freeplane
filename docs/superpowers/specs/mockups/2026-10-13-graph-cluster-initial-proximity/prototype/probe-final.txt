@@ -1,0 +1,137 @@
+proto.packingMultiplier=0.3 proto.boundary=box
+
+### A reference fixture (root > zfc > axioms + definitions)
+idle step = 42 (then +200)
+enclosure | footprint w x h (anchor offset) | settled anchor | per-side containment | drift
+Axiomatic Set Theory           225.4 x  153.4 (  -0.0,  -0.0)  (     6.9,    -0.1)  FAIL  x[ -119.9..   97.1]/[ -112.7..  112.7] y[  -71.2..   70.5]/[  -76.7..   76.7]   +0.0
+ZFC                            193.4 x  121.4 (  36.0,  -0.0)  (    43.8,    -5.3)  FAIL  x[ -140.8..   44.2]/[ -132.7..   60.7] y[  -50.0..   59.7]/[  -60.7..   60.7]   +0.0
+Axioms                          89.4 x   89.4 (  -0.0,  -0.0)  (    34.8,    -0.9)  OK    x[  -31.7..   37.2]/[  -44.7..   44.7] y[  -38.5..   39.2]/[  -44.7..   44.7]   +4.4
+Basic Definitions and Theorems    64.0 x   64.0 (  -0.0,  -0.0)  (   -49.8,    -0.2)  OK    x[  -31.1..   16.9]/[  -32.0..   32.0] y[  -23.8..   24.2]/[  -32.0..   32.0]   +7.1
+packed contacts -> settled anchor distance / packed rest / hull distance:
+   Axioms <-> Basic Definitions and Theorems            settled    84.6  packed    84.7  hull     36.0  EDGE
+   Basic Definitions and Theorems <-> Axioms            settled    84.6  packed    84.7  hull     36.0  EDGE
+   BOX-FORCE NONZERO Axioms <-> Basic Definitions and Theorems gapX -0.1 gapY -84.0
+settled box-force violations (non-ancestor pairs): 1
+stability window (1000 steps after the documented endpoint): max hold deviation 4.6 at Axioms <-> Basic Definitions and Theorems
+all-pairs non-ancestor crossings: 0, minimum separation 36.04
+
+### B two maps
+idle step = 28 (then +200)
+enclosure | footprint w x h (anchor offset) | settled anchor | per-side containment | drift
+a fundamentals                 108.0 x  108.0 (  -0.0,  -0.0)  (     4.4,     0.9)  OK    x[  -48.7..   47.9]/[  -54.0..   54.0] y[  -45.5..   44.6]/[  -54.0..   54.0]   +2.7
+Map a                          140.0 x  140.0 (  -0.0,  -0.0)  (    -4.9,     1.2)  FAIL  x[  -55.4..   73.2]/[  -70.0..   70.0] y[  -61.8..   60.3]/[  -70.0..   70.0]   +0.0
+b fundamentals                  86.0 x   86.0 (  -0.0,  -0.0)  (  -145.7,    -6.2)  OK    x[  -30.2..   38.3]/[  -43.0..   43.0] y[  -18.0..   38.0]/[  -43.0..   43.0]   +4.5
+Map b                          118.0 x  118.0 (  -0.0,  -0.0)  (  -144.6,   -16.9)  FAIL  x[  -47.3..   53.2]/[  -59.0..   59.0] y[  -23.3..   64.7]/[  -59.0..   59.0]   +0.0
+packed contacts -> settled anchor distance / packed rest / hull distance:
+   TOP Map a <-> Map b                                  settled   140.9  packed   137.0  hull     31.1  EDGE
+   TOP Map b <-> Map a                                  settled   140.9  packed   137.0  hull     31.1  EDGE
+settled box-force violations (non-ancestor pairs): 0
+stability window (1000 steps after the documented endpoint): max hold deviation 14.6 at TOP Map a <-> Map b
+all-pairs non-ancestor crossings: 0, minimum separation 31.15
+
+### C two maps + relationships + pin(60,20)
+idle step = 785 (then +200)
+enclosure | footprint w x h (anchor offset) | settled anchor | per-side containment | drift
+a fundamentals                  95.1 x   95.1 (  -0.0,  -0.0)  (   155.3,   -35.1)  FAIL  x[  -51.5..   21.4]/[  -47.6..   47.6] y[  -41.2..   51.4]/[  -47.6..   47.6]  +13.3
+Map a                          127.1 x  127.1 (  -0.0,  -0.0)  (   165.4,   -28.7)  FAIL  x[  -77.6..   27.3]/[  -63.6..   63.6] y[  -63.6..   61.0]/[  -63.6..   63.6]   +0.0
+b fundamentals                  95.1 x   95.1 (  -0.0,  -0.0)  (    41.0,     9.3)  OK    x[  -45.2..   43.0]/[  -47.6..   47.6] y[  -44.0..   38.8]/[  -47.6..   47.6]   +6.4
+Map b                          127.1 x  127.1 (  -0.0,  -0.0)  (    22.4,     6.5)  FAIL  x[  -42.6..   77.6]/[  -63.6..   63.6] y[  -57.1..   57.6]/[  -63.6..   63.6]   +0.0
+packed contacts -> settled anchor distance / packed rest / hull distance:
+   TOP Map a <-> Map b                                  settled   147.2  packed   135.1  hull      0.0  EDGE
+   TOP Map b <-> Map a                                  settled   147.2  packed   135.1  hull      0.0  EDGE
+settled box-force violations (non-ancestor pairs): 0
+stability window (1000 steps after the documented endpoint): max hold deviation 12.1 at TOP Map a <-> Map b
+all-pairs non-ancestor crossings: 0, minimum separation 0.00
+
+### D two maps + relationships
+idle step = 428 (then +200)
+enclosure | footprint w x h (anchor offset) | settled anchor | per-side containment | drift
+a fundamentals                  95.1 x   95.1 (  -0.0,  -0.0)  (    17.6,   -33.2)  FAIL  x[  -49.1..   42.2]/[  -47.6..   47.6] y[  -34.8..   44.4]/[  -47.6..   47.6]  +12.8
+Map a                          127.1 x  127.1 (  -0.0,  -0.0)  (     9.6,   -40.9)  FAIL  x[  -57.1..   66.2]/[  -63.6..   63.6] y[  -43.0..   68.2]/[  -63.6..   63.6]   +0.0
+b fundamentals                  95.1 x   95.1 (  -0.0,  -0.0)  (  -146.3,   -34.4)  OK    x[  -44.8..   47.0]/[  -47.6..   47.6] y[  -32.7..   41.7]/[  -47.6..   47.6]  +12.2
+Map b                          127.1 x  127.1 (  -0.0,  -0.0)  (  -137.6,   -41.6)  FAIL  x[  -69.5..   54.4]/[  -63.6..   63.6] y[  -41.4..   65.0]/[  -63.6..   63.6]   +0.0
+packed contacts -> settled anchor distance / packed rest / hull distance:
+   TOP Map a <-> Map b                                  settled   147.2  packed   135.1  hull     35.7  EDGE
+   TOP Map b <-> Map a                                  settled   147.2  packed   135.1  hull     35.7  EDGE
+settled box-force violations (non-ancestor pairs): 0
+stability window (1000 steps after the documented endpoint): max hold deviation 78.7 at TOP Map a <-> Map b
+all-pairs non-ancestor crossings: 0, minimum separation 35.73
+
+### E dual enclosure (root 2 nodes + child 3 nodes)
+idle step = 23 (then +200)
+enclosure | footprint w x h (anchor offset) | settled anchor | per-side containment | drift
+child group                     89.4 x   89.4 (  -0.0,  -0.0)  (   -31.6,    -0.0)  OK    x[  -31.9..   38.8]/[  -44.7..   44.7] y[  -36.8..   36.8]/[  -44.7..   44.7]   +2.3
+Root map                       183.4 x  121.4 (  48.7,  -0.0)  (    49.8,    -0.0)  OK    x[ -129.3..   37.4]/[ -140.4..   43.0] y[  -52.8..   52.8]/[  -60.7..   60.7]   +2.4
+packed contacts -> settled anchor distance / packed rest / hull distance:
+   child group <-> parent anchor                        settled    81.4  packed    79.7  hull    -86.7
+settled box-force violations (non-ancestor pairs): 0
+stability window (1000 steps after the documented endpoint): max hold deviation 2.1 at child group <-> parent
+all-pairs non-ancestor crossings: 0, minimum separation Infinity
+
+### F four maps heterogeneous
+idle step = 135 (then +200)
+enclosure | footprint w x h (anchor offset) | settled anchor | per-side containment | drift
+m0 fundamentals                 86.0 x   86.0 (  -0.0,  -0.0)  (   135.2,  -130.4)  OK    x[  -33.4..   22.9]/[  -43.0..   43.0] y[  -34.1..   37.7]/[  -43.0..   43.0]   +2.8
+Map m0                         118.0 x  118.0 (  -0.0,  -0.0)  (   146.1,  -134.1)  FAIL  x[  -60.3..   28.0]/[  -59.0..   59.0] y[  -46.5..   57.4]/[  -59.0..   59.0]   +0.0
+m1 fundamentals                 89.4 x   89.4 (  -0.0,  -0.0)  (   138.1,     0.7)  OK    x[  -35.7..   34.3]/[  -44.7..   44.7] y[  -36.0..   35.9]/[  -44.7..   44.7]   +3.1
+Map m1                         121.4 x  121.4 (  -0.0,  -0.0)  (   147.9,    -6.3)  FAIL  x[  -61.5..   40.5]/[  -60.7..   60.7] y[  -45.0..   58.9]/[  -60.7..   60.7]   +0.0
+m2 fundamentals                 95.1 x   95.1 (  -0.0,  -0.0)  (  -143.2,     0.1)  OK    x[  -32.6..   39.2]/[  -47.6..   47.6] y[  -41.8..   40.4]/[  -47.6..   47.6]   +3.0
+Map m2                         127.1 x  127.1 (  -0.0,  -0.0)  (  -154.9,    -1.0)  FAIL  x[  -37.0..   66.9]/[  -63.6..   63.6] y[  -56.7..   57.5]/[  -63.6..   63.6]   +0.0
+m3 fundamentals                101.4 x  101.4 (  -0.0,  -0.0)  (     6.4,     0.4)  OK    x[  -40.9..   44.3]/[  -50.7..   50.7] y[  -45.8..   45.8]/[  -50.7..   50.7]   +3.3
+Map m3                         133.4 x  133.4 (  -0.0,  -0.0)  (    -3.7,     0.4)  FAIL  x[  -46.8..   70.4]/[  -66.7..   66.7] y[  -61.8..   61.8]/[  -66.7..   66.7]   +0.0
+packed contacts -> settled anchor distance / packed rest / hull distance:
+   TOP Map m3 <-> Map m2                                settled   151.2  packed   138.3  hull     37.5  EDGE
+   TOP Map m3 <-> Map m1                                settled   151.8  packed   135.4  hull     19.7  EDGE
+   TOP Map m2 <-> Map m3                                settled   151.2  packed   138.3  hull     37.5  EDGE
+   TOP Map m1 <-> Map m3                                settled   151.8  packed   135.4  hull     19.7  EDGE
+   TOP Map m1 <-> Map m0                                settled   127.8  packed   127.7  hull     25.4  EDGE
+   TOP Map m0 <-> Map m1                                settled   127.8  packed   127.7  hull     25.4  EDGE
+settled box-force violations (non-ancestor pairs): 0
+stability window (1000 steps after the documented endpoint): max hold deviation 27.2 at TOP Map m3 <-> Map m1
+all-pairs non-ancestor crossings: 0, minimum separation 19.71
+
+### G one map four sibling subgroups
+idle step = 28 (then +200)
+enclosure | footprint w x h (anchor offset) | settled anchor | per-side containment | drift
+group 0                         86.0 x   86.0 (  -0.0,  -0.0)  (    43.9,    -1.7)  OK    x[  -37.7..   32.7]/[  -43.0..   43.0] y[  -22.6..   30.6]/[  -43.0..   43.0]   +2.7
+group 1                         86.0 x   86.0 (  -0.0,  -0.0)  (   -49.6,    -0.2)  OK    x[  -37.1..   37.4]/[  -43.0..   43.0] y[  -23.8..   24.2]/[  -43.0..   43.0]   +2.4
+group 2                         86.0 x   86.0 (  -0.0,  -0.0)  (   147.8,    -0.1)  OK    x[  -37.0..   37.5]/[  -43.0..   43.0] y[  -23.9..   24.1]/[  -43.0..   43.0]   +2.5
+group 3                         86.0 x   86.0 (  -0.0,  -0.0)  (  -143.4,    -0.1)  OK    x[  -37.2..   37.3]/[  -43.0..   43.0] y[  -23.9..   24.1]/[  -43.0..   43.0]   +2.3
+Map g                          400.0 x  118.0 (  47.0,  -0.0)  (    50.5,    -7.3)  FAIL  x[ -247.2..  150.8]/[ -247.0..  153.0] y[  -33.0..   52.2]/[  -59.0..   59.0]   +0.0
+packed contacts -> settled anchor distance / packed rest / hull distance:
+   group 0 <-> group 1                                  settled    93.6  packed    94.0  hull     18.6  EDGE
+   group 0 <-> group 2                                  settled   103.9  packed    94.0  hull     34.2  EDGE
+   group 1 <-> group 0                                  settled    93.6  packed    94.0  hull     18.6  EDGE
+   group 1 <-> group 3                                  settled    93.8  packed    94.0  hull     19.5  EDGE
+   group 2 <-> group 0                                  settled   103.9  packed    94.0  hull     34.2  EDGE
+   group 3 <-> group 1                                  settled    93.8  packed    94.0  hull     19.5  EDGE
+   BOX-FORCE NONZERO group 0 <-> group 1 gapX -0.4 gapY -92.5
+   BOX-FORCE NONZERO group 1 <-> group 3 gapX -0.2 gapY -93.9
+settled box-force violations (non-ancestor pairs): 2
+stability window (1000 steps after the documented endpoint): max hold deviation 9.9 at group 0 <-> group 2
+all-pairs non-ancestor crossings: 0, minimum separation 18.55
+
+### H root with direct nodes + two nested sibling sub-clusters
+idle step = 22 (then +200)
+enclosure | footprint w x h (anchor offset) | settled anchor | per-side containment | drift
+grandchild group                86.0 x   86.0 (  -0.0,  -0.0)  (  -110.6,     0.0)  OK    x[  -37.3..   37.1]/[  -43.0..   43.0] y[  -24.0..   24.0]/[  -43.0..   43.0]   +2.3
+child one group                180.0 x  118.0 (  47.0,  -0.0)  (   -31.3,     0.0)  OK    x[ -132.6..   37.3]/[ -137.0..   43.0] y[  -40.0..   40.0]/[  -59.0..   59.0]   +2.3
+child two group                 86.0 x   86.0 (  -0.0,  -0.0)  (   126.6,     0.0)  OK    x[  -37.1..   37.3]/[  -43.0..   43.0] y[  -24.0..   24.0]/[  -43.0..   43.0]   +2.3
+Root map                       368.0 x  150.0 (  47.0,  -0.0)  (    47.3,     0.0)  OK    x[ -227.2..  132.6]/[ -231.0..  137.0] y[  -56.0..   56.0]/[  -75.0..   75.0]   +2.3
+packed contacts -> settled anchor distance / packed rest / hull distance:
+   grandchild group <-> parent anchor                   settled    79.3  packed    78.0  hull    -64.0
+   child one group <-> parent anchor                    settled    78.6  packed    78.0  hull    -96.0
+   child two group <-> parent anchor                    settled    79.3  packed    78.0  hull    -80.0
+settled box-force violations (non-ancestor pairs): 0
+stability window (1000 steps after the documented endpoint): max hold deviation 2.1 at grandchild group <-> parent
+all-pairs non-ancestor crossings: 0, minimum separation 83.51
+reorder retained m0 fundamentals                          apply     0.0 next-step     0.1
+reorder retained Map m0                                   apply     0.0 next-step     0.7
+reorder retained m1 fundamentals                          apply    24.1 next-step     0.0
+reorder retained Map m1                                   apply    24.1 next-step     0.0
+reorder retained m2 fundamentals                          apply    17.1 next-step     0.1
+reorder retained Map m2                                   apply    17.1 next-step     0.2
+reorder retained m3 fundamentals                          apply   245.9 next-step   122.3
+reorder retained Map m3                                   apply   245.9 next-step   142.1
+reorder totals: applyMax 245.9 applySum 574.2 stepMax 142.1
+timing 200-child fixture: submit(apply+packing) 0.580 s, 10 steps 1.252 s, anchors 201

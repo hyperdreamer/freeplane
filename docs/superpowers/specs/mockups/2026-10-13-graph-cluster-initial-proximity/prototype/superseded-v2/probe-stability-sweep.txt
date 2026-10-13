@@ -1,0 +1,65 @@
+### packingMultiplier=0.3 boundary=box
+### SCENARIO A (root > zfc > axioms + definitions)
+idle at step 58 (+200 extra steps observed)
+   gap Axioms                     <-> Basic Definitions and Theorems     22.2
+### SCENARIO B (two maps)
+idle at step 205 (+200 extra steps observed)
+   gap Map a                      <-> Map b                          24.5
+### SCENARIO C (two maps, cross-map relationships, node pin at (60,20))
+idle at step 136 (+200 extra steps observed)
+   gap Map a                      <-> Map b                          31.0
+### SCENARIO D (two maps, cross-map relationships, no pin)
+idle at step 158 (+200 extra steps observed)
+   gap Map a                      <-> Map b                          28.3
+### packingMultiplier=1.0 boundary=box
+### SCENARIO A (root > zfc > axioms + definitions)
+idle at step 48 (+200 extra steps observed)
+   gap Axioms                     <-> Basic Definitions and Theorems     20.2
+### SCENARIO B (two maps)
+idle at step 71 (+200 extra steps observed)
+   gap Map a                      <-> Map b                          23.3
+### SCENARIO C (two maps, cross-map relationships, node pin at (60,20))
+idle at step 88 (+200 extra steps observed)
+   gap Map a                      <-> Map b                          29.3
+### SCENARIO D (two maps, cross-map relationships, no pin)
+idle at step 121 (+200 extra steps observed)
+   gap Map a                      <-> Map b                          30.1
+### packingMultiplier=3.0 boundary=box
+### SCENARIO A (root > zfc > axioms + definitions)
+idle at step 40 (+200 extra steps observed)
+   gap Axioms                     <-> Basic Definitions and Theorems     19.8
+### SCENARIO B (two maps)
+idle at step 63 (+200 extra steps observed)
+   gap Map a                      <-> Map b                          28.8
+### SCENARIO C (two maps, cross-map relationships, node pin at (60,20))
+idle at step 65 (+200 extra steps observed)
+   gap Map a                      <-> Map b                          34.2
+### SCENARIO D (two maps, cross-map relationships, no pin)
+idle at step 118 (+200 extra steps observed)
+   gap Map a                      <-> Map b                          25.7
+### packingMultiplier=5.0 boundary=box
+### SCENARIO A (root > zfc > axioms + definitions)
+idle at step 40 (+200 extra steps observed)
+   gap Axioms                     <-> Basic Definitions and Theorems     19.7
+### SCENARIO B (two maps)
+idle at step 56 (+200 extra steps observed)
+   gap Map a                      <-> Map b                          14.4
+### SCENARIO C (two maps, cross-map relationships, node pin at (60,20))
+idle at step 201 (+200 extra steps observed)
+   gap Map a                      <-> Map b                          32.6
+### SCENARIO D (two maps, cross-map relationships, no pin)
+idle at step 109 (+200 extra steps observed)
+   gap Map a                      <-> Map b                          26.8
+### packingMultiplier=10.0 boundary=box
+### SCENARIO A (root > zfc > axioms + definitions)
+idle at step -1 (+200 extra steps observed)
+   gap Axioms                     <-> Basic Definitions and Theorems     54.8
+### SCENARIO B (two maps)
+idle at step -1 (+200 extra steps observed)
+   gap Map a                      <-> Map b                          30.9
+### SCENARIO C (two maps, cross-map relationships, node pin at (60,20))
+idle at step -1 (+200 extra steps observed)
+   gap Map a                      <-> Map b                           2.3
+### SCENARIO D (two maps, cross-map relationships, no pin)
+idle at step -1 (+200 extra steps observed)
+   gap Map a                      <-> Map b                          44.1
