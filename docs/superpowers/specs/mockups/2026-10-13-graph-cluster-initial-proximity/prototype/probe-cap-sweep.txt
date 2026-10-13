@@ -1,0 +1,46 @@
+### cap sweep with the production centre-line packer (packingMultiplier=1.0 boundary=box containment=1.0 margin=8)
+--- caps 2.0-2.0 ---
+### A reference fixture (root > zfc > axioms + definitions)
+idle step = 37 (then +200)
+### B two maps
+idle step = 70 (then +200)
+### C two maps + relationships + pin(60,20)
+idle step = 596 (then +200)
+### D two maps + relationships
+idle step = 153 (then +200)
+### E dual enclosure (root 2 nodes + child 3 nodes)
+idle step = 23 (then +200)
+### F four maps heterogeneous
+idle step = 102 (then +200)
+### G one map four sibling subgroups
+idle step = 35 (then +200)
+--- caps 1.5-1.5 ---
+### A reference fixture (root > zfc > axioms + definitions)
+idle step = 36 (then +200)
+### B two maps
+idle step = 70 (then +200)
+### C two maps + relationships + pin(60,20)
+idle step = 592 (then +200)
+### D two maps + relationships
+idle step = 159 (then +200)
+### E dual enclosure (root 2 nodes + child 3 nodes)
+idle step = 23 (then +200)
+### F four maps heterogeneous
+idle step = 94 (then +200)
+### G one map four sibling subgroups
+idle step = 33 (then +200)
+--- caps 1.0-1.0 ---
+### A reference fixture (root > zfc > axioms + definitions)
+idle step = 35 (then +200)
+### B two maps
+idle step = 72 (then +200)
+### C two maps + relationships + pin(60,20)
+idle step = 620 (then +200)
+### D two maps + relationships
+idle step = 164 (then +200)
+### E dual enclosure (root 2 nodes + child 3 nodes)
+idle step = 23 (then +200)
+### F four maps heterogeneous
+idle step = 82 (then +200)
+### G one map four sibling subgroups
+idle step = 34 (then +200)
