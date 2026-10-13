@@ -212,12 +212,6 @@ public final class EdgeConflictCorrection {
         if (verificationStopped && !residual.keys().isEmpty() && !detectionTruncated) {
             verificationBudgetExhausted = true;
         }
-        final EdgeConflictDiagnostics diagnostics = new EdgeConflictDiagnostics(
-            conflictsDetected, crossingsDetected, edgeOverNodeDetected,
-            crossingsDetected - residual.crossings(), edgeOverNodeDetected - residual.edgeOverNodes(),
-            residual.keys(), repairs, rounds, verifications, verificationBudgetExhausted,
-            indexBudgetExhausted, detectionTruncated, indexInsertedItems, indexPairChecks,
-            verificationWork, indexSubdivisions);
         BoundarySeparationDiagnostics boundaryDiagnostics = boundaryResult.diagnostics();
         int nodeResidualViolations = boundaryResult.nodeResidualViolations();
         long rebuildNanos = 0L;
@@ -234,6 +228,14 @@ public final class EdgeConflictCorrection {
                 + (long) NodeSeparationProjection.violatingPairs(projection, published).size();
             rebuildNanos = System.nanoTime() - rebuildStart;
         }
+        // The §5.4 rebuild's counted units are part of the frame total, so the diagnostics are
+        // constructed only after the rebuild has added them (spec §13.1).
+        final EdgeConflictDiagnostics diagnostics = new EdgeConflictDiagnostics(
+            conflictsDetected, crossingsDetected, edgeOverNodeDetected,
+            crossingsDetected - residual.crossings(), edgeOverNodeDetected - residual.edgeOverNodes(),
+            residual.keys(), repairs, rounds, verifications, verificationBudgetExhausted,
+            indexBudgetExhausted, detectionTruncated, indexInsertedItems, indexPairChecks,
+            verificationWork, indexSubdivisions);
         return new EdgeConflictResult(currentPositions, diagnostics,
             new EdgeConflictTimings(0L, 0L, 0L, rebuildNanos), boundaryDiagnostics,
             nodeResidualViolations, appliedDisplacements(repairs));
