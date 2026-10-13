@@ -1059,6 +1059,76 @@ public class GraphCanvasPaintShould {
         assertThat(paintedFrom.y()).isCloseTo(path.arrowAnchor(false).y(), within(1e-9));
     }
 
+    @Test
+    public void paintsNoCrossingForTheReportedFixture() {
+        CanvasState state = reportedQuadState();
+        EdgePaths paths = state.edgePaths();
+
+        assertThat(paths.diagnostics().pathCrossingsResidual()).isEmpty();
+        int crossings = 0;
+        List<EdgePath> values = new ArrayList<EdgePath>(paths.byEdge().values());
+        for (int first = 0; first < values.size(); first++) {
+            for (int second = first + 1; second < values.size(); second++) {
+                if (EdgeRouter.properlyCross(values.get(first), values.get(second))) {
+                    crossings++;
+                }
+            }
+        }
+        assertThat(crossings).isZero();
+        assertThat(paintEdgeCount(state)).isEqualTo(2);
+    }
+
+    private static CanvasState reportedQuadState() {
+        ProjectedNode a = node(FIRST_MAP, "ID_A", LayoutPoint.of(272.0, 170.0));
+        ProjectedNode b = node(FIRST_MAP, "ID_B", LayoutPoint.of(307.0, 202.0));
+        ProjectedNode c = node(FIRST_MAP, "ID_C", LayoutPoint.of(275.0, 240.0));
+        ProjectedNode d = node(FIRST_MAP, "ID_D", LayoutPoint.of(240.0, 208.0));
+        Map<ProjectedNodeKey, LayoutPoint> positions = new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        positions.put(a.key(), LayoutPoint.of(272.0, 170.0));
+        positions.put(b.key(), LayoutPoint.of(307.0, 202.0));
+        positions.put(c.key(), LayoutPoint.of(275.0, 240.0));
+        positions.put(d.key(), LayoutPoint.of(240.0, 208.0));
+        Map<ProjectedNodeKey, NodeGeometry> nodes = new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
+        for (Map.Entry<ProjectedNodeKey, LayoutPoint> entry : positions.entrySet()) {
+            nodes.put(entry.getKey(), NodeGeometry.of(entry.getValue(), 14.0));
+        }
+        GraphGeometry geometry = GraphGeometry.of(nodes,
+            Collections.<EnclosureHullKey, HullGeometry>emptyMap());
+        ProjectedEdge first = directedEdge(ProjectedEndpointKey.ofNode(a.key()),
+            ProjectedEndpointKey.ofNode(c.key()), "ID_A", "ID_C");
+        ProjectedEdge second = directedEdge(ProjectedEndpointKey.ofNode(b.key()),
+            ProjectedEndpointKey.ofNode(d.key()), "ID_B", "ID_D");
+        GraphProjection projection = GraphProjection.projected(1L, Arrays.asList(a, b, c, d),
+            Collections.<ProjectedEnclosure>emptyList(), Arrays.asList(first, second),
+            Collections.<RelationshipResolution>emptyList(), Collections.<PinProjection>emptyList());
+        LayoutPositions layoutPositions = LayoutPositions.of(positions,
+            Collections.<EnclosureHullKey, LayoutPoint>emptyMap());
+        EdgePaths edgePaths = new EdgeRouter().route(projection, layoutPositions, geometry,
+            ProjectedEndpointVisibility.visibleEndpoints(projection.nodes(), projection.enclosures()));
+        LayoutFrame layout = LayoutFrame.of(1L, layoutPositions, false, 0);
+        return CanvasState.of(1L, projection, layout, geometry, edgePaths, OperationalStatus.IDLE);
+    }
+
+    private static int paintEdgeCount(final CanvasState state) {
+        PaintFixture fixture = new PaintFixture(state, null);
+        List<Shape> drawn = new ArrayList<Shape>();
+        recordPaint(fixture, drawn, new ArrayList<Shape>());
+        int edges = 0;
+        for (Shape shape : drawn) {
+            if (!(shape instanceof Path2D)) {
+                continue;
+            }
+            List<LayoutPoint> vertices = pathVertices((Path2D) shape);
+            for (EdgePath path : state.edgePaths().byEdge().values()) {
+                if (vertices.equals(path.samples())) {
+                    edges++;
+                    break;
+                }
+            }
+        }
+        return edges;
+    }
+
     private static PaintFixture bowFixture() {
         ProjectedNode first = node(FIRST_MAP, "bow-first", LayoutPoint.of(-90.0, 0.0));
         ProjectedNode second = node(FIRST_MAP, "bow-second", LayoutPoint.of(90.0, 0.0));
