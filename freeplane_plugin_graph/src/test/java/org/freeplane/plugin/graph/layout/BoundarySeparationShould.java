@@ -5,12 +5,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.TreeSet;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.TimeUnit;
 
+import org.freeplane.plugin.graph.geometry.GraphGeometry;
+import org.freeplane.plugin.graph.geometry.GraphGeometryEngine;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
+import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.layout.graphstream.GraphStreamLayoutFactory;
 import org.freeplane.plugin.graph.projection.BoundaryTier;
 import org.freeplane.plugin.graph.projection.CanonicalKeys;
@@ -35,6 +41,7 @@ import org.freeplane.plugin.graph.workspace.model.NodeReference;
 import org.freeplane.plugin.graph.workspace.model.PersistedNodeId;
 import org.freeplane.plugin.graph.workspace.model.PinRecord;
 import org.freeplane.plugin.graph.workspace.model.WorkspaceId;
+import org.junit.After;
 import org.junit.Test;
 
 public class BoundarySeparationShould {
@@ -815,6 +822,124 @@ public class BoundarySeparationShould {
             assertThat(worstWorstMapDisplacement).isGreaterThan(0.0);
         }
         finally {
+            worker.close();
+        }
+    }
+
+    @Test
+    public void rebuildsThePublishedBoundaryRecordAfterARelocation() throws Exception {
+        final RebuildPipeline pipeline = rebuildPipeline();
+        final LayoutFrame published = pipeline.worker.submit(pipeline.request).toCompletableFuture().get();
+
+        assertThat(published.edgeConflictDiagnostics().rounds()).isGreaterThan(0);
+        assertThat(published.boundaryDiagnostics().rounds())
+            .isEqualTo(pipeline.boundaryBaseline.rounds());
+        assertThat(published.boundaryDiagnostics().hullViolationsDetected())
+            .isEqualTo(pipeline.boundaryBaseline.hullViolationsDetected());
+        assertThat(published.boundaryDiagnostics().displacementRms())
+            .isEqualTo(pipeline.boundaryBaseline.displacementRms());
+        assertThat(published.boundaryDiagnostics().displacementMax())
+            .isEqualTo(pipeline.boundaryBaseline.displacementMax());
+        assertThat(published.boundaryDiagnostics().appliedDisplacements())
+            .isEqualTo(pipeline.boundaryBaseline.appliedDisplacements());
+        assertThat(published.boundaryDiagnostics().residualHullPairs()).isSorted();
+        assertThat(published.boundaryDiagnostics().residualHullPairs())
+            .isEqualTo(new ArrayList<String>(new TreeSet<String>(new BoundaryInvariants().detectPairKeys(
+                pipeline.request.projection(), pipeline.publishedGeometry))));
+    }
+
+    @Test
+    public void rebuiltNodeResidualIsOrderIndependent() {
+        final RebuildPipeline pipeline = rebuildPipeline();
+        final LayoutPositions published = pipeline.publishedPositions;
+
+        final int first = new NodeSeparationProjection().project(pipeline.request.projection(),
+            published, Collections.<ProjectedNodeKey>emptySet()).residualViolations();
+        final int second = new NodeSeparationProjection().project(pipeline.request.projection(),
+            reversedNodeOrder(published), Collections.<ProjectedNodeKey>emptySet()).residualViolations();
+
+        assertThat(first).isEqualTo(second);
+    }
+
+    private static final class RebuildPipeline {
+        private final LayoutWorker worker;
+        private final LayoutRequest request;
+        private final LayoutPositions publishedPositions;
+        private final GraphGeometry publishedGeometry;
+        private final BoundarySeparationDiagnostics boundaryBaseline;
+
+        private RebuildPipeline(final LayoutWorker worker, final LayoutRequest request,
+                final LayoutPositions publishedPositions, final GraphGeometry publishedGeometry,
+                final BoundarySeparationDiagnostics boundaryBaseline) {
+            this.worker = worker;
+            this.request = request;
+            this.publishedPositions = publishedPositions;
+            this.publishedGeometry = publishedGeometry;
+            this.boundaryBaseline = boundaryBaseline;
+        }
+    }
+
+    /**
+     * Pins only Choice, leaving the passed-over Theorem unpinned so the composed edge stage can
+     * apply its C2 translation repair (design section 5.2); with the full real-pin set the passed-over
+     * node is pinned and the conflict is correctly left as a residual with zero edge rounds.
+     */
+    private static List<PinProjection> pipelineRelocationPins() {
+        return Collections.singletonList(pipelinePin(PIPELINE_CHOICE,
+            -24.832420395427746, -34.920469854404410));
+    }
+
+    private RebuildPipeline rebuildPipeline() {
+        try {
+            final GraphProjection projection = pipelineProjection();
+            final LayoutRequest request = pipelineRequest(projection, pipelineRelocationPins());
+            final BoundarySeparationDiagnostics boundaryBaseline;
+            try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
+                engine.apply(pipelineRequest(projection, pipelineAllPins()));
+                for (int step = 0; step < 1500; step++) {
+                    engine.step();
+                }
+                final LayoutFrame raw = engine.apply(request);
+                boundaryBaseline = new BoundarySeparationCorrection()
+                    .apply(projection, raw.positions(), PIPELINE_METRICS, request.pins()).diagnostics();
+            }
+            final LayoutWorker worker = new LayoutWorker(LayoutCalibration.spikeDefaults());
+            rebuildWorker = worker;
+            await(worker.submit(pipelineRequest(projection, pipelineAllPins())));
+            for (int step = 0; step < 1500; step++) {
+                await(worker.step());
+            }
+            final LayoutFrame published = await(worker.submit(request));
+            final LayoutPositions publishedPositions = published.positions();
+            final GraphGeometry publishedGeometry = new GraphGeometryEngine()
+                .computeHulls(projection, publishedPositions, PIPELINE_METRICS);
+            return new RebuildPipeline(worker, request, publishedPositions, publishedGeometry,
+                boundaryBaseline);
+        }
+        catch (final Exception failure) {
+            throw new AssertionError(failure);
+        }
+    }
+
+    private static LayoutPositions reversedNodeOrder(final LayoutPositions positions) {
+        final List<Map.Entry<ProjectedNodeKey, LayoutPoint>> entries =
+            new ArrayList<Map.Entry<ProjectedNodeKey, LayoutPoint>>(positions.nodes().entrySet());
+        Collections.reverse(entries);
+        final Map<ProjectedNodeKey, LayoutPoint> reversed =
+            new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        for (final Map.Entry<ProjectedNodeKey, LayoutPoint> entry : entries) {
+            reversed.put(entry.getKey(), entry.getValue());
+        }
+        return LayoutPositions.of(reversed, positions.anchors());
+    }
+
+    private LayoutWorker rebuildWorker;
+
+    @After
+    public void closeRebuildWorker() {
+        final LayoutWorker worker = rebuildWorker;
+        rebuildWorker = null;
+        if (worker != null) {
             worker.close();
         }
     }
