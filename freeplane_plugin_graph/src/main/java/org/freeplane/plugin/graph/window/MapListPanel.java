@@ -176,7 +176,6 @@ final class MapListPanel extends JPanel {
     private final DeleteConfirmationPrompt deletePrompt;
     private final List<java.util.function.Consumer<MapRow>> selectionListeners =
         new ArrayList<java.util.function.Consumer<MapRow>>();
-    private MapReferenceId pendingSelectionId;
     private List<MapRow> rows = Collections.emptyList();
     private boolean readOnly;
     private boolean updatingSelection;
@@ -311,60 +310,30 @@ final class MapListPanel extends JPanel {
             copy.add(Objects.requireNonNull(row, "row"));
         }
         rows = Collections.unmodifiableList(copy);
+        // Capture the focus before clearing the models: DefaultListModel.clear()
+        // clears the JList selection synchronously.
+        final MapRow previousFocus = selectedRow();
+        final MapReferenceId capturedSelection = previousFocus == null ? null : previousFocus.mapReferenceId();
         updatingSelection = true;
         try {
             activeModel.clear();
             inactiveModel.clear();
-            int selectedActiveIndex = -1;
-            int selectedInactiveIndex = -1;
-
-            final MapReferenceId targetSelection = pendingSelectionId != null
-                ? pendingSelectionId : (selectedRow() != null ? selectedRow().mapReferenceId() : null);
-
             for (final MapRow row : rows) {
                 if (row.partition() == MapPartition.ACTIVE) {
                     activeModel.addElement(row);
-                    if (targetSelection != null && targetSelection.equals(row.mapReferenceId())) {
-                        selectedActiveIndex = activeModel.size() - 1;
-                    }
-                    else if (row.selected() && selectedActiveIndex < 0 && targetSelection == null) {
-                        selectedActiveIndex = activeModel.size() - 1;
-                    }
                 }
                 else {
                     inactiveModel.addElement(row);
-                    if (targetSelection != null && targetSelection.equals(row.mapReferenceId())) {
-                        selectedInactiveIndex = inactiveModel.size() - 1;
-                    }
-                    else if (row.selected() && selectedInactiveIndex < 0 && targetSelection == null) {
-                        selectedInactiveIndex = inactiveModel.size() - 1;
-                    }
                 }
             }
-
             activeHeader.setText(TextUtils.format("graph_workspace.map_list.active_heading", activeModel.size()));
             inactiveHeader.setText(TextUtils.format("graph_workspace.map_list.inactive_heading", inactiveModel.size()));
-
             syncListWidths();
-
-            if (selectedActiveIndex >= 0) {
-                activeList.setSelectedIndex(selectedActiveIndex);
-                inactiveList.clearSelection();
-            }
-            else if (selectedInactiveIndex >= 0) {
-                inactiveList.setSelectedIndex(selectedInactiveIndex);
-                activeList.clearSelection();
-            }
-            else {
-                activeList.clearSelection();
-                inactiveList.clearSelection();
-            }
-            pendingSelectionId = null;
         }
         finally {
             updatingSelection = false;
         }
-        synchronizeSelection();
+        applySelection(targetSelection(capturedSelection));
     }
 
     List<MapRow> rows() {
@@ -376,30 +345,54 @@ final class MapListPanel extends JPanel {
     }
 
     void selectMap(final MapReferenceId mapReferenceId) {
-        Objects.requireNonNull(mapReferenceId, "mapReferenceId");
+        applySelection(Objects.requireNonNull(mapReferenceId, "mapReferenceId"));
+    }
+
+    void clearSelection() {
+        applySelection(null);
+    }
+
+    private void applySelection(final MapReferenceId mapReferenceId) {
         updatingSelection = true;
         try {
+            activeList.clearSelection();
+            inactiveList.clearSelection();
+            if (mapReferenceId == null) {
+                return;
+            }
             for (int i = 0; i < activeModel.size(); i++) {
                 if (mapReferenceId.equals(activeModel.get(i).mapReferenceId())) {
                     activeList.setSelectedIndex(i);
-                    inactiveList.clearSelection();
                     return;
                 }
             }
             for (int i = 0; i < inactiveModel.size(); i++) {
                 if (mapReferenceId.equals(inactiveModel.get(i).mapReferenceId())) {
                     inactiveList.setSelectedIndex(i);
-                    activeList.clearSelection();
                     return;
                 }
             }
-            activeList.clearSelection();
-            inactiveList.clearSelection();
         }
         finally {
             updatingSelection = false;
             synchronizeSelection();
         }
+    }
+
+    private MapReferenceId targetSelection(final MapReferenceId capturedSelection) {
+        if (capturedSelection != null) {
+            for (final MapRow row : rows) {
+                if (capturedSelection.equals(row.mapReferenceId())) {
+                    return capturedSelection;
+                }
+            }
+        }
+        for (final MapRow row : rows) {
+            if (row.selected()) {
+                return row.mapReferenceId();
+            }
+        }
+        return null;
     }
 
     MapRow selectedRow() {
@@ -473,7 +466,6 @@ final class MapListPanel extends JPanel {
     void deactivateSelected() {
         final MapRow row = selectedRow();
         if (row != null && !readOnly && row.partition() == MapPartition.ACTIVE) {
-            pendingSelectionId = row.mapReferenceId();
             execute(GraphCommands.removeMap(row.mapReferenceId()));
         }
     }
@@ -481,7 +473,6 @@ final class MapListPanel extends JPanel {
     void reactivateSelected() {
         final MapRow row = selectedRow();
         if (row != null && !readOnly && row.partition() == MapPartition.INACTIVE) {
-            pendingSelectionId = row.mapReferenceId();
             execute(GraphCommands.reactivateMap(row.mapReferenceId()));
         }
     }
@@ -490,7 +481,6 @@ final class MapListPanel extends JPanel {
         final MapRow row = selectedRow();
         if (row != null && !readOnly && row.partition() == MapPartition.INACTIVE) {
             if (deletePrompt.confirmDelete(this, row.displayName())) {
-                pendingSelectionId = null;
                 execute(GraphCommands.deleteMap(row.mapReferenceId()));
             }
         }
