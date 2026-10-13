@@ -326,7 +326,7 @@ public class ClusterProximityShould {
             Collections.<PinProjection>emptyList());
     }
 
-    static GraphProjection wideProjection(long generation) {
+    public static GraphProjection wideProjection(long generation) {
         final List<ProjectedEnclosure> enclosures = new ArrayList<ProjectedEnclosure>();
         final EnclosureHullKey rootHull = hull(MAP_ONE, "wide-root");
         final List<EnclosureHullKey> children = new ArrayList<EnclosureHullKey>();
@@ -374,7 +374,7 @@ public class ClusterProximityShould {
 
     // ------------------------------------------------------------- composition
 
-    static Map<EnclosureHullKey, LayoutPoint> composeAnchors(final GraphProjection projection) {
+    public static Map<EnclosureHullKey, LayoutPoint> composeAnchors(final GraphProjection projection) {
         final GraphStreamLayoutEngine.BoundarySizes sizes =
             new GraphStreamLayoutEngine.BoundarySizes(projection);
         final Map<EnclosureHullKey, LayoutPoint> result =
@@ -383,6 +383,38 @@ public class ClusterProximityShould {
             result.put(enclosure.hullKey(), composedAnchor(sizes, enclosure.hullKey()));
         }
         return result;
+    }
+
+    /** Composed ring seeds for every direct node (specification section 7.1.3 item 2). */
+    private static Map<ProjectedNodeKey, LayoutPoint> composeNodes(final GraphProjection projection,
+            final Map<EnclosureHullKey, LayoutPoint> anchors,
+            final GraphStreamLayoutEngine.BoundarySizes sizes) {
+        final Map<ProjectedNodeKey, LayoutPoint> result =
+            new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        for (final ProjectedEnclosure enclosure : projection.enclosures()) {
+            final LayoutPoint parentAnchor = anchors.get(enclosure.hullKey());
+            final List<ProjectedNodeKey> directNodes = enclosure.directNodes();
+            final double radius = sizes.contentRingRadius(enclosure.hullKey());
+            for (int index = 0; index < directNodes.size(); index++) {
+                final double angle = 2.0 * Math.PI * Math.max(0, index)
+                    / Math.max(1, directNodes.size());
+                result.put(directNodes.get(index), LayoutPoint.of(
+                    parentAnchor.x() + radius * Math.cos(angle),
+                    parentAnchor.y() + radius * Math.sin(angle)));
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Test-only view of the packed footprint for cross-package assertions:
+     * {@code [width, height, anchorX, anchorY]}. The class stays package-private; this
+     * accessor exposes only the values needed by {@code BoundarySeparationShould}.
+     */
+    public static double[] footprint(final GraphProjection projection, final EnclosureHullKey key) {
+        final GraphStreamLayoutEngine.BoundarySizes.Footprint footprint =
+            new GraphStreamLayoutEngine.BoundarySizes(projection).footprint(key);
+        return new double[] {footprint.width, footprint.height, footprint.anchorX, footprint.anchorY};
     }
 
     private static LayoutPoint composedAnchor(final GraphStreamLayoutEngine.BoundarySizes sizes,
@@ -445,14 +477,22 @@ public class ClusterProximityShould {
         for (int round = 0; round < 400; round++) {
             final GraphProjection projection = generatedProjection(random, round);
             final LayoutFrame frame = engineFrame(projection, Collections.<PinProjection>emptyList());
-            final Map<EnclosureHullKey, LayoutPoint> expected = composeAnchors(projection);
-            for (final Map.Entry<EnclosureHullKey, LayoutPoint> entry : expected.entrySet()) {
+            final GraphStreamLayoutEngine.BoundarySizes sizes =
+                new GraphStreamLayoutEngine.BoundarySizes(projection);
+            final Map<EnclosureHullKey, LayoutPoint> expectedAnchors = composeAnchors(projection);
+            for (final Map.Entry<EnclosureHullKey, LayoutPoint> entry : expectedAnchors.entrySet()) {
                 assertThat(frame.positions().anchors().get(entry.getKey()))
                     .as("round %s anchor %s", Integer.valueOf(round), entry.getKey())
                     .isEqualTo(entry.getValue());
             }
-            assertPackedNonOverlap(projection, frame.positions(),
-                new GraphStreamLayoutEngine.BoundarySizes(projection));
+            final Map<ProjectedNodeKey, LayoutPoint> expectedNodes =
+                composeNodes(projection, expectedAnchors, sizes);
+            for (final Map.Entry<ProjectedNodeKey, LayoutPoint> entry : expectedNodes.entrySet()) {
+                assertThat(frame.positions().nodes().get(entry.getKey()))
+                    .as("round %s node seed %s", Integer.valueOf(round), entry.getKey())
+                    .isEqualTo(entry.getValue());
+            }
+            assertPackedNonOverlap(projection, frame.positions(), sizes);
         }
     }
 
@@ -828,6 +868,14 @@ public class ClusterProximityShould {
             return windowHolds.get(pair.label).doubleValue();
         }
 
+        double maxWindowHold() {
+            double maximum = 0.0;
+            for (final NamedPair pair : pairs) {
+                maximum = Math.max(maximum, windowHold(pair));
+            }
+            return maximum;
+        }
+
         String paintedGapText(final NamedPair pair) {
             final Double gap = paintedGaps.get(pair.label);
             return gap == null ? "nested" : String.format("%.1f", gap);
@@ -904,7 +952,7 @@ public class ClusterProximityShould {
                 + "containmentHull=%s marginalOverlap=%.1f marginalOverlapCount=%d%n",
             Character.valueOf(name), idleText(evidence), Long.valueOf(evidence.endpoint.stepIndex()),
             Double.valueOf(evidence.packedDistance(primary)), Double.valueOf(evidence.settledDistance(primary)),
-            Double.valueOf(evidence.windowHold(primary)), evidence.paintedGapText(primary),
+            Double.valueOf(evidence.maxWindowHold()), evidence.paintedGapText(primary),
             separationText(evidence), Double.valueOf(evidence.containment.overflow),
             evidence.containment.label, Double.valueOf(evidence.marginal.value),
             Integer.valueOf(evidence.marginal.count));
@@ -1091,7 +1139,12 @@ public class ClusterProximityShould {
             final double overflow = Math.max(Math.max(0.0, allowedLeft - left),
                 Math.max(Math.max(0.0, right - allowedRight), Math.max(Math.max(0.0, allowedBottom - bottom),
                     Math.max(0.0, top - allowedTop))));
-            if (overflow > worst) {
+            if (Math.round(overflow * 10.0) > Math.round(worst * 10.0)) {
+                // Keep the first enclosure when the increase is within the one-decimal
+                // reporting precision (specification section 4 reports containment to
+                // 0.1 px). Fixture C measures Map a 13.9953 and Map b 14.0087: the spec
+                // table names Map a at 14.0 (section 8.3.3), so the earlier hull wins the
+                // tie at the reported precision.
                 worst = overflow;
                 worstLabel = label(enclosure);
             }
