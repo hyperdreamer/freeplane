@@ -57,6 +57,114 @@ public final class BoundaryInvariants {
     }
 
     public List<Violation> detect(final GraphProjection projection, final GraphGeometry geometry) {
+        return detect(projection, geometry, null);
+    }
+
+    /**
+     * The counted A3 pair-key set: the ascending canonical hull-pair keys, the number of
+     * hull-pair comparisons consumed from the shared verification allowance, and whether the
+     * allowance stopped the comparison before the set was complete.
+     */
+    static final class CountedPairKeys {
+        private final Set<String> pairKeys;
+        private final long work;
+        private final boolean truncated;
+
+        private CountedPairKeys(final Set<String> pairKeys, final long work, final boolean truncated) {
+            this.pairKeys = Collections.unmodifiableSet(new LinkedHashSet<String>(pairKeys));
+            this.work = work;
+            this.truncated = truncated;
+        }
+
+        Set<String> pairKeys() {
+            return pairKeys;
+        }
+
+        long work() {
+            return work;
+        }
+
+        boolean truncated() {
+            return truncated;
+        }
+    }
+
+    /**
+     * The counted §5.4 rebuild: the rebuilt boundary record plus the A3 hull-pair comparisons
+     * its single detection pass consumed. Each comparison is one verification-work unit
+     * (spec §13.1); the rebuild runs unbounded, so the work is reported, not enforced. The
+     * rebuild reuses the terminal geometry, so it consumes no hull-recompute unit.
+     */
+    static final class CountedRebuild {
+        private final BoundarySeparationDiagnostics diagnostics;
+        private final long hullPairWork;
+
+        private CountedRebuild(final BoundarySeparationDiagnostics diagnostics, final long hullPairWork) {
+            this.diagnostics = Objects.requireNonNull(diagnostics, "diagnostics");
+            if (hullPairWork < 0L) {
+                throw new IllegalArgumentException("hullPairWork must be nonnegative");
+            }
+            this.hullPairWork = hullPairWork;
+        }
+
+        BoundarySeparationDiagnostics diagnostics() {
+            return diagnostics;
+        }
+
+        long hullPairWork() {
+            return hullPairWork;
+        }
+    }
+
+    /** One hull-pair comparison consumes one unit of the caller's verification allowance. */
+    private static final class HullPairWork {
+        private long remaining;
+        private long consumed;
+
+        private HullPairWork(final long allowance) {
+            remaining = allowance;
+        }
+
+        private void consume() {
+            if (remaining == 0L) {
+                throw new WorkStop();
+            }
+            remaining--;
+            consumed++;
+        }
+    }
+
+    private static final class WorkStop extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
+        private WorkStop() {
+            super(null, null, false, false);
+        }
+    }
+
+    /**
+     * The counted A3 variant used by {@code EdgeConflictCorrection}: every hull-pair comparison
+     * consumes one unit of {@code allowance}; a stop returns an incomplete set with
+     * {@code truncated() == true} so the in-flight attempt is rejected instead of accepted
+     * against a partial {@code V_out}. The public unbudgeted form keeps the memo and counters.
+     */
+    CountedPairKeys detectPairKeys(final GraphProjection projection, final GraphGeometry geometry,
+            final long allowance) {
+        final HullPairWork work = new HullPairWork(allowance);
+        try {
+            final TreeSet<String> sorted = new TreeSet<String>();
+            for (final Violation violation : detect(projection, geometry, work)) {
+                sorted.add(violation.pairKey());
+            }
+            return new CountedPairKeys(new LinkedHashSet<String>(sorted), work.consumed, false);
+        }
+        catch (final WorkStop stop) {
+            return new CountedPairKeys(Collections.<String>emptySet(), work.consumed, true);
+        }
+    }
+
+    private List<Violation> detect(final GraphProjection projection, final GraphGeometry geometry,
+            final HullPairWork work) {
         final Map<EnclosureHullKey, EnclosureHullKey> parents = parents(projection);
         final Map<EnclosureHullKey, HullGeometry> hulls = geometry.hulls();
         final Map<String, EnclosureHullKey> enforcedByCanonical = new LinkedHashMap<String, EnclosureHullKey>();
@@ -107,6 +215,9 @@ public final class BoundaryInvariants {
                 }
             }
             for (final EnclosureHullKey other : active) {
+                if (work != null) {
+                    work.consume();
+                }
                 final HullGeometry otherHull = hulls.get(other);
                 if (!(otherHull.minY() <= currentHull.maxY() && currentHull.minY() <= otherHull.maxY())) {
                     continue;
@@ -151,6 +262,9 @@ public final class BoundaryInvariants {
             if (!enforced.contains(child) || !enforced.contains(parent)) {
                 continue;
             }
+            if (work != null) {
+                work.consume();
+            }
             final HullGeometry childHull = hulls.get(child);
             final HullGeometry parentHull = hulls.get(parent);
             if (!ancestorContainment.isContained(parentHull, childHull)) {
@@ -194,19 +308,38 @@ public final class BoundaryInvariants {
             final LayoutPositions positions, final GeometryTextMetrics metrics, final List<PinProjection> pins,
             final GraphGeometry geometry, final List<String> baselineResidualKeys,
             final BoundarySeparationDiagnostics stageBaseline) {
-        final Set<String> present = detectPairKeys(projection, geometry);
+        return describeCounted(projection, positions, metrics, pins, geometry, baselineResidualKeys,
+            stageBaseline).diagnostics();
+    }
+
+    /**
+     * The N2 rebuild of the published boundary record with its detection work counted: one
+     * {@code detect} pass through an unbounded {@link HullPairWork} whose consumed A3 hull-pair
+     * comparisons are exposed so the caller can add them to the frame's verification-work total
+     * (spec §13.1). The rebuild reuses the terminal geometry, so no hull recompute is counted.
+     */
+    CountedRebuild describeCounted(final GraphProjection projection,
+            final LayoutPositions positions, final GeometryTextMetrics metrics, final List<PinProjection> pins,
+            final GraphGeometry geometry, final List<String> baselineResidualKeys,
+            final BoundarySeparationDiagnostics stageBaseline) {
+        final HullPairWork work = new HullPairWork(Long.MAX_VALUE);
+        final List<Violation> violations = detect(projection, geometry, work);
+        final Set<String> present = new TreeSet<String>();
+        for (final Violation violation : violations) {
+            present.add(violation.pairKey());
+        }
         if (!baselineResidualKeys.containsAll(present)) {
             throw new BoundarySeparationException(
                 "Rebuilt boundary record contains a pair absent from the boundary baseline");
         }
-        final List<Violation> violations = detect(projection, geometry);
         final List<BoundaryConflict> conflicts = terminalConflicts(projection, positions, metrics, pins,
             geometry, violations, false);
-        final List<String> residualHullPairs = new ArrayList<String>(new TreeSet<String>(present));
-        return new BoundarySeparationDiagnostics(conflicts, residualHullPairs,
+        final List<String> residualHullPairs = new ArrayList<String>(present);
+        return new CountedRebuild(new BoundarySeparationDiagnostics(conflicts, residualHullPairs,
             stageBaseline.hullViolationsDetected(), violations.size(), stageBaseline.rounds(),
             stageBaseline.displacementRms(), stageBaseline.displacementMax(),
-            stageBaseline.appliedDisplacements(), stageBaseline.deltaRms(), stageBaseline.deltaMax());
+            stageBaseline.appliedDisplacements(), stageBaseline.deltaRms(), stageBaseline.deltaMax()),
+            work.consumed);
     }
 
     PlanOutcome plan(final GraphProjection projection,
