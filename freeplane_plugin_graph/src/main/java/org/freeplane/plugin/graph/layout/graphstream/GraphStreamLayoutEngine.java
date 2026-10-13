@@ -39,8 +39,6 @@ import org.graphstream.graph.implementations.MultiGraph;
 
 final class GraphStreamLayoutEngine implements LayoutEngine {
     static final double NODE_RADIUS = 8.0;
-    static final double GROUP_SPACING = 100.0;
-    static final double SUB_GROUP_SPACING = 60.0;
 
     private final LayoutCalibration calibration;
     private final LinkedHashMap<String, ParticleState> particles = new LinkedHashMap<String, ParticleState>();
@@ -145,6 +143,11 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
             state.pinned = pin != null;
             springBox.configureParticle(desired.id, state.radius, state.pinned, desired.nodeKey == null,
                 desired.parentAnchorId);
+            if (desired.anchorKey != null) {
+                final BoundarySizes.Footprint footprint = sizes.footprint(desired.anchorKey);
+                springBox.configureAnchorExtents(desired.id, footprint.width * 0.5, footprint.height * 0.5,
+                    -footprint.anchorX, -footprint.anchorY);
+            }
             if (pin != null) {
                 state.x = pin.x();
                 state.y = pin.y();
@@ -206,8 +209,7 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
         final Map<EnclosureHullKey, String> anchorIds = new LinkedHashMap<EnclosureHullKey, String>();
         final Map<EnclosureKey, String> enclosureEndpoints = new LinkedHashMap<EnclosureKey, String>();
         for (final ProjectedEnclosure enclosure : projection.enclosures()) {
-            final DesiredParticle particle = DesiredParticle.anchor(enclosure.hullKey(),
-                sizes.boundaryRadius(enclosure.hullKey()));
+            final DesiredParticle particle = DesiredParticle.anchor(enclosure.hullKey(), 0.0);
             desired.put(particle.id, particle);
             anchorIds.put(enclosure.hullKey(), particle.id);
             for (final EnclosureKey endpoint : enclosure.endpointKeys()) {
@@ -221,7 +223,6 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
 
         final List<ForceLink> result = new ArrayList<ForceLink>();
         final Set<String> hierarchyPairs = new LinkedHashSet<String>();
-        final Map<EnclosureHullKey, Integer> depths = enclosureDepths(projection);
         final Map<String, Double> radiusById = new LinkedHashMap<String, Double>();
         for (final org.freeplane.plugin.graph.projection.ProjectedNode node : projection.nodes()) {
             radiusById.put(nodeIds.get(node.key()),
@@ -251,45 +252,16 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
                 }
             }
             if (enclosure.parentHull().isPresent()) {
-                addHierarchyLink(result, hierarchyPairs, anchorIds.get(enclosure.parentHull().get()), anchor,
-                    hierarchyRestLength(depths.get(enclosure.hullKey()).intValue()));
-            }
-            for (final EnclosureHullKey child : enclosure.directEnclosures()) {
-                addHierarchyLink(result, hierarchyPairs, anchor, anchorIds.get(child),
-                    hierarchyRestLength(depths.get(child).intValue()));
+                final EnclosureHullKey parentKey = enclosure.parentHull().get();
+                final ClusterPacking.ClusterPlacement placement =
+                    sizes.placementOf(parentKey, enclosure.hullKey());
+                final double rest = placement == null ? 0.0
+                    : Math.hypot(placement.x + placement.item.anchorX,
+                                 placement.y + placement.item.anchorY);
+                addHierarchyLink(result, hierarchyPairs, anchorIds.get(parentKey), anchor, rest);
             }
         }
         return new Topology(desired, result);
-    }
-
-    private static Map<EnclosureHullKey, Integer> enclosureDepths(final GraphProjection projection) {
-        final Map<EnclosureHullKey, ProjectedEnclosure> byHull =
-            new LinkedHashMap<EnclosureHullKey, ProjectedEnclosure>();
-        for (final ProjectedEnclosure enclosure : projection.enclosures()) {
-            byHull.put(enclosure.hullKey(), enclosure);
-        }
-        final Map<EnclosureHullKey, Integer> depths = new LinkedHashMap<EnclosureHullKey, Integer>();
-        for (final ProjectedEnclosure enclosure : projection.enclosures()) {
-            depthOf(enclosure, byHull, depths);
-        }
-        return depths;
-    }
-
-    private static int depthOf(final ProjectedEnclosure enclosure,
-            final Map<EnclosureHullKey, ProjectedEnclosure> byHull,
-            final Map<EnclosureHullKey, Integer> depths) {
-        final Integer cached = depths.get(enclosure.hullKey());
-        if (cached != null) {
-            return cached.intValue();
-        }
-        final int value = enclosure.parentHull().isPresent()
-            ? depthOf(byHull.get(enclosure.parentHull().get()), byHull, depths) + 1 : 0;
-        depths.put(enclosure.hullKey(), Integer.valueOf(value));
-        return value;
-    }
-
-    private static double hierarchyRestLength(final int childDepth) {
-        return childDepth <= 1 ? GROUP_SPACING : SUB_GROUP_SPACING;
     }
 
     private static double radiusOf(final String particleId, final Map<String, Double> radiusById) {
@@ -505,7 +477,6 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
     }
 
     static final class BoundarySizes {
-        static final double MAX_RENDERED_NODE_RADIUS = 14.0;
         static final double CHAR_WIDTH_UPPER_BOUND = 16.0;
         static final double CHAR_HEIGHT_UPPER_BOUND = 24.0;
         static final double BOUNDARY_PADDING = 8.0;
@@ -513,11 +484,8 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
         static final double NODE_SETTLE_MARGIN = 8.0;
         static final double FRAME_CLEARANCE = 16.0;
 
-        private final Map<ProjectedNodeKey, ProjectedNode> nodesByKey =
-            new LinkedHashMap<ProjectedNodeKey, ProjectedNode>();
         private final Map<EnclosureHullKey, ProjectedEnclosure> enclosuresByHull =
             new LinkedHashMap<EnclosureHullKey, ProjectedEnclosure>();
-        private final Map<EnclosureHullKey, Size> sizes = new LinkedHashMap<EnclosureHullKey, Size>();
         private final Map<ProjectedNodeKey, Double> discRadii = new LinkedHashMap<ProjectedNodeKey, Double>();
         private final Map<EnclosureHullKey, Footprint> footprints = new LinkedHashMap<EnclosureHullKey, Footprint>();
         private final Map<EnclosureHullKey, List<ClusterPacking.ClusterPlacement>> packedPlacements =
@@ -546,7 +514,6 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
 
         BoundarySizes(final GraphProjection projection) {
             for (final ProjectedNode node : projection.nodes()) {
-                nodesByKey.put(node.key(), node);
                 final double scale = projection.prominence().containsKey(node.key())
                     ? projection.prominence().get(node.key()).scale() : 1.0;
                 discRadii.put(node.key(), Double.valueOf(NODE_RADIUS * scale));
@@ -554,86 +521,6 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
             for (final ProjectedEnclosure enclosure : projection.enclosures()) {
                 enclosuresByHull.put(enclosure.hullKey(), enclosure);
             }
-        }
-
-        double boundaryRadius(final EnclosureHullKey key) {
-            final Size size = sizeOf(key);
-            return 0.5 * Math.hypot(size.width, size.height);
-        }
-
-        double directNodeRingRadius(final EnclosureHullKey key) {
-            final ProjectedEnclosure enclosure = enclosuresByHull.get(key);
-            final List<ProjectedNodeKey> directNodes = enclosure.directNodes();
-            final int count = directNodes.size();
-            if (count <= 1) {
-                return 0.0;
-            }
-            double maxWidth = 0.0;
-            double maxHeight = 0.0;
-            for (final ProjectedNodeKey nodeKey : directNodes) {
-                final ProjectedNode node = nodesByKey.get(nodeKey);
-                final double discRadius = MAX_RENDERED_NODE_RADIUS;
-                final double width = Math.max(2.0 * discRadius,
-                    node.label().displayText().length() * CHAR_WIDTH_UPPER_BOUND + 2.0 * BOUNDARY_PADDING);
-                final double height = Math.max(2.0 * discRadius,
-                    CHAR_HEIGHT_UPPER_BOUND + 2.0 * BOUNDARY_PADDING);
-                maxWidth = Math.max(maxWidth, width);
-                maxHeight = Math.max(maxHeight, height);
-            }
-            return Math.hypot(maxWidth + SIBLING_GAP, maxHeight + SIBLING_GAP)
-                / (2.0 * Math.sin(Math.PI / count));
-        }
-
-        double directNodeReach(final EnclosureHullKey key) {
-            final ProjectedEnclosure enclosure = enclosuresByHull.get(key);
-            final List<ProjectedNodeKey> directNodes = enclosure.directNodes();
-            if (directNodes.isEmpty()) {
-                return 0.0;
-            }
-            double maxNodeRadius = 0.0;
-            for (final ProjectedNodeKey nodeKey : directNodes) {
-                final ProjectedNode node = nodesByKey.get(nodeKey);
-                final double discRadius = MAX_RENDERED_NODE_RADIUS;
-                final double width = Math.max(2.0 * discRadius,
-                    node.label().displayText().length() * CHAR_WIDTH_UPPER_BOUND + 2.0 * BOUNDARY_PADDING);
-                final double height = Math.max(2.0 * discRadius,
-                    CHAR_HEIGHT_UPPER_BOUND + 2.0 * BOUNDARY_PADDING);
-                maxNodeRadius = Math.max(maxNodeRadius, 0.5 * Math.hypot(width, height));
-            }
-            final double radius = directNodeRingRadius(key);
-            return radius + maxNodeRadius;
-        }
-
-        double childBoundaryReach(final EnclosureHullKey key) {
-            final ProjectedEnclosure enclosure = enclosuresByHull.get(key);
-            final List<EnclosureHullKey> children = enclosure.directEnclosures();
-            if (children.isEmpty()) {
-                return 0.0;
-            }
-            double reach = 0.0;
-            final double radius = ringRadius(key);
-            for (final EnclosureHullKey child : children) {
-                reach = Math.max(reach, radius + reachOf(child));
-            }
-            return reach;
-        }
-
-        double ringRadius(final EnclosureHullKey key) {
-            final ProjectedEnclosure enclosure = enclosuresByHull.get(key);
-            final List<EnclosureHullKey> children = enclosure.directEnclosures();
-            final int count = children.size();
-            if (count <= 1) {
-                return 0.0;
-            }
-            double maxWidth = 0.0;
-            double maxHeight = 0.0;
-            for (final EnclosureHullKey child : children) {
-                final Size size = sizeOf(child);
-                maxWidth = Math.max(maxWidth, size.width);
-                maxHeight = Math.max(maxHeight, size.height);
-            }
-            return Math.hypot(maxWidth + SIBLING_GAP, maxHeight + SIBLING_GAP)
-                / (2.0 * Math.sin(Math.PI / count));
         }
 
         Footprint footprint(final EnclosureHullKey key) {
@@ -748,50 +635,6 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
             return new ArrayList<ProjectedEnclosure>(enclosuresByHull.values());
         }
 
-        Size sizeOf(final EnclosureHullKey key) {
-            final Size cached = sizes.get(key);
-            if (cached != null) {
-                return cached;
-            }
-            final ProjectedEnclosure enclosure = enclosuresByHull.get(key);
-            final Size size;
-            final double directReach = directNodeReach(key);
-            final double childReach = childBoundaryReach(key);
-            final double contentReach = Math.max(directReach, childReach);
-            if (contentReach == 0.0 && enclosure.directNodes().isEmpty() && enclosure.directEnclosures().isEmpty()) {
-                double width = 2.0 * BOUNDARY_PADDING;
-                double height = CHAR_HEIGHT_UPPER_BOUND + 2.0 * BOUNDARY_PADDING;
-                for (final SafeNodeLabel label : enclosure.labels()) {
-                    width = Math.max(width,
-                        label.displayText().length() * CHAR_WIDTH_UPPER_BOUND + 2.0 * BOUNDARY_PADDING);
-                }
-                size = new Size(width, height);
-            }
-            else {
-                size = new Size(2.0 * (contentReach + FRAME_CLEARANCE), 2.0 * (contentReach + FRAME_CLEARANCE));
-            }
-            sizes.put(key, size);
-            return size;
-        }
-
-        private double reachOf(final EnclosureHullKey key) {
-            final ProjectedEnclosure enclosure = enclosuresByHull.get(key);
-            if (enclosure.directNodes().isEmpty() && enclosure.directEnclosures().isEmpty()) {
-                return 0.5 * Math.hypot(sizeOf(key).width, sizeOf(key).height);
-            }
-            return Math.max(directNodeReach(key), childBoundaryReach(key));
-        }
-
-        private static final class Size {
-            private final double width;
-            private final double height;
-
-            Size(final double width, final double height) {
-                this.width = width;
-                this.height = height;
-            }
-        }
-
         static final class Footprint {
             final double width;
             final double height;
@@ -860,18 +703,19 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
             }
             final Position center;
             if (isTopLevel(key)) {
-                center = topRingPosition(key);
+                final ClusterPacking.ClusterPlacement placement = sizes.topLevelPlacementOf(key);
+                center = placement == null ? new Position(0.0, 0.0)
+                    : new Position(placement.x + placement.item.anchorX,
+                                   placement.y + placement.item.anchorY);
             }
             else {
                 final ProjectedEnclosure enclosure = sizes.enclosure(key);
                 final EnclosureHullKey parentKey = enclosure.parentHull().get();
                 final Position parentCenter = center(parentKey);
-                final int index = sizes.enclosure(parentKey).directEnclosures().indexOf(key);
-                final int count = sizes.enclosure(parentKey).directEnclosures().size();
-                final double radius = sizes.ringRadius(parentKey);
-                final double angle = 2.0 * Math.PI * Math.max(0, index) / Math.max(1, count);
-                center = new Position(parentCenter.x + radius * Math.cos(angle),
-                    parentCenter.y + radius * Math.sin(angle));
+                final ClusterPacking.ClusterPlacement placement = sizes.placementOf(parentKey, key);
+                center = placement == null ? parentCenter
+                    : new Position(parentCenter.x + placement.x + placement.item.anchorX,
+                                   parentCenter.y + placement.y + placement.item.anchorY);
             }
             centers.put(key, center);
             return center;
@@ -880,30 +724,6 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
         private boolean isTopLevel(final EnclosureHullKey key) {
             final ProjectedEnclosure enclosure = sizes.enclosure(key);
             return enclosure == null || enclosure.mapRoot() || !enclosure.parentHull().isPresent();
-        }
-
-        private Position topRingPosition(final EnclosureHullKey key) {
-            final List<EnclosureHullKey> roots = new ArrayList<EnclosureHullKey>();
-            for (final ProjectedEnclosure enclosure : sizes.enclosures()) {
-                if (enclosure.mapRoot()) {
-                    roots.add(enclosure.hullKey());
-                }
-            }
-            final int count = roots.size();
-            if (count <= 1) {
-                return new Position(0.0, 0.0);
-            }
-            double maxWidth = 0.0;
-            double maxHeight = 0.0;
-            for (final EnclosureHullKey root : roots) {
-                maxWidth = Math.max(maxWidth, sizes.sizeOf(root).width);
-                maxHeight = Math.max(maxHeight, sizes.sizeOf(root).height);
-            }
-            final double radius = Math.hypot(maxWidth + BoundarySizes.SIBLING_GAP,
-                maxHeight + BoundarySizes.SIBLING_GAP) / (2.0 * Math.sin(Math.PI / count));
-            final int index = Math.max(0, roots.indexOf(key));
-            final double angle = 2.0 * Math.PI * index / count;
-            return new Position(radius * Math.cos(angle), radius * Math.sin(angle));
         }
     }
 
