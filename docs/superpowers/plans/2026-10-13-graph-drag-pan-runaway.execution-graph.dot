@@ -1,0 +1,11 @@
+digraph graph_drag_pan_runaway {
+  rankdir=TB;
+  node [shape=box, style=rounded];
+  source_plan [shape=note, label="source plan\n9323adb85667"];
+  task1 [label="Task 1 (standard): Add GraphCanvas.viewportPoint and its unit tests"];
+  task2 [label="Task 2 (standard): Add regression, mechanism pin, and boundary tests (red)"];
+  task3 [label="Task 3 (fast): Convert the four controller gesture sites (green)"];
+  source_plan -> task1;
+  task1 -> task2;
+  task2 -> task3;
+}

@@ -1,0 +1,124 @@
+schema_version: 1
+topic: graph-drag-pan-runaway
+source_plan:
+  path: docs/superpowers/plans/2026-10-13-graph-drag-pan-runaway.md
+  sha256: 9323adb85667323c6020d91be653f15a1f9596ad6061c3815eb35d13a75a1fbb
+  commit_oid: cda6454c694cea7f783b961e77bca6712b2ea80a
+integration_baseline_oid: cda6454c694cea7f783b961e77bca6712b2ea80a
+lanes:
+  - id: graph-drag-pan-runaway
+    sequence: 1
+    task_ids: [t1, t2, t3]
+    ownership:
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/GraphCanvas.java
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/GraphInteractionController.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/GraphInteractionControllerShould.java
+    resources: []
+tasks:
+  - id: t1
+    plan_task: 1
+    title: "Add GraphCanvas.viewportPoint and its unit tests"
+    lane: graph-drag-pan-runaway
+    sequence: 1
+    depends_on: []
+    implementer_tier: standard
+    ownership:
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/GraphCanvas.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/GraphInteractionControllerShould.java
+    resources: []
+    produces:
+      - name: GraphCanvas.viewportPoint
+        signature: "org.freeplane.plugin.graph.canvas.GraphCanvas#viewportPoint(final java.awt.Point componentPoint): java.awt.Point [package-private instance method]"
+        digest: e2604e5ed86f6bd7a4fbcd756fcee182564de4c785b95f79eb73bcdf215d9fe7
+      - name: scrolledFixture
+        signature: "org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould#scrolledFixture(org.freeplane.plugin.graph.control.CanvasState state, double zoom, double centerX, double centerY, int scrollWidth, int scrollHeight): ScrolledFixture [private static]"
+        digest: 36f9a1ae034b7e4acf254259c229feea79231a5551502d2c582ae5a07205f6a5
+      - name: panFixtureState
+        signature: "org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould#panFixtureState(): org.freeplane.plugin.graph.control.CanvasState [private static]"
+        digest: 455b0f2b5951d37dab48020fdf8bd07daf14145d96914f835b907300be27d8c4
+      - name: scrolledPanFixture
+        signature: "org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould#scrolledPanFixture(double zoom): ScrolledFixture [private static]"
+        digest: 7ccc40147788543c7296957ac2535ffce1a255840e71bbf90574e735a643e207
+      - name: ScrolledFixture
+        signature: "org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould.ScrolledFixture { GraphCanvas canvas; JScrollPane scrollPane; GraphInteractionController controller; RecordingListener listener; }"
+        digest: 9fd0afd0bcb2c86c6d91c6b79e3ab5f90ab75066221963b8695cba72b779a8d1
+    consumes: []
+    consumes_existing:
+      - GraphCanvas.containingViewport
+      - GraphInteractionControllerShould.Fixture
+      - GraphInteractionControllerShould.dispatch
+      - GraphInteractionControllerShould.RecordingListener
+    validation_vectors:
+      - id: compile
+        argv: ["gradle", ":freeplane_plugin_graph:compileJava", ":freeplane_plugin_graph:compileTestJava", "--console=plain", "--offline"]
+        expected: "green"
+      - id: focused
+        argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould", "--console=plain", "--offline"]
+        expected: "green"
+  - id: t2
+    plan_task: 2
+    title: "Add the drag-pan regression, mechanism pin, and boundary tests (red phase)"
+    lane: graph-drag-pan-runaway
+    sequence: 2
+    depends_on: [t1]
+    implementer_tier: standard
+    ownership:
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/GraphInteractionControllerShould.java
+    resources: []
+    produces:
+      - name: dragGestureTestHelpers
+        signature: "org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould: PAN_THRESHOLD_DEAD_ZONE_PIXELS=3.0; PAN_MAX_CONTENT_STEP_PIXELS=1.5+1e-6; gestureEvent(GraphCanvas, JScrollPane, int, double, double): MouseEvent; contentX(GraphCanvas, JScrollPane): double; contentY(GraphCanvas, JScrollPane): double; dragGesture(ScrolledFixture, double, double, int, double, double): GestureResult; GestureResult { contentTravelX, contentTravelY, maxStepX, maxStepY, centersX, centersY }; assertTracksCursor(GestureResult, double, double, int, String); assertAxisTracks(double, double, int, String); assertMonotonicCenter(List<Double>, double, String)"
+        digest: 353f67046518e93f4c952a666766fbd37c79fa7ba7fbd4b689b8ae2a8e9589b4
+    consumes:
+      - interface: GraphCanvas.viewportPoint
+        producer: t1
+        digest: e2604e5ed86f6bd7a4fbcd756fcee182564de4c785b95f79eb73bcdf215d9fe7
+    consumes_existing:
+      - Fixture.create
+      - dispatch
+      - clickAt
+      - wheel
+      - RecordingListener.intents
+    validation_vectors:
+      - id: compile
+        argv: ["gradle", ":freeplane_plugin_graph:compileJava", ":freeplane_plugin_graph:compileTestJava", "--console=plain", "--offline"]
+        expected: "green"
+      - id: focused-red
+        argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould", "--console=plain", "--offline"]
+        expected: "red: exactly 8 failing tests"
+  - id: t3
+    plan_task: 3
+    title: "Convert the four controller gesture sites to viewport coordinates (green phase)"
+    lane: graph-drag-pan-runaway
+    sequence: 3
+    depends_on: [t2]
+    implementer_tier: fast
+    ownership:
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/GraphInteractionController.java
+    resources: []
+    produces:
+      - name: viewportSpaceGestureSites
+        signature: "org.freeplane.plugin.graph.canvas.GraphInteractionController: handleMouseDragged, beginSelect, beginConnect, finishSelect read all gesture geometry from canvas.viewportPoint(event.getPoint()); exactly 4 viewportPoint call sites; no event.getX()/event.getY() remain"
+        digest: 3b5a13d39bbe1406352b3481e38bafe5d845a9cdfeafca51e6383393cd915dec
+    consumes:
+      - interface: GraphCanvas.viewportPoint
+        producer: t1
+        digest: e2604e5ed86f6bd7a4fbcd756fcee182564de4c785b95f79eb73bcdf215d9fe7
+      - interface: dragGestureTestHelpers
+        producer: t2
+        digest: 353f67046518e93f4c952a666766fbd37c79fa7ba7fbd4b689b8ae2a8e9589b4
+    consumes_existing:
+      - DragState
+      - canvas.worldAt
+      - canvas.panByPixels
+      - DRAG_THRESHOLD_PIXELS
+    validation_vectors:
+      - id: compile
+        argv: ["gradle", ":freeplane_plugin_graph:compileJava", ":freeplane_plugin_graph:compileTestJava", "--console=plain", "--offline"]
+        expected: "green"
+      - id: focused-green
+        argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould", "--console=plain", "--offline"]
+        expected: "green"
+      - id: full-module
+        argv: ["gradle", ":freeplane_plugin_graph:test", "--console=plain", "--offline"]
+        expected: "green"
