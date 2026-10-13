@@ -114,6 +114,45 @@ final class EdgeRouterFixture {
             Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), radii);
     }
 
+    /**
+     * F-1 fixture: one edge whose straight chord and every live bow pass within the
+     * clearance of one of two mirrored obstacle discs while the live same-side dogleg 0.30
+     * keeps clear. The discs at {@code (60.44, +/-13.77)} with radius 12.0 put the 15.0
+     * clearance threshold between the farthest blocked path (bow 0.50, 13.788) and the
+     * accepted dogleg 0.30 (16.229), so no live bow or flatter dogleg can be selected and
+     * an alternating-bend dogleg would cross a disc instead of clearing.
+     */
+    static EdgeRouterFixture doglegAccepting() {
+        final ProjectedNodeKey a = node("ID_A");
+        final ProjectedNodeKey b = node("ID_B");
+        final ProjectedNodeKey upper = node("ID_OBSTACLE_UPPER");
+        final ProjectedNodeKey lower = node("ID_OBSTACLE_LOWER");
+        final Map<ProjectedNodeKey, Double> radii = new LinkedHashMap<ProjectedNodeKey, Double>();
+        radii.put(upper, Double.valueOf(12.0));
+        radii.put(lower, Double.valueOf(12.0));
+        return new EdgeRouterFixture(projection(Arrays.asList(a, b, upper, lower), Arrays.asList(
+            edge(a, b))), LayoutPositions.of(
+            points(a, 0.0, 0.0, b, 100.0, 0.0, upper, 60.44, 13.77, lower, 60.44, -13.77),
+            Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), radii);
+    }
+
+    /**
+     * F-2 fixture: a two-edge fan sharing X whose straight rungs are 2.786 world units
+     * apart at their shared-X attachments, below {@code EdgeRouter.EDGE_CLEARANCE = 3.0},
+     * so only the spec 6.4 fan exemption accepts them as straight instead of falling back
+     * or detouring.
+     */
+    static EdgeRouterFixture tightFan() {
+        final ProjectedNodeKey x = node("X");
+        final ProjectedNodeKey a = node("A");
+        final ProjectedNodeKey b = node("B");
+        return new EdgeRouterFixture(projection(Arrays.asList(x, a, b), Arrays.asList(
+            edge(x, a), edge(x, b))), LayoutPositions.of(
+            points(x, 0.0, 0.0, a, 100.0, -10.0, b, 100.0, 10.0),
+            Collections.<EnclosureHullKey, LayoutPoint>emptyMap()),
+            Collections.<ProjectedNodeKey, Double>emptyMap());
+    }
+
     static EdgeRouterFixture oneResolvableEdgeAndOneBrokenEdge() {
         final ProjectedNodeKey a = node("A");
         final ProjectedNodeKey b = node("B");
