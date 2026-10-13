@@ -1,0 +1,36 @@
+### SCENARIO A: reference fixture (root > zfc > axioms + definitions)
+enclosure                      estW       estH     estRad
+Axiomatic Set Theory         2038.9     2038.9     1441.7
+ZFC                          2038.9     2038.9     1441.7
+Axioms                        839.9      839.9      593.9
+Basic Definitions and Theorems      166.1      166.1      117.5
+idle at step 439 (+200 extra steps observed)
+painted hull                      w          h            bbox center
+Axiomatic Set Theory          858.2      150.5            (75.4, 0.0)
+ZFC                           826.2      118.5            (75.4, 0.0)
+Axioms                         63.4       86.5           (440.8, 0.0)
+Basic Definitions and Theorems       48.0       48.0          (-297.7, 0.0)
+painted hull gaps for requested pairs:
+  Axioms <-> Definitions   gap =    682.8 units
+      first  box x[409.1..472.5] y[-43.2..43.2]
+      second box x[-321.7..-273.7] y[-24.0..24.0]
+
+### SCENARIO B: two maps with heterogeneous subgroup sizes
+enclosure                      estW       estH     estRad
+a fundamentals               2020.7     2020.7     1428.8
+Map a                        2020.7     2020.7     1428.8
+b fundamentals               1355.0     1355.0      958.1
+Map b                        1355.0     1355.0      958.1
+idle at step 343 (+200 extra steps observed)
+painted hull                      w          h            bbox center
+a fundamentals                103.8      102.3          (1419.9, 1.8)
+Map a                         135.8      134.3          (1419.9, 1.8)
+b fundamentals                 85.8       50.6         (-1411.3, 2.0)
+Map b                         117.8       82.6         (-1411.3, 2.0)
+painted hull gaps for requested pairs:
+  fundamentals <-> fundamentals gap =   -102.3 units
+      first  box x[1368.0..1471.9] y[-49.3..53.0]
+      second box x[1368.0..1471.9] y[-49.3..53.0]
+  Map a <-> Map b          gap =   2704.4 units
+      first  box x[1352.0..1487.9] y[-65.3..69.0]
+      second box x[-1470.2..-1352.4] y[-39.3..43.3]

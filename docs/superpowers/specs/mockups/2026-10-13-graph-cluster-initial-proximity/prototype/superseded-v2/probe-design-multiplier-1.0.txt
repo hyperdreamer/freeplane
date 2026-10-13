@@ -1,0 +1,145 @@
+proto.packingMultiplier=1.0 proto.boundary=box
+
+### SCENARIO A (root > zfc > axioms + definitions)
+estimated footprint                         w          h
+Axiomatic Set Theory                    244.2      161.4
+ZFC                                     212.2      129.4
+Axioms                                   97.4       97.4
+Basic Definitions and Theorems           72.0       72.0
+packed child offsets (from parent anchor origin):
+   Axiomatic Set Theory               EnclosureHullKey{endp...   (    0.0,     0.0)
+   ZFC                                EnclosureHullKey{endp...   (  -41.4,     0.0)
+   ZFC                                EnclosureHullKey{endp...   (   54.1,    10.0)
+   Axioms                             <content>                  (    0.0,     0.0)
+   Basic Definitions and Theorems     <content>                  (    0.0,     0.0)
+   <top level>                        EnclosureHullKey{endp...   (    0.0,     0.0)
+idle at step 48 (+200 extra steps observed)
+settled anchor distances:
+   Axiomatic Set Theory       <-> ZFC                             6.9
+   Axiomatic Set Theory       <-> Axioms                         49.1
+   Axiomatic Set Theory       <-> Basic Definitions and Theorems     48.4
+   ZFC                        <-> Axioms                         42.2
+   ZFC                        <-> Basic Definitions and Theorems     55.1
+   Axioms                     <-> Basic Definitions and Theorems     96.8
+direct node drift (settled distance from content centre vs ideal ring):
+   Axioms                         ideal   12.7  max settled   21.5  drift   +8.8
+   Basic Definitions and Theorems ideal    0.0  max settled   12.0  drift  +12.0
+painted hull sizes and gaps:
+   Axiomatic Set Theory           w   210.6 h   145.5
+   ZFC                            w   178.6 h   113.5
+   Axioms                         w    78.3 h    81.5
+   Basic Definitions and Theorems w    48.0 h    48.0
+   gap Axiomatic Set Theory       <-> ZFC                          -129.5
+   gap Axiomatic Set Theory       <-> Axioms                       -110.3
+   gap Axiomatic Set Theory       <-> Basic Definitions and Theorems    -80.0
+   gap ZFC                        <-> Axioms                        -94.3
+   gap ZFC                        <-> Basic Definitions and Theorems    -64.0
+   gap Axioms                     <-> Basic Definitions and Theorems     20.2
+
+### SCENARIO B (two maps)
+estimated footprint                         w          h
+a fundamentals                          116.0      116.0
+Map a                                   148.0      148.0
+b fundamentals                           94.0       94.0
+Map b                                   126.0      126.0
+packed child offsets (from parent anchor origin):
+   a fundamentals                     <content>                  (    0.0,     0.0)
+   Map a                              EnclosureHullKey{endp...   (    0.0,     0.0)
+   b fundamentals                     <content>                  (    0.0,     0.0)
+   Map b                              EnclosureHullKey{endp...   (    0.0,     0.0)
+   <top level>                        EnclosureHullKey{endp...   (  -68.3,     0.0)
+   <top level>                        EnclosureHullKey{endp...   (   79.3,    10.3)
+idle at step 71 (+200 extra steps observed)
+settled anchor distances:
+   a fundamentals             <-> Map a                           6.7
+   a fundamentals             <-> b fundamentals                143.0
+   a fundamentals             <-> Map b                         141.5
+   Map a                      <-> b fundamentals                149.7
+   Map a                      <-> Map b                         148.2
+   b fundamentals             <-> Map b                           7.2
+direct node drift (settled distance from content centre vs ideal ring):
+   a fundamentals                 ideal   22.0  max settled   31.4  drift   +9.4
+   b fundamentals                 ideal   11.0  max settled   20.5  drift   +9.5
+painted hull sizes and gaps:
+   a fundamentals                 w   108.9 h   101.3
+   Map a                          w   140.9 h   133.3
+   b fundamentals                 w    74.8 h    54.5
+   Map b                          w   106.8 h    86.5
+   gap a fundamentals             <-> Map a                        -117.3
+   gap a fundamentals             <-> b fundamentals                 55.3
+   gap a fundamentals             <-> Map b                          39.3
+   gap Map a                      <-> b fundamentals                 39.3
+   gap Map a                      <-> Map b                          23.3
+   gap b fundamentals             <-> Map b                         -70.5
+
+### SCENARIO C (two maps, cross-map relationships, node pin at (60,20))
+estimated footprint                         w          h
+a fundamentals                          103.1      103.1
+Map a                                   135.1      135.1
+b fundamentals                          103.1      103.1
+Map b                                   135.1      135.1
+packed child offsets (from parent anchor origin):
+   a fundamentals                     <content>                  (    0.0,     0.0)
+   Map a                              EnclosureHullKey{endp...   (    0.0,     0.0)
+   b fundamentals                     <content>                  (    0.0,     0.0)
+   Map b                              EnclosureHullKey{endp...   (    0.0,     0.0)
+   <top level>                        EnclosureHullKey{endp...   (  -72.0,     0.0)
+   <top level>                        EnclosureHullKey{endp...   (   72.0,     0.0)
+idle at step 88 (+200 extra steps observed)
+settled anchor distances:
+   a fundamentals             <-> Map a                           6.6
+   a fundamentals             <-> b fundamentals                139.9
+   a fundamentals             <-> Map b                         138.9
+   Map a                      <-> b fundamentals                145.8
+   Map a                      <-> Map b                         144.7
+   b fundamentals             <-> Map b                           6.8
+direct node drift (settled distance from content centre vs ideal ring):
+   a fundamentals                 ideal   15.6  max settled   28.4  drift  +12.9
+   b fundamentals                 ideal   15.6  max settled   28.7  drift  +13.1
+painted hull sizes and gaps:
+   a fundamentals                 w    77.0 h    97.0
+   Map a                          w   109.0 h   129.0
+   b fundamentals                 w    68.5 h    97.3
+   Map b                          w   100.5 h   129.3
+   gap a fundamentals             <-> Map a                         -93.0
+   gap a fundamentals             <-> b fundamentals                 61.3
+   gap a fundamentals             <-> Map b                          45.3
+   gap Map a                      <-> b fundamentals                 45.3
+   gap Map a                      <-> Map b                          29.3
+   gap b fundamentals             <-> Map b                         -84.5
+
+### SCENARIO D (two maps, cross-map relationships, no pin)
+estimated footprint                         w          h
+a fundamentals                          103.1      103.1
+Map a                                   135.1      135.1
+b fundamentals                          103.1      103.1
+Map b                                   135.1      135.1
+packed child offsets (from parent anchor origin):
+   a fundamentals                     <content>                  (    0.0,     0.0)
+   Map a                              EnclosureHullKey{endp...   (    0.0,     0.0)
+   b fundamentals                     <content>                  (    0.0,     0.0)
+   Map b                              EnclosureHullKey{endp...   (    0.0,     0.0)
+   <top level>                        EnclosureHullKey{endp...   (  -72.0,     0.0)
+   <top level>                        EnclosureHullKey{endp...   (   72.0,     0.0)
+idle at step 121 (+200 extra steps observed)
+settled anchor distances:
+   a fundamentals             <-> Map a                           6.7
+   a fundamentals             <-> b fundamentals                143.2
+   a fundamentals             <-> Map b                         143.8
+   Map a                      <-> b fundamentals                143.8
+   Map a                      <-> Map b                         144.2
+   b fundamentals             <-> Map b                           6.7
+direct node drift (settled distance from content centre vs ideal ring):
+   a fundamentals                 ideal   15.6  max settled   26.1  drift  +10.5
+   b fundamentals                 ideal   15.6  max settled   26.1  drift  +10.5
+painted hull sizes and gaps:
+   a fundamentals                 w    79.9 h    98.2
+   Map a                          w   111.9 h   130.2
+   b fundamentals                 w    79.9 h    98.2
+   Map b                          w   111.9 h   130.2
+   gap a fundamentals             <-> Map a                         -95.9
+   gap a fundamentals             <-> b fundamentals                 62.1
+   gap a fundamentals             <-> Map b                          46.1
+   gap Map a                      <-> b fundamentals                 46.1
+   gap Map a                      <-> Map b                          30.1
+   gap b fundamentals             <-> Map b                         -95.9
