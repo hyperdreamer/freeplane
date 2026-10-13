@@ -293,6 +293,276 @@ public class GraphInteractionControllerShould {
             .hasMessageContaining("componentPoint");
     }
 
+    private static MouseEvent gestureEvent(final GraphCanvas canvas, final JScrollPane scrollPane,
+            final int id, final double viewportX, final double viewportY) {
+        final Point viewPosition = scrollPane.getViewport().getViewPosition();
+        final int componentX = (int) Math.round(viewportX + viewPosition.x);
+        final int componentY = (int) Math.round(viewportY + viewPosition.y);
+        return new MouseEvent(canvas, id, System.currentTimeMillis(), 0, componentX, componentY, 1,
+            false, MouseEvent.BUTTON1);
+    }
+
+    private static double contentX(final GraphCanvas canvas, final JScrollPane scrollPane) {
+        return canvas.getWidth() / 2.0
+            + (0.0 - canvas.viewport().centerX()) * canvas.viewport().zoom()
+            - scrollPane.getViewport().getViewPosition().x;
+    }
+
+    private static double contentY(final GraphCanvas canvas, final JScrollPane scrollPane) {
+        return canvas.getHeight() / 2.0
+            + (0.0 - canvas.viewport().centerY()) * canvas.viewport().zoom()
+            - scrollPane.getViewport().getViewPosition().y;
+    }
+
+    private static final double PAN_THRESHOLD_DEAD_ZONE_PIXELS = 3.0;
+    private static final double PAN_MAX_CONTENT_STEP_PIXELS = 1.5 + 1e-6;
+
+    private static GestureResult dragGesture(final ScrolledFixture fixture, final double directionX,
+            final double directionY, final int events, final double fingerX0, final double fingerY0) {
+        final GraphCanvas canvas = fixture.canvas;
+        final JScrollPane scrollPane = fixture.scrollPane;
+        dispatch(canvas, gestureEvent(canvas, scrollPane, MouseEvent.MOUSE_PRESSED, fingerX0, fingerY0));
+        final double startX = contentX(canvas, scrollPane);
+        final double startY = contentY(canvas, scrollPane);
+        double previousX = startX;
+        double previousY = startY;
+        double maxStepX = 0.0;
+        double maxStepY = 0.0;
+        final List<Double> centersX = new ArrayList<Double>();
+        final List<Double> centersY = new ArrayList<Double>();
+        double fingerX = fingerX0;
+        double fingerY = fingerY0;
+        for (int index = 0; index < events; index++) {
+            fingerX += directionX;
+            fingerY += directionY;
+            dispatch(canvas, gestureEvent(canvas, scrollPane, MouseEvent.MOUSE_DRAGGED, fingerX, fingerY));
+            final double currentX = contentX(canvas, scrollPane);
+            final double currentY = contentY(canvas, scrollPane);
+            maxStepX = Math.max(maxStepX, Math.abs(currentX - previousX));
+            maxStepY = Math.max(maxStepY, Math.abs(currentY - previousY));
+            previousX = currentX;
+            previousY = currentY;
+            centersX.add(canvas.viewport().centerX());
+            centersY.add(canvas.viewport().centerY());
+        }
+        dispatch(canvas, gestureEvent(canvas, scrollPane, MouseEvent.MOUSE_RELEASED, fingerX, fingerY));
+        return new GestureResult(previousX - startX, previousY - startY, maxStepX, maxStepY,
+            centersX, centersY);
+    }
+
+    private static final class GestureResult {
+        private final double contentTravelX;
+        private final double contentTravelY;
+        private final double maxStepX;
+        private final double maxStepY;
+        private final List<Double> centersX;
+        private final List<Double> centersY;
+
+        private GestureResult(final double contentTravelX, final double contentTravelY,
+                final double maxStepX, final double maxStepY, final List<Double> centersX,
+                final List<Double> centersY) {
+            this.contentTravelX = contentTravelX;
+            this.contentTravelY = contentTravelY;
+            this.maxStepX = maxStepX;
+            this.maxStepY = maxStepY;
+            this.centersX = centersX;
+            this.centersY = centersY;
+        }
+    }
+
+    private static void assertTracksCursor(final GestureResult result, final double directionX,
+            final double directionY, final int events, final String description) {
+        assertAxisTracks(result.contentTravelX, directionX, events, description + " x");
+        assertAxisTracks(result.contentTravelY, directionY, events, description + " y");
+        assertThat(result.maxStepX).as(description + " max x step")
+            .isLessThanOrEqualTo(PAN_MAX_CONTENT_STEP_PIXELS);
+        assertThat(result.maxStepY).as(description + " max y step")
+            .isLessThanOrEqualTo(PAN_MAX_CONTENT_STEP_PIXELS);
+        assertMonotonicCenter(result.centersX, directionX, description + " x");
+        assertMonotonicCenter(result.centersY, directionY, description + " y");
+    }
+
+    private static void assertAxisTracks(final double travel, final double direction,
+            final int events, final String description) {
+        if (direction == 0.0) {
+            assertThat(travel).as(description).isEqualTo(0.0);
+            return;
+        }
+        assertThat(travel * direction).as(description)
+            .isBetween(events - PAN_THRESHOLD_DEAD_ZONE_PIXELS, (double) events);
+    }
+
+    private static void assertMonotonicCenter(final List<Double> centers, final double direction,
+            final String description) {
+        for (int index = 1; index < centers.size(); index++) {
+            if (direction > 0.0) {
+                assertThat(centers.get(index)).as(description)
+                    .isLessThanOrEqualTo(centers.get(index - 1));
+            }
+            else if (direction < 0.0) {
+                assertThat(centers.get(index)).as(description)
+                    .isGreaterThanOrEqualTo(centers.get(index - 1));
+            }
+            else {
+                assertThat(centers.get(index)).as(description).isEqualTo(centers.get(index - 1));
+            }
+        }
+        if (direction != 0.0) {
+            assertThat(centers.get(centers.size() - 1)).as(description)
+                .isNotEqualTo(centers.get(0));
+        }
+    }
+
+    @Test
+    public void trackTheCursorOneToOneWhenDraggingEmptyCanvasRightAtZoomOnePointFive() {
+        assertRightDragTracksAtZoom(1.5);
+    }
+
+    @Test
+    public void trackTheCursorOneToOneWhenDraggingEmptyCanvasRightAtZoomOne() {
+        assertRightDragTracksAtZoom(1.0);
+    }
+
+    @Test
+    public void trackTheCursorOneToOneWhenDraggingEmptyCanvasRightAtZoomFive() {
+        assertRightDragTracksAtZoom(5.0);
+    }
+
+    @Test
+    public void trackTheCursorOneToOneWhenDraggingEmptyCanvasLeftAtZoomOne() {
+        assertLeftDragTracksAtZoom(1.0);
+    }
+
+    @Test
+    public void trackTheCursorOneToOneWhenDraggingEmptyCanvasLeftAtZoomOnePointFive() {
+        assertLeftDragTracksAtZoom(1.5);
+    }
+
+    @Test
+    public void trackTheCursorOneToOneWhenDraggingEmptyCanvasLeftAtZoomFive() {
+        assertLeftDragTracksAtZoom(5.0);
+    }
+
+    private static void assertLeftDragTracksAtZoom(final double zoom) {
+        final ScrolledFixture fixture = scrolledPanFixture(zoom);
+        try {
+            final GestureResult result = dragGesture(fixture, -1.0, 0.0, 60, 600.0, 650.0);
+            assertTracksCursor(result, -1.0, 0.0, 60, "left drag at zoom " + zoom);
+        }
+        finally {
+            fixture.controller.uninstall();
+        }
+    }
+
+    @Test
+    public void trackTheCursorOneToOneWhenDraggingEmptyCanvasDiagonallyAtZoomOnePointFive() {
+        final ScrolledFixture fixture = scrolledPanFixture(1.5);
+        try {
+            final GestureResult result = dragGesture(fixture, 1.0, 1.0, 60, 600.0, 650.0);
+            assertDiagonalTracksAtZoomOnePointFive(result);
+        }
+        finally {
+            fixture.controller.uninstall();
+        }
+    }
+
+    private static void assertDiagonalTracksAtZoomOnePointFive(final GestureResult result) {
+        assertThat(result.contentTravelX).as("diagonal drag at zoom 1.5 x")
+            .isBetween(57.0, 60.0);
+        assertThat(result.contentTravelY).as("diagonal drag at zoom 1.5 y")
+            .isBetween(57.0, 69.0);
+        assertThat(result.maxStepX).as("diagonal drag at zoom 1.5 max x step")
+            .isLessThanOrEqualTo(PAN_MAX_CONTENT_STEP_PIXELS);
+        assertThat(result.maxStepY).as("diagonal drag at zoom 1.5 max y step")
+            .isLessThanOrEqualTo(PAN_MAX_CONTENT_STEP_PIXELS);
+        assertMonotonicCenter(result.centersX, 1.0, "diagonal drag at zoom 1.5 x");
+        assertMonotonicCenter(result.centersY, 1.0, "diagonal drag at zoom 1.5 y");
+    }
+
+    private static void assertRightDragTracksAtZoom(final double zoom) {
+        final ScrolledFixture fixture = scrolledPanFixture(zoom);
+        try {
+            final GestureResult result = dragGesture(fixture, 1.0, 0.0, 60, 600.0, 650.0);
+            assertTracksCursor(result, 1.0, 0.0, 60, "right drag at zoom " + zoom);
+        }
+        finally {
+            fixture.controller.uninstall();
+        }
+    }
+
+    @Test
+    public void doNotPanWhenAProgrammaticScrollMovesTheViewportUnderAStationaryPointer() {
+        final ScrolledFixture fixture = scrolledPanFixture(1.5);
+        try {
+            final GraphCanvas canvas = fixture.canvas;
+            final JScrollPane scrollPane = fixture.scrollPane;
+            final double beforeDragCenterX = canvas.viewport().centerX();
+            dispatch(canvas, gestureEvent(canvas, scrollPane, MouseEvent.MOUSE_PRESSED, 600.0, 650.0));
+            dispatch(canvas, gestureEvent(canvas, scrollPane, MouseEvent.MOUSE_DRAGGED, 610.0, 650.0));
+            final double centerX = canvas.viewport().centerX();
+            final double centerY = canvas.viewport().centerY();
+            assertThat(centerX).isNotEqualTo(beforeDragCenterX);
+
+            final Point viewPosition = scrollPane.getViewport().getViewPosition();
+            final Dimension extent = scrollPane.getViewport().getExtentSize();
+            final int maxX = Math.max(0, canvas.getWidth() - extent.width);
+            final int maxY = Math.max(0, canvas.getHeight() - extent.height);
+            final int deltaX = Math.min(40, maxX - viewPosition.x);
+            final int deltaY = Math.min(20, maxY - viewPosition.y);
+            assertThat(deltaX).isGreaterThan(0);
+            assertThat(deltaY).isGreaterThan(0);
+            scrollPane.getViewport().setViewPosition(
+                new Point(viewPosition.x + deltaX, viewPosition.y + deltaY));
+            assertThat(scrollPane.getViewport().getViewPosition())
+                .isEqualTo(new Point(viewPosition.x + deltaX, viewPosition.y + deltaY));
+
+            dispatch(canvas, gestureEvent(canvas, scrollPane, MouseEvent.MOUSE_DRAGGED, 610.0, 650.0));
+
+            assertThat(canvas.viewport().centerX()).isEqualTo(centerX);
+            assertThat(canvas.viewport().centerY()).isEqualTo(centerY);
+        }
+        finally {
+            fixture.controller.uninstall();
+        }
+    }
+
+    @Test
+    public void hitTheEndpointUnderThePointerWhenTheViewportIsScrolled() {
+        final Fixture fixture = Fixture.create();
+        final ScrolledFixture scrolled = scrolledFixture(fixture.state, 1.0, 0.0, 0.0, 300, 200);
+        try {
+            final GraphCanvas canvas = scrolled.canvas;
+            final JScrollPane scrollPane = scrolled.scrollPane;
+            scrollPane.getViewport().setViewPosition(new Point(100, 80));
+            assertThat(scrollPane.getViewport().getViewPosition()).isEqualTo(new Point(100, 80));
+
+            final Dimension size = new Dimension(canvas.getWidth(), canvas.getHeight());
+            final Point2D node = canvas.viewport().toScreen(-40.0, 0.0, size);
+            final int x = (int) Math.round(node.getX());
+            final int y = (int) Math.round(node.getY());
+            dispatch(canvas, clickAt(canvas, MouseEvent.MOUSE_CLICKED, x, y, 1, MouseEvent.BUTTON1));
+            assertThat(scrolled.listener.intents).containsExactly(
+                new GraphIntent.ChangeSelection(Optional.of(fixture.firstEndpoint)),
+                new GraphIntent.RevealSourceNode(fixture.firstEndpoint));
+
+            dispatch(canvas, clickAt(canvas, MouseEvent.MOUSE_CLICKED, x, y, 2, MouseEvent.BUTTON1));
+            assertThat(scrolled.listener.intents).containsExactly(
+                new GraphIntent.ChangeSelection(Optional.of(fixture.firstEndpoint)),
+                new GraphIntent.RevealSourceNode(fixture.firstEndpoint),
+                new GraphIntent.OpenSourceNode(fixture.firstEndpoint));
+
+            final LayoutPoint before = canvas.viewport().toWorld((double) x, (double) y, size);
+            dispatch(canvas, wheel(canvas, x, y, -1));
+            final LayoutPoint after = canvas.viewport().toWorld((double) x, (double) y, size);
+            assertThat(canvas.viewport().zoom()).isGreaterThan(1.0);
+            assertThat(after.x()).isCloseTo(before.x(), within(1e-9));
+            assertThat(after.y()).isCloseTo(before.y(), within(1e-9));
+        }
+        finally {
+            scrolled.controller.uninstall();
+        }
+    }
+
     @Test
     public void cancelSelfConnectWithoutEmittingAConnectIntent() {
         final Fixture fixture = Fixture.create();
