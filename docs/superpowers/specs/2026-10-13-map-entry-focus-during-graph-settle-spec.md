@@ -450,11 +450,11 @@ Mandatory order for every `ChangeSelection`:
 The explicit application therefore always runs **after** `updateMapRows` and **before**
 `updateStatusBar`, so `updateStatusBar`'s `updateMenuEnablement()` observes the applied
 selection. `mapList.synchronizeSelection()` also notifies the panel's selection listener
-(`updateMenuEnablement`) from inside `updateMapRows`, so enablement is notified three times
-in total: the notification inside `updateMapRows` observes the rebuild selection (preserved
-focus or priority-2 fallback), the notification caused by the explicit
-`selectMap`/`clearSelection` observes the applied graph selection and corrects it, and
-`updateStatusBar`'s `updateMenuEnablement()` observes the applied selection. The later
+(`updateMenuEnablement`), and `updateMapRows` ends with its own `updateMenuEnablement()` call,
+so enablement is notified four times in total: the `setRows` notification and the trailing
+`updateMapRows` notification observe the rebuild selection (preserved focus or priority-2
+fallback); the notification caused by the explicit `selectMap`/`clearSelection` and
+`updateStatusBar`'s `updateMenuEnablement()` observe the applied selection. The later
 notifications are idempotent corrections of the first, not conflicting writes.
 
 Node versus non-node handling:
