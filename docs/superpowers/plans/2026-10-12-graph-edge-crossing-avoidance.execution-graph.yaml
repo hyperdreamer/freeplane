@@ -2,8 +2,8 @@ schema_version: 1
 topic: graph-edge-crossing-avoidance
 source_plan:
   path: docs/superpowers/plans/2026-10-12-graph-edge-crossing-avoidance.md
-  sha256: 3e0ae8099378d04de3505cc300eb6cf997e250502363b7a06972c55e443c8004
-  tasks: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+  sha256: 3a9c377a37a60ed4391c192f6acf5e9c331aa969b6d4ed04b49c62c1d86eba16
+  tasks: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
 validation_env:
   JAVA_HOME: ~/.sdkman/candidates/java/21.0.8-zulu
   note: Prefix every validation command with JAVA_HOME and PATH so the toolchain matches the plan.
@@ -16,6 +16,8 @@ lanes:
     task_ids: [geca-t5, geca-t6, geca-t11, geca-t16]
   - id: edge-publication
     task_ids: [geca-t7, geca-t8, geca-t9, geca-t12, geca-t17, geca-t18, geca-t19]
+  - id: edge-bounded
+    task_ids: [geca-t21]
 tasks:
   - id: geca-t1
     plan_task: 1
@@ -435,7 +437,7 @@ tasks:
     implementer_tier: advanced
     lane: edge-publication
     sequence: 6
-    depends_on: [geca-t14, geca-t15, geca-t16, geca-t17]
+    depends_on: [geca-t14, geca-t15, geca-t16, geca-t17, geca-t21]
     ownership:
       paths:
         - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/PerformanceMeasurements.java
@@ -457,7 +459,7 @@ tasks:
     implementer_tier: standard
     lane: edge-publication
     sequence: 7
-    depends_on: [geca-t12, geca-t16, geca-t17, geca-t18]
+    depends_on: [geca-t12, geca-t16, geca-t17, geca-t18, geca-t21]
     ownership:
       paths:
         - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/GraphCanvasPaintShould.java
@@ -492,5 +494,35 @@ tasks:
       consumes:
         - id: i-geca-t3-produces
           digest: 9f6c16c5209dce29
+    validation:
+      - [gradle, ":freeplane_plugin_graph:test", "-PTestLoggingFull"]
+  - id: geca-t21
+    plan_task: 21
+    title: "Bound the relocation and router work for reference-scale frames"
+    implementer_tier: advanced
+    lane: edge-bounded
+    sequence: 1
+    depends_on: [geca-t13, geca-t14, geca-t15, geca-t16]
+    ownership:
+      paths:
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrection.java
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/EdgeConflictDiagnostics.java
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/BoundaryInvariants.java
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/NodeSeparationProjection.java
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/CountedViolatingPairs.java
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/EdgeRouter.java
+        - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/EdgeRouteDiagnostics.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrectionShould.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/NodeSeparationProjectionShould.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/geometry/EdgeRouterShould.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/geometry/EdgeRouterFixture.java
+    resources: []
+    interfaces:
+      produces:
+        - id: i-geca-t21-produces
+          digest: 5b7d1a9c4e0f2233
+      consumes:
+        - id: i-geca-t13-produces
+          digest: 6a2f9c1d0b7e4411
     validation:
       - [gradle, ":freeplane_plugin_graph:test", "-PTestLoggingFull"]
