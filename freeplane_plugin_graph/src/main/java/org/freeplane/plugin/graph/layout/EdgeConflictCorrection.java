@@ -218,14 +218,19 @@ public final class EdgeConflictCorrection {
         if (rounds > 0) {
             final LayoutPositions published = canonicallySorted(currentPositions);
             final long rebuildStart = System.nanoTime();
-            boundaryDiagnostics = boundaryInvariants.describe(projection, published, metrics, pins,
-                currentGeometry, boundaryResult.diagnostics().residualHullPairs(),
-                boundaryResult.diagnostics());
+            final BoundaryInvariants.CountedRebuild rebuilt = boundaryInvariants.describeCounted(
+                projection, published, metrics, pins, currentGeometry,
+                boundaryResult.diagnostics().residualHullPairs(), boundaryResult.diagnostics());
+            boundaryDiagnostics = rebuilt.diagnostics();
             nodeResidualViolations = new NodeSeparationProjection().project(projection, published,
                 pinned).residualViolations();
-            verificationWork += (long) boundaryDiagnostics.residualHullPairs().size()
-                + (long) boundaryDiagnostics.hullResidualViolations()
-                + (long) NodeSeparationProjection.violatingPairs(projection, published).size();
+            // The §5.4 rebuild's counted units are predicate evaluations (spec §13.1): one A2
+            // node-pair test per pair its scan evaluates plus one A3 hull-pair comparison per
+            // comparison its detect pass consumes. The rebuild reuses the terminal geometry, so
+            // it recomputes no hull.
+            verificationWork += rebuilt.hullPairWork()
+                + NodeSeparationProjection.violatingPairsCounted(projection, published,
+                    Integer.MAX_VALUE).pairEvaluations();
             rebuildNanos = System.nanoTime() - rebuildStart;
         }
         // The §5.4 rebuild's counted units are part of the frame total, so the diagnostics are

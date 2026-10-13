@@ -284,17 +284,36 @@ public class EdgeConflictCorrectionShould {
     public void publishesTheRebuildUnitsInTheFrameVerificationTotal() {
         final Fixture fixture = rebuildWorkFixture();
         final EdgeConflictResult result = apply(fixture);
-        final long rebuildUnits = (long) result.boundaryDiagnostics().residualHullPairs().size()
-            + (long) result.boundaryDiagnostics().hullResidualViolations()
-            + (long) NodeSeparationProjection.violatingPairs(fixture.projection,
-                result.positions()).size();
+        // The rebuild's counted unit is a predicate evaluation (spec §13.1): its A2 scan of the
+        // six published nodes evaluates C(6, 2) = 15 node pairs. The fixture has no hulls, so the
+        // rebuild consumes no A3 comparison and recomputes no hull.
+        final long rebuildUnits = NodeSeparationProjection.violatingPairsCounted(fixture.projection,
+            result.positions(), Integer.MAX_VALUE).pairEvaluations();
 
         assertThat(result.diagnostics().rounds()).isEqualTo(1);
         assertThat(result.diagnostics().verifications()).isEqualTo(2);
-        assertThat(rebuildUnits).isEqualTo(1L);
+        assertThat(rebuildUnits).isEqualTo(15L);
         // 30 counted verification units (the rejected batch stops before A2, and the accepted
-        // single runs two six-node A2 scans of 15 pairs each) plus the rebuild's one unit.
+        // single runs two six-node A2 scans of 15 pairs each) plus the rebuild's 15 predicate
+        // evaluations. The result-size formula published 31 and fails this pin.
         assertThat(result.diagnostics().verificationWork()).isEqualTo(30L + rebuildUnits);
+    }
+
+    @Test
+    public void countsTheRebuildHullPairComparisonsAsVerificationWork() {
+        final A3SubsetFixture fixture = preExistingSiblingResidualFixture(0.0, 30.0, 100.0);
+
+        final BoundaryInvariants.CountedRebuild rebuilt = new BoundaryInvariants().describeCounted(
+            fixture.projection, fixture.boundary.positions(), METRICS,
+            Collections.<PinProjection>emptyList(), fixture.boundary.geometry(),
+            fixture.boundary.diagnostics().residualHullPairs(), fixture.boundary.diagnostics());
+        final long countedDetectWork = new BoundaryInvariants().detectPairKeys(fixture.projection,
+            fixture.boundary.geometry(), Long.MAX_VALUE).work();
+
+        // The fixture's three sibling hulls consume at least the A-C hull-pair comparison, and
+        // the rebuild must report exactly the work its own detect pass consumes.
+        assertThat(countedDetectWork).isGreaterThan(0L);
+        assertThat(rebuilt.hullPairWork()).isEqualTo(countedDetectWork);
     }
 
     private static Fixture referenceScaleFan(final int chords) {
