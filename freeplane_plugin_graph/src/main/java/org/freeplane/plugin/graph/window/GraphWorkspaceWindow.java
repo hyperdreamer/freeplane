@@ -1511,6 +1511,12 @@ final class GraphWorkspaceWindowModel {
                     GraphSearchModel.search(currentState, toolbar.searchField().getText()));
             canvas.setPaintState(paintState);
             updateMapRows(currentState);
+            if (selectedNode != null) {
+                mapList.selectMap(selectedNode.mapReferenceId());
+            }
+            else {
+                mapList.clearSelection();
+            }
             updateStatusBar();
         }
         else if (intent instanceof GraphIntent.InspectEdge
