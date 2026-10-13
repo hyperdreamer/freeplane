@@ -1,7 +1,7 @@
 package org.freeplane.plugin.graph.layout;
 
 public final class LayoutCalibration {
-    private static final double CONTAINMENT = 0.15;
+    private static final double CONTAINMENT = 1.0;
     private static final double HIERARCHY = 0.30;
     private static final double SAME_MAP = 1.0;
     private static final LayoutCalibration SPIKE_DEFAULTS =
