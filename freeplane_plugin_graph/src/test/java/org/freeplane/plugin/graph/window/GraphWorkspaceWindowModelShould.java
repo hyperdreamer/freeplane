@@ -2671,6 +2671,194 @@ public class GraphWorkspaceWindowModelShould {
     }
 
     @Test
+    public void graphSelectionOverridesAClickedMapRow() {
+        MapReferenceId activeA = id(201L);
+        MapReferenceId activeB = id(202L);
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(activeA, LayoutPoint.of(0.0, 0.0)),
+            Arrays.asList(registration(activeA, "A", MapAvailability.AVAILABLE),
+                registration(activeB, "B", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
+        model.mapList().selectMap(activeB);
+
+        model.acceptIntent(new GraphIntent.ChangeSelection(Optional.of(transientNodeEndpoint(activeA))));
+
+        assertThat(model.mapList().selectedRow()).isNotNull();
+        assertThat(model.mapList().selectedRow().mapReferenceId()).isEqualTo(activeA);
+        assertThat(model.mapList().activeList().getSelectedIndex()).isEqualTo(0);
+        assertThat(model.mapList().inactiveList().getSelectedIndex()).isEqualTo(-1);
+        assertThat(model.mapList().rows().get(0).selected()).isTrue();
+        assertThat(model.mapList().rows().get(1).selected()).isFalse();
+        assertThat(menuItem(model, "deactivate-map").isEnabled()).isTrue();
+        assertThat(menuItem(model, "reactivate-map").isEnabled()).isFalse();
+        model.close();
+    }
+
+    @Test
+    public void emptyGraphSelectionOverridesAClickedMapRow() {
+        MapReferenceId activeA = id(203L);
+        MapReferenceId activeB = id(204L);
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(activeA, LayoutPoint.of(0.0, 0.0)),
+            Arrays.asList(registration(activeA, "A", MapAvailability.AVAILABLE),
+                registration(activeB, "B", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
+        model.mapList().selectMap(activeB);
+
+        model.acceptIntent(new GraphIntent.ChangeSelection(Optional.<ProjectedEndpointKey>empty()));
+
+        assertThat(model.mapList().selectedRow()).isNull();
+        assertThat(model.mapList().activeList().getSelectedIndex()).isEqualTo(-1);
+        assertThat(model.mapList().inactiveList().getSelectedIndex()).isEqualTo(-1);
+        assertThat(model.mapList().rows().get(0).selected()).isFalse();
+        assertThat(model.mapList().rows().get(1).selected()).isFalse();
+        assertThat(menuItem(model, "deactivate-map").isEnabled()).isFalse();
+        assertThat(menuItem(model, "reactivate-map").isEnabled()).isFalse();
+        assertThat(menuItem(model, "delete-map").isEnabled()).isFalse();
+        assertThat(menuItem(model, "retry-map").isEnabled()).isFalse();
+        assertThat(menuItem(model, "locate-map").isEnabled()).isFalse();
+        assertThat(menuItem(model, "add-map").isEnabled()).isTrue();
+        model.close();
+    }
+
+    @Test
+    public void enclosureGraphSelectionOverridesAClickedMapRow() {
+        MapReferenceId activeA = id(205L);
+        MapReferenceId activeB = id(206L);
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(activeA, LayoutPoint.of(0.0, 0.0)),
+            Arrays.asList(registration(activeA, "A", MapAvailability.AVAILABLE),
+                registration(activeB, "B", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
+        model.mapList().selectMap(activeB);
+        EnclosureKey boundary = EnclosureKey.of(SourceNodeKey.transientPath(activeA,
+            Collections.singletonList(Integer.valueOf(2))));
+
+        model.acceptIntent(new GraphIntent.ChangeSelection(
+            Optional.of(ProjectedEndpointKey.ofEnclosure(boundary))));
+
+        assertThat(model.mapList().selectedRow()).isNull();
+        assertThat(model.mapList().activeList().getSelectedIndex()).isEqualTo(-1);
+        assertThat(model.mapList().inactiveList().getSelectedIndex()).isEqualTo(-1);
+        assertThat(model.mapList().rows().get(0).selected()).isFalse();
+        assertThat(model.mapList().rows().get(1).selected()).isFalse();
+        model.close();
+    }
+
+    @Test
+    public void neutralCanvasUpdatePreservesAClickedRowAndItsActions() {
+        MapReferenceId activeA = id(207L);
+        MapReferenceId activeB = id(208L);
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(activeA, LayoutPoint.of(0.0, 0.0)),
+            Arrays.asList(registration(activeA, "A", MapAvailability.AVAILABLE),
+                registration(activeB, "B", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
+        model.mapList().selectMap(activeB);
+
+        model.acceptCanvasState(nodeState(activeA, LayoutPoint.of(5.0, 5.0)));
+
+        assertThat(model.mapList().selectedRow()).isNotNull();
+        assertThat(model.mapList().selectedRow().mapReferenceId()).isEqualTo(activeB);
+        assertThat(model.mapList().activeList().getSelectedIndex()).isEqualTo(1);
+        assertThat(model.mapList().inactiveList().getSelectedIndex()).isEqualTo(-1);
+        assertThat(model.mapList().rows().get(0).selected()).isFalse();
+        assertThat(model.mapList().rows().get(1).selected()).isTrue();
+        assertThat(model.mapList().removeButton().getText()).isEqualTo("graph_workspace.action.deactivate_map");
+        assertThat(model.mapList().removeButton().isEnabled()).isTrue();
+        assertThat(menuItem(model, "deactivate-map").isEnabled()).isTrue();
+        assertThat(menuItem(model, "reactivate-map").isEnabled()).isFalse();
+        assertThat(menuItem(model, "delete-map").isEnabled()).isFalse();
+        model.close();
+    }
+
+    @Test
+    public void readOnlyTogglePreservesTheClickedRowAndOnlyDisablesItsActions() {
+        MapReferenceId activeA = id(209L);
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(activeA, LayoutPoint.of(0.0, 0.0)),
+            Collections.singletonList(registration(activeA, "A", MapAvailability.AVAILABLE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
+        model.mapList().selectMap(activeA);
+
+        model.setReadOnly(true);
+
+        assertThat(model.mapList().selectedRow()).isNotNull();
+        assertThat(model.mapList().selectedRow().mapReferenceId()).isEqualTo(activeA);
+        assertThat(model.mapList().rows().get(0).state()).isEqualTo(MapListPanel.RowState.READ_ONLY);
+        assertThat(model.mapList().rows().get(0).selected()).isTrue();
+        assertThat(model.mapList().addButton().isEnabled()).isFalse();
+        assertThat(model.mapList().removeButton().isEnabled()).isFalse();
+        assertThat(model.mapList().retryButton().isEnabled()).isFalse();
+        assertThat(model.mapList().locateButton().isEnabled()).isFalse();
+        assertThat(menuItem(model, "add-map").isEnabled()).isFalse();
+        assertThat(menuItem(model, "deactivate-map").isEnabled()).isFalse();
+        assertThat(menuItem(model, "reactivate-map").isEnabled()).isFalse();
+        assertThat(menuItem(model, "delete-map").isEnabled()).isFalse();
+        assertThat(menuItem(model, "retry-map").isEnabled()).isFalse();
+        assertThat(menuItem(model, "locate-map").isEnabled()).isFalse();
+        model.close();
+    }
+
+    @Test
+    public void clearingTheGraphSelectionDisablesTheMapMenuItems() {
+        MapReferenceId activeA = id(210L);
+        MapReferenceId inactiveB = id(211L);
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(activeA, LayoutPoint.of(0.0, 0.0)),
+            Arrays.asList(registration(activeA, "A", MapAvailability.AVAILABLE),
+                registration(inactiveB, "B", MapAvailability.INACTIVE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
+        model.mapList().selectMap(activeA);
+
+        model.mapList().clearSelection();
+
+        assertThat(model.mapList().selectedRow()).isNull();
+        assertThat(model.mapList().activeList().getSelectedIndex()).isEqualTo(-1);
+        assertThat(model.mapList().inactiveList().getSelectedIndex()).isEqualTo(-1);
+        for (MapListPanel.MapRow row : model.mapList().rows()) {
+            assertThat(row.selected()).isFalse();
+        }
+        assertThat(menuItem(model, "deactivate-map").isEnabled()).isFalse();
+        assertThat(menuItem(model, "reactivate-map").isEnabled()).isFalse();
+        assertThat(menuItem(model, "delete-map").isEnabled()).isFalse();
+        assertThat(menuItem(model, "retry-map").isEnabled()).isFalse();
+        assertThat(menuItem(model, "locate-map").isEnabled()).isFalse();
+        assertThat(menuItem(model, "add-map").isEnabled()).isTrue();
+        model.close();
+    }
+
+    @Test
+    public void deletionFrameFallsThroughToTheFlaggedGraphSelectedRow() {
+        MapReferenceId activeA = id(212L);
+        MapReferenceId inactiveB = id(213L);
+        Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
+            nodeState(activeA, LayoutPoint.of(0.0, 0.0)),
+            Arrays.asList(registration(activeA, "A", MapAvailability.AVAILABLE),
+                registration(inactiveB, "B", MapAvailability.INACTIVE)), false);
+        GraphWorkspaceWindowModel model = fixture.model();
+        model.acceptIntent(new GraphIntent.ChangeSelection(Optional.of(transientNodeEndpoint(activeA))));
+        model.mapList().selectMap(inactiveB);
+        assertThat(model.mapList().selectedRow().mapReferenceId()).isEqualTo(inactiveB);
+
+        // The model test owns no DeleteConfirmationPrompt; execute the same command the
+        // panel action dispatches and deliver the post-delete registration set.
+        model.execute(GraphCommands.deleteMap(inactiveB));
+        when(fixture.binding.currentMapRows()).thenReturn(Collections.singletonList(
+            registration(activeA, "A", MapAvailability.AVAILABLE)));
+
+        model.acceptCanvasState(nodeState(activeA, LayoutPoint.of(0.0, 0.0)));
+
+        assertThat(model.mapList().selectedRow()).isNotNull();
+        assertThat(model.mapList().selectedRow().mapReferenceId()).isEqualTo(activeA);
+        assertThat(model.mapList().activeList().getSelectedIndex()).isEqualTo(0);
+        assertThat(model.mapList().rows().size()).isEqualTo(1);
+        assertThat(model.mapList().rows().get(0).selected()).isTrue();
+        assertThat(menuItem(model, "deactivate-map").isEnabled()).isTrue();
+        model.close();
+    }
+
+    @Test
     public void tracksPinToggleLabelAndEnablementAcrossSelectionAndPinnedStates() {
         Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
             persistedNodeState(ACTIVE_ID, LayoutPoint.of(2.0, -3.0)),
@@ -2993,6 +3181,11 @@ public class GraphWorkspaceWindowModelShould {
         LayoutFrame layout = LayoutFrame.of(0L, LayoutPositions.of(
             Collections.singletonMap(key, center), Collections.emptyMap()), false, 0);
         return CanvasState.of(0L, projection, layout, geometry, OperationalStatus.IDLE);
+    }
+
+    private static ProjectedEndpointKey transientNodeEndpoint(final MapReferenceId mapId) {
+        return ProjectedEndpointKey.ofNode(ProjectedNodeKey.of(
+            SourceNodeKey.transientPath(mapId, Collections.emptyList())));
     }
 
     private static CanvasState wideNodeState(MapReferenceId mapId) {
