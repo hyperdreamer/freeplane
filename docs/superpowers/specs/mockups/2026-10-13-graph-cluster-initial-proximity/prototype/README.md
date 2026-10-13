@@ -64,5 +64,6 @@ $JAVA_HOME/bin/java -Djava.awt.headless=true -cp "baseline-probe-classes:$CP" \
 - Idle 22–785 steps on A–H; all-pairs non-ancestor crossings 0 at the documented endpoint.
 - Settled pairs drift (documented scope): window maxima A 4.6, B 14.6, C 12.1, D 78.7, E 2.1, F 27.2,
   G 9.9, H 2.1; painted gaps 0.0–37.5; containment overflow 0–14.0.
-- 200-child fixture: submit (apply + packing) 0.52 s, 10 steps 0.84 s.
+- 200-child fixture: submit (apply + packing) 0.580 s, 10 steps 1.252 s (stored `probe-final.txt`;
+  earlier runs 0.52 s / 0.84 s; timing is machine-dependent).
 - Baseline: A `Axioms`↔`Definitions` 682.8, B `Map a`↔`Map b` 2704.4.
