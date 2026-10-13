@@ -22,10 +22,13 @@ C2: Settling
 C3: Settling
 C4: Settling
 C5: Idle
-Note: C3 and C5 show the beta active row highlighted; the sidebar action buttons (Add Map / Deactivate Map / Retry Map / Locate Map and Delete Map for inactive rows) are enabled for the selected active row in C3 and C5.
+Note: C3 and C5 show the beta active row highlighted with Add Map and Deactivate Map enabled.
+Retry Map and Locate Map are correctly disabled for an available active row; Delete Map applies
+only to inactive rows.
 
 ## Canvas witness checks (nonzero pixel count proves frames still moving)
 
+- Measurement parameters: CANVAS_CROP=760x690+273+70; ROW_X=150, ROW_Y=207; RESTART_X=1149, RESTART_Y=786
 - C2 vs C1: AE=8313.74 (0.0158538)
 - C3 vs C2: AE=6838.86 (0.0130413)
 - C4 vs C3: AE=7398.05 (0.0141076)
