@@ -233,6 +233,24 @@ public final class GraphCanvas extends JComponent implements Accessible {
             new Dimension(getWidth(), getHeight()));
     }
 
+    /**
+     * Returns the component point expressed in viewport coordinates, which are
+     * independent of the view's current scroll position. AWT computes
+     * MouseEvent component coordinates against the component's current on-screen
+     * location, so this space is what keeps gesture deltas equal to physical
+     * pointer movement while the viewport scrolls the canvas under the pointer.
+     * Returns the given point unchanged when the canvas has no JViewport ancestor.
+     */
+    Point viewportPoint(final Point componentPoint) {
+        final Point value = Objects.requireNonNull(componentPoint, "componentPoint");
+        final JViewport scrollViewport = containingViewport();
+        if (scrollViewport == null) {
+            return value;
+        }
+        final Point viewPosition = scrollViewport.getViewPosition();
+        return new Point(value.x - viewPosition.x, value.y - viewPosition.y);
+    }
+
     void updateTooltip(final org.freeplane.plugin.graph.projection.ProjectedEndpointKey endpoint) {
         final CanvasState state = canvasState;
         final String text = state == null || endpoint == null
