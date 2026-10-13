@@ -158,16 +158,15 @@ public class EdgeConflictCorrectionShould {
             ids[index] = "C" + index;
         }
         final Fixture fixture = fixture(1L, ids, x, y, edges, 14.0);
-        final EdgeConflictResult result = apply(fixture);
+        // Every node is pinned, so no relocation candidate can be accepted and the ladder
+        // cannot run: the frame is the single complete initial detection pinned by spec §8.5.
+        final EdgeConflictResult result = new EdgeConflictCorrection().apply(fixture.projection,
+            fixture.boundary.positions(), METRICS, fixture.pinsForAllNodes(), fixture.visible,
+            fixture.boundary);
 
         assertThat(result.diagnostics().crossingsDetected()).isEqualTo(2080);
-        // The initial detection subdivides through all four levels (4 split triggers); the
-        // first verification detection adds one more split trigger before the frame-total
-        // detected-key budget stops it at the accumulated lower bound.
-        assertThat(result.diagnostics().indexSubdivisions()).isEqualTo(5);
+        assertThat(result.diagnostics().indexSubdivisions()).isEqualTo(4);
         assertThat(result.diagnostics().indexBudgetExhausted()).isTrue();
-        assertThat(result.diagnostics().detectionTruncated()).isFalse();
-        assertThat(result.diagnostics().verificationBudgetExhausted()).isTrue();
         assertThat(result.diagnostics().indexPairChecks()).isGreaterThanOrEqualTo(2080L);
     }
 
@@ -281,6 +280,23 @@ public class EdgeConflictCorrectionShould {
         assertThat(result.diagnostics().conflictsResidual()).isEqualTo(expected.keys());
     }
 
+    @Test
+    public void publishesTheRebuildUnitsInTheFrameVerificationTotal() {
+        final Fixture fixture = rebuildWorkFixture();
+        final EdgeConflictResult result = apply(fixture);
+        final long rebuildUnits = (long) result.boundaryDiagnostics().residualHullPairs().size()
+            + (long) result.boundaryDiagnostics().hullResidualViolations()
+            + (long) NodeSeparationProjection.violatingPairs(fixture.projection,
+                result.positions()).size();
+
+        assertThat(result.diagnostics().rounds()).isEqualTo(1);
+        assertThat(result.diagnostics().verifications()).isEqualTo(2);
+        assertThat(rebuildUnits).isEqualTo(1L);
+        // 30 counted verification units (the rejected batch stops before A2, and the accepted
+        // single runs two six-node A2 scans of 15 pairs each) plus the rebuild's one unit.
+        assertThat(result.diagnostics().verificationWork()).isEqualTo(30L + rebuildUnits);
+    }
+
     private static Fixture referenceScaleFan(final int chords) {
         return diameters(chords, 600000.0);
     }
@@ -390,6 +406,18 @@ public class EdgeConflictCorrectionShould {
         y[leaves + 3] = -50.0;
         final int[][] edges = new int[][] {{leaves, leaves + 1}, {leaves + 2, leaves + 3}};
         return fixture(1L, ids, x, y, edges, 14.0);
+    }
+
+    /**
+     * The reported quad plus two far-away discs below the minimum gap: the crossing is repaired
+     * through one rejected batch and one accepted single (30 counted verification units), and
+     * the published positions keep the close pair, so the §5.4 rebuild adds exactly one unit.
+     */
+    private static Fixture rebuildWorkFixture() {
+        return fixture(7L, new String[] {"ID_A", "ID_B", "ID_C", "ID_D", "ID_X", "ID_Y"},
+            new double[] {272.0, 170.0, 307.0, 202.0, 275.0, 240.0, 240.0, 208.0, 1000.0, 1000.0,
+                1010.0, 1000.0},
+            new int[][] {{0, 2}, {1, 3}});
     }
 
     @Test
