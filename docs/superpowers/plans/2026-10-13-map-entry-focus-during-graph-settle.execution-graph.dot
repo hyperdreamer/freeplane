@@ -1,0 +1,12 @@
+digraph map_entry_focus {
+    rankdir=TB;
+    node [shape=box, style=rounded, fontname="Helvetica"];
+    subgraph cluster_map_entry_focus {
+        label="map-entry-focus";
+        "t1-panel-focus-and-tests" [label="Task 1: Preserve the map-list row focus across neutral rebuilds\nStandard"];
+        "t2-graph-selection-application" [label="Task 2: Apply the graph selection explicitly on change selection\nAdvanced"];
+        "t3-acceptance-evidence" [label="Task 3: Record running-application mid-settle acceptance evidence\nCapable"];
+    }
+    "t1-panel-focus-and-tests" -> "t2-graph-selection-application";
+    "t2-graph-selection-application" -> "t3-acceptance-evidence";
+}
