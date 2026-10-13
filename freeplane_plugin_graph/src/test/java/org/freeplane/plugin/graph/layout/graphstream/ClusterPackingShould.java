@@ -60,6 +60,19 @@ public class ClusterPackingShould {
         return items;
     }
 
+    /** Fixed-seed multi-item set for the pairwise separation invariant (specification 7.1.1 item 13). */
+    private static List<ClusterPacking.ClusterItem> randomItemSet() {
+        Random random = new Random(20261013L);
+        List<ClusterPacking.ClusterItem> items = new ArrayList<ClusterPacking.ClusterItem>();
+        items.add(content(1.0 + random.nextDouble() * 60.0, 1.0 + random.nextDouble() * 60.0, 0));
+        for (int index = 0; index < 9; index++) {
+            items.add(item("random-" + index,
+                1.0 + random.nextDouble() * 120.0, 1.0 + random.nextDouble() * 60.0,
+                random.nextDouble() * 40.0 - 20.0, random.nextDouble() * 40.0 - 20.0, index + 1));
+        }
+        return items;
+    }
+
     private static void assertPlacementsEqual(List<ClusterPacking.ClusterPlacement> expected,
             List<ClusterPacking.ClusterPlacement> actual) {
         assertThat(actual).hasSameSizeAs(expected);
@@ -259,7 +272,7 @@ public class ClusterPackingShould {
 
     @Test
     public void everyPairIsSeparatedOnAtLeastOneAxis() {
-        List<ClusterPacking.ClusterPlacement> placements = pack(sixItemFixture());
+        List<ClusterPacking.ClusterPlacement> placements = pack(randomItemSet());
         for (int first = 0; first < placements.size(); first++) {
             for (int second = first + 1; second < placements.size(); second++) {
                 ClusterPacking.ClusterPlacement left = placements.get(first);

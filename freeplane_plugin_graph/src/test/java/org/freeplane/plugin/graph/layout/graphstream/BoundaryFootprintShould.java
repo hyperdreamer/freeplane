@@ -297,45 +297,16 @@ public class BoundaryFootprintShould {
 
     @Test
     public void footprintsAreMemoisedAndRecursionTerminates() {
-        EnclosureHullKey root = hull("root");
-        EnclosureHullKey first = hull("first");
-        EnclosureHullKey second = hull("second");
-        EnclosureHullKey grandFirst = hull("grandFirst");
-        EnclosureHullKey grandSecond = hull("grandSecond");
-        EnclosureHullKey grandThird = hull("grandThird");
-        EnclosureHullKey grandFourth = hull("grandFourth");
-        List<ProjectedNode> nodes = Arrays.asList(node("n1", "One"), node("n2", "Two"),
-            node("n3", "Three"), node("n4", "Four"));
-        List<ProjectedEnclosure> enclosures = new ArrayList<ProjectedEnclosure>();
-        enclosures.add(enclosure("root", "Root", Optional.<EnclosureHullKey>empty(),
-            Collections.<ProjectedNodeKey>emptyList(), Arrays.asList(first, second), true,
-            BoundaryTier.SUPPRESSED));
-        enclosures.add(enclosure("first", "First", Optional.of(root),
-            Collections.<ProjectedNodeKey>emptyList(), Arrays.asList(grandFirst, grandSecond), false,
-            BoundaryTier.EMPHATIC));
-        enclosures.add(enclosure("second", "Second", Optional.of(root),
-            Collections.<ProjectedNodeKey>emptyList(), Arrays.asList(grandThird, grandFourth), false,
-            BoundaryTier.EMPHATIC));
-        enclosures.add(enclosure("grandFirst", "Grand First", Optional.of(first),
-            Collections.singletonList(nodeKey("n1")), Collections.<EnclosureHullKey>emptyList(), false,
-            BoundaryTier.SUBTLE));
-        enclosures.add(enclosure("grandSecond", "Grand Second", Optional.of(first),
-            Collections.singletonList(nodeKey("n2")), Collections.<EnclosureHullKey>emptyList(), false,
-            BoundaryTier.SUBTLE));
-        enclosures.add(enclosure("grandThird", "Grand Third", Optional.of(second),
-            Collections.singletonList(nodeKey("n3")), Collections.<EnclosureHullKey>emptyList(), false,
-            BoundaryTier.SUBTLE));
-        enclosures.add(enclosure("grandFourth", "Grand Fourth", Optional.of(second),
-            Collections.singletonList(nodeKey("n4")), Collections.<EnclosureHullKey>emptyList(), false,
-            BoundaryTier.SUBTLE));
-        GraphStreamLayoutEngine.BoundarySizes sizes =
-            new GraphStreamLayoutEngine.BoundarySizes(projection(nodes, enclosures));
-
-        List<EnclosureHullKey> all = Arrays.asList(root, first, second, grandFirst, grandSecond,
-            grandThird, grandFourth);
-        for (EnclosureHullKey key : all) {
-            assertThat(sizes.footprint(key)).isSameAs(sizes.footprint(key));
+        final GraphProjection projection = ClusterProximityShould.wideProjection(1L);
+        final EnclosureHullKey root = ClusterProximityShould.hull(MAP, "wide-root");
+        final GraphStreamLayoutEngine.BoundarySizes sizes =
+            new GraphStreamLayoutEngine.BoundarySizes(projection);
+        for (int index = 0; index < 200; index++) {
+            final EnclosureHullKey child = ClusterProximityShould.hull(MAP, "wide-" + index);
+            assertThat(sizes.footprint(child)).as("child %d footprint", Integer.valueOf(index))
+                .isSameAs(sizes.footprint(child));
         }
+        assertThat(sizes.footprint(root)).isSameAs(sizes.footprint(root));
         assertThat(sizes.placements(root)).isSameAs(sizes.placements(root));
     }
 }
