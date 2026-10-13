@@ -21,8 +21,9 @@ public class EdgeRouterShould {
 
     @Test
     public void exposeStraightFallbackForAStraightOnlyScaffold() {
-        // The reported fixture's four nodes and two crossing chords: the scaffold returns
-        // two STRAIGHT paths and reports the crossing pair as a residual.
+        // The reported fixture's four nodes and two crossing chords: with the full ladder no
+        // rung clears (every rung still crosses the other chord), so both edges are straight
+        // fallbacks and the crossing pair stays as the published residual.
         final EdgeRouterFixture fixture = EdgeRouterFixture.reportedConvexQuad();
         final EdgePaths paths = new EdgeRouter().route(fixture.projection, fixture.positions,
             fixture.geometry, fixture.visibleEndpoints);
@@ -31,10 +32,10 @@ public class EdgeRouterShould {
         final List<EdgePath> values = new java.util.ArrayList<EdgePath>(paths.byEdge().values());
         assertThat(values.get(0).shape()).isEqualTo(EdgePath.Shape.STRAIGHT);
         assertThat(values.get(1).shape()).isEqualTo(EdgePath.Shape.STRAIGHT);
-        assertThat(paths.diagnostics().edgesStraight()).isEqualTo(2);
+        assertThat(paths.diagnostics().edgesStraight()).isZero();
         assertThat(paths.diagnostics().edgesBow()).isZero();
         assertThat(paths.diagnostics().edgesDogleg()).isZero();
-        assertThat(paths.diagnostics().edgesFallback()).isZero();
+        assertThat(paths.diagnostics().edgesFallback()).isEqualTo(2);
         assertThat(paths.diagnostics().pathCrossingsDetected()).isEqualTo(1);
         assertThat(paths.diagnostics().pathCrossingsResidual()).hasSize(1);
     }
@@ -139,5 +140,71 @@ public class EdgeRouterShould {
         // The same-side dogleg 0.50 has analytic ratio 1.535184 > ROUTE_LENGTH_CAP = 1.25 and
         // must never be selected as a live rung.
         assertThat(paths.diagnostics().edgesDogleg()).isZero();
+    }
+
+    @Test
+    public void rejectsAnAlternatingBendDogleg() {
+        final EdgeRouterFixture fixture = EdgeRouterFixture.fanCrossing();
+        final EdgePaths paths = new EdgeRouter().route(fixture.projection, fixture.positions,
+            fixture.geometry, fixture.visibleEndpoints);
+
+        // Both bends of every candidate lie on the same signed side; an alternating-bend
+        // dogleg (ratio ~2.256) is not part of the ladder.
+        for (final EdgePath path : paths.byEdge().values()) {
+            if (path.shape() == EdgePath.Shape.DOGLEG) {
+                final List<LayoutPoint> points = path.definingPoints();
+                final double firstSide = EdgeRouterFixture.side(points.get(0), points.get(3),
+                    points.get(1));
+                final double secondSide = EdgeRouterFixture.side(points.get(0), points.get(3),
+                    points.get(2));
+                assertThat(firstSide * secondSide).isGreaterThan(0.0);
+            }
+        }
+        assertThat(paths.diagnostics().pathCrossingsResidual()).isEmpty();
+    }
+
+    @Test
+    public void attachBowsAndDoglegsAtTheRimFacingTheRung() {
+        final EdgeRouterFixture fixture = EdgeRouterFixture.laterChordBow();
+        final EdgePaths paths = new EdgeRouter().route(fixture.projection, fixture.positions,
+            fixture.geometry, fixture.visibleEndpoints);
+        final EdgePath bow = paths.byEdge().get(EdgeRouterFixture.exitEdge("ID_1", "ID_2"));
+
+        assertThat(bow.shape()).isEqualTo(EdgePath.Shape.BOW);
+        final LayoutPoint control = bow.control().get();
+        assertThat(EdgeRouterFixture.distance(
+            fixture.geometry.nodes().get(EdgeRouterFixture.node("ID_1")).center(), bow.start()))
+            .isEqualTo(14.0, org.assertj.core.data.Offset.offset(1e-9));
+        assertThat(EdgeRouterFixture.distance(
+            fixture.geometry.nodes().get(EdgeRouterFixture.node("ID_2")).center(), bow.end()))
+            .isEqualTo(14.0, org.assertj.core.data.Offset.offset(1e-9));
+        assertThat(bow.start().x()).isLessThan(control.x());
+    }
+
+    @Test
+    public void keepEverySampleWithinTheSagittaTolerance() {
+        final EdgeRouterFixture fixture = EdgeRouterFixture.laterChordBow();
+        final EdgePaths paths = new EdgeRouter().route(fixture.projection, fixture.positions,
+            fixture.geometry, fixture.visibleEndpoints);
+
+        for (final EdgePath path : paths.byEdge().values()) {
+            if (path.shape() != EdgePath.Shape.BOW) {
+                continue;
+            }
+            final double worst = EdgeRouterFixture.maxSagitta(path);
+            assertThat(worst).isLessThanOrEqualTo(0.75);
+        }
+    }
+
+    @Test
+    public void isDeterministicAcrossRunsAndPermutedEdgeOrder() {
+        final EdgeRouterFixture fixture = EdgeRouterFixture.laterChordBow();
+        final EdgePaths first = new EdgeRouter().route(fixture.projection, fixture.positions,
+            fixture.geometry, fixture.visibleEndpoints);
+        final EdgePaths second = new EdgeRouter().route(fixture.permutedProjection(),
+            fixture.positions, fixture.geometry, fixture.visibleEndpoints);
+
+        assertThat(second.byEdge()).isEqualTo(first.byEdge());
+        assertThat(second.diagnostics()).isEqualTo(first.diagnostics());
     }
 }
