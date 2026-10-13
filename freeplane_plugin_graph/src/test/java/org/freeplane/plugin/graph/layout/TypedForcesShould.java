@@ -12,6 +12,7 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.TimeUnit;
 
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
+import org.freeplane.plugin.graph.layout.graphstream.ClusterProximityShould;
 import org.freeplane.plugin.graph.layout.graphstream.GraphStreamLayoutFactory;
 import org.freeplane.plugin.graph.projection.BoundaryTier;
 import org.freeplane.plugin.graph.projection.EdgeContributor;
@@ -114,31 +115,22 @@ public class TypedForcesShould {
 
     @Test
     public void largerWorkspacesSeedWiderThanTheMinimumSpread() {
-        List<ProjectedEnclosure> enclosures = new ArrayList<ProjectedEnclosure>();
-        List<EnclosureHullKey> rootChildren = new ArrayList<EnclosureHullKey>();
-        EnclosureHullKey rootHull = hull(MAP_ONE, "root");
-        for (int index = 0; index < 200; index++) {
-            EnclosureKey key = EnclosureKey.of(source(MAP_ONE, "wide-" + index));
-            EnclosureHullKey hull = EnclosureHullKey.of(Collections.singletonList(key));
-            SafeNodeLabel label = SafeNodeLabel.of("wide-" + index, "wide-" + index);
-            enclosures.add(ProjectedEnclosure.of(hull, Collections.singletonList(key),
-                Collections.singletonList(label), "Map", Optional.of(rootHull),
-                Collections.<ProjectedNodeKey>emptyList(), Collections.<EnclosureHullKey>emptyList(), false,
-                BoundaryTier.SUBTLE));
-            rootChildren.add(hull);
-        }
-        enclosures.add(ProjectedEnclosure.of(rootHull, Collections.singletonList(
-            EnclosureKey.of(source(MAP_ONE, "root"))), Collections.singletonList(SafeNodeLabel.of("Root", "Root")),
-            "Map", Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(), rootChildren,
-            true, BoundaryTier.EMPHATIC));
-        GraphProjection projection = projection(1, Collections.<ProjectedNode>emptyList(), enclosures,
-            Collections.<ProjectedEdge>emptyList());
+        // Supplementary fixture (specification section 7.2): 200 empty children under a
+        // map root. The engine seeds anchors at the deterministic packed composition
+        // (specification sections 3.4/3.5), so the composed packed diagonal is the
+        // minimum spread the seeded frame must reach. The previous ring seeding produced
+        // a spread just above 150.0; the packed composition is orders of magnitude wider.
+        final GraphProjection projection = ClusterProximityShould.wideProjection(1L);
+        final double packedSpread = greatestDistanceBetweenDistinctPositions(
+            new ArrayList<LayoutPoint>(ClusterProximityShould.composeAnchors(projection).values()));
 
         try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
             LayoutFrame frame = engine.apply(request(WORKSPACE_ONE, projection, projection,
                 Collections.<PinProjection>emptyList()));
-
-            assertThat(greatestDistanceBetweenDistinctPositions(frame)).isGreaterThan(150.0);
+            final double seededSpread = greatestDistanceBetweenDistinctPositions(frame);
+            System.out.println("largerWorkspacesSeedWiderThanTheMinimumSpread packedSpread=" + packedSpread
+                + " seededSpread=" + seededSpread);
+            assertThat(seededSpread).isGreaterThan(packedSpread - SIBLING_GAP);
         }
     }
 
@@ -194,13 +186,20 @@ public class TypedForcesShould {
         List<PinProjection> pins = Collections.singletonList(pin(key(MAP_ONE, "hierarchy-parent"), 0.0, 0.0));
 
         // Engine frame: a single child is placed at the parent anchor origin, so the packed
-        // parent-child anchor distance (the HIERARCHY rest) is 0 and the child seeds at (0, 0).
+        // parent-child anchor distance (the HIERARCHY rest, specification section 3.5) is 0
+        // and the child seeds at (0, 0). The rest length lives in the production-private
+        // ForceLink, so the rest identity is pinned here by the seeded packed distance plus
+        // the settled bound below: a rest that did not equal the packed distance moves the
+        // settled child outside this window.
         try (LayoutEngine engine = GraphStreamLayoutFactory.create(LayoutCalibration.spikeDefaults())) {
             LayoutFrame applied = engine.apply(request(WORKSPACE_ONE, nested, nested, pins));
-            assertThat(applied.positions().anchors().get(hierarchyParentHull()))
-                .isEqualTo(LayoutPoint.of(0.0, 0.0));
-            assertThat(applied.positions().anchors().get(hierarchyChildHull()))
-                .isEqualTo(LayoutPoint.of(0.0, 0.0));
+            LayoutPoint parentAnchor = applied.positions().anchors().get(hierarchyParentHull());
+            LayoutPoint childAnchor = applied.positions().anchors().get(hierarchyChildHull());
+            assertThat(parentAnchor).isEqualTo(LayoutPoint.of(0.0, 0.0));
+            assertThat(childAnchor).isEqualTo(LayoutPoint.of(0.0, 0.0));
+            assertThat(distance(parentAnchor, childAnchor))
+                .as("seeded parent-child distance equals the packed distance (the HIERARCHY rest)")
+                .isEqualTo(0.0);
         }
         double nestedDistance = anchorDistanceAfterSteps(WORKSPACE_ONE, nested, pins, 300);
         double peerDistance = anchorDistanceAfterSteps(WORKSPACE_ONE, peers, pins, 300);
@@ -460,7 +459,11 @@ public class TypedForcesShould {
     }
 
     private static double greatestDistanceBetweenDistinctPositions(LayoutFrame frame) {
-        List<LayoutPoint> positions = new ArrayList<LayoutPoint>(frame.positions().anchors().values());
+        return greatestDistanceBetweenDistinctPositions(
+            new ArrayList<LayoutPoint>(frame.positions().anchors().values()));
+    }
+
+    private static double greatestDistanceBetweenDistinctPositions(List<LayoutPoint> positions) {
         double greatestDistance = 0.0;
         for (int first = 0; first < positions.size(); first++) {
             for (int second = first + 1; second < positions.size(); second++) {
