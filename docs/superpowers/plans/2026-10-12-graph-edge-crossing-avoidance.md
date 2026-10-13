@@ -59,14 +59,23 @@ edge-geometry path exists.
 - `edge-foundation` also owns Task 20, the late composition assertion in
   `layout/BoundarySeparationShould.java` (the file is already owned by Task 1 of that
   lane); Task 20 depends on Tasks 8 and 15 and therefore appears after them.
+- `edge-bounded` (Task 21, Revision 7): the bounded-work budgets and counted accessors in
+  `layout/EdgeConflictCorrection.java`, `layout/EdgeConflictDiagnostics.java`,
+  `geometry/EdgeRouter.java`, `geometry/EdgeRouteDiagnostics.java` and the
+  `layout/EdgeConflictCorrectionShould.java` / `geometry/EdgeRouterShould.java` /
+  `geometry/EdgeRouterFixture.java` fixtures. These files were written by the
+  relocation/routing lanes in earlier tasks; Task 21 depends on Tasks 13-16, so the
+  bounded lane runs after those lanes have finished and no two lanes write the same file
+  concurrently.
 
-Cross-lane dependencies always point at a lower-numbered task: Tasks 4-6 depend on
-Tasks 1-3; Tasks 7-9 depend on Tasks 4-6; red-phase Tasks 10-12 add the failing
+Cross-lane dependencies are declared by each task's `Depends on` line and are the
+scheduling authority: task numbers are authoring order, not dependency order. Tasks 4-6
+depend on Tasks 1-3; Tasks 7-9 depend on Tasks 4-6; red-phase Tasks 10-12 add the failing
 fixtures; implementation Tasks 13-16 turn them green; Task 17 completes the painter and
-hit-test coverage; Task 18 adds the performance stages; Task 19 runs the module and core
-gates; Task 20 adds the late foundation-lane composition assertion. Lanes hold no shared
-file and can run in parallel once the tasks named in their `Depends on` lines have
-landed; a task inside a lane always runs after every lower-numbered task in that lane.
+hit-test coverage; Task 21 bounds the relocation and router work (Revision 7); Task 18
+adds the performance stages and depends on Task 21; Task 19 runs the module and core
+gates and depends on Tasks 18 and 21; Task 20 adds the late foundation-lane composition
+assertion. A task inside a lane always runs after every lower-numbered task in that lane.
 
 **Tech Stack:** Java 8 source level on runtime Zulu 21.0.8-zulu, Gradle multi-project
 build (`gradle :freeplane_plugin_graph:test`), JUnit 4.13.2 with AssertJ and Mockito.
@@ -76,7 +85,7 @@ projection}` inside `freeplane_plugin_graph`.
 **Implementation contract:** `docs/superpowers/specs/2026-10-12-graph-edge-crossing-avoidance-spec.md`
 (the contract implemented here; every value a task needs is restated in the task, so no
 task has to open it), derived from the approved design
-`docs/superpowers/specs/2026-10-12-graph-edge-crossing-avoidance-design.md` (revision 6).
+`docs/superpowers/specs/2026-10-12-graph-edge-crossing-avoidance-design.md` (revision 7).
 
 ## Global Constraints
 
@@ -117,10 +126,15 @@ task has to open it), derived from the approved design
   `baselineResidualKeys` (the boundary stage's terminal `residualHullPairs()`, exact
   `CanonicalKeys.hullPair` format); N3 `EdgeConflictResult.boundaryDiagnostics()` carries
   the rebuilt record; N4 the only exhaustion-flag names are
-  `verificationBudgetExhausted` and `indexBudgetExhausted`; N5 every `CanvasState`
-  construction site uses the `EdgePaths`-taking factory; N6 every three-argument
-  `withDiagnostics` call site uses the four-argument form; N7 the negative index/crossing
-  fixtures exist; N8 enclosure anchors stay at pre-batch values.
+  `verificationBudgetExhausted`, `indexBudgetExhausted`, `detectionTruncated` and
+  `routeBudgetExhausted` (Revision 7); N5 every `CanvasState` construction site uses the
+  `EdgePaths`-taking factory; N6 every three-argument `withDiagnostics` call site uses
+  the four-argument form; N7 the negative index/crossing fixtures exist; N8 enclosure
+  anchors stay at pre-batch values.
+- Revision 7 (bounded-effort stages, user-approved) is normative for Tasks 18, 19 and
+  21: per-frame work budgets with the pinned counted units and check points, the four
+  exhaustion flags and the both-flags rule, and steady-state measurement on the settled
+  published worker frame with zero budget-exhaustion events required for A7.
 
 ## Task 1: Extract projection/CanonicalKeys as the one canonical encoding path
 
@@ -4272,20 +4286,26 @@ git commit -m "test(graph): pin routed arrowheads, multiplicity and sampled hit-
 
 **Implementer tier:** Advanced
 **Lane:** edge-publication
-**Depends on:** Tasks 14, 15, 16
+**Depends on:** Tasks 14, 15, 16, 21
 
 **Files:**
 
 - Modify: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/PerformanceMeasurements.java:13-70,297-338`
-- Modify: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/PerformanceTripwiresShould.java:62-77,360-377`
-- Modify: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/GraphWorkspacePerformanceDiagnostic.java:244-400,820-850`
+- Modify: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/PerformanceTripwiresShould.java:38-77,225-290,350-377`
+- Modify: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/GraphWorkspacePerformanceDiagnostic.java:90-91,253-420,840-910`
+- Modify (only to tighten a calibrated ceiling below a pinned Task 21 constant when this task's calibration requires it): `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrection.java`
+- Modify (only to tighten a calibrated ceiling below a pinned Task 21 constant when this task's calibration requires it): `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/EdgeRouter.java`
 
 **Interfaces:**
 
 - Consumes: `EdgeConflictTimings.detectionNanos()/indexNanos()/verificationNanos()/rebuildNanos()`
   (Tasks 4, 13-15); `EdgeRouteTimings.indexNanos()/selectionNanos()/residualNanos()`
-  (Tasks 5, 16); `EdgeConflictCorrection.apply(...)`, `EdgeRouter.route(...)`;
-  `GeneratedWorkspace.forScenario("reference-2000-5000")`;
+  (Tasks 5, 16); `BoundarySeparationCorrection.apply(...)`,
+  `EdgeConflictCorrection.apply(...)`, `EdgeRouter.route(...)`;
+  `EdgeConflictDiagnostics.detectionTruncated()/verificationBudgetExhausted()/indexBudgetExhausted()`
+  and `EdgeRouteDiagnostics.routeBudgetExhausted()/detectionTruncated()` (Task 21);
+  `GeneratedWorkspace.forScenario("reference-2000-5000")`,
+  `GeneratedWorkspace.Scenario.REFERENCE_2000_5000.warmupCount()/measuredCount()`;
   `PerformanceMeasurements.Stage` wire names and threshold methods;
   `BoundaryCorrectionProfile` as the pattern for the direct-probe timings.
 - Produces: `PerformanceMeasurements.Stage.EDGE_CONFLICT("edge-conflict")` and
@@ -4297,8 +4317,13 @@ git commit -m "test(graph): pin routed arrowheads, multiplicity and sampled hit-
   `"snapshot", "projection", "diff", "mutation", "force", "correction", "separation",
   "hull", "edge-conflict", "edge-routing", "placement", "full-worker", "edt-swap",
   "repaint", "accepted-batch-first-frame"`; the named tests
-  `exposeTheCanonicalStageOrderAndThresholds` and
-  `referenceFixtureStaysInsideTheStrictWorkerAndFirstFrameGates`.
+  `exposeTheCanonicalStageOrderAndThresholds`,
+  `referenceFixtureStaysInsideTheStrictWorkerAndFirstFrameGates` and
+  `referenceFixtureUsesTheSettledFrameAndNoBudgetStops`; the
+  `GraphWorkspacePerformanceDiagnostic` settled-frame stage re-runs with
+  `settledFrameStageSamples()` and package-private `runReferenceFixture()`; the
+  zero-exhaustion discards for the two stages; the deadline message
+  `"Forty-minute diagnostic process deadline exceeded"`.
 
 - [ ] **Step 1: Extend the pinned tripwire test first**
 
@@ -4322,43 +4347,89 @@ wire-list expectation with exactly:
             .isEqualTo(PerformanceMeasurements.DIAGNOSTIC_ONLY_THRESHOLD);
 ```
 
-Add the reference-fixture gate test:
+Add the Revision 7 measurement-window pins directly after them:
 
 ```java
-    @Test
-    public void referenceFixtureStaysInsideTheStrictWorkerAndFirstFrameGates() throws Exception {
-        GraphWorkspacePerformanceDiagnostic diagnostic = diagnostic(new CountingNanoClock());
-        PerformanceMeasurements measurements = diagnostic.runReferenceFixture();
+        assertThat(GeneratedWorkspace.Scenario.REFERENCE_2000_5000.warmupCount()).isEqualTo(400);
+        assertThat(GeneratedWorkspace.Scenario.REFERENCE_2000_5000.measuredCount()).isEqualTo(300);
+        assertThat(GraphWorkspacePerformanceDiagnostic.WARMUP_SAMPLES).isEqualTo(20);
+        assertThat(GraphWorkspacePerformanceDiagnostic.TIMED_SAMPLES).isEqualTo(100);
+```
 
+`REFERENCE_2000_5000` is the only scenario that pins 400 warmups / 300 measured (700
+samples); `WARMUP_SAMPLES = 20` and `TIMED_SAMPLES = 100` are the placement-trigger
+sub-measurement counts and are unchanged. Make the two constants package-private in
+Step 4 so this compiles.
+
+Add the two reference-fixture gate tests. Both read one shared 700-sample run started
+once per test class by `@BeforeClass`:
+
+```java
+    @ClassRule
+    public static final TemporaryFolder classFixtureFolder = new TemporaryFolder();
+
+    private static GraphWorkspacePerformanceDiagnostic referenceDiagnostic;
+    private static PerformanceMeasurements referenceMeasurements;
+
+    @BeforeClass
+    public static void runReferenceFixtureOnce() throws Exception {
+        referenceDiagnostic = new GraphWorkspacePerformanceDiagnostic(
+            classFixtureFolder.newFolder("reference-fixture").toPath(), false, new CountingNanoClock());
+        referenceMeasurements = referenceDiagnostic.runReferenceFixture();
+    }
+
+    @Test
+    public void referenceFixtureStaysInsideTheStrictWorkerAndFirstFrameGates() {
         PerformanceMeasurements.Summary worker =
-            measurements.summary(PerformanceMeasurements.Stage.FULL_WORKER);
+            referenceMeasurements.summary(PerformanceMeasurements.Stage.FULL_WORKER);
         PerformanceMeasurements.Summary firstFrame =
-            measurements.summary(PerformanceMeasurements.Stage.ACCEPTED_BATCH_FIRST_FRAME);
+            referenceMeasurements.summary(PerformanceMeasurements.Stage.ACCEPTED_BATCH_FIRST_FRAME);
         assertThat(worker.p95Nanos).isLessThanOrEqualTo(PerformanceMeasurements.STRICT_FULL_WORKER_NANOS);
         assertThat(worker.p99Nanos).isLessThanOrEqualTo(PerformanceMeasurements.STRICT_FULL_WORKER_NANOS);
         assertThat(firstFrame.p95Nanos)
             .isLessThanOrEqualTo(PerformanceMeasurements.STRICT_FIRST_FRAME_P95_NANOS);
         assertThat(firstFrame.p99Nanos)
             .isLessThanOrEqualTo(PerformanceMeasurements.STRICT_FIRST_FRAME_P99_NANOS);
-        assertThat(measurements.summary(PerformanceMeasurements.Stage.EDGE_CONFLICT).p95Nanos)
+        assertThat(referenceMeasurements.summary(PerformanceMeasurements.Stage.EDGE_CONFLICT).p95Nanos)
             .isLessThanOrEqualTo(25_000_000L);
-        assertThat(measurements.summary(PerformanceMeasurements.Stage.EDGE_ROUTING).p95Nanos)
+        assertThat(referenceMeasurements.summary(PerformanceMeasurements.Stage.EDGE_ROUTING).p95Nanos)
             .isLessThanOrEqualTo(10_000_000L);
+    }
+
+    @Test
+    public void referenceFixtureUsesTheSettledFrameAndNoBudgetStops() {
+        assertThat(referenceDiagnostic.settledFrameStageSamples()).isTrue();
+        assertThat(referenceMeasurements.measuredCount(PerformanceMeasurements.Stage.EDGE_CONFLICT))
+            .isEqualTo(300);
+        assertThat(referenceMeasurements.measuredCount(PerformanceMeasurements.Stage.EDGE_ROUTING))
+            .isEqualTo(300);
+        assertThat(referenceMeasurements.discardCount(PerformanceMeasurements.Stage.EDGE_CONFLICT)).isZero();
+        assertThat(referenceMeasurements.discardCount(PerformanceMeasurements.Stage.EDGE_ROUTING)).isZero();
+        assertThat(referenceMeasurements.failureCount(PerformanceMeasurements.Stage.EDGE_CONFLICT)).isZero();
+        assertThat(referenceMeasurements.failureCount(PerformanceMeasurements.Stage.EDGE_ROUTING)).isZero();
     }
 ```
 
-If `GraphWorkspacePerformanceDiagnostic` has no `runReferenceFixture()` entry point, use
-its existing `run`/`diagnostic` harness for the same scenario and expose one
-package-private method that returns the `PerformanceMeasurements` for the reference
-fixture; do not weaken the assertions. The test is allowed to be marked with the same
-JUnit timeout the reference-fixture tests already use.
+Add the imports `org.junit.BeforeClass` and `org.junit.ClassRule`. If
+`GraphWorkspacePerformanceDiagnostic` has no `runReferenceFixture()` entry point, expose
+one package-private method that runs `GeneratedWorkspace.Scenario.REFERENCE_2000_5000`
+through the existing `runScenario` harness and returns its `PerformanceMeasurements`; do
+not weaken the assertions. The shared run happens once per test class, not once per
+test. The test is allowed to be marked with the same JUnit timeout the reference-fixture
+tests already use.
 
-Add the §8.5 negative fixtures to `PerformanceTripwiresShould` as design §10.3 requires:
-a hub/star fixture whose chords all share the origin cell proves the item-cap
-subdivision, and the `(-1e300, -1e300)`/`(1e300, 1e300)`/`(-1e300, 1e300)`/`(1e300,
--1e300)` fixture proves the outermost-ring fallback; both assert the same grid-encoding
-and counted-work values as `EdgeConflictCorrectionShould.detectsACrossingAtExtremeSpans`
-and `enumeratesEveryPairWhenSubdivisionExhausts`.
+The A7 threshold measurement is the **settled published worker frame**, never the
+fresh-engine direct probe; Step 4 deletes the attempt-7 `runDirectProbe` recordings and
+the zero-exhaustion rule below is what makes the gate non-vacuous.
+
+The §8.5/§13.5 bounded-policy fixtures — item-budget and pair-budget truncation, the
+volume fixture, the verification-detection stop, the router obstacle-budget fallback and
+the residual-pass lower bound, with their counted-work bounds — are Task 21's and must
+not be duplicated here. `PerformanceTripwiresShould` keeps the suite-level grid-encoding
+coverage spec §9.2 names (the hub/star frame and the geometry-suite extreme coordinates)
+by asserting the same values as Task 13's
+`EdgeConflictCorrectionShould.detectsACrossingAtExtremeSpans` and
+`.enumeratesEveryPairWhenSubdivisionExhausts`.
 
 - [ ] **Step 2: Run the tripwire test and confirm it fails**
 
@@ -4372,7 +4443,7 @@ gradle :freeplane_plugin_graph:test \
 ```
 
 Expected: FAIL at `exposeTheCanonicalStageOrderAndThresholds` with the missing
-`edge-conflict`/`edge-routing` names and the unknown enum constants in the new test.
+`edge-conflict`/`edge-routing` names and the unknown enum constants in the new tests.
 
 - [ ] **Step 3: Add the stages and thresholds**
 
@@ -4399,34 +4470,81 @@ feature flag: a first measurement above a pinned strict threshold is a hard fail
 forces a design revision, and the only permitted constant change is a tightening applied
 to the specification and to this test in the same change.
 
-- [ ] **Step 4: Record the two stages in the diagnostic harness**
+- [ ] **Step 4: Record the two stages on the settled published worker frame**
 
-In `GraphWorkspacePerformanceDiagnostic`, add two direct-probe recordings, following the
-existing boundary direct-probe pattern:
+In `GraphWorkspacePerformanceDiagnostic.runSample`, after `workerHull` is computed and
+before `acceptedFirstFrameState`, replace the attempt-7 direct-probe recordings with the
+settled-frame stage re-runs. `visible` is computed once here from the worker frame's
+projection and `workerHull` is the published hull geometry for `workerFrame.positions()`:
 
 ```java
-            final long edgeConflictStart = System.nanoTime();
-            final EdgeConflictResult edgeResult = new EdgeConflictCorrection().apply(projection,
-                boundary.positions(), metrics, projection.pins(), visibleEndpoints, boundary);
-            final long edgeConflictEnd = System.nanoTime();
-            measurements.recordDuration(PerformanceMeasurements.Stage.EDGE_CONFLICT,
-                edgeConflictStart, edgeConflictEnd, warmup);
+        final Set<ProjectedEndpointKey> visible = ProjectedEndpointVisibility.visibleEndpoints(
+            current.nodes(), current.enclosures());
 
-            final long edgeRoutingStart = System.nanoTime();
-            final EdgePaths paths = new EdgeRouter().route(projection, edgeResult.positions(),
-                geometry, visibleEndpoints);
-            final long edgeRoutingEnd = System.nanoTime();
-            measurements.recordDuration(PerformanceMeasurements.Stage.EDGE_ROUTING,
-                edgeRoutingStart, edgeRoutingEnd, warmup);
+        final long edgeConflictStart = clock.nanoTime();
+        final EdgeConflictResult settledEdge = invokeBounded(new Callable<EdgeConflictResult>() {
+            @Override
+            public EdgeConflictResult call() {
+                final BoundarySeparationResult settledBoundary = correctionEngine.apply(current,
+                    workerFrame.positions(), textMetrics, request.pins());
+                return new EdgeConflictCorrection().apply(current, settledBoundary.positions(),
+                    textMetrics, request.pins(), visible, settledBoundary);
+            }
+        }, "settled edge-conflict stage re-run");
+        final long edgeConflictEnd = clock.nanoTime();
+        measurements.recordDuration(PerformanceMeasurements.Stage.EDGE_CONFLICT,
+            edgeConflictStart, edgeConflictEnd, warmup);
+        if (settledEdge.diagnostics().detectionTruncated()
+                || settledEdge.diagnostics().verificationBudgetExhausted()
+                || settledEdge.diagnostics().indexBudgetExhausted()) {
+            measurements.recordDiscard(PerformanceMeasurements.Stage.EDGE_CONFLICT);
+        }
+
+        final long edgeRoutingStart = clock.nanoTime();
+        final EdgePaths settledPaths = invokeBounded(new Callable<EdgePaths>() {
+            @Override
+            public EdgePaths call() {
+                return new EdgeRouter().route(current, workerFrame.positions(), workerHull, visible);
+            }
+        }, "settled edge-routing stage re-run");
+        final long edgeRoutingEnd = clock.nanoTime();
+        measurements.recordDuration(PerformanceMeasurements.Stage.EDGE_ROUTING,
+            edgeRoutingStart, edgeRoutingEnd, warmup);
+        if (settledPaths.diagnostics().routeBudgetExhausted()
+                || settledPaths.diagnostics().detectionTruncated()) {
+            measurements.recordDiscard(PerformanceMeasurements.Stage.EDGE_ROUTING);
+        }
+        settledFrameStageSamples = true;
 ```
 
-`visibleEndpoints` is computed once with `ProjectedEndpointVisibility.visibleEndpoints(
-projection.nodes(), projection.enclosures())`; `geometry` is the published hull geometry
-for `edgeResult.positions()`. Keep the enum order and threshold assertions as the only
-pinned surface; the CSV rows already include the new stages through `Stage.values()`.
-Also route its `CanvasState` through the Task 8 factory and validate
-`frame.edgeConflictDiagnostics()` in `requireUsableFrame` exactly as
-`validateBoundaryDiagnostics` validates the boundary record.
+Add the `EdgeConflictCorrection` and `EdgeConflictResult` imports (the snippet's
+`Callable`, `EdgePaths`, `EdgeRouter`, `BoundarySeparationResult`,
+`ProjectedEndpointVisibility` and `ProjectedEndpointKey` types are already imported).
+
+The two stage samples are recorded **only** here; delete every `EDGE_CONFLICT` and
+`EDGE_ROUTING` recording from `runDirectProbe`, so no fresh-engine seed-frame sample can
+enter the gate (the attempt-7 direct-probe recordings are removed). Add
+`private boolean settledFrameStageSamples;` with the package-private accessors
+`boolean settledFrameStageSamples()` and `PerformanceMeasurements runReferenceFixture()`;
+make `runScenario` return the `PerformanceMeasurements` it builds so
+`runReferenceFixture()` can return it (it already calls `appendRows(measurements)`).
+Make `WARMUP_SAMPLES` and `TIMED_SAMPLES` package-private. Fix `checkDeadline`'s message
+to exactly `"Forty-minute diagnostic process deadline exceeded"`.
+
+A budget-stop sample is a discard, so `PerformanceMeasurements.Summary.pass()` is false
+for that stage; the zero-exhaustion rule for A7 is enforced by
+`referenceFixtureUsesTheSettledFrameAndNoBudgetStops` and by the strict diagnostic
+ledger. The deadline arithmetic is pinned and recorded: the reference window is 700
+samples at the 2 s per-sample budget ≈ 23.3 min, the other five scenarios are 250
+samples × 2 s ≈ 8.3 min and the placement triggers ≤ 6 min, all inside the pinned
+`PROCESS_DEADLINE_NANOS` (40 min). The settled-frame re-runs use the harness's
+bounded-operation wrapper (`invokeBounded`) with the per-operation expected time pinned
+in the task report.
+
+Also validate `frame.edgeConflictDiagnostics()` in `requireUsableFrame` exactly as
+`validateBoundaryDiagnostics` validates the boundary record: the diagnostics must be
+present on every usable worker frame (the Task 8 `CanvasState` factory already routes the
+frame's own positions).
 
 - [ ] **Step 5: Run the performance suites**
 
@@ -4439,36 +4557,60 @@ gradle :freeplane_plugin_graph:test \
   -PTestLoggingFull
 ```
 
-Expected: `BUILD SUCCESSFUL`; the wire list and both thresholds pass and the reference
-fixture stays inside the worker and first-frame gates. If the first measurement exceeds
-one of the pinned thresholds, stop and report `BLOCKED` with the measured p50/p95/p99
-values: the plan does not authorize raising a threshold.
+Expected: `BUILD SUCCESSFUL`; the wire list and both thresholds pass, the window pins
+hold, and the reference fixture stays inside the worker and first-frame gates with zero
+exhaustion discards. If the first measurement exceeds one of the pinned thresholds, stop
+and report `BLOCKED` with the measured p50/p95/p99 values: the plan does not authorize
+raising a threshold.
 
-- [ ] **Step 6: Complete probe 14's budget half**
+The full wall-clock ledger is the existing
+`gradle :freeplane_plugin_graph:graphPerformanceDiagnostic -PgraphStrictPerformance`
+JavaExec (all six scenarios, the process deadline and the strict ledger). Run it once on
+the reference machine for the calibration record below.
+
+- [ ] **Step 6: Record the calibration (`f = 0.5`, tighten-only)**
+
+On the saturated in-budget frame (all eight Task 21 budgets at their caps, including the
+final detection and the §5.4 rebuild), measure for each budget `B` the per-unit cost
+`c_B` and fixed overhead `o` using the Task 21 counted accessors, and the stage's
+measured worst-in-budget time. Verify `cap(B) × c_B + o ≤ f × threshold` with `f = 0.5`
+(the `edge-conflict` allowance is 12.5 ms and the `edge-routing` allowance is 5 ms) and
+record the measured values and the worst-in-budget stage time in the task report. If the
+calibrated cap is below a pinned ceiling, replace that ceiling with the calibrated value
+in `EdgeConflictCorrection.java`/`EdgeRouter.java` in this same change; never raise a
+pinned budget or threshold. The spec §13.1 obligation ("The implementation change records
+the measured values and replaces any ceiling above its calibrated cap with the calibrated
+value in the same change ... Only tightening is allowed") is satisfied by this record,
+and any measured stage time above the pinned threshold blocks the commit.
+
+- [ ] **Step 7: Complete probe 14's budget half**
 
 With the `edge-conflict` stage recorded, apply the Task 15 probe 14 mutation again
 (fresh `computeHulls` instead of the terminal-geometry reuse) and run
-`referenceFixtureStaysInsideTheStrictWorkerAndFirstFrameGates` and the `edge-conflict`
-threshold assertion. Expected: the mutation increases `edge-conflict` cost past the
-25 ms strict threshold on the reference fixture (or fails
-`reusesTheBoundaryTerminalGeometry`), proving the budget clause. Restore the file and
-confirm `git diff` is empty.
+`referenceFixtureStaysInsideTheStrictWorkerAndFirstFrameGates`. Expected: the mutation
+fails `reusesTheBoundaryTerminalGeometry` (the fresh `computeHulls` rebuilds radius
+8.0/14.0 discs instead of the poisoned terminal geometry), and it increases the
+settled-frame `edge-conflict` cost, so if that increase pushes the p95 past 25 ms the
+strict gate also fails. Restore the file and confirm `git diff` is empty.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 cd "$(git rev-parse --show-toplevel)"
 git add freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/PerformanceMeasurements.java \
   freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/PerformanceTripwiresShould.java \
   freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/GraphWorkspacePerformanceDiagnostic.java
-git commit -m "perf(graph): add edge-conflict and edge-routing stages with strict thresholds [2026-10-12-graph-edge-crossing-avoidance]"
+git commit -m "perf(graph): measure edge stages on the settled frame with zero-exhaustion gates [2026-10-12-graph-edge-crossing-avoidance]"
 ```
+
+If Step 6 tightened a calibrated ceiling, include the two source files in the same
+`git add` and the same commit.
 
 ## Task 19: Pin the acceptance surface and run the module and core gates
 
 **Implementer tier:** Standard
 **Lane:** edge-publication
-**Depends on:** Tasks 17, 18
+**Depends on:** Tasks 12, 16, 17, 18, 21
 
 **Files:**
 
@@ -4478,11 +4620,13 @@ git commit -m "perf(graph): add edge-conflict and edge-routing stages with stric
 **Interfaces:**
 
 - Consumes: the Task 12 `paintsNoCrossingForTheReportedFixture` fixture;
-  `EdgePaths.diagnostics().pathCrossingsResidual()`; the Task 16 routed paths; every
-  acceptance test named in spec §10.
+  `EdgePaths.diagnostics().pathCrossingsResidual()`;
+  `EdgeConflictDiagnostics.detectionTruncated()/verificationBudgetExhausted()/indexBudgetExhausted()`
+  and `EdgeRouteDiagnostics.routeBudgetExhausted()/detectionTruncated()` (Task 21);
+  the Task 16 routed paths; every acceptance test named in spec §10.
 - Produces: `GraphCanvasPaintShould.reportsNoPaintedCrossingResidualForTheReportedFixture`
-  and the full acceptance gate evidence in the task report (the module suite result and
-  the core-gate listing).
+  with the Revision 7 non-truncation scope, and the full acceptance gate evidence in the
+  task report (the module suite result and the core-gate listing).
 
 - [ ] **Step 1: Add the residual acceptance test**
 
@@ -4499,8 +4643,17 @@ Append to `GraphCanvasPaintShould`:
         assertThat(state.layout().edgeConflictDiagnostics().crossingsResolved()).isEqualTo(1);
         assertThat(state.layout().edgeConflictDiagnostics().conflictsResidual()).isEmpty();
         assertThat(state.layout().edgeConflictDiagnostics().verificationBudgetExhausted()).isFalse();
+        assertThat(state.layout().edgeConflictDiagnostics().detectionTruncated()).isFalse();
+        assertThat(state.layout().edgeConflictDiagnostics().indexBudgetExhausted()).isFalse();
+        assertThat(state.edgePaths().diagnostics().routeBudgetExhausted()).isFalse();
+        assertThat(state.edgePaths().diagnostics().detectionTruncated()).isFalse();
     }
 ```
+
+The reported fixture is a non-truncated frame for both stages: no detection-side
+truncation, no verification stop, no direct full-enumeration fallback and no router
+budget stop. A truncated frame publishes a lower-bound residual, so the acceptance
+surface must assert the flag scope, not only the empty residual.
 
 - [ ] **Step 2: Run the full module gate**
 
@@ -4562,12 +4715,22 @@ results in the task report: A1
 `.rejectsAProperCrossingInsideTheFanRegion`; A4
 `EdgeConflictCorrectionShould.keepsAPreExistingHullResidualWhenTheCandidateDoesNotAddOne`;
 A5 `LayoutWorkerShould.preservesBoundaryStageFieldsAcrossTheRebuild` +
-`BoundaryInvariantsShould.describePreservesStageFieldsAndRecomputesResiduals`; A6
+`BoundaryInvariantsShould.describePreservesStageFieldsAndRecomputesResiduals`; A6 **both
+scopes of the Revision 7 truncation contract**: the non-truncated scope by
 `EdgeConflictCorrectionShould.detectsACrossingAtExtremeSpans` +
-`.enumeratesEveryPairWhenSubdivisionExhausts`; A7
+`.enumeratesEveryPairWhenSubdivisionExhausts` (every pair detected, counted work bounded
+by the Task 21 pins) and the truncated scope by
+`EdgeConflictCorrectionShould.truncatesDetectionAtTheItemBudget` +
+`.truncatesDetectionAtThePairBudget` (the item/pair stop publishes the ascending
+accumulated set as a lower-bound residual with `detectionTruncated == true`); A7 the
+settled-frame zero-exhaustion gate by
 `PerformanceTripwiresShould.exposeTheCanonicalStageOrderAndThresholds` +
-`.referenceFixtureStaysInsideTheStrictWorkerAndFirstFrameGates`; A8 the sixteen probes
-recorded in Tasks 13-18; A9
+`.referenceFixtureStaysInsideTheStrictWorkerAndFirstFrameGates` +
+`.referenceFixtureUsesTheSettledFrameAndNoBudgetStops` (every measured sample reports
+`detectionTruncated == false`, `verificationBudgetExhausted == false`,
+`indexBudgetExhausted == false` and `routeBudgetExhausted == false` for the two stages);
+A8 **all twenty probes** recorded in Tasks 13-18 and 21 (probes 1-16 in Tasks 13-18,
+probes 17-20 in Task 21); A9
 `EdgeConflictCorrectionShould.isDeterministicAcrossRunsAndPermutedInputs` +
 `EdgeRouterShould.isDeterministicAcrossRunsAndPermutedEdgeOrder`; A10 this gate.
 
@@ -4690,4 +4853,695 @@ Expected: `BUILD SUCCESSFUL`.
 cd "$(git rev-parse --show-toplevel)"
 git add freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundarySeparationShould.java
 git commit -m "test(graph): pin the rebuilt-record and node-residual composition [2026-10-12-graph-edge-crossing-avoidance]"
+```
+
+## Task 21: Bound the relocation and router work for reference-scale frames
+
+**Implementer tier:** Advanced
+**Lane:** edge-bounded
+**Depends on:** Tasks 13, 14, 15, 16
+
+**Files:**
+
+- Modify: `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrection.java`
+- Modify: `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/EdgeConflictDiagnostics.java`
+- Modify: `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/BoundaryInvariants.java`
+- Modify: `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/NodeSeparationProjection.java`
+- Create: `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/CountedViolatingPairs.java`
+- Modify: `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/EdgeRouter.java`
+- Modify: `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/EdgeRouteDiagnostics.java`
+- Modify: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrectionShould.java`
+- Modify: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/NodeSeparationProjectionShould.java`
+- Modify: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/geometry/EdgeRouterShould.java`
+- Modify: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/geometry/EdgeRouterFixture.java`
+
+**Interfaces:**
+
+- Consumes: `EdgeConflictCorrection`'s Task 13-15 detection, candidate ladder, A1-A4,
+  round loop, diagnostics and rebuild; `NodeSeparationProjection.violatingPairs`,
+  `.MIN_GAP`, `NODE_RADIUS × prominenceScale`; `BoundaryInvariants.detectPairKeys`,
+  `.detect`; `GraphGeometryEngine.recomputeHulls(...)`;
+  `EdgeRouter.route(...)`, its `QueryGrid`, `clears(...)`, `crossingPairs(...)` and
+  `hullPenetrations(...)` (Task 16); `EdgeConflictDiagnostics` and
+  `EdgeRouteDiagnostics` (Tasks 4, 5); the Task 13-16 fixtures
+  (`reportedQuad()`, `enumeratesEveryPairWhenSubdivisionExhausts`,
+  `EdgeRouterFixture.laterChordBow()` and the counted `Detection` seam).
+- Produces (spec §13.1-§13.3, §2.3/§2.4/§2.6; design §14.2-§14.3): the eight per-frame
+  budgets, their counted units and check points exactly as pinned below; the four flags
+  and the both-flags rule; the counted conflict-stage accessors
+  `EdgeConflictDiagnostics.detectionTruncated()` and `.verificationWork()`; the counted
+  router accessors `EdgeRouteDiagnostics.routeBudgetExhausted()`,
+  `.detectionTruncated()`, `.routeIndexItems()`, `.routeObstacleChecks()`,
+  `.routePairChecks()`; and the budget-aware predicate (spec §2.6, verbatim):
+
+```java
+public static List<String> violatingPairs(GraphProjection projection, LayoutPositions positions);
+public static CountedViolatingPairs violatingPairsCounted(GraphProjection projection, LayoutPositions positions,
+        int pairBudget);
+```
+
+`CountedViolatingPairs` is a new immutable value type with `pairs()` (the ascending
+`CanonicalKeys.nodePair(a, b)` list), `long pairEvaluations()` (the number of node pairs
+examined, counted as `verificationWork`) and `boolean truncated()`. `violatingPairs(...)`
+delegates to the counted variant with `Integer.MAX_VALUE`, so the predicate has exactly
+one implementation and unbudgeted callers keep today's behaviour.
+
+The conflict-stage budget constants on `EdgeConflictCorrection` are package-private like
+the existing constants:
+
+```java
+    static final long EDGE_CONFLICT_MAX_INDEX_ITEMS_PER_FRAME = 262_144L;
+    static final long EDGE_CONFLICT_MAX_PAIR_CHECKS_PER_FRAME = 131_072L;
+    static final int EDGE_CONFLICT_MAX_DETECTED_PER_FRAME = 4_096;
+    static final long EDGE_CONFLICT_MAX_VERIFICATION_WORK_PER_FRAME = 65_536L;
+```
+
+`MAX_VERIFICATIONS_PER_FRAME = 64` is Task 14's constant and stays. The router budget
+constants on `EdgeRouter` are package-private:
+
+```java
+    static final long EDGE_ROUTING_MAX_INDEX_ITEMS_PER_FRAME = 262_144L;
+    static final long EDGE_ROUTING_MAX_OBSTACLE_CHECKS_PER_FRAME = 131_072L;
+    static final long EDGE_ROUTING_MAX_PAIR_CHECKS_PER_FRAME = 131_072L;
+```
+
+The eight pins, with counted work as the unit and the exact check points (spec §13.1):
+
+| pin | value | counted unit | check point | stop |
+| --- | --- | --- | --- | --- |
+| `EDGE_CONFLICT_MAX_INDEX_ITEMS_PER_FRAME` | `262_144` | one inserted index item (one primitive-cell write) or one direct outermost examination | before every cell write and inside every subdivision re-collect | `detectionTruncated`; ladder does not start; lower-bound residual |
+| `EDGE_CONFLICT_MAX_PAIR_CHECKS_PER_FRAME` | `131_072` | one `properlyCross` / `segmentDistance` test | before every test, including the outermost direct pass | `detectionTruncated`; lower-bound residual |
+| `EDGE_CONFLICT_MAX_DETECTED_PER_FRAME` | `4_096` | one distinct conflict identity key | when a key is added to the accumulating set | `detectionTruncated`; lower-bound residual |
+| `EDGE_CONFLICT_MAX_VERIFICATION_WORK_PER_FRAME` | `65_536` | one verification-phase predicate evaluation: one A2 node-pair test, one A3 hull-pair comparison or one recomputed hull | before every counted verification sub-step | attempt rejected; `verificationBudgetExhausted`; detection complete |
+| `MAX_VERIFICATIONS_PER_FRAME` | `64` (§1.3) | one batch or single A1-A4 evaluation | before each attempt | `verificationBudgetExhausted`; detection complete |
+| `EDGE_ROUTING_MAX_INDEX_ITEMS_PER_FRAME` | `262_144` | one query-index primitive-cell insertion (path sample segment, disc box, hull segment) | before every insertion | remaining edges fallback; `routeBudgetExhausted` |
+| `EDGE_ROUTING_MAX_OBSTACLE_CHECKS_PER_FRAME` | `131_072` | one `(candidate rung or straight chord, obstacle)` clearance evaluation | before every evaluation | remaining edges fallback; `routeBudgetExhausted`; fallbacks consume no obstacle budget |
+| `EDGE_ROUTING_MAX_PAIR_CHECKS_PER_FRAME` | `131_072` | one sample-segment pair test in the detected-crossing, residual or hull-penetration pass | before every test | running pass stops; lower-bound diagnostics; router `detectionTruncated` |
+
+All counters are **per-frame totals** and are never reset between passes: the conflict
+counters accumulate over the initial detection, every verification detection, A1-A4
+(including the counted A2 predicate, every A3 hull-pair comparison and every recomputed
+hull), the final detection and the §5.4 rebuild; the router counters accumulate over the
+index build, every obstacle evaluation and every detected/residual/hull pass. At every
+stop point all counters are evaluated and every flag whose counter is at or beyond its
+cap is set (the both-flags rule). The final publication detection and the §5.4 rebuild
+always run to completion and their counted work is part of the per-frame total; because
+A1 strictly shrinks the conflict set, the final detection's volume is no larger than the
+initial detection's.
+
+**Four flags, distinct.** `indexBudgetExhausted` records that the index fell back to
+direct full enumeration (subdivision floor/depth reached, or the outermost direct pass
+ran) with every pair examined and none dropped; it is never a truncation signal, it
+stays `false` on a truncated frame unless the direct fallback ran at the same stop
+point, and a stop inside that fallback may therefore carry both `indexBudgetExhausted`
+and `detectionTruncated`. `verificationBudgetExhausted` is a verification-phase stop;
+detection is complete and the residual exact. `detectionTruncated` is a detection-side
+stop on the initial (published-position) detection; the published
+`conflictsResidual`/`pathCrossingsResidual` is a lower bound and the flag is the only
+signal of incompleteness. `routeBudgetExhausted` is the router's index/obstacle stop and
+the remaining edges are fallbacks (§13.3).
+
+**Initial-detection stop (spec §13.2).** When an index-item, pair-check or detected-key
+budget trips during the initial detection, `apply` performs no relocation attempts and
+no §5.4 rebuild for that frame. The published set is the ascending set of distinct
+conflict keys accumulated up to the counted stop ("detected so far"), never a set derived
+from full enumeration: its size is `conflictsDetected`, its C1 subset count is
+`crossingsDetected`, its C2 subset count is `edgeOverNodeDetected`, and the same keys are
+`conflictsResidual`; `rounds = 0`, `verifications = 0`, `repairsApplied` empty and
+`crossingsResolved = edgeOverNodeResolved = 0`. The frame's
+boundary diagnostics are the boundary result's own diagnostics for this frame (no
+rebuild; positions are unchanged) and no stale previous-frame diagnostics are retained.
+
+**Verification stop (spec §13.2).** A detection-side stop inside a verification
+detection rejects that attempt; a verification-work stop likewise rejects the in-flight
+attempt. Both stop the ladder with `verificationBudgetExhausted = true` and leave
+`detectionTruncated = false` (the stop is reported as a verification-phase stop): the
+last complete detection still describes the unchanged published positions, so the
+residual is exact and `C_out` is never accepted partially. The attempt cap keeps its
+§5.3 semantics: the flag is set on the transition to the cap when conflicts remain after
+the rejected cap attempt and after the final detection when an accepted cap attempt
+still leaves conflicts; an accepted cap attempt that clears every conflict leaves the
+flag `false`.
+
+**Router stop semantics (spec §13.3).** On index-item or obstacle-budget exhaustion the
+router stops the corresponding work, publishes every remaining canonical-order edge as a
+straight fallback and sets `routeBudgetExhausted = true`; the classification identity
+`edgesStraight + edgesBow + edgesDogleg + edgesFallback == routed visible edges` still
+holds and **fallback edges consume no obstacle budget**. On pair-check exhaustion the
+running detected-crossing, residual or hull-penetration pass stops and sets router
+`detectionTruncated = true`; `pathCrossingsDetected`, `pathCrossingsResidual` and
+`pathHullPenetrations` are lower bounds over the published paths, and routing selection
+itself is unaffected (it is bounded by the obstacle budget). No partially drawn geometry
+is ever published; router index-item/obstacle stops and the pair-check stop may coexist
+as flags.
+
+- [ ] **Step 1: Add the budget-aware A2 predicate and its value type**
+
+Create `CountedViolatingPairs.java` with the spec §2.6 value type:
+
+```java
+public final class CountedViolatingPairs {
+    public static CountedViolatingPairs of(List<String> pairs, long pairEvaluations, boolean truncated);
+    public List<String> pairs();
+    public long pairEvaluations();
+    public boolean truncated();
+}
+```
+
+Then add to `NodeSeparationProjection`:
+
+```java
+    public static List<String> violatingPairs(final GraphProjection projection,
+            final LayoutPositions positions) {
+        return violatingPairsCounted(projection, positions, Integer.MAX_VALUE).pairs();
+    }
+
+    /** The canonical node-pair keys of every pair below the minimum gap, or the prefix examined
+     *  before the pair budget reaches zero; the loop decrements the allowance before each test. */
+    public static CountedViolatingPairs violatingPairsCounted(final GraphProjection projection,
+            final LayoutPositions positions, final int pairBudget) {
+        // Same ascending node order and same MIN_GAP / NODE_RADIUS * prominenceScale rule as
+        // violatingPairs today. remaining = pairBudget; before every test: if (remaining == 0)
+        // return CountedViolatingPairs.of(result, evaluations, true); remaining--; evaluations++;
+        // predicate; add CanonicalKeys.nodePair(first, second) when below need.
+        // A scan that ends with remaining == 0 is still truncated (the budget was consumed).
+    }
+```
+
+`project(...)` keeps computing `residualViolations()` as
+`violatingPairs(projection, result).size()` on the final relaxed positions. Do **not**
+change the public `violatingPairs` signature or the `project` signature.
+
+- [ ] **Step 2: Run the predicate suite and confirm the transition**
+
+Add to `NodeSeparationProjectionShould` a test that a small fixture's
+`violatingPairsCounted(projection, positions, 7)` returns exactly
+`pairEvaluations() == 7`, `truncated() == true`, and an ascending `pairs()` list that is
+a prefix of the unbounded `violatingPairs(...)` list, plus a test that the unbounded
+delegation returns `truncated() == false` and the same list as `violatingPairs(...)`.
+
+```bash
+export JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.8-zulu"
+export PATH="$JAVA_HOME/bin:$PATH"
+cd "$(git rev-parse --show-toplevel)"
+gradle :freeplane_plugin_graph:test \
+  --tests "org.freeplane.plugin.graph.layout.NodeSeparationProjectionShould" \
+  -PTestLoggingFull
+```
+
+Expected: FAIL at `compileTestJava` before the value type and method exist;
+`BUILD SUCCESSFUL` after Step 1.
+
+- [ ] **Step 3: Extend the diagnostics with the two flags and the counted accessors**
+
+`EdgeConflictDiagnostics` gains `boolean detectionTruncated()` and
+`long verificationWork()`; its full constructor becomes (spec §2.3):
+
+```java
+    public EdgeConflictDiagnostics(int conflictsDetected, int crossingsDetected, int edgeOverNodeDetected,
+            int crossingsResolved, int edgeOverNodeResolved, List<String> conflictsResidual,
+            List<Repair> repairsApplied, int rounds, int verifications,
+            boolean verificationBudgetExhausted, boolean indexBudgetExhausted, boolean detectionTruncated,
+            long indexInsertedItems, long indexPairChecks, long verificationWork, int indexSubdivisions);
+```
+
+`empty()` zeroes/falses the two new members; `equals`/`hashCode` include them.
+`EdgeRouteDiagnostics` gains `boolean routeBudgetExhausted()`, `boolean detectionTruncated()`,
+`long routeIndexItems()`, `long routeObstacleChecks()` and `long routePairChecks()`; its
+full constructor becomes (spec §2.4):
+
+```java
+    public EdgeRouteDiagnostics(int edgesStraight, int edgesBow, int edgesDogleg, int edgesFallback,
+            int pathCrossingsDetected, List<String> pathCrossingsResidual, int pathHullPenetrations,
+            boolean routeBudgetExhausted, boolean detectionTruncated,
+            long routeIndexItems, long routeObstacleChecks, long routePairChecks);
+```
+
+`empty()` zeroes/falses the new members; `equals`/`hashCode` include all of them. The
+only production construction sites, `EdgeConflictCorrection.relocate` and
+`EdgeRouter.route`, are updated in Steps 6 and 10; Task 5's `EdgePaths.empty()` keeps
+delegating to `EdgeRouteDiagnostics.empty()`.
+
+- [ ] **Step 4: Add the relocation truncation fixtures first**
+
+Add these fixtures and tests to `EdgeConflictCorrectionShould`. All fixtures are
+generated programmatically by helpers on the class (`referenceScaleFan(int)`,
+`sharedLeafFan(int)`, `concurrentDiameters(int)`, `wideNodeFieldWithOneCrossing(int)`,
+`verificationDetectionStopFixture()`), all using the class's existing hand-built
+`Fixture` harness, and all assertions are counted work — never wall clock.
+
+```java
+    @Test
+    public void boundsTheCountedRelocationWorkOnADenseWideSpanFrame() {
+        final Fixture fixture = referenceScaleFan(500);
+        final EdgeConflictResult result = apply(fixture);
+
+        assertThat(result.diagnostics().indexInsertedItems())
+            .isLessThanOrEqualTo(EdgeConflictCorrection.EDGE_CONFLICT_MAX_INDEX_ITEMS_PER_FRAME);
+        assertThat(result.diagnostics().indexPairChecks())
+            .isLessThanOrEqualTo(EdgeConflictCorrection.EDGE_CONFLICT_MAX_PAIR_CHECKS_PER_FRAME);
+        assertThat(result.diagnostics().verificationWork())
+            .isLessThanOrEqualTo(EdgeConflictCorrection.EDGE_CONFLICT_MAX_VERIFICATION_WORK_PER_FRAME);
+        assertThat(result.diagnostics().verifications())
+            .isLessThanOrEqualTo(EdgeConflictCorrection.MAX_VERIFICATIONS_PER_FRAME);
+    }
+
+    @Test
+    public void truncatesDetectionAtTheItemBudget() {
+        final Fixture fixture = referenceScaleFan(500);
+        final EdgeConflictResult result = apply(fixture);
+        final EdgeConflictCorrection.Detection bruteForce = EdgeConflictCorrection.detectConflicts(
+            fixture.projection, fixture.boundary.positions(), fixture.boundary.geometry(),
+            fixture.visible);
+
+        assertThat(result.diagnostics().detectionTruncated()).isTrue();
+        assertThat(result.diagnostics().indexBudgetExhausted()).isFalse();
+        assertThat(result.diagnostics().indexInsertedItems())
+            .isLessThanOrEqualTo(EdgeConflictCorrection.EDGE_CONFLICT_MAX_INDEX_ITEMS_PER_FRAME);
+        assertThat(result.diagnostics().indexPairChecks())
+            .isLessThan(EdgeConflictCorrection.EDGE_CONFLICT_MAX_PAIR_CHECKS_PER_FRAME);
+        assertThat(result.diagnostics().crossingsDetected()).isLessThan(bruteForce.crossings());
+        assertThat(result.diagnostics().rounds()).isZero();
+        assertThat(result.diagnostics().verifications()).isZero();
+        assertThat(result.diagnostics().repairsApplied()).isEmpty();
+        assertThat(new java.util.TreeSet<String>(bruteForce.keys()))
+            .containsAll(result.diagnostics().conflictsResidual());
+        assertThat(result.diagnostics().conflictsResidual()).isSorted();
+        assertThat(new java.util.LinkedHashSet<String>(result.diagnostics().conflictsResidual()))
+            .hasSize(result.diagnostics().conflictsResidual().size());
+    }
+
+    @Test
+    public void truncatesDetectionAtThePairBudget() {
+        final Fixture fixture = sharedLeafFan(513);
+        final EdgeConflictResult result = apply(fixture);
+        final EdgeConflictCorrection.Detection bruteForce = EdgeConflictCorrection.detectConflicts(
+            fixture.projection, fixture.boundary.positions(), fixture.boundary.geometry(),
+            fixture.visible);
+
+        assertThat(result.diagnostics().detectionTruncated()).isTrue();
+        assertThat(result.diagnostics().indexPairChecks())
+            .isLessThanOrEqualTo(EdgeConflictCorrection.EDGE_CONFLICT_MAX_PAIR_CHECKS_PER_FRAME);
+        assertThat(result.diagnostics().indexInsertedItems())
+            .isLessThan(EdgeConflictCorrection.EDGE_CONFLICT_MAX_INDEX_ITEMS_PER_FRAME);
+        assertThat(result.diagnostics().conflictsDetected())
+            .isLessThan(EdgeConflictCorrection.EDGE_CONFLICT_MAX_DETECTED_PER_FRAME);
+        assertThat(result.diagnostics().rounds()).isZero();
+        assertThat(result.diagnostics().verifications()).isZero();
+        assertThat(result.diagnostics().repairsApplied()).isEmpty();
+        assertThat(new java.util.TreeSet<String>(bruteForce.keys()))
+            .containsAll(result.diagnostics().conflictsResidual());
+        assertThat(result.diagnostics().conflictsResidual()).isSorted();
+    }
+
+    @Test
+    public void truncatesDetectionAtTheVolumeBudget() {
+        final Fixture fixture = concurrentDiameters(92);
+        final EdgeConflictResult result = apply(fixture);
+
+        assertThat(result.diagnostics().detectionTruncated()).isTrue();
+        assertThat(result.diagnostics().conflictsDetected())
+            .isEqualTo(EdgeConflictCorrection.EDGE_CONFLICT_MAX_DETECTED_PER_FRAME);
+        assertThat(result.diagnostics().crossingsDetected())
+            .isEqualTo(EdgeConflictCorrection.EDGE_CONFLICT_MAX_DETECTED_PER_FRAME);
+        assertThat(result.diagnostics().conflictsResidual()).hasSize(
+            EdgeConflictCorrection.EDGE_CONFLICT_MAX_DETECTED_PER_FRAME);
+        assertThat(result.diagnostics().rounds()).isZero();
+        assertThat(result.diagnostics().verifications()).isZero();
+        assertThat(result.diagnostics().repairsApplied()).isEmpty();
+        assertThat(result.diagnostics().conflictsResidual()).isSorted();
+    }
+
+    @Test
+    public void rejectsTheAttemptWhenVerificationWorkExhausts() {
+        final Fixture fixture = wideNodeFieldWithOneCrossing(512);
+        final EdgeConflictResult result = apply(fixture);
+        final EdgeConflictCorrection.Detection expected = EdgeConflictCorrection.detectConflicts(
+            fixture.projection, fixture.boundary.positions(), fixture.boundary.geometry(),
+            fixture.visible);
+
+        assertThat(result.diagnostics().verificationBudgetExhausted()).isTrue();
+        assertThat(result.diagnostics().detectionTruncated()).isFalse();
+        assertThat(result.diagnostics().rounds()).isZero();
+        assertThat(result.diagnostics().verificationWork())
+            .isLessThanOrEqualTo(EdgeConflictCorrection.EDGE_CONFLICT_MAX_VERIFICATION_WORK_PER_FRAME);
+        assertThat(result.diagnostics().conflictsResidual()).isEqualTo(expected.keys());
+    }
+
+    @Test
+    public void rejectsTheAttemptWhenAVerificationDetectionStops() {
+        final Fixture fixture = verificationDetectionStopFixture();
+        final EdgeConflictResult result = apply(fixture);
+        final EdgeConflictCorrection.Detection expected = EdgeConflictCorrection.detectConflicts(
+            fixture.projection, fixture.boundary.positions(), fixture.boundary.geometry(),
+            fixture.visible);
+
+        assertThat(result.diagnostics().verificationBudgetExhausted()).isTrue();
+        assertThat(result.diagnostics().detectionTruncated()).isFalse();
+        assertThat(result.diagnostics().conflictsResidual()).isEqualTo(expected.keys());
+    }
+```
+
+The fixture shapes (pick the counts by reading the counted accessors; the assertions
+above are the contract, the counts are tunable):
+
+- `referenceScaleFan(500)`: 500 diameters of a radius-`600_000` circle (the superseded
+  `1b5e22c460` shape). The shared origin cell re-collects at every subdivision level and
+  the item writes alone reach the cap before pair enumeration starts. This fixture
+  replaces the archived test's all-124,750-crossing assertion: below the budgets every
+  crossing is still detected, above them the accumulated truncated set plus
+  `detectionTruncated` is the pinned behaviour.
+- `sharedLeafFan(513)`: 513 chords that share a common endpoint inside one leaf cell plus
+  a small fixed number of genuine crossing pairs. Pair checks ≈ 513·512/2 > the pair cap,
+  the item writes and the detected-key volume stay below their caps, and the published
+  residual is the accumulated crossing keys (a non-empty lower bound).
+- `concurrentDiameters(92)`: 92 diameters that all pass through one interior point; all
+  4,186 pairs properly cross, so the detected-key volume trips at 4,096 with the pair and
+  item counters below their caps.
+- `wideNodeFieldWithOneCrossing(512)`: ~512 well-separated discs plus one properly
+  crossing pair. The initial detection is cheap, one conflict reaches A2, and the first
+  `violatingPairsCounted` call consumes the 65,536-unit verification-work cap
+  mid-predicate (512·511/2 = 130,816 pairs), so the in-flight attempt is rejected with
+  the flag set and the residual equals the complete initial detection.
+- `verificationDetectionStopFixture()`: the verification-detection stop. Tune a
+  wide-span fan so the initial detection's `indexInsertedItems` completes between
+  one-half and one times the cap (observable through the counted accessors), keep at
+  least one crossing pair so a candidate exists, and let the `C_out` detection re-collect
+  and trip the item budget; if the item cap cannot be reached this way, tune the fixture
+  so the candidate's positions pile the chords into shared cells and trip the pair-check
+  budget. The essential assertions are `verificationBudgetExhausted == true`,
+  `detectionTruncated == false` and the exact-residual equality; tune the counts, never
+  the semantics.
+
+- [ ] **Step 5: Run the new relocation fixtures and confirm they fail**
+
+```bash
+export JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.8-zulu"
+export PATH="$JAVA_HOME/bin:$PATH"
+cd "$(git rev-parse --show-toplevel)"
+gradle :freeplane_plugin_graph:test \
+  --tests "org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" \
+  -PTestLoggingFull
+```
+
+Expected: FAIL at `compileTestJava` for `detectionTruncated()`/`verificationWork()`
+before Step 3, then FAIL on the new assertions (the unbounded Task 13-15 code detects
+everything and never sets the flags) before Step 6.
+
+- [ ] **Step 6: Implement the bounded relocation detection and verification**
+
+1. **Per-frame counters and reset.** Keep the existing instance counters
+   (`indexInsertedItems`, `indexPairChecks`, `indexSubdivisions`,
+   `indexBudgetExhausted`) and add `detectedKeys`, `verificationWork`,
+   `detectionTruncated`, `verificationBudgetExhausted`. `resetIndexCounters()` (rename
+   to `resetFrameCounters()`) resets every one of them at the top of `apply`.
+2. **Budget-aware detection.** `detect(projection, positions, geometry, visibleEndpoints)`
+   becomes the counted per-frame detection. `collect(...)`, `insertChord(...)`,
+   `insertDisc(...)` and `addCell(...)` call the item-budget check **before every cell
+   write**, so every subdivision re-collect is checked too (the re-collect is another
+   `collect` pass). `DetectionAccumulator.examine...` and the outermost direct pass call
+   the pair-check check **before every `properlyCross`/`segmentDistance` test**. The
+   accumulation checks the detected-key budget when a distinct key is added. A stop
+   abandons the rest of the pass and returns the ascending distinct keys accumulated so
+   far, with the accumulated C1/C2 counts; the caller records which side stopped. The
+   direct full-enumeration fallback still sets `indexBudgetExhausted` (subdivision
+   floor/depth reached, or the outermost direct pass ran); it is set independently of the
+   truncation and a stop inside the fallback may carry both flags.
+3. **Counted verification.** Give `acceptsA1A2A3A4` a three-way outcome
+   (`ACCEPT`, `REJECT`, `DETECTION_STOP`). A2 calls `violatingPairsCounted` for the
+   current and the candidate positions with the frame's remaining verification-work
+   allowance, adds both `pairEvaluations()` to `verificationWork`, and returns
+   `DETECTION_STOP` when either result is `truncated()`. A3 counts every hull-pair
+   comparison and every `recomputeHulls(...)` under the same counter (add a
+   package-private counted overload on `BoundaryInvariants` used by `EdgeConflictCorrection`
+   and keep the public `detectPairKeys(projection, geometry)` unbudgeted for `describe`);
+   a candidate that exhausts the counter is a `DETECTION_STOP`. The §5.4 rebuild uses the
+   unbounded variants and adds its `detect`/`project` predicate work to `verificationWork`;
+   it always runs to completion.
+4. **Round loop.** Implement the spec §5.3 pinned control flow verbatim, including the
+   guard check before each attempt:
+
+```text
+detectionTruncated = false; verificationStopped = false
+round = 0; acceptedAny = false; verificationBudgetExhausted = false
+while (round < MAX_RELOCATION_ROUNDS && !detectionTruncated && !verificationStopped
+        && verificationCount < MAX_VERIFICATIONS_PER_FRAME) {
+    conflicts = detectConflicts(currentPositions, currentGeometry)     // counted; a detection-side
+                                                                       // stop sets detectionTruncated
+    if (detectionTruncated || conflicts.isEmpty()) break
+    pool = generateCandidates(conflicts)                                // canonical order
+    acceptedThisRound = false
+    while (pool not empty && !verificationStopped
+            && verificationCount < MAX_VERIFICATIONS_PER_FRAME) {
+        batch = greedyDisjoint(pool); pool -= batch
+        if (batch empty) break
+        attempts = [batch] + batch.singlesInCanonicalOrder()
+        for attempt in attempts {
+            verificationCount++                                         // counted before evaluation
+            outcome = acceptsA1A2A3A4(attempt)                          // counted; DETECTION_STOP
+                                                                        // rejects the attempt
+            if (outcome == ACCEPT) {
+                apply(attempt); currentPositions = result; currentGeometry = recomputedGeometry
+                rounds++; acceptedAny = true; acceptedThisRound = true
+                recordRepair(attempt)
+                if (verificationCount >= MAX_VERIFICATIONS_PER_FRAME) {
+                    verificationStopped = true      // accepted cap attempt; the final detection
+                                                    // below sets the flag if conflicts remain
+                }
+                break
+            }
+            if (outcome == DETECTION_STOP || verificationWorkAtCap) {
+                verificationStopped = true; verificationBudgetExhausted = true  // rejected attempt;
+                                                                                // C_out never truncated
+                break
+            }
+        }
+        if (acceptedThisRound || verificationStopped) break
+    }
+    if (!acceptedThisRound) break
+}
+residual = detectionTruncated ? conflicts                                  // accumulated lower bound
+         : rounds > 0 ? detectConflicts(currentPositions, currentGeometry) // complete final detection
+         : conflicts
+if (verificationStopped && !residual.isEmpty() && !detectionTruncated) {
+    verificationBudgetExhausted = true
+}
+```
+
+The top-of-loop detection is the initial detection on the first iteration and a
+verification detection on later iterations; on a verification-detection stop
+(`detectionStopped` during a non-initial detection) set `verificationStopped` and
+`verificationBudgetExhausted` and keep `detectionTruncated` false. When
+`detectionTruncated` is set, skip the attempts, the final detection and the §5.4 rebuild,
+and publish the accumulated set as both the detected and the residual set. When
+`rounds > 0`, run the unbudgeted final detection and the `describe` rebuild exactly as
+Task 15 does; otherwise copy the last complete detection and the boundary result.
+5. **Diagnostics composition.** `EdgeConflictDiagnostics` is built with the new flags
+   and counters: on an initial truncation `crossingsResolved = edgeOverNodeResolved = 0`
+   and `verificationWork` still reports the counted work consumed so far.
+
+- [ ] **Step 7: Run the relocation suite and the counted-work bounds**
+
+```bash
+export JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.8-zulu"
+export PATH="$JAVA_HOME/bin:$PATH"
+cd "$(git rev-parse --show-toplevel)"
+gradle :freeplane_plugin_graph:test \
+  --tests "org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" \
+  --tests "org.freeplane.plugin.graph.layout.NodeSeparationProjectionShould" \
+  --tests "org.freeplane.plugin.graph.layout.BoundaryInvariantsShould" \
+  --tests "org.freeplane.plugin.graph.layout.BoundarySeparationShould" \
+  -PTestLoggingFull
+```
+
+Expected: `BUILD SUCCESSFUL`; the six new tests pass with the pinned flags, and the
+Task 13-15 suites stay green (the 65-chord fixture keeps `indexSubdivisions = 4`,
+`indexBudgetExhausted = true`, `crossingsDetected = 2080`, and its ≈ 39,440 item writes
+and 2,080 pair checks stay inside the pins).
+
+- [ ] **Step 8: Add the router truncation fixtures first**
+
+Add these tests to `EdgeRouterShould` (fixtures generated programmatically on
+`EdgeRouterFixture`; all assertions counted work):
+
+```java
+    @Test
+    public void boundsTheRouterCountedWorkOnADenseFrame() {
+        final EdgeRouterFixture fixture = EdgeRouterFixture.referenceScaleFan(500);
+        final EdgePaths paths = new EdgeRouter().route(fixture.projection, fixture.positions,
+            fixture.geometry, fixture.visibleEndpoints);
+
+        assertThat(paths.diagnostics().routeIndexItems())
+            .isLessThanOrEqualTo(EdgeRouter.EDGE_ROUTING_MAX_INDEX_ITEMS_PER_FRAME);
+        assertThat(paths.diagnostics().routeObstacleChecks())
+            .isLessThanOrEqualTo(EdgeRouter.EDGE_ROUTING_MAX_OBSTACLE_CHECKS_PER_FRAME);
+        assertThat(paths.diagnostics().routePairChecks())
+            .isLessThanOrEqualTo(EdgeRouter.EDGE_ROUTING_MAX_PAIR_CHECKS_PER_FRAME);
+    }
+
+    @Test
+    public void fallsBackWhenTheObstacleBudgetExhausts() {
+        final EdgeRouterFixture fixture = EdgeRouterFixture.denseObstacleFan(400);
+        final EdgePaths paths = new EdgeRouter().route(fixture.projection, fixture.positions,
+            fixture.geometry, fixture.visibleEndpoints);
+
+        assertThat(paths.diagnostics().routeBudgetExhausted()).isTrue();
+        assertThat(paths.diagnostics().edgesStraight() + paths.diagnostics().edgesBow()
+            + paths.diagnostics().edgesDogleg() + paths.diagnostics().edgesFallback())
+            .isEqualTo(paths.byEdge().size());
+        assertThat(paths.diagnostics().routeObstacleChecks())
+            .isLessThanOrEqualTo(EdgeRouter.EDGE_ROUTING_MAX_OBSTACLE_CHECKS_PER_FRAME);
+    }
+
+    @Test
+    public void truncatesTheResidualPassAndPublishesALowerBound() {
+        final EdgeRouterFixture fixture = EdgeRouterFixture.referenceScaleFan(513);
+        final EdgePaths paths = new EdgeRouter().route(fixture.projection, fixture.positions,
+            fixture.geometry, fixture.visibleEndpoints);
+        final EdgePaths bruteForce = EdgeRouter.routeUnbounded(fixture.projection, fixture.positions,
+            fixture.geometry, fixture.visibleEndpoints);
+
+        assertThat(paths.diagnostics().detectionTruncated()).isTrue();
+        assertThat(paths.diagnostics().routePairChecks())
+            .isLessThanOrEqualTo(EdgeRouter.EDGE_ROUTING_MAX_PAIR_CHECKS_PER_FRAME);
+        assertThat(new java.util.TreeSet<String>(bruteForce.diagnostics().pathCrossingsResidual()))
+            .containsAll(paths.diagnostics().pathCrossingsResidual());
+        assertThat(paths.byEdge()).isEqualTo(bruteForce.byEdge());
+    }
+```
+
+Fixture shapes: `referenceScaleFan(500)`/`(513)` extend the Task 16 fixtures with the
+radius-`600_000` diameters so the query grid's pair tests reach the cap while the index
+and obstacle counters stay below theirs; `denseObstacleFan(400)` places ≈ 400 visible
+chords and ≈ 400 projected discs so the straight-chord clearance checks alone exceed
+131,072 before any rung is selected. `routeUnbounded` is a package-private test seam:
+the same `route` code path with the budget caps set to `Long.MAX_VALUE`.
+
+- [ ] **Step 9: Run the new router fixtures and confirm they fail**
+
+```bash
+export JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.8-zulu"
+export PATH="$JAVA_HOME/bin:$PATH"
+cd "$(git rev-parse --show-toplevel)"
+gradle :freeplane_plugin_graph:test \
+  --tests "org.freeplane.plugin.graph.geometry.EdgeRouterShould" \
+  -PTestLoggingFull
+```
+
+Expected: FAIL at `compileTestJava` for the new diagnostics accessors before Step 3,
+then FAIL on the flags (the Task 16 router is unbounded) before Step 10.
+
+- [ ] **Step 10: Implement the bounded router**
+
+1. **Counters and reset.** Add `routeIndexItems`, `routeObstacleChecks`,
+   `routePairChecks`, `routeBudgetExhausted` and `detectionTruncated` locals/state to
+   the `route(...)` frame; they reset at the start of every `route` call.
+2. **Index items.** `QueryGrid` checks the index-item budget **before every
+   primitive-cell insertion** (disc boxes, hull segments and every path sample
+   segment/straight chord), during the build and during every selection-time
+   `publish(...)`. On exhaustion no further items are inserted; the remaining edges are
+   fallbacks, the residual passes use the partial index, and `routeBudgetExhausted` is
+   set.
+3. **Obstacle checks.** Every `(candidate rung or straight chord, obstacle)` clearance
+   evaluation in `clears(...)`/`clearsDiscs(...)`/`clearsPath(...)` consumes one unit,
+   checked **before the evaluation**. On exhaustion the current edge and every remaining
+   canonical-order edge are published as straight fallbacks **without further obstacle
+   checks** and `routeBudgetExhausted` is set; the classification identity still holds.
+4. **Pair checks.** Every sample-segment pair test in `crossingPairs(false)`,
+   `crossingPairs(true)` and `hullPenetrations(...)` consumes one unit, checked **before
+   the test**. On exhaustion the running pass stops, the partial detected/residual/hull
+   results are published as lower bounds, and `detectionTruncated` is set; routing
+   selection itself keeps its obstacle-only bound. The three passes share the one
+   per-frame pair-check counter.
+5. **Diagnostics.** `EdgeRouter` builds `EdgeRouteDiagnostics` with the new flags and
+   counters; `EdgePaths` is unchanged.
+
+- [ ] **Step 11: Run the router suite and the counted-work bounds**
+
+```bash
+export JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.8-zulu"
+export PATH="$JAVA_HOME/bin:$PATH"
+cd "$(git rev-parse --show-toplevel)"
+gradle :freeplane_plugin_graph:test \
+  --tests "org.freeplane.plugin.graph.geometry.EdgeRouterShould" \
+  --tests "org.freeplane.plugin.graph.geometry.EdgePathShould" \
+  -PTestLoggingFull
+```
+
+Expected: `BUILD SUCCESSFUL`; the three new tests pass and every Task 6/11/16 router
+fixture keeps its pinned behaviour (the bounded budgets admit them all).
+
+- [ ] **Step 12: Run mutation probes 17-20 (spec §8.7)**
+
+For each probe: make the named single-line mutation, run the named test with
+`-PTestLoggingFull`, confirm the expected failure, restore the file with
+`git checkout -- <file>` and confirm `git diff` is empty before the next probe.
+
+### Probe 17: check-after-collect
+
+Mutation: move the index-item cap check after a whole cell/collect write instead of
+before every write. Run `truncatesDetectionAtTheItemBudget`. Expected: FAIL because the
+item counter overshoots the cap by a whole collect and the fixture no longer truncates
+at the counted stop.
+
+### Probe 18: check-after-predicate
+
+Mutation: move the pair-check cap check after the predicate instead of before it. Run
+`truncatesDetectionAtThePairBudget`. Expected: FAIL because the pair counter overshoots
+the cap by the whole pass and the fixture no longer truncates at the counted stop.
+
+### Probe 19: unbounded router residual pass
+
+Mutation: drop the router residual pass's pair-check budget (leave it unbounded). Run
+`truncatesTheResidualPassAndPublishesALowerBound`. Expected: FAIL because
+`detectionTruncated` is false and the residual equals the brute-force residual instead
+of a lower bound.
+
+### Probe 20: truncate `C_out`
+
+Mutation: truncate `C_out` instead of rejecting the attempt when the verification-work
+cap is reached. Run `rejectsTheAttemptWhenVerificationWorkExhausts`. Expected: FAIL
+because the truncated candidate detection is accepted (or sets `detectionTruncated`)
+instead of rejecting the in-flight attempt with `verificationBudgetExhausted` and the
+exact published-position residual.
+
+Record each probe's mutation, the exact failing assertion and the restore result in the
+task report.
+
+- [ ] **Step 13: Run the full bounded-policy suite**
+
+```bash
+export JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.8-zulu"
+export PATH="$JAVA_HOME/bin:$PATH"
+cd "$(git rev-parse --show-toplevel)"
+gradle :freeplane_plugin_graph:test \
+  --tests "org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" \
+  --tests "org.freeplane.plugin.graph.layout.NodeSeparationProjectionShould" \
+  --tests "org.freeplane.plugin.graph.layout.BoundaryInvariantsShould" \
+  --tests "org.freeplane.plugin.graph.layout.BoundarySeparationShould" \
+  --tests "org.freeplane.plugin.graph.geometry.EdgeRouterShould" \
+  --tests "org.freeplane.plugin.graph.geometry.EdgePathShould" \
+  -PTestLoggingFull
+```
+
+Expected: `BUILD SUCCESSFUL`. Every bounded claim in this task is asserted by counted
+work, never wall clock, and the new diagnostics equality over the flags means two
+identical runs produce identical truncated sets.
+
+- [ ] **Step 14: Commit**
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+git add freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrection.java \
+  freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/EdgeConflictDiagnostics.java \
+  freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/BoundaryInvariants.java \
+  freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/NodeSeparationProjection.java \
+  freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/CountedViolatingPairs.java \
+  freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/EdgeRouter.java \
+  freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/EdgeRouteDiagnostics.java \
+  freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrectionShould.java \
+  freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/NodeSeparationProjectionShould.java \
+  freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/geometry/EdgeRouterShould.java \
+  freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/geometry/EdgeRouterFixture.java
+git commit -m "perf(graph): bound relocation and router work with counted budgets [2026-10-12-graph-edge-crossing-avoidance]"
 ```
