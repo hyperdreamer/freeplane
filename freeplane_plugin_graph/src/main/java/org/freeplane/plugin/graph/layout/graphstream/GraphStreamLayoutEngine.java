@@ -510,6 +510,7 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
         static final double CHAR_HEIGHT_UPPER_BOUND = 24.0;
         static final double BOUNDARY_PADDING = 8.0;
         static final double SIBLING_GAP = 8.0;
+        static final double NODE_SETTLE_MARGIN = 8.0;
         static final double FRAME_CLEARANCE = 16.0;
 
         private final Map<ProjectedNodeKey, ProjectedNode> nodesByKey =
@@ -518,6 +519,10 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
             new LinkedHashMap<EnclosureHullKey, ProjectedEnclosure>();
         private final Map<EnclosureHullKey, Size> sizes = new LinkedHashMap<EnclosureHullKey, Size>();
         private final Map<ProjectedNodeKey, Double> discRadii = new LinkedHashMap<ProjectedNodeKey, Double>();
+        private final Map<EnclosureHullKey, Footprint> footprints = new LinkedHashMap<EnclosureHullKey, Footprint>();
+        private final Map<EnclosureHullKey, List<ClusterPacking.ClusterPlacement>> packedPlacements =
+            new LinkedHashMap<EnclosureHullKey, List<ClusterPacking.ClusterPlacement>>();
+        private List<ClusterPacking.ClusterPlacement> topLevelPlacements;
 
         double discRadius(final ProjectedNodeKey key) {
             final Double radius = discRadii.get(key);
@@ -631,6 +636,110 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
                 / (2.0 * Math.sin(Math.PI / count));
         }
 
+        Footprint footprint(final EnclosureHullKey key) {
+            final Footprint cached = footprints.get(key);
+            if (cached != null) {
+                return cached;
+            }
+            final ProjectedEnclosure enclosure = enclosuresByHull.get(key);
+            final Footprint result;
+            if (enclosure.directNodes().isEmpty() && enclosure.directEnclosures().isEmpty()) {
+                // Empty enclosure: the existing label-sized box is the only remaining use of
+                // the character/padding constants.
+                double width = 2.0 * BOUNDARY_PADDING;
+                double height = CHAR_HEIGHT_UPPER_BOUND + 2.0 * BOUNDARY_PADDING;
+                for (final SafeNodeLabel label : enclosure.labels()) {
+                    width = Math.max(width,
+                        label.displayText().length() * CHAR_WIDTH_UPPER_BOUND + 2.0 * BOUNDARY_PADDING);
+                }
+                result = new Footprint(width, height, 0.0, 0.0);
+            }
+            else {
+                final List<ClusterPacking.ClusterPlacement> placed = placements(key);
+                double minX = Double.POSITIVE_INFINITY;
+                double maxX = Double.NEGATIVE_INFINITY;
+                double minY = Double.POSITIVE_INFINITY;
+                double maxY = Double.NEGATIVE_INFINITY;
+                for (final ClusterPacking.ClusterPlacement p : placed) {
+                    minX = Math.min(minX, p.x - p.item.width * 0.5);
+                    maxX = Math.max(maxX, p.x + p.item.width * 0.5);
+                    minY = Math.min(minY, p.y - p.item.height * 0.5);
+                    maxY = Math.max(maxY, p.y + p.item.height * 0.5);
+                }
+                // Not re-centred: the assembly keeps the anchor frame and carries its offset.
+                result = new Footprint(maxX - minX + 2.0 * FRAME_CLEARANCE,
+                    maxY - minY + 2.0 * FRAME_CLEARANCE,
+                    -(minX + maxX) * 0.5, -(minY + maxY) * 0.5);
+            }
+            footprints.put(key, result);
+            return result;
+        }
+
+        List<ClusterPacking.ClusterPlacement> placements(final EnclosureHullKey key) {
+            final List<ClusterPacking.ClusterPlacement> cached = packedPlacements.get(key);
+            if (cached != null) {
+                return cached;
+            }
+            final ProjectedEnclosure enclosure = enclosuresByHull.get(key);
+            final List<ClusterPacking.ClusterItem> items = new ArrayList<ClusterPacking.ClusterItem>();
+            if (!enclosure.directNodes().isEmpty()) {
+                final double ring = contentRingRadius(key);
+                double maxDisc = 0.0;
+                for (final ProjectedNodeKey nodeKey : enclosure.directNodes()) {
+                    maxDisc = Math.max(maxDisc, discRadius(nodeKey));
+                }
+                final double half = ring + maxDisc + NODE_SETTLE_MARGIN;
+                items.add(new ClusterPacking.ClusterItem(null, 2.0 * half, 2.0 * half, 0.0, 0.0, 0));
+            }
+            int order = 0;
+            for (final EnclosureHullKey child : enclosure.directEnclosures()) {
+                final Footprint childFootprint = footprint(child);
+                items.add(new ClusterPacking.ClusterItem(child, childFootprint.width, childFootprint.height,
+                    childFootprint.anchorX, childFootprint.anchorY, order++));
+            }
+            final List<ClusterPacking.ClusterPlacement> result = items.isEmpty()
+                ? new ArrayList<ClusterPacking.ClusterPlacement>()
+                : ClusterPacking.packItems(items, SIBLING_GAP);
+            packedPlacements.put(key, result);
+            return result;
+        }
+
+        ClusterPacking.ClusterPlacement placementOf(final EnclosureHullKey parentKey,
+                final EnclosureHullKey childKey) {
+            for (final ClusterPacking.ClusterPlacement placement : placements(parentKey)) {
+                if (placement.item.anchorKey != null && placement.item.anchorKey.equals(childKey)) {
+                    return placement;
+                }
+            }
+            return null;
+        }
+
+        List<ClusterPacking.ClusterPlacement> topLevelPlacements() {
+            if (topLevelPlacements != null) {
+                return topLevelPlacements;
+            }
+            final List<ClusterPacking.ClusterItem> items = new ArrayList<ClusterPacking.ClusterItem>();
+            int order = 0;
+            for (final ProjectedEnclosure enclosure : enclosuresByHull.values()) {
+                if (enclosure.mapRoot() || !enclosure.parentHull().isPresent()) {
+                    final Footprint fp = footprint(enclosure.hullKey());
+                    items.add(new ClusterPacking.ClusterItem(enclosure.hullKey(), fp.width, fp.height,
+                        fp.anchorX, fp.anchorY, order++));
+                }
+            }
+            topLevelPlacements = ClusterPacking.packItems(items, SIBLING_GAP);
+            return topLevelPlacements;
+        }
+
+        ClusterPacking.ClusterPlacement topLevelPlacementOf(final EnclosureHullKey key) {
+            for (final ClusterPacking.ClusterPlacement placement : topLevelPlacements()) {
+                if (placement.item.anchorKey != null && placement.item.anchorKey.equals(key)) {
+                    return placement;
+                }
+            }
+            return null;
+        }
+
         ProjectedEnclosure enclosure(final EnclosureHullKey key) {
             return enclosuresByHull.get(key);
         }
@@ -680,6 +789,20 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
             Size(final double width, final double height) {
                 this.width = width;
                 this.height = height;
+            }
+        }
+
+        static final class Footprint {
+            final double width;
+            final double height;
+            final double anchorX;
+            final double anchorY;
+
+            Footprint(final double width, final double height, final double anchorX, final double anchorY) {
+                this.width = width;
+                this.height = height;
+                this.anchorX = anchorX;
+                this.anchorY = anchorY;
             }
         }
     }
