@@ -122,15 +122,18 @@ public final class EdgeConflictDiagnostics {
     private final int verifications;
     private final boolean verificationBudgetExhausted;
     private final boolean indexBudgetExhausted;
+    private final boolean detectionTruncated;
     private final long indexInsertedItems;
     private final long indexPairChecks;
+    private final long verificationWork;
     private final int indexSubdivisions;
 
     public EdgeConflictDiagnostics(final int conflictsDetected, final int crossingsDetected,
             final int edgeOverNodeDetected, final int crossingsResolved, final int edgeOverNodeResolved,
             final List<String> conflictsResidual, final List<Repair> repairsApplied, final int rounds,
             final int verifications, final boolean verificationBudgetExhausted,
-            final boolean indexBudgetExhausted, final long indexInsertedItems, final long indexPairChecks,
+            final boolean indexBudgetExhausted, final boolean detectionTruncated,
+            final long indexInsertedItems, final long indexPairChecks, final long verificationWork,
             final int indexSubdivisions) {
         requireNonnegative(conflictsDetected, "conflictsDetected");
         requireNonnegative(crossingsDetected, "crossingsDetected");
@@ -141,6 +144,7 @@ public final class EdgeConflictDiagnostics {
         requireNonnegative(verifications, "verifications");
         requireNonnegative(indexInsertedItems, "indexInsertedItems");
         requireNonnegative(indexPairChecks, "indexPairChecks");
+        requireNonnegative(verificationWork, "verificationWork");
         requireNonnegative(indexSubdivisions, "indexSubdivisions");
         this.conflictsDetected = conflictsDetected;
         this.crossingsDetected = crossingsDetected;
@@ -153,14 +157,16 @@ public final class EdgeConflictDiagnostics {
         this.verifications = verifications;
         this.verificationBudgetExhausted = verificationBudgetExhausted;
         this.indexBudgetExhausted = indexBudgetExhausted;
+        this.detectionTruncated = detectionTruncated;
         this.indexInsertedItems = indexInsertedItems;
         this.indexPairChecks = indexPairChecks;
+        this.verificationWork = verificationWork;
         this.indexSubdivisions = indexSubdivisions;
     }
 
     public static EdgeConflictDiagnostics empty() {
         return new EdgeConflictDiagnostics(0, 0, 0, 0, 0, Collections.<String>emptyList(),
-            Collections.<Repair>emptyList(), 0, 0, false, false, 0L, 0L, 0);
+            Collections.<Repair>emptyList(), 0, 0, false, false, false, 0L, 0L, 0L, 0);
     }
 
     public int conflictsDetected() {
@@ -207,12 +213,20 @@ public final class EdgeConflictDiagnostics {
         return indexBudgetExhausted;
     }
 
+    public boolean detectionTruncated() {
+        return detectionTruncated;
+    }
+
     public long indexInsertedItems() {
         return indexInsertedItems;
     }
 
     public long indexPairChecks() {
         return indexPairChecks;
+    }
+
+    public long verificationWork() {
+        return verificationWork;
     }
 
     public int indexSubdivisions() {
@@ -235,7 +249,9 @@ public final class EdgeConflictDiagnostics {
             && verifications == that.verifications
             && verificationBudgetExhausted == that.verificationBudgetExhausted
             && indexBudgetExhausted == that.indexBudgetExhausted
+            && detectionTruncated == that.detectionTruncated
             && indexInsertedItems == that.indexInsertedItems && indexPairChecks == that.indexPairChecks
+            && verificationWork == that.verificationWork
             && indexSubdivisions == that.indexSubdivisions
             && conflictsResidual.equals(that.conflictsResidual)
             && repairsApplied.equals(that.repairsApplied);
@@ -247,8 +263,9 @@ public final class EdgeConflictDiagnostics {
             Integer.valueOf(edgeOverNodeDetected), Integer.valueOf(crossingsResolved),
             Integer.valueOf(edgeOverNodeResolved), conflictsResidual, repairsApplied, Integer.valueOf(rounds),
             Integer.valueOf(verifications), Boolean.valueOf(verificationBudgetExhausted),
-            Boolean.valueOf(indexBudgetExhausted), Long.valueOf(indexInsertedItems),
-            Long.valueOf(indexPairChecks), Integer.valueOf(indexSubdivisions));
+            Boolean.valueOf(indexBudgetExhausted), Boolean.valueOf(detectionTruncated),
+            Long.valueOf(indexInsertedItems), Long.valueOf(indexPairChecks),
+            Long.valueOf(verificationWork), Integer.valueOf(indexSubdivisions));
     }
 
     private static void requireNonnegative(final int value, final String role) {

@@ -184,6 +184,39 @@ public class NodeSeparationProjectionShould {
     }
 
     @Test
+    public void countTheViolatingPairsAgainstThePairBudget() {
+        final GraphProjection projection = projection("a", "b", "c", "d", "e");
+        final LayoutPositions raw = positions(projection, orderedPoints(
+            new String[] {"a", "b", "c", "d", "e"},
+            new LayoutPoint[] {LayoutPoint.of(0.0, 0.0), LayoutPoint.of(10.0, 0.0),
+                LayoutPoint.of(30.0, 0.0), LayoutPoint.of(60.0, 0.0), LayoutPoint.of(100.0, 0.0)}));
+
+        final List<String> unbounded = NodeSeparationProjection.violatingPairs(projection, raw);
+        final CountedViolatingPairs counted =
+            NodeSeparationProjection.violatingPairsCounted(projection, raw, 7);
+
+        assertThat(counted.pairEvaluations()).isEqualTo(7L);
+        assertThat(counted.truncated()).isTrue();
+        assertThat(counted.pairs()).isSorted();
+        assertThat(unbounded.subList(0, counted.pairs().size())).isEqualTo(counted.pairs());
+    }
+
+    @Test
+    public void delegateTheUnboundedPredicateToTheCountedVariant() {
+        final GraphProjection projection = projection("a", "b", "c");
+        final LayoutPositions raw = positions(projection, orderedPoints(new String[] {"a", "b", "c"},
+            new LayoutPoint[] {LayoutPoint.of(0.0, 0.0), LayoutPoint.of(10.0, 0.0),
+                LayoutPoint.of(30.0, 0.0)}));
+
+        final CountedViolatingPairs counted =
+            NodeSeparationProjection.violatingPairsCounted(projection, raw, Integer.MAX_VALUE);
+
+        assertThat(counted.truncated()).isFalse();
+        assertThat(counted.pairEvaluations()).isEqualTo(3L);
+        assertThat(counted.pairs()).isEqualTo(NodeSeparationProjection.violatingPairs(projection, raw));
+    }
+
+    @Test
     public void ignoresPinnedKeysThatAreNotInThePositions() {
         GraphProjection projection = projection("a", "b");
         LayoutPositions raw = positions(projection, orderedPoints(new String[] { "a", "b" },
