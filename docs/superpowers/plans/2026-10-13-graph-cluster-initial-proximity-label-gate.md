@@ -136,12 +136,15 @@ is measured at the first-idle endpoint plus the mandatory 200 extra steps
   are packed in the viewport centre at fit-all and a single map fills the reading-zoom view with
   labels at their nodes.
 
-**Conclusion for the gate.** No row worsens on leader length or footprint ratio, reading-zoom
-overlap pairs are eliminated, and fit-all overlaps are reduced or unchanged. Crowding does not
-materially exceed the recorded baseline, so **decision 3 (no world-space label allowance) is not
-re-opened** by this evidence. If a future change makes crowding exceed this baseline, decision 3
-is re-opened with the user and any mitigation must be screen-space, never a world-space label
-reservation.
+**Conclusion for the gate.** No row worsens on overlapping pairs: fit-all totals fall from 44 to 29
+with no row increase, and reading-zoom overlap pairs fall from 17 to 0. Four rows show localized
+leader increases from near-zero baselines (A zoom 1.0 +34.1 px/+0.19; E zoom 1.0 +9.8 px/+0.97;
+G zoom 1.0 +37.1 px/+1.70; G zoom 4.0 +57.7 px/+3.61), while the global maximum leader falls from
+6841.4 px to 58.6 px and the maximum leader/footprint ratio falls from 65.22 to 3.66. Crowding on
+leaders therefore does not exceed the recorded baseline overall, so **decision 3 (no world-space
+label allowance) is not re-opened** by this evidence. If a future change makes crowding exceed this
+baseline, decision 3 is re-opened with the user and any mitigation must be screen-space, never a
+world-space label reservation.
 
 ## 6. Real-application screenshots (virtual X display)
 
