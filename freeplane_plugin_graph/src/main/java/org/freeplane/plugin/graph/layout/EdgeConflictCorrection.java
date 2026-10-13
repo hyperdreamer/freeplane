@@ -40,10 +40,17 @@ public final class EdgeConflictCorrection {
     static final int CONFLICT_CELL_CAP = 64;
     static final int CONFLICT_MAX_SUBDIVISION_DEPTH = 4;
     static final int OUTERMOST_CELL_INDEX = Integer.MAX_VALUE;
+    static final int CONFLICT_GRID_DIMENSION = 128;
+    static final double CONFLICT_MAX_CELL_SIZE = 1.0e9;
+    static final int CONFLICT_MAX_CELLS_PER_PRIMITIVE = 4096;
     static final double ROUTE_EPSILON = 1e-9;
     static final double CROSSING_CLEARANCE = 16.0;
     static final int MAX_RELOCATION_ROUNDS = 4;
     static final int MAX_VERIFICATIONS_PER_FRAME = 64;
+    static final long EDGE_CONFLICT_MAX_INDEX_ITEMS_PER_FRAME = 262_144L;
+    static final long EDGE_CONFLICT_MAX_PAIR_CHECKS_PER_FRAME = 131_072L;
+    static final int EDGE_CONFLICT_MAX_DETECTED_PER_FRAME = 4_096;
+    static final long EDGE_CONFLICT_MAX_VERIFICATION_WORK_PER_FRAME = 65_536L;
 
     private static final double OUTERMOST_CELL_INDEX_DOUBLE = OUTERMOST_CELL_INDEX;
     private static final Comparator<ProjectedNodeKey> NODE_ORDER =
@@ -66,6 +73,8 @@ public final class EdgeConflictCorrection {
     private long indexPairChecks;
     private int indexSubdivisions;
     private boolean indexBudgetExhausted;
+    private int detectedKeys;
+    private long verificationWork;
 
     public EdgeConflictCorrection() {
     }
@@ -95,7 +104,7 @@ public final class EdgeConflictCorrection {
             final GeometryTextMetrics metrics, final List<PinProjection> pins,
             final Set<ProjectedEndpointKey> visibleEndpoints,
             final BoundarySeparationResult boundaryResult) {
-        resetIndexCounters();
+        resetFrameCounters();
         final Set<ProjectedNodeKey> pinned = pinnedNodes(pins);
         final Map<ProjectedNodeKey, List<EnclosureHullKey>> nodeHullsByKey =
             BoundaryInvariants.nodeHullsByKey(projection);
@@ -104,8 +113,9 @@ public final class EdgeConflictCorrection {
 
         LayoutPositions currentPositions = positions;
         GraphGeometry currentGeometry = boundaryResult.geometry();
-        Detection conflicts = detect(projection, currentPositions, currentGeometry, visibleEndpoints)
-            .detection();
+        final IndexedDetection initial = detect(projection, currentPositions, currentGeometry,
+            visibleEndpoints);
+        Detection conflicts = initial.detection();
         final int conflictsDetected = conflicts.keys().size();
         final int crossingsDetected = conflicts.crossings();
         final int edgeOverNodeDetected = conflicts.edgeOverNodes();
@@ -113,16 +123,20 @@ public final class EdgeConflictCorrection {
             new ArrayList<EdgeConflictDiagnostics.Repair>();
         int rounds = 0;
         int verifications = 0;
+        boolean detectionTruncated = initial.truncated();
+        boolean verificationStopped = false;
         boolean verificationBudgetExhausted = false;
 
-        while (rounds < MAX_RELOCATION_ROUNDS && verifications < MAX_VERIFICATIONS_PER_FRAME) {
+        while (!detectionTruncated && !verificationStopped && rounds < MAX_RELOCATION_ROUNDS
+                && verifications < MAX_VERIFICATIONS_PER_FRAME) {
             if (conflicts.keys().isEmpty()) {
                 break;
             }
             final List<Candidate> pool = generateCandidates(conflicts, currentPositions, pinned,
                 enclosurePaths);
             boolean acceptedThisRound = false;
-            while (!pool.isEmpty() && verifications < MAX_VERIFICATIONS_PER_FRAME) {
+            while (!pool.isEmpty() && !verificationStopped
+                    && verifications < MAX_VERIFICATIONS_PER_FRAME) {
                 final List<Candidate> batch = greedyDisjoint(pool);
                 if (batch.isEmpty()) {
                     break;
@@ -140,54 +154,93 @@ public final class EdgeConflictCorrection {
                     final Evaluation evaluation = verify(attempt, projection, currentPositions,
                         currentGeometry, metrics, visibleEndpoints, conflicts, boundaryInvariants,
                         nodeHullsByKey, enclosurePaths);
-                    if (evaluation.accepted) {
+                    if (evaluation.outcome == Evaluation.Outcome.ACCEPT) {
                         recordRepair(repairs, attempt, rounds);
                         currentPositions = evaluation.positions;
                         currentGeometry = evaluation.geometry;
                         rounds++;
                         acceptedThisRound = true;
+                        if (verifications >= MAX_VERIFICATIONS_PER_FRAME) {
+                            verificationStopped = true;
+                        }
                         break;
                     }
-                    if (verifications == MAX_VERIFICATIONS_PER_FRAME) {
+                    if (evaluation.outcome == Evaluation.Outcome.DETECTION_STOP
+                            || verificationWorkAtCap()) {
+                        verificationStopped = true;
                         verificationBudgetExhausted = true;
                         break;
                     }
+                    if (verifications >= MAX_VERIFICATIONS_PER_FRAME) {
+                        // Transition to the attempt cap: the rejected cap attempt leaves the
+                        // frame with conflicts and the final check below sets the flag.
+                        verificationStopped = true;
+                        break;
+                    }
                 }
-                if (acceptedThisRound) {
+                if (acceptedThisRound || verificationStopped) {
                     break;
                 }
             }
             if (!acceptedThisRound) {
                 break;
             }
-            conflicts = detect(projection, currentPositions, currentGeometry, visibleEndpoints)
-                .detection();
+            if (rounds >= MAX_RELOCATION_ROUNDS || verificationStopped
+                    || verifications >= MAX_VERIFICATIONS_PER_FRAME) {
+                break;
+            }
+            final IndexedDetection next = detect(projection, currentPositions, currentGeometry,
+                visibleEndpoints);
+            conflicts = next.detection();
+            if (next.truncated()) {
+                verificationStopped = true;
+                verificationBudgetExhausted = true;
+            }
         }
 
-        final Detection residual = rounds > 0
-            ? detect(projection, currentPositions, currentGeometry, visibleEndpoints).detection()
-            : conflicts;
-        if (verifications == MAX_VERIFICATIONS_PER_FRAME && !residual.keys().isEmpty()) {
+        final Detection residual;
+        if (detectionTruncated) {
+            residual = conflicts;
+        }
+        else if (rounds > 0) {
+            residual = detectConflictsInternal(projection, currentPositions, currentGeometry,
+                visibleEndpoints, false).detection();
+        }
+        else {
+            residual = conflicts;
+        }
+        if (verificationStopped && !residual.keys().isEmpty() && !detectionTruncated) {
             verificationBudgetExhausted = true;
         }
-        final EdgeConflictDiagnostics diagnostics = new EdgeConflictDiagnostics(
-            conflictsDetected, crossingsDetected, edgeOverNodeDetected,
-            crossingsDetected - residual.crossings(), edgeOverNodeDetected - residual.edgeOverNodes(),
-            residual.keys(), repairs, rounds, verifications, verificationBudgetExhausted,
-            indexBudgetExhausted, indexInsertedItems, indexPairChecks, indexSubdivisions);
         BoundarySeparationDiagnostics boundaryDiagnostics = boundaryResult.diagnostics();
         int nodeResidualViolations = boundaryResult.nodeResidualViolations();
         long rebuildNanos = 0L;
         if (rounds > 0) {
             final LayoutPositions published = canonicallySorted(currentPositions);
             final long rebuildStart = System.nanoTime();
-            boundaryDiagnostics = boundaryInvariants.describe(projection, published, metrics, pins,
-                currentGeometry, boundaryResult.diagnostics().residualHullPairs(),
-                boundaryResult.diagnostics());
+            final BoundaryInvariants.CountedRebuild rebuilt = boundaryInvariants.describeCounted(
+                projection, published, metrics, pins, currentGeometry,
+                boundaryResult.diagnostics().residualHullPairs(), boundaryResult.diagnostics());
+            boundaryDiagnostics = rebuilt.diagnostics();
             nodeResidualViolations = new NodeSeparationProjection().project(projection, published,
                 pinned).residualViolations();
+            // The §5.4 rebuild's counted units are predicate evaluations (spec §13.1): one A2
+            // node-pair test per pair its scan evaluates plus one A3 hull-pair comparison per
+            // comparison its detect pass consumes. The rebuild reuses the terminal geometry, so
+            // it recomputes no hull.
+            verificationWork += rebuilt.hullPairWork()
+                + NodeSeparationProjection.violatingPairsCounted(projection, published,
+                    Integer.MAX_VALUE).pairEvaluations();
             rebuildNanos = System.nanoTime() - rebuildStart;
         }
+        // The §5.4 rebuild's counted units are part of the frame total, so the diagnostics are
+        // constructed only after the rebuild has added them (spec §13.1).
+        final EdgeConflictDiagnostics diagnostics = new EdgeConflictDiagnostics(
+            conflictsDetected, crossingsDetected, edgeOverNodeDetected,
+            crossingsDetected - residual.crossings(), edgeOverNodeDetected - residual.edgeOverNodes(),
+            residual.keys(), repairs, rounds, verifications, verificationBudgetExhausted,
+            indexBudgetExhausted, detectionTruncated, indexInsertedItems, indexPairChecks,
+            verificationWork, indexSubdivisions);
         return new EdgeConflictResult(currentPositions, diagnostics,
             new EdgeConflictTimings(0L, 0L, 0L, rebuildNanos), boundaryDiagnostics,
             nodeResidualViolations, appliedDisplacements(repairs));
@@ -502,22 +555,52 @@ public final class EdgeConflictCorrection {
             toCentres.putAll(candidate.toCentres);
         }
         final LayoutPositions candidatePositions = withCentres(currentPositions, toCentres);
+        final Set<EnclosureHullKey> changed = BoundaryInvariants.changedHulls(nodeHullsByKey,
+            currentPositions, candidatePositions);
+        if (!consumeVerificationWork(changed.size())) {
+            return Evaluation.stopped();
+        }
         final GraphGeometry candidateGeometry = geometryEngine.recomputeHulls(projection, candidatePositions,
-            metrics, currentGeometry, BoundaryInvariants.changedHulls(nodeHullsByKey, currentPositions,
-                candidatePositions));
-        final Detection candidateConflicts = detectConflicts(projection, candidatePositions,
+            metrics, currentGeometry, changed);
+        final IndexedDetection candidateDetection = detect(projection, candidatePositions,
             candidateGeometry, visibleEndpoints);
+        if (candidateDetection.truncated()) {
+            return Evaluation.stopped();
+        }
+        final Detection candidateConflicts = candidateDetection.detection();
         if (candidateConflicts.keys().size() >= currentConflicts.keys().size()
                 || !new LinkedHashSet<String>(currentConflicts.keys())
                     .containsAll(candidateConflicts.keys())) {
             return Evaluation.rejected();
         }
-        if (!new LinkedHashSet<String>(NodeSeparationProjection.violatingPairs(projection, currentPositions))
-                .containsAll(NodeSeparationProjection.violatingPairs(projection, candidatePositions))) {
+        final CountedViolatingPairs currentPairs = NodeSeparationProjection.violatingPairsCounted(
+            projection, currentPositions, verificationAllowance());
+        verificationWork += currentPairs.pairEvaluations();
+        if (currentPairs.truncated()) {
+            return Evaluation.stopped();
+        }
+        final CountedViolatingPairs candidatePairs = NodeSeparationProjection.violatingPairsCounted(
+            projection, candidatePositions, verificationAllowance());
+        verificationWork += candidatePairs.pairEvaluations();
+        if (candidatePairs.truncated()) {
+            return Evaluation.stopped();
+        }
+        if (!new LinkedHashSet<String>(currentPairs.pairs()).containsAll(candidatePairs.pairs())) {
             return Evaluation.rejected();
         }
-        if (!boundaryInvariants.detectPairKeys(projection, currentGeometry)
-                .containsAll(boundaryInvariants.detectPairKeys(projection, candidateGeometry))) {
+        final BoundaryInvariants.CountedPairKeys currentHullPairs = boundaryInvariants.detectPairKeys(
+            projection, currentGeometry, verificationAllowance());
+        verificationWork += currentHullPairs.work();
+        if (currentHullPairs.truncated()) {
+            return Evaluation.stopped();
+        }
+        final BoundaryInvariants.CountedPairKeys candidateHullPairs =
+            boundaryInvariants.detectPairKeys(projection, candidateGeometry, verificationAllowance());
+        verificationWork += candidateHullPairs.work();
+        if (candidateHullPairs.truncated()) {
+            return Evaluation.stopped();
+        }
+        if (!currentHullPairs.pairKeys().containsAll(candidateHullPairs.pairKeys())) {
             return Evaluation.rejected();
         }
         for (final Candidate candidate : attempt) {
@@ -534,6 +617,26 @@ public final class EdgeConflictCorrection {
             }
         }
         return new Evaluation(candidatePositions, candidateGeometry);
+    }
+
+    private int verificationAllowance() {
+        final long remaining = EDGE_CONFLICT_MAX_VERIFICATION_WORK_PER_FRAME - verificationWork;
+        if (remaining <= 0L) {
+            return 0;
+        }
+        return (int) Math.min(remaining, (long) Integer.MAX_VALUE);
+    }
+
+    private boolean consumeVerificationWork(final long units) {
+        if (verificationWork + units > EDGE_CONFLICT_MAX_VERIFICATION_WORK_PER_FRAME) {
+            return false;
+        }
+        verificationWork += units;
+        return true;
+    }
+
+    private boolean verificationWorkAtCap() {
+        return verificationWork >= EDGE_CONFLICT_MAX_VERIFICATION_WORK_PER_FRAME;
     }
 
     private static LayoutPositions withCentres(final LayoutPositions positions,
@@ -557,88 +660,98 @@ public final class EdgeConflictCorrection {
         }
     }
 
-    private void resetIndexCounters() {
+    private void resetFrameCounters() {
         indexInsertedItems = 0L;
         indexPairChecks = 0L;
         indexSubdivisions = 0;
         indexBudgetExhausted = false;
+        detectedKeys = 0;
+        verificationWork = 0L;
     }
 
     static Detection detectConflicts(final GraphProjection projection, final LayoutPositions positions,
             final GraphGeometry geometry, final Set<ProjectedEndpointKey> visibleEndpoints) {
-        return detectConflicts(projection, positions, geometry, visibleEndpoints, new ConflictIndex());
+        return new EdgeConflictCorrection()
+            .detectConflictsInternal(projection, positions, geometry, visibleEndpoints, false)
+            .detection();
     }
 
     IndexedDetection detect(final GraphProjection projection, final LayoutPositions positions,
             final GraphGeometry geometry, final Set<ProjectedEndpointKey> visibleEndpoints) {
-        final ConflictIndex index = new ConflictIndex();
-        final Detection detection = detectConflicts(projection, positions, geometry, visibleEndpoints, index);
-        indexInsertedItems += index.insertedItems;
-        indexPairChecks += index.pairChecks;
-        indexSubdivisions += index.subdivisions;
-        indexBudgetExhausted |= index.budgetExhausted;
-        return new IndexedDetection(detection, index.insertedItems, index.pairChecks, index.subdivisions,
-            index.budgetExhausted);
+        final DetectionRun run =
+            detectConflictsInternal(projection, positions, geometry, visibleEndpoints, true);
+        return new IndexedDetection(run.detection(), run.truncated());
     }
 
-    private static Detection detectConflicts(final GraphProjection projection, final LayoutPositions positions,
-            final GraphGeometry geometry, final Set<ProjectedEndpointKey> visibleEndpoints,
-            final ConflictIndex index) {
+    private DetectionRun detectConflictsInternal(final GraphProjection projection,
+            final LayoutPositions positions, final GraphGeometry geometry,
+            final Set<ProjectedEndpointKey> visibleEndpoints, final boolean bounded) {
         Objects.requireNonNull(projection, "projection");
         Objects.requireNonNull(positions, "positions");
         Objects.requireNonNull(geometry, "geometry");
         Objects.requireNonNull(visibleEndpoints, "visibleEndpoints");
         final List<Chord> chords = chords(projection, positions, geometry, visibleEndpoints);
         if (chords.isEmpty()) {
-            return Detection.empty();
+            return new DetectionRun(Detection.empty(), false);
         }
         final List<Disc> discs = discs(projection, geometry);
         final double originX = originX(chords, discs);
         final double originY = originY(chords, discs);
-        int level = 0;
-        IndexPass pass = collect(level, chords, discs, originX, originY);
-        while (hasOverCap(pass) && level < CONFLICT_MAX_SUBDIVISION_DEPTH) {
-            index.subdivisions += overCapCount(pass);
-            level++;
-            pass = collect(level, chords, discs, originX, originY);
-        }
-        if (hasOverCap(pass)) {
-            index.budgetExhausted = true;
-        }
-        if (!pass.outermost.isEmpty()) {
-            index.budgetExhausted = true;
-        }
-        index.insertedItems += pass.insertedItems;
-        final DetectionAccumulator accumulator = new DetectionAccumulator(index);
-        for (final List<Primitive> bucket : pass.cells.values()) {
-            for (int first = 0; first < bucket.size(); first++) {
-                for (int second = first + 1; second < bucket.size(); second++) {
-                    accumulator.examine(bucket.get(first), bucket.get(second));
-                }
+        final double baseCellSize = baseCellSize(chords, discs, originX, originY);
+        final DetectionAccumulator accumulator = new DetectionAccumulator(bounded);
+        try {
+            int level = 0;
+            IndexPass pass = collect(level, chords, discs, originX, originY, baseCellSize, bounded);
+            while (hasOverCap(pass) && level < CONFLICT_MAX_SUBDIVISION_DEPTH) {
+                indexSubdivisions += overCapCount(pass);
+                level++;
+                pass = collect(level, chords, discs, originX, originY, baseCellSize, bounded);
             }
-        }
-        for (final Primitive primitive : pass.outermost) {
-            if (primitive.chord != null) {
-                for (final Chord other : chords) {
-                    if (other != primitive.chord) {
-                        index.insertedItems++;
-                        accumulator.examineChords(primitive.chord, other);
+            if (hasOverCap(pass)) {
+                indexBudgetExhausted = true;
+            }
+            if (!pass.outermost.isEmpty()) {
+                indexBudgetExhausted = true;
+            }
+            for (final List<Primitive> bucket : pass.cells.values()) {
+                for (int first = 0; first < bucket.size(); first++) {
+                    for (int second = first + 1; second < bucket.size(); second++) {
+                        accumulator.examine(bucket.get(first), bucket.get(second));
                     }
                 }
-                for (final Disc disc : discs) {
-                    index.insertedItems++;
-                    accumulator.examineChordDisc(primitive.chord, disc);
+            }
+            for (final Primitive primitive : pass.outermost) {
+                if (primitive.chord != null) {
+                    for (final Chord other : chords) {
+                        if (other != primitive.chord) {
+                            countDirectExamination(bounded);
+                            accumulator.examineChords(primitive.chord, other);
+                        }
+                    }
+                    for (final Disc disc : discs) {
+                        countDirectExamination(bounded);
+                        accumulator.examineChordDisc(primitive.chord, disc);
+                    }
+                }
+                else {
+                    for (final Chord chord : chords) {
+                        countDirectExamination(bounded);
+                        accumulator.examineChordDisc(chord, primitive.disc);
+                    }
                 }
             }
-            else {
-                for (final Chord chord : chords) {
-                    index.insertedItems++;
-                    accumulator.examineChordDisc(chord, primitive.disc);
-                }
-            }
+            return new DetectionRun(accumulator.snapshot(), false);
         }
-        return new Detection(new ArrayList<String>(accumulator.keys), accumulator.crossings,
-            accumulator.edgeOverNodes, new ArrayList<Conflict>(accumulator.conflicts.values()));
+        catch (final DetectionStop stop) {
+            return new DetectionRun(accumulator.snapshot(), true);
+        }
+    }
+
+    private void countDirectExamination(final boolean bounded) {
+        if (bounded && indexInsertedItems >= EDGE_CONFLICT_MAX_INDEX_ITEMS_PER_FRAME) {
+            throw new DetectionStop();
+        }
+        indexInsertedItems++;
     }
 
     private static List<Chord> chords(final GraphProjection projection, final LayoutPositions positions,
@@ -756,35 +869,63 @@ public final class EdgeConflictCorrection {
         return minimum;
     }
 
-    private static IndexPass collect(final int level, final List<Chord> chords, final List<Disc> discs,
+    private static double baseCellSize(final List<Chord> chords, final List<Disc> discs,
             final double originX, final double originY) {
-        final double cellSize = CONFLICT_CELL_SIZE / Math.scalb(1.0, level);
-        final IndexPass pass = new IndexPass();
+        double maximumX = Double.NEGATIVE_INFINITY;
+        double maximumY = Double.NEGATIVE_INFINITY;
         for (final Chord chord : chords) {
-            insertChord(pass, chord, originX, originY, cellSize);
+            maximumX = Math.max(maximumX, Math.max(chord.first.x(), chord.second.x()));
+            maximumY = Math.max(maximumY, Math.max(chord.first.y(), chord.second.y()));
         }
         for (final Disc disc : discs) {
-            insertDisc(pass, disc, originX, originY, cellSize);
+            final double inflation = disc.radius + EDGE_NODE_CLEARANCE;
+            maximumX = Math.max(maximumX, disc.center.x() + inflation);
+            maximumY = Math.max(maximumY, disc.center.y() + inflation);
+        }
+        final double span = Math.max(maximumX - originX, maximumY - originY);
+        if (!(span > 0.0) || !Double.isFinite(span)) {
+            return CONFLICT_CELL_SIZE;
+        }
+        return Math.max(CONFLICT_CELL_SIZE,
+            Math.min(span / (double) CONFLICT_GRID_DIMENSION, CONFLICT_MAX_CELL_SIZE));
+    }
+
+    private IndexPass collect(final int level, final List<Chord> chords, final List<Disc> discs,
+            final double originX, final double originY, final double baseCellSize,
+            final boolean bounded) {
+        final double cellSize = baseCellSize / Math.scalb(1.0, level);
+        final IndexPass pass = new IndexPass();
+        for (final Chord chord : chords) {
+            insertChord(pass, chord, originX, originY, cellSize, bounded);
+        }
+        for (final Disc disc : discs) {
+            insertDisc(pass, disc, originX, originY, cellSize, bounded);
         }
         return pass;
     }
 
-    private static void insertChord(final IndexPass pass, final Chord chord, final double originX,
-            final double originY, final double cellSize) {
+    private void insertChord(final IndexPass pass, final Chord chord, final double originX,
+            final double originY, final double cellSize, final boolean bounded) {
         final int firstX = cellIndex(chord.first.x(), originX, cellSize);
         final int firstY = cellIndex(chord.first.y(), originY, cellSize);
         final int secondX = cellIndex(chord.second.x(), originX, cellSize);
         final int secondY = cellIndex(chord.second.y(), originY, cellSize);
         if (firstX == OUTERMOST_CELL_INDEX || firstY == OUTERMOST_CELL_INDEX
-                || secondX == OUTERMOST_CELL_INDEX || secondY == OUTERMOST_CELL_INDEX) {
+                || secondX == OUTERMOST_CELL_INDEX || secondY == OUTERMOST_CELL_INDEX
+                || Math.max(Math.abs((long) secondX - firstX), Math.abs((long) secondY - firstY)) + 1L
+                    > CONFLICT_MAX_CELLS_PER_PRIMITIVE) {
             pass.outermost.add(new Primitive(chord));
             return;
         }
         final Primitive primitive = new Primitive(chord);
         final double deltaX = chord.second.x() - chord.first.x();
         final double deltaY = chord.second.y() - chord.first.y();
-        final int stepX = deltaX > 0.0 ? 1 : deltaX < 0.0 ? -1 : 0;
-        final int stepY = deltaY > 0.0 ? 1 : deltaY < 0.0 ? -1 : 0;
+        // The step direction follows the cell indices, not the raw deltas: a chord whose
+        // endpoints share one cell index but differ by a sub-cell delta must not step that axis
+        // (the axis interval is convex, so the segment cannot leave the column). Following the
+        // sign of a tiny delta made the traversal step away from `secondX` and never terminate.
+        final int stepX = Integer.compare(secondX, firstX);
+        final int stepY = Integer.compare(secondY, firstY);
         double tMaxX = stepX == 0 ? Double.POSITIVE_INFINITY
             : boundaryTime(chord.first.x(), originX, firstX, stepX, cellSize, deltaX);
         double tMaxY = stepY == 0 ? Double.POSITIVE_INFINITY
@@ -794,7 +935,7 @@ public final class EdgeConflictCorrection {
         int cellX = firstX;
         int cellY = firstY;
         while (true) {
-            addCell(pass, primitive, cellX, cellY);
+            addCell(pass, primitive, cellX, cellY, bounded);
             if (cellX == secondX && cellY == secondY) {
                 return;
             }
@@ -807,6 +948,15 @@ public final class EdgeConflictCorrection {
                 tMaxY += tDeltaY;
             }
             else {
+                // The segment passes through the corner shared by four cells; the closed
+                // squares of the two adjacent cells contain that corner too, so they must be
+                // inserted as well or a pair crossing exactly at a grid corner is lost.
+                if (stepX != 0) {
+                    addCell(pass, primitive, cellX + stepX, cellY, bounded);
+                }
+                if (stepY != 0) {
+                    addCell(pass, primitive, cellX, cellY + stepY, bounded);
+                }
                 cellX += stepX;
                 cellY += stepY;
                 tMaxX += tDeltaX;
@@ -822,8 +972,8 @@ public final class EdgeConflictCorrection {
         return distance / Math.abs(delta);
     }
 
-    private static void insertDisc(final IndexPass pass, final Disc disc, final double originX,
-            final double originY, final double cellSize) {
+    private void insertDisc(final IndexPass pass, final Disc disc, final double originX,
+            final double originY, final double cellSize, final boolean bounded) {
         final double inflation = disc.radius + EDGE_NODE_CLEARANCE;
         final double minX = disc.center.x() - inflation;
         final double maxX = disc.center.x() + inflation;
@@ -834,7 +984,9 @@ public final class EdgeConflictCorrection {
         final int lastX = cellIndex(maxX, originX, cellSize);
         final int lastY = cellIndex(maxY, originY, cellSize);
         if (firstX == OUTERMOST_CELL_INDEX || firstY == OUTERMOST_CELL_INDEX
-                || lastX == OUTERMOST_CELL_INDEX || lastY == OUTERMOST_CELL_INDEX) {
+                || lastX == OUTERMOST_CELL_INDEX || lastY == OUTERMOST_CELL_INDEX
+                || ((long) (lastX - firstX) + 1L) * ((long) (lastY - firstY) + 1L)
+                    > CONFLICT_MAX_CELLS_PER_PRIMITIVE) {
             pass.outermost.add(new Primitive(disc));
             return;
         }
@@ -846,7 +998,7 @@ public final class EdgeConflictCorrection {
                 final double cellMinY = originY + (double) cellY * cellSize;
                 final double cellMaxY = cellMinY + cellSize;
                 if (squareDistance(disc.center, cellMinX, cellMinY, cellMaxX, cellMaxY) <= inflation) {
-                    addCell(pass, primitive, cellX, cellY);
+                    addCell(pass, primitive, cellX, cellY, bounded);
                 }
             }
         }
@@ -859,8 +1011,11 @@ public final class EdgeConflictCorrection {
         return Math.hypot(dx, dy);
     }
 
-    private static void addCell(final IndexPass pass, final Primitive primitive, final int cellX,
-            final int cellY) {
+    private void addCell(final IndexPass pass, final Primitive primitive, final int cellX,
+            final int cellY, final boolean bounded) {
+        if (bounded && indexInsertedItems >= EDGE_CONFLICT_MAX_INDEX_ITEMS_PER_FRAME) {
+            throw new DetectionStop();
+        }
         final Long key = Long.valueOf(cellKey(cellX, cellY));
         List<Primitive> bucket = pass.cells.get(key);
         if (bucket == null) {
@@ -869,6 +1024,7 @@ public final class EdgeConflictCorrection {
         }
         bucket.add(primitive);
         pass.insertedItems++;
+        indexInsertedItems++;
     }
 
     private static long cellKey(final int cellX, final int cellY) {
@@ -1006,66 +1162,47 @@ public final class EdgeConflictCorrection {
         }
     }
 
-    static final class ConflictIndex {
-        private long insertedItems;
-        private long pairChecks;
-        private int subdivisions;
-        private boolean budgetExhausted;
-
-        ConflictIndex() {
-        }
-
-        long insertedItems() {
-            return insertedItems;
-        }
-
-        long pairChecks() {
-            return pairChecks;
-        }
-
-        int subdivisions() {
-            return subdivisions;
-        }
-
-        boolean budgetExhausted() {
-            return budgetExhausted;
-        }
-    }
-
     static final class IndexedDetection {
         private final Detection detection;
-        private final long insertedItems;
-        private final long pairChecks;
-        private final int subdivisions;
-        private final boolean budgetExhausted;
+        private final boolean truncated;
 
-        private IndexedDetection(final Detection detection, final long insertedItems, final long pairChecks,
-                final int subdivisions, final boolean budgetExhausted) {
+        private IndexedDetection(final Detection detection, final boolean truncated) {
             this.detection = detection;
-            this.insertedItems = insertedItems;
-            this.pairChecks = pairChecks;
-            this.subdivisions = subdivisions;
-            this.budgetExhausted = budgetExhausted;
+            this.truncated = truncated;
         }
 
         Detection detection() {
             return detection;
         }
 
-        long insertedItems() {
-            return insertedItems;
+        boolean truncated() {
+            return truncated;
+        }
+    }
+
+    private static final class DetectionRun {
+        private final Detection detection;
+        private final boolean truncated;
+
+        private DetectionRun(final Detection detection, final boolean truncated) {
+            this.detection = detection;
+            this.truncated = truncated;
         }
 
-        long pairChecks() {
-            return pairChecks;
+        private Detection detection() {
+            return detection;
         }
 
-        int subdivisions() {
-            return subdivisions;
+        private boolean truncated() {
+            return truncated;
         }
+    }
 
-        boolean budgetExhausted() {
-            return budgetExhausted;
+    private static final class DetectionStop extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
+        private DetectionStop() {
+            super(null, null, false, false);
         }
     }
 
@@ -1155,23 +1292,33 @@ public final class EdgeConflictCorrection {
     }
 
     private static final class Evaluation {
-        private final boolean accepted;
+        private enum Outcome {
+            ACCEPT,
+            REJECT,
+            DETECTION_STOP
+        }
+
+        private final Outcome outcome;
         private final LayoutPositions positions;
         private final GraphGeometry geometry;
 
-        private Evaluation(final boolean accepted, final LayoutPositions positions,
+        private Evaluation(final Outcome outcome, final LayoutPositions positions,
                 final GraphGeometry geometry) {
-            this.accepted = accepted;
+            this.outcome = outcome;
             this.positions = positions;
             this.geometry = geometry;
         }
 
         static Evaluation rejected() {
-            return new Evaluation(false, null, null);
+            return new Evaluation(Outcome.REJECT, null, null);
+        }
+
+        static Evaluation stopped() {
+            return new Evaluation(Outcome.DETECTION_STOP, null, null);
         }
 
         private Evaluation(final LayoutPositions positions, final GraphGeometry geometry) {
-            this(true, positions, geometry);
+            this(Outcome.ACCEPT, positions, geometry);
         }
     }
 
@@ -1196,16 +1343,16 @@ public final class EdgeConflictCorrection {
         private long insertedItems;
     }
 
-    private static final class DetectionAccumulator {
-        private final ConflictIndex index;
+    private final class DetectionAccumulator {
+        private final boolean bounded;
         private final Set<String> examined = new HashSet<String>();
         private final TreeSet<String> keys = new TreeSet<String>();
         private final Map<String, Conflict> conflicts = new TreeMap<String, Conflict>();
         private int crossings;
         private int edgeOverNodes;
 
-        private DetectionAccumulator(final ConflictIndex index) {
-            this.index = index;
+        private DetectionAccumulator(final boolean bounded) {
+            this.bounded = bounded;
         }
 
         private void examine(final Primitive first, final Primitive second) {
@@ -1225,12 +1372,12 @@ public final class EdgeConflictCorrection {
             if (!examined.add(key)) {
                 return;
             }
-            index.pairChecks++;
+            if (bounded && indexPairChecks >= EDGE_CONFLICT_MAX_PAIR_CHECKS_PER_FRAME) {
+                throw new DetectionStop();
+            }
+            indexPairChecks++;
             if (properlyCross(first.first, first.second, second.first, second.second)) {
-                if (keys.add(key)) {
-                    crossings++;
-                    conflicts.put(key, Conflict.crossing(first, second));
-                }
+                recordConflict(key, Conflict.crossing(first, second), true);
             }
         }
 
@@ -1242,14 +1389,35 @@ public final class EdgeConflictCorrection {
             if (!examined.add(key)) {
                 return;
             }
-            index.pairChecks++;
+            if (bounded && indexPairChecks >= EDGE_CONFLICT_MAX_PAIR_CHECKS_PER_FRAME) {
+                throw new DetectionStop();
+            }
+            indexPairChecks++;
             if (segmentDistance(chord.first, chord.second, disc.center) - disc.radius
                     < EDGE_NODE_CLEARANCE - ROUTE_EPSILON) {
-                if (keys.add(key)) {
-                    edgeOverNodes++;
-                    conflicts.put(key, Conflict.edgeOverNode(chord, disc));
-                }
+                recordConflict(key, Conflict.edgeOverNode(chord, disc), false);
             }
+        }
+
+        private void recordConflict(final String key, final Conflict conflict, final boolean crossing) {
+            if (bounded && detectedKeys >= EDGE_CONFLICT_MAX_DETECTED_PER_FRAME) {
+                throw new DetectionStop();
+            }
+            if (keys.add(key)) {
+                detectedKeys++;
+                if (crossing) {
+                    crossings++;
+                }
+                else {
+                    edgeOverNodes++;
+                }
+                conflicts.put(key, conflict);
+            }
+        }
+
+        private Detection snapshot() {
+            return new Detection(new ArrayList<String>(keys), crossings, edgeOverNodes,
+                new ArrayList<Conflict>(conflicts.values()));
         }
     }
 }
