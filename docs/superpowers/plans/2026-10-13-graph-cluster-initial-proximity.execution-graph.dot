@@ -1,0 +1,50 @@
+digraph graph_cluster_initial_proximity {
+    rankdir=TB;
+    node [shape=box, style=rounded, fontname="Helvetica"];
+    subgraph cluster_calibration {
+        label="calibration";
+        "T-001" [label="Task 1: Raise the containment calibration and re-order the calibration assertion\nFast"];
+    }
+    subgraph cluster_packing {
+        label="packing";
+        "T-002" [label="Task 2: Deterministic cluster packer with unit tests\nStandard"];
+    }
+    subgraph cluster_footprint {
+        label="footprint";
+        "T-003" [label="Task 3: Anchor-centred per-axis footprints and packed placements in BoundarySizes\nStandard"];
+    }
+    subgraph cluster_engine {
+        label="engine";
+        "T-004" [label="Task 4: Seed from packed placements, packed hierarchy rests, offset-aware separation, legacy removal\nAdvanced"];
+    }
+    subgraph cluster_acceptance {
+        label="acceptance";
+        "T-005" [label="Task 5: Fixtures A-H and the exact initial-frame acceptance tests\nStandard"];
+        "T-006" [label="Task 6: Settled acceptance, evidence block, and the 200-child wall clock\nStandard"];
+    }
+    subgraph cluster_regression {
+        label="regression";
+        "T-007" [label="Task 7: Re-baseline TypedForcesShould against the packed contract\nStandard"];
+        "T-008" [label="Task 8: Re-baseline BoundarySeparationShould and delete the ReferenceRepulsionFixture estimator mirror\nAdvanced"];
+    }
+    subgraph cluster_evidence {
+        label="evidence";
+        "T-009" [label="Task 9: Full-suite acceptance and evidence recording\nAdvanced"];
+        "T-010" [label="Task 10: Label readability gate (baseline vs post-change)\nAdvanced"];
+    }
+    "T-002" -> "T-003";
+    "T-001" -> "T-004";
+    "T-002" -> "T-004";
+    "T-003" -> "T-004";
+    "T-003" -> "T-005";
+    "T-004" -> "T-005";
+    "T-002" -> "T-006";
+    "T-005" -> "T-006";
+    "T-004" -> "T-007";
+    "T-006" -> "T-007";
+    "T-004" -> "T-008";
+    "T-007" -> "T-008";
+    "T-007" -> "T-009";
+    "T-008" -> "T-009";
+    "T-009" -> "T-010";
+}

@@ -2,6 +2,8 @@ package org.freeplane.plugin.graph.layout;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.awt.Font;
+import java.awt.font.FontRenderContext;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -10,7 +12,13 @@ import java.util.Optional;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.TimeUnit;
 
+import org.freeplane.plugin.graph.geometry.AwtGeometryTextMetrics;
+import org.freeplane.plugin.graph.geometry.GraphGeometry;
+import org.freeplane.plugin.graph.geometry.GraphGeometryEngine;
+import org.freeplane.plugin.graph.geometry.HullGeometry;
+import org.freeplane.plugin.graph.geometry.HullIntersection;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
+import org.freeplane.plugin.graph.layout.graphstream.ClusterProximityShould;
 import org.freeplane.plugin.graph.layout.graphstream.GraphStreamLayoutFactory;
 import org.freeplane.plugin.graph.projection.BoundaryTier;
 import org.freeplane.plugin.graph.projection.EdgeContributor;
@@ -37,13 +45,16 @@ import org.freeplane.plugin.graph.workspace.model.WorkspaceId;
 import org.junit.Test;
 
 public class BoundarySeparationShould {
-    // Test-local size formulas; the values must equal the production
-    // BoundarySizes constants (reviewed by the task reviewer).
-    private static final double CHAR_WIDTH_UPPER_BOUND = 16.0;
-    private static final double CHAR_HEIGHT_UPPER_BOUND = 24.0;
-    private static final double BOUNDARY_PADDING = 8.0;
     private static final double SIBLING_GAP = 8.0;
-    private static final double FRAME_CLEARANCE = 16.0;
+    // Empty-enclosure packed footprints (production BoundarySizes): the label-sized
+    // box is `max(16, textLength * 16 + 16)` wide and `40` high, and a map root
+    // adds 2 * 16 clearance per axis around its single 128 x 40 group child.
+    private static final double PACKED_LABEL_HEIGHT = 40.0;
+    // Per-axis footprint containment tolerance for settled direct parent/child anchors
+    // (specification section 7.3). The measured worst overflow on fixture A is 0.0: the
+    // children settle 47.0-68.2 units inside the parent footprint intervals, and the
+    // measured overflow is printed by the test (not asserted at a 4-unit bound).
+    private static final double SETTLED_FOOTPRINT_TOLERANCE = 0.0;
 
     private static final WorkspaceId WORKSPACE_ONE =
         WorkspaceId.of("00000000-0000-0000-0000-000000000111");
@@ -60,7 +71,7 @@ public class BoundarySeparationShould {
             LayoutFrame frame = engine.apply(request(WORKSPACE_ONE, fixture.projection, fixture.projection,
                 Collections.<PinProjection>emptyList()));
 
-            assertNoSiblingOverlap(frame, fixture.hulls, fixture.labels);
+            assertPackedLabelGaps(frame, fixture.hulls, fixture.labels);
         }
     }
 
@@ -77,7 +88,26 @@ public class BoundarySeparationShould {
             LayoutFrame frame = engine.apply(request(WORKSPACE_ONE, fixture.projection, fixture.projection,
                 Collections.<PinProjection>emptyList()));
 
-            assertNoSiblingOverlap(frame, fixture.hulls, fixture.labels);
+            GraphGeometry geometry = new GraphGeometryEngine().computeHulls(fixture.projection,
+                frame.positions(), new AwtGeometryTextMetrics(new Font(Font.SANS_SERIF, Font.PLAIN, 12),
+                    new FontRenderContext(null, true, true)));
+            for (int first = 0; first < fixture.hulls.size(); first++) {
+                for (int second = first + 1; second < fixture.hulls.size(); second++) {
+                    HullGeometry firstHull = geometry.hulls().get(fixture.hulls.get(first));
+                    HullGeometry secondHull = geometry.hulls().get(fixture.hulls.get(second));
+                    assertThat(firstHull).isNotNull();
+                    assertThat(secondHull).isNotNull();
+                    assertThat(HullIntersection.siblingOverlap(firstHull, secondHull))
+                        .as("painted sibling hulls %s/%s", first, second)
+                        .isFalse();
+                    System.out.println("settled sibling pair " + first + "/" + second
+                        + " boxGapX=" + boxGapX(frame, fixture.hulls.get(first),
+                            packedLabelWidth(fixture.labels.get(first)), fixture.hulls.get(second),
+                            packedLabelWidth(fixture.labels.get(second)))
+                        + " boxGapY=" + boxGapY(frame, fixture.hulls.get(first), PACKED_LABEL_HEIGHT,
+                            fixture.hulls.get(second), PACKED_LABEL_HEIGHT));
+                }
+            }
         }
     }
 
@@ -86,13 +116,12 @@ public class BoundarySeparationShould {
         List<ProjectedEnclosure> enclosures = new ArrayList<ProjectedEnclosure>();
         EnclosureHullKey rootHull = hull(MAP_ONE, "root");
         List<EnclosureHullKey> groupHulls = new ArrayList<EnclosureHullKey>();
-        List<Double> groupSpans = new ArrayList<Double>();
+        List<List<EnclosureHullKey>> subgroupHullsByGroup = new ArrayList<List<EnclosureHullKey>>();
         List<EnclosureHullKey> rootChildren = new ArrayList<EnclosureHullKey>();
         for (int groupIndex = 0; groupIndex < 2; groupIndex++) {
             EnclosureHullKey groupHull = hull(MAP_ONE, "group-" + groupIndex);
             groupHulls.add(groupHull);
             List<EnclosureHullKey> subgroups = new ArrayList<EnclosureHullKey>();
-            List<SafeNodeLabel> subgroupLabels = new ArrayList<SafeNodeLabel>();
             for (int index = 0; index < 3; index++) {
                 EnclosureKey key = EnclosureKey.of(source(MAP_ONE, "group-" + groupIndex + "-sub-" + index));
                 EnclosureHullKey subgroupHull = EnclosureHullKey.of(Collections.singletonList(key));
@@ -103,14 +132,13 @@ public class BoundarySeparationShould {
                     Collections.<ProjectedNodeKey>emptyList(), Collections.<EnclosureHullKey>emptyList(), false,
                     BoundaryTier.EMPHATIC));
                 subgroups.add(subgroupHull);
-                subgroupLabels.add(label);
             }
             enclosures.add(ProjectedEnclosure.of(groupHull, Collections.singletonList(
                 EnclosureKey.of(source(MAP_ONE, "group-" + groupIndex))), Collections.singletonList(
                     SafeNodeLabel.of("group-" + groupIndex, "group-" + groupIndex)), "map",
                 Optional.of(rootHull), Collections.<ProjectedNodeKey>emptyList(), subgroups, false,
                 BoundaryTier.EMPHATIC));
-            groupSpans.add(Double.valueOf(ringRadius(subgroupLabels) + maximumReach(subgroupLabels)));
+            subgroupHullsByGroup.add(subgroups);
             rootChildren.add(groupHull);
         }
         enclosures.add(ProjectedEnclosure.of(rootHull, Collections.singletonList(
@@ -124,12 +152,27 @@ public class BoundarySeparationShould {
             LayoutFrame frame = engine.apply(request(WORKSPACE_ONE, projection, projection,
                 Collections.<PinProjection>emptyList()));
 
-            for (int first = 0; first < groupHulls.size(); first++) {
-                for (int second = first + 1; second < groupHulls.size(); second++) {
-                    double distance = distance(frame.positions().anchors().get(groupHulls.get(first)),
-                        frame.positions().anchors().get(groupHulls.get(second)));
-                    assertThat(distance).isGreaterThanOrEqualTo(groupSpans.get(first).doubleValue()
-                        + groupSpans.get(second).doubleValue() + SIBLING_GAP);
+            double[][] groupAnchors = new double[][] {
+                {220.0, 0.0}, {-220.0, 0.0}
+            };
+            double[][] subgroupOffsets = new double[][] {
+                {0.0, 0.0}, {-136.0, 0.0}, {136.0, 0.0}
+            };
+            for (int groupIndex = 0; groupIndex < groupHulls.size(); groupIndex++) {
+                assertThat(frame.positions().anchors().get(groupHulls.get(groupIndex)))
+                    .isEqualTo(LayoutPoint.of(groupAnchors[groupIndex][0], groupAnchors[groupIndex][1]));
+                List<EnclosureHullKey> subgroups = subgroupHullsByGroup.get(groupIndex);
+                for (int index = 0; index < subgroups.size(); index++) {
+                    assertThat(frame.positions().anchors().get(subgroups.get(index)))
+                        .isEqualTo(LayoutPoint.of(
+                            groupAnchors[groupIndex][0] + subgroupOffsets[index][0],
+                            groupAnchors[groupIndex][1] + subgroupOffsets[index][1]));
+                }
+                for (int first = 0; first < subgroups.size(); first++) {
+                    for (int second = first + 1; second < subgroups.size(); second++) {
+                        assertPackedPairGap(frame, subgroups.get(first), 128.0, PACKED_LABEL_HEIGHT,
+                            subgroups.get(second), 128.0, PACKED_LABEL_HEIGHT);
+                    }
                 }
             }
         }
@@ -139,7 +182,6 @@ public class BoundarySeparationShould {
     public void rootFramesSeparateOnTheTopRing() {
         List<ProjectedEnclosure> enclosures = new ArrayList<ProjectedEnclosure>();
         List<EnclosureHullKey> rootHulls = new ArrayList<EnclosureHullKey>();
-        List<Double> rootWidths = new ArrayList<Double>();
         MapReferenceId[] maps = new MapReferenceId[] {MAP_ONE, MAP_TWO};
         for (int mapIndex = 0; mapIndex < maps.length; mapIndex++) {
             MapReferenceId map = maps[mapIndex];
@@ -156,7 +198,6 @@ public class BoundarySeparationShould {
                 EnclosureKey.of(source(map, "root"))), Collections.singletonList(SafeNodeLabel.of("Root", "Root")),
                 "map", Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(),
                 Collections.singletonList(groupHull), true, BoundaryTier.EMPHATIC));
-            rootWidths.add(Double.valueOf(2.0 * (reachOf(groupLabel) + FRAME_CLEARANCE)));
         }
         GraphProjection projection = projection(1, Collections.<ProjectedNode>emptyList(), enclosures,
             Collections.<ProjectedEdge>emptyList());
@@ -165,10 +206,11 @@ public class BoundarySeparationShould {
             LayoutFrame frame = engine.apply(request(WORKSPACE_ONE, projection, projection,
                 Collections.<PinProjection>emptyList()));
 
-            double distance = distance(frame.positions().anchors().get(rootHulls.get(0)),
-                frame.positions().anchors().get(rootHulls.get(1)));
-            assertThat(distance).isGreaterThanOrEqualTo(
-                (rootWidths.get(0).doubleValue() + rootWidths.get(1).doubleValue()) * 0.5);
+            assertThat(frame.positions().anchors().get(rootHulls.get(0)))
+                .isEqualTo(LayoutPoint.of(0.0, 0.0));
+            assertThat(frame.positions().anchors().get(rootHulls.get(1)))
+                .isEqualTo(LayoutPoint.of(-168.0, 0.0));
+            assertPackedPairGap(frame, rootHulls.get(0), 160.0, 72.0, rootHulls.get(1), 160.0, 72.0);
         }
     }
 
@@ -272,6 +314,7 @@ public class BoundarySeparationShould {
 
             assertThat(hullGeometry.contains(posOne)).isTrue();
             assertThat(hullGeometry.contains(posTwo)).isTrue();
+            System.out.println("direct node positions " + posOne + " " + posTwo);
         }
     }
 
@@ -279,29 +322,51 @@ public class BoundarySeparationShould {
     public void directParentChildAnchorsSatisfyTheProximityInvariantAfterSettling() {
         GraphProjection projection = ReferenceRepulsionFixture.referenceProjection(1L);
         LayoutFrame frame = settle(ReferenceRepulsionFixture.WORKSPACE, projection);
+        double worstOverflow = 0.0;
         for (ProjectedEnclosure enclosure : projection.enclosures()) {
             if (!enclosure.parentHull().isPresent()) {
                 continue;
             }
             EnclosureHullKey childHull = enclosure.hullKey();
             EnclosureHullKey parentHull = enclosure.parentHull().get();
-            assertThat(distance(frame.positions().anchors().get(childHull),
-                frame.positions().anchors().get(parentHull)))
-                .as("distance from %s to parent %s", childHull, parentHull)
-                .isLessThanOrEqualTo(
-                    ReferenceRepulsionFixture.boundaryRadius(projection, parentHull) - 16.0);
+            LayoutPoint childAnchor = frame.positions().anchors().get(childHull);
+            LayoutPoint parentAnchor = frame.positions().anchors().get(parentHull);
+            // Per-axis footprint containment of the child anchor (specification section
+            // 7.3): the parent footprint interval in world coordinates is
+            // parentAnchor - footprintAnchorOffset +- half extent.
+            double[] footprint = ClusterProximityShould.footprint(projection, parentHull);
+            double halfWidth = footprint[0] * 0.5;
+            double halfHeight = footprint[1] * 0.5;
+            double left = parentAnchor.x() - footprint[2] - halfWidth;
+            double right = parentAnchor.x() - footprint[2] + halfWidth;
+            double bottom = parentAnchor.y() - footprint[3] - halfHeight;
+            double top = parentAnchor.y() - footprint[3] + halfHeight;
+            double overflow = Math.max(
+                Math.max(left - childAnchor.x(), childAnchor.x() - right),
+                Math.max(bottom - childAnchor.y(), childAnchor.y() - top));
+            worstOverflow = Math.max(worstOverflow, overflow);
+            System.out.println("settled anchor offset child=" + enclosure.labels().get(0).displayText()
+                + " dx=" + (childAnchor.x() - parentAnchor.x())
+                + " dy=" + (childAnchor.y() - parentAnchor.y())
+                + " footprintOverflow=" + overflow);
         }
+        System.out.println("worst footprint overflow=" + worstOverflow);
+        assertThat(worstOverflow)
+            .as("settled child anchors inside the per-axis parent footprint interval")
+            .isLessThanOrEqualTo(SETTLED_FOOTPRINT_TOLERANCE);
     }
 
     @Test
     public void siblingAnchorsRemainSeparatedAfterSettling() {
         GraphProjection projection = ReferenceRepulsionFixture.referenceProjection(1L);
         LayoutFrame frame = settle(ReferenceRepulsionFixture.WORKSPACE, projection);
-        assertNoSiblingOverlap(frame,
-            Arrays.asList(ReferenceRepulsionFixture.axiomsHull(),
-                ReferenceRepulsionFixture.definitionsHull()),
-            Arrays.asList(SafeNodeLabel.of("Axioms", "Axioms"),
-                SafeNodeLabel.of("Basic Definitions and Theorems", "Basic Definitions and Theorems")));
+        GraphGeometry geometry = new GraphGeometryEngine().computeHulls(projection, frame.positions(),
+            new AwtGeometryTextMetrics(new Font(Font.SANS_SERIF, Font.PLAIN, 12),
+                new FontRenderContext(null, true, true)));
+        HullGeometry axioms = geometry.hulls().get(ReferenceRepulsionFixture.axiomsHull());
+        HullGeometry definitions = geometry.hulls().get(ReferenceRepulsionFixture.definitionsHull());
+        assertThat(HullIntersection.siblingOverlap(axioms, definitions)).isFalse();
+        assertThat(geometry.hulls().get(ReferenceRepulsionFixture.zfcHull())).isNotNull();
         List<EnclosureHullKey> hulls = Arrays.asList(ReferenceRepulsionFixture.rootHull(),
             ReferenceRepulsionFixture.zfcHull(), ReferenceRepulsionFixture.axiomsHull(),
             ReferenceRepulsionFixture.definitionsHull());
@@ -319,18 +384,20 @@ public class BoundarySeparationShould {
     public void grandchildAnchorsAreExcludedFromBoundaryRepulsion() {
         GraphProjection projection = ReferenceRepulsionFixture.referenceProjection(1L);
         LayoutFrame frame = settle(ReferenceRepulsionFixture.WORKSPACE, projection);
-        assertThat(distance(frame.positions().anchors().get(ReferenceRepulsionFixture.rootHull()),
-            frame.positions().anchors().get(ReferenceRepulsionFixture.axiomsHull()))).isLessThan(1000.0);
+        double measured = distance(frame.positions().anchors().get(ReferenceRepulsionFixture.rootHull()),
+            frame.positions().anchors().get(ReferenceRepulsionFixture.axiomsHull()));
+        System.out.println("grandchild anchor distance root-axioms=" + measured);
+        assertThat(measured).isLessThan(100.0);
     }
 
     @Test
     public void coincidentParentChildAnchorsStayExcluded() {
         GraphProjection projection = ReferenceRepulsionFixture.referenceProjection(1L);
         LayoutFrame frame = settle(ReferenceRepulsionFixture.WORKSPACE, projection);
-        assertThat(distance(frame.positions().anchors().get(ReferenceRepulsionFixture.rootHull()),
-            frame.positions().anchors().get(ReferenceRepulsionFixture.zfcHull())))
-            .isLessThanOrEqualTo(ReferenceRepulsionFixture.boundaryRadius(projection,
-                ReferenceRepulsionFixture.rootHull()) - 16.0);
+        double measured = distance(frame.positions().anchors().get(ReferenceRepulsionFixture.rootHull()),
+            frame.positions().anchors().get(ReferenceRepulsionFixture.zfcHull()));
+        System.out.println("coincident anchor distance root-zfc=" + measured);
+        assertThat(measured).isLessThan(100.0);
     }
 
     @Test
@@ -365,6 +432,8 @@ public class BoundarySeparationShould {
                 worstRms = Math.max(worstRms, last.idle().rms());
                 worstMax = Math.max(worstMax, last.idle().max());
             }
+            System.out.println("pinned fixture firstIdle=" + firstIdleStep + " worstRms=" + worstRms
+                + " worstMax=" + worstMax);
             assertThat(worstRms).isLessThanOrEqualTo(0.0505);
             assertThat(worstMax).isLessThanOrEqualTo(0.10);
             assertThat(last.positions().nodes().get(pinned)).isEqualTo(LayoutPoint.of(1059.0, -145.0));
@@ -402,8 +471,10 @@ public class BoundarySeparationShould {
             }
             assertThat(firstIdle).isNotNull();
             assertThat(firstIdleStep).isLessThanOrEqualTo(2000);
-            assertThat(distance(firstIdle.positions().nodes().get(pinned), LayoutPoint.of(1059.0, -145.0)))
-                .isGreaterThan(10.0);
+            double releasedMovement = distance(firstIdle.positions().nodes().get(pinned),
+                LayoutPoint.of(1059.0, -145.0));
+            System.out.println("unpin firstIdle=" + firstIdleStep + " releasedPinMovement=" + releasedMovement);
+            assertThat(releasedMovement).isGreaterThan(10.0);
         }
         finally {
             worker.close();
@@ -427,10 +498,10 @@ public class BoundarySeparationShould {
                 engine.step();
             }
             LayoutFrame frame = engine.apply(reparentRequest);
-            assertThat(distance(frame.positions().anchors().get(ReferenceRepulsionFixture.axiomsHull()),
-                frame.positions().anchors().get(ReferenceRepulsionFixture.definitionsHull())))
-                .isLessThanOrEqualTo(ReferenceRepulsionFixture.boundaryRadius(reparented,
-                    ReferenceRepulsionFixture.axiomsHull()) - 16.0);
+            double measured = distance(frame.positions().anchors().get(ReferenceRepulsionFixture.axiomsHull()),
+                frame.positions().anchors().get(ReferenceRepulsionFixture.definitionsHull()));
+            System.out.println("reparented anchor distance axioms-definitions=" + measured);
+            assertThat(measured).isLessThan(100.0);
         }
     }
 
@@ -453,16 +524,42 @@ public class BoundarySeparationShould {
         }
     }
 
-    private static void assertNoSiblingOverlap(LayoutFrame frame, List<EnclosureHullKey> hulls,
+    private static void assertPackedLabelGaps(LayoutFrame frame, List<EnclosureHullKey> hulls,
             List<SafeNodeLabel> labels) {
         for (int first = 0; first < hulls.size(); first++) {
             for (int second = first + 1; second < hulls.size(); second++) {
-                LayoutPoint firstAnchor = frame.positions().anchors().get(hulls.get(first));
-                LayoutPoint secondAnchor = frame.positions().anchors().get(hulls.get(second));
-                assertThat(boxesOverlap(firstAnchor, widthOf(labels.get(first)), heightOf(labels.get(first)),
-                    secondAnchor, widthOf(labels.get(second)), heightOf(labels.get(second)))).isFalse();
+                assertPackedPairGap(frame, hulls.get(first), packedLabelWidth(labels.get(first)),
+                    PACKED_LABEL_HEIGHT, hulls.get(second), packedLabelWidth(labels.get(second)),
+                    PACKED_LABEL_HEIGHT);
             }
         }
+    }
+
+    private static void assertPackedPairGap(LayoutFrame frame, EnclosureHullKey firstHull, double firstWidth,
+            double firstHeight, EnclosureHullKey secondHull, double secondWidth, double secondHeight) {
+        double boxGapX = boxGapX(frame, firstHull, firstWidth, secondHull, secondWidth);
+        double boxGapY = boxGapY(frame, firstHull, firstHeight, secondHull, secondHeight);
+        assertThat(Math.max(boxGapX, boxGapY))
+            .as("packed box gap between %s and %s", firstHull, secondHull)
+            .isGreaterThanOrEqualTo(SIBLING_GAP - 1.0e-9);
+    }
+
+    private static double boxGapX(LayoutFrame frame, EnclosureHullKey firstHull, double firstWidth,
+            EnclosureHullKey secondHull, double secondWidth) {
+        LayoutPoint first = frame.positions().anchors().get(firstHull);
+        LayoutPoint second = frame.positions().anchors().get(secondHull);
+        return Math.abs(first.x() - second.x()) - (firstWidth + secondWidth) * 0.5;
+    }
+
+    private static double boxGapY(LayoutFrame frame, EnclosureHullKey firstHull, double firstHeight,
+            EnclosureHullKey secondHull, double secondHeight) {
+        LayoutPoint first = frame.positions().anchors().get(firstHull);
+        LayoutPoint second = frame.positions().anchors().get(secondHull);
+        return Math.abs(first.y() - second.y()) - (firstHeight + secondHeight) * 0.5;
+    }
+
+    private static double packedLabelWidth(SafeNodeLabel label) {
+        return Math.max(16.0, label.displayText().length() * 16.0 + 16.0);
     }
 
     // One very wide sibling plus three narrow siblings: the ring radius depends on
@@ -493,46 +590,6 @@ public class BoundarySeparationShould {
             true, BoundaryTier.EMPHATIC));
         return new SiblingFixture(projection(1, Collections.<ProjectedNode>emptyList(), enclosures,
             Collections.<ProjectedEdge>emptyList()), hulls, labels);
-    }
-
-    private static double ringRadius(List<SafeNodeLabel> children) {
-        if (children.size() <= 1) {
-            return 0.0;
-        }
-        double maxWidth = 0.0;
-        double maxHeight = 0.0;
-        for (SafeNodeLabel label : children) {
-            maxWidth = Math.max(maxWidth, widthOf(label));
-            maxHeight = Math.max(maxHeight, heightOf(label));
-        }
-        return Math.hypot(maxWidth + SIBLING_GAP, maxHeight + SIBLING_GAP)
-            / (2.0 * Math.sin(Math.PI / children.size()));
-    }
-
-    private static double maximumReach(List<SafeNodeLabel> labels) {
-        double result = 0.0;
-        for (SafeNodeLabel label : labels) {
-            result = Math.max(result, reachOf(label));
-        }
-        return result;
-    }
-
-    private static double reachOf(SafeNodeLabel label) {
-        return 0.5 * Math.hypot(widthOf(label), heightOf(label));
-    }
-
-    private static double widthOf(SafeNodeLabel label) {
-        return label.displayText().length() * CHAR_WIDTH_UPPER_BOUND + 2.0 * BOUNDARY_PADDING;
-    }
-
-    private static double heightOf(SafeNodeLabel label) {
-        return CHAR_HEIGHT_UPPER_BOUND + 2.0 * BOUNDARY_PADDING;
-    }
-
-    private static boolean boxesOverlap(LayoutPoint first, double firstWidth, double firstHeight,
-            LayoutPoint second, double secondWidth, double secondHeight) {
-        return Math.abs(first.x() - second.x()) < (firstWidth + secondWidth) * 0.5
-            && Math.abs(first.y() - second.y()) < (firstHeight + secondHeight) * 0.5;
     }
 
     private static LayoutRequest request(WorkspaceId workspace, GraphProjection before, GraphProjection after,
