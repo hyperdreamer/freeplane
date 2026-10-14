@@ -445,6 +445,10 @@ tasks:
         - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/GraphWorkspacePerformanceDiagnostic.java
         - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrection.java
         - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrectionShould.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/SettledReferenceFixture.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/SettledReferenceFixtureCompiler.java
+        - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/SettledReferenceFixtureShould.java
+        - freeplane_plugin_graph/src/test/resources/performance/settled-reference.csv
     resources: []
     interfaces:
       produces:
