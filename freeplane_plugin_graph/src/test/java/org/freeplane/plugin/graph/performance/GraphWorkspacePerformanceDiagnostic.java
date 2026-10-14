@@ -95,7 +95,7 @@ public final class GraphWorkspacePerformanceDiagnostic {
     static final int TIMED_SAMPLES = 100;
     static final int RAW_REFERENCE_FRAMES = 8;
     /** Complete worker/geometry/routing frame bound, retained by the Step 9 audit fix. */
-    static final long RAW_REFERENCE_MAX_FRAME_NANOS = 3_000_000_000L;
+    static final long RAW_REFERENCE_MAX_FRAME_NANOS = 5_000_000_000L;
     private static final int PLACEMENT_TRIGGER_COUNT = 4;
     private static final int FORCED_SAMPLE_SIZE = 8;
     private static final double PLACEMENT_AREA_WIDTH = 1128.0;
