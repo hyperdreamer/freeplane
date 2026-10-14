@@ -973,3 +973,61 @@ router `detectionTruncated`.
 and above them the accumulated truncated set plus `detectionTruncated` is the pinned behaviour, so the
 test is reshaped to assert the pinned semantics and the counted work instead of the all-124,750
 assertion.
+
+## 15. Revision 8 — split A7 for the settling-fixture premise
+
+Added by the PM after the second Step 8 pivot (2026-10-13, user decision "option 1").
+This section extends §9 and §10.3 and amends A7; no pinned threshold and no Revision 7
+budget changes.
+
+### 15.1 The pivot
+
+The pinned A7 fixture (`reference-2000-5000`) has **no steady state**: its generated
+GraphStream force layout diverges numerically at generated-fixture scale (per-step
+position deltas `1.56 -> 8.4e5` by step 6 and `1.19e14` by step 400; all six generated
+scenarios diverge; the 32-particle hand fixture settles normally at step 45, and a
+reference projection with its edge springs removed is static). Measured on the
+diverged frames: `full-worker` p50 10.36 s, `edge-conflict` p50 8.12 s (30/30
+truncations), `edge-routing` p50 0.65 s (30/30 budget stops); the seed frame needs
+~2.9M index items against the 262,144 pin. A steady-state measurement premise cannot be
+satisfied for that fixture, and the bounded budgets bound items, not wall-clock, on
+frames whose coordinates have diverged.
+
+### 15.2 A7a — strict gates on a settled-position fixture
+
+- The strict thresholds (`edge-conflict` 25 ms, `edge-routing` 10 ms, `FULL_WORKER`
+  p95/p99 100 ms, first-frame p95/p99 150/300 ms) and the Revision 7 zero-budget-
+  exhaustion rule are measured on a **settled-position fixture**: a deterministic,
+  committed frame whose size is calibrated as the largest that stays inside every
+  Revision 7 budget with zero exhaustion while carrying a non-trivial steady-state
+  workload (at least one detected crossing and at least one accepted bow or dogleg
+  rung). It need not be the full reference scale: the 2,000/5,000 scale is covered by
+  §15.3's bounded-behaviour assertions, because a full-scale settled graph's conflict
+  volume cannot stay inside the pinned budgets.
+- The fixture is built by the harness from committed fixture data (recorded-ledger
+  pattern), never by stepping the divergent engine, so it is deterministic and cannot
+  diverge. Its positions must exercise the production stages' real work: at least one
+  detected crossing, at least one accepted bow or dogleg rung, and no budget stop on
+  any measured sample.
+- The stages are measured by running the production code on that frame; the measurement
+  mechanism (worker path and/or direct stage re-runs) is pinned by the specification and
+  must not measure a fresh engine's seed frame.
+
+### 15.3 A7b — bounded behaviour on the reference frames
+
+- On the raw/divergent `reference-2000-5000` frames, A7 asserts bounded, flag-visible
+  behaviour instead of millisecond gates: every measured frame completes without OOM and
+  within a pinned per-frame bound; where a Revision 7 budget is exceeded the
+  corresponding flag (`detectionTruncated`, `verificationBudgetExhausted`,
+  `routeBudgetExhausted`, or the existing `indexBudgetExhausted`) is set; and the
+  published counted work stays within the pinned budgets.
+- The per-frame bound is a measurement-window value: the implementation records the
+  measured value and pins the bound from it (tighten-only). No strict millisecond
+  threshold applies to these frames.
+- No frame may hang, leak, or publish an unflagged incomplete residual; the bounded
+  policy's determinism and flag semantics still apply.
+
+### 15.4 Unchanged
+
+Every Revision 7 budget, the four flags, the stop semantics, the traceability and the
+threshold table remain exactly as pinned. Only the *measurement input* of A7 is split.
