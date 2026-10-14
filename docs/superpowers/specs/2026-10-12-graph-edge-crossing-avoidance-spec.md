@@ -1541,3 +1541,45 @@ set `detectionTruncated`; `indexBudgetExhausted` is never used for a truncation 
   and above them the accumulated truncated set plus `detectionTruncated` is the pinned behaviour. The
   test is reshaped to assert the pinned semantics and the counted-work bounds instead of the
   all-124,750 assertion.
+
+## 14. Revision 8 — A7 measurement input split (design §15)
+
+Added by the PM after the second Step 8 pivot (2026-10-13, user decision "option 1").
+Extends §7.1–§7.2, §8 and §10 A7; no threshold and no Revision 7 budget changes.
+
+### 14.1 A7a — settled-position fixture
+
+- New deterministic fixture `settled-reference`: bounded settled positions for a
+  generated projection supplied as committed fixture data (recorded-ledger pattern),
+  never produced by stepping the divergent engine. Its size is calibrated as the largest
+  deterministic layout that stays inside every Revision 7 budget with zero exhaustion
+  while carrying a non-trivial workload; a full-scale 2,000/5,000 settled graph is
+  explicitly not required for A7a because its conflict volume cannot stay in-budget.
+- The §7.1 strict thresholds (`25 ms`, `10 ms`, `100 ms`, `150 ms`, `300 ms`) and the
+  zero-budget-exhaustion rule are asserted on this fixture's measured samples.
+- The fixture must be non-trivial and in-budget: at least one detected crossing and at
+  least one accepted bow or dogleg rung on the measured frame, and no sample may set
+  `detectionTruncated`, `verificationBudgetExhausted`, `routeBudgetExhausted` or
+  `indexBudgetExhausted`. A vacuous frame (no crossings routed) is not acceptable
+  evidence.
+- The measurement runs the production `EdgeConflictCorrection.apply` / `EdgeRouter.route`
+  on the fixture's frame (and the worker composition where the worker gates are
+  asserted); it must not measure a fresh engine's replay seed frame.
+
+### 14.2 A7b — bounded reference-frame behaviour
+
+- On `reference-2000-5000`'s raw/divergent frames, A7 asserts: no OOM; every measured
+  frame completes within a pinned per-frame bound recorded and tightened by the
+  implementation (a measurement-window value); whenever a Revision 7 budget is exceeded
+  the corresponding flag is set; and the published counted work stays within the pinned
+  budgets. No millisecond threshold applies to these frames.
+- The measurement-window values from Revision 7 (§13.4) still govern sample counts and
+  the process deadline; they may be re-pinned with the measured cost recorded.
+
+### 14.3 Traceability
+
+- A7 now reads: the two stages are in the pinned order with the pinned thresholds; the
+  strict gates and the zero-exhaustion rule hold on `settled-reference-2000-5000`
+  (`PerformanceTripwiresShould.referenceFixtureStaysInsideTheStrictWorkerAndFirstFrameGates`
+  plus the settled-fixture gate), and the raw reference frames stay bounded and
+  flag-visible (`PerformanceTripwiresShould.referenceFixtureStaysBoundedAndFlagVisible`).

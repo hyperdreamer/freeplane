@@ -4293,6 +4293,12 @@ git commit -m "test(graph): pin routed arrowheads, multiplicity and sampled hit-
 - Modify: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/PerformanceMeasurements.java:13-70,297-338`
 - Modify: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/PerformanceTripwiresShould.java:38-77,225-290,350-377`
 - Modify: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/GraphWorkspacePerformanceDiagnostic.java:90-91,253-420,840-910`
+- Modify (visibility of the existing engine-supplier constructor only; no behaviour change):
+  `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/LayoutWorker.java:78-82`
+- Create: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/SettledReferenceFixture.java`
+- Create: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/SettledReferenceFixtureCompiler.java`
+- Create: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/SettledReferenceFixtureShould.java`
+- Create: `freeplane_plugin_graph/src/test/resources/performance/settled-reference.csv`
 - Modify (only to tighten a calibrated ceiling below a pinned Task 21 constant when this task's calibration requires it): `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrection.java`
 - Modify (only to tighten a calibrated ceiling below a pinned Task 21 constant when this task's calibration requires it): `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/EdgeRouter.java`
 
@@ -4302,11 +4308,14 @@ git commit -m "test(graph): pin routed arrowheads, multiplicity and sampled hit-
   (Tasks 4, 13-15); `EdgeRouteTimings.indexNanos()/selectionNanos()/residualNanos()`
   (Tasks 5, 16); `BoundarySeparationCorrection.apply(...)`,
   `EdgeConflictCorrection.apply(...)`, `EdgeRouter.route(...)`;
-  `EdgeConflictDiagnostics.detectionTruncated()/verificationBudgetExhausted()/indexBudgetExhausted()`
-  and `EdgeRouteDiagnostics.routeBudgetExhausted()/detectionTruncated()` (Task 21);
-  `GeneratedWorkspace.forScenario("reference-2000-5000")`,
+  `EdgeConflictDiagnostics.detectionTruncated()/verificationBudgetExhausted()/indexBudgetExhausted()/indexInsertedItems()/indexPairChecks()/verificationWork()/verifications()/crossingsDetected()/conflictsDetected()`
+  and `EdgeRouteDiagnostics.routeBudgetExhausted()/detectionTruncated()/routeIndexItems()/routeObstacleChecks()/routePairChecks()/pathCrossingsDetected()/edgesBow()/edgesDogleg()`
+  (Tasks 4, 5, 21); `GeneratedWorkspace.forScenario("reference-2000-5000")` and
   `GeneratedWorkspace.Scenario.REFERENCE_2000_5000.warmupCount()/measuredCount()`;
   `PerformanceMeasurements.Stage` wire names and threshold methods;
+  `LayoutWorker(Supplier<LayoutEngine>, PerceptualIdlePolicy)` (the existing
+  package-private constructor, made public in Step 5);
+  `LayoutFrame.of(...)`, `PerceptualIdlePolicy.spikeDefaults()`,
   `BoundaryCorrectionProfile` as the pattern for the direct-probe timings.
 - Produces: `PerformanceMeasurements.Stage.EDGE_CONFLICT("edge-conflict")` and
   `EDGE_ROUTING("edge-routing")` inserted immediately after `HULL` and before
@@ -4319,11 +4328,34 @@ git commit -m "test(graph): pin routed arrowheads, multiplicity and sampled hit-
   "repaint", "accepted-batch-first-frame"`; the named tests
   `exposeTheCanonicalStageOrderAndThresholds`,
   `referenceFixtureStaysInsideTheStrictWorkerAndFirstFrameGates` and
-  `referenceFixtureUsesTheSettledFrameAndNoBudgetStops`; the
-  `GraphWorkspacePerformanceDiagnostic` settled-frame stage re-runs with
-  `settledFrameStageSamples()` and package-private `runReferenceFixture()`; the
+  `referenceFixtureStaysBoundedAndFlagVisible`; `SettledReferenceFixture.load()` /
+  `.newReplayWorker()` / `.request()` / `.projection()` / `.positions()` / `.pins()`;
+  `SettledReferenceFixtureCompiler.compile()` / `.main(String[])`;
+  `GraphWorkspacePerformanceDiagnostic.runSettledReferenceFixture()`,
+  `.runRawReferenceFixture()`, `.settledReferenceSamples()`, `.rawReferenceFrames()`,
+  `.rawReferenceMaxFrameNanos()` and the public record types
+  `SettledReferenceSample` / `RawReferenceFrame`; the measurement-window constant
+  `RAW_REFERENCE_MAX_FRAME_NANOS` (recorded and tightened in Step 7); the
   zero-exhaustion discards for the two stages; the deadline message
   `"Forty-minute diagnostic process deadline exceeded"`.
+
+**Revision 8 measurement model (binding).** A7 is split into two inputs.
+**A7a** asserts the pinned `edge-conflict` (25 ms) and `edge-routing` (10 ms) strict
+thresholds, the `FULL_WORKER` p95/p99 (100 ms) and first-frame p95/p99 (150/300 ms)
+`out` gates on the deterministic `settled-reference` fixture (committed
+recorded-ledger positions, never produced by stepping the divergent engine), with zero
+budget-exhaustion events on every measured sample and a non-trivial workload (at least
+one detected crossing and at least one accepted bow or dogleg rung). **A7b** asserts
+bounded, flag-visible behaviour on the raw/divergent `reference-2000-5000` frames: no
+OOM, every measured frame completes within the pinned per-frame bound, every exceeded
+Revision 7 budget sets its corresponding flag and the published counted work stays
+within the pinned budgets; no millisecond threshold applies to those frames. The
+attempt-8/9 direct-probe benchmark scaffolding is **superseded**: the seed-frame
+`EDGE_CONFLICT`/`EDGE_ROUTING` recordings and the claim that the strict gates are
+measured on the fresh-engine/direct-probe seed frame must not be reintroduced, and A7b
+must never be read as a strict millisecond gate. Every Revision 7 budget, the four
+flags, the stop semantics and the threshold table remain exactly as pinned; only the
+measurement input of A7 is split.
 
 - [ ] **Step 1: Extend the pinned tripwire test first**
 
@@ -4358,11 +4390,13 @@ Add the Revision 7 measurement-window pins directly after them:
 
 `REFERENCE_2000_5000` is the only scenario that pins 400 warmups / 300 measured (700
 samples); `WARMUP_SAMPLES = 20` and `TIMED_SAMPLES = 100` are the placement-trigger
-sub-measurement counts and are unchanged. Make the two constants package-private in
-Step 4 so this compiles.
+sub-measurement counts and are unchanged. The window values remain re-pinnable with
+measured costs recorded (Revision 7 §13.4); no strict threshold changes.
+Make the two constants package-private in Step 5 so this compiles.
 
-Add the two reference-fixture gate tests. Both read one shared 700-sample run started
-once per test class by `@BeforeClass`:
+Add the two reference-fixture tests. Both read the two shared runs started once per
+test class by `@BeforeClass`; A7a uses the settled fixture and a **real** clock so the
+strict gates are wall-clock measurements, A7b uses the raw frames and a real clock:
 
 ```java
     @ClassRule
@@ -4372,10 +4406,12 @@ once per test class by `@BeforeClass`:
     private static PerformanceMeasurements referenceMeasurements;
 
     @BeforeClass
-    public static void runReferenceFixtureOnce() throws Exception {
+    public static void runReferenceFixturesOnce() throws Exception {
         referenceDiagnostic = new GraphWorkspacePerformanceDiagnostic(
-            classFixtureFolder.newFolder("reference-fixture").toPath(), false, new CountingNanoClock());
-        referenceMeasurements = referenceDiagnostic.runReferenceFixture();
+            classFixtureFolder.newFolder("reference-fixture").toPath(), false,
+            new GraphWorkspacePerformanceDiagnostic.RelativeNanoClock());
+        referenceMeasurements = referenceDiagnostic.runSettledReferenceFixture();
+        referenceDiagnostic.runRawReferenceFixture();
     }
 
     @Test
@@ -4384,43 +4420,81 @@ once per test class by `@BeforeClass`:
             referenceMeasurements.summary(PerformanceMeasurements.Stage.FULL_WORKER);
         PerformanceMeasurements.Summary firstFrame =
             referenceMeasurements.summary(PerformanceMeasurements.Stage.ACCEPTED_BATCH_FIRST_FRAME);
-        assertThat(worker.p95Nanos).isLessThanOrEqualTo(PerformanceMeasurements.STRICT_FULL_WORKER_NANOS);
-        assertThat(worker.p99Nanos).isLessThanOrEqualTo(PerformanceMeasurements.STRICT_FULL_WORKER_NANOS);
-        assertThat(firstFrame.p95Nanos)
+        assertThat(worker.p95Nanos()).isLessThanOrEqualTo(PerformanceMeasurements.STRICT_FULL_WORKER_NANOS);
+        assertThat(worker.p99Nanos()).isLessThanOrEqualTo(PerformanceMeasurements.STRICT_FULL_WORKER_NANOS);
+        assertThat(firstFrame.p95Nanos())
             .isLessThanOrEqualTo(PerformanceMeasurements.STRICT_FIRST_FRAME_P95_NANOS);
-        assertThat(firstFrame.p99Nanos)
+        assertThat(firstFrame.p99Nanos())
             .isLessThanOrEqualTo(PerformanceMeasurements.STRICT_FIRST_FRAME_P99_NANOS);
-        assertThat(referenceMeasurements.summary(PerformanceMeasurements.Stage.EDGE_CONFLICT).p95Nanos)
+        assertThat(referenceMeasurements.summary(PerformanceMeasurements.Stage.EDGE_CONFLICT).p95Nanos())
             .isLessThanOrEqualTo(25_000_000L);
-        assertThat(referenceMeasurements.summary(PerformanceMeasurements.Stage.EDGE_ROUTING).p95Nanos)
+        assertThat(referenceMeasurements.summary(PerformanceMeasurements.Stage.EDGE_ROUTING).p95Nanos())
             .isLessThanOrEqualTo(10_000_000L);
-    }
-
-    @Test
-    public void referenceFixtureUsesTheSettledFrameAndNoBudgetStops() {
-        assertThat(referenceDiagnostic.settledFrameStageSamples()).isTrue();
         assertThat(referenceMeasurements.measuredCount(PerformanceMeasurements.Stage.EDGE_CONFLICT))
             .isEqualTo(300);
         assertThat(referenceMeasurements.measuredCount(PerformanceMeasurements.Stage.EDGE_ROUTING))
             .isEqualTo(300);
         assertThat(referenceMeasurements.discardCount(PerformanceMeasurements.Stage.EDGE_CONFLICT)).isZero();
         assertThat(referenceMeasurements.discardCount(PerformanceMeasurements.Stage.EDGE_ROUTING)).isZero();
-        assertThat(referenceMeasurements.failureCount(PerformanceMeasurements.Stage.EDGE_CONFLICT)).isZero();
-        assertThat(referenceMeasurements.failureCount(PerformanceMeasurements.Stage.EDGE_ROUTING)).isZero();
+        assertThat(referenceDiagnostic.settledReferenceSamples()).isNotEmpty();
+        for (GraphWorkspacePerformanceDiagnostic.SettledReferenceSample sample
+                : referenceDiagnostic.settledReferenceSamples()) {
+            assertThat(sample.edgeDiagnostics().detectionTruncated()).isFalse();
+            assertThat(sample.edgeDiagnostics().verificationBudgetExhausted()).isFalse();
+            assertThat(sample.edgeDiagnostics().indexBudgetExhausted()).isFalse();
+            assertThat(sample.routeDiagnostics().routeBudgetExhausted()).isFalse();
+            assertThat(sample.routeDiagnostics().detectionTruncated()).isFalse();
+        }
+        assertThat(referenceDiagnostic.settledReferenceSamples()).anySatisfy(sample ->
+            assertThat(sample.edgeDiagnostics().crossingsDetected()).isGreaterThan(0));
+        assertThat(referenceDiagnostic.settledReferenceSamples()).anySatisfy(sample ->
+            assertThat(sample.routeDiagnostics().edgesBow()
+                + sample.routeDiagnostics().edgesDogleg()).isGreaterThan(0));
+    }
+
+    @Test
+    public void referenceFixtureStaysBoundedAndFlagVisible() {
+        assertThat(referenceDiagnostic.rawReferenceFrames()).isNotEmpty();
+        assertThat(referenceDiagnostic.rawReferenceMaxFrameNanos())
+            .isLessThanOrEqualTo(GraphWorkspacePerformanceDiagnostic.RAW_REFERENCE_MAX_FRAME_NANOS);
+        for (GraphWorkspacePerformanceDiagnostic.RawReferenceFrame frame
+                : referenceDiagnostic.rawReferenceFrames()) {
+            EdgeConflictDiagnostics edge = frame.edgeDiagnostics();
+            EdgeRouteDiagnostics route = frame.routeDiagnostics();
+            // The pinned Revision 7 caps of spec 13.1 (the constants are package-private in
+            // the production packages; these literals are the specification pins).
+            assertThat(edge.indexInsertedItems()).isLessThanOrEqualTo(262_144L);
+            assertThat(edge.indexPairChecks()).isLessThanOrEqualTo(131_072L);
+            assertThat(edge.verificationWork()).isLessThanOrEqualTo(65_536L);
+            assertThat(route.routeIndexItems()).isLessThanOrEqualTo(262_144L);
+            assertThat(route.routeObstacleChecks()).isLessThanOrEqualTo(131_072L);
+            assertThat(route.routePairChecks()).isLessThanOrEqualTo(131_072L);
+            // Whenever a budget is exhausted the corresponding flag is set.
+            if (edge.indexInsertedItems() == 262_144L) {
+                assertThat(edge.detectionTruncated() || edge.indexBudgetExhausted()).isTrue();
+            }
+            if (edge.indexPairChecks() == 131_072L) {
+                assertThat(edge.detectionTruncated()).isTrue();
+            }
+            if (edge.verificationWork() == 65_536L) {
+                assertThat(edge.verificationBudgetExhausted()).isTrue();
+            }
+            if (route.routeIndexItems() == 262_144L || route.routeObstacleChecks() == 131_072L) {
+                assertThat(route.routeBudgetExhausted()).isTrue();
+            }
+            if (route.routePairChecks() == 131_072L) {
+                assertThat(route.detectionTruncated()).isTrue();
+            }
+        }
     }
 ```
 
-Add the imports `org.junit.BeforeClass` and `org.junit.ClassRule`. If
-`GraphWorkspacePerformanceDiagnostic` has no `runReferenceFixture()` entry point, expose
-one package-private method that runs `GeneratedWorkspace.Scenario.REFERENCE_2000_5000`
-through the existing `runScenario` harness and returns its `PerformanceMeasurements`; do
-not weaken the assertions. The shared run happens once per test class, not once per
-test. The test is allowed to be marked with the same JUnit timeout the reference-fixture
-tests already use.
-
-The A7 threshold measurement is the **settled published worker frame**, never the
-fresh-engine direct probe; Step 4 deletes the attempt-7 `runDirectProbe` recordings and
-the zero-exhaustion rule below is what makes the gate non-vacuous.
+Add the imports `org.junit.BeforeClass`, `org.junit.ClassRule`,
+`org.freeplane.plugin.graph.layout.EdgeConflictDiagnostics` and
+`org.freeplane.plugin.graph.geometry.EdgeRouteDiagnostics`. If
+`GraphWorkspacePerformanceDiagnostic` has no settled/raw entry points yet, Steps 4-5
+add them below; do not weaken the assertions. The shared runs happen once per test
+class, not once per test.
 
 The §8.5/§13.5 bounded-policy fixtures — item-budget and pair-budget truncation, the
 volume fixture, the verification-detection stop, the router obstacle-budget fallback and
@@ -4470,27 +4544,395 @@ feature flag: a first measurement above a pinned strict threshold is a hard fail
 forces a design revision, and the only permitted constant change is a tightening applied
 to the specification and to this test in the same change.
 
-- [ ] **Step 4: Record the two stages on the settled published worker frame**
+- [ ] **Step 4: Build the deterministic `settled-reference` fixture (A7a)**
 
-In `GraphWorkspacePerformanceDiagnostic.runSample`, after `workerHull` is computed and
-before `acceptedFirstFrameState`, replace the attempt-7 direct-probe recordings with the
-settled-frame stage re-runs. `visible` is computed once here from the worker frame's
-projection and `workerHull` is the published hull geometry for `workerFrame.positions()`:
+Create `SettledReferenceFixtureCompiler` as a test-only, **offline** generator. It is
+never called by any test at measurement time: it computes the recorded ledger once, the
+ledger is committed as a resource, and the tests only parse it and verify its digest.
+The construction recipe is fixed and deterministic.
+
+**Size calibration (binding).** The fixture must be the largest deterministic layout
+that stays inside every Revision 7 budget with zero exhaustion while carrying a
+non-trivial workload (at least one detected crossing and at least one accepted bow or
+dogleg rung). A full-scale 2,000/5,000 ledger is **not** required and is measured to be
+infeasible in-budget (its conflict volume exceeds the detected-key, index-item and
+router caps). Start from the full reference projection and deterministically reduce it -
+drop the highest-index nodes and their incident edges in ascending `CanonicalKeys.node`
+order - until the counted work of a complete detection and a complete routing pass stays
+under every cap with margin. Record the chosen node/edge counts in the ledger header and
+in the task report. The fixture's resource name records provenance, not a hard scale.
+
+The construction recipe is fixed and deterministic:
+
+1. Build `GeneratedWorkspace.forScenario("reference-2000-5000").projection()` and order
+   the projected nodes ascending by `CanonicalKeys.node`.
+2. Seed node `i` with the lattice position `((i % 50) * 100, (i / 50) * 100)`.
+3. Run exactly `SETTLED_RELAXATION_ITERATIONS = 400` relaxation passes with the pinned
+   Fruchterman-Reingold routine below: repulsion `k^2 / d` between every node pair
+   within `2k` through a deterministic bucket grid, attraction `d^2 / k` along every
+   node-node edge (the reference graph has no enclosure endpoints), per-node displacement
+   capped at a linearly cooling temperature `8 * 100 * (1 - pass / iterations)`.
+   The pass count, the edge order and the arithmetic are fixed and there is no RNG and
+   no engine, so the compiler always terminates in a fixed time.
+4. Scale node coordinates by `SETTLED_SCALE` (initial `4.1`; see the Step 6 tuning
+   rule) and derive each enclosure anchor as the arithmetic mean of its
+   `directNodes()` positions (zero when it has none).
+5. Emit rows in ascending key order as `kind,key,x,y`, where `kind` is `node` or
+   `anchor`, the key is `CanonicalKeys.node(key)` or `CanonicalKeys.hull(hullKey)`, and
+   the coordinates use `%.17g` so the ledger is byte-stable. Every projected node is
+   recorded and every node is pinned by the fixture request (Step 5), so the frame is an
+   immovable fixed point: a "settled" frame by construction.
+6. Write the bytes to
+   `freeplane_plugin_graph/src/test/resources/performance/settled-reference.csv`
+   and print its SHA-256.
+
+**Why it cannot diverge.** The committed ledger is static data; the test
+(`SettledReferenceFixture.load()`) only reads bytes, verifies the SHA-256 pin and maps
+each row to a `ProjectedNodeKey`/`EnclosureHullKey`; no `LayoutEngine`, no `step()` and
+no iteration run at test time. Even the compiler is bounded: it performs a fixed 400
+passes with clamped displacement, never an open-ended convergence loop, and it is a
+dedicated test-only relaxation, not the production `GraphStreamLayoutEngine`. The
+recorded frame is bounded (`Double.isFinite` on every coordinate) because the attract
+and repel updates are finite and clamped.
+
+The exact routine (fill in the enclosing class and constants):
 
 ```java
-        final Set<ProjectedEndpointKey> visible = ProjectedEndpointVisibility.visibleEndpoints(
-            current.nodes(), current.enclosures());
+    static final int SETTLED_RELAXATION_ITERATIONS = 400;
+    static final double SETTLED_SCALE = 4.1;
+    static final int LATTICE_COLUMNS = 50;
+    static final double LATTICE_SPACING = 100.0;
 
-        final long edgeConflictStart = clock.nanoTime();
-        final EdgeConflictResult settledEdge = invokeBounded(new Callable<EdgeConflictResult>() {
+    static byte[] compile(final GraphProjection projection) {
+        final List<ProjectedNode> nodes = new ArrayList<ProjectedNode>(projection.nodes());
+        Collections.sort(nodes, new Comparator<ProjectedNode>() {
             @Override
-            public EdgeConflictResult call() {
-                final BoundarySeparationResult settledBoundary = correctionEngine.apply(current,
-                    workerFrame.positions(), textMetrics, request.pins());
-                return new EdgeConflictCorrection().apply(current, settledBoundary.positions(),
-                    textMetrics, request.pins(), visible, settledBoundary);
+            public int compare(final ProjectedNode first, final ProjectedNode second) {
+                return CanonicalKeys.node(first.key()).compareTo(CanonicalKeys.node(second.key()));
             }
-        }, "settled edge-conflict stage re-run");
+        });
+        final int count = nodes.size();
+        final Map<ProjectedNodeKey, Integer> indexByKey = new LinkedHashMap<ProjectedNodeKey, Integer>();
+        for (int index = 0; index < count; index++) {
+            indexByKey.put(nodes.get(index).key(), Integer.valueOf(index));
+        }
+        final double[] x = new double[count];
+        final double[] y = new double[count];
+        for (int index = 0; index < count; index++) {
+            x[index] = (index % LATTICE_COLUMNS) * LATTICE_SPACING;
+            y[index] = (index / LATTICE_COLUMNS) * LATTICE_SPACING;
+        }
+        final List<int[]> edges = new ArrayList<int[]>();
+        for (final ProjectedEdge edge : projection.edges()) {
+            if (!edge.first().isNode() || !edge.second().isNode()) {
+                continue;
+            }
+            final Integer first = indexByKey.get(edge.first().node().get());
+            final Integer second = indexByKey.get(edge.second().node().get());
+            if (first != null && second != null && first.intValue() != second.intValue()) {
+                edges.add(new int[] { first.intValue(), second.intValue() });
+            }
+        }
+        final double area = (LATTICE_COLUMNS * LATTICE_SPACING)
+            * ((count / LATTICE_COLUMNS + 1) * LATTICE_SPACING);
+        final double k = Math.sqrt(area / count);
+        final double[] displacementX = new double[count];
+        final double[] displacementY = new double[count];
+        for (int pass = 0; pass < SETTLED_RELAXATION_ITERATIONS; pass++) {
+            final double temperature = 8.0 * LATTICE_SPACING
+                * (1.0 - (double) pass / SETTLED_RELAXATION_ITERATIONS);
+            Arrays.fill(displacementX, 0.0);
+            Arrays.fill(displacementY, 0.0);
+            final double bucketSize = 2.0 * k;
+            final Map<Long, List<Integer>> buckets = new HashMap<Long, List<Integer>>();
+            for (int index = 0; index < count; index++) {
+                final long bucketKey = (((long) Math.floor(x[index] / bucketSize)) << 32)
+                    | ((long) Math.floor(y[index] / bucketSize) & 0xffffffffL);
+                List<Integer> bucket = buckets.get(Long.valueOf(bucketKey));
+                if (bucket == null) {
+                    bucket = new ArrayList<Integer>();
+                    buckets.put(Long.valueOf(bucketKey), bucket);
+                }
+                bucket.add(Integer.valueOf(index));
+            }
+            for (int index = 0; index < count; index++) {
+                final int cellX = (int) Math.floor(x[index] / bucketSize);
+                final int cellY = (int) Math.floor(y[index] / bucketSize);
+                for (int dx = -1; dx <= 1; dx++) {
+                    for (int dy = -1; dy <= 1; dy++) {
+                        final List<Integer> bucket = buckets.get(Long.valueOf(
+                            (((long) (cellX + dx)) << 32) | ((cellY + dy) & 0xffffffffL)));
+                        if (bucket == null) {
+                            continue;
+                        }
+                        for (final Integer other : bucket) {
+                            final int peer = other.intValue();
+                            if (peer == index) {
+                                continue;
+                            }
+                            double deltaX = x[index] - x[peer];
+                            double deltaY = y[index] - y[peer];
+                            double distance = Math.hypot(deltaX, deltaY);
+                            if (distance < 1e-9) {
+                                deltaX = ((index & 1) == 0 ? 1.0 : -1.0) * 0.01;
+                                deltaY = 0.01;
+                                distance = Math.hypot(deltaX, deltaY);
+                            }
+                            final double force = (k * k) / distance / 2.0;
+                            displacementX[index] += deltaX / distance * force;
+                            displacementY[index] += deltaY / distance * force;
+                        }
+                    }
+                }
+            }
+            for (final int[] edge : edges) {
+                final int first = edge[0];
+                final int second = edge[1];
+                final double deltaX = x[first] - x[second];
+                final double deltaY = y[first] - y[second];
+                final double distance = Math.max(1e-9, Math.hypot(deltaX, deltaY));
+                final double force = (distance * distance) / k / 2.0;
+                displacementX[first] -= deltaX / distance * force;
+                displacementY[first] -= deltaY / distance * force;
+                displacementX[second] += deltaX / distance * force;
+                displacementY[second] += deltaY / distance * force;
+            }
+            for (int index = 0; index < count; index++) {
+                final double length = Math.hypot(displacementX[index], displacementY[index]);
+                if (length < 1e-12) {
+                    continue;
+                }
+                final double limited = Math.min(length, temperature) / length;
+                x[index] += displacementX[index] * limited;
+                y[index] += displacementY[index] * limited;
+            }
+        }
+        final StringBuilder csv = new StringBuilder("kind,key,x,y\n");
+        for (int index = 0; index < count; index++) {
+            csv.append("node,").append(CanonicalKeys.node(nodes.get(index).key())).append(',')
+                .append(String.format(Locale.ROOT, "%.17g", x[index] * SETTLED_SCALE)).append(',')
+                .append(String.format(Locale.ROOT, "%.17g", y[index] * SETTLED_SCALE)).append('\n');
+        }
+        final List<ProjectedEnclosure> enclosures = new ArrayList<ProjectedEnclosure>(projection.enclosures());
+        Collections.sort(enclosures, new Comparator<ProjectedEnclosure>() {
+            @Override
+            public int compare(final ProjectedEnclosure first, final ProjectedEnclosure second) {
+                return CanonicalKeys.hull(first.hullKey()).compareTo(CanonicalKeys.hull(second.hullKey()));
+            }
+        });
+        for (final ProjectedEnclosure enclosure : enclosures) {
+            double sumX = 0.0;
+            double sumY = 0.0;
+            int direct = 0;
+            for (final ProjectedNodeKey key : enclosure.directNodes()) {
+                final Integer index = indexByKey.get(key);
+                if (index != null) {
+                    sumX += x[index.intValue()] * SETTLED_SCALE;
+                    sumY += y[index.intValue()] * SETTLED_SCALE;
+                    direct++;
+                }
+            }
+            csv.append("anchor,").append(CanonicalKeys.hull(enclosure.hullKey())).append(',')
+                .append(String.format(Locale.ROOT, "%.17g", direct == 0 ? 0.0 : sumX / direct)).append(',')
+                .append(String.format(Locale.ROOT, "%.17g", direct == 0 ? 0.0 : sumY / direct)).append('\n');
+        }
+        return csv.toString().getBytes(StandardCharsets.UTF_8);
+    }
+```
+
+`main(String[] args)` writes `compile(new GeneratedWorkspace(...).projection())` to the
+resource path above. Run it once in the task worktree:
+
+```bash
+export JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.8-zulu"
+export PATH="$JAVA_HOME/bin:$PATH"
+cd "$(git rev-parse --show-toplevel)"
+gradle :freeplane_plugin_graph:testClasses
+GRAPH_REGENERATE_SETTLED_FIXTURE=1 gradle :freeplane_plugin_graph:test \
+  --tests "org.freeplane.plugin.graph.performance.SettledReferenceFixtureShould" \
+  -PTestLoggingFull
+```
+
+`SettledReferenceFixtureShould` (created in this step) regenerates the committed ledger
+**byte-for-byte** when `GRAPH_REGENERATE_SETTLED_FIXTURE=1` and otherwise asserts that
+`compile(...)` equals the committed resource bytes and that the resource SHA-256 equals
+the pinned constant:
+
+```java
+    @Test
+    public void theCommittedLedgerIsTheDeterministicCompilationOfTheReferenceProjection() throws Exception {
+        GeneratedWorkspace workspace = GeneratedWorkspace.forScenario("reference-2000-5000");
+        byte[] expected = SettledReferenceFixtureCompiler.compile(workspace.projection());
+        if ("1".equals(System.getenv("GRAPH_REGENERATE_SETTLED_FIXTURE"))) {
+            Path resource = repositoryFile(
+                "freeplane_plugin_graph/src/test/resources/performance/settled-reference.csv");
+            Files.createDirectories(resource.getParent());
+            Files.write(resource, expected);
+        }
+        byte[] committed = SettledReferenceFixture.readCommittedLedger();
+        assertThat(committed).isEqualTo(expected);
+        assertThat(SettledReferenceFixture.sha256(committed))
+            .isEqualTo(SettledReferenceFixture.SETTLED_FIXTURE_SHA256);
+    }
+
+    @Test
+    public void theCommittedLedgerCoversTheReferenceProjectionExactly() {
+        SettledReferenceFixture fixture = SettledReferenceFixture.load();
+        assertThat(fixture.positions().nodes()).hasSize(2000);
+        assertThat(fixture.positions().anchors()).hasSize(1200);
+        assertThat(fixture.positions().nodes().keySet()).containsExactlyInAnyOrderElementsOf(
+            nodeKeys(fixture.projection()));
+        assertThat(fixture.pins()).hasSize(2000);
+    }
+```
+
+Define the two test helpers in the same class: `repositoryFile(String relativePath)`
+walks up from the working directory until the file exists (the
+`GraphWorkspaceModelAcceptanceShould.repositoryFile` pattern), and
+`nodeKeys(GraphProjection)` returns the ascending `CanonicalKeys.node` key list of the
+projection's nodes.
+
+`SettledReferenceFixture` (created in this step) loads the resource through
+`SettledReferenceFixture.class.getResourceAsStream("/performance/settled-reference.csv")`,
+verifies the pinned SHA-256, parses the header `kind,key,x,y` and builds the
+`LayoutPositions`/`PinProjection` lists against the projection's exact key sets (a
+missing or extra row raises `IllegalStateException`). Its public surface is:
+
+```java
+public final class SettledReferenceFixture {
+    public static final String SETTLED_FIXTURE_SHA256 = "<recorded in Step 4>";
+    static byte[] readCommittedLedger();
+    static String sha256(byte[] bytes);
+    public static SettledReferenceFixture load();
+    public GraphProjection projection();
+    public LayoutPositions positions();
+    public List<PinProjection> pins();
+    public LayoutRequest request();
+    public LayoutFrame replayFrame();       // LayoutFrame.of(0L, positions(), false, 0)
+}
+```
+
+`request()` builds the `LayoutRequest` from the reference workspace id, the loaded
+projection, an empty `ProjectionDiff.between(projection, projection)` and the ledged
+pins.
+
+Those two surface requirements are the whole recorded-ledger contract: static committed
+bytes, a digest pin, and no engine step anywhere in the test path.
+
+- [ ] **Step 5: Record the two stages on the settled fixture and the raw frames**
+
+Make the `LayoutWorker` engine-supplier constructor public (visibility only):
+
+```java
+    public LayoutWorker(final Supplier<LayoutEngine> engineFactory,
+            final PerceptualIdlePolicy idlePolicy) {
+```
+
+This is the seam `SettledReferenceFixture` needs to drive the production worker
+composition with a deterministic replay engine:
+
+```java
+    private static final class LedgerReplayEngine implements LayoutEngine {
+        private final LayoutFrame frame;
+
+        private LedgerReplayEngine(final LayoutFrame frame) {
+            this.frame = frame;
+        }
+
+        @Override
+        public LayoutFrame apply(final LayoutRequest request) {
+            return frame;
+        }
+
+        @Override
+        public LayoutFrame step() {
+            return frame;
+        }
+
+        @Override
+        public void reset() {
+        }
+
+        @Override
+        public void close() {
+        }
+    }
+```
+
+In `GraphWorkspacePerformanceDiagnostic`, add the two record types and the two entry
+points (package-private; `WARMUP_SAMPLES`/`TIMED_SAMPLES` become package-private), and
+remove every `EDGE_CONFLICT`/`EDGE_ROUTING` recording from `runDirectProbe` (the
+attempt-8/9 direct-probe benchmark scaffolding is superseded; if no such recordings
+exist yet, add none there):
+
+```java
+    static final int RAW_REFERENCE_FRAMES = 8;
+    static final long RAW_REFERENCE_MAX_FRAME_NANOS = 30_000_000_000L;   // Step 7 tightens
+
+    public static final class SettledReferenceSample {
+        private final EdgeConflictDiagnostics edgeDiagnostics;
+        private final EdgeRouteDiagnostics routeDiagnostics;
+        public EdgeConflictDiagnostics edgeDiagnostics() { return edgeDiagnostics; }
+        public EdgeRouteDiagnostics routeDiagnostics() { return routeDiagnostics; }
+    }
+
+    public static final class RawReferenceFrame {
+        private final long durationNanos;
+        private final EdgeConflictDiagnostics edgeDiagnostics;
+        private final EdgeRouteDiagnostics routeDiagnostics;
+        public long durationNanos() { return durationNanos; }
+        public EdgeConflictDiagnostics edgeDiagnostics() { return edgeDiagnostics; }
+        public EdgeRouteDiagnostics routeDiagnostics() { return routeDiagnostics; }
+    }
+
+    private final List<SettledReferenceSample> settledReferenceSamples =
+        new ArrayList<SettledReferenceSample>();
+    private final List<RawReferenceFrame> rawReferenceFrames =
+        new ArrayList<RawReferenceFrame>();
+
+    List<SettledReferenceSample> settledReferenceSamples() {
+        return Collections.unmodifiableList(settledReferenceSamples);
+    }
+
+    List<RawReferenceFrame> rawReferenceFrames() {
+        return Collections.unmodifiableList(rawReferenceFrames);
+    }
+
+    long rawReferenceMaxFrameNanos() {
+        long maximum = 0L;
+        for (final RawReferenceFrame frame : rawReferenceFrames) {
+            maximum = Math.max(maximum, frame.durationNanos());
+        }
+        return maximum;
+    }
+```
+
+`runSettledReferenceFixture()` runs `REFERENCE_2000_5000.warmupCount()` +
+`measuredCount()` samples with one replay worker and records every stage on the settled
+fixture's own frame. `visible` is computed once from the fixture projection; the
+`edge-conflict` stage is timed on `frame.positions()` after a fresh
+`BoundarySeparationCorrection.apply`; the `edge-routing` stage is timed on the same
+positions and `workerHull`; the first-frame sample runs from the sample start through
+the `CanvasState` swap, mirroring `runSample`:
+
+```java
+        final long workerStart = clock.nanoTime();
+        final LayoutFrame workerFrame = await(worker.submit(fixture.request()),
+            "settled reference worker submit");
+        final long workerEnd = clock.nanoTime();
+        measurements.recordDuration(PerformanceMeasurements.Stage.FULL_WORKER,
+            workerStart, workerEnd, warmup);
+
+        final GraphGeometry workerHull = geometryEngine.computeHulls(fixture.projection(),
+            workerFrame.positions(), textMetrics);
+        final Set<ProjectedEndpointKey> visible = ProjectedEndpointVisibility.visibleEndpoints(
+            fixture.projection().nodes(), fixture.projection().enclosures());
+
+        final BoundarySeparationResult settledBoundary = correctionEngine.apply(fixture.projection(),
+            workerFrame.positions(), textMetrics, fixture.pins());
+        final long edgeConflictStart = clock.nanoTime();
+        final EdgeConflictResult settledEdge = new EdgeConflictCorrection().apply(fixture.projection(),
+            settledBoundary.positions(), textMetrics, fixture.pins(), visible, settledBoundary);
         final long edgeConflictEnd = clock.nanoTime();
         measurements.recordDuration(PerformanceMeasurements.Stage.EDGE_CONFLICT,
             edgeConflictStart, edgeConflictEnd, warmup);
@@ -4501,12 +4943,8 @@ projection and `workerHull` is the published hull geometry for `workerFrame.posi
         }
 
         final long edgeRoutingStart = clock.nanoTime();
-        final EdgePaths settledPaths = invokeBounded(new Callable<EdgePaths>() {
-            @Override
-            public EdgePaths call() {
-                return new EdgeRouter().route(current, workerFrame.positions(), workerHull, visible);
-            }
-        }, "settled edge-routing stage re-run");
+        final EdgePaths settledPaths = new EdgeRouter().route(fixture.projection(),
+            workerFrame.positions(), workerHull, visible);
         final long edgeRoutingEnd = clock.nanoTime();
         measurements.recordDuration(PerformanceMeasurements.Stage.EDGE_ROUTING,
             edgeRoutingStart, edgeRoutingEnd, warmup);
@@ -4514,61 +4952,60 @@ projection and `workerHull` is the published hull geometry for `workerFrame.posi
                 || settledPaths.diagnostics().detectionTruncated()) {
             measurements.recordDiscard(PerformanceMeasurements.Stage.EDGE_ROUTING);
         }
-        settledFrameStageSamples = true;
+        if (!warmup) {
+            settledReferenceSamples.add(new SettledReferenceSample(settledEdge.diagnostics(),
+                settledPaths.diagnostics()));
+        }
 ```
 
-Add the `EdgeConflictCorrection` and `EdgeConflictResult` imports (the snippet's
-`Callable`, `EdgePaths`, `EdgeRouter`, `BoundarySeparationResult`,
-`ProjectedEndpointVisibility` and `ProjectedEndpointKey` types are already imported).
-
-The two stage samples are recorded **only** here; delete every `EDGE_CONFLICT` and
-`EDGE_ROUTING` recording from `runDirectProbe`, so no fresh-engine seed-frame sample can
-enter the gate (the attempt-7 direct-probe recordings are removed). Add
-`private boolean settledFrameStageSamples;` with the package-private accessors
-`boolean settledFrameStageSamples()` and `PerformanceMeasurements runReferenceFixture()`;
-make `runScenario` return the `PerformanceMeasurements` it builds so
-`runReferenceFixture()` can return it (it already calls `appendRows(measurements)`).
-Make `WARMUP_SAMPLES` and `TIMED_SAMPLES` package-private. Fix `checkDeadline`'s message
-to exactly `"Forty-minute diagnostic process deadline exceeded"`.
-
-A budget-stop sample is a discard, so `PerformanceMeasurements.Summary.pass()` is false
-for that stage; the zero-exhaustion rule for A7 is enforced by
-`referenceFixtureUsesTheSettledFrameAndNoBudgetStops` and by the strict diagnostic
-ledger. The deadline arithmetic is pinned and recorded: the reference window is 700
-samples at the 2 s per-sample budget ≈ 23.3 min, the other five scenarios are 250
-samples × 2 s ≈ 8.3 min and the placement triggers ≤ 6 min, all inside the pinned
-`PROCESS_DEADLINE_NANOS` (40 min). The settled-frame re-runs use the harness's
-bounded-operation wrapper (`invokeBounded`) with the per-operation expected time pinned
-in the task report.
+The settled run is the **only** place the two stages are recorded; the raw run records
+no `EDGE_CONFLICT`/`EDGE_ROUTING` samples at all. `runRawReferenceFixture()` submits
+exactly `RAW_REFERENCE_FRAMES = 8` production worker frames on the generated reference
+workspace (no `worker.step()`, matching the published raw/divergent frames), times each
+`worker.submit` completion and records a `RawReferenceFrame` with the frame's own
+`edgeConflictDiagnostics()` and the `EdgeRouter.route(...)` diagnostics for that frame's
+positions. Its frames must be non-failed (`LayoutFrame.of` already rejects non-finite
+coordinates), so an OOM or a failed frame fails the test rather than passing silently.
 
 Also validate `frame.edgeConflictDiagnostics()` in `requireUsableFrame` exactly as
 `validateBoundaryDiagnostics` validates the boundary record: the diagnostics must be
 present on every usable worker frame (the Task 8 `CanvasState` factory already routes the
 frame's own positions).
 
-- [ ] **Step 5: Run the performance suites**
+- [ ] **Step 6: Run the performance suites and tune only the fixture compiler**
 
 ```bash
 export JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.8-zulu"
 export PATH="$JAVA_HOME/bin:$PATH"
 cd "$(git rev-parse --show-toplevel)"
 gradle :freeplane_plugin_graph:test \
+  --tests "org.freeplane.plugin.graph.performance.SettledReferenceFixtureShould" \
   --tests "org.freeplane.plugin.graph.performance.PerformanceTripwiresShould" \
   -PTestLoggingFull
 ```
 
 Expected: `BUILD SUCCESSFUL`; the wire list and both thresholds pass, the window pins
-hold, and the reference fixture stays inside the worker and first-frame gates with zero
-exhaustion discards. If the first measurement exceeds one of the pinned thresholds, stop
-and report `BLOCKED` with the measured p50/p95/p99 values: the plan does not authorize
-raising a threshold.
+hold, every measured settled sample is exhaustion-free and non-trivial (at least one
+detected crossing and at least one accepted bow or dogleg), the settled fixture stays
+inside the worker/first-frame gates, and the raw frames stay bounded and flag-visible.
 
-The full wall-clock ledger is the existing
+If Step 6 fails, the only permitted adjustments are the deterministic fixture compiler's
+parameters (`SETTLED_RELAXATION_ITERATIONS`, `SETTLED_SCALE` and the relaxation
+constants) and its deterministic projection subset size (per the Step 4 size-calibration
+rule): record the observed counted work, regenerate the ledger, and re-run. **Do not change any
+assertion, threshold or Revision 7 budget.** If no safe parameter change removes a
+budget stop, stop and report `BLOCKED` with the observed diagnostics
+(`indexInsertedItems`, `indexPairChecks`, `detectionTruncated`, `indexBudgetExhausted`,
+`verificationBudgetExhausted`, `routeIndexItems`, `routeObstacleChecks`,
+`routePairChecks`, `routeBudgetExhausted`, and the measured stage p50/p95/p99): the plan
+does not authorize weakening A7a or raising a budget.
+
+The full wall-clock ledger remains the existing
 `gradle :freeplane_plugin_graph:graphPerformanceDiagnostic -PgraphStrictPerformance`
 JavaExec (all six scenarios, the process deadline and the strict ledger). Run it once on
 the reference machine for the calibration record below.
 
-- [ ] **Step 6: Record the calibration (`f = 0.5`, tighten-only)**
+- [ ] **Step 7: Record the calibration and the A7b per-frame bound (tighten-only)**
 
 On the saturated in-budget frame (all eight Task 21 budgets at their caps, including the
 final detection and the §5.4 rebuild), measure for each budget `B` the per-unit cost
@@ -4583,27 +5020,42 @@ the measured values and replaces any ceiling above its calibrated cap with the c
 value in the same change ... Only tightening is allowed") is satisfied by this record,
 and any measured stage time above the pinned threshold blocks the commit.
 
-- [ ] **Step 7: Complete probe 14's budget half**
+Record the max raw/divergent frame time from `runRawReferenceFixture()`; replace
+`RAW_REFERENCE_MAX_FRAME_NANOS` with `ceil(max(measuredMaxNanos, 1 s) * 1.25)` rounded up
+to the next second when that is smaller than the current value, and record both the
+measured maximum and the final pin in the task report. This is a measurement-window
+value (Revision 8 §15.3); no strict millisecond threshold applies to the raw frames.
+The Revision 7 window values (400/300, `WARMUP_SAMPLES = 20`, `TIMED_SAMPLES = 100`, the
+40-minute `PROCESS_DEADLINE_NANOS`) remain re-pinnable with the measured cost recorded;
+no strict threshold changes.
 
-With the `edge-conflict` stage recorded, apply the Task 15 probe 14 mutation again
-(fresh `computeHulls` instead of the terminal-geometry reuse) and run
+- [ ] **Step 8: Complete probe 14's budget half**
+
+With the `edge-conflict` stage recorded on the settled fixture, apply the Task 15 probe
+14 mutation again (fresh `computeHulls` instead of the terminal-geometry reuse) and run
 `referenceFixtureStaysInsideTheStrictWorkerAndFirstFrameGates`. Expected: the mutation
 fails `reusesTheBoundaryTerminalGeometry` (the fresh `computeHulls` rebuilds radius
 8.0/14.0 discs instead of the poisoned terminal geometry), and it increases the
 settled-frame `edge-conflict` cost, so if that increase pushes the p95 past 25 ms the
 strict gate also fails. Restore the file and confirm `git diff` is empty.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
 cd "$(git rev-parse --show-toplevel)"
-git add freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/PerformanceMeasurements.java \
+git add freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/LayoutWorker.java \
+  freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/PerformanceMeasurements.java \
   freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/PerformanceTripwiresShould.java \
-  freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/GraphWorkspacePerformanceDiagnostic.java
-git commit -m "perf(graph): measure edge stages on the settled frame with zero-exhaustion gates [2026-10-12-graph-edge-crossing-avoidance]"
+  freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/GraphWorkspacePerformanceDiagnostic.java \
+  freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/SettledReferenceFixture.java \
+  freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/SettledReferenceFixtureCompiler.java \
+  freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/SettledReferenceFixtureShould.java \
+  freeplane_plugin_graph/src/test/resources/performance/settled-reference.csv
+git commit -m "perf(graph): split A7 measurement with a committed settled-position fixture [2026-10-12-graph-edge-crossing-avoidance]"
 ```
 
-If Step 6 tightened a calibrated ceiling, include the two source files in the same
+If Step 5 tightened a calibrated ceiling or Step 7 tightened
+`RAW_REFERENCE_MAX_FRAME_NANOS`, include the modified source file(s) in the same
 `git add` and the same commit.
 
 ## Task 19: Pin the acceptance surface and run the module and core gates
@@ -4623,7 +5075,11 @@ If Step 6 tightened a calibrated ceiling, include the two source files in the sa
   `EdgePaths.diagnostics().pathCrossingsResidual()`;
   `EdgeConflictDiagnostics.detectionTruncated()/verificationBudgetExhausted()/indexBudgetExhausted()`
   and `EdgeRouteDiagnostics.routeBudgetExhausted()/detectionTruncated()` (Task 21);
-  the Task 16 routed paths; every acceptance test named in spec §10.
+  the Task 16 routed paths; the Task 18 A7a/A7b acceptance tests
+  (`PerformanceTripwiresShould.referenceFixtureStaysInsideTheStrictWorkerAndFirstFrameGates`
+  on the committed `settled-reference` fixture, and
+  `.referenceFixtureStaysBoundedAndFlagVisible` on the raw/divergent reference frames);
+  every acceptance test named in spec §10.
 - Produces: `GraphCanvasPaintShould.reportsNoPaintedCrossingResidualForTheReportedFixture`
   with the Revision 7 non-truncation scope, and the full acceptance gate evidence in the
   task report (the module suite result and the core-gate listing).
@@ -4702,6 +5158,7 @@ gradle :freeplane_plugin_graph:test \
   --tests "org.freeplane.plugin.graph.layout.LayoutWorkerShould" \
   --tests "org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" \
   --tests "org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" \
+  --tests "org.freeplane.plugin.graph.performance.SettledReferenceFixtureShould" \
   --tests "org.freeplane.plugin.graph.performance.PerformanceTripwiresShould" \
   -PTestLoggingFull
 ```
@@ -4723,14 +5180,21 @@ by the Task 21 pins) and the truncated scope by
 `EdgeConflictCorrectionShould.truncatesDetectionAtTheItemBudget` +
 `.truncatesDetectionAtThePairBudget` (the item/pair stop publishes the ascending
 accumulated set as a lower-bound residual with `detectionTruncated == true`); A7 the
-settled-frame zero-exhaustion gate by
-`PerformanceTripwiresShould.exposeTheCanonicalStageOrderAndThresholds` +
-`.referenceFixtureStaysInsideTheStrictWorkerAndFirstFrameGates` +
-`.referenceFixtureUsesTheSettledFrameAndNoBudgetStops` (every measured sample reports
-`detectionTruncated == false`, `verificationBudgetExhausted == false`,
-`indexBudgetExhausted == false` and `routeBudgetExhausted == false` for the two stages);
-A8 **all twenty probes** recorded in Tasks 13-18 and 21 (probes 1-16 in Tasks 13-18,
-probes 17-20 in Task 21); A9
+Revision 8 split — **A7a** by `PerformanceTripwiresShould.exposeTheCanonicalStageOrderAndThresholds` +
+`.referenceFixtureStaysInsideTheStrictWorkerAndFirstFrameGates` on the committed
+`settled-reference` ledger (`SettledReferenceFixtureShould` proves the ledger
+is the deterministic compilation of the reference projection): the pinned strict gates
+hold and every measured sample reports `detectionTruncated == false`,
+`verificationBudgetExhausted == false`, `indexBudgetExhausted == false`,
+`routeBudgetExhausted == false` with at least one detected crossing and at least one
+accepted bow or dogleg; **A7b** by
+`.referenceFixtureStaysBoundedAndFlagVisible` on the raw/divergent reference frames: no
+OOM, every frame completes within `RAW_REFERENCE_MAX_FRAME_NANOS`, every exhausted
+Revision 7 budget has its flag set and the published counted work stays within the pins
+(no millisecond threshold applies to those frames). The attempt-8/9 direct-probe
+benchmark scaffolding is superseded where it conflicts with this measurement model; A8
+**all twenty probes** recorded in Tasks 13-18 and 21 (probes 1-16 in Tasks 13-18, probes
+17-20 in Task 21); A9
 `EdgeConflictCorrectionShould.isDeterministicAcrossRunsAndPermutedInputs` +
 `EdgeRouterShould.isDeterministicAcrossRunsAndPermutedEdgeOrder`; A10 this gate.
 
