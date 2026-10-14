@@ -75,7 +75,7 @@ public final class LayoutWorker implements AutoCloseable {
         this.executor = createExecutor();
     }
 
-    LayoutWorker(final Supplier<LayoutEngine> engineFactory, final PerceptualIdlePolicy idlePolicy) {
+    public LayoutWorker(final Supplier<LayoutEngine> engineFactory, final PerceptualIdlePolicy idlePolicy) {
         this.engineFactory = Objects.requireNonNull(engineFactory, "engineFactory");
         this.idlePolicy = Objects.requireNonNull(idlePolicy, "idlePolicy");
         this.executor = createExecutor();
