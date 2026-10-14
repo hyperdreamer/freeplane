@@ -2,7 +2,7 @@ schema_version: 1
 topic: graph-edge-crossing-avoidance
 source_plan:
   path: docs/superpowers/plans/2026-10-12-graph-edge-crossing-avoidance.md
-  sha256: 3a9c377a37a60ed4391c192f6acf5e9c331aa969b6d4ed04b49c62c1d86eba16
+  sha256: dc9d9e2b051d59ecc366aef265bca11e548e27e6c785a2611192694dc2efde76
   tasks: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
 validation_env:
   JAVA_HOME: ~/.sdkman/candidates/java/21.0.8-zulu
