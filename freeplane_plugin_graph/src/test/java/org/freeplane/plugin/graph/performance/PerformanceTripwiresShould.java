@@ -135,17 +135,20 @@ public class PerformanceTripwiresShould {
         assertThat(referenceDiagnostic.settledReferenceSamples()).isNotEmpty();
         for (GraphWorkspacePerformanceDiagnostic.SettledReferenceSample sample
                 : referenceDiagnostic.settledReferenceSamples()) {
+            // Revision 9 must leave this complete in-index fixture unsuppressed.
+            // The constant is package-private in layout; 8 is the specification pin.
+            assertThat(sample.edgeDiagnostics().conflictsDetected())
+                .as("A7a must remain within the Revision 9 repairable-conflict bound")
+                .isLessThanOrEqualTo(8);
+            assertThat(sample.edgeDiagnostics().crossingsDetected()).isGreaterThan(0);
+            assertThat(sample.routeDiagnostics().edgesBow()
+                + sample.routeDiagnostics().edgesDogleg()).isGreaterThan(0);
             assertThat(sample.edgeDiagnostics().detectionTruncated()).isFalse();
             assertThat(sample.edgeDiagnostics().verificationBudgetExhausted()).isFalse();
             assertThat(sample.edgeDiagnostics().indexBudgetExhausted()).isFalse();
             assertThat(sample.routeDiagnostics().routeBudgetExhausted()).isFalse();
             assertThat(sample.routeDiagnostics().detectionTruncated()).isFalse();
         }
-        assertThat(referenceDiagnostic.settledReferenceSamples()).anySatisfy(sample ->
-            assertThat(sample.edgeDiagnostics().crossingsDetected()).isGreaterThan(0));
-        assertThat(referenceDiagnostic.settledReferenceSamples()).anySatisfy(sample ->
-            assertThat(sample.routeDiagnostics().edgesBow()
-                + sample.routeDiagnostics().edgesDogleg()).isGreaterThan(0));
     }
 
     @Test

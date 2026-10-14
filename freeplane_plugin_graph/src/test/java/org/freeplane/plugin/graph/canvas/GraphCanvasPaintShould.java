@@ -1193,6 +1193,14 @@ public class GraphCanvasPaintShould {
     }
 
     private static PaintFixture bowFixture() {
+        return bowFixture(LayoutPoint.of(0.0, 90.0));
+    }
+
+    private static PaintFixture shortTerminalBowFixture() {
+        return bowFixture(LayoutPoint.of(82.0, 7.0));
+    }
+
+    private static PaintFixture bowFixture(final LayoutPoint control) {
         ProjectedNode first = node(FIRST_MAP, "bow-first", LayoutPoint.of(-90.0, 0.0));
         ProjectedNode second = node(FIRST_MAP, "bow-second", LayoutPoint.of(90.0, 0.0));
         ProjectedEndpointKey firstEndpoint = ProjectedEndpointKey.ofNode(first.key());
@@ -1206,7 +1214,7 @@ public class GraphCanvasPaintShould {
         LayoutPoint start = geometry.edgeAttachment(firstEndpoint, LayoutPoint.of(90.0, 0.0));
         LayoutPoint end = geometry.edgeAttachment(secondEndpoint, LayoutPoint.of(-90.0, 0.0));
         Map<ProjectedEdgeKey, EdgePath> byEdge = new LinkedHashMap<ProjectedEdgeKey, EdgePath>();
-        byEdge.put(edge.key(), EdgePath.bow(start, LayoutPoint.of(0.0, 90.0), end));
+        byEdge.put(edge.key(), EdgePath.bow(start, control, end));
         EdgePaths edgePaths = EdgePaths.of(byEdge, EdgeRouteDiagnostics.empty(),
             new EdgeRouteTimings(0L, 0L, 0L));
         GraphProjection projection = GraphProjection.projected(1L, Arrays.asList(first, second),
@@ -1415,7 +1423,7 @@ public class GraphCanvasPaintShould {
         assertThat(GraphPainter.availableArrowHeadWorldLength(bow.terminalSegmentLength(false), true, true))
             .isEqualTo(Math.hypot(180.0, 90.0) / 2.0);
 
-        PaintFixture fixture = bowFixture();
+        PaintFixture fixture = shortTerminalBowFixture();
         EdgePath routed = fixture.state.edgePaths().path(fixture.edgeKey).get();
         ProjectedEdge routedEdge = fixture.state.projection().edges().get(0);
         double zoom = 0.05;

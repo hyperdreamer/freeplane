@@ -59,6 +59,7 @@ for the chosen number.
 | `ROUTE_EPSILON` | `EdgeRouter` | `1e-9` | world units | covers only degenerate touch | Matches the house precision `BoundarySeparationCorrection.SUPPORT_COMPARISON_EPSILON = 1e-9`; `10⁻⁹` is nine orders below the pinned clearances (`3.0`), so it can never mask a real violation while absorbing floating-point touch. Crossing predicates are sign-only (no epsilon on the sign), normalise the four points of a predicate by one common binary exponent and can never produce a non-finite product, so extreme spans cannot silently turn every crossing degenerate. |
 | `MAX_RELOCATION_ROUNDS` | `EdgeConflictCorrection` | `4` | count | `≥ 1` | Equals `BoundarySeparationCorrection.MAX_DISPLACEMENT_ROUNDS = 4`; every accepted round strictly shrinks the conflict set by A1, so four rounds bound the stage exactly as the boundary stage bounds its own displacement rounds. |
 | `MAX_VERIFICATIONS_PER_FRAME` | `EdgeConflictCorrection` | `64` | count | bounds every A1–A4 attempt including retries | Equals `NodeSeparationProjection.MAX_PASSES = 64`; the per-frame detection count is bounded by `1 + MAX_RELOCATION_ROUNDS + MAX_VERIFICATIONS_PER_FRAME + 1`, and one batch of six candidates plus its six singles never exhausts the budget for a frame with a handful of conflicts. Exhaustion sets `verificationBudgetExhausted`, never an exception. |
+| `EDGE_CONFLICT_MAX_REPAIRABLE_CONFLICTS_PER_FRAME` | `EdgeConflictCorrection` | `8` | count | bounds the ordinary in-index conflict set before candidate generation | A complete initial detection with more than eight keys suppresses relocation for that frame; direct full-enumeration fallback remains on the Revision 7 path. |
 | `BOW_SAMPLE_TOLERANCE` | `EdgePath` | `0.75` | world units | max sagitta `≤ min(EDGE_NODE_CLEARANCE, EDGE_CLEARANCE) / 2 = 1.5` | Half the allowed fidelity bound (safety margin for the §6.5 single-sample-list contract): the drawn polyline deviates from the true quadratic by at most `0.75`, i.e. a quarter of the `3.0` clearance. |
 | `FAN_HULL_RADIUS` | `EdgeRouter` | `16.0` | world units | `> 0`; hull-endpoint part of `endpointClearanceRadius` | Equals `BoundarySeparationCorrection.HULL_CLEARANCE = 16.0`: a hull endpoint has no drawn disc, and its fan region uses exactly the hull padding the boundary stage reserves, so the two stages agree on hull scale. |
 | `CONFLICT_CELL_SIZE` | `EdgeConflictCorrection` | `48.0` | world units | `> 0`; the level-0 floor of the span-adaptive cell size with 64-bit cell-key encoding + outermost-ring fallback | `48.0 > 34.0 = 2 × (14.0 + EDGE_NODE_CLEARANCE)`, the largest inflated-disc diameter: at the root level every inflated disc overlaps at most a 2 × 2 cell block, bounding insertion cost. Larger than `NodeSeparationProjection.SPATIAL_CELL = 34.0` (the house grid) for the same reason. Frames wider than `CONFLICT_GRID_DIMENSION × 48.0` grow the cell instead (next row), so the floor is preserved exactly for the small frames that keep it. |
@@ -693,6 +694,7 @@ semantics are:
 | `EDGE_CONFLICT_MAX_INDEX_ITEMS_PER_FRAME` | one inserted index item (one primitive-cell write) or one direct outermost examination | before every cell write and inside every subdivision re-collect | detection truncation |
 | `EDGE_CONFLICT_MAX_PAIR_CHECKS_PER_FRAME` | one `properlyCross` / `segmentDistance` test | before every test, including the outermost direct pass | detection truncation |
 | `EDGE_CONFLICT_MAX_DETECTED_PER_FRAME` | one distinct conflict identity key | when a key is added to the accumulating set | detection truncation |
+| `EDGE_CONFLICT_MAX_REPAIRABLE_CONFLICTS_PER_FRAME` | one distinct conflict identity key in a complete initial in-index detection | after initial detection, before candidate generation | when the count exceeds `8`, suppress relocation and the §5.4 rebuild; truncated detection and direct full-enumeration fallback remain on the Revision 7 path |
 | `EDGE_CONFLICT_MAX_VERIFICATION_WORK_PER_FRAME` | one A2 node-pair test, one A3 hull-pair comparison or one recomputed hull | before every counted verification sub-step | the in-flight attempt is rejected; verification-phase stop |
 
 The counters are **per-frame totals** over the initial detection, every verification detection, A1–A4 (including A2
@@ -719,6 +721,14 @@ both-flags rule), respecting detection-side versus verification-phase flag seman
 detection and the §5.4 rebuild consume only the remaining frame allowances. A terminal detection stop publishes
 its accumulated lower bound with `detectionTruncated`; a rebuild stop keeps the last complete edge detection
 with `verificationBudgetExhausted` and `detectionTruncated == false`.
+
+**Crowded-frame suppression (Revision 9).** After a complete initial detection and before candidate generation, if the
+initial distinct conflict-key count exceeds `EDGE_CONFLICT_MAX_REPAIRABLE_CONFLICTS_PER_FRAME` and the detection did not
+use the direct full-enumeration fallback, the frame is suppressed: publish the detected keys as both
+`conflictsDetected` and `conflictsResidual`, keep the baseline positions and boundary diagnostics, set
+`rounds = 0`, `verifications = 0`, `repairsApplied` empty and both resolved counts to zero, and skip the §5.4 rebuild.
+The existing four flags are unchanged; truncated detection and direct full-enumeration fallback retain Revision 7's
+stop semantics. A suppressed frame is identified by `conflictsDetected > 8 && rounds == 0`.
 
 **Round loop.** Pinned control flow:
 
@@ -1004,7 +1014,8 @@ The arrival head is oriented along the terminal segment and capped by it:
   semantics (halved when both ends carry heads), and
   `effectiveArrowHeadLengthPx(zoom, availableWorldLength) = min(arrowHeadLengthPx(zoom), availableWorldLength × zoom)`
   keeps its floor and growth rules. The painter draws the head from `arrowAnchor(...)` to the attachment using the same
-  `paintArrow` math as today.
+  `paintArrow` math as today. Probe 9 uses a bow whose terminal segment is shorter than the uncapped arrowhead length,
+  while its endpoint-to-endpoint chord remains longer, so the terminal-segment cap remains falsifiable.
 
 ### 6.7 Multiplicity cue
 
@@ -1402,6 +1413,7 @@ Each probe breaks exactly one mechanism and shows the covering test fails; the n
 | §5.6–§5.7 diagnostics and failure | §2.3, §2.5, §5.5, §5.6, §5.7 | `LayoutWorkerShould`, `BoundarySeparationShould` (extended) |
 | §6.1–§6.3 processing, ladder, caps | §6.1–§6.3 | `EdgeRouterShould` |
 | §6.4 clearance and fan exemption | §6.4 | `EdgeRouterShould`, `EdgeConflictCorrectionShould` |
+| §5.3–§5.4 crowded-frame suppression and preserved fallback semantics | Revision 9 | `EdgeConflictCorrectionShould.suppressesAFrameWithMoreThanTheRepairableConflictBound`; bounded-policy fixtures |
 | §6.5–§6.8 paths, arrowheads, cue, hit-test | §2.4, §6.5–§6.8 | `EdgePathShould`, `GraphCanvasPaintShould`, `GraphInteractionControllerShould` |
 | §6.9–§6.10 diagnostics and authoritative residual | §6.9 | `EdgeRouterShould`, `GraphCanvasPaintShould` |
 | §9 performance | §7 | `PerformanceTripwiresShould` |
@@ -1614,12 +1626,12 @@ Extends §7.1–§7.2, §8 and §10 A7; no threshold and no Revision 7 budget ch
 
 ### 14.1 A7a — settled-position fixture
 
-- New deterministic fixture `settled-reference`: bounded settled positions for a
+- Deterministic fixture `settled-reference`: bounded settled positions for a
   generated projection supplied as committed fixture data (recorded-ledger pattern),
-  never produced by stepping the divergent engine. Its size is calibrated as the largest
-  deterministic layout that stays inside every Revision 7 budget with zero exhaustion
-  while carrying a non-trivial workload; a full-scale 2,000/5,000 settled graph is
-  explicitly not required for A7a because its conflict volume cannot stay in-budget.
+  never produced by stepping the divergent engine. Revision 9 B-prime recalibrates its
+  25-node projection to conflict-light adjacency with at most eight complete initial
+  conflict keys, zero Revision 7 exhaustion and a non-trivial workload; a full-scale
+  2,000/5,000 settled graph is explicitly not required for A7a.
 - The §7.1 strict thresholds (`25 ms`, `10 ms`, `100 ms`, `150 ms`, `300 ms`) and the
   zero-budget-exhaustion rule are asserted on this fixture's measured samples.
 - The fixture must be non-trivial and in-budget: at least one detected crossing and at
@@ -1648,3 +1660,25 @@ Extends §7.1–§7.2, §8 and §10 A7; no threshold and no Revision 7 budget ch
   (`PerformanceTripwiresShould.referenceFixtureStaysInsideTheStrictWorkerAndFirstFrameGates`),
   and the raw reference frames stay bounded and
   flag-visible (`PerformanceTripwiresShould.referenceFixtureStaysBoundedAndFlagVisible`).
+
+## 15. Revision 9 — crowded-frame suppression and falsifiable terminal-arrowhead probe
+
+Added by the PM after delivery reconciliation (2026-10-12, user decisions B and B-prime).
+The ordinary relocation path now has the pinned `EDGE_CONFLICT_MAX_REPAIRABLE_CONFLICTS_PER_FRAME = 8` bound:
+a complete initial in-index detection above that bound publishes the baseline frame unchanged with the detected keys as
+residuals, zero rounds/verifications/repairs/resolved counts, and no §5.4 rebuild. Truncated detection and direct
+full-enumeration fallback keep Revision 7's existing ladder and flag semantics. Suppression adds no diagnostic flag and is recognized by
+`conflictsDetected > 8 && rounds == 0`. The bound must leave the committed A7a settled fixture and the reported crossing
+fixture unsuppressed; the Revision 7 bounded-policy probes must retain their detection, verification and fallback paths.
+
+B-prime recalibrates `settled-reference.csv` to the first 25 canonical reference node identities with 22 synthetic edges:
+two crossing chords at `(-90, 0)–(90, 0)` and `(0, -25)–(0, 25)`, beside a separate 21-node serpentine grid path with
+200-world spacing. All nodes remain pinned to the recorded ledger; no relaxation runs at measurement time. Each of the
+300 measured samples has **1 initial conflict (1 crossing, 0 edge-over-node)**, below the bound of 8, and accepts
+**1 bow, 21 straights, 0 doglegs and 0 fallbacks**, with no routed residual crossing or budget exhaustion.
+The deterministic compiler and loader pin SHA-256 `e9e988b7967ea6bb4f503dfb4c5af7d3e74a3328e28e0987e71ff0f0b8ac0578`.
+No strict threshold and no Revision 7 cap changed. The two-map first-idle pin remains **756** after remeasurement.
+
+Probe 9 remains a terminal-segment test. Its bow fixture makes the terminal segment shorter than the uncapped arrowhead
+length while the endpoint chord remains longer, so the assertion distinguishes terminal-segment availability from the
+endpoint-to-endpoint chord instead of passing through the proportional cap on both inputs.
