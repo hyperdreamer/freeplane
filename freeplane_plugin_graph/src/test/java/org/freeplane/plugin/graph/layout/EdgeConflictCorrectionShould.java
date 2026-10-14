@@ -281,6 +281,120 @@ public class EdgeConflictCorrectionShould {
     }
 
     @Test
+    public void boundsTheTerminalRebuildAfterAnAcceptedRepair() {
+        // Two complete A2 scans admit the repair: 2 * C(220, 2) = 48,180.
+        // Its terminal rebuild needs another 24,090 units and must stop at 65,536.
+        final Fixture fixture = wideNodeFieldWithOneCrossing(220);
+        final EdgeConflictResult result = apply(fixture);
+
+        assertThat(result.diagnostics().rounds()).isEqualTo(1);
+        assertThat(result.diagnostics().verificationWork()).isEqualTo(65_536L);
+        assertThat(result.diagnostics().verificationBudgetExhausted()).isTrue();
+        assertThat(result.diagnostics().detectionTruncated()).isFalse();
+        assertThat(result.diagnostics().conflictsResidual()).isEmpty();
+        assertThat(result.boundaryDiagnostics()).isSameAs(fixture.boundary.diagnostics());
+    }
+
+    @Test
+    public void truncatesThePublishedDetectionAfterAnAcceptedRepair() {
+        // Initial detection, rejected batch and accepted single complete. Exercise the
+        // post-round detection (4) and the final publication detection (5) independently.
+        for (final int detection : new int[] {4, 5}) {
+            final Fixture fixture = reportedQuad();
+            final EdgeConflictCorrection correction = new EdgeConflictCorrection();
+            final Set<ProjectedEndpointKey> visible = seedCountersAtDetection(correction, fixture,
+                detection, 262_143L, 131_072L, 0L);
+            final EdgeConflictResult result = correction.apply(fixture.projection,
+                fixture.boundary.positions(), METRICS, Collections.<PinProjection>emptyList(),
+                visible, fixture.boundary);
+
+            assertThat(result.diagnostics().rounds()).as("detection %s", detection).isEqualTo(1);
+            assertThat(result.diagnostics().indexInsertedItems()).isEqualTo(262_144L);
+            assertThat(result.diagnostics().indexPairChecks()).isEqualTo(131_072L);
+            assertThat(result.diagnostics().verificationWork()).isLessThanOrEqualTo(65_536L);
+            assertThat(result.diagnostics().detectionTruncated()).isTrue();
+            assertThat(result.diagnostics().verificationBudgetExhausted()).isFalse();
+            assertThat(result.diagnostics().conflictsResidual()).isEmpty();
+        }
+    }
+
+    @Test
+    public void reconcilesDetectionAndVerificationCapsAtAnInitialDetectionStop() {
+        final Fixture fixture = reportedQuad();
+        final EdgeConflictCorrection correction = new EdgeConflictCorrection();
+        final EdgeConflictResult result = correction.apply(fixture.projection,
+            fixture.boundary.positions(), METRICS, Collections.<PinProjection>emptyList(),
+            seedCountersAtDetection(correction, fixture, 1, 0L, 131_072L, 65_536L),
+            fixture.boundary);
+
+        assertThat(result.diagnostics().detectionTruncated()).isTrue();
+        assertThat(result.diagnostics().verificationBudgetExhausted()).isTrue();
+        assertThat(result.diagnostics().indexBudgetExhausted()).isFalse();
+        assertThat(result.diagnostics().indexPairChecks()).isEqualTo(131_072L);
+        assertThat(result.diagnostics().verificationWork()).isEqualTo(65_536L);
+        assertThat(result.diagnostics().verifications()).isZero();
+        assertThat(result.diagnostics().conflictsResidual()).isEmpty();
+    }
+
+    @Test
+    public void keepsTheCompleteResidualWhenBothCapsStopVerificationDetection() {
+        final Fixture fixture = reportedQuad();
+        final EdgeConflictCorrection correction = new EdgeConflictCorrection();
+        final EdgeConflictResult result = correction.apply(fixture.projection,
+            fixture.boundary.positions(), METRICS, Collections.<PinProjection>emptyList(),
+            seedCountersAtDetection(correction, fixture, 2, 0L, 131_072L, 65_536L),
+            fixture.boundary);
+
+        assertThat(result.diagnostics().detectionTruncated()).isFalse();
+        assertThat(result.diagnostics().verificationBudgetExhausted()).isTrue();
+        assertThat(result.diagnostics().rounds()).isZero();
+        assertThat(result.diagnostics().indexPairChecks()).isEqualTo(131_072L);
+        assertThat(result.diagnostics().verificationWork()).isEqualTo(65_536L);
+        assertThat(result.diagnostics().conflictsResidual()).containsExactly(CanonicalKeys.edgePair(
+            fixture.projection.edges().get(0).key(), fixture.projection.edges().get(1).key()));
+    }
+
+    private static Set<ProjectedEndpointKey> seedCountersAtDetection(
+            final EdgeConflictCorrection correction, final Fixture fixture, final int detection,
+            final long items, final long pairs, final long verification) {
+        return new java.util.AbstractSet<ProjectedEndpointKey>() {
+            private int queries;
+
+            @Override
+            public boolean contains(final Object endpoint) {
+                if (++queries == (detection - 1) * fixture.projection.edges().size() * 2 + 1) {
+                    setCounter(correction, "indexInsertedItems", items);
+                    setCounter(correction, "indexPairChecks", pairs);
+                    setCounter(correction, "verificationWork", verification);
+                }
+                return fixture.visible.contains(endpoint);
+            }
+
+            @Override
+            public java.util.Iterator<ProjectedEndpointKey> iterator() {
+                return fixture.visible.iterator();
+            }
+
+            @Override
+            public int size() {
+                return fixture.visible.size();
+            }
+        };
+    }
+
+    private static void setCounter(final EdgeConflictCorrection correction, final String name,
+            final long value) {
+        try {
+            final java.lang.reflect.Field field = EdgeConflictCorrection.class.getDeclaredField(name);
+            field.setAccessible(true);
+            field.setLong(correction, value);
+        }
+        catch (final ReflectiveOperationException exception) {
+            throw new AssertionError(exception);
+        }
+    }
+
+    @Test
     public void publishesTheRebuildUnitsInTheFrameVerificationTotal() {
         final Fixture fixture = rebuildWorkFixture();
         final EdgeConflictResult result = apply(fixture);

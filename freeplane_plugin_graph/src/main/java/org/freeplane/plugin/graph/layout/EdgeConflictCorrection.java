@@ -75,6 +75,8 @@ public final class EdgeConflictCorrection {
     private boolean indexBudgetExhausted;
     private int detectedKeys;
     private long verificationWork;
+    private int verifications;
+    private boolean verificationBudgetExhausted;
 
     public EdgeConflictCorrection() {
     }
@@ -122,10 +124,8 @@ public final class EdgeConflictCorrection {
         final List<EdgeConflictDiagnostics.Repair> repairs =
             new ArrayList<EdgeConflictDiagnostics.Repair>();
         int rounds = 0;
-        int verifications = 0;
         boolean detectionTruncated = initial.truncated();
         boolean verificationStopped = false;
-        boolean verificationBudgetExhausted = false;
 
         while (!detectionTruncated && !verificationStopped && rounds < MAX_RELOCATION_ROUNDS
                 && verifications < MAX_VERIFICATIONS_PER_FRAME) {
@@ -158,6 +158,7 @@ public final class EdgeConflictCorrection {
                         recordRepair(repairs, attempt, rounds);
                         currentPositions = evaluation.positions;
                         currentGeometry = evaluation.geometry;
+                        conflicts = evaluation.conflicts;
                         rounds++;
                         acceptedThisRound = true;
                         if (verifications >= MAX_VERIFICATIONS_PER_FRAME) {
@@ -169,6 +170,7 @@ public final class EdgeConflictCorrection {
                             || verificationWorkAtCap()) {
                         verificationStopped = true;
                         verificationBudgetExhausted = true;
+                        reconcileStopFlags();
                         break;
                     }
                     if (verifications >= MAX_VERIFICATIONS_PER_FRAME) {
@@ -193,44 +195,51 @@ public final class EdgeConflictCorrection {
                 visibleEndpoints);
             conflicts = next.detection();
             if (next.truncated()) {
-                verificationStopped = true;
-                verificationBudgetExhausted = true;
+                detectionTruncated = true;
             }
         }
 
-        final Detection residual;
-        if (detectionTruncated) {
-            residual = conflicts;
-        }
-        else if (rounds > 0) {
-            residual = detectConflictsInternal(projection, currentPositions, currentGeometry,
-                visibleEndpoints, false).detection();
-        }
-        else {
-            residual = conflicts;
+        Detection residual = conflicts;
+        if (rounds > 0 && !detectionTruncated && !verificationStopped) {
+            final IndexedDetection terminal = detect(projection, currentPositions, currentGeometry,
+                visibleEndpoints);
+            residual = terminal.detection();
+            detectionTruncated = terminal.truncated();
         }
         if (verificationStopped && !residual.keys().isEmpty() && !detectionTruncated) {
             verificationBudgetExhausted = true;
+            reconcileStopFlags();
         }
         BoundarySeparationDiagnostics boundaryDiagnostics = boundaryResult.diagnostics();
         int nodeResidualViolations = boundaryResult.nodeResidualViolations();
         long rebuildNanos = 0L;
-        if (rounds > 0) {
+        if (rounds > 0 && !detectionTruncated) {
             final LayoutPositions published = canonicallySorted(currentPositions);
             final long rebuildStart = System.nanoTime();
             final BoundaryInvariants.CountedRebuild rebuilt = boundaryInvariants.describeCounted(
                 projection, published, metrics, pins, currentGeometry,
-                boundaryResult.diagnostics().residualHullPairs(), boundaryResult.diagnostics());
-            boundaryDiagnostics = rebuilt.diagnostics();
-            nodeResidualViolations = new NodeSeparationProjection().project(projection, published,
-                pinned).residualViolations();
-            // The §5.4 rebuild's counted units are predicate evaluations (spec §13.1): one A2
-            // node-pair test per pair its scan evaluates plus one A3 hull-pair comparison per
-            // comparison its detect pass consumes. The rebuild reuses the terminal geometry, so
-            // it recomputes no hull.
-            verificationWork += rebuilt.hullPairWork()
-                + NodeSeparationProjection.violatingPairsCounted(projection, published,
-                    Integer.MAX_VALUE).pairEvaluations();
+                boundaryResult.diagnostics().residualHullPairs(), boundaryResult.diagnostics(),
+                verificationAllowance());
+            verificationWork += rebuilt.hullPairWork();
+            if (rebuilt.truncated()) {
+                verificationBudgetExhausted = true;
+                reconcileStopFlags();
+            }
+            else {
+                final NodeSeparationProjection.CountedProjection nodeRebuild =
+                    new NodeSeparationProjection().projectCounted(projection, published, pinned,
+                        verificationAllowance());
+                verificationWork += nodeRebuild.pairEvaluations();
+                if (nodeRebuild.truncated()) {
+                    verificationBudgetExhausted = true;
+                    reconcileStopFlags();
+                }
+                else {
+                    // Publish the rebuilt record only when both terminal scans are complete.
+                    boundaryDiagnostics = rebuilt.diagnostics();
+                    nodeResidualViolations = nodeRebuild.result().residualViolations();
+                }
+            }
             rebuildNanos = System.nanoTime() - rebuildStart;
         }
         // The §5.4 rebuild's counted units are part of the frame total, so the diagnostics are
@@ -616,7 +625,7 @@ public final class EdgeConflictCorrection {
                 }
             }
         }
-        return new Evaluation(candidatePositions, candidateGeometry);
+        return new Evaluation(candidatePositions, candidateGeometry, candidateConflicts);
     }
 
     private int verificationAllowance() {
@@ -628,11 +637,21 @@ public final class EdgeConflictCorrection {
     }
 
     private boolean consumeVerificationWork(final long units) {
-        if (verificationWork + units > EDGE_CONFLICT_MAX_VERIFICATION_WORK_PER_FRAME) {
+        if (units > EDGE_CONFLICT_MAX_VERIFICATION_WORK_PER_FRAME - verificationWork) {
+            reconcileStopFlags();
             return false;
         }
         verificationWork += units;
         return true;
+    }
+
+    private void reconcileStopFlags() {
+        // Detection flags are phase-specific: the caller publishes a lower bound only for
+        // a published-position detection stop, and keeps the last complete C_in for a
+        // verification stop. The index flag describes direct enumeration, never truncation.
+        if (verificationWorkAtCap() || verifications >= MAX_VERIFICATIONS_PER_FRAME) {
+            verificationBudgetExhausted = true;
+        }
     }
 
     private boolean verificationWorkAtCap() {
@@ -667,6 +686,8 @@ public final class EdgeConflictCorrection {
         indexBudgetExhausted = false;
         detectedKeys = 0;
         verificationWork = 0L;
+        verifications = 0;
+        verificationBudgetExhausted = false;
     }
 
     static Detection detectConflicts(final GraphProjection projection, final LayoutPositions positions,
@@ -743,6 +764,7 @@ public final class EdgeConflictCorrection {
             return new DetectionRun(accumulator.snapshot(), false);
         }
         catch (final DetectionStop stop) {
+            reconcileStopFlags();
             return new DetectionRun(accumulator.snapshot(), true);
         }
     }
@@ -1301,24 +1323,27 @@ public final class EdgeConflictCorrection {
         private final Outcome outcome;
         private final LayoutPositions positions;
         private final GraphGeometry geometry;
+        private final Detection conflicts;
 
         private Evaluation(final Outcome outcome, final LayoutPositions positions,
-                final GraphGeometry geometry) {
+                final GraphGeometry geometry, final Detection conflicts) {
             this.outcome = outcome;
             this.positions = positions;
             this.geometry = geometry;
+            this.conflicts = conflicts;
         }
 
         static Evaluation rejected() {
-            return new Evaluation(Outcome.REJECT, null, null);
+            return new Evaluation(Outcome.REJECT, null, null, null);
         }
 
         static Evaluation stopped() {
-            return new Evaluation(Outcome.DETECTION_STOP, null, null);
+            return new Evaluation(Outcome.DETECTION_STOP, null, null, null);
         }
 
-        private Evaluation(final LayoutPositions positions, final GraphGeometry geometry) {
-            this(Outcome.ACCEPT, positions, geometry);
+        private Evaluation(final LayoutPositions positions, final GraphGeometry geometry,
+                final Detection conflicts) {
+            this(Outcome.ACCEPT, positions, geometry, conflicts);
         }
     }
 

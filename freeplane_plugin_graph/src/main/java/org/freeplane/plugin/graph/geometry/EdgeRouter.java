@@ -213,7 +213,7 @@ public final class EdgeRouter {
 
         private boolean insertItem() {
             if (indexItems >= indexItemCap) {
-                routeBudgetExhausted = true;
+                reconcileStopFlags();
                 return false;
             }
             indexItems++;
@@ -222,7 +222,7 @@ public final class EdgeRouter {
 
         private boolean obstacleCheck() {
             if (obstacleChecks >= obstacleCheckCap) {
-                routeBudgetExhausted = true;
+                reconcileStopFlags();
                 return false;
             }
             obstacleChecks++;
@@ -231,11 +231,16 @@ public final class EdgeRouter {
 
         private boolean pairCheck() {
             if (pairChecks >= pairCheckCap) {
-                detectionTruncated = true;
+                reconcileStopFlags();
                 return false;
             }
             pairChecks++;
             return true;
+        }
+
+        private void reconcileStopFlags() {
+            routeBudgetExhausted |= indexItems >= indexItemCap || obstacleChecks >= obstacleCheckCap;
+            detectionTruncated |= pairChecks >= pairCheckCap;
         }
 
         private long indexItems() {

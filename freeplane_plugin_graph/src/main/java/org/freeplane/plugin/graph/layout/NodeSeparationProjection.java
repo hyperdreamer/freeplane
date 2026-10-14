@@ -32,6 +32,12 @@ public final class NodeSeparationProjection {
     /** Pure. Never mutates the arguments. */
     public NodeSeparationResult project(final GraphProjection projection, final LayoutPositions positions,
             final Set<ProjectedNodeKey> pinned) {
+        return projectCounted(projection, positions, pinned, Integer.MAX_VALUE).result();
+    }
+
+    /** The same projection with its terminal A2 scan charged to the caller's allowance. */
+    CountedProjection projectCounted(final GraphProjection projection, final LayoutPositions positions,
+            final Set<ProjectedNodeKey> pinned, final int pairBudget) {
         Objects.requireNonNull(projection, "projection");
         Objects.requireNonNull(positions, "positions");
         Objects.requireNonNull(pinned, "pinned");
@@ -112,7 +118,31 @@ public final class NodeSeparationProjection {
             projected.put(keys.get(index), LayoutPoint.of(x[index], y[index]));
         }
         final LayoutPositions result = LayoutPositions.of(projected, positions.anchors());
-        return NodeSeparationResult.of(result, violatingPairs(projection, result).size(), passes);
+        final CountedViolatingPairs residual = violatingPairsCounted(projection, result, pairBudget);
+        return new CountedProjection(residual.truncated() ? null
+            : NodeSeparationResult.of(result, residual.pairs().size(), passes), residual);
+    }
+
+    static final class CountedProjection {
+        private final NodeSeparationResult result;
+        private final CountedViolatingPairs residual;
+
+        private CountedProjection(final NodeSeparationResult result, final CountedViolatingPairs residual) {
+            this.result = result;
+            this.residual = residual;
+        }
+
+        NodeSeparationResult result() {
+            return result;
+        }
+
+        long pairEvaluations() {
+            return residual.pairEvaluations();
+        }
+
+        boolean truncated() {
+            return residual.truncated();
+        }
     }
 
     /** The canonical node-pair keys of every unordered disc pair below the minimum gap. */
@@ -146,9 +176,7 @@ public final class NodeSeparationProjection {
             for (int second = first + 1; second < keys.size(); second++) {
                 final ProjectedNodeKey firstKey = keys.get(first);
                 final ProjectedNodeKey secondKey = keys.get(second);
-                if (CanonicalKeys.node(firstKey).compareTo(CanonicalKeys.node(secondKey)) > 0) {
-                    continue;
-                }
+                // The keys are already in canonical order and second > first.
                 final LayoutPoint firstPoint = positions.nodes().get(firstKey);
                 final LayoutPoint secondPoint = positions.nodes().get(secondKey);
                 if (firstPoint == null || secondPoint == null) {
