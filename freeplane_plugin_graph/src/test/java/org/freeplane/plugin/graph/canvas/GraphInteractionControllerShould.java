@@ -290,7 +290,8 @@ public class GraphInteractionControllerShould {
             Collections.<EnclosureHullKey, HullGeometry>emptyMap());
         final LayoutFrame frame = LayoutFrame.of(1L, LayoutPositions.of(positions,
             Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false, 0);
-        return CanvasState.of(1L, projection, frame, graphGeometry, OperationalStatus.IDLE);
+        return CanvasState.of(1L, projection, frame, graphGeometry, EdgePaths.empty(),
+            OperationalStatus.IDLE);
     }
 
     private static ScrolledFixture scrolledPanFixture(final double zoom) {
