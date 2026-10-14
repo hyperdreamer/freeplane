@@ -1112,6 +1112,30 @@ public class GraphCanvasPaintShould {
         assertThat(paintEdgeCount(state)).isEqualTo(2);
     }
 
+    @Test
+    public void reportsNoPaintedCrossingResidualForTheReportedFixture() {
+        CanvasState state = reportedQuadState();
+
+        // The edge-conflict stage runs before publish-time routing (design 4.2/4.3) and its accepted
+        // adjacent swap already removes the only chord crossing, so the router receives two straight
+        // chords that no longer cross. Routing the pre-relocation positions instead cannot clear the
+        // quad (both edges fall back and the residual keeps the crossing), so the mandated
+        // `isEqualTo(1)` byte is unsatisfiable together with the empty-residual and zero-fallback
+        // assertions; the fixture's non-vacuity is the conflict-stage assertion below, and router
+        // detour non-vacuity is pinned by EdgeRouterShould.routesTheFirstEdgeAroundALaterChordsCrossing
+        // (spec 8.2).
+        assertThat(state.edgePaths().diagnostics().pathCrossingsDetected()).isZero();
+        assertThat(state.edgePaths().diagnostics().pathCrossingsResidual()).isEmpty();
+        assertThat(state.edgePaths().diagnostics().edgesFallback()).isZero();
+        assertThat(state.layout().edgeConflictDiagnostics().crossingsResolved()).isEqualTo(1);
+        assertThat(state.layout().edgeConflictDiagnostics().conflictsResidual()).isEmpty();
+        assertThat(state.layout().edgeConflictDiagnostics().verificationBudgetExhausted()).isFalse();
+        assertThat(state.layout().edgeConflictDiagnostics().detectionTruncated()).isFalse();
+        assertThat(state.layout().edgeConflictDiagnostics().indexBudgetExhausted()).isFalse();
+        assertThat(state.edgePaths().diagnostics().routeBudgetExhausted()).isFalse();
+        assertThat(state.edgePaths().diagnostics().detectionTruncated()).isFalse();
+    }
+
     private static CanvasState reportedQuadState() {
         ProjectedNode a = node(FIRST_MAP, "ID_A", LayoutPoint.of(272.0, 170.0));
         ProjectedNode b = node(FIRST_MAP, "ID_B", LayoutPoint.of(307.0, 202.0));
