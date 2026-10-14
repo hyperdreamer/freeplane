@@ -92,19 +92,27 @@ public final class BoundaryInvariants {
     /**
      * The counted §5.4 rebuild: the rebuilt boundary record plus the A3 hull-pair comparisons
      * its single detection pass consumed. Each comparison is one verification-work unit
-     * (spec §13.1); the rebuild runs unbounded, so the work is reported, not enforced. The
-     * rebuild reuses the terminal geometry, so it consumes no hull-recompute unit.
+     * (spec §13.1). Every comparison checks the caller's remaining allowance first. A
+     * truncated rebuild retains the supplied boundary record. The terminal geometry is reused,
+     * so the rebuild consumes no hull-recompute unit.
      */
     static final class CountedRebuild {
         private final BoundarySeparationDiagnostics diagnostics;
         private final long hullPairWork;
+        private final boolean truncated;
 
-        private CountedRebuild(final BoundarySeparationDiagnostics diagnostics, final long hullPairWork) {
+        private CountedRebuild(final BoundarySeparationDiagnostics diagnostics, final long hullPairWork,
+                final boolean truncated) {
             this.diagnostics = Objects.requireNonNull(diagnostics, "diagnostics");
             if (hullPairWork < 0L) {
                 throw new IllegalArgumentException("hullPairWork must be nonnegative");
             }
             this.hullPairWork = hullPairWork;
+            this.truncated = truncated;
+        }
+
+        boolean truncated() {
+            return truncated;
         }
 
         BoundarySeparationDiagnostics diagnostics() {
@@ -314,16 +322,30 @@ public final class BoundaryInvariants {
 
     /**
      * The N2 rebuild of the published boundary record with its detection work counted: one
-     * {@code detect} pass through an unbounded {@link HullPairWork} whose consumed A3 hull-pair
-     * comparisons are exposed so the caller can add them to the frame's verification-work total
-     * (spec §13.1). The rebuild reuses the terminal geometry, so no hull recompute is counted.
+     * {@code detect} pass whose A3 hull-pair comparisons check the remaining allowance.
+     * A stop returns the supplied record and the consumed work, never a partial record.
+     * The rebuild reuses the terminal geometry, so no hull recompute is counted.
      */
     CountedRebuild describeCounted(final GraphProjection projection,
             final LayoutPositions positions, final GeometryTextMetrics metrics, final List<PinProjection> pins,
             final GraphGeometry geometry, final List<String> baselineResidualKeys,
             final BoundarySeparationDiagnostics stageBaseline) {
-        final HullPairWork work = new HullPairWork(Long.MAX_VALUE);
-        final List<Violation> violations = detect(projection, geometry, work);
+        return describeCounted(projection, positions, metrics, pins, geometry, baselineResidualKeys,
+            stageBaseline, Long.MAX_VALUE);
+    }
+
+    CountedRebuild describeCounted(final GraphProjection projection,
+            final LayoutPositions positions, final GeometryTextMetrics metrics, final List<PinProjection> pins,
+            final GraphGeometry geometry, final List<String> baselineResidualKeys,
+            final BoundarySeparationDiagnostics stageBaseline, final long allowance) {
+        final HullPairWork work = new HullPairWork(allowance);
+        final List<Violation> violations;
+        try {
+            violations = detect(projection, geometry, work);
+        }
+        catch (final WorkStop stop) {
+            return new CountedRebuild(stageBaseline, work.consumed, true);
+        }
         final Set<String> present = new TreeSet<String>();
         for (final Violation violation : violations) {
             present.add(violation.pairKey());
@@ -339,7 +361,7 @@ public final class BoundaryInvariants {
             stageBaseline.hullViolationsDetected(), violations.size(), stageBaseline.rounds(),
             stageBaseline.displacementRms(), stageBaseline.displacementMax(),
             stageBaseline.appliedDisplacements(), stageBaseline.deltaRms(), stageBaseline.deltaMax()),
-            work.consumed);
+            work.consumed, false);
     }
 
     PlanOutcome plan(final GraphProjection projection,

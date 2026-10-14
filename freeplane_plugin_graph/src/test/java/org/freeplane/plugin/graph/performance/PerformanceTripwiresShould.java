@@ -151,8 +151,7 @@ public class PerformanceTripwiresShould {
     @Test
     public void referenceFixtureStaysBoundedAndFlagVisible() {
         assertThat(referenceDiagnostic.rawReferenceFrames()).isNotEmpty();
-        assertThat(referenceDiagnostic.rawReferenceMaxFrameNanos())
-            .isLessThanOrEqualTo(GraphWorkspacePerformanceDiagnostic.RAW_REFERENCE_MAX_FRAME_NANOS);
+        assertRawReferenceFrameBound(referenceDiagnostic);
         for (GraphWorkspacePerformanceDiagnostic.RawReferenceFrame frame
                 : referenceDiagnostic.rawReferenceFrames()) {
             EdgeConflictDiagnostics edge = frame.edgeDiagnostics();
@@ -181,6 +180,40 @@ public class PerformanceTripwiresShould {
             if (route.routePairChecks() == 131_072L) {
                 assertThat(route.detectionTruncated()).isTrue();
             }
+        }
+    }
+
+    @Test
+    public void rejectsAFrameWhoseRoutingExceedsTheCompleteFrameBound() throws Exception {
+        final RoutingDelayClock clock = new RoutingDelayClock();
+        final GraphWorkspacePerformanceDiagnostic diagnostic = new GraphWorkspacePerformanceDiagnostic(
+            temporaryFolder.newFolder("delayed-routing").toPath(), false, clock,
+            (projection, positions, geometry, visible) -> {
+                final org.freeplane.plugin.graph.geometry.EdgePaths paths =
+                    new org.freeplane.plugin.graph.geometry.EdgeRouter().route(projection, positions,
+                        geometry, visible);
+                // Model a routing stall on the same clock used by the frame timer. No sleep
+                // or production routing shortcut: every real geometry/routing call still runs.
+                clock.value += GraphWorkspacePerformanceDiagnostic.RAW_REFERENCE_MAX_FRAME_NANOS + 1L;
+                return paths;
+            });
+        diagnostic.runRawReferenceFixture();
+
+        assertThatThrownBy(() -> assertRawReferenceFrameBound(diagnostic))
+            .isInstanceOf(AssertionError.class);
+    }
+
+    private static void assertRawReferenceFrameBound(final GraphWorkspacePerformanceDiagnostic diagnostic) {
+        assertThat(diagnostic.rawReferenceMaxFrameNanos())
+            .isLessThanOrEqualTo(GraphWorkspacePerformanceDiagnostic.RAW_REFERENCE_MAX_FRAME_NANOS);
+    }
+
+    private static final class RoutingDelayClock implements NanoClock {
+        private long value;
+
+        @Override
+        public long nanoTime() {
+            return ++value;
         }
     }
 
