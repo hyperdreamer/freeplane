@@ -27,6 +27,8 @@ import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.layout.graphstream.GraphStreamLayoutFactory;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.GraphProjection;
+import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
+import org.freeplane.plugin.graph.projection.ProjectedEndpointVisibility;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
 
@@ -36,7 +38,8 @@ public final class LayoutWorker implements AutoCloseable {
         LayoutFrame.of(0L, LayoutPositions.of(
             Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(),
             Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), true, 0),
-        BoundarySeparationDiagnostics.empty(), PerceptualIdlePolicy.IdleMeasurement.initial());
+        0, BoundarySeparationDiagnostics.empty(), EdgeConflictDiagnostics.empty(),
+        PerceptualIdlePolicy.IdleMeasurement.initial());
 
     private final Supplier<LayoutEngine> engineFactory;
     private final PerceptualIdlePolicy idlePolicy;
@@ -45,6 +48,7 @@ public final class LayoutWorker implements AutoCloseable {
     private final Set<CompletableFuture<LayoutFrame>> pending =
         Collections.synchronizedSet(new HashSet<CompletableFuture<LayoutFrame>>());
     private final BoundarySeparationCorrection boundaryCorrection = new BoundarySeparationCorrection();
+    private final EdgeConflictCorrection edgeConflictCorrection = new EdgeConflictCorrection();
 
     private volatile LayoutFrame lastValidFrame = EMPTY_FAILED_FRAME;
     private volatile boolean paused;
@@ -71,7 +75,7 @@ public final class LayoutWorker implements AutoCloseable {
         this.executor = createExecutor();
     }
 
-    LayoutWorker(final Supplier<LayoutEngine> engineFactory, final PerceptualIdlePolicy idlePolicy) {
+    public LayoutWorker(final Supplier<LayoutEngine> engineFactory, final PerceptualIdlePolicy idlePolicy) {
         this.engineFactory = Objects.requireNonNull(engineFactory, "engineFactory");
         this.idlePolicy = Objects.requireNonNull(idlePolicy, "idlePolicy");
         this.executor = createExecutor();
@@ -283,26 +287,47 @@ public final class LayoutWorker implements AutoCloseable {
             return failedFrame(raw.stepIndex());
         }
         validateCoverage(request.projection(), raw.positions());
-        final BoundarySeparationResult result = boundaryCorrection.apply(request.projection(), raw.positions(),
-            defaultMetrics(), request.pins());
-        if (!result.diagnostics().boundaryVerified() && !result.diagnostics().boundaryCovered()) {
+        final BoundarySeparationResult boundary = boundaryCorrection.apply(request.projection(),
+            raw.positions(), defaultMetrics(), request.pins());
+        if (!boundary.diagnostics().boundaryVerified() && !boundary.diagnostics().boundaryCovered()) {
             throw new BoundarySeparationException("Boundary separation did not cover every residual pair");
         }
-        final LayoutPositions corrected = result.positions();
+        final Set<ProjectedEndpointKey> visible = ProjectedEndpointVisibility.visibleEndpoints(
+            request.projection().nodes(), request.projection().enclosures());
+        final EdgeConflictResult edge = edgeConflictCorrection.apply(request.projection(),
+            boundary.positions(), defaultMetrics(), request.pins(), visible, boundary);
+        final LayoutPositions corrected = edge.positions();
+        final Map<String, LayoutPoint> merged = mergeDisplacements(boundary.appliedDisplacements(),
+            edge.appliedDisplacements());
         final LayoutPositions before = previousCorrectedPositions == null ? corrected
             : previousCorrectedPositions;
         final PerceptualIdlePolicy.IdleMeasurement idle = idlePolicy.observe(before, corrected);
-        final double[] deltas = displacementDeltas(previousAppliedDisplacements,
-            result.appliedDisplacements());
+        final double[] deltas = displacementDeltas(previousAppliedDisplacements, merged);
         final LayoutFrame decorated = LayoutFrame.withDiagnostics(
-            LayoutFrame.of(raw.stepIndex(), corrected, false, result.nodeResidualViolations()),
-            result.diagnostics().withDeltas(deltas[0], deltas[1]), idle);
-        previousAppliedDisplacements = result.appliedDisplacements();
+            LayoutFrame.of(raw.stepIndex(), corrected, false, edge.nodeResidualViolations()),
+            edge.nodeResidualViolations(),
+            edge.boundaryDiagnostics().withDeltas(deltas[0], deltas[1]), edge.diagnostics(), idle);
+        previousAppliedDisplacements = merged;
         currentRequest = request;
         hasRequest = true;
         previousCorrectedPositions = corrected;
         lastValidFrame = decorated;
         return decorated;
+    }
+
+    private static Map<String, LayoutPoint> mergeDisplacements(final Map<String, LayoutPoint> boundary,
+            final Map<String, LayoutPoint> edge) {
+        final Map<String, LayoutPoint> result = new java.util.TreeMap<String, LayoutPoint>();
+        for (final Map.Entry<String, LayoutPoint> entry : boundary.entrySet()) {
+            result.put(entry.getKey(), entry.getValue());
+        }
+        for (final Map.Entry<String, LayoutPoint> entry : edge.entrySet()) {
+            final LayoutPoint previous = result.get(entry.getKey());
+            result.put(entry.getKey(), previous == null ? entry.getValue()
+                : LayoutPoint.of(previous.x() + entry.getValue().x(),
+                    previous.y() + entry.getValue().y()));
+        }
+        return new java.util.LinkedHashMap<String, LayoutPoint>(result);
     }
 
     private static double[] displacementDeltas(final Map<String, LayoutPoint> previous,
@@ -374,7 +399,8 @@ public final class LayoutWorker implements AutoCloseable {
         final long index = requestedIndex >= 0L ? requestedIndex : retained.stepIndex();
         return LayoutFrame.withDiagnostics(
             LayoutFrame.of(index, retained.positions(), true, retained.residualViolations()),
-            retained.boundaryDiagnostics(), retained.idle());
+            retained.residualViolations(), retained.boundaryDiagnostics(),
+            retained.edgeConflictDiagnostics(), retained.idle());
     }
 
     private void closeEngine() {

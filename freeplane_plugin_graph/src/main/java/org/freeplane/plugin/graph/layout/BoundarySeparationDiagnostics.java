@@ -10,6 +10,7 @@ import java.util.Objects;
 import java.util.Set;
 
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
+import org.freeplane.plugin.graph.projection.CanonicalKeys;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 
 public final class BoundarySeparationDiagnostics {
@@ -136,7 +137,7 @@ public final class BoundarySeparationDiagnostics {
     public double worstMapDisplacement() {
         final Map<MapReferenceId, Double> perMap = new LinkedHashMap<MapReferenceId, Double>();
         for (final Map.Entry<String, LayoutPoint> entry : appliedDisplacements.entrySet()) {
-            final MapReferenceId map = CanonicalLayoutKeys.mapOfField(entry.getKey());
+            final MapReferenceId map = CanonicalKeys.mapOfField(entry.getKey());
             final LayoutPoint value = entry.getValue();
             final double magnitude = Math.hypot(value.x(), value.y());
             final Double previous = perMap.get(map);

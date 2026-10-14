@@ -24,6 +24,8 @@ import javax.swing.SwingUtilities;
 
 import org.freeplane.plugin.graph.adapter.EdtExecutor;
 import org.freeplane.plugin.graph.geometry.AwtGeometryTextMetrics;
+import org.freeplane.plugin.graph.geometry.EdgePaths;
+import org.freeplane.plugin.graph.geometry.EdgeRouter;
 import org.freeplane.plugin.graph.geometry.GeometryTextMetrics;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.GraphGeometryEngine;
@@ -40,6 +42,8 @@ import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.projection.PinProjection;
 import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
+import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
+import org.freeplane.plugin.graph.projection.ProjectedEndpointVisibility;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
 import org.freeplane.plugin.graph.projection.ProjectionDiff;
@@ -545,10 +549,16 @@ public final class LayoutSettleLoop implements AutoCloseable {
         try {
             final GraphGeometry geometry =
                 geometryEngine.computeHulls(run.projection, frame.positions(), metrics);
+            final Set<ProjectedEndpointKey> visibleEndpoints =
+                ProjectedEndpointVisibility.visibleEndpoints(run.projection.nodes(),
+                    run.projection.enclosures());
+            final EdgePaths edgePaths = new EdgeRouter().route(run.projection, frame.positions(),
+                geometry, visibleEndpoints);
             final OperationalStatus status = isEmpty(run.projection)
                 ? OperationalStatus.EMPTY
                 : frame.idle().idle() ? OperationalStatus.IDLE : OperationalStatus.SETTLING;
-            final CanvasState state = CanvasState.of(run.batch.generation(), run.projection, frame, geometry, status);
+            final CanvasState state = CanvasState.of(run.batch.generation(), run.projection, frame,
+                geometry, edgePaths, status);
             publish(run, state, frame.idle().idle());
         }
         catch (RuntimeException exception) {
@@ -723,8 +733,13 @@ public final class LayoutSettleLoop implements AutoCloseable {
         try {
             final GraphGeometry geometry =
                 geometryEngine.computeHulls(run.projection, failed.positions(), metrics);
-            final CanvasState state = CanvasState.of(run.batch.generation(), run.projection, failed, geometry,
-                OperationalStatus.FAILED);
+            final Set<ProjectedEndpointKey> visibleEndpoints =
+                ProjectedEndpointVisibility.visibleEndpoints(run.projection.nodes(),
+                    run.projection.enclosures());
+            final EdgePaths edgePaths = new EdgeRouter().route(run.projection, failed.positions(),
+                geometry, visibleEndpoints);
+            final CanvasState state = CanvasState.of(run.batch.generation(), run.projection, failed,
+                geometry, edgePaths, OperationalStatus.FAILED);
             publish(run, state, true);
         }
         catch (RuntimeException exception) {
@@ -758,8 +773,8 @@ public final class LayoutSettleLoop implements AutoCloseable {
             return LayoutFrame.of(index, positions, true, residual);
         }
         final BoundarySeparationDiagnostics diagnostics = retained.boundaryDiagnostics();
-        return LayoutFrame.withDiagnostics(LayoutFrame.of(index, positions, true, residual), diagnostics,
-            retained.idle());
+        return LayoutFrame.withDiagnostics(LayoutFrame.of(index, positions, true, residual),
+            residual, diagnostics, retained.edgeConflictDiagnostics(), retained.idle());
     }
 
     private static Set<ProjectedNodeKey> pinnedNodes(final List<PinProjection> pins) {

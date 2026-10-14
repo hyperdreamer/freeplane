@@ -2,6 +2,7 @@ package org.freeplane.plugin.graph.layout;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -11,6 +12,7 @@ import java.util.Set;
 
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
+import org.freeplane.plugin.graph.projection.CanonicalKeys;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.projection.NodeProminence;
@@ -30,6 +32,12 @@ public final class NodeSeparationProjection {
     /** Pure. Never mutates the arguments. */
     public NodeSeparationResult project(final GraphProjection projection, final LayoutPositions positions,
             final Set<ProjectedNodeKey> pinned) {
+        return projectCounted(projection, positions, pinned, Integer.MAX_VALUE).result();
+    }
+
+    /** The same projection with its terminal A2 scan charged to the caller's allowance. */
+    CountedProjection projectCounted(final GraphProjection projection, final LayoutPositions positions,
+            final Set<ProjectedNodeKey> pinned, final int pairBudget) {
         Objects.requireNonNull(projection, "projection");
         Objects.requireNonNull(positions, "positions");
         Objects.requireNonNull(pinned, "pinned");
@@ -110,7 +118,84 @@ public final class NodeSeparationProjection {
             projected.put(keys.get(index), LayoutPoint.of(x[index], y[index]));
         }
         final LayoutPositions result = LayoutPositions.of(projected, positions.anchors());
-        return NodeSeparationResult.of(result, residualViolations(x, y, radius, count), passes);
+        final CountedViolatingPairs residual = violatingPairsCounted(projection, result, pairBudget);
+        return new CountedProjection(residual.truncated() ? null
+            : NodeSeparationResult.of(result, residual.pairs().size(), passes), residual);
+    }
+
+    static final class CountedProjection {
+        private final NodeSeparationResult result;
+        private final CountedViolatingPairs residual;
+
+        private CountedProjection(final NodeSeparationResult result, final CountedViolatingPairs residual) {
+            this.result = result;
+            this.residual = residual;
+        }
+
+        NodeSeparationResult result() {
+            return result;
+        }
+
+        long pairEvaluations() {
+            return residual.pairEvaluations();
+        }
+
+        boolean truncated() {
+            return residual.truncated();
+        }
+    }
+
+    /** The canonical node-pair keys of every unordered disc pair below the minimum gap. */
+    public static List<String> violatingPairs(final GraphProjection projection,
+            final LayoutPositions positions) {
+        return violatingPairsCounted(projection, positions, Integer.MAX_VALUE).pairs();
+    }
+
+    /**
+     * The canonical node-pair keys of every pair below the minimum gap, or the prefix examined
+     * before the pair budget reaches zero; the loop decrements the allowance before each test.
+     */
+    public static CountedViolatingPairs violatingPairsCounted(final GraphProjection projection,
+            final LayoutPositions positions, final int pairBudget) {
+        Objects.requireNonNull(projection, "projection");
+        Objects.requireNonNull(positions, "positions");
+        if (pairBudget < 0) {
+            throw new IllegalArgumentException("pairBudget must be nonnegative");
+        }
+        final List<ProjectedNodeKey> keys = new ArrayList<ProjectedNodeKey>(positions.nodes().keySet());
+        Collections.sort(keys, new Comparator<ProjectedNodeKey>() {
+            @Override
+            public int compare(final ProjectedNodeKey first, final ProjectedNodeKey second) {
+                return CanonicalKeys.node(first).compareTo(CanonicalKeys.node(second));
+            }
+        });
+        final List<String> result = new ArrayList<String>();
+        int remaining = pairBudget;
+        long evaluations = 0L;
+        for (int first = 0; first < keys.size(); first++) {
+            for (int second = first + 1; second < keys.size(); second++) {
+                final ProjectedNodeKey firstKey = keys.get(first);
+                final ProjectedNodeKey secondKey = keys.get(second);
+                // The keys are already in canonical order and second > first.
+                final LayoutPoint firstPoint = positions.nodes().get(firstKey);
+                final LayoutPoint secondPoint = positions.nodes().get(secondKey);
+                if (firstPoint == null || secondPoint == null) {
+                    continue;
+                }
+                if (remaining == 0) {
+                    return CountedViolatingPairs.of(result, evaluations, true);
+                }
+                remaining--;
+                evaluations++;
+                final double need = NODE_RADIUS * prominenceScale(projection, firstKey)
+                    + NODE_RADIUS * prominenceScale(projection, secondKey) + MIN_GAP;
+                if (Math.hypot(secondPoint.x() - firstPoint.x(), secondPoint.y() - firstPoint.y()) < need) {
+                    result.add(CanonicalKeys.nodePair(firstKey, secondKey));
+                }
+            }
+        }
+        Collections.sort(result);
+        return CountedViolatingPairs.of(result, evaluations, remaining == 0);
     }
 
     private static void move(final Map<Long, List<Integer>> cells, final int index, final double[] x,
@@ -162,20 +247,6 @@ public final class NodeSeparationProjection {
 
     private static int cell(final double value) {
         return (int) Math.floor(value / SPATIAL_CELL);
-    }
-
-    private static int residualViolations(final double[] x, final double[] y, final double[] radius,
-            final int count) {
-        int violations = 0;
-        for (int first = 0; first < count; first++) {
-            for (int second = first + 1; second < count; second++) {
-                final double need = radius[first] + radius[second] + MIN_GAP;
-                if (Math.hypot(x[second] - x[first], y[second] - y[first]) < need) {
-                    violations++;
-                }
-            }
-        }
-        return violations;
     }
 
     private static double prominenceScale(final GraphProjection projection, final ProjectedNodeKey key) {
