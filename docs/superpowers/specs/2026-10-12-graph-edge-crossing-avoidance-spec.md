@@ -576,12 +576,13 @@ order. A pair found in several cells is emitted once.
   verification-work stop rejects the in-flight attempt and stops the ladder the same way; detection stays complete.
   `indexBudgetExhausted` keeps the different meaning above (direct full enumeration, all pairs examined, no drop).
   The both-flags rule applies at a single stop point: all counters are evaluated there and every flag whose counter
-  is at or beyond its cap is set; it therefore sets `detectionTruncated` only for an initial-detection stop, and a
-  verification-detection stop always reports `detectionTruncated = false`.
+  is at or beyond its cap is set, respecting the phase: a published-position detection stop (initial,
+  post-repair or terminal) sets `detectionTruncated`; a verification-detection stop keeps it false.
 - Per frame, detection runs once when no conflicts exist and otherwise at most `1 initial + acceptedRounds + rejectedAttempts
   + 1 conditional final detection (only when at least one attempt was accepted) + 1 rebuild` times, bounded by
-  `MAX_VERIFICATIONS_PER_FRAME` and the work budgets; the final publication detection and the rebuild always run to
-  completion. No full hull computation is performed by the index.
+  `MAX_VERIFICATIONS_PER_FRAME` and the work budgets. The final publication detection and every counted
+  rebuild sub-step check the remaining frame allowance before executing. No full hull computation is
+  performed by the index.
 
 ## 5. Relocation Stage `EdgeConflictCorrection` (design §5)
 
@@ -706,17 +707,18 @@ and every `recomputeHulls`), the final detection and the §5.4 rebuild; a pass n
   accepting a truncated `C_out`; the last complete detection describes the unchanged positions, so the ladder stops with
   `verificationBudgetExhausted` and the published residual is exact;
 - a **verification-phase stop** (`MAX_VERIFICATIONS_PER_FRAME` reached or the verification-work budget exhausted)
-  rejects the in-flight attempt, sets `verificationBudgetExhausted`, and reaches a complete final detection on the
-  published positions; the flag is set on the transition to the attempt cap (a rejected cap attempt leaves conflicts)
-  and after the final detection when an accepted cap attempt still leaves conflicts. When the accepted cap attempt
+  rejects the in-flight attempt, sets `verificationBudgetExhausted`, and retains the last complete detection
+  on the published positions (including the accepted candidate's complete `C_out` after an earlier repair).
+  The flag is set on transition to the attempt cap when conflicts remain. When the accepted cap attempt
   clears every conflict the flag stays `false`;
 - `indexBudgetExhausted` is unrelated to stops: it records a direct full-enumeration fallback (subdivision floor/depth
   reached, or the outermost direct pass) with every pair examined and none dropped.
 
 At every stop point all counters are evaluated and every flag whose counter is at or beyond its cap is set (the
-both-flags rule). The final publication detection and the §5.4 rebuild always run to completion and their work is
-counted in the frame totals; because A1 strictly shrinks the conflict set, the final detection's volume is no larger
-than the initial detection's.
+both-flags rule), respecting detection-side versus verification-phase flag semantics. The final publication
+detection and the §5.4 rebuild consume only the remaining frame allowances. A terminal detection stop publishes
+its accumulated lower bound with `detectionTruncated`; a rebuild stop keeps the last complete edge detection
+with `verificationBudgetExhausted` and `detectionTruncated == false`.
 
 **Round loop.** Pinned control flow:
 
@@ -741,6 +743,7 @@ while (round < MAX_RELOCATION_ROUNDS && !detectionTruncated && !verificationStop
                                                                         // rejects the attempt
             if (outcome == ACCEPT) {
                 apply(attempt); currentPositions = result; currentGeometry = recomputedGeometry
+                conflicts = acceptedCompleteC_out
                 rounds++; acceptedAny = true; acceptedThisRound = true
                 recordRepair(attempt)
                 if (verificationCount >= MAX_VERIFICATIONS_PER_FRAME) {
@@ -759,25 +762,29 @@ while (round < MAX_RELOCATION_ROUNDS && !detectionTruncated && !verificationStop
     }
     if (!acceptedThisRound) break
 }
-residual = detectionTruncated ? conflicts                                  // accumulated lower bound
-         : rounds > 0 ? detectConflicts(currentPositions, currentGeometry) // complete final detection
-         : conflicts
+residual = conflicts
+if (rounds > 0 && !detectionTruncated && !verificationStopped) {
+    terminal = detectConflicts(currentPositions, currentGeometry, remainingFrameAllowances)
+    residual = terminal.accumulatedKeys
+    detectionTruncated = terminal.truncated
+}
 if (verificationStopped && !residual.isEmpty() && !detectionTruncated) {
     verificationBudgetExhausted = true
 }
 ```
 
 Each accepted attempt is one round; A1's strict decrease guarantees termination; `rounds` records accepted attempts and is
-also the accepted-attempt index (`repairsApplied` order). For a non-truncated frame the final detection after the loop is
-the source of `conflictsResidual`, `crossingsResolved` and `edgeOverNodeResolved`, so those diagnostics are measured on
-the published positions even when the loop exits at `MAX_RELOCATION_ROUNDS` or on a verification-phase budget stop. When
-the initial detection is truncated, `conflictsResidual` and the resolved counts come from the accumulated detection
-instead and `detectionTruncated` is set. If `rounds` reaches `MAX_RELOCATION_ROUNDS` with conflicts remaining, those are
+also the accepted-attempt index (`repairsApplied` order). The final detection supplies the published-position
+residual when it completes. On a verification stop, the retained complete `C_in` (or accepted complete `C_out`)
+supplies that exact residual without further detection work. On any published-position detection stop,
+`conflictsResidual` and the resolved counts instead come from the accumulated lower bound and
+`detectionTruncated` is set. If `rounds` reaches `MAX_RELOCATION_ROUNDS` with conflicts remaining, those are
 residuals; an unsatisfiable conflict is never an exception.
 
 ### 5.4 Rebuilt boundary record (design §5.5, N3) and rebuild data path
 
-When at least one attempt was accepted (a batch or a retry single; equivalently `rounds > 0`):
+When at least one attempt was accepted (a batch or a retry single; equivalently `rounds > 0`) and
+published-position detection is complete, attempt the following rebuild with the remaining verification allowance:
 
 1. `rebuilt = boundaryInvariants.describe(projection, publishedPositions, metrics, pins, publishedGeometry,
    boundaryResult.diagnostics().residualHullPairs(), boundaryResult.diagnostics())`.
@@ -788,8 +795,14 @@ When at least one attempt was accepted (a batch or a retry single; equivalently 
    `new NodeSeparationProjection().project(projection, canonicallySorted(publishedPositions), pinnedNodes).residualViolations()`
    where `canonicallySorted` rebuilds the node map in ascending `CanonicalKeys.node` order (so the diagnostic is
    independent of input map iteration order) and keeps `anchors()` unchanged.
-3. The result's `appliedDisplacements()` is the edge stage's own canonical field map (figures in §5.6);
-   `boundaryDiagnostics()` is `rebuilt`; `nodeResidualViolations()` is step 2's count.
+3. Both scans charge their consumed A3/A2 units before the next counted operation; they never use an
+   unbounded terminal allowance. Publish `rebuilt` and step 2's count together only if both scans complete.
+   On a stop retain this frame's `boundaryResult.diagnostics()` and `nodeResidualViolations()`, set
+   `verificationBudgetExhausted`, and keep the complete edge residual with `detectionTruncated == false`.
+   The accepted edge displacements remain published. These retained informational boundary fields describe
+   the boundary stage before edge repair; they are not a partial rebuild or previous-frame data.
+4. The result's `appliedDisplacements()` is the edge stage's own canonical field map (figures in §5.6).
+   A detection-truncated frame skips this rebuild and retains the same boundary-stage fields.
 
 When no attempt was accepted, `boundaryDiagnostics()` is `boundaryResult.diagnostics()`,
 `nodeResidualViolations()` is `boundaryResult.nodeResidualViolations()`, and no detection/rebuild runs beyond the initial
@@ -1077,10 +1090,9 @@ The two new stage samples are recorded on the **settled worker frame the applica
 re-runs each stage on the worker frame's own positions and times that call, and the direct-probe seed-frame recordings
 are removed. A7 is satisfied only when every measured sample has zero budget-exhaustion events for the two stages
 (`detectionTruncated`, `verificationBudgetExhausted`, `indexBudgetExhausted`, `routeBudgetExhausted` all `false`);
-otherwise the sample is a budget-stop time and the gate would be vacuous. The budgets are calibrated per §7.2/§13.1:
-with the measured per-unit cost and fixed overhead on the saturated in-budget frame,
-`budget × cost + overhead ≤ 0.5 × threshold` for the `edge-conflict` 12.5 ms allowance and the `edge-routing` 5 ms
-allowance.
+otherwise the sample is a budget-stop time and the gate would be vacuous. The measured replacement guarantee
+and the frontier calibration record are in §13.1: strict gates apply to A7a's calibrated settled fixture;
+Revision 7 caps bound counted work on larger frames, whose truncation is designed degraded behaviour.
 
 ### 7.2 Budget composition and calibration
 
@@ -1096,11 +1108,13 @@ The budgets of §13.1 are **per-frame totals over every counted event** of the t
 verification detection, A1–A4, the final detection and the rebuild for `edge-conflict`; the index build, every obstacle
 evaluation and the detected/residual/hull passes for `edge-routing`. A verification-phase stop rejects the in-flight
 attempt and sets `verificationBudgetExhausted` with detection complete; a detection-side stop truncates detection and
-sets `detectionTruncated` (lower-bound residual). The calibration obligation is binding: each budget has exactly one
-counted unit (table §13.1), and the implementation change records the measured per-unit cost and fixed overhead on the
-saturated in-budget frame and must satisfy `budget × per-unit cost + overhead ≤ f × threshold` with `f = 0.5` for both
-stages (12.5 ms / 5 ms allowances); verification and A2 work is included. The measured worst-in-budget stage time is
-recorded in this specification in the same change; only tightening is allowed.
+sets `detectionTruncated` (lower-bound residual). The calibration obligation is to record measured per-unit
+costs, fixed overhead and worst-in-budget stage times on the largest complete frame in the declared deterministic
+calibration sweep, including a near-cap accepted-repair case for verification and the terminal rebuild. The
+replacement guarantee is measured A7a strict gates with zero exhaustion on the calibrated settled fixture, plus
+A7b counted-work caps, declared flags and the pinned complete-frame time bound. The caps do not imply the
+former half-threshold wall-clock guarantee; §13.1 records the measured limitation. No threshold or Revision 7
+cap is raised.
 
 ## 8. Test Fixtures and Exact Expected Values
 
@@ -1356,9 +1370,9 @@ Each probe breaks exactly one mechanism and shows the covering test fails; the n
 | A2 | A later edge's straight chord is an obstacle: the first edge bows around it and the residual is empty | `EdgeRouterShould.routesTheFirstEdgeAroundALaterChordsCrossing` |
 | A3 | The fan region waives only the distance requirement; a proper crossing is never accepted, inside or outside the region | `EdgeRouterShould.waivesTheDistanceRequirementInsideTheFanRegion`; `EdgeRouterShould.rejectsAProperCrossingInsideTheFanRegion` |
 | A4 | A3 uses pair-key subset semantics with a per-round baseline; a legal pre-existing residual never vetoes | `EdgeConflictCorrectionShould.keepsAPreExistingHullResidualWhenTheCandidateDoesNotAddOne` |
-| A5 | The §5.5 rebuild preserves boundary stage-level fields and recomputes residuals on the published positions, order-independently | `LayoutWorkerShould.preservesBoundaryStageFieldsAcrossTheRebuild`; `BoundaryInvariantsShould.characterizesDescribeAgainstTheExtractedBoundaryStage` |
+| A5 | The §5.5 rebuild preserves boundary stage-level fields and recomputes residuals on the published positions, order-independently | `LayoutWorkerShould.preservesBoundaryStageFieldsAcrossTheRebuild`; `BoundaryInvariantsShould.describePreservesStageFieldsAndRecomputesResiduals` |
 | A6 | On a non-truncated frame the conflict index detects every pair (extreme spans, subdivision at the cap, direct outermost pass) and reports counted work bounded by its pins; an index-item, pair-check or volume stop truncates detection, publishes a lower-bound residual and sets `detectionTruncated` | `EdgeConflictCorrectionShould.detectsACrossingAtExtremeSpans`; `EdgeConflictCorrectionShould.enumeratesEveryPairWhenSubdivisionExhausts`; `EdgeConflictCorrectionShould.truncatesDetectionAtTheItemBudget`; `EdgeConflictCorrectionShould.truncatesDetectionAtThePairBudget` |
-| A7 | The two new performance stages are in the pinned order with 25 ms / 10 ms strict thresholds, measured on the settled published worker frame with zero budget-exhaustion events, calibrated so `budget × per-unit cost + overhead ≤ 0.5 × threshold`, and the reference fixture stays inside the worker and first-frame gates | `PerformanceTripwiresShould.exposeTheCanonicalStageOrderAndThresholds`; `PerformanceTripwiresShould.referenceFixtureStaysInsideTheStrictWorkerAndFirstFrameGates`; `PerformanceTripwiresShould.referenceFixtureUsesTheSettledFrameAndNoBudgetStops` |
+| A7 | The two stages have the pinned order and 25 ms / 10 ms strict thresholds; A7a's calibrated settled fixture meets the strict worker/first-frame gates with zero exhaustion; A7b's raw frames obey the counted-work caps, declared flags and complete submit/geometry/routing bound (§13.1, §14) | `PerformanceTripwiresShould.exposeTheCanonicalStageOrderAndThresholds`; `PerformanceTripwiresShould.referenceFixtureStaysInsideTheStrictWorkerAndFirstFrameGates`; `PerformanceTripwiresShould.referenceFixtureStaysBoundedAndFlagVisible`; `PerformanceTripwiresShould.rejectsAFrameWhoseRoutingExceedsTheCompleteFrameBound` |
 | A8 | Every §8.7 mutation probe (all twenty, including the check-after-collect, check-after-predicate and unbounded-residual-pass probes) is falsified by its named test | probe table §8.7 |
 | A9 | Determinism: identical inputs produce identical positions, paths and diagnostics across runs and permuted input order | `EdgeConflictCorrectionShould.isDeterministicAcrossRunsAndPermutedInputs`; `EdgeRouterShould.isDeterministicAcrossRunsAndPermutedEdgeOrder` |
 | A10 | Core gate: no file under `freeplane/` or `freeplane_api/` is modified; `gradle :freeplane_plugin_graph:test` passes with the Java 21 Zulu toolchain | `git diff --stat`; module suite |
@@ -1428,22 +1442,70 @@ accumulated up to the counted stop (“detected so far”) — never a set deriv
 set `detectionTruncated`; `indexBudgetExhausted` is never used for a truncation and keeps its §4.3 meaning
 (direct full enumeration, every pair examined, no pair dropped).
 
-**Calibration (binding).** Every budget is calibrated against the stage threshold it protects, with
-`f = 0.5`:
+**Measured replacement guarantee (Step 9 audit calibration, binding).** Revision 7 caps and all §7.1
+thresholds stay unchanged. A7a guarantees its strict stage/worker/first-frame gates on the committed,
+SHA-256-pinned settled fixture, with a nontrivial crossing, a bow/dogleg and zero exhaustion. A7b guarantees
+the counted-work caps, the phase-specific stop/flag rules and a complete submit/geometry/routing duration
+of at most `RAW_REFERENCE_MAX_FRAME_NANOS = 3_000_000_000L` per raw reference frame. Caps alone do not
+guarantee 12.5 ms / 5 ms stage times for arbitrary larger non-truncating frames. This replaces the former
+`cap(B) × c_B + overhead ≤ 0.5 × threshold` saturation obligation, which the measurements below falsify;
+no cap or threshold is raised.
 
-- Recorded baseline (attempt 7, 2000 nodes; the unbounded seed-frame pass retained as the initial calibration
-  basis, to be superseded by the bounded implementation's own saturated-frame measurement): one detection
-  pass 13,430 ms with 2,925,332 inserted items and 677,272 pair checks;
-  `NodeSeparationProjection.violatingPairs` 1,344 ms per 1,999,000-pair call; one `EdgeRouter.route`
-  5,177 ms.
-- For each budget `B`, measure the per-unit cost `c_B` and fixed overhead `o` on the saturated in-budget
-  frame (all budgets at their caps, including the final detection and the §5.4 rebuild) using the counted
-  unit above, and set the pin so that `cap(B) × c_B + o ≤ f × threshold` — the `edge-conflict` threshold
-  is 25 ms (12.5 ms allowance) and the `edge-routing` threshold is 10 ms (5 ms allowance); verification
-  and A2 work counts as either units or fixed overhead. The measured total stage time of that saturated
-  frame must also stay within the same allowance. The implementation change records the measured values
-  and replaces any ceiling above its calibrated cap with the calibrated value in the same change; the
-  measured worst-in-budget stage time is recorded here. Only tightening is allowed (§7.1).
+Calibration record (Intel Core Ultra 7 155H, Java 21.0.8-zulu, CPU governor `performance`, headless AWT metrics):
+
+- **Declared frontier search.** Take `reference-2000-5000`, reduce it with
+  `SettledReferenceFixtureCompiler.reduce`, retain the compiler's 400 relaxation iterations, rescale its
+  compiled positions from 4.1 to 0.35, and pin all nodes and anchors as in A7a. Sweep node limits
+  300..600 in increments of 25, plus every integer 400..499 (109 distinct frames). This is a calibration
+  family, not the committed A7a ledger. The largest nontrivial frame completing every budget in this
+  sweep is **474 nodes / 273 enclosures / 909 edges**. Its counts are 19,038 conflict index items,
+  18,946 conflict pair tests, **4,035 detected keys**, zero verification work/attempts, 57,395 route index
+  items, 17,270 obstacle checks and 84,540 route pair checks; all five exhaustion/truncation flags are
+  false and three bows are accepted. At 475 nodes the 4,096-key cap truncates detection; no larger
+  sampled frame completes. Simultaneously saturating every counter is not a realizable precondition
+  for this family because the first exhausted counter stops the stage.
+- **Measured worst-in-budget times.** After 20 warmups, 30 complete samples of that frontier have
+  edge-conflict p50/p95/max **69.956581 / 84.428137 / 102.679241 ms**, and edge-routing
+  p50/p95/max **181.621258 / 209.709899 / 213.857198 ms**. These samples exceed the withdrawn
+  half-threshold allowances even though none is a budget-stop measurement.
+- **Verification and terminal work.** For the accepted-repair wide-node family, 209 nodes is the
+  largest complete member: `3 × C(209,2) = 65,208` verification units (99.5% of 65,536), two
+  attempts and one accepted round. The three scans include the candidate A2 check, A2 recheck and
+  terminal node-residual rebuild. After 20 warmups, 30 samples give edge-conflict p50/p95/max
+  **10.678875 / 12.329001 / 13.956123 ms**. At 210 nodes the terminal rebuild stops at exactly
+  65,536, sets `verificationBudgetExhausted`, retains the complete edge residual and leaves
+  `detectionTruncated` false. Counted A3 terminal hull comparisons are independently checked with
+  allowances 0, 1, 2 and 3 by `BoundaryInvariantsShould.checksTheRebuildAllowanceBeforeEveryHullComparison`.
+- **Fixed overhead.** An empty-input stage harness (30 warmups, 100 measurements) measures median/max
+  overhead of **5,441.5 / 34,634 ns** for edge conflict and **4,195 / 26,341 ns** for routing.
+  Size-dependent geometry, candidate generation and other uncounted overhead remain in the inclusive
+  costs below; empty-input overhead is not claimed to model those costs independently.
+
+Measured inclusive cost per counted unit, computed as `(largest measured stage time − median empty-input
+overhead) / unit count` on the corresponding complete frame:
+
+| stage / unit | complete-frame count | inclusive ns / unit |
+| --- | ---: | ---: |
+| conflict index item | 19,038 | 5,393.098 |
+| conflict pair test | 18,946 | 5,419.286 |
+| distinct detected key | 4,035 | 25,445.799 |
+| verification work unit (209-node accepted-repair family) | 65,208 | 213.941 |
+| verification attempt (same accepted-repair family) | 2 | 6,975,340.750 |
+| route index item | 57,395 | 3,725.987 |
+| route obstacle check | 17,270 | 12,382.919 |
+| route pair check | 84,540 | 2,529.607 |
+
+Each ratio includes the other work in that stage; the rows are not independent marginal costs and must
+not be summed or linearly extrapolated to an all-caps frame. They record the measured per-unit cost and
+its fixed-overhead basis without implying the withdrawn saturation guarantee.
+
+A fresh full diagnostic with the unchanged A7a ledger measured edge-conflict p95 **2.563023 ms**, routing
+p95 **8.104872 ms**, full-worker p95/p99 **3.273580 / 4.869970 ms** and first-frame p95/p99
+**21.530890 / 22.950769 ms**, with zero exhaustion in 300 measured samples. A7b's eight raw frames
+measured a maximum complete submit/geometry/routing duration of **2,820,913,745 ns** (2.821 s), below
+the unchanged 3 s pin. Its saturated counts included 262,144 conflict index items, 262,144 route index
+items and 131,072 route pair tests, with the declared truncation/exhaustion flags. The A3 routing-delay
+regression test proves that routing time participates in that bound.
 
 ### 13.2 Budget-exhausted relocation semantics
 
@@ -1457,16 +1519,21 @@ set `detectionTruncated`; `indexBudgetExhausted` is never used for a truncation 
   verification-work stop likewise rejects the in-flight attempt; `C_out` is never truncated and never
   accepted partially. Both stop the ladder with `verificationBudgetExhausted = true` and leave
   `detectionTruncated = false` (the stop is reported as a verification-phase stop); because the last
-  complete detection still describes the published positions, the residual is exact. An initial
-  (published-position) detection stop is the only stop that sets `detectionTruncated`. The attempt-cap
+  complete detection still describes the published positions, the residual is exact. The accepted candidate's
+  complete `C_out` becomes that retained detection immediately. A published-position detection stop after
+  an accepted repair (post-round or terminal) publishes its accumulated lower bound and sets
+  `detectionTruncated`; it does not become a verification stop. The attempt-cap
   branch keeps its §5.3 semantics: the flag is set on the transition to the cap when conflicts remain
   after the rejected cap attempt and after the final detection when an accepted cap attempt still leaves
   conflicts; an accepted cap attempt that clears every conflict leaves the flag `false`.
 - `indexBudgetExhausted` stays `false` for every truncated frame unless the index also completed a direct
   full-enumeration fallback at the same stop point; `indexBudgetExhausted` alone never truncates.
-- The §5.4 rebuilt boundary record is not recomputed for an out-of-budget frame: the rebuild path is
-  skipped and the frame's boundary diagnostics are **the boundary result's own diagnostics for this frame
-  (no rebuild; positions are unchanged)**; no stale previous-frame diagnostics are retained.
+- A detection-truncated frame skips the §5.4 rebuild. After an accepted repair, each terminal A3 hull
+  comparison and A2 residual test checks the remaining verification allowance and charges its consumed
+  work to this frame. If either rebuild scan stops, publish neither partial record: retain this frame's
+  boundary-stage diagnostics and node residual, set `verificationBudgetExhausted`, and retain the complete
+  edge residual with `detectionTruncated == false`. The retained boundary record describes the boundary
+  stage before the accepted edge repair (§5.4); no previous-frame diagnostics are retained.
 - Frames inside every budget keep every §5.3 rule, every counter, and the §5.4 rebuild exactly as
   specified.
 
@@ -1500,14 +1567,12 @@ set `detectionTruncated`; `indexBudgetExhausted` is never used for a truncation 
   samples). `WARMUP_SAMPLES = 20` and `TIMED_SAMPLES = 100` are the placement-trigger sub-measurement
   counts and are unchanged. Convergence means a stable p95 across the measured window plus the
   zero-exhaustion rule; raising the window remains a measurement-window value, never a threshold change.
-- **Per-frame total and deadline.** With every budget saturated, the two new stages are capped at their
-  `f × threshold` values, 12.5 ms (`edge-conflict`) and 5 ms (`edge-routing`). The measured non-edge
-  stages are unchanged (force p95 17.9 ms, correction p95 1.5 ms, hull p95 1.3 ms, worker p95 4.8 ms)
-  and the reference accepted-batch baseline was 131.5 ms p95 / 138.4 ms p99 (2026-08-10 performance
-  report). A bounded reference frame is therefore bounded by `baseline + 12.5 ms + 5 ms` ≈ 149 ms p95
-  (inside `STRICT_FIRST_FRAME_P95_NANOS` = 150 ms) and ≈ 156 ms p99 (inside 300 ms), and the worker path
-  stays inside `STRICT_FULL_WORKER_NANOS` (100 ms); the calibration records the measured total and any
-  breaching sample blocks the feature. The direct probe and the settled-frame stage re-runs are wrapped
+- **Per-frame total and deadline.** Revision 7 caps bound counted work and do not imply a 12.5 ms /
+  5 ms saturated-frame time allowance. A7a measures the strict stage, worker and first-frame gates on
+  the calibrated settled fixture with zero exhaustion; A7b measures complete raw-frame duration through
+  worker submit, publish-time geometry and routing against `RAW_REFERENCE_MAX_FRAME_NANOS = 3_000_000_000L`.
+  The measured frontier costs and the replacement guarantee are recorded in §13.1. The direct probe and
+  the settled-frame stage re-runs are wrapped
   in the harness's bounded-operation wrapper (`invokeBounded`) with the per-operation expected time
   pinned in the implementation change; until that wrapper is in place their bounded per-frame work is the
   practical bound. The reference
@@ -1569,8 +1634,8 @@ Extends §7.1–§7.2, §8 and §10 A7; no threshold and no Revision 7 budget ch
 ### 14.2 A7b — bounded reference-frame behaviour
 
 - On `reference-2000-5000`'s raw/divergent frames, A7 asserts: no OOM; every measured
-  frame completes within a pinned per-frame bound recorded and tightened by the
-  implementation (a measurement-window value); whenever a Revision 7 budget is exceeded
+  frame completes through worker submit, publish-time geometry and routing within
+  `RAW_REFERENCE_MAX_FRAME_NANOS = 3_000_000_000L` (unchanged measurement-window pin); whenever a Revision 7 budget is exceeded
   the corresponding flag is set; and the published counted work stays within the pinned
   budgets. No millisecond threshold applies to these frames.
 - The measurement-window values from Revision 7 (§13.4) still govern sample counts and
@@ -1580,6 +1645,6 @@ Extends §7.1–§7.2, §8 and §10 A7; no threshold and no Revision 7 budget ch
 
 - A7 now reads: the two stages are in the pinned order with the pinned thresholds; the
   strict gates and the zero-exhaustion rule hold on `settled-reference-2000-5000`
-  (`PerformanceTripwiresShould.referenceFixtureStaysInsideTheStrictWorkerAndFirstFrameGates`
-  plus the settled-fixture gate), and the raw reference frames stay bounded and
+  (`PerformanceTripwiresShould.referenceFixtureStaysInsideTheStrictWorkerAndFirstFrameGates`),
+  and the raw reference frames stay bounded and
   flag-visible (`PerformanceTripwiresShould.referenceFixtureStaysBoundedAndFlagVisible`).

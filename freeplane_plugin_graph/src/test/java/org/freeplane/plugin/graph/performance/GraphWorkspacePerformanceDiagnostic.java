@@ -94,7 +94,7 @@ public final class GraphWorkspacePerformanceDiagnostic {
     static final int WARMUP_SAMPLES = 20;
     static final int TIMED_SAMPLES = 100;
     static final int RAW_REFERENCE_FRAMES = 8;
-    /** Step 7 tightening: measured max 1.968 s on the reference machine, 1.25x rounded up. */
+    /** Complete worker/geometry/routing frame bound, retained by the Step 9 audit fix. */
     static final long RAW_REFERENCE_MAX_FRAME_NANOS = 3_000_000_000L;
     private static final int PLACEMENT_TRIGGER_COUNT = 4;
     private static final int FORCED_SAMPLE_SIZE = 8;
@@ -110,6 +110,7 @@ public final class GraphWorkspacePerformanceDiagnostic {
     private final Path outputDirectory;
     private final boolean strict;
     private final NanoClock clock;
+    private final RawReferenceRouter rawReferenceRouter;
     private final long processStart;
     private final ExecutorService boundedOperations;
     private final GraphGeometryEngine geometryEngine = new GraphGeometryEngine();
@@ -127,8 +128,19 @@ public final class GraphWorkspacePerformanceDiagnostic {
     private boolean preCorrectionOverlapChecked;
     private boolean placementTriggersSampled;
 
+    interface RawReferenceRouter {
+        EdgePaths route(GraphProjection projection, LayoutPositions positions, GraphGeometry geometry,
+            Set<ProjectedEndpointKey> visible);
+    }
+
     GraphWorkspacePerformanceDiagnostic(final Path outputDirectory, final boolean strict, final NanoClock clock) {
+        this(outputDirectory, strict, clock, new EdgeRouter()::route);
+    }
+
+    GraphWorkspacePerformanceDiagnostic(final Path outputDirectory, final boolean strict, final NanoClock clock,
+            final RawReferenceRouter rawReferenceRouter) {
         this.outputDirectory = outputDirectory;
+        this.rawReferenceRouter = Objects.requireNonNull(rawReferenceRouter, "rawReferenceRouter");
         this.strict = strict;
         this.clock = Objects.requireNonNull(clock, "clock");
         processStart = this.clock.nanoTime();
@@ -956,14 +968,14 @@ public final class GraphWorkspacePerformanceDiagnostic {
             for (int index = 0; index < RAW_REFERENCE_FRAMES; index++) {
                 final long start = clock.nanoTime();
                 final LayoutFrame frame = await(worker.submit(request), "raw reference worker submit");
-                final long end = clock.nanoTime();
                 requireUsableFrame(frame, projection, "raw reference frame",
                     PerformanceMeasurements.Stage.FULL_WORKER);
-                final long duration = PerformanceMeasurements.checkedDuration(start, end);
                 final GraphGeometry hull = geometryEngine.computeHulls(projection, frame.positions(),
                     textMetrics);
-                final EdgePaths paths = new EdgeRouter().route(projection, frame.positions(), hull,
+                final EdgePaths paths = rawReferenceRouter.route(projection, frame.positions(), hull,
                     visible);
+                final long end = clock.nanoTime();
+                final long duration = PerformanceMeasurements.checkedDuration(start, end);
                 rawReferenceFrames.add(new RawReferenceFrame(duration,
                     frame.edgeConflictDiagnostics(), paths.diagnostics()));
             }

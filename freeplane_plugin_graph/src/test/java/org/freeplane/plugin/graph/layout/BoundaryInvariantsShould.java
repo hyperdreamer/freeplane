@@ -171,6 +171,37 @@ public class BoundaryInvariantsShould {
     }
 
     @Test
+    public void checksTheRebuildAllowanceBeforeEveryHullComparison() {
+        final EnclosureHullKey aHull = hull("a");
+        final EnclosureHullKey bHull = hull("b");
+        final EnclosureHullKey cHull = hull("c");
+        final GraphProjection projection = projection(Collections.<ProjectedNodeKey>emptyList(),
+            Arrays.asList(enclosure(aHull, Collections.<ProjectedNodeKey>emptyList(), BoundaryTier.EMPHATIC),
+                enclosure(bHull, Collections.<ProjectedNodeKey>emptyList(), BoundaryTier.EMPHATIC),
+                enclosure(cHull, Collections.<ProjectedNodeKey>emptyList(), BoundaryTier.EMPHATIC)));
+        final LayoutPositions positions = LayoutPositions.of(Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(),
+            anchorMap(aHull, 0.0, 0.0, bHull, 0.0, 500.0, cHull, 0.0, 1000.0));
+        final org.freeplane.plugin.graph.geometry.GraphGeometry geometry =
+            new GraphGeometryEngine().computeHulls(projection, positions, METRICS);
+        final BoundarySeparationDiagnostics baseline = BoundarySeparationDiagnostics.empty();
+        for (int allowance = 0; allowance < 3; allowance++) {
+            final BoundaryInvariants.CountedRebuild rebuilt = new BoundaryInvariants().describeCounted(
+                projection, positions, METRICS, Collections.<PinProjection>emptyList(), geometry,
+                Collections.<String>emptyList(), baseline, allowance);
+
+            assertThat(rebuilt.truncated()).isTrue();
+            assertThat(rebuilt.hullPairWork()).isEqualTo(allowance);
+            assertThat(rebuilt.diagnostics()).isSameAs(baseline);
+        }
+        final BoundaryInvariants.CountedRebuild complete = new BoundaryInvariants().describeCounted(
+            projection, positions, METRICS, Collections.<PinProjection>emptyList(), geometry,
+            Collections.<String>emptyList(), baseline, 3L);
+        assertThat(complete.truncated()).isFalse();
+        assertThat(complete.hullPairWork()).isEqualTo(3L);
+        assertThat(complete.diagnostics()).isNotSameAs(baseline);
+    }
+
+    @Test
     public void describeRejectsAPairAbsentFromTheBaseline() {
         final ProjectedNodeKey a = nodeKey("a");
         final ProjectedNodeKey b = nodeKey("b");

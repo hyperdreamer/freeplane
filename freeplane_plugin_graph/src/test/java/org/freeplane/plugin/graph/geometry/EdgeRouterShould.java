@@ -383,6 +383,35 @@ public class EdgeRouterShould {
         assertThat(paths.byEdge()).isEqualTo(bruteForce.byEdge());
     }
 
+    @Test
+    public void reconcilesEveryRouterCapAtEachStopPoint() throws Exception {
+        final Class<?> type = Class.forName(EdgeRouter.class.getName() + "$RouterBudget");
+        final java.lang.reflect.Constructor<?> constructor = type.getDeclaredConstructor(
+            long.class, long.class, long.class);
+        constructor.setAccessible(true);
+        // Reach two caps simultaneously, then stop through either counter. A one-counter
+        // stop misses the other flag; all three methods must reconcile both categories.
+        for (final String[] stop : new String[][] {
+                {"insertItem", "indexItems"}, {"obstacleCheck", "obstacleChecks"},
+                {"pairCheck", "indexItems"}, {"pairCheck", "obstacleChecks"}}) {
+            final Object budget = constructor.newInstance(262_144L, 131_072L, 131_072L);
+            final java.lang.reflect.Field pair = type.getDeclaredField("pairChecks");
+            pair.setAccessible(true);
+            pair.setLong(budget, 131_072L);
+            final java.lang.reflect.Field other = type.getDeclaredField(stop[1]);
+            other.setAccessible(true);
+            other.setLong(budget, "indexItems".equals(stop[1]) ? 262_144L : 131_072L);
+            final java.lang.reflect.Method check = type.getDeclaredMethod(stop[0]);
+            check.setAccessible(true);
+            assertThat(check.invoke(budget)).isEqualTo(Boolean.FALSE);
+            for (final String flag : new String[] {"routeBudgetExhausted", "detectionTruncated"}) {
+                final java.lang.reflect.Field field = type.getDeclaredField(flag);
+                field.setAccessible(true);
+                assertThat(field.getBoolean(budget)).as(stop[0] + ": " + flag).isTrue();
+            }
+        }
+    }
+
     private static List<String> bruteForceCrossingKeys(final EdgePaths paths) {
         final List<ProjectedEdgeKey> keys = new ArrayList<ProjectedEdgeKey>(paths.byEdge().keySet());
         final Set<String> crossings = new TreeSet<String>();
