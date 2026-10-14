@@ -26,6 +26,11 @@ import javax.swing.JScrollPane;
 
 import org.freeplane.plugin.graph.control.CanvasState;
 import org.freeplane.plugin.graph.control.OperationalStatus;
+import org.freeplane.plugin.graph.geometry.EdgePath;
+import org.freeplane.plugin.graph.geometry.EdgePaths;
+import org.freeplane.plugin.graph.geometry.EdgeRouteDiagnostics;
+import org.freeplane.plugin.graph.geometry.EdgeRouteTimings;
+import org.freeplane.plugin.graph.geometry.EdgeRouter;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.HullGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
@@ -42,9 +47,11 @@ import org.freeplane.plugin.graph.projection.ProjectedEdge;
 import org.freeplane.plugin.graph.projection.ProjectedEdgeKey;
 import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
+import org.freeplane.plugin.graph.projection.ProjectedEndpointVisibility;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
 import org.freeplane.plugin.graph.projection.PinProjection;
+import org.freeplane.plugin.graph.projection.RelationshipResolution;
 import org.freeplane.plugin.graph.projection.input.ConnectorDescriptor;
 import org.freeplane.plugin.graph.projection.input.ConnectorSnapshot;
 import org.freeplane.plugin.graph.projection.input.SafeNodeLabel;
@@ -80,6 +87,33 @@ public class GraphInteractionControllerShould {
 
         assertThat(GraphHitIndex.from(fixture.state).edgeAt(fixture.paintedSegmentPoint, 0.1))
             .contains(fixture.edgeKey);
+    }
+
+    @Test
+    public void hitTestARoutedBowAtItsSampledNearestPoint() {
+        CanvasState state = bowState();
+        EdgePath path = state.edgePaths().path(state.projection().edges().get(0).key()).get();
+        LayoutPoint midpointSample = path.samples().get(path.samples().size() / 2);
+
+        assertThat(index(state).edgeAt(midpointSample, 0.5)).contains(
+            state.projection().edges().get(0).key());
+        assertThat(index(state).edgeAt(LayoutPoint.of(midpointSample.x() + 50.0,
+            midpointSample.y() + 50.0), 0.5)).isEmpty();
+    }
+
+    @Test
+    public void hitTestARoutedDoglegAtItsSampledNearestPoint() {
+        CanvasState state = doglegState();
+        EdgePath path = state.edgePaths().path(state.projection().edges().get(0).key()).get();
+        LayoutPoint firstBend = path.definingPoints().get(1);
+        LayoutPoint secondBend = path.definingPoints().get(2);
+        LayoutPoint middle = LayoutPoint.of((firstBend.x() + secondBend.x()) * 0.5,
+            (firstBend.y() + secondBend.y()) * 0.5);
+
+        assertThat(index(state).edgeAt(middle, 0.5)).contains(
+            state.projection().edges().get(0).key());
+        assertThat(index(state).edgeAt(LayoutPoint.of(middle.x() + 50.0, middle.y() + 50.0), 0.5))
+            .isEmpty();
     }
 
     @Test
@@ -716,7 +750,9 @@ public class GraphInteractionControllerShould {
             fixture.state.projection().nodes(), fixture.state.projection().enclosures(), edges,
             fixture.state.projection().relationshipResolutions(), fixture.state.projection().pins());
         final CanvasState state = CanvasState.of(1L, projection, fixture.state.layout(),
-            fixture.state.geometry(), fixture.state.status());
+            fixture.state.geometry(),
+            routedPaths(projection, fixture.state.layout().positions(), fixture.state.geometry()),
+            fixture.state.status());
         final LayoutPoint sourceCenter = fixture.state.geometry().nodes().get(fixture.firstNodeKey).center();
         final LayoutPoint targetAnchor = LayoutPoint.of(95.0, 0.0);
         final LayoutPoint first = fixture.state.geometry().edgeAttachment(fixture.firstEndpoint, targetAnchor);
@@ -991,7 +1027,116 @@ public class GraphInteractionControllerShould {
         final GraphProjection projection = GraphProjection.projected(base.generation(), nodes, enclosures,
             Collections.<ProjectedEdge>emptyList(), base.projection().relationshipResolutions(),
             Collections.<PinProjection>emptyList());
-        return CanvasState.of(base.generation(), projection, base.layout(), geometry, base.status());
+        return CanvasState.of(base.generation(), projection, base.layout(), geometry,
+            routedPaths(projection, base.layout().positions(), geometry), base.status());
+    }
+
+    private static GraphHitIndex index(final CanvasState state) {
+        return GraphHitIndex.from(state);
+    }
+
+    private static EdgePaths routedPaths(final GraphProjection projection, final LayoutPositions positions,
+            final GraphGeometry geometry) {
+        if (projection.edges().isEmpty()) {
+            return EdgePaths.empty();
+        }
+        return new EdgeRouter().route(projection, positions, geometry,
+            ProjectedEndpointVisibility.visibleEndpoints(projection.nodes(), projection.enclosures()));
+    }
+
+    private static CanvasState bowState() {
+        final MapReferenceId map = MapReferenceId.of(
+            UUID.fromString("00000000-0000-0000-0000-000000000071"));
+        final NodeReference firstReference = NodeReference.of(map, PersistedNodeId.of("bow-first"));
+        final NodeReference secondReference = NodeReference.of(map, PersistedNodeId.of("bow-second"));
+        final ProjectedNodeKey first = ProjectedNodeKey.of(SourceNodeKey.persisted(firstReference));
+        final ProjectedNodeKey second = ProjectedNodeKey.of(SourceNodeKey.persisted(secondReference));
+        final ProjectedEndpointKey firstEndpoint = ProjectedEndpointKey.ofNode(first);
+        final ProjectedEndpointKey secondEndpoint = ProjectedEndpointKey.ofNode(second);
+        final ProjectedNode firstNode = ProjectedNode.of(first,
+            SafeNodeLabel.of("Bow first", "Bow first"), "Map", false);
+        final ProjectedNode secondNode = ProjectedNode.of(second,
+            SafeNodeLabel.of("Bow second", "Bow second"), "Map", false);
+        final ProjectedEdgeKey edgeKey = ProjectedEdgeKey.of(firstEndpoint, secondEndpoint);
+        final ConnectorDescriptor descriptor = ConnectorDescriptor.of(
+            SourceNodeKey.persisted(firstReference), secondReference, false, true,
+            "source", "middle", "target");
+        final ProjectedEdge edge = ProjectedEdge.of(edgeKey,
+            Collections.singletonList(EdgeContributor.nativeConnector(
+                ConnectorSnapshot.of(0, descriptor), firstEndpoint, secondEndpoint)));
+        final GraphProjection projection = GraphProjection.projected(1L,
+            Arrays.asList(firstNode, secondNode), Collections.<ProjectedEnclosure>emptyList(),
+            Collections.singletonList(edge), Collections.<RelationshipResolution>emptyList(),
+            Collections.<PinProjection>emptyList());
+        final Map<ProjectedNodeKey, NodeGeometry> nodes =
+            new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
+        nodes.put(first, NodeGeometry.of(LayoutPoint.of(-90.0, 0.0), 8.0));
+        nodes.put(second, NodeGeometry.of(LayoutPoint.of(90.0, 0.0), 8.0));
+        final GraphGeometry geometry = GraphGeometry.of(nodes,
+            Collections.<EnclosureHullKey, HullGeometry>emptyMap());
+        final Map<ProjectedEdgeKey, EdgePath> byEdge =
+            new LinkedHashMap<ProjectedEdgeKey, EdgePath>();
+        byEdge.put(edgeKey, EdgePath.bow(
+            geometry.edgeAttachment(firstEndpoint, LayoutPoint.of(90.0, 0.0)),
+            LayoutPoint.of(0.0, 90.0),
+            geometry.edgeAttachment(secondEndpoint, LayoutPoint.of(-90.0, 0.0))));
+        final Map<ProjectedNodeKey, LayoutPoint> positions =
+            new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        positions.put(first, LayoutPoint.of(-90.0, 0.0));
+        positions.put(second, LayoutPoint.of(90.0, 0.0));
+        final LayoutFrame frame = LayoutFrame.of(1L, LayoutPositions.of(positions,
+            Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false, 0);
+        return CanvasState.of(1L, projection, frame, geometry,
+            EdgePaths.of(byEdge, EdgeRouteDiagnostics.empty(), new EdgeRouteTimings(0L, 0L, 0L)),
+            OperationalStatus.IDLE);
+    }
+
+    private static CanvasState doglegState() {
+        final MapReferenceId map = MapReferenceId.of(
+            UUID.fromString("00000000-0000-0000-0000-000000000072"));
+        final NodeReference firstReference = NodeReference.of(map, PersistedNodeId.of("dogleg-first"));
+        final NodeReference secondReference = NodeReference.of(map, PersistedNodeId.of("dogleg-second"));
+        final ProjectedNodeKey first = ProjectedNodeKey.of(SourceNodeKey.persisted(firstReference));
+        final ProjectedNodeKey second = ProjectedNodeKey.of(SourceNodeKey.persisted(secondReference));
+        final ProjectedEndpointKey firstEndpoint = ProjectedEndpointKey.ofNode(first);
+        final ProjectedEndpointKey secondEndpoint = ProjectedEndpointKey.ofNode(second);
+        final ProjectedNode firstNode = ProjectedNode.of(first,
+            SafeNodeLabel.of("Dogleg first", "Dogleg first"), "Map", false);
+        final ProjectedNode secondNode = ProjectedNode.of(second,
+            SafeNodeLabel.of("Dogleg second", "Dogleg second"), "Map", false);
+        final ProjectedEdgeKey edgeKey = ProjectedEdgeKey.of(firstEndpoint, secondEndpoint);
+        final ConnectorDescriptor descriptor = ConnectorDescriptor.of(
+            SourceNodeKey.persisted(firstReference), secondReference, false, true,
+            "source", "middle", "target");
+        final ProjectedEdge edge = ProjectedEdge.of(edgeKey,
+            Collections.singletonList(EdgeContributor.nativeConnector(
+                ConnectorSnapshot.of(0, descriptor), firstEndpoint, secondEndpoint)));
+        final GraphProjection projection = GraphProjection.projected(1L,
+            Arrays.asList(firstNode, secondNode), Collections.<ProjectedEnclosure>emptyList(),
+            Collections.singletonList(edge), Collections.<RelationshipResolution>emptyList(),
+            Collections.<PinProjection>emptyList());
+        final Map<ProjectedNodeKey, NodeGeometry> nodes =
+            new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
+        nodes.put(first, NodeGeometry.of(LayoutPoint.of(-90.0, 0.0), 8.0));
+        nodes.put(second, NodeGeometry.of(LayoutPoint.of(90.0, 0.0), 8.0));
+        final GraphGeometry geometry = GraphGeometry.of(nodes,
+            Collections.<EnclosureHullKey, HullGeometry>emptyMap());
+        final LayoutPoint firstBend = LayoutPoint.of(-27.33, 30.0);
+        final LayoutPoint secondBend = LayoutPoint.of(27.33, 30.0);
+        final Map<ProjectedEdgeKey, EdgePath> byEdge =
+            new LinkedHashMap<ProjectedEdgeKey, EdgePath>();
+        byEdge.put(edgeKey, EdgePath.dogleg(
+            geometry.edgeAttachment(firstEndpoint, firstBend), firstBend, secondBend,
+            geometry.edgeAttachment(secondEndpoint, secondBend)));
+        final Map<ProjectedNodeKey, LayoutPoint> positions =
+            new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        positions.put(first, LayoutPoint.of(-90.0, 0.0));
+        positions.put(second, LayoutPoint.of(90.0, 0.0));
+        final LayoutFrame frame = LayoutFrame.of(1L, LayoutPositions.of(positions,
+            Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false, 0);
+        return CanvasState.of(1L, projection, frame, geometry,
+            EdgePaths.of(byEdge, EdgeRouteDiagnostics.empty(), new EdgeRouteTimings(0L, 0L, 0L)),
+            OperationalStatus.IDLE);
     }
 
     private static void dispatch(GraphCanvas canvas, AWTEvent event) {
@@ -1136,7 +1281,7 @@ public class GraphInteractionControllerShould {
             final LayoutFrame frame = LayoutFrame.of(1L, LayoutPositions.of(nodePositions, anchors),
                 false, 0);
             final CanvasState state = CanvasState.of(1L, projection, frame, geometry,
-                OperationalStatus.IDLE);
+                routedPaths(projection, frame.positions(), geometry), OperationalStatus.IDLE);
             final LayoutPoint firstAttachment = geometry.edgeAttachment(nodeEndpoint, layoutAnchor);
             final LayoutPoint secondAttachment = geometry.edgeAttachment(enclosureEndpoint,
                 nodeCenter);
@@ -1206,7 +1351,7 @@ public class GraphInteractionControllerShould {
             final LayoutFrame frame = LayoutFrame.of(1L,
                 LayoutPositions.of(positions, Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false, 0);
             return new CoordinateSegmentFixture(CanvasState.of(1L, projection, frame, geometry,
-                OperationalStatus.IDLE), edgeKey);
+                routedPaths(projection, frame.positions(), geometry), OperationalStatus.IDLE), edgeKey);
         }
     }
 
@@ -1264,7 +1409,7 @@ public class GraphInteractionControllerShould {
             final LayoutFrame frame = LayoutFrame.of(1L,
                 LayoutPositions.of(positions, Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false, 0);
             return new ExtremeSpanFixture(CanvasState.of(1L, projection, frame, geometry,
-                OperationalStatus.IDLE), edgeKey);
+                routedPaths(projection, frame.positions(), geometry), OperationalStatus.IDLE), edgeKey);
         }
     }
 
@@ -1405,7 +1550,7 @@ public class GraphInteractionControllerShould {
             final LayoutPositions positions = LayoutPositions.of(nodePoints(nodes), anchors);
             final LayoutFrame frame = LayoutFrame.of(1L, positions, false, 0);
             final CanvasState state = CanvasState.of(1L, projection, frame, geometry,
-                OperationalStatus.IDLE);
+                routedPaths(projection, frame.positions(), geometry), OperationalStatus.IDLE);
             return new Fixture(state, first, second, firstEndpoint, secondEndpoint,
                 hullKey, secondHullKey, ProjectedEndpointKey.ofEnclosure(enclosureKey),
                 ProjectedEndpointKey.ofEnclosure(secondEnclosureKey),

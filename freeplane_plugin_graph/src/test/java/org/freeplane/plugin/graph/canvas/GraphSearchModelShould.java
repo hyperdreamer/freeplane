@@ -16,6 +16,7 @@ import java.util.UUID;
 
 import org.freeplane.plugin.graph.control.CanvasState;
 import org.freeplane.plugin.graph.control.OperationalStatus;
+import org.freeplane.plugin.graph.geometry.EdgePaths;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
@@ -183,7 +184,7 @@ public class GraphSearchModelShould {
             final LayoutPositions positions = LayoutPositions.of(nodePositions, anchors);
             final LayoutFrame frame = LayoutFrame.of(1L, positions, false, 0);
             final CanvasState state = CanvasState.of(1L, projection, frame, geometry,
-                OperationalStatus.IDLE);
+                EdgePaths.empty(), OperationalStatus.IDLE);
             return new Fixture(state, ProjectedEndpointKey.ofNode(northNodeKey),
                 ProjectedEndpointKey.ofEnclosure(enclosureKey),
                 ProjectedEndpointKey.ofEnclosure(secondEnclosureKey),

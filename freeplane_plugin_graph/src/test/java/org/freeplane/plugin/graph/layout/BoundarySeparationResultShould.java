@@ -5,8 +5,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.Collections;
 
+import org.freeplane.plugin.graph.geometry.GraphGeometry;
+import org.freeplane.plugin.graph.geometry.HullGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
+import org.freeplane.plugin.graph.geometry.NodeGeometry;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
 import org.junit.Test;
@@ -22,7 +25,8 @@ public class BoundarySeparationResultShould {
             Collections.<org.freeplane.plugin.graph.projection.EnclosureHullKey,
                 org.freeplane.plugin.graph.geometry.LayoutPoint>emptyMap());
 
-        final BoundarySeparationResult result = new BoundarySeparationResult(positions, diagnostics, 7, timings);
+        final BoundarySeparationResult result = new BoundarySeparationResult(positions, geometry(), diagnostics, 7,
+            timings);
 
         assertThat(result.positions()).isSameAs(positions);
         assertThat(result.diagnostics()).isSameAs(diagnostics);
@@ -32,29 +36,41 @@ public class BoundarySeparationResultShould {
     }
 
     @Test
+    public void exposeTheTerminalGeometry() {
+        final GraphGeometry geometry = GraphGeometry.of(
+            Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(),
+            Collections.<EnclosureHullKey, HullGeometry>emptyMap());
+
+        final BoundarySeparationResult result = new BoundarySeparationResult(positions(), geometry,
+            diagnostics(), 0, timings());
+
+        assertThat(result.geometry()).isSameAs(geometry);
+    }
+
+    @Test
     public void rejectNegativeNodeResidualViolations() {
-        assertThatThrownBy(() -> new BoundarySeparationResult(positions(), diagnostics(), -1, timings()))
+        assertThatThrownBy(() -> new BoundarySeparationResult(positions(), geometry(), diagnostics(), -1, timings()))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessage("Node residual violations must be nonnegative");
     }
 
     @Test
     public void rejectNullPositions() {
-        assertThatThrownBy(() -> new BoundarySeparationResult(null, diagnostics(), 0, timings()))
+        assertThatThrownBy(() -> new BoundarySeparationResult(null, geometry(), diagnostics(), 0, timings()))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("positions");
     }
 
     @Test
     public void rejectNullDiagnostics() {
-        assertThatThrownBy(() -> new BoundarySeparationResult(positions(), null, 0, timings()))
+        assertThatThrownBy(() -> new BoundarySeparationResult(positions(), geometry(), null, 0, timings()))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("diagnostics");
     }
 
     @Test
     public void rejectNullTimings() {
-        assertThatThrownBy(() -> new BoundarySeparationResult(positions(), diagnostics(), 0, null))
+        assertThatThrownBy(() -> new BoundarySeparationResult(positions(), geometry(), diagnostics(), 0, null))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("timings");
     }
@@ -63,6 +79,12 @@ public class BoundarySeparationResultShould {
         return LayoutPositions.of(
             Collections.<ProjectedNodeKey, LayoutPoint>emptyMap(),
             Collections.<EnclosureHullKey, LayoutPoint>emptyMap());
+    }
+
+    private static GraphGeometry geometry() {
+        return GraphGeometry.of(
+            Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(),
+            Collections.<EnclosureHullKey, HullGeometry>emptyMap());
     }
 
     private static BoundarySeparationDiagnostics diagnostics() {
