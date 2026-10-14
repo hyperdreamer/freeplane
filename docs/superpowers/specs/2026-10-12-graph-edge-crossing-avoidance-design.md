@@ -802,6 +802,7 @@ not design defects:
 | detection epsilon | world units | pinned; the crossing predicate is exact-sign based, the epsilon covers only degenerate touch |
 | `MAX_RELOCATION_ROUNDS` | count | `≥ 1` (draft 4); each accepted round strictly shrinks the conflict set |
 | `MAX_VERIFICATIONS_PER_FRAME` | count | bounds every A1-A4 verification attempt including the §5.3 single-candidate retries; on exhaustion the ladder stops with `verificationBudgetExhausted` and detection complete (distinct from `indexBudgetExhausted`) |
+| `EDGE_CONFLICT_MAX_REPAIRABLE_CONFLICTS_PER_FRAME` | count | `8`; after a complete initial detection, an ordinary in-index frame above this distinct-key count is suppressed before candidate generation; direct full-enumeration fallback keeps the Revision 7 path |
 | bow sampling tolerance | world units | maximum sagitta of the sampled polyline; `≤ min(EDGE_NODE_CLEARANCE, EDGE_CLEARANCE) / 2`. It is a **fidelity bound**, not a safety margin: §6.5 makes the same sample list both verified and painted, so the bound keeps the drawn curve indistinguishable from the verified one at the clearances in play |
 | `FAN_HULL_RADIUS` | world units | `> 0`; the hull-endpoint part of `endpointClearanceRadius` (§6.4) |
 | conflict-index cell size | world units | `> 0`; the small-frame level-0 floor `CONFLICT_CELL_SIZE` (48.0), with the 64-bit cell-key encoding and outermost-ring fallback of §9 |
@@ -850,6 +851,7 @@ Each budget has exactly one counted unit:
 | index-item | one inserted index item (one primitive-cell write) or one direct outermost examination | before every cell write and inside every subdivision re-collect | detection truncated at the counted stop |
 | pair-check | one `properlyCross` / `segmentDistance` test | before every test, including the outermost direct pass | detection truncated at the counted stop |
 | detected-key volume | one distinct conflict identity key | when a key is added to the accumulating set | detection truncated at the counted stop |
+| repairable-conflict count (`EDGE_CONFLICT_MAX_REPAIRABLE_CONFLICTS_PER_FRAME`) | one distinct conflict identity key in a complete initial in-index detection | after initial detection, before candidate generation | when the count exceeds `8`, suppress relocation and the §5.5 rebuild; truncated detection and direct full-enumeration fallback remain on the Revision 7 path |
 | verification-work | one verification-phase predicate evaluation: one A2 node-pair test, one A3 hull-pair comparison or one recomputed hull | before every counted verification sub-step | the in-flight attempt is rejected; the ladder stops with detection complete |
 | verification attempts (`MAX_VERIFICATIONS_PER_FRAME`) | one batch or single A1–A4 evaluation | before each attempt | the ladder stops with detection complete |
 
@@ -998,10 +1000,11 @@ frames whose coordinates have diverged.
 - The strict thresholds (`edge-conflict` 25 ms, `edge-routing` 10 ms, `FULL_WORKER`
   p95/p99 100 ms, first-frame p95/p99 150/300 ms) and the Revision 7 zero-budget-
   exhaustion rule are measured on a **settled-position fixture**: a deterministic,
-  committed frame whose size is calibrated as the largest that stays inside every
-  Revision 7 budget with zero exhaustion while carrying a non-trivial steady-state
-  workload (at least one detected crossing and at least one accepted bow or dogleg
-  rung). It need not be the full reference scale: the 2,000/5,000 scale is covered by
+  committed frame. Revision 9 B-prime recalibrates its 25-node projection to
+  conflict-light adjacency with at most eight complete initial conflict keys, zero
+  Revision 7 exhaustion and a non-trivial steady-state workload (at least one detected
+  crossing and at least one accepted bow or dogleg rung). It need not be the full
+  reference scale: the 2,000/5,000 scale is covered by
   §15.3's bounded-behaviour assertions, because a full-scale settled graph's conflict
   volume cannot stay inside the pinned budgets.
 - The fixture is built by the harness from committed fixture data (recorded-ledger
@@ -1031,3 +1034,23 @@ frames whose coordinates have diverged.
 
 Every Revision 7 budget, the four flags, the stop semantics, the traceability and the
 threshold table remain exactly as pinned. Only the *measurement input* of A7 is split.
+
+## 16. Revision 9 — crowded-frame suppression and the terminal-arrowhead probe premise
+
+Added by the PM after delivery reconciliation (2026-10-12, user decisions B and B-prime). The ordinary in-index relocation
+path suppresses an initial frame with more than eight distinct conflict keys before candidate generation, publishing the
+baseline positions and detected keys as residuals with zero rounds, verifications, repairs and resolved counts and no
+§5.5 rebuild. Truncated detection and direct full-enumeration fallback retain Revision 7's ladder and flag semantics; no new flag is added.
+The implementation test identifies suppression with `conflictsDetected > 8 && rounds == 0`.
+
+B-prime replaces the crossing-heavy A7a adjacency with 22 synthetic edges over the first 25 canonical reference node
+identities: an isolated four-node crossing pair and a 21-node serpentine grid path at 200-world spacing. The recorded
+ledger, all-node pins and deterministic SHA-256 check remain; the new digest is
+`e9e988b7967ea6bb4f503dfb4c5af7d3e74a3328e28e0987e71ff0f0b8ac0578`. All 300 measured samples have **1 initial conflict
+(1 crossing, 0 edge-over-node)** and accept **1 bow and 21 straights**, with no fallback, routed residual crossing or
+budget exhaustion. The eligibility assertion checks the bound of 8 and non-trivial routing on every measured sample.
+No strict threshold and no Revision 7 cap changed; the two-map first-idle step is remeasured at **756**.
+
+The terminal-arrowhead probe keeps the terminal-segment contract by using a bow whose terminal segment is shorter than
+the uncapped arrowhead length while the endpoint chord remains longer, so the proportional cap cannot make both measured
+inputs equal.
