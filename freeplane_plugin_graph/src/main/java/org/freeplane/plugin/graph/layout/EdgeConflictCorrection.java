@@ -50,6 +50,7 @@ public final class EdgeConflictCorrection {
     static final long EDGE_CONFLICT_MAX_INDEX_ITEMS_PER_FRAME = 262_144L;
     static final long EDGE_CONFLICT_MAX_PAIR_CHECKS_PER_FRAME = 131_072L;
     static final int EDGE_CONFLICT_MAX_DETECTED_PER_FRAME = 4_096;
+    static final int EDGE_CONFLICT_MAX_REPAIRABLE_CONFLICTS_PER_FRAME = 8;
     static final long EDGE_CONFLICT_MAX_VERIFICATION_WORK_PER_FRAME = 65_536L;
 
     private static final double OUTERMOST_CELL_INDEX_DOUBLE = OUTERMOST_CELL_INDEX;
@@ -121,10 +122,23 @@ public final class EdgeConflictCorrection {
         final int conflictsDetected = conflicts.keys().size();
         final int crossingsDetected = conflicts.crossings();
         final int edgeOverNodeDetected = conflicts.edgeOverNodes();
+        final boolean initialDetectionTruncated = initial.truncated();
+        if (conflictsDetected > EDGE_CONFLICT_MAX_REPAIRABLE_CONFLICTS_PER_FRAME
+                && !initialDetectionTruncated && !indexBudgetExhausted) {
+            final EdgeConflictDiagnostics diagnostics = new EdgeConflictDiagnostics(
+                conflictsDetected, crossingsDetected, edgeOverNodeDetected, 0, 0, conflicts.keys(),
+                Collections.<EdgeConflictDiagnostics.Repair>emptyList(), 0, 0, false,
+                indexBudgetExhausted, initialDetectionTruncated, indexInsertedItems, indexPairChecks,
+                verificationWork, indexSubdivisions);
+            return new EdgeConflictResult(positions, diagnostics,
+                new EdgeConflictTimings(0L, 0L, 0L, 0L), boundaryResult.diagnostics(),
+                boundaryResult.nodeResidualViolations(),
+                Collections.<String, LayoutPoint>emptyMap());
+        }
         final List<EdgeConflictDiagnostics.Repair> repairs =
             new ArrayList<EdgeConflictDiagnostics.Repair>();
         int rounds = 0;
-        boolean detectionTruncated = initial.truncated();
+        boolean detectionTruncated = initialDetectionTruncated;
         boolean verificationStopped = false;
 
         while (!detectionTruncated && !verificationStopped && rounds < MAX_RELOCATION_ROUNDS

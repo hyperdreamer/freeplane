@@ -186,6 +186,28 @@ public class EdgeConflictCorrectionShould {
     }
 
     @Test
+    public void suppressesAFrameWithMoreThanTheRepairableConflictBound() {
+        final Fixture fixture = concurrentDiameters(5);
+        final EdgeConflictCorrection.Detection detected = EdgeConflictCorrection.detectConflicts(
+            fixture.projection, fixture.boundary.positions(), fixture.boundary.geometry(),
+            fixture.visible);
+        final EdgeConflictResult result = apply(fixture);
+
+        assertThat(detected.keys()).hasSizeGreaterThan(
+            EdgeConflictCorrection.EDGE_CONFLICT_MAX_REPAIRABLE_CONFLICTS_PER_FRAME);
+        assertThat(result.positions()).isSameAs(fixture.boundary.positions());
+        assertThat(result.diagnostics().conflictsDetected()).isEqualTo(detected.keys().size());
+        assertThat(result.diagnostics().conflictsResidual()).containsExactlyElementsOf(detected.keys());
+        assertThat(result.diagnostics().rounds()).isZero();
+        assertThat(result.diagnostics().verifications()).isZero();
+        assertThat(result.diagnostics().repairsApplied()).isEmpty();
+        assertThat(result.diagnostics().crossingsResolved()).isZero();
+        assertThat(result.diagnostics().edgeOverNodeResolved()).isZero();
+        assertThat(result.boundaryDiagnostics()).isSameAs(fixture.boundary.diagnostics());
+        assertThat(result.timings().rebuildNanos()).isZero();
+    }
+
+    @Test
     public void truncatesDetectionAtTheItemBudget() {
         final Fixture fixture = referenceScaleFan(500);
         final EdgeConflictResult result = apply(fixture);

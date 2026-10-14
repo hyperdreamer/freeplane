@@ -18,9 +18,15 @@ import org.junit.Test;
 
 public class SettledReferenceFixtureShould {
     @Test
-    public void theCommittedLedgerIsTheDeterministicCompilationOfTheReferenceProjection() throws Exception {
+    public void theCommittedLedgerIsTheDeterministicCompilationOfTheRecalibratedProjection() throws Exception {
         GeneratedWorkspace workspace = GeneratedWorkspace.forScenario("reference-2000-5000");
         byte[] expected = SettledReferenceFixtureCompiler.compile(workspace.projection());
+        List<ProjectedNode> reversedNodes = new ArrayList<ProjectedNode>(workspace.projection().nodes());
+        Collections.reverse(reversedNodes);
+        GraphProjection reordered = GraphProjection.projected(workspace.projection().generation(),
+            reversedNodes, workspace.projection().enclosures(), workspace.projection().edges(),
+            workspace.projection().relationshipResolutions(), workspace.projection().pins());
+        assertThat(SettledReferenceFixtureCompiler.compile(reordered)).isEqualTo(expected);
         if ("1".equals(System.getenv("GRAPH_REGENERATE_SETTLED_FIXTURE"))) {
             Path resource = repositoryFile(
                 "freeplane_plugin_graph/src/test/resources/performance/settled-reference.csv");
@@ -34,7 +40,7 @@ public class SettledReferenceFixtureShould {
     }
 
     @Test
-    public void theCommittedLedgerCoversTheReferenceProjectionExactly() {
+    public void theCommittedLedgerCoversTheRecalibratedProjectionExactly() {
         SettledReferenceFixture fixture = SettledReferenceFixture.load();
         assertThat(fixture.positions().nodes()).hasSize(25);
         assertThat(fixture.positions().anchors()).isEmpty();

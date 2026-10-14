@@ -32,7 +32,7 @@ import org.freeplane.plugin.graph.workspace.model.UnknownXml;
 import org.freeplane.plugin.graph.workspace.model.WorkspaceId;
 
 /**
- * Committed deterministic settled-position ledger (spec Revision 8 §14.1). The ledger is
+ * Committed deterministic settled-position ledger (spec Revision 9 §15). The ledger is
  * static resource data; {@link #load()} only parses bytes, verifies the SHA-256 pin and
  * maps each row to a {@link ProjectedNodeKey}/{@link EnclosureHullKey}. No layout engine
  * and no relaxation run at test time, so the "settled" frame is a fixed point by
@@ -40,9 +40,9 @@ import org.freeplane.plugin.graph.workspace.model.WorkspaceId;
  * pins every node.
  */
 public final class SettledReferenceFixture {
-    /** Filled by the Step 4 generation run; the ledger is byte-stable. */
+    /** Re-pinned by the Revision 9 B-prime calibration; the ledger is byte-stable. */
     public static final String SETTLED_FIXTURE_SHA256 =
-        "798559382fa361a039998bc61b3440e6fde6ec62f2ed94312c073fa9096732cb";
+        "e9e988b7967ea6bb4f503dfb4c5af7d3e74a3328e28e0987e71ff0f0b8ac0578";
 
     private static final String RESOURCE = "/performance/settled-reference.csv";
     private static final String CSV_HEADER = "kind,key,x,y";
@@ -107,8 +107,8 @@ public final class SettledReferenceFixture {
             throw new IllegalStateException("Committed settled-reference ledger digest changed: " + actual);
         }
         final GeneratedWorkspace workspace = GeneratedWorkspace.forScenario("reference-2000-5000");
-        final GraphProjection projection = SettledReferenceFixtureCompiler.reduce(workspace.projection(),
-            SettledReferenceFixtureCompiler.FIXTURE_NODE_LIMIT);
+        final GraphProjection projection = SettledReferenceFixtureCompiler.fixtureProjection(
+            workspace.projection());
         return parse(workspace.document().id(), projection, ledger);
     }
 
