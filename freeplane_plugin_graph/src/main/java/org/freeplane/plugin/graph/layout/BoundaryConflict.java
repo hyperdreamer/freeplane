@@ -6,6 +6,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 
+import org.freeplane.plugin.graph.projection.CanonicalKeys;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.PinProjection;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
@@ -36,8 +37,8 @@ public final class BoundaryConflict {
         this.kind = Objects.requireNonNull(kind, "kind");
         this.reason = Objects.requireNonNull(reason, "reason");
         Objects.requireNonNull(blockingPins, "blockingPins");
-        final String firstKey = CanonicalLayoutKeys.hull(firstHull);
-        final String secondKey = CanonicalLayoutKeys.hull(secondHull);
+        final String firstKey = CanonicalKeys.hull(firstHull);
+        final String secondKey = CanonicalKeys.hull(secondHull);
         if (firstKey.compareTo(secondKey) <= 0) {
             this.firstHull = firstHull;
             this.secondHull = secondHull;
@@ -85,7 +86,7 @@ public final class BoundaryConflict {
     }
 
     public String pairKey() {
-        return CanonicalLayoutKeys.pair(firstHull, secondHull);
+        return CanonicalKeys.pair(firstHull, secondHull);
     }
 
     public Kind kind() {

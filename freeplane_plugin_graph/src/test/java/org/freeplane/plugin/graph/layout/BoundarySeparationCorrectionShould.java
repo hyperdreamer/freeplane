@@ -23,6 +23,7 @@ import org.freeplane.plugin.graph.geometry.HullIntersection;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.projection.BoundaryTier;
+import org.freeplane.plugin.graph.projection.CanonicalKeys;
 import org.freeplane.plugin.graph.projection.EdgeContributor;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.EnclosureKey;
@@ -259,7 +260,7 @@ public class BoundarySeparationCorrectionShould {
         hulls.put(childHull, square(20.0, 1.0));
 
         assertThat(BoundarySeparationCorrection.ancestorEscapePairKeys(projection, hulls))
-            .containsExactly(CanonicalLayoutKeys.pair(childHull, parentHull));
+            .containsExactly(CanonicalKeys.pair(childHull, parentHull));
     }
 
     private static HullGeometry square(double centerX, double halfExtent) {
@@ -559,11 +560,11 @@ public class BoundarySeparationCorrectionShould {
         assertThat(result.diagnostics().hullResidualViolations()).isEqualTo(3);
         assertThat(result.diagnostics().conflicts()).hasSize(3);
         assertThat(result.diagnostics().conflicts().get(0).pairKey()).isEqualTo(
-            CanonicalLayoutKeys.pair(hull(maps.get(1), "root"), hull(maps.get(2), "root")));
+            CanonicalKeys.pair(hull(maps.get(1), "root"), hull(maps.get(2), "root")));
         assertThat(result.diagnostics().conflicts().get(1).pairKey()).isEqualTo(
-            CanonicalLayoutKeys.pair(hull(maps.get(0), "root"), hull(maps.get(2), "root")));
+            CanonicalKeys.pair(hull(maps.get(0), "root"), hull(maps.get(2), "root")));
         assertThat(result.diagnostics().conflicts().get(2).pairKey()).isEqualTo(
-            CanonicalLayoutKeys.pair(hull(maps.get(0), "root"), hull(maps.get(1), "root")));
+            CanonicalKeys.pair(hull(maps.get(0), "root"), hull(maps.get(1), "root")));
         for (final BoundaryConflict conflict : result.diagnostics().conflicts()) {
             assertThat(conflict.reason()).isEqualTo(BoundaryConflict.Reason.IMMOVABLE_SIDES);
             assertThat(conflict.blockingPins()).hasSize(2);
@@ -671,9 +672,9 @@ public class BoundarySeparationCorrectionShould {
 
         assertThat(result.diagnostics().rounds()).isEqualTo(1);
         assertThat(result.diagnostics().boundaryVerified()).isTrue();
-        assertThat(result.appliedDisplacements().get(CanonicalLayoutKeys.nodeField(aFree)))
+        assertThat(result.appliedDisplacements().get(CanonicalKeys.nodeField(aFree)))
             .isEqualTo(LayoutPoint.of(-5.0, 0.0));
-        assertThat(result.appliedDisplacements().get(CanonicalLayoutKeys.nodeField(bFree)))
+        assertThat(result.appliedDisplacements().get(CanonicalKeys.nodeField(bFree)))
             .isEqualTo(LayoutPoint.of(5.0, 0.0));
         assertThat(result.positions().nodes().get(aPin)).isEqualTo(LayoutPoint.of(-6.0, 30.0));
         assertThat(result.positions().nodes().get(bPin)).isEqualTo(LayoutPoint.of(44.0, 30.0));
@@ -694,12 +695,12 @@ public class BoundarySeparationCorrectionShould {
 
         assertThat(result.diagnostics().rounds()).isEqualTo(1);
         assertThat(result.diagnostics().boundaryVerified()).isTrue();
-        assertThat(result.appliedDisplacements().get(CanonicalLayoutKeys.nodeField(bFree)))
+        assertThat(result.appliedDisplacements().get(CanonicalKeys.nodeField(bFree)))
             .isEqualTo(LayoutPoint.of(10.0, 0.0));
         assertThat(result.positions().nodes().get(aPin)).isEqualTo(LayoutPoint.of(0.0, 0.0));
         assertThat(result.positions().nodes().get(bFree)).isEqualTo(LayoutPoint.of(48.0, 0.0));
         assertThat(result.appliedDisplacements().keySet())
-            .doesNotContain(CanonicalLayoutKeys.nodeField(aPin));
+            .doesNotContain(CanonicalKeys.nodeField(aPin));
     }
 
     @Test
@@ -718,9 +719,9 @@ public class BoundarySeparationCorrectionShould {
 
         assertThat(result.diagnostics().rounds()).isEqualTo(1);
         assertThat(result.diagnostics().boundaryVerified()).isTrue();
-        assertThat(result.appliedDisplacements().get(CanonicalLayoutKeys.nodeField(a1Free)))
+        assertThat(result.appliedDisplacements().get(CanonicalKeys.nodeField(a1Free)))
             .isEqualTo(LayoutPoint.of(-5.0, 0.0));
-        assertThat(result.appliedDisplacements().get(CanonicalLayoutKeys.nodeField(bFree)))
+        assertThat(result.appliedDisplacements().get(CanonicalKeys.nodeField(bFree)))
             .isEqualTo(LayoutPoint.of(5.0, 0.0));
     }
 
@@ -748,9 +749,9 @@ public class BoundarySeparationCorrectionShould {
 
         assertThat(result.diagnostics().rounds()).isEqualTo(1);
         assertThat(result.diagnostics().boundaryVerified()).isTrue();
-        assertThat(result.appliedDisplacements().get(CanonicalLayoutKeys.anchorField(bHull)))
+        assertThat(result.appliedDisplacements().get(CanonicalKeys.anchorField(bHull)))
             .isEqualTo(LayoutPoint.of(translation.x() * 0.5, translation.y() * 0.5));
-        assertThat(result.appliedDisplacements().get(CanonicalLayoutKeys.nodeField(aFree)))
+        assertThat(result.appliedDisplacements().get(CanonicalKeys.nodeField(aFree)))
             .isEqualTo(LayoutPoint.of(-translation.x() * 0.5, -translation.y() * 0.5));
         assertThat(result.positions().anchors().get(bHull)).isEqualTo(LayoutPoint.of(
             20.0 + translation.x() * 0.5, translation.y() * 0.5));
@@ -769,9 +770,9 @@ public class BoundarySeparationCorrectionShould {
         final BoundarySeparationResult result = apply(fixture);
 
         assertThat(result.diagnostics().rounds()).isEqualTo(1);
-        assertThat(result.appliedDisplacements().get(CanonicalLayoutKeys.nodeField(aLow)))
+        assertThat(result.appliedDisplacements().get(CanonicalKeys.nodeField(aLow)))
             .isEqualTo(LayoutPoint.of(-5.0, 0.0));
-        assertThat(result.appliedDisplacements().get(CanonicalLayoutKeys.nodeField(aHigh)))
+        assertThat(result.appliedDisplacements().get(CanonicalKeys.nodeField(aHigh)))
             .isEqualTo(LayoutPoint.of(-5.0, 0.0));
     }
 
@@ -857,9 +858,9 @@ public class BoundarySeparationCorrectionShould {
 
         assertThat(result.diagnostics().rounds()).isEqualTo(1);
         assertThat(result.diagnostics().boundaryVerified()).isTrue();
-        assertThat(result.appliedDisplacements().get(CanonicalLayoutKeys.nodeField(aFree)))
+        assertThat(result.appliedDisplacements().get(CanonicalKeys.nodeField(aFree)))
             .isEqualTo(LayoutPoint.of(-3.0, 0.0));
-        assertThat(result.appliedDisplacements().get(CanonicalLayoutKeys.nodeField(bFree)))
+        assertThat(result.appliedDisplacements().get(CanonicalKeys.nodeField(bFree)))
             .isEqualTo(LayoutPoint.of(7.0, 0.0));
         assertThat(result.positions().nodes().get(aPin)).isEqualTo(LayoutPoint.of(-3.0, 30.0));
         assertThat(result.positions().nodes().get(bPin)).isEqualTo(LayoutPoint.of(47.0, 30.0));
@@ -881,12 +882,12 @@ public class BoundarySeparationCorrectionShould {
         final BoundarySeparationResult result = apply(fixture);
 
         assertThat(result.appliedDisplacements()).containsOnlyKeys(
-            CanonicalLayoutKeys.nodeField(aFree), CanonicalLayoutKeys.nodeField(bFree),
-            CanonicalLayoutKeys.anchorField(fixture.hullA), CanonicalLayoutKeys.anchorField(fixture.hullB),
-            CanonicalLayoutKeys.anchorField(hull("root")));
+            CanonicalKeys.nodeField(aFree), CanonicalKeys.nodeField(bFree),
+            CanonicalKeys.anchorField(fixture.hullA), CanonicalKeys.anchorField(fixture.hullB),
+            CanonicalKeys.anchorField(hull("root")));
         assertThat(result.appliedDisplacements().keySet())
-            .doesNotContain(CanonicalLayoutKeys.nodeField(aPin))
-            .doesNotContain(CanonicalLayoutKeys.nodeField(bPin));
+            .doesNotContain(CanonicalKeys.nodeField(aPin))
+            .doesNotContain(CanonicalKeys.nodeField(bPin));
         assertThat(result.positions().nodes().get(aPin)).isEqualTo(LayoutPoint.of(-3.0, 30.0));
         assertThat(result.positions().nodes().get(bPin)).isEqualTo(LayoutPoint.of(47.0, 30.0));
     }
@@ -942,9 +943,9 @@ public class BoundarySeparationCorrectionShould {
 
         assertThat(result.diagnostics().rounds()).isEqualTo(1);
         assertThat(result.diagnostics().boundaryVerified()).isTrue();
-        assertThat(result.appliedDisplacements().get(CanonicalLayoutKeys.nodeField(a1Free)))
+        assertThat(result.appliedDisplacements().get(CanonicalKeys.nodeField(a1Free)))
             .isEqualTo(LayoutPoint.of(-3.0, 0.0));
-        assertThat(result.appliedDisplacements().get(CanonicalLayoutKeys.nodeField(bFree)))
+        assertThat(result.appliedDisplacements().get(CanonicalKeys.nodeField(bFree)))
             .isEqualTo(LayoutPoint.of(7.0, 0.0));
         assertThat(result.positions().nodes().get(a1Pin)).isEqualTo(LayoutPoint.of(-3.0, 30.0));
         assertThat(result.positions().nodes().get(bPin)).isEqualTo(LayoutPoint.of(63.0, 30.0));
@@ -1069,11 +1070,11 @@ public class BoundarySeparationCorrectionShould {
             .isEqualTo(LayoutPoint.of(-24.832420395427746, -34.920469854404410));
         assertThat(result.positions().nodes().get(fixture.pinnedTheorem))
             .isEqualTo(LayoutPoint.of(-209.31397564145126, 9.820904009249132));
-        assertThat(result.appliedDisplacements().get(CanonicalLayoutKeys.nodeField(fixture.regularity)))
+        assertThat(result.appliedDisplacements().get(CanonicalKeys.nodeField(fixture.regularity)))
             .isEqualTo(LayoutPoint.of(FROZEN_REGULARITY_DELTA_X, 0.0));
         assertThat(result.appliedDisplacements().keySet())
-            .doesNotContain(CanonicalLayoutKeys.nodeField(fixture.choice))
-            .doesNotContain(CanonicalLayoutKeys.nodeField(fixture.pinnedTheorem));
+            .doesNotContain(CanonicalKeys.nodeField(fixture.choice))
+            .doesNotContain(CanonicalKeys.nodeField(fixture.pinnedTheorem));
 
         final GraphGeometry correctedGeometry = engine.computeHulls(fixture.projection, result.positions(),
             METRICS);
@@ -1105,9 +1106,9 @@ public class BoundarySeparationCorrectionShould {
 
     @Test
     public void canonicalKeysUseTheCapturedRealHullStrings() {
-        assertThat(CanonicalLayoutKeys.hull(hull(FROZEN_MAP, FROZEN_AXIOMS)))
+        assertThat(CanonicalKeys.hull(hull(FROZEN_MAP, FROZEN_AXIOMS)))
             .isEqualTo("m:" + FROZEN_MAP.value() + "|p:" + FROZEN_AXIOMS);
-        assertThat(CanonicalLayoutKeys.pair(hull(FROZEN_MAP, FROZEN_AXIOMS),
+        assertThat(CanonicalKeys.pair(hull(FROZEN_MAP, FROZEN_AXIOMS),
             hull(FROZEN_MAP, FROZEN_DEFINITIONS)))
                 .isEqualTo("m:" + FROZEN_MAP.value() + "|p:" + FROZEN_AXIOMS + "|m:" + FROZEN_MAP.value()
                     + "|p:" + FROZEN_DEFINITIONS);

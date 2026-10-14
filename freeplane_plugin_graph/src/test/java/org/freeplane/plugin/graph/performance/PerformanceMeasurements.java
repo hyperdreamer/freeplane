@@ -33,6 +33,8 @@ public final class PerformanceMeasurements {
         CORRECTION("correction"),
         SEPARATION("separation"),
         HULL("hull"),
+        EDGE_CONFLICT("edge-conflict"),
+        EDGE_ROUTING("edge-routing"),
         PLACEMENT("placement"),
         FULL_WORKER("full-worker"),
         EDT_SWAP("edt-swap"),
@@ -326,6 +328,10 @@ public final class PerformanceMeasurements {
             return STRICT_FIRST_FRAME_P95_NANOS;
         case EDT_SWAP:
             return STRICT_EDT_SWAP_NANOS;
+        case EDGE_CONFLICT:
+            return 25_000_000L;
+        case EDGE_ROUTING:
+            return 10_000_000L;
         default:
             return DIAGNOSTIC_ONLY_THRESHOLD;
         }

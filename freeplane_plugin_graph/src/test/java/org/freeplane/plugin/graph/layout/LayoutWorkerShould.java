@@ -3,6 +3,8 @@ package org.freeplane.plugin.graph.layout;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.awt.Font;
+import java.awt.font.FontRenderContext;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -17,6 +19,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
+import org.freeplane.plugin.graph.geometry.AwtGeometryTextMetrics;
+import org.freeplane.plugin.graph.geometry.GeometryTextMetrics;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.projection.BoundaryTier;
@@ -28,11 +32,13 @@ import org.freeplane.plugin.graph.projection.PinProjection;
 import org.freeplane.plugin.graph.projection.ProjectedEdge;
 import org.freeplane.plugin.graph.projection.ProjectedEdgeKey;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
+import org.freeplane.plugin.graph.projection.ProjectedEndpointVisibility;
 import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
 import org.freeplane.plugin.graph.projection.ProjectionDiff;
 import org.freeplane.plugin.graph.projection.input.ConnectorDescriptor;
+import org.freeplane.plugin.graph.projection.input.ConnectorSnapshot;
 import org.freeplane.plugin.graph.projection.input.SafeNodeLabel;
 import org.freeplane.plugin.graph.projection.input.SourceNodeKey;
 import org.freeplane.plugin.graph.workspace.model.GraphRelationshipRecord;
@@ -44,6 +50,7 @@ import org.freeplane.plugin.graph.workspace.model.RelationshipDirection;
 import org.freeplane.plugin.graph.workspace.model.RelationshipId;
 import org.freeplane.plugin.graph.workspace.model.UnknownXml;
 import org.freeplane.plugin.graph.workspace.model.WorkspaceId;
+import org.junit.After;
 import org.junit.Test;
 
 public class LayoutWorkerShould {
@@ -56,6 +63,16 @@ public class LayoutWorkerShould {
     private static final ProjectedNodeKey NODE_TWO_OTHER = nodeKey(MAP_TWO, "two-other");
     private static final EnclosureHullKey HULL_ONE = hullKey(MAP_ONE, "root-one");
     private static final EnclosureHullKey HULL_TWO = hullKey(MAP_TWO, "root-two");
+    private static final ProjectedNodeKey QUAD_A = nodeKey(MAP_ONE, "quad-a");
+    private static final ProjectedNodeKey QUAD_B = nodeKey(MAP_ONE, "quad-b");
+    private static final ProjectedNodeKey QUAD_C = nodeKey(MAP_ONE, "quad-c");
+    private static final ProjectedNodeKey QUAD_D = nodeKey(MAP_ONE, "quad-d");
+    private static final ProjectedNodeKey BOUNDARY_NODE = nodeKey(MAP_TWO, "boundary-node");
+    private static final GeometryTextMetrics WORKER_METRICS = new AwtGeometryTextMetrics(
+        new Font("Dialog", Font.PLAIN, 12), new FontRenderContext(null, true, true));
+
+    private LayoutWorker relocationWorker;
+    private RelocationFixture lastRelocationFixture;
 
     @Test
     public void queueStepBehindAnOutstandingSubmit() throws Exception {
@@ -445,6 +462,67 @@ public class LayoutWorkerShould {
         }
     }
 
+    @Test
+    public void decoratePublishedFramesWithEmptyEdgeConflictDiagnosticsInTheScaffold() {
+        LayoutWorker worker = new LayoutWorker(fixedEngine(), PerceptualIdlePolicy.spikeDefaults());
+        try {
+            LayoutFrame frame = worker.submit(twoNodeRequest()).toCompletableFuture().get();
+
+            assertThat(frame.edgeConflictDiagnostics()).isEqualTo(EdgeConflictDiagnostics.empty());
+            assertThat(frame.boundaryDiagnostics().rounds()).isEqualTo(0);
+            assertThat(frame.verified()).isTrue();
+        }
+        catch (Exception failure) {
+            throw new AssertionError(failure);
+        }
+        finally {
+            worker.close();
+        }
+    }
+
+    @Test
+    public void preservesBoundaryStageFieldsAcrossTheRebuild() throws Exception {
+        LayoutFrame frame = publishRelocationFixture();
+
+        assertThat(frame.edgeConflictDiagnostics().rounds()).isGreaterThan(0);
+        assertThat(frame.boundaryDiagnostics().hullViolationsDetected())
+            .isEqualTo(boundaryBaselineHullViolationsDetected());
+        assertThat(frame.boundaryDiagnostics().rounds())
+            .isEqualTo(boundaryBaselineRounds());
+        assertThat(frame.boundaryDiagnostics().displacementRms())
+            .isEqualTo(boundaryBaselineDisplacementRms());
+        assertThat(frame.boundaryDiagnostics().displacementMax())
+            .isEqualTo(boundaryBaselineDisplacementMax());
+        assertThat(frame.boundaryDiagnostics().deltaRms()).isEqualTo(boundaryBaselineDeltaRms());
+        assertThat(frame.boundaryDiagnostics().deltaMax()).isEqualTo(boundaryBaselineDeltaMax());
+        assertThat(frame.boundaryDiagnostics().appliedDisplacements())
+            .isEqualTo(boundaryBaselineAppliedDisplacements());
+    }
+
+    @Test
+    public void retainsEdgeDiagnosticsOnFailureFrames() throws Exception {
+        LayoutFrame valid = publishRelocationFixture();
+        assertThat(valid.edgeConflictDiagnostics().rounds()).isGreaterThan(0);
+
+        LayoutFrame failed = failAfter(valid);
+
+        assertThat(failed.failed()).isTrue();
+        assertThat(failed.edgeConflictDiagnostics()).isEqualTo(valid.edgeConflictDiagnostics());
+        assertThat(failed.boundaryDiagnostics()).isEqualTo(valid.boundaryDiagnostics());
+    }
+
+    @Test
+    public void mergedRelocationDisplacementsEnterTheDeltaAccounting() throws Exception {
+        LayoutFrame first = publishRelocationFixture();
+        LayoutFrame second = publishRelocationFixture();
+
+        assertThat(first.boundaryDiagnostics().deltaMax()).isGreaterThan(0.0);
+        assertThat(second.boundaryDiagnostics().deltaRms())
+            .isEqualTo(second.boundaryDiagnostics().deltaRms());
+        assertThat(lastAppliedDisplacements()).containsKeys(
+            lastBoundaryAppliedDisplacements().keySet().toArray(new String[0]));
+    }
+
     private static void assertFinitePositions(final LayoutPositions positions) {
         for (Map.Entry<ProjectedNodeKey, LayoutPoint> entry : positions.nodes().entrySet()) {
             assertThat(Double.isFinite(entry.getValue().x())).as(entry.getKey().toString()).isTrue();
@@ -463,6 +541,210 @@ public class LayoutWorkerShould {
     private static LayoutRequest request(List<PinProjection> pins) {
         GraphProjection projection = projection(pins);
         return LayoutRequest.of(WORKSPACE, projection, ProjectionDiff.between(projection, projection), pins);
+    }
+
+    private static Supplier<LayoutEngine> fixedEngine() {
+        return new FixedEngineSupplier(new CountingEngine(new AtomicInteger(), new AtomicInteger()));
+    }
+
+    /** Two nodes and no enclosures, so the scaffold boundary stage reports zero rounds. */
+    private static LayoutRequest twoNodeRequest() {
+        ProjectedNodeKey first = nodeKey(MAP_ONE, "frame-first");
+        ProjectedNodeKey second = nodeKey(MAP_TWO, "frame-second");
+        GraphProjection projection = GraphProjection.projected(1L,
+            Arrays.asList(node(first), node(second)), Collections.<ProjectedEnclosure>emptyList(),
+            Collections.<ProjectedEdge>emptyList(),
+            Collections.<org.freeplane.plugin.graph.projection.RelationshipResolution>emptyList(),
+            Collections.<PinProjection>emptyList());
+        return LayoutRequest.of(WORKSPACE, projection, ProjectionDiff.between(projection, projection),
+            Collections.<PinProjection>emptyList());
+    }
+
+    @After
+    public void closeRelocationWorker() {
+        if (relocationWorker != null) {
+            relocationWorker.close();
+            relocationWorker = null;
+        }
+    }
+
+    private LayoutFrame publishRelocationFixture() throws Exception {
+        closeRelocationWorker();
+        lastRelocationFixture = relocationFixture();
+        relocationWorker = new LayoutWorker(new FixedEngineSupplier(
+            new RelocationEngine(relocationBasePositions())),
+            PerceptualIdlePolicy.spikeDefaults());
+        return await(relocationWorker.submit(relocationRequest(lastRelocationFixture.projection)));
+    }
+
+    private LayoutFrame failAfter(final LayoutFrame valid) throws Exception {
+        assertThat(valid.failed()).isFalse();
+        final LayoutWorker worker = relocationWorker;
+        try {
+            return await(worker.step());
+        }
+        finally {
+            closeRelocationWorker();
+        }
+    }
+
+    private int boundaryBaselineHullViolationsDetected() {
+        return lastRelocationFixture.boundary.diagnostics().hullViolationsDetected();
+    }
+
+    private int boundaryBaselineRounds() {
+        return lastRelocationFixture.boundary.diagnostics().rounds();
+    }
+
+    private double boundaryBaselineDisplacementRms() {
+        return lastRelocationFixture.boundary.diagnostics().displacementRms();
+    }
+
+    private double boundaryBaselineDisplacementMax() {
+        return lastRelocationFixture.boundary.diagnostics().displacementMax();
+    }
+
+    private Map<String, LayoutPoint> boundaryBaselineAppliedDisplacements() {
+        return lastRelocationFixture.boundary.diagnostics().appliedDisplacements();
+    }
+
+    private double boundaryBaselineDeltaRms() {
+        return displacementStats(lastRelocationFixture.merged)[0];
+    }
+
+    private double boundaryBaselineDeltaMax() {
+        return displacementStats(lastRelocationFixture.merged)[1];
+    }
+
+    private Map<String, LayoutPoint> lastAppliedDisplacements() {
+        return lastRelocationFixture.merged;
+    }
+
+    private Map<String, LayoutPoint> lastBoundaryAppliedDisplacements() {
+        return lastRelocationFixture.boundary.diagnostics().appliedDisplacements();
+    }
+
+    private static double[] displacementStats(final Map<String, LayoutPoint> field) {
+        if (field.isEmpty()) {
+            return new double[] {0.0, 0.0};
+        }
+        double sumSquares = 0.0;
+        double maximum = 0.0;
+        for (final LayoutPoint value : field.values()) {
+            final double magnitude = Math.hypot(value.x(), value.y());
+            sumSquares += magnitude * magnitude;
+            maximum = Math.max(maximum, magnitude);
+        }
+        return new double[] {Math.sqrt(sumSquares / field.size()), maximum};
+    }
+
+    private static RelocationFixture relocationFixture() {
+        final GraphProjection projection = relocationProjection();
+        final List<PinProjection> pins = Collections.emptyList();
+        final BoundarySeparationResult boundary = new BoundarySeparationCorrection()
+            .apply(projection, relocationBasePositions(), WORKER_METRICS, pins);
+        final Set<ProjectedEndpointKey> visible = ProjectedEndpointVisibility.visibleEndpoints(
+            projection.nodes(), projection.enclosures());
+        final EdgeConflictResult edge = new EdgeConflictCorrection()
+            .apply(projection, boundary.positions(), WORKER_METRICS, pins, visible, boundary);
+        return new RelocationFixture(projection, boundary,
+            mergeDisplacements(boundary.appliedDisplacements(), edge.appliedDisplacements()));
+    }
+
+    private static LayoutRequest relocationRequest(final GraphProjection projection) {
+        return LayoutRequest.of(WORKSPACE, projection, ProjectionDiff.between(projection, projection),
+            Collections.<PinProjection>emptyList());
+    }
+
+    private static GraphProjection relocationProjection() {
+        final List<ProjectedEdge> edges = Arrays.asList(
+            relocationEdge(QUAD_A, QUAD_C),
+            relocationEdge(QUAD_B, QUAD_D));
+        return GraphProjection.projected(1L,
+            Arrays.asList(node(QUAD_A), node(QUAD_B), node(QUAD_C), node(QUAD_D), node(BOUNDARY_NODE)),
+            Arrays.asList(root(MAP_ONE, "root-quad", Arrays.asList(QUAD_A, QUAD_B, QUAD_C, QUAD_D)),
+                root(MAP_TWO, "root-boundary", Collections.singletonList(BOUNDARY_NODE))),
+            edges, Collections.<org.freeplane.plugin.graph.projection.RelationshipResolution>emptyList(),
+            Collections.<PinProjection>emptyList());
+    }
+
+    private static LayoutPositions relocationBasePositions() {
+        final Map<ProjectedNodeKey, LayoutPoint> nodes = new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        nodes.put(QUAD_A, LayoutPoint.of(272.0, 170.0));
+        nodes.put(QUAD_B, LayoutPoint.of(307.0, 202.0));
+        nodes.put(QUAD_C, LayoutPoint.of(275.0, 240.0));
+        nodes.put(QUAD_D, LayoutPoint.of(240.0, 208.0));
+        nodes.put(BOUNDARY_NODE, LayoutPoint.of(307.0, 265.0));
+        final Map<EnclosureHullKey, LayoutPoint> anchors = new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
+        anchors.put(hullKey(MAP_ONE, "root-quad"), LayoutPoint.of(273.5, 205.0));
+        anchors.put(hullKey(MAP_TWO, "root-boundary"), LayoutPoint.of(307.0, 265.0));
+        return LayoutPositions.of(nodes, anchors);
+    }
+
+    private static ProjectedEdge relocationEdge(final ProjectedNodeKey source, final ProjectedNodeKey target) {
+        final ProjectedEndpointKey first = ProjectedEndpointKey.ofNode(source);
+        final ProjectedEndpointKey second = ProjectedEndpointKey.ofNode(target);
+        final ConnectorDescriptor descriptor = ConnectorDescriptor.of(source.source(),
+            NodeReference.of(target.mapReferenceId(),
+                target.source().persistedReference().get().nodeId()),
+            false, false, "source", "middle", "target");
+        return ProjectedEdge.of(ProjectedEdgeKey.of(first, second),
+            Collections.singletonList(EdgeContributor.nativeConnector(
+                ConnectorSnapshot.of(0, descriptor), first, second)));
+    }
+
+    private static Map<String, LayoutPoint> mergeDisplacements(final Map<String, LayoutPoint> boundary,
+            final Map<String, LayoutPoint> edge) {
+        final Map<String, LayoutPoint> result = new java.util.TreeMap<String, LayoutPoint>();
+        for (final Map.Entry<String, LayoutPoint> entry : boundary.entrySet()) {
+            result.put(entry.getKey(), entry.getValue());
+        }
+        for (final Map.Entry<String, LayoutPoint> entry : edge.entrySet()) {
+            final LayoutPoint previous = result.get(entry.getKey());
+            result.put(entry.getKey(), previous == null ? entry.getValue()
+                : LayoutPoint.of(previous.x() + entry.getValue().x(),
+                    previous.y() + entry.getValue().y()));
+        }
+        return new LinkedHashMap<String, LayoutPoint>(result);
+    }
+
+    private static final class RelocationFixture {
+        private final GraphProjection projection;
+        private final BoundarySeparationResult boundary;
+        private final Map<String, LayoutPoint> merged;
+
+        private RelocationFixture(final GraphProjection projection,
+                final BoundarySeparationResult boundary, final Map<String, LayoutPoint> merged) {
+            this.projection = projection;
+            this.boundary = boundary;
+            this.merged = merged;
+        }
+    }
+
+    private static final class RelocationEngine implements LayoutEngine {
+        private final LayoutPositions positions;
+
+        RelocationEngine(final LayoutPositions positions) {
+            this.positions = positions;
+        }
+
+        @Override
+        public LayoutFrame apply(final LayoutRequest request) {
+            return LayoutFrame.of(1L, positions, false);
+        }
+
+        @Override
+        public LayoutFrame step() {
+            throw new IllegalStateException("step failed");
+        }
+
+        @Override
+        public void reset() {
+        }
+
+        @Override
+        public void close() {
+        }
     }
 
     private static GraphProjection projection(List<PinProjection> pins) {

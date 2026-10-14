@@ -14,9 +14,11 @@ import java.util.Optional;
 import org.freeplane.plugin.graph.control.CanvasState;
 import org.freeplane.plugin.graph.control.NanoClock;
 import org.freeplane.plugin.graph.control.OperationalStatus;
+import org.freeplane.plugin.graph.geometry.EdgeRouteDiagnostics;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
+import org.freeplane.plugin.graph.layout.EdgeConflictDiagnostics;
 import org.freeplane.plugin.graph.layout.LayoutFrame;
 import org.freeplane.plugin.graph.projection.BoundaryTier;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
@@ -31,6 +33,8 @@ import org.freeplane.plugin.graph.projection.input.SourceNodeKey;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 import org.freeplane.plugin.graph.workspace.model.NodeReference;
 import org.freeplane.plugin.graph.workspace.model.PersistedNodeId;
+import org.junit.BeforeClass;
+import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -38,6 +42,12 @@ import org.junit.rules.TemporaryFolder;
 public class PerformanceTripwiresShould {
     @Rule
     public final TemporaryFolder temporaryFolder = new TemporaryFolder();
+
+    @ClassRule
+    public static final TemporaryFolder classFixtureFolder = new TemporaryFolder();
+
+    private static GraphWorkspacePerformanceDiagnostic referenceDiagnostic;
+    private static PerformanceMeasurements referenceMeasurements;
 
     @Test
     public void computeNearestRankWithoutMutatingTheInput() {
@@ -63,17 +73,148 @@ public class PerformanceTripwiresShould {
     public void exposeTheCanonicalStageOrderAndThresholds() {
         assertThat(PerformanceMeasurements.Stage.names()).containsExactly(
             "snapshot", "projection", "diff", "mutation", "force", "correction", "separation",
-            "hull", "placement", "full-worker", "edt-swap", "repaint", "accepted-batch-first-frame");
+            "hull", "edge-conflict", "edge-routing", "placement", "full-worker", "edt-swap",
+            "repaint", "accepted-batch-first-frame");
         assertThat(PerformanceMeasurements.normalThresholdNanos("reference-2000-5000",
             PerformanceMeasurements.Stage.FORCE)).isEqualTo(250_000_000L);
         assertThat(PerformanceMeasurements.strictThresholdNanos("reference-2000-5000",
             PerformanceMeasurements.Stage.FORCE)).isEqualTo(50_000_000L);
         assertThat(PerformanceMeasurements.strictThresholdNanos("two-map",
             PerformanceMeasurements.Stage.FORCE)).isEqualTo(-1L);
+        assertThat(PerformanceMeasurements.strictThresholdNanos("reference-2000-5000",
+            PerformanceMeasurements.Stage.EDGE_CONFLICT)).isEqualTo(25_000_000L);
+        assertThat(PerformanceMeasurements.strictThresholdNanos("reference-2000-5000",
+            PerformanceMeasurements.Stage.EDGE_ROUTING)).isEqualTo(10_000_000L);
+        assertThat(PerformanceMeasurements.normalThresholdNanos("reference-2000-5000",
+            PerformanceMeasurements.Stage.EDGE_CONFLICT))
+            .isEqualTo(PerformanceMeasurements.DIAGNOSTIC_ONLY_THRESHOLD);
+        assertThat(PerformanceMeasurements.normalThresholdNanos("two-map",
+            PerformanceMeasurements.Stage.EDGE_ROUTING))
+            .isEqualTo(PerformanceMeasurements.DIAGNOSTIC_ONLY_THRESHOLD);
+        assertThat(GeneratedWorkspace.Scenario.REFERENCE_2000_5000.warmupCount()).isEqualTo(400);
+        assertThat(GeneratedWorkspace.Scenario.REFERENCE_2000_5000.measuredCount()).isEqualTo(300);
+        assertThat(GraphWorkspacePerformanceDiagnostic.WARMUP_SAMPLES).isEqualTo(20);
+        assertThat(GraphWorkspacePerformanceDiagnostic.TIMED_SAMPLES).isEqualTo(100);
         assertThat(PerformanceMeasurements.NORMAL_FIRST_FRAME_P99_NANOS)
             .isEqualTo(1_500_000_000L);
         assertThat(PerformanceMeasurements.strictP99ThresholdNanos("reference-2000-5000",
             PerformanceMeasurements.Stage.ACCEPTED_BATCH_FIRST_FRAME)).isEqualTo(300_000_000L);
+    }
+
+    @BeforeClass
+    public static void runReferenceFixturesOnce() throws Exception {
+        referenceDiagnostic = new GraphWorkspacePerformanceDiagnostic(
+            classFixtureFolder.newFolder("reference-fixture").toPath(), false,
+            new GraphWorkspacePerformanceDiagnostic.RelativeNanoClock());
+        referenceMeasurements = referenceDiagnostic.runSettledReferenceFixture();
+        referenceDiagnostic.runRawReferenceFixture();
+    }
+
+    @Test
+    public void referenceFixtureStaysInsideTheStrictWorkerAndFirstFrameGates() {
+        PerformanceMeasurements.Summary worker =
+            referenceMeasurements.summary(PerformanceMeasurements.Stage.FULL_WORKER);
+        PerformanceMeasurements.Summary firstFrame =
+            referenceMeasurements.summary(PerformanceMeasurements.Stage.ACCEPTED_BATCH_FIRST_FRAME);
+        assertThat(worker.p95Nanos()).isLessThanOrEqualTo(PerformanceMeasurements.STRICT_FULL_WORKER_NANOS);
+        assertThat(worker.p99Nanos()).isLessThanOrEqualTo(PerformanceMeasurements.STRICT_FULL_WORKER_NANOS);
+        assertThat(firstFrame.p95Nanos())
+            .isLessThanOrEqualTo(PerformanceMeasurements.STRICT_FIRST_FRAME_P95_NANOS);
+        assertThat(firstFrame.p99Nanos())
+            .isLessThanOrEqualTo(PerformanceMeasurements.STRICT_FIRST_FRAME_P99_NANOS);
+        assertThat(referenceMeasurements.summary(PerformanceMeasurements.Stage.EDGE_CONFLICT).p95Nanos())
+            .isLessThanOrEqualTo(25_000_000L);
+        assertThat(referenceMeasurements.summary(PerformanceMeasurements.Stage.EDGE_ROUTING).p95Nanos())
+            .isLessThanOrEqualTo(10_000_000L);
+        assertThat(referenceMeasurements.measuredCount(PerformanceMeasurements.Stage.EDGE_CONFLICT))
+            .isEqualTo(300);
+        assertThat(referenceMeasurements.measuredCount(PerformanceMeasurements.Stage.EDGE_ROUTING))
+            .isEqualTo(300);
+        assertThat(referenceMeasurements.discardCount(PerformanceMeasurements.Stage.EDGE_CONFLICT)).isZero();
+        assertThat(referenceMeasurements.discardCount(PerformanceMeasurements.Stage.EDGE_ROUTING)).isZero();
+        assertThat(referenceDiagnostic.settledReferenceSamples()).isNotEmpty();
+        for (GraphWorkspacePerformanceDiagnostic.SettledReferenceSample sample
+                : referenceDiagnostic.settledReferenceSamples()) {
+            assertThat(sample.edgeDiagnostics().detectionTruncated()).isFalse();
+            assertThat(sample.edgeDiagnostics().verificationBudgetExhausted()).isFalse();
+            assertThat(sample.edgeDiagnostics().indexBudgetExhausted()).isFalse();
+            assertThat(sample.routeDiagnostics().routeBudgetExhausted()).isFalse();
+            assertThat(sample.routeDiagnostics().detectionTruncated()).isFalse();
+        }
+        assertThat(referenceDiagnostic.settledReferenceSamples()).anySatisfy(sample ->
+            assertThat(sample.edgeDiagnostics().crossingsDetected()).isGreaterThan(0));
+        assertThat(referenceDiagnostic.settledReferenceSamples()).anySatisfy(sample ->
+            assertThat(sample.routeDiagnostics().edgesBow()
+                + sample.routeDiagnostics().edgesDogleg()).isGreaterThan(0));
+    }
+
+    @Test
+    public void referenceFixtureStaysBoundedAndFlagVisible() {
+        assertThat(referenceDiagnostic.rawReferenceFrames()).isNotEmpty();
+        assertRawReferenceFrameBound(referenceDiagnostic);
+        for (GraphWorkspacePerformanceDiagnostic.RawReferenceFrame frame
+                : referenceDiagnostic.rawReferenceFrames()) {
+            EdgeConflictDiagnostics edge = frame.edgeDiagnostics();
+            EdgeRouteDiagnostics route = frame.routeDiagnostics();
+            // The pinned Revision 7 caps of spec 13.1 (the constants are package-private in
+            // the production packages; these literals are the specification pins).
+            assertThat(edge.indexInsertedItems()).isLessThanOrEqualTo(262_144L);
+            assertThat(edge.indexPairChecks()).isLessThanOrEqualTo(131_072L);
+            assertThat(edge.verificationWork()).isLessThanOrEqualTo(65_536L);
+            assertThat(route.routeIndexItems()).isLessThanOrEqualTo(262_144L);
+            assertThat(route.routeObstacleChecks()).isLessThanOrEqualTo(131_072L);
+            assertThat(route.routePairChecks()).isLessThanOrEqualTo(131_072L);
+            // Whenever a budget is exhausted the corresponding flag is set.
+            if (edge.indexInsertedItems() == 262_144L) {
+                assertThat(edge.detectionTruncated() || edge.indexBudgetExhausted()).isTrue();
+            }
+            if (edge.indexPairChecks() == 131_072L) {
+                assertThat(edge.detectionTruncated()).isTrue();
+            }
+            if (edge.verificationWork() == 65_536L) {
+                assertThat(edge.verificationBudgetExhausted()).isTrue();
+            }
+            if (route.routeIndexItems() == 262_144L || route.routeObstacleChecks() == 131_072L) {
+                assertThat(route.routeBudgetExhausted()).isTrue();
+            }
+            if (route.routePairChecks() == 131_072L) {
+                assertThat(route.detectionTruncated()).isTrue();
+            }
+        }
+    }
+
+    @Test
+    public void rejectsAFrameWhoseRoutingExceedsTheCompleteFrameBound() throws Exception {
+        final RoutingDelayClock clock = new RoutingDelayClock();
+        final GraphWorkspacePerformanceDiagnostic diagnostic = new GraphWorkspacePerformanceDiagnostic(
+            temporaryFolder.newFolder("delayed-routing").toPath(), false, clock,
+            (projection, positions, geometry, visible) -> {
+                final org.freeplane.plugin.graph.geometry.EdgePaths paths =
+                    new org.freeplane.plugin.graph.geometry.EdgeRouter().route(projection, positions,
+                        geometry, visible);
+                // Model a routing stall on the same clock used by the frame timer. No sleep
+                // or production routing shortcut: every real geometry/routing call still runs.
+                clock.value += GraphWorkspacePerformanceDiagnostic.RAW_REFERENCE_MAX_FRAME_NANOS + 1L;
+                return paths;
+            });
+        diagnostic.runRawReferenceFixture();
+
+        assertThatThrownBy(() -> assertRawReferenceFrameBound(diagnostic))
+            .isInstanceOf(AssertionError.class);
+    }
+
+    private static void assertRawReferenceFrameBound(final GraphWorkspacePerformanceDiagnostic diagnostic) {
+        assertThat(diagnostic.rawReferenceMaxFrameNanos())
+            .isLessThanOrEqualTo(GraphWorkspacePerformanceDiagnostic.RAW_REFERENCE_MAX_FRAME_NANOS);
+    }
+
+    private static final class RoutingDelayClock implements NanoClock {
+        private long value;
+
+        @Override
+        public long nanoTime() {
+            return ++value;
+        }
     }
 
     @Test
