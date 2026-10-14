@@ -52,6 +52,7 @@ import org.freeplane.plugin.graph.control.NanoClock;
 import org.freeplane.plugin.graph.control.OperationalStatus;
 import org.freeplane.plugin.graph.geometry.AwtGeometryTextMetrics;
 import org.freeplane.plugin.graph.geometry.EdgePaths;
+import org.freeplane.plugin.graph.geometry.EdgeRouteDiagnostics;
 import org.freeplane.plugin.graph.geometry.EdgeRouter;
 import org.freeplane.plugin.graph.geometry.GeometryTextMetrics;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
@@ -63,6 +64,9 @@ import org.freeplane.plugin.graph.layout.BoundaryConflict;
 import org.freeplane.plugin.graph.layout.BoundarySeparationCorrection;
 import org.freeplane.plugin.graph.layout.BoundarySeparationDiagnostics;
 import org.freeplane.plugin.graph.layout.BoundarySeparationResult;
+import org.freeplane.plugin.graph.layout.EdgeConflictCorrection;
+import org.freeplane.plugin.graph.layout.EdgeConflictDiagnostics;
+import org.freeplane.plugin.graph.layout.EdgeConflictResult;
 import org.freeplane.plugin.graph.layout.LayoutCalibration;
 import org.freeplane.plugin.graph.layout.LayoutEngine;
 import org.freeplane.plugin.graph.layout.LayoutFrame;
@@ -87,8 +91,11 @@ public final class GraphWorkspacePerformanceDiagnostic {
     public static final int CANVAS_WIDTH = 1024;
     public static final int CANVAS_HEIGHT = 768;
     public static final String OUTPUT_DIRECTORY_NAME = "graph-performance";
-    private static final int WARMUP_SAMPLES = 20;
-    private static final int TIMED_SAMPLES = 100;
+    static final int WARMUP_SAMPLES = 20;
+    static final int TIMED_SAMPLES = 100;
+    static final int RAW_REFERENCE_FRAMES = 8;
+    /** Step 7 tightening: measured max 1.968 s on the reference machine, 1.25x rounded up. */
+    static final long RAW_REFERENCE_MAX_FRAME_NANOS = 3_000_000_000L;
     private static final int PLACEMENT_TRIGGER_COUNT = 4;
     private static final int FORCED_SAMPLE_SIZE = 8;
     private static final double PLACEMENT_AREA_WIDTH = 1128.0;
@@ -113,6 +120,10 @@ public final class GraphWorkspacePerformanceDiagnostic {
     private GraphTheme theme;
     private final List<PerformanceMeasurements.Summary> ledgerRows =
         new ArrayList<PerformanceMeasurements.Summary>();
+    private final List<SettledReferenceSample> settledReferenceSamples =
+        new ArrayList<SettledReferenceSample>();
+    private final List<RawReferenceFrame> rawReferenceFrames =
+        new ArrayList<RawReferenceFrame>();
     private boolean preCorrectionOverlapChecked;
     private boolean placementTriggersSampled;
 
@@ -541,11 +552,21 @@ public final class GraphWorkspacePerformanceDiagnostic {
                 "Pinned-map pre-correction overlap was not observed");
         }
         for (final PerformanceMeasurements.Stage stage : PerformanceMeasurements.Stage.values()) {
-            if (measurements.warmupCount(stage) != generated.warmupCount()
-                    || measurements.measuredCount(stage) != generated.measuredCount()) {
+            if (recordedByScenario(stage) && (measurements.warmupCount(stage) != generated.warmupCount()
+                    || measurements.measuredCount(stage) != generated.measuredCount())) {
                 throw new DiagnosticFailure(stage, "Scenario sample count is incomplete");
             }
         }
+    }
+
+    /**
+     * The two Revision 8 edge stages are measured by {@link #runSettledReferenceFixture()}
+     * on the committed settled-position fixture, never by the per-scenario loop; the raw
+     * reference frames are only validated for bounded, flag-visible behaviour.
+     */
+    private static boolean recordedByScenario(final PerformanceMeasurements.Stage stage) {
+        return stage != PerformanceMeasurements.Stage.EDGE_CONFLICT
+            && stage != PerformanceMeasurements.Stage.EDGE_ROUTING;
     }
 
     private void validatePinConflicts(final GeneratedWorkspace generated, final LayoutFrame frame) {
@@ -659,9 +680,11 @@ public final class GraphWorkspacePerformanceDiagnostic {
 
     private void appendRows(final PerformanceMeasurements measurements) {
         for (final PerformanceMeasurements.Stage stage : PerformanceMeasurements.Stage.values()) {
-            ledgerRows.add(measurements.summary(stage,
-                PerformanceMeasurements.normalThresholdNanos(measurements.scenario(), stage),
-                PerformanceMeasurements.strictThresholdNanos(measurements.scenario(), stage), strict));
+            if (recordedByScenario(stage)) {
+                ledgerRows.add(measurements.summary(stage,
+                    PerformanceMeasurements.normalThresholdNanos(measurements.scenario(), stage),
+                    PerformanceMeasurements.strictThresholdNanos(measurements.scenario(), stage), strict));
+            }
         }
     }
 
@@ -677,7 +700,8 @@ public final class GraphWorkspacePerformanceDiagnostic {
 
     private boolean allRowsPass() {
         final int scenarioCount = GeneratedWorkspace.Scenario.values().length;
-        final int scenarioRows = scenarioCount * PerformanceMeasurements.Stage.values().length;
+        final int scenarioStages = PerformanceMeasurements.Stage.values().length - 2;
+        final int scenarioRows = scenarioCount * scenarioStages;
         final int placementTriggerRows = scenarioCount * PLACEMENT_TRIGGER_COUNT;
         if (ledgerRows.size() != scenarioRows + placementTriggerRows) {
             return false;
@@ -841,6 +865,162 @@ public final class GraphWorkspacePerformanceDiagnostic {
         return clock;
     }
 
+    /**
+     * Runs the Revision 8 A7a measurement: the two new stages on the committed
+     * settled-position fixture, plus the production worker and first-frame gates. Every
+     * sample is exhaustion-free; the calibration run records the counted work.
+     */
+    PerformanceMeasurements runSettledReferenceFixture() {
+        final SettledReferenceFixture fixture = SettledReferenceFixture.load();
+        final GeneratedWorkspace.Scenario scenario = GeneratedWorkspace.Scenario.REFERENCE_2000_5000;
+        final PerformanceMeasurements measurements = new PerformanceMeasurements(scenario.wireName(),
+            scenario.warmupCount(), scenario.measuredCount());
+        final Set<ProjectedEndpointKey> visible = ProjectedEndpointVisibility.visibleEndpoints(
+            fixture.projection().nodes(), fixture.projection().enclosures());
+        final LayoutWorker worker = fixture.newReplayWorker();
+        try {
+            final int total = scenario.warmupCount() + scenario.measuredCount();
+            for (int index = 0; index < total; index++) {
+                checkDeadline();
+                final boolean warmup = index < scenario.warmupCount();
+                final long sampleStart = clock.nanoTime();
+                final long workerStart = clock.nanoTime();
+                final LayoutFrame workerFrame = await(worker.submit(fixture.request()),
+                    "settled reference worker submit");
+                final long workerEnd = clock.nanoTime();
+                measurements.recordDuration(PerformanceMeasurements.Stage.FULL_WORKER,
+                    workerStart, workerEnd, warmup);
+                requireUsableFrame(workerFrame, fixture.projection(), "settled reference worker",
+                    PerformanceMeasurements.Stage.FULL_WORKER);
+
+                final GraphGeometry workerHull = geometryEngine.computeHulls(fixture.projection(),
+                    workerFrame.positions(), textMetrics);
+                final BoundarySeparationResult settledBoundary = correctionEngine.apply(
+                    fixture.projection(), workerFrame.positions(), textMetrics, fixture.pins());
+                final long edgeConflictStart = clock.nanoTime();
+                final EdgeConflictResult settledEdge = new EdgeConflictCorrection().apply(
+                    fixture.projection(), settledBoundary.positions(), textMetrics, fixture.pins(),
+                    visible, settledBoundary);
+                final long edgeConflictEnd = clock.nanoTime();
+                measurements.recordDuration(PerformanceMeasurements.Stage.EDGE_CONFLICT,
+                    edgeConflictStart, edgeConflictEnd, warmup);
+                if (settledEdge.diagnostics().detectionTruncated()
+                        || settledEdge.diagnostics().verificationBudgetExhausted()
+                        || settledEdge.diagnostics().indexBudgetExhausted()) {
+                    measurements.recordDiscard(PerformanceMeasurements.Stage.EDGE_CONFLICT);
+                }
+
+                final long edgeRoutingStart = clock.nanoTime();
+                final EdgePaths settledPaths = new EdgeRouter().route(fixture.projection(),
+                    workerFrame.positions(), workerHull, visible);
+                final long edgeRoutingEnd = clock.nanoTime();
+                measurements.recordDuration(PerformanceMeasurements.Stage.EDGE_ROUTING,
+                    edgeRoutingStart, edgeRoutingEnd, warmup);
+                if (settledPaths.diagnostics().routeBudgetExhausted()
+                        || settledPaths.diagnostics().detectionTruncated()) {
+                    measurements.recordDiscard(PerformanceMeasurements.Stage.EDGE_ROUTING);
+                }
+
+                final CanvasState state = acceptedFirstFrameState(index + 1L, fixture.projection(),
+                    workerFrame, workerHull);
+                setCanvasStateBounded(state);
+                final long sampleEnd = clock.nanoTime();
+                measurements.recordDuration(PerformanceMeasurements.Stage.ACCEPTED_BATCH_FIRST_FRAME,
+                    sampleStart, sampleEnd, warmup);
+
+                if (!warmup) {
+                    settledReferenceSamples.add(new SettledReferenceSample(settledEdge.diagnostics(),
+                        settledPaths.diagnostics()));
+                }
+            }
+            return measurements;
+        }
+        finally {
+            worker.close();
+        }
+    }
+
+    /**
+     * Runs the Revision 8 A7b measurement: bounded, flag-visible behaviour on the raw
+     * divergent reference frames. No millisecond threshold is asserted here.
+     */
+    void runRawReferenceFixture() {
+        final GeneratedWorkspace workspace = GeneratedWorkspace.forScenario("reference-2000-5000");
+        final GraphProjection projection = workspace.projection();
+        final LayoutRequest request = LayoutRequest.of(workspace.document().id(), projection,
+            ProjectionDiff.between(projection, projection), projection.pins());
+        final Set<ProjectedEndpointKey> visible = ProjectedEndpointVisibility.visibleEndpoints(
+            projection.nodes(), projection.enclosures());
+        final LayoutWorker worker = new LayoutWorker(LayoutCalibration.spikeDefaults());
+        try {
+            for (int index = 0; index < RAW_REFERENCE_FRAMES; index++) {
+                final long start = clock.nanoTime();
+                final LayoutFrame frame = await(worker.submit(request), "raw reference worker submit");
+                final long end = clock.nanoTime();
+                requireUsableFrame(frame, projection, "raw reference frame",
+                    PerformanceMeasurements.Stage.FULL_WORKER);
+                final long duration = PerformanceMeasurements.checkedDuration(start, end);
+                final GraphGeometry hull = geometryEngine.computeHulls(projection, frame.positions(),
+                    textMetrics);
+                final EdgePaths paths = new EdgeRouter().route(projection, frame.positions(), hull,
+                    visible);
+                rawReferenceFrames.add(new RawReferenceFrame(duration,
+                    frame.edgeConflictDiagnostics(), paths.diagnostics()));
+            }
+        }
+        finally {
+            worker.close();
+        }
+    }
+
+    List<SettledReferenceSample> settledReferenceSamples() {
+        return Collections.unmodifiableList(settledReferenceSamples);
+    }
+
+    List<RawReferenceFrame> rawReferenceFrames() {
+        return Collections.unmodifiableList(rawReferenceFrames);
+    }
+
+    long rawReferenceMaxFrameNanos() {
+        long maximum = 0L;
+        for (final RawReferenceFrame frame : rawReferenceFrames) {
+            maximum = Math.max(maximum, frame.durationNanos());
+        }
+        return maximum;
+    }
+
+    public static final class SettledReferenceSample {
+        private final EdgeConflictDiagnostics edgeDiagnostics;
+        private final EdgeRouteDiagnostics routeDiagnostics;
+
+        private SettledReferenceSample(final EdgeConflictDiagnostics edgeDiagnostics,
+                final EdgeRouteDiagnostics routeDiagnostics) {
+            this.edgeDiagnostics = edgeDiagnostics;
+            this.routeDiagnostics = routeDiagnostics;
+        }
+
+        public EdgeConflictDiagnostics edgeDiagnostics() { return edgeDiagnostics; }
+        public EdgeRouteDiagnostics routeDiagnostics() { return routeDiagnostics; }
+    }
+
+    public static final class RawReferenceFrame {
+        private final long durationNanos;
+        private final EdgeConflictDiagnostics edgeDiagnostics;
+        private final EdgeRouteDiagnostics routeDiagnostics;
+
+        private RawReferenceFrame(final long durationNanos,
+                final EdgeConflictDiagnostics edgeDiagnostics,
+                final EdgeRouteDiagnostics routeDiagnostics) {
+            this.durationNanos = durationNanos;
+            this.edgeDiagnostics = edgeDiagnostics;
+            this.routeDiagnostics = routeDiagnostics;
+        }
+
+        public long durationNanos() { return durationNanos; }
+        public EdgeConflictDiagnostics edgeDiagnostics() { return edgeDiagnostics; }
+        public EdgeRouteDiagnostics routeDiagnostics() { return routeDiagnostics; }
+    }
+
     CanvasState acceptedFirstFrameState(final long generation, final GraphProjection projection,
             final LayoutFrame frame, final GraphGeometry geometry) {
         return CanvasState.of(generation, projection, frame, geometry,
@@ -893,12 +1073,23 @@ public final class GraphWorkspacePerformanceDiagnostic {
                     operation + " returned a non-finite enclosure position");
             }
         }
+        final EdgeConflictDiagnostics edgeDiagnostics = frame.edgeConflictDiagnostics();
+        if (edgeDiagnostics == null) {
+            throw new DiagnosticFailure(stage, operation + " returned no edge-conflict diagnostics");
+        }
+        // The pinned Revision 7 production bounds (the constants are package-private in the
+        // layout package; these literals are the specification pins).
+        if (edgeDiagnostics.rounds() > 4 || edgeDiagnostics.verifications() > 64) {
+            throw new DiagnosticFailure(stage,
+                operation + " edge-conflict diagnostics exceed the production bounds: rounds="
+                    + edgeDiagnostics.rounds() + " verifications=" + edgeDiagnostics.verifications());
+        }
     }
 
     private void checkDeadline() {
         final long elapsed = PerformanceMeasurements.checkedDuration(processStart, clock.nanoTime());
         if (elapsed > PROCESS_DEADLINE_NANOS) {
-            throw new DiagnosticFailure(null, "Ten-minute diagnostic process deadline exceeded");
+            throw new DiagnosticFailure(null, "Forty-minute diagnostic process deadline exceeded");
         }
     }
 
