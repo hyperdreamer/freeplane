@@ -659,12 +659,12 @@ graph_workspace.hint.full_screen_exit=Esc or F11 exits full screen
 
 | Test method | Required assertions |
 | --- | --- |
-| `f11MakesWindowUndecoratedAndFillsCurrentScreen` | Capture live current graphics bounds; press F11 once; frame undecorated, screen bounds equal, all chrome hidden, checked/active, visible-center/zoom preserved |
+| `f11MakesWindowUndecoratedAndFillsCurrentScreen` | Press F11 once; frame undecorated; the frame covers the work area of the current screen and stays within the screen (window managers may constrain to the work area; documented X11 AWT-cache tolerance), all chrome hidden, checked/active, visible-center/zoom preserved |
 | `f11RestoresBoundsAndExtendedStateFromNormalWindow` | Capture normal bounds/state; enter and exit with actual F11; decorated, exact captured bounds/state, effective chrome/sidebar restored, same current center/zoom |
-| `f11RestoresBoundsAndExtendedStateFromMaximizedWindow` | Begin maximized, capture the exact extended-state bits before entry; exit restores them exactly and the restored bounds equal the maximized geometry of the frame's graphics configuration (the pre-entry AWT bounds may be a stale X11/KWin cache value and are not the acceptance target) |
+| `f11RestoresBoundsAndExtendedStateFromMaximizedWindow` | Begin maximized; capture the exact extended-state bits before entry; exit restores them exactly and the restored frame covers the work area of its graphics configuration and stays within the screen (documented X11 AWT-cache tolerance; no pixel-exact AWT bounds comparison) |
 | `escapeExitsWhenCanvasHasNoPreviewOrSelection` | Active mode and canvas with neither; press Escape, event consumed and inactive/restored; separate preview/selection assertions remain owned by Task 3 |
 | `panDuringPresentationIsPreservedThroughExit` | Real pan and wheel zoom while active; changed visible view becomes exit baseline, survives exit and late geometry; checkpoint command count after user actions and require transition adds zero |
-| `canvasHasFocusAfterEntryAndExit` | After each surviving transition, await canvas.isFocusOwner rather than merely counting callback invocation |
+| `canvasHasFocusAfterEntryAndExit` | After each surviving transition, await canvas.isFocusOwner with bounded polling robust to whole-suite focus contention rather than merely counting callback invocation |
 | `oneF11PressPerformsExactlyOneToggle` | One key press/release causes exactly one protected frame operation and one active-state change; a second press exits once; repeat with menu bar hidden |
 | `temporaryDisposeDoesNotClosePresentationMode` | Enter/exit cycle includes both temporary dispose calls; mode, chrome, hint and hold stay operational until real close; next cycle works |
 | `closeDuringTransitionLeavesDisposedWindowWithoutError` | Inject real close from the concrete frame-transition seam; final frame not displayable, mode terminal, no re-show, no uncaught EDT error, late callbacks inert |
