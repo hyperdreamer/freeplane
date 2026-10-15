@@ -65,6 +65,33 @@ public class MapSidebarPanelShould {
     }
 
     @Test
+    public void railRestoreButtonHasNoPanelOwnedListener() {
+        assertThat(panel().rail().restoreButton().getActionListeners()).isEmpty();
+    }
+
+    @Test
+    public void programmaticCollapsedListenerRemainsUnchanged() {
+        List<Boolean> changes = new ArrayList<>();
+        MapSidebarPanel panel = new MapSidebarPanel(mapList(), changes::add);
+        panel.setCollapsed(true);
+        panel.setCollapsed(true);
+        panel.setCollapsed(false);
+        assertThat(changes).containsExactly(true, false);
+    }
+
+    @Test
+    public void modelOwnsRailRestoreUserPath() {
+        GraphWorkspaceWindow.runOnEdt(() -> {
+            try (GraphWindowChromeShould.ChromeFixture fixture = new GraphWindowChromeShould.ChromeFixture(true)) {
+                fixture.restoreEffective(true);
+                assertThat(fixture.sidebar.rail().restoreButton().getActionListeners()).hasSize(1);
+                fixture.sidebar.rail().restoreButton().doClick(0);
+                fixture.assertReleased(false, true);
+            }
+        });
+    }
+
+    @Test
     public void showsOnlyOneOfRailAndMapList() {
         MapSidebarPanel panel = panel();
         assertThat(panel.mapList().isVisible()).isTrue();
