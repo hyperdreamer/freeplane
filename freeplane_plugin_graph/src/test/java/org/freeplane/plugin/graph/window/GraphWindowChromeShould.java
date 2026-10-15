@@ -58,6 +58,7 @@ import org.freeplane.plugin.graph.canvas.GraphCanvas;
 import org.freeplane.plugin.graph.canvas.GraphViewport;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.NodeGeometry;
+import org.freeplane.plugin.graph.geometry.EdgePaths;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.layout.LayoutFrame;
@@ -1323,7 +1324,7 @@ public class GraphWindowChromeShould {
         }
         return CanvasState.of(0, GraphProjection.structure(0, nodes, Collections.emptyList()),
             LayoutFrame.of(0, LayoutPositions.of(positions, Collections.emptyMap()), false, 0),
-            GraphGeometry.of(geometry, Collections.emptyMap()), OperationalStatus.IDLE);
+            GraphGeometry.of(geometry, Collections.emptyMap()), EdgePaths.empty(), OperationalStatus.IDLE);
     }
 
     static DisplaySettings settings(final int width, final boolean hidden) {
@@ -1392,7 +1393,7 @@ public class GraphWindowChromeShould {
                 .thenAnswer(i -> i.<String>getArgument(0));
             state = CanvasState.of(0L, GraphProjection.structure(0L, Collections.emptyList(), Collections.emptyList()),
                 LayoutFrame.of(0L, LayoutPositions.of(Collections.emptyMap(), Collections.emptyMap()), false, 0),
-                GraphGeometry.of(Collections.emptyMap(), Collections.emptyMap()), OperationalStatus.IDLE);
+                GraphGeometry.of(Collections.emptyMap(), Collections.emptyMap()), EdgePaths.empty(), OperationalStatus.IDLE);
             when(binding.currentViewport()).thenReturn(Viewport.of(0, 0, 1, Collections.emptyList()));
             when(binding.currentCanvasState()).thenReturn(state);
             when(binding.currentSessionStatus()).thenReturn(WorkspaceSessionStatus.empty());
