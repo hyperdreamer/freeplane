@@ -1,0 +1,178 @@
+source_plan:
+  path: docs/superpowers/plans/2026-10-14-graph-fullscreen-mode.md
+  sha256: 866c2605ec84fd81f3598058b69ec01ab5c44fec648daf4ec57c189f979f841a
+lanes:
+  - id: core-mode
+    owns: [freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/ScreenFillSurface.java, freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/PresentationChrome.java, freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/PresentationViewport.java, freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/PresentationHint.java, freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/GraphPresentationMode.java, freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/GraphCanvas.java, freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/GraphInteractionController.java, freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/GraphPresentationModeShould.java, freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/GraphInteractionControllerShould.java]
+    task_ids: [T-001, T-002, T-003]
+  - id: window-integration
+    owns: [freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindow.java, freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/MapSidebarPanel.java, freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/GraphWindowChromeShould.java, freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindowModelShould.java, freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/MapSidebarPanelShould.java, freeplane/src/viewer/resources/translations/Resources_en.properties]
+    task_ids: [T-004, T-005, T-006]
+produces:
+  - id: iface-screen-fill-surface
+    signature: "org.freeplane.plugin.graph.window.ScreenFillSurface: FrameState captureFrameState(); Survival applyScreenFill(FrameState previous); Survival restoreFrameState(FrameState previous);"
+    sha256: c4abebf39f27be84789fb7af69184c356354223f2e95ef28ab657372c0b89546
+  - id: iface-presentation-chrome
+    signature: "org.freeplane.plugin.graph.window.PresentationChrome: void capture(); void hide(); void restore(); void discard();"
+    sha256: 391b7f3199f40724f3edc5dd2bdd0279afaa81402caac1e34d4f5c834b0304a1
+  - id: iface-presentation-viewport
+    signature: "org.freeplane.plugin.graph.window.PresentationViewport: void capture(); void compensate(); void classify(ChangeEvent event); void canvasPublication(); void toolbarPublication(GraphViewport value); void disarm(); void windowClosed();"
+    sha256: d9f17509df6ea9670bf26e37850611e232afdd348199691ccaf58cb082d9c870
+  - id: iface-presentation-hint
+    signature: "org.freeplane.plugin.graph.window.PresentationHint: void show(); void hide(); void dispose();"
+    sha256: 25f2c80b82da911c615080844a438a42ec68c17a9db095da8fc8fb0186ab0118
+  - id: iface-graph-presentation-mode
+    signature: "org.freeplane.plugin.graph.window.GraphPresentationMode: boolean isAvailable(); void toggle(); boolean isActive(); void requestExit(); void windowClosed();"
+    sha256: 77777ac42cf87457d4d46fc52176330f0f47301b3392e274d78af94792bcb9f4
+  - id: iface-graph-canvas-settle
+    signature: "org.freeplane.plugin.graph.canvas.GraphCanvas: public void runWhenViewportSettled(Runnable callback); public boolean isViewportPositioningActive();"
+    sha256: aaf70291b2dc7793234aea54e95cedd7075bca950d17a65f348a941c7748ef9d
+consumes:
+  - id: iface-screen-fill-surface
+    signature: "org.freeplane.plugin.graph.window.ScreenFillSurface: FrameState captureFrameState(); Survival applyScreenFill(FrameState previous); Survival restoreFrameState(FrameState previous);"
+    sha256: c4abebf39f27be84789fb7af69184c356354223f2e95ef28ab657372c0b89546
+  - id: iface-presentation-chrome
+    signature: "org.freeplane.plugin.graph.window.PresentationChrome: void capture(); void hide(); void restore(); void discard();"
+    sha256: 391b7f3199f40724f3edc5dd2bdd0279afaa81402caac1e34d4f5c834b0304a1
+  - id: iface-presentation-viewport
+    signature: "org.freeplane.plugin.graph.window.PresentationViewport: void capture(); void compensate(); void classify(ChangeEvent event); void canvasPublication(); void toolbarPublication(GraphViewport value); void disarm(); void windowClosed();"
+    sha256: d9f17509df6ea9670bf26e37850611e232afdd348199691ccaf58cb082d9c870
+  - id: iface-presentation-hint
+    signature: "org.freeplane.plugin.graph.window.PresentationHint: void show(); void hide(); void dispose();"
+    sha256: 25f2c80b82da911c615080844a438a42ec68c17a9db095da8fc8fb0186ab0118
+  - id: iface-graph-presentation-mode
+    signature: "org.freeplane.plugin.graph.window.GraphPresentationMode: boolean isAvailable(); void toggle(); boolean isActive(); void requestExit(); void windowClosed();"
+    sha256: 77777ac42cf87457d4d46fc52176330f0f47301b3392e274d78af94792bcb9f4
+  - id: iface-graph-canvas-settle
+    signature: "org.freeplane.plugin.graph.canvas.GraphCanvas: public void runWhenViewportSettled(Runnable callback); public boolean isViewportPositioningActive();"
+    sha256: aaf70291b2dc7793234aea54e95cedd7075bca950d17a65f348a941c7748ef9d
+tasks:
+  - id: T-001
+    plan_task: 1
+    title: "Define presentation contracts and implement the exit hint"
+    lane: core-mode
+    sequence: 1
+    tier: capable
+    owns: [freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/ScreenFillSurface.java, freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/PresentationChrome.java, freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/PresentationViewport.java, freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/PresentationHint.java, freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/GraphPresentationModeShould.java]
+    depends_on: []
+    interfaces:
+      produces: [iface-screen-fill-surface, iface-presentation-chrome, iface-presentation-viewport, iface-presentation-hint]
+      consumes: []
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.window.GraphPresentationModeShould", "-PTestLoggingFull", "--console=plain"]
+        cwd: "."
+        timeout_seconds: 1800
+  - id: T-002
+    plan_task: 2
+    title: "Implement the mode state machine and exception boundary"
+    lane: core-mode
+    sequence: 2
+    tier: frontier
+    owns: [freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/GraphPresentationMode.java, freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/GraphPresentationModeShould.java]
+    depends_on: [T-001]
+    interfaces:
+      produces: [iface-graph-presentation-mode]
+      consumes: []
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.window.GraphPresentationModeShould", "-PTestLoggingFull", "--console=plain"]
+        cwd: "."
+        timeout_seconds: 1800
+  - id: T-003
+    plan_task: 3
+    title: "Add canvas settle completion and the Escape fallback"
+    lane: core-mode
+    sequence: 3
+    tier: capable
+    owns: [freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/GraphCanvas.java, freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/GraphInteractionController.java, freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/GraphInteractionControllerShould.java]
+    depends_on: [T-001, T-002]
+    interfaces:
+      produces: [iface-graph-canvas-settle]
+      consumes: []
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould", "--tests", "org.freeplane.plugin.graph.window.GraphPresentationModeShould", "-PTestLoggingFull", "--console=plain"]
+        cwd: "."
+        timeout_seconds: 1800
+  - id: T-004
+    plan_task: 4
+    title: "Preserve effective chrome and sidebar user ownership"
+    lane: window-integration
+    sequence: 1
+    tier: capable
+    owns: [freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindow.java, freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/MapSidebarPanel.java, freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/GraphWindowChromeShould.java, freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/MapSidebarPanelShould.java]
+    depends_on: [T-001]
+    interfaces:
+      produces: []
+      consumes: [iface-presentation-chrome]
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.window.GraphWindowChromeShould", "--tests", "org.freeplane.plugin.graph.window.MapSidebarPanelShould", "--tests", "org.freeplane.plugin.graph.window.GraphWorkspaceWindowModelShould", "-PTestLoggingFull", "--console=plain"]
+        cwd: "."
+        timeout_seconds: 1800
+  - id: T-005
+    plan_task: 5
+    title: "Implement viewport hold and wire concrete window transitions"
+    lane: window-integration
+    sequence: 2
+    tier: frontier
+    owns: [freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindow.java, freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/GraphWindowChromeShould.java, freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindowModelShould.java]
+    depends_on: [T-001, T-002, T-003, T-004]
+    interfaces:
+      produces: []
+      consumes: [iface-screen-fill-surface, iface-presentation-chrome, iface-presentation-viewport, iface-presentation-hint, iface-graph-presentation-mode, iface-graph-canvas-settle]
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.window.GraphWindowChromeShould", "--tests", "org.freeplane.plugin.graph.window.GraphWorkspaceWindowModelShould", "--tests", "org.freeplane.plugin.graph.window.MapSidebarPanelShould", "--tests", "org.freeplane.plugin.graph.window.GraphPresentationModeShould", "--tests", "org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould", "-PTestLoggingFull", "--console=plain"]
+        cwd: "."
+        timeout_seconds: 1800
+  - id: T-006
+    plan_task: 6
+    title: "Translate controls and verify display acceptance"
+    lane: window-integration
+    sequence: 3
+    tier: advanced
+    owns: [freeplane/src/viewer/resources/translations/Resources_en.properties, freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindowModelShould.java]
+    depends_on: [T-001, T-002, T-003, T-004, T-005]
+    interfaces:
+      produces: []
+      consumes: []
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "-PTestLoggingFull", "--console=plain"]
+        cwd: "."
+        timeout_seconds: 1800
+interfaces:
+  produces:
+    - id: iface-screen-fill-surface
+      signature: "org.freeplane.plugin.graph.window.ScreenFillSurface: FrameState captureFrameState(); Survival applyScreenFill(FrameState previous); Survival restoreFrameState(FrameState previous);"
+      sha256: c4abebf39f27be84789fb7af69184c356354223f2e95ef28ab657372c0b89546
+    - id: iface-presentation-chrome
+      signature: "org.freeplane.plugin.graph.window.PresentationChrome: void capture(); void hide(); void restore(); void discard();"
+      sha256: 391b7f3199f40724f3edc5dd2bdd0279afaa81402caac1e34d4f5c834b0304a1
+    - id: iface-presentation-viewport
+      signature: "org.freeplane.plugin.graph.window.PresentationViewport: void capture(); void compensate(); void classify(ChangeEvent event); void canvasPublication(); void toolbarPublication(GraphViewport value); void disarm(); void windowClosed();"
+      sha256: d9f17509df6ea9670bf26e37850611e232afdd348199691ccaf58cb082d9c870
+    - id: iface-presentation-hint
+      signature: "org.freeplane.plugin.graph.window.PresentationHint: void show(); void hide(); void dispose();"
+      sha256: 25f2c80b82da911c615080844a438a42ec68c17a9db095da8fc8fb0186ab0118
+    - id: iface-graph-presentation-mode
+      signature: "org.freeplane.plugin.graph.window.GraphPresentationMode: boolean isAvailable(); void toggle(); boolean isActive(); void requestExit(); void windowClosed();"
+      sha256: 77777ac42cf87457d4d46fc52176330f0f47301b3392e274d78af94792bcb9f4
+    - id: iface-graph-canvas-settle
+      signature: "org.freeplane.plugin.graph.canvas.GraphCanvas: public void runWhenViewportSettled(Runnable callback); public boolean isViewportPositioningActive();"
+      sha256: aaf70291b2dc7793234aea54e95cedd7075bca950d17a65f348a941c7748ef9d
+  consumes:
+    - id: iface-screen-fill-surface
+      signature: "org.freeplane.plugin.graph.window.ScreenFillSurface: FrameState captureFrameState(); Survival applyScreenFill(FrameState previous); Survival restoreFrameState(FrameState previous);"
+      sha256: c4abebf39f27be84789fb7af69184c356354223f2e95ef28ab657372c0b89546
+    - id: iface-presentation-chrome
+      signature: "org.freeplane.plugin.graph.window.PresentationChrome: void capture(); void hide(); void restore(); void discard();"
+      sha256: 391b7f3199f40724f3edc5dd2bdd0279afaa81402caac1e34d4f5c834b0304a1
+    - id: iface-presentation-viewport
+      signature: "org.freeplane.plugin.graph.window.PresentationViewport: void capture(); void compensate(); void classify(ChangeEvent event); void canvasPublication(); void toolbarPublication(GraphViewport value); void disarm(); void windowClosed();"
+      sha256: d9f17509df6ea9670bf26e37850611e232afdd348199691ccaf58cb082d9c870
+    - id: iface-presentation-hint
+      signature: "org.freeplane.plugin.graph.window.PresentationHint: void show(); void hide(); void dispose();"
+      sha256: 25f2c80b82da911c615080844a438a42ec68c17a9db095da8fc8fb0186ab0118
+    - id: iface-graph-presentation-mode
+      signature: "org.freeplane.plugin.graph.window.GraphPresentationMode: boolean isAvailable(); void toggle(); boolean isActive(); void requestExit(); void windowClosed();"
+      sha256: 77777ac42cf87457d4d46fc52176330f0f47301b3392e274d78af94792bcb9f4
+    - id: iface-graph-canvas-settle
+      signature: "org.freeplane.plugin.graph.canvas.GraphCanvas: public void runWhenViewportSettled(Runnable callback); public boolean isViewportPositioningActive();"
+      sha256: aaf70291b2dc7793234aea54e95cedd7075bca950d17a65f348a941c7748ef9d
