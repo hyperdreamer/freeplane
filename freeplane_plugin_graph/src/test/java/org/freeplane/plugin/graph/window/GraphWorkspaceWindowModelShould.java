@@ -60,6 +60,9 @@ import javax.swing.JSplitPane;
 import javax.swing.JSeparator;
 import javax.swing.JTextField;
 import javax.swing.JToggleButton;
+import javax.swing.JComponent;
+import javax.swing.JRootPane;
+import javax.swing.KeyStroke;
 import javax.swing.JViewport;
 import javax.swing.Icon;
 import javax.swing.UIManager;
@@ -131,6 +134,155 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
 
 public class GraphWorkspaceWindowModelShould {
+    @Test
+    public void fullScreenMenuItemHasExpectedNameAndTranslationKey() {
+        GraphWorkspaceWindow.runOnEdt(() -> {
+            try (GraphWindowChromeShould.ChromeFixture f = new GraphWindowChromeShould.ChromeFixture(true)) {
+                JMenu view = menu(f.model, "graph-workspace-view-menu");
+                assertThat(view.getMenuComponents()).extracting(Component::getName).containsExactly(
+                    "graph-workspace-menu-item-fit-graph", "graph-workspace-menu-item-reset-zoom",
+                    "graph-workspace-menu-item-zoom-in", "graph-workspace-menu-item-zoom-out",
+                    "graph-workspace-menu-item-settings", "graph-workspace-full-screen-menu-item",
+                    "graph-workspace-maps-sidebar-menu-item");
+                JCheckBoxMenuItem item = (JCheckBoxMenuItem) view.getMenuComponent(5);
+                assertThat(item.getText()).isEqualTo("graph_workspace.action.full_screen");
+                assertThat(item.getAccelerator()).isNull();
+            }
+        });
+    }
+
+    @Test
+    public void fullScreenMenuItemIsDisabledAndUncheckedWhenUnavailable() {
+        GraphWorkspaceWindow.runOnEdt(() -> {
+            try (GraphWindowChromeShould.ChromeFixture f = new GraphWindowChromeShould.ChromeFixture(true)) {
+                JCheckBoxMenuItem item = (JCheckBoxMenuItem) GraphWindowChromeShould.field(f.model, "fullScreenMenuItem");
+                ScreenFillSurface surface = mock(ScreenFillSurface.class);
+                GraphPresentationMode mode = presentationMode(f, surface, item, false);
+                assertThat(item.isEnabled()).isFalse();
+                assertThat(item.isSelected()).isFalse();
+                mode.toggle();
+                mode.requestExit();
+                org.mockito.Mockito.verifyNoInteractions(surface);
+                f.assertNoCommands();
+                mode.windowClosed();
+            }
+        });
+    }
+
+    @Test
+    public void f11IsBoundOnceOnFocusedWindowAndNoMenuAcceleratorExists() {
+        GraphWorkspaceWindow.runOnEdt(() -> {
+            try (GraphWindowChromeShould.ChromeFixture f = new GraphWindowChromeShould.ChromeFixture(true)) {
+                JCheckBoxMenuItem item = (JCheckBoxMenuItem) GraphWindowChromeShould.field(f.model, "fullScreenMenuItem");
+                ScreenFillSurface surface = mock(ScreenFillSurface.class);
+                when(surface.captureFrameState()).thenReturn(new ScreenFillSurface.FrameState(new java.awt.Rectangle(1, 2, 800, 600), 0));
+                when(surface.applyScreenFill(any())).thenReturn(ScreenFillSurface.Survival.REENTERED_FULLSCREEN);
+                GraphPresentationMode mode = presentationMode(f, surface, item, true);
+                JRootPane root = new JRootPane();
+                GraphWorkspaceWindow.installPresentationKeys(root, mode);
+                KeyStroke f11 = KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_F11, 0);
+                Object key = root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).get(f11);
+                assertThat(key).isEqualTo("graph-workspace-toggle-full-screen");
+                assertThat(root.getInputMap(JComponent.WHEN_FOCUSED).get(f11)).isNull();
+                assertThat(root.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).get(f11)).isNull();
+                assertThat(root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).get(KeyStroke.getKeyStroke("ESCAPE"))).isNull();
+                assertThat(item.getAccelerator()).isNull();
+                root.getActionMap().get(key).actionPerformed(new java.awt.event.ActionEvent(root, 0, "F11"));
+                verify(surface, org.mockito.Mockito.times(1)).applyScreenFill(any());
+                assertThat(mode.isActive()).isTrue();
+                f.assertNoCommands();
+                mode.windowClosed();
+            }
+        });
+    }
+
+    @Test
+    public void f11UnavailableActionDoesNothing() {
+        GraphWorkspaceWindow.runOnEdt(() -> {
+            try (GraphWindowChromeShould.ChromeFixture f = new GraphWindowChromeShould.ChromeFixture(true)) {
+                JCheckBoxMenuItem item = new JCheckBoxMenuItem();
+                ScreenFillSurface surface = mock(ScreenFillSurface.class);
+                GraphPresentationMode mode = presentationMode(f, surface, item, false);
+                JRootPane root = new JRootPane();
+                GraphWorkspaceWindow.installPresentationKeys(root, mode);
+                Object key = root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                    .get(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_F11, 0));
+                assertThat(key).isNotNull();
+                root.getActionMap().get(key).actionPerformed(new java.awt.event.ActionEvent(root, 0, "F11"));
+                org.mockito.Mockito.verifyNoInteractions(surface);
+                assertThat(GraphWindowChromeShould.field(f.model.presentationViewport(), "armed")).isEqualTo(false);
+                f.assertNoCommands();
+                mode.windowClosed();
+            }
+        });
+    }
+
+    private GraphPresentationMode presentationMode(final GraphWindowChromeShould.ChromeFixture f,
+            final ScreenFillSurface surface, final JCheckBoxMenuItem item, final boolean supported) {
+        return new GraphPresentationMode(surface, f.model, f.model.presentationViewport(),
+            new PresentationHint(new javax.swing.JLayeredPane(), "exit"), item, () -> { }, f.logs::add, supported);
+    }
+
+    @Test
+    public void modelFrameRecoveryReportsObservableSurvivalAndBoundedCalls() {
+        for (boolean entering : new boolean[] {true, false}) {
+            for (int failures = 0; failures <= 2; failures++) {
+                final int failureCount = failures;
+                List<String> calls = new ArrayList<>();
+                List<String> logs = new ArrayList<>();
+                final boolean[] decorated = {!entering};
+                final boolean[] visible = {true};
+                java.awt.Rectangle original = new java.awt.Rectangle(30, 40, 800, 600);
+                java.awt.Rectangle screen = new java.awt.Rectangle(0, 0, 1920, 1080);
+                final java.awt.Rectangle[] bounds = {entering ? original : screen};
+                final int[] extendedState = {entering ? 0 : java.awt.Frame.MAXIMIZED_BOTH};
+                ScreenFillSurface.FrameState previous = new ScreenFillSurface.FrameState(original, 0);
+                Runnable enter = () -> {
+                    calls.add("enter");
+                    decorated[0] = false;
+                    visible[0] = false;
+                    if (calls.size() <= failureCount) { throw new AssertionError("enter-failure"); }
+                    bounds[0] = screen;
+                    extendedState[0] = java.awt.Frame.MAXIMIZED_BOTH;
+                    visible[0] = true;
+                };
+                java.util.function.Consumer<ScreenFillSurface.FrameState> restore = saved -> {
+                    calls.add("restore");
+                    decorated[0] = true;
+                    visible[0] = false;
+                    if (calls.size() <= failureCount) { throw new IllegalStateException("restore-failure"); }
+                    bounds[0] = saved.bounds();
+                    extendedState[0] = saved.extendedState();
+                    visible[0] = true;
+                };
+                GraphWorkspaceWindow.FrameTransitions transitions = new GraphWorkspaceWindow.FrameTransitions(enter, restore, logs::add);
+                ScreenFillSurface.Survival survival = entering ? transitions.applyScreenFill(previous)
+                    : transitions.restoreFrameState(previous);
+                assertThat(calls).containsExactlyElementsOf(failures == 0
+                    ? Collections.singletonList(entering ? "enter" : "restore")
+                    : Arrays.asList(entering ? "enter" : "restore", entering ? "restore" : "enter"));
+                assertThat(logs).hasSize(failures);
+                if (failures == 2) {
+                    assertThat(survival).isEqualTo(ScreenFillSurface.Survival.UNKNOWN_FRAME);
+                    assertThat(visible[0]).isFalse();
+                }
+                else {
+                    boolean fullscreen = entering == (failures == 0);
+                    assertThat(survival).isEqualTo(fullscreen ? ScreenFillSurface.Survival.REENTERED_FULLSCREEN
+                        : ScreenFillSurface.Survival.RESTORED_WINDOWED);
+                    assertThat(decorated[0]).isEqualTo(!fullscreen);
+                    assertThat(visible[0]).isTrue();
+                    assertThat(bounds[0]).isEqualTo(fullscreen ? screen : original);
+                    assertThat(extendedState[0]).isEqualTo(fullscreen ? java.awt.Frame.MAXIMIZED_BOTH : 0);
+                }
+                // A broken logger also stays inside this recovery boundary.
+                new GraphWorkspaceWindow.FrameTransitions(() -> { throw new AssertionError("raw"); },
+                    saved -> { throw new IllegalStateException("inverse"); }, message -> { throw new AssertionError("logger"); })
+                    .applyScreenFill(previous);
+            }
+        }
+    }
+
     private static final Path OPEN_PATH = Paths.get("/tmp/opened.graph-workspace");
     private static final Color SEARCH_STUB_COLOR = new Color(0xFFFF00FF);
     private static final Color DISABLED_PROBE_COLOR = new Color(0xFF4080C0);
