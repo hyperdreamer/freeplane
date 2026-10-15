@@ -1,6 +1,7 @@
 package org.freeplane.plugin.graph.canvas;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
 
@@ -13,6 +14,9 @@ import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.awt.event.InputEvent;
 import java.awt.geom.Point2D;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -21,8 +25,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import javax.swing.JScrollPane;
+import javax.swing.JViewport;
+import javax.swing.SwingUtilities;
 
 import org.freeplane.plugin.graph.control.CanvasState;
 import org.freeplane.plugin.graph.control.OperationalStatus;
@@ -67,6 +75,190 @@ import org.freeplane.plugin.graph.workspace.model.RelationshipId;
 import org.junit.Test;
 
 public class GraphInteractionControllerShould {
+    @Test
+    public void viewportSettledCallbackRunsImmediatelyOnEdt() throws Exception {
+        final AtomicReference<GraphCanvas> canvas = new AtomicReference<GraphCanvas>();
+        final List<String> calls = new ArrayList<String>();
+        SwingUtilities.invokeAndWait(() -> {
+            canvas.set(new GraphCanvas());
+            canvas.get().runWhenViewportSettled(() -> {
+                assertThat(SwingUtilities.isEventDispatchThread()).isTrue();
+                calls.add("edt");
+            });
+            assertThat(calls).containsExactly("edt");
+        });
+        final AtomicReference<Throwable> workerFailure = new AtomicReference<Throwable>();
+        final Thread worker = new Thread(() -> {
+            try {
+                canvas.get().runWhenViewportSettled(() -> {
+                    assertThat(SwingUtilities.isEventDispatchThread()).isTrue();
+                    calls.add("worker");
+                });
+            }
+            catch (Throwable failure) {
+                workerFailure.set(failure);
+            }
+        }, "viewport-settled-registration");
+        worker.start();
+        worker.join(5000);
+        assertThat(worker.isAlive()).isFalse();
+        assertThat(workerFailure.get()).isNull();
+        SwingUtilities.invokeAndWait(() -> assertThat(calls).containsExactly("edt", "worker"));
+    }
+
+    @Test
+    public void viewportSettledCallbackWaitsForPositioningAndPendingClamps() throws Exception {
+        final List<String> calls = new ArrayList<String>();
+        final CanvasCompletionProbe probe = CanvasCompletionProbe.settled();
+        SwingUtilities.invokeAndWait(() -> {
+            probe.begin();
+            probe.begin();
+            probe.scheduleClamp();
+            probe.scheduleClamp();
+            probe.canvas.runWhenViewportSettled(() -> {
+                probe.assertSettled();
+                calls.add("settled");
+            });
+            probe.end();
+            assertThat(probe.counter("viewportPositioningDepth")).isEqualTo(1);
+            assertThat(calls).isEmpty();
+            probe.end();
+            assertThat(probe.counter("pendingViewportClamps")).isEqualTo(2);
+            assertThat(calls).isEmpty();
+        });
+        SwingUtilities.invokeAndWait(() -> {
+            probe.assertSettled();
+            assertThat(calls).containsExactly("settled");
+            assertThat(probe.viewportEvents.get()).isZero();
+        });
+    }
+
+    @Test
+    public void viewportSettledRegistrationReplacesEarlierCallback() throws Exception {
+        final List<String> calls = new ArrayList<String>();
+        final CanvasCompletionProbe probe = CanvasCompletionProbe.settled();
+        SwingUtilities.invokeAndWait(() -> {
+            probe.begin();
+            probe.scheduleClamp();
+            probe.canvas.runWhenViewportSettled(() -> calls.add("first"));
+            probe.canvas.runWhenViewportSettled(() -> {
+                probe.assertSettled();
+                calls.add("second");
+            });
+            assertThat(probe.counter("viewportPositioningDepth")).isEqualTo(1);
+            assertThat(probe.counter("pendingViewportClamps")).isEqualTo(1);
+            probe.end();
+            assertThat(calls).isEmpty();
+        });
+        SwingUtilities.invokeAndWait(() -> {
+            probe.assertSettled();
+            assertThat(calls).containsExactly("second");
+            assertThat(probe.viewportEvents.get()).isZero();
+        });
+    }
+
+    @Test
+    public void viewportSettledCallbackExceptionDoesNotEscapeCompletion() throws Exception {
+        for (final Throwable failure : Arrays.asList(new RuntimeException("callback runtime"),
+                new AssertionError("callback error"))) {
+            SwingUtilities.invokeAndWait(() -> {
+                final CanvasCompletionProbe probe = new CanvasCompletionProbe();
+                final AtomicInteger calls = new AtomicInteger();
+                probe.begin();
+                probe.canvas.runWhenViewportSettled(() -> {
+                    calls.incrementAndGet();
+                    if (failure instanceof Error) {
+                        throw (Error) failure;
+                    }
+                    throw (RuntimeException) failure;
+                });
+                assertThatCode(probe::end).doesNotThrowAnyException();
+                probe.assertSettled();
+                assertThat(calls.get()).isEqualTo(1);
+            });
+        }
+        SwingUtilities.invokeAndWait(() -> {
+            final CanvasCompletionProbe probe = new CanvasCompletionProbe();
+            final AtomicInteger logs = new AtomicInteger();
+            final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(
+                GraphCanvas.class.getName());
+            final java.util.logging.Level oldLevel = logger.getLevel();
+            final java.util.logging.Handler handler = new java.util.logging.Handler() {
+                @Override
+                public void publish(final java.util.logging.LogRecord record) {
+                    logs.incrementAndGet();
+                    throw new AssertionError("logger error");
+                }
+
+                @Override
+                public void flush() {
+                }
+
+                @Override
+                public void close() {
+                }
+            };
+            logger.addHandler(handler);
+            logger.setLevel(java.util.logging.Level.ALL);
+            try {
+                probe.begin();
+                probe.canvas.runWhenViewportSettled(() -> {
+                    throw new AssertionError("callback before logger error");
+                });
+                assertThatCode(probe::end).doesNotThrowAnyException();
+                probe.assertSettled();
+                assertThat(logs.get()).isEqualTo(1);
+            }
+            finally {
+                logger.removeHandler(handler);
+                logger.setLevel(oldLevel);
+            }
+        });
+    }
+
+    @Test
+    public void viewportPositioningAccessorExcludesPendingClamps() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            final CanvasCompletionProbe probe = new CanvasCompletionProbe();
+            probe.scheduleClamp();
+            assertThat(probe.counter("viewportPositioningDepth")).isZero();
+            assertThat(probe.counter("pendingViewportClamps")).isEqualTo(1);
+            assertThat(probe.canvas.isViewportPositioningActive()).isFalse();
+            assertThat(probe.canvas.isProgrammaticViewportChange()).isTrue();
+            probe.begin();
+            assertThat(probe.canvas.isViewportPositioningActive()).isTrue();
+            probe.end();
+            assertThat(probe.canvas.isViewportPositioningActive()).isFalse();
+            assertThat(probe.canvas.isProgrammaticViewportChange()).isTrue();
+        });
+        SwingUtilities.invokeAndWait(() -> { });
+    }
+
+    @Test
+    public void viewportSettledCallbackRejectsNull() {
+        assertThat(SwingUtilities.isEventDispatchThread()).isFalse();
+        final GraphCanvas canvas = new GraphCanvas();
+        assertThatThrownBy(() -> canvas.runWhenViewportSettled(null))
+            .isInstanceOf(NullPointerException.class).hasMessage("callback");
+    }
+
+    @Test
+    public void viewportSettledCallbackCanRegisterAReplacementReentrantly() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            final CanvasCompletionProbe probe = new CanvasCompletionProbe();
+            final List<String> calls = new ArrayList<String>();
+            probe.begin();
+            probe.canvas.runWhenViewportSettled(() -> {
+                calls.add("first");
+                probe.canvas.runWhenViewportSettled(() -> calls.add("second"));
+            });
+            probe.end();
+            probe.begin();
+            probe.end();
+            assertThat(calls).containsExactly("first", "second");
+        });
+    }
+
     @Test
     public void hitNodeEndpointsFirstAndPreserveHullHitOrdering() {
         final Fixture fixture = Fixture.create();
@@ -854,6 +1046,110 @@ public class GraphInteractionControllerShould {
     }
 
     @Test
+    public void escapeFallbackRunsWhenPressStartsWithNoPreviewAndNoSelection() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            final EscapeFixture fixture = new EscapeFixture();
+            try {
+                assertThat(fixture.canvas.paintState().connectionPreview()).isEmpty();
+                assertThat(fixture.canvas.paintState().selection()).isEmpty();
+                final KeyEvent event = key(fixture.canvas, KeyEvent.VK_ESCAPE, 0);
+                fixture.controller.setEscapeFallback(() -> {
+                    assertThat(event.isConsumed()).isTrue();
+                    fixture.assertSelectionClearedIntent();
+                    fixture.fallbackCalls.incrementAndGet();
+                });
+                dispatchKey(fixture.canvas, event);
+                assertThat(fixture.fallbackCalls.get()).isEqualTo(1);
+                fixture.assertSelectionClearedIntent();
+                assertThat(event.isConsumed()).isTrue();
+
+                fixture.controller.setEscapeFallback(null);
+                fixture.listener.intents.clear();
+                final KeyEvent withoutFallback = fixture.escape();
+                assertThat(withoutFallback.isConsumed()).isTrue();
+                assertThat(fixture.fallbackCalls.get()).isEqualTo(1);
+                fixture.assertSelectionClearedIntent();
+            }
+            finally {
+                fixture.controller.uninstall();
+            }
+        });
+    }
+
+    @Test
+    public void escapeFallbackDoesNotRunWhenPressStartsWithPreview() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            final EscapeFixture fixture = new EscapeFixture();
+            try {
+                fixture.preview();
+                assertThat(fixture.canvas.paintState().connectionPreview()).isPresent();
+                assertThat(fixture.canvas.paintState().selection()).isEmpty();
+                fixture.listener.intents.clear();
+                final KeyEvent event = fixture.escape();
+                assertThat(fixture.fallbackCalls.get()).isZero();
+                assertThat(event.isConsumed()).isTrue();
+                assertThat(fixture.canvas.paintState().connectionPreview()).isEmpty();
+                assertThat(fixture.listener.intents).isEmpty();
+            }
+            finally {
+                fixture.controller.uninstall();
+            }
+        });
+    }
+
+    @Test
+    public void escapeFallbackDoesNotRunWhenPressStartsWithSelection() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            final EscapeFixture fixture = new EscapeFixture();
+            try {
+                fixture.select();
+                assertThat(fixture.canvas.paintState().selection()).contains(fixture.source.firstEndpoint);
+                assertThat(fixture.canvas.paintState().connectionPreview()).isEmpty();
+                fixture.listener.intents.clear();
+                final KeyEvent event = fixture.escape();
+                assertThat(fixture.fallbackCalls.get()).isZero();
+                assertThat(event.isConsumed()).isTrue();
+                assertThat(fixture.canvas.paintState().selection()).isEmpty();
+                fixture.assertSelectionClearedIntent();
+            }
+            finally {
+                fixture.controller.uninstall();
+            }
+        });
+    }
+
+    @Test
+    public void escapeIsConsumedForPreviewSelectionAndFallbackCases() throws Exception {
+        for (int startingState = 0; startingState < 3; startingState++) {
+            final int selectedState = startingState;
+            SwingUtilities.invokeAndWait(() -> {
+                final EscapeFixture fixture = new EscapeFixture();
+                try {
+                    if (selectedState == 0) {
+                        fixture.preview();
+                    }
+                    else if (selectedState == 1) {
+                        fixture.select();
+                    }
+                    fixture.listener.intents.clear();
+                    final KeyEvent event = fixture.escape();
+                    assertThat(event.isConsumed()).isTrue();
+                    assertThat(fixture.fallbackCalls.get()).isEqualTo(selectedState == 2 ? 1 : 0);
+                    if (selectedState == 0) {
+                        assertThat(fixture.listener.intents).isEmpty();
+                    }
+                    else {
+                        fixture.assertSelectionClearedIntent();
+                    }
+                }
+                finally {
+                    fixture.controller.uninstall();
+                }
+            });
+        }
+    }
+
+    @Test
     public void cancelConnectionPreviewBeforeClearingSelection() {
         final Fixture fixture = Fixture.create();
         final GraphCanvas canvas = fixture.canvas();
@@ -1196,6 +1492,115 @@ public class GraphInteractionControllerShould {
     private static KeyEvent key(GraphCanvas canvas, int code, int modifiers) {
         return new KeyEvent(canvas, KeyEvent.KEY_PRESSED, System.currentTimeMillis(), modifiers,
             code, KeyEvent.CHAR_UNDEFINED);
+    }
+
+    private static final class EscapeFixture {
+        private final Fixture source = Fixture.create();
+        private final GraphCanvas canvas = source.canvas();
+        private final RecordingListener listener = new RecordingListener();
+        private final GraphInteractionController controller = new GraphInteractionController(listener);
+        private final AtomicInteger fallbackCalls = new AtomicInteger();
+
+        private EscapeFixture() {
+            controller.install(canvas);
+            controller.setEscapeFallback(fallbackCalls::incrementAndGet);
+        }
+
+        private void preview() {
+            controller.setTool(InteractionTool.CONNECT);
+            dispatch(canvas, press(canvas, -40.0, 0.0));
+            dispatch(canvas, drag(canvas, 0.0, 20.0));
+        }
+
+        private void select() {
+            dispatch(canvas, click(canvas, MouseEvent.MOUSE_CLICKED, -40.0, 0.0, 1,
+                MouseEvent.BUTTON1));
+        }
+
+        private KeyEvent escape() {
+            final KeyEvent event = key(canvas, KeyEvent.VK_ESCAPE, 0);
+            dispatchKey(canvas, event);
+            return event;
+        }
+
+        private void assertSelectionClearedIntent() {
+            assertThat(listener.intents).containsExactly(new GraphIntent.ChangeSelection(
+                Optional.<ProjectedEndpointKey>empty()));
+        }
+    }
+
+    private static final class CanvasCompletionProbe {
+        private final GraphCanvas canvas = new GraphCanvas();
+        private final JViewport viewport = new JViewport();
+        private final AtomicInteger viewportEvents = new AtomicInteger();
+
+        private CanvasCompletionProbe() {
+            assertThat(SwingUtilities.isEventDispatchThread()).isTrue();
+            viewport.setView(canvas);
+            canvas.setSize(400, 300);
+            viewport.setExtentSize(new Dimension(80, 80));
+            viewport.setViewPosition(new Point(20, 20));
+            viewport.addChangeListener(event -> viewportEvents.incrementAndGet());
+        }
+
+        private static CanvasCompletionProbe settled() throws Exception {
+            final AtomicReference<CanvasCompletionProbe> probe = new AtomicReference<CanvasCompletionProbe>();
+            SwingUtilities.invokeAndWait(() -> probe.set(new CanvasCompletionProbe()));
+            // Exclude the deferred initialization resize before observing clamp events.
+            SwingUtilities.invokeAndWait(() -> probe.get().viewportEvents.set(0));
+            return probe.get();
+        }
+
+        private void begin() {
+            invoke("beginViewportPositioning", new Class<?>[0]);
+        }
+
+        private void end() {
+            invoke("endViewportPositioning", new Class<?>[0]);
+        }
+
+        private void scheduleClamp() {
+            invoke("scheduleViewportClamp", new Class<?>[] { JViewport.class }, viewport);
+        }
+
+        private void assertSettled() {
+            assertThat(SwingUtilities.isEventDispatchThread()).isTrue();
+            assertThat(counter("viewportPositioningDepth")).isZero();
+            assertThat(counter("pendingViewportClamps")).isZero();
+        }
+
+        private int counter(final String name) {
+            try {
+                final Field field = GraphCanvas.class.getDeclaredField(name);
+                field.setAccessible(true);
+                return field.getInt(canvas);
+            }
+            catch (ReflectiveOperationException failure) {
+                throw new AssertionError(failure);
+            }
+        }
+
+        private void invoke(final String name, final Class<?>[] parameterTypes,
+                final Object... arguments) {
+            try {
+                final Method method = GraphCanvas.class.getDeclaredMethod(name, parameterTypes);
+                method.setAccessible(true);
+                method.invoke(canvas, arguments);
+            }
+            catch (InvocationTargetException failure) {
+                final Throwable cause = failure.getCause();
+                if (cause instanceof RuntimeException) {
+                    throw (RuntimeException) cause;
+                }
+                if (cause instanceof Error) {
+                    throw (Error) cause;
+                }
+                throw new AssertionError(cause);
+            }
+            catch (ReflectiveOperationException failure) {
+                throw new AssertionError(failure);
+            }
+        }
     }
 
     private static final class RecordingListener implements GraphInteractionListener {
