@@ -373,6 +373,52 @@ public class GraphWindowChromeShould {
         });
     }
 
+    @Test public void preservesScrolledCenterWhenTransitionExhaustsScrollRange() {
+        for (int x : new int[] {118, 199}) {
+            for (int y : new int[] {71, 148}) {
+                withViewport(p -> {
+                    // The live window has W0=989, E0=672 and P0=118: its
+                    // visible center is 40.5 pixels left of the canvas anchor.
+                    p.canvas.setPreferredSize(new Dimension(989, 631));
+                    p.configure(989, 631, 672, 412, x, y);
+                    p.capture();
+                    p.hold.compensate();
+                    p.viewport.setExtentSize(new Dimension(1914, 1074));
+                    p.viewport.doLayout();
+                    p.assertVisibleCenter();
+                    p.assertTarget();
+                    assertThat(p.canvas.viewport()).isEqualTo(p.anchor);
+                    p.f.assertNoCommands();
+                    // A late publication shrinks the surface back to the extent
+                    // and queues the real canvas clamp before its settle callback.
+                    p.canvas.setCanvasState(largeState(0, 0));
+                    assertThat(field(p.canvas, "pendingViewportClamps")).isEqualTo(1);
+                }, p -> {
+                    assertThat(field(p.canvas, "pendingViewportClamps")).isEqualTo(0);
+                    p.assertVisibleCenter();
+                    p.assertTarget();
+                    p.clock.advanceTo(2500);
+                    p.assertArmed(false);
+                    p.viewport.doLayout();
+                    p.assertVisibleCenter();
+                    // Exit captures the current view and restores the small surface.
+                    p.capture();
+                    p.canvas.setPreferredSize(new Dimension(989, 631));
+                    p.geometry(989, 631, 672, 412);
+                    p.hold.compensate();
+                    p.assertVisibleCenter();
+                    p.assertTarget();
+                    p.clock.advanceTo(5000);
+                    p.assertArmed(false);
+                    p.viewport.doLayout();
+                    p.assertVisibleCenter();
+                    assertThat(p.canvas.viewport()).isEqualTo(p.anchor);
+                    p.f.assertNoCommands();
+                });
+            }
+        }
+    }
+
     @Test public void compensatesLateExtentChangeAfterTransitionReturns() {
         withViewport(p -> {
             p.capture();
@@ -1159,6 +1205,12 @@ public class GraphWindowChromeShould {
             assertThat(events).isPositive();
         }
         void assertArmed(final boolean armed) { assertThat(field(hold, "armed")).isEqualTo(armed); }
+        void assertVisibleCenter() {
+            GraphViewport visible = canvas.visibleViewport();
+            assertThat(Math.abs(visible.centerX() - center.centerX()) * center.zoom()).isLessThanOrEqualTo(0.5);
+            assertThat(Math.abs(visible.centerY() - center.centerY()) * center.zoom()).isLessThanOrEqualTo(0.5);
+            assertThat(visible.zoom()).isEqualTo(center.zoom());
+        }
         void assertTarget() {
             Point expected = new Point(axis(p0.x, w0.width, e0.width, canvas.getWidth(), viewport.getExtentSize().width),
                 axis(p0.y, w0.height, e0.height, canvas.getHeight(), viewport.getExtentSize().height));
