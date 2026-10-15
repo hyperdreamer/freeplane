@@ -1,0 +1,89 @@
+<h2>What happens to the graph view on F11?</h2>
+<p class="subtitle">Your viewport is a center point plus a zoom factor. Entering full screen gives the canvas much more room — the question is whether the graph keeps your exact view or re-fits. (The dashed outline marks where the window used to be.)</p>
+
+<style>
+  .gscreen { background:#12161b; border:1px solid #2c333c; border-radius:10px; overflow:hidden; position:relative; height:200px; }
+  .gscreen .canvas { position:absolute; inset:0; background:radial-gradient(circle at 40% 45%, #17202b 0, #0d1116 70%); }
+  .gcap { font-size:11px; color:#8b98a5; margin-top:6px; text-align:center; }
+  .gscreen .hint { position:absolute; left:50%; top:12px; transform:translateX(-50%); background:rgba(20,26,33,.9);
+                   border:1px solid #33404e; color:#c6d3e0; font:11px system-ui,sans-serif; padding:4px 10px; border-radius:14px; }
+</style>
+
+<div class="cards">
+
+  <div class="card" data-choice="A" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="gscreen">
+        <div class="canvas"></div>
+        <svg viewBox="0 0 320 200" style="position:absolute;inset:0;width:100%;height:100%">
+          <rect x="60" y="35" width="200" height="130" fill="none" stroke="#5b6b7d" stroke-dasharray="5 4" stroke-width="1.2"/>
+          <g stroke="#3d4b5c" stroke-width="1.4" fill="none" opacity="0.9">
+            <path d="M160 100 L70 30 M160 100 L255 38 M160 100 L262 168 M160 100 L58 172 M70 30 L255 38 M58 172 L160 190"/>
+          </g>
+          <g fill="#4b5c70">
+            <circle cx="160" cy="100" r="17"/>
+            <circle cx="70" cy="30" r="11"/><circle cx="255" cy="38" r="12"/>
+            <circle cx="262" cy="168" r="10"/><circle cx="58" cy="172" r="12"/>
+            <circle cx="160" cy="190" r="9"/>
+          </g>
+        </svg>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Keep your exact view <span class="label">recommended</span></h3>
+      <p>Same center and same zoom; extra space reveals more of the graph around your focus. Exiting returns precisely to the previous view. Nothing moves unexpectedly.</p>
+      <div class="gcap">dashed box = old window area · new surroundings appear at the edges</div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="B" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="gscreen">
+        <div class="canvas"></div>
+        <svg viewBox="0 0 320 200" style="position:absolute;inset:0;width:100%;height:100%">
+          <g stroke="#3d4b5c" stroke-width="1.4" fill="none" opacity="0.9">
+            <path d="M160 100 L76 46 M160 100 L243 54 M160 100 L248 152 M160 100 L72 156 M76 46 L243 54 M72 156 L160 168"/>
+          </g>
+          <g fill="#4b5c70">
+            <circle cx="160" cy="100" r="15"/>
+            <circle cx="76" cy="46" r="10"/><circle cx="243" cy="54" r="11"/>
+            <circle cx="248" cy="152" r="9"/><circle cx="72" cy="156" r="11"/>
+            <circle cx="160" cy="168" r="8"/>
+          </g>
+        </svg>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Fit graph on entry, restore view on exit</h3>
+      <p>F11 re-fits the whole graph to the screen (zoom changes). Exiting returns to your previous viewport, so the fitted view is temporary.</p>
+      <div class="gcap">entry always shows everything · exit = exact previous view</div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="C" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="gscreen">
+        <div class="canvas"></div>
+        <svg viewBox="0 0 320 200" style="position:absolute;inset:0;width:100%;height:100%">
+          <g stroke="#3d4b5c" stroke-width="1.4" fill="none" opacity="0.9">
+            <path d="M160 100 L76 46 M160 100 L243 54 M160 100 L248 152 M160 100 L72 156 M76 46 L243 54 M72 156 L160 168"/>
+          </g>
+          <g fill="#4b5c70">
+            <circle cx="160" cy="100" r="15"/>
+            <circle cx="76" cy="46" r="10"/><circle cx="243" cy="54" r="11"/>
+            <circle cx="248" cy="152" r="9"/><circle cx="72" cy="156" r="11"/>
+            <circle cx="160" cy="168" r="8"/>
+          </g>
+        </svg>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Fit graph on entry and keep it</h3>
+      <p>F11 re-fits and the fitted view stays after exit — the windowed view comes back showing the whole graph. Your previous zoom is gone.</p>
+      <div class="gcap">entry and exit both show the whole graph</div>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:18px">Current actions (zoom, fit, pan, node drag) work normally in fullscreen in all three options. Click a card to select, then confirm in the terminal.</p>

@@ -6,6 +6,9 @@ import java.awt.Dialog;
 import java.awt.Dimension;
 import java.awt.GraphicsEnvironment;
 import java.awt.Insets;
+import java.awt.Point;
+import java.awt.Rectangle;
+import java.awt.Frame;
 import java.awt.Window;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -13,8 +16,11 @@ import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
+import java.awt.event.MouseWheelEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.nio.file.Path;
@@ -35,16 +41,19 @@ import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
+import javax.swing.JLayeredPane;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
+import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.JRootPane;
 import javax.swing.JSplitPane;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
+import javax.swing.event.ChangeEvent;
 import javax.swing.event.PopupMenuEvent;
 import javax.swing.event.PopupMenuListener;
 import javax.swing.plaf.basic.BasicSplitPaneDivider;
@@ -53,6 +62,7 @@ import javax.swing.plaf.basic.BasicSplitPaneUI;
 import org.freeplane.core.resources.IFreeplanePropertyListener;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.ui.components.FrameResynchronizer;
+import org.freeplane.core.util.Compat;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.plugin.graph.command.GraphCommand;
@@ -97,13 +107,16 @@ import org.freeplane.plugin.graph.workspace.model.DisplaySettings;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 import org.freeplane.plugin.graph.workspace.model.NodeReference;
 
-final class GraphWorkspaceWindow extends JFrame implements GraphWorkspaceView {
+final class GraphWorkspaceWindow extends JFrame implements GraphWorkspaceView, ScreenFillSurface {
     private static final long serialVersionUID = 1L;
     private static final Dimension WINDOW_SIZE = new Dimension(1280, 800);
 
     private final WorkspaceCloseController closeController;
     private final GraphWorkspaceWindowModel model;
     private final IFreeplanePropertyListener colorChangeListener;
+    private final GraphPresentationMode presentationMode;
+    private final FrameTransitions frameTransitions;
+    private final ComponentAdapter presentationFrameListener;
     private boolean closed;
 
     GraphWorkspaceWindow(final GraphWorkspaceHandle handle, final GraphWorkspaceViewBinding binding,
@@ -139,6 +152,24 @@ final class GraphWorkspaceWindow extends JFrame implements GraphWorkspaceView {
         setJMenuBar(model.menuBar());
         setContentPane(model.content());
         model.installWorkspaceHistoryKeys(getRootPane());
+        final Consumer<String> presentationLog = message ->
+            Controller.getCurrentController().getViewController().out(message);
+        frameTransitions = new FrameTransitions(this::rawEnterFullScreen, this::rawRestoreWindowed, presentationLog);
+        presentationMode = model.createPresentationMode(this, getLayeredPane(),
+            () -> canvas().requestFocusInWindow(), presentationLog);
+        installPresentationKeys(getRootPane(), presentationMode);
+        presentationFrameListener = new ComponentAdapter() {
+            @Override
+            public void componentMoved(final ComponentEvent event) {
+                model.presentationFrameGeometryChanged(getBounds());
+            }
+
+            @Override
+            public void componentResized(final ComponentEvent event) {
+                model.presentationFrameGeometryChanged(getBounds());
+            }
+        };
+        addComponentListener(presentationFrameListener);
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(final WindowEvent event) {
@@ -264,6 +295,8 @@ final class GraphWorkspaceWindow extends JFrame implements GraphWorkspaceView {
             return;
         }
         closed = true;
+        presentationMode.windowClosed();
+        removeComponentListener(presentationFrameListener);
         ResourceController.getResourceController().removePropertyChangeListener(colorChangeListener);
         model.close();
         dispose();
@@ -279,6 +312,120 @@ final class GraphWorkspaceWindow extends JFrame implements GraphWorkspaceView {
         final javax.swing.JFileChooser chooser = new javax.swing.JFileChooser();
         return chooser.showOpenDialog(null) == javax.swing.JFileChooser.APPROVE_OPTION
             ? chooser.getSelectedFile().toPath() : null;
+    }
+
+    @Override
+    public FrameState captureFrameState() {
+        return new FrameState(getBounds(), getExtendedState());
+    }
+
+    @Override
+    public Survival applyScreenFill(final FrameState previous) {
+        return frameTransitions.applyScreenFill(previous);
+    }
+
+    @Override
+    public Survival restoreFrameState(final FrameState previous) {
+        return frameTransitions.restoreFrameState(previous);
+    }
+
+    void rawEnterFullScreen() {
+        final Rectangle graphics = getGraphicsConfiguration().getBounds();
+        dispose();
+        setUndecorated(true);
+        setExtendedState(Frame.MAXIMIZED_BOTH);
+        setBounds(graphics);
+        if (Compat.isWindowsOS()) {
+            setResizable(false);
+        }
+        setVisible(true);
+        validate();
+    }
+
+    void rawRestoreWindowed(final FrameState previous) {
+        dispose();
+        setUndecorated(false);
+        setBounds(previous.bounds());
+        setExtendedState(previous.extendedState());
+        if (Compat.isWindowsOS()) {
+            setResizable(false);
+        }
+        setResizable(true);
+        setVisible(true);
+        validate();
+    }
+
+    static void installPresentationKeys(final JRootPane root, final GraphPresentationMode mode) {
+        final String actionName = "graph-workspace-toggle-full-screen";
+        root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(KeyEvent.VK_F11, 0), actionName);
+        root.getActionMap().put(actionName, new AbstractAction() {
+            private static final long serialVersionUID = 1L;
+
+            @Override
+            public void actionPerformed(final ActionEvent event) {
+                if (mode.isAvailable()) {
+                    mode.toggle();
+                }
+            }
+        });
+    }
+
+    static final class FrameTransitions {
+        private final Runnable enterRaw;
+        private final Consumer<FrameState> restoreRaw;
+        private final Consumer<String> log;
+
+        FrameTransitions(final Runnable enterRaw, final Consumer<FrameState> restoreRaw,
+                final Consumer<String> log) {
+            this.enterRaw = Objects.requireNonNull(enterRaw, "enterRaw");
+            this.restoreRaw = Objects.requireNonNull(restoreRaw, "restoreRaw");
+            this.log = Objects.requireNonNull(log, "log");
+        }
+
+        Survival applyScreenFill(final FrameState previous) {
+            try {
+                enterRaw.run();
+                return Survival.REENTERED_FULLSCREEN;
+            }
+            catch (RuntimeException | Error primary) {
+                logFailure("enter full screen", primary);
+                try {
+                    restoreRaw.accept(previous);
+                    return Survival.RESTORED_WINDOWED;
+                }
+                catch (RuntimeException | Error inverse) {
+                    logFailure("restore windowed after failed entry", inverse);
+                    return Survival.UNKNOWN_FRAME;
+                }
+            }
+        }
+
+        Survival restoreFrameState(final FrameState previous) {
+            try {
+                restoreRaw.accept(previous);
+                return Survival.RESTORED_WINDOWED;
+            }
+            catch (RuntimeException | Error primary) {
+                logFailure("restore windowed", primary);
+                try {
+                    enterRaw.run();
+                    return Survival.REENTERED_FULLSCREEN;
+                }
+                catch (RuntimeException | Error inverse) {
+                    logFailure("enter full screen after failed restore", inverse);
+                    return Survival.UNKNOWN_FRAME;
+                }
+            }
+        }
+
+        private void logFailure(final String operation, final Throwable failure) {
+            try {
+                log.accept("Graph presentation " + operation + " failed: " + failure);
+            }
+            catch (RuntimeException | Error loggingFailure) {
+                // Recovery remains bounded even when the diagnostic sink fails.
+            }
+        }
     }
 
     static void runOnEdt(final Runnable action) {
@@ -306,7 +453,7 @@ final class GraphWorkspaceWindow extends JFrame implements GraphWorkspaceView {
     }
 }
 
-final class GraphWorkspaceWindowModel {
+final class GraphWorkspaceWindowModel implements PresentationChrome {
     static final Dimension CANVAS_PREFERRED_SIZE = new Dimension(800, 560);
 
     private final GraphWorkspaceHandle handle;
@@ -362,12 +509,520 @@ final class GraphWorkspaceWindowModel {
     private final MapSidebarPanel sidebar;
     private JSplitPane splitPane;
     private JCheckBoxMenuItem mapsSidebarMenuItem;
+    private JCheckBoxMenuItem fullScreenMenuItem;
+    private GraphPresentationMode presentationMode;
     private int appliedSidebarWidth;
     private boolean sidebarGestureActive;
     private boolean sidebarApplyPending;
     private boolean sidebarApplying;
     private Integer sessionSidebarWidth;
     private Boolean sessionSidebarHidden;
+    private ChromeSnapshot chromeSnapshot;
+    private SidebarOverride sidebarOverride;
+    private boolean presentationHidden;
+    private boolean sidebarKeyboardAction;
+    private final ViewportHold viewportHold = new ViewportHold();
+    private boolean applyingViewport;
+    private boolean toolbarViewportOperation;
+    private boolean baseViewportSuppression = true;
+    private int viewportSuppressionDepth;
+    private int userScrollDepth;
+    private PresentationScheduler presentationScheduler = new PresentationScheduler() {
+        @Override
+        public long nowMillis() {
+            return System.nanoTime() / 1_000_000L;
+        }
+
+        @Override
+        public ScheduledWork schedule(final int delayMillis, final Runnable callback) {
+            final javax.swing.Timer timer = new javax.swing.Timer(delayMillis, event -> callback.run());
+            timer.setRepeats(false);
+            timer.start();
+            return timer::stop;
+        }
+    };
+    private static final Runnable NO_SETTLE_CORRECTION = () -> { };
+
+    interface PresentationScheduler {
+        long nowMillis();
+        ScheduledWork schedule(int delayMillis, Runnable callback);
+    }
+
+    interface ScheduledWork {
+        void cancel();
+    }
+
+    PresentationViewport presentationViewport() {
+        return viewportHold;
+    }
+
+    void setPresentationScheduler(final PresentationScheduler scheduler) {
+        if (viewportHold.armed || viewportHold.closed) {
+            throw new IllegalStateException("Presentation scheduler cannot change while armed or closed");
+        }
+        presentationScheduler = Objects.requireNonNull(scheduler, "scheduler");
+    }
+
+    void presentationFrameGeometryChanged(final Rectangle bounds) {
+        viewportHold.frameGeometryChanged(bounds);
+    }
+
+    GraphPresentationMode createPresentationMode(final ScreenFillSurface surface, final JLayeredPane host,
+            final Runnable focusCanvas, final Consumer<String> log) {
+        if (presentationMode == null) {
+            presentationMode = new GraphPresentationMode(surface, this, viewportHold,
+                new PresentationHint(host, TextUtils.getText("graph_workspace.hint.full_screen_exit")),
+                fullScreenMenuItem, focusCanvas, log);
+            interactionController.setEscapeFallback(presentationMode::requestExit);
+            fullScreenMenuItem.addActionListener(event -> presentationMode.toggle());
+        }
+        return presentationMode;
+    }
+
+    private final class ViewportHold implements PresentationViewport {
+        private boolean armed;
+        private boolean closed;
+        private long generation;
+        private Point baselinePosition;
+        private Dimension baselineExtent;
+        private Dimension baselineSurface;
+        private GraphViewport baselineAnchor;
+        private Dimension observedExtent;
+        private Dimension observedSurface;
+        private Point observedPosition;
+        private Rectangle observedFrame;
+        private boolean correcting;
+        private boolean baselineSuppression;
+        private long lastTransitionGeometryAt;
+        private long lastFrameEventAt;
+        private long lastViewportEventAt;
+        private ScheduledWork quietWork;
+        private long registeredSettleGeneration = -1;
+
+        @Override
+        public void capture() {
+            if (closed || GraphWorkspaceWindowModel.this.closed) {
+                return;
+            }
+            if (!armed) {
+                baselineSuppression = baseViewportSuppression;
+            }
+            generation++;
+            cancelWork();
+            captureGeometry();
+            armed = true;
+            updateViewportSuppression();
+            lastTransitionGeometryAt = presentationScheduler.nowMillis();
+            lastFrameEventAt = lastTransitionGeometryAt;
+            lastViewportEventAt = lastTransitionGeometryAt;
+            scheduleQuietObservation(2500);
+        }
+
+        private void captureGeometry() {
+            final javax.swing.JViewport viewport = graphScrollPane.getViewport();
+            baselinePosition = viewport.getViewPosition();
+            baselineExtent = viewport.getExtentSize();
+            baselineSurface = canvas.getSize();
+            baselineAnchor = canvas.viewport();
+            observeGeometry();
+        }
+
+        private void modelViewportApplied() {
+            if (!armed || closed) {
+                return;
+            }
+            generation++;
+            cancelWork();
+            captureGeometry();
+            // A model assignment changes the view being protected, without extending
+            // the presentation transition's original horizon or absolute cap.
+            final long next = Math.min(lastTransitionGeometryAt + 5000,
+                Math.max(lastTransitionGeometryAt + 2500,
+                    Math.max(lastFrameEventAt, lastViewportEventAt) + 200));
+            scheduleQuietObservation((int) Math.max(1L, next - presentationScheduler.nowMillis()));
+        }
+
+        @Override
+        public void compensate() {
+            if (!armed || closed) {
+                return;
+            }
+            lastTransitionGeometryAt = presentationScheduler.nowMillis();
+            correctGeometry();
+            if (quietWork != null) {
+                quietWork.cancel();
+            }
+            scheduleQuietObservation(2500);
+        }
+
+        private void correctGeometry() {
+            if (!armed || closed || correcting) {
+                return;
+            }
+            correcting = true;
+            try {
+                final javax.swing.JViewport viewport = graphScrollPane.getViewport();
+                Dimension surface = canvas.getSize();
+                Dimension extent = viewport.getExtentSize();
+                Point target = new Point(
+                    targetAxis(baselinePosition.x, baselineSurface.width, baselineExtent.width, surface.width, extent.width),
+                    targetAxis(baselinePosition.y, baselineSurface.height, baselineExtent.height, surface.height, extent.height));
+                final Dimension reachableSurface = new Dimension(
+                    surfaceForCenter(baselinePosition.x, baselineSurface.width, baselineExtent.width, surface.width, extent.width),
+                    surfaceForCenter(baselinePosition.y, baselineSurface.height, baselineExtent.height, surface.height, extent.height));
+                if (!reachableSurface.equals(surface)) {
+                    // A viewport-sized surface has no scroll range. Retain enough
+                    // room on both sides of the anchor to reach the captured center.
+                    final Dimension preferred = canvas.getPreferredSize();
+                    reachableSurface.width = Math.max(reachableSurface.width, preferred.width);
+                    reachableSurface.height = Math.max(reachableSurface.height, preferred.height);
+                    runWithViewportEventsSuppressed(() -> {
+                        canvas.setPreferredSize(reachableSurface);
+                        viewport.setViewSize(reachableSurface);
+                        canvas.revalidate();
+                    });
+                    surface = canvas.getSize();
+                    extent = viewport.getExtentSize();
+                    target = new Point(
+                        targetAxis(baselinePosition.x, baselineSurface.width, baselineExtent.width, surface.width, extent.width),
+                        targetAxis(baselinePosition.y, baselineSurface.height, baselineExtent.height, surface.height, extent.height));
+                }
+                final Point position = target;
+                runWithViewportEventsSuppressed(() -> viewport.setViewPosition(position));
+                lastPublishedViewport = canvas.visibleViewport();
+            }
+            finally {
+                observeGeometry();
+                correcting = false;
+            }
+        }
+
+        private int surfaceForCenter(final int p0, final int w0, final int e0, final int w1, final int e1) {
+            final long twiceOffset = 2L * p0 + e0 - w0;
+            final long required = (long) e1 + Math.abs(twiceOffset);
+            return (int) Math.max(w1, Math.min(Integer.MAX_VALUE - 1L, required));
+        }
+
+        private int targetAxis(final int p0, final int w0, final int e0, final int w1, final int e1) {
+            final double requested = (double) p0 + (((double) w1 - w0) - ((double) e1 - e0)) / 2.0;
+            final long rounded = Math.round(requested);
+            final int maximum = Math.max(0, w1 - e1);
+            final int applied = (int) Math.max(0L, Math.min((long) maximum, rounded));
+            if (rounded != applied) {
+                logClamp(requested, rounded, applied, requested - applied);
+            }
+            return applied;
+        }
+
+        private void logClamp(final double requested, final long rounded, final int applied, final double residual) {
+            logPresentation("Graph presentation viewport clamp requested=" + requested + " rounded=" + rounded
+                + " applied=" + applied + " residual=" + residual);
+        }
+
+        @Override
+        public void classify(final ChangeEvent event) {
+            lastViewportEventAt = presentationScheduler.nowMillis();
+            if (closed || GraphWorkspaceWindowModel.this.closed || correcting) {
+                return;
+            }
+            if (!armed) {
+                publishExternalViewport();
+                return;
+            }
+            try {
+                if (applyingViewport || toolbarViewportOperation) {
+                    return;
+                }
+                if (!baselineAnchor.equals(canvas.viewport())) {
+                    publishUserView();
+                }
+                else if (canvas.isViewportPositioningActive()) {
+                    registerSettleCorrection();
+                }
+                else if (observedExtent.equals(graphScrollPane.getViewport().getExtentSize())
+                        && observedSurface.equals(canvas.getSize())) {
+                    if (!observedPosition.equals(graphScrollPane.getViewport().getViewPosition())) {
+                        if (userScrollInputActive()) {
+                            publishUserView();
+                        }
+                        else {
+                            correctGeometry();
+                        }
+                    }
+                }
+                else {
+                    correctGeometry();
+                }
+            }
+            finally {
+                observeGeometry();
+            }
+        }
+
+        private void publishUserView() {
+            emitViewportIfChanged(canvas.visibleViewport());
+            disarm();
+        }
+
+        private void observeGeometry() {
+            observedExtent = graphScrollPane.getViewport().getExtentSize();
+            observedSurface = canvas.getSize();
+            observedPosition = graphScrollPane.getViewport().getViewPosition();
+        }
+
+        private void registerSettleCorrection() {
+            if (!armed || closed || registeredSettleGeneration == generation) {
+                return;
+            }
+            final long registered = generation;
+            registeredSettleGeneration = registered;
+            canvas.runWhenViewportSettled(() -> {
+                if (!closed && !GraphWorkspaceWindowModel.this.closed && armed && generation == registered) {
+                    correctGeometry();
+                }
+            });
+        }
+
+        @Override
+        public void canvasPublication() {
+            disarm();
+        }
+
+        @Override
+        public void toolbarPublication(final GraphViewport value) {
+            disarm();
+        }
+
+        @Override
+        public void disarm() {
+            lastPublishedViewport = canvas.visibleViewport();
+            if (!armed) {
+                return;
+            }
+            generation++;
+            cancelWork();
+            armed = false;
+            baseViewportSuppression = baselineSuppression;
+            updateViewportSuppression();
+        }
+
+        @Override
+        public void windowClosed() {
+            if (closed) {
+                return;
+            }
+            closed = true;
+            generation++;
+            cancelWork();
+            lastPublishedViewport = canvas.visibleViewport();
+            if (armed) {
+                baseViewportSuppression = baselineSuppression;
+            }
+            armed = false;
+            updateViewportSuppression();
+        }
+
+        private void cancelWork() {
+            if (quietWork != null) {
+                quietWork.cancel();
+                quietWork = null;
+            }
+            registeredSettleGeneration = -1;
+            canvas.runWhenViewportSettled(NO_SETTLE_CORRECTION);
+        }
+
+        private void frameGeometryChanged(final Rectangle bounds) {
+            if (closed) {
+                return;
+            }
+            final Rectangle next = new Rectangle(Objects.requireNonNull(bounds, "bounds"));
+            if (!next.equals(observedFrame)) {
+                observedFrame = next;
+                lastFrameEventAt = presentationScheduler.nowMillis();
+            }
+        }
+
+        private void scheduleQuietObservation(final int delayMillis) {
+            final long scheduledGeneration = generation;
+            quietWork = presentationScheduler.schedule(delayMillis, () -> {
+                if (closed || GraphWorkspaceWindowModel.this.closed || !armed || generation != scheduledGeneration) {
+                    return;
+                }
+                quietWork = null;
+                final long now = presentationScheduler.nowMillis();
+                final long horizon = lastTransitionGeometryAt + 2500;
+                final long cap = lastTransitionGeometryAt + 5000;
+                final long quietAt = Math.max(lastFrameEventAt, lastViewportEventAt) + 200;
+                if (now >= horizon && now >= quietAt) {
+                    disarm();
+                }
+                else if (now >= cap) {
+                    logPresentation("Graph presentation settlement failure generation=" + generation
+                        + " transition=" + lastTransitionGeometryAt + " frame=" + lastFrameEventAt
+                        + " viewport=" + lastViewportEventAt + " now=" + now);
+                    disarm();
+                }
+                else {
+                    scheduleQuietObservation((int) Math.max(1L, Math.min(cap, Math.max(horizon, quietAt)) - now));
+                }
+            });
+        }
+    }
+
+    private boolean userScrollInputActive() {
+        return userScrollDepth > 0
+            || graphScrollPane.getHorizontalScrollBar().getValueIsAdjusting()
+            || graphScrollPane.getVerticalScrollBar().getValueIsAdjusting();
+    }
+
+    private final class UserScrollPane extends JScrollPane {
+        private static final long serialVersionUID = 1L;
+
+        UserScrollPane() {
+            super(canvas);
+            installScrollbarMouseMarker(getHorizontalScrollBar());
+            installScrollbarMouseMarker(getVerticalScrollBar());
+        }
+
+        @Override
+        protected void processMouseWheelEvent(final MouseWheelEvent event) {
+            userScrollDepth++;
+            try {
+                super.processMouseWheelEvent(event);
+            }
+            finally {
+                userScrollDepth--;
+            }
+        }
+
+        @Override
+        protected boolean processKeyBinding(final KeyStroke stroke, final KeyEvent event,
+                final int condition, final boolean pressed) {
+            final int key = event.getKeyCode();
+            final boolean scroll = isFocusOwner() && (key == KeyEvent.VK_LEFT || key == KeyEvent.VK_RIGHT
+                || key == KeyEvent.VK_UP || key == KeyEvent.VK_DOWN || key == KeyEvent.VK_PAGE_UP
+                || key == KeyEvent.VK_PAGE_DOWN || key == KeyEvent.VK_HOME || key == KeyEvent.VK_END);
+            if (scroll) {
+                userScrollDepth++;
+            }
+            try {
+                return super.processKeyBinding(stroke, event, condition, pressed);
+            }
+            finally {
+                if (scroll) {
+                    userScrollDepth--;
+                }
+            }
+        }
+
+        @Override
+        public JScrollBar createHorizontalScrollBar() {
+            return userScrollBar(JScrollBar.HORIZONTAL);
+        }
+
+        @Override
+        public JScrollBar createVerticalScrollBar() {
+            return userScrollBar(JScrollBar.VERTICAL);
+        }
+
+        private JScrollBar userScrollBar(final int orientation) {
+            return new ScrollBar(orientation) {
+                private static final long serialVersionUID = 1L;
+
+                @Override
+                public void setValueIsAdjusting(final boolean adjusting) {
+                    final boolean input = adjusting || getValueIsAdjusting();
+                    if (input) {
+                        userScrollDepth++;
+                    }
+                    try {
+                        super.setValueIsAdjusting(adjusting);
+                    }
+                    finally {
+                        if (input) {
+                            userScrollDepth--;
+                        }
+                    }
+                }
+            };
+        }
+
+        private void installScrollbarMouseMarker(final Component component) {
+            final boolean[] down = {false};
+            final MouseListener[] delegates = component.getMouseListeners();
+            for (MouseListener listener : delegates) {
+                component.removeMouseListener(listener);
+            }
+            // Mark before the UI's press handler, including scrollbar arrow buttons.
+            component.addMouseListener(new MouseAdapter() {
+                @Override public void mousePressed(final MouseEvent event) {
+                    if (!down[0]) {
+                        down[0] = true;
+                        userScrollDepth++;
+                    }
+                }
+            });
+            for (MouseListener listener : delegates) {
+                component.addMouseListener(listener);
+            }
+            component.addMouseListener(new MouseAdapter() {
+                @Override public void mouseReleased(final MouseEvent event) {
+                    if (down[0]) {
+                        down[0] = false;
+                        userScrollDepth--;
+                    }
+                }
+            });
+            if (component instanceof java.awt.Container) {
+                for (Component child : ((java.awt.Container) component).getComponents()) {
+                    installScrollbarMouseMarker(child);
+                }
+            }
+        }
+    }
+
+    private void logPresentation(final String message) {
+        try {
+            commandMessageSink.accept(message);
+        }
+        catch (RuntimeException | Error loggingFailure) {
+            // Diagnostics cannot break viewport recovery or timer cleanup.
+        }
+    }
+
+    private static final class SidebarOverride {
+        final boolean collapsed;
+        final int dividerLocation;
+        final int dividerSize;
+        final boolean enabled;
+
+        SidebarOverride(final boolean collapsed, final int dividerLocation, final int dividerSize,
+                final boolean enabled) {
+            this.collapsed = collapsed;
+            this.dividerLocation = dividerLocation;
+            this.dividerSize = dividerSize;
+            this.enabled = enabled;
+        }
+    }
+
+    private static final class ChromeSnapshot {
+        final boolean menuVisible;
+        final boolean toolbarVisible;
+        final boolean sidebarVisible;
+        final boolean settingsVisible;
+        final boolean statusVisible;
+        final SidebarOverride sidebar;
+
+        ChromeSnapshot(final boolean menuVisible, final boolean toolbarVisible, final boolean sidebarVisible,
+                final boolean settingsVisible, final boolean statusVisible, final SidebarOverride sidebar) {
+            this.menuVisible = menuVisible;
+            this.toolbarVisible = toolbarVisible;
+            this.sidebarVisible = sidebarVisible;
+            this.settingsVisible = settingsVisible;
+            this.statusVisible = statusVisible;
+            this.sidebar = sidebar;
+        }
+    }
 
     GraphWorkspaceWindowModel(final GraphWorkspaceHandle handle, final GraphWorkspaceViewBinding binding,
             final GraphWorkspaceController applicationController, final Supplier<java.nio.file.Path> pathChooser,
@@ -455,16 +1110,17 @@ final class GraphWorkspaceWindowModel {
         canvas.setPreferredSize(CANVAS_PREFERRED_SIZE);
         canvas.setMinimumSize(new Dimension(320, 240));
         canvas.setSize(CANVAS_PREFERRED_SIZE);
-        graphScrollPane = new JScrollPane(canvas);
+        graphScrollPane = new UserScrollPane();
         graphScrollPane.setName("graph-workspace-scroll-pane");
         graphScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
         graphScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
-        graphScrollPane.getViewport().addChangeListener(event -> publishExternalViewport());
+        graphScrollPane.getViewport().addChangeListener(event -> presentationViewport().classify(event));
         canvas.setUserViewportChangeListener(this::publishCanvasViewport);
         mapList = new MapListPanel(routedHandle, pathChooser);
         mapList.addSelectionListener(row -> updateMenuEnablement());
         sidebar = new MapSidebarPanel(mapList, this::setSidebarCollapsed);
-        sidebar.collapseButton().addActionListener(event -> setSidebarCollapsed(true));
+        sidebar.collapseButton().addActionListener(event -> sidebarToggledFromUser(true));
+        sidebar.rail().restoreButton().addActionListener(event -> sidebarToggledFromUser(false));
         toolbar = new WorkspaceToolbar(applicationController, routedHandle, canvas, pathChooser);
         currentPresentation = presentationOrDefault(binding.currentPresentation());
         settingsPanel = new WorkspaceSettingsPanel(routedHandle, currentPresentation.displaySettings());
@@ -482,7 +1138,7 @@ final class GraphWorkspaceWindowModel {
         toolbar.setToolListener(tool -> interactionController.setTool(tool));
         toolbar.setDirectionListener(interactionController::setRelationshipDirection);
         toolbar.setSearchListener(this::search);
-        toolbar.setViewportOperation(this::runWithViewportEventsSuppressed);
+        toolbar.setViewportOperation(this::runToolbarViewportOperation);
         toolbar.setViewportListener(this::publishToolbarViewport);
         toolbar.setPinAction(this::togglePinSelectedNode);
 
@@ -532,14 +1188,15 @@ final class GraphWorkspaceWindowModel {
             canvas.setCanvasState(currentState);
         }
         initialViewport = GraphViewport.from(Objects.requireNonNull(binding.currentViewport(), "currentViewport"));
-        runWithViewportEventsSuppressed(new Runnable() {
+        applyModelViewport(new Runnable() {
             @Override
             public void run() {
                 canvas.setViewport(initialViewport);
             }
         });
         lastPublishedViewport = canvas.visibleViewport();
-        suppressViewportEvents = false;
+        baseViewportSuppression = false;
+        updateViewportSuppression();
         setReadOnlyOnEdt(binding.isReadOnly());
         updateStatusBar();
         sessionStatusRegistration = registrationOrNoOp(binding.addSessionStatusListener(
@@ -577,12 +1234,16 @@ final class GraphWorkspaceWindowModel {
         return result;
     }
 
-    private void applyPresentation(final GraphWorkspacePresentation value) {
+    void applyPresentation(final GraphWorkspacePresentation value) {
         final GraphWorkspacePresentation next = Objects.requireNonNull(value, "presentation");
         final DisplaySettings previousSettings = currentPresentation == null
             ? null : currentPresentation.displaySettings();
-        currentPresentation = next;
         final DisplaySettings settings = next.displaySettings();
+        if (previousSettings != null && (previousSettings.mapSidebarWidth() != settings.mapSidebarWidth()
+                || previousSettings.mapSidebarHidden() != settings.mapSidebarHidden())) {
+            sidebarOverride = null;
+        }
+        currentPresentation = next;
         settingsPanel.setSettings(settings);
         canvas.setTheme(GraphTheme.resolve(settings.canvasTheme(), palette(next)));
         canvas.setShowArrowheads(settings.showArrowheads());
@@ -594,11 +1255,120 @@ final class GraphWorkspaceWindowModel {
         applySidebarSettings(settings);
     }
 
+    @Override
+    public void capture() {
+        try {
+            final SidebarOverride effective = new SidebarOverride(sidebar.isCollapsed(),
+                splitPane.getDividerLocation(), splitPane.getDividerSize(), splitPane.isEnabled());
+            final ChromeSnapshot captured = new ChromeSnapshot(menuBar.isVisible(), toolbar.isVisible(),
+                sidebar.isVisible(), settingsPanel.isVisible(), statusSlot.isVisible(), effective);
+            chromeSnapshot = captured;
+            sidebarOverride = effective;
+        }
+        catch (RuntimeException | Error failure) {
+            if (chromeSnapshot == null || sidebarOverride == null) {
+                discard();
+            }
+            throw failure;
+        }
+    }
+
+    @Override
+    public void hide() {
+        presentationHidden = true;
+        menuBar.setVisible(false);
+        toolbar.setVisible(false);
+        sidebar.setVisible(false);
+        splitPane.setDividerSize(0);
+        settingsPanel.setVisible(false);
+        toolbar.setSettingsVisible(false);
+        statusSlot.setVisible(false);
+    }
+
+    @Override
+    public void restore() {
+        final ChromeSnapshot captured = chromeSnapshot;
+        try {
+            if (captured == null) {
+                return;
+            }
+            restoreChromePart(() -> menuBar.setVisible(captured.menuVisible));
+            restoreChromePart(() -> toolbar.setVisible(captured.toolbarVisible));
+            restoreChromePart(() -> sidebar.setVisible(captured.sidebarVisible));
+            restoreChromePart(() -> settingsPanel.setVisible(captured.settingsVisible));
+            restoreChromePart(() -> toolbar.setSettingsVisible(settingsPanel.isVisible()));
+            restoreChromePart(() -> statusSlot.setVisible(captured.statusVisible));
+            sidebarOverride = captured.sidebar;
+            applySidebarOverride(captured.sidebar);
+        }
+        finally {
+            presentationHidden = false;
+        }
+    }
+
+    private void restoreChromePart(final Runnable operation) {
+        try {
+            operation.run();
+        }
+        catch (RuntimeException | Error failure) {
+            try {
+                commandMessageSink.accept("Graph presentation chrome restore failed: " + failure);
+            }
+            catch (RuntimeException | Error loggingFailure) {
+                // Restoration must continue even if the diagnostic sink fails.
+            }
+        }
+    }
+
+    @Override
+    public void discard() {
+        chromeSnapshot = null;
+        sidebarOverride = null;
+        presentationHidden = false;
+    }
+
+    void sidebarToggledFromUser(final boolean collapsed) {
+        sidebarOverride = null;
+        setSidebarCollapsed(collapsed);
+    }
+
     int appliedSidebarWidth() {
         return appliedSidebarWidth;
     }
 
-    private void applySidebarSettings(final DisplaySettings settings) {
+    void applySidebarSettings(final DisplaySettings settings) {
+        if (presentationHidden) {
+            return;
+        }
+        if (sidebarOverride != null) {
+            applySidebarOverride(sidebarOverride);
+            return;
+        }
+        applyCurrentSidebarSettings(settings);
+    }
+
+    private void applySidebarOverride(final SidebarOverride effective) {
+        runWithSidebarGuard(() -> {
+            restoreChromePart(() -> sidebar.setCollapsed(effective.collapsed));
+            restoreChromePart(() -> splitPane.setDividerSize(effective.dividerSize));
+            restoreChromePart(() -> splitPane.setEnabled(effective.enabled));
+            restoreChromePart(() -> sidebar.setMinimumSize(new Dimension(effective.collapsed
+                ? MapSidebarLayout.RAIL_WIDTH
+                : MapSidebarLayout.effectiveMinimum(splitWidth(), effectiveDividerWidth(), splitInsets()), 0)));
+            restoreChromePart(() -> graphScrollPane.setMinimumSize(new Dimension(
+                MapSidebarLayout.canvasMinimumWidth(splitWidth(), effectiveDividerWidth(), splitInsets()), 0)));
+            restoreChromePart(() -> mapsSidebarMenuItem.setSelected(!effective.collapsed));
+            appliedSidebarWidth = effective.dividerLocation;
+            sidebarGestureActive = false;
+            sidebarApplyPending = splitPane.getWidth() <= 0;
+            if (!sidebarApplyPending) {
+                restoreChromePart(() -> splitPane.setDividerLocation(effective.dividerLocation));
+            }
+            restoreChromePart(() -> sidebar.mapList().syncListWidths());
+        });
+    }
+
+    private void applyCurrentSidebarSettings(final DisplaySettings settings) {
         final boolean hidden = readOnly && sessionSidebarHidden != null
             ? sessionSidebarHidden.booleanValue() : settings.mapSidebarHidden();
         final int width = readOnly && sessionSidebarWidth != null
@@ -635,7 +1405,10 @@ final class GraphWorkspaceWindowModel {
         });
     }
 
-    private void setSidebarCollapsed(final boolean collapsed) {
+    void setSidebarCollapsed(final boolean collapsed) {
+        if (presentationHidden || sidebarOverride != null) {
+            return;
+        }
         if (sidebarApplying) {
             return;
         }
@@ -653,7 +1426,10 @@ final class GraphWorkspaceWindowModel {
         applySidebarSettings(currentPresentation.displaySettings());
     }
 
-    private void commitSidebarWidth(final int location) {
+    void commitSidebarWidth(final int location) {
+        if (presentationHidden || sidebarOverride != null) {
+            return;
+        }
         final int splitWidth = splitWidth();
         final int dividerWidth = effectiveDividerWidth();
         final Insets insets = splitInsets();
@@ -674,7 +1450,10 @@ final class GraphWorkspaceWindowModel {
         applySidebarSettings(currentPresentation.displaySettings());
     }
 
-    private void resetSidebarWidth() {
+    void resetSidebarWidth() {
+        if (presentationHidden || sidebarOverride != null) {
+            return;
+        }
         final int splitWidth = splitWidth();
         final int dividerWidth = effectiveDividerWidth();
         final Insets insets = splitInsets();
@@ -702,7 +1481,7 @@ final class GraphWorkspaceWindowModel {
         }
     }
 
-    private void commitSidebarDisplaySettings(final int width, final boolean hidden) {
+    void commitSidebarDisplaySettings(final int width, final boolean hidden) {
         final DisplaySettings current = currentPresentation.displaySettings();
         executeCommand(GraphCommands.display(DisplaySettings.of(current.showArrowheads(), current.canvasTheme(),
             current.rememberViewport(), current.dimUnrelatedNodes(), width, hidden, current.unknownXml())));
@@ -819,21 +1598,26 @@ final class GraphWorkspaceWindowModel {
         if (suppressViewportEvents || canvas.isProgrammaticViewportChange() || closed) {
             return;
         }
-        publishViewport(canvas.visibleViewport());
+        emitViewportIfChanged(canvas.visibleViewport());
     }
 
     private void publishCanvasViewport() {
-        if (suppressViewportEvents || closed) {
+        if (applyingViewport || closed || (!viewportHold.armed && suppressViewportEvents)) {
             return;
         }
-        publishViewport(canvas.visibleViewport());
+        emitViewportIfChanged(canvas.visibleViewport());
+        viewportHold.canvasPublication();
     }
 
     private void publishToolbarViewport(final GraphViewport value) {
-        publishViewport(Objects.requireNonNull(value, "viewport"));
+        if (applyingViewport || closed) {
+            return;
+        }
+        emitViewportIfChanged(Objects.requireNonNull(value, "viewport"));
+        viewportHold.toolbarPublication(value);
     }
 
-    private void publishViewport(final GraphViewport value) {
+    private void emitViewportIfChanged(final GraphViewport value) {
         final GraphViewport next = Objects.requireNonNull(value, "viewport");
         if (lastPublishedViewport != null && lastPublishedViewport.equals(next)) {
             return;
@@ -846,15 +1630,44 @@ final class GraphWorkspaceWindowModel {
     }
 
     private void runWithViewportEventsSuppressed(final Runnable action) {
-        final boolean previous = suppressViewportEvents;
-        suppressViewportEvents = true;
+        viewportSuppressionDepth++;
+        updateViewportSuppression();
         try {
             Objects.requireNonNull(action, "action").run();
         }
         finally {
-            suppressViewportEvents = previous;
+            viewportSuppressionDepth--;
+            updateViewportSuppression();
         }
     }
+
+    private void updateViewportSuppression() {
+        suppressViewportEvents = baseViewportSuppression || viewportSuppressionDepth > 0 || viewportHold.armed;
+    }
+
+    private void runToolbarViewportOperation(final Runnable operation) {
+        final boolean previous = toolbarViewportOperation;
+        toolbarViewportOperation = true;
+        try {
+            runWithViewportEventsSuppressed(operation);
+        }
+        finally {
+            toolbarViewportOperation = previous;
+        }
+    }
+
+    private void applyModelViewport(final Runnable application) {
+        final boolean previousApplying = applyingViewport;
+        applyingViewport = true;
+        try {
+            runWithViewportEventsSuppressed(application);
+            viewportHold.modelViewportApplied();
+        }
+        finally {
+            applyingViewport = previousApplying;
+        }
+    }
+
     private GraphCommandResult executeCommand(final GraphCommand command) {
         return executeCommand(command, false);
     }
@@ -1140,6 +1953,8 @@ final class GraphWorkspaceWindowModel {
                     return;
                 }
                 closed = true;
+                viewportHold.windowClosed();
+                discard();
                 canvasRegistration.close();
                 sessionStatusRegistration.close();
                 interactionController.uninstall();
@@ -1237,6 +2052,7 @@ final class GraphWorkspaceWindowModel {
                     if (event.getButton() != MouseEvent.BUTTON1) {
                         return;
                     }
+                    sidebarOverride = null;
                     if (event.getClickCount() == 2) {
                         sidebarGestureActive = false;
                         resetSidebarWidth();
@@ -1257,7 +2073,7 @@ final class GraphWorkspaceWindowModel {
             });
         }
         splitPane.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, event -> {
-            if (sidebarApplying) {
+            if (sidebarApplying || presentationHidden || sidebarOverride != null || sidebarKeyboardAction) {
                 return;
             }
             final int splitWidth = splitWidth();
@@ -1294,6 +2110,9 @@ final class GraphWorkspaceWindowModel {
         splitPane.addFocusListener(new FocusAdapter() {
             @Override
             public void focusLost(final FocusEvent event) {
+                if (presentationHidden || sidebarOverride != null || sidebarKeyboardAction) {
+                    return;
+                }
                 if (sidebarGestureActive) {
                     sidebarGestureActive = false;
                     runPendingSidebarApply();
@@ -1303,6 +2122,60 @@ final class GraphWorkspaceWindowModel {
                 runPendingSidebarApply();
             }
         });
+        for (final String key : new String[] {"selectMin", "selectMax", "negativeIncrement", "positiveIncrement"}) {
+            final Action delegate = splitPane.getActionMap().get(key);
+            if (delegate == null) {
+                continue;
+            }
+            splitPane.getActionMap().put(key, new Action() {
+                @Override
+                public Object getValue(final String name) {
+                    return delegate.getValue(name);
+                }
+
+                @Override
+                public void putValue(final String name, final Object value) {
+                    delegate.putValue(name, value);
+                }
+
+                @Override
+                public boolean isEnabled() {
+                    return delegate.isEnabled();
+                }
+
+                @Override
+                public void setEnabled(final boolean enabled) {
+                    delegate.setEnabled(enabled);
+                }
+
+                @Override
+                public void addPropertyChangeListener(final java.beans.PropertyChangeListener listener) {
+                    delegate.addPropertyChangeListener(listener);
+                }
+
+                @Override
+                public void removePropertyChangeListener(final java.beans.PropertyChangeListener listener) {
+                    delegate.removePropertyChangeListener(listener);
+                }
+
+                @Override
+                public void actionPerformed(final ActionEvent event) {
+                    if (presentationHidden || !delegate.isEnabled()) {
+                        return;
+                    }
+                    sidebarOverride = null;
+                    sidebarKeyboardAction = true;
+                    try {
+                        delegate.actionPerformed(event);
+                    }
+                    finally {
+                        sidebarKeyboardAction = false;
+                    }
+                    commitSidebarWidth(splitPane.getDividerLocation());
+                    runPendingSidebarApply();
+                }
+            });
+        }
     }
 
     private JMenuBar createMenuBar() {
@@ -1350,9 +2223,13 @@ final class GraphWorkspaceWindowModel {
         viewSettingsMenuItem = item("graph_workspace.action.settings", "settings",
             event -> toolbar.settingsButton().doClick());
         view.add(viewSettingsMenuItem);
+        fullScreenMenuItem = new JCheckBoxMenuItem(TextUtils.getText("graph_workspace.action.full_screen"));
+        fullScreenMenuItem.setName("graph-workspace-full-screen-menu-item");
+        fullScreenMenuItem.setEnabled(false);
+        view.add(fullScreenMenuItem);
         mapsSidebarMenuItem = new JCheckBoxMenuItem(TextUtils.getText("graph_workspace.action.maps_sidebar"));
         mapsSidebarMenuItem.setName("graph-workspace-maps-sidebar-menu-item");
-        mapsSidebarMenuItem.addActionListener(event -> setSidebarCollapsed(!sidebar.isCollapsed()));
+        mapsSidebarMenuItem.addActionListener(event -> sidebarToggledFromUser(!sidebar.isCollapsed()));
         view.add(mapsSidebarMenuItem);
 
         final JMenu maps = menu("graph_workspace.menu.maps", "graph-workspace-maps-menu");
@@ -1602,7 +2479,7 @@ final class GraphWorkspaceWindowModel {
         final Dimension overlapSize = graphScrollPane.getViewport().getExtentSize();
         final Dimension effectiveOverlapSize = overlapSize.width > 0 && overlapSize.height > 0
             ? overlapSize : CANVAS_PREFERRED_SIZE;
-        runWithViewportEventsSuppressed(new Runnable() {
+        applyModelViewport(new Runnable() {
             @Override
             public void run() {
                 canvas.setViewport(initialViewport);

@@ -1,0 +1,28 @@
+digraph execution_graph {
+  rankdir=TB;
+  subgraph cluster_core_mode {
+    label="core-mode";
+    T-001 [label="Task 1: Define presentation contracts and implement the exit hint\nCapable"];
+    T-002 [label="Task 2: Implement the mode state machine and exception boundary\nFrontier"];
+    T-003 [label="Task 3: Add canvas settle completion and the Escape fallback\nCapable"];
+  }
+  subgraph cluster_window_integration {
+    label="window-integration";
+    T-004 [label="Task 4: Preserve effective chrome and sidebar user ownership\nCapable"];
+    T-005 [label="Task 5: Implement viewport hold and wire concrete window transitions\nFrontier"];
+    T-006 [label="Task 6: Translate controls and verify display acceptance\nAdvanced"];
+  }
+  T-001 -> T-002;
+  T-001 -> T-003;
+  T-002 -> T-003;
+  T-001 -> T-004;
+  T-001 -> T-005;
+  T-002 -> T-005;
+  T-003 -> T-005;
+  T-004 -> T-005;
+  T-001 -> T-006;
+  T-002 -> T-006;
+  T-003 -> T-006;
+  T-004 -> T-006;
+  T-005 -> T-006;
+}

@@ -1,0 +1,99 @@
+<h2>Presentation mode: what stays on screen?</h2>
+<p class="subtitle">All three options enter the same way (F11 / View menu) and screen-fill the graph window with no title bar. They differ only in which graph chrome stays visible. Exit (F11 or Esc) restores the exact prior window: bounds, chrome, sidebar width.</p>
+
+<style>
+  .gscreen { background:#12161b; border:1px solid #2c333c; border-radius:10px; overflow:hidden; position:relative; height:210px; }
+  .gscreen .chrome { background:#20262e; color:#9fb0c3; font:11px system-ui,sans-serif; display:flex; align-items:center; gap:6px; padding:0 8px; }
+  .gscreen .menubar { height:22px; border-bottom:1px solid #2c333c; }
+  .gscreen .toolbar { height:30px; border-bottom:1px solid #2c333c; }
+  .gscreen .statusbar { height:20px; border-top:1px solid #2c333c; position:absolute; left:0; right:0; bottom:0; }
+  .gscreen .pill { background:#2c333c; border-radius:4px; padding:2px 6px; }
+  .gscreen .icon { width:18px; height:18px; border-radius:4px; background:#2c333c; }
+  .gscreen .canvas { position:absolute; inset:0; background:
+      radial-gradient(circle at 30% 40%, #17202b 0, #0d1116 70%); }
+  .gscreen .sidebar { position:absolute; left:0; top:0; bottom:0; width:64px; background:#1a2027; border-right:1px solid #2c333c; }
+  .gcap { font-size:11px; color:#8b98a5; margin-top:6px; text-align:center; }
+</style>
+
+<div class="cards">
+
+  <div class="card" data-choice="A" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="gscreen">
+        <div class="canvas"></div>
+        <svg viewBox="0 0 320 210" style="position:absolute;inset:0;width:100%;height:100%">
+          <g stroke="#3d4b5c" stroke-width="1.4" fill="none" opacity="0.9">
+            <path d="M160 100 L90 55 M160 100 L235 62 M160 100 L225 152 M160 100 L95 155 M90 55 L235 62"/>
+          </g>
+          <g fill="#4b5c70">
+            <circle cx="160" cy="100" r="17"/>
+            <circle cx="90" cy="55" r="11"/><circle cx="235" cy="62" r="12"/>
+            <circle cx="225" cy="152" r="10"/><circle cx="95" cy="155" r="12"/>
+          </g>
+        </svg>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Canvas only <span class="label">recommended</span></h3>
+      <p>Menu, toolbar, map sidebar, settings panel and status bar all hidden. Maximum graph area, zero distractions.</p>
+      <div class="gcap">screen filled edge-to-edge by the graph canvas</div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="B" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="gscreen">
+        <div class="canvas"></div>
+        <svg viewBox="0 0 320 210" style="position:absolute;inset:0;width:100%;height:100%">
+          <g stroke="#3d4b5c" stroke-width="1.4" fill="none" opacity="0.9">
+            <path d="M160 88 L90 48 M160 88 L235 55 M160 88 L225 138 M160 88 L95 141 M90 48 L235 55"/>
+          </g>
+          <g fill="#4b5c70">
+            <circle cx="160" cy="88" r="16"/>
+            <circle cx="90" cy="48" r="11"/><circle cx="235" cy="55" r="12"/>
+            <circle cx="225" cy="138" r="10"/><circle cx="95" cy="141" r="12"/>
+          </g>
+        </svg>
+        <div class="chrome statusbar"><span>Zoom 120%</span><span>·</span><span>24 nodes, 31 edges</span><span>·</span><span>Layout settled</span></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Canvas + status bar</h3>
+      <p>Everything hidden except the thin status bar, so zoom level, node counts and messages remain readable.</p>
+      <div class="gcap">graph canvas plus a 20&nbsp;px bottom strip</div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="C" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="gscreen">
+        <div class="toolbar chrome" style="position:absolute;left:0;right:0;top:0;z-index:2">
+          <span class="icon"></span><span class="icon"></span><span class="icon"></span>
+          <span class="pill">select</span><span class="pill">connect</span>
+          <span class="pill">search…</span>
+          <span style="flex:1"></span>
+          <span class="pill">−</span><span class="pill">+</span><span class="pill">fit</span>
+        </div>
+        <div class="canvas"></div>
+        <svg viewBox="0 0 320 210" style="position:absolute;inset:0;width:100%;height:100%">
+          <g stroke="#3d4b5c" stroke-width="1.4" fill="none" opacity="0.9">
+            <path d="M160 110 L90 70 M160 110 L235 77 M160 110 L225 160 M160 110 L95 163"/>
+          </g>
+          <g fill="#4b5c70">
+            <circle cx="160" cy="110" r="16"/>
+            <circle cx="90" cy="70" r="11"/><circle cx="235" cy="77" r="12"/>
+            <circle cx="225" cy="160" r="10"/><circle cx="95" cy="163" r="12"/>
+          </g>
+        </svg>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Canvas + toolbar</h3>
+      <p>Toolbar kept so tools, search and zoom are reachable without leaving fullscreen. Menu, sidebar and status bar hidden.</p>
+      <div class="gcap">graph canvas plus the 30&nbsp;px toolbar</div>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:18px">In every option: menu bar, map sidebar and settings panel are hidden; window decorations are off. Click a card to select, then confirm in the terminal.</p>
