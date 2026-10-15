@@ -7,6 +7,8 @@ import static org.mockito.Mockito.when;
 
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.Point;
+import java.awt.Rectangle;
 import java.awt.Graphics2D;
 import java.awt.event.ActionEvent;
 import java.awt.event.FocusEvent;
@@ -18,12 +20,19 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.List;
 import java.util.function.Consumer;
 
 import javax.swing.Action;
 import javax.swing.JCheckBoxMenuItem;
+import javax.swing.JLayeredPane;
+import javax.swing.JViewport;
 import javax.swing.JScrollPane;
+import javax.swing.SwingUtilities;
+import javax.swing.event.ChangeEvent;
 import javax.swing.JSplitPane;
 import javax.swing.plaf.basic.BasicSplitPaneUI;
 
@@ -39,10 +48,19 @@ import org.freeplane.plugin.graph.control.GraphWorkspaceViewBinding;
 import org.freeplane.plugin.graph.control.OperationalStatus;
 import org.freeplane.plugin.graph.control.WorkspaceCloseController;
 import org.freeplane.plugin.graph.control.WorkspaceSessionStatus;
+import org.freeplane.plugin.graph.canvas.GraphCanvas;
+import org.freeplane.plugin.graph.canvas.GraphViewport;
+import org.freeplane.plugin.graph.geometry.LayoutPoint;
+import org.freeplane.plugin.graph.geometry.NodeGeometry;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.layout.LayoutFrame;
 import org.freeplane.plugin.graph.projection.GraphProjection;
+import org.freeplane.plugin.graph.projection.ProjectedNode;
+import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
+import org.freeplane.plugin.graph.projection.input.SourceNodeKey;
+import org.freeplane.plugin.graph.projection.input.SafeNodeLabel;
+import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 import org.freeplane.plugin.graph.workspace.model.DisplaySettings;
 import org.freeplane.plugin.graph.workspace.model.Viewport;
 import org.junit.Test;
@@ -322,6 +340,672 @@ public class GraphWindowChromeShould {
                 f.assertNoCommands();
             });
         }
+    }
+
+    @Test public void preservesCenterForEvenCanvasAndEvenExtentGeometry() { assertParity(0, 0); }
+    @Test public void preservesCenterForOddCanvasAndEvenExtentGeometry() { assertParity(1, 0); }
+    @Test public void preservesCenterForEvenCanvasAndOddExtentGeometry() { assertParity(0, 1); }
+    @Test public void preservesCenterForOddCanvasAndOddExtentGeometry() { assertParity(1, 1); }
+
+    private void assertParity(final int canvasParity, final int extentParity) {
+        withViewport(p -> {
+            p.configure(8000 + canvasParity, 6000 + canvasParity, 600 + extentParity, 400 + extentParity, 713, 419);
+            assertThat(p.canvas.getWidth() % 2).isEqualTo(canvasParity);
+            assertThat(p.canvas.getHeight() % 2).isEqualTo(canvasParity);
+            assertThat(p.viewport.getExtentSize().width % 2).isEqualTo(extentParity);
+            assertThat(p.viewport.getExtentSize().height % 2).isEqualTo(extentParity);
+            p.capture();
+            p.f.model.capture();
+            p.f.model.hide();
+            p.f.model.restore();
+            p.geometry(p.w0.width - 117, p.w0.height + 53, p.e0.width + 201, p.e0.height - 39);
+            p.assertTarget();
+            GraphViewport visible = p.canvas.visibleViewport();
+            assertThat(Math.abs(visible.centerX() - p.center.centerX()) * p.anchor.zoom()).isLessThanOrEqualTo(0.5);
+            assertThat(Math.abs(visible.centerY() - p.center.centerY()) * p.anchor.zoom()).isLessThanOrEqualTo(0.5);
+            p.f.assertNoCommands();
+        });
+    }
+
+    @Test public void compensatesLateExtentChangeAfterTransitionReturns() {
+        withViewport(p -> {
+            p.capture();
+            p.hold.compensate();
+            p.viewport.setExtentSize(new Dimension(p.e0.width + 200, p.e0.height + 200));
+            assertThat(p.events).isPositive();
+            p.assertTarget();
+            p.assertArmed(true);
+            p.f.assertNoCommands();
+        });
+    }
+
+    @Test public void recomputesAbsolutelyAfterOddShrinkWithoutCompounding() {
+        withViewport(p -> {
+            Dimension natural = p.canvas.getPreferredSize();
+            p.configure(natural.width, natural.height, 600, 400, 37, 37);
+            p.capture();
+            p.viewport.setExtentSize(new Dimension(601, 401));
+            assertThat(p.viewport.getViewPosition()).isEqualTo(new Point(37, 37));
+            p.canvas.setCanvasState(largeState(2048 - 1.0 / 3.0, 1536 - 1.0 / 3.0));
+            assertThat(p.canvas.getWidth()).isEqualTo(p.w0.width - 1);
+            assertThat(p.canvas.getHeight()).isEqualTo(p.w0.height - 1);
+        }, p -> {
+            assertThat(p.viewport.getViewPosition()).isEqualTo(new Point(36, 36));
+            p.assertTarget();
+            p.f.assertNoCommands();
+        });
+    }
+
+    @Test public void logsClampResidualAndPinsContentEdge() {
+        withViewport(p -> {
+            p.configure(8000, 6000, 600, 400, 1, 1);
+            p.capture();
+            p.geometry(7000, 5000, 1600, 1400);
+            assertThat(p.viewport.getViewPosition()).isEqualTo(new Point());
+            assertThat(p.f.logs).anyMatch(s -> s.contains("requested=") && s.contains("applied=0") && s.contains("residual="));
+            p.hold.disarm();
+            p.f.model.acceptCanvasState(p.f.state);
+            p.configure(100, 100, 600, 400, 0, 0);
+            p.capture();
+            p.geometry(90, 90, 700, 500);
+            p.assertTarget();
+            assertThat(p.canvas.viewport()).isEqualTo(p.anchor);
+            p.f.assertNoCommands();
+        });
+    }
+
+    @Test public void unchangedCanvasDeliveryDoesNotPublishOrMoveCenter() {
+        withViewport(p -> {
+            // Use the canvas's naturally sized surface for an unchanged delivery.
+            p.f.model.acceptCanvasState(p.largeState);
+            p.canvas.setViewport(p.anchor);
+        }, p -> {
+            p.checkpoint();
+            p.capture();
+            p.f.model.acceptCanvasState(p.largeState);
+            p.assertTarget();
+            assertThat(p.canvas.visibleViewport()).isEqualTo(p.center);
+            p.f.assertNoCommands();
+        });
+    }
+
+    @Test public void classifiesAnchorChangeAsUserBeforePositioningMarker() {
+        withViewport(p -> {
+            p.capture();
+            field(p.canvas, "viewportPositioningDepth", 1);
+            p.canvas.resetZoom();
+            assertThat(p.canvas.viewport()).isNotEqualTo(p.anchor);
+            p.assertOneViewportCommand();
+            p.assertArmed(false);
+            field(p.canvas, "viewportPositioningDepth", 0);
+            Point user = p.viewport.getViewPosition();
+            p.hold.compensate();
+            assertThat(p.viewport.getViewPosition()).isEqualTo(user);
+        });
+    }
+
+    @Test public void classifiesScrollbarDragAsUserWhenExtentAndSurfaceAreUnchanged() {
+        withViewport(p -> {
+            p.capture();
+            Point next = new Point(p.p0.x + 31, p.p0.y + 19);
+            p.viewport.setViewPosition(next);
+            assertThat(p.events).isPositive();
+            p.assertOneViewportCommand();
+            p.assertArmed(false);
+            p.hold.compensate();
+            assertThat(p.viewport.getViewPosition()).isEqualTo(next);
+        });
+    }
+
+    @Test public void classifiesKeyboardScrollAsUserWhenPendingClampExistsWithoutActivePositioning() {
+        withViewport(p -> {
+            p.capture();
+            invoke(p.canvas, "scheduleViewportClamp", JViewport.class, p.viewport);
+            assertThat(field(p.canvas, "pendingViewportClamps")).isEqualTo(1);
+            assertThat(p.canvas.isViewportPositioningActive()).isFalse();
+            Action scroll = p.f.scroll.getActionMap().get("unitScrollRight");
+            assertThat(scroll).isNotNull();
+            scroll.actionPerformed(new ActionEvent(p.f.scroll, ActionEvent.ACTION_PERFORMED, "unitScrollRight"));
+            assertThat(p.viewport.getViewPosition()).isNotEqualTo(p.p0);
+            p.assertOneViewportCommand();
+            p.assertArmed(false);
+        }, p -> {
+            assertThat(field(p.canvas, "pendingViewportClamps")).isEqualTo(0);
+            p.assertOneViewportCommand();
+        });
+    }
+
+    @Test public void ignoresActiveProgrammaticPositioningAndKeepsHoldArmed() {
+        withViewport(p -> {
+            p.capture();
+            field(p.canvas, "viewportPositioningDepth", 1);
+            p.viewport.setViewPosition(new Point(714, 420));
+            assertThat(p.events).isPositive();
+            p.assertArmed(true);
+            assertThat(field(p.canvas, "pendingViewportSettledCallback")).isNotNull();
+            field(p.canvas, "viewportPositioningDepth", 0);
+            p.f.assertNoCommands();
+        });
+    }
+
+    @Test public void toolbarPublicationPublishesBeforeDisarm() {
+        withViewport(p -> {
+            p.capture();
+            final int[] observed = {0};
+            org.mockito.Mockito.doAnswer(i -> {
+                p.assertArmed(true);
+                assertThat(field(p.f.model, "lastPublishedViewport")).isNotEqualTo(p.center);
+                p.f.executed.add(i.getArgument(0));
+                observed[0]++;
+                return null;
+            }).when(p.f.handle).execute(any(GraphCommand.class));
+            javax.swing.event.ChangeListener listener = p.listener();
+            p.viewport.removeChangeListener(listener);
+            p.f.model.toolbar().zoomInButton().doClick(0);
+            p.viewport.addChangeListener(listener);
+            assertThat(observed[0]).isEqualTo(1);
+            p.assertOneViewportCommand();
+            p.assertArmed(false);
+            Point user = p.viewport.getViewPosition();
+            p.hold.compensate();
+            assertThat(p.viewport.getViewPosition()).isEqualTo(user);
+        });
+    }
+
+    @Test public void canvasPublicationPublishesBeforeDedupeReconcileAndDisarm() {
+        withViewport(p -> {
+            p.capture();
+            GraphViewport changed = GraphViewport.of(231, -142, 1.75);
+            // Direct callback has no obligation to deliver a JViewport event first.
+            field(p.canvas, "viewport", changed);
+            final int[] observed = {0};
+            org.mockito.Mockito.doAnswer(i -> {
+                p.assertArmed(true);
+                p.f.executed.add(i.getArgument(0));
+                observed[0]++;
+                return null;
+            }).when(p.f.handle).execute(any(GraphCommand.class));
+            ((Runnable) field(p.canvas, "userViewportChangeListener")).run();
+            assertThat(observed[0]).isEqualTo(1);
+            p.assertOneViewportCommand();
+            p.assertArmed(false);
+            assertThat(p.canvas.viewport()).isEqualTo(changed);
+        });
+    }
+
+    @Test public void settleCallbackCorrectsAfterClampWithoutFinalViewportEvent() {
+        withViewport(p -> {
+            Dimension natural = p.canvas.getPreferredSize();
+            p.configure(natural.width, natural.height, 600, 400, 37, 37);
+            p.capture();
+            p.viewport.setExtentSize(new Dimension(599, 399));
+            assertThat(p.viewport.getViewPosition()).isEqualTo(new Point(38, 38));
+            // Isolate the silent-clamp case: the queued component-size notification is
+            // deliberately absent, while resizeSurface and its real clamp queue run.
+            for (java.awt.event.ComponentListener listener : p.canvas.getComponentListeners()) {
+                p.canvas.removeComponentListener(listener);
+            }
+            p.canvas.addPropertyChangeListener("preferredSize", event -> {
+                assertThat(p.canvas.isViewportPositioningActive()).isTrue();
+                p.viewport.setViewPosition(new Point(39, 39));
+                p.viewport.setViewPosition(new Point(38, 38));
+            });
+            p.canvas.setCanvasState(largeState(2048 - 1.0 / 3.0, 1536 - 1.0 / 3.0));
+            assertThat(p.canvas.getWidth()).isEqualTo(p.w0.width - 1);
+            assertThat(p.canvas.getHeight()).isEqualTo(p.w0.height - 1);
+            assertThat(p.viewport.getViewPosition()).isEqualTo(new Point(38, 38));
+            assertThat(field(p.canvas, "pendingViewportClamps")).isEqualTo(1);
+            assertThat(p.savedCallback()).isNotNull();
+            p.events = 0;
+        }, p -> {
+            // Clamp at 38 emits no event. Only completion correction changes 38 to 37.
+            assertThat(field(p.canvas, "pendingViewportClamps")).isEqualTo(0);
+            assertThat(p.events).isEqualTo(1);
+            assertThat(p.viewport.getViewPosition()).isEqualTo(new Point(37, 37));
+            p.assertTarget();
+            p.f.assertNoCommands();
+        });
+    }
+
+    @Test public void settleCallbackRegistrationIsIdempotentPerGeneration() {
+        withViewport(p -> {
+            p.capture();
+            field(p.canvas, "viewportPositioningDepth", 1);
+            p.viewport.setViewPosition(new Point(714, 420));
+            Runnable first = p.savedCallback();
+            p.viewport.setViewPosition(new Point(715, 421));
+            assertThat(p.savedCallback()).isSameAs(first);
+            field(p.canvas, "viewportPositioningDepth", 0);
+            first.run();
+            p.assertTarget();
+            p.f.assertNoCommands();
+        });
+    }
+
+    @Test public void settleCallbackRunsImmediatelyWhenAlreadySettled() {
+        withViewport(p -> {
+            p.capture();
+            // The registration seam itself must tolerate inline canvas completion.
+            p.viewport.removeChangeListener(p.listener());
+            p.viewport.setViewSize(new Dimension(7999, 5999));
+            assertThat(p.canvas.isProgrammaticViewportChange()).isFalse();
+            invoke(p.hold, "registerSettleCorrection");
+            assertThat(SwingUtilities.isEventDispatchThread()).isTrue();
+            p.assertTarget();
+            assertThat(field(p.canvas, "pendingViewportSettledCallback")).isNull();
+            p.f.assertNoCommands();
+        });
+    }
+
+    @Test public void userDisarmCancelsSettleCallback() {
+        withViewport(p -> {
+            p.capture();
+            p.beginPositioning();
+            Runnable old = p.savedCallback();
+            field(p.canvas, "viewportPositioningDepth", 0);
+            Point user = new Point(933, 627);
+            p.viewport.setViewPosition(user);
+            p.assertArmed(false);
+            old.run();
+            assertThat(p.viewport.getViewPosition()).isEqualTo(user);
+            p.assertOneViewportCommand();
+        });
+    }
+
+    @Test public void closeCancelsSettleCallbackAndIgnoresLateGeneration() {
+        withViewport(p -> {
+            p.capture();
+            p.beginPositioning();
+            Runnable old = p.savedCallback();
+            field(p.canvas, "viewportPositioningDepth", 0);
+            p.capture();
+            javax.swing.event.ChangeListener listener = p.listener();
+            p.viewport.removeChangeListener(listener);
+            Point newer = new Point(919, 717);
+            p.viewport.setViewPosition(newer);
+            old.run();
+            assertThat(p.viewport.getViewPosition()).isEqualTo(newer);
+            p.viewport.addChangeListener(listener);
+            p.assertArmed(true);
+            p.beginPositioning();
+            Runnable closing = p.savedCallback();
+            field(p.canvas, "viewportPositioningDepth", 0);
+            p.f.model.close();
+            Point closed = p.viewport.getViewPosition();
+            closing.run();
+            old.run();
+            p.hold.capture();
+            p.hold.compensate();
+            p.assertArmed(false);
+            assertThat(p.viewport.getViewPosition()).isEqualTo(closed);
+            p.f.assertNoCommands();
+        });
+    }
+
+    @Test public void modelAppliedViewportDoesNotPublishOrDisarm() {
+        withViewport(p -> {
+            p.capture();
+            long generation = (Long) field(p.hold, "generation");
+            p.clock.advanceTo(1000);
+            GraphViewport different = GraphViewport.of(-711, 221, 2.0);
+            invoke(p.f.model, "applyModelViewport", Runnable.class, (Runnable) () -> p.canvas.setViewport(different));
+            assertThat(p.canvas.viewport()).isEqualTo(different);
+            assertThat(field(p.hold, "generation")).isEqualTo(generation + 1);
+            assertThat(field(p.hold, "baselineAnchor")).isEqualTo(different);
+            assertThat(field(p.hold, "lastTransitionGeometryAt")).isEqualTo(0L);
+            assertThat(p.events).isPositive();
+            p.assertArmed(true);
+            p.f.assertNoCommands();
+        }, p -> {
+            p.assertArmed(true);
+            p.f.assertNoCommands();
+            p.clock.advanceTo(2500);
+            p.assertArmed(false);
+            p.f.assertNoCommands();
+        });
+    }
+
+    @Test public void exitRecapturesCurrentViewAfterEntryHoldDisarmed() {
+        withViewport(p -> {
+            p.capture();
+            p.f.model.toolbar().zoomInButton().doClick(0);
+            p.assertArmed(false);
+        }, p -> {
+            p.checkpoint();
+            p.capture();
+            GraphViewport exiting = p.center;
+            p.viewport.setExtentSize(new Dimension(p.e0.width + 200, p.e0.height + 100));
+            p.assertTarget();
+            assertThat(p.canvas.visibleViewport().zoom()).isEqualTo(exiting.zoom());
+            assertThat(Math.abs(p.canvas.visibleViewport().centerX() - exiting.centerX()) * exiting.zoom())
+                .isLessThanOrEqualTo(0.5);
+            p.f.assertNoCommands();
+        });
+    }
+
+    @Test public void publishedViewportIsNotSwallowedByReconcileBeforeDisarm() {
+        withViewport(p -> {
+            p.capture();
+            GraphViewport before = (GraphViewport) field(p.f.model, "lastPublishedViewport");
+            p.viewport.setViewPosition(new Point(1044, 733));
+            p.assertOneViewportCommand();
+            GraphCommands.Viewport command = (GraphCommands.Viewport) p.f.commands().get(0);
+            assertThat(command.viewport()).isEqualTo(p.canvas.visibleViewport().toPersisted());
+            assertThat(p.canvas.visibleViewport()).isNotEqualTo(before);
+            p.assertArmed(false);
+        });
+    }
+
+    @Test public void holdNeverDisarmsBeforeTwoThousandFiveHundredMilliseconds() {
+        withViewport(p -> {
+            p.capture();
+            p.hold.compensate();
+            p.clock.advanceTo(2499);
+            p.assertArmed(true);
+            p.f.assertNoCommands();
+        });
+    }
+
+    @Test public void holdDisarmsOnFirstQuietWindowAtOrAfterPlatformHorizon() {
+        withViewport(p -> {
+            p.capture();
+            p.clock.advanceTo(2450);
+            p.f.model.presentationFrameGeometryChanged(new Rectangle(10, 10, 1280, 800));
+            p.clock.advanceTo(2500);
+            p.assertArmed(true);
+            p.clock.advanceTo(2649);
+            p.assertArmed(true);
+            p.clock.advanceTo(2650);
+            p.assertArmed(false);
+            p.f.assertNoCommands();
+        });
+    }
+
+    @Test public void holdReleasesAtFiveSecondCapAndLogsSettlementFailure() {
+        withViewport(p -> {
+            p.capture();
+            for (int time = 150; time < 5000; time += 150) {
+                p.clock.advanceTo(time);
+                p.f.model.presentationFrameGeometryChanged(new Rectangle(time, 10, 1280, 800));
+            }
+            p.clock.advanceTo(4999);
+            p.assertArmed(true);
+            p.clock.advanceTo(5000);
+            p.assertArmed(false);
+            assertThat(p.f.logs).anyMatch(s -> s.contains("settlement failure") && s.contains("generation=")
+                && s.contains("frame=") && s.contains("viewport="));
+            p.f.assertNoCommands();
+        });
+    }
+
+    @Test public void newTransitionCancelsPreviousQuietWindowGeneration() {
+        withViewport(p -> {
+            p.capture();
+            Runnable old = p.clock.last().callback;
+            long generation = (Long) field(p.hold, "generation");
+            p.clock.advanceTo(1000);
+            p.capture();
+            assertThat((Long) field(p.hold, "generation")).isGreaterThan(generation);
+            p.clock.advanceTo(2500);
+            int observations = p.clock.work.size();
+            old.run();
+            assertThat(p.clock.work).hasSize(observations);
+            p.assertArmed(true);
+            p.clock.advanceTo(3500);
+            p.assertArmed(false);
+            assertThat(field(p.f.model, "suppressViewportEvents")).isEqualTo(false);
+            p.f.assertNoCommands();
+        });
+    }
+
+    @Test public void closeCancelsQuietWindowGeneration() {
+        withViewport(p -> {
+            p.capture();
+            Runnable old = p.clock.last().callback;
+            p.f.model.close();
+            assertThat(p.clock.last().cancelled).isTrue();
+            p.clock.advanceTo(6000);
+            old.run();
+            p.assertArmed(false);
+            p.f.assertNoCommands();
+        });
+    }
+
+    @Test public void disarmReconcilesWithoutPublishing() {
+        withViewport(p -> {
+            p.capture();
+            p.geometry(8020, 6020, 700, 500);
+            p.hold.disarm();
+            assertThat(field(p.f.model, "lastPublishedViewport")).isEqualTo(p.canvas.visibleViewport());
+            assertThat(field(p.f.model, "suppressViewportEvents")).isEqualTo(false);
+            p.assertArmed(false);
+            p.f.assertNoCommands();
+        });
+    }
+
+    @Test public void subsequentIndependentResizeUsesBaselineAfterHoldDisarms() {
+        withViewport(p -> {
+            p.capture();
+            p.clock.advanceTo(2500);
+            p.assertArmed(false);
+            p.viewport.setExtentSize(new Dimension(800, 500));
+            assertThat(p.events).isPositive();
+            p.assertOneViewportCommand();
+        });
+    }
+
+    @Test public void presentationEnterAndExitEmitNoWorkspaceCommandInWritableMode() { assertModeNoCommands(true); }
+    @Test public void presentationEnterAndExitEmitNoWorkspaceCommandInReadOnlyMode() { assertModeNoCommands(false); }
+
+    private void assertModeNoCommands(final boolean writable) {
+        withViewport(writable, p -> {
+            ScreenFillSurface surface = new ScreenFillSurface() {
+                @Override public FrameState captureFrameState() { return new FrameState(new Rectangle(1, 2, 800, 600), 0); }
+                @Override public Survival applyScreenFill(FrameState previous) {
+                    p.geometry(8111, 6073, 1001, 701);
+                    return Survival.REENTERED_FULLSCREEN;
+                }
+                @Override public Survival restoreFrameState(FrameState previous) {
+                    p.geometry(8000, 6000, 600, 400);
+                    return Survival.RESTORED_WINDOWED;
+                }
+            };
+            GraphPresentationMode mode = new GraphPresentationMode(surface, p.f.model, p.hold,
+                new PresentationHint(new JLayeredPane(), "exit"), new JCheckBoxMenuItem(), () -> { }, p.f.logs::add, true);
+            mode.toggle();
+            assertThat(mode.isActive()).isTrue();
+            p.viewport.setExtentSize(new Dimension(1100, 800));
+            mode.requestExit();
+            assertThat(mode.isActive()).isFalse();
+            p.viewport.setExtentSize(new Dimension(611, 411));
+            p.f.assertNoCommands();
+            mode.windowClosed();
+        }, p -> p.f.assertNoCommands());
+    }
+
+    @Test public void displaySettingsAndViewportCommandMutantsFailTheNoCommandAssertion() {
+        withViewport(p -> {
+            p.f.assertNoCommands();
+            p.f.handle.execute(GraphCommands.display(p.f.stored));
+            org.assertj.core.api.Assertions.assertThatThrownBy(p.f::assertNoCommands).isInstanceOf(AssertionError.class);
+            p.checkpoint();
+            p.f.handle.execute(GraphCommands.viewport(p.canvas.visibleViewport().toPersisted()));
+            org.assertj.core.api.Assertions.assertThatThrownBy(p.f::assertNoCommands).isInstanceOf(AssertionError.class);
+        });
+    }
+
+    private void withViewport(final Consumer<ViewportProbe> test) { withViewport(test, p -> { }); }
+    private void withViewport(final Consumer<ViewportProbe> test, final Consumer<ViewportProbe> afterDrain) {
+        withViewport(true, test, afterDrain);
+    }
+    private void withViewport(final boolean writable, final Consumer<ViewportProbe> test,
+            final Consumer<ViewportProbe> afterDrain) {
+        final ViewportProbe[] probe = {null};
+        try {
+            GraphWorkspaceWindow.runOnEdt(() -> probe[0] = new ViewportProbe(writable));
+            drainEdt();
+            GraphWorkspaceWindow.runOnEdt(() -> { probe[0].initialize(); test.accept(probe[0]); });
+            drainEdt();
+            GraphWorkspaceWindow.runOnEdt(() -> afterDrain.accept(probe[0]));
+        }
+        finally {
+            if (probe[0] != null) {
+                GraphWorkspaceWindow.runOnEdt(() -> probe[0].f.close());
+            }
+            drainEdt();
+        }
+    }
+
+    private static void drainEdt() {
+        for (int turn = 0; turn < 4; turn++) { GraphWorkspaceWindow.runOnEdt(() -> { }); }
+    }
+
+    static void invoke(final Object target, final String name) { invoke(target, name, null, null); }
+    static void invoke(final Object target, final String name, final Class<?> parameter, final Object value) {
+        try {
+            Method method = parameter == null ? target.getClass().getDeclaredMethod(name)
+                : target.getClass().getDeclaredMethod(name, parameter);
+            method.setAccessible(true);
+            if (parameter == null) { method.invoke(target); }
+            else { method.invoke(target, value); }
+        }
+        catch (ReflectiveOperationException failure) { throw new AssertionError(failure); }
+    }
+
+    private static final class ViewportProbe {
+        final ChromeFixture f;
+        final GraphCanvas canvas;
+        final JViewport viewport;
+        final PresentationViewport hold;
+        final FakePresentationScheduler clock = new FakePresentationScheduler();
+        final GraphViewport anchor = GraphViewport.of(123.5, -87.25, 1.5);
+        final CanvasState largeState = largeState();
+        Point p0;
+        Dimension w0;
+        Dimension e0;
+        GraphViewport center;
+        int events;
+
+        ViewportProbe(final boolean writable) {
+            f = new ChromeFixture(writable);
+            canvas = f.model.canvas();
+            viewport = f.scroll.getViewport();
+            hold = f.model.presentationViewport();
+            f.model.setPresentationScheduler(clock);
+            f.model.acceptCanvasState(largeState);
+            canvas.setViewport(anchor);
+            viewport.addChangeListener(event -> events++);
+        }
+
+        void initialize() { configure(8000, 6000, 600, 400, 713, 419); checkpoint(); }
+        void checkpoint() { f.checkpoint = f.executed.size(); field(f.model, "lastPublishedViewport", canvas.visibleViewport()); }
+        void configure(final int width, final int height, final int extentX, final int extentY, final int x, final int y) {
+            viewport.setExtentSize(new Dimension(extentX, extentY));
+            viewport.setViewSize(new Dimension(width, height));
+            viewport.setViewPosition(new Point(x, y));
+            checkpoint();
+        }
+        void capture() {
+            p0 = viewport.getViewPosition();
+            w0 = canvas.getSize();
+            e0 = viewport.getExtentSize();
+            center = canvas.visibleViewport();
+            events = 0;
+            hold.capture();
+            assertArmed(true);
+        }
+        void geometry(final int width, final int height, final int extentX, final int extentY) {
+            viewport.setExtentSize(new Dimension(extentX, extentY));
+            viewport.setViewSize(new Dimension(width, height));
+            assertThat(events).isPositive();
+        }
+        void assertArmed(final boolean armed) { assertThat(field(hold, "armed")).isEqualTo(armed); }
+        void assertTarget() {
+            Point expected = new Point(axis(p0.x, w0.width, e0.width, canvas.getWidth(), viewport.getExtentSize().width),
+                axis(p0.y, w0.height, e0.height, canvas.getHeight(), viewport.getExtentSize().height));
+            System.out.println("VIEWPORT P0=" + p0 + " W0=" + w0 + " E0=" + e0 + " W1=" + canvas.getSize()
+                + " E1=" + viewport.getExtentSize() + " target=" + expected + " actual=" + viewport.getViewPosition()
+                + " events=" + events + " commands=" + f.commands().size() + " zoom=" + canvas.viewport().zoom());
+            assertThat(viewport.getViewPosition()).isEqualTo(expected);
+            assertThat(canvas.viewport().zoom()).isEqualTo(center.zoom());
+        }
+        int axis(final int p, final int w, final int e, final int nextW, final int nextE) {
+            return (int) Math.max(0L, Math.min((long) Math.max(0, nextW - nextE),
+                Math.round(p + (((double) nextW - w) - ((double) nextE - e)) / 2.0)));
+        }
+        void assertOneViewportCommand() {
+            assertThat(f.commands()).hasSize(1);
+            assertThat(f.commands().get(0)).isInstanceOf(GraphCommands.Viewport.class);
+        }
+        void beginPositioning() {
+            field(canvas, "viewportPositioningDepth", 1);
+            viewport.setViewPosition(new Point(viewport.getViewPosition().x + 1, viewport.getViewPosition().y + 1));
+        }
+        Runnable savedCallback() {
+            Runnable callback = (Runnable) field(canvas, "pendingViewportSettledCallback");
+            assertThat(callback).isNotNull();
+            return callback;
+        }
+        javax.swing.event.ChangeListener listener() {
+            return Arrays.stream(viewport.getChangeListeners())
+                .filter(listener -> listener.getClass().getName().contains("GraphWorkspaceWindowModel")).findFirst().get();
+        }
+    }
+
+    private static final class FakePresentationScheduler implements GraphWorkspaceWindowModel.PresentationScheduler {
+        long now;
+        long sequence;
+        final List<Work> work = new ArrayList<>();
+        @Override public long nowMillis() { return now; }
+        @Override public GraphWorkspaceWindowModel.ScheduledWork schedule(final int delay, final Runnable callback) {
+            Work next = new Work(now + delay, sequence++, callback);
+            work.add(next);
+            return () -> next.cancelled = true;
+        }
+        Work last() { assertThat(work).isNotEmpty(); return work.get(work.size() - 1); }
+        void advanceTo(final long millis) {
+            assertThat(SwingUtilities.isEventDispatchThread()).isTrue();
+            while (true) {
+                Work next = work.stream().filter(w -> !w.cancelled && !w.ran && w.deadline <= millis)
+                    .min(Comparator.comparingLong((Work w) -> w.deadline).thenComparingLong(w -> w.sequence)).orElse(null);
+                if (next == null) { break; }
+                now = next.deadline;
+                next.ran = true;
+                next.callback.run();
+            }
+            now = millis;
+        }
+        private static final class Work {
+            final long deadline;
+            final long sequence;
+            final Runnable callback;
+            boolean cancelled;
+            boolean ran;
+            Work(final long deadline, final long sequence, final Runnable callback) {
+                this.deadline = deadline; this.sequence = sequence; this.callback = callback;
+            }
+        }
+    }
+
+    private static CanvasState largeState() {
+        return largeState(2048, 1536);
+    }
+
+    private static CanvasState largeState(final double x, final double y) {
+        MapReferenceId id = MapReferenceId.of("00000000-0000-0000-0000-000000000001");
+        Map<ProjectedNodeKey, LayoutPoint> positions = new LinkedHashMap<>();
+        Map<ProjectedNodeKey, NodeGeometry> geometry = new LinkedHashMap<>();
+        List<ProjectedNode> nodes = new ArrayList<>();
+        for (int sign : new int[] {-1, 1}) {
+            ProjectedNodeKey key = ProjectedNodeKey.of(SourceNodeKey.transientPath(id, Collections.singletonList(sign + 1)));
+            LayoutPoint point = LayoutPoint.of(sign * x, sign * y);
+            positions.put(key, point);
+            geometry.put(key, NodeGeometry.of(point, 10));
+            nodes.add(ProjectedNode.of(key, SafeNodeLabel.of("Node", "Node"), "Map", false));
+        }
+        return CanvasState.of(0, GraphProjection.structure(0, nodes, Collections.emptyList()),
+            LayoutFrame.of(0, LayoutPositions.of(positions, Collections.emptyMap()), false, 0),
+            GraphGeometry.of(geometry, Collections.emptyMap()), OperationalStatus.IDLE);
     }
 
     static DisplaySettings settings(final int width, final boolean hidden) {
