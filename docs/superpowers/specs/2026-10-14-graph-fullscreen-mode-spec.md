@@ -46,7 +46,7 @@ other than the Escape fallback defined in Section 2.7, or persisted settings.
 | **scroll position** | The integer `JViewport` view position, denoted `P`. |
 | **model application** | A viewport assignment initiated by the model, including `applyInitialViewport` and model-owned `canvas.setViewport` calls, protected by `applyingViewport`. |
 | **positioning-active** | `canvas.isViewportPositioningActive() == true`, meaning the canvas positioning-depth marker is positive. This deliberately excludes pending clamps without active positioning. |
-| **genuine user viewport action** | A changed anchor, a scroll/keyboard/wheel movement with unchanged extent and surface size, or a direct canvas/toolbar viewport publication entry. It publishes first, reconciles the dedupe cache, and disarms. |
+| **genuine user viewport action** | A changed anchor, a scroll/keyboard/wheel movement with unchanged extent and surface size while an explicit user-scroll input marker is active, or a direct canvas/toolbar viewport publication entry. It publishes first, reconciles the dedupe cache, and disarms. |
 | **quiet window** | A 200 ms interval containing neither a frame-bounds change nor a viewport change. |
 | **platform horizon** | The minimum 2,500 ms settling period after the last transition geometry operation. The absolute cap is 5,000 ms. |
 | **transition generation** | A monotonically increasing identifier attached to a viewport hold, settle callback, and quiet-window chain. It invalidates stale asynchronous work. |
@@ -702,10 +702,19 @@ Every `JViewport` change received while the hold is armed is classified in this 
    unchanged, classify as canvas-owned programmatic positioning. Ignore the event, keep the
    hold armed, and register the post-clamp settle correction for the current generation.
    Pending clamps alone do not qualify.
-3. **User scroll.** If anchor, extent, and surface size are unchanged, classify as scrollbar,
-   keyboard, or equivalent user scrolling. Publish first, reconcile, and disarm.
-4. **Geometry.** If extent or surface size changed, classify as transition/layout geometry.
-   Compensate against the original baseline and keep the hold armed.
+3. **User scroll.** If anchor, extent, and surface size are unchanged, the position moved, and
+   an explicit user-scroll input marker is active, classify as scrollbar, pane-wheel, or pane-keyboard
+   scrolling. Publish first, reconcile, and disarm.
+4. **Geometry.** If extent or surface size changed, or the position moved without an explicit
+   user-scroll input marker, classify as transition/layout geometry. Compensate against the
+   original baseline and keep the hold armed. AWT `ViewportLayout` can emit position-only events
+   between extent/surface changes outside the canvas positioning marker; those never publish.
+
+The model marks scrollbar mouse presses (including arrow buttons) before the UI handles them,
+keeps the marker through release/final adjustment, and treats adjusting scrollbars as user input.
+Pane wheel dispatch has a transient marker; canvas wheel zoom retains its existing anchor path.
+Pane arrows, Page Up/Down, Home/End have a transient marker only while the pane itself has focus,
+including modified navigation bindings. Markers clear after their input dispatch/gesture.
 
 Anchor comparison precedes the positioning marker so a user pan whose callback runs while the
 canvas marker is active is still treated as user input. The implementation must not use
@@ -904,7 +913,12 @@ cover both canvas-size/extent parity combinations:
 - `logsClampResidualAndPinsContentEdge`
 - `unchangedCanvasDeliveryDoesNotPublishOrMoveCenter`
 - `classifiesAnchorChangeAsUserBeforePositioningMarker`
+- `compensatesPositionOnlyLayoutEventWithoutPublishingOrDisarming`
 - `classifiesScrollbarDragAsUserWhenExtentAndSurfaceAreUnchanged`
+- `scrollbarPressPublishesOnceBeforeUiAdjustmentOnEitherAxis`
+- `adjustingScrollbarPublishesOnceOnEitherAxisAndClearsMarker`
+- `classifiesPaneWheelScrollAsUserAndClearsTransientMarker`
+- `keyboardPaneNavigationPublishesOnceOnlyWhenPaneHasFocus`
 - `classifiesKeyboardScrollAsUserWhenPendingClampExistsWithoutActivePositioning`
 - `ignoresActiveProgrammaticPositioningAndKeepsHoldArmed`
 - `toolbarPublicationPublishesBeforeDisarm`
@@ -1055,8 +1069,8 @@ this feature; translated fallback behavior uses the existing resource mechanism.
 
 No `GraphCanvas` change beyond the two specified additions, `runWhenViewportSettled(Runnable)`
 and `isViewportPositioningActive()`, is needed. The compensation uses the existing scroll
-viewport, canvas size, viewport model, and the model's suppression flag. No scrollbar listener,
-new canvas command, or rendering change is allowed.
+viewport, canvas size, viewport model, and the model's suppression flag. Scrollbar/pane input
+markers belong to the model. No new canvas command or rendering change is allowed.
 
 ## 9. Acceptance Evidence and Open Verification Items
 

@@ -19,6 +19,8 @@ import java.awt.event.FocusEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
+import java.awt.event.MouseWheelEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.nio.file.Path;
@@ -44,6 +46,7 @@ import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
+import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.JRootPane;
 import javax.swing.JSplitPane;
@@ -523,6 +526,7 @@ final class GraphWorkspaceWindowModel implements PresentationChrome {
     private boolean toolbarViewportOperation;
     private boolean baseViewportSuppression = true;
     private int viewportSuppressionDepth;
+    private int userScrollDepth;
     private PresentationScheduler presentationScheduler = new PresentationScheduler() {
         @Override
         public long nowMillis() {
@@ -712,7 +716,12 @@ final class GraphWorkspaceWindowModel implements PresentationChrome {
                 else if (observedExtent.equals(graphScrollPane.getViewport().getExtentSize())
                         && observedSurface.equals(canvas.getSize())) {
                     if (!observedPosition.equals(graphScrollPane.getViewport().getViewPosition())) {
-                        publishUserView();
+                        if (userScrollInputActive()) {
+                            publishUserView();
+                        }
+                        else {
+                            correctGeometry();
+                        }
                     }
                 }
                 else {
@@ -831,6 +840,118 @@ final class GraphWorkspaceWindowModel implements PresentationChrome {
                     scheduleQuietObservation((int) Math.max(1L, Math.min(cap, Math.max(horizon, quietAt)) - now));
                 }
             });
+        }
+    }
+
+    private boolean userScrollInputActive() {
+        return userScrollDepth > 0
+            || graphScrollPane.getHorizontalScrollBar().getValueIsAdjusting()
+            || graphScrollPane.getVerticalScrollBar().getValueIsAdjusting();
+    }
+
+    private final class UserScrollPane extends JScrollPane {
+        private static final long serialVersionUID = 1L;
+
+        UserScrollPane() {
+            super(canvas);
+            installScrollbarMouseMarker(getHorizontalScrollBar());
+            installScrollbarMouseMarker(getVerticalScrollBar());
+        }
+
+        @Override
+        protected void processMouseWheelEvent(final MouseWheelEvent event) {
+            userScrollDepth++;
+            try {
+                super.processMouseWheelEvent(event);
+            }
+            finally {
+                userScrollDepth--;
+            }
+        }
+
+        @Override
+        protected boolean processKeyBinding(final KeyStroke stroke, final KeyEvent event,
+                final int condition, final boolean pressed) {
+            final int key = event.getKeyCode();
+            final boolean scroll = isFocusOwner() && (key == KeyEvent.VK_LEFT || key == KeyEvent.VK_RIGHT
+                || key == KeyEvent.VK_UP || key == KeyEvent.VK_DOWN || key == KeyEvent.VK_PAGE_UP
+                || key == KeyEvent.VK_PAGE_DOWN || key == KeyEvent.VK_HOME || key == KeyEvent.VK_END);
+            if (scroll) {
+                userScrollDepth++;
+            }
+            try {
+                return super.processKeyBinding(stroke, event, condition, pressed);
+            }
+            finally {
+                if (scroll) {
+                    userScrollDepth--;
+                }
+            }
+        }
+
+        @Override
+        public JScrollBar createHorizontalScrollBar() {
+            return userScrollBar(JScrollBar.HORIZONTAL);
+        }
+
+        @Override
+        public JScrollBar createVerticalScrollBar() {
+            return userScrollBar(JScrollBar.VERTICAL);
+        }
+
+        private JScrollBar userScrollBar(final int orientation) {
+            return new ScrollBar(orientation) {
+                private static final long serialVersionUID = 1L;
+
+                @Override
+                public void setValueIsAdjusting(final boolean adjusting) {
+                    final boolean input = adjusting || getValueIsAdjusting();
+                    if (input) {
+                        userScrollDepth++;
+                    }
+                    try {
+                        super.setValueIsAdjusting(adjusting);
+                    }
+                    finally {
+                        if (input) {
+                            userScrollDepth--;
+                        }
+                    }
+                }
+            };
+        }
+
+        private void installScrollbarMouseMarker(final Component component) {
+            final boolean[] down = {false};
+            final MouseListener[] delegates = component.getMouseListeners();
+            for (MouseListener listener : delegates) {
+                component.removeMouseListener(listener);
+            }
+            // Mark before the UI's press handler, including scrollbar arrow buttons.
+            component.addMouseListener(new MouseAdapter() {
+                @Override public void mousePressed(final MouseEvent event) {
+                    if (!down[0]) {
+                        down[0] = true;
+                        userScrollDepth++;
+                    }
+                }
+            });
+            for (MouseListener listener : delegates) {
+                component.addMouseListener(listener);
+            }
+            component.addMouseListener(new MouseAdapter() {
+                @Override public void mouseReleased(final MouseEvent event) {
+                    if (down[0]) {
+                        down[0] = false;
+                        userScrollDepth--;
+                    }
+                }
+            });
+            if (component instanceof java.awt.Container) {
+                for (Component child : ((java.awt.Container) component).getComponents()) {
+                    installScrollbarMouseMarker(child);
+                }
+            }
         }
     }
 
@@ -963,7 +1084,7 @@ final class GraphWorkspaceWindowModel implements PresentationChrome {
         canvas.setPreferredSize(CANVAS_PREFERRED_SIZE);
         canvas.setMinimumSize(new Dimension(320, 240));
         canvas.setSize(CANVAS_PREFERRED_SIZE);
-        graphScrollPane = new JScrollPane(canvas);
+        graphScrollPane = new UserScrollPane();
         graphScrollPane.setName("graph-workspace-scroll-pane");
         graphScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
         graphScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);

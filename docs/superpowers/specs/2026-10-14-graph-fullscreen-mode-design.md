@@ -379,9 +379,16 @@ transition, and disarmed by genuine user viewport input or by the quiet-window d
      re-correction. Using the combined `isProgrammaticViewportChange()` here would misclassify a
      user scrollbar or keyboard scroll that arrives during a pending-clamp interval as
      programmatic, suppress it, and then snap it back by compensation;
-  3. otherwise the extent and surface size are unchanged → a genuine user scroll (scrollbar,
-     keyboard, wheel over the pane): publish first, then reconcile and disarm;
-  4. otherwise the extent or surface size changed → geometry: compensate and keep the hold armed.
+  3. otherwise the extent and surface size are unchanged, the position moved, and an explicit
+     user-scroll input marker is active → a genuine user scroll (scrollbar, keyboard, wheel over
+     the pane): publish first, then reconcile and disarm;
+  4. otherwise the extent or surface size changed, or the position moved without an explicit
+     user-scroll input marker → geometry: compensate and keep the hold armed. AWT `ViewportLayout`
+     can emit position-only events outside the canvas positioning marker between size updates.
+  The model marks scrollbar presses before UI handling, including arrow buttons, through release
+  and final adjustment; adjusting scrollbars also qualify. Pane wheel events and pane-focused
+  arrows/Page/Home/End bindings carry a transient marker during dispatch. Canvas wheel zoom uses
+  the existing anchor path. Markers clear after dispatch/gesture.
   Checking the anchor before the programmatic flag is what makes a user pan whose positioning runs
   under the canvas marker still classify as user input.
 - **Direct publication paths disarm:** `publishCanvasViewport` (`GraphWorkspaceWindow.java:463`)
@@ -519,8 +526,8 @@ while armed: viewport change -> classify (model-application guard first, then an
    model-applied viewport (applyingViewport guard)    -> ignore
    anchor changed (user pan/zoom/fit/toolbar)         -> publish, reconcile, disarm
    programmatic canvas positioning, anchor unchanged  -> ignore; schedule post-clamp re-correction
-   extent/surface unchanged (user scrollbar/keyboard) -> publish, reconcile, disarm
-   extent or surface changed (geometry)               -> compensate (never publish)
+   extent/surface unchanged + explicit user-scroll input -> publish, reconcile, disarm
+   size change or unmarked position-only layout change   -> compensate (never publish)
 post-clamp: canvas settle callback fires -> absolute re-correction from the baseline
 toolbar/canvas direct publication while armed -> publish, reconcile, disarm
 settled:    quiet 200 ms window, never before 2500 ms (5000 ms cap with logged failure) -> reconcile, disarm
@@ -579,7 +586,7 @@ Esc (canvas) -> GraphInteractionController
     the compensation clamps and the content edge stays pinned; the deviation is logged. No parity
     padding or surface re-anchoring is performed.
 17. **Genuine user viewport input while armed** (pan, wheel zoom, fit, reset, toolbar zoom, a
-    scrollbar drag or a keyboard scroll): the event is classified by the anchor/extent rule, the
+    scrollbar drag or a keyboard scroll): the event is classified by the anchor/input-marker rule, the
     hold disarms, and the resulting viewport is published exactly as in the baseline windowed
     behavior — the user's view is never snapped back.
 18. **Quiet-window disarm rule**: after the mode's last geometry operation the hold disarms only
@@ -667,7 +674,8 @@ fake viewport, fake hint, injectable availability)
 - **Classification while armed**: a user pan, wheel zoom, fit/reset and a toolbar zoom/fit/reset
   (the anchor changes, and the publication callback fires after the mutation) each disarm and
   publish exactly one viewport command — the user's view is never snapped back; a scrollbar drag
-  and a keyboard scroll (extent/surface unchanged) do the same; a programmatic canvas clamp is
+  and a keyboard or pane-wheel scroll (extent/surface unchanged, explicit input marker) do the same;
+  an unmarked position-only layout change compensates without publishing or disarming; a programmatic canvas clamp is
   ignored and never disarms; after disarm, further external scroll changes publish as baseline.
 - **Post-clamp re-correction**: the pass-7 odd-extent/odd-shrink probe (37 → 37.5 → 38) ends at 37
   because the canvas's settle callback triggers the absolute re-correction, including when the
@@ -766,7 +774,7 @@ Modified:
   baseline/compensation implementation, armed-hold event classification in the viewport change
   listener (model-application guard, then anchor, post-clamp re-correction), the
   generation-stamped settling-horizon chain with an injectable scheduler, and the anchor snapshot
-  captured at arm time. No canvas change and no scrollbar listener are needed.
+  captured at arm time, plus explicit scrollbar/pane input markers. No additional canvas change is needed.
 - `freeplane_plugin_graph/.../canvas/GraphCanvas.java` — add the public, generation-agnostic
   settle callback `runWhenViewportSettled(Runnable)` that fires once positioning depth and pending
   clamps are both zero (the post-clamp completion signal), and the public
