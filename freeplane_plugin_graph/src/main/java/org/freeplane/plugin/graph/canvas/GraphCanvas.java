@@ -52,6 +52,7 @@ public final class GraphCanvas extends JComponent implements Accessible {
     private volatile boolean dimUnrelated;
     private volatile int viewportPositioningDepth;
     private volatile int pendingViewportClamps;
+    private Runnable pendingViewportSettledCallback;
     private volatile Runnable userViewportChangeListener;
     private boolean userPanGestureActive;
     private boolean userPanPending;
@@ -131,6 +132,41 @@ public final class GraphCanvas extends JComponent implements Accessible {
             + (visibleCenterY - getHeight() * 0.5) / anchor.zoom();
         return GraphViewport.from(Viewport.of(centerX, centerY, anchor.zoom(),
             anchor.toPersisted().unknownXml()));
+    }
+
+    public boolean isViewportPositioningActive() {
+        return viewportPositioningDepth > 0;
+    }
+
+    public void runWhenViewportSettled(final Runnable callback) {
+        final Runnable value = Objects.requireNonNull(callback, "callback");
+        onEdt(() -> {
+            pendingViewportSettledCallback = value;
+            drainViewportSettledCallback();
+        });
+    }
+
+    private void drainViewportSettledCallback() {
+        if (viewportPositioningDepth != 0 || pendingViewportClamps != 0) {
+            return;
+        }
+        final Runnable callback = pendingViewportSettledCallback;
+        pendingViewportSettledCallback = null;
+        if (callback == null) {
+            return;
+        }
+        try {
+            callback.run();
+        }
+        catch (RuntimeException | Error failure) {
+            try {
+                java.util.logging.Logger.getLogger(GraphCanvas.class.getName()).log(
+                    java.util.logging.Level.WARNING, "Viewport settle callback failed", failure);
+            }
+            catch (RuntimeException | Error loggingFailure) {
+                // A diagnostic failure must not escape the canvas completion path.
+            }
+        }
     }
 
     public boolean isProgrammaticViewportChange() {
@@ -548,12 +584,14 @@ public final class GraphCanvas extends JComponent implements Accessible {
                     finally {
                         endViewportPositioning();
                         pendingViewportClamps--;
+                        drainViewportSettledCallback();
                     }
                 }
             });
         }
         catch (final RuntimeException exception) {
             pendingViewportClamps--;
+            drainViewportSettledCallback();
             throw exception;
         }
     }
@@ -564,6 +602,7 @@ public final class GraphCanvas extends JComponent implements Accessible {
 
     private void endViewportPositioning() {
         viewportPositioningDepth--;
+        drainViewportSettledCallback();
     }
 
     private static Point clampedPosition(final JViewport scrollViewport, final int x, final int y) {
