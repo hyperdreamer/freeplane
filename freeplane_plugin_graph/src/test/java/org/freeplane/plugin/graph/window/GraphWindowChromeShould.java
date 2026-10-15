@@ -738,6 +738,127 @@ public class GraphWindowChromeShould {
         });
     }
 
+    @Test public void quietWindowFloorRestartsAfterLastTransitionGeometry() {
+        withViewport(p -> {
+            p.capture();
+            FakePresentationScheduler.Work entry = p.clock.last();
+            p.clock.advanceTo(1000);
+            p.hold.compensate();
+            assertThat(entry.cancelled).isTrue();
+            p.clock.advanceTo(3499);
+            p.assertArmed(true);
+            assertThat(field(p.f.model, "suppressViewportEvents")).isEqualTo(true);
+            p.clock.advanceTo(3500);
+            p.assertArmed(false);
+            assertThat(field(p.f.model, "suppressViewportEvents")).isEqualTo(false);
+            assertThat(p.f.logs).noneMatch(s -> s.contains("settlement failure"));
+            p.f.assertNoCommands();
+        });
+    }
+
+    @Test public void lateViewportEventsIndependentlyDelayQuietWindowAndHitCap() {
+        withViewport(p -> {
+            p.capture();
+            long generation = (Long) field(p.hold, "generation");
+            for (int time = 150; time < 5000; time += 150) {
+                p.clock.advanceTo(time);
+                p.viewport.setExtentSize(new Dimension(600 + (time / 150) % 2, 400));
+                p.assertArmed(true);
+            }
+            p.clock.advanceTo(4999);
+            p.assertArmed(true);
+            assertThat(p.f.logs).noneMatch(s -> s.contains("settlement failure"));
+            p.clock.advanceTo(5000);
+            p.assertArmed(false);
+            assertThat(p.f.logs.stream().filter(s -> s.contains("settlement failure")))
+                .containsExactly("Graph presentation settlement failure generation=" + generation
+                    + " transition=0 frame=0 viewport=4950 now=5000");
+            assertThat(field(p.f.model, "suppressViewportEvents")).isEqualTo(false);
+            p.clock.advanceTo(10000);
+            assertThat(p.f.logs.stream().filter(s -> s.contains("settlement failure")).count()).isEqualTo(1);
+            p.f.assertNoCommands();
+        });
+    }
+
+    @Test public void newGenerationReplacesPendingSettleCallbackAndRunsCorrectionOnce() {
+        final int[] callbacks = {0};
+        withViewport(p -> {
+            p.capture();
+            p.beginPositioning();
+            Runnable stale = p.savedCallback();
+            long previous = (Long) field(p.hold, "generation");
+            FakePresentationScheduler.Work previousQuiet = p.clock.last();
+            p.capture();
+            assertThat(previousQuiet.cancelled).isTrue();
+            assertThat(field(p.hold, "generation")).isEqualTo(previous + 1);
+            p.beginPositioning();
+            Runnable current = p.savedCallback();
+            assertThat(current).isNotSameAs(stale);
+            assertThat(field(p.hold, "registeredSettleGeneration")).isEqualTo(previous + 1);
+            p.viewport.setViewPosition(new Point(p.p0.x + 17, p.p0.y + 13));
+            assertThat(p.savedCallback()).isSameAs(current);
+            Point pending = p.viewport.getViewPosition();
+            stale.run();
+            assertThat(p.viewport.getViewPosition()).isEqualTo(pending);
+            invoke(p.canvas, "scheduleViewportClamp", JViewport.class, p.viewport);
+            assertThat(field(p.canvas, "pendingViewportClamps")).isEqualTo(1);
+            field(p.canvas, "viewportPositioningDepth", 0);
+            invoke(p.canvas, "drainViewportSettledCallback");
+            assertThat(p.savedCallback()).isSameAs(current);
+            assertThat(p.viewport.getViewPosition()).isEqualTo(pending);
+            field(p.canvas, "pendingViewportSettledCallback", (Runnable) () -> {
+                callbacks[0]++;
+                current.run();
+            });
+            assertThat(callbacks[0]).isZero();
+            p.events = 0;
+        }, p -> {
+            assertThat(field(p.canvas, "pendingViewportClamps")).isEqualTo(0);
+            assertThat(field(p.canvas, "pendingViewportSettledCallback")).isNull();
+            assertThat(callbacks[0]).isEqualTo(1);
+            p.assertTarget();
+            int eventsAfterCorrection = p.events;
+            assertThat(eventsAfterCorrection).isPositive();
+            invoke(p.canvas, "drainViewportSettledCallback");
+            assertThat(callbacks[0]).isEqualTo(1);
+            assertThat(p.events).isEqualTo(eventsAfterCorrection);
+            p.assertArmed(true);
+            p.f.assertNoCommands();
+        });
+    }
+
+    @Test public void closeWithPendingClampCancelsSettleCorrectionAndQuietWork() {
+        withViewport(p -> {
+            p.capture();
+            p.beginPositioning();
+            Runnable stale = p.savedCallback();
+            FakePresentationScheduler.Work quiet = p.clock.last();
+            long generation = (Long) field(p.hold, "generation");
+            invoke(p.canvas, "scheduleViewportClamp", JViewport.class, p.viewport);
+            assertThat(field(p.canvas, "pendingViewportClamps")).isEqualTo(1);
+            field(p.canvas, "viewportPositioningDepth", 0);
+            p.f.model.close();
+            assertThat(quiet.cancelled).isTrue();
+            assertThat(field(p.hold, "generation")).isEqualTo(generation + 1);
+            assertThat(field(p.hold, "registeredSettleGeneration")).isEqualTo(-1L);
+            assertThat(p.savedCallback()).isNotSameAs(stale);
+            p.p0 = p.viewport.getViewPosition();
+            stale.run();
+            quiet.callback.run();
+            p.clock.advanceTo(10000);
+            p.assertArmed(false);
+            assertThat(p.viewport.getViewPosition()).isEqualTo(p.p0);
+            p.f.assertNoCommands();
+        }, p -> {
+            assertThat(field(p.canvas, "pendingViewportClamps")).isEqualTo(0);
+            assertThat(field(p.canvas, "pendingViewportSettledCallback")).isNull();
+            assertThat(p.viewport.getViewPosition()).isEqualTo(p.p0);
+            p.assertArmed(false);
+            assertThat(p.f.logs).noneMatch(s -> s.contains("settlement failure"));
+            p.f.assertNoCommands();
+        });
+    }
+
     @Test public void newTransitionCancelsPreviousQuietWindowGeneration() {
         withViewport(p -> {
             p.capture();
