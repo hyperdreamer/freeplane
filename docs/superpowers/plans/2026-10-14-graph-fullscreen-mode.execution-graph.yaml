@@ -1,6 +1,6 @@
 source_plan:
   path: docs/superpowers/plans/2026-10-14-graph-fullscreen-mode.md
-  sha256: 866c2605ec84fd81f3598058b69ec01ab5c44fec648daf4ec57c189f979f841a
+  sha256: cbd7b3299cfc90ac40bd8f73ddb3ab65010b525009734230cd9ed084e91062a6
 lanes:
   - id: core-mode
     owns: [freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/ScreenFillSurface.java, freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/PresentationChrome.java, freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/PresentationViewport.java, freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/PresentationHint.java, freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/GraphPresentationMode.java, freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/GraphCanvas.java, freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/GraphInteractionController.java, freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/GraphPresentationModeShould.java, freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/GraphInteractionControllerShould.java]
