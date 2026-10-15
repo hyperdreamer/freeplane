@@ -1214,9 +1214,6 @@ public class GraphWindowChromeShould {
         void assertTarget() {
             Point expected = new Point(axis(p0.x, w0.width, e0.width, canvas.getWidth(), viewport.getExtentSize().width),
                 axis(p0.y, w0.height, e0.height, canvas.getHeight(), viewport.getExtentSize().height));
-            System.out.println("VIEWPORT P0=" + p0 + " W0=" + w0 + " E0=" + e0 + " W1=" + canvas.getSize()
-                + " E1=" + viewport.getExtentSize() + " target=" + expected + " actual=" + viewport.getViewPosition()
-                + " events=" + events + " commands=" + f.commands().size() + " zoom=" + canvas.viewport().zoom());
             assertThat(viewport.getViewPosition()).isEqualTo(expected);
             assertThat(canvas.viewport().zoom()).isEqualTo(center.zoom());
         }
