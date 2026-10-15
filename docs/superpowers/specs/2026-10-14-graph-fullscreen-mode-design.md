@@ -32,13 +32,15 @@ and `F11` is unused in the plugin.
 ### Goals
 
 1. **Enter presentation mode with F11** (or the View menu): the graph window becomes undecorated
-   and fills the screen it currently occupies, and all chrome is hidden so the canvas is the only
+   and fills the usable screen area of the display it currently occupies (the window manager may
+   constrain it to the work area), and all chrome is hidden so the canvas is the only
    visible content.
 2. **Exit with F11 or Esc** and restore the exact prior state: window bounds and maximized state,
    each chrome element's visibility, the effective sidebar divider state, and the View menu item
    state. For a window whose saved extended state includes maximized-both, the exact extended state
-   must be restored and the restored bounds must be the maximized geometry of the frame's graphics
-   configuration (window managers own maximized geometry); the exact captured-bounds requirement
+   must be restored and acceptance asserts that the frame covers the work area of its graphics
+   configuration and stays within the screen, within the documented X11 AWT coordinate-cache
+   tolerance (window managers own maximized outer geometry); the exact captured-bounds requirement
    applies to non-maximized windows.
 3. **Preserve the graph view exactly** across enter/exit: the effective visible center and zoom do
    not change (exact when the integer scroll position allows it, otherwise within half a device
@@ -66,7 +68,7 @@ and `F11` is unused in the plugin.
 | Aspect | Behavior |
 | --- | --- |
 | Platform | **Linux and Windows.** On macOS `isAvailable()` is false: the View ▸ Full Screen item is disabled and F11 does nothing. |
-| Enter | **F11** toggles on; **View ▸ Full Screen** check item toggles on (no toolbar button). The frame becomes undecorated and fills the screen it currently occupies. Menu bar, toolbar, maps sidebar, settings panel and status bar become invisible. The canvas receives focus. A hint `Esc or F11 exits full screen` appears and fades after ~3 s. |
+| Enter | **F11** toggles on; **View ▸ Full Screen** check item toggles on (no toolbar button). The frame becomes undecorated and fills the usable screen area of the display it currently occupies (constrained to the work area where the window manager requires it). Menu bar, toolbar, maps sidebar, settings panel and status bar become invisible. The canvas receives focus. A hint `Esc or F11 exits full screen` appears and fades after ~3 s. |
 | Active | The canvas is the only visible content. Zoom, pan, selection, connect, keyboard navigation, context menus and the existing Ctrl+Z / Ctrl+Y bindings behave exactly as before. The effective visible center and zoom are unchanged from the moment of entry; user pan/zoom during presentation is normal and is preserved through exit. |
 | Exit | **Esc** when there is neither a connection preview nor a selection, or **F11**, or the View menu item. The frame is decorated again with the exact previous bounds and extended state; every chrome element returns to its prior visibility; the sidebar keeps its effective divider location, size and collapsed/rail state; the effective visible center and zoom are preserved through the geometry change; the hint is removed; the menu item is unchecked. |
 | Workspace | Zero mutation. No `GraphCommands.display(...)`, no `GraphCommands.viewport(...)`, no `setSidebarCollapsed`, no `commitSidebarWidth`, no `commitSidebarDisplaySettings`, no dirty flag — including for geometry that settles after the transition returns. Read-only workspaces behave identically. |
@@ -541,12 +543,11 @@ Esc (canvas) -> GraphInteractionController
 5. **Maps sidebar collapsed (rail) before entry**: the captured collapsed flag and effective
    divider location are restored directly; all user controls release the override and work
    normally afterwards.
-6. **Maximized or otherwise extended window**: the extended state bits are restored exactly, and
-   the restored bounds must equal the maximized geometry of the frame's graphics configuration.
-   The AWT `getBounds()` value captured before entry can be a stale X11/KWin coordinate-cache
-   artifact (the condition `FrameResynchronizer` deliberately does not repair when the sizes
-   disagree), so acceptance compares maximized restores against the WM-canonical geometry;
-   non-maximized windows keep the exact captured-bounds comparison.
+6. **Maximized or otherwise extended window**: the extended state bits are restored exactly. The
+   window manager owns maximized outer geometry, so acceptance asserts that the restored frame
+   covers the work area of its graphics configuration and stays within the screen, within the
+   documented X11 AWT coordinate-cache tolerance (the native y may differ from the AWT-cached y
+   by the work-area inset); non-maximized windows keep the exact captured-bounds comparison.
 7. **Multiple monitors**: the screen bounds come from the frame's current
    `GraphicsConfiguration`, so the window fills the monitor it is on.
 8. **Automatic layout, resize or no-gesture focus loss while the override is installed**: the
