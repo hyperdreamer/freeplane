@@ -661,7 +661,7 @@ graph_workspace.hint.full_screen_exit=Esc or F11 exits full screen
 | --- | --- |
 | `f11MakesWindowUndecoratedAndFillsCurrentScreen` | Capture live current graphics bounds; press F11 once; frame undecorated, screen bounds equal, all chrome hidden, checked/active, visible-center/zoom preserved |
 | `f11RestoresBoundsAndExtendedStateFromNormalWindow` | Capture normal bounds/state; enter and exit with actual F11; decorated, exact captured bounds/state, effective chrome/sidebar restored, same current center/zoom |
-| `f11RestoresBoundsAndExtendedStateFromMaximizedWindow` | Begin maximized, capture actual settled bounds and exact extended-state bits before entry; exit restores both |
+| `f11RestoresBoundsAndExtendedStateFromMaximizedWindow` | Begin maximized, capture the exact extended-state bits before entry; exit restores them exactly and the restored bounds equal the maximized geometry of the frame's graphics configuration (the pre-entry AWT bounds may be a stale X11/KWin cache value and are not the acceptance target) |
 | `escapeExitsWhenCanvasHasNoPreviewOrSelection` | Active mode and canvas with neither; press Escape, event consumed and inactive/restored; separate preview/selection assertions remain owned by Task 3 |
 | `panDuringPresentationIsPreservedThroughExit` | Real pan and wheel zoom while active; changed visible view becomes exit baseline, survives exit and late geometry; checkpoint command count after user actions and require transition adds zero |
 | `canvasHasFocusAfterEntryAndExit` | After each surviving transition, await canvas.isFocusOwner rather than merely counting callback invocation |
