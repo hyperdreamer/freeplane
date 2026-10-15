@@ -306,7 +306,7 @@ final class GraphWorkspaceWindow extends JFrame implements GraphWorkspaceView {
     }
 }
 
-final class GraphWorkspaceWindowModel {
+final class GraphWorkspaceWindowModel implements PresentationChrome {
     static final Dimension CANVAS_PREFERRED_SIZE = new Dimension(800, 560);
 
     private final GraphWorkspaceHandle handle;
@@ -368,6 +368,44 @@ final class GraphWorkspaceWindowModel {
     private boolean sidebarApplying;
     private Integer sessionSidebarWidth;
     private Boolean sessionSidebarHidden;
+    private ChromeSnapshot chromeSnapshot;
+    private SidebarOverride sidebarOverride;
+    private boolean presentationHidden;
+    private boolean sidebarKeyboardAction;
+
+    private static final class SidebarOverride {
+        final boolean collapsed;
+        final int dividerLocation;
+        final int dividerSize;
+        final boolean enabled;
+
+        SidebarOverride(final boolean collapsed, final int dividerLocation, final int dividerSize,
+                final boolean enabled) {
+            this.collapsed = collapsed;
+            this.dividerLocation = dividerLocation;
+            this.dividerSize = dividerSize;
+            this.enabled = enabled;
+        }
+    }
+
+    private static final class ChromeSnapshot {
+        final boolean menuVisible;
+        final boolean toolbarVisible;
+        final boolean sidebarVisible;
+        final boolean settingsVisible;
+        final boolean statusVisible;
+        final SidebarOverride sidebar;
+
+        ChromeSnapshot(final boolean menuVisible, final boolean toolbarVisible, final boolean sidebarVisible,
+                final boolean settingsVisible, final boolean statusVisible, final SidebarOverride sidebar) {
+            this.menuVisible = menuVisible;
+            this.toolbarVisible = toolbarVisible;
+            this.sidebarVisible = sidebarVisible;
+            this.settingsVisible = settingsVisible;
+            this.statusVisible = statusVisible;
+            this.sidebar = sidebar;
+        }
+    }
 
     GraphWorkspaceWindowModel(final GraphWorkspaceHandle handle, final GraphWorkspaceViewBinding binding,
             final GraphWorkspaceController applicationController, final Supplier<java.nio.file.Path> pathChooser,
@@ -464,7 +502,8 @@ final class GraphWorkspaceWindowModel {
         mapList = new MapListPanel(routedHandle, pathChooser);
         mapList.addSelectionListener(row -> updateMenuEnablement());
         sidebar = new MapSidebarPanel(mapList, this::setSidebarCollapsed);
-        sidebar.collapseButton().addActionListener(event -> setSidebarCollapsed(true));
+        sidebar.collapseButton().addActionListener(event -> sidebarToggledFromUser(true));
+        sidebar.rail().restoreButton().addActionListener(event -> sidebarToggledFromUser(false));
         toolbar = new WorkspaceToolbar(applicationController, routedHandle, canvas, pathChooser);
         currentPresentation = presentationOrDefault(binding.currentPresentation());
         settingsPanel = new WorkspaceSettingsPanel(routedHandle, currentPresentation.displaySettings());
@@ -577,12 +616,16 @@ final class GraphWorkspaceWindowModel {
         return result;
     }
 
-    private void applyPresentation(final GraphWorkspacePresentation value) {
+    void applyPresentation(final GraphWorkspacePresentation value) {
         final GraphWorkspacePresentation next = Objects.requireNonNull(value, "presentation");
         final DisplaySettings previousSettings = currentPresentation == null
             ? null : currentPresentation.displaySettings();
-        currentPresentation = next;
         final DisplaySettings settings = next.displaySettings();
+        if (previousSettings != null && (previousSettings.mapSidebarWidth() != settings.mapSidebarWidth()
+                || previousSettings.mapSidebarHidden() != settings.mapSidebarHidden())) {
+            sidebarOverride = null;
+        }
+        currentPresentation = next;
         settingsPanel.setSettings(settings);
         canvas.setTheme(GraphTheme.resolve(settings.canvasTheme(), palette(next)));
         canvas.setShowArrowheads(settings.showArrowheads());
@@ -594,11 +637,120 @@ final class GraphWorkspaceWindowModel {
         applySidebarSettings(settings);
     }
 
+    @Override
+    public void capture() {
+        try {
+            final SidebarOverride effective = new SidebarOverride(sidebar.isCollapsed(),
+                splitPane.getDividerLocation(), splitPane.getDividerSize(), splitPane.isEnabled());
+            final ChromeSnapshot captured = new ChromeSnapshot(menuBar.isVisible(), toolbar.isVisible(),
+                sidebar.isVisible(), settingsPanel.isVisible(), statusSlot.isVisible(), effective);
+            chromeSnapshot = captured;
+            sidebarOverride = effective;
+        }
+        catch (RuntimeException | Error failure) {
+            if (chromeSnapshot == null || sidebarOverride == null) {
+                discard();
+            }
+            throw failure;
+        }
+    }
+
+    @Override
+    public void hide() {
+        presentationHidden = true;
+        menuBar.setVisible(false);
+        toolbar.setVisible(false);
+        sidebar.setVisible(false);
+        splitPane.setDividerSize(0);
+        settingsPanel.setVisible(false);
+        toolbar.setSettingsVisible(false);
+        statusSlot.setVisible(false);
+    }
+
+    @Override
+    public void restore() {
+        final ChromeSnapshot captured = chromeSnapshot;
+        try {
+            if (captured == null) {
+                return;
+            }
+            restoreChromePart(() -> menuBar.setVisible(captured.menuVisible));
+            restoreChromePart(() -> toolbar.setVisible(captured.toolbarVisible));
+            restoreChromePart(() -> sidebar.setVisible(captured.sidebarVisible));
+            restoreChromePart(() -> settingsPanel.setVisible(captured.settingsVisible));
+            restoreChromePart(() -> toolbar.setSettingsVisible(settingsPanel.isVisible()));
+            restoreChromePart(() -> statusSlot.setVisible(captured.statusVisible));
+            sidebarOverride = captured.sidebar;
+            applySidebarOverride(captured.sidebar);
+        }
+        finally {
+            presentationHidden = false;
+        }
+    }
+
+    private void restoreChromePart(final Runnable operation) {
+        try {
+            operation.run();
+        }
+        catch (RuntimeException | Error failure) {
+            try {
+                commandMessageSink.accept("Graph presentation chrome restore failed: " + failure);
+            }
+            catch (RuntimeException | Error loggingFailure) {
+                // Restoration must continue even if the diagnostic sink fails.
+            }
+        }
+    }
+
+    @Override
+    public void discard() {
+        chromeSnapshot = null;
+        sidebarOverride = null;
+        presentationHidden = false;
+    }
+
+    void sidebarToggledFromUser(final boolean collapsed) {
+        sidebarOverride = null;
+        setSidebarCollapsed(collapsed);
+    }
+
     int appliedSidebarWidth() {
         return appliedSidebarWidth;
     }
 
-    private void applySidebarSettings(final DisplaySettings settings) {
+    void applySidebarSettings(final DisplaySettings settings) {
+        if (presentationHidden) {
+            return;
+        }
+        if (sidebarOverride != null) {
+            applySidebarOverride(sidebarOverride);
+            return;
+        }
+        applyCurrentSidebarSettings(settings);
+    }
+
+    private void applySidebarOverride(final SidebarOverride effective) {
+        runWithSidebarGuard(() -> {
+            restoreChromePart(() -> sidebar.setCollapsed(effective.collapsed));
+            restoreChromePart(() -> splitPane.setDividerSize(effective.dividerSize));
+            restoreChromePart(() -> splitPane.setEnabled(effective.enabled));
+            restoreChromePart(() -> sidebar.setMinimumSize(new Dimension(effective.collapsed
+                ? MapSidebarLayout.RAIL_WIDTH
+                : MapSidebarLayout.effectiveMinimum(splitWidth(), effectiveDividerWidth(), splitInsets()), 0)));
+            restoreChromePart(() -> graphScrollPane.setMinimumSize(new Dimension(
+                MapSidebarLayout.canvasMinimumWidth(splitWidth(), effectiveDividerWidth(), splitInsets()), 0)));
+            restoreChromePart(() -> mapsSidebarMenuItem.setSelected(!effective.collapsed));
+            appliedSidebarWidth = effective.dividerLocation;
+            sidebarGestureActive = false;
+            sidebarApplyPending = splitPane.getWidth() <= 0;
+            if (!sidebarApplyPending) {
+                restoreChromePart(() -> splitPane.setDividerLocation(effective.dividerLocation));
+            }
+            restoreChromePart(() -> sidebar.mapList().syncListWidths());
+        });
+    }
+
+    private void applyCurrentSidebarSettings(final DisplaySettings settings) {
         final boolean hidden = readOnly && sessionSidebarHidden != null
             ? sessionSidebarHidden.booleanValue() : settings.mapSidebarHidden();
         final int width = readOnly && sessionSidebarWidth != null
@@ -635,7 +787,10 @@ final class GraphWorkspaceWindowModel {
         });
     }
 
-    private void setSidebarCollapsed(final boolean collapsed) {
+    void setSidebarCollapsed(final boolean collapsed) {
+        if (presentationHidden || sidebarOverride != null) {
+            return;
+        }
         if (sidebarApplying) {
             return;
         }
@@ -653,7 +808,10 @@ final class GraphWorkspaceWindowModel {
         applySidebarSettings(currentPresentation.displaySettings());
     }
 
-    private void commitSidebarWidth(final int location) {
+    void commitSidebarWidth(final int location) {
+        if (presentationHidden || sidebarOverride != null) {
+            return;
+        }
         final int splitWidth = splitWidth();
         final int dividerWidth = effectiveDividerWidth();
         final Insets insets = splitInsets();
@@ -674,7 +832,10 @@ final class GraphWorkspaceWindowModel {
         applySidebarSettings(currentPresentation.displaySettings());
     }
 
-    private void resetSidebarWidth() {
+    void resetSidebarWidth() {
+        if (presentationHidden || sidebarOverride != null) {
+            return;
+        }
         final int splitWidth = splitWidth();
         final int dividerWidth = effectiveDividerWidth();
         final Insets insets = splitInsets();
@@ -702,7 +863,7 @@ final class GraphWorkspaceWindowModel {
         }
     }
 
-    private void commitSidebarDisplaySettings(final int width, final boolean hidden) {
+    void commitSidebarDisplaySettings(final int width, final boolean hidden) {
         final DisplaySettings current = currentPresentation.displaySettings();
         executeCommand(GraphCommands.display(DisplaySettings.of(current.showArrowheads(), current.canvasTheme(),
             current.rememberViewport(), current.dimUnrelatedNodes(), width, hidden, current.unknownXml())));
@@ -1140,6 +1301,7 @@ final class GraphWorkspaceWindowModel {
                     return;
                 }
                 closed = true;
+                discard();
                 canvasRegistration.close();
                 sessionStatusRegistration.close();
                 interactionController.uninstall();
@@ -1237,6 +1399,7 @@ final class GraphWorkspaceWindowModel {
                     if (event.getButton() != MouseEvent.BUTTON1) {
                         return;
                     }
+                    sidebarOverride = null;
                     if (event.getClickCount() == 2) {
                         sidebarGestureActive = false;
                         resetSidebarWidth();
@@ -1257,7 +1420,7 @@ final class GraphWorkspaceWindowModel {
             });
         }
         splitPane.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, event -> {
-            if (sidebarApplying) {
+            if (sidebarApplying || presentationHidden || sidebarOverride != null || sidebarKeyboardAction) {
                 return;
             }
             final int splitWidth = splitWidth();
@@ -1294,6 +1457,9 @@ final class GraphWorkspaceWindowModel {
         splitPane.addFocusListener(new FocusAdapter() {
             @Override
             public void focusLost(final FocusEvent event) {
+                if (presentationHidden || sidebarOverride != null || sidebarKeyboardAction) {
+                    return;
+                }
                 if (sidebarGestureActive) {
                     sidebarGestureActive = false;
                     runPendingSidebarApply();
@@ -1303,6 +1469,60 @@ final class GraphWorkspaceWindowModel {
                 runPendingSidebarApply();
             }
         });
+        for (final String key : new String[] {"selectMin", "selectMax", "negativeIncrement", "positiveIncrement"}) {
+            final Action delegate = splitPane.getActionMap().get(key);
+            if (delegate == null) {
+                continue;
+            }
+            splitPane.getActionMap().put(key, new Action() {
+                @Override
+                public Object getValue(final String name) {
+                    return delegate.getValue(name);
+                }
+
+                @Override
+                public void putValue(final String name, final Object value) {
+                    delegate.putValue(name, value);
+                }
+
+                @Override
+                public boolean isEnabled() {
+                    return delegate.isEnabled();
+                }
+
+                @Override
+                public void setEnabled(final boolean enabled) {
+                    delegate.setEnabled(enabled);
+                }
+
+                @Override
+                public void addPropertyChangeListener(final java.beans.PropertyChangeListener listener) {
+                    delegate.addPropertyChangeListener(listener);
+                }
+
+                @Override
+                public void removePropertyChangeListener(final java.beans.PropertyChangeListener listener) {
+                    delegate.removePropertyChangeListener(listener);
+                }
+
+                @Override
+                public void actionPerformed(final ActionEvent event) {
+                    if (presentationHidden || !delegate.isEnabled()) {
+                        return;
+                    }
+                    sidebarOverride = null;
+                    sidebarKeyboardAction = true;
+                    try {
+                        delegate.actionPerformed(event);
+                    }
+                    finally {
+                        sidebarKeyboardAction = false;
+                    }
+                    commitSidebarWidth(splitPane.getDividerLocation());
+                    runPendingSidebarApply();
+                }
+            });
+        }
     }
 
     private JMenuBar createMenuBar() {
@@ -1352,7 +1572,7 @@ final class GraphWorkspaceWindowModel {
         view.add(viewSettingsMenuItem);
         mapsSidebarMenuItem = new JCheckBoxMenuItem(TextUtils.getText("graph_workspace.action.maps_sidebar"));
         mapsSidebarMenuItem.setName("graph-workspace-maps-sidebar-menu-item");
-        mapsSidebarMenuItem.addActionListener(event -> setSidebarCollapsed(!sidebar.isCollapsed()));
+        mapsSidebarMenuItem.addActionListener(event -> sidebarToggledFromUser(!sidebar.isCollapsed()));
         view.add(mapsSidebarMenuItem);
 
         final JMenu maps = menu("graph_workspace.menu.maps", "graph-workspace-maps-menu");
