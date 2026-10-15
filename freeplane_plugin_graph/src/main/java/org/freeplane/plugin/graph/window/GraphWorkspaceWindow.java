@@ -662,19 +662,45 @@ final class GraphWorkspaceWindowModel implements PresentationChrome {
             correcting = true;
             try {
                 final javax.swing.JViewport viewport = graphScrollPane.getViewport();
-                final Dimension surface = canvas.getSize();
-                final Dimension extent = viewport.getExtentSize();
-                final int x = targetAxis(baselinePosition.x, baselineSurface.width, baselineExtent.width,
-                    surface.width, extent.width);
-                final int y = targetAxis(baselinePosition.y, baselineSurface.height, baselineExtent.height,
-                    surface.height, extent.height);
-                runWithViewportEventsSuppressed(() -> viewport.setViewPosition(new Point(x, y)));
+                Dimension surface = canvas.getSize();
+                Dimension extent = viewport.getExtentSize();
+                Point target = new Point(
+                    targetAxis(baselinePosition.x, baselineSurface.width, baselineExtent.width, surface.width, extent.width),
+                    targetAxis(baselinePosition.y, baselineSurface.height, baselineExtent.height, surface.height, extent.height));
+                final Dimension reachableSurface = new Dimension(
+                    surfaceForCenter(baselinePosition.x, baselineSurface.width, baselineExtent.width, surface.width, extent.width),
+                    surfaceForCenter(baselinePosition.y, baselineSurface.height, baselineExtent.height, surface.height, extent.height));
+                if (!reachableSurface.equals(surface)) {
+                    // A viewport-sized surface has no scroll range. Retain enough
+                    // room on both sides of the anchor to reach the captured center.
+                    final Dimension preferred = canvas.getPreferredSize();
+                    reachableSurface.width = Math.max(reachableSurface.width, preferred.width);
+                    reachableSurface.height = Math.max(reachableSurface.height, preferred.height);
+                    runWithViewportEventsSuppressed(() -> {
+                        canvas.setPreferredSize(reachableSurface);
+                        viewport.setViewSize(reachableSurface);
+                        canvas.revalidate();
+                    });
+                    surface = canvas.getSize();
+                    extent = viewport.getExtentSize();
+                    target = new Point(
+                        targetAxis(baselinePosition.x, baselineSurface.width, baselineExtent.width, surface.width, extent.width),
+                        targetAxis(baselinePosition.y, baselineSurface.height, baselineExtent.height, surface.height, extent.height));
+                }
+                final Point position = target;
+                runWithViewportEventsSuppressed(() -> viewport.setViewPosition(position));
                 lastPublishedViewport = canvas.visibleViewport();
             }
             finally {
                 observeGeometry();
                 correcting = false;
             }
+        }
+
+        private int surfaceForCenter(final int p0, final int w0, final int e0, final int w1, final int e1) {
+            final long twiceOffset = 2L * p0 + e0 - w0;
+            final long required = (long) e1 + Math.abs(twiceOffset);
+            return (int) Math.max(w1, Math.min(Integer.MAX_VALUE - 1L, required));
         }
 
         private int targetAxis(final int p0, final int w0, final int e0, final int w1, final int e1) {
