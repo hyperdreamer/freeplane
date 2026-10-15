@@ -36,7 +36,10 @@ and `F11` is unused in the plugin.
    visible content.
 2. **Exit with F11 or Esc** and restore the exact prior state: window bounds and maximized state,
    each chrome element's visibility, the effective sidebar divider state, and the View menu item
-   state.
+   state. For a window whose saved extended state includes maximized-both, the exact extended state
+   must be restored and the restored bounds must be the maximized geometry of the frame's graphics
+   configuration (window managers own maximized geometry); the exact captured-bounds requirement
+   applies to non-maximized windows.
 3. **Preserve the graph view exactly** across enter/exit: the effective visible center and zoom do
    not change (exact when the integer scroll position allows it, otherwise within half a device
    pixel; a scroll-boundary clamp is the only documented deviation), and no auto-fit is performed.
@@ -538,8 +541,12 @@ Esc (canvas) -> GraphInteractionController
 5. **Maps sidebar collapsed (rail) before entry**: the captured collapsed flag and effective
    divider location are restored directly; all user controls release the override and work
    normally afterwards.
-6. **Maximized or otherwise extended window**: the extended state and bounds are captured and
-   restored.
+6. **Maximized or otherwise extended window**: the extended state bits are restored exactly, and
+   the restored bounds must equal the maximized geometry of the frame's graphics configuration.
+   The AWT `getBounds()` value captured before entry can be a stale X11/KWin coordinate-cache
+   artifact (the condition `FrameResynchronizer` deliberately does not repair when the sizes
+   disagree), so acceptance compares maximized restores against the WM-canonical geometry;
+   non-maximized windows keep the exact captured-bounds comparison.
 7. **Multiple monitors**: the screen bounds come from the frame's current
    `GraphicsConfiguration`, so the window fills the monitor it is on.
 8. **Automatic layout, resize or no-gesture focus loss while the override is installed**: the

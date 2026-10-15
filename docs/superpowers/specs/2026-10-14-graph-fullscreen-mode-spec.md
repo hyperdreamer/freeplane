@@ -153,6 +153,12 @@ method returns the result of the surviving raw operation:
 The mode never retries a frame operation. Every failure is logged by the mode or its injected
 logger with the original and recovery exception where available.
 
+For a saved state that includes `MAXIMIZED_BOTH`, the window manager owns the final geometry: the
+restore sets the saved bounds and then the saved extended state, and the resulting bounds are the
+maximized geometry of the frame's graphics configuration. Acceptance for maximized restores
+compares against that canonical geometry (the pre-entry AWT `getBounds()` value may be a stale
+X11/KWin cache value); non-maximized restores compare against the exact captured bounds.
+
 `GraphWorkspaceWindow` implements `ScreenFillSurface` and adds these package-private raw
 methods, which may throw and never call one another:
 
@@ -787,8 +793,12 @@ cancels the prior chain. Window close cancels it permanently. The hold remains a
     applied target, and residual. Do not re-anchor the canvas or change zoom.
 11. **Zero-width restore:** if the split pane has width zero at restore time, retain the sidebar
     override; the first real layout event applies the captured divider/collapse state.
-12. **Maximized/extended window:** capture the exact bounds and extended state before `dispose()`
-    and restore both after decoration is restored.
+12. **Maximized/extended window:** capture the exact extended state bits before `dispose()` and
+    restore them exactly. For a saved state that includes `MAXIMIZED_BOTH`, assert that the
+    restored bounds equal the maximized geometry of the frame's graphics configuration (the
+    window manager owns maximized geometry); the pre-entry AWT `getBounds()` value may be a stale
+    X11/KWin cache value and is not the acceptance target. Non-maximized windows assert the exact
+    captured bounds.
 13. **Multiple monitors:** use `getGraphicsConfiguration().getBounds()` from the live frame so
     entry fills the monitor currently occupied by the window.
 14. **Hidden settings panel:** restore it hidden and keep `toolbar.setSettingsVisible` consistent.
@@ -946,7 +956,10 @@ Modify `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/G
 - `f11UnavailableActionDoesNothing`.
 - `modelFrameRecoveryReportsObservableSurvivalAndBoundedCalls`.
 
-Add display-required tests guarded with `Assume.assumeFalse(GraphicsEnvironment.isHeadless())`:
+Add display-required tests guarded with `Assume.assumeFalse(GraphicsEnvironment.isHeadless())`.
+For `f11RestoresBoundsAndExtendedStateFromMaximizedWindow`, the bounds assertion compares the
+restored bounds with the maximized geometry of the frame's graphics configuration (see the
+maximized-restore rule above); every other display method keeps its exact-bounds assertion.
 
 - `f11MakesWindowUndecoratedAndFillsCurrentScreen`.
 - `f11RestoresBoundsAndExtendedStateFromNormalWindow`.
