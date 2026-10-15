@@ -54,6 +54,7 @@ public final class GraphInteractionController {
     private LayoutPoint previewFrom;
     private boolean contextHandled;
     private boolean contextGestureDispatched;
+    private Runnable escapeFallback;
 
     public GraphInteractionController(final GraphInteractionListener listener) {
         this.listener = Objects.requireNonNull(listener, "listener");
@@ -167,6 +168,10 @@ public final class GraphInteractionController {
         if (next != InteractionTool.CONNECT) {
             cancelPreview();
         }
+    }
+
+    public void setEscapeFallback(final Runnable fallback) {
+        escapeFallback = fallback;
     }
 
     public void setRelationshipDirection(final RelationshipDirection value) {
@@ -368,7 +373,9 @@ public final class GraphInteractionController {
             return;
         }
         if (event.getKeyCode() == KeyEvent.VK_ESCAPE) {
-            if (previewSource != null) {
+            final boolean hadPreview = previewSource != null;
+            final boolean hadSelection = canvas.paintState().selection().isPresent();
+            if (hadPreview) {
                 cancelPreview();
             }
             else {
@@ -376,6 +383,9 @@ public final class GraphInteractionController {
                 emit(new GraphIntent.ChangeSelection(Optional.<ProjectedEndpointKey>empty()));
             }
             event.consume();
+            if (!hadPreview && !hadSelection && escapeFallback != null) {
+                escapeFallback.run();
+            }
             return;
         }
         final int modifiers = event.getModifiersEx();
