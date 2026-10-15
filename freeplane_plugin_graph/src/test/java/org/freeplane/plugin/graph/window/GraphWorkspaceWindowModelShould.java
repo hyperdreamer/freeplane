@@ -343,6 +343,35 @@ public class GraphWorkspaceWindowModelShould {
     }
 
     @Test
+    public void resolvesFullScreenControlsFromTheEnglishResource() throws Exception {
+        final java.util.Properties english = new java.util.Properties();
+        try (java.io.InputStream input = Files.newInputStream(
+                Paths.get("../freeplane/src/viewer/resources/translations/Resources_en.properties"))) {
+            english.load(input);
+        }
+        assertThat(english.getProperty("graph_workspace.action.full_screen")).isEqualTo("Full Screen");
+        assertThat(english.getProperty("graph_workspace.hint.full_screen_exit"))
+            .isEqualTo("Esc or F11 exits full screen");
+        final Fixture fixture = fixture(RecentWorkspaceList.empty());
+        GraphWorkspaceWindow.runOnEdt(() -> {
+            EdtResources resources = new EdtResources();
+            RESOURCES.add(resources);
+            resources.textUtils.when(() -> TextUtils.getText(any(String.class)))
+                .thenAnswer(invocation -> english.getProperty((String) invocation.getArgument(0)));
+            GraphWorkspaceWindowModel model = new GraphWorkspaceWindowModel(fixture.handle, fixture.binding,
+                fixture.applicationController, () -> OPEN_PATH, fixture.closeController,
+                () -> { }, () -> { }, () -> { }, message -> { });
+            try {
+                assertThat(((JCheckBoxMenuItem) GraphWindowChromeShould.field(model,
+                    "fullScreenMenuItem")).getText()).isEqualTo("Full Screen");
+            }
+            finally {
+                model.close();
+            }
+        });
+    }
+
+    @Test
     public void rendersVisibleShellControlsFromGraphWorkspaceResourceKeys() {
         Fixture fixture = fixture(Viewport.of(0.0, 0.0, 1.0, emptyUnknownXml()),
             nodeState(ACTIVE_ID, LayoutPoint.of(0.0, 0.0)),
@@ -1814,6 +1843,598 @@ public class GraphWorkspaceWindowModelShould {
         finally {
             window.close();
             resourceScope.close();
+        }
+    }
+
+    @Test
+    public void f11MakesWindowUndecoratedAndFillsCurrentScreen() throws Exception {
+        Assume.assumeFalse(GraphicsEnvironment.isHeadless());
+        try (DisplayFixture f = new DisplayFixture()) {
+            final GraphViewport before = f.view();
+            f.pressF11();
+            f.awaitActive(true);
+            f.await(f::hasWorkAreaCoverage);
+            f.onEdt(() -> {
+                assertThat(f.window.isUndecorated()).isTrue();
+                assertThat(f.menu.isSelected()).isTrue();
+                assertThat(f.chrome()).containsOnly(false);
+            });
+            f.assertWorkAreaCoverage();
+            f.assertView(before);
+            f.assertNoCommands();
+        }
+    }
+
+    @Test
+    public void f11RestoresBoundsAndExtendedStateFromNormalWindow() throws Exception {
+        Assume.assumeFalse(GraphicsEnvironment.isHeadless());
+        try (DisplayFixture f = new DisplayFixture()) {
+            f.assertRoundTrip();
+        }
+    }
+
+    @Test
+    public void f11RestoresBoundsAndExtendedStateFromMaximizedWindow() throws Exception {
+        Assume.assumeFalse(GraphicsEnvironment.isHeadless());
+        try (DisplayFixture f = new DisplayFixture()) {
+            f.onEdt(() -> f.window.setExtendedState(java.awt.Frame.MAXIMIZED_BOTH));
+            f.await(() -> f.window.getExtendedState() == java.awt.Frame.MAXIMIZED_BOTH);
+            f.awaitFrameStable(2100);
+            f.checkpoint = f.edt(() -> f.commands.size());
+            f.assertRoundTrip(true);
+        }
+    }
+
+    @Test
+    public void escapeExitsWhenCanvasHasNoPreviewOrSelection() throws Exception {
+        Assume.assumeFalse(GraphicsEnvironment.isHeadless());
+        try (DisplayFixture f = new DisplayFixture()) {
+            final AtomicReference<KeyEvent> escape = new AtomicReference<KeyEvent>();
+            f.onEdt(() -> f.window.canvas().addKeyListener(new java.awt.event.KeyAdapter() {
+                @Override
+                public void keyPressed(final KeyEvent event) {
+                    if (event.getKeyCode() == KeyEvent.VK_ESCAPE) {
+                        escape.set(event);
+                    }
+                }
+            }));
+            f.pressF11();
+            f.awaitActive(true);
+            f.onEdt(() -> {
+                org.freeplane.plugin.graph.canvas.GraphPaintState paint =
+                    (org.freeplane.plugin.graph.canvas.GraphPaintState) GraphWindowChromeShould.field(
+                        f.window.canvas(), "paintState");
+                assertThat(paint.selection()).isEmpty();
+                assertThat((Optional<?>) GraphWindowChromeShould.field(paint, "connectionPreview")).isEmpty();
+            });
+            f.pressEscape();
+            f.awaitActive(false);
+            f.onEdt(() -> {
+                assertThat(escape.get()).isNotNull();
+                assertThat(escape.get().isConsumed()).isTrue();
+                assertThat(f.window.isUndecorated()).isFalse();
+            });
+            f.assertNoCommands();
+        }
+    }
+
+    @Test
+    public void panDuringPresentationIsPreservedThroughExit() throws Exception {
+        Assume.assumeFalse(GraphicsEnvironment.isHeadless());
+        try (DisplayFixture f = new DisplayFixture()) {
+            f.pressF11();
+            f.awaitActive(true);
+            final GraphViewport before = f.view();
+            final Point pointer = f.edt(() -> {
+                JViewport viewport = (JViewport) f.window.canvas().getParent();
+                Point point = viewport.getLocationOnScreen();
+                point.translate(viewport.getWidth() / 2, viewport.getHeight() / 2);
+                return point;
+            });
+            f.robot.mouseMove(pointer.x, pointer.y);
+            f.robot.mousePress(InputEvent.BUTTON1_DOWN_MASK);
+            f.robot.mouseMove(pointer.x + 60, pointer.y + 40);
+            f.robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK);
+            f.robot.mouseWheel(-2);
+            f.await(() -> f.window.canvas().visibleViewport().zoom() != before.zoom());
+            f.awaitEdt();
+            final GraphViewport changed = f.view();
+            assertThat(changed.centerX()).isNotEqualTo(before.centerX());
+            assertThat(changed.centerY()).isNotEqualTo(before.centerY());
+            assertThat(f.edt(() -> f.commands.size())).isGreaterThan(f.checkpoint);
+            f.checkpoint = f.edt(() -> f.commands.size());
+            f.pressF11();
+            f.awaitActive(false);
+            f.await(() -> !(Boolean) GraphWindowChromeShould.field(f.model.presentationViewport(), "armed"));
+            f.assertView(changed);
+            f.assertNoCommands();
+        }
+    }
+
+    @Test
+    public void canvasHasFocusAfterEntryAndExit() throws Exception {
+        Assume.assumeFalse(GraphicsEnvironment.isHeadless());
+        try (DisplayFixture f = new DisplayFixture()) {
+            f.pressF11();
+            f.awaitActive(true);
+            f.awaitCanvasFocus();
+            f.pressF11();
+            f.awaitActive(false);
+            f.awaitCanvasFocus();
+            f.assertNoCommands();
+        }
+    }
+
+    @Test
+    public void oneF11PressPerformsExactlyOneToggle() throws Exception {
+        Assume.assumeFalse(GraphicsEnvironment.isHeadless());
+        try (DisplayFixture f = new DisplayFixture()) {
+            final int[] operations = { 0, 0 };
+            f.onEdt(() -> f.replaceTransitions(new GraphWorkspaceWindow.FrameTransitions(() -> {
+                operations[0]++;
+                f.window.rawEnterFullScreen();
+            }, previous -> {
+                operations[1]++;
+                f.window.rawRestoreWindowed(previous);
+            }, f.messages::add)));
+            for (int cycle = 0; cycle < 2; cycle++) {
+                if (cycle == 1) {
+                    f.onEdt(() -> f.model.menuBar().setVisible(false));
+                }
+                final int expected = cycle + 1;
+                f.pressF11();
+                f.awaitActive(true);
+                f.onEdt(() -> assertThat(operations).containsExactly(expected, expected - 1));
+                f.pressF11();
+                f.awaitActive(false);
+                f.onEdt(() -> assertThat(operations).containsExactly(expected, expected));
+            }
+            f.assertNoCommands();
+        }
+    }
+
+    @Test
+    public void temporaryDisposeDoesNotClosePresentationMode() throws Exception {
+        Assume.assumeFalse(GraphicsEnvironment.isHeadless());
+        try (DisplayFixture f = new DisplayFixture()) {
+            for (int cycle = 0; cycle < 2; cycle++) {
+                f.pressF11();
+                f.awaitActive(true);
+                f.onEdt(() -> {
+                    assertThat(f.menu.isEnabled()).isTrue();
+                    assertThat(f.hintPanel.getParent()).isSameAs(f.window.getLayeredPane());
+                    assertThat(GraphWindowChromeShould.field(f.model.presentationViewport(), "closed"))
+                        .isEqualTo(false);
+                    assertThat(f.chrome()).containsOnly(false);
+                });
+                f.pressF11();
+                f.awaitActive(false);
+                f.onEdt(() -> {
+                    assertThat(f.window.isDisplayable()).isTrue();
+                    assertThat(f.model.menuBar().isVisible()).isTrue();
+                    assertThat(f.menu.isEnabled()).isTrue();
+                });
+            }
+            f.assertNoCommands();
+        }
+    }
+
+    @Test
+    public void closeDuringTransitionLeavesDisposedWindowWithoutError() throws Exception {
+        Assume.assumeFalse(GraphicsEnvironment.isHeadless());
+        try (DisplayFixture f = new DisplayFixture()) {
+            final AtomicReference<Runnable> late = new AtomicReference<Runnable>();
+            f.onEdt(() -> f.replaceTransitions(new GraphWorkspaceWindow.FrameTransitions(() -> {
+                late.set((Runnable) GraphWindowChromeShould.field(f.window.canvas(),
+                    "pendingViewportSettledCallback"));
+                f.window.close();
+                f.window.rawEnterFullScreen();
+            }, f.window::rawRestoreWindowed, f.messages::add)));
+            f.pressF11();
+            f.await(() -> !f.window.isDisplayable());
+            f.onEdt(() -> {
+                assertThat(GraphWindowChromeShould.field(f.mode, "state").toString()).isEqualTo("CLOSED");
+                assertThat(f.menu.isSelected()).isFalse();
+                assertThat(f.menu.isEnabled()).isFalse();
+                assertThat(f.hintTimer.isRunning()).isFalse();
+                assertThat(f.hintPanel.getParent()).isNull();
+                if (late.get() != null) {
+                    late.get().run();
+                }
+                f.hintTimer.getActionListeners()[0].actionPerformed(null);
+                f.window.show();
+                f.window.focus();
+                f.mode.toggle();
+                f.mode.requestExit();
+                assertThat(f.window.isDisplayable()).isFalse();
+                assertThat(GraphWindowChromeShould.field(f.model.presentationViewport(), "armed"))
+                    .isEqualTo(false);
+            });
+            f.awaitEdt();
+            f.assertNoCommands();
+        }
+    }
+
+    @Test
+    public void hintShowsOnEntryAndIsRemovedAfterInjectedDelay() throws Exception {
+        Assume.assumeFalse(GraphicsEnvironment.isHeadless());
+        try (DisplayFixture f = new DisplayFixture()) {
+            final java.util.concurrent.atomic.AtomicBoolean shown = new java.util.concurrent.atomic.AtomicBoolean();
+            f.onEdt(() -> {
+                f.hintTimer.setInitialDelay(25);
+                f.hintPanel.addComponentListener(new java.awt.event.ComponentAdapter() {
+                    @Override
+                    public void componentShown(final java.awt.event.ComponentEvent event) {
+                        shown.set(f.hintPanel.isVisible());
+                    }
+                });
+            });
+            f.pressF11();
+            f.awaitActive(true);
+            f.await(shown::get);
+            f.await(() -> !f.hintPanel.isVisible() && !f.hintTimer.isRunning());
+            f.pressF11();
+            f.awaitActive(false);
+            f.onEdt(() -> {
+                assertThat(f.hintPanel.isVisible()).isFalse();
+                f.window.close();
+                f.hintTimer.getActionListeners()[0].actionPerformed(null);
+                assertThat(f.hintPanel.isVisible()).isFalse();
+                assertThat(f.hintPanel.getParent()).isNull();
+            });
+        }
+    }
+
+    @Test
+    public void rawFrameOperationsFollowSpecifiedOrder() throws Exception {
+        Assume.assumeFalse(GraphicsEnvironment.isHeadless());
+        try (DisplayFixture f = new DisplayFixture()) {
+            f.onEdt(() -> {
+                final GraphWorkspaceWindow spy = org.mockito.Mockito.spy(f.window);
+                final List<String> operations = new ArrayList<String>();
+                final int[] nesting = { 0 };
+                final org.mockito.stubbing.Answer<Object> record = invocation -> {
+                    boolean top = nesting[0]++ == 0;
+                    try {
+                        if (top) {
+                            operations.add(invocation.getMethod().getName()
+                                + Arrays.toString(invocation.getArguments()));
+                        }
+                        return invocation.callRealMethod();
+                    }
+                    finally {
+                        nesting[0]--;
+                    }
+                };
+                org.mockito.Mockito.doAnswer(record).when(spy).dispose();
+                org.mockito.Mockito.doAnswer(record).when(spy).setUndecorated(any(Boolean.class));
+                org.mockito.Mockito.doAnswer(record).when(spy).setExtendedState(any(Integer.class));
+                org.mockito.Mockito.doAnswer(record).when(spy).setBounds(any(java.awt.Rectangle.class));
+                org.mockito.Mockito.doAnswer(record).when(spy).setResizable(any(Boolean.class));
+                org.mockito.Mockito.doAnswer(record).when(spy).setVisible(any(Boolean.class));
+                org.mockito.Mockito.doAnswer(record).when(spy).validate();
+                final java.awt.Rectangle screen = spy.getGraphicsConfiguration().getBounds();
+                final ScreenFillSurface.FrameState previous = spy.captureFrameState();
+                try {
+                    operations.clear();
+                    spy.rawEnterFullScreen();
+                    List<String> enter = new ArrayList<String>(Arrays.asList("dispose[]", "setUndecorated[true]",
+                        "setExtendedState[6]", "setBounds[" + screen + "]"));
+                    if (org.freeplane.core.util.Compat.isWindowsOS()) {
+                        enter.add("setResizable[false]");
+                    }
+                    enter.add("setVisible[true]");
+                    enter.add("validate[]");
+                    assertThat(operations).containsExactlyElementsOf(enter);
+                    operations.clear();
+                    spy.rawRestoreWindowed(previous);
+                    List<String> restore = new ArrayList<String>(Arrays.asList("dispose[]", "setUndecorated[false]",
+                        "setBounds[" + previous.bounds() + "]", "setExtendedState[" + previous.extendedState() + "]"));
+                    if (org.freeplane.core.util.Compat.isWindowsOS()) {
+                        restore.add("setResizable[false]");
+                    }
+                    restore.addAll(Arrays.asList("setResizable[true]", "setVisible[true]", "validate[]"));
+                    assertThat(operations).containsExactlyElementsOf(restore);
+                }
+                finally {
+                    spy.dispose();
+                }
+            });
+        }
+    }
+
+    private static final class DisplayFixture implements AutoCloseable {
+        // X11 AWT geometry can lag the window manager by a couple of pixels.
+        private static final int X11_AWT_BOUNDS_TOLERANCE = 2;
+        private final java.awt.Robot robot;
+        private final List<GraphCommand> commands = new ArrayList<GraphCommand>();
+        private final List<String> messages = new ArrayList<String>();
+        private final AtomicReference<Throwable> uncaught = new AtomicReference<Throwable>();
+        private GraphWorkspaceWindow window;
+        private GraphWorkspaceWindowModel model;
+        private GraphPresentationMode mode;
+        private JCheckBoxMenuItem menu;
+        private JPanel hintPanel;
+        private javax.swing.Timer hintTimer;
+        private Thread.UncaughtExceptionHandler previousHandler;
+        private int checkpoint;
+
+        private DisplayFixture() throws Exception {
+            robot = new java.awt.Robot();
+            robot.setAutoDelay(15);
+            final Fixture fixture = fixture(Viewport.of(37.25, -28.75, 1.25, emptyUnknownXml()),
+                displayState(), Collections.singletonList(registration(ACTIVE_ID, "Active",
+                    MapAvailability.AVAILABLE)), false);
+            when(fixture.handle.execute(any(GraphCommand.class))).thenAnswer(invocation -> {
+                commands.add(invocation.getArgument(0));
+                return null;
+            });
+            onEdt(() -> {
+                final EdtResources resources = new EdtResources();
+                RESOURCES.add(resources);
+                previousHandler = Thread.currentThread().getUncaughtExceptionHandler();
+                Thread.currentThread().setUncaughtExceptionHandler((thread, failure) -> uncaught.compareAndSet(null, failure));
+                window = new GraphWorkspaceWindow(fixture.handle, fixture.binding, fixture.closeController,
+                    fixture.applicationController, () -> OPEN_PATH);
+                model = (GraphWorkspaceWindowModel) GraphWindowChromeShould.field(window, "model");
+                mode = (GraphPresentationMode) GraphWindowChromeShould.field(window, "presentationMode");
+                menu = (JCheckBoxMenuItem) GraphWindowChromeShould.field(model, "fullScreenMenuItem");
+                final Object hint = GraphWindowChromeShould.field(mode, "hint");
+                hintPanel = (JPanel) GraphWindowChromeShould.field(hint, "panel");
+                hintTimer = (javax.swing.Timer) GraphWindowChromeShould.field(hint, "timer");
+                window.setBounds(120, 100, 1000, 700);
+                window.show();
+                window.toFront();
+                window.canvas().requestFocusInWindow();
+            });
+            awaitCanvasFocus();
+            awaitFrameStable();
+            checkpoint = edt(() -> commands.size());
+        }
+
+        private static CanvasState displayState() {
+            List<ProjectedNode> nodes = new ArrayList<ProjectedNode>();
+            Map<ProjectedNodeKey, NodeGeometry> geometry = new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
+            Map<ProjectedNodeKey, LayoutPoint> positions = new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+            for (int index = 0; index < 2; index++) {
+                ProjectedNodeKey key = ProjectedNodeKey.of(SourceNodeKey.transientPath(ACTIVE_ID,
+                    Collections.singletonList(Integer.valueOf(index))));
+                LayoutPoint point = LayoutPoint.of(index == 0 ? -4000.0 : 4000.0,
+                    index == 0 ? -3000.0 : 3000.0);
+                nodes.add(ProjectedNode.of(key, SafeNodeLabel.of("Node", "Node"), "Map", true));
+                geometry.put(key, NodeGeometry.of(point, 10.0));
+                positions.put(key, point);
+            }
+            return CanvasState.of(0L, GraphProjection.structure(0L, nodes, Collections.emptyList()),
+                LayoutFrame.of(0L, LayoutPositions.of(positions, Collections.emptyMap()), false, 0),
+                GraphGeometry.of(geometry, Collections.emptyMap()), OperationalStatus.IDLE);
+        }
+
+        private void onEdt(final Runnable operation) {
+            GraphWorkspaceWindow.runOnEdt(operation);
+        }
+
+        private <T> T edt(final Supplier<T> operation) {
+            AtomicReference<T> result = new AtomicReference<T>();
+            onEdt(() -> result.set(operation.get()));
+            return result.get();
+        }
+
+        private void awaitEdt() {
+            assertThat(javax.swing.SwingUtilities.isEventDispatchThread()).isFalse();
+            onEdt(() -> { });
+            onEdt(() -> { });
+            assertThat(uncaught.get()).as("uncaught EDT error").isNull();
+        }
+
+        private void await(final java.util.function.BooleanSupplier condition) throws Exception {
+            long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(5000);
+            while (!edt(() -> condition.getAsBoolean())) {
+                assertThat(uncaught.get()).as("uncaught EDT error").isNull();
+                if (System.nanoTime() >= deadline) {
+                    throw new AssertionError("Display condition did not settle within 5000 ms; bounds="
+                        + edt(() -> window.getBounds()) + "; messages=" + messages);
+                }
+                Thread.sleep(10);
+            }
+            awaitEdt();
+        }
+
+        private void awaitCanvasFocus() throws Exception {
+            final long deadline = System.nanoTime()
+                + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(5000);
+            while (!edt(() -> window.canvas().isFocusOwner())) {
+                onEdt(() -> {
+                    if (window.isDisplayable() && window.isVisible()) {
+                        window.toFront();
+                        window.canvas().requestFocusInWindow();
+                    }
+                });
+                assertThat(uncaught.get()).as("uncaught EDT error").isNull();
+                if (System.nanoTime() >= deadline) {
+                    throw new AssertionError("Canvas did not regain focus within 5000 ms");
+                }
+                Thread.sleep(10);
+            }
+            awaitEdt();
+        }
+
+        private void awaitFrameStable() throws Exception {
+            awaitFrameStable(200);
+        }
+
+        private void awaitFrameStable(final int quietMillis) throws Exception {
+            final AtomicReference<java.awt.Rectangle> last = new AtomicReference<java.awt.Rectangle>();
+            final long[] changed = { System.nanoTime() };
+            await(() -> {
+                java.awt.Rectangle current = window.getBounds();
+                if (!current.equals(last.get())) {
+                    last.set(current);
+                    changed[0] = System.nanoTime();
+                }
+                return System.nanoTime() - changed[0]
+                    >= java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(quietMillis);
+            });
+        }
+
+        private void pressF11() throws Exception {
+            press(KeyEvent.VK_F11);
+        }
+
+        private void pressEscape() throws Exception {
+            press(KeyEvent.VK_ESCAPE);
+        }
+
+        private void press(final int key) throws Exception {
+            awaitCanvasFocus();
+            robot.keyPress(key);
+            robot.keyRelease(key);
+            awaitEdt();
+        }
+
+        private void awaitActive(final boolean active) throws Exception {
+            await(() -> mode.isActive() == active);
+            awaitFrameStable();
+        }
+
+        private GraphViewport view() {
+            return edt(() -> window.canvas().visibleViewport());
+        }
+
+        private void assertView(final GraphViewport expected) {
+            final GraphViewport actual = view();
+            assertThat(actual.zoom()).isEqualTo(expected.zoom());
+            // Pixel rounding allows half a pixel; the epsilon covers the world/pixel double round trip.
+            assertThat(Math.abs(actual.centerX() - expected.centerX()) * actual.zoom())
+                .as("horizontal center residual in pixels").isLessThanOrEqualTo(0.500000001);
+            assertThat(Math.abs(actual.centerY() - expected.centerY()) * actual.zoom())
+                .as("vertical center residual in pixels").isLessThanOrEqualTo(0.500000001);
+        }
+
+        private List<Boolean> chrome() {
+            return Arrays.asList(model.menuBar().isVisible(), model.toolbar().isVisible(),
+                ((Component) GraphWindowChromeShould.field(model, "sidebar")).isVisible(),
+                model.settingsPanel().isVisible(), model.statusSlot().isVisible());
+        }
+
+        private void assertRoundTrip() throws Exception {
+            assertRoundTrip(edt(() -> window.getBounds()), false);
+        }
+
+        private void assertRoundTrip(final boolean requireWorkArea) throws Exception {
+            assertRoundTrip(requireWorkArea ? null : edt(() -> window.getBounds()), requireWorkArea);
+        }
+
+        private void assertRoundTrip(final java.awt.Rectangle expectedBounds, final boolean requireWorkArea)
+                throws Exception {
+            final int extended = edt(() -> window.getExtendedState());
+            final List<Boolean> chrome = edt(this::chrome);
+            final int divider = edt(() -> splitPane(model).getDividerLocation());
+            final GraphViewport before = view();
+            System.out.println("DISPLAY before bounds=" + expectedBounds + " state=" + extended + " view=" + before);
+            pressF11();
+            awaitActive(true);
+            assertView(before);
+            final GraphViewport exitBaseline = view();
+            pressF11();
+            awaitActive(false);
+            System.out.println("DISPLAY restored bounds=" + edt(() -> window.getBounds())
+                + " state=" + edt(() -> window.getExtendedState()) + " view=" + view());
+            await(() -> window.getExtendedState() == extended
+                && (requireWorkArea ? hasWorkAreaCoverage() : window.getBounds().equals(expectedBounds)));
+            onEdt(() -> {
+                assertThat(window.isUndecorated()).isFalse();
+                if (requireWorkArea) {
+                    assertWorkAreaCoverageOnEdt();
+                }
+                else {
+                    assertThat(window.getBounds()).isEqualTo(expectedBounds);
+                }
+                assertThat(chrome()).isEqualTo(chrome);
+                assertThat(splitPane(model).getDividerLocation()).isEqualTo(divider);
+            });
+            assertView(exitBaseline);
+            assertNoCommands();
+        }
+
+        private boolean hasWorkAreaCoverage() {
+            final java.awt.GraphicsConfiguration graphics = window.getGraphicsConfiguration();
+            final java.awt.Rectangle screen = graphics.getBounds();
+            final java.awt.Rectangle workArea = workArea(graphics);
+            final java.awt.Rectangle actual = window.getBounds();
+            return actual.x <= workArea.x + X11_AWT_BOUNDS_TOLERANCE
+                && actual.y <= workArea.y + X11_AWT_BOUNDS_TOLERANCE
+                && actual.x + actual.width >= workArea.x + workArea.width - X11_AWT_BOUNDS_TOLERANCE
+                && actual.y + actual.height >= workArea.y + workArea.height - X11_AWT_BOUNDS_TOLERANCE
+                && actual.x >= screen.x - X11_AWT_BOUNDS_TOLERANCE
+                && actual.y >= screen.y - X11_AWT_BOUNDS_TOLERANCE
+                && actual.x + actual.width <= screen.x + screen.width + X11_AWT_BOUNDS_TOLERANCE
+                && actual.y + actual.height <= screen.y + screen.height + X11_AWT_BOUNDS_TOLERANCE;
+        }
+
+        private void assertWorkAreaCoverage() {
+            onEdt(this::assertWorkAreaCoverageOnEdt);
+        }
+
+        private void assertWorkAreaCoverageOnEdt() {
+            final java.awt.GraphicsConfiguration graphics = window.getGraphicsConfiguration();
+            final java.awt.Rectangle screen = graphics.getBounds();
+            final java.awt.Rectangle workArea = workArea(graphics);
+            final java.awt.Rectangle actual = window.getBounds();
+            // X11 AWT can briefly report a cached outer bound while KWin has already
+            // applied the current work-area placement; permit two pixels at each edge.
+            assertThat(actual.x).as("full-screen frame left edge within screen")
+                .isGreaterThanOrEqualTo(screen.x - X11_AWT_BOUNDS_TOLERANCE);
+            assertThat(actual.y).as("full-screen frame top edge within screen")
+                .isGreaterThanOrEqualTo(screen.y - X11_AWT_BOUNDS_TOLERANCE);
+            assertThat(actual.x + actual.width).as("full-screen frame right edge within screen")
+                .isLessThanOrEqualTo(screen.x + screen.width + X11_AWT_BOUNDS_TOLERANCE);
+            assertThat(actual.y + actual.height).as("full-screen frame bottom edge within screen")
+                .isLessThanOrEqualTo(screen.y + screen.height + X11_AWT_BOUNDS_TOLERANCE);
+            assertThat(actual.x).as("full-screen frame covers work-area left edge")
+                .isLessThanOrEqualTo(workArea.x + X11_AWT_BOUNDS_TOLERANCE);
+            assertThat(actual.y).as("full-screen frame covers work-area top edge")
+                .isLessThanOrEqualTo(workArea.y + X11_AWT_BOUNDS_TOLERANCE);
+            assertThat(actual.x + actual.width).as("full-screen frame covers work-area right edge")
+                .isGreaterThanOrEqualTo(workArea.x + workArea.width - X11_AWT_BOUNDS_TOLERANCE);
+            assertThat(actual.y + actual.height).as("full-screen frame covers work-area bottom edge")
+                .isGreaterThanOrEqualTo(workArea.y + workArea.height - X11_AWT_BOUNDS_TOLERANCE);
+        }
+
+        private static java.awt.Rectangle workArea(final java.awt.GraphicsConfiguration graphics) {
+            final java.awt.Rectangle bounds = new java.awt.Rectangle(graphics.getBounds());
+            final Insets insets = java.awt.Toolkit.getDefaultToolkit().getScreenInsets(graphics);
+            bounds.x += insets.left;
+            bounds.y += insets.top;
+            bounds.width -= insets.left + insets.right;
+            bounds.height -= insets.top + insets.bottom;
+            return bounds;
+        }
+
+        private void replaceTransitions(final GraphWorkspaceWindow.FrameTransitions replacement) {
+            try {
+                java.lang.reflect.Field field = GraphWorkspaceWindow.class.getDeclaredField("frameTransitions");
+                field.setAccessible(true);
+                field.set(window, replacement);
+            }
+            catch (ReflectiveOperationException failure) {
+                throw new AssertionError(failure);
+            }
+        }
+
+        private void assertNoCommands() {
+            onEdt(() -> assertThat(commands).hasSize(checkpoint));
+        }
+
+        @Override
+        public void close() {
+            onEdt(() -> {
+                if (window != null) {
+                    window.close();
+                }
+                Thread.currentThread().setUncaughtExceptionHandler(previousHandler);
+            });
+            awaitEdt();
         }
     }
 
