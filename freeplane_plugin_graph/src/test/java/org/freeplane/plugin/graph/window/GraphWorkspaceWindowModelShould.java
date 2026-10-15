@@ -2208,7 +2208,7 @@ public class GraphWorkspaceWindowModelShould {
             }
             return CanvasState.of(0L, GraphProjection.structure(0L, nodes, Collections.emptyList()),
                 LayoutFrame.of(0L, LayoutPositions.of(positions, Collections.emptyMap()), false, 0),
-                GraphGeometry.of(geometry, Collections.emptyMap()), OperationalStatus.IDLE);
+                GraphGeometry.of(geometry, Collections.emptyMap()), EdgePaths.empty(), OperationalStatus.IDLE);
         }
 
         private void onEdt(final Runnable operation) {
