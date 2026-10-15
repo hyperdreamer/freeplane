@@ -32,7 +32,6 @@ final class MapSidebarPanel extends JPanel {
         setName("graph-workspace-map-sidebar");
         setLayout(new BorderLayout());
         rail = new MapSidebarRail();
-        rail.restoreButton().addActionListener(event -> setCollapsed(false));
         add(rail, BorderLayout.WEST);
         add(mapList, BorderLayout.CENTER);
         applyCollapsedState(false);
