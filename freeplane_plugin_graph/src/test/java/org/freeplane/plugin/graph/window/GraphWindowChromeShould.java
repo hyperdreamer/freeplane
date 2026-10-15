@@ -11,8 +11,11 @@ import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.Graphics2D;
 import java.awt.event.ActionEvent;
+import java.awt.KeyboardFocusManager;
 import java.awt.event.FocusEvent;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
+import java.awt.event.MouseWheelEvent;
 import java.awt.image.BufferedImage;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -28,7 +31,10 @@ import java.util.function.Consumer;
 
 import javax.swing.Action;
 import javax.swing.JCheckBoxMenuItem;
+import javax.swing.JComponent;
 import javax.swing.JLayeredPane;
+import javax.swing.JScrollBar;
+import javax.swing.KeyStroke;
 import javax.swing.JViewport;
 import javax.swing.JScrollPane;
 import javax.swing.SwingUtilities;
@@ -444,11 +450,26 @@ public class GraphWindowChromeShould {
         });
     }
 
+    @Test public void compensatesPositionOnlyLayoutEventWithoutPublishingOrDisarming() {
+        withViewport(p -> {
+            p.capture();
+            long generation = (Long) field(p.hold, "generation");
+            p.viewport.setViewPosition(new Point(p.p0.x + 31, p.p0.y + 19));
+            assertThat(p.events).isPositive();
+            assertThat(p.viewport.getExtentSize()).isEqualTo(p.e0);
+            assertThat(p.canvas.getSize()).isEqualTo(p.w0);
+            p.assertTarget();
+            p.assertArmed(true);
+            assertThat(field(p.hold, "generation")).isEqualTo(generation);
+            p.f.assertNoCommands();
+        });
+    }
+
     @Test public void classifiesScrollbarDragAsUserWhenExtentAndSurfaceAreUnchanged() {
         withViewport(p -> {
             p.capture();
             Point next = new Point(p.p0.x + 31, p.p0.y + 19);
-            p.viewport.setViewPosition(next);
+            p.userScrollTo(next);
             assertThat(p.events).isPositive();
             p.assertOneViewportCommand();
             p.assertArmed(false);
@@ -465,7 +486,7 @@ public class GraphWindowChromeShould {
             assertThat(p.canvas.isViewportPositioningActive()).isFalse();
             Action scroll = p.f.scroll.getActionMap().get("unitScrollRight");
             assertThat(scroll).isNotNull();
-            scroll.actionPerformed(new ActionEvent(p.f.scroll, ActionEvent.ACTION_PERFORMED, "unitScrollRight"));
+            p.paneKey(KeyEvent.VK_RIGHT, true);
             assertThat(p.viewport.getViewPosition()).isNotEqualTo(p.p0);
             p.assertOneViewportCommand();
             p.assertArmed(false);
@@ -473,6 +494,103 @@ public class GraphWindowChromeShould {
             assertThat(field(p.canvas, "pendingViewportClamps")).isEqualTo(0);
             p.assertOneViewportCommand();
         });
+    }
+
+    @Test public void scrollbarPressPublishesOnceBeforeUiAdjustmentOnEitherAxis() {
+        for (boolean horizontal : new boolean[] {false, true}) {
+            withViewport(p -> {
+                JScrollBar bar = horizontal ? p.f.scroll.getHorizontalScrollBar()
+                    : p.f.scroll.getVerticalScrollBar();
+                Component arrow = bar.getComponent(0);
+                p.capture();
+                arrow.dispatchEvent(new MouseEvent(arrow, MouseEvent.MOUSE_PRESSED,
+                    1L, 0, 2, 2, 1, false, MouseEvent.BUTTON1));
+                arrow.dispatchEvent(new MouseEvent(arrow, MouseEvent.MOUSE_RELEASED,
+                    2L, 0, 2, 2, 1, false, MouseEvent.BUTTON1));
+                assertThat(p.viewport.getViewPosition()).isNotEqualTo(p.p0);
+                p.assertOneViewportCommand();
+                p.assertArmed(false);
+                assertThat(field(p.f.model, "userScrollDepth")).isEqualTo(0);
+                assertThat(bar.getValueIsAdjusting()).isFalse();
+                p.checkpoint();
+                p.capture();
+                p.viewport.setViewPosition(new Point(p.p0.x + 31, p.p0.y + 19));
+                p.assertTarget();
+                p.assertArmed(true);
+                p.f.assertNoCommands();
+            });
+        }
+    }
+
+    @Test public void adjustingScrollbarPublishesOnceOnEitherAxisAndClearsMarker() {
+        for (boolean horizontal : new boolean[] {false, true}) {
+            withViewport(p -> {
+                JScrollBar bar = horizontal ? p.f.scroll.getHorizontalScrollBar()
+                    : p.f.scroll.getVerticalScrollBar();
+                p.capture();
+                bar.setValueIsAdjusting(true);
+                assertThat(bar.getValueIsAdjusting()).isTrue();
+                bar.setValue(bar.getValue() + 31);
+                bar.setValueIsAdjusting(false);
+                assertThat(p.viewport.getViewPosition()).isNotEqualTo(p.p0);
+                p.assertOneViewportCommand();
+                p.assertArmed(false);
+                assertThat(field(p.f.model, "userScrollDepth")).isEqualTo(0);
+                p.checkpoint();
+                p.capture();
+                p.viewport.setViewPosition(new Point(p.p0.x + 31, p.p0.y + 19));
+                p.assertTarget();
+                p.assertArmed(true);
+                p.f.assertNoCommands();
+            });
+        }
+    }
+
+    @Test public void classifiesPaneWheelScrollAsUserAndClearsTransientMarker() {
+        withViewport(p -> {
+            p.capture();
+            p.f.scroll.dispatchEvent(new MouseWheelEvent(p.f.scroll, MouseEvent.MOUSE_WHEEL,
+                1L, 0, 20, 20, 0, false, MouseWheelEvent.WHEEL_UNIT_SCROLL, 1, 1));
+            assertThat(p.viewport.getViewPosition()).isNotEqualTo(p.p0);
+            p.assertOneViewportCommand();
+            p.assertArmed(false);
+            assertThat(field(p.f.model, "userScrollDepth")).isEqualTo(0);
+            p.checkpoint();
+            p.capture();
+            p.viewport.setViewPosition(new Point(p.p0.x + 31, p.p0.y + 19));
+            p.assertTarget();
+            p.assertArmed(true);
+            p.f.assertNoCommands();
+        });
+    }
+
+    @Test public void keyboardPaneNavigationPublishesOnceOnlyWhenPaneHasFocus() {
+        for (int key : new int[] {KeyEvent.VK_LEFT, KeyEvent.VK_RIGHT, KeyEvent.VK_UP, KeyEvent.VK_DOWN,
+                KeyEvent.VK_PAGE_UP, KeyEvent.VK_PAGE_DOWN, KeyEvent.VK_HOME, KeyEvent.VK_END}) {
+            for (boolean paneFocus : new boolean[] {true, false}) {
+                withViewport(p -> {
+                    p.capture();
+                    p.paneKey(key, paneFocus);
+                    if (paneFocus) {
+                        assertThat(p.viewport.getViewPosition()).isNotEqualTo(p.p0);
+                        p.assertOneViewportCommand();
+                        p.assertArmed(false);
+                    }
+                    else {
+                        p.assertTarget();
+                        p.assertArmed(true);
+                        p.f.assertNoCommands();
+                    }
+                    assertThat(field(p.f.model, "userScrollDepth")).isEqualTo(0);
+                    p.checkpoint();
+                    p.capture();
+                    p.viewport.setViewPosition(new Point(p.p0.x + 31, p.p0.y + 19));
+                    p.assertTarget();
+                    p.assertArmed(true);
+                    p.f.assertNoCommands();
+                });
+            }
+        }
     }
 
     @Test public void ignoresActiveProgrammaticPositioningAndKeepsHoldArmed() {
@@ -604,7 +722,7 @@ public class GraphWindowChromeShould {
             Runnable old = p.savedCallback();
             field(p.canvas, "viewportPositioningDepth", 0);
             Point user = new Point(933, 627);
-            p.viewport.setViewPosition(user);
+            p.userScrollTo(user);
             p.assertArmed(false);
             old.run();
             assertThat(p.viewport.getViewPosition()).isEqualTo(user);
@@ -687,7 +805,7 @@ public class GraphWindowChromeShould {
         withViewport(p -> {
             p.capture();
             GraphViewport before = (GraphViewport) field(p.f.model, "lastPublishedViewport");
-            p.viewport.setViewPosition(new Point(1044, 733));
+            p.userScrollTo(new Point(1044, 733));
             p.assertOneViewportCommand();
             GraphCommands.Viewport command = (GraphCommands.Viewport) p.f.commands().get(0);
             assertThat(command.viewport()).isEqualTo(p.canvas.visibleViewport().toPersisted());
@@ -1057,6 +1175,36 @@ public class GraphWindowChromeShould {
         void assertOneViewportCommand() {
             assertThat(f.commands()).hasSize(1);
             assertThat(f.commands().get(0)).isInstanceOf(GraphCommands.Viewport.class);
+        }
+        void userScrollTo(final Point position) {
+            JScrollBar bar = f.scroll.getHorizontalScrollBar();
+            bar.setValueIsAdjusting(true);
+            try {
+                viewport.setViewPosition(position);
+            }
+            finally {
+                bar.setValueIsAdjusting(false);
+            }
+        }
+        void paneKey(final int key, final boolean paneFocus) {
+            KeyboardFocusManager manager = mock(KeyboardFocusManager.class);
+            when(manager.getFocusOwner()).thenReturn(paneFocus ? f.scroll : canvas);
+            try (MockedStatic<KeyboardFocusManager> focus = org.mockito.Mockito.mockStatic(
+                    KeyboardFocusManager.class, org.mockito.Mockito.CALLS_REAL_METHODS)) {
+                focus.when(KeyboardFocusManager::getCurrentKeyboardFocusManager).thenReturn(manager);
+                Method method = f.scroll.getClass().getDeclaredMethod("processKeyBinding", KeyStroke.class,
+                    KeyEvent.class, int.class, boolean.class);
+                method.setAccessible(true);
+                int modifiers = key == KeyEvent.VK_HOME || key == KeyEvent.VK_END
+                    ? java.awt.event.InputEvent.CTRL_DOWN_MASK : 0;
+                KeyEvent event = new KeyEvent(f.scroll, KeyEvent.KEY_PRESSED, 1L, modifiers,
+                    key, KeyEvent.CHAR_UNDEFINED);
+                assertThat(method.invoke(f.scroll, KeyStroke.getKeyStrokeForEvent(event), event,
+                    JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT, true)).isEqualTo(true);
+            }
+            catch (ReflectiveOperationException failure) {
+                throw new AssertionError(failure);
+            }
         }
         void beginPositioning() {
             field(canvas, "viewportPositioningDepth", 1);
