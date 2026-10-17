@@ -5,7 +5,7 @@
 - PM run: `pm-run-20261016-125451-a5048653`
 - Delivery target: `plugin/graph-workspace`
 - Base: `0734fb23db6873f4ec64c3e3e29fc8c3e17edc7a`
-- Status: user-approved design, option 1 — Moderate (24-unit preferred gap); independent design review PASS, round 2.
+- Status: user-approved design, option 1 — Moderate (24-unit preferred gap); independent design review PASS, round 2. Amended at epoch 2 (2026-10-17): the preferred gap applies to enclosure content rings only; relationship rest lengths retain the collision clearance. Rationale and measured receipts in the amendment note below.
 
 ## User decision and intended result
 
@@ -41,9 +41,11 @@ as an unselected design alternative; it is not a runtime mode.
 
 1. **One preferred node gap shared by layout targets (recommended).** Introduce a
    layout-owned constant of 24 units and use it in the existing content
-   ring and relationship rest-length formulas. Existing footprints and hierarchy
-   distances derive from those values. This gives one parameter with a narrow
-   change surface and retains the current layout algorithms.
+   ring formula. Existing footprints and hierarchy distances derive from those
+   values. This gives one parameter with a narrow change surface and retains the
+   current layout algorithms. The epoch 2 amendment confines it to the content ring
+   because the relationship rest-length formula is coupled to a frozen cross-map
+   motion budget; see the amendment below.
 2. **Multiply all preferred distances.** A common multiplier also widens the
    graph, but scales distances due to large node radii and enclosure size as well
    as the empty space. Its effect varies more with prominence and nesting.
@@ -54,7 +56,8 @@ as an unselected design alternative; it is not a runtime mode.
 ## Architecture and data flow
 
 Keep the change within `GraphStreamLayoutEngine`'s existing parameterized
-geometry. The approved constant is `PREFERRED_NODE_GAP = 24.0`.
+geometry, plus the one authorized tolerance correction in
+`ClusterPacking.isClear`. The approved constant is `PREFERRED_NODE_GAP = 24.0`.
 
 For an enclosure with at least two direct nodes, retain the existing ring formula:
 
@@ -74,17 +77,39 @@ computed ring radius feeds all existing consumers:
 - enclosure endpoint radii when relationship rest lengths are computed.
 
 Relationship springs use `firstEndpointRadius + secondEndpointRadius +
-PREFERRED_NODE_GAP`. This is necessary for connected nodes to receive a wider
-preferred distance too. It applies to both same-map and cross-map relationships;
-force coefficients and the existing cross-map motion budget stay as they are.
-Hierarchy spring lengths continue to come from the resulting packed anchor
-positions.
+NodeSeparationProjection.MIN_GAP`; their preferred distance is deliberately
+unchanged by this feature. `NodeSeparationProjection.MIN_GAP = 6.0` remains the hard
+collision clearance and keeps its other production use, so the engine keeps that
+import. There is one active preferred-gap parameter and no legacy preference
+fallback.
 
-`NodeSeparationProjection.MIN_GAP = 6.0` remains the hard collision clearance.
-The preferred gap describes a layout target, while that lower bound remains a
-separate geometry constraint. Remove the engine's now-unused dependency on the
-collision constant if these are its only uses. There is one active preferred-gap
-parameter and no legacy preference fallback.
+### Epoch 2 amendment: why relationship rests are excluded
+
+Widening relationship rest lengths was measured to break convergence. The
+cross-map rest length for two radius-8 nodes would grow from `8+8+6 = 22` to
+`8+8+24 = 40`, an 18-unit separation. `TypedSpringBox.CROSS_MAP_DISPLACEMENT_LIMIT`
+caps cross-map travel at 0.005 units per affected particle per engine step, so
+traversing 18 units needs at least 3600 steps, while
+`TypedForcesShould.twoMapWorkspaceSettlesToIdle` requires a non-null idle frame
+within 2000 steps. The fixture therefore never reaches idle: 20 000 steps produced
+no run of idle frames at all (limit cycle, not slow convergence).
+
+The failure is not specific to 24: gaps of 12, 16 and 20 fail identically, and
+isolated mutants show the relationship rest is the dominant trigger while the ring
+alone still converges (3455 steps). No tested cross-map cap satisfies both the
+frozen cap and the observation bound.
+
+Content rings are not subject to that cap, so the preferred gap is confined to
+them. This keeps wide settled clusters — the visible spacing the request is about —
+without changing a safety limit. The 2000-step bound was still too tight for the
+widened ring on that one cross-map fixture, so it is raised to a measured 6000 as a
+test observation bound only; the production idle policy is untouched.
+
+Two further allowances were approved from measurement: a `CANDIDATE_EPSILON`
+tolerance in `ClusterPacking.isClear`, which corrects a pre-existing one-ulp
+rejection of valid geometry that larger packed items newly expose, and a
+residual-tolerant assertion for one `ClusterProximityShould` fixture whose
+last-ulp premise the widened ring removes.
 
 ## User-visible behavior and scope
 
@@ -142,9 +167,9 @@ of every required fixture must increase by at least 6.0 layout units**, with a
 numerical tolerance of 1e-6. At the fixed acceptance zoom of 1.0 this is a
 6-pixel visible-improvement margin. Report each enclosure's minimum as well as
 its median; retain the existing collision, residual, pin, and painted-crossing
-safety assertions. Measure relationship-endpoint gaps separately, with their
-24-unit preferred rest gap verified directly. Enclosure/anchor distances alone
-do not satisfy the node-spacing gate.
+safety assertions. Measure relationship-endpoint gaps separately and record that
+their preferred rest stays at the unchanged collision-based value. Enclosure/anchor
+distances alone do not satisfy the node-spacing gate.
 
 Record the next 100 worker frames' node gaps and idle/motion diagnostics as a
 separate post-idle experiment. Those frames cannot replace a failed first-idle
@@ -166,9 +191,10 @@ and deterministic.
 
 1. Pin the preferred gap with independent expectations for the initial two-node
    and multi-node distances; include mixed prominence and singleton behavior.
-2. Verify that containment and relationship spring rest lengths use the selected
-   preference, including node and enclosure relationship endpoints. A change
-   confined to initial seeding must fail these tests.
+2. Verify that containment spring rest lengths use the selected preference,
+   including node and enclosure relationship endpoints, and that relationship
+   springs keep the unchanged collision-based rest. A change confined to initial
+   seeding must fail these tests.
 3. Verify that expanded content footprints participate in sibling and top-level
    packing without overlap, while the packing gutter remains 8 units.
 4. Execute the first-idle gate above for the required relationship-free,
@@ -210,8 +236,11 @@ Original and diagnostic logs are retained in the external PM run's `reports/`:
   rendered radius conservatively; empty and singleton behavior is unchanged.
   Incremental updates and healthy restart verify retained-coordinate continuity
   and updated targets instead of exact fresh-ring gaps.
-- Both containment and relationship target lengths use the selected wider
-  spacing throughout settling and after reset.
+- Containment target lengths use the selected wider spacing throughout settling and
+  after reset. Relationship links keep the unchanged collision-based rest
+  `firstEndpointModelRadius + secondEndpointModelRadius +
+  NodeSeparationProjection.MIN_GAP`; enclosure endpoint radii may still change
+  through the wider content ring.
 - The three required unpinned cases pass the first-idle gate: idle within 2000
   steps and 30 seconds, at least 6 units of median nearest-neighbor gap
   improvement in every qualifying enclosure, and existing safety assertions.

@@ -3,29 +3,52 @@
 - Date: 2026-10-16
 - Task identifier: `graph-initial-spacing`
 - Delivery target: `plugin/graph-workspace`
-- Status: specification draft for independent review; implementation and outcome verification are pending.
-- Approved design: [2026-10-16-graph-initial-spacing-design.md](2026-10-16-graph-initial-spacing-design.md), committed at `7cb4ad04960fca107de6da39fb5cdb671d72b4e7`.
+- Status: specification amended at epoch 2 after Task 1 convergence finding; implementation and outcome verification are pending.
+- Approved design: [2026-10-16-graph-initial-spacing-design.md](2026-10-16-graph-initial-spacing-design.md), committed at `7cb4ad04960fca107de6da39fb5cdb671d72b4e7`. Amendment approved 2026-10-17.
 - Pinned old production implementation: `0734fb23db6873f4ec64c3e3e29fc8c3e17edc7a`.
-- Decision: scope B, initial placement **and** preferred settling spacing; option 1, **24.0 layout units** of preferred node-disc edge gap.
+- Decision: scope B, initial placement **and** preferred settling spacing; option 1, **24.0 layout units** of preferred node-disc edge gap, applied to enclosure content rings. Relationship rest lengths retain the collision clearance.
+
+> **Epoch 2 amendment.** Task 1 measured that substituting the preferred gap into the
+> relationship rest length makes the cross-map fixture in
+> `TypedForcesShould.twoMapWorkspaceSettlesToIdle` fail to converge at any gap above
+> the old value: the cross-map rest length grows by 18 units while
+> `TypedSpringBox.CROSS_MAP_DISPLACEMENT_LIMIT` allows only 0.005 units of cross-map
+> travel per engine step, which needs at least 3600 steps against the 2000-step
+> observation bound. Measured receipts are in `reports/task-1-convergence-finding.md`.
+> The preferred gap is therefore confined to the content ring, which is not subject to
+> that cap, and three additional allowances below are authorized. The acceptance
+> contract of section 7, the collision clearance, the packing gutter, the cross-map
+> cap, and all idle thresholds are unchanged.
 
 ## 1. Contract and production change boundary
 
 Fresh layouts should open with wider node spacing, and the force targets should retain that preference during settling. The preferred value is an equilibrium target. It does not guarantee a 24-unit gap between every settled pair.
 
-The production diff is confined to `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/GraphStreamLayoutEngine.java`:
+The production diff is confined to these two files:
+
+`freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/GraphStreamLayoutEngine.java`
 
 1. Declare one package-private internal `static final double PREFERRED_NODE_GAP = 24.0` beside `NODE_RADIUS`.
 2. Substitute that constant for `NodeSeparationProjection.MIN_GAP` in `BoundarySizes.contentRingRadius`.
-3. Substitute it for `NodeSeparationProjection.MIN_GAP` in the relationship `ForceLink` rest-length expression in `topology`.
-4. Remove the resulting unused `NodeSeparationProjection` import.
+3. Keep `NodeSeparationProjection.MIN_GAP` in the relationship `ForceLink` rest-length expression in `topology`, and therefore keep the `NodeSeparationProjection` import.
 
-There is one active preferred-gap parameter. No production algorithm, class interface, factory, command path, dependency, setting, persistence field, serialization format, migration, fallback, or public API changes. Do not restore obsolete `GROUP_SPACING` or `SUB_GROUP_SPACING` constants. Test-only observation and comparison code is permitted during implementation; it must not enter the plugin bundle.
+`freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/ClusterPacking.java`
+
+4. Apply the existing `CANDIDATE_EPSILON` tolerance to the clearance comparison in `isClear`, so a candidate exactly on the gutter is accepted:
+
+```java
+if (clearanceX < gap - CANDIDATE_EPSILON && clearanceY < gap - CANDIDATE_EPSILON) {
+```
+
+This corrects a pre-existing one-ulp fragility (`7.999999999999986 < 8.0`) that the changed item sizes newly expose; it does not change the 8.0 gutter. Larger packed items shift the arithmetic, and a strictly `<` comparison rejects a geometrically valid candidate by one unit in the last place, aborting packing with `Cluster packing found no free slot`.
+
+There is one active preferred-gap parameter. Apart from the authorized `ClusterPacking.isClear` tolerance correction described above, no production algorithm, class interface, factory, command path, dependency, setting, persistence field, serialization format, migration, fallback, or public API changes. No other production file may change. Do not restore obsolete `GROUP_SPACING` or `SUB_GROUP_SPACING` constants. Test-only observation and comparison code is permitted during implementation; it must not enter the plugin bundle.
 
 The following retain their existing independent roles and values:
 
 | Mechanism | Required value/behavior |
 | --- | --- |
-| Collision clearance, `NodeSeparationProjection.MIN_GAP` | 6.0 |
+| Collision clearance, `NodeSeparationProjection.MIN_GAP` | 6.0, and the relationship rest-length term |
 | Footprint packing gutter, `BoundarySizes.SIBLING_GAP` | 8.0 |
 | Rendered base node radius | 8.0, scaled by the existing prominence |
 | Footprint node settle margin / frame clearance | 8.0 / 16.0 |
@@ -71,10 +94,12 @@ A relationship endpoint's model radius is the rendered disc radius for a node, a
 Every resolved relationship link has:
 
 ```text
-restLength = firstEndpointModelRadius + secondEndpointModelRadius + 24.0
+restLength = firstEndpointModelRadius + secondEndpointModelRadius + 6.0
 kind       = RELATIONSHIP
 crossMap   = firstEndpoint.mapReferenceId != secondEndpoint.mapReferenceId
 ```
+
+The added term is the existing collision clearance `NodeSeparationProjection.MIN_GAP`, unchanged by this feature. Relationship rest lengths are deliberately **not** widened: they are subject to the cross-map displacement cap of 0.005 units per engine step, and widening them makes the cross-map fixture non-convergent within the observation bound (see the epoch 2 amendment note and `reports/task-1-convergence-finding.md`). The preferred gap therefore governs enclosure content rings, which are not capped.
 
 This applies to node/node, node/enclosure, and enclosure/enclosure endpoints, both same-map and cross-map. Native same-map connectors and cross-map graph relationships both reach this force-kind path. Preserve endpoint resolution, duplicate/parallel-link handling, and rejection of missing/self links.
 
@@ -121,7 +146,7 @@ For direct rest-length inspection, freeze two enclosure variants with the same f
 
 For each variant, add edges in this order: `p0--q0`, `p1--right`, `left--right`. Use distinct native contributor keys for the same-map case (occurrence 0 for sources p0,p1,left); cross-map relationship IDs `00000000-0000-0000-0000-000000016041` through `...016043`, sequence 1 through 3, `UNDIRECTED`, empty unknown XML. Labels equal IDs; map names are `Map A`/`Map B`; graph-group nodes are true. Workspaces are `...001605` and `...001606`. Generation is 1 and all pins/resolutions are empty. These are target tests, not additional first-idle outcome cases.
 
-Both two-node enclosures have model radius 20. Actual registered relationship rests must consequently be **40, 52, 64**, respectively, with crossMap flags all false in the same-map variant and all true in the cross-map variant. Containment rests are **20** for all four direct nodes. The root with no direct nodes has ring 0. Add a node/enclosure and enclosure/enclosure assertion using a singleton/children-only enclosure to pin the zero endpoint-radius rule. A parent with one child enclosure and no direct content has the existing valid zero hierarchy rest.
+Both two-node enclosures have model radius 20. Actual registered relationship rests must consequently be **22, 34, 46**, respectively, with crossMap flags all false in the same-map variant and all true in the cross-map variant. Containment rests are **20** for all four direct nodes. The root with no direct nodes has ring 0. Add a node/enclosure and enclosure/enclosure assertion using a singleton/children-only enclosure to pin the zero endpoint-radius rule. A parent with one child enclosure and no direct content has the existing valid zero hierarchy rest.
 
 Also verify recursively expanded footprints in a parent containing both direct content and child enclosures, and at least two top-level map roots. Check the actual non-overlapping packed rectangles and their 8-unit gutter, including anchor offsets. Existing no-content fixtures and their literals remain unchanged. A production-helper-derived expected footprint alone cannot establish the selected preference.
 
@@ -132,12 +157,12 @@ Keep `GraphStreamLayoutEngine` package-private. Place raw-engine/target tests in
 Required distinct proofs:
 
 - Inspect actual links **registered with the live engine's spring box**, including after stepping, a real topology change, raw reset, command Reset, and failed replacement. Computing a rest again from `BoundarySizes` is not registration evidence.
-- Connect registration to consumption through a controlled `TypedSpringBox.addTypedAttraction` experiment in the same test package. With one non-cross-map relationship along +x, particles at (0,0) and (30,0), coefficient 1.0, and no other links, rest 40 produces x contribution **-0.5** to the first particle; rest 22 produces **+0.4**. The change is **-0.9**. Inspect before integration/clamping so the 0.005 cross-map limit cannot conceal it. Separately use a registered containment link with rest 20 at distance 15, giving **-0.25** instead of the old rest-11 contribution **+0.20**. Use a real `MultiGraph` edge and `TypedSpringBox` particle; call the actual consumer, not a copied force equation.
+- Connect registration to consumption through a controlled `TypedSpringBox.addTypedAttraction` experiment in the same test package. With one non-cross-map relationship along +x, particles at (0,0) and (30,0), coefficient 1.0, and no other links, rest 22 produces x contribution **+0.4** to the first particle; rest 40 produces **-0.5**. The difference is **-0.9**. Inspect before integration/clamping so the 0.005 cross-map limit cannot conceal it. Separately use a registered containment link with rest 20 at distance 15, giving **-0.25** instead of the old rest-11 contribution **+0.20**. Use a real `MultiGraph` edge and `TypedSpringBox` particle; call the actual consumer, not a copied force equation.
 - Check cross-map links' actual rest values and flags directly, then retain the existing integration tests for the aggregate 0.005 cap. Do not enlarge the cap to make an outcome or consumption test visible.
-- For a real synchronization test, begin with direct nodes `u0,u1`; apply/step; then generation 2 adds `u2` and forward native edges `u0->u1`, `u0->u2`. Use `ProjectionDiff.between(before,after)` and assert it is nonempty. All retained node and anchor positions are bit-identical at raw apply; `u2` is deterministic; the updated ring/containment is 24.941531628991836; relationship rests are 41.6 for both edges. Remove `u2`/one edge at generation 3 and verify obsolete links disappear and current rests/radii are rebuilt. This must not be replaced with the empty-diff fast path.
+- For a real synchronization test, begin with direct nodes `u0,u1`; apply/step; then generation 2 adds `u2` and forward native edges `u0->u1`, `u0->u2`. Use `ProjectionDiff.between(before,after)` and assert it is nonempty. All retained node and anchor positions are bit-identical at raw apply; `u2` is deterministic; the updated ring/containment is 24.941531628991836; relationship rests remain 23.6 for both edges, unchanged by this feature. Remove `u2`/one edge at generation 3 and verify obsolete links disappear and current rests/radii are rebuilt. This must not be replaced with the empty-diff fast path.
 - Exercise pins in fresh, stepped, update, restart, reset and recovery cases. In particular pin radius-8 nodes at (0,0) and (20,0): keep exact positions even though the 4-unit disc gap conflicts with the preference and 6-unit clearance; require the existing residual/conflict representation. Do not force a zero-residual assertion onto that deliberate conflict fixture.
 
-Meaningful negative controls, in disposable test compilation/output only, must demonstrate that each relevant assertion fails: (a) revert the constant to 6; (b) widen seeds/footprints but leave containment rests old; (c) leave relationship rests at old radius-sum+6; (d) ignore `restLength` in attraction; (e) reseed retained particles during real topology synchronization; (f) make healthy restart recreate the engine; (g) make Reset preserve the old engine. Preserve the active worktree and record each broken mechanism and the failing test/assertion. The unchanged implementation failing new literal seed/target tests is expected red evidence, not evidence that a frozen outcome fixture may be changed.
+Meaningful negative controls, in disposable test compilation/output only, must demonstrate that each relevant assertion fails: (a) revert the constant to 6; (b) widen seeds/footprints but leave containment rests old; (c) substitute `PREFERRED_NODE_GAP` for `NodeSeparationProjection.MIN_GAP` in the relationship rest-length term while keeping current endpoint radii, so the registered-rest assertions for 22/34/46 and 23.6 must reject it; (d) ignore `restLength` in attraction; (e) reseed retained particles during real topology synchronization; (f) make healthy restart recreate the engine; (g) make Reset preserve the old engine. Preserve the active worktree and record each broken mechanism and the failing test/assertion. The unchanged implementation failing new literal seed/target tests is expected red evidence, not evidence that a frozen outcome fixture may be changed.
 
 ## 6. Frozen first-idle input fixtures
 
@@ -189,7 +214,7 @@ delta = candidateMedianAtItsOwnFirstIdle - baselineMedianAtItsOwnFirstIdle
 PASS  iff delta >= 6.0 - 1e-6
 ```
 
-Apply tolerance once to the difference. Do not average across enclosures or cases. Report each version's minimum and median, every per-node nearest gap, delta, explicit worker step count, raw frame index, elapsed nanoseconds, RMS, maximum motion and stable-frame count. Report relationship-endpoint centre distances and rendered disc-edge gaps separately for every relationship in SM8/XM4x2; target tests independently establish the 24-unit model rest gap. Anchor/hull distances cannot replace this population or predicate.
+Apply tolerance once to the difference. Do not average across enclosures or cases. Report each version's minimum and median, every per-node nearest gap, delta, explicit worker step count, raw frame index, elapsed nanoseconds, RMS, maximum motion and stable-frame count. Report relationship-endpoint centre distances and rendered disc-edge gaps separately for every relationship in SM8/XM4x2; target tests independently establish that relationship model rests are unchanged at 22 units and that the preferred 24-unit gap governs content rings. Anchor/hull distances cannot replace this population or predicate.
 
 Retain safety checks on first-idle frames: exact node/anchor coverage and finite geometry; verified node residuals; collision pair detection; boundary residual/detection consistency and containment; zero unpinned residuals in these small fixtures; complete nonexhausted edge diagnostics; actual painted-path crossing checks. The observer records independent boundary/node and chord checks plus painted crossings. Existing detailed boundary/pin/edge routing assertions remain required in their regression suites. A larger preference does not waive any existing safety or motion/performance assertion.
 
@@ -241,7 +266,15 @@ The harness has a 65-second external process watchdog per fixture/version to bou
 
 Required tests are JUnit 4/AssertJ, Java 8 source/bytecode target. Extend the existing `BoundaryFootprintShould`, `TypedForcesShould`, `ClusterPackingShould`, `ClusterProximityShould`, raw-engine and lifecycle tests where appropriate; a focused `InitialSpacingShould` can own the independent numeric/registration tests. The observer itself is evidence support, not a replacement for those assertions.
 
-Preserve the existing `<8.0` one-step movement checks, cross-map cap, 200-enclosure **<=3.0-second** submission assertion and its **5-second** future await. Keep existing safety/coverage/pin/determinism and performance thresholds. Only spacing-derived numeric goldens may change, supported by old/new measured receipts and a derivation explaining the spacing dependency. For example, the `BoundaryFootprintShould` literals 11/86 become 20/104; singleton 64 remains 64. The exact `TypedForcesShould` first-idle golden is not an outcome threshold and may change only with measured candidate evidence. Update obsolete comments tying preferred rings to collision MIN_GAP. No blanket golden regeneration or accepting any changed output is allowed.
+Preserve the existing `<8.0` one-step movement checks, cross-map cap, 200-enclosure **<=3.0-second** submission assertion and its **5-second** future await. Keep existing safety/coverage/pin/determinism and performance thresholds. Only spacing-derived numeric goldens may change, supported by old/new measured receipts and a derivation explaining the spacing dependency. For example, the `BoundaryFootprintShould` literals 11/86 become 20/104; singleton 64 remains 64. Update obsolete comments tying preferred rings to collision MIN_GAP. No blanket golden regeneration or accepting any changed output is allowed.
+
+Three measured regression expectations are additionally authorized, each with receipts:
+
+1. `TypedForcesShould.TWO_MAP_FIRST_IDLE_STEP` becomes the re-measured candidate value (measured 3455), and that test's observation bound becomes **6000** steps in place of 2000, because the widened ring lengthens convergence on the cross-map fixture while remaining convergent. This raises a test observation bound only; the production idle policy and every safety/performance threshold are unchanged, and section 7's 2000-call first-idle budget for the frozen outcome fixtures is unchanged.
+2. That test's post-idle hold envelope becomes the measured candidate envelope (measured worst RMS 0.291052 and worst maximum 0.990234 over 100 frames, rounding up to 0.30 / 1.00). It remains a bounded smoke envelope, not a stability guarantee, and the rationale comment must be restated from measured receipts.
+3. `ClusterProximityShould.initialFrameThroughWorkerKeepsSeedsWithoutPins` becomes residual-tolerant for fixture D: the widened ring removes the exact `MIN_GAP` tie that the old assertion depended on, so `EdgeConflictCorrection` may leave one residual edge conflict. The frame must still be `verified` with `residualViolations == 0`, `hullResidual == 0`, `boundaryVerified`/`boundaryCovered` true, and no violating node-separation pairs. No tolerance, threshold, or production assertion may be weakened to obtain this.
+
+The obsolete comment at `ClusterProximityShould.java:506-513` referring to the `MIN_GAP tie produced by contentRingRadius` becomes `preferred-gap tie produced by contentRingRadius`.
 
 Run from the verified candidate root, using the installed `gradle`, Java 21.0.8-zulu, and the repository's required build escalation where the execution harness supports it. Every non-UI command below inherits the same headless environment:
 
