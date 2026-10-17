@@ -1,6 +1,7 @@
 package org.freeplane.plugin.graph.layout;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -191,25 +192,230 @@ public class EdgeConflictCorrectionShould {
     }
 
     @Test
-    public void suppressesAFrameWithMoreThanTheRepairableConflictBound() {
-        final Fixture fixture = concurrentDiameters(5);
-        final EdgeConflictCorrection.Detection detected = EdgeConflictCorrection.detectConflicts(
+    public void repairsNineIndependentObstructionsInBoundedBatches() {
+        final Fixture fixture = nineObstructionsFixture();
+        final EdgeConflictCorrection.Detection initial = EdgeConflictCorrection.detectConflicts(
             fixture.projection, fixture.boundary.positions(), fixture.boundary.geometry(),
             fixture.visible);
+        final List<String> expectedConflicts = new ArrayList<String>();
+        for (int index = 0; index < 9; index++) {
+            expectedConflicts.add(CanonicalKeys.edgeNodePair(
+                fixture.projection.edges().get(index).key(), fixture.key(3 * index + 2)));
+        }
+        assertThat(initial.keys()).containsExactlyElementsOf(expectedConflicts);
+        assertThat(initial.crossings()).isZero();
+        assertThat(initial.edgeOverNodes()).isEqualTo(9);
+        assertThat(NodeSeparationProjection.violatingPairs(fixture.projection,
+            fixture.boundary.positions())).isEmpty();
+        assertThat(new BoundaryInvariants().detectPairKeys(fixture.projection,
+            fixture.boundary.geometry())).isEmpty();
+        for (final ProjectedNodeKey key : fixture.keys()) {
+            assertThat(fixture.boundary.geometry().nodes().get(key).radius()).isEqualTo(8.0);
+        }
+
+        final EdgeConflictResult result = apply(fixture);
+        for (int i = 0; i < 9; i++) {
+            assertThat(result.positions().nodes().get(fixture.key(3 * i + 2)))
+                .isEqualTo(LayoutPoint.of(0, 150 * i + 11));
+        }
+        assertThat(result.diagnostics().rounds()).isEqualTo(2);
+        assertThat(result.diagnostics().verifications()).isEqualTo(2);
+        assertThat(result.diagnostics().verificationWork()).isEqualTo(1_755);
+        assertThat(result.diagnostics().repairsApplied()).hasSize(9);
+        assertThat(result.diagnostics().conflictsResidual()).isEmpty();
+
+        assertThat(result.diagnostics().edgeOverNodeDetected()).isEqualTo(9);
+        assertThat(result.diagnostics().edgeOverNodeResolved()).isEqualTo(9);
+        assertThat(result.diagnostics().crossingsDetected()).isZero();
+        assertThat(result.diagnostics().crossingsResolved()).isZero();
+        assertThat(result.diagnostics().conflictsDetected()).isEqualTo(9);
+        assertThat(result.diagnostics().detectionTruncated()).isFalse();
+        assertThat(result.diagnostics().verificationBudgetExhausted()).isFalse();
+        assertThat(result.diagnostics().indexBudgetExhausted()).isFalse();
+        for (int index = 0; index < 9; index++) {
+            final EdgeConflictDiagnostics.Repair repair = result.diagnostics().repairsApplied().get(index);
+            assertThat(repair.kind()).isEqualTo(EdgeConflictDiagnostics.RepairKind.TRANSLATION);
+            assertThat(repair.nodeKeys()).containsExactly(fixture.key(3 * index + 2));
+            assertThat(repair.fromCentres().get(fixture.key(3 * index + 2)))
+                .isEqualTo(LayoutPoint.of(0, 150 * index + 5));
+            assertThat(repair.toCentres().get(fixture.key(3 * index + 2)))
+                .isEqualTo(LayoutPoint.of(0, 150 * index + 11));
+            // Ascending canonical index order selects N0..N7 first, then N8 from the new
+            // complete residual, so the ninth record belongs to the second accepted round.
+            assertThat(repair.batchIndex()).as("repair %s", index).isEqualTo(index < 8 ? 0 : 1);
+        }
+        for (int index = 0; index < 9; index++) {
+            assertThat(result.positions().nodes().get(fixture.key(3 * index)))
+                .isEqualTo(LayoutPoint.of(-100, 150 * index));
+            assertThat(result.positions().nodes().get(fixture.key(3 * index + 1)))
+                .isEqualTo(LayoutPoint.of(100, 150 * index));
+        }
+        assertThat(result.positions().anchors()).isEqualTo(fixture.boundary.positions().anchors());
+        assertThat(result.appliedDisplacements()).hasSize(9);
+        for (int index = 0; index < 9; index++) {
+            final ProjectedNodeKey obstructing = fixture.key(3 * index + 2);
+            assertThat(result.appliedDisplacements().get(CanonicalKeys.nodeField(obstructing)))
+                .as("displacement of %s", obstructing)
+                .isEqualTo(LayoutPoint.of(0, 6));
+            assertThat(result.appliedDisplacements()
+                .containsKey(CanonicalKeys.nodeField(fixture.key(3 * index)))).isFalse();
+            assertThat(result.appliedDisplacements()
+                .containsKey(CanonicalKeys.nodeField(fixture.key(3 * index + 1)))).isFalse();
+        }
+        assertThat(NodeSeparationProjection.violatingPairs(fixture.projection, result.positions()))
+            .isEmpty();
+
+        final GraphGeometry geometry = publishedGeometry(fixture, result);
+        assertThat(new BoundaryInvariants().detectPairKeys(fixture.projection, geometry)).isEmpty();
+        final Set<ProjectedEdgeKey> expectedEdges = new LinkedHashSet<ProjectedEdgeKey>();
+        for (int index = 0; index < 9; index++) {
+            expectedEdges.add(fixture.projection.edges().get(index).key());
+        }
+        final EdgePaths paths = routed(fixture, result);
+        assertClearPaths(fixture.projection, geometry, paths, expectedEdges);
+        assertThat(paths.diagnostics().edgesStraight()).isEqualTo(9);
+        assertThat(paths.diagnostics().edgesBow()).isZero();
+        assertThat(paths.diagnostics().edgesDogleg()).isZero();
+        assertThat(paths.diagnostics().edgesFallback()).isZero();
+        assertThat(paths.diagnostics().pathCrossingsResidual()).isEmpty();
+        assertThat(paths.diagnostics().routeBudgetExhausted()).isFalse();
+        assertThat(paths.diagnostics().detectionTruncated()).isFalse();
+        for (int index = 0; index < 9; index++) {
+            final EdgePath straight = paths.byEdge().get(fixture.projection.edges().get(index).key());
+            assertThat(straight.shape()).isEqualTo(EdgePath.Shape.STRAIGHT);
+            assertThat(straight.samples()).containsExactly(LayoutPoint.of(-92.0, 150.0 * index),
+                LayoutPoint.of(92.0, 150.0 * index));
+            assertThat(straight.length()).isEqualTo(184.0);
+        }
+    }
+
+    @Test
+    public void keepsAResidualWhenEveryLocalAlternativeBreaksTheGap() {
+        final Fixture fixture = fullyBlockedFixture();
+        final ProjectedEdgeKey edgeKey = fixture.projection.edges().get(0).key();
+        final ProjectedNodeKey obstructing = fixture.key(2);
+        final String conflicted = CanonicalKeys.edgeNodePair(edgeKey, obstructing);
+
+        assertThat(fixture.keys()).hasSize(9);
+        assertThat(NodeSeparationProjection.violatingPairs(fixture.projection,
+            fixture.boundary.positions())).isEmpty();
+        assertThat(new BoundaryInvariants().detectPairKeys(fixture.projection,
+            fixture.boundary.geometry())).isEmpty();
+        assertThat(EdgeConflictCorrection.detectConflicts(fixture.projection,
+            fixture.boundary.positions(), fixture.boundary.geometry(), fixture.visible).keys())
+            .containsExactly(conflicted);
+
         final EdgeConflictResult result = apply(fixture);
 
-        assertThat(detected.keys()).hasSizeGreaterThan(
-            EdgeConflictCorrection.EDGE_CONFLICT_MAX_REPAIRABLE_CONFLICTS_PER_FRAME);
-        assertThat(result.positions()).isSameAs(fixture.boundary.positions());
-        assertThat(result.diagnostics().conflictsDetected()).isEqualTo(detected.keys().size());
-        assertThat(result.diagnostics().conflictsResidual()).containsExactlyElementsOf(detected.keys());
+        // Six finite-family targets exist and every one of them adds a node gap: the run is
+        // finite-search failure, not budget exhaustion. A pre-scan that skipped them, or a
+        // "nothing can ever be repaired" suppression, would show fewer than six attempts.
+        assertThat(result.diagnostics().verifications()).isEqualTo(6);
+        assertThat(result.diagnostics().verificationWork()).isEqualTo(432);
         assertThat(result.diagnostics().rounds()).isZero();
-        assertThat(result.diagnostics().verifications()).isZero();
         assertThat(result.diagnostics().repairsApplied()).isEmpty();
-        assertThat(result.diagnostics().crossingsResolved()).isZero();
+        assertThat(result.diagnostics().edgeOverNodeDetected()).isEqualTo(1);
         assertThat(result.diagnostics().edgeOverNodeResolved()).isZero();
-        assertThat(result.boundaryDiagnostics()).isSameAs(fixture.boundary.diagnostics());
-        assertThat(result.timings().rebuildNanos()).isZero();
+        assertThat(result.diagnostics().crossingsResolved()).isZero();
+        assertThat(result.diagnostics().conflictsResidual()).containsExactly(conflicted);
+        assertThat(result.diagnostics().verificationBudgetExhausted()).isFalse();
+        assertThat(result.diagnostics().detectionTruncated()).isFalse();
+        assertThat(result.diagnostics().indexBudgetExhausted()).isFalse();
+        assertThat(result.appliedDisplacements()).isEmpty();
+        for (final ProjectedNodeKey key : fixture.keys()) {
+            assertThat(result.positions().nodes().get(key))
+                .isEqualTo(fixture.boundary.positions().nodes().get(key));
+        }
+        assertThat(result.positions().anchors()).isEqualTo(fixture.boundary.positions().anchors());
+
+        // The routed edge must stay present and observable. The router bows around the
+        // obstruction, so this control is not expected to be straight, and its clearance is
+        // recorded through the independent same-geometry oracle.
+        final Set<ProjectedEdgeKey> expectedEdges = new LinkedHashSet<ProjectedEdgeKey>();
+        expectedEdges.add(edgeKey);
+        final GraphGeometry geometry = publishedGeometry(fixture, result);
+        final EdgePaths paths = routed(fixture, result);
+        assertThat(paths.byEdge().keySet()).containsExactlyInAnyOrderElementsOf(expectedEdges);
+        // Actual classification for this control: no straight rung clears, the first live bow
+        // also fails, and the first same-side dogleg is published. A fallback would also be a
+        // legitimate observable outcome; it is not what this geometry produces.
+        assertThat(paths.diagnostics().edgesStraight()).isZero();
+        assertThat(paths.diagnostics().edgesBow()).isZero();
+        assertThat(paths.diagnostics().edgesDogleg()).isEqualTo(1);
+        assertThat(paths.diagnostics().edgesFallback()).isZero();
+        assertThat(paths.diagnostics().pathCrossingsResidual()).isEmpty();
+        assertThat(paths.diagnostics().routeBudgetExhausted()).isFalse();
+        assertThat(paths.diagnostics().detectionTruncated()).isFalse();
+        final double minimum = minimumNodeClearance(fixture.projection, geometry, paths);
+        // Recorded actual minimum same-geometry clearance for the routed dogleg.
+        assertThat(minimum).isCloseTo(23.590001215504564, within(1e-9));
+        assertThat(minimum).isGreaterThanOrEqualTo(3.0 - 1e-9);
+        assertClearPaths(fixture.projection, geometry, paths, expectedEdges);
+    }
+
+    @Test
+    public void deduplicatesIdenticalAlternativesFromOverlappingChords() {
+        final Fixture fixture = duplicateChordFixture();
+        final ProjectedEdgeKey firstEdge = fixture.projection.edges().get(0).key();
+        final ProjectedEdgeKey secondEdge = fixture.projection.edges().get(1).key();
+        final ProjectedNodeKey n = fixture.key(4);
+        final ProjectedNodeKey c = fixture.key(2);
+        final ProjectedNodeKey e = fixture.key(3);
+
+        assertThat(fixture.keys()).hasSize(11);
+        assertThat(NodeSeparationProjection.violatingPairs(fixture.projection,
+            fixture.boundary.positions())).isEmpty();
+        assertThat(new BoundaryInvariants().detectPairKeys(fixture.projection,
+            fixture.boundary.geometry())).isEmpty();
+        assertThat(EdgeConflictCorrection.detectConflicts(fixture.projection,
+            fixture.boundary.positions(), fixture.boundary.geometry(), fixture.visible).keys())
+            .containsExactly(CanonicalKeys.edgeNodePair(firstEdge, c),
+                CanonicalKeys.edgeNodePair(firstEdge, e),
+                CanonicalKeys.edgeNodePair(firstEdge, n),
+                CanonicalKeys.edgeNodePair(secondEdge, n));
+
+        final EdgeConflictResult result = new EdgeConflictCorrection().apply(fixture.projection,
+            fixture.boundary.positions(), METRICS, fixture.pinsFor(0, 1, 2, 3), fixture.visible,
+            fixture.boundary);
+
+        // Both chords generate the same six N targets and the pinned endpoints emit nothing, so
+        // only the six deduplicated entries can be attempted. Twelve attempts would prove the
+        // pool kept one family per generating conflict key.
+        assertThat(result.diagnostics().verifications()).isEqualTo(6);
+        assertThat(result.diagnostics().verificationWork()).isEqualTo(660);
+        assertThat(result.diagnostics().rounds()).isZero();
+        assertThat(result.diagnostics().repairsApplied()).isEmpty();
+        assertThat(result.diagnostics().conflictsDetected()).isEqualTo(4);
+        assertThat(result.diagnostics().edgeOverNodeDetected()).isEqualTo(4);
+        assertThat(result.diagnostics().edgeOverNodeResolved()).isZero();
+        assertThat(result.diagnostics().crossingsResolved()).isZero();
+        assertThat(result.diagnostics().conflictsResidual()).containsExactly(
+            CanonicalKeys.edgeNodePair(firstEdge, c),
+            CanonicalKeys.edgeNodePair(firstEdge, e),
+            CanonicalKeys.edgeNodePair(firstEdge, n),
+            CanonicalKeys.edgeNodePair(secondEdge, n));
+        assertThat(result.diagnostics().verificationBudgetExhausted()).isFalse();
+        assertThat(result.diagnostics().detectionTruncated()).isFalse();
+        assertThat(result.diagnostics().indexBudgetExhausted()).isFalse();
+        assertThat(result.appliedDisplacements()).isEmpty();
+        for (final ProjectedNodeKey key : fixture.keys()) {
+            assertThat(result.positions().nodes().get(key))
+                .isEqualTo(fixture.boundary.positions().nodes().get(key));
+        }
+        assertThat(result.positions().anchors()).isEqualTo(fixture.boundary.positions().anchors());
+
+        final Set<ProjectedEdgeKey> expectedEdges = new LinkedHashSet<ProjectedEdgeKey>();
+        expectedEdges.add(firstEdge);
+        expectedEdges.add(secondEdge);
+        final GraphGeometry geometry = publishedGeometry(fixture, result);
+        final EdgePaths paths = routed(fixture, result);
+        assertThat(paths.byEdge().keySet()).containsExactlyInAnyOrderElementsOf(expectedEdges);
+        assertThat(paths.diagnostics().edgesStraight() + paths.diagnostics().edgesBow()
+            + paths.diagnostics().edgesDogleg() + paths.diagnostics().edgesFallback()).isEqualTo(2);
+        assertThat(paths.diagnostics().routeBudgetExhausted()).isFalse();
+        assertThat(paths.diagnostics().detectionTruncated()).isFalse();
+        final double minimum = minimumNodeClearance(fixture.projection, geometry, paths);
+        assertThat(minimum).isGreaterThanOrEqualTo(3.0 - 1e-9);
     }
 
     @Test
@@ -1077,6 +1283,92 @@ public class EdgeConflictCorrectionShould {
     private static Fixture excursionBoundaryFixture() {
         return clearanceFixture(new String[] {"A", "B", "N"},
             new double[] {-100, 0, 100, 0, 0, 1}, new int[][] {{0, 1}});
+    }
+
+    /**
+     * E1 (spec §6.2): nine independent radius-eight obstructions on nine separated horizontal
+     * chords. Node keys are {@code A_i, B_i, N_i} at canonical indices {@code 3*i, 3*i+1, 3*i+2},
+     * so ascending conflict order is the row order.
+     */
+    private static Fixture nineObstructionsFixture() {
+        final String[] ids = new String[27];
+        final double[] coordinates = new double[54];
+        final int[][] edges = new int[9][];
+        for (int index = 0; index < 9; index++) {
+            ids[index * 3] = "A" + index;
+            ids[index * 3 + 1] = "B" + index;
+            ids[index * 3 + 2] = "N" + index;
+            coordinates[index * 6] = -100.0;
+            coordinates[index * 6 + 1] = 150.0 * index;
+            coordinates[index * 6 + 2] = 100.0;
+            coordinates[index * 6 + 3] = 150.0 * index;
+            coordinates[index * 6 + 4] = 0.0;
+            coordinates[index * 6 + 5] = 150.0 * index + 5.0;
+            edges[index] = new int[] {index * 3, index * 3 + 1};
+        }
+        return clearanceFixture(ids, coordinates, edges);
+    }
+
+    /**
+     * The no-candidate control of spec §7.1: the E3 chord plus a blocker on each of the six
+     * finite-family targets, so every direct target is 11 and every diagonal 14 from a
+     * neighbour that would enter a new node gap.
+     */
+    private static Fixture fullyBlockedFixture() {
+        return clearanceFixture(
+            new String[] {"A", "B", "N", "U", "D", "UL", "UR", "DL", "DR"},
+            new double[] {-100, 0, 100, 0, 0, 0, 0, 22, 0, -22, -25, 25, 25, 25, -25, -25, 25,
+                -25},
+            new int[][] {{0, 1}});
+    }
+
+    /**
+     * The duplicate-alternative control of spec §7.1: two collinear horizontal chords whose
+     * obstruction families for {@code N} are identical. Pinning the four endpoints leaves only
+     * the two {@code N} families, so cross-conflict deduplication is observable as six rather
+     * than twelve verifications.
+     */
+    private static Fixture duplicateChordFixture() {
+        return clearanceFixture(
+            new String[] {"A", "B", "C", "E", "N", "U", "D", "UL", "UR", "DL", "DR"},
+            new double[] {-120, 0, 120, 0, -80, 0, 80, 0, 0, 0, 0, 22, 0, -22, -25, 25, 25, 25,
+                -25, -25, 25, -25},
+            new int[][] {{0, 1}, {2, 3}});
+    }
+
+    /**
+     * The independent final-path clearance measurement of spec §6.1 evaluated over every
+     * unrelated node disc of the same rebuilt geometry: the smallest
+     * {@code segmentDistance - actualRadius} over all sample segments.
+     */
+    private static double minimumNodeClearance(final GraphProjection projection,
+            final GraphGeometry geometry, final EdgePaths paths) {
+        double minimum = Double.POSITIVE_INFINITY;
+        for (final Map.Entry<ProjectedEdgeKey, EdgePath> entry : paths.byEdge().entrySet()) {
+            final Set<ProjectedNodeKey> attached = new LinkedHashSet<ProjectedNodeKey>();
+            for (final ProjectedEdge edge : projection.edges()) {
+                if (!edge.key().equals(entry.getKey())) {
+                    continue;
+                }
+                if (edge.first().isNode()) {
+                    attached.add(edge.first().node().get());
+                }
+                if (edge.second().isNode()) {
+                    attached.add(edge.second().node().get());
+                }
+            }
+            final List<LayoutPoint> samples = entry.getValue().samples();
+            for (int index = 1; index < samples.size(); index++) {
+                for (final Map.Entry<ProjectedNodeKey, NodeGeometry> node : geometry.nodes().entrySet()) {
+                    if (attached.contains(node.getKey())) {
+                        continue;
+                    }
+                    minimum = Math.min(minimum, segmentDistance(node.getValue().center(),
+                        samples.get(index - 1), samples.get(index)) - node.getValue().radius());
+                }
+            }
+        }
+        return minimum;
     }
 
     private static EdgePaths routed(final Fixture fixture, final EdgeConflictResult result) {
