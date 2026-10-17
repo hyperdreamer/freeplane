@@ -4,8 +4,8 @@ run_id: pm-run-20261016-125451-a5048653
 topic: graph-initial-spacing
 source_plan:
   path: docs/superpowers/plans/2026-10-16-graph-initial-spacing.md
-  sha256: 37f11eaa632b33a0ef4943e9b9de19ddeb67a8ff5cd5f328ea3e2031074dfb90
-  commit_oid: 2035dbf32401cf291b65f13ee4740f893a43e3c6
+  sha256: 17b2c4e11a25f94edd1ced8ff4e602de0b425ef3cdc5a4258db46984aa0915bd
+  commit_oid: b572272f410165fddc244e33f6eeaa69524e9fa5
   task_count: 5
 lanes:
   - id: spacing
@@ -21,7 +21,9 @@ tasks:
     ownership:
       paths:
       - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/GraphStreamLayoutEngine.java
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/ClusterPacking.java
       - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/BoundaryFootprintShould.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/ClusterPackingShould.java
       - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/SpacingTestSupport.java
       - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/InitialSpacingShould.java
       - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/InitialSpacingProbe.java
@@ -47,7 +49,7 @@ tasks:
         sha256: 8e1a50c33505a50eaefd9c3c8ccf0b322e2f1a1bcb71f961eda466977a719a3d
       consumes: []
     validation:
-      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "*InitialSpacingShould", "--tests", "*BoundaryFootprintShould", "--console=plain", "-PTestLoggingFull"]
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "*InitialSpacingShould", "--tests", "*BoundaryFootprintShould", "--tests", "*ClusterPackingShould", "--console=plain", "-PTestLoggingFull"]
         cwd: lane
         timeout_seconds: 1200
         environment: java21-headless-build
