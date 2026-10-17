@@ -6,12 +6,17 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
 import org.freeplane.plugin.graph.geometry.AwtGeometryTextMetrics;
+import org.freeplane.plugin.graph.geometry.EdgePath;
+import org.freeplane.plugin.graph.geometry.EdgePaths;
+import org.freeplane.plugin.graph.geometry.EdgeRouter;
+import org.freeplane.plugin.graph.geometry.EdgeRouteDiagnostics;
 import org.freeplane.plugin.graph.geometry.GeometryTextMetrics;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.GraphGeometryEngine;
@@ -649,19 +654,85 @@ public class EdgeConflictCorrectionShould {
     }
 
     @Test
-    public void vetoesACandidateThatAddsASiblingHullViolation() {
-        final SiblingFixture fixture = siblingOverlapFixture();
+    public void vetoesTheUnsafeDirectTargetThatAddsANodeGapAndAcceptsTheOtherSide() {
+        // n sits at (0,5) between A and B; b sits at (0,30), so the two are 25 apart and no gap
+        // violation exists initially. The family's first staged target is the +y direct target
+        // (0,11), only 19 from b: it really does add a new node-pair identity, so A2 must veto it.
+        final MinGapFixture fixture = minGapFixture();
+        final String gapKey = CanonicalKeys.nodePair(fixture.passedOverNode, fixture.bystanderNode);
+        assertThat(NodeSeparationProjection.violatingPairs(fixture.projection,
+            fixture.boundary.positions())).isEmpty();
+        final Map<ProjectedNodeKey, LayoutPoint> unsafeNodes =
+            new LinkedHashMap<ProjectedNodeKey, LayoutPoint>(fixture.boundary.positions().nodes());
+        unsafeNodes.put(fixture.passedOverNode, LayoutPoint.of(0.0, 11.0));
+        assertThat(NodeSeparationProjection.violatingPairs(fixture.projection, LayoutPositions.of(
+            unsafeNodes, fixture.boundary.positions().anchors()))).containsExactly(gapKey);
+
         final EdgeConflictResult result = new EdgeConflictCorrection().apply(fixture.projection,
             fixture.boundary.positions(), METRICS, Collections.<PinProjection>emptyList(),
             fixture.visible, fixture.boundary);
 
-        assertThat(result.diagnostics().rounds()).isZero();
-        assertThat(result.diagnostics().verifications()).isEqualTo(1);
-        assertThat(result.diagnostics().conflictsResidual())
-            .containsExactly(CanonicalKeys.edgeNodePair(fixture.edgeKey, fixture.passedOverNode));
-        assertThat(result.diagnostics().repairsApplied()).isEmpty();
+        // The unsafe direct target consumes the first verification and is never installed; the
+        // opposite direct target clears the chord and adds no gap identity.
+        assertThat(result.diagnostics().verifications()).isEqualTo(2);
+        assertThat(result.diagnostics().rounds()).isEqualTo(1);
+        assertThat(result.diagnostics().repairsApplied()).hasSize(1);
+        final EdgeConflictDiagnostics.Repair repair = result.diagnostics().repairsApplied().get(0);
+        assertThat(repair.kind()).isEqualTo(EdgeConflictDiagnostics.RepairKind.TRANSLATION);
+        assertThat(repair.toCentres().get(fixture.passedOverNode))
+            .isEqualTo(LayoutPoint.of(0.0, -11.0));
         assertThat(result.positions().nodes().get(fixture.passedOverNode))
-            .isEqualTo(fixture.initialPassedOverCentre);
+            .isEqualTo(LayoutPoint.of(0.0, -11.0))
+            .isNotEqualTo(LayoutPoint.of(0.0, 11.0));
+        assertThat(result.positions().nodes().get(fixture.bystanderNode))
+            .isEqualTo(fixture.boundary.positions().nodes().get(fixture.bystanderNode));
+        assertThat(result.diagnostics().conflictsResidual()).isEmpty();
+        assertThat(NodeSeparationProjection.violatingPairs(fixture.projection, result.positions()))
+            .isEmpty();
+    }
+
+    @Test
+    public void vetoesTheNearestDirectTargetThatAddsASiblingHullViolation() {
+        final SiblingFixture fixture = siblingOverlapFixture();
+        // The nearest direct target really does introduce pair(HA,HC), so A3's pair-key subset
+        // comparison must veto it; the next direct target is safe.
+        final Map<ProjectedNodeKey, LayoutPoint> preferredNodes =
+            new LinkedHashMap<ProjectedNodeKey, LayoutPoint>(fixture.boundary.positions().nodes());
+        preferredNodes.put(fixture.passedOverNode, fixture.preferredPassedOverTarget);
+        final LayoutPositions preferredPositions = LayoutPositions.of(preferredNodes,
+            fixture.boundary.positions().anchors());
+        final GraphGeometry preferredGeometry = new GraphGeometryEngine().computeHulls(
+            fixture.projection, preferredPositions, METRICS);
+        final BoundaryInvariants invariants = new BoundaryInvariants();
+        assertThat(invariants.detectPairKeys(fixture.projection, fixture.boundary.geometry()))
+            .isEmpty();
+        assertThat(invariants.detectPairKeys(fixture.projection, preferredGeometry))
+            .containsExactly(CanonicalKeys.hullPair(fixture.siblingFirst, fixture.siblingSecond));
+
+        final EdgeConflictCorrection.Detection initial = EdgeConflictCorrection.detectConflicts(
+            fixture.projection, fixture.boundary.positions(), fixture.boundary.geometry(),
+            fixture.visible);
+        assertThat(initial.keys()).containsExactly(
+            CanonicalKeys.edgeNodePair(fixture.edgeKey, fixture.passedOverNode));
+        final EdgeConflictResult result = new EdgeConflictCorrection().apply(fixture.projection,
+            fixture.boundary.positions(), METRICS, Collections.<PinProjection>emptyList(),
+            fixture.visible, fixture.boundary);
+
+        // The vetoed proposal consumes the first verification and is never installed.
+        assertThat(result.diagnostics().verifications()).isEqualTo(2);
+        assertThat(result.diagnostics().rounds()).isEqualTo(1);
+        assertThat(result.diagnostics().repairsApplied()).hasSize(1);
+        final EdgeConflictDiagnostics.Repair repair = result.diagnostics().repairsApplied().get(0);
+        assertThat(repair.kind()).isEqualTo(EdgeConflictDiagnostics.RepairKind.TRANSLATION);
+        assertThat(repair.toCentres().get(fixture.passedOverNode))
+            .isEqualTo(fixture.safePassedOverTarget);
+        assertThat(result.positions().nodes().get(fixture.passedOverNode))
+            .isEqualTo(fixture.safePassedOverTarget)
+            .isNotEqualTo(fixture.preferredPassedOverTarget)
+            .isNotEqualTo(fixture.initialPassedOverCentre);
+        assertThat(result.diagnostics().conflictsResidual()).isEmpty();
+        assertThat(invariants.detectPairKeys(fixture.projection,
+            publishedGeometry(fixture.projection, result))).isEmpty();
     }
 
     @Test
@@ -692,13 +763,15 @@ public class EdgeConflictCorrectionShould {
             fixture.visible, fixture.boundary);
 
         assertThat(result.diagnostics().rounds()).isEqualTo(1);
-        assertThat(result.diagnostics().verifications()).isEqualTo(1);
         assertThat(result.diagnostics().repairsApplied()).hasSize(1);
         final EdgeConflictDiagnostics.Repair repair = result.diagnostics().repairsApplied().get(0);
         assertThat(repair.kind()).isEqualTo(EdgeConflictDiagnostics.RepairKind.TRANSLATION);
         assertThat(repair.nodeKeys()).containsExactly(fixture.aKey);
-        assertThat(repair.toCentres().get(fixture.aKey)).isEqualTo(LayoutPoint.of(-6.0, 0.0));
+        assertThat(repair.toCentres().get(fixture.aKey)).isEqualTo(fixture.unsafeTarget);
         assertThat(result.diagnostics().conflictsResidual()).isEmpty();
+        assertThat(new BoundaryInvariants().detectPairKeys(fixture.projection,
+            publishedGeometry(fixture.projection, result)))
+            .containsExactly(CanonicalKeys.hullPair(fixture.aHull, fixture.cHull));
     }
 
     @Test
@@ -712,7 +785,7 @@ public class EdgeConflictCorrectionShould {
 
         final Map<ProjectedNodeKey, LayoutPoint> candidateNodes =
             new LinkedHashMap<ProjectedNodeKey, LayoutPoint>(fixture.boundary.positions().nodes());
-        candidateNodes.put(fixture.aKey, LayoutPoint.of(-6.0, 0.0));
+        candidateNodes.put(fixture.aKey, fixture.unsafeTarget);
         final LayoutPositions candidatePositions = LayoutPositions.of(candidateNodes,
             fixture.boundary.positions().anchors());
         final GraphGeometry candidateGeometry = new GraphGeometryEngine().recomputeHulls(
@@ -726,12 +799,22 @@ public class EdgeConflictCorrectionShould {
             fixture.boundary.positions(), METRICS, Collections.<PinProjection>emptyList(),
             fixture.visible, fixture.boundary);
 
-        assertThat(result.diagnostics().rounds()).isZero();
-        assertThat(result.diagnostics().verifications()).isEqualTo(1);
-        assertThat(result.diagnostics().repairsApplied()).isEmpty();
-        assertThat(result.diagnostics().conflictsResidual()).containsExactly(
-            CanonicalKeys.edgeNodePair(fixture.edgeKey, fixture.aKey));
-        assertThat(result.positions().nodes().get(fixture.aKey)).isEqualTo(fixture.aCentre);
+        // The unsafe preferred target is rejected by A3 and the family's other direct target
+        // keeps V_in, so the fixture pins the identity subset rather than a total block.
+        assertThat(result.diagnostics().verifications()).isEqualTo(2);
+        assertThat(result.diagnostics().rounds()).isEqualTo(1);
+        assertThat(result.diagnostics().repairsApplied()).hasSize(1);
+        final EdgeConflictDiagnostics.Repair repair = result.diagnostics().repairsApplied().get(0);
+        assertThat(repair.kind()).isEqualTo(EdgeConflictDiagnostics.RepairKind.TRANSLATION);
+        assertThat(repair.toCentres().get(fixture.aKey)).isEqualTo(fixture.safeTarget);
+        assertThat(result.positions().nodes().get(fixture.aKey))
+            .isEqualTo(fixture.safeTarget)
+            .isNotEqualTo(fixture.unsafeTarget)
+            .isNotEqualTo(fixture.aCentre);
+        assertThat(result.diagnostics().conflictsResidual()).isEmpty();
+        assertThat(invariants.detectPairKeys(fixture.projection,
+            publishedGeometry(fixture.projection, result)))
+            .containsExactly(CanonicalKeys.hullPair(fixture.aHull, fixture.cHull));
     }
 
     @Test
@@ -756,7 +839,10 @@ public class EdgeConflictCorrectionShould {
         assertThat(translation.nodeKeys()).containsExactly(fixture.key(6));
         assertThat(translation.fromCentres().get(fixture.key(6)))
             .isEqualTo(LayoutPoint.of(1005.0, 1050.0));
-        assertThat(translation.toCentres().get(fixture.key(6))).isEqualTo(LayoutPoint.of(983.0, 1050.0));
+        // The radius-14 disc's nearest direct target is +12 along x; the superseded single
+        // signed-normal candidate produced -22.
+        assertThat(translation.toCentres().get(fixture.key(6)))
+            .isEqualTo(LayoutPoint.of(1017.0, 1050.0));
         assertThat(result.diagnostics().conflictsResidual()).isEmpty();
     }
 
@@ -784,20 +870,6 @@ public class EdgeConflictCorrectionShould {
     }
 
     @Test
-    public void vetoesACandidateThatWouldBreakMinGap() {
-        final MinGapFixture fixture = minGapFixture();
-        final EdgeConflictResult result = new EdgeConflictCorrection().apply(fixture.projection,
-            fixture.boundary.positions(), METRICS, Collections.<PinProjection>emptyList(),
-            fixture.visible, fixture.boundary);
-
-        assertThat(result.diagnostics().rounds()).isZero();
-        assertThat(result.diagnostics().verifications()).isEqualTo(1);
-        assertThat(org.freeplane.plugin.graph.layout.NodeSeparationProjection.violatingPairs(
-            fixture.projection, result.positions())).contains(
-                CanonicalKeys.nodePair(fixture.passedOverNode, fixture.bystanderNode));
-    }
-
-    @Test
     public void movesThePassedOverNodeOffTheChordWithTheLexicographicallySmallerNormal() {
         final C2Fixture fixture = c2FixtureWithPositiveProjection();
         final EdgeConflictResult result = new EdgeConflictCorrection().apply(fixture.projection,
@@ -813,6 +885,262 @@ public class EdgeConflictCorrectionShould {
         // Flipping the normal direction (probe 16) would leave |2s - (R + 3)| < R + 3.
         assertThat(result.positions().nodes().get(fixture.passedOverNode))
             .isNotEqualTo(fixture.initialPassedOverCentre);
+    }
+
+    @Test
+    public void repairsOnTheOppositeSideWhenTheNearestSideBreaksTheGap() {
+        final Fixture fixture = oppositeSideFixture();
+        final EdgeConflictResult result = apply(fixture);
+        assertThat(result.positions().nodes().get(fixture.key(2))).isEqualTo(LayoutPoint.of(0, -11));
+        assertThat(result.diagnostics().rounds()).isEqualTo(1);
+        assertThat(result.diagnostics().verifications()).isEqualTo(2);
+        assertThat(result.diagnostics().verificationWork()).isEqualTo(30);
+        assertSuccessfulStraight(fixture, result, routed(fixture, result), 1);
+    }
+
+    @Test
+    public void repairsTheBlockedColumnWithTheFirstFeasibleDiagonal() {
+        final Fixture fixture = blockedColumnFixture();
+        final EdgeConflictResult result = apply(fixture);
+        assertThat(result.positions().nodes().get(fixture.key(2))).isEqualTo(LayoutPoint.of(-25, -11));
+        assertThat(result.diagnostics().rounds()).isEqualTo(1);
+        assertThat(result.diagnostics().verifications()).isEqualTo(3);
+        assertThat(result.diagnostics().verificationWork()).isEqualTo(252);
+        assertSuccessfulStraight(fixture, result, routed(fixture, result), 1);
+    }
+
+    @Test
+    public void measuresThePointToClosedSegmentDistanceIndependently() {
+        // Interior perpendicular projection.
+        assertThat(segmentDistance(LayoutPoint.of(0.0, 5.0), LayoutPoint.of(-10.0, 0.0),
+            LayoutPoint.of(10.0, 0.0))).isEqualTo(5.0);
+        // Projection outside both ends clamps to the nearer endpoint.
+        assertThat(segmentDistance(LayoutPoint.of(14.0, 3.0), LayoutPoint.of(-10.0, 0.0),
+            LayoutPoint.of(10.0, 0.0))).isEqualTo(Math.hypot(4.0, 3.0));
+        assertThat(segmentDistance(LayoutPoint.of(-14.0, 3.0), LayoutPoint.of(-10.0, 0.0),
+            LayoutPoint.of(10.0, 0.0))).isEqualTo(Math.hypot(4.0, 3.0));
+        // A zero-length segment degrades to the plain point distance.
+        assertThat(segmentDistance(LayoutPoint.of(3.0, 4.0), LayoutPoint.of(0.0, 0.0),
+            LayoutPoint.of(0.0, 0.0))).isEqualTo(5.0);
+    }
+
+    private static Fixture oppositeSideFixture() {
+        return clearanceFixture(new String[] {"A", "B", "N", "O"},
+            new double[] {-100, 0, 100, 0, 0, 5, 0, 30}, new int[][] {{0, 1}});
+    }
+
+    private static Fixture blockedColumnFixture() {
+        return clearanceFixture(
+            new String[] {"A", "B", "N", "O1", "O2", "O3", "O4", "O5", "O6"},
+            new double[] {-100, 0, 100, 0, 0, 0, 0, -22, 0, -44, 0, -66, 0, 22, 0, 44, 0, 66},
+            new int[][] {{0, 1}});
+    }
+
+    private static EdgePaths routed(final Fixture fixture, final EdgeConflictResult result) {
+        return new EdgeRouter().route(fixture.projection, result.positions(),
+            publishedGeometry(fixture, result), fixture.visible);
+    }
+
+    private static GraphGeometry publishedGeometry(final Fixture fixture,
+            final EdgeConflictResult result) {
+        return publishedGeometry(fixture.projection, result);
+    }
+
+    private static GraphGeometry publishedGeometry(final GraphProjection projection,
+            final EdgeConflictResult result) {
+        return new GraphGeometryEngine().computeHulls(projection, result.positions(), METRICS);
+    }
+
+    private static double segmentDistance(final LayoutPoint p, final LayoutPoint a, final LayoutPoint b) {
+        final double dx = b.x() - a.x();
+        final double dy = b.y() - a.y();
+        final double lengthSquared = dx * dx + dy * dy;
+        final double t = lengthSquared == 0.0 ? 0.0 : Math.max(0.0, Math.min(1.0,
+            ((p.x() - a.x()) * dx + (p.y() - a.y()) * dy) / lengthSquared));
+        return Math.hypot(p.x() - (a.x() + t * dx), p.y() - (a.y() + t * dy));
+    }
+
+    /**
+     * The final-path oracle of spec §6.1: exact expected edge coverage, finite positions and
+     * samples, and an independent clamped point/segment Euclidean clearance check of every
+     * consecutive sample segment against every unrelated node disc of the same rebuilt geometry.
+     * Fallback shapes are checked exactly like any other shape.
+     */
+    private static void assertClearPaths(final GraphProjection projection, final GraphGeometry geometry,
+            final EdgePaths paths, final Set<ProjectedEdgeKey> expectedEdges) {
+        assertThat(paths.byEdge().keySet()).containsExactlyInAnyOrderElementsOf(expectedEdges);
+        for (final Map.Entry<ProjectedNodeKey, NodeGeometry> entry : geometry.nodes().entrySet()) {
+            assertThat(Double.isFinite(entry.getValue().center().x())).isTrue();
+            assertThat(Double.isFinite(entry.getValue().center().y())).isTrue();
+        }
+        for (final Map.Entry<ProjectedEdgeKey, EdgePath> entry : paths.byEdge().entrySet()) {
+            final List<LayoutPoint> samples = entry.getValue().samples();
+            assertThat(samples.size()).isGreaterThanOrEqualTo(2);
+            for (final LayoutPoint sample : samples) {
+                assertThat(Double.isFinite(sample.x())).isTrue();
+                assertThat(Double.isFinite(sample.y())).isTrue();
+            }
+            final Set<ProjectedNodeKey> attached = new LinkedHashSet<ProjectedNodeKey>();
+            for (final ProjectedEdge edge : projection.edges()) {
+                if (!edge.key().equals(entry.getKey())) {
+                    continue;
+                }
+                if (edge.first().isNode()) {
+                    attached.add(edge.first().node().get());
+                }
+                if (edge.second().isNode()) {
+                    attached.add(edge.second().node().get());
+                }
+            }
+            for (int index = 1; index < samples.size(); index++) {
+                final LayoutPoint from = samples.get(index - 1);
+                final LayoutPoint to = samples.get(index);
+                for (final Map.Entry<ProjectedNodeKey, NodeGeometry> node : geometry.nodes().entrySet()) {
+                    if (attached.contains(node.getKey())) {
+                        continue;
+                    }
+                    final double distance = segmentDistance(node.getValue().center(), from, to);
+                    assertThat(distance - node.getValue().radius())
+                        .as("edge %s segment %s clears node %s", entry.getKey(), index, node.getKey())
+                        .isGreaterThanOrEqualTo(3.0 - 1e-9);
+                }
+            }
+        }
+    }
+
+    /**
+     * The complete accepted-repair assertion of spec §§6.1-6.4 for the single-obstruction
+     * production-geometry fixtures: exact movement, counters, untouched state, flags and the
+     * successful straight rim attachments.
+     */
+    private static void assertSuccessfulStraight(final Fixture fixture,
+            final EdgeConflictResult result, final EdgePaths paths, final int expectedStraight) {
+        final EdgeConflictCorrection.Detection initial = EdgeConflictCorrection.detectConflicts(
+            fixture.projection, fixture.boundary.positions(), fixture.boundary.geometry(),
+            fixture.visible);
+        assertThat(initial.keys()).hasSize(1);
+        assertThat(initial.crossings()).isZero();
+        assertThat(initial.edgeOverNodes()).isEqualTo(1);
+        assertThat(NodeSeparationProjection.violatingPairs(fixture.projection,
+            fixture.boundary.positions())).isEmpty();
+        assertThat(new BoundaryInvariants().detectPairKeys(fixture.projection,
+            fixture.boundary.geometry())).isEmpty();
+        for (final ProjectedNodeKey key : fixture.keys()) {
+            assertThat(fixture.boundary.geometry().nodes().get(key).radius()).isEqualTo(8.0);
+        }
+
+        assertThat(result.diagnostics().rounds()).isEqualTo(1);
+        assertThat(result.diagnostics().repairsApplied()).hasSize(1);
+        final EdgeConflictDiagnostics.Repair repair = result.diagnostics().repairsApplied().get(0);
+        assertThat(repair.kind()).isEqualTo(EdgeConflictDiagnostics.RepairKind.TRANSLATION);
+        assertThat(repair.nodeKeys()).hasSize(1);
+        final ProjectedNodeKey moved = repair.nodeKeys().get(0);
+        assertThat(initial.keys().get(0)).isEqualTo(CanonicalKeys.edgeNodePair(
+            fixture.projection.edges().get(0).key(), moved));
+        assertThat(repair.batchIndex()).isZero();
+        assertThat(repair.fromCentres().get(moved))
+            .isEqualTo(fixture.boundary.positions().nodes().get(moved));
+        assertThat(repair.toCentres().get(moved)).isEqualTo(result.positions().nodes().get(moved));
+        assertThat(result.diagnostics().edgeOverNodeDetected()).isEqualTo(1);
+        assertThat(result.diagnostics().edgeOverNodeResolved()).isEqualTo(1);
+        assertThat(result.diagnostics().crossingsDetected()).isZero();
+        assertThat(result.diagnostics().crossingsResolved()).isZero();
+        assertThat(result.diagnostics().conflictsResidual()).isEmpty();
+
+        for (final ProjectedNodeKey key : fixture.keys()) {
+            if (key.equals(moved)) {
+                continue;
+            }
+            assertThat(result.positions().nodes().get(key))
+                .isEqualTo(fixture.boundary.positions().nodes().get(key));
+        }
+        assertThat(result.positions().anchors()).isEqualTo(fixture.boundary.positions().anchors());
+        assertThat(NodeSeparationProjection.violatingPairs(fixture.projection, result.positions()))
+            .isEmpty();
+
+        assertThat(result.diagnostics().detectionTruncated()).isFalse();
+        assertThat(result.diagnostics().verificationBudgetExhausted()).isFalse();
+        assertThat(result.diagnostics().indexBudgetExhausted()).isFalse();
+        assertThat(result.diagnostics().verifications())
+            .isLessThanOrEqualTo(EdgeConflictCorrection.MAX_VERIFICATIONS_PER_FRAME);
+        assertThat(result.diagnostics().verificationWork())
+            .isLessThanOrEqualTo(EdgeConflictCorrection.EDGE_CONFLICT_MAX_VERIFICATION_WORK_PER_FRAME);
+        assertThat(result.diagnostics().indexInsertedItems())
+            .isLessThanOrEqualTo(EdgeConflictCorrection.EDGE_CONFLICT_MAX_INDEX_ITEMS_PER_FRAME);
+        assertThat(result.diagnostics().indexPairChecks())
+            .isLessThanOrEqualTo(EdgeConflictCorrection.EDGE_CONFLICT_MAX_PAIR_CHECKS_PER_FRAME);
+        assertThat(result.diagnostics().conflictsDetected())
+            .isLessThanOrEqualTo(EdgeConflictCorrection.EDGE_CONFLICT_MAX_DETECTED_PER_FRAME);
+
+        final GraphGeometry geometry = publishedGeometry(fixture, result);
+        assertThat(geometry.nodes().keySet()).isEqualTo(fixture.boundary.geometry().nodes().keySet());
+        for (final ProjectedNodeKey key : fixture.keys()) {
+            assertThat(geometry.nodes().get(key).center()).isEqualTo(result.positions().nodes().get(key));
+        }
+        assertThat(new BoundaryInvariants().detectPairKeys(fixture.projection, geometry)).isEmpty();
+        final Set<ProjectedEdgeKey> expectedEdges = new LinkedHashSet<ProjectedEdgeKey>();
+        for (final ProjectedEdge edge : fixture.projection.edges()) {
+            expectedEdges.add(edge.key());
+        }
+        assertClearPaths(fixture.projection, geometry, paths, expectedEdges);
+
+        final EdgeRouteDiagnostics route = paths.diagnostics();
+        assertThat(route.edgesStraight()).isEqualTo(expectedStraight);
+        assertThat(route.edgesBow()).isZero();
+        assertThat(route.edgesDogleg()).isZero();
+        assertThat(route.edgesFallback()).isZero();
+        assertThat(route.pathCrossingsDetected()).isZero();
+        assertThat(route.pathCrossingsResidual()).isEmpty();
+        assertThat(route.pathHullPenetrations()).isZero();
+        assertThat(route.routeBudgetExhausted()).isFalse();
+        assertThat(route.detectionTruncated()).isFalse();
+        assertThat(route.routeIndexItems()).isLessThanOrEqualTo(262_144L);
+        assertThat(route.routeObstacleChecks()).isLessThanOrEqualTo(131_072L);
+        assertThat(route.routePairChecks()).isLessThanOrEqualTo(131_072L);
+
+        final EdgePath straight = paths.byEdge().get(fixture.projection.edges().get(0).key());
+        assertThat(straight.shape()).isEqualTo(EdgePath.Shape.STRAIGHT);
+        assertThat(straight.samples()).containsExactly(LayoutPoint.of(-92.0, 0.0),
+            LayoutPoint.of(92.0, 0.0));
+        assertThat(straight.length()).isEqualTo(184.0);
+    }
+
+    private static Fixture clearanceFixture(final String[] ids, final double[] coordinates,
+            final int[][] edges) {
+        final List<ProjectedNodeKey> keys = new ArrayList<ProjectedNodeKey>();
+        final List<ProjectedNode> nodes = new ArrayList<ProjectedNode>();
+        final Map<ProjectedNodeKey, LayoutPoint> points =
+            new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        for (int index = 0; index < ids.length; index++) {
+            final ProjectedNodeKey key = ProjectedNodeKey.of(SourceNodeKey.persisted(
+                NodeReference.of(MAP, PersistedNodeId.of(ids[index]))));
+            keys.add(key);
+            nodes.add(ProjectedNode.of(key, SafeNodeLabel.of(ids[index], ids[index]), "map", false));
+            points.put(key, LayoutPoint.of(coordinates[index * 2], coordinates[index * 2 + 1]));
+        }
+        final List<ProjectedEdge> projectedEdges = new ArrayList<ProjectedEdge>();
+        for (final int[] edge : edges) {
+            final ProjectedEndpointKey first = ProjectedEndpointKey.ofNode(keys.get(edge[0]));
+            final ProjectedEndpointKey second = ProjectedEndpointKey.ofNode(keys.get(edge[1]));
+            final ConnectorDescriptor descriptor = ConnectorDescriptor.of(
+                first.node().get().source(), NodeReference.of(second.mapReferenceId(),
+                    PersistedNodeId.of(ids[edge[1]])), false, false, "s", "m", "t");
+            projectedEdges.add(ProjectedEdge.of(ProjectedEdgeKey.of(first, second),
+                Collections.singletonList(EdgeContributor.nativeConnector(
+                    ConnectorSnapshot.of(0, descriptor), first, second))));
+        }
+        final GraphProjection projection = GraphProjection.projected(1L, nodes,
+            Collections.<ProjectedEnclosure>emptyList(), projectedEdges,
+            Collections.<RelationshipResolution>emptyList(), Collections.<PinProjection>emptyList());
+        final LayoutPositions positions = LayoutPositions.of(points,
+            Collections.<EnclosureHullKey, LayoutPoint>emptyMap());
+        final GraphGeometry geometry = new GraphGeometryEngine().computeHulls(projection, positions,
+            METRICS);
+        final BoundarySeparationResult boundary = new BoundarySeparationResult(positions, geometry,
+            BoundarySeparationDiagnostics.empty(), 0, new BoundarySeparationTimings(0L, 0L, 0L, 0L));
+        final Set<ProjectedEndpointKey> visible = ProjectedEndpointVisibility.visibleEndpoints(
+            projection.nodes(), projection.enclosures());
+        return new Fixture(projection, boundary, visible, keys);
     }
 
     @Test
@@ -1103,11 +1431,14 @@ public class EdgeConflictCorrectionShould {
         private final ProjectedEdgeKey edgeKey;
         private final ProjectedNodeKey passedOverNode;
         private final LayoutPoint initialPassedOverCentre;
+        private final LayoutPoint preferredPassedOverTarget;
+        private final LayoutPoint safePassedOverTarget;
 
         private SiblingFixture(final GraphProjection projection, final BoundarySeparationResult boundary,
                 final Set<ProjectedEndpointKey> visible, final EnclosureHullKey siblingFirst,
                 final EnclosureHullKey siblingSecond, final ProjectedEdgeKey edgeKey,
-                final ProjectedNodeKey passedOverNode, final LayoutPoint initialPassedOverCentre) {
+                final ProjectedNodeKey passedOverNode, final LayoutPoint initialPassedOverCentre,
+                final LayoutPoint preferredPassedOverTarget, final LayoutPoint safePassedOverTarget) {
             this.projection = projection;
             this.boundary = boundary;
             this.visible = visible;
@@ -1116,6 +1447,8 @@ public class EdgeConflictCorrectionShould {
             this.edgeKey = edgeKey;
             this.passedOverNode = passedOverNode;
             this.initialPassedOverCentre = initialPassedOverCentre;
+            this.preferredPassedOverTarget = preferredPassedOverTarget;
+            this.safePassedOverTarget = safePassedOverTarget;
         }
 
         private BoundarySeparationResult boundaryWithResidual(final String pairKey) {
@@ -1164,10 +1497,10 @@ public class EdgeConflictCorrectionShould {
             Collections.<RelationshipResolution>emptyList(), Collections.<PinProjection>emptyList());
         final Map<ProjectedNodeKey, LayoutPoint> points =
             new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
-        points.put(a, LayoutPoint.of(10.0, 0.0));
-        points.put(c, LayoutPoint.of(-58.0, 0.0));
-        points.put(p, LayoutPoint.of(0.0, 100.0));
-        points.put(q, LayoutPoint.of(0.0, -100.0));
+        points.put(a, LayoutPoint.of(0.0, 0.0));
+        points.put(c, LayoutPoint.of(-53.0, 0.0));
+        points.put(p, LayoutPoint.of(5.0, 100.0));
+        points.put(q, LayoutPoint.of(5.0, -100.0));
         final Map<EnclosureHullKey, LayoutPoint> anchors =
             new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
         anchors.put(rootHull, LayoutPoint.of(0.0, 0.0));
@@ -1180,7 +1513,7 @@ public class EdgeConflictCorrectionShould {
         final Set<ProjectedEndpointKey> visible = ProjectedEndpointVisibility.visibleEndpoints(
             projection.nodes(), projection.enclosures());
         return new SiblingFixture(projection, boundary, visible, aHull, cHull, pToQ.key(), a,
-            LayoutPoint.of(10.0, 0.0));
+            LayoutPoint.of(0.0, 0.0), LayoutPoint.of(-6.0, 0.0), LayoutPoint.of(16.0, 0.0));
     }
 
     private static final class A3SubsetFixture {
@@ -1193,12 +1526,15 @@ public class EdgeConflictCorrectionShould {
         private final EnclosureHullKey dHull;
         private final ProjectedEdgeKey edgeKey;
         private final LayoutPoint aCentre;
+        private final LayoutPoint unsafeTarget;
+        private final LayoutPoint safeTarget;
 
         private A3SubsetFixture(final GraphProjection projection, final BoundarySeparationResult boundary,
                 final Set<ProjectedEndpointKey> visible, final ProjectedNodeKey aKey,
                 final EnclosureHullKey aHull, final EnclosureHullKey cHull,
                 final EnclosureHullKey dHull, final ProjectedEdgeKey edgeKey,
-                final LayoutPoint aCentre) {
+                final LayoutPoint aCentre, final LayoutPoint unsafeTarget,
+                final LayoutPoint safeTarget) {
             this.projection = projection;
             this.boundary = boundary;
             this.visible = visible;
@@ -1208,14 +1544,17 @@ public class EdgeConflictCorrectionShould {
             this.dHull = dHull;
             this.edgeKey = edgeKey;
             this.aCentre = aCentre;
+            this.unsafeTarget = unsafeTarget;
+            this.safeTarget = safeTarget;
         }
     }
 
     /**
      * Three sibling enclosures A, C and D under no common parent, each holding one node on the
-     * x-axis, plus the vertical edge p-q: the C2 conflict on node a drives a single TRANSLATION
-     * candidate that moves a from (aX, 0) to (-6, 0). The sibling hull distance is chosen by the
-     * caller, so aX/cX/dX select the pre-existing residual state A3 must judge.
+     * x-axis, plus the vertical edge p-q: the C2 conflict on node a drives TRANSLATION candidates.
+     * The nearest direct target is (-6,0); the opposite direct target is (16,0). The sibling hull
+     * distance is chosen by the caller, so aX/cX/dX select the pre-existing residual state A3
+     * must judge.
      */
     private static A3SubsetFixture preExistingSiblingResidualFixture(final double aX, final double cX,
             final double dX) {
@@ -1270,7 +1609,8 @@ public class EdgeConflictCorrectionShould {
         final Set<ProjectedEndpointKey> visible = ProjectedEndpointVisibility.visibleEndpoints(
             projection.nodes(), projection.enclosures());
         return new A3SubsetFixture(projection, boundary, visible, a, aHull, cHull, dHull,
-            projection.edges().get(0).key(), LayoutPoint.of(aX, 0.0));
+            projection.edges().get(0).key(), LayoutPoint.of(aX, 0.0), LayoutPoint.of(-6.0, 0.0),
+            LayoutPoint.of(16.0, 0.0));
     }
 
     private static final class MinGapFixture {
@@ -1291,8 +1631,8 @@ public class EdgeConflictCorrectionShould {
     }
 
     private static MinGapFixture minGapFixture() {
-        final Fixture fixture = fixture(3L, new String[] {"A", "B", "n", "b", "g"},
-            new double[] {-100.0, 0.0, 100.0, 0.0, 0.0, 5.0, 0.0, 20.0, 0.0, 38.0},
+        final Fixture fixture = clearanceFixture(new String[] {"A", "B", "n", "b"},
+            new double[] {-100.0, 0.0, 100.0, 0.0, 0.0, 5.0, 0.0, 30.0},
             new int[][] {{0, 1}});
         return new MinGapFixture(fixture, fixture.key(2), fixture.key(3));
     }
