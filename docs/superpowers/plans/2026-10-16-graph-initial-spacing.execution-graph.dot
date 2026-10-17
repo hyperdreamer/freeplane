@@ -1,0 +1,19 @@
+// Generated deterministically from the YAML manifest and source-plan SHA-256.
+// source_plan_sha256: 37f11eaa632b33a0ef4943e9b9de19ddeb67a8ff5cd5f328ea3e2031074dfb90
+// manifest_sha256: b11cf319f2aa7a7358f3a86f0eef685b0e4a19f129366f81b9d6bbb05b262d33
+digraph graph_initial_spacing_execution {
+  rankdir=LR;
+  node [shape=box];
+  subgraph cluster_spacing {
+    label="spacing";
+    "T-001" [label="Task 1: Pin independent geometry and live targets, widen the parameter, and run the frozen outcome gate\nAdvanced"];
+    "T-002" [label="Task 2: Exercise real worker lifecycle commands and exact pin retention\nAdvanced"];
+    "T-003" [label="Task 3: Falsify every load-bearing mechanism and reconcile only derived regression expectations\nAdvanced"];
+    "T-004" [label="Task 4: Capture first-idle publications in the installed application at a fixed viewport\nAdvanced"];
+    "T-005" [label="Task 5: Run the required integration gates and publish a receipt-backed acceptance record\nStandard"];
+  }
+  "T-001" -> "T-002";
+  "T-002" -> "T-003";
+  "T-003" -> "T-004";
+  "T-004" -> "T-005";
+}

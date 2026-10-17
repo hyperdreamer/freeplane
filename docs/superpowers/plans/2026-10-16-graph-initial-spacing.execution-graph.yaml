@@ -1,0 +1,294 @@
+# Generated from the committed source plan; YAML is canonical scheduling input.
+version: 1
+run_id: pm-run-20261016-125451-a5048653
+topic: graph-initial-spacing
+source_plan:
+  path: docs/superpowers/plans/2026-10-16-graph-initial-spacing.md
+  sha256: 37f11eaa632b33a0ef4943e9b9de19ddeb67a8ff5cd5f328ea3e2031074dfb90
+  commit_oid: 2035dbf32401cf291b65f13ee4740f893a43e3c6
+  task_count: 5
+lanes:
+  - id: spacing
+    task_ids: [T-001, T-002, T-003, T-004, T-005]
+tasks:
+  - id: T-001
+    plan_task: 1
+    title: "Pin independent geometry and live targets, widen the parameter, and run the frozen outcome gate"
+    implementer_tier: "Advanced"
+    lane: "spacing"
+    sequence: 1
+    depends_on: []
+    ownership:
+      paths:
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/GraphStreamLayoutEngine.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/BoundaryFootprintShould.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/SpacingTestSupport.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/InitialSpacingShould.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/InitialSpacingProbe.java
+      - freeplane_plugin_graph/src/test/scripts/compare_initial_spacing.py
+    external_evidence:
+    - /tmp/graph-initial-spacing-evidence/task-1/**
+    resources: []
+    produces:
+    - id: iface.spacing-test-support
+      signature: '`SpacingTestSupport.ring(long,int,boolean): GraphProjection`, `targets(boolean): GraphProjection`, `request(WorkspaceId,GraphProjection,GraphProjection,List<PinProjection>): LayoutRequest`, `inspect(LayoutEngine): Snapshot`, `requireTargets(Snapshot,double,boolean,double...): void`; public test-only `Snapshot` contains detached node/anchor positions, particle radii and `List<Link>` with semantic endpoints, `kind`, `crossMap`, `restLength`. `Link` carries no live mutation handle. Detailed declarations are below.'
+      sha256: d4e6c5609d72ac6571db18cc27057210944f6c95e1e803a1240cb26520490933
+    - id: iface.spacing-outcome
+      signature: one internal production constant, no new production interface; complete archived baseline/candidate comparison at `/tmp/graph-initial-spacing-evidence/task-1/comparison/comparison.json`. Later tasks require its `status == "PASS"`; the four literal/target tests passing is a separate gate.
+      sha256: 8e1a50c33505a50eaefd9c3c8ccf0b322e2f1a1bcb71f961eda466977a719a3d
+    consumes: []
+    interfaces:
+      produces:
+      - id: iface.spacing-test-support
+        signature: '`SpacingTestSupport.ring(long,int,boolean): GraphProjection`, `targets(boolean): GraphProjection`, `request(WorkspaceId,GraphProjection,GraphProjection,List<PinProjection>): LayoutRequest`, `inspect(LayoutEngine): Snapshot`, `requireTargets(Snapshot,double,boolean,double...): void`; public test-only `Snapshot` contains detached node/anchor positions, particle radii and `List<Link>` with semantic endpoints, `kind`, `crossMap`, `restLength`. `Link` carries no live mutation handle. Detailed declarations are below.'
+        sha256: d4e6c5609d72ac6571db18cc27057210944f6c95e1e803a1240cb26520490933
+      - id: iface.spacing-outcome
+        signature: one internal production constant, no new production interface; complete archived baseline/candidate comparison at `/tmp/graph-initial-spacing-evidence/task-1/comparison/comparison.json`. Later tasks require its `status == "PASS"`; the four literal/target tests passing is a separate gate.
+        sha256: 8e1a50c33505a50eaefd9c3c8ccf0b322e2f1a1bcb71f961eda466977a719a3d
+      consumes: []
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "*InitialSpacingShould", "--tests", "*BoundaryFootprintShould", "--console=plain", "-PTestLoggingFull"]
+        cwd: lane
+        timeout_seconds: 1200
+        environment: java21-headless-build
+      - argv: ["python3", "freeplane_plugin_graph/src/test/scripts/compare_initial_spacing.py", ".", "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/InitialSpacingProbe.java", "/tmp/graph-initial-spacing-evidence/task-1/comparison"]
+        cwd: lane
+        timeout_seconds: 1200
+        environment: java21-headless-build
+  - id: T-002
+    plan_task: 2
+    title: "Exercise real worker lifecycle commands and exact pin retention"
+    implementer_tier: "Advanced"
+    lane: "spacing"
+    sequence: 2
+    depends_on: [T-001]
+    ownership:
+      paths:
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/control/InitialSpacingLifecycleShould.java
+    external_evidence:
+    - /tmp/graph-initial-spacing-evidence/task-2/**
+    resources: []
+    produces:
+    - id: iface.spacing-lifecycle
+      signature: JUnit tests proving healthy engine continuity across a barriered pause/Restart resume boundary before the next force integration, reset worker/engine replacement, failed engine replacement/current-projection resubmission, actual wider registered targets and active-pin coordinates through every transition. There is no production interface change.
+      sha256: a2ae97e6832e89a1977b59b43565395d753a5f14a4b24428cbbbb83737cdd08f
+    consumes:
+    - producer_task: T-001
+      interface_id: iface.spacing-test-support
+      signature: '`SpacingTestSupport.ring(long,int,boolean): GraphProjection`, `targets(boolean): GraphProjection`, `request(WorkspaceId,GraphProjection,GraphProjection,List<PinProjection>): LayoutRequest`, `inspect(LayoutEngine): Snapshot`, `requireTargets(Snapshot,double,boolean,double...): void`; public test-only `Snapshot` contains detached node/anchor positions, particle radii and `List<Link>` with semantic endpoints, `kind`, `crossMap`, `restLength`. `Link` carries no live mutation handle. Detailed declarations are below.'
+      sha256: d4e6c5609d72ac6571db18cc27057210944f6c95e1e803a1240cb26520490933
+    - producer_task: T-001
+      interface_id: iface.spacing-outcome
+      signature: one internal production constant, no new production interface; complete archived baseline/candidate comparison at `/tmp/graph-initial-spacing-evidence/task-1/comparison/comparison.json`. Later tasks require its `status == "PASS"`; the four literal/target tests passing is a separate gate.
+      sha256: 8e1a50c33505a50eaefd9c3c8ccf0b322e2f1a1bcb71f961eda466977a719a3d
+    interfaces:
+      produces:
+      - id: iface.spacing-lifecycle
+        signature: JUnit tests proving healthy engine continuity across a barriered pause/Restart resume boundary before the next force integration, reset worker/engine replacement, failed engine replacement/current-projection resubmission, actual wider registered targets and active-pin coordinates through every transition. There is no production interface change.
+        sha256: a2ae97e6832e89a1977b59b43565395d753a5f14a4b24428cbbbb83737cdd08f
+      consumes:
+      - producer_task: T-001
+        interface_id: iface.spacing-test-support
+        signature: '`SpacingTestSupport.ring(long,int,boolean): GraphProjection`, `targets(boolean): GraphProjection`, `request(WorkspaceId,GraphProjection,GraphProjection,List<PinProjection>): LayoutRequest`, `inspect(LayoutEngine): Snapshot`, `requireTargets(Snapshot,double,boolean,double...): void`; public test-only `Snapshot` contains detached node/anchor positions, particle radii and `List<Link>` with semantic endpoints, `kind`, `crossMap`, `restLength`. `Link` carries no live mutation handle. Detailed declarations are below.'
+        sha256: d4e6c5609d72ac6571db18cc27057210944f6c95e1e803a1240cb26520490933
+      - producer_task: T-001
+        interface_id: iface.spacing-outcome
+        signature: one internal production constant, no new production interface; complete archived baseline/candidate comparison at `/tmp/graph-initial-spacing-evidence/task-1/comparison/comparison.json`. Later tasks require its `status == "PASS"`; the four literal/target tests passing is a separate gate.
+        sha256: 8e1a50c33505a50eaefd9c3c8ccf0b322e2f1a1bcb71f961eda466977a719a3d
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "*InitialSpacingLifecycleShould", "--tests", "*LayoutWorkerShould", "--tests", "*LayoutSettleLoopShould", "--tests", "*GraphUpdateCoordinatorShould", "--console=plain", "-PTestLoggingFull"]
+        cwd: lane
+        timeout_seconds: 1200
+        environment: java21-headless-build
+  - id: T-003
+    plan_task: 3
+    title: "Falsify every load-bearing mechanism and reconcile only derived regression expectations"
+    implementer_tier: "Advanced"
+    lane: "spacing"
+    sequence: 3
+    depends_on: [T-002]
+    ownership:
+      paths:
+      - freeplane_plugin_graph/src/test/scripts/mutate_initial_spacing.py
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/TypedForcesShould.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/ClusterProximityShould.java
+    external_evidence:
+    - /tmp/graph-initial-spacing-evidence/task-3/**
+    resources: []
+    produces:
+    - id: iface.spacing-mutations
+      signature: CLI `python3 freeplane_plugin_graph/src/test/scripts/mutate_initial_spacing.py <candidateRoot> <evidenceDirectory>` returning 0 iff a clean JUnit control passes and all seven isolated compiled mutants fail the specified assertions; `mutations.json` holds commands, source hashes, return codes and expected assertion names.
+      sha256: bb3ea3791dc1af35b8d604767bfe82c452be0fbe8451f9b149be0e8893f12f58
+    consumes:
+    - producer_task: T-001
+      interface_id: iface.spacing-test-support
+      signature: '`SpacingTestSupport.ring(long,int,boolean): GraphProjection`, `targets(boolean): GraphProjection`, `request(WorkspaceId,GraphProjection,GraphProjection,List<PinProjection>): LayoutRequest`, `inspect(LayoutEngine): Snapshot`, `requireTargets(Snapshot,double,boolean,double...): void`; public test-only `Snapshot` contains detached node/anchor positions, particle radii and `List<Link>` with semantic endpoints, `kind`, `crossMap`, `restLength`. `Link` carries no live mutation handle. Detailed declarations are below.'
+      sha256: d4e6c5609d72ac6571db18cc27057210944f6c95e1e803a1240cb26520490933
+    - producer_task: T-001
+      interface_id: iface.spacing-outcome
+      signature: one internal production constant, no new production interface; complete archived baseline/candidate comparison at `/tmp/graph-initial-spacing-evidence/task-1/comparison/comparison.json`. Later tasks require its `status == "PASS"`; the four literal/target tests passing is a separate gate.
+      sha256: 8e1a50c33505a50eaefd9c3c8ccf0b322e2f1a1bcb71f961eda466977a719a3d
+    - producer_task: T-002
+      interface_id: iface.spacing-lifecycle
+      signature: JUnit tests proving healthy engine continuity across a barriered pause/Restart resume boundary before the next force integration, reset worker/engine replacement, failed engine replacement/current-projection resubmission, actual wider registered targets and active-pin coordinates through every transition. There is no production interface change.
+      sha256: a2ae97e6832e89a1977b59b43565395d753a5f14a4b24428cbbbb83737cdd08f
+    interfaces:
+      produces:
+      - id: iface.spacing-mutations
+        signature: CLI `python3 freeplane_plugin_graph/src/test/scripts/mutate_initial_spacing.py <candidateRoot> <evidenceDirectory>` returning 0 iff a clean JUnit control passes and all seven isolated compiled mutants fail the specified assertions; `mutations.json` holds commands, source hashes, return codes and expected assertion names.
+        sha256: bb3ea3791dc1af35b8d604767bfe82c452be0fbe8451f9b149be0e8893f12f58
+      consumes:
+      - producer_task: T-001
+        interface_id: iface.spacing-test-support
+        signature: '`SpacingTestSupport.ring(long,int,boolean): GraphProjection`, `targets(boolean): GraphProjection`, `request(WorkspaceId,GraphProjection,GraphProjection,List<PinProjection>): LayoutRequest`, `inspect(LayoutEngine): Snapshot`, `requireTargets(Snapshot,double,boolean,double...): void`; public test-only `Snapshot` contains detached node/anchor positions, particle radii and `List<Link>` with semantic endpoints, `kind`, `crossMap`, `restLength`. `Link` carries no live mutation handle. Detailed declarations are below.'
+        sha256: d4e6c5609d72ac6571db18cc27057210944f6c95e1e803a1240cb26520490933
+      - producer_task: T-001
+        interface_id: iface.spacing-outcome
+        signature: one internal production constant, no new production interface; complete archived baseline/candidate comparison at `/tmp/graph-initial-spacing-evidence/task-1/comparison/comparison.json`. Later tasks require its `status == "PASS"`; the four literal/target tests passing is a separate gate.
+        sha256: 8e1a50c33505a50eaefd9c3c8ccf0b322e2f1a1bcb71f961eda466977a719a3d
+      - producer_task: T-002
+        interface_id: iface.spacing-lifecycle
+        signature: JUnit tests proving healthy engine continuity across a barriered pause/Restart resume boundary before the next force integration, reset worker/engine replacement, failed engine replacement/current-projection resubmission, actual wider registered targets and active-pin coordinates through every transition. There is no production interface change.
+        sha256: a2ae97e6832e89a1977b59b43565395d753a5f14a4b24428cbbbb83737cdd08f
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "*InitialSpacingShould", "--tests", "*InitialSpacingLifecycleShould", "--tests", "*BoundaryFootprintShould", "--tests", "*ClusterPackingShould", "--tests", "*TypedForcesShould", "--tests", "*ClusterProximityShould", "--tests", "*AnchorSeparationShould", "--tests", "*LayoutWorkerShould", "--tests", "*LayoutSettleLoopShould", "--tests", "*GraphUpdateCoordinatorShould", "--console=plain", "-PTestLoggingFull"]
+        cwd: lane
+        timeout_seconds: 1200
+        environment: java21-headless-build
+      - argv: ["python3", "freeplane_plugin_graph/src/test/scripts/mutate_initial_spacing.py", ".", "/tmp/graph-initial-spacing-evidence/task-3/mutations"]
+        cwd: lane
+        timeout_seconds: 1200
+        environment: java21-headless-build
+  - id: T-004
+    plan_task: 4
+    title: "Capture first-idle publications in the installed application at a fixed viewport"
+    implementer_tier: "Advanced"
+    lane: "spacing"
+    sequence: 4
+    depends_on: [T-003]
+    ownership:
+      paths:
+      - freeplane_plugin_graph/src/test/evidence/initial-spacing/SpacingUiAgent.java
+      - freeplane_plugin_graph/src/test/evidence/initial-spacing/capture.py
+    external_evidence:
+    - /tmp/graph-initial-spacing-evidence/task-4/**
+    resources: []
+    produces:
+    - id: iface.spacing-ui
+      signature: 'test-only `SpacingUiAgent.premain(String,Instrumentation): void`, argument `outputDirectory,workspacePath,caseName` (`nr8`, `sm8`, `nested`, `pins`, or `pin-conflict`); it locates installed classes through their real OSGi classloader, wraps only view construction to attach a passive listener, and delegates every production operation. No class redefinition, worker replacement, synthesized `CanvasState`, setter for positions, forced idle, extra step, Fit Graph or settle-policy modification is allowed. `python3 capture.py <candidateRoot> <evidenceDirectory>` exit 0 only when old/new direct-node, connected, nested multi-map and required one-pin lifecycle captures complete, source/projection/viewport/radius identities match, exact pin coordinates survive Restart/Reset, and normal first-IDLE screenshots identify the first qualified publication. A supplemental two-pin conflict diagnostic is excluded from spacing acceptance. `frames.tsv` row types and receipt calculations are fully specified by the code below.'
+      sha256: 2d34c44284d0447b3d7948f2a8670a1eb584a2a4101810b8ffadfad39f7e853b
+    - id: iface.spacing-visual-inspection
+      signature: visual-inspection.json binds every Task 4 window/canvas screenshot path and SHA-256 to native-resolution inspection observations; status PASS; uiReceiptSha256 equals the ui-receipt.json byte digest; observations cover phase, visibility, labels/hulls, unchanged radii/viewport/zoom, clipping, exact pins and excluded nonzero-residual diagnostics.
+      sha256: fd9c802dd9819f81ccccf32a42fcebe228eadcc075289ee4f9bcd49ea88712bf
+    consumes:
+    - producer_task: T-001
+      interface_id: iface.spacing-outcome
+      signature: one internal production constant, no new production interface; complete archived baseline/candidate comparison at `/tmp/graph-initial-spacing-evidence/task-1/comparison/comparison.json`. Later tasks require its `status == "PASS"`; the four literal/target tests passing is a separate gate.
+      sha256: 8e1a50c33505a50eaefd9c3c8ccf0b322e2f1a1bcb71f961eda466977a719a3d
+    - producer_task: T-003
+      interface_id: iface.spacing-mutations
+      signature: CLI `python3 freeplane_plugin_graph/src/test/scripts/mutate_initial_spacing.py <candidateRoot> <evidenceDirectory>` returning 0 iff a clean JUnit control passes and all seven isolated compiled mutants fail the specified assertions; `mutations.json` holds commands, source hashes, return codes and expected assertion names.
+      sha256: bb3ea3791dc1af35b8d604767bfe82c452be0fbe8451f9b149be0e8893f12f58
+    interfaces:
+      produces:
+      - id: iface.spacing-ui
+        signature: 'test-only `SpacingUiAgent.premain(String,Instrumentation): void`, argument `outputDirectory,workspacePath,caseName` (`nr8`, `sm8`, `nested`, `pins`, or `pin-conflict`); it locates installed classes through their real OSGi classloader, wraps only view construction to attach a passive listener, and delegates every production operation. No class redefinition, worker replacement, synthesized `CanvasState`, setter for positions, forced idle, extra step, Fit Graph or settle-policy modification is allowed. `python3 capture.py <candidateRoot> <evidenceDirectory>` exit 0 only when old/new direct-node, connected, nested multi-map and required one-pin lifecycle captures complete, source/projection/viewport/radius identities match, exact pin coordinates survive Restart/Reset, and normal first-IDLE screenshots identify the first qualified publication. A supplemental two-pin conflict diagnostic is excluded from spacing acceptance. `frames.tsv` row types and receipt calculations are fully specified by the code below.'
+        sha256: 2d34c44284d0447b3d7948f2a8670a1eb584a2a4101810b8ffadfad39f7e853b
+      - id: iface.spacing-visual-inspection
+        signature: visual-inspection.json binds every Task 4 window/canvas screenshot path and SHA-256 to native-resolution inspection observations; status PASS; uiReceiptSha256 equals the ui-receipt.json byte digest; observations cover phase, visibility, labels/hulls, unchanged radii/viewport/zoom, clipping, exact pins and excluded nonzero-residual diagnostics.
+        sha256: fd9c802dd9819f81ccccf32a42fcebe228eadcc075289ee4f9bcd49ea88712bf
+      consumes:
+      - producer_task: T-001
+        interface_id: iface.spacing-outcome
+        signature: one internal production constant, no new production interface; complete archived baseline/candidate comparison at `/tmp/graph-initial-spacing-evidence/task-1/comparison/comparison.json`. Later tasks require its `status == "PASS"`; the four literal/target tests passing is a separate gate.
+        sha256: 8e1a50c33505a50eaefd9c3c8ccf0b322e2f1a1bcb71f961eda466977a719a3d
+      - producer_task: T-003
+        interface_id: iface.spacing-mutations
+        signature: CLI `python3 freeplane_plugin_graph/src/test/scripts/mutate_initial_spacing.py <candidateRoot> <evidenceDirectory>` returning 0 iff a clean JUnit control passes and all seven isolated compiled mutants fail the specified assertions; `mutations.json` holds commands, source hashes, return codes and expected assertion names.
+        sha256: bb3ea3791dc1af35b8d604767bfe82c452be0fbe8451f9b149be0e8893f12f58
+    validation:
+      - argv: ["python3", "freeplane_plugin_graph/src/test/evidence/initial-spacing/capture.py", ".", "/tmp/graph-initial-spacing-evidence/task-4/ui"]
+        cwd: lane
+        timeout_seconds: 3600
+        environment: java21-headless-build
+  - id: T-005
+    plan_task: 5
+    title: "Run the required integration gates and publish a receipt-backed acceptance record"
+    implementer_tier: "Standard"
+    lane: "spacing"
+    sequence: 5
+    depends_on: [T-004]
+    ownership:
+      paths:
+      - docs/superpowers/evidence/2026-10-16-graph-initial-spacing.md
+    external_evidence:
+    - /tmp/graph-initial-spacing-evidence/task-5/**
+    resources: []
+    produces:
+    - id: iface.spacing-acceptance
+      signature: '`task-5/validation.json` with actual argv/cwd/environment/exit results, `task-5/production.diff`, copied current build receipts, and the acceptance markdown linking requirement-specific evidence with actual measurements. No new runtime/test interface or production code.'
+      sha256: e248f64674932c88c0ced9d8354ea848de84089aa6e5e0366fd70c9df1785ffb
+    consumes:
+    - producer_task: T-001
+      interface_id: iface.spacing-outcome
+      signature: one internal production constant, no new production interface; complete archived baseline/candidate comparison at `/tmp/graph-initial-spacing-evidence/task-1/comparison/comparison.json`. Later tasks require its `status == "PASS"`; the four literal/target tests passing is a separate gate.
+      sha256: 8e1a50c33505a50eaefd9c3c8ccf0b322e2f1a1bcb71f961eda466977a719a3d
+    - producer_task: T-002
+      interface_id: iface.spacing-lifecycle
+      signature: JUnit tests proving healthy engine continuity across a barriered pause/Restart resume boundary before the next force integration, reset worker/engine replacement, failed engine replacement/current-projection resubmission, actual wider registered targets and active-pin coordinates through every transition. There is no production interface change.
+      sha256: a2ae97e6832e89a1977b59b43565395d753a5f14a4b24428cbbbb83737cdd08f
+    - producer_task: T-003
+      interface_id: iface.spacing-mutations
+      signature: CLI `python3 freeplane_plugin_graph/src/test/scripts/mutate_initial_spacing.py <candidateRoot> <evidenceDirectory>` returning 0 iff a clean JUnit control passes and all seven isolated compiled mutants fail the specified assertions; `mutations.json` holds commands, source hashes, return codes and expected assertion names.
+      sha256: bb3ea3791dc1af35b8d604767bfe82c452be0fbe8451f9b149be0e8893f12f58
+    - producer_task: T-004
+      interface_id: iface.spacing-ui
+      signature: 'test-only `SpacingUiAgent.premain(String,Instrumentation): void`, argument `outputDirectory,workspacePath,caseName` (`nr8`, `sm8`, `nested`, `pins`, or `pin-conflict`); it locates installed classes through their real OSGi classloader, wraps only view construction to attach a passive listener, and delegates every production operation. No class redefinition, worker replacement, synthesized `CanvasState`, setter for positions, forced idle, extra step, Fit Graph or settle-policy modification is allowed. `python3 capture.py <candidateRoot> <evidenceDirectory>` exit 0 only when old/new direct-node, connected, nested multi-map and required one-pin lifecycle captures complete, source/projection/viewport/radius identities match, exact pin coordinates survive Restart/Reset, and normal first-IDLE screenshots identify the first qualified publication. A supplemental two-pin conflict diagnostic is excluded from spacing acceptance. `frames.tsv` row types and receipt calculations are fully specified by the code below.'
+      sha256: 2d34c44284d0447b3d7948f2a8670a1eb584a2a4101810b8ffadfad39f7e853b
+    - producer_task: T-004
+      interface_id: iface.spacing-visual-inspection
+      signature: visual-inspection.json binds every Task 4 window/canvas screenshot path and SHA-256 to native-resolution inspection observations; status PASS; uiReceiptSha256 equals the ui-receipt.json byte digest; observations cover phase, visibility, labels/hulls, unchanged radii/viewport/zoom, clipping, exact pins and excluded nonzero-residual diagnostics.
+      sha256: fd9c802dd9819f81ccccf32a42fcebe228eadcc075289ee4f9bcd49ea88712bf
+    interfaces:
+      produces:
+      - id: iface.spacing-acceptance
+        signature: '`task-5/validation.json` with actual argv/cwd/environment/exit results, `task-5/production.diff`, copied current build receipts, and the acceptance markdown linking requirement-specific evidence with actual measurements. No new runtime/test interface or production code.'
+        sha256: e248f64674932c88c0ced9d8354ea848de84089aa6e5e0366fd70c9df1785ffb
+      consumes:
+      - producer_task: T-001
+        interface_id: iface.spacing-outcome
+        signature: one internal production constant, no new production interface; complete archived baseline/candidate comparison at `/tmp/graph-initial-spacing-evidence/task-1/comparison/comparison.json`. Later tasks require its `status == "PASS"`; the four literal/target tests passing is a separate gate.
+        sha256: 8e1a50c33505a50eaefd9c3c8ccf0b322e2f1a1bcb71f961eda466977a719a3d
+      - producer_task: T-002
+        interface_id: iface.spacing-lifecycle
+        signature: JUnit tests proving healthy engine continuity across a barriered pause/Restart resume boundary before the next force integration, reset worker/engine replacement, failed engine replacement/current-projection resubmission, actual wider registered targets and active-pin coordinates through every transition. There is no production interface change.
+        sha256: a2ae97e6832e89a1977b59b43565395d753a5f14a4b24428cbbbb83737cdd08f
+      - producer_task: T-003
+        interface_id: iface.spacing-mutations
+        signature: CLI `python3 freeplane_plugin_graph/src/test/scripts/mutate_initial_spacing.py <candidateRoot> <evidenceDirectory>` returning 0 iff a clean JUnit control passes and all seven isolated compiled mutants fail the specified assertions; `mutations.json` holds commands, source hashes, return codes and expected assertion names.
+        sha256: bb3ea3791dc1af35b8d604767bfe82c452be0fbe8451f9b149be0e8893f12f58
+      - producer_task: T-004
+        interface_id: iface.spacing-ui
+        signature: 'test-only `SpacingUiAgent.premain(String,Instrumentation): void`, argument `outputDirectory,workspacePath,caseName` (`nr8`, `sm8`, `nested`, `pins`, or `pin-conflict`); it locates installed classes through their real OSGi classloader, wraps only view construction to attach a passive listener, and delegates every production operation. No class redefinition, worker replacement, synthesized `CanvasState`, setter for positions, forced idle, extra step, Fit Graph or settle-policy modification is allowed. `python3 capture.py <candidateRoot> <evidenceDirectory>` exit 0 only when old/new direct-node, connected, nested multi-map and required one-pin lifecycle captures complete, source/projection/viewport/radius identities match, exact pin coordinates survive Restart/Reset, and normal first-IDLE screenshots identify the first qualified publication. A supplemental two-pin conflict diagnostic is excluded from spacing acceptance. `frames.tsv` row types and receipt calculations are fully specified by the code below.'
+        sha256: 2d34c44284d0447b3d7948f2a8670a1eb584a2a4101810b8ffadfad39f7e853b
+      - producer_task: T-004
+        interface_id: iface.spacing-visual-inspection
+        signature: visual-inspection.json binds every Task 4 window/canvas screenshot path and SHA-256 to native-resolution inspection observations; status PASS; uiReceiptSha256 equals the ui-receipt.json byte digest; observations cover phase, visibility, labels/hulls, unchanged radii/viewport/zoom, clipping, exact pins and excluded nonzero-residual diagnostics.
+        sha256: fd9c802dd9819f81ccccf32a42fcebe228eadcc075289ee4f9bcd49ea88712bf
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:check", "--console=plain"]
+        cwd: lane
+        timeout_seconds: 3600
+        environment: java21-headless-build
+      - argv: ["gradle", ":freeplane_plugin_graph:graphPerformanceDiagnostic", "-PgraphStrictPerformance", "--console=plain"]
+        cwd: lane
+        timeout_seconds: 3600
+        environment: java21-headless-build
+      - argv: ["xvfb-run", "-a", "-s", "-screen 0 1440x1000x24 -nolisten tcp", "gradle", ":freeplane_plugin_graph:graphOsgiSmoke", ":freeplaneLaunchSmoke", "--console=plain"]
+        cwd: lane
+        timeout_seconds: 3600
+        environment: isolated-xvfb
+      - argv: ["gradle", ":freeplane:compileJava", "test", "--console=plain"]
+        cwd: lane
+        timeout_seconds: 3600
+        environment: java21-headless-build
