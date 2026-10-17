@@ -51,9 +51,10 @@ public final class EdgeConflictCorrection {
     static final long EDGE_CONFLICT_MAX_INDEX_ITEMS_PER_FRAME = 262_144L;
     static final long EDGE_CONFLICT_MAX_PAIR_CHECKS_PER_FRAME = 131_072L;
     static final int EDGE_CONFLICT_MAX_DETECTED_PER_FRAME = 4_096;
-    static final int EDGE_CONFLICT_MAX_REPAIRABLE_CONFLICTS_PER_FRAME = 8;
     static final long EDGE_CONFLICT_MAX_VERIFICATION_WORK_PER_FRAME = 65_536L;
     static final double MAX_EDGE_NODE_EXCURSION = 64.0;
+    static final int MAX_CANDIDATE_FAMILIES_PER_ROUND = 8;
+    static final int MAX_CANDIDATES_PER_BATCH = 8;
 
     private static final double OUTERMOST_CELL_INDEX_DOUBLE = OUTERMOST_CELL_INDEX;
     private static final Comparator<ProjectedNodeKey> NODE_ORDER =
@@ -125,18 +126,6 @@ public final class EdgeConflictCorrection {
         final int crossingsDetected = conflicts.crossings();
         final int edgeOverNodeDetected = conflicts.edgeOverNodes();
         final boolean initialDetectionTruncated = initial.truncated();
-        if (conflictsDetected > EDGE_CONFLICT_MAX_REPAIRABLE_CONFLICTS_PER_FRAME
-                && !initialDetectionTruncated && !indexBudgetExhausted) {
-            final EdgeConflictDiagnostics diagnostics = new EdgeConflictDiagnostics(
-                conflictsDetected, crossingsDetected, edgeOverNodeDetected, 0, 0, conflicts.keys(),
-                Collections.<EdgeConflictDiagnostics.Repair>emptyList(), 0, 0, false,
-                indexBudgetExhausted, initialDetectionTruncated, indexInsertedItems, indexPairChecks,
-                verificationWork, indexSubdivisions);
-            return new EdgeConflictResult(positions, diagnostics,
-                new EdgeConflictTimings(0L, 0L, 0L, 0L), boundaryResult.diagnostics(),
-                boundaryResult.nodeResidualViolations(),
-                Collections.<String, LayoutPoint>emptyMap());
-        }
         final List<EdgeConflictDiagnostics.Repair> repairs =
             new ArrayList<EdgeConflictDiagnostics.Repair>();
         int rounds = 0;
@@ -361,19 +350,42 @@ public final class EdgeConflictCorrection {
         }
     }
 
+    /**
+     * The bounded family selection of spec §4.1: visit the complete conflict list in ascending
+     * canonical detection-identity order (the accumulator stores it in a {@link TreeMap}, so it
+     * is already ascending), build one family at a time, and retain only entries whose
+     * {@link CandidateIdentity} is new for this current-state pool. A family is counted only when
+     * something survives that deduplication; generation stops after
+     * {@link #MAX_CANDIDATE_FAMILIES_PER_ROUND} nonempty families, so at most 48 entries enter the
+     * pool. Unselected conflicts stay in the detection and the reported residual; this is a
+     * candidate-generation bound, never a detection or verification bound.
+     */
     private static List<Candidate> generateCandidates(final Detection conflicts,
             final LayoutPositions positions, final Set<ProjectedNodeKey> pinned,
             final Map<ProjectedNodeKey, List<EnclosureHullKey>> enclosurePaths) {
-        final List<Candidate> candidates = new ArrayList<Candidate>();
+        final List<Candidate> pool = new ArrayList<Candidate>();
+        final Set<CandidateIdentity> retained = new HashSet<CandidateIdentity>();
+        int families = 0;
         for (final Conflict conflict : conflicts.conflicts()) {
+            final List<Candidate> family = new ArrayList<Candidate>(6);
             if (conflict.isCrossing()) {
-                addCrossingCandidates(candidates, conflict, positions, pinned, enclosurePaths);
+                addCrossingCandidates(family, conflict, positions, pinned, enclosurePaths);
             }
             else {
-                addEdgeOverNodeCandidates(candidates, conflict, positions, pinned);
+                addEdgeOverNodeCandidates(family, conflict, positions, pinned);
+            }
+            boolean nonempty = false;
+            for (final Candidate candidate : family) {
+                if (retained.add(new CandidateIdentity(candidate))) {
+                    pool.add(candidate);
+                    nonempty = true;
+                }
+            }
+            if (nonempty && ++families == MAX_CANDIDATE_FAMILIES_PER_ROUND) {
+                break;
             }
         }
-        return candidates;
+        return pool;
     }
 
     private static void addCrossingCandidates(final List<Candidate> candidates, final Conflict conflict,
@@ -623,6 +635,9 @@ public final class EdgeConflictCorrection {
         final List<Candidate> batch = new ArrayList<Candidate>();
         final Set<ProjectedNodeKey> moved = new LinkedHashSet<ProjectedNodeKey>();
         for (final Candidate candidate : pool) {
+            if (batch.size() >= MAX_CANDIDATES_PER_BATCH) {
+                break;
+            }
             boolean disjoint = true;
             for (final ProjectedNodeKey node : candidate.movedNodes) {
                 if (moved.contains(node)) {
