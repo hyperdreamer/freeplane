@@ -1,0 +1,318 @@
+schema_version: 1
+source_plan:
+  path: "docs/superpowers/plans/2026-10-16-edge-node-clearance.md"
+  sha256: f2bf8c2c8c887cebad0902163ff968443836603e93411a8551e87e059433127b
+  commit: b757b0f1f0a0f82cd0f8f0c0cf82196aa1fbbac7
+  commit_oid: b757b0f1f0a0f82cd0f8f0c0cf82196aa1fbbac7
+  parsed_tasks: [1, 2, 3, 4, 5, 6, 7]
+  task_numbers: [1, 2, 3, 4, 5, 6, 7]
+lanes:
+  - lane_id: "clearance"
+    task_ids: ["T1", "T2", "T3", "T4", "T5", "T6", "T7"]
+produces:
+  - task: T1
+    name: "task-output:T1"
+    digest: sha256:d52c4e02e4802d75ea48381573920683dfa5c87c194468951d7d94be79714971
+    signature: "- Produces private static `addEdgeOverNodeCandidates(List<Candidate>, Conflict, LayoutPositions, Set<ProjectedNodeKey>): void`, replacing the singular method; private `CandidateIdentity implements Comparable<CandidateIdentity>` with constructor `CandidateIdentity(Candidate)`, value equality/hash; private `RankedCandidate(Candidate candidate, int stage, double movement, int sideRank, int alongRank, CandidateIdentity identity)` with static `Comparator<RankedCandidate> ORDER` and its candidate field. C1 `Candidate` observable fields/kinds are unchanged. | - Produces package-private `static final double MAX_EDGE_NODE_EXCURSION = 64.0`. | - Produces test-private `clearanceFixture(String[] ids, double[] xy, int[][] edges): Fixture`, `oppositeSideFixture(): Fixture`, `blockedColumnFixture(): Fixture`, `routed(Fixture, EdgeConflictResult): EdgePaths`, `assertClearPaths(GraphProjection, GraphGeometry, EdgePaths, Set<ProjectedEdgeKey>): void`, `assertSuccessfulStraight(Fixture, EdgeConflictResult, EdgePaths, int): void`. Build final geometry from result positions, not the fixture's initial geometry. No test helper leaks into main sources."
+  - task: T2
+    name: "task-output:T2"
+    digest: sha256:7a25e8e2297de265690692720d3a3c4f59b89273b940dffbb37f5f71ee93b260
+    signature: "- Produces package-private `static final int MAX_CANDIDATE_FAMILIES_PER_ROUND=8`, `MAX_CANDIDATES_PER_BATCH=8`; replaces the private `generateCandidates` body with a deduplicated bounded family traversal. No signature/public diagnostic changes. | - Produces private `nineObstructionsFixture(): Fixture`, `fullyBlockedFixture(): Fixture`, `duplicateChordFixture(): Fixture` and tests named below."
+  - task: T3
+    name: "task-output:T3"
+    digest: sha256:6a1ff36c79368b79a1cf5ee3b5224a0b2ddcc0db884e13c7be01ec0fe0974b01
+    signature: "- Produces only tests/local construction/assertion helpers. No production or fixture-ledger edits. `BoundaryInvariants.Violation.kind(): BoundaryConflict.Kind` must equal `BoundaryConflict.Kind.ANCESTOR_ESCAPE`; no new diagnostic enum/API is introduced."
+  - task: T4
+    name: "task-output:T4"
+    digest: sha256:efad232b2cabf4f20de4b142c612ddb67c36d632ac99705a117538a4a77b1f14
+    signature: "- Consumes unchanged `EdgeConflictDiagnostics` getters for residual, rounds/verifications, flags and counted work; `BoundarySeparationResult`/diagnostics and existing counted boundary/node test fixtures. Produces only additional/strengthened regression methods and external verification logs."
+  - task: T5
+    name: "task-output:T5"
+    digest: sha256:68b2ad5342a9a534809f12008c5a461d8602574cb942f119852b61e3396a6ccb
+    signature: "- Produces test helper `public final class EdgeNodeClearanceReplay` in the control package with package-private `static GraphProjection projection()`, `static LayoutPositions rawPositions()`, `static LayoutSettleLoop.FrameStepper newStepper()`, `static void assertE3(CanvasState state)`, `static double minimumClearance(GraphProjection, GraphGeometry, EdgePaths)`, `static String stateDigest(CanvasState)`. All dependencies/nested helper types live in this one source; runtime assertions use JDK `AssertionError`, no JUnit/AssertJ or other test utility reference. Stable test workspace UUID: `00000000-0000-0000-0000-000000000100`; map UUID/IDs/generation from Global Constraints. Task 7 must generate `.fpg`/`.mm` matching these values."
+  - task: T6
+    name: "task-output:T6"
+    digest: sha256:3addab11b2ba78fa73efe224ab7a84bd32e47c126999eb618f4627e9ae8bc85b
+    signature: "- Produces test-helper `public static void run(Object window, Path attemptDirectory) throws Exception`; package-private `static <T> T onEdt(Callable<T> operation, long deadlineNanos) throws Exception`, `static void requireSameSnapshot(Snapshot before, Snapshot after)`, nested immutable `Snapshot`; JDK-only JSON/bit encoding/digest and cleanup helpers, all nested in this source."
+  - task: T7
+    name: "task-output:T7"
+    digest: sha256:df5e01c5f256011074f123e6af717849eefd8f528dd245b9fd4d368825174908
+    signature: "- Produces `EdgeNodeClearanceEvidenceAgent.premain(String attemptDirectory, Instrumentation): void`; `EdgeNodeClearanceApplicationEvidence.main(String[] args): void` (three path arguments; or exactly `--self-test` for isolated JDK-only validator checks); nonzero process exit on every failed launch/artifact/cleanup gate. | - Produces `edgeNodeClearanceEvidenceAgent` Jar and `edgeNodeClearanceApplicationEvidence` JavaExec, required `-PedgeClearanceEvidenceDir`, plus fresh external per-attempt artifacts. Final `result.json` schema: `schemaVersion`, `attemptId`, `stage`, `status` (`PASS`/`FAIL`), `error` (structured cause/stack), `provenance` (cwd/source/diff/java/command/fixture/installedBundle/agent hashes), `artifacts` (paths/state/image/log hashes), `deadlines`, `cleanup` (helper close/controller shutdown/window disposed/child exit/owned PIDs and survivors)."
+consumes:
+  - task: T2
+    producer_task: T1
+    name: "task-output:T1"
+    digest: sha256:d52c4e02e4802d75ea48381573920683dfa5c87c194468951d7d94be79714971
+    signature: "- Produces private static `addEdgeOverNodeCandidates(List<Candidate>, Conflict, LayoutPositions, Set<ProjectedNodeKey>): void`, replacing the singular method; private `CandidateIdentity implements Comparable<CandidateIdentity>` with constructor `CandidateIdentity(Candidate)`, value equality/hash; private `RankedCandidate(Candidate candidate, int stage, double movement, int sideRank, int alongRank, CandidateIdentity identity)` with static `Comparator<RankedCandidate> ORDER` and its candidate field. C1 `Candidate` observable fields/kinds are unchanged. | - Produces package-private `static final double MAX_EDGE_NODE_EXCURSION = 64.0`. | - Produces test-private `clearanceFixture(String[] ids, double[] xy, int[][] edges): Fixture`, `oppositeSideFixture(): Fixture`, `blockedColumnFixture(): Fixture`, `routed(Fixture, EdgeConflictResult): EdgePaths`, `assertClearPaths(GraphProjection, GraphGeometry, EdgePaths, Set<ProjectedEdgeKey>): void`, `assertSuccessfulStraight(Fixture, EdgeConflictResult, EdgePaths, int): void`. Build final geometry from result positions, not the fixture's initial geometry. No test helper leaks into main sources."
+  - task: T3
+    producer_task: T2
+    name: "task-output:T2"
+    digest: sha256:7a25e8e2297de265690692720d3a3c4f59b89273b940dffbb37f5f71ee93b260
+    signature: "- Produces package-private `static final int MAX_CANDIDATE_FAMILIES_PER_ROUND=8`, `MAX_CANDIDATES_PER_BATCH=8`; replaces the private `generateCandidates` body with a deduplicated bounded family traversal. No signature/public diagnostic changes. | - Produces private `nineObstructionsFixture(): Fixture`, `fullyBlockedFixture(): Fixture`, `duplicateChordFixture(): Fixture` and tests named below."
+  - task: T4
+    producer_task: T3
+    name: "task-output:T3"
+    digest: sha256:6a1ff36c79368b79a1cf5ee3b5224a0b2ddcc0db884e13c7be01ec0fe0974b01
+    signature: "- Produces only tests/local construction/assertion helpers. No production or fixture-ledger edits. `BoundaryInvariants.Violation.kind(): BoundaryConflict.Kind` must equal `BoundaryConflict.Kind.ANCESTOR_ESCAPE`; no new diagnostic enum/API is introduced."
+  - task: T5
+    producer_task: T4
+    name: "task-output:T4"
+    digest: sha256:efad232b2cabf4f20de4b142c612ddb67c36d632ac99705a117538a4a77b1f14
+    signature: "- Consumes unchanged `EdgeConflictDiagnostics` getters for residual, rounds/verifications, flags and counted work; `BoundarySeparationResult`/diagnostics and existing counted boundary/node test fixtures. Produces only additional/strengthened regression methods and external verification logs."
+  - task: T6
+    producer_task: T5
+    name: "task-output:T5"
+    digest: sha256:68b2ad5342a9a534809f12008c5a461d8602574cb942f119852b61e3396a6ccb
+    signature: "- Produces test helper `public final class EdgeNodeClearanceReplay` in the control package with package-private `static GraphProjection projection()`, `static LayoutPositions rawPositions()`, `static LayoutSettleLoop.FrameStepper newStepper()`, `static void assertE3(CanvasState state)`, `static double minimumClearance(GraphProjection, GraphGeometry, EdgePaths)`, `static String stateDigest(CanvasState)`. All dependencies/nested helper types live in this one source; runtime assertions use JDK `AssertionError`, no JUnit/AssertJ or other test utility reference. Stable test workspace UUID: `00000000-0000-0000-0000-000000000100`; map UUID/IDs/generation from Global Constraints. Task 7 must generate `.fpg`/`.mm` matching these values."
+  - task: T7
+    producer_task: T6
+    name: "task-output:T6"
+    digest: sha256:3addab11b2ba78fa73efe224ab7a84bd32e47c126999eb618f4627e9ae8bc85b
+    signature: "- Produces test-helper `public static void run(Object window, Path attemptDirectory) throws Exception`; package-private `static <T> T onEdt(Callable<T> operation, long deadlineNanos) throws Exception`, `static void requireSameSnapshot(Snapshot before, Snapshot after)`, nested immutable `Snapshot`; JDK-only JSON/bit encoding/digest and cleanup helpers, all nested in this source."
+tasks:
+  - task_id: T1
+    plan_task: 1
+    lane: "clearance"
+    sequence: 1
+    title: "Replace the single C2 translation with the finite ordered local family"
+    tier: "advanced"
+    depends_on: []
+    ownership:
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrection.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrectionShould.java"
+    exclusive_resources: []
+    produces:
+      - name: "task-output:T1"
+        digest: sha256:d52c4e02e4802d75ea48381573920683dfa5c87c194468951d7d94be79714971
+        signature: "- Produces private static `addEdgeOverNodeCandidates(List<Candidate>, Conflict, LayoutPositions, Set<ProjectedNodeKey>): void`, replacing the singular method; private `CandidateIdentity implements Comparable<CandidateIdentity>` with constructor `CandidateIdentity(Candidate)`, value equality/hash; private `RankedCandidate(Candidate candidate, int stage, double movement, int sideRank, int alongRank, CandidateIdentity identity)` with static `Comparator<RankedCandidate> ORDER` and its candidate field. C1 `Candidate` observable fields/kinds are unchanged. | - Produces package-private `static final double MAX_EDGE_NODE_EXCURSION = 64.0`. | - Produces test-private `clearanceFixture(String[] ids, double[] xy, int[][] edges): Fixture`, `oppositeSideFixture(): Fixture`, `blockedColumnFixture(): Fixture`, `routed(Fixture, EdgeConflictResult): EdgePaths`, `assertClearPaths(GraphProjection, GraphGeometry, EdgePaths, Set<ProjectedEdgeKey>): void`, `assertSuccessfulStraight(Fixture, EdgeConflictResult, EdgePaths, int): void`. Build final geometry from result positions, not the fixture's initial geometry. No test helper leaks into main sources."
+    consumes: []
+    interfaces:
+      produces:
+        - name: "task-output:T1"
+          digest: sha256:d52c4e02e4802d75ea48381573920683dfa5c87c194468951d7d94be79714971
+          signature: "- Produces private static `addEdgeOverNodeCandidates(List<Candidate>, Conflict, LayoutPositions, Set<ProjectedNodeKey>): void`, replacing the singular method; private `CandidateIdentity implements Comparable<CandidateIdentity>` with constructor `CandidateIdentity(Candidate)`, value equality/hash; private `RankedCandidate(Candidate candidate, int stage, double movement, int sideRank, int alongRank, CandidateIdentity identity)` with static `Comparator<RankedCandidate> ORDER` and its candidate field. C1 `Candidate` observable fields/kinds are unchanged. | - Produces package-private `static final double MAX_EDGE_NODE_EXCURSION = 64.0`. | - Produces test-private `clearanceFixture(String[] ids, double[] xy, int[][] edges): Fixture`, `oppositeSideFixture(): Fixture`, `blockedColumnFixture(): Fixture`, `routed(Fixture, EdgeConflictResult): EdgePaths`, `assertClearPaths(GraphProjection, GraphGeometry, EdgePaths, Set<ProjectedEdgeKey>): void`, `assertSuccessfulStraight(Fixture, EdgeConflictResult, EdgePaths, int): void`. Build final geometry from result positions, not the fixture's initial geometry. No test helper leaks into main sources."
+      consumes: []
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould", "-I", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-045155-9d674096/reports/performance-headless.init.gradle", "--console=plain"]
+        cwd: "."
+        timeout_seconds: 1800
+  - task_id: T2
+    plan_task: 2
+    lane: "clearance"
+    sequence: 2
+    title: "Bound family selection and consume rejected alternatives without suppressing crowded frames"
+    tier: "advanced"
+    depends_on: ["T1"]
+    ownership:
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrection.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrectionShould.java"
+    exclusive_resources: []
+    produces:
+      - name: "task-output:T2"
+        digest: sha256:7a25e8e2297de265690692720d3a3c4f59b89273b940dffbb37f5f71ee93b260
+        signature: "- Produces package-private `static final int MAX_CANDIDATE_FAMILIES_PER_ROUND=8`, `MAX_CANDIDATES_PER_BATCH=8`; replaces the private `generateCandidates` body with a deduplicated bounded family traversal. No signature/public diagnostic changes. | - Produces private `nineObstructionsFixture(): Fixture`, `fullyBlockedFixture(): Fixture`, `duplicateChordFixture(): Fixture` and tests named below."
+    consumes:
+      - task: T1
+        name: "task-output:T1"
+        digest: sha256:d52c4e02e4802d75ea48381573920683dfa5c87c194468951d7d94be79714971
+        signature: "- Produces private static `addEdgeOverNodeCandidates(List<Candidate>, Conflict, LayoutPositions, Set<ProjectedNodeKey>): void`, replacing the singular method; private `CandidateIdentity implements Comparable<CandidateIdentity>` with constructor `CandidateIdentity(Candidate)`, value equality/hash; private `RankedCandidate(Candidate candidate, int stage, double movement, int sideRank, int alongRank, CandidateIdentity identity)` with static `Comparator<RankedCandidate> ORDER` and its candidate field. C1 `Candidate` observable fields/kinds are unchanged. | - Produces package-private `static final double MAX_EDGE_NODE_EXCURSION = 64.0`. | - Produces test-private `clearanceFixture(String[] ids, double[] xy, int[][] edges): Fixture`, `oppositeSideFixture(): Fixture`, `blockedColumnFixture(): Fixture`, `routed(Fixture, EdgeConflictResult): EdgePaths`, `assertClearPaths(GraphProjection, GraphGeometry, EdgePaths, Set<ProjectedEdgeKey>): void`, `assertSuccessfulStraight(Fixture, EdgeConflictResult, EdgePaths, int): void`. Build final geometry from result positions, not the fixture's initial geometry. No test helper leaks into main sources."
+    interfaces:
+      produces:
+        - name: "task-output:T2"
+          digest: sha256:7a25e8e2297de265690692720d3a3c4f59b89273b940dffbb37f5f71ee93b260
+          signature: "- Produces package-private `static final int MAX_CANDIDATE_FAMILIES_PER_ROUND=8`, `MAX_CANDIDATES_PER_BATCH=8`; replaces the private `generateCandidates` body with a deduplicated bounded family traversal. No signature/public diagnostic changes. | - Produces private `nineObstructionsFixture(): Fixture`, `fullyBlockedFixture(): Fixture`, `duplicateChordFixture(): Fixture` and tests named below."
+      consumes:
+        - task: T1
+          name: "task-output:T1"
+          digest: sha256:d52c4e02e4802d75ea48381573920683dfa5c87c194468951d7d94be79714971
+          signature: "- Produces private static `addEdgeOverNodeCandidates(List<Candidate>, Conflict, LayoutPositions, Set<ProjectedNodeKey>): void`, replacing the singular method; private `CandidateIdentity implements Comparable<CandidateIdentity>` with constructor `CandidateIdentity(Candidate)`, value equality/hash; private `RankedCandidate(Candidate candidate, int stage, double movement, int sideRank, int alongRank, CandidateIdentity identity)` with static `Comparator<RankedCandidate> ORDER` and its candidate field. C1 `Candidate` observable fields/kinds are unchanged. | - Produces package-private `static final double MAX_EDGE_NODE_EXCURSION = 64.0`. | - Produces test-private `clearanceFixture(String[] ids, double[] xy, int[][] edges): Fixture`, `oppositeSideFixture(): Fixture`, `blockedColumnFixture(): Fixture`, `routed(Fixture, EdgeConflictResult): EdgePaths`, `assertClearPaths(GraphProjection, GraphGeometry, EdgePaths, Set<ProjectedEdgeKey>): void`, `assertSuccessfulStraight(Fixture, EdgeConflictResult, EdgePaths, int): void`. Build final geometry from result positions, not the fixture's initial geometry. No test helper leaks into main sources."
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould", "-I", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-045155-9d674096/reports/performance-headless.init.gradle", "--console=plain"]
+        cwd: "."
+        timeout_seconds: 1800
+  - task_id: T3
+    plan_task: 3
+    lane: "clearance"
+    sequence: 3
+    title: "Pin global geometry invariants, numerical eligibility, prominence and deterministic retries"
+    tier: "advanced"
+    depends_on: ["T2"]
+    ownership:
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrectionShould.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundaryInvariantsShould.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/BoundarySeparationCorrectionShould.java"
+    exclusive_resources: []
+    produces:
+      - name: "task-output:T3"
+        digest: sha256:6a1ff36c79368b79a1cf5ee3b5224a0b2ddcc0db884e13c7be01ec0fe0974b01
+        signature: "- Produces only tests/local construction/assertion helpers. No production or fixture-ledger edits. `BoundaryInvariants.Violation.kind(): BoundaryConflict.Kind` must equal `BoundaryConflict.Kind.ANCESTOR_ESCAPE`; no new diagnostic enum/API is introduced."
+    consumes:
+      - task: T2
+        name: "task-output:T2"
+        digest: sha256:7a25e8e2297de265690692720d3a3c4f59b89273b940dffbb37f5f71ee93b260
+        signature: "- Produces package-private `static final int MAX_CANDIDATE_FAMILIES_PER_ROUND=8`, `MAX_CANDIDATES_PER_BATCH=8`; replaces the private `generateCandidates` body with a deduplicated bounded family traversal. No signature/public diagnostic changes. | - Produces private `nineObstructionsFixture(): Fixture`, `fullyBlockedFixture(): Fixture`, `duplicateChordFixture(): Fixture` and tests named below."
+    interfaces:
+      produces:
+        - name: "task-output:T3"
+          digest: sha256:6a1ff36c79368b79a1cf5ee3b5224a0b2ddcc0db884e13c7be01ec0fe0974b01
+          signature: "- Produces only tests/local construction/assertion helpers. No production or fixture-ledger edits. `BoundaryInvariants.Violation.kind(): BoundaryConflict.Kind` must equal `BoundaryConflict.Kind.ANCESTOR_ESCAPE`; no new diagnostic enum/API is introduced."
+      consumes:
+        - task: T2
+          name: "task-output:T2"
+          digest: sha256:7a25e8e2297de265690692720d3a3c4f59b89273b940dffbb37f5f71ee93b260
+          signature: "- Produces package-private `static final int MAX_CANDIDATE_FAMILIES_PER_ROUND=8`, `MAX_CANDIDATES_PER_BATCH=8`; replaces the private `generateCandidates` body with a deduplicated bounded family traversal. No signature/public diagnostic changes. | - Produces private `nineObstructionsFixture(): Fixture`, `fullyBlockedFixture(): Fixture`, `duplicateChordFixture(): Fixture` and tests named below."
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould", "--tests", "org.freeplane.plugin.graph.layout.BoundaryInvariantsShould", "--tests", "org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould.ancestorEscapePairKeysReportEscapingChildren", "--tests", "org.freeplane.plugin.graph.geometry.EdgeRouterShould", "-I", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-045155-9d674096/reports/performance-headless.init.gradle", "--console=plain"]
+        cwd: "."
+        timeout_seconds: 1800
+  - task_id: T4
+    plan_task: 4
+    lane: "clearance"
+    sequence: 4
+    title: "Verify complete crowded residuals, shared stops and unchanged performance pins"
+    tier: "standard"
+    depends_on: ["T3"]
+    ownership:
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrectionShould.java"
+    exclusive_resources: []
+    produces:
+      - name: "task-output:T4"
+        digest: sha256:efad232b2cabf4f20de4b142c612ddb67c36d632ac99705a117538a4a77b1f14
+        signature: "- Consumes unchanged `EdgeConflictDiagnostics` getters for residual, rounds/verifications, flags and counted work; `BoundarySeparationResult`/diagnostics and existing counted boundary/node test fixtures. Produces only additional/strengthened regression methods and external verification logs."
+    consumes:
+      - task: T3
+        name: "task-output:T3"
+        digest: sha256:6a1ff36c79368b79a1cf5ee3b5224a0b2ddcc0db884e13c7be01ec0fe0974b01
+        signature: "- Produces only tests/local construction/assertion helpers. No production or fixture-ledger edits. `BoundaryInvariants.Violation.kind(): BoundaryConflict.Kind` must equal `BoundaryConflict.Kind.ANCESTOR_ESCAPE`; no new diagnostic enum/API is introduced."
+    interfaces:
+      produces:
+        - name: "task-output:T4"
+          digest: sha256:efad232b2cabf4f20de4b142c612ddb67c36d632ac99705a117538a4a77b1f14
+          signature: "- Consumes unchanged `EdgeConflictDiagnostics` getters for residual, rounds/verifications, flags and counted work; `BoundarySeparationResult`/diagnostics and existing counted boundary/node test fixtures. Produces only additional/strengthened regression methods and external verification logs."
+      consumes:
+        - task: T3
+          name: "task-output:T3"
+          digest: sha256:6a1ff36c79368b79a1cf5ee3b5224a0b2ddcc0db884e13c7be01ec0fe0974b01
+          signature: "- Produces only tests/local construction/assertion helpers. No production or fixture-ledger edits. `BoundaryInvariants.Violation.kind(): BoundaryConflict.Kind` must equal `BoundaryConflict.Kind.ANCESTOR_ESCAPE`; no new diagnostic enum/API is introduced."
+    validation:
+      - argv: ["sha256sum", "freeplane_plugin_graph/src/test/resources/performance/settled-reference.csv"]
+        cwd: "."
+        timeout_seconds: 1800
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould", "--tests", "org.freeplane.plugin.graph.performance.PerformanceTripwiresShould", "-I", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-045155-9d674096/reports/performance-headless.init.gradle", "--console=plain"]
+        cwd: "."
+        timeout_seconds: 1800
+  - task_id: T5
+    plan_task: 5
+    lane: "clearance"
+    sequence: 5
+    title: "Prove the first published E3 paths come from a real corrected worker frame"
+    tier: "advanced"
+    depends_on: ["T4"]
+    ownership:
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/control/EdgeNodeClearanceReplay.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/control/LayoutSettleLoopShould.java"
+    exclusive_resources: []
+    produces:
+      - name: "task-output:T5"
+        digest: sha256:68b2ad5342a9a534809f12008c5a461d8602574cb942f119852b61e3396a6ccb
+        signature: "- Produces test helper `public final class EdgeNodeClearanceReplay` in the control package with package-private `static GraphProjection projection()`, `static LayoutPositions rawPositions()`, `static LayoutSettleLoop.FrameStepper newStepper()`, `static void assertE3(CanvasState state)`, `static double minimumClearance(GraphProjection, GraphGeometry, EdgePaths)`, `static String stateDigest(CanvasState)`. All dependencies/nested helper types live in this one source; runtime assertions use JDK `AssertionError`, no JUnit/AssertJ or other test utility reference. Stable test workspace UUID: `00000000-0000-0000-0000-000000000100`; map UUID/IDs/generation from Global Constraints. Task 7 must generate `.fpg`/`.mm` matching these values."
+    consumes:
+      - task: T4
+        name: "task-output:T4"
+        digest: sha256:efad232b2cabf4f20de4b142c612ddb67c36d632ac99705a117538a4a77b1f14
+        signature: "- Consumes unchanged `EdgeConflictDiagnostics` getters for residual, rounds/verifications, flags and counted work; `BoundarySeparationResult`/diagnostics and existing counted boundary/node test fixtures. Produces only additional/strengthened regression methods and external verification logs."
+    interfaces:
+      produces:
+        - name: "task-output:T5"
+          digest: sha256:68b2ad5342a9a534809f12008c5a461d8602574cb942f119852b61e3396a6ccb
+          signature: "- Produces test helper `public final class EdgeNodeClearanceReplay` in the control package with package-private `static GraphProjection projection()`, `static LayoutPositions rawPositions()`, `static LayoutSettleLoop.FrameStepper newStepper()`, `static void assertE3(CanvasState state)`, `static double minimumClearance(GraphProjection, GraphGeometry, EdgePaths)`, `static String stateDigest(CanvasState)`. All dependencies/nested helper types live in this one source; runtime assertions use JDK `AssertionError`, no JUnit/AssertJ or other test utility reference. Stable test workspace UUID: `00000000-0000-0000-0000-000000000100`; map UUID/IDs/generation from Global Constraints. Task 7 must generate `.fpg`/`.mm` matching these values."
+      consumes:
+        - task: T4
+          name: "task-output:T4"
+          digest: sha256:efad232b2cabf4f20de4b142c612ddb67c36d632ac99705a117538a4a77b1f14
+          signature: "- Consumes unchanged `EdgeConflictDiagnostics` getters for residual, rounds/verifications, flags and counted work; `BoundarySeparationResult`/diagnostics and existing counted boundary/node test fixtures. Produces only additional/strengthened regression methods and external verification logs."
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.control.LayoutSettleLoopShould", "-I", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-045155-9d674096/reports/performance-headless.init.gradle", "--console=plain"]
+        cwd: "."
+        timeout_seconds: 1800
+      - argv: ["gradle", ":freeplane_plugin_graph:testClasses", "--console=plain"]
+        cwd: "."
+        timeout_seconds: 1800
+  - task_id: T6
+    plan_task: 6
+    lane: "clearance"
+    sequence: 6
+    title: "Bind the replay to the installed window and capture one retained painted state"
+    tier: "capable"
+    depends_on: ["T5"]
+    ownership:
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/control/EdgeNodeClearanceReplay.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/control/LayoutSettleLoopShould.java"
+    exclusive_resources: []
+    produces:
+      - name: "task-output:T6"
+        digest: sha256:3addab11b2ba78fa73efe224ab7a84bd32e47c126999eb618f4627e9ae8bc85b
+        signature: "- Produces test-helper `public static void run(Object window, Path attemptDirectory) throws Exception`; package-private `static <T> T onEdt(Callable<T> operation, long deadlineNanos) throws Exception`, `static void requireSameSnapshot(Snapshot before, Snapshot after)`, nested immutable `Snapshot`; JDK-only JSON/bit encoding/digest and cleanup helpers, all nested in this source."
+    consumes:
+      - task: T5
+        name: "task-output:T5"
+        digest: sha256:68b2ad5342a9a534809f12008c5a461d8602574cb942f119852b61e3396a6ccb
+        signature: "- Produces test helper `public final class EdgeNodeClearanceReplay` in the control package with package-private `static GraphProjection projection()`, `static LayoutPositions rawPositions()`, `static LayoutSettleLoop.FrameStepper newStepper()`, `static void assertE3(CanvasState state)`, `static double minimumClearance(GraphProjection, GraphGeometry, EdgePaths)`, `static String stateDigest(CanvasState)`. All dependencies/nested helper types live in this one source; runtime assertions use JDK `AssertionError`, no JUnit/AssertJ or other test utility reference. Stable test workspace UUID: `00000000-0000-0000-0000-000000000100`; map UUID/IDs/generation from Global Constraints. Task 7 must generate `.fpg`/`.mm` matching these values."
+    interfaces:
+      produces:
+        - name: "task-output:T6"
+          digest: sha256:3addab11b2ba78fa73efe224ab7a84bd32e47c126999eb618f4627e9ae8bc85b
+          signature: "- Produces test-helper `public static void run(Object window, Path attemptDirectory) throws Exception`; package-private `static <T> T onEdt(Callable<T> operation, long deadlineNanos) throws Exception`, `static void requireSameSnapshot(Snapshot before, Snapshot after)`, nested immutable `Snapshot`; JDK-only JSON/bit encoding/digest and cleanup helpers, all nested in this source."
+      consumes:
+        - task: T5
+          name: "task-output:T5"
+          digest: sha256:68b2ad5342a9a534809f12008c5a461d8602574cb942f119852b61e3396a6ccb
+          signature: "- Produces test helper `public final class EdgeNodeClearanceReplay` in the control package with package-private `static GraphProjection projection()`, `static LayoutPositions rawPositions()`, `static LayoutSettleLoop.FrameStepper newStepper()`, `static void assertE3(CanvasState state)`, `static double minimumClearance(GraphProjection, GraphGeometry, EdgePaths)`, `static String stateDigest(CanvasState)`. All dependencies/nested helper types live in this one source; runtime assertions use JDK `AssertionError`, no JUnit/AssertJ or other test utility reference. Stable test workspace UUID: `00000000-0000-0000-0000-000000000100`; map UUID/IDs/generation from Global Constraints. Task 7 must generate `.fpg`/`.mm` matching these values."
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.control.LayoutSettleLoopShould", "-I", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-045155-9d674096/reports/performance-headless.init.gradle", "--console=plain"]
+        cwd: "."
+        timeout_seconds: 1800
+      - argv: ["gradle", ":freeplane_plugin_graph:testClasses", "--console=plain"]
+        cwd: "."
+        timeout_seconds: 1800
+  - task_id: T7
+    plan_task: 7
+    lane: "clearance"
+    sequence: 7
+    title: "Launch and validate the installed-application E3 gate and run final acceptance"
+    tier: "capable"
+    depends_on: ["T6"]
+    ownership:
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/smoke/EdgeNodeClearanceEvidenceAgent.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/smoke/EdgeNodeClearanceApplicationEvidence.java"
+      - "freeplane_plugin_graph/build.gradle"
+    exclusive_resources: []
+    produces:
+      - name: "task-output:T7"
+        digest: sha256:df5e01c5f256011074f123e6af717849eefd8f528dd245b9fd4d368825174908
+        signature: "- Produces `EdgeNodeClearanceEvidenceAgent.premain(String attemptDirectory, Instrumentation): void`; `EdgeNodeClearanceApplicationEvidence.main(String[] args): void` (three path arguments; or exactly `--self-test` for isolated JDK-only validator checks); nonzero process exit on every failed launch/artifact/cleanup gate. | - Produces `edgeNodeClearanceEvidenceAgent` Jar and `edgeNodeClearanceApplicationEvidence` JavaExec, required `-PedgeClearanceEvidenceDir`, plus fresh external per-attempt artifacts. Final `result.json` schema: `schemaVersion`, `attemptId`, `stage`, `status` (`PASS`/`FAIL`), `error` (structured cause/stack), `provenance` (cwd/source/diff/java/command/fixture/installedBundle/agent hashes), `artifacts` (paths/state/image/log hashes), `deadlines`, `cleanup` (helper close/controller shutdown/window disposed/child exit/owned PIDs and survivors)."
+    consumes:
+      - task: T6
+        name: "task-output:T6"
+        digest: sha256:3addab11b2ba78fa73efe224ab7a84bd32e47c126999eb618f4627e9ae8bc85b
+        signature: "- Produces test-helper `public static void run(Object window, Path attemptDirectory) throws Exception`; package-private `static <T> T onEdt(Callable<T> operation, long deadlineNanos) throws Exception`, `static void requireSameSnapshot(Snapshot before, Snapshot after)`, nested immutable `Snapshot`; JDK-only JSON/bit encoding/digest and cleanup helpers, all nested in this source."
+    interfaces:
+      produces:
+        - name: "task-output:T7"
+          digest: sha256:df5e01c5f256011074f123e6af717849eefd8f528dd245b9fd4d368825174908
+          signature: "- Produces `EdgeNodeClearanceEvidenceAgent.premain(String attemptDirectory, Instrumentation): void`; `EdgeNodeClearanceApplicationEvidence.main(String[] args): void` (three path arguments; or exactly `--self-test` for isolated JDK-only validator checks); nonzero process exit on every failed launch/artifact/cleanup gate. | - Produces `edgeNodeClearanceEvidenceAgent` Jar and `edgeNodeClearanceApplicationEvidence` JavaExec, required `-PedgeClearanceEvidenceDir`, plus fresh external per-attempt artifacts. Final `result.json` schema: `schemaVersion`, `attemptId`, `stage`, `status` (`PASS`/`FAIL`), `error` (structured cause/stack), `provenance` (cwd/source/diff/java/command/fixture/installedBundle/agent hashes), `artifacts` (paths/state/image/log hashes), `deadlines`, `cleanup` (helper close/controller shutdown/window disposed/child exit/owned PIDs and survivors)."
+      consumes:
+        - task: T6
+          name: "task-output:T6"
+          digest: sha256:3addab11b2ba78fa73efe224ab7a84bd32e47c126999eb618f4627e9ae8bc85b
+          signature: "- Produces test-helper `public static void run(Object window, Path attemptDirectory) throws Exception`; package-private `static <T> T onEdt(Callable<T> operation, long deadlineNanos) throws Exception`, `static void requireSameSnapshot(Snapshot before, Snapshot after)`, nested immutable `Snapshot`; JDK-only JSON/bit encoding/digest and cleanup helpers, all nested in this source."
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:testClasses", "--console=plain"]
+        cwd: "."
+        timeout_seconds: 1800
+      - argv: ["gradle", ":freeplane_plugin_graph:verifyGraphBundle", "--console=plain"]
+        cwd: "."
+        timeout_seconds: 1800
+      - argv: ["xvfb-run", "-a", "-s", "-screen 0 1600x1000x24", "gradle", ":freeplane_plugin_graph:edgeNodeClearanceApplicationEvidence", "-PedgeClearanceEvidenceDir=/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-045155-9d674096/reports/installed-e3", "--console=plain"]
+        cwd: "."
+        timeout_seconds: 1800
