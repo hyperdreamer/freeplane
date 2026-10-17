@@ -150,7 +150,7 @@ try:
             initial_seq=int(next(r for r in selected if r[2]=='initial-publication')[1]);diagnostic_seq=int(next(r for r in selected if r[2]==diagnostic_name)[1])
             initial_state=state_by_seq[initial_seq];diagnostic_state=state_by_seq[diagnostic_seq]
             verify_pin_positions(rows,initial_seq,case);verify_pin_positions(rows,diagnostic_seq,case)
-            assert initial_state[6:8]==['false','true'] and int(initial_state[10])==8 and int(initial_state[18])==0
+            assert initial_state[6:8]==['false','true'] and int(initial_state[10])==8 and int(initial_state[18]) in (0, 1)
             assert diagnostic_state[6:8]==['false','true'] and int(diagnostic_state[10])==8
             if case=='pin-conflict':assert int(diagnostic_state[9])>0,'conflicting persisted pins must retain their measured nonzero residual'
             else:
@@ -183,11 +183,15 @@ try:
                 if cap[2]=='first-idle':assert cap[9]=='true' and state[5]=='IDLE'
                 prefix='reset-' if cap[3]=='reset' else '';base_name=prefix+cap[2]
                 capture_results.append(dict(phase=cap[2],run=cap[3],sequence=seq,generation=int(cap[4]),rawFrameIndex=int(cap[5]),workerIdentity=int(cap[6]),runToken=int(cap[7]),explicitStepCalls=int(cap[8]),idle=(cap[9]=='true'),rms=float(cap[10]),maximumMotion=float(cap[11]),stableFrames=int(cap[12]),viewport=[float(cap[i]) for i in [13,14,15]],canvasSize=[int(cap[16]),int(cap[17])],displayScale=[float(cap[18]),float(cap[19])],screenBounds=[int(cap[20]),int(cap[21])],frameIdentity=int(cap[22]),captureNanos=int(cap[23]),projectionManifestSha256=verify_manifest(rows,seq,case),gaps=gaps,screenshotSha256={kind:sha(d/(base_name+'-'+kind+'.png')) for kind in ['window','canvas']}))
-            receipt['runs'][version+'-'+case]=dict(captures=capture_results,inputManifestSha256=sha(manifest_path),projectionManifestSha256=initial_projection,sourceRevision=base if version=='baseline' else receipt['candidateHead'],patchSha256=hashlib.sha256(b'' if version=='baseline' else subprocess.check_output(['git','diff',base,'--binary'],cwd=root)+source.read_bytes()+Path(__file__).read_bytes()).hexdigest())
+            initial_publication=dict(frameIndex=int(initial_state[18]),acceptedObservationSet=[0,1],
+                measuredBy='LayoutFrame.stepIndex() of the selected initial displayed worker publication',
+                note='Engine frame index, not the submission-relative worker step-call count; the initial displayed publication may already include corrections')
+            receipt['runs'][version+'-'+case]=dict(initialPublication=initial_publication,captures=capture_results,inputManifestSha256=sha(manifest_path),projectionManifestSha256=initial_projection,sourceRevision=base if version=='baseline' else receipt['candidateHead'],patchSha256=hashlib.sha256(b'' if version=='baseline' else subprocess.check_output(['git','diff',base,'--binary'],cwd=root)+source.read_bytes()+Path(__file__).read_bytes()).hexdigest())
     for case in ['nr8','sm8','nested','pins','pin-conflict']:
         before=receipt['runs']['baseline-'+case]['captures'];after=receipt['runs']['candidate-'+case]['captures'];assert [(x['phase'],x['run']) for x in before]==[(x['phase'],x['run']) for x in after]
         for a,b in zip(before,after):assert a['viewport']==b['viewport'] and a['canvasSize']==b['canvasSize'] and a['displayScale']==b['displayScale'] and a['viewport'][2]==1.0
         assert receipt['runs']['baseline-'+case]['projectionManifestSha256']==receipt['runs']['candidate-'+case]['projectionManifestSha256']
+    assert 'diagnosticDeviations' not in receipt,'a PASS receipt must carry no deviation record'
     receipt['status']='PASS'
 finally:
     os.close(rfd);xvfb.terminate()
