@@ -3,6 +3,7 @@ package org.freeplane.plugin.graph.layout.graphstream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -361,6 +362,34 @@ public class ClusterPackingShould {
         finally {
             worker.close();
         }
+    }
+
+    /**
+     * A geometrically valid candidate can land one unit in the last place below the configured
+     * gutter, because item sizes shift the arithmetic. The existing {@code twoItemsAreSeparatedByExactlyTheGap}
+     * assertion keeps the gutter itself at 8.0; this test only proves the boundary is accepted
+     * through {@code CANDIDATE_EPSILON} rather than by widening the gutter.
+     */
+    @Test
+    public void acceptsAnEightUnitGutterAtTheFloatingPointBoundaryWithoutWideningIt() throws Exception {
+        final double gutter = GAP;
+        assertThat(gutter).isEqualTo(8.0);
+        final ClusterPacking.ClusterItem placedItem = content(10.0, 10.0, 0);
+        final ClusterPacking.ClusterItem candidate = content(10.0, 10.0, 1);
+        final ClusterPacking.ClusterPlacement placed =
+            new ClusterPacking.ClusterPlacement(placedItem, 0.0, 0.0);
+        final double halfExtent = (placedItem.width + candidate.width) * 0.5;
+        final double candidateX = halfExtent + gutter - Math.ulp(halfExtent + gutter);
+        final double measuredGap = Math.abs(candidateX - placed.x) - halfExtent;
+        assertThat(measuredGap).isLessThan(gutter);
+        assertThat(measuredGap).isGreaterThan(gutter - ClusterPacking.CANDIDATE_EPSILON);
+
+        final Method isClear = ClusterPacking.class.getDeclaredMethod("isClear",
+            double.class, double.class, ClusterPacking.ClusterItem.class, List.class, double.class);
+        isClear.setAccessible(true);
+        final boolean accepted = ((Boolean) isClear.invoke(null, candidateX, 0.0, candidate,
+            Collections.singletonList(placed), gutter)).booleanValue();
+        assertThat(accepted).isTrue();
     }
 
     private static LayoutFrame await(final CompletionStage<LayoutFrame> stage) throws Exception {
