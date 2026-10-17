@@ -36,6 +36,7 @@ public class InitialSpacingLifecycleShould {
             if(fail.compareAndSet(true,false)) return LayoutFrame.of(0,last.positions,true);
             LayoutFrame f=delegate.step(); last=inspect(delegate); return f;
         }
+        Snapshot snapshot() { last=inspect(delegate); return last; }
         public void reset() { delegate.reset(); last=inspect(delegate); }
         public void close() { delegate.close(); closed=true; }
     }
@@ -45,8 +46,9 @@ public class InitialSpacingLifecycleShould {
         final RealEngine engine;
         final Snapshot raw;
         final LayoutFrame corrected;
-        Submission(LayoutRequest r,LayoutWorker w,RealEngine e,LayoutFrame f) {
-            request=r;worker=w;engine=e;raw=e.last;corrected=f;
+        final long engineSteps;
+        Submission(LayoutRequest r,LayoutWorker w,RealEngine e,Snapshot raw,LayoutFrame f,long engineSteps) {
+            request=r;worker=w;engine=e;this.raw=raw;corrected=f;this.engineSteps=engineSteps;
         }
     }
     private static final class Gate {
@@ -59,7 +61,7 @@ public class InitialSpacingLifecycleShould {
         final AtomicBoolean failNext=new AtomicBoolean();
         final AtomicReference<Gate> nextSubmit=new AtomicReference<Gate>();
         final AtomicReference<Gate> nextStepResult=new AtomicReference<Gate>();
-        final AtomicReference<Gate> nextStepBeforeIntegration=new AtomicReference<Gate>();
+        final AtomicReference<Gate> nextRestartCompletion=new AtomicReference<Gate>();
         volatile LayoutRequest lastRequest;
         volatile RealEngine current;
         ObservingStepper() throws Exception {
@@ -75,11 +77,19 @@ public class InitialSpacingLifecycleShould {
         Gate holdNextStepResult() {
             Gate gate=new Gate(); assertThat(nextStepResult.compareAndSet(null,gate)).isTrue(); return gate;
         }
-        Gate holdNextStepBeforeIntegration() {
-            Gate gate=new Gate(); assertThat(nextStepBeforeIntegration.compareAndSet(null,gate)).isTrue(); return gate;
+        Gate holdNextRestartCompletion() {
+            Gate gate=new Gate(); assertThat(nextRestartCompletion.compareAndSet(null,gate)).isTrue(); return gate;
+        }
+        private void failPendingGate(Gate submitGate,Throwable failure) {
+            if(submitGate!=null) { submitGate.entered.completeExceptionally(failure); return; }
+            for(AtomicReference<Gate> gates:Arrays.asList(nextStepResult,nextRestartCompletion)) {
+                Gate pending=gates.getAndSet(null);
+                if(pending!=null) { pending.entered.completeExceptionally(failure); return; }
+            }
         }
         private Submission observed(LayoutWorker w,LayoutFrame corrected) {
-            return new Submission(lastRequest,w,current,corrected);
+            Snapshot snapshot=current.snapshot();
+            return new Submission(lastRequest,w,current,snapshot,corrected,engineStepIndex(current));
         }
         public CompletionStage<LayoutFrame> submit(LayoutRequest r) {
             lastRequest=r;
@@ -89,18 +99,20 @@ public class InitialSpacingLifecycleShould {
             });
             Gate gate=nextSubmit.getAndSet(null);
             return delegate.submit(r).thenCompose(f->{
-                requireTargets(current.last,20,false,22);
+                try {
+                    requireTargets(current.last,20,false,22);
+                } catch(Throwable failure) {
+                    failPendingGate(gate,failure);
+                    if(failure instanceof Error) throw (Error)failure;
+                    throw (RuntimeException)failure;
+                }
                 if(gate==null) return CompletableFuture.completedFuture(f);
-                gate.entered.complete(new Submission(r,w,current,f));
+                Snapshot raw=current.snapshot();
+                gate.entered.complete(new Submission(r,w,current,raw,f,engineStepIndex(current)));
                 return gate.release.thenApply(ignored->f);
             });
         }
         public CompletionStage<LayoutFrame> step() {
-            Gate before=nextStepBeforeIntegration.getAndSet(null);
-            if(before!=null) {
-                before.entered.complete(observed(worker(),delegate.lastValidFrame()));
-                return before.release.thenCompose(ignored->delegate.step());
-            }
             Gate after=nextStepResult.getAndSet(null);
             CompletionStage<LayoutFrame> stepping=delegate.step();
             if(after==null) return stepping;
@@ -110,11 +122,34 @@ public class InitialSpacingLifecycleShould {
             });
         }
         public void pause() { delegate.pause(); }
-        public void restart() { delegate.restart(); }
+        public void restart() {
+            Gate gate=nextRestartCompletion.getAndSet(null);
+            delegate.restart();
+            if(gate==null) return;
+            final LayoutWorker w=worker();
+            try {
+                enqueueOnWorker(w,()->{
+                    try {
+                        assertThat(Thread.currentThread().getName())
+                            .as("raw engine inspection must run on the worker owner thread")
+                            .startsWith("freeplane-graph-layout-worker-");
+                        gate.entered.complete(observed(w,delegate.lastValidFrame()));
+                    } catch(Throwable failure) {
+                        gate.entered.completeExceptionally(
+                            new AssertionError("raw engine inspection at the restart boundary failed",failure));
+                        return;
+                    }
+                    awaitRelease(gate.release);
+                });
+            } catch(RuntimeException failure) {
+                gate.entered.completeExceptionally(
+                    new AssertionError("restart boundary could not be queued on the real worker",failure));
+            }
+        }
         public void reset() { delegate.reset(); }
         public LayoutFrame lastValidFrame() { return delegate.lastValidFrame(); }
         public void close() {
-            for(AtomicReference<Gate> gates:Arrays.asList(nextSubmit,nextStepResult,nextStepBeforeIntegration)) {
+            for(AtomicReference<Gate> gates:Arrays.asList(nextSubmit,nextStepResult,nextRestartCompletion)) {
                 Gate g=gates.getAndSet(null);if(g!=null)g.release.complete(null);
             }
             delegate.close();
@@ -166,7 +201,40 @@ public class InitialSpacingLifecycleShould {
         }
         public void close() { coordinator.close();scheduler.shutdownNow(); }
     }
-    private static Submission entered(Gate gate) throws Exception { return gate.entered.get(5,TimeUnit.SECONDS); }
+    private static void enqueueOnWorker(LayoutWorker worker,Runnable action) {
+        ((ExecutorService)read(worker,"executor")).execute(action);
+    }
+    private static void awaitRelease(CompletableFuture<Void> release) {
+        try { release.get(30,TimeUnit.SECONDS); }
+        catch(InterruptedException interrupted) { Thread.currentThread().interrupt(); }
+        catch(ExecutionException impossible) { /* gate release never fails */ }
+        catch(TimeoutException timeout) { throw new AssertionError("worker restart boundary release timed out",timeout); }
+    }
+    private static double maximumDelta(LayoutPositions before,LayoutPositions after) {
+        double maximum=0.0;
+        for(Map.Entry<ProjectedNodeKey,LayoutPoint> entry:before.nodes().entrySet()) {
+            LayoutPoint moved=after.nodes().get(entry.getKey());
+            if(moved==null) return Double.POSITIVE_INFINITY;
+            maximum=Math.max(maximum,Math.max(Math.abs(moved.x()-entry.getValue().x()),
+                Math.abs(moved.y()-entry.getValue().y())));
+        }
+        return maximum;
+    }
+    private static long engineStepIndex(RealEngine engine) {
+        return ((Long)read(engine.delegate,"nextStepIndex")).longValue();
+    }
+    private static Submission entered(Gate gate) throws Exception {
+        try { return gate.entered.get(5,TimeUnit.SECONDS); }
+        catch(ExecutionException failure) {
+            Throwable cause=failure.getCause();
+            if(cause instanceof Error) throw (Error)cause;
+            if(cause instanceof RuntimeException) throw (RuntimeException)cause;
+            throw failure;
+        }
+        catch(TimeoutException timeout) {
+            throw new AssertionError("lifecycle boundary was never reached",timeout);
+        }
+    }
     private static void verifyPin(Submission s) {
         assertThat(s.raw.positions.nodes().get(node(A,"u0"))).isEqualTo(LayoutPoint.of(0,0));
         assertThat(s.corrected.positions().nodes().get(node(A,"u0"))).isEqualTo(LayoutPoint.of(0,0));
@@ -180,15 +248,25 @@ public class InitialSpacingLifecycleShould {
             f.start();Submission beforeRestart=entered(inFlight);verifyPin(beforeRestart);
             RealEngine retained=beforeRestart.engine;LayoutWorker worker=beforeRestart.worker;
             Snapshot rawBefore=beforeRestart.raw;
-            Gate restartBoundary=f.stepper.holdNextStepBeforeIntegration();
+            Gate restartBoundary=f.stepper.holdNextRestartCompletion();
             try {
                 f.coordinator.pauseLayout();f.coordinator.restartLayout();
                 inFlight.release.complete(null);
                 Submission resumed=entered(restartBoundary);verifyPin(resumed);
                 assertThat(resumed.worker).isSameAs(worker);assertThat(resumed.engine).isSameAs(retained);
                 assertThat(retained.closed).isFalse();
+                assertThat(maximumDelta(rawBefore.positions,resumed.raw.positions))
+                    .as("raw live engine coordinates must be unchanged across a healthy Restart")
+                    .isEqualTo(0.0);
                 assertThat(resumed.raw.positions).isEqualTo(rawBefore.positions);
+                assertThat(resumed.engineSteps)
+                    .as("a healthy Restart must not integrate a raw engine step before resuming")
+                    .isEqualTo(beforeRestart.engineSteps);
                 assertThat(resumed.request.projection()).isSameAs(f.coordinator.currentProjection());
+                System.out.println("spacing-lifecycle restart-boundary worker="+System.identityHashCode(resumed.worker)
+                    +" engine="+System.identityHashCode(resumed.engine)
+                    +" engineSteps="+resumed.engineSteps
+                    +" maxDelta="+maximumDelta(rawBefore.positions,resumed.raw.positions));
             } finally { inFlight.release.complete(null);restartBoundary.release.complete(null); }
             f.until(OperationalStatus.IDLE);f.states.clear();
             Gate reset=f.stepper.holdNextSubmit();
