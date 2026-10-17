@@ -4,13 +4,13 @@
 > subagent-driven-development controller to implement this plan task-by-task.
 > Steps use checkbox (`- [ ]`) syntax for tracking; leave this pinned plan unchanged during execution.
 
-**Goal:** Widen fresh Graph View node-disc gaps and preferred relationship targets to 24.0 layout units, and verify the approved first-idle outcome without changing collision clearance or layout behavior beyond the approved parameter.
+**Goal:** Widen fresh Graph View enclosure content-ring gaps to 24.0 layout units, preserve collision-based relationship targets, and verify the approved first-idle outcome without changing collision clearance or layout behavior beyond the approved amendment.
 
-**Architecture:** Introduce one internal preferred-gap constant in `GraphStreamLayoutEngine`; its existing content-ring consumers propagate the larger ring through seeds, containment targets and recursive packed footprints. Inspect actual spring-box registrations and their consumer in test code, compare corrected first-idle frames against an archived unchanged implementation, then verify lifecycle commands and installed-application publications. A failed frozen outcome stops execution before the later evidence work.
+**Architecture:** Introduce one internal preferred-gap constant in `GraphStreamLayoutEngine` and confine it to the existing content-ring formula, whose consumers propagate the larger ring through seeds, containment targets and recursive packed footprints. Add only the approved `ClusterPacking.isClear` last-ulp tolerance; relationship rest lengths continue to use collision clearance. Inspect actual spring-box registrations and their consumer in test code, compare corrected first-idle frames against an archived unchanged implementation, then verify lifecycle commands and installed-application publications. A failed frozen outcome stops execution before the later evidence work.
 
 **Tech Stack:** Java 8 source/bytecode, Java 21.0.8-zulu build/runtime, installed Gradle, JUnit 4, AssertJ, Mockito, GraphStream 1.3, Python 3, Swing/Java2D, Xvfb and Java Robot for actual application captures. No new runtime dependencies.
 
-**Approved inputs:** `docs/superpowers/specs/2026-10-16-graph-initial-spacing-design.md`; `docs/superpowers/specs/2026-10-16-graph-initial-spacing-spec.md`, SHA-256 `4cc339deb07b402ad2cc3b9e1c2de621f44d6b582e5884367f6b1e16a75543e6`, committed at `bf6529ce051f4b0604be3ba31c5ab63f6274f7cd`. Task identifier: `graph-initial-spacing`. Old production baseline: `0734fb23db6873f4ec64c3e3e29fc8c3e17edc7a`.
+**Approved inputs:** `docs/superpowers/specs/2026-10-16-graph-initial-spacing-design.md`; `docs/superpowers/specs/2026-10-16-graph-initial-spacing-spec.md`, SHA-256 `023bde826c9c6f351e2340d643ce262d9ce1d2a1c97ded0b4b250ae5f7ab80a1`. Task identifier: `graph-initial-spacing`. Old production baseline: `0734fb23db6873f4ec64c3e3e29fc8c3e17edc7a`.
 
 **Execution graph:** One lane, `spacing`, with Tasks 1 → 2 → 3 → 4 → 5, sequence numbers 1..5. Test support, the parameter, mutations and application evidence share interfaces and must not execute concurrently. There are no cross-lane writes. Each Files block is an exact write allowlist; read-only references are not permission to edit those files. External evidence below `/tmp/graph-initial-spacing-evidence/` is also explicitly allowlisted by task.
 
@@ -18,37 +18,39 @@
 
 | Owner | File | Responsibility |
 | --- | --- | --- |
-| Task 1 | `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/GraphStreamLayoutEngine.java` | Only production change: preferred-gap declaration, two substitutions, unused import removal |
+| Task 1 | `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/GraphStreamLayoutEngine.java` | One preferred-gap declaration and one substitution in `BoundarySizes.contentRingRadius`; relationship term and `NodeSeparationProjection` import kept |
+| Task 1 | `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/ClusterPacking.java` | Only production tolerance correction: accept a candidate at the existing 8.0 gutter when arithmetic is one ulp below it |
+| Task 1 | `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/BoundaryFootprintShould.java` | Only proven spacing-dependent 11/86 → 20/104 literals |
+| Task 1 | `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/ClusterPackingShould.java` | Focused exactly-on-the-8.0-gutter regression and unchanged-gutter assertion |
 | Task 1 | `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/SpacingTestSupport.java` | Test fixtures, reflection snapshots, registered-target assertions |
 | Task 1 | `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/InitialSpacingShould.java` | Independent raw seeds, footprints, registration, consumption, topology, raw reset and pins |
 | Task 1 | `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/InitialSpacingProbe.java` | Exact approved appendix A bytes, test only |
 | Task 1 | `freeplane_plugin_graph/src/test/scripts/compare_initial_spacing.py` | Exact approved appendix B bytes, independent archived comparison |
-| Task 1 | `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/BoundaryFootprintShould.java` | Only proven spacing-dependent 11/86 → 20/104 literals |
 | Task 2 | `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/control/InitialSpacingLifecycleShould.java` | Real coordinator/settle-loop/WorkerStepper/worker command tests |
 | Task 3 | `freeplane_plugin_graph/src/test/scripts/mutate_initial_spacing.py` | Disposable single-mechanism negative controls |
-| Task 3 | `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/TypedForcesShould.java` | Measured spacing-dependent first-idle golden only, if it changes |
-| Task 3 | `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/ClusterProximityShould.java` | Remove obsolete collision-gap wording from the content-ring comment only |
+| Task 3 | `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/TypedForcesShould.java` | Measured spacing-dependent first-idle golden and bounded hold envelope for the two-map regression only |
+| Task 3 | `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/ClusterProximityShould.java` | Preferred-gap comment and fixture-D last-ulp residual-tolerant assertion only |
 | Task 4 | `freeplane_plugin_graph/src/test/evidence/initial-spacing/SpacingUiAgent.java` | Test-only installed-application trace and synchronized screen captures |
 | Task 4 | `freeplane_plugin_graph/src/test/evidence/initial-spacing/capture.py` | Frozen source files, isolated profiles, installed runtime launcher and receipt checks |
 | Task 5 | `docs/superpowers/evidence/2026-10-16-graph-initial-spacing.md` | Requirement-to-receipt acceptance record with honest gate statuses |
 
 ## Global Constraints
 
-- The production diff is confined to `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/GraphStreamLayoutEngine.java`.
+- The production diff is confined to exactly these two files: `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/GraphStreamLayoutEngine.java` and `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/ClusterPacking.java`.
 - Declare one package-private internal `static final double PREFERRED_NODE_GAP = 24.0` beside `NODE_RADIUS`.
-- Substitute that constant for `NodeSeparationProjection.MIN_GAP` in `BoundarySizes.contentRingRadius`.
-- Substitute it for `NodeSeparationProjection.MIN_GAP` in the relationship `ForceLink` rest-length expression in `topology`.
-- Remove the resulting unused `NodeSeparationProjection` import.
-- There is one active preferred-gap parameter. No production algorithm, class interface, factory, command path, dependency, setting, persistence field, serialization format, migration, fallback, or public API changes. Do not restore obsolete `GROUP_SPACING` or `SUB_GROUP_SPACING` constants. Test-only observation and comparison code is permitted during implementation; it must not enter the plugin bundle.
-- Collision clearance, `NodeSeparationProjection.MIN_GAP`: 6.0.
+- Substitute `PREFERRED_NODE_GAP` for `NodeSeparationProjection.MIN_GAP` in `BoundarySizes.contentRingRadius` only.
+- Keep `NodeSeparationProjection.MIN_GAP` in the relationship `ForceLink` rest-length expression in `topology`; keep the `NodeSeparationProjection` import.
+- In `ClusterPacking.isClear`, use `clearanceX < gap - CANDIDATE_EPSILON && clearanceY < gap - CANDIDATE_EPSILON`; this accepts the existing 8.0 gutter at a one-ulp arithmetic boundary without widening the gutter.
+- There is one active preferred-gap parameter. Apart from the authorized `ClusterPacking.isClear` tolerance correction, no production algorithm, class interface, factory, command path, dependency, setting, persistence field, serialization format, migration, fallback, or public API changes. Do not restore obsolete `GROUP_SPACING` or `SUB_GROUP_SPACING` constants. Test-only observation and comparison code is permitted during implementation; it must not enter the plugin bundle.
+- Relationship rest lengths are not widened. Collision clearance, `NodeSeparationProjection.MIN_GAP`: 6.0.
 - Footprint packing gutter, `BoundarySizes.SIBLING_GAP`: 8.0.
+- Aggregate cross-map displacement cap: 0.005 per affected particle per engine step.
+- Production idle policy: 8 consecutive frames; RMS <= 0.05; maximum displacement <= 0.10.
 - Rendered base node radius: 8.0, scaled by the existing prominence.
 - Footprint node settle margin / frame clearance: 8.0 / 16.0.
 - Existing boundary padding / hull clearance: 8.0 / 16.0.
 - `LayoutCalibration.spikeDefaults()`: containment 1.0; hierarchy 0.30; relationship (`sameMap`) 1.0.
 - Typed attraction / repulsion / boundary repulsion: 0.05 / 16.0 / 0.5.
-- Aggregate cross-map displacement cap: 0.005 per affected particle per engine step.
-- Production idle policy: 8 consecutive frames; RMS <= 0.05; maximum displacement <= 0.10.
 - Pins, worker ownership, correction budgets, publication fencing: Existing mechanisms and limits.
 - Zoom, node/label rendering, projection semantics: Existing mechanisms.
 - Keep `GraphStreamLayoutEngine` package-private. Do not expose getters or mutation hooks in production, widen module exports, or make private topology/seed classes public.
@@ -64,9 +66,10 @@
 - No random generator, search for favorable IDs, fixture-size reduction, edge removal, prominence override, pin, coefficient change, or per-version adjustment is permitted to make the comparison pass.
 - If any required fixture fails to converge, improve or remain safe, keep its exact inputs and failed receipts and return the finding to design review. Do not weaken the frozen acceptance contract or expand production logic under this specification.
 - Every headless command runs from the verified candidate root with `JAVA_HOME=/home/henry/.sdkman/candidates/java/21.0.8-zulu`, that `bin` prepended to inherited `PATH`, and `JAVA_TOOL_OPTIONS=-Djava.awt.headless=true`; use installed `gradle`, with repository-required escalation where supported. UI processes instead use a valid recorded X display and remove forced headless.
-- Exact specification source is `docs/superpowers/specs/2026-10-16-graph-initial-spacing-spec.md`, SHA-256 `4cc339deb07b402ad2cc3b9e1c2de621f44d6b582e5884367f6b1e16a75543e6`. Read its sections 1–11 and appendices before implementing any task. Baseline is `0734fb23db6873f4ec64c3e3e29fc8c3e17edc7a`; never substitute a formula or the candidate for that old tree.
+- Exact specification source is `docs/superpowers/specs/2026-10-16-graph-initial-spacing-spec.md`, SHA-256 `023bde826c9c6f351e2340d643ce262d9ce1d2a1c97ded0b4b250ae5f7ab80a1`. Read its sections 1–11 and appendices before implementing any task. Baseline is `0734fb23db6873f4ec64c3e3e29fc8c3e17edc7a`; never substitute a formula or the candidate for that old tree.
 - Evidence root is `/tmp/graph-initial-spacing-evidence`; preserve failed receipts and use fresh, explicitly numbered attempt directories after an identified environmental correction. Do not select successful attempts or overwrite failures.
 - Existing `reports/spec-materialization-2/` under PM run `pm-run-20261016-125451-a5048653` proves unchanged-layout negative controls only. It supplies no candidate feature pass. Do not repeat its six unchanged runs or its 31-second delay experiment as setup.
+- The frozen outcome acceptance predicate is unchanged: for each of NR8 A, SM8 A, XM4x2 A and XM4x2 B, `candidateMedianAtItsOwnFirstIdle - baselineMedianAtItsOwnFirstIdle >= 6.0 - 1e-6`, with at most 2000 calls to `step()` after submission and one shared monotonic 30-second deadline per fixture/version.
 - Gate failures stop dependent tasks. Commits below are execution instructions, not authorization to implement or commit during plan drafting. Every task commit includes `graph-initial-spacing`; do not push or edit PM state.
 
 ## Task 1: Pin independent geometry and live targets, widen the parameter, and run the frozen outcome gate
@@ -82,7 +85,9 @@
 **Files:**
 
 - Modify: `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/GraphStreamLayoutEngine.java:23-25,40-42,232-245,500-513`
+- Modify: `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/ClusterPacking.java:isClear`
 - Modify: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/BoundaryFootprintShould.java:70-86`
+- Modify: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/ClusterPackingShould.java`
 - Create: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/SpacingTestSupport.java`
 - Create: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/InitialSpacingShould.java`
 - Create: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/InitialSpacingProbe.java`
@@ -100,7 +105,7 @@
 
 ```json
 [
-  ["gradle", ":freeplane_plugin_graph:test", "--tests", "*InitialSpacingShould", "--tests", "*BoundaryFootprintShould", "--console=plain", "-PTestLoggingFull"],
+  ["gradle", ":freeplane_plugin_graph:test", "--tests", "*InitialSpacingShould", "--tests", "*BoundaryFootprintShould", "--tests", "*ClusterPackingShould", "--console=plain", "-PTestLoggingFull"],
   ["python3", "freeplane_plugin_graph/src/test/scripts/compare_initial_spacing.py", ".", "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/InitialSpacingProbe.java", "/tmp/graph-initial-spacing-evidence/task-1/comparison"]
 ]
 ```
@@ -114,7 +119,7 @@ from pathlib import Path
 import hashlib, re
 spec = Path('docs/superpowers/specs/2026-10-16-graph-initial-spacing-spec.md')
 raw = spec.read_bytes()
-assert hashlib.sha256(raw).hexdigest() == '4cc339deb07b402ad2cc3b9e1c2de621f44d6b582e5884367f6b1e16a75543e6'
+assert hashlib.sha256(raw).hexdigest() == '023bde826c9c6f351e2340d643ce262d9ce1d2a1c97ded0b4b250ae5f7ab80a1'
 for marker, lang, path in [
     ('spacing-probe-java', 'java', 'freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/InitialSpacingProbe.java'),
     ('spacing-compare-python', 'python', 'freeplane_plugin_graph/src/test/scripts/compare_initial_spacing.py')]:
@@ -389,7 +394,7 @@ public class InitialSpacingShould {
                 assertThat(distance(f.positions().nodes().get(key), f.positions().nodes().get(p.nodes().get((i + 1) % 3).key()))
                     - radii[i] - radii[(i + 1) % 3]).isCloseTo(gaps[i], offset(EPS));
             }
-            requireTargets(inspect(e), 24.941531628991836, false, 41.6, 41.6);
+            requireTargets(inspect(e), 24.941531628991836, false, 23.6, 23.6);
         }
     }
     @Test public void registerAllEndpointAndMapVariantsAndConsumeTheirActualRests() {
@@ -397,22 +402,22 @@ public class InitialSpacingShould {
             GraphProjection p = targets(cross);
             try (LayoutEngine e = engine()) {
                 e.apply(request(workspace(cross), empty(0), p, p.pins()));
-                requireTargets(inspect(e), 20, cross, 40, 52, 64);
+                requireTargets(inspect(e), 20, cross, 22, 34, 46);
                 if (!cross) {
-                    assertThat(attraction(registered(e, "RELATIONSHIP", 40), 30)).isCloseTo(-0.5, offset(EPS));
+                    assertThat(attraction(registered(e, "RELATIONSHIP", 22), 30)).isCloseTo(0.4, offset(EPS));
                     assertThat(attraction(new GraphStreamLayoutEngine.ForceLink("x", "y",
-                        GraphStreamLayoutEngine.ForceKind.RELATIONSHIP, false, 22), 30)).isCloseTo(0.4, offset(EPS));
-                    assertThat(attraction(registered(e, "RELATIONSHIP", 40), 30) - attraction(
-                        new GraphStreamLayoutEngine.ForceLink("x", "y", GraphStreamLayoutEngine.ForceKind.RELATIONSHIP, false, 22), 30))
-                        .isCloseTo(-0.9, offset(EPS));
+                        GraphStreamLayoutEngine.ForceKind.RELATIONSHIP, false, 40), 30)).isCloseTo(-0.5, offset(EPS));
+                    assertThat(attraction(new GraphStreamLayoutEngine.ForceLink("x", "y",
+                        GraphStreamLayoutEngine.ForceKind.RELATIONSHIP, false, 40), 30) - attraction(
+                        registered(e, "RELATIONSHIP", 22), 30)).isCloseTo(-0.9, offset(EPS));
                     assertThat(attraction(registered(e, "CONTAINMENT", 20), 15)).isCloseTo(-0.25, offset(EPS));
                     assertThat(attraction(new GraphStreamLayoutEngine.ForceLink("x", "y",
                         GraphStreamLayoutEngine.ForceKind.CONTAINMENT, false, 11), 15)).isCloseTo(0.20, offset(EPS));
                 }
-                e.step(); requireTargets(inspect(e), 20, cross, 40, 52, 64);
+                e.step(); requireTargets(inspect(e), 20, cross, 22, 34, 46);
                 e.reset();
                 LayoutFrame reset = e.apply(request(workspace(cross), p, p, p.pins()));
-                requireTargets(inspect(e), 20, cross, 40, 52, 64);
+                requireTargets(inspect(e), 20, cross, 22, 34, 46);
                 try (LayoutEngine fresh = engine()) {
                     assertThat(reset.positions()).isEqualTo(fresh.apply(request(workspace(cross), empty(0), p, p.pins())).positions());
                 }
@@ -464,12 +469,12 @@ public class InitialSpacingShould {
             for (ProjectedNodeKey key : retained.positions().nodes().keySet())
                 assertThat(updated.positions().nodes().get(key)).isEqualTo(retained.positions().nodes().get(key));
             assertThat(updated.positions().anchors()).isEqualTo(retained.positions().anchors());
-            requireTargets(inspect(e), 24.941531628991836, false, 41.6, 41.6);
+            requireTargets(inspect(e), 24.941531628991836, false, 23.6, 23.6);
             assertThat(inspect(e).radii.get(node(A,"u0"))).isCloseTo(9.6,offset(EPS));
             e.apply(request(WORKSPACE, after, removed, removed.pins()));
             assertThat(inspect(e).positions.nodes()).doesNotContainKey(node(A,"u2"));
             assertThat(inspect(e).radii.get(node(A,"u0"))).isEqualTo(8.0);
-            requireTargets(inspect(e), 20, false, 40);
+            requireTargets(inspect(e), 20, false, 22);
         }
     }
     @Test public void honorConflictingPinsWithoutHidingResiduals() throws Exception {
@@ -506,7 +511,7 @@ public class InitialSpacingShould {
                 edge(ProjectedEndpointKey.ofEnclosure(root.endpointKeys().get(0)),ProjectedEndpointKey.ofEnclosure(child.endpointKeys().get(0)),false,16042)),
             Collections.<PinProjection>emptyList());
         try(LayoutEngine e=engine()) {
-            e.apply(request(WORKSPACE,empty(0),p,p.pins())); requireTargets(inspect(e),0,false,24,32);
+            e.apply(request(WORKSPACE,empty(0),p,p.pins())); requireTargets(inspect(e),0,false,6,14);
             List<Link> hierarchy=new ArrayList<Link>();
             for(Link l:inspect(e).links) if(l.kind.equals("HIERARCHY")) hierarchy.add(l);
             assertThat(hierarchy).hasSize(1); assertThat(hierarchy.get(0).restLength).isEqualTo(0);
@@ -556,33 +561,63 @@ public class InitialSpacingShould {
 }
 ```
 
-### Step 4: Establish red before the production edit
+### Step 4: Add the focused packing-boundary regression and establish red before the production edit
 
-- [ ] Run the first validation argv, retain stdout/stderr and JUnit XML in `task-1/red/`. Expected: assertion failures for ring 20 versus old 11, radius-derived footprints, registered rests 40/52/64 versus old values, and consumption -0.5 versus +0.4. A compiler error is not red evidence; correct test API/type mistakes without touching production behavior. Do not run the six-case comparator against unchanged code again.
+- [ ] Add `java.lang.reflect.Method` to `ClusterPackingShould` and append this focused test. It calls only the private predicate through reflection so the test can pin the exact one-ulp boundary without adding a production API. The mathematical candidate is exactly at the existing 8.0 gutter; `Math.ulp` makes the computed clearance one ulp below 8.0, as occurs in the real candidate enumeration. The assertion accepts that value only because of `CANDIDATE_EPSILON`, and the existing `twoItemsAreSeparatedByExactlyTheGap` assertion continues to prove that the configured gutter is still 8.0 rather than widened:
+
+```java
+    @Test
+    public void acceptsAnEightUnitGutterAtTheFloatingPointBoundaryWithoutWideningIt() throws Exception {
+        final double gutter = GAP;
+        assertThat(gutter).isEqualTo(8.0);
+        final ClusterPacking.ClusterItem placedItem = content(10.0, 10.0, 0);
+        final ClusterPacking.ClusterItem candidate = content(10.0, 10.0, 1);
+        final ClusterPacking.ClusterPlacement placed =
+            new ClusterPacking.ClusterPlacement(placedItem, 0.0, 0.0);
+        final double halfExtent = (placedItem.width + candidate.width) * 0.5;
+        final double candidateX = halfExtent + gutter - Math.ulp(gutter);
+        final double measuredGap = Math.abs(candidateX - placed.x) - halfExtent;
+        assertThat(measuredGap).isLessThan(gutter);
+        assertThat(measuredGap).isGreaterThan(gutter - ClusterPacking.CANDIDATE_EPSILON);
+
+        final Method isClear = ClusterPacking.class.getDeclaredMethod("isClear",
+            double.class, double.class, ClusterPacking.ClusterItem.class, List.class, double.class);
+        isClear.setAccessible(true);
+        final boolean accepted = ((Boolean) isClear.invoke(null, candidateX, 0.0, candidate,
+            Collections.singletonList(placed), gutter)).booleanValue();
+        assertThat(accepted).isTrue();
+    }
+```
+
+- [ ] Run the first validation argv, retain stdout/stderr and JUnit XML in `task-1/red/`. Expected red evidence is ring 20 versus old 11, radius-derived footprints, and the focused one-ulp candidate being rejected by the old `isClear`; the relationship assertions must remain 22/34/46 and 23.6, and the attraction controls must already remain `+0.4` for rest 22, `-0.5` for rest 40, and `-0.9` for their difference. A compiler error is not red evidence; correct test API/type mistakes without touching production behavior. Do not run the six-case comparator against unchanged code again.
 
 ### Step 5: Apply exactly the approved production change and footprint literals
 
-- [ ] Make this entire production diff, using the original file's exact whitespace:
+- [ ] Make this entire production diff, using the original files' exact whitespace. The relationship expression and its import are intentionally unchanged:
 
 ```diff
--import org.freeplane.plugin.graph.layout.NodeSeparationProjection;
+ GraphStreamLayoutEngine.java
 @@
      static final double NODE_RADIUS = 8.0;
 +    static final double PREFERRED_NODE_GAP = 24.0;
 @@
--                        + NodeSeparationProjection.MIN_GAP));
-+                        + PREFERRED_NODE_GAP));
-@@
 -            return (2.0 * maxRadius + NodeSeparationProjection.MIN_GAP)
 +            return (2.0 * maxRadius + PREFERRED_NODE_GAP)
++
+ClusterPacking.java
+@@
+-            if (clearanceX < gap && clearanceY < gap) {
++            if (clearanceX < gap - CANDIDATE_EPSILON && clearanceY < gap - CANDIDATE_EPSILON) {
 ```
+
+- [ ] Verify in the source diff that `NodeSeparationProjection.MIN_GAP` remains in the relationship `ForceLink` rest-length expression and that its import remains present. No relationship-rest substitution or import removal is allowed.
 
 - [ ] In `BoundaryFootprintShould.leafFootprintIsSquareAroundTheAnchor`, change its ring literal `11.0` to `20.0` and both footprint literals `86.0` to `104.0`. Keep the independent singleton 64, empty-label boxes and no-content nesting literals. The derivation is `R=(16+24)/2=20`, then `2*(20+8+8+16)=104`. No other test golden changes in this task.
 
 ### Step 6: Verify literal/target green, then independently require the frozen outcome
 
-- [ ] Rerun the first validation argv. Expected: both classes pass. Capture test counts, source diff and Java/Gradle versions under `task-1/green/`.
-- [ ] Run the second validation argv once against the actual candidate. The unchanged appendix handles `git archive` of the old revision, Java-8 observer compilation against each version, exact input-manifest comparison, corrected own-first-idle measurement, all-pairs independent Python recomputation, four separate six-unit predicates, safety checks, separate complete 100-frame diagnostics, 2000-call/shared-30-second bounds and the 65-second process watchdog. Keep every emitted file, including failed receipts. `comparison.json` must show all four improvements passing; actual candidate numbers are empirical and are not supplied by this plan.
+- [ ] Rerun the first validation argv. Expected: `InitialSpacingShould`, `BoundaryFootprintShould` and `ClusterPackingShould` pass. Capture test counts, source diff and Java/Gradle versions under `task-1/green/`.
+- [ ] Run the second validation argv once against the actual candidate. The unchanged appendix handles `git archive` of the old revision, Java-8 observer compilation against each version, exact input-manifest comparison, corrected own-first-idle measurement, all-pairs independent Python recomputation, four separate six-unit predicates, safety checks, separate complete 100-frame diagnostics, 2000-call/shared-30-second bounds and the 65-second process watchdog. Keep every emitted file, including failed receipts. `comparison.json` must show all four improvements passing. Confirm the ring-only candidate receipts against the measured finding: NR8/A delta `17.529239771648` with first idle step `7`; SM8/A delta `11.456894` with first idle step `39`; XM4x2/A delta `17.043923865606` with first idle step `7`; XM4x2/B delta `17.042998283483` with first idle step `7`; record the observed full-precision values in evidence, but do not hard-code them into production or replace the comparator predicate with these numbers.
 - [ ] If either gate fails, stop Task 1 and all dependent tasks with the exact failure/receipt path. For an outcome failure, report a design-review blocker; do not change inputs, force multipliers, idle policy, performance limits or production scope to rescue it. Do not execute UI evidence tasks for a rejected numeric outcome.
 
 ### Step 7: Commit the passing task
@@ -590,7 +625,7 @@ public class InitialSpacingShould {
 - [ ] Only after both distinct gates pass, review `git diff` and commit exactly the Task 1 allowlisted repository files:
 
 ```bash
-git add freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/GraphStreamLayoutEngine.java freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/BoundaryFootprintShould.java freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/SpacingTestSupport.java freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/InitialSpacingShould.java freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/InitialSpacingProbe.java freeplane_plugin_graph/src/test/scripts/compare_initial_spacing.py
+git add freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/GraphStreamLayoutEngine.java freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/ClusterPacking.java freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/BoundaryFootprintShould.java freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/ClusterPackingShould.java freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/SpacingTestSupport.java freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/InitialSpacingShould.java freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/InitialSpacingProbe.java freeplane_plugin_graph/src/test/scripts/compare_initial_spacing.py
 git commit -m "graph-initial-spacing: widen preferred node gap and verify frozen outcome"
 ```
 
@@ -720,7 +755,7 @@ public class InitialSpacingLifecycleShould {
             });
             Gate gate=nextSubmit.getAndSet(null);
             return delegate.submit(r).thenCompose(f->{
-                requireTargets(current.last,20,false,40);
+                requireTargets(current.last,20,false,22);
                 if(gate==null) return CompletableFuture.completedFuture(f);
                 gate.entered.complete(new Submission(r,w,current,f));
                 return gate.release.thenApply(ignored->f);
@@ -801,9 +836,9 @@ public class InitialSpacingLifecycleShould {
     private static void verifyPin(Submission s) {
         assertThat(s.raw.positions.nodes().get(node(A,"u0"))).isEqualTo(LayoutPoint.of(0,0));
         assertThat(s.corrected.positions().nodes().get(node(A,"u0"))).isEqualTo(LayoutPoint.of(0,0));
-        requireTargets(s.raw,20,false,40);
+        requireTargets(s.raw,20,false,22);
         System.out.println("spacing-lifecycle worker="+System.identityHashCode(s.worker)+" engine="+
-            System.identityHashCode(s.engine)+" generation="+s.request.projection().generation()+" targets=20/40 pin=0,0");
+            System.identityHashCode(s.engine)+" generation="+s.request.projection().generation()+" targets=20/22 pin=0,0");
     }
     @Test public void healthyRestartRetainsRawCoordinatesAndResetReplacesTheRealWorker() throws Exception {
         try(Fixture f=new Fixture()) {
@@ -856,7 +891,7 @@ public class InitialSpacingLifecycleShould {
 
 ### Step 2: Run the focused verification and check the barriers
 
-- [ ] Run the validation argv. Expected: the two new command-path tests and existing worker/settle-loop/coordinator suites pass, with real raw targets 20/40 on initial, healthy restart, Reset and failed recovery. The exact two-pin residual fixture remains in Task 1; it is intentionally not an idle-zero-residual fixture.
+- [ ] Run the validation argv. Expected: the two new command-path tests and existing worker/settle-loop/coordinator suites pass, with the real raw containment target 20 and node-to-node relationship target 22 on initial, healthy restart, Reset and failed recovery. The exact two-pin residual fixture remains in Task 1; it is intentionally not an idle-zero-residual fixture.
 - [ ] Retain the new lifecycle output and XML under `task-2/`. If an existing production behavior contradicts the approved lifecycle contract, report it; do not widen the production allowlist. Task 3 will demonstrate that engine-recreating healthy Restart and engine-preserving Reset break these exact assertions. A gate or failure injection that times out is not a successful negative control.
 
 ### Step 3: Commit the passing task
@@ -881,8 +916,8 @@ git commit -m "graph-initial-spacing: verify real reset restart recovery and pin
 **Files:**
 
 - Create: `freeplane_plugin_graph/src/test/scripts/mutate_initial_spacing.py`
-- Modify, only if measured spacing changes its exact golden: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/TypedForcesShould.java:45-51`
-- Modify, comment only: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/ClusterProximityShould.java:506-513`
+- Modify: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/TypedForcesShould.java:45-51,391-421` (the measured two-map regression only)
+- Modify: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/ClusterProximityShould.java:506-513` (preferred-gap wording and fixture-D residual-tolerant comparison only)
 - Create evidence only: `/tmp/graph-initial-spacing-evidence/task-3/` (disposable source/classes, classpath init script, compiler/JUnit outputs, commands and mutation/golden receipts).
 
 **Interfaces:**
@@ -890,7 +925,7 @@ git commit -m "graph-initial-spacing: verify real reset restart recovery and pin
 - Consumes: Task 1 `InitialSpacingShould` test methods named in the mutation table below; Task 2 `InitialSpacingLifecycleShould.healthyRestartRetainsRawCoordinatesAndResetReplacesTheRealWorker()`; actual `sourceSets.test.runtimeClasspath.asPath` obtained through a temporary Gradle init task.
 - Consumes: Task 1 `comparison.json` status PASS and immutable raw comparison receipts. No frozen input/observer or outcome predicate change is allowed here.
 - Produces: CLI `python3 freeplane_plugin_graph/src/test/scripts/mutate_initial_spacing.py <candidateRoot> <evidenceDirectory>` returning 0 iff a clean JUnit control passes and all seven isolated compiled mutants fail the specified assertions; `mutations.json` holds commands, source hashes, return codes and expected assertion names.
-- Produces: unchanged motion/safety/performance assertions; only an independently measured spacing-derived exact first-idle integer may replace `TWO_MAP_FIRST_IDLE_STEP`. Other mismatches require review, not a blanket test rewrite.
+- Produces: unchanged motion/safety/performance assertions; `TWO_MAP_FIRST_IDLE_STEP = 3455`, an observation bound of 6000 calls for this one two-map test, and its scoped 100-frame hold envelope of RMS <= 0.30 / maximum <= 1.00. Other mismatches require review, not a blanket test rewrite.
 
 **Validation commands:** Candidate root and headless environment:
 
@@ -903,8 +938,9 @@ git commit -m "graph-initial-spacing: verify real reset restart recovery and pin
 
 ### Step 1: Preserve invariant assertions and obtain measured golden receipts
 
-- [ ] Run the first argv and retain JUnit XML/output in `task-3/regression-before/`. If the old integer 756 fails, retain the exact candidate assertion output and the actual first-idle integer. Confirm the same fixture and runtime at the pinned old tree still produce 756 using its unchanged test and source in an external archive, not a reconstructed formula. Retain both test outputs, fixture/source hashes and the derivation: preferred ring and registered relationship rests changed while the fixture, policy and count convention did not. Replace only the one integer with that measured value, then rerun the failing class once. A non-converged fixture or a failed motion/performance/safety assertion is a blocker, not permission to change a threshold.
-- [ ] Replace only `MIN_GAP tie produced by contentRingRadius` in the obsolete comment in `ClusterProximityShould` with `preferred-gap tie produced by contentRingRadius`. Leave its tolerance and assertion unchanged. No other comment or test formula needs modernization.
+- [ ] Run the first argv and retain JUnit XML/output in `task-3/regression-before/`. The amended candidate receipt must show the two-map fixture first reaches idle at step 3455; preserve the exact pre-amendment failure and the convergence report rather than treating the old 756 value as a valid candidate expectation. Confirm the old tree only as an unchanged-baseline receipt, not by reconstructing a formula. Derivation: the approved amendment widens the content ring only, keeps relationship rests collision-based, and therefore removes the prior widened-rest/2000-step mismatch; the observed cross-map ring-only trajectory needs 3455 steps. Change only `TWO_MAP_FIRST_IDLE_STEP`, the observation bound to 6000 for this one test, and the scoped post-idle envelope to RMS <= 0.30 / maximum <= 1.00 over 100 frames. A non-converged fixture or a failed motion/performance/safety assertion is a blocker, not permission to change another threshold.
+- [ ] Replace only `MIN_GAP tie produced by contentRingRadius` in the obsolete comment in `ClusterProximityShould` with `preferred-gap tie produced by contentRingRadius`. In `initialFrameThroughWorkerKeepsSeedsWithoutPins`, keep the engine and anchor equality assertions exact for every unpinned fixture. For fixture `D` only, compare each worker node coordinate with the corresponding `NodeSeparationProjection` coordinate using an explicitly named one-ulp helper whose offset is `max(Math.ulp(actual), Math.ulp(expected))`; all other fixtures keep exact node-map equality. Do not relax the worker frame gate: assert `failed()` false, `verified()` true, `residualViolations()` zero, `boundaryDiagnostics().hullResidualViolations()` zero, `boundaryVerified()` true, `boundaryCovered()` true, and `NodeSeparationProjection.violatingPairs(projection, worker.positions())` empty for every fixture, then retain `assertPackedNonOverlap` and `assertContactGutters`. The only changed premise is fixture D's last-ulp node equality.
+- [ ] In `TypedForcesShould.twoMapWorkspaceSettlesToIdle`, set `TWO_MAP_FIRST_IDLE_STEP` to `3455`; change the loop bound from `2000` to `6000` and retain an explicit `assertThat(firstIdleStep).isLessThanOrEqualTo(6000)` before `isEqualTo(TWO_MAP_FIRST_IDLE_STEP)`. Replace the old comment with: `Epoch-2 ring-only amendment receipt: content-ring seeds changed, relationship rests remain collision-based via MIN_GAP; the measured first idle is 3455. The next 100 frames are a bounded observation for this regression only, with measured RMS <= 0.30 and maximum displacement <= 1.00; this is not a production idle-policy change.` Assert those two limits with `0.30` and `1.00`; do not alter any other test or production threshold.
 
 ### Step 2: Add isolated mutation verification
 
@@ -970,7 +1006,10 @@ mutants=[
  ('gap-six',engine,lambda t:replace_once(t,'PREFERRED_NODE_GAP = 24.0','PREFERRED_NODE_GAP = 6.0'),
   'pinLiteralFreshRingsAndFootprints'),
  ('old-containment',engine,old_containment,'registerAllEndpointAndMapVariantsAndConsumeTheirActualRests'),
- ('old-relationship',engine,lambda t:replace_once(t,'+ PREFERRED_NODE_GAP));','+ 6.0));'),
+ # Control (c): the forbidden widened relationship term must be rejected by the
+ # frozen 22/34/46 registrations and the 23.6 mixed-prominence registrations.
+ ('relationship-preferred',engine,lambda t:replace_once(t,
+  '+ NodeSeparationProjection.MIN_GAP));','+ PREFERRED_NODE_GAP));'),
   'registerAllEndpointAndMapVariantsAndConsumeTheirActualRests'),
  ('ignore-rest',box,lambda t:replace_once(t,'(distance - link.restLength) * ATTRACTION_FACTOR','distance * ATTRACTION_FACTOR'),
   'registerAllEndpointAndMapVariantsAndConsumeTheirActualRests'),
@@ -1006,7 +1045,7 @@ try:
 finally:
     assert source_hashes=={p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in source_hashes},'active source changed'
     (out/'mutations.json').write_text(json.dumps(dict(commands=records,activeSourceHashes=source_hashes),indent=2)+'\n')
-print('PASS: clean control and all seven isolated mutation assertions')
+print('PASS: clean control and all seven isolated mutation assertions, including control (c)')
 ```
 
 ### Step 3: Require actual failures and retain controls
@@ -1618,25 +1657,34 @@ assert len(records)==4 and all(r.get('exit')==0 for r in records)
 ### Step 2: Enforce the exact production diff and write the acceptance record
 
 - [ ] Confirm the bundle verification remains in `check`, the strict performance gate retains every old threshold, OSGi activates the installed graph bundle, and the real launch smoke reaches production QuitAction and exits without surviving processes. Locate the actual smoke result files from the command logs if their generated output paths differ from the optional copies above; add those exact artifacts to the external receipt directory. Do not change build files to make this collection work.
-- [ ] Run this complete source/receipt verifier and acceptance writer. It compares the complete candidate production source to the old source with only the four approved edits applied; a production refactor or unrelated change fails. Numerical outcomes are extracted from receipts, not invented in documentation.
+- [ ] Run this complete source/receipt verifier and acceptance writer. It compares both candidate production files to their old sources with only the approved ring substitution, preferred-gap declaration and `ClusterPacking.isClear` epsilon correction; the relationship expression/import must remain byte-identical. A production refactor or unrelated change fails. Numerical outcomes are extracted from receipts, not invented in documentation.
 
 ```python
 from pathlib import Path
 import hashlib, json, subprocess
 root=Path.cwd();e=Path('/tmp/graph-initial-spacing-evidence');base='0734fb23db6873f4ec64c3e3e29fc8c3e17edc7a'
 p='freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/GraphStreamLayoutEngine.java'
+packing='freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/ClusterPacking.java'
 old=subprocess.check_output(['git','show',base+':'+p],text=True)
+old_packing=subprocess.check_output(['git','show',base+':'+packing],text=True)
 assert old.count('import org.freeplane.plugin.graph.layout.NodeSeparationProjection;\n')==1
-expected=old.replace('import org.freeplane.plugin.graph.layout.NodeSeparationProjection;\n','')
-expected=expected.replace('    static final double NODE_RADIUS = 8.0;\n','    static final double NODE_RADIUS = 8.0;\n    static final double PREFERRED_NODE_GAP = 24.0;\n')
-assert expected.count('NodeSeparationProjection.MIN_GAP')==2
-expected=expected.replace('NodeSeparationProjection.MIN_GAP','PREFERRED_NODE_GAP')
-assert (root/p).read_text()==expected,'production source exceeds four approved edits'
-changed=subprocess.check_output(['git','diff','--name-only',base,'--','*/src/main/**'],text=True).splitlines()
-assert changed==[p],changed
-(e/'task-5/production.diff').write_bytes(subprocess.check_output(['git','diff',base,'--',p]))
+assert old_packing.count('if (clearanceX < gap && clearanceY < gap) {')==1
+expected=old.replace('    static final double NODE_RADIUS = 8.0;\n','    static final double NODE_RADIUS = 8.0;\n    static final double PREFERRED_NODE_GAP = 24.0;\n')
+old_ring='            return (2.0 * maxRadius + NodeSeparationProjection.MIN_GAP)\n                / (2.0 * Math.sin(Math.PI / count));'
+new_ring='            return (2.0 * maxRadius + PREFERRED_NODE_GAP)\n                / (2.0 * Math.sin(Math.PI / count));'
+assert expected.count(old_ring)==1
+expected=expected.replace(old_ring,new_ring)
+assert expected.count('NodeSeparationProjection.MIN_GAP')==1
+assert (root/p).read_text()==expected,'GraphStreamLayoutEngine production source exceeds the approved ring-only edits'
+expected_packing=old_packing.replace(
+    '            if (clearanceX < gap && clearanceY < gap) {',
+    '            if (clearanceX < gap - CANDIDATE_EPSILON && clearanceY < gap - CANDIDATE_EPSILON) {')
+assert (root/packing).read_text()==expected_packing,'ClusterPacking production source exceeds the approved epsilon edit'
+changed=sorted(subprocess.check_output(['git','diff','--name-only',base,'--','*/src/main/**'],text=True).splitlines())
+assert changed==sorted([p,packing]),changed
+(e/'task-5/production.diff').write_bytes(subprocess.check_output(['git','diff',base,'--',p,packing]))
 spec=root/'docs/superpowers/specs/2026-10-16-graph-initial-spacing-spec.md'
-assert hashlib.sha256(spec.read_bytes()).hexdigest()=='4cc339deb07b402ad2cc3b9e1c2de621f44d6b582e5884367f6b1e16a75543e6'
+assert hashlib.sha256(spec.read_bytes()).hexdigest()=='023bde826c9c6f351e2340d643ce262d9ce1d2a1c97ded0b4b250ae5f7ab80a1'
 comparison=json.loads((e/'task-1/comparison/comparison.json').read_text());assert comparison['status']=='PASS'
 mutations=json.loads((e/'task-3/mutations/mutations.json').read_text());assert sum(x.get('killed',False) for x in mutations['commands'])==7
 ui=json.loads((e/'task-4/ui/ui-receipt.json').read_text());assert ui['status']=='PASS'
@@ -1654,9 +1702,14 @@ assert all(item['observations'].get('pinsExact') is True for item in visual['ima
 assert all(item['observations'].get('nonzeroResidualDiagnostic') is True and item['observations'].get('excludedFromOutcomeGate') is True for item in visual['images'] if 'pinned-diagnostic' in item['path'])
 assert visual['uiReceiptSha256']==hashlib.sha256((e/'task-4/ui/ui-receipt.json').read_bytes()).hexdigest()
 validation=json.loads((e/'task-5/attempt-1/validation.json').read_text());assert len(validation)==4 and all(x.get('exit')==0 for x in validation)
+convergence=Path('/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/reports/task-1-convergence-finding.md')
+assert convergence.exists() and 'twoMapWorkspaceSettlesToIdle' in convergence.read_text()
 lines=['# Graph initial spacing acceptance','',
- 'Task: `graph-initial-spacing`. Approved spec SHA-256: `4cc339deb07b402ad2cc3b9e1c2de621f44d6b582e5884367f6b1e16a75543e6`.',
- '', 'Production scope: one preferred-gap constant at 24.0, the content ring and relationship-rest substitutions, and unused import removal. Exact whole-source comparison PASS. Collision 6.0, sibling gutter 8.0, radii, force coefficients, idle policy, lifecycle, persistence and zoom retain their existing values.',
+ 'Task: `graph-initial-spacing`. Approved spec SHA-256: `023bde826c9c6f351e2340d643ce262d9ce1d2a1c97ded0b4b250ae5f7ab80a1`.',
+ '', 'Production scope: one preferred-gap constant at 24.0 and the content-ring substitution, plus the approved `ClusterPacking.isClear` one-ulp epsilon correction. The relationship `ForceLink` term remains `NodeSeparationProjection.MIN_GAP` and its import remains present; no relationship rest was widened. Exact whole-source comparison PASS. Collision 6.0, sibling gutter 8.0, radii, force coefficients, idle policy, lifecycle, persistence and zoom retain their existing values.',
+ '', '## Epoch 2 convergence finding and approved resolution','',
+ 'The pre-amendment Task 1 run recorded `TypedForcesShould.twoMapWorkspaceSettlesToIdle` failing to reach idle within 2000 calls; the convergence report records the 12/16/20/24 gap sweep failures, the widened-relationship-only non-convergence, and the widened-ring-only trajectory reaching idle at step 3455. This finding is retained at `/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/reports/task-1-convergence-finding.md`.',
+ 'The approved Epoch 2 amendment resolves that finding by widening only `BoundarySizes.contentRingRadius`, applying the `ClusterPacking.isClear` last-ulp tolerance, and keeping relationship rests collision-based: 22/34/46 for the frozen target fixture and 23.6 for the mixed-prominence synchronization fixture. The two-map regression records first idle 3455 within its scoped 6000-call observation bound and uses only its scoped 100-frame RMS <= 0.30 / maximum <= 1.00 envelope. The four-fixture outcome predicate, 2000-call bound, one 30-second deadline per fixture/version, and production idle policy remain unchanged.',
  '', '## Corrected first-idle outcome','',
  'Each version is measured at its own first corrected idle. Submission is step 0; first idle is bounded by 2000 subsequent calls and one shared 30-second monotonic deadline. Full-precision predicates use `delta >= 6.0 - 1e-6`. These are independent of the raw geometry/registration/consumption tests.',
  '', '| Fixture / enclosure | Old median | New median | Delta | Old/new first-idle calls | PASS |',
