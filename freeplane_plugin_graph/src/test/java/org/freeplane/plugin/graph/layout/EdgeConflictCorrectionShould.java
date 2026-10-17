@@ -743,8 +743,20 @@ public class EdgeConflictCorrectionShould {
         final EdgeConflictResult result = new EdgeConflictCorrection().apply(fixture.projection,
             boundary.positions(), METRICS, Collections.<PinProjection>emptyList(), fixture.visible, boundary);
 
-        // A3 compares pair-key subsets, so a legal pre-existing residual never vetoes the repair.
-        assertThat(result.diagnostics().rounds()).isGreaterThanOrEqualTo(0);
+        // A3 compares pair-key subsets, so a legal pre-existing residual never vetoes the repair:
+        // the unsafe nearest target (-6,0) is still rejected, and the repair is really installed
+        // with the safe opposite target rather than the frame degenerating to no repair at all.
+        assertThat(result.diagnostics().rounds()).isEqualTo(1);
+        assertThat(result.diagnostics().verifications()).isEqualTo(2);
+        assertThat(result.diagnostics().repairsApplied()).hasSize(1);
+        final EdgeConflictDiagnostics.Repair repair = result.diagnostics().repairsApplied().get(0);
+        assertThat(repair.kind()).isEqualTo(EdgeConflictDiagnostics.RepairKind.TRANSLATION);
+        assertThat(repair.nodeKeys()).containsExactly(fixture.passedOverNode);
+        assertThat(repair.toCentres().get(fixture.passedOverNode))
+            .isEqualTo(fixture.safePassedOverTarget);
+        assertThat(result.positions().nodes().get(fixture.passedOverNode))
+            .isEqualTo(fixture.safePassedOverTarget);
+        assertThat(result.diagnostics().conflictsResidual()).isEmpty();
         assertThat(result.diagnostics().conflictsResidual()).doesNotContain(
             CanonicalKeys.hullPair(fixture.siblingFirst, fixture.siblingSecond));
     }
@@ -910,6 +922,125 @@ public class EdgeConflictCorrectionShould {
     }
 
     @Test
+    public void rejectsEveryC2TargetBeyondTheMaximumExcursionWithoutClamping() {
+        // A detected C2 disc always satisfies |s| < rho = r + 3 (the chord is within rho of the
+        // centre), and the nearest direct target moves exactly rho - |s|, so the 64-unit rule is
+        // only reachable when the supplied actual radius exceeds 61. This 62-radius disc sits on
+        // the chord, so both direct targets move 65 and each diagonal moves hypot(65,133) = 148.03:
+        // every member of the finite family is over the limit, and no target may be clamped into it.
+        final Fixture fixture = overExcursionFixture();
+        final double radius = 62.0;
+        final BoundarySeparationResult boundary =
+            fixture.boundaryWithNodeRadius(fixture.key(2), radius);
+        final ProjectedNodeKey obstructing = fixture.key(2);
+        final ProjectedEdge edge = fixture.projection.edges().get(0);
+        final String conflicted = CanonicalKeys.edgeNodePair(edge.key(), obstructing);
+
+        assertThat(EdgeConflictCorrection.MAX_EDGE_NODE_EXCURSION).isEqualTo(64.0);
+        assertThat(boundary.geometry().nodes().get(obstructing).radius()).isEqualTo(radius);
+        assertThat(boundary.geometry().nodes().get(fixture.key(0)).radius()).isEqualTo(8.0);
+        assertThat(boundary.geometry().nodes().get(fixture.key(1)).radius()).isEqualTo(8.0);
+        assertThat(NodeSeparationProjection.violatingPairs(fixture.projection,
+            boundary.positions())).isEmpty();
+        assertThat(EdgeConflictCorrection.detectConflicts(fixture.projection, boundary.positions(),
+            boundary.geometry(), fixture.visible).keys()).containsExactly(conflicted);
+
+        // Both over-limit direct targets would in fact clear the chord, so only the excursion rule
+        // can retain the residual: clamping or dropping the limit would install one of them.
+        final LayoutPoint firstRim = boundary.geometry().edgeAttachment(edge.first(),
+            boundary.positions().nodes().get(fixture.key(1)));
+        final LayoutPoint secondRim = boundary.geometry().edgeAttachment(edge.second(),
+            boundary.positions().nodes().get(fixture.key(0)));
+        assertThat(firstRim).isEqualTo(LayoutPoint.of(-92.0, 0.0));
+        assertThat(secondRim).isEqualTo(LayoutPoint.of(92.0, 0.0));
+        for (final double offset : new double[] {-65.0, 65.0}) {
+            assertThat(segmentDistance(LayoutPoint.of(0.0, offset), firstRim, secondRim) - radius)
+                .as("target y=%s clears the chord", offset)
+                .isGreaterThanOrEqualTo(3.0 - 1e-9);
+            assertThat(Math.hypot(0.0, offset)).isGreaterThan(
+                EdgeConflictCorrection.MAX_EDGE_NODE_EXCURSION);
+        }
+
+        final EdgeConflictResult result = new EdgeConflictCorrection().apply(fixture.projection,
+            boundary.positions(), METRICS, Collections.<PinProjection>emptyList(), fixture.visible,
+            boundary);
+
+        assertThat(result.diagnostics().rounds()).isZero();
+        assertThat(result.diagnostics().verifications()).isZero();
+        assertThat(result.diagnostics().repairsApplied()).isEmpty();
+        assertThat(result.diagnostics().conflictsResidual()).containsExactly(conflicted);
+        assertThat(result.diagnostics().verificationBudgetExhausted()).isFalse();
+        assertThat(result.diagnostics().detectionTruncated()).isFalse();
+        assertThat(result.diagnostics().indexBudgetExhausted()).isFalse();
+        assertThat(result.appliedDisplacements()).isEmpty();
+        assertThat(result.positions().nodes().get(obstructing)).isEqualTo(LayoutPoint.of(0.0, 0.0));
+        for (final ProjectedNodeKey key : fixture.keys()) {
+            assertThat(result.positions().nodes().get(key))
+                .isEqualTo(boundary.positions().nodes().get(key));
+        }
+    }
+
+    @Test
+    public void acceptsTheC2TargetAtExactlyTheMaximumExcursion() {
+        // The same 62-radius disc one unit off the chord: the same-side direct target moves
+        // exactly 64 units (the inclusive limit) while the opposite direct target moves 66 and both
+        // diagonals move more than 147. Only the boundary target survives generation, it really
+        // clears, and a ">=" comparison would instead leave the frame unrepaired.
+        final Fixture fixture = excursionBoundaryFixture();
+        final double radius = 62.0;
+        final BoundarySeparationResult boundary =
+            fixture.boundaryWithNodeRadius(fixture.key(2), radius);
+        final ProjectedNodeKey obstructing = fixture.key(2);
+        final ProjectedEdgeKey edgeKey = fixture.projection.edges().get(0).key();
+
+        assertThat(boundary.geometry().nodes().get(obstructing).radius()).isEqualTo(radius);
+        assertThat(EdgeConflictCorrection.detectConflicts(fixture.projection, boundary.positions(),
+            boundary.geometry(), fixture.visible).keys()).containsExactly(
+                CanonicalKeys.edgeNodePair(edgeKey, obstructing));
+
+        final EdgeConflictResult result = new EdgeConflictCorrection().apply(fixture.projection,
+            boundary.positions(), METRICS, Collections.<PinProjection>emptyList(), fixture.visible,
+            boundary);
+
+        assertThat(result.diagnostics().rounds()).isEqualTo(1);
+        assertThat(result.diagnostics().verifications()).isEqualTo(1);
+        assertThat(result.diagnostics().repairsApplied()).hasSize(1);
+        final EdgeConflictDiagnostics.Repair repair = result.diagnostics().repairsApplied().get(0);
+        assertThat(repair.kind()).isEqualTo(EdgeConflictDiagnostics.RepairKind.TRANSLATION);
+        assertThat(repair.nodeKeys()).containsExactly(obstructing);
+        assertThat(repair.fromCentres().get(obstructing)).isEqualTo(LayoutPoint.of(0.0, 1.0));
+        assertThat(repair.toCentres().get(obstructing)).isEqualTo(LayoutPoint.of(0.0, 65.0));
+        assertThat(repair.batchIndex()).isZero();
+        assertThat(result.positions().nodes().get(obstructing)).isEqualTo(LayoutPoint.of(0.0, 65.0));
+        assertThat(result.diagnostics().edgeOverNodeDetected()).isEqualTo(1);
+        assertThat(result.diagnostics().edgeOverNodeResolved()).isEqualTo(1);
+        assertThat(result.diagnostics().crossingsDetected()).isZero();
+        assertThat(result.diagnostics().conflictsResidual()).isEmpty();
+        assertThat(result.diagnostics().verificationBudgetExhausted()).isFalse();
+        assertThat(result.diagnostics().detectionTruncated()).isFalse();
+
+        final Set<ProjectedEdgeKey> expectedEdges = new LinkedHashSet<ProjectedEdgeKey>();
+        expectedEdges.add(edgeKey);
+        final GraphGeometry geometry = publishedGeometry(fixture, result);
+        final EdgePaths paths = routed(fixture, result);
+        assertClearPaths(fixture.projection, geometry, paths, expectedEdges);
+        // The accepted target really clears the supplied 62-radius disc (65 - 62 == 3.0), so the
+        // repair is legitimate rather than merely installed.
+        final double toChord = segmentDistance(result.positions().nodes().get(obstructing),
+            boundary.geometry().edgeAttachment(fixture.projection.edges().get(0).first(),
+                boundary.positions().nodes().get(fixture.key(1))),
+            boundary.geometry().edgeAttachment(fixture.projection.edges().get(0).second(),
+                boundary.positions().nodes().get(fixture.key(0))));
+        assertThat(toChord - radius).isGreaterThanOrEqualTo(3.0 - 1e-9);
+        assertThat(toChord).isEqualTo(65.0);
+        final EdgePath straight = paths.byEdge().get(edgeKey);
+        assertThat(straight.shape()).isEqualTo(EdgePath.Shape.STRAIGHT);
+        assertThat(straight.samples()).containsExactly(LayoutPoint.of(-92.0, 0.0),
+            LayoutPoint.of(92.0, 0.0));
+        assertThat(straight.length()).isEqualTo(184.0);
+    }
+
+    @Test
     public void measuresThePointToClosedSegmentDistanceIndependently() {
         // Interior perpendicular projection.
         assertThat(segmentDistance(LayoutPoint.of(0.0, 5.0), LayoutPoint.of(-10.0, 0.0),
@@ -934,6 +1065,18 @@ public class EdgeConflictCorrectionShould {
             new String[] {"A", "B", "N", "O1", "O2", "O3", "O4", "O5", "O6"},
             new double[] {-100, 0, 100, 0, 0, 0, 0, -22, 0, -44, 0, -66, 0, 22, 0, 44, 0, 66},
             new int[][] {{0, 1}});
+    }
+
+    /** The obstructing disc exactly on the chord, so every family target is 65 or farther. */
+    private static Fixture overExcursionFixture() {
+        return clearanceFixture(new String[] {"A", "B", "N"},
+            new double[] {-100, 0, 100, 0, 0, 0}, new int[][] {{0, 1}});
+    }
+
+    /** The obstructing disc one unit off the chord, so one direct target moves exactly 64. */
+    private static Fixture excursionBoundaryFixture() {
+        return clearanceFixture(new String[] {"A", "B", "N"},
+            new double[] {-100, 0, 100, 0, 0, 1}, new int[][] {{0, 1}});
     }
 
     private static EdgePaths routed(final Fixture fixture, final EdgeConflictResult result) {
@@ -1269,6 +1412,25 @@ public class EdgeConflictCorrectionShould {
                 new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
             for (final ProjectedNodeKey key : keys) {
                 nodeGeometry.put(key, NodeGeometry.of(boundary.positions().nodes().get(key), radius));
+            }
+            return new BoundarySeparationResult(boundary.positions(),
+                GraphGeometry.of(nodeGeometry, boundary.geometry().hulls()), boundary.diagnostics(),
+                boundary.nodeResidualViolations(), boundary.timings());
+        }
+
+        /**
+         * The same published positions with a different supplied actual drawn radius for one node.
+         * A detected C2 disc must be honoured at whatever radius the terminal geometry carries, so
+         * this is the only way to reach targets near the 64-unit excursion limit: production
+         * prominence radii stay at or below 14.
+         */
+        private BoundarySeparationResult boundaryWithNodeRadius(final ProjectedNodeKey changed,
+                final double radius) {
+            final Map<ProjectedNodeKey, NodeGeometry> nodeGeometry =
+                new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
+            for (final ProjectedNodeKey key : keys) {
+                nodeGeometry.put(key, NodeGeometry.of(boundary.positions().nodes().get(key),
+                    key.equals(changed) ? radius : boundary.geometry().nodes().get(key).radius()));
             }
             return new BoundarySeparationResult(boundary.positions(),
                 GraphGeometry.of(nodeGeometry, boundary.geometry().hulls()), boundary.diagnostics(),
