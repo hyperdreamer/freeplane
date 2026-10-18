@@ -283,9 +283,6 @@ public class GraphWorkspaceLifecycleShould {
             canvasRegistration = binding.addCanvasStateListener(state -> canvasCallbacks.incrementAndGet());
             statusRegistration = binding.addSessionStatusListener(status -> statusCallbacks.incrementAndGet());
 
-            assertThat(callbackHandle.execute(GraphCommands.viewport(Viewport.of(13, 14, 1.6,
-                Collections.emptyList()))).status()).isEqualTo(GraphCommandResult.Status.APPLIED);
-            assertThat(firstProjectionEntered.await(5, TimeUnit.SECONDS)).isTrue();
             final AtomicReference<Throwable> closeFailure = new AtomicReference<Throwable>();
             final Thread closing = new Thread(() -> {
                 try {
@@ -295,8 +292,13 @@ public class GraphWorkspaceLifecycleShould {
                     closeFailure.set(failure);
                 }
             }, "graph-workspace-stale-callback-close-probe");
-            closing.start();
+            boolean closingStarted = false;
             try {
+                assertThat(callbackHandle.execute(GraphCommands.viewport(Viewport.of(13, 14, 1.6,
+                    Collections.emptyList()))).status()).isEqualTo(GraphCommandResult.Status.APPLIED);
+                assertThat(firstProjectionEntered.await(5, TimeUnit.SECONDS)).isTrue();
+                closing.start();
+                closingStarted = true;
                 GraphWorkspaceIntegrationSupport.awaitCondition(() -> {
                     try {
                         callbackHandle.execute(GraphCommands.viewport(Viewport.of(15, 16, 1.7,
@@ -307,6 +309,9 @@ public class GraphWorkspaceLifecycleShould {
                         return true;
                     }
                 }, 5000L, "close did not cross the handle closing boundary");
+                GraphWorkspaceIntegrationSupport.awaitCondition(
+                    () -> freeplane.mapLifecycleListenerCount() == baseline.mapLifecycleListeners,
+                    5000L, "close did not detach workspace map lifecycle listeners");
                 GraphWorkspaceIntegrationSupport.awaitCondition(() -> {
                     try {
                         binding.addCanvasStateListener(state -> {
@@ -320,7 +325,9 @@ public class GraphWorkspaceLifecycleShould {
             }
             finally {
                 releaseFirstProjection.countDown();
-                closing.join(10000L);
+                if (closingStarted) {
+                    closing.join(10000L);
+                }
             }
             assertThat(closing.isAlive()).as("close thread completed").isFalse();
             assertThat(closeFailure.get()).isNull();
