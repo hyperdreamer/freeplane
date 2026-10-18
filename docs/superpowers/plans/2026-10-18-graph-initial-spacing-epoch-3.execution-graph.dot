@@ -1,0 +1,19 @@
+digraph execution {
+  rankdir=LR;
+  subgraph cluster_spacing {
+    label="spacing";
+    "T-001" [label="T-001: Scope accessibility headless assumptions"];
+    "T-002" [label="T-002: Prove window-manager capability and boun"];
+    "T-003" [label="T-003: Pin the measured eleven-conflict golden "];
+    "T-004" [label="T-004: Establish the lifecycle teardown barrier"];
+    "T-005" [label="T-005: Collect common-tree supporting evidence "];
+    "T-006" [label="T-006: Write the receipt-backed acceptance reco"];
+  }
+  "T-001" -> "T-002";
+  "T-002" -> "T-003";
+  "T-003" -> "T-004";
+  "T-004" -> "T-005";
+  "T-005" -> "T-006";
+  // source-plan sha256 febc017277b6b03ceaa4e68f96c41f466575b79ecf7c1f25b42fd3df1067cc92
+  // manifest sha256 9d7967c2ce69280e92b8bb02606d71102546524f4bd6a64a5d86908b0b6d699d
+}

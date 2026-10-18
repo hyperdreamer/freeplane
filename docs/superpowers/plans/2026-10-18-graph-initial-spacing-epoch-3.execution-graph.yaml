@@ -1,0 +1,428 @@
+# Generated from the committed source plan; YAML is canonical scheduling input.
+version: 1
+run_id: pm-run-20261016-125451-a5048653
+topic: graph-initial-spacing
+epoch: 3
+source_plan:
+  path: docs/superpowers/plans/2026-10-18-graph-initial-spacing-epoch-3.md
+  sha256: febc017277b6b03ceaa4e68f96c41f466575b79ecf7c1f25b42fd3df1067cc92
+  commit_oid: 234deacce31e64a8a7dbbc51332b4c8588fd5008
+  task_count: 6
+lanes:
+  - id: spacing
+    task_ids: [T-001, T-002, T-003, T-004, T-005, T-006]
+tasks:
+  - id: T-001
+    plan_task: 1
+    title: "Scope accessibility headless assumptions to the two actual-window methods"
+    implementer_tier: "Advanced"
+    lane: "spacing"
+    sequence: 1
+    depends_on: []
+    ownership:
+      paths:
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/AccessibleGraphCanvasShould.java
+    external_evidence:
+    - /data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/reports/epoch-3/task-1/**
+    - /data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/scripts/epoch-3/**
+    resources: []
+    produces:
+    - id: iface.t1.1
+      signature: "the unchanged 11 test methods with assumptions only in `receiveTabThroughSwingDispatchAndRestoreFocusTraversalConfiguration()` and `ignoreEnterForSelectionsAbsentFromCurrentVisibleOrderAfterStateReplacement()`."
+      sha256: 5c7ac87e63ce4c03f0a97db5dd9f8ea1e59536f74018cbfb2077e88d8a68b9a9
+    - id: iface.t1.2
+      signature: "`python3 record-run.py [--allow-dirty] RECEIPT_DIR -- COMMAND [ARG ...] -> command exit code`, or exit 78 for prerequisite/provenance/cleanup BLOCKED. It writes `run.json`, `gradle.log`, process evidence and copies command artifacts; it never changes source. `--allow-dirty` is for provisional iterations only."
+      sha256: 5976c34fa857fc6b1345ac4bdeee9c15bf2c2182637e5390cdd880ce09344c5d
+    - id: iface.t1.3
+      signature: "`python3 seal-evidence.py DIR -> 0`, writing one `SHA256SUMS` manifest plus `SHA256SUMS.sha256`, rejecting an already sealed directory. Tasks 2\u20136 consume these exact CLIs and `run.json` fields."
+      sha256: d5eaaad854e2eb4b28b53a547931e5046087fca5aecc2c13c673d6229f4c3aba
+    - id: iface.t1.4
+      signature: "provisional accessibility receipts with explicit source identity. Final supporting runs 1 and 2 are replayed by Task 5 at the common candidate tree."
+      sha256: efc8f741a6e3915847dd9e18221d77dec34996331b425a364ea40df0a9753d8c
+    consumes: []
+    interfaces:
+      produces:
+      - id: iface.t1.1
+        signature: "the unchanged 11 test methods with assumptions only in `receiveTabThroughSwingDispatchAndRestoreFocusTraversalConfiguration()` and `ignoreEnterForSelectionsAbsentFromCurrentVisibleOrderAfterStateReplacement()`."
+        sha256: 5c7ac87e63ce4c03f0a97db5dd9f8ea1e59536f74018cbfb2077e88d8a68b9a9
+      - id: iface.t1.2
+        signature: "`python3 record-run.py [--allow-dirty] RECEIPT_DIR -- COMMAND [ARG ...] -> command exit code`, or exit 78 for prerequisite/provenance/cleanup BLOCKED. It writes `run.json`, `gradle.log`, process evidence and copies command artifacts; it never changes source. `--allow-dirty` is for provisional iterations only."
+        sha256: 5976c34fa857fc6b1345ac4bdeee9c15bf2c2182637e5390cdd880ce09344c5d
+      - id: iface.t1.3
+        signature: "`python3 seal-evidence.py DIR -> 0`, writing one `SHA256SUMS` manifest plus `SHA256SUMS.sha256`, rejecting an already sealed directory. Tasks 2\u20136 consume these exact CLIs and `run.json` fields."
+        sha256: d5eaaad854e2eb4b28b53a547931e5046087fca5aecc2c13c673d6229f4c3aba
+      - id: iface.t1.4
+        signature: "provisional accessibility receipts with explicit source identity. Final supporting runs 1 and 2 are replayed by Task 5 at the common candidate tree."
+        sha256: efc8f741a6e3915847dd9e18221d77dec34996331b425a364ea40df0a9753d8c
+      consumes: []
+    validation:
+      - argv: ["python3", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/scripts/epoch-3/record-run.py", "--allow-dirty", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/reports/epoch-3/task-1/headless-green", "--", "gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould", "--console=plain", "-PTestLoggingFull", "--rerun-tasks"]
+        cwd: lane
+        timeout_seconds: 3600
+        environment: java21-headless-build
+      - argv: ["python3", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/scripts/epoch-3/record-run.py", "--allow-dirty", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/reports/epoch-3/task-1/display-green", "--", "env", "-u", "JAVA_TOOL_OPTIONS", "xvfb-run", "-a", "gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould", "--console=plain", "-PTestLoggingFull", "--rerun-tasks"]
+        cwd: lane
+        timeout_seconds: 3600
+        environment: java21-headless-build
+  - id: T-002
+    plan_task: 2
+    title: "Prove window-manager capability and bounded maximized-window stability"
+    implementer_tier: "Advanced"
+    lane: "spacing"
+    sequence: 2
+    depends_on: [T-001]
+    ownership:
+      paths:
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindowModelShould.java
+    external_evidence:
+    - /data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/reports/epoch-3/task-2/**
+    - /data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/scripts/epoch-3/**
+    resources: []
+    produces:
+    - id: iface.t2.1
+      signature: "test-only `queryRootProperty(String): String`, `requiredWorkArea(): Rectangle`, and `requireWindowManager(String): void`; their query output includes the same `DISPLAY` and raw property bytes in JUnit stdout. No public API is added."
+      sha256: c84a008e574924a3418fa5c414f038409b7058a8741a11d437863edce992ae5b
+    - id: iface.t2.2
+      signature: "`bash run-openbox-window-probe.sh CANDIDATE_ROOT RECEIPT_DIR -> 0/1/78`; inner argument `--inner` is private to the runner. Exit 78 plus `WM_PREREQUISITE_MISSING:OPENBOX_3_6_1` means prerequisite BLOCKED. The outer receipt records the exact public invocation, and Task 5 replays it as supporting run 4."
+      sha256: f212a2f7f9c9009fb025f9a1547036481e2a99c491268d656a63a4fc1cb5a306
+    - id: iface.t2.3
+      signature: "method-level optional absence proof and full-class Openbox evidence; normal-window/F11 methods remain active. Final supporting runs 3/4 are replayed at Task 5's common candidate tree."
+      sha256: 1c9ed6286fe4da694667577ee9dc0b39ffba99fc22b6a9bd3a0922eed7234df3
+    consumes:
+    - id: consumed.t2.iface.t1.1
+      producer_task: T-001
+      interface_id: iface.t1.1
+      signature: "the unchanged 11 test methods with assumptions only in `receiveTabThroughSwingDispatchAndRestoreFocusTraversalConfiguration()` and `ignoreEnterForSelectionsAbsentFromCurrentVisibleOrderAfterStateReplacement()`."
+      sha256: 5c7ac87e63ce4c03f0a97db5dd9f8ea1e59536f74018cbfb2077e88d8a68b9a9
+    interfaces:
+      produces:
+      - id: iface.t2.1
+        signature: "test-only `queryRootProperty(String): String`, `requiredWorkArea(): Rectangle`, and `requireWindowManager(String): void`; their query output includes the same `DISPLAY` and raw property bytes in JUnit stdout. No public API is added."
+        sha256: c84a008e574924a3418fa5c414f038409b7058a8741a11d437863edce992ae5b
+      - id: iface.t2.2
+        signature: "`bash run-openbox-window-probe.sh CANDIDATE_ROOT RECEIPT_DIR -> 0/1/78`; inner argument `--inner` is private to the runner. Exit 78 plus `WM_PREREQUISITE_MISSING:OPENBOX_3_6_1` means prerequisite BLOCKED. The outer receipt records the exact public invocation, and Task 5 replays it as supporting run 4."
+        sha256: f212a2f7f9c9009fb025f9a1547036481e2a99c491268d656a63a4fc1cb5a306
+      - id: iface.t2.3
+        signature: "method-level optional absence proof and full-class Openbox evidence; normal-window/F11 methods remain active. Final supporting runs 3/4 are replayed at Task 5's common candidate tree."
+        sha256: 1c9ed6286fe4da694667577ee9dc0b39ffba99fc22b6a9bd3a0922eed7234df3
+      consumes:
+      - id: consumed.t2.iface.t1.1
+        producer_task: T-001
+        interface_id: iface.t1.1
+        signature: "the unchanged 11 test methods with assumptions only in `receiveTabThroughSwingDispatchAndRestoreFocusTraversalConfiguration()` and `ignoreEnterForSelectionsAbsentFromCurrentVisibleOrderAfterStateReplacement()`."
+        sha256: 5c7ac87e63ce4c03f0a97db5dd9f8ea1e59536f74018cbfb2077e88d8a68b9a9
+    validation:
+      - argv: ["python3", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/scripts/epoch-3/record-run.py", "--allow-dirty", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/reports/epoch-3/task-2/bare-optional", "--", "env", "-u", "JAVA_TOOL_OPTIONS", "FREEPLANE_GRAPH_TEST_WINDOW_MANAGER=optional", "xvfb-run", "-a", "gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.window.GraphWorkspaceWindowModelShould.f11RestoresBoundsAndExtendedStateFromMaximizedWindow", "--console=plain", "-PTestLoggingFull", "--rerun-tasks"]
+        cwd: lane
+        timeout_seconds: 3600
+        environment: java21-headless-build
+      - argv: ["python3", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/scripts/epoch-3/record-run.py", "--allow-dirty", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/reports/epoch-3/task-2/bare-required", "--", "env", "-u", "JAVA_TOOL_OPTIONS", "FREEPLANE_GRAPH_TEST_WINDOW_MANAGER=required", "xvfb-run", "-a", "gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.window.GraphWorkspaceWindowModelShould.f11RestoresBoundsAndExtendedStateFromMaximizedWindow", "--console=plain", "-PTestLoggingFull", "--rerun-tasks"]
+        cwd: lane
+        timeout_seconds: 3600
+        environment: java21-headless-build
+      - argv: ["python3", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/scripts/epoch-3/record-run.py", "--allow-dirty", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/reports/epoch-3/task-2/invalid-mode", "--", "env", "-u", "JAVA_TOOL_OPTIONS", "FREEPLANE_GRAPH_TEST_WINDOW_MANAGER=invalid", "xvfb-run", "-a", "gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.window.GraphWorkspaceWindowModelShould.f11RestoresBoundsAndExtendedStateFromMaximizedWindow", "--console=plain", "-PTestLoggingFull", "--rerun-tasks"]
+        cwd: lane
+        timeout_seconds: 3600
+        environment: java21-headless-build
+      - argv: ["python3", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/scripts/epoch-3/record-run.py", "--allow-dirty", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/reports/epoch-3/task-2/openbox-class", "--", "env", "-u", "JAVA_TOOL_OPTIONS", "PM_RUN_ROOT=/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653", "bash", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/scripts/epoch-3/run-openbox-window-probe.sh", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/reports/epoch-3/task-5/candidate-root", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/reports/epoch-3/task-2/openbox-class"]
+        cwd: lane
+        timeout_seconds: 3600
+        environment: java21-headless-build
+  - id: T-003
+    plan_task: 3
+    title: "Pin the measured eleven-conflict golden and four-sample provenance"
+    implementer_tier: "Advanced"
+    lane: "spacing"
+    sequence: 3
+    depends_on: [T-002]
+    ownership:
+      paths:
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/GraphWorkspacePerformanceDiagnostic.java
+    external_evidence:
+    - /data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/reports/epoch-3/task-3/**
+    - /data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/scripts/epoch-3/**
+    resources: []
+    produces:
+    - id: iface.t3.1
+      signature: "exact constant 11 and semantic validation of all 11 reasons, 2/9 kind split and every unordered persisted pin set. No order-dependent pin lookup remains in this branch."
+      sha256: f057ade1044e15a4b70e60745f631e5f87893df33841aeac5a6e793850e1cd80
+    - id: iface.t3.2
+      signature: "`org.freeplane.plugin.graph.performance.ConflictProbe OUTPUT_JSONL -> 0/1`, four fresh-worker first submissions of the exact fixture, each with a 5-second await, full conflict details and diagnostic guard verification; `bash run-conflict-probe.sh [--allow-dirty] -> sequence exit code`, consuming exported `EVIDENCE_ROOT` plus the staged `two-pinned-conflicts/ConflictProbe.java` and `classpath.init.gradle`. It writes per-command receipts beneath that directory. An enclosing common recorder writes the aggregate `run.json`. Task 5 copies the immutable template into its final fresh probe directory and repeats the exact Section 17.1 sequence."
+      sha256: 346cf0d4babecb3149d9d3833bbab7e796509d8a5724307c6bb521e8d800eccb
+    - id: iface.t3.3
+      signature: "baseline-20 provenance receipt and provisional candidate-11 receipt; neither earlier epoch-2 samples nor this intermediate task tree is final acceptance evidence."
+      sha256: 349ee249d0de4b45ee83c34ed958b6de73b8cc72f29261c2bfa80e50ab93761d
+    consumes:
+    - id: consumed.t3.iface.t1.1
+      producer_task: T-001
+      interface_id: iface.t1.1
+      signature: "the unchanged 11 test methods with assumptions only in `receiveTabThroughSwingDispatchAndRestoreFocusTraversalConfiguration()` and `ignoreEnterForSelectionsAbsentFromCurrentVisibleOrderAfterStateReplacement()`."
+      sha256: 5c7ac87e63ce4c03f0a97db5dd9f8ea1e59536f74018cbfb2077e88d8a68b9a9
+    interfaces:
+      produces:
+      - id: iface.t3.1
+        signature: "exact constant 11 and semantic validation of all 11 reasons, 2/9 kind split and every unordered persisted pin set. No order-dependent pin lookup remains in this branch."
+        sha256: f057ade1044e15a4b70e60745f631e5f87893df33841aeac5a6e793850e1cd80
+      - id: iface.t3.2
+        signature: "`org.freeplane.plugin.graph.performance.ConflictProbe OUTPUT_JSONL -> 0/1`, four fresh-worker first submissions of the exact fixture, each with a 5-second await, full conflict details and diagnostic guard verification; `bash run-conflict-probe.sh [--allow-dirty] -> sequence exit code`, consuming exported `EVIDENCE_ROOT` plus the staged `two-pinned-conflicts/ConflictProbe.java` and `classpath.init.gradle`. It writes per-command receipts beneath that directory. An enclosing common recorder writes the aggregate `run.json`. Task 5 copies the immutable template into its final fresh probe directory and repeats the exact Section 17.1 sequence."
+        sha256: 346cf0d4babecb3149d9d3833bbab7e796509d8a5724307c6bb521e8d800eccb
+      - id: iface.t3.3
+        signature: "baseline-20 provenance receipt and provisional candidate-11 receipt; neither earlier epoch-2 samples nor this intermediate task tree is final acceptance evidence."
+        sha256: 349ee249d0de4b45ee83c34ed958b6de73b8cc72f29261c2bfa80e50ab93761d
+      consumes:
+      - id: consumed.t3.iface.t1.1
+        producer_task: T-001
+        interface_id: iface.t1.1
+        signature: "the unchanged 11 test methods with assumptions only in `receiveTabThroughSwingDispatchAndRestoreFocusTraversalConfiguration()` and `ignoreEnterForSelectionsAbsentFromCurrentVisibleOrderAfterStateReplacement()`."
+        sha256: 5c7ac87e63ce4c03f0a97db5dd9f8ea1e59536f74018cbfb2077e88d8a68b9a9
+    validation:
+      - argv: ["python3", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/scripts/epoch-3/record-run.py", "--allow-dirty", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/reports/epoch-3/task-3/probe-green/build-command", "--", "gradle", ":freeplane_plugin_graph:testClasses", ":freeplane_plugin_graph:printSpacingTestClasspath", "--console=plain"]
+        cwd: lane
+        timeout_seconds: 3600
+        environment: java21-headless-build
+      - argv: ["python3", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/scripts/epoch-3/record-run.py", "--allow-dirty", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/reports/epoch-3/task-3/probe-green/probe-command", "--", "java", "-Duser.language=en", "-Duser.country=US", "org.freeplane.plugin.graph.performance.ConflictProbe", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/reports/epoch-3/task-3/probe-green/two-pinned-conflicts/samples.jsonl"]
+        cwd: lane
+        timeout_seconds: 3600
+        environment: java21-headless-build
+  - id: T-004
+    plan_task: 4
+    title: "Establish the lifecycle teardown barrier and kill the disposable closed-guard mutant"
+    implementer_tier: "Advanced"
+    lane: "spacing"
+    sequence: 4
+    depends_on: [T-003]
+    ownership:
+      paths:
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/integration/GraphWorkspaceLifecycleShould.java
+    external_evidence:
+    - /data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/reports/epoch-3/task-4/**
+    - /data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/scripts/epoch-3/**
+    resources: []
+    produces:
+    - id: iface.t4.1
+      signature: "order `baseline -> observed listener increase -> off-EDT close -> handle rejection -> listener baseline restored -> release blocked listener -> bounded close join`. Callback-registration rejection remains supporting observation only."
+      sha256: 5d03926356e7fe94741c8ef35f3016574cbe879c066b70db46345b3c7636300b
+    - id: iface.t4.2
+      signature: "`python3 run-lifecycle-mutant.py CANDIDATE_ROOT CLASSPATH_FILE RECEIPT_DIR -> 0` only when the real method passes with production classes and fails with the one copied per-listener closed check removed. The receipt records green/mutant exit codes, assertion text, source/class hashes and unchanged active source/tree."
+      sha256: fe731c2f27110ea3f1d2b671c2da9745d75f52c54360b79c7cf0de02bc7d7c11
+    - id: iface.t4.3
+      signature: "a reviewed clean lane head containing all four authorized test changes, ready for Task 5's common-tree evidence collection."
+      sha256: d9c8150f57294235778bb4d7b1eaddb37d1ea111495ea567f7a8914593f89b4c
+    consumes:
+    - id: consumed.t4.iface.t1.1
+      producer_task: T-001
+      interface_id: iface.t1.1
+      signature: "the unchanged 11 test methods with assumptions only in `receiveTabThroughSwingDispatchAndRestoreFocusTraversalConfiguration()` and `ignoreEnterForSelectionsAbsentFromCurrentVisibleOrderAfterStateReplacement()`."
+      sha256: 5c7ac87e63ce4c03f0a97db5dd9f8ea1e59536f74018cbfb2077e88d8a68b9a9
+    interfaces:
+      produces:
+      - id: iface.t4.1
+        signature: "order `baseline -> observed listener increase -> off-EDT close -> handle rejection -> listener baseline restored -> release blocked listener -> bounded close join`. Callback-registration rejection remains supporting observation only."
+        sha256: 5d03926356e7fe94741c8ef35f3016574cbe879c066b70db46345b3c7636300b
+      - id: iface.t4.2
+        signature: "`python3 run-lifecycle-mutant.py CANDIDATE_ROOT CLASSPATH_FILE RECEIPT_DIR -> 0` only when the real method passes with production classes and fails with the one copied per-listener closed check removed. The receipt records green/mutant exit codes, assertion text, source/class hashes and unchanged active source/tree."
+        sha256: fe731c2f27110ea3f1d2b671c2da9745d75f52c54360b79c7cf0de02bc7d7c11
+      - id: iface.t4.3
+        signature: "a reviewed clean lane head containing all four authorized test changes, ready for Task 5's common-tree evidence collection."
+        sha256: d9c8150f57294235778bb4d7b1eaddb37d1ea111495ea567f7a8914593f89b4c
+      consumes:
+      - id: consumed.t4.iface.t1.1
+        producer_task: T-001
+        interface_id: iface.t1.1
+        signature: "the unchanged 11 test methods with assumptions only in `receiveTabThroughSwingDispatchAndRestoreFocusTraversalConfiguration()` and `ignoreEnterForSelectionsAbsentFromCurrentVisibleOrderAfterStateReplacement()`."
+        sha256: 5c7ac87e63ce4c03f0a97db5dd9f8ea1e59536f74018cbfb2077e88d8a68b9a9
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.integration.GraphWorkspaceLifecycleShould", "--console=plain", "-PTestLoggingFull", "--rerun-tasks"]
+        cwd: lane
+        timeout_seconds: 3600
+        environment: java21-headless-build
+      - argv: ["gradle", ":freeplane_plugin_graph:clean", ":freeplane_plugin_graph:check", ":freeplane_plugin_graph:test", ":freeplane_plugin_graph:build", "--console=plain", "-PTestLoggingFull"]
+        cwd: lane
+        timeout_seconds: 3600
+        environment: java21-headless-build
+      - argv: ["gradle", "test", "--console=plain", "-PTestLoggingFull"]
+        cwd: lane
+        timeout_seconds: 3600
+        environment: java21-headless-build
+      - argv: ["python3", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/scripts/epoch-3/run-lifecycle-mutant.py", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/reports/epoch-3/task-5/candidate-root", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/reports/epoch-3/task-4/classpath.txt", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/reports/epoch-3/task-4/mutant"]
+        cwd: lane
+        timeout_seconds: 3600
+        environment: java21-headless-build
+  - id: T-005
+    plan_task: 5
+    title: "Collect common-tree supporting evidence and all four final integration gates"
+    implementer_tier: "Standard"
+    lane: "spacing"
+    sequence: 5
+    depends_on: [T-004]
+    ownership:
+      paths: []
+    external_evidence:
+    - /data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/reports/epoch-3/task-5/**
+    - /data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/scripts/epoch-3/**
+    resources: []
+    produces:
+    - id: iface.t5.1
+      signature: "`$EPOCH3_ROOT/task-5/candidate.json` with absolute root, candidate commit/tree, source hashes and clean status; six supporting receipts and four gate receipts pinned to that same tree."
+      sha256: ff7a83c74d5f773f2be540b380dcf54e066817e6525282394e8fce7e5a2a4611
+    - id: iface.t5.2
+      signature: "`$EPOCH3_ROOT/task-5/evidence-index.json` containing six `supportingRuns` and four `finalGates`, each with `id`, `status`, `receiptPath`, `manifestSha256`, `candidateHead`, `candidateTree`, `exitStatus`, `cleanupComplete` and requirement IDs; missing evidence has a reason and no invented digest."
+      sha256: 4c822a9ec042c125c60bbfb722822e5d6c0cbb86cc49857efda068b88ae918fc
+    - id: iface.t5.3
+      signature: "honest four-state gate outcomes. All commands succeeding is necessary but insufficient for overall acceptance; Task 6 must still verify final lane/integration/delivery tree equality and the unresolved document-commit conflict."
+      sha256: 8ef72185fff71d533cab51d330817155fa1a904b10f169a5806d1d3dcf8cdb73
+    consumes:
+    - id: consumed.t5.iface.t1.1
+      producer_task: T-001
+      interface_id: iface.t1.1
+      signature: "the unchanged 11 test methods with assumptions only in `receiveTabThroughSwingDispatchAndRestoreFocusTraversalConfiguration()` and `ignoreEnterForSelectionsAbsentFromCurrentVisibleOrderAfterStateReplacement()`."
+      sha256: 5c7ac87e63ce4c03f0a97db5dd9f8ea1e59536f74018cbfb2077e88d8a68b9a9
+    - id: consumed.t5.iface.t1.2
+      producer_task: T-001
+      interface_id: iface.t1.2
+      signature: "`python3 record-run.py [--allow-dirty] RECEIPT_DIR -- COMMAND [ARG ...] -> command exit code`, or exit 78 for prerequisite/provenance/cleanup BLOCKED. It writes `run.json`, `gradle.log`, process evidence and copies command artifacts; it never changes source. `--allow-dirty` is for provisional iterations only."
+      sha256: 5976c34fa857fc6b1345ac4bdeee9c15bf2c2182637e5390cdd880ce09344c5d
+    - id: consumed.t5.iface.t2.1
+      producer_task: T-002
+      interface_id: iface.t2.1
+      signature: "test-only `queryRootProperty(String): String`, `requiredWorkArea(): Rectangle`, and `requireWindowManager(String): void`; their query output includes the same `DISPLAY` and raw property bytes in JUnit stdout. No public API is added."
+      sha256: c84a008e574924a3418fa5c414f038409b7058a8741a11d437863edce992ae5b
+    - id: consumed.t5.iface.t3.1
+      producer_task: T-003
+      interface_id: iface.t3.1
+      signature: "exact constant 11 and semantic validation of all 11 reasons, 2/9 kind split and every unordered persisted pin set. No order-dependent pin lookup remains in this branch."
+      sha256: f057ade1044e15a4b70e60745f631e5f87893df33841aeac5a6e793850e1cd80
+    - id: consumed.t5.iface.t4.1
+      producer_task: T-004
+      interface_id: iface.t4.1
+      signature: "order `baseline -> observed listener increase -> off-EDT close -> handle rejection -> listener baseline restored -> release blocked listener -> bounded close join`. Callback-registration rejection remains supporting observation only."
+      sha256: 5d03926356e7fe94741c8ef35f3016574cbe879c066b70db46345b3c7636300b
+    interfaces:
+      produces:
+      - id: iface.t5.1
+        signature: "`$EPOCH3_ROOT/task-5/candidate.json` with absolute root, candidate commit/tree, source hashes and clean status; six supporting receipts and four gate receipts pinned to that same tree."
+        sha256: ff7a83c74d5f773f2be540b380dcf54e066817e6525282394e8fce7e5a2a4611
+      - id: iface.t5.2
+        signature: "`$EPOCH3_ROOT/task-5/evidence-index.json` containing six `supportingRuns` and four `finalGates`, each with `id`, `status`, `receiptPath`, `manifestSha256`, `candidateHead`, `candidateTree`, `exitStatus`, `cleanupComplete` and requirement IDs; missing evidence has a reason and no invented digest."
+        sha256: 4c822a9ec042c125c60bbfb722822e5d6c0cbb86cc49857efda068b88ae918fc
+      - id: iface.t5.3
+        signature: "honest four-state gate outcomes. All commands succeeding is necessary but insufficient for overall acceptance; Task 6 must still verify final lane/integration/delivery tree equality and the unresolved document-commit conflict."
+        sha256: 8ef72185fff71d533cab51d330817155fa1a904b10f169a5806d1d3dcf8cdb73
+      consumes:
+      - id: consumed.t5.iface.t1.1
+        producer_task: T-001
+        interface_id: iface.t1.1
+        signature: "the unchanged 11 test methods with assumptions only in `receiveTabThroughSwingDispatchAndRestoreFocusTraversalConfiguration()` and `ignoreEnterForSelectionsAbsentFromCurrentVisibleOrderAfterStateReplacement()`."
+        sha256: 5c7ac87e63ce4c03f0a97db5dd9f8ea1e59536f74018cbfb2077e88d8a68b9a9
+      - id: consumed.t5.iface.t1.2
+        producer_task: T-001
+        interface_id: iface.t1.2
+        signature: "`python3 record-run.py [--allow-dirty] RECEIPT_DIR -- COMMAND [ARG ...] -> command exit code`, or exit 78 for prerequisite/provenance/cleanup BLOCKED. It writes `run.json`, `gradle.log`, process evidence and copies command artifacts; it never changes source. `--allow-dirty` is for provisional iterations only."
+        sha256: 5976c34fa857fc6b1345ac4bdeee9c15bf2c2182637e5390cdd880ce09344c5d
+      - id: consumed.t5.iface.t2.1
+        producer_task: T-002
+        interface_id: iface.t2.1
+        signature: "test-only `queryRootProperty(String): String`, `requiredWorkArea(): Rectangle`, and `requireWindowManager(String): void`; their query output includes the same `DISPLAY` and raw property bytes in JUnit stdout. No public API is added."
+        sha256: c84a008e574924a3418fa5c414f038409b7058a8741a11d437863edce992ae5b
+      - id: consumed.t5.iface.t3.1
+        producer_task: T-003
+        interface_id: iface.t3.1
+        signature: "exact constant 11 and semantic validation of all 11 reasons, 2/9 kind split and every unordered persisted pin set. No order-dependent pin lookup remains in this branch."
+        sha256: f057ade1044e15a4b70e60745f631e5f87893df33841aeac5a6e793850e1cd80
+      - id: consumed.t5.iface.t4.1
+        producer_task: T-004
+        interface_id: iface.t4.1
+        signature: "order `baseline -> observed listener increase -> off-EDT close -> handle rejection -> listener baseline restored -> release blocked listener -> bounded close join`. Callback-registration rejection remains supporting observation only."
+        sha256: 5d03926356e7fe94741c8ef35f3016574cbe879c066b70db46345b3c7636300b
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould", "--console=plain", "-PTestLoggingFull", "--rerun-tasks"]
+        cwd: lane
+        timeout_seconds: 3600
+        environment: java21-headless-build
+      - argv: ["xvfb-run", "-a", "gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould", "--console=plain", "-PTestLoggingFull", "--rerun-tasks"]
+        cwd: lane
+        timeout_seconds: 3600
+        environment: java21-headless-build
+      - argv: ["xvfb-run", "-a", "gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.window.GraphWorkspaceWindowModelShould.f11RestoresBoundsAndExtendedStateFromMaximizedWindow", "--console=plain", "-PTestLoggingFull", "--rerun-tasks"]
+        cwd: lane
+        timeout_seconds: 3600
+        environment: java21-headless-build
+      - argv: ["bash", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/scripts/epoch-3/run-openbox-window-probe.sh", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/reports/epoch-3/task-5/candidate-root", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/reports/epoch-3/supporting-evidence/f11-openbox-xvfb"]
+        cwd: lane
+        timeout_seconds: 3600
+        environment: java21-headless-build
+      - argv: ["python3", "freeplane_plugin_graph/src/test/scripts/compare_initial_spacing.py", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/reports/epoch-3/task-5/candidate-root", "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/InitialSpacingProbe.java", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/reports/epoch-3/supporting-evidence/spacing-comparison"]
+        cwd: lane
+        timeout_seconds: 3600
+        environment: java21-headless-build
+      - argv: ["gradle", ":freeplane_plugin_graph:check", "--console=plain", "-PTestLoggingFull"]
+        cwd: lane
+        timeout_seconds: 3600
+        environment: java21-headless-build
+      - argv: ["gradle", ":freeplane_plugin_graph:graphPerformanceDiagnostic", "-PgraphStrictPerformance", "--console=plain"]
+        cwd: lane
+        timeout_seconds: 3600
+        environment: java21-headless-build
+      - argv: ["xvfb-run", "-a", "gradle", ":freeplane_plugin_graph:graphOsgiSmoke", ":freeplane_plugin_graph:freeplaneLaunchSmoke", "--console=plain"]
+        cwd: lane
+        timeout_seconds: 3600
+        environment: java21-headless-build
+      - argv: ["gradle", ":freeplane:compileJava", "test", "--console=plain", "-PTestLoggingFull"]
+        cwd: lane
+        timeout_seconds: 3600
+        environment: java21-headless-build
+  - id: T-006
+    plan_task: 6
+    title: "Write the receipt-backed acceptance record and verify delivery-tree equality"
+    implementer_tier: "Advanced"
+    lane: "spacing"
+    sequence: 6
+    depends_on: [T-005]
+    ownership:
+      paths: []
+    external_evidence:
+    - /data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/reports/epoch-3/task-6/**
+    - /data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/scripts/epoch-3/**
+    resources: []
+    produces:
+    - id: iface.t6.1
+      signature: "the acceptance record at `$EPOCH3_ROOT/acceptance/2026-10-18-graph-initial-spacing-epoch-3.md` mapping every requirement to actual artifact paths, hashes, statuses and limitations; it preserves all historical failures and the twenty-to-eleven derivation. It is an external PM artifact and is **not** committed to Git."
+      sha256: 6baa6f5f63e21fd40dd65455654aea300192b7b34a77d378f70afe4aaefbb5fe
+    - id: iface.t6.2
+      signature: "`acceptance/acceptance-audit.json` and `acceptance/delivery-provenance.json`. Overall PASS requires all ten semantic results, preserved budgets/source bytes, cleanup, and candidate = lane = integration/delivery tree equality. Because this task writes no repository file, equality is achievable exactly; any mismatch is BLOCKED with the measured OIDs recorded, never reconciled by relaxing the rule."
+      sha256: 87900831f1409a3b79f23381c51066c24878903de62a31af4bc406b8657dc1c7
+    consumes:
+    - id: consumed.t6.iface.t5.1
+      producer_task: T-005
+      interface_id: iface.t5.1
+      signature: "`$EPOCH3_ROOT/task-5/candidate.json` with absolute root, candidate commit/tree, source hashes and clean status; six supporting receipts and four gate receipts pinned to that same tree."
+      sha256: ff7a83c74d5f773f2be540b380dcf54e066817e6525282394e8fce7e5a2a4611
+    - id: consumed.t6.iface.t5.2
+      producer_task: T-005
+      interface_id: iface.t5.2
+      signature: "`$EPOCH3_ROOT/task-5/evidence-index.json` containing six `supportingRuns` and four `finalGates`, each with `id`, `status`, `receiptPath`, `manifestSha256`, `candidateHead`, `candidateTree`, `exitStatus`, `cleanupComplete` and requirement IDs; missing evidence has a reason and no invented digest."
+      sha256: 4c822a9ec042c125c60bbfb722822e5d6c0cbb86cc49857efda068b88ae918fc
+    interfaces:
+      produces:
+      - id: iface.t6.1
+        signature: "the acceptance record at `$EPOCH3_ROOT/acceptance/2026-10-18-graph-initial-spacing-epoch-3.md` mapping every requirement to actual artifact paths, hashes, statuses and limitations; it preserves all historical failures and the twenty-to-eleven derivation. It is an external PM artifact and is **not** committed to Git."
+        sha256: 6baa6f5f63e21fd40dd65455654aea300192b7b34a77d378f70afe4aaefbb5fe
+      - id: iface.t6.2
+        signature: "`acceptance/acceptance-audit.json` and `acceptance/delivery-provenance.json`. Overall PASS requires all ten semantic results, preserved budgets/source bytes, cleanup, and candidate = lane = integration/delivery tree equality. Because this task writes no repository file, equality is achievable exactly; any mismatch is BLOCKED with the measured OIDs recorded, never reconciled by relaxing the rule."
+        sha256: 87900831f1409a3b79f23381c51066c24878903de62a31af4bc406b8657dc1c7
+      consumes:
+      - id: consumed.t6.iface.t5.1
+        producer_task: T-005
+        interface_id: iface.t5.1
+        signature: "`$EPOCH3_ROOT/task-5/candidate.json` with absolute root, candidate commit/tree, source hashes and clean status; six supporting receipts and four gate receipts pinned to that same tree."
+        sha256: ff7a83c74d5f773f2be540b380dcf54e066817e6525282394e8fce7e5a2a4611
+      - id: consumed.t6.iface.t5.2
+        producer_task: T-005
+        interface_id: iface.t5.2
+        signature: "`$EPOCH3_ROOT/task-5/evidence-index.json` containing six `supportingRuns` and four `finalGates`, each with `id`, `status`, `receiptPath`, `manifestSha256`, `candidateHead`, `candidateTree`, `exitStatus`, `cleanupComplete` and requirement IDs; missing evidence has a reason and no invented digest."
+        sha256: 4c822a9ec042c125c60bbfb722822e5d6c0cbb86cc49857efda068b88ae918fc
+    validation:
+      - argv: ["python3", "-", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/reports/epoch-3/task-5/evidence-index.json"]
+        cwd: lane
+        timeout_seconds: 3600
+        environment: java21-headless-build
