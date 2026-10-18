@@ -925,3 +925,254 @@ summary['status'] = 'PASS' if not errors else 'FAIL'
 print(json.dumps({'status': summary['status'], 'errors': errors, 'evidence': str(out)}, indent=2))
 raise SystemExit(0 if not errors else 1)
 ```
+
+---
+
+# Epoch 3 Addendum - final-gate remediation (normative)
+
+- Date: 2026-10-18
+- Task identifier: `graph-initial-spacing`
+- Epoch: 3
+- Authority: approved design [2026-10-18-graph-initial-spacing-epoch-3-design.md](2026-10-18-graph-initial-spacing-epoch-3-design.md), revision 4, SHA-256 `b333b5df12b11e85c9b1ed60149fddf69a019dd7b8b4db8140643e1b8a6ebf84`.
+- Epoch-3 integration baseline: commit `92f31fce842f8e5bb1376c13e4135cdd138907db`, generation 1.
+- Status: normative draft addendum. Implementation, runner creation, evidence collection, and user sign-off remain pending.
+
+This addendum is appended to, and does not replace or rewrite, any epoch-1 or epoch-2 text above. All parent contracts remain in force. This addendum supplies the approved epoch-3 remediation contract for the four pre-existing final-gate defects. If an epoch-3 final-gate command below differs from a historical command in the preserved parent text, the command below is the epoch-3 final acceptance command; the preserved parent command remains unchanged as historical specification text.
+
+## 12. Epoch-3 scope, authority, and freeze
+
+Epoch 3 repairs environment assumptions, stale test evidence, and the lifecycle suite-order failure without changing the approved ring-only `PREFERRED_NODE_GAP=24.0` behavior, relationship rest lengths, convergence or idle policy, safety limits, or the meaning of any non-spacing performance threshold.
+
+The only source-file changes authorized by this addendum are these four test classes:
+
+1. `AccessibleGraphCanvasShould`, for the two explicitly named headless assumptions in Section 13.
+2. `GraphWorkspaceWindowModelShould`, for the window-manager precondition and test-mode handling in Section 14.
+3. `GraphWorkspacePerformanceDiagnostic`, for the exact two-pinned-maps conflict golden and structure assertions in Section 15.
+4. `GraphWorkspaceLifecycleShould.java`, for the test-only close-boundary barrier in Section 16.
+
+The final command path correction, external receipts, and hash-recorded evidence runners are also in scope. No production source, production API, build configuration, fixture resource, dependency, serialization format, persistence field, threshold, deadline, safety budget, or non-spacing numeric golden may change. All epoch-2 production implementation files must remain byte-identical to the approved integrated tree. No production correction is authorized by this addendum; if evidence indicates that one is needed, implementation must stop for a new explicit user decision.
+
+The candidate/evidence runner and receipts are implementation deliverables. They may be absent while this addendum is drafted and must not be described as existing evidence until they have been created, hash-recorded, and run. Openbox is unavailable in the drafting environment. Its absence is a blocking prerequisite for the positive window-manager evidence, not an optional skip or a pass.
+
+## 13. A - accessibility assumptions are exactly scoped
+
+The only display-dependent methods in `AccessibleGraphCanvasShould` are:
+
+- `receiveTabThroughSwingDispatchAndRestoreFocusTraversalConfiguration`
+- `ignoreEnterForSelectionsAbsentFromCurrentVisibleOrderAfterStateReplacement`
+
+Both methods call `withFocusedCanvas`, which creates and shows a `JFrame`. Add the repository's existing JUnit assumption pattern at the beginning of exactly these two methods, before frame construction, to skip when `GraphicsEnvironment.isHeadless()` is true. Keep every existing focus, traversal, and state-replacement assertion unchanged when a display is available.
+
+No other method in the class may be skipped for this reason. Do not replace either real-window test with a mocked focus owner, and do not add a class-level headless guard. The headless class receipt must show exactly these two named methods skipped and the other nine methods executed and passed. In the full module receipt, the pre-existing skipped test identifiers must remain unchanged and the module skip count may increase only from the frozen candidate count of 18 to 20.
+
+A separate display-backed run must execute both named methods and all nine other methods, for 11 executed methods, zero skipped, zero failures, and zero errors. This display-backed run is required evidence that the assumptions are scoped rather than a permanent bypass.
+
+## 14. B - maximized-window capability, EWMH proof, and Openbox evidence
+
+### 14.1 Test-worker mode contract
+
+`GraphWorkspaceWindowModelShould.f11RestoresBoundsAndExtendedStateFromMaximizedWindow` depends on a window manager honoring `MAXIMIZED_BOTH`; a bare Xvfb display is not sufficient. Retain the existing headless guard and all existing fullscreen round-trip assertions.
+
+The test worker reads `FREEPLANE_GRAPH_TEST_WINDOW_MANAGER` from its environment. The only accepted values are:
+
+- `required`, which is the default when the variable is unset;
+- `optional`.
+
+Every other value is a hard test failure. Gradle's test worker must inherit this environment variable; no new Gradle property propagation is permitted.
+
+Before requesting maximization, the test must query `_NET_SUPPORTING_WM_CHECK` on the current `DISPLAY` using `xprop`. A query or tool failure is an error and is not evidence that a window manager is absent. In `optional` mode, exactly one JUnit assumption skip is permitted only when this independent pre-maximize query proves `_NET_SUPPORTING_WM_CHECK` absent on that same display. A maximize timeout, malformed property, broken window manager, or missing postcondition is never an optional absence skip.
+
+If a window manager is present, missing `_NET_WORKAREA`, a failed work-area cross-check, failure to maximize, or failure to stabilize is an assertion failure even in `optional` mode. In `required` mode, absence of either required EWMH property or failure to maximize is an assertion failure and can never skip.
+
+### 14.2 Authoritative work area and stable interval
+
+Keep the existing AWT-insets `workArea(graphics)` as the test's authoritative rectangle so the existing `DisplayFixture` contract remains the assertion source. When a window manager is present, read `_NET_CURRENT_DESKTOP` and the four-cardinal rectangle for that desktop from `_NET_WORKAREA` on the same `DISPLAY`. Record both rectangles and require each corresponding edge to agree within `X11_AWT_BOUNDS_TOLERANCE`, exactly 2 px. Missing or malformed `_NET_WORKAREA` fails whenever a window manager is present; it is not converted to a skip.
+
+The visible frame must cover the authoritative AWT work area within the same 2 px tolerance. Use the existing `awaitFrameStable(2100)` mechanism without enlarging its deadline: it polls every 10 ms, requires a full 2100 ms of continuous quiet, and fails at the existing 5000 ms monotonic deadline. Strengthen every poll so that the frame remains visible and displayable, `MAXIMIZED_BOTH` remains set, and its bounds remain unchanged. Require work-area coverage again at the stable endpoint, then run the existing F11 round-trip assertions. The bare no-window-manager path may skip before this interval only after the independent absent-property proof; the required path treats missing `_NET_WORKAREA`, a failed cross-check, or a failed stable interval as failure.
+
+### 14.3 Openbox 3.6.1 prerequisite and identity chain
+
+The positive display-backed run has an explicit external prerequisite: Openbox upstream release 3.6.1. The future runner must preflight and record:
+
+- `command -v openbox`;
+- `openbox --version`;
+- `pacman -Q openbox`;
+- the executable SHA-256.
+
+On Arch, the documented provisioning command is `sudo pacman -S --needed openbox`. Provisioning is an implementation/operator step, not an action of this drafting task. The run must be rejected unless the reported upstream release is exactly 3.6.1. If preflight cannot establish the prerequisite, the runner must emit `WM_PREREQUISITE_MISSING:OPENBOX_3_6_1`; the evidence gate is BLOCKED, not SKIPPED and not PASS.
+
+On an isolated Xvfb display, start `openbox --sm-disable` and wait no more than 5 seconds for root `_NET_SUPPORTING_WM_CHECK`. Verify all of the following identity links:
+
+1. The launched Openbox PID is alive.
+2. `/proc/<pid>/exe` resolves to the preflight executable path and its executable SHA-256 equals the preflight SHA-256.
+3. `xprop -root _OPENBOX_PID` equals the launched PID.
+4. Read the support-window XID from root `_NET_SUPPORTING_WM_CHECK`.
+5. `xprop -id <support-XID> _NET_SUPPORTING_WM_CHECK` self-references the same support XID.
+6. `xprop -id <support-XID> _NET_WM_NAME` identifies Openbox.
+
+Openbox 3.6.1 publishes `_OPENBOX_PID` on the root, not `_NET_WM_PID` on the support window. `_NET_WM_PID` may be recorded if a package supplies it, but its absence must not reject stock 3.6.1 and the runner must not synthesize it. Record `_NET_CURRENT_DESKTOP` and `_NET_WORKAREA` as well as the full process/property evidence.
+
+The runner must install a cleanup trap, terminate and reap Openbox, allow `xvfb-run` to stop Xvfb, and record each cleanup outcome, including child-process termination and display-server reaping. A stale process or failed cleanup makes the evidence incomplete and must be reported.
+
+The bare run must show the named maximized-window method with exactly one capability skip caused by the same-display proof of absent `_NET_SUPPORTING_WM_CHECK`. The Openbox run must show that method executed with `skipped=0`, `failures=0`, and `errors=0`; the rest of the class must pass with no newly introduced skips so normal-window and other F11 behavior remain covered independently.
+
+## 15. C - exact two-pinned-maps conflict golden and provenance
+
+Change only `GraphWorkspacePerformanceDiagnostic.TWO_PINNED_MAPS_EXPECTED_CONFLICTS` from the stale value 1 to the measured delivered-branch value 11. Keep an exact count assertion. The count is a measured re-derivation authorized by the existing spacing-golden rule, not a tunable threshold or a relaxation.
+
+The conflict assertion must additionally require all of the following:
+
+- exactly 11 conflicts;
+- every conflict has reason `IMMOVABLE_SIDES`;
+- exactly 2 conflicts have kind `SIBLING_CROSSING`;
+- exactly 9 conflicts have kind `SIBLING_CONTAINMENT`;
+- every conflict has the exact unordered blocking-pin identity set:
+  `{(00000000-0000-0000-0000-000000000001, m00-n0001), (00000000-0000-0000-0000-000000000002, m01-n0001)}`.
+
+Resolve the two identities from the fixture's persisted `PinProjection`/`NodeReference` values. Do not use list order, map order, or merely `blockingPins().size()==2` as the identity proof. The fixture persists `m00-n0001` and `m01-n0001` as roots of two maps pinned at the same `(0.0, 0.0)` center. The wider delivered rings separate some remaining hull pairs, producing baseline 20 and candidate 11 while retaining the `IMMOVABLE_SIDES` classification.
+
+### 15.1 Frozen baseline receipt
+
+The baseline value 20 must be bound to all of these immutable provenance facts:
+
+- source commit `0734fb23db6873f4ec64c3e3e29fc8c3e17edc7a`;
+- source tree `0bc8e57b5d26c2d79252a4ea4735cbf52fdbbf3c`;
+- strict log `/tmp/graph-initial-spacing-evidence/task-5/diagnostic/baseline-vector2-strict.log`;
+- strict-log SHA-256 `67390c50c91aec57d8ff913b6f1c549453eab83555834d53978bf66b6a52c104`;
+- a SHA-256 recorded for the baseline receipt itself.
+
+The baseline receipt must preserve the exact 20-count failure from the hash-pinned strict log and bind it to the frozen source commit/tree and the receipt's SHA-256. The historical log does not claim to contain per-conflict records. Full conflict records and four individually recorded first-submission samples are required for the final candidate under Section 15.2. A missing receipt hash, altered source tree, or substituted baseline run invalidates the golden evidence.
+
+### 15.2 Candidate receipt and tree equality
+
+The candidate value 11 must be bound to the final epoch-3 candidate commit and tree, the matching final lane tree, and the matching final integration/delivery tree. Acceptance must reject the receipt unless the candidate, lane, and final delivery `git rev-parse HEAD^{tree}` values are identical. An earlier epoch-2 probe is supporting historical evidence only and cannot serve as the final-tree acceptance receipt.
+
+The candidate receipt must include hashes of `GraphWorkspacePerformanceDiagnostic.java` and `GeneratedWorkspace.java`, the exact `TWO_PINNED_MAPS` fixture identity, request generation, first-submission identity, four individually recorded consecutive samples, every full conflict record, and a SHA-256 for the probe log and all probe artifacts. Each sample must independently show the exact count, reason, kind split, and unordered persisted pin identities. An aggregate count without the four sample records is insufficient.
+
+No other conflict golden, conflict rule, performance threshold, operation timeout, or process deadline may change. The exact 20-to-11 result and all structure guardrails must remain visible in the acceptance record.
+
+## 16. D - lifecycle suite-order remediation is test-only
+
+The frozen baseline's full module suite failed once at `GraphWorkspaceLifecycleShould.doesNotDeliverCallbacksAfterClose` with `stale projection listener after close`, while the focused test passed. Preserve the invariant that no projection, canvas, or status callbacks are delivered after the coordinator's logical close boundary. First localize and record whether suite order exposes leaked fixture resources or a race-prone test assumption; do not infer a production defect from one order-dependent failure.
+
+The only source file authorized for this remediation is `GraphWorkspaceLifecycleShould.java`. The governing [Graph Workspace Lifecycle Close-Boundary Remediation Design](2026-08-24-graph-workspace-lifecycle-close-boundary-remediation-design.md) forbids production-source, API, fixture-resource, build-configuration, timeout, or unrelated lifecycle changes.
+
+Implement the test-only teardown barrier in this exact order:
+
+1. Capture the `ResourceBaseline`.
+2. Prove that the workspace map-lifecycle listener count has risen above the captured baseline.
+3. Start close off the EDT and await the existing handle-closing rejection boundary.
+4. Use the existing bounded condition helper to wait until the listener count returns to baseline.
+5. Only after that teardown signal, release the deliberately blocked first projection listener.
+
+The return to baseline is the governing evidence that `GraphUpdateCoordinator` entered its logical closed state and began owned-map teardown. Keep the current callback-registration rejection check as a supporting observation only; it cannot replace the map-listener teardown barrier.
+
+Preserve the second-listener zero assertion, source-map mutation, resource-baseline checks, callback counters, closed-handle assertions, and existing cleanup. Release the blocking listener in a `finally` path that covers the wait and bounded close-thread join, so a failing probe cannot contaminate later tests.
+
+Add no retries, sleeps, `Assume` guards, broad exclusions, or weakened callback-count assertions. In a disposable test compilation only, remove the production closed-state guard immediately before each projection-listener invocation. The revised test must fail against that mutant. The active production source tree must remain untouched by the mutant probe. If investigation establishes that a production correction is required, stop and obtain a new explicit user decision; this epoch authorizes no production correction.
+
+## 17. Supporting-evidence matrix and runner contract
+
+The following six supporting runs are required in addition to, and never instead of, the four final gates in Section 19. They must run from a pinned, clean `CANDIDATE_ROOT`, recorded as an absolute path that resolves to the final candidate commit/tree.
+
+Before these runs, export `JAVA_HOME=/home/henry/.sdkman/candidates/java/21.0.8-zulu`, prepend `$JAVA_HOME/bin` to `PATH`, and export:
+
+```bash
+export CANDIDATE_ROOT=/absolute/path/to/final-candidate
+export PM_RUN_ROOT=/home/henry/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653
+export EVIDENCE_ROOT="$PM_RUN_ROOT/reports/epoch-3/supporting-evidence"
+```
+
+Each run must have a fresh named evidence directory and `run.json` containing the exact argv, environment, working directory, start/end timestamps, exit status, `git rev-parse HEAD`, `git rev-parse HEAD^{tree}`, clean status, and relevant source hashes. Preserve full stdout/stderr and the JUnit XML emitted under `freeplane_plugin_graph/build/test-results/test/` in that run's directory. Hash the runner scripts, source/probe files, init scripts, classpaths, receipts, logs, and generated artifacts; record every hash in an immutable manifest. Do not overwrite an earlier receipt or silently rerun with changed inputs.
+
+| Run | Exact command | Expected result | Receipt |
+| --- | --- | --- | --- |
+| 1 - headless accessibility | `JAVA_TOOL_OPTIONS=-Djava.awt.headless=true gradle :freeplane_plugin_graph:test --tests 'org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould' --console=plain -PTestLoggingFull --rerun-tasks` | Exactly the two named assumption skips and 9 passes; no other skip in the selected class. | `reports/epoch-3/supporting-evidence/accessibility-headless/`, including `gradle.log` and `TEST-org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould.xml`. |
+| 2 - display accessibility | `env -u JAVA_TOOL_OPTIONS xvfb-run -a gradle :freeplane_plugin_graph:test --tests 'org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould' --console=plain -PTestLoggingFull --rerun-tasks` | All 11 methods execute and pass; zero skipped. | `reports/epoch-3/supporting-evidence/accessibility-xvfb/`, including the actual `DISPLAY`, `gradle.log`, the class XML, and Xvfb cleanup. |
+| 3 - bare-Xvfb maximized method | `env -u JAVA_TOOL_OPTIONS FREEPLANE_GRAPH_TEST_WINDOW_MANAGER=optional xvfb-run -a gradle :freeplane_plugin_graph:test --tests 'org.freeplane.plugin.graph.window.GraphWorkspaceWindowModelShould.f11RestoresBoundsAndExtendedStateFromMaximizedWindow' --console=plain -PTestLoggingFull --rerun-tasks` | Exactly one skip, caused only by the same-display proof that `_NET_SUPPORTING_WM_CHECK` is absent; record the absent property and `_NET_WORKAREA` on that display. | `reports/epoch-3/supporting-evidence/f11-bare-xvfb/`, including XML, logs, display data, and Xvfb cleanup. |
+| 4 - Openbox/Xvfb window-model class | `env -u JAVA_TOOL_OPTIONS PM_RUN_ROOT="$PM_RUN_ROOT" bash "$PM_RUN_ROOT/scripts/epoch-3/run-openbox-window-probe.sh" "$CANDIDATE_ROOT" "$EVIDENCE_ROOT/f11-openbox-xvfb"` | The target method executes with `skipped=0`, `failures=0`, and `errors=0`; the rest of the class passes with no newly introduced skips. A failed prerequisite emits `WM_PREREQUISITE_MISSING:OPENBOX_3_6_1` and blocks acceptance. | `reports/epoch-3/supporting-evidence/f11-openbox-xvfb/`, including runner hash, Openbox/Xvfb process identities, version, EWMH properties, AWT/EWMH rectangles, XML, Gradle log, and cleanup results. |
+| 5 - two-pinned-maps golden | Use the exact classpath, compile, and probe sequence in Section 17.1 against a fresh `supporting-evidence/two-pinned-conflicts/` directory. | Four consecutive first submissions of the exact `TWO_PINNED_MAPS` fixture, 5-second await per submission, full conflict records, and the exact 11/`IMMOVABLE_SIDES`/2-crossing/9-containment/pin-identity result in every sample. | `reports/epoch-3/supporting-evidence/two-pinned-conflicts/`, including `ConflictProbe.java`, `classpath.init.gradle`, classpath, source/log/JSONL hashes, and sample receipts. |
+| 6 - frozen baseline comparison | `python3 freeplane_plugin_graph/src/test/scripts/compare_initial_spacing.py "$CANDIDATE_ROOT" freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/InitialSpacingProbe.java "$EVIDENCE_ROOT/spacing-comparison"` | Fresh output; all four parent fixtures, unchanged first-idle/post-idle budgets, complete receipts, and each median delta at least `6.0 - 1e-6`. | `reports/epoch-3/supporting-evidence/spacing-comparison/`, preserving the complete output tree. |
+
+The six-run matrix is a supporting contract, not a replacement for the final integration vector. A display assumption is acceptable only because the same method is separately proven executed under the required display/window manager. Every Xvfb invocation must exit and reap its display server. The Openbox runner must terminate and reap Openbox before Xvfb cleanup and record the result. Test workers, probe JVMs, and capture/launch children must terminate normally; cleanup failures make the corresponding evidence incomplete.
+
+### 17.1 Exact two-pinned-maps classpath and probe setup
+
+In the fresh `supporting-evidence/two-pinned-conflicts/` directory, the implementation deliverable must save the probe source as `ConflictProbe.java` and save this exact Gradle init script as `classpath.init.gradle`:
+
+```groovy
+allprojects { p ->
+  afterEvaluate {
+    if (p.path == ':freeplane_plugin_graph') {
+      tasks.register('printSpacingTestClasspath') {
+        doLast { println('SPACING_TEST_CP=' + p.sourceSets.test.runtimeClasspath.asPath) }
+      }
+    }
+  }
+}
+```
+
+Run the following exact commands, requiring exit status 0 at every step:
+
+```bash
+JAVA_TOOL_OPTIONS=-Djava.awt.headless=true gradle :freeplane_plugin_graph:testClasses :freeplane_plugin_graph:printSpacingTestClasspath -I "$EVIDENCE_ROOT/two-pinned-conflicts/classpath.init.gradle" --console=plain > "$EVIDENCE_ROOT/two-pinned-conflicts/classpath.log" 2>&1
+sed -n 's/^SPACING_TEST_CP=//p' "$EVIDENCE_ROOT/two-pinned-conflicts/classpath.log" > "$EVIDENCE_ROOT/two-pinned-conflicts/classpath.txt"
+# Require classpath.txt to contain exactly one non-empty line.
+mkdir -p "$EVIDENCE_ROOT/two-pinned-conflicts/classes"
+javac --release 8 -encoding UTF-8 -cp "$(cat "$EVIDENCE_ROOT/two-pinned-conflicts/classpath.txt")" -d "$EVIDENCE_ROOT/two-pinned-conflicts/classes" "$EVIDENCE_ROOT/two-pinned-conflicts/ConflictProbe.java"
+JAVA_TOOL_OPTIONS=-Djava.awt.headless=true "$JAVA_HOME/bin/java" -Duser.language=en -Duser.country=US -cp "$EVIDENCE_ROOT/two-pinned-conflicts/classes:$(cat "$EVIDENCE_ROOT/two-pinned-conflicts/classpath.txt")" org.freeplane.plugin.graph.performance.ConflictProbe "$EVIDENCE_ROOT/two-pinned-conflicts/samples.jsonl" > "$EVIDENCE_ROOT/two-pinned-conflicts/probe.log" 2>&1
+```
+
+The probe must make four consecutive first submissions of the exact `TWO_PINNED_MAPS` fixture, use a 5-second await for each submission, and emit one full conflict record per sample. The source, init script, classpath, source files, logs, JSONL receipt, and all generated artifacts must be SHA-256 recorded. The exact probe source and Openbox runner are deliverables and are not pre-existing artifacts merely because these commands are specified here.
+
+## 18. Immutable evidence, provenance, and cleanup
+
+Every final-gate and supporting-run receipt must bind the result to the final candidate source state. At minimum, each receipt records the full command, environment, working directory, candidate HEAD and tree, start/end timestamps, exit status, and content hashes. The spacing comparator must retain its candidate patch/status, observer hash, all main-source hashes, Java/Gradle versions, dependency/JAR checksums, exact inputs, baseline archive, candidate archive/working tree identity, full stdout/stderr, unrounded TSV files, and comparison result. The conflict probe must retain its four sample records and full conflict details. The Openbox runner must be immutable after hashing and its hash must appear in the receipt.
+
+The acceptance package must distinguish PASS, FAIL, NOT RUN, and BLOCKED for every gate and supporting run. A missing runner, missing receipt, missing hash, absent cleanup proof, or fabricated result is not PASS. The current draft does not claim that the absent Openbox runner or receipts exist. A preflight failure must remain `WM_PREREQUISITE_MISSING:OPENBOX_3_6_1` and BLOCKED; it must not be reclassified as the optional bare-Xvfb skip.
+
+The final candidate, lane, and integration tree equality in Section 15 is a hard provenance gate. A receipt generated from an earlier epoch-2 tree, a dirty or changed candidate, a candidate/lane mismatch, or a final-delivery tree mismatch cannot satisfy the conflict golden or any final acceptance criterion. Preserve failed receipts and explain any rerun after an identified environmental correction.
+
+## 19. Four exact final integration gates
+
+Run from the verified candidate root using the installed `gradle` and Java 21.0.8-zulu. Non-UI commands inherit `JAVA_TOOL_OPTIONS=-Djava.awt.headless=true`; the runtime smoke command explicitly removes that variable and uses an actual X display. Each receipt records the full command, environment, working directory, candidate HEAD/tree, timestamps, exit status, and content hashes.
+
+| Gate | Exact command and environment | Frozen contract | Required receipt |
+| --- | --- | --- | --- |
+| 1 - graph module | `gradle :freeplane_plugin_graph:check --console=plain -PTestLoggingFull` with headless Java 21.0.8-zulu and `JAVA_TOOL_OPTIONS=-Djava.awt.headless=true` | Full module suite. Exactly the two named accessibility methods may be newly skipped; all pre-existing skipped identifiers remain unchanged and the module total may increase only 18 to 20. | `reports/epoch-3/final-gates/gate-1/`, including command/environment, exit code, per-test XML, counts, and skip attribution. |
+| 2 - strict performance | `gradle :freeplane_plugin_graph:graphPerformanceDiagnostic -PgraphStrictPerformance --console=plain` with headless Java 21.0.8-zulu and `JAVA_TOOL_OPTIONS=-Djava.awt.headless=true` | `OPERATION_TIMEOUT_NANOS` remains 5 seconds; `PROCESS_DEADLINE_NANOS` remains 40 minutes; 8 raw-reference frames remain, each at most 5 seconds; 200-enclosure submission remains <=3.0 seconds with its 5-second await; cross-map displacement remains 0.005; production idle remains 8 consecutive frames, RMS <=0.05, maximum <=0.10. | `reports/epoch-3/final-gates/gate-2/`, including the strict ledger, command/environment, exit code, and diagnostics. |
+| 3 - runtime smoke | `env -u JAVA_TOOL_OPTIONS xvfb-run -a gradle :freeplane_plugin_graph:graphOsgiSmoke :freeplane_plugin_graph:freeplaneLaunchSmoke --console=plain` with Java 21.0.8-zulu | Both project-qualified tasks execute on an actual X display; capture/launch processes terminate normally. The unqualified `:freeplaneLaunchSmoke` is not the epoch-3 command. | `reports/epoch-3/final-gates/gate-3/`, including display, task receipts, OSGi bundle evidence, launch result, and child-process termination. |
+| 4 - application compile/tests | `gradle :freeplane:compileJava test --console=plain -PTestLoggingFull` with headless Java 21.0.8-zulu and `JAVA_TOOL_OPTIONS=-Djava.awt.headless=true` | Existing application compile and test assertions remain unchanged. | `reports/epoch-3/final-gates/gate-4/`, including command/environment, exit code, and XML/log outputs. |
+
+All four final gates are independently required and must exit 0. The supporting matrix is additional evidence. The Openbox positive evidence is also required for completion; if its prerequisite is unavailable, the final acceptance status remains BLOCKED even if the bare-Xvfb optional run produces its one capability skip.
+
+## 20. Unchanged spacing, performance, safety, and production budgets
+
+The following parent contracts are explicitly frozen for epoch 3:
+
+- The preferred gap remains ring-only at 24.0 layout units; relationship rest lengths continue to use collision clearance 6.0, not the preferred gap.
+- The packing gutter remains 8.0; rendered base node radius remains 8.0; node settle margin/frame clearance remains 8.0/16.0; boundary padding/hull clearance remains 8.0/16.0.
+- Calibration remains `(1.0, 0.30, 1.0)`; typed attraction, repulsion, and boundary repulsion remain `0.05 / 16.0 / 0.5`.
+- The aggregate cross-map displacement cap remains 0.005 per affected particle per engine step.
+- The production idle policy remains 8 consecutive frames, RMS <=0.05, and maximum displacement <=0.10.
+- First-idle outcome evidence retains NR8 A, SM8 A, XM4x2 A, and XM4x2 B; each candidate-versus-baseline median delta remains `>= 6.0 - 1e-6`; the first-idle limit remains at most 2000 `step()` calls and one monotonic 30-second deadline per fixture/version.
+- The post-idle diagnostic remains the next 100 sequential worker frames from the same worker, with its own monotonic 30-second deadline and no improvement threshold; the external per-fixture/version watchdog remains 65 seconds.
+- `OPERATION_TIMEOUT_NANOS` remains 5 seconds; `PROCESS_DEADLINE_NANOS` remains 40 minutes; the strict diagnostic retains 8 raw-reference frames with a maximum of 5 seconds each.
+- The 200-enclosure submission assertion remains <=3.0 seconds with its existing 5-second future await.
+- Existing `<8.0` one-step movement checks, cross-map cap checks, safety/coverage/pin/determinism assertions, boundary and edge-routing checks, and performance thresholds remain active.
+- No idle threshold, correction budget, convergence cap, process deadline, operation timeout, safety budget, non-spacing numeric golden, conflict rule, or unrelated test assertion may be weakened or changed.
+
+The authorized conflict value change is only the measured 20-to-11 `TWO_PINNED_MAPS` golden with the guardrails in Section 15. It is not a general golden regeneration. The lifecycle test may become order-stable only through the Section 16 test-only barrier; no production lifecycle behavior changes.
+
+## 21. Epoch-3 acceptance criteria and status
+
+Epoch 3 is complete only when all of the following are evidenced against the final tree:
+
+1. The two named accessibility methods are the only newly permitted headless skips; the headless class has exactly 2 skips and 9 passes; the display-backed class executes and passes all 11 methods; the full module skip count changes only 18 to 20.
+2. The maximized-window method uses the exact `required`/`optional` environment contract, performs the same-display pre-maximize xprop proof, skips only for independently proven WM absence in optional bare Xvfb, fails for missing/broken WM capability when required or present, and passes under Openbox 3.6.1 with the complete PID/support-XID/name identity chain, AWT/EWMH work-area cross-check within 2 px, and the full 2100 ms stable interval under the existing 5000 ms deadline.
+3. The exact two-pinned-maps conflict golden is 11, with all `IMMOVABLE_SIDES`, exactly 2 `SIBLING_CROSSING`, exactly 9 `SIBLING_CONTAINMENT`, and the exact unordered persisted pin identities in all four samples. Baseline 20 provenance, strict-log hash, receipt hashes, final candidate/lane/integration tree equality, source hashes, and probe hashes are present.
+4. The lifecycle suite no longer exhibits the order-dependent post-close callback failure; only `GraphWorkspaceLifecycleShould.java` changed; the map-listener teardown barrier precedes release of the blocked listener; existing assertions and cleanup remain; and the disposable closed-guard mutant fails the test without modifying production source.
+5. All six supporting runs and all four exact final gates have immutable receipts, source/runner hashes, full logs, and cleanup results. Any missing Openbox prerequisite is recorded as `WM_PREREQUISITE_MISSING:OPENBOX_3_6_1` and BLOCKED, never SKIPPED or PASS.
+6. The unchanged spacing, convergence, performance, safety, lifecycle production-file, and Java-8 bundle contracts in the parent specification remain satisfied. No production source, threshold, deadline, safety budget, or non-spacing golden was changed or relaxed.
+
+At drafting time, the epoch-3 runner/evidence deliverables are NOT RUN, and the Openbox prerequisite is unavailable. No candidate pass is claimed by this addendum. A final acceptance record must report every item as PASS, FAIL, NOT RUN, or BLOCKED with its artifact path and must preserve all failures for review.
