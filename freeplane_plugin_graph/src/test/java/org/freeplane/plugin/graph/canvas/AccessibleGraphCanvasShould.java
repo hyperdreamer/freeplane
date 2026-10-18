@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 import java.awt.AWTKeyStroke;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
+import java.awt.GraphicsEnvironment;
 import java.awt.KeyboardFocusManager;
 import java.awt.Point;
 import java.awt.Rectangle;
@@ -71,6 +72,7 @@ import org.freeplane.plugin.graph.workspace.model.PinRecord;
 import org.freeplane.plugin.graph.workspace.model.RelationshipDirection;
 import org.freeplane.plugin.graph.workspace.model.RelationshipId;
 
+import org.junit.Assume;
 import org.junit.Test;
 
 public class AccessibleGraphCanvasShould {
@@ -233,6 +235,7 @@ public class AccessibleGraphCanvasShould {
 
     @Test
     public void receiveTabThroughSwingDispatchAndRestoreFocusTraversalConfiguration() {
+        Assume.assumeFalse(GraphicsEnvironment.isHeadless());
         final Fixture fixture = Fixture.create();
         final GraphCanvas canvas = fixture.canvas();
         final RecordingListener listener = new RecordingListener();
@@ -326,6 +329,7 @@ public class AccessibleGraphCanvasShould {
 
     @Test
     public void ignoreEnterForSelectionsAbsentFromCurrentVisibleOrderAfterStateReplacement() {
+        Assume.assumeFalse(GraphicsEnvironment.isHeadless());
         final Fixture fixture = Fixture.create();
         final GraphCanvas canvas = fixture.canvas();
         final RecordingListener listener = new RecordingListener();
