@@ -1876,14 +1876,109 @@ public class GraphWorkspaceWindowModelShould {
 
     @Test
     public void f11RestoresBoundsAndExtendedStateFromMaximizedWindow() throws Exception {
+        final String configured = System.getenv("FREEPLANE_GRAPH_TEST_WINDOW_MANAGER");
+        final String mode = configured == null ? "required" : configured;
+        assertThat(mode).as("FREEPLANE_GRAPH_TEST_WINDOW_MANAGER").isIn("required", "optional");
         Assume.assumeFalse(GraphicsEnvironment.isHeadless());
+        requireWindowManager(mode);
+        final java.awt.Rectangle ewmh = requiredWorkArea();
         try (DisplayFixture f = new DisplayFixture()) {
+            final java.awt.Rectangle awt = f.edt(() -> DisplayFixture.workArea(f.window.getGraphicsConfiguration()));
+            assertWorkAreaAgreement(awt, ewmh);
             f.onEdt(() -> f.window.setExtendedState(java.awt.Frame.MAXIMIZED_BOTH));
             f.await(() -> f.window.getExtendedState() == java.awt.Frame.MAXIMIZED_BOTH);
-            f.awaitFrameStable(2100);
+            f.requireMaximizedDuringStable = true;
+            try {
+                f.awaitFrameStable(2100);
+            }
+            finally {
+                f.requireMaximizedDuringStable = false;
+            }
+            f.assertMaximizedWorkAreaCoverage();
             f.checkpoint = f.edt(() -> f.commands.size());
             f.assertRoundTrip(true);
         }
+    }
+
+    private static String queryRootProperty(final String property) throws Exception {
+        final String display = System.getenv("DISPLAY");
+        assertThat(display).as("current DISPLAY").isNotNull().isNotEmpty();
+        final Process process = new ProcessBuilder("xprop", "-display", display, "-root", property)
+            .redirectErrorStream(true).start();
+        try {
+            assertThat(process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS))
+                .as("bounded xprop query for %s", property).isTrue();
+            final java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+            final byte[] buffer = new byte[1024];
+            int count;
+            while ((count = process.getInputStream().read(buffer)) != -1) {
+                bytes.write(buffer, 0, count);
+            }
+            final String text = new String(bytes.toByteArray(), java.nio.charset.StandardCharsets.UTF_8).trim();
+            System.out.println("EWMH DISPLAY=" + display + " property=" + property + " output=" + text);
+            assertThat(process.exitValue()).as("xprop exit: %s", text).isZero();
+            return text;
+        }
+        finally {
+            if (process.isAlive()) {
+                process.destroyForcibly();
+                assertThat(process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS))
+                    .as("xprop cleanup").isTrue();
+            }
+        }
+    }
+
+    private static void requireWindowManager(final String mode) throws Exception {
+        final String supporting = queryRootProperty("_NET_SUPPORTING_WM_CHECK");
+        final boolean absent = supporting.matches("_NET_SUPPORTING_WM_CHECK:\\s+"
+            + "(?:not found\\.|no such atom on any window\\.)");
+        if (absent) {
+            queryRootProperty("_NET_WORKAREA"); // Same-display absent-path receipt, before maximization.
+            if ("optional".equals(mode)) {
+                Assume.assumeTrue("WM_ABSENT_SAME_DISPLAY:" + System.getenv("DISPLAY"), false);
+            }
+            throw new AssertionError("Required WM absent on " + System.getenv("DISPLAY"));
+        }
+        assertThat(supporting).matches("_NET_SUPPORTING_WM_CHECK\\(WINDOW\\): window id # 0x[0-9a-fA-F]+");
+        final String xid = supporting.substring(supporting.lastIndexOf(' ') + 1);
+        assertThat(Long.parseLong(xid.substring(2), 16)).as("nonzero WM support XID").isNotZero();
+    }
+
+    private static java.awt.Rectangle requiredWorkArea() throws Exception {
+        final String desktop = queryRootProperty("_NET_CURRENT_DESKTOP");
+        assertThat(desktop).matches("_NET_CURRENT_DESKTOP\\(CARDINAL\\) = [0-9]+");
+        final int index = Integer.parseInt(desktop.substring(desktop.indexOf("= ") + 2));
+        final String work = queryRootProperty("_NET_WORKAREA");
+        assertThat(work).startsWith("_NET_WORKAREA(CARDINAL) = ");
+        final String[] values = work.substring(work.indexOf("= ") + 2).split(",\\s*");
+        assertThat(values.length % 4).isZero();
+        assertThat(index).isGreaterThanOrEqualTo(0).isLessThan(values.length / 4);
+        final long[] rectangle = new long[4];
+        for (int i = 0; i < values.length; i++) {
+            assertThat(values[i]).matches("[0-9]+");
+            final long value = Long.parseLong(values[i]);
+            assertThat(value).isBetween(0L, 4294967295L);
+            if (i / 4 == index) {
+                rectangle[i % 4] = value;
+            }
+        }
+        assertThat(rectangle[2]).isBetween(1L, (long) Integer.MAX_VALUE);
+        assertThat(rectangle[3]).isBetween(1L, (long) Integer.MAX_VALUE);
+        return new java.awt.Rectangle((int) rectangle[0], (int) rectangle[1],
+            (int) rectangle[2], (int) rectangle[3]);
+    }
+
+    private static void assertWorkAreaAgreement(final java.awt.Rectangle awt,
+            final java.awt.Rectangle ewmh) {
+        System.out.println("EWMH AWT=" + awt + " NET_WORKAREA=" + ewmh
+            + " tolerance=" + DisplayFixture.X11_AWT_BOUNDS_TOLERANCE);
+        final long tolerance = DisplayFixture.X11_AWT_BOUNDS_TOLERANCE;
+        assertThat(Math.abs((long) awt.x - ewmh.x)).isLessThanOrEqualTo(tolerance);
+        assertThat(Math.abs((long) awt.y - ewmh.y)).isLessThanOrEqualTo(tolerance);
+        assertThat(Math.abs(((long) awt.x + awt.width) - ((long) ewmh.x + ewmh.width)))
+            .isLessThanOrEqualTo(tolerance);
+        assertThat(Math.abs(((long) awt.y + awt.height) - ((long) ewmh.y + ewmh.height)))
+            .isLessThanOrEqualTo(tolerance);
     }
 
     @Test
@@ -2159,6 +2254,7 @@ public class GraphWorkspaceWindowModelShould {
         private javax.swing.Timer hintTimer;
         private Thread.UncaughtExceptionHandler previousHandler;
         private int checkpoint;
+        private boolean requireMaximizedDuringStable;
 
         private DisplayFixture() throws Exception {
             robot = new java.awt.Robot();
@@ -2268,6 +2364,12 @@ public class GraphWorkspaceWindowModelShould {
             final AtomicReference<java.awt.Rectangle> last = new AtomicReference<java.awt.Rectangle>();
             final long[] changed = { System.nanoTime() };
             await(() -> {
+                if (requireMaximizedDuringStable) {
+                    assertThat(window.isVisible()).as("maximized frame visible throughout stable interval").isTrue();
+                    assertThat(window.isDisplayable()).as("maximized frame displayable throughout stable interval").isTrue();
+                    assertThat(window.getExtendedState() & java.awt.Frame.MAXIMIZED_BOTH)
+                        .as("MAXIMIZED_BOTH throughout stable interval").isEqualTo(java.awt.Frame.MAXIMIZED_BOTH);
+                }
                 java.awt.Rectangle current = window.getBounds();
                 if (!current.equals(last.get())) {
                     last.set(current);
@@ -2375,6 +2477,27 @@ public class GraphWorkspaceWindowModelShould {
 
         private void assertWorkAreaCoverage() {
             onEdt(this::assertWorkAreaCoverageOnEdt);
+        }
+
+        // The maximized stable endpoint requires work-area coverage only. The stricter
+        // screen-containment assertions of assertWorkAreaCoverageOnEdt belong to the
+        // undecorated full-screen contract and do not hold for a decorated maximized frame.
+        private void assertMaximizedWorkAreaCoverage() {
+            onEdt(() -> {
+                final java.awt.GraphicsConfiguration graphics = window.getGraphicsConfiguration();
+                final java.awt.Rectangle workArea = workArea(graphics);
+                final java.awt.Rectangle actual = window.getBounds();
+                System.out.println("DISPLAY maximized endpoint bounds=" + actual
+                    + " workArea=" + workArea);
+                assertThat(actual.x).as("maximized frame covers work-area left edge")
+                    .isLessThanOrEqualTo(workArea.x + X11_AWT_BOUNDS_TOLERANCE);
+                assertThat(actual.y).as("maximized frame covers work-area top edge")
+                    .isLessThanOrEqualTo(workArea.y + X11_AWT_BOUNDS_TOLERANCE);
+                assertThat(actual.x + actual.width).as("maximized frame covers work-area right edge")
+                    .isGreaterThanOrEqualTo(workArea.x + workArea.width - X11_AWT_BOUNDS_TOLERANCE);
+                assertThat(actual.y + actual.height).as("maximized frame covers work-area bottom edge")
+                    .isGreaterThanOrEqualTo(workArea.y + workArea.height - X11_AWT_BOUNDS_TOLERANCE);
+            });
         }
 
         private void assertWorkAreaCoverageOnEdt() {
