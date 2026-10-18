@@ -551,9 +551,10 @@ public class EdgeConflictCorrectionShould {
     }
 
     /**
-     * The spec §5.2 initial-detection-stop contract: ascending deduplicated lower-bound keys that
-     * really are a prefix of the unbounded detection of the same geometry, no repair and no
-     * resolved count, cap reconciliation on both work counters, and no §5.4 rebuild.
+     * The spec §5.2 initial-detection-stop contract: ascending lower-bound keys that are a
+     * deduplicated subset of the unbounded detection of the same geometry, accumulated in
+     * examination order, no repair and no resolved count, cap reconciliation on both work
+     * counters, and no §5.4 rebuild.
      */
     private static void assertInitialDetectionStopContracts(final Fixture fixture,
             final EdgeConflictResult result, final List<String> unboundedKeys) {
@@ -629,6 +630,32 @@ public class EdgeConflictCorrectionShould {
         // This fixture's single-entry batch is evaluated once and stops inside its candidate
         // detection, so exactly one rejected current attempt is reported.
         assertThat(result.diagnostics().verifications()).isEqualTo(1);
+        assertCandidateVerificationStopContracts(fixture, result, expected.keys());
+    }
+
+    @Test
+    public void stopsOnTheVerificationWorkCapWithoutADetectionStop() {
+        // reportedQuad's first candidate is the two-swap batch; seeding the shared work total to
+        // the retained cap immediately before that candidate's verification exhausts the work
+        // allowance without any candidate detection stopping. The work STOP must reject the
+        // attempt outright, report exhaustion, and never retry the singleton: exactly one
+        // verification, not two.
+        final Fixture fixture = reportedQuad();
+        final EdgeConflictCorrection correction = new EdgeConflictCorrection();
+        final EdgeConflictCorrection.Detection expected = EdgeConflictCorrection.detectConflicts(
+            fixture.projection, fixture.boundary.positions(), fixture.boundary.geometry(),
+            fixture.visible);
+        final EdgeConflictResult result = correction.apply(fixture.projection,
+            fixture.boundary.positions(), METRICS, Collections.<PinProjection>emptyList(),
+            seedCountersAtDetection(correction, fixture, 2, 0L, 0L, 65_536L), fixture.boundary);
+
+        assertThat(result.diagnostics().verifications()).isEqualTo(1);
+        assertThat(result.diagnostics().verificationWork())
+            .isEqualTo(EdgeConflictCorrection.EDGE_CONFLICT_MAX_VERIFICATION_WORK_PER_FRAME);
+        assertThat(result.diagnostics().verificationBudgetExhausted()).isTrue();
+        assertThat(result.diagnostics().detectionTruncated()).isFalse();
+        assertThat(result.diagnostics().rounds()).isZero();
+        assertThat(result.diagnostics().repairsApplied()).isEmpty();
         assertCandidateVerificationStopContracts(fixture, result, expected.keys());
     }
 
@@ -3377,7 +3404,8 @@ public class EdgeConflictCorrectionShould {
         }
     }
 
-    private static EdgeConflictResult apply(final Fixture fixture) {        return apply(new EdgeConflictCorrection(), fixture);
+    private static EdgeConflictResult apply(final Fixture fixture) {
+        return apply(new EdgeConflictCorrection(), fixture);
     }
 
     private static EdgeConflictResult apply(final EdgeConflictCorrection correction,
