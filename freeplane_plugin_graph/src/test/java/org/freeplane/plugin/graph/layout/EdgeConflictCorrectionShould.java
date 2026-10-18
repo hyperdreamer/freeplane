@@ -420,6 +420,65 @@ public class EdgeConflictCorrectionShould {
     }
 
     @Test
+    public void keepsTheCompleteCrowdedResidualWhenGlobalVerificationCannotFinish() {
+        // E1 plus 230 isolated nodes Xi = (10000 + 100*i, 10000). Selecting the first eight C2
+        // families does not avoid the two global A2 scans, and 2*C(257,2) = 65,792 already
+        // exceeds the retained 65,536 work units before any hull or rebuild charge.
+        final Fixture fixture = crowdedNineObstructionsFixture();
+        final List<String> initialCompleteKeys = EdgeConflictCorrection.detectConflicts(
+            fixture.projection, fixture.boundary.positions(), fixture.boundary.geometry(),
+            fixture.visible).keys();
+        final List<String> expectedConflicts = new ArrayList<String>();
+        for (int index = 0; index < 9; index++) {
+            expectedConflicts.add(CanonicalKeys.edgeNodePair(
+                fixture.projection.edges().get(index).key(), fixture.key(3 * index + 2)));
+        }
+
+        assertThat(fixture.projection.nodes()).hasSize(257);
+        assertThat(fixture.boundary.positions().nodes()).hasSize(257);
+        assertThat(fixture.projection.edges()).hasSize(9);
+        assertThat(NodeSeparationProjection.violatingPairs(fixture.projection,
+            fixture.boundary.positions())).isEmpty();
+        assertThat(new BoundaryInvariants().detectPairKeys(fixture.projection,
+            fixture.boundary.geometry())).isEmpty();
+        assertThat(initialCompleteKeys).containsExactlyElementsOf(expectedConflicts);
+
+        final EdgeConflictResult result = apply(fixture);
+
+        assertThat(result.positions()).isEqualTo(fixture.boundary.positions());
+        assertThat(result.diagnostics().rounds()).isZero();
+        assertThat(result.diagnostics().verifications()).isEqualTo(1);
+        assertThat(result.diagnostics().repairsApplied()).isEmpty();
+        assertThat(result.diagnostics().verificationWork()).isEqualTo(65_536L);
+        assertThat(result.diagnostics().verificationBudgetExhausted()).isTrue();
+        assertThat(result.diagnostics().detectionTruncated()).isFalse();
+        assertThat(result.diagnostics().conflictsResidual()).containsExactlyElementsOf(initialCompleteKeys);
+        // Complete detection: nine detected, none resolved, and no truncation of either kind.
+        assertThat(result.diagnostics().conflictsDetected()).isEqualTo(9);
+        assertThat(result.diagnostics().edgeOverNodeDetected()).isEqualTo(9);
+        assertThat(result.diagnostics().crossingsDetected()).isZero();
+        assertThat(result.diagnostics().crossingsResolved()).isZero();
+        assertThat(result.diagnostics().edgeOverNodeResolved()).isZero();
+        assertThat(result.diagnostics().indexBudgetExhausted()).isFalse();
+        // Reaching the selection limit is not an incomplete detection: the published unchanged
+        // positions still detect the same nine complete keys, so a retry could not have helped.
+        assertThat(EdgeConflictCorrection.detectConflicts(fixture.projection, result.positions(),
+            fixture.boundary.geometry(), fixture.visible).keys())
+            .containsExactlyElementsOf(initialCompleteKeys);
+        // A stop before any acceptance performs no §5.4 rebuild; the boundary record and the
+        // node residual stay the supplied frame's own values.
+        assertThat(result.boundaryDiagnostics()).isSameAs(fixture.boundary.diagnostics());
+        assertThat(result.nodeResidualViolations()).isEqualTo(fixture.boundary.nodeResidualViolations());
+        assertThat(result.timings().rebuildNanos()).isZero();
+        assertThat(result.appliedDisplacements()).isEmpty();
+        for (final ProjectedNodeKey key : fixture.keys()) {
+            assertThat(result.positions().nodes().get(key))
+                .isEqualTo(fixture.boundary.positions().nodes().get(key));
+        }
+        assertThat(result.positions().anchors()).isEqualTo(fixture.boundary.positions().anchors());
+    }
+
+    @Test
     public void truncatesDetectionAtTheItemBudget() {
         final Fixture fixture = referenceScaleFan(500);
         final EdgeConflictResult result = apply(fixture);
@@ -442,6 +501,7 @@ public class EdgeConflictCorrectionShould {
         assertThat(result.diagnostics().conflictsResidual()).isSorted();
         assertThat(new java.util.LinkedHashSet<String>(result.diagnostics().conflictsResidual()))
             .hasSize(result.diagnostics().conflictsResidual().size());
+        assertInitialDetectionStopContracts(fixture, result, bruteForce.keys());
     }
 
     @Test
@@ -465,12 +525,16 @@ public class EdgeConflictCorrectionShould {
         assertThat(new java.util.TreeSet<String>(bruteForce.keys()))
             .containsAll(result.diagnostics().conflictsResidual());
         assertThat(result.diagnostics().conflictsResidual()).isSorted();
+        assertInitialDetectionStopContracts(fixture, result, bruteForce.keys());
     }
 
     @Test
     public void truncatesDetectionAtTheVolumeBudget() {
         final Fixture fixture = concurrentDiameters(92);
         final EdgeConflictResult result = apply(fixture);
+        final EdgeConflictCorrection.Detection bruteForce = EdgeConflictCorrection.detectConflicts(
+            fixture.projection, fixture.boundary.positions(), fixture.boundary.geometry(),
+            fixture.visible);
 
         assertThat(result.diagnostics().detectionTruncated()).isTrue();
         assertThat(result.diagnostics().conflictsDetected())
@@ -483,6 +547,52 @@ public class EdgeConflictCorrectionShould {
         assertThat(result.diagnostics().verifications()).isZero();
         assertThat(result.diagnostics().repairsApplied()).isEmpty();
         assertThat(result.diagnostics().conflictsResidual()).isSorted();
+        assertInitialDetectionStopContracts(fixture, result, bruteForce.keys());
+    }
+
+    /**
+     * The spec §5.2 initial-detection-stop contract: ascending deduplicated lower-bound keys that
+     * really are a prefix of the unbounded detection of the same geometry, no repair and no
+     * resolved count, cap reconciliation on both work counters, and no §5.4 rebuild.
+     */
+    private static void assertInitialDetectionStopContracts(final Fixture fixture,
+            final EdgeConflictResult result, final List<String> unboundedKeys) {
+        final List<String> residual = result.diagnostics().conflictsResidual();
+        assertThat(result.diagnostics().detectionTruncated()).isTrue();
+        assertThat(result.diagnostics().verificationBudgetExhausted()).isFalse();
+        assertThat(result.diagnostics().rounds()).isZero();
+        assertThat(result.diagnostics().verifications()).isZero();
+        assertThat(result.diagnostics().repairsApplied()).isEmpty();
+        assertThat(result.diagnostics().crossingsResolved()).isZero();
+        assertThat(result.diagnostics().edgeOverNodeResolved()).isZero();
+        assertThat(residual).isSorted();
+        assertThat(new LinkedHashSet<String>(residual)).hasSize(residual.size());
+        // The accumulated keys are a lower bound of the same unbounded detection, but the counted
+        // stop is reached in examination order, so they are a subset rather than an ascending
+        // prefix of the complete key list.
+        assertThat(residual.size()).isLessThanOrEqualTo(unboundedKeys.size());
+        assertThat(new java.util.TreeSet<String>(unboundedKeys)).containsAll(residual);
+        // At least one detection counter reached its retained cap and both counters are reported.
+        assertThat(result.diagnostics().indexInsertedItems()
+                == EdgeConflictCorrection.EDGE_CONFLICT_MAX_INDEX_ITEMS_PER_FRAME
+            || result.diagnostics().indexPairChecks()
+                == EdgeConflictCorrection.EDGE_CONFLICT_MAX_PAIR_CHECKS_PER_FRAME
+            || result.diagnostics().conflictsDetected()
+                == EdgeConflictCorrection.EDGE_CONFLICT_MAX_DETECTED_PER_FRAME).isTrue();
+        assertThat(result.diagnostics().indexInsertedItems())
+            .isLessThanOrEqualTo(EdgeConflictCorrection.EDGE_CONFLICT_MAX_INDEX_ITEMS_PER_FRAME);
+        assertThat(result.diagnostics().indexPairChecks())
+            .isLessThanOrEqualTo(EdgeConflictCorrection.EDGE_CONFLICT_MAX_PAIR_CHECKS_PER_FRAME);
+        assertThat(result.diagnostics().conflictsDetected())
+            .isLessThanOrEqualTo(EdgeConflictCorrection.EDGE_CONFLICT_MAX_DETECTED_PER_FRAME);
+        // No terminal rebuild ran, so the published boundary record is the supplied frame's own
+        // record and the frame's own node residual survives untouched.
+        assertThat(result.boundaryDiagnostics()).isSameAs(fixture.boundary.diagnostics());
+        assertThat(result.nodeResidualViolations())
+            .isEqualTo(fixture.boundary.nodeResidualViolations());
+        assertThat(result.timings().rebuildNanos()).isZero();
+        assertThat(result.positions()).isEqualTo(fixture.boundary.positions());
+        assertThat(result.appliedDisplacements()).isEmpty();
     }
 
     @Test
@@ -497,8 +607,12 @@ public class EdgeConflictCorrectionShould {
         assertThat(result.diagnostics().detectionTruncated()).isFalse();
         assertThat(result.diagnostics().rounds()).isZero();
         assertThat(result.diagnostics().verificationWork())
-            .isLessThanOrEqualTo(EdgeConflictCorrection.EDGE_CONFLICT_MAX_VERIFICATION_WORK_PER_FRAME);
+            .isEqualTo(EdgeConflictCorrection.EDGE_CONFLICT_MAX_VERIFICATION_WORK_PER_FRAME);
         assertThat(result.diagnostics().conflictsResidual()).isEqualTo(expected.keys());
+        // The crossing offers a two-swap batch and a singleton retry, so the stop happens after
+        // two rejected attempts rather than one.
+        assertThat(result.diagnostics().verifications()).isEqualTo(2);
+        assertCandidateVerificationStopContracts(fixture, result, expected.keys());
     }
 
     @Test
@@ -512,6 +626,36 @@ public class EdgeConflictCorrectionShould {
         assertThat(result.diagnostics().verificationBudgetExhausted()).isTrue();
         assertThat(result.diagnostics().detectionTruncated()).isFalse();
         assertThat(result.diagnostics().conflictsResidual()).isEqualTo(expected.keys());
+        // This fixture's single-entry batch is evaluated once and stops inside its candidate
+        // detection, so exactly one rejected current attempt is reported.
+        assertThat(result.diagnostics().verifications()).isEqualTo(1);
+        assertCandidateVerificationStopContracts(fixture, result, expected.keys());
+    }
+
+    /**
+     * The spec §5.2 candidate detection/work stop contract: exactly one rejected current attempt,
+     * the last accepted positions, their <em>last complete</em> detection as the exact residual, a
+     * verification-phase stop with no published truncation, and no retry or relocation detection
+     * afterwards. No §5.4 rebuild runs, so the frame keeps its own boundary diagnostics.
+     */
+    private static void assertCandidateVerificationStopContracts(final Fixture fixture,
+            final EdgeConflictResult result, final List<String> lastCompleteKeys) {
+        assertThat(result.diagnostics().verificationBudgetExhausted()).isTrue();
+        assertThat(result.diagnostics().detectionTruncated()).isFalse();
+        assertThat(result.diagnostics().rounds()).isZero();
+        assertThat(result.diagnostics().verifications()).isGreaterThanOrEqualTo(1);
+        assertThat(result.diagnostics().repairsApplied()).isEmpty();
+        assertThat(result.diagnostics().crossingsResolved()).isZero();
+        assertThat(result.diagnostics().edgeOverNodeResolved()).isZero();
+        assertThat(result.diagnostics().conflictsResidual()).isEqualTo(lastCompleteKeys);
+        // The reported residual is the complete detection of the published positions, not a
+        // candidate's partial set: redetecting them with the unbounded API agrees exactly.
+        assertThat(EdgeConflictCorrection.detectConflicts(fixture.projection, result.positions(),
+            fixture.boundary.geometry(), fixture.visible).keys()).isEqualTo(lastCompleteKeys);
+        assertThat(result.positions()).isEqualTo(fixture.boundary.positions());
+        assertThat(result.appliedDisplacements()).isEmpty();
+        assertThat(result.boundaryDiagnostics()).isSameAs(fixture.boundary.diagnostics());
+        assertThat(result.timings().rebuildNanos()).isZero();
     }
 
     @Test
@@ -591,27 +735,57 @@ public class EdgeConflictCorrectionShould {
     private static Set<ProjectedEndpointKey> seedCountersAtDetection(
             final EdgeConflictCorrection correction, final Fixture fixture, final int detection,
             final long items, final long pairs, final long verification) {
+        return seedCountersAtDetection(correction, fixture, detection, items, pairs, verification, 0);
+    }
+
+    /**
+     * Seeds the counted frame totals from the {@code detection}-th visibility query, which is the
+     * first edge-endpoint lookup of that detection. {@code detectedKeys > 0} additionally seeds the
+     * shared detected-key total so a chosen detection stops on the volume allowance.
+     */
+    private static Set<ProjectedEndpointKey> seedCountersAtDetection(
+            final EdgeConflictCorrection correction, final Fixture fixture, final int detection,
+            final long items, final long pairs, final long verification, final int detectedKeys) {
+        return seedCountersAtDetection(correction, fixture.projection, fixture.visible, detection,
+            items, pairs, verification, detectedKeys);
+    }
+
+    private static Set<ProjectedEndpointKey> seedCountersAtDetection(
+            final EdgeConflictCorrection correction, final GraphProjection projection,
+            final Set<ProjectedEndpointKey> visible, final int detection, final long items,
+            final long pairs, final long verification) {
+        return seedCountersAtDetection(correction, projection, visible, detection, items, pairs,
+            verification, 0);
+    }
+
+    private static Set<ProjectedEndpointKey> seedCountersAtDetection(
+            final EdgeConflictCorrection correction, final GraphProjection projection,
+            final Set<ProjectedEndpointKey> visible, final int detection, final long items,
+            final long pairs, final long verification, final int detectedKeys) {
         return new java.util.AbstractSet<ProjectedEndpointKey>() {
             private int queries;
 
             @Override
             public boolean contains(final Object endpoint) {
-                if (++queries == (detection - 1) * fixture.projection.edges().size() * 2 + 1) {
+                if (++queries == (detection - 1) * projection.edges().size() * 2 + 1) {
                     setCounter(correction, "indexInsertedItems", items);
                     setCounter(correction, "indexPairChecks", pairs);
                     setCounter(correction, "verificationWork", verification);
+                    if (detectedKeys > 0) {
+                        setIntCounter(correction, "detectedKeys", detectedKeys);
+                    }
                 }
-                return fixture.visible.contains(endpoint);
+                return visible.contains(endpoint);
             }
 
             @Override
             public java.util.Iterator<ProjectedEndpointKey> iterator() {
-                return fixture.visible.iterator();
+                return visible.iterator();
             }
 
             @Override
             public int size() {
-                return fixture.visible.size();
+                return visible.size();
             }
         };
     }
@@ -626,6 +800,402 @@ public class EdgeConflictCorrectionShould {
         catch (final ReflectiveOperationException exception) {
             throw new AssertionError(exception);
         }
+    }
+
+    private static void setIntCounter(final EdgeConflictCorrection correction, final String name,
+            final int value) {
+        try {
+            final java.lang.reflect.Field field = EdgeConflictCorrection.class.getDeclaredField(name);
+            field.setAccessible(true);
+            field.setInt(correction, value);
+        }
+        catch (final ReflectiveOperationException exception) {
+            throw new AssertionError(exception);
+        }
+    }
+
+    @Test
+    public void publishesTheLowerBoundResidualFromThePostRoundAndTerminalDetections() {
+        // E1 with N0..N7 actively pinned: the first accepted round clears exactly one row, so a
+        // seeded published-position detection really has eight surviving keys, and the seeded
+        // detected-key cap stops it part-way through a multi-key residual.
+        final Fixture fixture = nineObstructionsFixture();
+        final List<PinProjection> pins = fixture.pinsFor(2, 5, 8, 11, 14, 17, 20, 23);
+        final List<String> zeroThroughSeven = new ArrayList<String>();
+        for (int index = 0; index < 8; index++) {
+            zeroThroughSeven.add(CanonicalKeys.edgeNodePair(
+                fixture.projection.edges().get(index).key(), fixture.key(3 * index + 2)));
+        }
+
+        // Control: without a seeded stop the frame publishes the complete eight-key residual.
+        final EdgeConflictResult complete = new EdgeConflictCorrection().apply(fixture.projection,
+            fixture.boundary.positions(), METRICS, pins, fixture.visible, fixture.boundary);
+        assertThat(complete.diagnostics().rounds()).isEqualTo(1);
+        assertThat(complete.diagnostics().verifications()).isEqualTo(1);
+        assertThat(complete.diagnostics().verificationWork()).isEqualTo(1_053L);
+        assertThat(complete.diagnostics().detectionTruncated()).isFalse();
+        assertThat(complete.diagnostics().conflictsResidual()).containsExactlyElementsOf(zeroThroughSeven);
+
+        // Detection 3 is the post-round scan; detection 4 is the terminal publication scan. Both
+        // stop on the detected-key allowance, so both publish that detection's ascending
+        // accumulated keys and skip the §5.4 rebuild.
+        for (final int detection : new int[] {3, 4}) {
+            final EdgeConflictCorrection correction = new EdgeConflictCorrection();
+            final EdgeConflictResult result = correction.apply(fixture.projection,
+                fixture.boundary.positions(), METRICS, pins,
+                seedCountersAtDetection(correction, fixture, detection, 0L, 0L, 0L, 4_095),
+                fixture.boundary);
+            final EdgeConflictDiagnostics diagnostics = result.diagnostics();
+
+            assertThat(diagnostics.rounds()).as("detection %s", detection).isEqualTo(1);
+            assertThat(diagnostics.verifications()).as("detection %s", detection).isEqualTo(1);
+            assertThat(diagnostics.detectionTruncated()).as("detection %s", detection).isTrue();
+            assertThat(diagnostics.verificationBudgetExhausted()).as("detection %s", detection)
+                .isFalse();
+            assertThat(diagnostics.indexBudgetExhausted()).as("detection %s", detection).isFalse();
+            assertThat(diagnostics.conflictsResidual()).as("detection %s", detection)
+                .containsExactly(zeroThroughSeven.get(0));
+            // The lower bound really came from the published geometry of this detection, not from
+            // a candidate's partial set and not from the previous round's complete keys.
+            final List<String> publishedResidual = EdgeConflictCorrection.detectConflicts(
+                fixture.projection, result.positions(), fixture.boundary.geometry(),
+                fixture.visible).keys();
+            assertThat(new java.util.TreeSet<String>(publishedResidual))
+                .as("detection %s", detection)
+                .containsAll(diagnostics.conflictsResidual());
+            assertThat(new java.util.TreeSet<String>(publishedResidual))
+                .as("detection %s", detection)
+                .containsAll(zeroThroughSeven);
+            // The accepted movement is published even though the detection stopped. Only N8 is
+            // unpinned, so it is the row the accepted round repairs.
+            assertThat(result.positions().nodes().get(fixture.key(3 * 8 + 2)))
+                .as("detection %s", detection).isEqualTo(LayoutPoint.of(0, 1_211));
+            for (int index = 0; index < 8; index++) {
+                assertThat(result.positions().nodes().get(fixture.key(3 * index + 2)))
+                    .as("detection %s row %s", detection, index)
+                    .isEqualTo(fixture.boundary.positions().nodes().get(fixture.key(3 * index + 2)));
+            }
+            assertThat(diagnostics.repairsApplied()).as("detection %s", detection).hasSize(1);
+            // Skip the rebuild: the supplied boundary record and node residual stand unchanged.
+            assertThat(result.boundaryDiagnostics()).as("detection %s", detection)
+                .isSameAs(fixture.boundary.diagnostics());
+            assertThat(result.nodeResidualViolations()).as("detection %s", detection)
+                .isEqualTo(fixture.boundary.nodeResidualViolations());
+            assertThat(result.timings().rebuildNanos()).as("detection %s", detection).isZero();
+        }
+    }
+
+    @Test
+    public void rejectsTheSecondRoundCandidateWithoutLosingTheLastCompleteResidual() {
+        // 33 independent E1 rows: eight C2 families per round leave 25 keys after the first
+        // accepted round. The second round's candidate verification then stops either on the
+        // shared detected-key total or on the verification-work total.
+        final Fixture fixture = crowdedRowsFixture(33);
+
+        // Detection 1 is the initial scan, 2 the first round's candidate detection, 3 the
+        // post-round scan and 4 the second round's candidate detection, whose stop must reject
+        // that attempt and keep round 1's last complete residual.
+        final EdgeConflictCorrection detectionCorrection = new EdgeConflictCorrection();
+        final EdgeConflictResult detectionStop = detectionCorrection.apply(
+            fixture.projection, fixture.boundary.positions(), METRICS,
+            Collections.<PinProjection>emptyList(),
+            seedCountersAtDetection(detectionCorrection, fixture, 4, 0L, 0L, 0L, 4_093),
+            fixture.boundary);
+        final EdgeConflictResult control = apply(fixture);
+        assertThat(control.diagnostics().rounds()).isEqualTo(4);
+        assertThat(control.diagnostics().verificationBudgetExhausted()).isFalse();
+        assertThat(control.diagnostics().detectionTruncated()).isFalse();
+        assertThat(control.diagnostics().conflictsResidual()).hasSize(1);
+
+        // The last complete C_in of the first accepted round is the complete detection of the
+        // round-1 published positions on that round's recomputed geometry: 33 - 8 = 25 keys.
+        final List<String> firstRoundResidual = EdgeConflictCorrection.detectConflicts(
+            fixture.projection, detectionStop.positions(),
+            publishedGeometry(fixture.projection, detectionStop), fixture.visible).keys();
+        assertThat(firstRoundResidual).hasSize(25);
+
+        assertThat(detectionStop.diagnostics().rounds()).isEqualTo(1);
+        assertThat(detectionStop.diagnostics().verifications()).isEqualTo(2);
+        assertThat(detectionStop.diagnostics().verificationBudgetExhausted()).isTrue();
+        assertThat(detectionStop.diagnostics().detectionTruncated()).isFalse();
+        assertThat(detectionStop.diagnostics().repairsApplied()).hasSize(8);
+        // The candidate's partial detection never becomes the published residual.
+        assertThat(detectionStop.diagnostics().conflictsResidual())
+            .containsExactlyElementsOf(firstRoundResidual);
+        assertThat(detectionStop.diagnostics().crossingsResolved()).isZero();
+        assertThat(detectionStop.diagnostics().edgeOverNodeResolved()).isEqualTo(8);
+        // A candidate detection stop is a verification-phase stop, not a published-position
+        // truncation, so the §5.4 rebuild is still eligible and completes here.
+        assertThat(detectionStop.boundaryDiagnostics())
+            .isNotSameAs(fixture.boundary.diagnostics());
+        assertThat(detectionStop.timings().rebuildNanos()).isGreaterThan(0L);
+
+        final EdgeConflictCorrection workCorrection = new EdgeConflictCorrection();
+        final EdgeConflictResult workStop = workCorrection.apply(fixture.projection,
+            fixture.boundary.positions(), METRICS, Collections.<PinProjection>emptyList(),
+            seedCountersAtDetection(workCorrection, fixture, 4, 0L, 0L, 65_536L), fixture.boundary);
+        assertThat(workStop.diagnostics().rounds()).isEqualTo(1);
+        assertThat(workStop.diagnostics().verifications()).isEqualTo(2);
+        assertThat(workStop.diagnostics().verificationWork())
+            .isEqualTo(EdgeConflictCorrection.EDGE_CONFLICT_MAX_VERIFICATION_WORK_PER_FRAME);
+        assertThat(workStop.diagnostics().verificationBudgetExhausted()).isTrue();
+        assertThat(workStop.diagnostics().detectionTruncated()).isFalse();
+        assertThat(workStop.diagnostics().repairsApplied()).hasSize(8);
+        assertThat(workStop.diagnostics().conflictsResidual())
+            .containsExactlyElementsOf(firstRoundResidual);
+        assertThat(workStop.diagnostics().edgeOverNodeResolved()).isEqualTo(8);
+        assertThat(workStop.positions()).isEqualTo(detectionStop.positions());
+        // The work stop leaves no allowance for the terminal node rebuild, so neither partial
+        // rebuilt record is published; the frame keeps its own boundary diagnostics and residual.
+        assertThat(workStop.boundaryDiagnostics()).isSameAs(fixture.boundary.diagnostics());
+        assertThat(workStop.nodeResidualViolations())
+            .isEqualTo(fixture.boundary.nodeResidualViolations());
+    }
+
+    @Test
+    public void publishesNeitherPartialRebuildRecordWhenTheTerminalScanStops() {
+        // The A3 subset fixture needs one hull-pair comparison plus ten node-pair evaluations for
+        // its terminal rebuild (34 work units in total). Seeding 65,536, 65,535 or 65,525 leaves
+        // 0 or 1 units, so the hull stage stops and the pre-existing residual pair survives.
+        final A3SubsetFixture fixture = preExistingSiblingResidualFixture(0.0, 30.0, 100.0);
+        final String residualPair = CanonicalKeys.hullPair(fixture.aHull, fixture.cHull);
+        assertThat(fixture.boundary.diagnostics().residualHullPairs()).containsExactly(residualPair);
+        assertThat(fixture.boundary.nodeResidualViolations()).isZero();
+
+        for (final long work : new long[] {65_536L, 65_535L, 65_525L}) {
+            final EdgeConflictCorrection correction = new EdgeConflictCorrection();
+            final EdgeConflictResult result = correction.apply(fixture.projection,
+                fixture.boundary.positions(), METRICS, Collections.<PinProjection>emptyList(),
+                seedCountersAtDetection(correction, fixture.projection, fixture.visible, 3, 0L, 0L,
+                    work), fixture.boundary);
+
+            assertThat(result.diagnostics().rounds()).as("work %s", work).isEqualTo(1);
+            assertThat(result.diagnostics().verificationWork()).as("work %s", work)
+                .isEqualTo(EdgeConflictCorrection.EDGE_CONFLICT_MAX_VERIFICATION_WORK_PER_FRAME);
+            assertThat(result.diagnostics().verificationBudgetExhausted()).as("work %s", work)
+                .isTrue();
+            assertThat(result.diagnostics().detectionTruncated()).as("work %s", work).isFalse();
+            // The complete edge residual of the accepted round is retained untouched.
+            assertThat(result.diagnostics().conflictsResidual()).as("work %s", work).isEmpty();
+            assertThat(result.diagnostics().edgeOverNodeResolved()).as("work %s", work).isEqualTo(1);
+            // Neither the rebuilt boundary record nor the node residual is published partially.
+            assertThat(result.boundaryDiagnostics()).as("work %s", work)
+                .isSameAs(fixture.boundary.diagnostics());
+            assertThat(result.boundaryDiagnostics().residualHullPairs())
+                .as("work %s", work).containsExactly(residualPair);
+            assertThat(result.nodeResidualViolations()).as("work %s", work)
+                .isEqualTo(fixture.boundary.nodeResidualViolations());
+            // The accepted candidate position is published; only the rebuild stopped.
+            assertThat(result.positions().nodes().get(fixture.aKey)).as("work %s", work)
+                .isEqualTo(fixture.unsafeTarget);
+            assertThat(result.appliedDisplacements()).as("work %s", work).hasSize(1);
+        }
+
+        // Control: the same fixture below the stop completes both stages and publishes the rebuilt
+        // record, so the assertions above really pin the partial-publication rule.
+        final EdgeConflictCorrection controlCorrection = new EdgeConflictCorrection();
+        final EdgeConflictResult control = controlCorrection.apply(fixture.projection,
+            fixture.boundary.positions(), METRICS, Collections.<PinProjection>emptyList(),
+            seedCountersAtDetection(controlCorrection, fixture.projection, fixture.visible, 3, 0L, 0L,
+                65_524L), fixture.boundary);
+        assertThat(control.diagnostics().verificationWork()).isEqualTo(65_535L);
+        assertThat(control.diagnostics().verificationBudgetExhausted()).isFalse();
+        assertThat(control.diagnostics().detectionTruncated()).isFalse();
+        assertThat(control.boundaryDiagnostics()).isNotSameAs(fixture.boundary.diagnostics());
+        assertThat(control.boundaryDiagnostics().residualHullPairs()).containsExactly(residualPair);
+        assertThat(control.timings().rebuildNanos()).isGreaterThanOrEqualTo(0L);
+    }
+
+    @Test
+    public void keepsTheFiniteRejectionAndAcceptedRoundLimitsDistinctFromExhaustion() {
+        // Both attempt-64 cases: the rejected cap attempt that leaves the crossing residual sets the
+        // exhaustion flag, while the accepted cap attempt that clears every conflict leaves it clear.
+        final Fixture quad = reportedQuad();
+        final EdgeConflictCorrection rejectedCorrection = new EdgeConflictCorrection();
+        final EdgeConflictResult rejected = rejectedCorrection.apply(quad.projection,
+            quad.boundary.positions(), METRICS, Collections.<PinProjection>emptyList(),
+            seedVerificationsAtDetection(rejectedCorrection, quad, 63), quad.boundary);
+        assertThat(rejected.diagnostics().rounds()).isZero();
+        assertThat(rejected.diagnostics().verifications())
+            .isEqualTo(EdgeConflictCorrection.MAX_VERIFICATIONS_PER_FRAME);
+        assertThat(rejected.diagnostics().verificationWork()).isZero();
+        assertThat(rejected.diagnostics().verificationBudgetExhausted()).isTrue();
+        assertThat(rejected.diagnostics().detectionTruncated()).isFalse();
+        assertThat(rejected.diagnostics().repairsApplied()).isEmpty();
+        assertThat(rejected.diagnostics().conflictsResidual()).containsExactly(CanonicalKeys.edgePair(
+            quad.projection.edges().get(0).key(), quad.projection.edges().get(1).key()));
+        assertThat(rejected.positions()).isEqualTo(quad.boundary.positions());
+        assertThat(rejected.boundaryDiagnostics()).isSameAs(quad.boundary.diagnostics());
+        assertThat(rejected.timings().rebuildNanos()).isZero();
+
+        final ProminenceFixture prominence = prominenceFixture();
+        final EdgeConflictCorrection acceptedCorrection = new EdgeConflictCorrection();
+        final EdgeConflictResult accepted = acceptedCorrection.apply(prominence.projection,
+            prominence.boundary.positions(), METRICS, Collections.<PinProjection>emptyList(),
+            seedVerificationsAtDetection(acceptedCorrection, prominence.projection,
+                prominence.visible, 63), prominence.boundary);
+        assertThat(accepted.diagnostics().rounds()).isEqualTo(1);
+        assertThat(accepted.diagnostics().verifications())
+            .isEqualTo(EdgeConflictCorrection.MAX_VERIFICATIONS_PER_FRAME);
+        assertThat(accepted.diagnostics().conflictsResidual()).isEmpty();
+        assertThat(accepted.diagnostics().verificationBudgetExhausted()).as(
+            "clearing every conflict at the attempt cap is not exhaustion").isFalse();
+        assertThat(accepted.diagnostics().detectionTruncated()).isFalse();
+        assertThat(accepted.positions().nodes().get(prominence.n).y())
+            .isCloseTo(12.6, within(1e-9));
+    }
+
+    @Test
+    public void stopsAtFourAcceptedRoundsWithoutClaimingExhaustion() {
+        // 33 independent rows exceed the eight-family selection limit in every round, so exactly
+        // four accepted rounds leave 33 - 4*8 = 1 unsolved identity. Four rounds alone must never
+        // set a budget flag.
+        final Fixture fixture = crowdedRowsFixture(33);
+        final EdgeConflictResult result = apply(fixture);
+        final List<String> expectedResidual = Collections.singletonList(CanonicalKeys.edgeNodePair(
+            fixture.projection.edges().get(9).key(), fixture.key(3 * 9 + 2)));
+
+        assertThat(result.diagnostics().rounds())
+            .isEqualTo(EdgeConflictCorrection.MAX_RELOCATION_ROUNDS);
+        assertThat(result.diagnostics().verifications()).isEqualTo(4);
+        assertThat(result.diagnostics().repairsApplied()).hasSize(32);
+        assertThat(result.diagnostics().verificationBudgetExhausted()).isFalse();
+        assertThat(result.diagnostics().detectionTruncated()).isFalse();
+        assertThat(result.diagnostics().indexBudgetExhausted()).isFalse();
+        assertThat(result.diagnostics().conflictsResidual())
+            .containsExactlyElementsOf(expectedResidual);
+        // The unsolved identity stays visible on the published positions.
+        assertThat(EdgeConflictCorrection.detectConflicts(fixture.projection, result.positions(),
+            publishedGeometry(fixture.projection, result), fixture.visible).keys())
+            .containsExactlyElementsOf(expectedResidual);
+        assertThat(result.diagnostics().edgeOverNodeResolved()).isEqualTo(32);
+        assertThat(result.diagnostics().conflictsDetected()).isEqualTo(33);
+        // The terminal rebuild still runs: four rounds is not a stop.
+        assertThat(result.timings().rebuildNanos()).isGreaterThan(0L);
+        assertThat(result.boundaryDiagnostics()).isNotSameAs(fixture.boundary.diagnostics());
+        // Ascending canonical family order repairs rows 0-8 first, then 10-32, leaving row 9.
+        for (int index = 0; index < 33; index++) {
+            final LayoutPoint expected = index == 9 ? LayoutPoint.of(0, 150 * index + 5)
+                : LayoutPoint.of(0, 150 * index + 11);
+            assertThat(result.positions().nodes().get(fixture.key(3 * index + 2)))
+                .as("row %s", index).isEqualTo(expected);
+        }
+    }
+
+    @Test
+    public void keepsSelectionLimitsOrdinaryAndDirectEnumerationEligible() {
+        // The bounded family limit is a selection rule, not truncation: E1 needs two rounds for
+        // nine families and reports no budget flag at any point, while the fully blocked control
+        // exhausts its single family's six ordinary alternatives with no exhaustion either.
+        final EdgeConflictResult e1 = apply(nineObstructionsFixture());
+        assertThat(e1.diagnostics().rounds()).isEqualTo(2);
+        assertThat(e1.diagnostics().verifications()).isEqualTo(2);
+        assertThat(e1.diagnostics().verificationWork()).isEqualTo(1_755L);
+        assertThat(e1.diagnostics().repairsApplied()).hasSize(9);
+        assertThat(e1.diagnostics().conflictsResidual()).isEmpty();
+        assertThat(e1.diagnostics().verificationBudgetExhausted()).isFalse();
+        assertThat(e1.diagnostics().detectionTruncated()).isFalse();
+        assertThat(e1.diagnostics().indexBudgetExhausted()).isFalse();
+
+        final EdgeConflictResult blocked = apply(fullyBlockedFixture());
+        assertThat(blocked.diagnostics().rounds()).isZero();
+        assertThat(blocked.diagnostics().verifications()).isEqualTo(6);
+        assertThat(blocked.diagnostics().verificationWork()).isEqualTo(432L);
+        assertThat(blocked.diagnostics().repairsApplied()).isEmpty();
+        assertThat(blocked.diagnostics().verificationBudgetExhausted()).isFalse();
+        assertThat(blocked.diagnostics().detectionTruncated()).isFalse();
+        assertThat(blocked.diagnostics().indexBudgetExhausted()).isFalse();
+
+        final EdgeConflictResult deduplicated = new EdgeConflictCorrection().apply(
+            duplicateChordFixture().projection, duplicateChordFixture().boundary.positions(), METRICS,
+            duplicateChordFixture().pinsFor(0, 1, 2, 3), duplicateChordFixture().visible,
+            duplicateChordFixture().boundary);
+        assertThat(deduplicated.diagnostics().verifications()).isEqualTo(6);
+        assertThat(deduplicated.diagnostics().verificationWork()).isEqualTo(660L);
+        assertThat(deduplicated.diagnostics().rounds()).isZero();
+        assertThat(deduplicated.diagnostics().verificationBudgetExhausted()).isFalse();
+        assertThat(deduplicated.diagnostics().detectionTruncated()).isFalse();
+        assertThat(deduplicated.diagnostics().indexBudgetExhausted()).isFalse();
+
+        // A complete direct-enumeration detection keeps `indexBudgetExhausted` and still enters
+        // selection: the extreme-span frame repairs its crossing instead of stopping.
+        final Fixture extreme = fixture(1L, new String[] {"A", "B", "C", "D"},
+            new double[] {-1e300, -1e300, 1e300, 1e300, -1e300, 1e300, 1e300, -1e300},
+            new int[][] {{0, 1}, {2, 3}});
+        final EdgeConflictResult enumerated = apply(extreme);
+        assertThat(enumerated.diagnostics().indexBudgetExhausted()).isTrue();
+        assertThat(enumerated.diagnostics().detectionTruncated()).isFalse();
+        assertThat(enumerated.diagnostics().verifications()).isEqualTo(2);
+        assertThat(enumerated.diagnostics().rounds()).isEqualTo(1);
+        assertThat(enumerated.diagnostics().crossingsResolved()).isEqualTo(1);
+        assertThat(enumerated.diagnostics().conflictsResidual()).isEmpty();
+        assertThat(enumerated.diagnostics().verificationBudgetExhausted()).isFalse();
+    }
+
+    @Test
+    public void resetsEveryCounterBetweenSeparateApplyCallsOnOneCorrectionInstance() {
+        // A stopped crowded frame leaves the exhausted verification flag behind; the reused
+        // instance must clear it and reproduce a fresh instance's exact diagnostics for E1.
+        final EdgeConflictCorrection correction = new EdgeConflictCorrection();
+        final Fixture crowded = crowdedNineObstructionsFixture();
+        final EdgeConflictResult halted = apply(correction, crowded);
+        assertThat(halted.diagnostics().verificationBudgetExhausted()).isTrue();
+        assertThat(halted.diagnostics().verificationWork()).isEqualTo(65_536L);
+        assertThat(halted.diagnostics().verifications()).isEqualTo(1);
+
+        final Fixture fixture = nineObstructionsFixture();
+        final EdgeConflictResult reused = apply(correction, fixture);
+        final EdgeConflictResult fresh = apply(new EdgeConflictCorrection(), fixture);
+
+        assertThat(reused.diagnostics()).isEqualTo(fresh.diagnostics());
+        assertThat(reused.positions()).isEqualTo(fresh.positions());
+        assertThat(reused.appliedDisplacements()).isEqualTo(fresh.appliedDisplacements());
+        assertThat(reused.diagnostics().verificationBudgetExhausted()).isFalse();
+        assertThat(reused.diagnostics().indexBudgetExhausted()).isFalse();
+        assertThat(reused.diagnostics().detectionTruncated()).isFalse();
+        assertThat(reused.diagnostics().verificationWork()).isEqualTo(1_755L);
+        assertThat(reused.diagnostics().verifications()).isEqualTo(2);
+
+        // A detection stop is likewise cleared, including its counted index totals.
+        final EdgeConflictCorrection indexCorrection = new EdgeConflictCorrection();
+        final EdgeConflictResult truncated = apply(indexCorrection, referenceScaleFan(500));
+        assertThat(truncated.diagnostics().detectionTruncated()).isTrue();
+        final EdgeConflictResult afterTruncation = apply(indexCorrection, fixture);
+        assertThat(afterTruncation.diagnostics()).isEqualTo(fresh.diagnostics());
+        assertThat(afterTruncation.diagnostics().detectionTruncated()).isFalse();
+    }
+
+    private static Set<ProjectedEndpointKey> seedVerificationsAtDetection(
+            final EdgeConflictCorrection correction, final Fixture fixture,
+            final int verifications) {
+        return seedVerificationsAtDetection(correction, fixture.projection, fixture.visible,
+            verifications);
+    }
+
+    private static Set<ProjectedEndpointKey> seedVerificationsAtDetection(
+            final EdgeConflictCorrection correction, final GraphProjection projection,
+            final Set<ProjectedEndpointKey> visible, final int verifications) {
+        return new java.util.AbstractSet<ProjectedEndpointKey>() {
+            private int queries;
+
+            @Override
+            public boolean contains(final Object endpoint) {
+                if (++queries == 1) {
+                    setIntCounter(correction, "verifications", verifications);
+                }
+                return visible.contains(endpoint);
+            }
+
+            @Override
+            public java.util.Iterator<ProjectedEndpointKey> iterator() {
+                return visible.iterator();
+            }
+
+            @Override
+            public int size() {
+                return visible.size();
+            }
+        };
     }
 
     @Test
@@ -2146,6 +2716,59 @@ public class EdgeConflictCorrectionShould {
         final double[] coordinates = new double[54];
         final int[][] edges = new int[9][];
         for (int index = 0; index < 9; index++) {
+            ids[index * 3] = "A" + index;
+            ids[index * 3 + 1] = "B" + index;
+            ids[index * 3 + 2] = "N" + index;
+            coordinates[index * 6] = -100.0;
+            coordinates[index * 6 + 1] = 150.0 * index;
+            coordinates[index * 6 + 2] = 100.0;
+            coordinates[index * 6 + 3] = 150.0 * index;
+            coordinates[index * 6 + 4] = 0.0;
+            coordinates[index * 6 + 5] = 150.0 * index + 5.0;
+            edges[index] = new int[] {index * 3, index * 3 + 1};
+        }
+        return clearanceFixture(ids, coordinates, edges);
+    }
+
+    /**
+     * E1 plus 230 isolated nodes {@code Xi = (10000 + 100*i, 10000)}. The nine C2 obstructions stay
+     * complete at 257 nodes, while the two global A2 scans cost {@code 2*C(257,2) = 65_792} units —
+     * more than the retained 65,536 verification-work allowance.
+     */
+    private static Fixture crowdedNineObstructionsFixture() {
+        final String[] ids = new String[257];
+        final double[] coordinates = new double[514];
+        final int[][] edges = new int[9][];
+        for (int index = 0; index < 9; index++) {
+            ids[index * 3] = "A" + index;
+            ids[index * 3 + 1] = "B" + index;
+            ids[index * 3 + 2] = "N" + index;
+            coordinates[index * 6] = -100.0;
+            coordinates[index * 6 + 1] = 150.0 * index;
+            coordinates[index * 6 + 2] = 100.0;
+            coordinates[index * 6 + 3] = 150.0 * index;
+            coordinates[index * 6 + 4] = 0.0;
+            coordinates[index * 6 + 5] = 150.0 * index + 5.0;
+            edges[index] = new int[] {index * 3, index * 3 + 1};
+        }
+        for (int index = 0; index < 230; index++) {
+            ids[27 + index] = "X" + index;
+            coordinates[(27 + index) * 2] = 10_000.0 + 100.0 * index;
+            coordinates[(27 + index) * 2 + 1] = 10_000.0;
+        }
+        return clearanceFixture(ids, coordinates, edges);
+    }
+
+    /**
+     * {@code rows} independent E1 rows. Every round selects at most eight families, so {@code rows}
+     * above 32 exercises the four-accepted-round limit while {@code rows} above 8 exercises the
+     * eight-family selection limit in the first round.
+     */
+    private static Fixture crowdedRowsFixture(final int rows) {
+        final String[] ids = new String[rows * 3];
+        final double[] coordinates = new double[rows * 6];
+        final int[][] edges = new int[rows][];
+        for (int index = 0; index < rows; index++) {
             ids[index * 3] = "A" + index;
             ids[index * 3 + 1] = "B" + index;
             ids[index * 3 + 2] = "N" + index;
