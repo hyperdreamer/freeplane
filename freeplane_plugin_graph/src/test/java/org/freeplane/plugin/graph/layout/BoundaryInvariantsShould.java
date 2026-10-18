@@ -12,13 +12,17 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TreeSet;
 
 import org.freeplane.plugin.graph.geometry.AwtGeometryTextMetrics;
 import org.freeplane.plugin.graph.geometry.GeometryTextMetrics;
+import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.GraphGeometryEngine;
+import org.freeplane.plugin.graph.geometry.HullGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
+import org.freeplane.plugin.graph.geometry.NodeGeometry;
 import org.freeplane.plugin.graph.projection.BoundaryTier;
 import org.freeplane.plugin.graph.projection.CanonicalKeys;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
@@ -221,6 +225,70 @@ public class BoundaryInvariantsShould {
             BoundarySeparationDiagnostics.empty()))
             .isInstanceOf(Exception.class)
             .hasMessageContaining("baseline");
+    }
+
+    @Test
+    public void detectsAncestorEscapeInTheCandidatePairSet() {
+        // Enforced HR/HC: HR is the square [-10,10]x[-10,10], HC starts as [-1,1]x[-1,1] and the
+        // candidate HC is [19,21]x[-1,1], leaving HR unchanged. These are explicit supplied hulls
+        // that test the detector directly; they are not claimed to be production-generated parent
+        // geometry, because a consistent production parent would expand around its child.
+        final EnclosureKey parentKey = EnclosureKey.of(
+            SourceNodeKey.persisted(NodeReference.of(MAP, PersistedNodeId.of("HR"))));
+        final EnclosureKey childKey = EnclosureKey.of(
+            SourceNodeKey.persisted(NodeReference.of(MAP, PersistedNodeId.of("HC"))));
+        final EnclosureHullKey parentHull = EnclosureHullKey.of(Collections.singletonList(parentKey));
+        final EnclosureHullKey childHull = EnclosureHullKey.of(Collections.singletonList(childKey));
+        final ProjectedEnclosure parent = ProjectedEnclosure.of(parentHull, parentHull.endpointKeys(),
+            Collections.singletonList(SafeNodeLabel.of("HR", "HR")), "map",
+            Optional.<EnclosureHullKey>empty(), Collections.<ProjectedNodeKey>emptyList(),
+            Collections.singletonList(childHull), true, BoundaryTier.EMPHATIC);
+        final ProjectedEnclosure child = ProjectedEnclosure.of(childHull, childHull.endpointKeys(),
+            Collections.singletonList(SafeNodeLabel.of("HC", "HC")), "map",
+            Optional.of(parentHull), Collections.<ProjectedNodeKey>emptyList(),
+            Collections.<EnclosureHullKey>emptyList(), false, BoundaryTier.SUBTLE);
+        final GraphProjection projection = projection(Collections.<ProjectedNodeKey>emptyList(),
+            Arrays.asList(parent, child));
+        final BoundaryInvariants invariants = new BoundaryInvariants();
+
+        final Map<EnclosureHullKey, HullGeometry> contained =
+            new LinkedHashMap<EnclosureHullKey, HullGeometry>();
+        contained.put(parentHull, square(0.0, 0.0, 10.0));
+        contained.put(childHull, square(0.0, 0.0, 1.0));
+        final GraphGeometry baseline = GraphGeometry.of(
+            Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(), contained);
+
+        final Map<EnclosureHullKey, HullGeometry> escaped =
+            new LinkedHashMap<EnclosureHullKey, HullGeometry>();
+        escaped.put(parentHull, square(0.0, 0.0, 10.0));
+        escaped.put(childHull, square(20.0, 0.0, 1.0));
+        final GraphGeometry candidate = GraphGeometry.of(
+            Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(), escaped);
+
+        assertThat(invariants.detectPairKeys(projection, baseline)).isEmpty();
+        assertThat(invariants.detect(projection, baseline)).isEmpty();
+        final Set<String> candidatePairs = invariants.detectPairKeys(projection, candidate);
+        assertThat(candidatePairs).containsExactly(CanonicalKeys.pair(parentHull, childHull));
+        final List<BoundaryInvariants.Violation> violations = invariants.detect(projection, candidate);
+        assertThat(violations).hasSize(1);
+        assertThat(violations.get(0).kind()).isEqualTo(BoundaryConflict.Kind.ANCESTOR_ESCAPE);
+        assertThat(violations.get(0).pairKey()).isEqualTo(CanonicalKeys.pair(parentHull, childHull));
+        // The endpoints are the canonical-sorted hull pair of the escape, in either order.
+        assertThat(Arrays.asList(violations.get(0).first(), violations.get(0).second()))
+            .containsExactlyInAnyOrder(parentHull, childHull);
+        // The identity is not a sibling pair, so no sibling classification is reported for it.
+        assertThat(violations.get(0).kind()).isNotEqualTo(BoundaryConflict.Kind.SIBLING_CROSSING);
+        assertThat(violations.get(0).kind()).isNotEqualTo(BoundaryConflict.Kind.SIBLING_CONTAINMENT);
+    }
+
+    private static HullGeometry square(final double centerX, final double centerY,
+            final double halfExtent) {
+        return HullGeometry.of(Arrays.asList(
+            LayoutPoint.of(centerX - halfExtent, centerY - halfExtent),
+            LayoutPoint.of(centerX + halfExtent, centerY - halfExtent),
+            LayoutPoint.of(centerX + halfExtent, centerY + halfExtent),
+            LayoutPoint.of(centerX - halfExtent, centerY + halfExtent)),
+            LayoutPoint.of(centerX, centerY));
     }
 
     private static GraphProjection projection(final List<ProjectedNodeKey> nodeKeys,
