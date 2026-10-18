@@ -11,7 +11,7 @@
 
 **Tech Stack:** Java 8 source/bytecode target; Java 21.0.8-zulu runtime; installed Gradle; JUnit 4 and AssertJ; Python 3; X11 `xprop`, Xvfb and Openbox upstream release 3.6.1; Git and SHA-256.
 
-**Authority:** `docs/superpowers/specs/2026-10-16-graph-initial-spacing-spec.md`, including Sections 12–21 (SHA-256 `b26c92071a959bd1b5555318719d973fc544a9076bfdd26f3cc7ad99f30cd9f1`), and `docs/superpowers/specs/2026-10-18-graph-initial-spacing-epoch-3-design.md`, revision 4 (SHA-256 `b333b5df12b11e85c9b1ed60149fddf69a019dd7b8b4db8140643e1b8a6ebf84`). Design review 5 and specification review 2 are the approved reviews. The epoch-2 plan is a style reference, not an epoch-3 execution plan.
+**Authority:** `docs/superpowers/specs/2026-10-16-graph-initial-spacing-spec.md`, including Sections 12–21 (SHA-256 `5561e22397b216788403f22709e2e0b37c0e10a110f4a7bd367dc1b292a51e74`), and `docs/superpowers/specs/2026-10-18-graph-initial-spacing-epoch-3-design.md`, revision 5 (SHA-256 `2b2ea8ec83bc9eb7144826a09e165ccc373fc45a5cd3226dca8e47cd2690a72f`). Design review 5, specification review 2 and the D1/D2 amendment review are the approved reviews. The epoch-2 plan is a style reference, not an epoch-3 execution plan.
 
 **Planning status:** This document specifies the authorized implementation and evidence work. It does not claim that implementation, runners, tests, receipts, or acceptance have completed. The earlier execution-contract conflict is **resolved by explicit user decision on 2026-10-18**: the acceptance record is written **outside Git** under `$EPOCH3_ROOT/acceptance/`, so no task adds a repository document after the final-tree measurements. The delivered tree therefore equals the measured candidate tree exactly, and no source-only digest, documentation exclusion, or reordered provenance exception is authorized. A repository copy of the acceptance record, if the user later wants one, is a separate post-acceptance docs-only delivery commit and is never claimed as measured evidence. Tasks 1–6 and an honest acceptance record are concrete and reviewable.
 
@@ -29,7 +29,7 @@
 ## Global Constraints
 
 - Task identifier is `graph-initial-spacing`; epoch is 3. There is exactly one lane, `spacing`, with sequence 1–6 and no concurrent execution. Each task consumes its predecessor's reviewed outputs. Do not reinterpret the fixed implementer tiers or add tasks.
-- Read-only authorities for every task: `docs/superpowers/specs/2026-10-16-graph-initial-spacing-spec.md` including Sections 12–21, SHA-256 `b26c92071a959bd1b5555318719d973fc544a9076bfdd26f3cc7ad99f30cd9f1`; `docs/superpowers/specs/2026-10-18-graph-initial-spacing-epoch-3-design.md` revision 4, SHA-256 `b333b5df12b11e85c9b1ed60149fddf69a019dd7b8b4db8140643e1b8a6ebf84`; `$PM_RUN_ROOT/reports/epoch3-design-review-5.md`; and `$PM_RUN_ROOT/reports/epoch3-spec-review-2.md`. Any impossible requirement is reported rather than silently repaired.
+- Read-only authorities for every task: `docs/superpowers/specs/2026-10-16-graph-initial-spacing-spec.md` including Sections 12–21, SHA-256 `5561e22397b216788403f22709e2e0b37c0e10a110f4a7bd367dc1b292a51e74`; `docs/superpowers/specs/2026-10-18-graph-initial-spacing-epoch-3-design.md` revision 5, SHA-256 `2b2ea8ec83bc9eb7144826a09e165ccc373fc45a5cd3226dca8e47cd2690a72f`; `$PM_RUN_ROOT/reports/epoch3-design-review-5.md`; and `$PM_RUN_ROOT/reports/epoch3-spec-review-2.md`, plus `$PM_RUN_ROOT/reports/epoch3-amendment-review-{1,2,3}.md`. Any impossible requirement is reported rather than silently repaired.
 - Execute from the actual assigned isolated lane/candidate worktree, not an assumed current directory. Record `pwd -P`, `git rev-parse HEAD`, `git rev-parse 'HEAD^{tree}'`, and `git status --porcelain=v1 --untracked-files=all`. `CANDIDATE_ROOT` must be an absolute canonical path to a clean pinned checkout for every final supporting run and final gate. Early red/green iteration receipts are explicitly provisional and must be replayed after all four test changes have been committed.
 - `PM_RUN_ROOT=/home/henry/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653`; `EPOCH3_ROOT=$PM_RUN_ROOT/reports/epoch-3`; final `EVIDENCE_ROOT=$EPOCH3_ROOT/supporting-evidence`. These variable names expand only to the exact roots stated here. Each task's Files block explicitly bounds its external writes. Historical reports, quarantines, archives, and `/tmp/graph-initial-spacing-evidence/task-*/` are read-only inputs.
 - Export `JAVA_HOME=/home/henry/.sdkman/candidates/java/21.0.8-zulu` and prepend `$JAVA_HOME/bin` to `PATH`. All non-UI commands use `JAVA_TOOL_OPTIONS=-Djava.awt.headless=true`; display commands explicitly use `env -u JAVA_TOOL_OPTIONS` and an isolated X display. Use installed `gradle`, never `gradlew` or Maven. Keep the Java-8 compilation and bundle checks active. The recorder may use `GRADLE_OPTS=-Dorg.gradle.daemon=false` so run-owned workers have observable lifetimes; record the effective environment without changing project build files.
@@ -486,11 +486,21 @@ try (DisplayFixture f = new DisplayFixture()) {
     finally {
         f.requireMaximizedDuringStable = false;
     }
-    f.assertWorkAreaCoverage();
+    f.assertWorkAreaCoverage(false);
     f.checkpoint = f.edt(() -> f.commands.size());
     f.assertRoundTrip(true);
 }
 ```
+
+**D1 scoping (binding).** Screen containment must be relaxed **only** on the decorated maximized path. The existing helpers are shared with the undecorated fullscreen test, where screen containment is achievable and must keep being asserted. So:
+
+1. `hasWorkAreaCoverage(boolean requireScreenContainment)` keeps all four work-area clauses unconditionally and applies its four screen-containment clauses only when the argument is `true`.
+2. `assertWorkAreaCoverageOnEdt(boolean requireScreenContainment)` does the same, and the `assertWorkAreaCoverage(boolean)` wrapper delegates to it.
+3. The undecorated fullscreen call sites in `f11MakesWindowUndecoratedAndFillsCurrentScreen` — `f.await(f::hasWorkAreaCoverage)` and `f.assertWorkAreaCoverage()` — keep `true`; this task only updates their call syntax to pass it explicitly.
+4. The decorated maximized path passes `false`: the direct call above, and the two internal uses inside `assertRoundTrip(requireWorkArea = true)`.
+5. `X11_AWT_BOUNDS_TOLERANCE` stays exactly 2 px, no clause is deleted, and no other call site changes.
+
+Do not delete the screen-containment clauses outright and do not add a new helper that silently drops them for every caller.
 
 - [ ] **Step 3: Strengthen each poll only for the maximized interval**
 
@@ -1038,7 +1048,7 @@ git commit -m "graph-initial-spacing: pin measured two-map conflict structure"
 
 - Consumes: `GraphWorkspaceIntegrationSupport.baseline(FreeplaneScope,Path): ResourceBaseline`, `ResourceBaseline.mapLifecycleListeners`, `FreeplaneScope.mapLifecycleListenerCount(): int`, `awaitCondition(BooleanSupplier,long,String): void`, and the existing `awaitPostCloseCompletion(...)`.
 - Consumes: existing `callbackHandle.close()`, handle command rejection, `binding.addCanvasStateListener(...).close()`, blocked first projection listener, callback counters, and bounded `closing.join(10000L)`.
-- Produces: order `baseline -> observed listener increase -> off-EDT close -> handle rejection -> listener baseline restored -> release blocked listener -> bounded close join`. Callback-registration rejection remains supporting observation only.
+- Produces: order `baseline -> observed listener increase -> off-EDT close -> handle rejection -> callback-registration rejection (governing logical-close signal) -> release blocked listener -> listener baseline restored (post-release teardown completion) -> bounded close join`. Both signals are required; the listener baseline is a post-release assertion, never a pre-release gate.
 - Produces: `python3 run-lifecycle-mutant.py CANDIDATE_ROOT CLASSPATH_FILE RECEIPT_DIR -> 0` only when the real method passes with production classes and fails with the one copied per-listener closed check removed. The receipt records green/mutant exit codes, assertion text, source/class hashes and unchanged active source/tree.
 - Produces: a reviewed clean lane head containing all four authorized test changes, ready for Task 5's common-tree evidence collection.
 
@@ -1090,9 +1100,6 @@ try {
             return true;
         }
     }, 5000L, "close did not cross the handle closing boundary");
-    GraphWorkspaceIntegrationSupport.awaitCondition(
-        () -> freeplane.mapLifecycleListenerCount() == baseline.mapLifecycleListeners,
-        5000L, "close did not detach workspace map lifecycle listeners");
     GraphWorkspaceIntegrationSupport.awaitCondition(() -> {
         try {
             binding.addCanvasStateListener(state -> {
@@ -1103,6 +1110,10 @@ try {
             return true;
         }
     }, 5000L, "close did not reach the graph update coordinator callback boundary");
+    releaseFirstProjection.countDown();
+    GraphWorkspaceIntegrationSupport.awaitCondition(
+        () -> freeplane.mapLifecycleListenerCount() == baseline.mapLifecycleListeners,
+        5000L, "close did not detach workspace map lifecycle listeners");
 }
 finally {
     releaseFirstProjection.countDown();
@@ -1112,7 +1123,7 @@ finally {
 }
 ```
 
-The return-to-baseline wait governs teardown; callback-registration rejection remains supporting observation only. The `finally` now covers the command, first-entry wait, close-thread start and all three boundary observations. Preserve the original 5-second latch and 10-second join values, thread-terminated/`closeFailure` assertions, callback counters, second-listener zero assertion, source-map mutation, baseline checks and closed-handle assertions. Add no sleeps, retries or assumptions.
+The callback-registration rejection **governs** the logical-close precondition for release, and the listener-count return is a **post-release** completed-teardown assertion. This ordering is mandatory: the reverse order is circular, because `MapLeaseManager.close()` detaches that listener via `runOnEdtAndWait` on the very EDT the blocked listener occupies, so a pre-release listener-baseline wait can only be satisfied by the listener's own 5-second latch expiring. The `finally` still counts down the latch (idempotent, and now usually redundant) and joins the close thread, so failure cleanup is unchanged. Preserve the original 5-second latch and 10-second join values, thread-terminated/`closeFailure` assertions, callback counters, second-listener zero assertion, source-map mutation, baseline checks and closed-handle assertions. Both waits keep the existing `5000L` budget. Add no sleeps, retries or assumptions.
 
 - [ ] **Step 3: Execute fresh focused and class/suite compatibility runs**
 
