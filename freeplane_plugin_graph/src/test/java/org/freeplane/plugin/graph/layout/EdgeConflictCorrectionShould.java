@@ -1275,6 +1275,11 @@ public class EdgeConflictCorrectionShould {
             fixture.boundary.positions())).isEmpty();
         assertThat(new BoundaryInvariants().detectPairKeys(fixture.projection,
             fixture.boundary.geometry())).isEmpty();
+        // Production geometry: all eight discs are engine-drawn radius eight, so the C2 family uses
+        // rho = 11 throughout rather than a synthetic radius that recomputation later changes.
+        for (final ProjectedNodeKey key : fixture.keys()) {
+            assertThat(fixture.boundary.geometry().nodes().get(key).radius()).isEqualTo(8.0);
+        }
         assertThat(EdgeConflictCorrection.detectConflicts(fixture.projection,
             fixture.boundary.positions(), fixture.boundary.geometry(), fixture.visible).keys())
             .containsExactly(crossing, obstruction);
@@ -1283,8 +1288,9 @@ public class EdgeConflictCorrectionShould {
             fixture.boundary.positions(), METRICS, fixture.pinsFor(2, 3), fixture.visible,
             fixture.boundary);
 
-        // The joint batch is rejected as a whole, both retry singletons fail, and the sweep advances
-        // to the C2 remaining opposite direct target in the new state.
+        // The joint batch is rejected as a whole, so its first retry singleton (swap01) installs the
+        // quad; the new state's preferred C2 direct target is then vetoed and the opposite direct
+        // target is accepted in the second round.
         assertThat(result.diagnostics().rounds()).isEqualTo(2);
         assertThat(result.diagnostics().verifications()).isEqualTo(4);
         assertThat(result.diagnostics().conflictsResidual()).isEmpty();
@@ -1859,9 +1865,11 @@ public class EdgeConflictCorrectionShould {
             assertThat(huge.positions().nodes().get(key)).isEqualTo(hugeBoundary.positions().nodes().get(key));
         }
 
-        // A large but still finite radius whose normal shift overflows: no eligible target exists.
+        // A large but still finite radius whose offset h = 2*r + 9 itself overflows. The basis,
+        // the projected scalar and rho all stay finite, so this control isolates the single
+        // half-height eligibility check rather than any earlier overflow.
         final Fixture shiftOverflow = fixture(1L, new String[] {"A", "B", "N"},
-            new double[] {-100.0, -1.0e308, 100.0, -1.0e308, 0.0, 0.0}, new int[][] {{0, 1}});
+            new double[] {-100.0, 0.0, 100.0, 0.0, 0.0, 5.0}, new int[][] {{0, 1}});
         final BoundarySeparationResult shiftBoundary =
             shiftOverflow.boundaryWithNodeRadius(shiftOverflow.key(2), 1.0e308);
         final String shiftConflict = CanonicalKeys.edgeNodePair(
@@ -1906,6 +1914,105 @@ public class EdgeConflictCorrectionShould {
             assertThat(collapsed.positions().nodes().get(key))
                 .isEqualTo(degenerate.boundary.positions().nodes().get(key));
         }
+    }
+
+    @Test
+    public void rejectsIneligibleC2TargetsReachedByHypotScalarAndTargetOverflow() {
+        // Three independent finite-input overflow controls that each genuinely reach the C2
+        // generator. Every published centre, chord endpoint and supplied radius below is finite, so
+        // no forbidden non-finite LayoutPoint is ever needed; the family must emit no eligible
+        // candidate at all (zero verifications, not a vetoed candidate), leave the frame untouched
+        // and retain the detected conflict without inventing budget exhaustion. Each case fails
+        // loudly if the corresponding eligibility check stops guarding its branch.
+        final EdgeConflictCorrection correction = new EdgeConflictCorrection();
+
+        // (a) Hypot overflow from finite deltas: L is infinite although both chord endpoints stay
+        // finite and the published obstacles are ordinary radius-eight discs.
+        final Fixture hypotOverflow = clearanceFixture(new String[] {"A", "B", "N"},
+            new double[] {-7.0e307, -7.0e307, 7.0e307, 7.0e307, 0.0, 0.0},
+            new int[][] {{0, 1}});
+        final String hypotConflict = CanonicalKeys.edgeNodePair(
+            hypotOverflow.projection.edges().get(0).key(), hypotOverflow.key(2));
+        assertThat(hypotOverflow.boundary.geometry().nodes().get(hypotOverflow.key(2)).radius())
+            .isEqualTo(8.0);
+        assertThat(EdgeConflictCorrection.detectConflicts(hypotOverflow.projection,
+            hypotOverflow.boundary.positions(), hypotOverflow.boundary.geometry(),
+            hypotOverflow.visible).keys()).containsExactly(hypotConflict);
+        assertIneligibleC2Residual(correction, hypotOverflow, hypotOverflow.boundary,
+            hypotConflict, true);
+
+        // (b) Scalar-projection overflow from finite projected components: the supplied terminal
+        // geometry puts the radius-eight disc on the chord so the conflict is real, while the
+        // published centre sits far along the finite normalized normal, so each product is finite
+        // and only their sum overflows.
+        final Fixture scalarOverflow = clearanceFixture(new String[] {"A", "B", "N"},
+            new double[] {-100.0, -100.0, 100.0, 100.0, -1.5e308, 1.5e308},
+            new int[][] {{0, 1}});
+        final BoundarySeparationResult scalarBoundary =
+            scalarOverflow.boundaryWithNodeCentreAndRadius(scalarOverflow.key(2),
+                LayoutPoint.of(0.0, 0.0), 8.0);
+        final String scalarConflict = CanonicalKeys.edgeNodePair(
+            scalarOverflow.projection.edges().get(0).key(), scalarOverflow.key(2));
+        assertThat(scalarBoundary.positions().nodes().get(scalarOverflow.key(2)))
+            .isEqualTo(LayoutPoint.of(-1.5e308, 1.5e308));
+        assertThat(scalarBoundary.geometry().nodes().get(scalarOverflow.key(2)).center())
+            .isEqualTo(LayoutPoint.of(0.0, 0.0));
+        assertThat(EdgeConflictCorrection.detectConflicts(scalarOverflow.projection,
+            scalarBoundary.positions(), scalarBoundary.geometry(), scalarOverflow.visible).keys())
+            .containsExactly(scalarConflict);
+        assertIneligibleC2Residual(correction, scalarOverflow, scalarBoundary, scalarConflict,
+            false);
+
+        // (c) Target overflow behind finite preceding scalars: the horizontal chord, its canonical
+        // normal, the scalar projection, rho = 8e307 and h = 1.6e308 are all finite, yet the
+        // near-side direct target lands beyond Double.MAX_VALUE.
+        final Fixture targetOverflow = clearanceFixture(new String[] {"A", "B", "N"},
+            new double[] {-100.0, 1.0e308, 100.0, 1.0e308, 0.0, 1.7e308},
+            new int[][] {{0, 1}});
+        final BoundarySeparationResult targetBoundary =
+            targetOverflow.boundaryWithNodeRadius(targetOverflow.key(2), 8.0e307);
+        final String targetConflict = CanonicalKeys.edgeNodePair(
+            targetOverflow.projection.edges().get(0).key(), targetOverflow.key(2));
+        assertThat(targetBoundary.geometry().nodes().get(targetOverflow.key(2)).radius())
+            .isEqualTo(8.0e307);
+        assertThat(2.0 * 8.0e307 + 9.0).isFinite();
+        assertThat(EdgeConflictCorrection.detectConflicts(targetOverflow.projection,
+            targetBoundary.positions(), targetBoundary.geometry(), targetOverflow.visible).keys())
+            .containsExactly(targetConflict);
+        assertIneligibleC2Residual(correction, targetOverflow, targetBoundary, targetConflict,
+            true);
+    }
+
+    /**
+     * The shared outcome assertion of the finite-input numerical controls: the detected conflict is
+     * retained verbatim, nothing is verified or repaired, every published centre is unchanged and
+     * finite, and the numerical ineligibility synthesizes no correction budget flag. The
+     * {@code directEnumeration} parameter pins {@code indexBudgetExhausted} to its genuine
+     * direct-enumeration meaning so a control whose chord spans the whole grid is not silently
+     * reinterpreted as repair exhaustion.
+     */
+    private static void assertIneligibleC2Residual(final EdgeConflictCorrection correction,
+            final Fixture fixture, final BoundarySeparationResult boundary, final String conflict,
+            final boolean directEnumeration) {
+        final EdgeConflictResult result = correction.apply(fixture.projection, boundary.positions(),
+            METRICS, Collections.<PinProjection>emptyList(), fixture.visible, boundary);
+        assertThat(result.diagnostics().rounds()).isZero();
+        // Zero verifications proves the family emitted nothing rather than proposing a target that
+        // A1-A4 later vetoed.
+        assertThat(result.diagnostics().verifications()).isZero();
+        assertThat(result.diagnostics().repairsApplied()).isEmpty();
+        assertThat(result.diagnostics().conflictsResidual()).containsExactly(conflict);
+        assertThat(result.diagnostics().verificationBudgetExhausted()).isFalse();
+        assertThat(result.diagnostics().detectionTruncated()).isFalse();
+        assertThat(result.diagnostics().indexBudgetExhausted()).isEqualTo(directEnumeration);
+        assertThat(result.appliedDisplacements()).isEmpty();
+        for (final ProjectedNodeKey key : fixture.keys()) {
+            assertThat(Double.isFinite(result.positions().nodes().get(key).x())).isTrue();
+            assertThat(Double.isFinite(result.positions().nodes().get(key).y())).isTrue();
+            assertThat(result.positions().nodes().get(key))
+                .isEqualTo(boundary.positions().nodes().get(key));
+        }
+        assertThat(result.positions().anchors()).isEqualTo(boundary.positions().anchors());
     }
 
     @Test
@@ -2384,32 +2491,14 @@ public class EdgeConflictCorrectionShould {
                 fixture.shuffledBoundary(seed));
 
             for (final EdgeConflictResult actual : Arrays.asList(reversed, shuffled)) {
+                // EdgeConflictDiagnostics carries no elapsed timings, so whole-value equality is
+                // the exact required comparison: it covers every counter and flag, including
+                // indexInsertedItems, indexPairChecks, crossingsResolved and edgeOverNodeResolved,
+                // which a hand-maintained field list silently dropped.
+                assertThat(actual.diagnostics()).as("%s diagnostics", name)
+                    .isEqualTo(expected.diagnostics());
                 assertThat(actual.positions()).as("%s positions", name)
                     .isEqualTo(expected.positions());
-                assertThat(actual.diagnostics().repairsApplied()).as("%s repairs", name)
-                    .isEqualTo(expected.diagnostics().repairsApplied());
-                assertThat(actual.diagnostics().rounds()).as("%s rounds", name)
-                    .isEqualTo(expected.diagnostics().rounds());
-                assertThat(actual.diagnostics().verifications()).as("%s verifications", name)
-                    .isEqualTo(expected.diagnostics().verifications());
-                assertThat(actual.diagnostics().verificationWork()).as("%s work", name)
-                    .isEqualTo(expected.diagnostics().verificationWork());
-                assertThat(actual.diagnostics().conflictsDetected()).as("%s detected", name)
-                    .isEqualTo(expected.diagnostics().conflictsDetected());
-                assertThat(actual.diagnostics().crossingsDetected()).as("%s crossings", name)
-                    .isEqualTo(expected.diagnostics().crossingsDetected());
-                assertThat(actual.diagnostics().edgeOverNodeDetected()).as("%s C2", name)
-                    .isEqualTo(expected.diagnostics().edgeOverNodeDetected());
-                assertThat(actual.diagnostics().conflictsResidual()).as("%s residual", name)
-                    .isEqualTo(expected.diagnostics().conflictsResidual());
-                assertThat(actual.diagnostics().indexSubdivisions()).as("%s subdivisions", name)
-                    .isEqualTo(expected.diagnostics().indexSubdivisions());
-                assertThat(actual.diagnostics().detectionTruncated()).as("%s truncation", name)
-                    .isEqualTo(expected.diagnostics().detectionTruncated());
-                assertThat(actual.diagnostics().verificationBudgetExhausted()).as("%s work stop", name)
-                    .isEqualTo(expected.diagnostics().verificationBudgetExhausted());
-                assertThat(actual.diagnostics().indexBudgetExhausted()).as("%s index stop", name)
-                    .isEqualTo(expected.diagnostics().indexBudgetExhausted());
                 assertThat(actual.appliedDisplacements()).as("%s displacements", name)
                     .isEqualTo(expected.appliedDisplacements());
                 assertThat(actual.positions().anchors()).as("%s anchors", name)
@@ -2691,7 +2780,11 @@ public class EdgeConflictCorrectionShould {
      * first greedy batch is the mixed-kind pair {swap01, translation-N}.
      */
     private static Fixture mixedRetryFixture() {
-        return fixture(9L, new String[] {"Q_A", "Q_B", "Q_C", "Q_D", "Q_P", "Q_Q", "Q_O", "N"},
+        // Production geometry: every connector is a native A→B direction (one visible outgoing
+        // target per source, none for the targets), so the engine-drawn radius is eight for all
+        // eight discs and the first C2 proposal uses rho = 11 rather than a synthetic 17.
+        return clearanceFixture(new String[] {"Q_A", "Q_B", "Q_C", "Q_D", "Q_P", "Q_Q", "Q_O",
+            "N"},
             new double[] {272.0, 170.0, 307.0, 202.0, 275.0, 240.0, 240.0, 208.0, 900.0, 1000.0,
                 1100.0, 1000.0, 1000.0, 1030.0, 1000.0, 1005.0},
             new int[][] {{0, 2}, {1, 3}, {4, 5}});
