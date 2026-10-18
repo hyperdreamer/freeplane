@@ -1,6 +1,8 @@
 package org.freeplane.plugin.graph.control;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
+import static org.assertj.core.api.Assertions.within;
 
 import java.awt.Dimension;
 import java.awt.Font;
@@ -12,9 +14,11 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
@@ -25,9 +29,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.freeplane.plugin.graph.adapter.EdtExecutor;
 import org.freeplane.plugin.graph.geometry.AwtGeometryTextMetrics;
+import org.freeplane.plugin.graph.geometry.EdgePath;
 import org.freeplane.plugin.graph.geometry.EdgePaths;
+import org.freeplane.plugin.graph.geometry.EdgeRouteDiagnostics;
+import org.freeplane.plugin.graph.geometry.EdgeRouteTimings;
 import org.freeplane.plugin.graph.geometry.EdgeRouter;
 import org.freeplane.plugin.graph.geometry.GeometryTextMetrics;
+import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.GraphGeometryEngine;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
@@ -1411,6 +1419,193 @@ public class LayoutSettleLoopShould {
             .isEqualTo(state.edgePaths().byEdge().size());
         assertThat(state.edgePaths()).isSameAs(state.withStatus(OperationalStatus.FAILED).edgePaths());
         assertThat(publishTwoEdgeFailedFrame().edgePaths().byEdge()).isNotEmpty();
+    }
+
+    @Test
+    public void publishesAStraightClearPathAfterRepairingTheBlockedColumn() throws Exception {
+        // Spec §6.4: the first consumer-published state of the real LayoutWorker must carry the
+        // repaired E3 column and a straight, exhaustively clear path. The replay engine hands the
+        // worker only the raw column, so a pre-corrected frame cannot satisfy this witness.
+        final GraphProjection projection = EdgeNodeClearanceReplay.projection();
+        final WorkspaceId e3Workspace = WorkspaceId.of(EdgeNodeClearanceReplay.WORKSPACE_ID);
+        final CompletableFuture<CanvasState> first = new CompletableFuture<CanvasState>();
+        final List<CanvasState> published = Collections.synchronizedList(new ArrayList<CanvasState>());
+        final LayoutSettleLoop loop = new LayoutSettleLoop(e3Workspace,
+            EdgeNodeClearanceReplay.newStepper(), new GraphGeometryEngine(), new ImmediateEdt());
+        try {
+            loop.start(batch(1L), projection, ProjectionDiff.between(emptyProjection(0L), projection),
+                state -> {
+                    try {
+                        loop.pause();
+                        published.add(state);
+                        first.complete(state);
+                    }
+                    catch (Throwable failure) {
+                        first.completeExceptionally(failure);
+                    }
+                });
+            final CanvasState state = first.get(5, TimeUnit.SECONDS);
+            assertThat(state.projection()).isSameAs(projection);
+            EdgeNodeClearanceReplay.assertE3(state);
+            final CanvasState changedStatus = state.withStatus(state.status());
+            assertThat(changedStatus.edgePaths()).isSameAs(state.edgePaths());
+            assertThat(changedStatus.layout()).isSameAs(state.layout());
+            assertThat(changedStatus.geometry()).isSameAs(state.geometry());
+
+            // Pausing inside the first callback must stop the replay before a later raw step can
+            // replace this frame's repair diagnostics; only one publication may ever occur.
+            for (int attempt = 0; attempt < 20; attempt++) {
+                if (published.size() != 1) {
+                    break;
+                }
+                Thread.sleep(25L);
+            }
+            assertThat(published).hasSize(1);
+            assertThat(published.get(0)).isSameAs(state);
+        }
+        finally {
+            await(CompletableFuture.runAsync(loop::close));
+        }
+    }
+
+    @Test
+    public void recreatesTheRealReplayWorkerOnReset() throws Exception {
+        // The adapter's reset path closes the worker and builds a fresh one from the same raw
+        // factory, so a later generation still replays the unmodified column and is repaired by
+        // the real worker rather than by a retained frame.
+        final GraphProjection projection = EdgeNodeClearanceReplay.projection();
+        final LayoutSettleLoop.FrameStepper stepper = EdgeNodeClearanceReplay.newStepper();
+        final org.freeplane.plugin.graph.layout.LayoutRequest request =
+            org.freeplane.plugin.graph.layout.LayoutRequest.of(
+                WorkspaceId.of(EdgeNodeClearanceReplay.WORKSPACE_ID), projection,
+                ProjectionDiff.between(emptyProjection(0L), projection), projection.pins());
+        try {
+            final LayoutFrame firstFrame = await(stepper.submit(request));
+            assertThat(firstFrame.failed()).isFalse();
+            assertThat(repairedCentre(firstFrame, projection)).isEqualTo(LayoutPoint.of(-25.0, -11.0));
+
+            stepper.reset();
+
+            final LayoutFrame secondFrame = await(stepper.submit(request));
+            assertThat(secondFrame.failed()).isFalse();
+            assertThat(secondFrame.stepIndex()).isEqualTo(0L);
+            assertThat(repairedCentre(secondFrame, projection)).isEqualTo(LayoutPoint.of(-25.0, -11.0));
+        }
+        finally {
+            await(CompletableFuture.runAsync(stepper::close));
+        }
+    }
+
+    private static LayoutPoint repairedCentre(final LayoutFrame frame, final GraphProjection projection) {
+        return frame.positions().nodes().get(obstructingKey(projection));
+    }
+
+    @Test
+    public void rejectsTheUnrepairedColumnStateAndHashesTheExactBits() {
+        // The publication witness is only meaningful if its oracle and digest reject the baseline.
+        // An unchanged E3 column leaves the straight chord through N's r=8 disc, so
+        // distance - radius is -8 rather than the required 3.
+        final GraphProjection projection = EdgeNodeClearanceReplay.projection();
+        final LayoutPositions raw = EdgeNodeClearanceReplay.rawPositions();
+        final CanvasState unrepaired = replayState(projection, raw, EdgePaths.empty());
+        final Set<ProjectedEdgeKey> expectedEdges = new LinkedHashSet<ProjectedEdgeKey>();
+        for (final ProjectedEdge edge : projection.edges()) {
+            expectedEdges.add(edge.key());
+        }
+        // The oracle is measured on an explicitly supplied straight chord, so this probe pins the
+        // clearance arithmetic of spec §6.1 and not the router's own obstacle threshold.
+        final EdgePaths chordThroughN = EdgePaths.of(
+            Collections.singletonMap(projection.edges().get(0).key(),
+                EdgePath.straight(LayoutPoint.of(-92.0, 0.0), LayoutPoint.of(92.0, 0.0))),
+            EdgeRouteDiagnostics.empty(), new EdgeRouteTimings(0L, 0L, 0L));
+        assertThat(chordThroughN.byEdge().keySet()).isEqualTo(expectedEdges);
+        assertThat(EdgeNodeClearanceReplay.minimumClearance(projection, unrepaired.geometry(),
+            chordThroughN)).isCloseTo(-8.0, within(1e-9));
+
+        // The real router on the published raw frame is the historical baseline: one straight
+        // fallback through N, whose minimum clearance is also -8.
+        final CanvasState routedRaw = replayState(projection, raw, null);
+        assertThat(routedRaw.edgePaths().diagnostics().edgesFallback()).isEqualTo(1);
+        assertThat(routedRaw.edgePaths().diagnostics().edgesStraight()).isZero();
+        assertThat(EdgeNodeClearanceReplay.minimumClearance(projection, routedRaw.geometry(),
+            routedRaw.edgePaths())).isCloseTo(-8.0, within(1e-9));
+
+        try {
+            EdgeNodeClearanceReplay.assertE3(routedRaw);
+            fail("The E3 acceptance assertion must reject the unrepaired column");
+        }
+        catch (AssertionError expected) {
+            assertThat(expected.getMessage()).contains("E3 position of N");
+        }
+
+        // The digest is stable for the same state and sensitive to a single-bit centre change.
+        final String digest = EdgeNodeClearanceReplay.stateDigest(unrepaired);
+        assertThat(EdgeNodeClearanceReplay.stateDigest(unrepaired)).isEqualTo(digest);
+        assertThat(digest).hasSize(64);
+        final Map<ProjectedNodeKey, LayoutPoint> shifted =
+            new LinkedHashMap<ProjectedNodeKey, LayoutPoint>(raw.nodes());
+        final ProjectedNodeKey obstructing = obstructingKey(projection);
+        shifted.put(obstructing, LayoutPoint.of(Math.nextUp(0.0), 0.0));
+        assertThat(EdgeNodeClearanceReplay.stateDigest(replayState(projection,
+            LayoutPositions.of(shifted, raw.anchors()), EdgePaths.empty()))).isNotEqualTo(digest);
+        // A signed-zero centre is the same published point, so it must not split the identity.
+        shifted.put(obstructing, LayoutPoint.of(-0.0, -0.0));
+        assertThat(EdgeNodeClearanceReplay.stateDigest(replayState(projection,
+            LayoutPositions.of(shifted, raw.anchors()), EdgePaths.empty()))).isEqualTo(digest);
+    }
+
+    /**
+     * A published state for the given positions. A {@code null} {@code paths} argument routes the
+     * real {@link EdgeRouter}, which is how the baseline frame's fallback classification is
+     * observed; an explicit value supplies the shape under test instead.
+     */
+    private static CanvasState replayState(final GraphProjection projection, final LayoutPositions positions,
+            final EdgePaths paths) {
+        final AwtGeometryTextMetrics metrics = new AwtGeometryTextMetrics(new Font("Dialog", Font.PLAIN, 12),
+            new FontRenderContext(null, true, true));
+        final GraphGeometry geometry = new GraphGeometryEngine().computeHulls(projection, positions, metrics);
+        final EdgePaths published = paths != null ? paths
+            : new EdgeRouter().route(projection, positions, geometry,
+                ProjectedEndpointVisibility.visibleEndpoints(projection.nodes(), projection.enclosures()));
+        return CanvasState.of(1L, projection, LayoutFrame.of(0L, positions, false, 0), geometry, published,
+            OperationalStatus.SETTLING);
+    }
+
+    private static ProjectedNodeKey obstructingKey(final GraphProjection projection) {
+        for (final ProjectedNode node : projection.nodes()) {
+            if (node.key().source().persistedReference().get().nodeId().value().equals("N")) {
+                return node.key();
+            }
+        }
+        throw new AssertionError("The E3 fixture has no N node");
+    }
+
+    @Test
+    public void replayHelperReferencesOnlyTheJdkAndInstalledProductionClasses() throws Exception {
+        // The helper is defined into the installed application loader by the evidence agent, so it
+        // must not link against JUnit, AssertJ, Mockito or a regression-test helper.
+        final java.io.File directory = new java.io.File(new java.io.File(
+            EdgeNodeClearanceReplay.class.getProtectionDomain()
+                .getCodeSource().getLocation().toURI()),
+            "org/freeplane/plugin/graph/control");
+        final java.io.File[] classFiles = directory.listFiles();
+        assertThat(classFiles).isNotNull();
+        int inspected = 0;
+        for (final java.io.File file : classFiles) {
+            if (!file.getName().startsWith("EdgeNodeClearanceReplay") || !file.getName().endsWith(".class")) {
+                continue;
+            }
+            final String bytes = new String(java.nio.file.Files.readAllBytes(file.toPath()),
+                java.nio.charset.StandardCharsets.ISO_8859_1);
+            assertThat(bytes).doesNotContain("org/junit", "org/assertj", "org/mockito", "org/hamcrest",
+                "LayoutSettleLoopShould", "EdgeConflictCorrectionShould");
+            inspected++;
+        }
+        assertThat(inspected).isGreaterThan(1);
+        final String outer = new String(java.nio.file.Files.readAllBytes(
+            new java.io.File(directory, "EdgeNodeClearanceReplay.class").toPath()),
+            java.nio.charset.StandardCharsets.ISO_8859_1);
+        assertThat(outer).contains("org/freeplane/plugin/graph/control/LayoutSettleLoop");
     }
 
     private static CanvasState publishTwoEdgeFrame() {
