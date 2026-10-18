@@ -5,8 +5,8 @@ topic: graph-initial-spacing
 epoch: 3
 source_plan:
   path: docs/superpowers/plans/2026-10-18-graph-initial-spacing-epoch-3.md
-  sha256: bc9149b0c894280a5550ff61c37bd0ee6f9ffa541a94d6148292efc1f77ad7dc
-  commit_oid: f1c6da5aa9d67f3cb4674ecbce848f1e5a0385f6
+  sha256: a116a9673a8e6f7e034b06c5cd59b3f29635db58adb958af01396ac3185c595d
+  commit_oid: 1f237508fdd07ab5f8ba0272e6206dc616b43064
   task_count: 6
 lanes:
   - id: spacing
@@ -342,15 +342,15 @@ tasks:
       - argv: ["xvfb-run", "-a", "gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould", "--console=plain", "-PTestLoggingFull", "--rerun-tasks"]
         cwd: lane
         timeout_seconds: 3600
-        environment: java21-headless-build
+        environment: java21-display
       - argv: ["xvfb-run", "-a", "gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.window.GraphWorkspaceWindowModelShould.f11RestoresBoundsAndExtendedStateFromMaximizedWindow", "--console=plain", "-PTestLoggingFull", "--rerun-tasks"]
         cwd: lane
         timeout_seconds: 3600
-        environment: java21-headless-build
+        environment: java21-display
       - argv: ["bash", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/scripts/epoch-3/run-openbox-window-probe.sh", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/reports/epoch-3/task-5/candidate-root", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/reports/epoch-3/supporting-evidence/f11-openbox-xvfb"]
         cwd: lane
         timeout_seconds: 3600
-        environment: java21-headless-build
+        environment: java21-display
       - argv: ["python3", "freeplane_plugin_graph/src/test/scripts/compare_initial_spacing.py", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/reports/epoch-3/task-5/candidate-root", "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/InitialSpacingProbe.java", "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/reports/epoch-3/supporting-evidence/spacing-comparison"]
         cwd: lane
         timeout_seconds: 3600
@@ -366,7 +366,7 @@ tasks:
       - argv: ["xvfb-run", "-a", "gradle", ":freeplane_plugin_graph:graphOsgiSmoke", ":freeplane_plugin_graph:freeplaneLaunchSmoke", "--console=plain"]
         cwd: lane
         timeout_seconds: 3600
-        environment: java21-headless-build
+        environment: java21-display
       - argv: ["gradle", ":freeplane:compileJava", "test", "--console=plain", "-PTestLoggingFull"]
         cwd: lane
         timeout_seconds: 3600
