@@ -5,9 +5,12 @@ import static org.assertj.core.api.Assertions.fail;
 import static org.assertj.core.api.Assertions.within;
 
 import java.awt.Dimension;
+import java.awt.Point;
+import java.awt.Rectangle;
 import java.awt.Font;
 import java.awt.font.FontRenderContext;
 import java.awt.geom.Dimension2D;
+import java.awt.geom.Rectangle2D;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -23,10 +26,15 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.EnumSet;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import javax.swing.SwingUtilities;
+
+import org.freeplane.plugin.graph.canvas.GraphViewport;
 import org.freeplane.plugin.graph.adapter.EdtExecutor;
 import org.freeplane.plugin.graph.geometry.AwtGeometryTextMetrics;
 import org.freeplane.plugin.graph.geometry.EdgePath;
@@ -37,6 +45,7 @@ import org.freeplane.plugin.graph.geometry.EdgeRouter;
 import org.freeplane.plugin.graph.geometry.GeometryTextMetrics;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.GraphGeometryEngine;
+import org.freeplane.plugin.graph.geometry.NodeGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.layout.BoundaryConflict;
@@ -1606,6 +1615,307 @@ public class LayoutSettleLoopShould {
             new java.io.File(directory, "EdgeNodeClearanceReplay.class").toPath()),
             java.nio.charset.StandardCharsets.ISO_8859_1);
         assertThat(outer).contains("org/freeplane/plugin/graph/control/LayoutSettleLoop");
+    }
+
+    @Test
+    public void replayDigestIgnoresOrderButDetectsEveryPaintedInputAndClassification() throws Exception {
+        // A digest that overlooks geometry centres, radii, fallback classification or a sample
+        // would allow the screenshot to be bound to different visible content.
+        final CanvasState first = firstReplayPublication();
+        final String digest = EdgeNodeClearanceReplay.stateDigest(first);
+        final List<ProjectedNode> reversedNodes = new ArrayList<ProjectedNode>(first.projection().nodes());
+        Collections.reverse(reversedNodes);
+        final GraphProjection reorderedProjection = GraphProjection.projected(1L, reversedNodes,
+            first.projection().enclosures(), first.projection().edges(),
+            Collections.<RelationshipResolution>emptyList(), first.projection().pins());
+        final Map<ProjectedNodeKey, LayoutPoint> positions = new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        final Map<ProjectedNodeKey, NodeGeometry> nodes = new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
+        for (final ProjectedNode node : reversedNodes) {
+            positions.put(node.key(), first.layout().positions().nodes().get(node.key()));
+            nodes.put(node.key(), first.geometry().nodes().get(node.key()));
+        }
+        final CanvasState reordered = CanvasState.of(1L, reorderedProjection,
+            LayoutFrame.of(0L, LayoutPositions.of(positions, first.layout().positions().anchors()), false, 0),
+            GraphGeometry.of(nodes, first.geometry().hulls()), first.edgePaths(), first.status());
+        assertThat(EdgeNodeClearanceReplay.stateDigest(reordered)).isEqualTo(digest);
+        final ProjectedNodeKey n = obstructingKey(first.projection());
+        final NodeGeometry original = nodes.get(n);
+        nodes.put(n, NodeGeometry.of(LayoutPoint.of(Math.nextUp(-25.0), -11.0), original.radius()));
+        assertThat(EdgeNodeClearanceReplay.stateDigest(withGeometryAndPaths(first,
+            GraphGeometry.of(nodes, first.geometry().hulls()), first.edgePaths()))).isNotEqualTo(digest);
+        nodes.put(n, NodeGeometry.of(original.center(), Math.nextUp(original.radius())));
+        assertThat(EdgeNodeClearanceReplay.stateDigest(withGeometryAndPaths(first,
+            GraphGeometry.of(nodes, first.geometry().hulls()), first.edgePaths()))).isNotEqualTo(digest);
+        assertThat(EdgeNodeClearanceReplay.stateDigest(withGeometryAndPaths(first, first.geometry(),
+            EdgePaths.empty()))).isNotEqualTo(digest);
+        final ProjectedEdgeKey edge = first.projection().edges().get(0).key();
+        final EdgePaths fallback = EdgePaths.of(first.edgePaths().byEdge(), new EdgeRouteDiagnostics(
+            0, 0, 0, 1, 0, Collections.<String>emptyList(), 0, false, false, 0L, 0L, 0L),
+            new EdgeRouteTimings(0L, 0L, 0L));
+        assertThat(EdgeNodeClearanceReplay.stateDigest(withGeometryAndPaths(first, first.geometry(),
+            fallback))).isNotEqualTo(digest);
+        final EdgePaths changedSample = EdgePaths.of(Collections.singletonMap(edge,
+            EdgePath.straight(LayoutPoint.of(Math.nextUp(-92.0), 0.0), LayoutPoint.of(92.0, 0.0))),
+            first.edgePaths().diagnostics(), new EdgeRouteTimings(0L, 0L, 0L));
+        assertThat(EdgeNodeClearanceReplay.stateDigest(withGeometryAndPaths(first, first.geometry(),
+            changedSample))).isNotEqualTo(digest);
+    }
+
+    @Test
+    public void replayOracleRejectsMissingCoverageAndMeasuresActualProminentRadii() throws Exception {
+        final CanvasState state = firstReplayPublication();
+        try {
+            EdgeNodeClearanceReplay.minimumClearance(state.projection(), state.geometry(), EdgePaths.empty());
+            fail("Missing expected edge must fail before clearance measurement");
+        }
+        catch (AssertionError expected) {
+            assertThat(expected.getMessage()).contains("coverage");
+        }
+        final Map<ProjectedNodeKey, NodeGeometry> nodes = new LinkedHashMap<ProjectedNodeKey, NodeGeometry>(
+            state.geometry().nodes());
+        nodes.put(obstructingKey(state.projection()), NodeGeometry.of(LayoutPoint.of(-25.0, -11.0), 9.6));
+        final GraphGeometry prominent = GraphGeometry.of(nodes, state.geometry().hulls());
+        assertThat(EdgeNodeClearanceReplay.minimumClearance(state.projection(), prominent, state.edgePaths()))
+            .isCloseTo(1.4, within(1e-9));
+        final GraphGeometry raw = new GraphGeometryEngine().computeHulls(state.projection(),
+            EdgeNodeClearanceReplay.rawPositions(), new AwtGeometryTextMetrics(new Font("Dialog", Font.PLAIN, 12),
+                new FontRenderContext(null, true, true)));
+        for (final GraphGeometry invalid : Arrays.asList(raw, prominent)) {
+            try {
+                EdgeNodeClearanceReplay.requireClearance(state.projection(), invalid, state.edgePaths());
+                fail("A path cutting through an unrelated clearance disc must be rejected");
+            }
+            catch (AssertionError expected) {
+                assertThat(expected.getMessage()).contains("minimum clearance");
+            }
+        }
+        final LayoutPoint point = LayoutPoint.of(0.0, 0.0);
+        final EdgePaths zeroLength = EdgePaths.of(Collections.singletonMap(state.projection().edges().get(0).key(),
+            EdgePath.straight(point, point)), EdgeRouteDiagnostics.empty(), new EdgeRouteTimings(0, 0, 0));
+        assertThat(EdgeNodeClearanceReplay.minimumClearance(state.projection(), raw, zeroLength))
+            .isCloseTo(-8.0, within(1e-9));
+    }
+
+    @Test
+    public void replayEdtRequestsTransportFailuresAndRunInlineOnTheEdt() throws Exception {
+        final IllegalStateException failure = new IllegalStateException("evidence-edt-failure");
+        try {
+            EdgeNodeClearanceReplay.onEdt(() -> { throw failure; }, System.nanoTime() + TimeUnit.SECONDS.toNanos(3));
+            fail("The real EDT exception must reach the coordinator");
+        }
+        catch (IllegalStateException actual) {
+            assertThat(actual).isSameAs(failure);
+        }
+        final boolean inline = EdgeNodeClearanceReplay.onEdt(() -> EdgeNodeClearanceReplay.onEdt(
+            SwingUtilities::isEventDispatchThread, System.nanoTime() + TimeUnit.SECONDS.toNanos(3)),
+            System.nanoTime() + TimeUnit.SECONDS.toNanos(3));
+        assertThat(inline).isTrue();
+    }
+
+    @Test
+    public void replayEdtDeadlineCancelsQueuedWorkBeforeItCanBindLate() throws Exception {
+        final CountDownLatch entered = new CountDownLatch(1);
+        final CountDownLatch release = new CountDownLatch(1);
+        final AtomicBoolean lateBinding = new AtomicBoolean();
+        SwingUtilities.invokeLater(() -> {
+            entered.countDown();
+            try {
+                release.await(5L, TimeUnit.SECONDS);
+            }
+            catch (InterruptedException failure) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        try {
+            assertThat(entered.await(3L, TimeUnit.SECONDS)).isTrue();
+            try {
+                EdgeNodeClearanceReplay.onEdt(() -> lateBinding.compareAndSet(false, true),
+                    System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(150));
+                fail("A gated EDT must time out");
+            }
+            catch (TimeoutException expected) {
+                assertThat(lateBinding).isFalse();
+            }
+        }
+        finally {
+            release.countDown();
+            EdgeNodeClearanceReplay.onEdt(() -> null, System.nanoTime() + TimeUnit.SECONDS.toNanos(3));
+        }
+        assertThat(lateBinding).isFalse();
+    }
+
+    @Test
+    public void replaySnapshotsRejectReferenceGenerationDigestAndViewChangesIndividually() throws Exception {
+        final CanvasState state = firstReplayPublication();
+        final String digest = EdgeNodeClearanceReplay.stateDigest(state);
+        final Rectangle window = new Rectangle(10, 20, 1200, 800);
+        final Rectangle visible = new Rectangle(100, 150, 900, 600);
+        final Rectangle2D drawing = new Rectangle2D.Double(200, 200, 600, 400);
+        final GraphViewport viewport = GraphViewport.of(0, 0, 2);
+        final Dimension size = new Dimension(1400, 1000);
+        final Point origin = new Point(-100, -50);
+        final Point viewPosition = new Point(200, 200);
+        final EdgeNodeClearanceReplay.Snapshot before = new EdgeNodeClearanceReplay.Snapshot(state, state,
+            1L, digest, window, visible, drawing, viewport, size, origin, viewPosition);
+        final CanvasState equivalent = state.withStatus(state.status());
+        final List<EdgeNodeClearanceReplay.Snapshot> changed = Arrays.asList(
+            new EdgeNodeClearanceReplay.Snapshot(equivalent, state, 1L, digest, window, visible, drawing, viewport, size, origin, viewPosition),
+            new EdgeNodeClearanceReplay.Snapshot(state, equivalent, 1L, digest, window, visible, drawing, viewport, size, origin, viewPosition),
+            new EdgeNodeClearanceReplay.Snapshot(state, state, 2L, digest, window, visible, drawing, viewport, size, origin, viewPosition),
+            new EdgeNodeClearanceReplay.Snapshot(state, state, 1L, digest + "changed", window, visible, drawing, viewport, size, origin, viewPosition),
+            new EdgeNodeClearanceReplay.Snapshot(state, state, 1L, digest, new Rectangle(11, 20, 1200, 800), visible, drawing, viewport, size, origin, viewPosition),
+            new EdgeNodeClearanceReplay.Snapshot(state, state, 1L, digest, window, new Rectangle(101, 150, 900, 600), drawing, viewport, size, origin, viewPosition),
+            new EdgeNodeClearanceReplay.Snapshot(state, state, 1L, digest, window, visible, new Rectangle2D.Double(201, 200, 600, 400), viewport, size, origin, viewPosition),
+            new EdgeNodeClearanceReplay.Snapshot(state, state, 1L, digest, window, visible, drawing, GraphViewport.of(1, 0, 2), size, origin, viewPosition),
+            new EdgeNodeClearanceReplay.Snapshot(state, state, 1L, digest, window, visible, drawing, GraphViewport.of(0, 0, 3), size, origin, viewPosition),
+            new EdgeNodeClearanceReplay.Snapshot(state, state, 1L, digest, window, visible, drawing, viewport, new Dimension(1401, 1000), origin, viewPosition),
+            new EdgeNodeClearanceReplay.Snapshot(state, state, 1L, digest, window, visible, drawing, viewport, size, new Point(-101, -50), viewPosition),
+            new EdgeNodeClearanceReplay.Snapshot(state, state, 1L, digest, window, visible, drawing, viewport, size, origin, new Point(201, 200)));
+        for (final EdgeNodeClearanceReplay.Snapshot after : changed) {
+            try {
+                EdgeNodeClearanceReplay.requireSameSnapshot(before, after);
+                fail("A changed retained reference or view must reject the screenshot");
+            }
+            catch (AssertionError expected) {
+                assertThat(expected.getMessage()).contains("snapshot");
+            }
+        }
+        window.x++;
+        visible.x++;
+        drawing.setRect(0, 0, 1, 1);
+        size.width++;
+        origin.x++;
+        viewPosition.x++;
+        // Mutating constructor arguments cannot change an already taken snapshot.
+        EdgeNodeClearanceReplay.requireSameSnapshot(before, new EdgeNodeClearanceReplay.Snapshot(state, state,
+            1L, digest, new Rectangle(10, 20, 1200, 800), new Rectangle(100, 150, 900, 600),
+            new Rectangle2D.Double(200, 200, 600, 400), viewport, new Dimension(1400, 1000),
+            new Point(-100, -50), new Point(200, 200)));
+    }
+
+    @Test
+    public void replayFailureStagesFailAfterCleanupAndEscapesExternalText() throws Exception {
+        final java.nio.file.Path directory = java.nio.file.Files.createTempDirectory("e3-helper-negative-");
+        final java.util.Properties launch = new java.util.Properties();
+        final long now = System.currentTimeMillis();
+        launch.setProperty("attemptId", "negative-attempt");
+        launch.setProperty("launchEpochMillis", Long.toString(now));
+        launch.setProperty("deadlineEpochMillis", Long.toString(now + 30_000L));
+        launch.setProperty("sourceOid", String.join("", Collections.nCopies(40, "0")));
+        for (final String hash : Arrays.asList("workingDiffSha256", "agentJarSha256", "graphBundleSha256",
+                "mapFixtureSha256", "workspaceFixtureSha256")) {
+            launch.setProperty(hash, String.join("", Collections.nCopies(64, "0")));
+        }
+        launch.setProperty("repositoryRoot", directory.toString());
+        launch.setProperty("javaVersion", System.getProperty("java.version"));
+        launch.setProperty("command", "negative-test");
+        final java.util.Properties readiness = new java.util.Properties();
+        readiness.setProperty("attemptId", "negative-attempt");
+        for (final String check : Arrays.asList("actionReady", "helperReady")) {
+            readiness.setProperty(check + ".disableProperty", "true");
+            readiness.setProperty(check + ".securityManagerAbsent", "true");
+        }
+        final String securityKey = "org.freeplane.main.application.FreeplaneSecurityManager.disable";
+        final String previous = System.getProperty(securityKey);
+        System.setProperty(securityKey, "true");
+        try {
+            try (java.io.Writer writer = java.nio.file.Files.newBufferedWriter(directory.resolve("launch.properties"))) {
+                launch.store(writer, null);
+            }
+            try (java.io.Writer writer = java.nio.file.Files.newBufferedWriter(directory.resolve("agent-readiness.properties"))) {
+                readiness.store(writer, null);
+            }
+            try {
+                EdgeNodeClearanceReplay.run(null, directory);
+                fail("Missing installed window must be a reported failure");
+            }
+            catch (AssertionError expected) {
+                assertThat(expected.getMessage()).contains("installed graph window");
+            }
+            final String result = new String(java.nio.file.Files.readAllBytes(directory.resolve("helper-result.json")),
+                java.nio.charset.StandardCharsets.UTF_8);
+            assertThat(result).contains("\"result\":\"FAIL\"", "\"stage\":\"installed-window-binding\"",
+                "\"captureExecutorStopped\":true", "\"cleanupExecutorStopped\":true", "\"passed\":true");
+            assertThat(java.nio.file.Files.exists(directory.resolve("result.json"))).isFalse();
+            assertThat(java.nio.file.Files.exists(directory.resolve("e3-window.png"))).isFalse();
+            assertThat(EdgeNodeClearanceReplay.json("C:\\quoted\"\n\t\u0000\uD800"))
+                .isEqualTo("\"C:\\\\quoted\\\"\\u000a\\u0009\\u0000\\ud800\"");
+        }
+        finally {
+            if (previous == null) {
+                System.clearProperty(securityKey);
+            }
+            else {
+                System.setProperty(securityKey, previous);
+            }
+            try (java.nio.file.DirectoryStream<java.nio.file.Path> files = java.nio.file.Files.newDirectoryStream(directory)) {
+                for (java.nio.file.Path file : files) {
+                    java.nio.file.Files.delete(file);
+                }
+            }
+            java.nio.file.Files.delete(directory);
+        }
+    }
+
+    @Test
+    public void replayProvenanceUsesInstalledBundleDirectoryAndRejectsAnotherLocation() throws Exception {
+        final java.nio.file.Path bin = java.nio.file.Files.createTempDirectory("e3 bundle #with spaces");
+        final java.nio.file.Path bundle = bin.resolve("plugins/org.freeplane.plugin.graph");
+        final java.nio.file.Path jar = bundle.resolve("lib/plugin-1.13.4.jar");
+        java.nio.file.Files.createDirectories(jar.getParent());
+        java.nio.file.Files.createDirectories(bundle.resolve("META-INF"));
+        java.nio.file.Files.write(bundle.resolve("META-INF/MANIFEST.MF"), Arrays.asList("Manifest-Version: 1.0"));
+        try (java.util.jar.JarOutputStream output = new java.util.jar.JarOutputStream(java.nio.file.Files.newOutputStream(jar))) {
+            // This control tests the installed path contract; it is never used as application evidence.
+        }
+        try {
+            assertThat(EdgeNodeClearanceReplay.installedGraphJar(bin, "reference:" + bundle.toUri(), "1.13.4"))
+                .isEqualTo(jar.toRealPath());
+            try {
+                EdgeNodeClearanceReplay.installedGraphJar(bin, "reference:" + bin.resolve("plugins").toUri(), "1.13.4");
+                fail("Another bundle directory must be rejected");
+            }
+            catch (AssertionError expected) {
+                assertThat(expected.getMessage()).contains("installed BIN bundle");
+            }
+        }
+        finally {
+            try (java.util.stream.Stream<java.nio.file.Path> files = java.nio.file.Files.walk(bin)) {
+                final java.util.Iterator<java.nio.file.Path> reverse = files.sorted(java.util.Comparator.reverseOrder()).iterator();
+                while (reverse.hasNext()) {
+                    java.nio.file.Files.delete(reverse.next());
+                }
+            }
+        }
+    }
+
+    private static CanvasState withGeometryAndPaths(final CanvasState source, final GraphGeometry geometry,
+            final EdgePaths paths) {
+        return CanvasState.of(source.generation(), source.projection(), source.layout(), geometry, paths, source.status());
+    }
+
+    private static CanvasState firstReplayPublication() throws Exception {
+        final GraphProjection projection = EdgeNodeClearanceReplay.projection();
+        final CompletableFuture<CanvasState> first = new CompletableFuture<CanvasState>();
+        final LayoutSettleLoop loop = new LayoutSettleLoop(WorkspaceId.of(EdgeNodeClearanceReplay.WORKSPACE_ID),
+            EdgeNodeClearanceReplay.newStepper(), new GraphGeometryEngine(), new ImmediateEdt());
+        try {
+            loop.start(batch(1L), projection, ProjectionDiff.between(emptyProjection(0L), projection), state -> {
+                try {
+                    loop.pause();
+                    first.complete(state);
+                }
+                catch (Throwable failure) {
+                    first.completeExceptionally(failure);
+                }
+            });
+            final CanvasState result = first.get(5L, TimeUnit.SECONDS);
+            EdgeNodeClearanceReplay.assertE3(result);
+            return result;
+        }
+        finally {
+            await(CompletableFuture.runAsync(loop::close));
+        }
     }
 
     private static CanvasState publishTwoEdgeFrame() {
