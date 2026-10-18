@@ -350,7 +350,7 @@ git commit -m "graph-initial-spacing: scope accessibility display assumptions"
 
 **Files:**
 
-- Modify: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindowModelShould.java:1-134,1851-1887,2147-2162,2267-2380` — imports; the maximized-window method; the undecorated fullscreen method's two coverage call sites (which keep screen containment, passing `true`); `assertRoundTrip`; the coverage helpers and their screen-containment flag; the private EWMH helpers; and the narrowly gated stable-poll checks. That is the complete set of methods the D1 scoping and the WM precondition require, and nothing outside it may change.
+- Modify: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindowModelShould.java:1-134,1851-1887,2147-2162,2267-2403` — imports; the maximized-window method; the undecorated fullscreen method's two coverage call sites (which keep screen containment, passing `true`); `awaitFrameStable`; `assertRoundTrip`; `hasWorkAreaCoverage`; `assertWorkAreaCoverage`; and the complete `assertWorkAreaCoverageOnEdt` body through its closing brace (base line 2403). That is the complete set of methods the D1 scoping and the WM precondition require, and nothing outside it may change. All ranges refer to the pre-Task-2 base revision `e84c301375`.
 - Create: `/home/henry/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/scripts/epoch-3/run-openbox-window-probe.sh`.
 - Create: `/home/henry/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261016-125451-a5048653/reports/epoch-3/task-2/` — bare/required/invalid/tool-failure/malformed/positive iteration receipts, input scripts and handoff only.
 - Read only: Task 1's `record-run.py` and `seal-evidence.py`. Generated only: ignored Gradle/display-test outputs from the listed commands. No build-property propagation or other source write is authorized.
@@ -512,10 +512,20 @@ if (requireMaximizedDuringStable) {
     assertThat(window.isDisplayable()).as("maximized frame displayable throughout stable interval").isTrue();
     assertThat(window.getExtendedState() & java.awt.Frame.MAXIMIZED_BOTH)
         .as("MAXIMIZED_BOTH throughout stable interval").isEqualTo(java.awt.Frame.MAXIMIZED_BOTH);
+    final java.awt.Rectangle workArea = workArea(window.getGraphicsConfiguration());
+    final java.awt.Rectangle actual = window.getBounds();
+    assertThat(actual.x).as("maximized frame covers work-area left edge throughout stable interval")
+        .isLessThanOrEqualTo(workArea.x + X11_AWT_BOUNDS_TOLERANCE);
+    assertThat(actual.y).as("maximized frame covers work-area top edge throughout stable interval")
+        .isLessThanOrEqualTo(workArea.y + X11_AWT_BOUNDS_TOLERANCE);
+    assertThat(actual.x + actual.width).as("maximized frame covers work-area right edge throughout stable interval")
+        .isGreaterThanOrEqualTo(workArea.x + workArea.width - X11_AWT_BOUNDS_TOLERANCE);
+    assertThat(actual.y + actual.height).as("maximized frame covers work-area bottom edge throughout stable interval")
+        .isGreaterThanOrEqualTo(workArea.y + workArea.height - X11_AWT_BOUNDS_TOLERANCE);
 }
 ```
 
-Bounds changes restart the quiet interval; they cannot count toward the required 2100 continuous milliseconds. Endpoint work-area coverage precedes the original round trip. The extra field is false for all other existing stability calls.
+Bounds changes restart the quiet interval; they cannot count toward the required 2100 continuous milliseconds. The four work-area coverage assertions run on **every** poll, as the design and Section 14.2 require, not only at the endpoint; the endpoint coverage check precedes the original round trip. The extra field is false for all other existing stability calls, and the poll keeps the existing 10 ms cadence and the existing 5000 ms monotonic deadline.
 
 - [ ] **Step 4: Author and hash the Openbox runner**
 
