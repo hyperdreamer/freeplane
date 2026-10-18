@@ -2,12 +2,12 @@ digraph execution {
   rankdir=LR;
   subgraph cluster_spacing {
     label="spacing";
-    "T-001" [label="T-001: Scope accessibility headless assumptions"];
-    "T-002" [label="T-002: Prove window-manager capability and boun"];
-    "T-003" [label="T-003: Pin the measured eleven-conflict golden "];
-    "T-004" [label="T-004: Establish the lifecycle teardown barrier"];
-    "T-005" [label="T-005: Collect common-tree supporting evidence "];
-    "T-006" [label="T-006: Write the receipt-backed acceptance reco"];
+    "T-001" [label="T-001: Scope accessibility headless assumptions to the two actual-window methods\n(Advanced)"];
+    "T-002" [label="T-002: Prove window-manager capability and bounded maximized-window stability\n(Advanced)"];
+    "T-003" [label="T-003: Pin the measured eleven-conflict golden and four-sample provenance\n(Advanced)"];
+    "T-004" [label="T-004: Establish the lifecycle teardown barrier and kill the disposable closed-guard mutant\n(Advanced)"];
+    "T-005" [label="T-005: Collect common-tree supporting evidence and all four final integration gates\n(Standard)"];
+    "T-006" [label="T-006: Write the receipt-backed acceptance record and verify delivery-tree equality\n(Advanced)"];
   }
   "T-001" -> "T-002";
   "T-002" -> "T-003";
