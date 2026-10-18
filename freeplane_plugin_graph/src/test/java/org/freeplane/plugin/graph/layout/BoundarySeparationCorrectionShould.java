@@ -22,6 +22,7 @@ import org.freeplane.plugin.graph.geometry.HullGeometry;
 import org.freeplane.plugin.graph.geometry.HullIntersection;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
+import org.freeplane.plugin.graph.geometry.NodeGeometry;
 import org.freeplane.plugin.graph.projection.BoundaryTier;
 import org.freeplane.plugin.graph.projection.CanonicalKeys;
 import org.freeplane.plugin.graph.projection.EdgeContributor;
@@ -261,6 +262,26 @@ public class BoundarySeparationCorrectionShould {
 
         assertThat(BoundarySeparationCorrection.ancestorEscapePairKeys(projection, hulls))
             .containsExactly(CanonicalKeys.pair(childHull, parentHull));
+
+        // The contained control differs from the escaped one only in the child's extent, so the
+        // exact same projection and parent hull must report nothing.
+        final Map<EnclosureHullKey, HullGeometry> contained =
+            new LinkedHashMap<EnclosureHullKey, HullGeometry>();
+        contained.put(parentHull, square(0.0, 10.0));
+        contained.put(childHull, square(0.0, 1.0));
+        assertThat(BoundarySeparationCorrection.ancestorEscapePairKeys(projection, contained)).isEmpty();
+        assertThat(new BoundaryInvariants().detectPairKeys(projection,
+            GraphGeometry.of(Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(), contained))).isEmpty();
+        assertThat(new BoundaryInvariants().detectPairKeys(projection,
+            GraphGeometry.of(Collections.<ProjectedNodeKey, NodeGeometry>emptyMap(), hulls)))
+            .containsExactly(CanonicalKeys.pair(childHull, parentHull));
+        // Touching-but-contained: the child's rim reaches exactly the parent's rim and is still
+        // contained, so a strict-interior reading would be a regression.
+        final Map<EnclosureHullKey, HullGeometry> touching =
+            new LinkedHashMap<EnclosureHullKey, HullGeometry>();
+        touching.put(parentHull, square(0.0, 10.0));
+        touching.put(childHull, square(9.0, 1.0));
+        assertThat(BoundarySeparationCorrection.ancestorEscapePairKeys(projection, touching)).isEmpty();
     }
 
     private static HullGeometry square(double centerX, double halfExtent) {
