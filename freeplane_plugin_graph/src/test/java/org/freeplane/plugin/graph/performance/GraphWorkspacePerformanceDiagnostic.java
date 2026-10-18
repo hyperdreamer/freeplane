@@ -83,6 +83,8 @@ import org.freeplane.plugin.graph.projection.ProjectionDiff;
 import org.freeplane.plugin.graph.projection.ProjectionEngine;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
 import org.freeplane.plugin.graph.workspace.model.DisplaySettings;
+import org.freeplane.plugin.graph.workspace.model.NodeReference;
+import org.freeplane.plugin.graph.workspace.model.PersistedNodeId;
 import org.freeplane.plugin.graph.workspace.model.WorkspaceId;
 
 public final class GraphWorkspacePerformanceDiagnostic {
@@ -105,7 +107,7 @@ public final class GraphWorkspacePerformanceDiagnostic {
      * Golden conflict count for the TWO_PINNED_MAPS scenario under generalized enforcement.
      * Captured from the first measured run and updated only from a measured run; see the task step.
      */
-    private static final int TWO_PINNED_MAPS_EXPECTED_CONFLICTS = 1;
+    private static final int TWO_PINNED_MAPS_EXPECTED_CONFLICTS = 11;
 
     private final Path outputDirectory;
     private final boolean strict;
@@ -595,22 +597,41 @@ public final class GraphWorkspacePerformanceDiagnostic {
                 "Two-pinned-maps conflict count changed: expected " + TWO_PINNED_MAPS_EXPECTED_CONFLICTS
                     + " but measured " + frame.conflicts().size());
         }
+        final Set<NodeReference> expectedPins = new HashSet<NodeReference>();
+        for (final PinProjection pin : generated.projection().pins()) {
+            expectedPins.add(pin.source());
+        }
+        final Set<NodeReference> declaredPins = new HashSet<NodeReference>(Arrays.asList(
+            NodeReference.of(org.freeplane.plugin.graph.workspace.model.MapReferenceId.of(
+                "00000000-0000-0000-0000-000000000001"), PersistedNodeId.of("m00-n0001")),
+            NodeReference.of(org.freeplane.plugin.graph.workspace.model.MapReferenceId.of(
+                "00000000-0000-0000-0000-000000000002"), PersistedNodeId.of("m01-n0001"))));
+        if (!expectedPins.equals(declaredPins)) {
+            throw new DiagnosticFailure(PerformanceMeasurements.Stage.FULL_WORKER,
+                "Two-pinned-maps fixture persisted identities changed");
+        }
+        int crossing = 0;
+        int containment = 0;
         for (final BoundaryConflict conflict : frame.conflicts()) {
-            if (conflict.firstMap().equals(conflict.secondMap())) {
-                for (final PinProjection pin : conflict.blockingPins()) {
-                    if (!pin.source().mapReferenceId().equals(conflict.firstMap())) {
-                        throw new DiagnosticFailure(PerformanceMeasurements.Stage.FULL_WORKER,
-                            "A same-map conflict listed a pin from another map");
-                    }
-                }
-                continue;
+            final Set<NodeReference> actualPins = new HashSet<NodeReference>();
+            for (final PinProjection pin : conflict.blockingPins()) {
+                actualPins.add(pin.source());
             }
-            if (conflict.blockingPins().size() != 2
-                    || !conflict.blockingPins().get(0).source().nodeId().value().equals("m00-n0001")
-                    || !conflict.blockingPins().get(1).source().nodeId().value().equals("m01-n0001")) {
+            if (conflict.reason() != BoundaryConflict.Reason.IMMOVABLE_SIDES
+                    || conflict.blockingPins().size() != 2 || !actualPins.equals(expectedPins)) {
                 throw new DiagnosticFailure(PerformanceMeasurements.Stage.FULL_WORKER,
-                    "Two-pinned-maps conflict did not retain both pin identities");
+                    "Two-pinned-maps conflict reason or unordered persisted pin identities changed");
             }
+            if (conflict.kind() == BoundaryConflict.Kind.SIBLING_CROSSING) {
+                crossing++;
+            }
+            else if (conflict.kind() == BoundaryConflict.Kind.SIBLING_CONTAINMENT) {
+                containment++;
+            }
+        }
+        if (crossing != 2 || containment != 9) {
+            throw new DiagnosticFailure(PerformanceMeasurements.Stage.FULL_WORKER,
+                "Two-pinned-maps conflict kind split changed: crossing=" + crossing + ", containment=" + containment);
         }
     }
 
