@@ -22,6 +22,7 @@ import org.freeplane.plugin.graph.geometry.GraphGeometryEngine;
 import org.freeplane.plugin.graph.geometry.HullGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
+import org.freeplane.plugin.graph.layout.EdgeConflictDiagnostics;
 import org.freeplane.plugin.graph.layout.LayoutCalibration;
 import org.freeplane.plugin.graph.layout.LayoutEngine;
 import org.freeplane.plugin.graph.layout.LayoutFrame;
@@ -505,19 +506,76 @@ public class ClusterProximityShould {
                 new GraphStreamLayoutEngine.BoundarySizes(projection);
             final LayoutFrame engine = engineFrame(projection, pins);
             final LayoutFrame worker = workerFrame(projection, pins);
+            assertThat(worker.failed())
+                .as("fixture %s worker failed", Character.valueOf(name))
+                .isFalse();
+            assertThat(worker.verified())
+                .as("fixture %s worker verified", Character.valueOf(name))
+                .isTrue();
+            assertThat(worker.residualViolations())
+                .as("fixture %s worker node residual violations", Character.valueOf(name))
+                .isZero();
+            assertThat(worker.boundaryDiagnostics().hullResidualViolations())
+                .as("fixture %s worker hull residual violations", Character.valueOf(name))
+                .isZero();
+            assertThat(worker.boundaryDiagnostics().boundaryVerified())
+                .as("fixture %s worker boundary verified", Character.valueOf(name))
+                .isTrue();
+            assertThat(worker.boundaryDiagnostics().boundaryCovered())
+                .as("fixture %s worker boundary covered", Character.valueOf(name))
+                .isTrue();
+            assertThat(NodeSeparationProjection.violatingPairs(projection, worker.positions()))
+                .as("fixture %s worker node-separation violating pairs", Character.valueOf(name))
+                .isEmpty();
             // The worker applies BoundarySeparationCorrection, whose first stage is the
-            // documented NodeSeparationProjection. It rebuilds node positions, so on the exact
-            // MIN_GAP tie produced by contentRingRadius the last ulp can change on some fixtures;
-            // anchors are never moved for an unpinned seed and no hull displacement is recorded.
-            // Assert both stages exactly instead of relaxing an equality to a tolerance.
+            // documented NodeSeparationProjection, and then EdgeConflictCorrection. The
+            // preferred-gap tie produced by contentRingRadius leaves one residual edge conflict
+            // on the unpinned fixture D, and EdgeConflictCorrection resolves it with a recorded
+            // TRANSLATION of a single node. That is not a node-separation effect: the
+            // node-separation stage moves nothing here, and the translation is far larger than an
+            // ulp. Pin the repair rather than widening an equality to a tolerance: every node the
+            // repair did not touch must equal the node-separation projection of the engine frame
+            // exactly, and every repaired node must equal the recorded repair target exactly.
+            final Map<ProjectedNodeKey, LayoutPoint> expectedNodes =
+                new NodeSeparationProjection().project(projection, engine.positions(),
+                    Collections.<ProjectedNodeKey>emptySet()).positions().nodes();
+            final Map<ProjectedNodeKey, LayoutPoint> repairedNodes =
+                recordedEdgeConflictRepairs(worker.edgeConflictDiagnostics());
             assertThat(worker.positions().anchors())
                 .as("fixture %s worker anchors equal engine anchors", Character.valueOf(name))
                 .isEqualTo(engine.positions().anchors());
-            assertThat(worker.positions().nodes())
+            assertThat(worker.positions().nodes().keySet())
+                .as("fixture %s worker node keys equal the projected node keys", Character.valueOf(name))
+                .isEqualTo(expectedNodes.keySet());
+            // A repair may only excuse the keys it names, and only from where the separation stage
+            // left them: the recorded origin must be the projection itself, so the exception cannot
+            // be satisfied by a repair the worker invented to describe a displacement.
+            for (final EdgeConflictDiagnostics.Repair repair
+                    : worker.edgeConflictDiagnostics().repairsApplied()) {
+                for (final Map.Entry<ProjectedNodeKey, LayoutPoint> origin
+                        : repair.fromCentres().entrySet()) {
+                    assertThat(origin.getValue())
+                        .as("fixture %s edge-conflict repair origin of %s",
+                            Character.valueOf(name), origin.getKey())
+                        .isEqualTo(expectedNodes.get(origin.getKey()));
+                }
+            }
+            final Map<ProjectedNodeKey, LayoutPoint> untouchedNodes =
+                new LinkedHashMap<ProjectedNodeKey, LayoutPoint>(expectedNodes);
+            untouchedNodes.keySet().removeAll(repairedNodes.keySet());
+            final Map<ProjectedNodeKey, LayoutPoint> untouchedActual =
+                new LinkedHashMap<ProjectedNodeKey, LayoutPoint>(worker.positions().nodes());
+            untouchedActual.keySet().retainAll(untouchedNodes.keySet());
+            assertThat(untouchedActual)
                 .as("fixture %s worker nodes equal the node-separation projection of the engine frame",
                     Character.valueOf(name))
-                .isEqualTo(new NodeSeparationProjection().project(projection, engine.positions(),
-                    Collections.<ProjectedNodeKey>emptySet()).positions().nodes());
+                .isEqualTo(untouchedNodes);
+            for (final Map.Entry<ProjectedNodeKey, LayoutPoint> repair : repairedNodes.entrySet()) {
+                assertThat(worker.positions().nodes().get(repair.getKey()))
+                    .as("fixture %s recorded edge-conflict repair target of %s",
+                        Character.valueOf(name), repair.getKey())
+                    .isEqualTo(repair.getValue());
+            }
             assertPackedNonOverlap(projection, worker.positions(), sizes);
             assertContactGutters(sizes);
         }
@@ -614,6 +672,22 @@ public class ClusterProximityShould {
         }
         assertPackedNonOverlap(projection, positions, sizes);
         assertContactGutters(sizes);
+    }
+
+    /**
+     * The node centres that {@code EdgeConflictCorrection} rewrote, keyed by node, exactly as the
+     * worker recorded them in its applied repairs. An unpinned seed can leave one residual edge
+     * conflict, and the correction resolves it with a recorded translation rather than a
+     * node-separation nudge; the test pins those recorded targets instead of a tolerance.
+     */
+    private static Map<ProjectedNodeKey, LayoutPoint> recordedEdgeConflictRepairs(
+            final EdgeConflictDiagnostics diagnostics) {
+        final Map<ProjectedNodeKey, LayoutPoint> targets =
+            new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
+        for (final EdgeConflictDiagnostics.Repair repair : diagnostics.repairsApplied()) {
+            targets.putAll(repair.toCentres());
+        }
+        return targets;
     }
 
     private static void assertPackedNonOverlap(final GraphProjection projection,

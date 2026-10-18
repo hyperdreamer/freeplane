@@ -143,7 +143,7 @@ final class ClusterPacking {
         for (final ClusterPlacement p : placed) {
             final double clearanceX = Math.abs(x - p.x) - (item.width + p.item.width) * 0.5;
             final double clearanceY = Math.abs(y - p.y) - (item.height + p.item.height) * 0.5;
-            if (clearanceX < gap && clearanceY < gap) {
+            if (clearanceX < gap - CANDIDATE_EPSILON && clearanceY < gap - CANDIDATE_EPSILON) {
                 return false;
             }
         }
