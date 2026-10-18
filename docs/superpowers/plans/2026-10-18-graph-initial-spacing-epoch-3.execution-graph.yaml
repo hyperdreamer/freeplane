@@ -5,8 +5,8 @@ topic: graph-initial-spacing
 epoch: 3
 source_plan:
   path: docs/superpowers/plans/2026-10-18-graph-initial-spacing-epoch-3.md
-  sha256: febc017277b6b03ceaa4e68f96c41f466575b79ecf7c1f25b42fd3df1067cc92
-  commit_oid: 234deacce31e64a8a7dbbc51332b4c8588fd5008
+  sha256: bc9149b0c894280a5550ff61c37bd0ee6f9ffa541a94d6148292efc1f77ad7dc
+  commit_oid: f1c6da5aa9d67f3cb4674ecbce848f1e5a0385f6
   task_count: 6
 lanes:
   - id: spacing
@@ -200,8 +200,8 @@ tasks:
     resources: []
     produces:
     - id: iface.t4.1
-      signature: "order `baseline -> observed listener increase -> off-EDT close -> handle rejection -> listener baseline restored -> release blocked listener -> bounded close join`. Callback-registration rejection remains supporting observation only."
-      sha256: 5d03926356e7fe94741c8ef35f3016574cbe879c066b70db46345b3c7636300b
+      signature: "order `baseline -> observed listener increase -> off-EDT close -> handle rejection -> callback-registration rejection (governing logical-close signal) -> release blocked listener -> listener baseline restored (post-release teardown completion) -> bounded close join`. Both signals are required; the listener baseline is a post-release assertion, never a pre-release gate."
+      sha256: 0a6140234cb52b1b258d406751cc50df6a2b12d53f1cec7bd56670b129354463
     - id: iface.t4.2
       signature: "`python3 run-lifecycle-mutant.py CANDIDATE_ROOT CLASSPATH_FILE RECEIPT_DIR -> 0` only when the real method passes with production classes and fails with the one copied per-listener closed check removed. The receipt records green/mutant exit codes, assertion text, source/class hashes and unchanged active source/tree."
       sha256: fe731c2f27110ea3f1d2b671c2da9745d75f52c54360b79c7cf0de02bc7d7c11
@@ -217,8 +217,8 @@ tasks:
     interfaces:
       produces:
       - id: iface.t4.1
-        signature: "order `baseline -> observed listener increase -> off-EDT close -> handle rejection -> listener baseline restored -> release blocked listener -> bounded close join`. Callback-registration rejection remains supporting observation only."
-        sha256: 5d03926356e7fe94741c8ef35f3016574cbe879c066b70db46345b3c7636300b
+        signature: "order `baseline -> observed listener increase -> off-EDT close -> handle rejection -> callback-registration rejection (governing logical-close signal) -> release blocked listener -> listener baseline restored (post-release teardown completion) -> bounded close join`. Both signals are required; the listener baseline is a post-release assertion, never a pre-release gate."
+        sha256: 0a6140234cb52b1b258d406751cc50df6a2b12d53f1cec7bd56670b129354463
       - id: iface.t4.2
         signature: "`python3 run-lifecycle-mutant.py CANDIDATE_ROOT CLASSPATH_FILE RECEIPT_DIR -> 0` only when the real method passes with production classes and fails with the one copied per-listener closed check removed. The receipt records green/mutant exit codes, assertion text, source/class hashes and unchanged active source/tree."
         sha256: fe731c2f27110ea3f1d2b671c2da9745d75f52c54360b79c7cf0de02bc7d7c11
@@ -295,8 +295,8 @@ tasks:
     - id: consumed.t5.iface.t4.1
       producer_task: T-004
       interface_id: iface.t4.1
-      signature: "order `baseline -> observed listener increase -> off-EDT close -> handle rejection -> listener baseline restored -> release blocked listener -> bounded close join`. Callback-registration rejection remains supporting observation only."
-      sha256: 5d03926356e7fe94741c8ef35f3016574cbe879c066b70db46345b3c7636300b
+      signature: "order `baseline -> observed listener increase -> off-EDT close -> handle rejection -> callback-registration rejection (governing logical-close signal) -> release blocked listener -> listener baseline restored (post-release teardown completion) -> bounded close join`. Both signals are required; the listener baseline is a post-release assertion, never a pre-release gate."
+      sha256: 0a6140234cb52b1b258d406751cc50df6a2b12d53f1cec7bd56670b129354463
     interfaces:
       produces:
       - id: iface.t5.1
@@ -332,8 +332,8 @@ tasks:
       - id: consumed.t5.iface.t4.1
         producer_task: T-004
         interface_id: iface.t4.1
-        signature: "order `baseline -> observed listener increase -> off-EDT close -> handle rejection -> listener baseline restored -> release blocked listener -> bounded close join`. Callback-registration rejection remains supporting observation only."
-        sha256: 5d03926356e7fe94741c8ef35f3016574cbe879c066b70db46345b3c7636300b
+        signature: "order `baseline -> observed listener increase -> off-EDT close -> handle rejection -> callback-registration rejection (governing logical-close signal) -> release blocked listener -> listener baseline restored (post-release teardown completion) -> bounded close join`. Both signals are required; the listener baseline is a post-release assertion, never a pre-release gate."
+        sha256: 0a6140234cb52b1b258d406751cc50df6a2b12d53f1cec7bd56670b129354463
     validation:
       - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould", "--console=plain", "-PTestLoggingFull", "--rerun-tasks"]
         cwd: lane
