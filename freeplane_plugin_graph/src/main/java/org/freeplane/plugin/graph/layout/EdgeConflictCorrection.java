@@ -1,6 +1,7 @@
 package org.freeplane.plugin.graph.layout;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -50,8 +51,10 @@ public final class EdgeConflictCorrection {
     static final long EDGE_CONFLICT_MAX_INDEX_ITEMS_PER_FRAME = 262_144L;
     static final long EDGE_CONFLICT_MAX_PAIR_CHECKS_PER_FRAME = 131_072L;
     static final int EDGE_CONFLICT_MAX_DETECTED_PER_FRAME = 4_096;
-    static final int EDGE_CONFLICT_MAX_REPAIRABLE_CONFLICTS_PER_FRAME = 8;
     static final long EDGE_CONFLICT_MAX_VERIFICATION_WORK_PER_FRAME = 65_536L;
+    static final double MAX_EDGE_NODE_EXCURSION = 64.0;
+    static final int MAX_CANDIDATE_FAMILIES_PER_ROUND = 8;
+    static final int MAX_CANDIDATES_PER_BATCH = 8;
 
     private static final double OUTERMOST_CELL_INDEX_DOUBLE = OUTERMOST_CELL_INDEX;
     private static final Comparator<ProjectedNodeKey> NODE_ORDER =
@@ -123,18 +126,6 @@ public final class EdgeConflictCorrection {
         final int crossingsDetected = conflicts.crossings();
         final int edgeOverNodeDetected = conflicts.edgeOverNodes();
         final boolean initialDetectionTruncated = initial.truncated();
-        if (conflictsDetected > EDGE_CONFLICT_MAX_REPAIRABLE_CONFLICTS_PER_FRAME
-                && !initialDetectionTruncated && !indexBudgetExhausted) {
-            final EdgeConflictDiagnostics diagnostics = new EdgeConflictDiagnostics(
-                conflictsDetected, crossingsDetected, edgeOverNodeDetected, 0, 0, conflicts.keys(),
-                Collections.<EdgeConflictDiagnostics.Repair>emptyList(), 0, 0, false,
-                indexBudgetExhausted, initialDetectionTruncated, indexInsertedItems, indexPairChecks,
-                verificationWork, indexSubdivisions);
-            return new EdgeConflictResult(positions, diagnostics,
-                new EdgeConflictTimings(0L, 0L, 0L, 0L), boundaryResult.diagnostics(),
-                boundaryResult.nodeResidualViolations(),
-                Collections.<String, LayoutPoint>emptyMap());
-        }
         final List<EdgeConflictDiagnostics.Repair> repairs =
             new ArrayList<EdgeConflictDiagnostics.Repair>();
         int rounds = 0;
@@ -359,19 +350,42 @@ public final class EdgeConflictCorrection {
         }
     }
 
+    /**
+     * The bounded family selection of spec §4.1: visit the complete conflict list in ascending
+     * canonical detection-identity order (the accumulator stores it in a {@link TreeMap}, so it
+     * is already ascending), build one family at a time, and retain only entries whose
+     * {@link CandidateIdentity} is new for this current-state pool. A family is counted only when
+     * something survives that deduplication; generation stops after
+     * {@link #MAX_CANDIDATE_FAMILIES_PER_ROUND} nonempty families, so at most 48 entries enter the
+     * pool. Unselected conflicts stay in the detection and the reported residual; this is a
+     * candidate-generation bound, never a detection or verification bound.
+     */
     private static List<Candidate> generateCandidates(final Detection conflicts,
             final LayoutPositions positions, final Set<ProjectedNodeKey> pinned,
             final Map<ProjectedNodeKey, List<EnclosureHullKey>> enclosurePaths) {
-        final List<Candidate> candidates = new ArrayList<Candidate>();
+        final List<Candidate> pool = new ArrayList<Candidate>();
+        final Set<CandidateIdentity> retained = new HashSet<CandidateIdentity>();
+        int families = 0;
         for (final Conflict conflict : conflicts.conflicts()) {
+            final List<Candidate> family = new ArrayList<Candidate>(6);
             if (conflict.isCrossing()) {
-                addCrossingCandidates(candidates, conflict, positions, pinned, enclosurePaths);
+                addCrossingCandidates(family, conflict, positions, pinned, enclosurePaths);
             }
             else {
-                addEdgeOverNodeCandidate(candidates, conflict, positions, pinned);
+                addEdgeOverNodeCandidates(family, conflict, positions, pinned);
+            }
+            boolean nonempty = false;
+            for (final Candidate candidate : family) {
+                if (retained.add(new CandidateIdentity(candidate))) {
+                    pool.add(candidate);
+                    nonempty = true;
+                }
+            }
+            if (nonempty && ++families == MAX_CANDIDATE_FAMILIES_PER_ROUND) {
+                break;
             }
         }
-        return candidates;
+        return pool;
     }
 
     private static void addCrossingCandidates(final List<Candidate> candidates, final Conflict conflict,
@@ -508,12 +522,25 @@ public final class EdgeConflictCorrection {
         candidates.add(new Candidate(EdgeConflictDiagnostics.RepairKind.MIRROR, moved, from, to));
     }
 
-    private static void addEdgeOverNodeCandidate(final List<Candidate> candidates,
+    /**
+     * Emits the finite C2 family (spec §3): both direct perpendicular targets and the four
+     * diagonals, ordered by {@code (stage, movement, sideRank, alongRank, candidateIdentity)}.
+     * The basis is canonicalised so a horizontal chord always yields {@code n = (0,-1)} and
+     * {@code u = (1,0)}, independent of endpoint traversal direction. Ineligible input emits no
+     * candidate; nothing is clamped, and no fallback direction or radius is invented.
+     */
+    private static void addEdgeOverNodeCandidates(final List<Candidate> candidates,
             final Conflict conflict, final LayoutPositions positions,
             final Set<ProjectedNodeKey> pinned) {
         final Chord chord = conflict.firstChord();
         final Disc disc = conflict.disc();
         if (pinned.contains(disc.key)) {
+            return;
+        }
+        final LayoutPoint known = positions.nodes().get(disc.key);
+        final LayoutPoint centre = known == null ? disc.center : known;
+        if (!isFinite(centre) || !isFinite(chord.first) || !isFinite(chord.second)
+                || !(disc.radius > 0.0) || !Double.isFinite(disc.radius)) {
             return;
         }
         final double deltaX = chord.second.x() - chord.first.x();
@@ -522,35 +549,95 @@ public final class EdgeConflictCorrection {
         if (!(length > 0.0) || !Double.isFinite(length)) {
             return;
         }
-        double normalX = -deltaY / length;
-        double normalY = deltaX / length;
-        if (Double.compare(normalX, -normalX) > 0 || Double.compare(normalX, -normalX) == 0
-                && Double.compare(normalY, -normalY) > 0) {
-            normalX = -normalX;
-            normalY = -normalY;
+        final double rawNormalX = -deltaY / length;
+        final double rawNormalY = deltaX / length;
+        if (!Double.isFinite(rawNormalX) || !Double.isFinite(rawNormalY)) {
+            return;
         }
-        final LayoutPoint known = positions.nodes().get(disc.key);
-        final LayoutPoint centre = known == null ? disc.center : known;
-        final double projection = (centre.x() - chord.first.x()) * normalX
-            + (centre.y() - chord.first.y()) * normalY;
-        final double shift = disc.radius + EDGE_NODE_CLEARANCE - projection;
-        final LayoutPoint target = LayoutPoint.of(centre.x() + shift * normalX,
-            centre.y() + shift * normalY);
-        final List<ProjectedNodeKey> moved = new ArrayList<ProjectedNodeKey>(1);
-        moved.add(disc.key);
-        final Map<ProjectedNodeKey, LayoutPoint> from =
-            new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
-        from.put(disc.key, centre);
-        final Map<ProjectedNodeKey, LayoutPoint> to =
-            new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
-        to.put(disc.key, target);
-        candidates.add(new Candidate(EdgeConflictDiagnostics.RepairKind.TRANSLATION, moved, from, to));
+        double normalX = zeroNormalized(rawNormalX);
+        double normalY = zeroNormalized(rawNormalY);
+        final double negatedNormalX = zeroNormalized(-rawNormalX);
+        final double negatedNormalY = zeroNormalized(-rawNormalY);
+        if (Double.compare(normalX, negatedNormalX) > 0
+                || Double.compare(normalX, negatedNormalX) == 0
+                    && Double.compare(normalY, negatedNormalY) > 0) {
+            normalX = negatedNormalX;
+            normalY = negatedNormalY;
+        }
+        final double alongX = zeroNormalized(-normalY);
+        final double alongY = zeroNormalized(normalX);
+        final double projectedX = centre.x() - chord.first.x();
+        final double projectedY = centre.y() - chord.first.y();
+        if (!Double.isFinite(projectedX) || !Double.isFinite(projectedY)) {
+            return;
+        }
+        final double projection = projectedX * normalX + projectedY * normalY;
+        final double rho = disc.radius + EDGE_NODE_CLEARANCE;
+        final double halfHeight = 2.0 * disc.radius + NodeSeparationProjection.MIN_GAP
+            + EDGE_NODE_CLEARANCE;
+        if (!Double.isFinite(projection) || !Double.isFinite(rho) || !Double.isFinite(halfHeight)) {
+            return;
+        }
+        final ProjectedNodeKey node = disc.key;
+        final List<RankedCandidate> ranked = new ArrayList<RankedCandidate>(6);
+        for (int side = 0; side < 2; side++) {
+            final double sigma = side == 0 ? 1.0 : -1.0;
+            final double normalShift = sigma * rho - projection;
+            if (!Double.isFinite(normalShift)) {
+                continue;
+            }
+            for (int along = 0; along < 3; along++) {
+                final double offset = along == 0 ? 0.0 : along == 1 ? -halfHeight : halfHeight;
+                final double offsetProductX = offset * alongX;
+                final double offsetProductY = offset * alongY;
+                if (!Double.isFinite(offset) || !Double.isFinite(offsetProductX)
+                        || !Double.isFinite(offsetProductY)) {
+                    continue;
+                }
+                final double shiftX = normalShift * normalX;
+                final double shiftY = normalShift * normalY;
+                if (!Double.isFinite(shiftX) || !Double.isFinite(shiftY)) {
+                    continue;
+                }
+                final double targetX = centre.x() + shiftX + offsetProductX;
+                final double targetY = centre.y() + shiftY + offsetProductY;
+                final double movementX = targetX - centre.x();
+                final double movementY = targetY - centre.y();
+                if (!Double.isFinite(targetX) || !Double.isFinite(targetY)
+                        || !Double.isFinite(movementX) || !Double.isFinite(movementY)) {
+                    continue;
+                }
+                final double movement = Math.hypot(movementX, movementY);
+                if (!Double.isFinite(movement) || movement == 0.0
+                        || movement > MAX_EDGE_NODE_EXCURSION) {
+                    continue;
+                }
+                final LayoutPoint target = LayoutPoint.of(targetX, targetY);
+                final Candidate candidate = new Candidate(
+                    EdgeConflictDiagnostics.RepairKind.TRANSLATION,
+                    Collections.singletonList(node), Collections.singletonMap(node, centre),
+                    Collections.singletonMap(node, target));
+                ranked.add(new RankedCandidate(candidate, along == 0 ? 0 : 1, movement, side,
+                    along == 2 ? 1 : 0, new CandidateIdentity(candidate)));
+            }
+        }
+        Collections.sort(ranked, RankedCandidate.ORDER);
+        for (final RankedCandidate value : ranked) {
+            candidates.add(value.candidate);
+        }
+    }
+
+    private static double zeroNormalized(final double value) {
+        return value == 0.0 ? 0.0 : value;
     }
 
     private static List<Candidate> greedyDisjoint(final List<Candidate> pool) {
         final List<Candidate> batch = new ArrayList<Candidate>();
         final Set<ProjectedNodeKey> moved = new LinkedHashSet<ProjectedNodeKey>();
         for (final Candidate candidate : pool) {
+            if (batch.size() >= MAX_CANDIDATES_PER_BATCH) {
+                break;
+            }
             boolean disjoint = true;
             for (final ProjectedNodeKey node : candidate.movedNodes) {
                 if (moved.contains(node)) {
@@ -1324,6 +1411,135 @@ public final class EdgeConflictCorrection {
                 new LinkedHashMap<ProjectedNodeKey, LayoutPoint>(fromCentres));
             this.toCentres = Collections.unmodifiableMap(
                 new LinkedHashMap<ProjectedNodeKey, LayoutPoint>(toCentres));
+        }
+    }
+
+    /**
+     * One C2 alternative with its total-order rank tuple (spec §3.3). The identity is the last
+     * tie-breaker, so the comparison never depends on map insertion order.
+     */
+    private static final class RankedCandidate {
+        private static final Comparator<RankedCandidate> ORDER = new Comparator<RankedCandidate>() {
+            @Override
+            public int compare(final RankedCandidate first, final RankedCandidate second) {
+                int result = Integer.compare(first.stage, second.stage);
+                if (result != 0) {
+                    return result;
+                }
+                result = Double.compare(first.movement, second.movement);
+                if (result != 0) {
+                    return result;
+                }
+                result = Integer.compare(first.sideRank, second.sideRank);
+                if (result != 0) {
+                    return result;
+                }
+                result = Integer.compare(first.alongRank, second.alongRank);
+                if (result != 0) {
+                    return result;
+                }
+                return first.identity.compareTo(second.identity);
+            }
+        };
+
+        private final Candidate candidate;
+        private final int stage;
+        private final double movement;
+        private final int sideRank;
+        private final int alongRank;
+        private final CandidateIdentity identity;
+
+        private RankedCandidate(final Candidate candidate, final int stage, final double movement,
+                final int sideRank, final int alongRank, final CandidateIdentity identity) {
+            this.candidate = candidate;
+            this.stage = stage;
+            this.movement = movement;
+            this.sideRank = sideRank;
+            this.alongRank = alongRank;
+            this.identity = identity;
+        }
+    }
+
+    /**
+     * The private C2 candidate identity (spec §3.3): repair kind, canonical sorted moved-node
+     * keys and the corresponding zero-normalized from/to x/y bit patterns. It deliberately
+     * excludes the generating conflict key so duplicate proposals collapse.
+     */
+    private static final class CandidateIdentity implements Comparable<CandidateIdentity> {
+        private final String kind;
+        private final List<String> nodes;
+        private final long[] fromBits;
+        private final long[] toBits;
+
+        private CandidateIdentity(final Candidate candidate) {
+            this.kind = candidate.kind.name();
+            final List<ProjectedNodeKey> sorted =
+                new ArrayList<ProjectedNodeKey>(candidate.movedNodes);
+            Collections.sort(sorted, NODE_ORDER);
+            final int count = sorted.size();
+            this.nodes = new ArrayList<String>(count);
+            this.fromBits = new long[count * 2];
+            this.toBits = new long[count * 2];
+            for (int index = 0; index < count; index++) {
+                final ProjectedNodeKey key = sorted.get(index);
+                nodes.add(CanonicalKeys.node(key));
+                final LayoutPoint from = candidate.fromCentres.get(key);
+                final LayoutPoint to = candidate.toCentres.get(key);
+                fromBits[index * 2] = Double.doubleToLongBits(zeroNormalized(from.x()));
+                fromBits[index * 2 + 1] = Double.doubleToLongBits(zeroNormalized(from.y()));
+                toBits[index * 2] = Double.doubleToLongBits(zeroNormalized(to.x()));
+                toBits[index * 2 + 1] = Double.doubleToLongBits(zeroNormalized(to.y()));
+            }
+        }
+
+        @Override
+        public int compareTo(final CandidateIdentity other) {
+            int result = kind.compareTo(other.kind);
+            if (result != 0) {
+                return result;
+            }
+            final int limit = Math.min(nodes.size(), other.nodes.size());
+            for (int index = 0; index < limit; index++) {
+                result = nodes.get(index).compareTo(other.nodes.get(index));
+                if (result != 0) {
+                    return result;
+                }
+                result = Long.compareUnsigned(fromBits[index * 2], other.fromBits[index * 2]);
+                if (result != 0) {
+                    return result;
+                }
+                result = Long.compareUnsigned(fromBits[index * 2 + 1], other.fromBits[index * 2 + 1]);
+                if (result != 0) {
+                    return result;
+                }
+                result = Long.compareUnsigned(toBits[index * 2], other.toBits[index * 2]);
+                if (result != 0) {
+                    return result;
+                }
+                result = Long.compareUnsigned(toBits[index * 2 + 1], other.toBits[index * 2 + 1]);
+                if (result != 0) {
+                    return result;
+                }
+            }
+            return Integer.compare(nodes.size(), other.nodes.size());
+        }
+
+        @Override
+        public boolean equals(final Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof CandidateIdentity)) {
+                return false;
+            }
+            final CandidateIdentity that = (CandidateIdentity) other;
+            return kind.equals(that.kind) && nodes.equals(that.nodes)
+                && Arrays.equals(fromBits, that.fromBits) && Arrays.equals(toBits, that.toBits);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(kind, nodes, Arrays.hashCode(fromBits), Arrays.hashCode(toBits));
         }
     }
 
