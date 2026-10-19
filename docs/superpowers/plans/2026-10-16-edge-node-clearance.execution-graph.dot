@@ -1,0 +1,20 @@
+digraph execution_graph {
+  rankdir=TB;
+  node [shape=box, style=rounded];
+  subgraph cluster_clearance {
+    label="clearance";
+    T1 [label="Task 1: Replace the single C2 translation with the finite ordered local family\nAdvanced"];
+    T2 [label="Task 2: Bound family selection and consume rejected alternatives without suppressing crowded frames\nAdvanced"];
+    T3 [label="Task 3: Pin global geometry invariants, numerical eligibility, prominence and deterministic retries\nAdvanced"];
+    T4 [label="Task 4: Verify complete crowded residuals, shared stops and unchanged performance pins\nStandard"];
+    T5 [label="Task 5: Prove the first published E3 paths come from a real corrected worker frame\nAdvanced"];
+    T6 [label="Task 6: Bind the replay to the installed window and capture one retained painted state\nCapable"];
+    T7 [label="Task 7: Launch and validate the installed-application E3 gate and run final acceptance\nCapable"];
+  }
+  T1 -> T2;
+  T2 -> T3;
+  T3 -> T4;
+  T4 -> T5;
+  T5 -> T6;
+  T6 -> T7;
+}
