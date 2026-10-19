@@ -1854,13 +1854,13 @@ public class GraphWorkspaceWindowModelShould {
             final GraphViewport before = f.view();
             f.pressF11();
             f.awaitActive(true);
-            f.await(f::hasWorkAreaCoverage);
+            f.await(() -> f.hasWorkAreaCoverage(true));
             f.onEdt(() -> {
                 assertThat(f.window.isUndecorated()).isTrue();
                 assertThat(f.menu.isSelected()).isTrue();
                 assertThat(f.chrome()).containsOnly(false);
             });
-            f.assertWorkAreaCoverage();
+            f.assertWorkAreaCoverage(true);
             f.assertView(before);
             f.assertNoCommands();
         }
@@ -1894,7 +1894,7 @@ public class GraphWorkspaceWindowModelShould {
             finally {
                 f.requireMaximizedDuringStable = false;
             }
-            f.assertMaximizedWorkAreaCoverage();
+            f.assertWorkAreaCoverage(false);
             f.checkpoint = f.edt(() -> f.commands.size());
             f.assertRoundTrip(true);
         }
@@ -2444,11 +2444,11 @@ public class GraphWorkspaceWindowModelShould {
             System.out.println("DISPLAY restored bounds=" + edt(() -> window.getBounds())
                 + " state=" + edt(() -> window.getExtendedState()) + " view=" + view());
             await(() -> window.getExtendedState() == extended
-                && (requireWorkArea ? hasWorkAreaCoverage() : window.getBounds().equals(expectedBounds)));
+                && (requireWorkArea ? hasWorkAreaCoverage(false) : window.getBounds().equals(expectedBounds)));
             onEdt(() -> {
                 assertThat(window.isUndecorated()).isFalse();
                 if (requireWorkArea) {
-                    assertWorkAreaCoverageOnEdt();
+                    assertWorkAreaCoverageOnEdt(false);
                 }
                 else {
                     assertThat(window.getBounds()).isEqualTo(expectedBounds);
@@ -2460,61 +2460,50 @@ public class GraphWorkspaceWindowModelShould {
             assertNoCommands();
         }
 
-        private boolean hasWorkAreaCoverage() {
+        // Work-area coverage is required on every path. Screen containment is asserted
+        // only where it is achievable: an undecorated full-screen frame carries no
+        // decoration, while AWT reports a decorated maximized frame as extending past the
+        // screen edge (measured (-1,-1,1282,1030) on a 1280x1024 screen).
+        private boolean hasWorkAreaCoverage(final boolean requireScreenContainment) {
             final java.awt.GraphicsConfiguration graphics = window.getGraphicsConfiguration();
-            final java.awt.Rectangle screen = graphics.getBounds();
             final java.awt.Rectangle workArea = workArea(graphics);
             final java.awt.Rectangle actual = window.getBounds();
-            return actual.x <= workArea.x + X11_AWT_BOUNDS_TOLERANCE
+            final boolean coversWorkArea = actual.x <= workArea.x + X11_AWT_BOUNDS_TOLERANCE
                 && actual.y <= workArea.y + X11_AWT_BOUNDS_TOLERANCE
                 && actual.x + actual.width >= workArea.x + workArea.width - X11_AWT_BOUNDS_TOLERANCE
-                && actual.y + actual.height >= workArea.y + workArea.height - X11_AWT_BOUNDS_TOLERANCE
+                && actual.y + actual.height >= workArea.y + workArea.height - X11_AWT_BOUNDS_TOLERANCE;
+            if (!requireScreenContainment) {
+                return coversWorkArea;
+            }
+            final java.awt.Rectangle screen = graphics.getBounds();
+            return coversWorkArea
                 && actual.x >= screen.x - X11_AWT_BOUNDS_TOLERANCE
                 && actual.y >= screen.y - X11_AWT_BOUNDS_TOLERANCE
                 && actual.x + actual.width <= screen.x + screen.width + X11_AWT_BOUNDS_TOLERANCE
                 && actual.y + actual.height <= screen.y + screen.height + X11_AWT_BOUNDS_TOLERANCE;
         }
 
-        private void assertWorkAreaCoverage() {
-            onEdt(this::assertWorkAreaCoverageOnEdt);
+        private void assertWorkAreaCoverage(final boolean requireScreenContainment) {
+            onEdt(() -> assertWorkAreaCoverageOnEdt(requireScreenContainment));
         }
 
-        // The maximized stable endpoint requires work-area coverage only. The stricter
-        // screen-containment assertions of assertWorkAreaCoverageOnEdt belong to the
-        // undecorated full-screen contract and do not hold for a decorated maximized frame.
-        private void assertMaximizedWorkAreaCoverage() {
-            onEdt(() -> {
-                final java.awt.GraphicsConfiguration graphics = window.getGraphicsConfiguration();
-                final java.awt.Rectangle workArea = workArea(graphics);
-                final java.awt.Rectangle actual = window.getBounds();
-                System.out.println("DISPLAY maximized endpoint bounds=" + actual
-                    + " workArea=" + workArea);
-                assertThat(actual.x).as("maximized frame covers work-area left edge")
-                    .isLessThanOrEqualTo(workArea.x + X11_AWT_BOUNDS_TOLERANCE);
-                assertThat(actual.y).as("maximized frame covers work-area top edge")
-                    .isLessThanOrEqualTo(workArea.y + X11_AWT_BOUNDS_TOLERANCE);
-                assertThat(actual.x + actual.width).as("maximized frame covers work-area right edge")
-                    .isGreaterThanOrEqualTo(workArea.x + workArea.width - X11_AWT_BOUNDS_TOLERANCE);
-                assertThat(actual.y + actual.height).as("maximized frame covers work-area bottom edge")
-                    .isGreaterThanOrEqualTo(workArea.y + workArea.height - X11_AWT_BOUNDS_TOLERANCE);
-            });
-        }
-
-        private void assertWorkAreaCoverageOnEdt() {
+        private void assertWorkAreaCoverageOnEdt(final boolean requireScreenContainment) {
             final java.awt.GraphicsConfiguration graphics = window.getGraphicsConfiguration();
             final java.awt.Rectangle screen = graphics.getBounds();
             final java.awt.Rectangle workArea = workArea(graphics);
             final java.awt.Rectangle actual = window.getBounds();
-            // X11 AWT can briefly report a cached outer bound while KWin has already
-            // applied the current work-area placement; permit two pixels at each edge.
-            assertThat(actual.x).as("full-screen frame left edge within screen")
-                .isGreaterThanOrEqualTo(screen.x - X11_AWT_BOUNDS_TOLERANCE);
-            assertThat(actual.y).as("full-screen frame top edge within screen")
-                .isGreaterThanOrEqualTo(screen.y - X11_AWT_BOUNDS_TOLERANCE);
-            assertThat(actual.x + actual.width).as("full-screen frame right edge within screen")
-                .isLessThanOrEqualTo(screen.x + screen.width + X11_AWT_BOUNDS_TOLERANCE);
-            assertThat(actual.y + actual.height).as("full-screen frame bottom edge within screen")
-                .isLessThanOrEqualTo(screen.y + screen.height + X11_AWT_BOUNDS_TOLERANCE);
+            if (requireScreenContainment) {
+                // X11 AWT can briefly report a cached outer bound while KWin has already
+                // applied the current work-area placement; permit two pixels at each edge.
+                assertThat(actual.x).as("full-screen frame left edge within screen")
+                    .isGreaterThanOrEqualTo(screen.x - X11_AWT_BOUNDS_TOLERANCE);
+                assertThat(actual.y).as("full-screen frame top edge within screen")
+                    .isGreaterThanOrEqualTo(screen.y - X11_AWT_BOUNDS_TOLERANCE);
+                assertThat(actual.x + actual.width).as("full-screen frame right edge within screen")
+                    .isLessThanOrEqualTo(screen.x + screen.width + X11_AWT_BOUNDS_TOLERANCE);
+                assertThat(actual.y + actual.height).as("full-screen frame bottom edge within screen")
+                    .isLessThanOrEqualTo(screen.y + screen.height + X11_AWT_BOUNDS_TOLERANCE);
+            }
             assertThat(actual.x).as("full-screen frame covers work-area left edge")
                 .isLessThanOrEqualTo(workArea.x + X11_AWT_BOUNDS_TOLERANCE);
             assertThat(actual.y).as("full-screen frame covers work-area top edge")

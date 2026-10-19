@@ -309,9 +309,9 @@ public class GraphWorkspaceLifecycleShould {
                         return true;
                     }
                 }, 5000L, "close did not cross the handle closing boundary");
-                GraphWorkspaceIntegrationSupport.awaitCondition(
-                    () -> freeplane.mapLifecycleListenerCount() == baseline.mapLifecycleListeners,
-                    5000L, "close did not detach workspace map lifecycle listeners");
+                // The callback-registration rejection is the governing logical-close signal: the
+                // coordinator sets closed=true synchronously before any teardown, so it is
+                // reachable while the blocked projection listener still occupies the EDT.
                 GraphWorkspaceIntegrationSupport.awaitCondition(() -> {
                     try {
                         binding.addCanvasStateListener(state -> {
@@ -322,6 +322,13 @@ public class GraphWorkspaceLifecycleShould {
                         return true;
                     }
                 }, 5000L, "close did not reach the graph update coordinator callback boundary");
+                releaseFirstProjection.countDown();
+                // Only after release can teardown detach the map lifecycle listener, which it
+                // does inside a blocking EDT round trip; the return to baseline is therefore a
+                // completed-teardown assertion rather than a precondition for release.
+                GraphWorkspaceIntegrationSupport.awaitCondition(
+                    () -> freeplane.mapLifecycleListenerCount() == baseline.mapLifecycleListeners,
+                    5000L, "close did not detach workspace map lifecycle listeners");
             }
             finally {
                 releaseFirstProjection.countDown();
