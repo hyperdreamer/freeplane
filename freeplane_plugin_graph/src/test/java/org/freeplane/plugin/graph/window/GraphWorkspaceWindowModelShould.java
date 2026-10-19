@@ -2369,19 +2369,25 @@ public class GraphWorkspaceWindowModelShould {
                     assertThat(window.isDisplayable()).as("maximized frame displayable throughout stable interval").isTrue();
                     assertThat(window.getExtendedState() & java.awt.Frame.MAXIMIZED_BOTH)
                         .as("MAXIMIZED_BOTH throughout stable interval").isEqualTo(java.awt.Frame.MAXIMIZED_BOTH);
-                    // Work-area coverage is required on every poll, not only at the endpoint.
+                    // Coverage must hold for the whole measured quiet interval. A frame that is
+                    // not yet at the maximized geometry (the WM applies it asynchronously) has not
+                    // started a stable interval, so restart it here rather than failing on the
+                    // first poll. A frame that never settles still fails: the quiet interval never
+                    // reaches quietMillis and the existing await deadline reports it.
                     final java.awt.Rectangle polledWorkArea = workArea(window.getGraphicsConfiguration());
                     final java.awt.Rectangle polled = window.getBounds();
-                    assertThat(polled.x).as("maximized frame covers work-area left edge throughout stable interval")
-                        .isLessThanOrEqualTo(polledWorkArea.x + X11_AWT_BOUNDS_TOLERANCE);
-                    assertThat(polled.y).as("maximized frame covers work-area top edge throughout stable interval")
-                        .isLessThanOrEqualTo(polledWorkArea.y + X11_AWT_BOUNDS_TOLERANCE);
-                    assertThat(polled.x + polled.width)
-                        .as("maximized frame covers work-area right edge throughout stable interval")
-                        .isGreaterThanOrEqualTo(polledWorkArea.x + polledWorkArea.width - X11_AWT_BOUNDS_TOLERANCE);
-                    assertThat(polled.y + polled.height)
-                        .as("maximized frame covers work-area bottom edge throughout stable interval")
-                        .isGreaterThanOrEqualTo(polledWorkArea.y + polledWorkArea.height - X11_AWT_BOUNDS_TOLERANCE);
+                    final boolean coversWorkArea =
+                        polled.x <= polledWorkArea.x + X11_AWT_BOUNDS_TOLERANCE
+                            && polled.y <= polledWorkArea.y + X11_AWT_BOUNDS_TOLERANCE
+                            && polled.x + polled.width >= polledWorkArea.x + polledWorkArea.width
+                                - X11_AWT_BOUNDS_TOLERANCE
+                            && polled.y + polled.height >= polledWorkArea.y + polledWorkArea.height
+                                - X11_AWT_BOUNDS_TOLERANCE;
+                    if (!coversWorkArea) {
+                        last.set(null);
+                        changed[0] = System.nanoTime();
+                        return false;
+                    }
                 }
                 java.awt.Rectangle current = window.getBounds();
                 if (!current.equals(last.get())) {
