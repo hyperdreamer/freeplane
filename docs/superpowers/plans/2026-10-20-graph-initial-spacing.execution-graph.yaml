@@ -204,4 +204,3 @@ tasks:
       - argv: ["gradle", "--no-daemon", "--max-workers=1", ":freeplane_plugin_graph:verifyGraphBundle"]
         cwd: "."
         timeout_seconds: 3600
-

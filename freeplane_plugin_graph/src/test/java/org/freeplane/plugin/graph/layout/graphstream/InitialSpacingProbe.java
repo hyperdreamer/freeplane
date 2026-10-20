@@ -17,12 +17,16 @@ public final class InitialSpacingProbe {
         "verification_cap", "edge_rounds", "round_cap", "index_inserted_items", "index_items_cap", "index_pair_checks",
         "pair_checks_cap", "verification_work", "work_cap", "conflicts_detected", "conflicts_cap",
         "residual_conflict_keys", "repairs_applied", "boundary_rounds", "raw_node_residual_pairs",
-        "frame_node_residual", "node_residual_diagnostic_matches", "gated_frames", "exhausted_frames"};
+        "frame_node_residual", "node_residual_diagnostic_matches", "gated_frames",
+        "authorised_verification_budget_exhausted_frames", "forbidden_index_budget_exhausted_frames",
+        "forbidden_detection_truncated_frames"};
     private static String fixture;
     private static String configuration;
     private static double gap;
     private static int gatedFrames;
-    private static int exhaustedFrames;
+    private static int authorisedVerificationBudgetExhaustedFrames;
+    private static int forbiddenIndexBudgetExhaustedFrames;
+    private static int forbiddenDetectionTruncatedFrames;
     private static int maxVerifications;
     private static int maxResidualConflictKeys;
     private static int maxRepairs;
@@ -132,8 +136,9 @@ public final class InitialSpacingProbe {
      * Candidate frames keep the strict shared gate unchanged. C0 is a baseline observation of the
      * unmodified pre-change engine, so four pre-existing conditions are recorded in the receipt
      * instead of being rejected: verification-budget exhaustion, residual edge-conflict keys, repair
-     * counts, and the frame node-residual diagnostic disagreeing with the raw geometric scan. The
-     * fourth condition is authorised by {@code ruling-A-amendment-1.md} condition 4; it is not
+     * counts, and the frame node-residual diagnostic disagreeing with the raw geometric scan. Index-budget
+     * exhaustion and truncated detection remain forbidden and fail the C0 run. The fourth recorded
+     * condition is authorised by {@code ruling-A-amendment-1.md} condition 4; it is not
      * inferred from the ruling's principle. Every other property the shared gate asserts is
      * re-asserted for C0, including {@code BoundaryInvariantAssertions.assertVerifiedFrame}
      * (sibling-hull non-crossing and child-vertex containment), which is invoked reflectively because
@@ -198,6 +203,10 @@ public final class InitialSpacingProbe {
         nonnegative(boundary.deltaMax());
         for (LayoutPoint point : boundary.appliedDisplacements().values()) finitePoint(point);
         EdgeConflictDiagnostics edge = frame.edgeConflictDiagnostics();
+        if (edge.indexBudgetExhausted()) forbiddenIndexBudgetExhaustedFrames++;
+        assertThat(edge.indexBudgetExhausted()).as("C0 index-budget exhaustion is forbidden").isFalse();
+        if (edge.detectionTruncated()) forbiddenDetectionTruncatedFrames++;
+        assertThat(edge.detectionTruncated()).as("C0 truncated edge detection is forbidden").isFalse();
         assertThat(edge.rounds()).isBetween(0, 4);
         assertThat(edge.verifications()).isBetween(0, 64);
         assertThat(edge.indexInsertedItems()).isBetween(0L, 262144L);
@@ -219,7 +228,8 @@ public final class InitialSpacingProbe {
             edge.indexInsertedItems(), 262144L, edge.indexPairChecks(), 131072L, edge.verificationWork(), 65536L,
             edge.conflictsDetected(), 4096, edge.conflictsResidual().size(), edge.repairsApplied().size(),
             boundary.rounds(), residuals.size(), frame.residualViolations(), residualDiagnosticMatches,
-            gatedFrames, exhaustedFrames);
+            gatedFrames, authorisedVerificationBudgetExhaustedFrames, forbiddenIndexBudgetExhaustedFrames,
+            forbiddenDetectionTruncatedFrames);
     }
 
     /**
@@ -256,8 +266,7 @@ public final class InitialSpacingProbe {
     }
 
     private static void record(LayoutFrame frame, EdgeConflictDiagnostics edge) {
-        if (edge.indexBudgetExhausted() || edge.verificationBudgetExhausted() || edge.detectionTruncated())
-            exhaustedFrames++;
+        if (edge.verificationBudgetExhausted()) authorisedVerificationBudgetExhaustedFrames++;
         maxVerifications = Math.max(maxVerifications, edge.verifications());
         maxResidualConflictKeys = Math.max(maxResidualConflictKeys, edge.conflictsResidual().size());
         maxRepairs = Math.max(maxRepairs, edge.repairsApplied().size());
@@ -266,8 +275,11 @@ public final class InitialSpacingProbe {
 
     private static void summary() {
         row("CONTROL_SUMMARY", fixture, configuration, "exhausted_control", configuration.equals("C0"),
-            "gated_frames", gatedFrames, "exhausted_frames", exhaustedFrames, "verification_cap", 64,
-            "max_verifications_observed", maxVerifications, "round_cap", 4,
+            "gated_frames", gatedFrames,
+            "authorised_verification_budget_exhausted_frames", authorisedVerificationBudgetExhaustedFrames,
+            "forbidden_index_budget_exhausted_frames", forbiddenIndexBudgetExhaustedFrames,
+            "forbidden_detection_truncated_frames", forbiddenDetectionTruncatedFrames,
+            "verification_cap", 64, "max_verifications_observed", maxVerifications, "round_cap", 4,
             "max_residual_conflict_keys", maxResidualConflictKeys, "max_repairs_observed", maxRepairs,
             "boundary_covered_frames", coveredFrames, "hull_invariant_frames", hullInvariantFrames,
             "node_residual_mismatch_frames", residualMismatchFrames);
@@ -284,11 +296,17 @@ public final class InitialSpacingProbe {
                 "observed_first_idle_step", observed, "shipped_pre_change_baseline", baseline, "match", match,
                 "node_residual_mismatch_frames", residualMismatchFrames,
                 "recorded_not_rejected", "verification-budget exhaustion; residual edge-conflict keys; repair counts; frame node-residual diagnostic versus the raw geometric scan",
+                "forbidden_not_recorded", "index-budget exhaustion and truncated detection fail the C0 run",
+                "forbidden_index_budget_exhausted_frames", forbiddenIndexBudgetExhaustedFrames,
+                "forbidden_detection_truncated_frames", forbiddenDetectionTruncatedFrames,
                 "authorisation", "ruling-A-amendment-1.md condition 4 covers the frame node-residual diagnostic disagreement: C0 records it, never rejects it",
                 "scope", "baseline observation, not a candidate defect, regression or waived gate");
         }
         else row("CONTROL_NOTE", fixture, configuration, "exhausted_control", false,
-            "candidate_exhausted_frames", exhaustedFrames, "node_residual_mismatch_frames", residualMismatchFrames,
+            "candidate_authorised_verification_budget_exhausted_frames", authorisedVerificationBudgetExhaustedFrames,
+            "forbidden_index_budget_exhausted_frames", forbiddenIndexBudgetExhaustedFrames,
+            "forbidden_detection_truncated_frames", forbiddenDetectionTruncatedFrames,
+            "node_residual_mismatch_frames", residualMismatchFrames,
             "gate", "shared InitialSpacingFrameAssertions.check on every frame",
             "pre_existing_condition", "removed by the candidate rather than introduced by it");
     }

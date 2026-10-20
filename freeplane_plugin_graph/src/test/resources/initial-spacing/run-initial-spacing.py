@@ -165,7 +165,12 @@ def run_acceptance(repo, candidate_cp, output):
             gated = int(summary['gated_frames'])
             assert gated == (1 if fixture.startswith('matrix-') else 102 + int(first[0][2])), (label, gated)
             if configuration == 'candidate':
-                assert int(summary['exhausted_frames']) == 0 and note['candidate_exhausted_frames'] == '0', label
+                assert int(summary['authorised_verification_budget_exhausted_frames']) == 0, label
+                assert note['candidate_authorised_verification_budget_exhausted_frames'] == '0', label
+                assert int(summary['forbidden_index_budget_exhausted_frames']) == 0, label
+                assert int(summary['forbidden_detection_truncated_frames']) == 0, label
+                assert note['forbidden_index_budget_exhausted_frames'] == '0', label
+                assert note['forbidden_detection_truncated_frames'] == '0', label
                 assert int(summary['node_residual_mismatch_frames']) == 0, label
                 assert note['node_residual_mismatch_frames'] == '0', label
                 assert int(summary['hull_invariant_frames']) == gated, label
@@ -177,10 +182,14 @@ def run_acceptance(repo, candidate_cp, output):
                 assert all(r['verification_cap'] == '64' and r['round_cap'] == '4' for r in controls)
                 assert all(int(r['verifications']) <= 64 for r in controls)
                 assert int(summary['max_verifications_observed']) <= 64
-                assert sum(1 for r in controls if r['verification_budget_exhausted'] == 'true') == int(summary['exhausted_frames'])
+                assert sum(1 for r in controls if r['verification_budget_exhausted'] == 'true') == int(summary['authorised_verification_budget_exhausted_frames'])
+                assert sum(1 for r in controls if r['index_budget_exhausted'] == 'true') == int(summary['forbidden_index_budget_exhausted_frames'])
+                assert sum(1 for r in controls if r['detection_truncated'] == 'true') == int(summary['forbidden_detection_truncated_frames'])
+                assert int(summary['forbidden_index_budget_exhausted_frames']) == 0, label
+                assert int(summary['forbidden_detection_truncated_frames']) == 0, label
                 assert sum(1 for r in controls if r['node_residual_diagnostic_matches'] == 'false') == int(summary['node_residual_mismatch_frames'])
                 if fixture == 'cross':
-                    assert int(summary['exhausted_frames']) > 0 and int(summary['max_verifications_observed']) == 64
+                    assert int(summary['authorised_verification_budget_exhausted_frames']) > 0 and int(summary['max_verifications_observed']) == 64
                     assert note['observed_first_idle_step'] == '756' and note['shipped_pre_change_baseline'] == '756'
                     assert note['match'] == 'true', note
                     # ruling-A-amendment-1.md condition 4: recorded per frame, never rejected.
@@ -215,7 +224,8 @@ def run_acceptance(repo, candidate_cp, output):
     write_report(reports, output)
     manifest['epsilon_necessity'] = 'NOT_ESTABLISHED'
     manifest['epsilon_reason'] = 'Predicate ULP sensitivity does not reproduce a larger-item C0 packItems slot failure.'
-    manifest['c0_exhaustion_control'] = 'C0 pre-existing conditions recorded (exhausted_control=true); candidate exhausted_frames=0 and node_residual_mismatch_frames=0'
+    manifest['c0_exhaustion_control'] = ('C0 authorised verification-budget exhaustion and node-residual disagreement are recorded; '
+        'index-budget exhaustion and truncated detection are forbidden; candidate records zero of all three flags')
     manifest['c0_node_residual_control'] = (C0_NODE_RESIDUAL_AUTHORISATION + ': C0 cross records '
         + str(C0_CROSS_NODE_RESIDUAL_MISMATCHES) + ' of ' + str(C0_CROSS_GATED_FRAMES)
         + ' gated frames where the frame field reports 0 while the raw scan reports 1; the candidate asserts'
@@ -287,9 +297,14 @@ def compare(reports, output):
         for fixture in FIXTURES:
             summary = control_pairs([r for r in reports[(config, fixture)] if r[0] == 'CONTROL_SUMMARY'][0])
             exhaustion.append(dict(configuration=config, fixture=fixture, **{k: summary[k] for k in (
-                'exhausted_control', 'gated_frames', 'exhausted_frames', 'max_verifications_observed',
-                'max_residual_conflict_keys', 'max_repairs_observed', 'node_residual_mismatch_frames')}))
-    assert all(r['exhausted_frames'] == '0' for r in exhaustion if r['configuration'] == 'candidate')
+                'exhausted_control', 'gated_frames', 'authorised_verification_budget_exhausted_frames',
+                'forbidden_index_budget_exhausted_frames', 'forbidden_detection_truncated_frames',
+                'max_verifications_observed', 'max_residual_conflict_keys', 'max_repairs_observed',
+                'node_residual_mismatch_frames')}))
+    assert all(r['authorised_verification_budget_exhausted_frames'] == '0'
+        and r['forbidden_index_budget_exhausted_frames'] == '0'
+        and r['forbidden_detection_truncated_frames'] == '0'
+        for r in exhaustion if r['configuration'] == 'candidate')
     cross = [r for r in exhaustion if r['configuration'] == 'C0' and r['fixture'] == 'cross'][0]
     assert int(cross['gated_frames']) == C0_CROSS_GATED_FRAMES, cross
     assert int(cross['node_residual_mismatch_frames']) == C0_CROSS_NODE_RESIDUAL_MISMATCHES, cross
@@ -344,19 +359,22 @@ def write_report(reports, output):
     lines += ['', '## Baseline exhaustion control', '',
         'C0 is the unmodified pre-change engine from delivery base ' + BASE + '. Its verification-budget exhaustion is',
         'recorded as exhausted_control: true and never rejected: it is pre-existing behaviour of the unmodified engine,',
-        'evidenced by the C0 cross-map first-idle step of 756 matching the shipped pre-change baseline. It is a baseline',
-        'observation, not a candidate defect, a regression or a waived gate.',
-        'The candidate applies the strict shared gate to every frame and records zero exhausted frames, so the change',
-        'removes a pre-existing condition rather than introducing one.',
+        'evidenced by the C0 cross-map first-idle step of 756 matching the shipped pre-change baseline.',
+        'This authorised verification-budget exhaustion is a baseline observation, not a candidate defect, regression',
+        'or waived gate. Index-budget exhaustion and truncated detection are forbidden and fail the C0 run.',
+        'The candidate applies the strict shared gate to every frame and records zero authorised verification-budget',
+        'exhaustion, zero index-budget exhaustion, zero detection truncation, and zero node-residual mismatches.',
+        'The candidate removes the pre-existing verification-budget exhaustion rather than introducing it.',
         'The C0 control gate also records, without rejecting, disagreement between the frame node-residual field and',
         'the raw geometric pair scan under ' + control4['authorisation'] + '; the measured figures are in',
         '"Authorised C0 node-residual control" below.', '',
-        '| Config | Fixture | exhausted_control | Gated frames | Exhausted frames | Node-residual mismatches | Max verifications | Max residual conflict keys | Max repairs |',
-        '| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |']
+        '| Config | Fixture | exhausted_control | Gated frames | Authorised verification exhaustion | Forbidden index exhaustion | Forbidden detection truncation | Node-residual mismatches | Max verifications | Max residual conflict keys | Max repairs |',
+        '| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |']
     for r in result['exhaustion_control']:
         lines.append('| ' + ' | '.join(str(r[k]) for k in ('configuration', 'fixture', 'exhausted_control', 'gated_frames',
-            'exhausted_frames', 'node_residual_mismatch_frames', 'max_verifications_observed', 'max_residual_conflict_keys',
-            'max_repairs_observed')) + ' |')
+            'authorised_verification_budget_exhausted_frames', 'forbidden_index_budget_exhausted_frames',
+            'forbidden_detection_truncated_frames', 'node_residual_mismatch_frames', 'max_verifications_observed',
+            'max_residual_conflict_keys', 'max_repairs_observed')) + ' |')
     lines += ['', '## Authorised C0 node-residual control', '',
         'The fourth C0 recorded condition is authorised explicitly by ' + control4['authorisation'] + ', not inferred',
         'from the ruling principle: disagreement between the frame node-residual field and the raw geometric pair scan',
