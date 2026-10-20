@@ -322,3 +322,173 @@ The design's baseline evidence relies on
 `JAVA_TOOL_OPTIONS=-Djava.awt.headless=true` for non-UI checks; the original
 non-headless run timed out on an unauthorized X11 display. The specification must pin
 that environment for every automated layout gate and keep real-UI evidence separate.
+
+---
+
+## Epoch-2 amendment (2026-10-20): acceptance restated on the seed frame
+
+Decided by the user after independent design review returned REQUEST_CHANGES and a
+36-configuration measurement campaign. Approved parameter change is unchanged:
+`PREFERRED_NODE_GAP = 24.0` applied to enclosure content rings only. This amendment
+supersedes the settled-spacing acceptance gate and resolves the review findings; it does
+not supersede the user's visual choice.
+
+### E2-A1 — Why the settled gate is withdrawn
+
+The previous gate required the first-idle nearest-neighbour median to improve by at least
+6.0 units in **every** qualifying enclosure of every required fixture. Measurement at the
+delivery base shows that is unsatisfiable by ring-only widening, at any ring value.
+
+| Required case | C0 | ring 24 | ring 30 | ring 40 | ring 56 |
+| --- | --- | --- | --- | --- | --- |
+| Relationship-free | 6.000 | +20.23 | +25.60 | +35.00 | +50.54 |
+| Cross-map, enclosures meeting +6.0 | — | 2/6 | 4/6 | 6/6 | 6/6 |
+| Same-map native connector | 6.000 | +0.55 | +0.59 | +0.61 | +0.62 |
+| First-idle step, cross-map | 756 | 3455 | 3765 | 698 | 2430 |
+| Post-idle max displacement, cross-map | 29.69 | 0.99 | 0.93 | 0.97 | 107.95 |
+
+The cause is structural, not numerical: a pair chained by a relationship settles at its
+rest length `r₁ + r₂ + MIN_GAP`, which this feature deliberately leaves unchanged, so no
+content-ring value can move it. In the same-map case a 32-unit ring increase (24 → 56)
+moves the settled median by 0.07 units. An enclosure can also be compressed below its own
+ring by *external* connector tension even when none of its own nearest pairs carry an edge:
+cross-map `B-sub 0` settles at exactly `MIN_GAP` under ring 24 and ring 30.
+
+Excluding connector-endpoint enclosures does not repair the gate: cross-map `A-sub 2`
+(+4.124) and `B-sub 2` (+5.201) contain no connector endpoints and still miss +6.0.
+Lowering the threshold would make the claim vacuous. The gate therefore moves to the frame
+that the reported problem is actually about.
+
+### E2-A2 — The acceptance gate (primary, seed frame)
+
+On a **fresh or reset seed frame** — the first non-failed published `LayoutWorker` frame
+after `submit(...)`, before any settling steps — and for **every qualifying enclosure of
+every required fixture**:
+
+```
+nearestGap(i) = min over direct nodes j in the same enclosure of
+                distance(i, j) - renderedRadius(i) - renderedRadius(j)
+```
+
+- qualifying enclosure: an enclosure with at least two direct nodes whose positions are
+  present in the frame; relationship and native-connector endpoints are included;
+- `renderedRadius` is the production disc radius `NODE_RADIUS * prominenceScale`, 8.0 when
+  no prominence entry is present; mixed prominence therefore uses each node's own radius;
+- median is the middle value for odd counts and the arithmetic mean of the two middle
+  values for even counts;
+- gate: the enclosure median must increase by **at least 6.0 layout units** relative to the
+  frozen baseline, compared with tolerance 1e-6;
+- frozen baseline is C0: ring 6.0 (`MIN_GAP`), `MIN_GAP` 6.0, no `CANDIDATE_EPSILON`, at
+  delivery base `cb8782fb`;
+- additionally, an enclosure whose seed positions are the unmodified ring (no packing
+  displacement of its centre and no pin) must have adjacent equal-radius direct nodes at a
+  **24.0 ± 1e-6** gap. The specification must identify, per fixture, which enclosures are
+  unmodified rings and which are displaced by packing.
+
+Measured at ring 24, this gate passes with margin: cross-map enclosure seed medians are
+17.147, 17.147, 24.000, 24.000, 24.000, 20.574 against a 6.000 baseline (+11.15 to
++18.00); the relationship-free case is 24.000 (+18.00). The same-map seed frame must be
+frozen and confirmed by the specification before it is gated; if it does not clear +6.0 the
+case is reported, never waived.
+
+### E2-A3 — Settled behaviour is reported, not gated
+
+The first-idle frame remains the observation point, under the unchanged production idle
+policy. For each required fixture the specification must record, against the frozen C0
+baseline: per-enclosure minimum and median nearest-neighbour gap, the first-idle step, and
+the 100-frame post-idle window with rms and maximum motion. Explicitly:
+
+- no +6.0 settled threshold is asserted anywhere, and no document may claim universal
+  settled-spacing improvement;
+- an enclosure whose settled median equals `MIN_GAP` within 1e-9 is labelled
+  **connector-bound** and reported as expected not to improve;
+- the settled result is described as an equilibrium among containment, relationships,
+  repulsion, hull corrections and pins, in which the ring is only one contributor.
+
+### E2-A4 — One authoritative convergence limit table
+
+This table supersedes the 2000-step and 30-second statements at lines 105, 145 and 244,
+which contradicted each other.
+
+| Fixture | First idle within | Wall bound | Measured at ring 24 |
+| --- | --- | --- | --- |
+| Relationship-free | 6000 steps | 600 s | 42 steps |
+| Same-map native connector | 6000 steps | 600 s | 58 steps |
+| Cross-map | 6000 steps | 600 s | 3455 steps / 213 s |
+
+6000 steps and 600 s are **test observation bounds**, sized from measurement. They are not
+production policy: the eight-consecutive-frame idle policy, its RMS and maximum motion
+thresholds, and all safety limits are unchanged. Failure, timeout or no idle still blocks
+acceptance, and a budget-exhausted frame may only be reported as diagnostic evidence.
+
+The pre-existing exact pin in `TypedForcesShould.twoMapWorkspaceSettlesToIdle`
+(`TWO_MAP_FIRST_IDLE_STEP = 756`, asserted with `isEqualTo`) cannot survive this change: the
+same fixture idles at 3455 steps at ring 24. The specification must either re-pin it to a
+measured value or replace the equality with a bounded window, justified by measurement and
+reviewed as a separately visible change. Relaxing it silently during implementation is
+forbidden.
+
+### E2-A5 — The same-map case is a native-connector case
+
+`GraphRelationshipRecord` rejects same-map endpoints
+(`source.mapReferenceId().equals(target.mapReferenceId())` throws "Relationships must
+connect distinct nodes across maps"). "Same-map relationship" is therefore not
+representable and the phrase is removed from this design. The third required case becomes a
+**single-map native-connector case**, built with `EdgeContributor.nativeConnector` and
+`ConnectorDescriptor` as `EdgeRouterFixture` does.
+
+It is a genuinely distinct force regime: same-map edges are not marked cross-map, so they
+bypass `CROSS_MAP_DISPLACEMENT_LIMIT`. Measured topology audit — cross-map fixture 4
+cross-map links over 8 of 32 particles; same-map fixture 0 cross-map links over 0 of 32
+particles.
+
+The fixture must be proven to reach idle at C0 before it is used as a gate. A 24-node
+shape (2 roots × 3 sub-enclosures × 4 nodes) does **not** settle at C0 (no idle within 6000
+steps, final-100 maximum displacement 142.8) and must not be used; the divergence is a
+property of that fixture shape, not of spacing. A 4-node single-sub-enclosure shape with
+two or four native connectors does settle at C0 (steps 84 and 58) and is the verified
+starting point.
+
+### E2-A6 — Resolution of the review findings
+
+1. **`ClusterProximityShould` (review major 3).** The earlier "last-ulp roundoff" rationale
+   is withdrawn as inaccurate. On the delivery base, fixture D fails under the wider ring
+   because two nodes move about 11 units (`y≈0` to `y=11`) in the corrected worker frame,
+   not because of roundoff; `LayoutWorker.accept` now applies edge-node correction after
+   boundary correction. The specification must state the contract for the corrected frame
+   and assert independently checked repair expectations and invariants — node residual, hull,
+   pin, finite coordinates, repair budget — rather than adopting a tolerance that would
+   swallow an 11-unit move. `CANDIDATE_EPSILON` in `ClusterPacking.isClear` remains, justified
+   solely by packing geometry and kept separate from this.
+2. **Cross-map displacement argument (review major 4).** The "18 units at 0.005 per step
+   therefore at least 3600 steps" argument is withdrawn as unsound.
+   `TypedNodeParticle.move` clamps the combined native-repulsion / cross-map-attraction
+   component and then restores ordinary displacement; containment, hierarchy, boundary
+   repulsion and worker corrections are uncapped, and a separation increase need not be paid
+   by either endpoint alone. The relationship-rest exclusion is retained as an **empirical**
+   decision supported by pinned receipts: ring 24 with `MIN_GAP` 24 never idles within 6000
+   steps, while ring 24 alone idles at 3455; ring 40 with `MIN_GAP` 24 converges at 698, so
+   the failure is the combination rather than `MIN_GAP` alone.
+3. **Relationship preferred distance (review minor 5).** The statement that relationship
+   preferred distances are unchanged is true only of the additive `MIN_GAP` term. Because
+   enclosure endpoint radii come from `contentRingRadius`, total rest lengths for
+   node–enclosure and enclosure–enclosure relationships **do** change. The complete consumer
+   list is: `Seeds.nodePosition`; content footprints and sibling plus top-level packing;
+   containment rest lengths; enclosure endpoint radii inside relationship rest lengths;
+   hierarchy rest lengths derived from placements; anchor extents and anchor repulsion
+   (`TypedSpringBox` 185/188); and worker geometry and correction. Same-map and cross-map
+   endpoint types must be tested separately.
+4. **Fixtures and metric conventions (review minors 6 and 7).** The specification must freeze
+   each required fixture: generator, node/enclosure/edge counts and ordering, nesting,
+   endpoint and contributor types, workspace ids, labels and label metrics, calibration,
+   prominence, and baseline provenance (C0 at `cb8782fb`). Metric conventions are fixed in
+   E2-A2 above. Zoom 1.0 maps one layout unit to one logical component pixel; physical pixel
+   size depends on display scaling, so UI receipts must state logical pixels and the display
+   scale factor separately, and must identify the actual first-IDLE state.
+
+### E2-A7 — Unchanged
+
+`PREFERRED_NODE_GAP = 24.0`; ring-only application; `NodeSeparationProjection.MIN_GAP` stays
+6.0 as the hard collision clearance with its other production uses; the 8-unit packing gutter;
+node radii, label placement, zoom policy, projection semantics and the force model; no
+setting, menu item, serialization field or migration.
