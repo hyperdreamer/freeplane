@@ -336,28 +336,47 @@ not supersede the user's visual choice.
 ### E2-A1 — Why the settled gate is withdrawn
 
 The previous gate required the first-idle nearest-neighbour median to improve by at least
-6.0 units in **every** qualifying enclosure of every required fixture. Measurement at the
-delivery base shows that is unsatisfiable by ring-only widening, at any ring value.
+6.0 units in **every** qualifying enclosure of every required fixture. The approved
+candidate (`PREFERRED_NODE_GAP = 24.0`, `MIN_GAP` unchanged) does not satisfy it on frozen
+fixtures. First-idle and post-100-frame values are reported in separate rows below, because
+they differ materially and must not be conflated.
 
 | Required case | C0 | ring 24 | ring 30 | ring 40 | ring 56 |
 | --- | --- | --- | --- | --- | --- |
-| Relationship-free | 6.000 | +20.23 | +25.60 | +35.00 | +50.54 |
-| Cross-map, enclosures meeting +6.0 | — | 2/6 | 4/6 | 6/6 | 6/6 |
-| Same-map native connector | 6.000 | +0.55 | +0.59 | +0.61 | +0.62 |
+| Relationship-free, first-idle median | 6.000 | 26.226 (+20.23) | 31.600 (+25.60) | 41.000 (+35.00) | 56.545 (+50.54) |
+| Cross-map, enclosures meeting +6.0 at first idle | — | 2/6 | 4/6 | 6/6 | 6/6 |
+| Same-map 2-connector (S1), first-idle median | 6.000 | 7.086 (+1.09) | — | — | — |
+| Same-map 2-connector (S1), post-100 median | 6.000 | 6.552 (+0.55) | 6.586 | 6.609 | 6.620 |
+| Same-map 4-connector (S3), first-idle median | 6.000 | 12.873 (+6.87) | — | 17.089 (+11.09) | — |
 | First-idle step, cross-map | 756 | 3455 | 3765 | 698 | 2430 |
 | Post-idle max displacement, cross-map | 29.69 | 0.99 | 0.93 | 0.97 | 107.95 |
 
-The cause is structural, not numerical: a pair chained by a relationship settles at its
-rest length `r₁ + r₂ + MIN_GAP`, which this feature deliberately leaves unchanged, so no
-content-ring value can move it. In the same-map case a 32-unit ring increase (24 → 56)
-moves the settled median by 0.07 units. An enclosure can also be compressed below its own
-ring by *external* connector tension even when none of its own nearest pairs carry an edge:
-cross-map `B-sub 0` settles at exactly `MIN_GAP` under ring 24 and ring 30.
+Two facts follow, and neither is a claim of impossibility:
 
-Excluding connector-endpoint enclosures does not repair the gate: cross-map `A-sub 2`
-(+4.124) and `B-sub 2` (+5.201) contain no connector endpoints and still miss +6.0.
-Lowering the threshold would make the claim vacuous. The gate therefore moves to the frame
-that the reported problem is actually about.
+- At the approved 24-unit value the settled gate fails: 4 of 6 cross-map enclosures miss
+  +6.0, and the frozen 2-connector same-map candidate misses it both at first idle (+1.09)
+  and after 100 further frames (+0.55).
+- The settled gate is reachable at other parameter values, but only with a particular
+  same-map fixture: ring 40 clears the relationship-free case (+35.00), all six cross-map
+  enclosures, and the 4-connector same-map fixture (+11.09). It does not clear the
+  2-connector same-map fixture, whose median moves only +0.61 across rings 24 to 56.
+
+The cause of the residual gap is structural: a pair chained by a relationship is pulled
+toward its rest length `r₁ + r₂ + MIN_GAP`, which this feature deliberately leaves unchanged.
+An enclosure can also be compressed toward the collision floor by *external* connector
+tension even when none of its own nearest pairs carry an edge: cross-map `B-sub 0` sits at
+exactly `MIN_GAP` under ring 24 and ring 30, while `A-sub 0` measures 8.708 at ring 24 and is
+**not** at the floor. Exempting connector-endpoint enclosures does not repair the gate
+either — `A-sub 2` (+4.124) and `B-sub 2` (+5.201) contain no connector endpoints and still
+miss +6.0.
+
+Because reachability depends on which same-map fixture is frozen (the 2-connector fixture
+fails, the 4-connector fixture passes at ring 40), the same-map fixture must be frozen and
+shown to settle at C0 *before* any acceptance measurement is applied. Selecting the fixture
+after seeing the result is forbidden.
+
+The user's decision, taken with this evidence, is to keep the approved 24-unit value and move
+the acceptance gate to the seed frame — the stage the reported problem actually concerns.
 
 ### E2-A2 — The acceptance gate (primary, seed frame)
 
@@ -380,16 +399,38 @@ nearestGap(i) = min over direct nodes j in the same enclosure of
   frozen baseline, compared with tolerance 1e-6;
 - frozen baseline is C0: ring 6.0 (`MIN_GAP`), `MIN_GAP` 6.0, no `CANDIDATE_EPSILON`, at
   delivery base `cb8782fb`;
-- additionally, an enclosure whose seed positions are the unmodified ring (no packing
-  displacement of its centre and no pin) must have adjacent equal-radius direct nodes at a
-  **24.0 ± 1e-6** gap. The specification must identify, per fixture, which enclosures are
-  unmodified rings and which are displaced by packing.
+- `i ≠ j` always; a node is never its own nearest neighbour;
+- additionally, the exact-gap obligation applies **only** to an enclosure that is a
+  **uniform unmodified ring**: all of its direct nodes share one rendered radius `r`, and the
+  specification has verified, against the raw pre-worker seed positions, that the enclosure's
+  placement carries no packing translation and that no worker repair moved any of those nodes
+  on the seed frame. For such an enclosure, adjacent direct nodes must be
+  `PREFERRED_NODE_GAP` apart, i.e. **24.0 ± 1e-6**. The obligation does not apply to a
+  displaced or repaired enclosure, and does not apply to a mixed-prominence enclosure, where
+  an adjacent pair's gap is `24.0 + 2·maxRadius − rᵢ − rⱼ`; those carry only the +6.0 median
+  requirement. A displaced enclosure whose centre is unchanged does not qualify: cross-map
+  `A-sub 0` keeps its anchor at `(0,0)` while a worker repair moves one node about 11 units,
+  so centre-stability alone can never be the predicate.
 
-Measured at ring 24, this gate passes with margin: cross-map enclosure seed medians are
-17.147, 17.147, 24.000, 24.000, 24.000, 20.574 against a 6.000 baseline (+11.15 to
-+18.00); the relationship-free case is 24.000 (+18.00). The same-map seed frame must be
-frozen and confirmed by the specification before it is gated; if it does not clear +6.0 the
-case is reported, never waived.
+Measured at ring 24 this gate passes in every required case, with the same-map figure
+confirmed by independent review:
+
+| Fixture / enclosure | C0 seed median | ring-24 seed minimum | ring-24 seed median | Increase |
+| --- | --- | --- | --- | --- |
+| Same-map S1 (2 connectors) | 6.000000 | 24.000000 | 24.000000 | **+18.000000** |
+| Same-map S3 (4 connectors) | 6.000000 | 24.000000 | 24.000000 | **+18.000000** |
+| Relationship-free | 6.000000 | 24.000000 | 24.000000 | **+18.000000** |
+| Cross-map `A-sub 0` | 6.000000 | 17.147338 | 20.573669 | **+14.573669** |
+| Cross-map `A-sub 1` | 6.000000 | 17.147338 | 17.147338 | **+11.147338** |
+| Cross-map `A-sub 2` | 6.000000 | 24.000000 | 24.000000 | **+18.000000** |
+| Cross-map `B-sub 0` | 6.000000 | 24.000000 | 24.000000 | **+18.000000** |
+| Cross-map `B-sub 1` | 6.000000 | 24.000000 | 24.000000 | **+18.000000** |
+| Cross-map `B-sub 2` | 6.000000 | 17.147338 | 20.573669 | **+14.573669** |
+
+The smallest observed increase is +11.147, so the +6.0 threshold holds with margin. The
+specification must still freeze each fixture's ring/displaced classification and verify it
+against raw engine seed positions, corrected worker positions and repair diagnostics before
+gating.
 
 ### E2-A3 — Settled behaviour is reported, not gated
 
@@ -400,8 +441,12 @@ the 100-frame post-idle window with rms and maximum motion. Explicitly:
 
 - no +6.0 settled threshold is asserted anywhere, and no document may claim universal
   settled-spacing improvement;
-- an enclosure whose settled median equals `MIN_GAP` within 1e-9 is labelled
-  **connector-bound** and reported as expected not to improve;
+- an enclosure whose settled median equals `MIN_GAP` within 1e-9 is labelled **median at
+  collision floor** and reported as expected not to improve. The label is descriptive only:
+  the relationship-free C0 baseline also sits at 6.0 with no connectors present, so a floor
+  median does not by itself identify the binding force. Connector topology — how many
+  relationship or native-connector endpoints each enclosure holds — must be recorded
+  separately, and no causal "connector-bound" attribution may be made from the median alone;
 - the settled result is described as an equilibrium among containment, relationships,
   repulsion, hull corrections and pins, in which the ring is only one contributor.
 
@@ -412,14 +457,17 @@ which contradicted each other.
 
 | Fixture | First idle within | Wall bound | Measured at ring 24 |
 | --- | --- | --- | --- |
-| Relationship-free | 6000 steps | 600 s | 42 steps |
+| Relationship-free | 6000 steps | 600 s | 37 steps (C0: 42) |
 | Same-map native connector | 6000 steps | 600 s | 58 steps |
 | Cross-map | 6000 steps | 600 s | 3455 steps / 213 s |
 
 6000 steps and 600 s are **test observation bounds**, sized from measurement. They are not
 production policy: the eight-consecutive-frame idle policy, its RMS and maximum motion
 thresholds, and all safety limits are unchanged. Failure, timeout or no idle still blocks
-acceptance, and a budget-exhausted frame may only be reported as diagnostic evidence.
+acceptance, and a budget-exhausted frame may only be reported as diagnostic evidence. An
+independent re-run of the cross-map case at ring 24 reached first idle at 3455 steps in
+216.6 s, so the wall bound carries roughly 2.8x headroom. Every measured value in this
+table must carry its own receipt in the specification; none may be copied without one.
 
 The pre-existing exact pin in `TypedForcesShould.twoMapWorkspaceSettlesToIdle`
 (`TWO_MAP_FIRST_IDLE_STEP = 756`, asserted with `isEqualTo`) cannot survive this change: the
@@ -492,3 +540,24 @@ starting point.
 6.0 as the hard collision clearance with its other production uses; the 8-unit packing gutter;
 node radii, label placement, zoom policy, projection semantics and the force model; no
 setting, menu item, serialization field or migration.
+
+### E2-A8 — Superseded statements in the approved body
+
+The approved body is preserved byte-identical above. The following surviving sentences are
+**superseded** and must not be implemented or cited as current requirements:
+
+| Approved-body statement | Superseded by |
+| --- | --- |
+| Lines 80-81: relationship preferred distance is unchanged / "all existing consumers" listed | E2-A6 item 3 (only the additive `MIN_GAP` term is unchanged; total rest lengths for enclosure endpoints change) |
+| Lines 90-95: the "18 units at 0.005 per step, therefore at least 3600 steps" lower bound | E2-A6 item 2 (argument withdrawn as unsound) |
+| Lines 110-112: the last-ulp roundoff rationale for the `ClusterProximityShould` allowance | E2-A6 item 1 (replaced by a corrected-frame contract) |
+| Line 151: the required "same-map relationship case" | E2-A5 (single-map native-connector case; relationships cannot be same-map) |
+| Lines 145 and 244: "2000 worker steps and 30 seconds per fixture" | E2-A4 (6000 steps / 600 s test observation bounds, one authoritative table) |
+| Lines 165-169: every qualifying enclosure must improve by at least 6.0 at first idle | E2-A2 (the same requirement moved to the seed frame) plus E2-A3 (settled behaviour reported, not gated) |
+| Lines 200-204: settled acceptance bullet ("idle within 2000 steps", "at least 6 units of median improvement") | E2-A2 and E2-A4 |
+| Lines 244-247: acceptance criterion requiring the three cases to pass the first-idle gate | E2-A2 (seed-frame gate) and E2-A3 (reporting only) |
+| Line 244: "no failed gate is waived or weakened" as applied to the settled gate | Retained in force for the seed-frame gate; the settled gate is withdrawn, not weakened |
+
+Everything else in the approved body stands, including the 24-unit user choice, scope B,
+the ring-only confinement, the unchanged 8-unit packing gutter, and the requirement that the
+schematic is not presented as a settled measurement.
