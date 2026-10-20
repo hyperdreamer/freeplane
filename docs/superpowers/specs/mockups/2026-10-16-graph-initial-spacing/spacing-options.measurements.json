@@ -1,0 +1,32 @@
+[
+  {
+    "variant": "Current",
+    "preferred_gap": 6,
+    "node_radius": 8.0,
+    "node_count": 8,
+    "ring_radius": 28.744385227280283,
+    "center_to_center": 22.0,
+    "measured_adjacent_edge_gap": 5.9999999999999964,
+    "pixels_per_layout_unit": 2.0
+  },
+  {
+    "variant": "1  Moderate",
+    "preferred_gap": 24,
+    "node_radius": 8.0,
+    "node_count": 8,
+    "ring_radius": 52.26251859505506,
+    "center_to_center": 40.0,
+    "measured_adjacent_edge_gap": 24.00000000000003,
+    "pixels_per_layout_unit": 2.0
+  },
+  {
+    "variant": "2  Roomier",
+    "preferred_gap": 40,
+    "node_radius": 8.0,
+    "node_count": 8,
+    "ring_radius": 73.16752603307708,
+    "center_to_center": 56.0,
+    "measured_adjacent_edge_gap": 40.00000000000002,
+    "pixels_per_layout_unit": 2.0
+  }
+]
