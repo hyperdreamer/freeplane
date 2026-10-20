@@ -1,0 +1,207 @@
+schema_version: 1
+source_plan:
+  path: "docs/superpowers/plans/2026-10-20-graph-initial-spacing.md"
+  sha256: c77a74b6a4a45c77bdf7977f9f35797365a44aa708a63cff0b9951ba6f3f7e22
+  commit: 18bf59ff0dae19b16d64307e46d0579412710f3e
+  commit_oid: 18bf59ff0dae19b16d64307e46d0579412710f3e
+  parsed_tasks: [1, 2, 3, 4, 5, 6]
+  task_numbers: [1, 2, 3, 4, 5, 6]
+lanes:
+  - lane_id: "spacing"
+    task_ids: ["T1", "T2", "T3", "T4", "T5", "T6"]
+produces:
+  - task: T1
+    name: "task-output:T1"
+    digest: sha256:a0764dff4f125746a17f9cbe59e5232306bf32c30b8b243887c5e0abc0c5be8e
+    signature: "`static final WorkspaceId InitialSpacingFixtures.WORKSPACE` | `static final MapReferenceId InitialSpacingFixtures.A` | `static final MapReferenceId InitialSpacingFixtures.B` | `static GraphProjection InitialSpacingFixtures.reference(long generation) throws Exception` | `static GraphProjection InitialSpacingFixtures.reparented(long generation) throws Exception` | `static GraphProjection InitialSpacingFixtures.cross(long generation) throws Exception` | `static SourceNodeKey InitialSpacingFixtures.source(MapReferenceId map, String id)` | `static ProjectedNodeKey InitialSpacingFixtures.key(MapReferenceId map, String id)` | `static EnclosureHullKey InitialSpacingFixtures.hull(MapReferenceId map, String id)` | `static ProjectedEnclosure InitialSpacingFixtures.enclosure(MapReferenceId map, String id, String label, Optional<EnclosureHullKey> parent, List<ProjectedNodeKey> direct, List<EnclosureHullKey> children, boolean root, BoundaryTier tier)` | `static GraphProjection InitialSpacingFixtures.projection(long generation, List<ProjectedNode> nodes, List<ProjectedEnclosure> enclosures, List<ProjectedEdge> edges, List<PinProjection> pins)` | `static GraphProjection InitialSpacingFixtures.single(int count, long generation, boolean mixed, List<PinProjection> pins)` | `static GraphProjection InitialSpacingFixtures.root(int count, long generation)` | `static GraphProjection InitialSpacingFixtures.named(String name) throws Exception` | `static ProjectedEndpointKey InitialSpacingFixtures.endpoint(ProjectedNodeKey key)` | `static SourceNodeKey InitialSpacingFixtures.source(ProjectedEndpointKey endpoint)` | `static ProjectedEdge InitialSpacingFixtures.nativeEdge(int occurrence, ProjectedEndpointKey first, ProjectedEndpointKey second, boolean targetArrow)` | `static GraphProjection InitialSpacingFixtures.matrix(boolean crossMap, String pair, boolean reverse)` | `static PinProjection InitialSpacingFixtures.pin(ProjectedNodeKey key, double x, double y)` | `static LayoutRequest InitialSpacingFixtures.request(GraphProjection before, GraphProjection after)` | `static final double InitialSpacingMetrics.TOLERANCE = 1e-6` | `static double InitialSpacingMetrics.radius(GraphProjection projection, ProjectedNodeKey key)` | `static void InitialSpacingMetrics.finite(double value)` | `static void InitialSpacingMetrics.close(double actual, double expected)` | `static double InitialSpacingMetrics.distance(LayoutPoint a, LayoutPoint b)` | `static Map<EnclosureHullKey, InitialSpacingMetrics.Metric> InitialSpacingMetrics.measure(GraphProjection projection, LayoutPositions positions)` | `static double InitialSpacingMetrics.analyticRadius(GraphProjection projection, ProjectedEnclosure enclosure, double gap)` | `InitialSpacingMetrics.Metric(List<Double> values)` | `final double InitialSpacingMetrics.Metric.minimum` | `final double InitialSpacingMetrics.Metric.median` | `final List<Double> InitialSpacingMetrics.Metric.nearest` | `public static GeometryTextMetrics InitialSpacingFrameAssertions.metrics()` | `public static LayoutFrame InitialSpacingFrameAssertions.awaitWithinDeadline(CompletionStage<LayoutFrame> stage, long deadline) throws Exception` | `public static List<String> InitialSpacingFrameAssertions.residualPairs(GraphProjection projection, LayoutPositions positions)` | `public static void InitialSpacingFrameAssertions.check(GraphProjection projection, LayoutFrame frame, List<PinProjection> pins, boolean requireZero)` | `public class InitialSpacingShould (JUnit 4 suite entrypoint)`"
+  - task: T2
+    name: "task-output:T2"
+    digest: sha256:abd48c33bbc9f74eedb37104a493e17e16f2a93492ed3b8e2f5ce795819b4a04
+    signature: "`static Object InitialSpacingConsumers.field(Object object, String name) throws Exception` | `static LayoutPoint InitialSpacingConsumers.composed(GraphStreamLayoutEngine.BoundarySizes sizes, EnclosureHullKey key)` | `static void InitialSpacingConsumers.raw(GraphProjection p, LayoutFrame raw, double gap)` | `static void InitialSpacingConsumers.topology(GraphProjection p, GraphStreamLayoutEngine engine, double gap) throws Exception` | `static EnclosureHullKey InitialSpacingConsumers.endpointHull(GraphProjection p, ProjectedEndpointKey endpoint)` | `static double InitialSpacingConsumers.endpointRadius(GraphProjection p, ProjectedEndpointKey endpoint, double gap)` | `static void InitialSpacingConsumers.repulsion() throws Exception` | `static final double GraphStreamLayoutEngine.PREFERRED_NODE_GAP = 24.0` | `double GraphStreamLayoutEngine.BoundarySizes.contentRingRadius(EnclosureHullKey key)` | `private static boolean ClusterPacking.isClear(double x, double y, ClusterItem item, List<ClusterPlacement> placed, double gap)`"
+  - task: T3
+    name: "task-output:T3"
+    digest: sha256:f766cab502543328e7ad01aa9dac8f898c89ebe8ef5fc79c593f85a516698767
+    signature: "`private static final int TypedForcesShould.TWO_MAP_FIRST_IDLE_STEP = 3455` | `private static final int TypedForcesShould.INITIAL_SPACING_FIRST_IDLE_LIMIT = 6000` | `private static void TypedForcesShould.observeInitialSpacing(GraphProjection projection, boolean crossMap) throws Exception` | `public void ClusterProximityShould.initialFrameThroughWorkerPublishesTheCompleteCorrectionPipeline() throws Exception` | `public void ClusterProximityShould.initialFrameThroughWorkerPreservesPinsAndChecksCorrectedGeometry() throws Exception`"
+  - task: T4
+    name: "task-output:T4"
+    digest: sha256:10b4f8769983d46b8036257e7001e7cb44b1c4eb125cdffc4e8526f420514e24
+    signature: "`public class InitialSpacingLifecycleShould (JUnit 4 lifecycle/edge-case tests)`"
+  - task: T5
+    name: "task-output:T5"
+    digest: sha256:5a65ba6a4b5c357f91e1194b7721e7d27fb7c1b21e0559a45420f023093d1e6a
+    signature: "`public static void InitialSpacingProbe.main(String[] args) throws Exception` | `CLI InitialSpacingProbe <C0|candidate> <fixture-name> <absolute-C0-log-path>` | `def run_acceptance(repo, candidate_cp, output)` | `def compare(reports, output)` | `def write_report(reports, output)` | `CLI run-initial-spacing.py --repo <absolute-repo> --classpath <candidate-classpath> --output <new-output-directory>` | `public class InitialSpacingAcceptanceShould (JUnit 4 acceptance driver)` | `freeplane_plugin_graph/build/initial-spacing-current.txt: absolute directory of the complete latest attempt`"
+  - task: T6
+    name: "task-output:T6"
+    digest: sha256:1f76fcf103b84c3a7da677b6ffcadf16b710e24cd9440e6f57e2ce81ec9b36e2
+    signature: "`CLI collect-receipt.py (run from repository root; no arguments)` | `freeplane_plugin_graph/doc/initial-spacing/collection.json: source/artifact/receipt provenance and open UI delivery status` | `freeplane_plugin_graph/doc/initial-spacing/UI-CAPTURE-RECIPE.md: external application-capture recipe and receipt schema`"
+consumes:
+  - task: T2
+    producer_task: T1
+    name: "task-output:T1"
+    digest: sha256:a0764dff4f125746a17f9cbe59e5232306bf32c30b8b243887c5e0abc0c5be8e
+    signature: "`static final WorkspaceId InitialSpacingFixtures.WORKSPACE` | `static final MapReferenceId InitialSpacingFixtures.A` | `static final MapReferenceId InitialSpacingFixtures.B` | `static GraphProjection InitialSpacingFixtures.reference(long generation) throws Exception` | `static GraphProjection InitialSpacingFixtures.reparented(long generation) throws Exception` | `static GraphProjection InitialSpacingFixtures.cross(long generation) throws Exception` | `static SourceNodeKey InitialSpacingFixtures.source(MapReferenceId map, String id)` | `static ProjectedNodeKey InitialSpacingFixtures.key(MapReferenceId map, String id)` | `static EnclosureHullKey InitialSpacingFixtures.hull(MapReferenceId map, String id)` | `static ProjectedEnclosure InitialSpacingFixtures.enclosure(MapReferenceId map, String id, String label, Optional<EnclosureHullKey> parent, List<ProjectedNodeKey> direct, List<EnclosureHullKey> children, boolean root, BoundaryTier tier)` | `static GraphProjection InitialSpacingFixtures.projection(long generation, List<ProjectedNode> nodes, List<ProjectedEnclosure> enclosures, List<ProjectedEdge> edges, List<PinProjection> pins)` | `static GraphProjection InitialSpacingFixtures.single(int count, long generation, boolean mixed, List<PinProjection> pins)` | `static GraphProjection InitialSpacingFixtures.root(int count, long generation)` | `static GraphProjection InitialSpacingFixtures.named(String name) throws Exception` | `static ProjectedEndpointKey InitialSpacingFixtures.endpoint(ProjectedNodeKey key)` | `static SourceNodeKey InitialSpacingFixtures.source(ProjectedEndpointKey endpoint)` | `static ProjectedEdge InitialSpacingFixtures.nativeEdge(int occurrence, ProjectedEndpointKey first, ProjectedEndpointKey second, boolean targetArrow)` | `static GraphProjection InitialSpacingFixtures.matrix(boolean crossMap, String pair, boolean reverse)` | `static PinProjection InitialSpacingFixtures.pin(ProjectedNodeKey key, double x, double y)` | `static LayoutRequest InitialSpacingFixtures.request(GraphProjection before, GraphProjection after)` | `static final double InitialSpacingMetrics.TOLERANCE = 1e-6` | `static double InitialSpacingMetrics.radius(GraphProjection projection, ProjectedNodeKey key)` | `static void InitialSpacingMetrics.finite(double value)` | `static void InitialSpacingMetrics.close(double actual, double expected)` | `static double InitialSpacingMetrics.distance(LayoutPoint a, LayoutPoint b)` | `static Map<EnclosureHullKey, InitialSpacingMetrics.Metric> InitialSpacingMetrics.measure(GraphProjection projection, LayoutPositions positions)` | `static double InitialSpacingMetrics.analyticRadius(GraphProjection projection, ProjectedEnclosure enclosure, double gap)` | `InitialSpacingMetrics.Metric(List<Double> values)` | `final double InitialSpacingMetrics.Metric.minimum` | `final double InitialSpacingMetrics.Metric.median` | `final List<Double> InitialSpacingMetrics.Metric.nearest` | `public static GeometryTextMetrics InitialSpacingFrameAssertions.metrics()` | `public static LayoutFrame InitialSpacingFrameAssertions.awaitWithinDeadline(CompletionStage<LayoutFrame> stage, long deadline) throws Exception` | `public static List<String> InitialSpacingFrameAssertions.residualPairs(GraphProjection projection, LayoutPositions positions)` | `public static void InitialSpacingFrameAssertions.check(GraphProjection projection, LayoutFrame frame, List<PinProjection> pins, boolean requireZero)` | `public class InitialSpacingShould (JUnit 4 suite entrypoint)`"
+  - task: T3
+    producer_task: T2
+    name: "task-output:T2"
+    digest: sha256:abd48c33bbc9f74eedb37104a493e17e16f2a93492ed3b8e2f5ce795819b4a04
+    signature: "`static Object InitialSpacingConsumers.field(Object object, String name) throws Exception` | `static LayoutPoint InitialSpacingConsumers.composed(GraphStreamLayoutEngine.BoundarySizes sizes, EnclosureHullKey key)` | `static void InitialSpacingConsumers.raw(GraphProjection p, LayoutFrame raw, double gap)` | `static void InitialSpacingConsumers.topology(GraphProjection p, GraphStreamLayoutEngine engine, double gap) throws Exception` | `static EnclosureHullKey InitialSpacingConsumers.endpointHull(GraphProjection p, ProjectedEndpointKey endpoint)` | `static double InitialSpacingConsumers.endpointRadius(GraphProjection p, ProjectedEndpointKey endpoint, double gap)` | `static void InitialSpacingConsumers.repulsion() throws Exception` | `static final double GraphStreamLayoutEngine.PREFERRED_NODE_GAP = 24.0` | `double GraphStreamLayoutEngine.BoundarySizes.contentRingRadius(EnclosureHullKey key)` | `private static boolean ClusterPacking.isClear(double x, double y, ClusterItem item, List<ClusterPlacement> placed, double gap)`"
+  - task: T4
+    producer_task: T3
+    name: "task-output:T3"
+    digest: sha256:f766cab502543328e7ad01aa9dac8f898c89ebe8ef5fc79c593f85a516698767
+    signature: "`private static final int TypedForcesShould.TWO_MAP_FIRST_IDLE_STEP = 3455` | `private static final int TypedForcesShould.INITIAL_SPACING_FIRST_IDLE_LIMIT = 6000` | `private static void TypedForcesShould.observeInitialSpacing(GraphProjection projection, boolean crossMap) throws Exception` | `public void ClusterProximityShould.initialFrameThroughWorkerPublishesTheCompleteCorrectionPipeline() throws Exception` | `public void ClusterProximityShould.initialFrameThroughWorkerPreservesPinsAndChecksCorrectedGeometry() throws Exception`"
+  - task: T5
+    producer_task: T4
+    name: "task-output:T4"
+    digest: sha256:10b4f8769983d46b8036257e7001e7cb44b1c4eb125cdffc4e8526f420514e24
+    signature: "`public class InitialSpacingLifecycleShould (JUnit 4 lifecycle/edge-case tests)`"
+  - task: T6
+    producer_task: T5
+    name: "task-output:T5"
+    digest: sha256:5a65ba6a4b5c357f91e1194b7721e7d27fb7c1b21e0559a45420f023093d1e6a
+    signature: "`public static void InitialSpacingProbe.main(String[] args) throws Exception` | `CLI InitialSpacingProbe <C0|candidate> <fixture-name> <absolute-C0-log-path>` | `def run_acceptance(repo, candidate_cp, output)` | `def compare(reports, output)` | `def write_report(reports, output)` | `CLI run-initial-spacing.py --repo <absolute-repo> --classpath <candidate-classpath> --output <new-output-directory>` | `public class InitialSpacingAcceptanceShould (JUnit 4 acceptance driver)` | `freeplane_plugin_graph/build/initial-spacing-current.txt: absolute directory of the complete latest attempt`"
+tasks:
+  - id: T1
+    plan_task: 1
+    title: "Freeze fixtures and implement independent spacing metrics"
+    lane: "spacing"
+    sequence: 1
+    depends_on: []
+    ownership:
+      - "freeplane_plugin_graph/**"
+    resources: []
+    interfaces:
+      produces:
+        - name: "task-output:T1"
+          digest: sha256:a0764dff4f125746a17f9cbe59e5232306bf32c30b8b243887c5e0abc0c5be8e
+          signature: "`static final WorkspaceId InitialSpacingFixtures.WORKSPACE` | `static final MapReferenceId InitialSpacingFixtures.A` | `static final MapReferenceId InitialSpacingFixtures.B` | `static GraphProjection InitialSpacingFixtures.reference(long generation) throws Exception` | `static GraphProjection InitialSpacingFixtures.reparented(long generation) throws Exception` | `static GraphProjection InitialSpacingFixtures.cross(long generation) throws Exception` | `static SourceNodeKey InitialSpacingFixtures.source(MapReferenceId map, String id)` | `static ProjectedNodeKey InitialSpacingFixtures.key(MapReferenceId map, String id)` | `static EnclosureHullKey InitialSpacingFixtures.hull(MapReferenceId map, String id)` | `static ProjectedEnclosure InitialSpacingFixtures.enclosure(MapReferenceId map, String id, String label, Optional<EnclosureHullKey> parent, List<ProjectedNodeKey> direct, List<EnclosureHullKey> children, boolean root, BoundaryTier tier)` | `static GraphProjection InitialSpacingFixtures.projection(long generation, List<ProjectedNode> nodes, List<ProjectedEnclosure> enclosures, List<ProjectedEdge> edges, List<PinProjection> pins)` | `static GraphProjection InitialSpacingFixtures.single(int count, long generation, boolean mixed, List<PinProjection> pins)` | `static GraphProjection InitialSpacingFixtures.root(int count, long generation)` | `static GraphProjection InitialSpacingFixtures.named(String name) throws Exception` | `static ProjectedEndpointKey InitialSpacingFixtures.endpoint(ProjectedNodeKey key)` | `static SourceNodeKey InitialSpacingFixtures.source(ProjectedEndpointKey endpoint)` | `static ProjectedEdge InitialSpacingFixtures.nativeEdge(int occurrence, ProjectedEndpointKey first, ProjectedEndpointKey second, boolean targetArrow)` | `static GraphProjection InitialSpacingFixtures.matrix(boolean crossMap, String pair, boolean reverse)` | `static PinProjection InitialSpacingFixtures.pin(ProjectedNodeKey key, double x, double y)` | `static LayoutRequest InitialSpacingFixtures.request(GraphProjection before, GraphProjection after)` | `static final double InitialSpacingMetrics.TOLERANCE = 1e-6` | `static double InitialSpacingMetrics.radius(GraphProjection projection, ProjectedNodeKey key)` | `static void InitialSpacingMetrics.finite(double value)` | `static void InitialSpacingMetrics.close(double actual, double expected)` | `static double InitialSpacingMetrics.distance(LayoutPoint a, LayoutPoint b)` | `static Map<EnclosureHullKey, InitialSpacingMetrics.Metric> InitialSpacingMetrics.measure(GraphProjection projection, LayoutPositions positions)` | `static double InitialSpacingMetrics.analyticRadius(GraphProjection projection, ProjectedEnclosure enclosure, double gap)` | `InitialSpacingMetrics.Metric(List<Double> values)` | `final double InitialSpacingMetrics.Metric.minimum` | `final double InitialSpacingMetrics.Metric.median` | `final List<Double> InitialSpacingMetrics.Metric.nearest` | `public static GeometryTextMetrics InitialSpacingFrameAssertions.metrics()` | `public static LayoutFrame InitialSpacingFrameAssertions.awaitWithinDeadline(CompletionStage<LayoutFrame> stage, long deadline) throws Exception` | `public static List<String> InitialSpacingFrameAssertions.residualPairs(GraphProjection projection, LayoutPositions positions)` | `public static void InitialSpacingFrameAssertions.check(GraphProjection projection, LayoutFrame frame, List<PinProjection> pins, boolean requireZero)` | `public class InitialSpacingShould (JUnit 4 suite entrypoint)`"
+      consumes: []
+    validation:
+      - argv: ["gradle", "--no-daemon", "--max-workers=1", ":freeplane_plugin_graph:compileTestJava"]
+        cwd: "."
+        timeout_seconds: 3600
+      - argv: ["gradle", "--no-daemon", "--max-workers=1", ":freeplane_plugin_graph:test", "--rerun-tasks", "-PTestLoggingFull", "--tests", "org.freeplane.plugin.graph.layout.graphstream.InitialSpacingShould"]
+        cwd: "."
+        timeout_seconds: 3600
+  - id: T2
+    plan_task: 2
+    title: "Apply the preferred ring gap and verify every geometry consumer"
+    lane: "spacing"
+    sequence: 2
+    depends_on: [T1]
+    ownership:
+      - "freeplane_plugin_graph/**"
+    resources: []
+    interfaces:
+      produces:
+        - name: "task-output:T2"
+          digest: sha256:abd48c33bbc9f74eedb37104a493e17e16f2a93492ed3b8e2f5ce795819b4a04
+          signature: "`static Object InitialSpacingConsumers.field(Object object, String name) throws Exception` | `static LayoutPoint InitialSpacingConsumers.composed(GraphStreamLayoutEngine.BoundarySizes sizes, EnclosureHullKey key)` | `static void InitialSpacingConsumers.raw(GraphProjection p, LayoutFrame raw, double gap)` | `static void InitialSpacingConsumers.topology(GraphProjection p, GraphStreamLayoutEngine engine, double gap) throws Exception` | `static EnclosureHullKey InitialSpacingConsumers.endpointHull(GraphProjection p, ProjectedEndpointKey endpoint)` | `static double InitialSpacingConsumers.endpointRadius(GraphProjection p, ProjectedEndpointKey endpoint, double gap)` | `static void InitialSpacingConsumers.repulsion() throws Exception` | `static final double GraphStreamLayoutEngine.PREFERRED_NODE_GAP = 24.0` | `double GraphStreamLayoutEngine.BoundarySizes.contentRingRadius(EnclosureHullKey key)` | `private static boolean ClusterPacking.isClear(double x, double y, ClusterItem item, List<ClusterPlacement> placed, double gap)`"
+      consumes:
+        - task: T1
+          name: "task-output:T1"
+          digest: sha256:a0764dff4f125746a17f9cbe59e5232306bf32c30b8b243887c5e0abc0c5be8e
+          signature: "`static final WorkspaceId InitialSpacingFixtures.WORKSPACE` | `static final MapReferenceId InitialSpacingFixtures.A` | `static final MapReferenceId InitialSpacingFixtures.B` | `static GraphProjection InitialSpacingFixtures.reference(long generation) throws Exception` | `static GraphProjection InitialSpacingFixtures.reparented(long generation) throws Exception` | `static GraphProjection InitialSpacingFixtures.cross(long generation) throws Exception` | `static SourceNodeKey InitialSpacingFixtures.source(MapReferenceId map, String id)` | `static ProjectedNodeKey InitialSpacingFixtures.key(MapReferenceId map, String id)` | `static EnclosureHullKey InitialSpacingFixtures.hull(MapReferenceId map, String id)` | `static ProjectedEnclosure InitialSpacingFixtures.enclosure(MapReferenceId map, String id, String label, Optional<EnclosureHullKey> parent, List<ProjectedNodeKey> direct, List<EnclosureHullKey> children, boolean root, BoundaryTier tier)` | `static GraphProjection InitialSpacingFixtures.projection(long generation, List<ProjectedNode> nodes, List<ProjectedEnclosure> enclosures, List<ProjectedEdge> edges, List<PinProjection> pins)` | `static GraphProjection InitialSpacingFixtures.single(int count, long generation, boolean mixed, List<PinProjection> pins)` | `static GraphProjection InitialSpacingFixtures.root(int count, long generation)` | `static GraphProjection InitialSpacingFixtures.named(String name) throws Exception` | `static ProjectedEndpointKey InitialSpacingFixtures.endpoint(ProjectedNodeKey key)` | `static SourceNodeKey InitialSpacingFixtures.source(ProjectedEndpointKey endpoint)` | `static ProjectedEdge InitialSpacingFixtures.nativeEdge(int occurrence, ProjectedEndpointKey first, ProjectedEndpointKey second, boolean targetArrow)` | `static GraphProjection InitialSpacingFixtures.matrix(boolean crossMap, String pair, boolean reverse)` | `static PinProjection InitialSpacingFixtures.pin(ProjectedNodeKey key, double x, double y)` | `static LayoutRequest InitialSpacingFixtures.request(GraphProjection before, GraphProjection after)` | `static final double InitialSpacingMetrics.TOLERANCE = 1e-6` | `static double InitialSpacingMetrics.radius(GraphProjection projection, ProjectedNodeKey key)` | `static void InitialSpacingMetrics.finite(double value)` | `static void InitialSpacingMetrics.close(double actual, double expected)` | `static double InitialSpacingMetrics.distance(LayoutPoint a, LayoutPoint b)` | `static Map<EnclosureHullKey, InitialSpacingMetrics.Metric> InitialSpacingMetrics.measure(GraphProjection projection, LayoutPositions positions)` | `static double InitialSpacingMetrics.analyticRadius(GraphProjection projection, ProjectedEnclosure enclosure, double gap)` | `InitialSpacingMetrics.Metric(List<Double> values)` | `final double InitialSpacingMetrics.Metric.minimum` | `final double InitialSpacingMetrics.Metric.median` | `final List<Double> InitialSpacingMetrics.Metric.nearest` | `public static GeometryTextMetrics InitialSpacingFrameAssertions.metrics()` | `public static LayoutFrame InitialSpacingFrameAssertions.awaitWithinDeadline(CompletionStage<LayoutFrame> stage, long deadline) throws Exception` | `public static List<String> InitialSpacingFrameAssertions.residualPairs(GraphProjection projection, LayoutPositions positions)` | `public static void InitialSpacingFrameAssertions.check(GraphProjection projection, LayoutFrame frame, List<PinProjection> pins, boolean requireZero)` | `public class InitialSpacingShould (JUnit 4 suite entrypoint)`"
+    validation:
+      - argv: ["gradle", "--no-daemon", "--max-workers=1", ":freeplane_plugin_graph:compileTestJava"]
+        cwd: "."
+        timeout_seconds: 3600
+      - argv: ["gradle", "--no-daemon", "--max-workers=1", ":freeplane_plugin_graph:test", "--rerun-tasks", "-PTestLoggingFull", "--tests", "org.freeplane.plugin.graph.layout.graphstream.InitialSpacingShould"]
+        cwd: "."
+        timeout_seconds: 3600
+  - id: T3
+    plan_task: 3
+    title: "Pin corrected worker geometry and the measured first-idle regression"
+    lane: "spacing"
+    sequence: 3
+    depends_on: [T2]
+    ownership:
+      - "freeplane_plugin_graph/**"
+    resources: []
+    interfaces:
+      produces:
+        - name: "task-output:T3"
+          digest: sha256:f766cab502543328e7ad01aa9dac8f898c89ebe8ef5fc79c593f85a516698767
+          signature: "`private static final int TypedForcesShould.TWO_MAP_FIRST_IDLE_STEP = 3455` | `private static final int TypedForcesShould.INITIAL_SPACING_FIRST_IDLE_LIMIT = 6000` | `private static void TypedForcesShould.observeInitialSpacing(GraphProjection projection, boolean crossMap) throws Exception` | `public void ClusterProximityShould.initialFrameThroughWorkerPublishesTheCompleteCorrectionPipeline() throws Exception` | `public void ClusterProximityShould.initialFrameThroughWorkerPreservesPinsAndChecksCorrectedGeometry() throws Exception`"
+      consumes:
+        - task: T2
+          name: "task-output:T2"
+          digest: sha256:abd48c33bbc9f74eedb37104a493e17e16f2a93492ed3b8e2f5ce795819b4a04
+          signature: "`static Object InitialSpacingConsumers.field(Object object, String name) throws Exception` | `static LayoutPoint InitialSpacingConsumers.composed(GraphStreamLayoutEngine.BoundarySizes sizes, EnclosureHullKey key)` | `static void InitialSpacingConsumers.raw(GraphProjection p, LayoutFrame raw, double gap)` | `static void InitialSpacingConsumers.topology(GraphProjection p, GraphStreamLayoutEngine engine, double gap) throws Exception` | `static EnclosureHullKey InitialSpacingConsumers.endpointHull(GraphProjection p, ProjectedEndpointKey endpoint)` | `static double InitialSpacingConsumers.endpointRadius(GraphProjection p, ProjectedEndpointKey endpoint, double gap)` | `static void InitialSpacingConsumers.repulsion() throws Exception` | `static final double GraphStreamLayoutEngine.PREFERRED_NODE_GAP = 24.0` | `double GraphStreamLayoutEngine.BoundarySizes.contentRingRadius(EnclosureHullKey key)` | `private static boolean ClusterPacking.isClear(double x, double y, ClusterItem item, List<ClusterPlacement> placed, double gap)`"
+    validation:
+      - argv: ["gradle", "--no-daemon", "--max-workers=1", ":freeplane_plugin_graph:test", "--rerun-tasks", "-PTestLoggingFull", "--tests", "org.freeplane.plugin.graph.layout.TypedForcesShould", "--tests", "org.freeplane.plugin.graph.layout.graphstream.ClusterProximityShould"]
+        cwd: "."
+        timeout_seconds: 3600
+  - id: T4
+    plan_task: 4
+    title: "Verify lifecycle retention pins and edge-case behavior"
+    lane: "spacing"
+    sequence: 4
+    depends_on: [T3]
+    ownership:
+      - "freeplane_plugin_graph/**"
+    resources: []
+    interfaces:
+      produces:
+        - name: "task-output:T4"
+          digest: sha256:10b4f8769983d46b8036257e7001e7cb44b1c4eb125cdffc4e8526f420514e24
+          signature: "`public class InitialSpacingLifecycleShould (JUnit 4 lifecycle/edge-case tests)`"
+      consumes:
+        - task: T3
+          name: "task-output:T3"
+          digest: sha256:f766cab502543328e7ad01aa9dac8f898c89ebe8ef5fc79c593f85a516698767
+          signature: "`private static final int TypedForcesShould.TWO_MAP_FIRST_IDLE_STEP = 3455` | `private static final int TypedForcesShould.INITIAL_SPACING_FIRST_IDLE_LIMIT = 6000` | `private static void TypedForcesShould.observeInitialSpacing(GraphProjection projection, boolean crossMap) throws Exception` | `public void ClusterProximityShould.initialFrameThroughWorkerPublishesTheCompleteCorrectionPipeline() throws Exception` | `public void ClusterProximityShould.initialFrameThroughWorkerPreservesPinsAndChecksCorrectedGeometry() throws Exception`"
+    validation:
+      - argv: ["gradle", "--no-daemon", "--max-workers=1", ":freeplane_plugin_graph:test", "--rerun-tasks", "-PTestLoggingFull", "--tests", "org.freeplane.plugin.graph.layout.graphstream.InitialSpacingShould", "--tests", "org.freeplane.plugin.graph.layout.LayoutWorkerShould", "--tests", "org.freeplane.plugin.graph.layout.BoundarySeparationShould"]
+        cwd: "."
+        timeout_seconds: 3600
+  - id: T5
+    plan_task: 5
+    title: "Implement isolated C0 and candidate acceptance receipts"
+    lane: "spacing"
+    sequence: 5
+    depends_on: [T4]
+    ownership:
+      - "freeplane_plugin_graph/**"
+    resources: []
+    interfaces:
+      produces:
+        - name: "task-output:T5"
+          digest: sha256:5a65ba6a4b5c357f91e1194b7721e7d27fb7c1b21e0559a45420f023093d1e6a
+          signature: "`public static void InitialSpacingProbe.main(String[] args) throws Exception` | `CLI InitialSpacingProbe <C0|candidate> <fixture-name> <absolute-C0-log-path>` | `def run_acceptance(repo, candidate_cp, output)` | `def compare(reports, output)` | `def write_report(reports, output)` | `CLI run-initial-spacing.py --repo <absolute-repo> --classpath <candidate-classpath> --output <new-output-directory>` | `public class InitialSpacingAcceptanceShould (JUnit 4 acceptance driver)` | `freeplane_plugin_graph/build/initial-spacing-current.txt: absolute directory of the complete latest attempt`"
+      consumes:
+        - task: T4
+          name: "task-output:T4"
+          digest: sha256:10b4f8769983d46b8036257e7001e7cb44b1c4eb125cdffc4e8526f420514e24
+          signature: "`public class InitialSpacingLifecycleShould (JUnit 4 lifecycle/edge-case tests)`"
+    validation:
+      - argv: ["gradle", "--no-daemon", "--max-workers=1", ":freeplane_plugin_graph:test", "-PTestLoggingFull"]
+        cwd: "."
+        timeout_seconds: 3600
+  - id: T6
+    plan_task: 6
+    title: "Run the delivery gates and publish the evidence handoff"
+    lane: "spacing"
+    sequence: 6
+    depends_on: [T5]
+    ownership:
+      - "freeplane_plugin_graph/**"
+    resources: []
+    interfaces:
+      produces:
+        - name: "task-output:T6"
+          digest: sha256:1f76fcf103b84c3a7da677b6ffcadf16b710e24cd9440e6f57e2ce81ec9b36e2
+          signature: "`CLI collect-receipt.py (run from repository root; no arguments)` | `freeplane_plugin_graph/doc/initial-spacing/collection.json: source/artifact/receipt provenance and open UI delivery status` | `freeplane_plugin_graph/doc/initial-spacing/UI-CAPTURE-RECIPE.md: external application-capture recipe and receipt schema`"
+      consumes:
+        - task: T5
+          name: "task-output:T5"
+          digest: sha256:5a65ba6a4b5c357f91e1194b7721e7d27fb7c1b21e0559a45420f023093d1e6a
+          signature: "`public static void InitialSpacingProbe.main(String[] args) throws Exception` | `CLI InitialSpacingProbe <C0|candidate> <fixture-name> <absolute-C0-log-path>` | `def run_acceptance(repo, candidate_cp, output)` | `def compare(reports, output)` | `def write_report(reports, output)` | `CLI run-initial-spacing.py --repo <absolute-repo> --classpath <candidate-classpath> --output <new-output-directory>` | `public class InitialSpacingAcceptanceShould (JUnit 4 acceptance driver)` | `freeplane_plugin_graph/build/initial-spacing-current.txt: absolute directory of the complete latest attempt`"
+    validation:
+      - argv: ["gradle", "--no-daemon", "--max-workers=1", ":freeplane_plugin_graph:test", "-PTestLoggingFull"]
+        cwd: "."
+        timeout_seconds: 3600
+      - argv: ["gradle", "--no-daemon", "--max-workers=1", ":freeplane_plugin_graph:verifyGraphBundle"]
+        cwd: "."
+        timeout_seconds: 3600
+
