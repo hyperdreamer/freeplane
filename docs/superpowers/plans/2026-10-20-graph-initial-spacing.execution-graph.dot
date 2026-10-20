@@ -1,0 +1,19 @@
+digraph graph_initial_spacing_execution {
+  rankdir=LR;
+  node [shape=box, style=rounded];
+  label="6 tasks, 1 lane (spacing), epoch 2";
+  subgraph cluster_spacing {
+    label="lane: spacing";
+    "T1" [label="Task 1: Freeze fixtures and implement independent spacing metrics\nT1"];
+    "T2" [label="Task 2: Apply the preferred ring gap and verify every geometry consumer\nT2"];
+    "T3" [label="Task 3: Pin corrected worker geometry and the measured first-idle regression\nT3"];
+    "T4" [label="Task 4: Verify lifecycle retention pins and edge-case behavior\nT4"];
+    "T5" [label="Task 5: Implement isolated C0 and candidate acceptance receipts\nT5"];
+    "T6" [label="Task 6: Run the delivery gates and publish the evidence handoff\nT6"];
+    "T1" -> "T2";
+    "T2" -> "T3";
+    "T3" -> "T4";
+    "T4" -> "T5";
+    "T5" -> "T6";
+  }
+}
