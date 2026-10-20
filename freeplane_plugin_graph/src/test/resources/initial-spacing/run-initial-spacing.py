@@ -11,6 +11,10 @@ import tempfile
 import time
 
 BASE = 'cb8782fb3742f378b2907198fd2343292415da95'
+# ruling-A-amendment-1.md condition 4: the C0 cross baseline records these figures, never rejects them.
+C0_CROSS_GATED_FRAMES = 858
+C0_CROSS_NODE_RESIDUAL_MISMATCHES = 23
+C0_NODE_RESIDUAL_AUTHORISATION = 'ruling-A-amendment-1.md condition 4'
 JAVA = '/home/henry/.sdkman/candidates/java/21.0.8-zulu/bin/java'
 PREFIX = 'freeplane_plugin_graph/src/main/java/'
 ENGINE = PREFIX + 'org/freeplane/plugin/graph/layout/graphstream/GraphStreamLayoutEngine.java'
@@ -163,6 +167,8 @@ def run_acceptance(repo, candidate_cp, output):
             if configuration == 'candidate':
                 assert int(summary['exhausted_frames']) == 0 and note['candidate_exhausted_frames'] == '0', label
                 assert int(summary['node_residual_mismatch_frames']) == 0, label
+                assert note['node_residual_mismatch_frames'] == '0', label
+                assert int(summary['hull_invariant_frames']) == gated, label
             else:
                 header = [r for r in rows if r[0] == 'CONTROL_HEADER'][0][1:]
                 controls = [dict(zip(header, r[1:])) for r in rows if r[0] == 'CONTROL']
@@ -177,6 +183,19 @@ def run_acceptance(repo, candidate_cp, output):
                     assert int(summary['exhausted_frames']) > 0 and int(summary['max_verifications_observed']) == 64
                     assert note['observed_first_idle_step'] == '756' and note['shipped_pre_change_baseline'] == '756'
                     assert note['match'] == 'true', note
+                    # ruling-A-amendment-1.md condition 4: recorded per frame, never rejected.
+                    assert note['authorisation'].startswith(C0_NODE_RESIDUAL_AUTHORISATION), note
+                    assert int(summary['hull_invariant_frames']) == gated
+                    assert gated == C0_CROSS_GATED_FRAMES, (label, gated)
+                    assert int(summary['node_residual_mismatch_frames']) == C0_CROSS_NODE_RESIDUAL_MISMATCHES, (label, summary)
+                    disagreed = [r for r in controls if r['node_residual_diagnostic_matches'] == 'false']
+                    assert len(disagreed) == C0_CROSS_NODE_RESIDUAL_MISMATCHES, (label, len(disagreed))
+                    assert all(r['frame_node_residual'] == '0' and r['raw_node_residual_pairs'] == '1' for r in disagreed), label
+                else:
+                    assert int(summary['hull_invariant_frames']) == gated, label
+                    # The recorded disagreement is one-directional: the relaxing projection's field under-reports.
+                    assert all(int(r['frame_node_residual']) < int(r['raw_node_residual_pairs'])
+                        for r in controls if r['node_residual_diagnostic_matches'] == 'false'), label
             # Independent enumeration from printed coordinates catches metric implementation mutations.
             for stage in (('raw', 'seed') if fixture.startswith('matrix-') else ('raw', 'seed', 'idle', 'post100')):
                 points = {r[4]: tuple(map(float, r[5:8])) for r in rows if r[0] == 'POINT' and r[2] == stage and r[3] == 'node'}
@@ -197,6 +216,10 @@ def run_acceptance(repo, candidate_cp, output):
     manifest['epsilon_necessity'] = 'NOT_ESTABLISHED'
     manifest['epsilon_reason'] = 'Predicate ULP sensitivity does not reproduce a larger-item C0 packItems slot failure.'
     manifest['c0_exhaustion_control'] = 'C0 pre-existing conditions recorded (exhausted_control=true); candidate exhausted_frames=0 and node_residual_mismatch_frames=0'
+    manifest['c0_node_residual_control'] = (C0_NODE_RESIDUAL_AUTHORISATION + ': C0 cross records '
+        + str(C0_CROSS_NODE_RESIDUAL_MISMATCHES) + ' of ' + str(C0_CROSS_GATED_FRAMES)
+        + ' gated frames where the frame field reports 0 while the raw scan reports 1; the candidate asserts'
+        + ' the shared equality on every frame with zero mismatches')
     manifest['status'] = 'MODEL_GATES_PASSED; UI_NOT_MEASURED_DELIVERY_GATE_OPEN'
     (output / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
 
@@ -267,13 +290,21 @@ def compare(reports, output):
                 'exhausted_control', 'gated_frames', 'exhausted_frames', 'max_verifications_observed',
                 'max_residual_conflict_keys', 'max_repairs_observed', 'node_residual_mismatch_frames')}))
     assert all(r['exhausted_frames'] == '0' for r in exhaustion if r['configuration'] == 'candidate')
+    cross = [r for r in exhaustion if r['configuration'] == 'C0' and r['fixture'] == 'cross'][0]
+    assert int(cross['gated_frames']) == C0_CROSS_GATED_FRAMES, cross
+    assert int(cross['node_residual_mismatch_frames']) == C0_CROSS_NODE_RESIDUAL_MISMATCHES, cross
+    node_residual_control = dict(authorisation=C0_NODE_RESIDUAL_AUTHORISATION, fixture='cross',
+        gated_frames=int(cross['gated_frames']), mismatched_frames=int(cross['node_residual_mismatch_frames']),
+        frame_field=0, raw_scan=1)
     result = dict(seed=comparisons, endpoints=endpoint_rows, endpoint_aggregates=aggregates, rest_matrix=rests,
-        exhaustion_control=exhaustion, note='Endpoint gaps are descriptive. Additive MIN_GAP remains 6.0; total rests involving enclosures change.')
+        exhaustion_control=exhaustion, node_residual_control=node_residual_control,
+        note='Endpoint gaps are descriptive. Additive MIN_GAP remains 6.0; total rests involving enclosures change.')
     (output / 'comparison.json').write_text(json.dumps(result, indent=2, allow_nan=False) + '\n')
 
 
 def write_report(reports, output):
     result = json.loads((output / 'comparison.json').read_text())
+    control4 = result['node_residual_control']
     lines = ['# Initial-spacing acceptance receipts', '',
         'EPSILON_NECESSITY = NOT_ESTABLISHED: predicate ULP sensitivity does not reproduce a larger-item C0 packItems slot failure.', '',
         'UI evidence: NOT_MEASURED; mandatory same-build application capture gate remains open.', '',
@@ -317,15 +348,25 @@ def write_report(reports, output):
         'observation, not a candidate defect, a regression or a waived gate.',
         'The candidate applies the strict shared gate to every frame and records zero exhausted frames, so the change',
         'removes a pre-existing condition rather than introducing one.',
-        'The C0 control gate additionally records, without rejecting, disagreement between the frame node-residual',
-        'diagnostic and the raw geometric pair scan; the seeded frames still require a zero raw node residual and the',
-        'candidate keeps the shared equality assertion on every frame.', '',
+        'The C0 control gate also records, without rejecting, disagreement between the frame node-residual field and',
+        'the raw geometric pair scan under ' + control4['authorisation'] + '; the measured figures are in',
+        '"Authorised C0 node-residual control" below.', '',
         '| Config | Fixture | exhausted_control | Gated frames | Exhausted frames | Node-residual mismatches | Max verifications | Max residual conflict keys | Max repairs |',
         '| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |']
     for r in result['exhaustion_control']:
         lines.append('| ' + ' | '.join(str(r[k]) for k in ('configuration', 'fixture', 'exhausted_control', 'gated_frames',
             'exhausted_frames', 'node_residual_mismatch_frames', 'max_verifications_observed', 'max_residual_conflict_keys',
             'max_repairs_observed')) + ' |')
+    lines += ['', '## Authorised C0 node-residual control', '',
+        'The fourth C0 recorded condition is authorised explicitly by ' + control4['authorisation'] + ', not inferred',
+        'from the ruling principle: disagreement between the frame node-residual field and the raw geometric pair scan',
+        'is recorded, never rejected, for the C0 baseline.', '',
+        'Measured on the C0 cross baseline: ' + str(control4['mismatched_frames']) + ' of ' + str(control4['gated_frames'])
+        + ' gated frames disagree, and in every one of them the frame field reports ' + str(control4['frame_field'])
+        + ' while the raw scan reports ' + str(control4['raw_scan']) + '.', '',
+        'The seeded C0 frames still require a zero raw node residual, so the raw geometry remains gated. The candidate',
+        'applies the strict shared gate to every frame, keeps the shared equality assertion, and records zero',
+        'node-residual mismatches; no candidate-side requirement is relaxed.', '']
     lines += ['', 'Matrix cases are raw/seed consumer checks only; endpoints-cross-ne/ee are qualified settled supplemental cases.',
         'Full precision coordinates, input order, classification, repairs, clocks and all 100 follow-up samples are in the adjacent per-run .log/.json files.',
         'C0 S1 qualification is measured before candidate runs. Missing/failed/timeout/truncated runs fail once and cannot be promoted as settled.',
