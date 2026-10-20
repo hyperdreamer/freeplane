@@ -17,7 +17,7 @@ public final class InitialSpacingProbe {
         "verification_cap", "edge_rounds", "round_cap", "index_inserted_items", "index_items_cap", "index_pair_checks",
         "pair_checks_cap", "verification_work", "work_cap", "conflicts_detected", "conflicts_cap",
         "residual_conflict_keys", "repairs_applied", "boundary_rounds", "raw_node_residual_pairs",
-        "node_residual_diagnostic_matches", "gated_frames", "exhausted_frames"};
+        "frame_node_residual", "node_residual_diagnostic_matches", "gated_frames", "exhausted_frames"};
     private static String fixture;
     private static String configuration;
     private static double gap;
@@ -27,6 +27,7 @@ public final class InitialSpacingProbe {
     private static int maxResidualConflictKeys;
     private static int maxRepairs;
     private static int coveredFrames;
+    private static int hullInvariantFrames;
     private static int residualMismatchFrames;
     private static boolean controlHeaderWritten;
     private static long firstIdleStep = -1L;
@@ -129,15 +130,21 @@ public final class InitialSpacingProbe {
 
     /**
      * Candidate frames keep the strict shared gate unchanged. C0 is a baseline observation of the
-     * unmodified pre-change engine: its pre-existing budget exhaustion, residual edge-conflict keys
-     * and repair counts are recorded in the receipt instead of being rejected, and every other
-     * property the shared gate asserts is asserted here too.
+     * unmodified pre-change engine, so four pre-existing conditions are recorded in the receipt
+     * instead of being rejected: verification-budget exhaustion, residual edge-conflict keys, repair
+     * counts, and the frame node-residual diagnostic disagreeing with the raw geometric scan. The
+     * fourth condition is authorised by {@code ruling-A-amendment-1.md} condition 4; it is not
+     * inferred from the ruling's principle. Every other property the shared gate asserts is
+     * re-asserted for C0, including {@code BoundaryInvariantAssertions.assertVerifiedFrame}
+     * (sibling-hull non-crossing and child-vertex containment), which is invoked reflectively because
+     * the helper is package-private in the parent package.
      */
     private static void gate(GraphProjection p, LayoutFrame frame, List<PinProjection> pins,
             boolean requireZero, String stage) {
         gatedFrames++;
         if (!configuration.equals("C0")) {
             InitialSpacingFrameAssertions.check(p, frame, pins, requireZero);
+            if (pins.isEmpty() || frame.boundaryDiagnostics().boundaryVerified()) hullInvariantFrames++;
             record(frame, frame.edgeConflictDiagnostics());
             return;
         }
@@ -160,7 +167,8 @@ public final class InitialSpacingProbe {
         assertThat(residuals).doesNotHaveDuplicates();
         if (requireZero) assertThat(residuals).isEmpty();
         // The frame's node-residual field is a diagnostic of the unmodified engine's relaxing
-        // projection; the raw geometric scan is the geometry truth. C0 records their disagreement.
+        // projection; the raw geometric scan is the geometry truth. C0 records their disagreement
+        // under ruling-A-amendment-1.md condition 4 instead of rejecting the baseline.
         boolean residualDiagnosticMatches = frame.residualViolations() == residuals.size();
         if (!residualDiagnosticMatches) residualMismatchFrames++;
         Set<ProjectedNodeKey> pinned = new LinkedHashSet<ProjectedNodeKey>();
@@ -178,6 +186,7 @@ public final class InitialSpacingProbe {
         if (pins.isEmpty() || boundary.boundaryVerified()) {
             assertThat(boundary.boundaryVerified()).isTrue();
             assertThat(boundary.hullResidualViolations()).isZero();
+            verifiedHullInvariants(p, frame, boundary, pins);
         }
         for (PinProjection pin : pins) if (pin.active())
             assertThat(frame.positions().nodes().get(pin.projectedNode().get()))
@@ -209,7 +218,41 @@ public final class InitialSpacingProbe {
             edge.verificationBudgetExhausted(), edge.detectionTruncated(), edge.verifications(), 64, edge.rounds(), 4,
             edge.indexInsertedItems(), 262144L, edge.indexPairChecks(), 131072L, edge.verificationWork(), 65536L,
             edge.conflictsDetected(), 4096, edge.conflictsResidual().size(), edge.repairsApplied().size(),
-            boundary.rounds(), residuals.size(), residualDiagnosticMatches, gatedFrames, exhaustedFrames);
+            boundary.rounds(), residuals.size(), frame.residualViolations(), residualDiagnosticMatches,
+            gatedFrames, exhaustedFrames);
+    }
+
+    /**
+     * Re-asserts the shared gate's hull invariants for a C0 frame: non-crossing sibling hulls and
+     * child-vertex containment inside the parent hull. The helper is package-private in
+     * {@code org.freeplane.plugin.graph.layout}, hence reflection; a missing or inaccessible helper
+     * fails the run instead of silently narrowing the C0 gate.
+     */
+    private static void verifiedHullInvariants(GraphProjection p, LayoutFrame frame,
+            BoundarySeparationDiagnostics boundary, List<PinProjection> pins) {
+        java.lang.reflect.Method method;
+        try {
+            Class<?> type = Class.forName("org.freeplane.plugin.graph.layout.BoundaryInvariantAssertions");
+            method = type.getDeclaredMethod("assertVerifiedFrame", GraphProjection.class, LayoutFrame.class,
+                BoundarySeparationDiagnostics.class, GeometryTextMetrics.class, List.class);
+            method.setAccessible(true);
+        }
+        catch (ClassNotFoundException | NoSuchMethodException | RuntimeException absent) {
+            throw new AssertionError("shared hull invariants are unavailable to the C0 control gate", absent);
+        }
+        try {
+            method.invoke(null, p, frame, boundary, InitialSpacingFrameAssertions.metrics(), pins);
+        }
+        catch (java.lang.reflect.InvocationTargetException failure) {
+            Throwable cause = failure.getCause();
+            if (cause instanceof Error) throw (Error) cause;
+            if (cause instanceof RuntimeException) throw (RuntimeException) cause;
+            throw new AssertionError("shared hull invariants failed for a C0 frame", cause);
+        }
+        catch (IllegalAccessException denied) {
+            throw new AssertionError("shared hull invariants are inaccessible to the C0 control gate", denied);
+        }
+        hullInvariantFrames++;
     }
 
     private static void record(LayoutFrame frame, EdgeConflictDiagnostics edge) {
@@ -226,7 +269,8 @@ public final class InitialSpacingProbe {
             "gated_frames", gatedFrames, "exhausted_frames", exhaustedFrames, "verification_cap", 64,
             "max_verifications_observed", maxVerifications, "round_cap", 4,
             "max_residual_conflict_keys", maxResidualConflictKeys, "max_repairs_observed", maxRepairs,
-            "boundary_covered_frames", coveredFrames, "node_residual_mismatch_frames", residualMismatchFrames);
+            "boundary_covered_frames", coveredFrames, "hull_invariant_frames", hullInvariantFrames,
+            "node_residual_mismatch_frames", residualMismatchFrames);
     }
 
     private static void note() {
@@ -240,6 +284,7 @@ public final class InitialSpacingProbe {
                 "observed_first_idle_step", observed, "shipped_pre_change_baseline", baseline, "match", match,
                 "node_residual_mismatch_frames", residualMismatchFrames,
                 "recorded_not_rejected", "verification-budget exhaustion; residual edge-conflict keys; repair counts; frame node-residual diagnostic versus the raw geometric scan",
+                "authorisation", "ruling-A-amendment-1.md condition 4 covers the frame node-residual diagnostic disagreement: C0 records it, never rejects it",
                 "scope", "baseline observation, not a candidate defect, regression or waived gate");
         }
         else row("CONTROL_NOTE", fixture, configuration, "exhausted_control", false,
