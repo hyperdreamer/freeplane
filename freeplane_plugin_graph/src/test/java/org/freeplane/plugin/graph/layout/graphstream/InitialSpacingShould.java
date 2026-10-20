@@ -4,5 +4,5 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Suite;
 
 @RunWith(Suite.class)
-@Suite.SuiteClasses({InitialSpacingMetricsShould.class, InitialSpacingSeedShould.class, InitialSpacingLifecycleShould.class})
+@Suite.SuiteClasses({InitialSpacingMetricsShould.class, InitialSpacingSeedShould.class, InitialSpacingLifecycleShould.class, InitialSpacingAcceptanceShould.class})
 public class InitialSpacingShould { }
