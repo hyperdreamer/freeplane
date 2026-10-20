@@ -39,6 +39,7 @@ import org.graphstream.graph.implementations.MultiGraph;
 
 final class GraphStreamLayoutEngine implements LayoutEngine {
     static final double NODE_RADIUS = 8.0;
+    static final double PREFERRED_NODE_GAP = 24.0;
 
     private final LayoutCalibration calibration;
     private final LinkedHashMap<String, ParticleState> particles = new LinkedHashMap<String, ParticleState>();
@@ -508,7 +509,7 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
             for (final ProjectedNodeKey nodeKey : directNodes) {
                 maxRadius = Math.max(maxRadius, discRadius(nodeKey));
             }
-            return (2.0 * maxRadius + NodeSeparationProjection.MIN_GAP)
+            return (2.0 * maxRadius + PREFERRED_NODE_GAP)
                 / (2.0 * Math.sin(Math.PI / count));
         }
 
