@@ -27,7 +27,6 @@ import org.freeplane.plugin.graph.layout.LayoutEngine;
 import org.freeplane.plugin.graph.layout.LayoutFrame;
 import org.freeplane.plugin.graph.layout.LayoutRequest;
 import org.freeplane.plugin.graph.layout.LayoutWorker;
-import org.freeplane.plugin.graph.layout.NodeSeparationProjection;
 import org.freeplane.plugin.graph.projection.BoundaryTier;
 import org.freeplane.plugin.graph.projection.EdgeContributor;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
@@ -497,44 +496,92 @@ public class ClusterProximityShould {
     }
 
     @Test
-    public void initialFrameThroughWorkerKeepsSeedsWithoutPins() throws Exception {
+    public void initialFrameThroughWorkerPublishesTheCompleteCorrectionPipeline() throws Exception {
         final List<PinProjection> pins = Collections.<PinProjection>emptyList();
         for (final char name : UNPINNED_FIXTURE_NAMES) {
             final GraphProjection projection = fixture(name);
-            final GraphStreamLayoutEngine.BoundarySizes sizes =
-                new GraphStreamLayoutEngine.BoundarySizes(projection);
-            final LayoutFrame engine = engineFrame(projection, pins);
-            final LayoutFrame worker = workerFrame(projection, pins);
-            // The worker applies BoundarySeparationCorrection, whose first stage is the
-            // documented NodeSeparationProjection. It rebuilds node positions, so on the exact
-            // MIN_GAP tie produced by contentRingRadius the last ulp can change on some fixtures;
-            // anchors are never moved for an unpinned seed and no hull displacement is recorded.
-            // Assert both stages exactly instead of relaxing an equality to a tolerance.
-            assertThat(worker.positions().anchors())
-                .as("fixture %s worker anchors equal engine anchors", Character.valueOf(name))
-                .isEqualTo(engine.positions().anchors());
-            assertThat(worker.positions().nodes())
-                .as("fixture %s worker nodes equal the node-separation projection of the engine frame",
-                    Character.valueOf(name))
-                .isEqualTo(new NodeSeparationProjection().project(projection, engine.positions(),
-                    Collections.<ProjectedNodeKey>emptySet()).positions().nodes());
-            assertPackedNonOverlap(projection, worker.positions(), sizes);
+            final GraphStreamLayoutEngine.BoundarySizes sizes = new GraphStreamLayoutEngine.BoundarySizes(projection);
+            final LayoutFrame raw = engineFrame(projection, pins);
+            InitialSpacingConsumers.raw(projection, raw, 24.0);
+            final org.freeplane.plugin.graph.layout.BoundarySeparationResult boundary =
+                new org.freeplane.plugin.graph.layout.BoundarySeparationCorrection().apply(projection,
+                    raw.positions(), org.freeplane.plugin.graph.layout.InitialSpacingFrameAssertions.metrics(), pins);
+            final org.freeplane.plugin.graph.layout.EdgeConflictResult edge =
+                new org.freeplane.plugin.graph.layout.EdgeConflictCorrection().apply(projection,
+                    boundary.positions(), org.freeplane.plugin.graph.layout.InitialSpacingFrameAssertions.metrics(), pins,
+                    org.freeplane.plugin.graph.projection.ProjectedEndpointVisibility.visibleEndpoints(
+                        projection.nodes(), projection.enclosures()), boundary);
+            final LayoutFrame actual = workerFrame(projection, pins);
+            assertThat(actual.positions()).as("fixture %s complete correction", name).isEqualTo(edge.positions());
+            org.freeplane.plugin.graph.layout.InitialSpacingFrameAssertions.check(projection, actual, pins, name == 'D');
             assertContactGutters(sizes);
+            System.out.println("STAGES " + name + " raw=" + raw.positions() + " boundary=" + boundary.positions()
+                + " edge=" + edge.positions() + " diagnostics=" + actual.edgeConflictDiagnostics());
+            if (name == 'D') assertFixtureDRepairs(projection, raw, actual);
         }
     }
 
+    private static void assertFixtureDRepairs(final GraphProjection projection, final LayoutFrame raw,
+            final LayoutFrame actual) {
+        final ProjectedNodeKey a = nodeKey(MAP_ONE, "a-n2"), b = nodeKey(MAP_TWO, "b-n0");
+        assertThat(raw.positions().nodes().get(a).x()).isCloseTo(-28.284271247461902, org.assertj.core.data.Offset.offset(1e-6));
+        assertThat(raw.positions().nodes().get(a).y()).isCloseTo(3.4638242249419733e-15, org.assertj.core.data.Offset.offset(1e-6));
+        assertThat(raw.positions().nodes().get(b).x()).isCloseTo(-132.28427124746190, org.assertj.core.data.Offset.offset(1e-6));
+        assertThat(raw.positions().nodes().get(b).y()).isCloseTo(0.0, org.assertj.core.data.Offset.offset(1e-6));
+        assertThat(actual.positions().nodes().get(a).x()).isCloseTo(-28.284271247461902, org.assertj.core.data.Offset.offset(1e-6));
+        assertThat(actual.positions().nodes().get(a).y()).isCloseTo(11.0, org.assertj.core.data.Offset.offset(1e-6));
+        assertThat(actual.positions().nodes().get(b).x()).isCloseTo(-132.28427124746190, org.assertj.core.data.Offset.offset(1e-6));
+        assertThat(actual.positions().nodes().get(b).y()).isCloseTo(-10.999999999999996, org.assertj.core.data.Offset.offset(1e-6));
+        for (final ProjectedNode node : projection.nodes()) if (!node.key().equals(a) && !node.key().equals(b)) {
+            assertThat(actual.positions().nodes().get(node.key())).isEqualTo(raw.positions().nodes().get(node.key()));
+        }
+        assertThat(actual.positions().anchors()).isEqualTo(raw.positions().anchors());
+        final Map<EnclosureHullKey, LayoutPoint> composed = composeAnchors(projection);
+        assertThat(actual.positions().anchors()).isEqualTo(composed);
+        assertThat(actual.positions().anchors().get(hull(MAP_ONE, "a-sub"))).isEqualTo(LayoutPoint.of(0.0, 0.0));
+        assertThat(actual.positions().anchors().get(hull(MAP_TWO, "b-sub")).x())
+            .isCloseTo(-160.56854249492380, org.assertj.core.data.Offset.offset(1e-6));
+        assertThat(actual.positions().anchors().get(hull(MAP_TWO, "b-sub")).y()).isEqualTo(0.0);
+        final org.freeplane.plugin.graph.layout.EdgeConflictDiagnostics diagnostic = actual.edgeConflictDiagnostics();
+        assertThat(diagnostic.repairsApplied()).hasSize(2);
+        final java.util.Set<ProjectedNodeKey> affected = new java.util.LinkedHashSet<ProjectedNodeKey>();
+        for (final org.freeplane.plugin.graph.layout.EdgeConflictDiagnostics.Repair repair : diagnostic.repairsApplied()) {
+            for (int i = 0; i < repair.nodeKeys().size(); i++) {
+                final ProjectedNodeKey key = repair.nodeKeys().get(i);
+                assertThat(affected.add(key)).isTrue();
+                assertThat(key).isIn(a, b);
+                assertThat(repair.toCentres().get(key).x()).isEqualTo(repair.fromCentres().get(key).x());
+                assertThat(repair.toCentres().get(key).y() - repair.fromCentres().get(key).y())
+                    .isCloseTo(key.equals(a) ? 11.0 : -11.0, org.assertj.core.data.Offset.offset(1e-6));
+                assertThat(repair.toCentres().get(key)).isNotEqualTo(repair.fromCentres().get(key));
+            }
+        }
+        assertThat(affected).containsExactlyInAnyOrder(a, b);
+        assertThat(diagnostic.rounds()).isEqualTo(1); assertThat(diagnostic.verifications()).isEqualTo(1);
+        assertThat(diagnostic.conflictsResidual()).isEmpty();
+        assertThat(diagnostic.indexInsertedItems()).isEqualTo(112L);
+        assertThat(diagnostic.indexPairChecks()).isEqualTo(40L); assertThat(diagnostic.verificationWork()).isEqualTo(98L);
+    }
+
     @Test
-    public void initialFrameThroughWorkerWithPinOnlyChecksNonOverlap() throws Exception {
+    public void initialFrameThroughWorkerPreservesPinsAndChecksCorrectedGeometry() throws Exception {
         final GraphProjection projection = fixture('C');
         final List<PinProjection> pins = fixturePins('C');
-        final GraphStreamLayoutEngine.BoundarySizes sizes =
-            new GraphStreamLayoutEngine.BoundarySizes(projection);
+        final GraphStreamLayoutEngine.BoundarySizes sizes = new GraphStreamLayoutEngine.BoundarySizes(projection);
+        final LayoutFrame raw = engineFrame(projection, pins);
+        final org.freeplane.plugin.graph.layout.BoundarySeparationResult boundary =
+            new org.freeplane.plugin.graph.layout.BoundarySeparationCorrection().apply(projection, raw.positions(),
+                org.freeplane.plugin.graph.layout.InitialSpacingFrameAssertions.metrics(), pins);
+        final org.freeplane.plugin.graph.layout.EdgeConflictResult edge =
+            new org.freeplane.plugin.graph.layout.EdgeConflictCorrection().apply(projection, boundary.positions(),
+                org.freeplane.plugin.graph.layout.InitialSpacingFrameAssertions.metrics(), pins,
+                org.freeplane.plugin.graph.projection.ProjectedEndpointVisibility.visibleEndpoints(
+                    projection.nodes(), projection.enclosures()), boundary);
         final LayoutFrame frame = workerFrame(projection, pins);
-        assertPackedNonOverlap(projection, frame.positions(), sizes);
+        assertThat(frame.positions()).isEqualTo(edge.positions());
+        org.freeplane.plugin.graph.layout.InitialSpacingFrameAssertions.check(projection, frame, pins, false);
         assertContactGutters(sizes);
-        assertThat(frame.positions().nodes().get(nodeKey(MAP_TWO, "b-n0")))
-            .as("fixture C pinned b-n0")
-            .isEqualTo(LayoutPoint.of(60.0, 20.0));
+        assertThat(frame.positions().nodes().get(nodeKey(MAP_TWO, "b-n0"))).isEqualTo(LayoutPoint.of(60.0, 20.0));
     }
 
     @Test
