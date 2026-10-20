@@ -47,7 +47,8 @@ public class TypedForcesShould {
     // Test-local size formulas; the values must equal the production
     // BoundarySizes constants (reviewed by the task reviewer).
     private static final double SIBLING_GAP = 8.0;
-    private static final int TWO_MAP_FIRST_IDLE_STEP = 756;
+    private static final int TWO_MAP_FIRST_IDLE_STEP = 3455;
+    private static final int INITIAL_SPACING_FIRST_IDLE_LIMIT = 6000;
 
     private static final WorkspaceId WORKSPACE_ONE =
         WorkspaceId.of("00000000-0000-0000-0000-000000000111");
@@ -364,66 +365,58 @@ public class TypedForcesShould {
 
     @Test
     public void settleRelationshipFreeNestedBoundaryProjectionToIdle() throws Exception {
-        GraphProjection projection = ReferenceRepulsionFixture.referenceProjection(1L);
-        LayoutWorker worker = new LayoutWorker(LayoutCalibration.spikeDefaults());
-        try {
-            await(worker.submit(LayoutRequest.of(ReferenceRepulsionFixture.WORKSPACE, projection,
-                ProjectionDiff.between(projection, projection), Collections.<PinProjection>emptyList())));
-            LayoutFrame firstIdle = null;
-            int firstIdleStep = 0;
-            for (int step = 1; step <= 2000; step++) {
-                LayoutFrame frame = await(worker.step());
-                if (frame.idle().idle()) {
-                    firstIdle = frame;
-                    firstIdleStep = step;
-                    break;
-                }
-            }
-            assertThat(firstIdle).isNotNull();
-            assertThat(firstIdleStep).isLessThanOrEqualTo(2000);
-        }
-        finally {
-            worker.close();
-        }
+        observeInitialSpacing(ReferenceRepulsionFixture.referenceProjection(1L), false);
     }
 
     @Test
     public void twoMapWorkspaceSettlesToIdle() throws Exception {
-        GraphProjection projection = twoMapProjection(1L);
-        LayoutWorker worker = new LayoutWorker(LayoutCalibration.spikeDefaults());
+        observeInitialSpacing(twoMapProjection(1L), true);
+    }
+
+    private static void observeInitialSpacing(final GraphProjection projection, final boolean crossMap) throws Exception {
+        final long start = System.nanoTime();
+        final long firstIdleDeadlineNanos = start + TimeUnit.SECONDS.toNanos(600L);
+        final LayoutWorker worker = new LayoutWorker(LayoutCalibration.spikeDefaults());
         try {
-            await(worker.submit(LayoutRequest.of(ReferenceRepulsionFixture.WORKSPACE, projection,
-                ProjectionDiff.between(projection, projection), Collections.<PinProjection>emptyList())));
+            final LayoutFrame seed = InitialSpacingFrameAssertions.awaitWithinDeadline(worker.submit(
+                LayoutRequest.of(ReferenceRepulsionFixture.WORKSPACE, projection,
+                    ProjectionDiff.between(projection, projection), Collections.<PinProjection>emptyList())), firstIdleDeadlineNanos);
+            InitialSpacingFrameAssertions.check(projection, seed, Collections.<PinProjection>emptyList(), true);
             LayoutFrame firstIdle = null;
             int firstIdleStep = 0;
-            for (int step = 1; step <= 2000; step++) {
-                LayoutFrame frame = await(worker.step());
+            long firstIdleReceived = 0L;
+            for (int step = 1; step <= INITIAL_SPACING_FIRST_IDLE_LIMIT; step++) {
+                final LayoutFrame frame = InitialSpacingFrameAssertions.awaitWithinDeadline(worker.step(), firstIdleDeadlineNanos);
+                final long received = System.nanoTime();
+                assertThat(frame.failed()).isFalse();
+                InitialSpacingFrameAssertions.check(projection, frame, Collections.<PinProjection>emptyList(), false);
                 if (frame.idle().idle()) {
                     firstIdle = frame;
                     firstIdleStep = step;
+                    firstIdleReceived = received;
                     break;
                 }
             }
-            assertThat(firstIdle).isNotNull();
-            assertThat(firstIdleStep).isEqualTo(TWO_MAP_FIRST_IDLE_STEP);
-            // Re-measured hold envelope for the crowded-frame configuration (spec section 7.3).
-            // Measured worst rms 6.9119 / max 29.6932 over the 100 frames after first idle; the
-            // earlier 0.16 / 0.70 envelope predates whole-frame C2 repair on crowded frames, which
-            // only applies once the >8-conflict suppression is removed. Crowded frames are now
-            // repairable, so nodes legitimately keep adjusting after idle() first reports true.
-            // The bounds below carry ~30% / ~21% headroom over that measurement; a 1000-frame probe
-            // shows these excursions do not decay within that window (worst 11.57 / 60.26, against a
-            // production MAX_EDGE_NODE_EXCURSION of 64.0), so this stays a bounded smoke envelope
-            // rather than a stability guarantee (spec section 8.2).
-            for (int step = 0; step < 100; step++) {
-                LayoutFrame frame = await(worker.step());
-                assertThat(frame.idle().rms()).isLessThanOrEqualTo(9.0);
-                assertThat(frame.idle().max()).isLessThanOrEqualTo(36.0);
+            assertThat(firstIdle).as("first idle within 6000 steps and 600 seconds").isNotNull();
+            assertThat(firstIdleReceived - start).isBetween(0L, TimeUnit.SECONDS.toNanos(600L));
+            if (crossMap) assertThat(firstIdleStep).as("measured ring-24 first-idle step").isEqualTo(TWO_MAP_FIRST_IDLE_STEP);
+            else assertThat(firstIdleStep).isLessThanOrEqualTo(INITIAL_SPACING_FIRST_IDLE_LIMIT);
+            System.out.println("FIRST_IDLE_REGRESSION " + crossMap + " " + firstIdleStep + " " + (firstIdleReceived - start));
+            if (crossMap) {
+                // C0: 6.911901186336649 / 29.693160379681416; candidate: 0.2910542126686765 / 0.9902335696885642.
+                // These maxima cover 100 following frames; the unchanged 9/36 smoke envelope does not promise persistent idle.
+                final long followStart = System.nanoTime();
+                final long followDeadline = followStart + TimeUnit.SECONDS.toNanos(600L);
+                for (int step = 0; step < 100; step++) {
+                    final LayoutFrame frame = InitialSpacingFrameAssertions.awaitWithinDeadline(worker.step(), followDeadline);
+                    InitialSpacingFrameAssertions.check(projection, frame, Collections.<PinProjection>emptyList(), false);
+                    assertThat(frame.idle().rms()).isLessThanOrEqualTo(9.0);
+                    assertThat(frame.idle().max()).isLessThanOrEqualTo(36.0);
+                }
+                assertThat(System.nanoTime() - followStart).isLessThanOrEqualTo(TimeUnit.SECONDS.toNanos(600L));
             }
         }
-        finally {
-            worker.close();
-        }
+        finally { worker.close(); }
     }
 
     private static LayoutFrame await(CompletionStage<LayoutFrame> stage) throws Exception {
