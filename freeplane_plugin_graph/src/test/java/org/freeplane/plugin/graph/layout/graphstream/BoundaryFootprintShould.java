@@ -70,15 +70,15 @@ public class BoundaryFootprintShould {
         GraphStreamLayoutEngine.BoundarySizes sizes = new GraphStreamLayoutEngine.BoundarySizes(projection);
         assertThat(sizes.discRadius(nodeKey("p1"))).isEqualTo(8.0);
         assertThat(sizes.discRadius(nodeKey("p2"))).isEqualTo(8.0);
-        assertThat(sizes.contentRingRadius(leaf)).isEqualTo(11.0);
+        assertThat(sizes.contentRingRadius(leaf)).isEqualTo(20.0);
         GraphStreamLayoutEngine.BoundarySizes.Footprint footprint = sizes.footprint(leaf);
         double expected = 2.0 * (sizes.contentRingRadius(leaf) + 8.0
             + GraphStreamLayoutEngine.BoundarySizes.NODE_SETTLE_MARGIN
             + GraphStreamLayoutEngine.BoundarySizes.FRAME_CLEARANCE);
         assertThat(footprint.width).isEqualTo(expected);
         assertThat(footprint.height).isEqualTo(expected);
-        assertThat(footprint.width).isEqualTo(86.0);
-        assertThat(footprint.height).isEqualTo(86.0);
+        assertThat(footprint.width).isEqualTo(104.0);
+        assertThat(footprint.height).isEqualTo(104.0);
         assertThat(footprint.anchorX).isEqualTo(0.0);
         assertThat(footprint.anchorY).isEqualTo(0.0);
     }
