@@ -1,0 +1,62 @@
+Picked up JAVA_TOOL_OPTIONS: -Djava.awt.headless=true
+INPUT_NODE	n:m:00000000-0000-0000-0000-000000000001|p:left0	Node 0	Map	true	8.0
+INPUT_NODE	n:m:00000000-0000-0000-0000-000000000001|p:left1	Node 1	Map	true	8.0
+INPUT_NODE	n:m:00000000-0000-0000-0000-000000000001|p:left2	Node 2	Map	true	8.0
+INPUT_NODE	n:m:00000000-0000-0000-0000-000000000001|p:left3	Node 3	Map	true	8.0
+INPUT_NODE	n:m:00000000-0000-0000-0000-000000000001|p:right0	Node 0	Map	true	8.0
+INPUT_NODE	n:m:00000000-0000-0000-0000-000000000001|p:right1	Node 1	Map	true	8.0
+INPUT_NODE	n:m:00000000-0000-0000-0000-000000000001|p:right2	Node 2	Map	true	8.0
+INPUT_NODE	n:m:00000000-0000-0000-0000-000000000001|p:right3	Node 3	Map	true	8.0
+INPUT_HULL	m:00000000-0000-0000-0000-000000000001|p:left	[left]	Map	true	SUBTLE	absent	[n:m:00000000-0000-0000-0000-000000000001|p:left0, n:m:00000000-0000-0000-0000-000000000001|p:left1, n:m:00000000-0000-0000-0000-000000000001|p:left2, n:m:00000000-0000-0000-0000-000000000001|p:left3]	[]
+INPUT_HULL	m:00000000-0000-0000-0000-000000000001|p:right	[right]	Map	true	SUBTLE	absent	[n:m:00000000-0000-0000-0000-000000000001|p:right0, n:m:00000000-0000-0000-0000-000000000001|p:right1, n:m:00000000-0000-0000-0000-000000000001|p:right2, n:m:00000000-0000-0000-0000-000000000001|p:right3]	[]
+INPUT_EDGE	n:m:00000000-0000-0000-0000-000000000001|p:left0	n:m:00000000-0000-0000-0000-000000000001|p:right0	true	n:m:00000000-0000-0000-0000-000000000001|p:left0	n:m:00000000-0000-0000-0000-000000000001|p:right0	false	false	source	middle	target
+CONFIG	C0	matrix-same-nn	6.0	6.0	8.0	00000000-0000-0000-0000-0000000000aa	21.0.8	/data/home/henry-arch/.sdkman/candidates/java/21.0.8-zulu	Dialog/PLAIN/12;FRC(null,true,true)
+CODE_SOURCE	org.freeplane.plugin.graph.layout.graphstream.GraphStreamLayoutEngine	file:/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/integration/freeplane_plugin_graph/build/initial-spacing-1182471124844599051/C0-classes/
+CODE_SOURCE	org.freeplane.plugin.graph.layout.graphstream.ClusterPacking	file:/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/integration/freeplane_plugin_graph/build/initial-spacing-1182471124844599051/C0-classes/
+CODE_SOURCE	org.freeplane.plugin.graph.layout.LayoutWorker	file:/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/integration/freeplane_plugin_graph/build/initial-spacing-1182471124844599051/C0-classes/
+CODE_SOURCE	org.freeplane.plugin.graph.layout.graphstream.InitialSpacingFixtures	file:/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/integration/freeplane_plugin_graph/build/classes/java/test/
+CONTROL_HEADER	fixture	stage	step_index	exhausted_control	index_budget_exhausted	verification_budget_exhausted	detection_truncated	verifications	verification_cap	edge_rounds	round_cap	index_inserted_items	index_items_cap	index_pair_checks	pair_checks_cap	verification_work	work_cap	conflicts_detected	conflicts_cap	residual_conflict_keys	repairs_applied	boundary_rounds	raw_node_residual_pairs	frame_node_residual	node_residual_diagnostic_matches	gated_frames	authorised_verification_budget_exhausted_frames	forbidden_index_budget_exhausted_frames	forbidden_detection_truncated_frames
+CONTROL	matrix-same-nn	seed	0	true	false	false	false	6	64	0	4	105	262144	21	131072	344	65536	1	4096	1	0	0	0	0	true	1	0	0	0
+REST	n:m:00000000-0000-0000-0000-000000000001|p:left0	n:m:00000000-0000-0000-0000-000000000001|p:right0	false	8.0000000000000000	8.0000000000000000	22.000000000000000
+ELIGIBILITY_NODE	matrix-same-nn	m:00000000-0000-0000-0000-000000000001|p:left	n:m:00000000-0000-0000-0000-000000000001|p:left0	8.0	15.556349186104047	0.0	15.556349186104047	0.0	15.556349186104047	0.0	15.556349186104047	0.0	false
+ELIGIBILITY_NODE	matrix-same-nn	m:00000000-0000-0000-0000-000000000001|p:left	n:m:00000000-0000-0000-0000-000000000001|p:left1	8.0	15.556349186104047	1.5707963267948966	9.525516618590428E-16	15.556349186104047	9.525516618590428E-16	15.556349186104047	9.525516618590428E-16	15.556349186104047	false
+ELIGIBILITY_NODE	matrix-same-nn	m:00000000-0000-0000-0000-000000000001|p:left	n:m:00000000-0000-0000-0000-000000000001|p:left2	8.0	15.556349186104047	3.141592653589793	-15.556349186104047	1.9051033237180856E-15	-15.556349186104047	1.9051033237180856E-15	-15.556349186104047	1.9051033237180856E-15	false
+ELIGIBILITY_NODE	matrix-same-nn	m:00000000-0000-0000-0000-000000000001|p:left	n:m:00000000-0000-0000-0000-000000000001|p:left3	8.0	15.556349186104047	4.71238898038469	-2.857654985577128E-15	-15.556349186104047	-2.857654985577128E-15	-15.556349186104047	-2.857654985577128E-15	-15.556349186104047	false
+ELIGIBILITY	matrix-same-nn	m:00000000-0000-0000-0000-000000000001|p:left	left	0.0	0.0	0.0	0.0	0.0	false	false	false	true
+ELIGIBILITY_NODE	matrix-same-nn	m:00000000-0000-0000-0000-000000000001|p:right	n:m:00000000-0000-0000-0000-000000000001|p:right0	8.0	15.556349186104047	0.0	-87.55634918610404	0.0	-87.55634918610404	0.0	-87.55634918610404	0.0	false
+ELIGIBILITY_NODE	matrix-same-nn	m:00000000-0000-0000-0000-000000000001|p:right	n:m:00000000-0000-0000-0000-000000000001|p:right1	8.0	15.556349186104047	1.5707963267948966	-103.11269837220809	15.556349186104047	-103.11269837220809	15.556349186104049	-103.11269837220809	15.556349186104049	false
+ELIGIBILITY_NODE	matrix-same-nn	m:00000000-0000-0000-0000-000000000001|p:right	n:m:00000000-0000-0000-0000-000000000001|p:right2	8.0	15.556349186104047	3.141592653589793	-118.66904755831213	1.9051033237180856E-15	-118.66904755831213	6.490293567710654E-16	-118.66904755831213	6.490293567710654E-16	false
+ELIGIBILITY_NODE	matrix-same-nn	m:00000000-0000-0000-0000-000000000001|p:right	n:m:00000000-0000-0000-0000-000000000001|p:right3	8.0	15.556349186104047	4.71238898038469	-103.11269837220809	-15.556349186104047	-103.11269837220809	-15.556349186104047	-103.11269837220809	-15.556349186104047	false
+ELIGIBILITY	matrix-same-nn	m:00000000-0000-0000-0000-000000000001|p:right	right	0.0	0.0	-103.11269837220809	0.0	1.7763568394002505E-15	false	true	false	false
+POINT	matrix-same-nn	raw	node	n:m:00000000-0000-0000-0000-000000000001|p:left0	15.556349186104047	0.0	8.0
+POINT	matrix-same-nn	raw	node	n:m:00000000-0000-0000-0000-000000000001|p:left1	9.525516618590428E-16	15.556349186104047	8.0
+POINT	matrix-same-nn	raw	node	n:m:00000000-0000-0000-0000-000000000001|p:left2	-15.556349186104047	1.9051033237180856E-15	8.0
+POINT	matrix-same-nn	raw	node	n:m:00000000-0000-0000-0000-000000000001|p:left3	-2.857654985577128E-15	-15.556349186104047	8.0
+POINT	matrix-same-nn	raw	node	n:m:00000000-0000-0000-0000-000000000001|p:right0	-87.55634918610404	0.0	8.0
+POINT	matrix-same-nn	raw	node	n:m:00000000-0000-0000-0000-000000000001|p:right1	-103.11269837220809	15.556349186104047	8.0
+POINT	matrix-same-nn	raw	node	n:m:00000000-0000-0000-0000-000000000001|p:right2	-118.66904755831213	1.9051033237180856E-15	8.0
+POINT	matrix-same-nn	raw	node	n:m:00000000-0000-0000-0000-000000000001|p:right3	-103.11269837220809	-15.556349186104047	8.0
+POINT	matrix-same-nn	raw	enclosure	m:00000000-0000-0000-0000-000000000001|p:left	0.0	0.0	15.556349186104047
+POINT	matrix-same-nn	raw	enclosure	m:00000000-0000-0000-0000-000000000001|p:right	-103.11269837220809	0.0	15.556349186104047
+METRIC	matrix-same-nn	raw	m:00000000-0000-0000-0000-000000000001|p:left	left	6.0	6.0	[6.0, 6.0, 6.0, 6.0]	true	1	0
+METRIC	matrix-same-nn	raw	m:00000000-0000-0000-0000-000000000001|p:right	right	5.9999999999999964	5.999999999999998	[6.0, 5.9999999999999964, 5.9999999999999964, 6.0]	true	1	0
+DIAGNOSTICS	matrix-same-nn	raw	false	-1	true	true	0	0	0	0	0	[]	0	0	0	false	false	false
+POINT	matrix-same-nn	seed	node	n:m:00000000-0000-0000-0000-000000000001|p:left0	15.556349186104047	0.0	8.0
+POINT	matrix-same-nn	seed	node	n:m:00000000-0000-0000-0000-000000000001|p:left1	9.525516618590428E-16	15.556349186104047	8.0
+POINT	matrix-same-nn	seed	node	n:m:00000000-0000-0000-0000-000000000001|p:left2	-15.556349186104047	1.9051033237180856E-15	8.0
+POINT	matrix-same-nn	seed	node	n:m:00000000-0000-0000-0000-000000000001|p:left3	-2.857654985577128E-15	-15.556349186104047	8.0
+POINT	matrix-same-nn	seed	node	n:m:00000000-0000-0000-0000-000000000001|p:right0	-87.55634918610404	0.0	8.0
+POINT	matrix-same-nn	seed	node	n:m:00000000-0000-0000-0000-000000000001|p:right1	-103.11269837220809	15.556349186104049	8.0
+POINT	matrix-same-nn	seed	node	n:m:00000000-0000-0000-0000-000000000001|p:right2	-118.66904755831213	6.490293567710654E-16	8.0
+POINT	matrix-same-nn	seed	node	n:m:00000000-0000-0000-0000-000000000001|p:right3	-103.11269837220809	-15.556349186104047	8.0
+POINT	matrix-same-nn	seed	enclosure	m:00000000-0000-0000-0000-000000000001|p:left	0.0	0.0	15.556349186104047
+POINT	matrix-same-nn	seed	enclosure	m:00000000-0000-0000-0000-000000000001|p:right	-103.11269837220809	0.0	15.556349186104047
+METRIC	matrix-same-nn	seed	m:00000000-0000-0000-0000-000000000001|p:left	left	6.0	6.0	[6.0, 6.0, 6.0, 6.0]	true	1	0
+METRIC	matrix-same-nn	seed	m:00000000-0000-0000-0000-000000000001|p:right	right	6.0	6.0	[6.0, 6.0, 6.0, 6.0]	true	1	0
+DIAGNOSTICS	matrix-same-nn	seed	false	0	true	true	0	0	0	0	6	[n:m:00000000-0000-0000-0000-000000000001|p:left0~n:m:00000000-0000-0000-0000-000000000001|p:right0|n:m:00000000-0000-0000-0000-000000000001|p:left2]	105	21	344	false	false	false
+LABEL	m:00000000-0000-0000-0000-000000000001|p:left	left	SUBTLE	18.324142456054688	16.344114303588867
+LABEL	m:00000000-0000-0000-0000-000000000001|p:right	right	SUBTLE	27.180191040039062	16.344114303588867
+LABEL_SHA256	3a48a53d1bf817cafbe41cc0f3e757c2771131827d294798ee91e663f49e04fb
+CONSUMER_ONLY	matrix-same-nn	Raw/seed topology matrix; no settling claim
+CONTROL_SUMMARY	matrix-same-nn	C0	exhausted_control	true	gated_frames	1	authorised_verification_budget_exhausted_frames	0	forbidden_index_budget_exhausted_frames	0	forbidden_detection_truncated_frames	0	verification_cap	64	max_verifications_observed	6	round_cap	4	max_residual_conflict_keys	1	max_repairs_observed	0	boundary_covered_frames	1	hull_invariant_frames	1	node_residual_mismatch_frames	0
+CONTROL_NOTE	matrix-same-nn	C0	exhausted_control	true	disposition	recorded_not_rejected	cause	pre-existing behaviour of the unmodified pre-change engine	observed_first_idle_step	not-applicable	shipped_pre_change_baseline	not-applicable	match	not-applicable	node_residual_mismatch_frames	0	recorded_not_rejected	verification-budget exhaustion; residual edge-conflict keys; repair counts; frame node-residual diagnostic versus the raw geometric scan	forbidden_not_recorded	index-budget exhaustion and truncated detection fail the C0 run	forbidden_index_budget_exhausted_frames	0	forbidden_detection_truncated_frames	0	authorisation	ruling-A-amendment-1.md condition 4 covers the frame node-residual diagnostic disagreement: C0 records it, never rejects it	scope	baseline observation, not a candidate defect, regression or waived gate

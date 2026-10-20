@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="org.freeplane.plugin.graph.layout.graphstream.InitialSpacingAcceptanceShould" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-10-20T17:09:15.709Z" hostname="Arch-MSSD0" time="954.461">
+<testsuite name="org.freeplane.plugin.graph.layout.graphstream.InitialSpacingAcceptanceShould" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-10-20T19:34:49.852Z" hostname="Arch-MSSD0" time="389.087">
   <properties/>
-  <testcase name="compareFrozenC0AndCandidateInSerialFreshJvms" classname="org.freeplane.plugin.graph.layout.graphstream.InitialSpacingAcceptanceShould" time="483.65"/>
-  <testcase name="compareFrozenC0AndCandidateInSerialFreshJvms" classname="org.freeplane.plugin.graph.layout.graphstream.InitialSpacingAcceptanceShould" time="470.171"/>
+  <testcase name="compareFrozenC0AndCandidateInSerialFreshJvms" classname="org.freeplane.plugin.graph.layout.graphstream.InitialSpacingAcceptanceShould" time="389.087"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>
