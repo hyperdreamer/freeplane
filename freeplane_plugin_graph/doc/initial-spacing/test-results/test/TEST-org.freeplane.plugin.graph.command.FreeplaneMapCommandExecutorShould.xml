@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.command.FreeplaneMapCommandExecutorShould" tests="22" skipped="0" failures="0" errors="0" timestamp="2026-10-20T16:57:32.122Z" hostname="Arch-MSSD0" time="0.227">
+  <properties/>
+  <testcase name="rejectsAnIdlessTargetWithoutCreatingAnIdOrConnectorThenSucceedsAfterNormalIdAssignment" classname="org.freeplane.plugin.graph.command.FreeplaneMapCommandExecutorShould" time="0.117"/>
+  <testcase name="compensatesCommittedMapsWhenALaterNativeCommitFails" classname="org.freeplane.plugin.graph.command.FreeplaneMapCommandExecutorShould" time="0.01"/>
+  <testcase name="rollsBackAllStartedMapTransactionsInReverseOrderAfterALaterNativeFailure" classname="org.freeplane.plugin.graph.command.FreeplaneMapCommandExecutorShould" time="0.003"/>
+  <testcase name="materializesOneMissingEditorViewThenReusesItForRepeatedEdits" classname="org.freeplane.plugin.graph.command.FreeplaneMapCommandExecutorShould" time="0.003"/>
+  <testcase name="rollsBackDeleteMutationAndPreservesThePriorUndoTarget" classname="org.freeplane.plugin.graph.command.FreeplaneMapCommandExecutorShould" time="0.003"/>
+  <testcase name="exposesAndUndoesOnlyTheLastSuccessfulSourceMapUndoTarget" classname="org.freeplane.plugin.graph.command.FreeplaneMapCommandExecutorShould" time="0.005"/>
+  <testcase name="rejectsAStaleOccurrenceOrDescriptorWithoutDeletingAnotherConnector" classname="org.freeplane.plugin.graph.command.FreeplaneMapCommandExecutorShould" time="0.01"/>
+  <testcase name="deletesASnapshotCompatibleRawConnectorThroughATreeCloneWithoutAssigningCloneTargetIds" classname="org.freeplane.plugin.graph.command.FreeplaneMapCommandExecutorShould" time="0.007"/>
+  <testcase name="keepsTheFullDescriptorGuardForAReorderedBatchOccurrence" classname="org.freeplane.plugin.graph.command.FreeplaneMapCommandExecutorShould" time="0.005"/>
+  <testcase name="exposesIncompleteRecoveryAndRetainsRetryStateWhenNativeRollbackFails" classname="org.freeplane.plugin.graph.command.FreeplaneMapCommandExecutorShould" time="0.006"/>
+  <testcase name="entersTheEdtForEveryPublicCommand" classname="org.freeplane.plugin.graph.command.FreeplaneMapCommandExecutorShould" time="0.005"/>
+  <testcase name="resolvesEveryConnectorBeforeStartingAnyMapTransaction" classname="org.freeplane.plugin.graph.command.FreeplaneMapCommandExecutorShould" time="0.005"/>
+  <testcase name="createsOneUndoTransactionWithTheRequestedDirectionAndOnlyMarksTheSourceMapDirty" classname="org.freeplane.plugin.graph.command.FreeplaneMapCommandExecutorShould" time="0.009"/>
+  <testcase name="doesNotSaveWorkspaceOrSourceMapsWhileCreatingDeletingOrUndoing" classname="org.freeplane.plugin.graph.command.FreeplaneMapCommandExecutorShould" time="0.005"/>
+  <testcase name="rollsBackCreateMutationAndPreservesThePriorUndoTarget" classname="org.freeplane.plugin.graph.command.FreeplaneMapCommandExecutorShould" time="0.006"/>
+  <testcase name="startsOneTransactionPerTouchedMapAndUsesTheDeterministicLastMapAsUndoOwner" classname="org.freeplane.plugin.graph.command.FreeplaneMapCommandExecutorShould" time="0.007"/>
+  <testcase name="batchesTwoNativeDeletionsOnOneSourceMapIntoOneOpenUndoTransaction" classname="org.freeplane.plugin.graph.command.FreeplaneMapCommandExecutorShould" time="0.007"/>
+  <testcase name="rejectsMapEditsWhenMaterializationStillDoesNotProvideUndoSupport" classname="org.freeplane.plugin.graph.command.FreeplaneMapCommandExecutorShould" time="0.003"/>
+  <testcase name="materializesEachOfThreeDifferentMapsAtMostOnceWhileTheirViewsRemainOpen" classname="org.freeplane.plugin.graph.command.FreeplaneMapCommandExecutorShould" time="0.004"/>
+  <testcase name="makesTheLastSuccessfulDeleteOwnTheUndoTarget" classname="org.freeplane.plugin.graph.command.FreeplaneMapCommandExecutorShould" time="0.002"/>
+  <testcase name="rejectsReadOnlyMapsBeforeStartingANativeConnectorTransaction" classname="org.freeplane.plugin.graph.command.FreeplaneMapCommandExecutorShould" time="0.002"/>
+  <testcase name="deletesOnlyTheCurrentOccurrenceWhoseFullDescriptorStillMatches" classname="org.freeplane.plugin.graph.command.FreeplaneMapCommandExecutorShould" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

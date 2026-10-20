@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" tests="40" skipped="0" failures="0" errors="0" timestamp="2026-10-20T16:57:32.659Z" hostname="Arch-MSSD0" time="1.944">
+  <properties/>
+  <testcase name="closesTheSessionRecorderWhenTheSessionCloses" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.305"/>
+  <testcase name="reportsAsyncRollbackFailureAfterTheSessionIsReleased" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.009"/>
+  <testcase name="discardClosesWithoutSavingAndCancelLeavesTheSessionUntouched" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.005"/>
+  <testcase name="keepsTheSessionOpenWhenSaveFailsAndReleasesEverythingOnlyAfterRetrySucceeds" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.006"/>
+  <testcase name="shutsDownEverySessionWithoutSavingAndMakesHandlesUnusable" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.079"/>
+  <testcase name="closesStoreUpdatesLeasesSchedulerAndViewInDependencyOrder" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.073"/>
+  <testcase name="openExistingWrapsCanonicalizationFailure" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.005"/>
+  <testcase name="aFailingPersisterDoesNotFailTheOpenOrHideTheWindow" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.003"/>
+  <testcase name="createsAndShowsANewWorkspaceOnlyAfterTheSessionResourcesExist" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.281"/>
+  <testcase name="recordsCompletedHandleCommandsInTheSessionStatusPublisher" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.17"/>
+  <testcase name="waitsForAnOpeningSessionBeforeCompletingShutdownAndRejectsNewOpens" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.109"/>
+  <testcase name="recordsAgainWhenAnAlreadyOpenWorkspaceIsFocusedAfterClear" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.002"/>
+  <testcase name="leavesRegistryAndViewUntouchedWhenLoadingFails" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.002"/>
+  <testcase name="waitsForAClosingSessionBeforeReopeningItsPath" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.109"/>
+  <testcase name="openExistingNeverCreatesAWorkspaceForAMissingPath" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.002"/>
+  <testcase name="keepsAProductionCreatedFileUntilEdtAssemblyRollbackFinishes" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.204"/>
+  <testcase name="completesEdtShutdownAfterAnEdtUserCloseHasStartedAsyncTeardown" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.112"/>
+  <testcase name="allowsImmediateReopenAfterACompleteClose" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.003"/>
+  <testcase name="opensAndClosesThroughTheProductionResourceComposition" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.01"/>
+  <testcase name="recordsAnOpenedWorkspaceInTheRecentList" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.005"/>
+  <testcase name="reportsSaveFailureWithoutMarkingTheHandleClosed" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.003"/>
+  <testcase name="openExistingForcesACreateDisabledOpenWhenTheFileVanishesAfterTheCheck" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.157"/>
+  <testcase name="openExistingOpensAnExistingFileWithoutCreating" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.003"/>
+  <testcase name="forwardsHandleObservationCommandsAndListenerRegistration" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.092"/>
+  <testcase name="shutsDownWithoutSessionsAndRejectsFurtherOpens" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.003"/>
+  <testcase name="doesNotDeleteAReplacementFileDuringDelayedRollback" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.017"/>
+  <testcase name="doesNotBlockTheEdtWhileCoordinatorShutdownNeedsTheEdt" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.008"/>
+  <testcase name="makesConcurrentShutdownCallersAwaitTheSameTeardownFailure" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.109"/>
+  <testcase name="keepsStatusLiveAfterFailedSaveCloseAndClosesPublisherAfterRetrySucceeds" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.006"/>
+  <testcase name="closesTheSessionRecorderOnShutdown" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.005"/>
+  <testcase name="openExistingWrapsShutdownFailure" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.004"/>
+  <testcase name="reservesTheWorkspacePathBeforeCreatingItsStore" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.005"/>
+  <testcase name="keepsTheSessionRecorderOpenOnSaveFailureAndClosesItOnRetry" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.003"/>
+  <testcase name="createsDistinctSessionsForDistinctWorkspacePaths" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.002"/>
+  <testcase name="focusesAnAlreadyOpenWorkspaceWithoutCreatingASecondSession" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.003"/>
+  <testcase name="continuesShutdownAfterOneSessionCleanupFailsAndReturnsTheFailure" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.004"/>
+  <testcase name="waitsForOffEdtResourceCleanupAndClosesTheViewOnTheEdt" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.006"/>
+  <testcase name="reportsAsyncTeardownFailureAfterTheSessionIsReleased" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.005"/>
+  <testcase name="removesANewlyCreatedWorkspaceWhenViewAssemblyFails" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.004"/>
+  <testcase name="serializesHandleCommandsWithAViewInitiatedClose" classname="org.freeplane.plugin.graph.control.DefaultGraphWorkspaceControllerShould" time="0.006"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.layout.graphstream.BoundaryFootprintShould" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-10-20T17:04:02.814Z" hostname="Arch-MSSD0" time="0.971">
+  <properties/>
+  <testcase name="emptyEnclosureUsesTheLabelSizedBox" classname="org.freeplane.plugin.graph.layout.graphstream.BoundaryFootprintShould" time="0.001"/>
+  <testcase name="contentItemIsPlacedAtTheAnchor" classname="org.freeplane.plugin.graph.layout.graphstream.BoundaryFootprintShould" time="0.001"/>
+  <testcase name="singleChildIsPlacedAtTheAnchorOrigin" classname="org.freeplane.plugin.graph.layout.graphstream.BoundaryFootprintShould" time="0.0"/>
+  <testcase name="singleDirectNodeFootprint" classname="org.freeplane.plugin.graph.layout.graphstream.BoundaryFootprintShould" time="0.0"/>
+  <testcase name="packedFootprintBoxesDoNotOverlapAcrossTheFixtureSet" classname="org.freeplane.plugin.graph.layout.graphstream.BoundaryFootprintShould" time="0.828"/>
+  <testcase name="leafFootprintIsSquareAroundTheAnchor" classname="org.freeplane.plugin.graph.layout.graphstream.BoundaryFootprintShould" time="0.001"/>
+  <testcase name="footprintsAreMemoisedAndRecursionTerminates" classname="org.freeplane.plugin.graph.layout.graphstream.BoundaryFootprintShould" time="0.138"/>
+  <testcase name="nestedFootprintIsThePackedChildBoxPlusFrameClearance" classname="org.freeplane.plugin.graph.layout.graphstream.BoundaryFootprintShould" time="0.0"/>
+  <testcase name="topLevelMembershipMatchesSeedsPredicate" classname="org.freeplane.plugin.graph.layout.graphstream.BoundaryFootprintShould" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

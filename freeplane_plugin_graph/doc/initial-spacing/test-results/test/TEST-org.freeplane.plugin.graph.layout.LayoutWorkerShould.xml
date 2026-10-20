@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.layout.LayoutWorkerShould" tests="24" skipped="0" failures="0" errors="0" timestamp="2026-10-20T16:59:03.219Z" hostname="Arch-MSSD0" time="0.272">
+  <properties/>
+  <testcase name="restartResetsTheDisplacementField" classname="org.freeplane.plugin.graph.layout.LayoutWorkerShould" time="0.013"/>
+  <testcase name="preservesBoundaryStageFieldsAcrossTheRebuild" classname="org.freeplane.plugin.graph.layout.LayoutWorkerShould" time="0.028"/>
+  <testcase name="decorateRigidConflictsAndIdleMeasurements" classname="org.freeplane.plugin.graph.layout.LayoutWorkerShould" time="0.007"/>
+  <testcase name="startsFromAnEmptyFailedFrameWithAZeroResidual" classname="org.freeplane.plugin.graph.layout.LayoutWorkerShould" time="0.002"/>
+  <testcase name="replaceAFailedEngineBeforeTheNextSubmittedRequest" classname="org.freeplane.plugin.graph.layout.LayoutWorkerShould" time="0.009"/>
+  <testcase name="retainTheLastValidFrameAfterGeometryFailure" classname="org.freeplane.plugin.graph.layout.LayoutWorkerShould" time="0.012"/>
+  <testcase name="serializeEngineCallsAndDecorateSuccessfulFrames" classname="org.freeplane.plugin.graph.layout.LayoutWorkerShould" time="0.006"/>
+  <testcase name="decoratePublishedFramesWithEmptyEdgeConflictDiagnosticsInTheScaffold" classname="org.freeplane.plugin.graph.layout.LayoutWorkerShould" time="0.002"/>
+  <testcase name="terminateTheWorkerThreadAcrossRepeatedCloseCycles" classname="org.freeplane.plugin.graph.layout.LayoutWorkerShould" time="0.014"/>
+  <testcase name="produceNodeAndAnchorPositionsAndHonorNodePinCoordinates" classname="org.freeplane.plugin.graph.layout.LayoutWorkerShould" time="0.006"/>
+  <testcase name="carriesTheRetainedResidualIntoAFailedFrame" classname="org.freeplane.plugin.graph.layout.LayoutWorkerShould" time="0.017"/>
+  <testcase name="retainsEdgeDiagnosticsOnFailureFrames" classname="org.freeplane.plugin.graph.layout.LayoutWorkerShould" time="0.021"/>
+  <testcase name="decorateConsecutiveFramesWithDisplacementDeltas" classname="org.freeplane.plugin.graph.layout.LayoutWorkerShould" time="0.02"/>
+  <testcase name="projectsAcceptedFramesAndPublishesTheRecomputedResidual" classname="org.freeplane.plugin.graph.layout.LayoutWorkerShould" time="0.002"/>
+  <testcase name="decorateNonEmptyFramesWithTemporaryGeometryAndCorrection" classname="org.freeplane.plugin.graph.layout.LayoutWorkerShould" time="0.007"/>
+  <testcase name="publishesTheRecomputedResidualForATwoPinnedSandwich" classname="org.freeplane.plugin.graph.layout.LayoutWorkerShould" time="0.006"/>
+  <testcase name="cancelQueuedStagesWhenClosed" classname="org.freeplane.plugin.graph.layout.LayoutWorkerShould" time="0.008"/>
+  <testcase name="rejectWorkAfterClose" classname="org.freeplane.plugin.graph.layout.LayoutWorkerShould" time="0.002"/>
+  <testcase name="mergedRelocationDisplacementsEnterTheDeltaAccounting" classname="org.freeplane.plugin.graph.layout.LayoutWorkerShould" time="0.05"/>
+  <testcase name="returnRetainedFramesForPausedAndPreSubmitSteps" classname="org.freeplane.plugin.graph.layout.LayoutWorkerShould" time="0.009"/>
+  <testcase name="preserveTheLastValidFrameWhenTheEngineFails" classname="org.freeplane.plugin.graph.layout.LayoutWorkerShould" time="0.004"/>
+  <testcase name="queueStepBehindAnOutstandingSubmit" classname="org.freeplane.plugin.graph.layout.LayoutWorkerShould" time="0.006"/>
+  <testcase name="applyActiveDormantAndUnpinnedTransitions" classname="org.freeplane.plugin.graph.layout.LayoutWorkerShould" time="0.009"/>
+  <testcase name="retainBoundaryDiagnosticsWhenTheComponentFailsClosed" classname="org.freeplane.plugin.graph.layout.LayoutWorkerShould" time="0.008"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

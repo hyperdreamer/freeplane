@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" tests="65" skipped="0" failures="0" errors="0" timestamp="2026-10-20T16:58:52.909Z" hostname="Arch-MSSD0" time="8.183">
+  <properties/>
+  <testcase name="publishesTheLowerBoundResidualFromThePostRoundAndTerminalDetections" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.011"/>
+  <testcase name="clearsTheActualProminentNodeDisc" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.003"/>
+  <testcase name="rejectsTheSecondRoundCandidateWithoutLosingTheLastCompleteResidual" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.04"/>
+  <testcase name="acceptsAPreExistingSiblingHullResidualWhenTheCandidateKeepsTheSamePair" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.009"/>
+  <testcase name="rebuildsTheBoundaryRecordForThePublishedPositions" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.001"/>
+  <testcase name="isDeterministicAcrossRunsAndPermutedInputs" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.001"/>
+  <testcase name="reconcilesDetectionAndVerificationCapsAtAnInitialDetectionStop" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.001"/>
+  <testcase name="rejectsIneligibleC2TargetsReachedByHypotScalarAndTargetOverflow" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.001"/>
+  <testcase name="rejectsIneligibleC2TargetsWithoutThrowingOrClaimingExhaustion" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.0"/>
+  <testcase name="stopsOnTheVerificationWorkCapWithoutADetectionStop" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.001"/>
+  <testcase name="clearsTheExhaustedIndexBudgetBeforeTheNextFrame" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.002"/>
+  <testcase name="truncatesDetectionAtThePairBudget" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="1.402"/>
+  <testcase name="resetsTheIndexCountersOnEveryApply" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.003"/>
+  <testcase name="truncatesDetectionAtTheVolumeBudget" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.539"/>
+  <testcase name="measuresThePointToClosedSegmentDistanceIndependently" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.001"/>
+  <testcase name="boundsTheTerminalRebuildAfterAnAcceptedRepair" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.045"/>
+  <testcase name="truncatesThePublishedDetectionAfterAnAcceptedRepair" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.001"/>
+  <testcase name="returnsTheBoundaryResultUnchangedInTheScaffold" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.0"/>
+  <testcase name="ignoresAnInvisibleEdgeForC2" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.001"/>
+  <testcase name="rebuildsAncestorsAfterTheColumnDiagonal" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.017"/>
+  <testcase name="publishesNeitherPartialRebuildRecordWhenTheTerminalScanStops" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.013"/>
+  <testcase name="rejectsACandidateThatReplacesAPreExistingHullResidualWithAnEqualCountPair" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.011"/>
+  <testcase name="keepsObservableOutcomesIndependentOfCollectionOrder" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.024"/>
+  <testcase name="rejectsTheAttemptWhenVerificationWorkExhausts" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.025"/>
+  <testcase name="rejectsEveryC2TargetBeyondTheMaximumExcursionWithoutClamping" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.001"/>
+  <testcase name="leavesAMixedEnclosureConflictToRoutingWithoutMovingAnchors" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.009"/>
+  <testcase name="resetsEveryCounterBetweenSeparateApplyCallsOnOneCorrectionInstance" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.126"/>
+  <testcase name="vetoesTheUnsafeDirectTargetThatAddsANodeGapAndAcceptsTheOtherSide" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.001"/>
+  <testcase name="repairsTheColumnWithADormantPin" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.002"/>
+  <testcase name="deduplicatesIdenticalAlternativesFromOverlappingChords" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.004"/>
+  <testcase name="rejectsACandidateThatIntroducesANewCrossing" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.001"/>
+  <testcase name="acceptsTheC2TargetAtExactlyTheMaximumExcursion" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.001"/>
+  <testcase name="reportsTheReportedFixtureCountsBeforeRepair" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.0"/>
+  <testcase name="vetoesTheNearestDirectTargetThatAddsASiblingHullViolation" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.018"/>
+  <testcase name="repairsOnTheOppositeSideWhenTheNearestSideBreaksTheGap" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.001"/>
+  <testcase name="rejectsTheTwoAdjacentSwapBatchAndRetriesSingles" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.001"/>
+  <testcase name="appliesCandidatesInCanonicalOrder" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.0"/>
+  <testcase name="keepsTheFiniteRejectionAndAcceptedRoundLimitsDistinctFromExhaustion" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.006"/>
+  <testcase name="countsTheRebuildHullPairComparisonsAsVerificationWork" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.004"/>
+  <testcase name="keepsAResidualWhenEveryLocalAlternativeBreaksTheGap" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.002"/>
+  <testcase name="retriesTheOppositeC2TargetAfterARejectedMixedBatch" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.002"/>
+  <testcase name="retriesASingleCandidateAfterARejectedBatch" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.0"/>
+  <testcase name="swapsTheReportedConvexQuadAndRemovesTheCrossing" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.001"/>
+  <testcase name="movesThePassedOverNodeOffTheChordWithTheLexicographicallySmallerNormal" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.0"/>
+  <testcase name="reusesTheBoundaryTerminalGeometry" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.002"/>
+  <testcase name="rejectsTheAttemptWhenAVerificationDetectionStops" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.368"/>
+  <testcase name="detectConflictsIsAscendingDeduplicatedAndDeterministic" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.001"/>
+  <testcase name="discardsCandidatesThatMoveAPinnedNode" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.0"/>
+  <testcase name="repairsTheBlockedColumnWithTheFirstFeasibleDiagonal" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.002"/>
+  <testcase name="keepsAPreExistingHullResidualWhenTheCandidateDoesNotAddOne" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.009"/>
+  <testcase name="keepsThePinnedColumnObstructionAsAnExactResidual" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.001"/>
+  <testcase name="detectsACrossingAtExtremeSpans" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.0"/>
+  <testcase name="publishesTheRebuildUnitsInTheFrameVerificationTotal" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.0"/>
+  <testcase name="keepsTheCompleteCrowdedResidualWhenGlobalVerificationCannotFinish" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.019"/>
+  <testcase name="keepsTheFiniteC2FamilyWithinItsStatedBounds" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.003"/>
+  <testcase name="keepsTheCompleteResidualWhenBothCapsStopVerificationDetection" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.0"/>
+  <testcase name="repairsNineIndependentObstructionsInBoundedBatches" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.005"/>
+  <testcase name="recordsOneRepairPerCandidateForAnAcceptedMixedKindBatch" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.001"/>
+  <testcase name="truncatesDetectionAtTheItemBudget" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="5.179"/>
+  <testcase name="rejectsTheZeroMovementTargetButAcceptsTheOppositeSide" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.001"/>
+  <testcase name="keepsSelectionLimitsOrdinaryAndDirectEnumerationEligible" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.005"/>
+  <testcase name="stopsAtFourAcceptedRoundsWithoutClaimingExhaustion" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.015"/>
+  <testcase name="enumeratesEveryPairWhenSubdivisionExhausts" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.064"/>
+  <testcase name="boundsTheCountedRelocationWorkOnADenseWideSpanFrame" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.171"/>
+  <testcase name="usesTheCanonicalHorizontalNormalForEitherEndpointOrder" classname="org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

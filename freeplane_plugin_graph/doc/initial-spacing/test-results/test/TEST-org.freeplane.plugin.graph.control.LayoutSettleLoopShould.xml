@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" tests="51" skipped="0" failures="0" errors="0" timestamp="2026-10-20T16:57:35.934Z" hostname="Arch-MSSD0" time="1.256">
+  <properties/>
+  <testcase name="preservesAReentrantResetFromAnAlreadyCompletedRun" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.038"/>
+  <testcase name="replayOracleRejectsMissingCoverageAndMeasuresActualProminentRadii" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.049"/>
+  <testcase name="suppressesAStaleRunWhenANewerGenerationStarts" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.027"/>
+  <testcase name="rejectsALowerGenerationAfterAHigherGenerationHasBeenAccepted" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.029"/>
+  <testcase name="recreatesTheRealReplayWorkerOnReset" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.013"/>
+  <testcase name="replayDigestIgnoresOrderButDetectsEveryPaintedInputAndClassification" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.017"/>
+  <testcase name="resetsAnIdleRunWithAFreshWorkerSeed" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.026"/>
+  <testcase name="publishTheFramesOwnRoutedEdgePaths" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.042"/>
+  <testcase name="returnsFromResetBeforeBlockedPhysicalResetStarts" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.01"/>
+  <testcase name="waitsForAndRethrowsFailedExternalClose" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.001"/>
+  <testcase name="stepsAfterRestartWhenPauseSupersedesQueuedStepDispatch" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.016"/>
+  <testcase name="executesOnlyTheNewestQueuedReset" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.013"/>
+  <testcase name="doesNotResetOrSubmitAfterCloseWinsBeforeQueuedReset" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.01"/>
+  <testcase name="replayHelperReferencesOnlyTheJdkAndInstalledProductionClasses" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.003"/>
+  <testcase name="handlesAnAlreadyCompletedFrameOffTheEdt" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.008"/>
+  <testcase name="publishesAStraightClearPathAfterRepairingTheBlockedColumn" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.515"/>
+  <testcase name="letsCloseWinOverAQueuedFailedRecovery" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.006"/>
+  <testcase name="doesNotClobberAReentrantStartWhenSupersedingCompletionRuns" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.006"/>
+  <testcase name="replayProvenanceUsesInstalledBundleDirectoryAndRejectsAnotherLocation" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.009"/>
+  <testcase name="doesNotFollowUpBlockedResetAfterCloseWins" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.007"/>
+  <testcase name="coalescesReentrantDoubleRestartForAFailedPublication" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.012"/>
+  <testcase name="suppressesAQueuedPublicationWhenPausePrecedesEdtDelivery" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.008"/>
+  <testcase name="recoversWhenRestartSupersedesPauseDuringFailedPublication" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.016"/>
+  <testcase name="retainsTheCurrentGenerationWhenPhysicalResetFails" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.026"/>
+  <testcase name="publishesAFallbackFrameWithARecomputedResidual" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.009"/>
+  <testcase name="replaySnapshotsRejectReferenceGenerationDigestAndViewChangesIndividually" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.013"/>
+  <testcase name="recoversAFailedFrameWithOneRestartAndASecondSubmission" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.007"/>
+  <testcase name="replayFailureStagesFailAfterCleanupAndEscapesExternalText" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.026"/>
+  <testcase name="submitsAfterRestartWhenPauseSupersedesQueuedResetDispatch" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.008"/>
+  <testcase name="doesNotFollowUpBlockedResetAfterPauseWins" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.006"/>
+  <testcase name="letsResetWinOverAQueuedFailedRecovery" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.01"/>
+  <testcase name="submitsTheCurrentRequestWhenRestartingAfterPauseSupersedesQueuedStartDispatch" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.005"/>
+  <testcase name="returnsFromLifecycleLaneCloseWithoutWaitingForItsQueuedClose" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.001"/>
+  <testcase name="suppressesAnInFlightFrameCompletedAfterPause" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.008"/>
+  <testcase name="returnsFromEdtCloseBeforeABlockedPhysicalCloseAndClosesOnce" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.001"/>
+  <testcase name="publishesAFailedCurrentGenerationWhenItsInitialFrameFails" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.007"/>
+  <testcase name="canvasStateCopiesItsStatusAndReferencesImmutably" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.001"/>
+  <testcase name="doesNotClobberAReentrantResetWhenANewerStartSupersedesTheCompletedRun" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.006"/>
+  <testcase name="doesNotSubmitANewerGenerationBeforeBlockedResetCompletes" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.013"/>
+  <testcase name="continuesSettlingAfterAListenerThrows" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.013"/>
+  <testcase name="publishesEmptyAfterAnAcceptedEmptyFrame" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.003"/>
+  <testcase name="doesNotFollowUpBlockedResetAfterNewerResetWins" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.009"/>
+  <testcase name="doesNotIssueWorkAfterAReentrantCloseDuringSupersedingCompletion" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.003"/>
+  <testcase name="submitsAfterRestartWhenPauseSupersedesQueuedStartDispatch" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.005"/>
+  <testcase name="replayEdtRequestsTransportFailuresAndRunInlineOnTheEdt" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.002"/>
+  <testcase name="recoversADeferredRestartClaimWhenASecondRestartSupersedesIt" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.006"/>
+  <testcase name="doesNotFollowUpBlockedResetAfterNewerStartWins" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.009"/>
+  <testcase name="rejectsTheUnrepairedColumnStateAndHashesTheExactBits" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.005"/>
+  <testcase name="replayEdtDeadlineCancelsQueuedWorkBeforeItCanBindLate" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.152"/>
+  <testcase name="restartsThePausedWorkerBeforeANewerAcceptedGenerationSettles" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.009"/>
+  <testcase name="publishesEverySettlingFrameOnTheEdtUntilIdle" classname="org.freeplane.plugin.graph.control.LayoutSettleLoopShould" time="0.009"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

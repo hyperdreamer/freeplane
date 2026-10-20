@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.integration.GraphWorkspaceCommandAcceptanceShould" tests="14" skipped="0" failures="0" errors="0" timestamp="2026-10-20T16:57:47.392Z" hostname="Arch-MSSD0" time="0.24">
+  <properties/>
+  <testcase name="scenario22RejectsStaleAndPendingPurgeThenUndoesMissingPurge" classname="org.freeplane.plugin.graph.integration.GraphWorkspaceCommandAcceptanceShould" time="0.011"/>
+  <testcase name="consumesRecordedStrictPerformanceAcceptanceResult" classname="org.freeplane.plugin.graph.integration.GraphWorkspaceCommandAcceptanceShould" time="0.001"/>
+  <testcase name="scenario11RoutesEndpointDeletionToMapUndoAndReactivatesTheMap" classname="org.freeplane.plugin.graph.integration.GraphWorkspaceCommandAcceptanceShould" time="0.018"/>
+  <testcase name="scenario08RoutesSameMapNativeConnectorAndMapUndoThroughTheHandle" classname="org.freeplane.plugin.graph.integration.GraphWorkspaceCommandAcceptanceShould" time="0.01"/>
+  <testcase name="scenario22RejectsStalePendingAndChangedContributorRequestsBeforeMutation" classname="org.freeplane.plugin.graph.integration.GraphWorkspaceCommandAcceptanceShould" time="0.007"/>
+  <testcase name="scenario17KeepsDenseThreeMapSourcesDistinct" classname="org.freeplane.plugin.graph.integration.GraphWorkspaceCommandAcceptanceShould" time="0.005"/>
+  <testcase name="scenario20RetainsPinnedConflictUntilExplicitUnpin" classname="org.freeplane.plugin.graph.integration.GraphWorkspaceCommandAcceptanceShould" time="0.005"/>
+  <testcase name="scenario14SupportsPanZoomFitResetSearchHoverSelectOpenAndInspect" classname="org.freeplane.plugin.graph.integration.GraphWorkspaceCommandAcceptanceShould" time="0.009"/>
+  <testcase name="rejectsSaveAsLiveTargetAndKeepsSeparateWorkspaceHistories" classname="org.freeplane.plugin.graph.integration.GraphWorkspaceCommandAcceptanceShould" time="0.004"/>
+  <testcase name="scenario21DoesNotLeakLockedContentAndRejectsLockedRelationshipPurge" classname="org.freeplane.plugin.graph.integration.GraphWorkspaceCommandAcceptanceShould" time="0.003"/>
+  <testcase name="scenario24CreatesAtMostOneEditorViewPerMapAndReusesIt" classname="org.freeplane.plugin.graph.integration.GraphWorkspaceCommandAcceptanceShould" time="0.121"/>
+  <testcase name="scenario25ProvidesMultiplicityCueOrDuplicateNoOpReason" classname="org.freeplane.plugin.graph.integration.GraphWorkspaceCommandAcceptanceShould" time="0.006"/>
+  <testcase name="scenario16RejectsIdlessPersistentCommandAtomicallyThenAcceptsNormalSavedId" classname="org.freeplane.plugin.graph.integration.GraphWorkspaceCommandAcceptanceShould" time="0.031"/>
+  <testcase name="scenario09RejectsCrossMapNativeConnectorsAndStoresOnlyFpgRelationships" classname="org.freeplane.plugin.graph.integration.GraphWorkspaceCommandAcceptanceShould" time="0.008"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

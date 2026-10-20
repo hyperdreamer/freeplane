@@ -1,0 +1,7 @@
+Picked up JAVA_TOOL_OPTIONS: -Djava.awt.headless=true
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+Note: /data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane_plugin_graph/build/initial-spacing-8518394598620205758/C0-src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindow.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+3 warnings

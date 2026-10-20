@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.control.GraphWorkspacePresentationShould" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-20T16:57:35.923Z" hostname="Arch-MSSD0" time="0.006">
+  <properties/>
+  <testcase name="rejectsNullDuplicateAndInvalidMapColorEntries" classname="org.freeplane.plugin.graph.control.GraphWorkspacePresentationShould" time="0.004"/>
+  <testcase name="defensivelyCopiesOrderedMapColorsAndPreservesEveryDisplaySetting" classname="org.freeplane.plugin.graph.control.GraphWorkspacePresentationShould" time="0.001"/>
+  <testcase name="retainsDeterministicInputOrderingAcrossEquivalentPresentations" classname="org.freeplane.plugin.graph.control.GraphWorkspacePresentationShould" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

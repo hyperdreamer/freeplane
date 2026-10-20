@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.window.UndoRoutingShould" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-20T17:25:49.447Z" hostname="Arch-MSSD0" time="0.538">
+  <properties/>
+  <testcase name="routesStatusSessionControlsThroughTheSessionHandleAndRespectsReadOnlyMode" classname="org.freeplane.plugin.graph.window.UndoRoutingShould" time="0.37"/>
+  <testcase name="routesCtrlZAndCtrlYOnlyToWorkspaceHistory" classname="org.freeplane.plugin.graph.window.UndoRoutingShould" time="0.015"/>
+  <testcase name="keepsWorkspaceAndSourceMapHistoryActionsIndependentAndLocalized" classname="org.freeplane.plugin.graph.window.UndoRoutingShould" time="0.153"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.projection.EdgeProjectionShould" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-10-20T17:25:37.453Z" hostname="Arch-MSSD0" time="0.03">
+  <properties/>
+  <testcase name="shareOneLineBetweenUndirectedAndDirectedContributors" classname="org.freeplane.plugin.graph.projection.EdgeProjectionShould" time="0.001"/>
+  <testcase name="retainRepeatedOppositeGraphRelationshipsAndUnionTheirDirections" classname="org.freeplane.plugin.graph.projection.EdgeProjectionShould" time="0.005"/>
+  <testcase name="rejectDuplicateProjectedPhysicalKeysInProjectionDiff" classname="org.freeplane.plugin.graph.projection.EdgeProjectionShould" time="0.002"/>
+  <testcase name="unionAllSixteenTwoContributorArrowBitCombinationsIncludingReversedOrientation" classname="org.freeplane.plugin.graph.projection.EdgeProjectionShould" time="0.001"/>
+  <testcase name="omitRelationshipsToStructuralNodes" classname="org.freeplane.plugin.graph.projection.EdgeProjectionShould" time="0.001"/>
+  <testcase name="reportPhysicalProjectionDiffsAndKeepItsCollectionsImmutable" classname="org.freeplane.plugin.graph.projection.EdgeProjectionShould" time="0.005"/>
+  <testcase name="omitInternalActiveGroupConnectorsWithoutChangingTheirSnapshot" classname="org.freeplane.plugin.graph.projection.EdgeProjectionShould" time="0.001"/>
+  <testcase name="omitUnresolvedRelationshipsAndConnectorsFromUnavailableStaleSnapshots" classname="org.freeplane.plugin.graph.projection.EdgeProjectionShould" time="0.001"/>
+  <testcase name="retainIdenticalNativeDescriptorsByDistinctOccurrencesAndExposeTheirLabels" classname="org.freeplane.plugin.graph.projection.EdgeProjectionShould" time="0.004"/>
+  <testcase name="canonicalizeReversedProjectedEdgeKeysAndOrderEngineEdges" classname="org.freeplane.plugin.graph.projection.EdgeProjectionShould" time="0.002"/>
+  <testcase name="preserveProjectionAndContributorOrderingAcrossMapInputPermutations" classname="org.freeplane.plugin.graph.projection.EdgeProjectionShould" time="0.006"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

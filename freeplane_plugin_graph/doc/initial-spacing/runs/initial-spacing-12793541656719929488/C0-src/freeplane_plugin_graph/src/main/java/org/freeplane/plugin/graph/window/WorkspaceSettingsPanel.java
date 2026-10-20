@@ -1,0 +1,165 @@
+package org.freeplane.plugin.graph.window;
+
+import java.awt.BorderLayout;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.Objects;
+import java.util.Set;
+
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.DefaultListCellRenderer;
+import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
+import javax.swing.JLabel;
+import javax.swing.JList;
+import javax.swing.JPanel;
+import javax.swing.SwingConstants;
+import javax.swing.border.EmptyBorder;
+
+import org.freeplane.core.util.TextUtils;
+import org.freeplane.plugin.graph.command.GraphCommands;
+import org.freeplane.plugin.graph.control.GraphWorkspaceHandle;
+import org.freeplane.plugin.graph.workspace.model.DisplaySettings;
+import org.freeplane.plugin.graph.workspace.model.DisplaySettings.CanvasTheme;
+
+final class WorkspaceSettingsPanel extends JPanel {
+    private static final int PANEL_WIDTH = 244;
+
+    private final GraphWorkspaceHandle handle;
+    private final JCheckBox showArrowheads = new JCheckBox(TextUtils.getText("graph_workspace.settings.arrowheads"));
+    private final JComboBox<CanvasTheme> canvasTheme = new JComboBox<CanvasTheme>(CanvasTheme.values());
+    private final JCheckBox rememberViewport = new JCheckBox(TextUtils.getText(
+        "graph_workspace.settings.remember_viewport"));
+    private final JCheckBox dimUnrelated = new JCheckBox(TextUtils.getText(
+        "graph_workspace.settings.dim_unrelated"));
+    private final Set<String> approvedSettingNames = Collections.unmodifiableSet(new LinkedHashSet<String>(Arrays.asList(
+        "show-arrowheads", "canvas-theme", "remember-viewport", "dim-unrelated")));
+    private DisplaySettings settings;
+    private boolean readOnly;
+    private boolean updating;
+
+    WorkspaceSettingsPanel(final GraphWorkspaceHandle handle, final DisplaySettings initialSettings) {
+        this.handle = Objects.requireNonNull(handle, "handle");
+        setName("graph-workspace-settings");
+        setLayout(new BorderLayout(0, 8));
+        setBorder(new EmptyBorder(8, 8, 8, 8));
+        setPreferredSize(new Dimension(PANEL_WIDTH, 0));
+        setMinimumSize(new Dimension(PANEL_WIDTH, 0));
+
+        final JLabel heading = new JLabel(TextUtils.getText("graph_workspace.settings.heading"),
+            SwingConstants.LEADING);
+        heading.setName("graph-workspace-settings-heading");
+        add(heading, BorderLayout.NORTH);
+
+        final JPanel controls = new JPanel();
+        controls.setName("graph-workspace-settings-controls");
+        controls.setLayout(new BoxLayout(controls, BoxLayout.Y_AXIS));
+        showArrowheads.setName("graph-workspace-show-arrowheads");
+        canvasTheme.setName("graph-workspace-canvas-theme");
+        rememberViewport.setName("graph-workspace-remember-viewport");
+        dimUnrelated.setName("graph-workspace-dim-unrelated");
+        canvasTheme.setRenderer(new DefaultListCellRenderer() {
+            private static final long serialVersionUID = 1L;
+
+            @Override
+            public Component getListCellRendererComponent(final JList<?> list, final Object value, final int index,
+                    final boolean isSelected, final boolean cellHasFocus) {
+                final Component result = super.getListCellRendererComponent(list, value, index, isSelected,
+                    cellHasFocus);
+                if (value instanceof CanvasTheme) {
+                    setText(TextUtils.getText("graph_workspace.settings.theme."
+                        + ((CanvasTheme) value).name().toLowerCase(java.util.Locale.ROOT)));
+                }
+                return result;
+            }
+        });
+        final JPanel themeRow = new JPanel(new BorderLayout(0, 2));
+        themeRow.add(new JLabel(TextUtils.getText("graph_workspace.settings.canvas_theme")), BorderLayout.NORTH);
+        themeRow.add(canvasTheme, BorderLayout.CENTER);
+        showArrowheads.setAlignmentX(Component.LEFT_ALIGNMENT);
+        themeRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        rememberViewport.setAlignmentX(Component.LEFT_ALIGNMENT);
+        dimUnrelated.setAlignmentX(Component.LEFT_ALIGNMENT);
+        controls.add(showArrowheads);
+        controls.add(Box.createVerticalStrut(6));
+        controls.add(themeRow);
+        controls.add(Box.createVerticalStrut(6));
+        controls.add(rememberViewport);
+        controls.add(Box.createVerticalStrut(6));
+        controls.add(dimUnrelated);
+        final JPanel packedControls = new JPanel(new BorderLayout());
+        packedControls.add(controls, BorderLayout.NORTH);
+        add(packedControls, BorderLayout.CENTER);
+
+        showArrowheads.addActionListener(event -> publishSettings());
+        canvasTheme.addActionListener(event -> publishSettings());
+        rememberViewport.addActionListener(event -> publishSettings());
+        dimUnrelated.addActionListener(event -> publishSettings());
+        setSettings(Objects.requireNonNull(initialSettings, "initialSettings"));
+    }
+
+    void setSettings(final DisplaySettings value) {
+        settings = Objects.requireNonNull(value, "settings");
+        updating = true;
+        try {
+            showArrowheads.setSelected(settings.showArrowheads());
+            canvasTheme.setSelectedItem(settings.canvasTheme());
+            rememberViewport.setSelected(settings.rememberViewport());
+            dimUnrelated.setSelected(settings.dimUnrelatedNodes());
+        }
+        finally {
+            updating = false;
+        }
+    }
+
+    DisplaySettings settings() {
+        return settings;
+    }
+
+    Set<String> approvedSettingNames() {
+        return approvedSettingNames;
+    }
+
+    JCheckBox showArrowheads() {
+        return showArrowheads;
+    }
+
+    JComboBox<CanvasTheme> canvasTheme() {
+        return canvasTheme;
+    }
+
+    JCheckBox rememberViewport() {
+        return rememberViewport;
+    }
+
+    JCheckBox dimUnrelated() {
+        return dimUnrelated;
+    }
+
+    void setReadOnly(final boolean value) {
+        readOnly = value;
+        showArrowheads.setEnabled(!value);
+        canvasTheme.setEnabled(!value);
+        rememberViewport.setEnabled(!value);
+        dimUnrelated.setEnabled(!value);
+    }
+
+    boolean isReadOnly() {
+        return readOnly;
+    }
+
+    private void publishSettings() {
+        if (updating || readOnly) {
+            return;
+        }
+        settings = DisplaySettings.of(showArrowheads.isSelected(),
+            (CanvasTheme) canvasTheme.getSelectedItem(), rememberViewport.isSelected(),
+            dimUnrelated.isSelected(), settings.mapSidebarWidth(), settings.mapSidebarHidden(),
+            settings.unknownXml());
+        handle.execute(GraphCommands.display(settings));
+    }
+}

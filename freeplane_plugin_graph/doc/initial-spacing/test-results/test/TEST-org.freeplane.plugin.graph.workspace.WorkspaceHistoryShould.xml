@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.workspace.WorkspaceHistoryShould" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-10-20T17:25:51.560Z" hostname="Arch-MSSD0" time="0.01">
+  <properties/>
+  <testcase name="executeAppliedCommandsOnceAndLeaveHistoryUntouchedForNoOpOrRejectedCommands" classname="org.freeplane.plugin.graph.workspace.WorkspaceHistoryShould" time="0.003"/>
+  <testcase name="clearRedoWhenANewCommandIsAppliedAfterUndo" classname="org.freeplane.plugin.graph.workspace.WorkspaceHistoryShould" time="0.001"/>
+  <testcase name="reportEmptyHistoryAndClearBothStacks" classname="org.freeplane.plugin.graph.workspace.WorkspaceHistoryShould" time="0.0"/>
+  <testcase name="makeTransitionArgumentsImmutableAndDefensivelyCopied" classname="org.freeplane.plugin.graph.workspace.WorkspaceHistoryShould" time="0.001"/>
+  <testcase name="restoresSidebarWidthWithTheWholeDisplaySettingsSnapshot" classname="org.freeplane.plugin.graph.workspace.WorkspaceHistoryShould" time="0.0"/>
+  <testcase name="compensateMatchingTokenOnceAndRestorePriorRedoStack" classname="org.freeplane.plugin.graph.workspace.WorkspaceHistoryShould" time="0.001"/>
+  <testcase name="overlayTheCurrentIdentityCompatibilityAndViewportOnUndoAndRedo" classname="org.freeplane.plugin.graph.workspace.WorkspaceHistoryShould" time="0.002"/>
+  <testcase name="rejectsCompensationAfterCommandUndoRedoABA" classname="org.freeplane.plugin.graph.workspace.WorkspaceHistoryShould" time="0.001"/>
+  <testcase name="compensationMustNotUseGlobalUndoHead" classname="org.freeplane.plugin.graph.workspace.WorkspaceHistoryShould" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

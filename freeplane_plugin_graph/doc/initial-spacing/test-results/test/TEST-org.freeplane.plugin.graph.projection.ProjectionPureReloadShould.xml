@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.projection.ProjectionPureReloadShould" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-10-20T17:25:37.675Z" hostname="Arch-MSSD0" time="0.018">
+  <properties/>
+  <testcase name="projectTheDecodedWorkspaceLikeAnIndependentlyRebuiltLiveInput" classname="org.freeplane.plugin.graph.projection.ProjectionPureReloadShould" time="0.018"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

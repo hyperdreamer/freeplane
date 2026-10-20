@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.projection.ProjectionDeterminismShould" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-10-20T17:25:37.564Z" hostname="Arch-MSSD0" time="0.107">
+  <properties/>
+  <testcase name="commutativeOperationsProduceTheSameProjectionFor64RecordedSeeds" classname="org.freeplane.plugin.graph.projection.ProjectionDeterminismShould" time="0.094"/>
+  <testcase name="textOnlyRetainsPositionKeys" classname="org.freeplane.plugin.graph.projection.ProjectionDeterminismShould" time="0.002"/>
+  <testcase name="mapOrderIndependentOfHashInsertion" classname="org.freeplane.plugin.graph.projection.ProjectionDeterminismShould" time="0.008"/>
+  <testcase name="reportOnlyTheAffectedStructuralDiff" classname="org.freeplane.plugin.graph.projection.ProjectionDeterminismShould" time="0.003"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

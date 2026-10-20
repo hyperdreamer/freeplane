@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.layout.BoundaryConflictShould" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-20T16:57:54.462Z" hostname="Arch-MSSD0" time="0.002">
+  <properties/>
+  <testcase name="allowSameMapConflictsAndSortBlockingPins" classname="org.freeplane.plugin.graph.layout.BoundaryConflictShould" time="0.001"/>
+  <testcase name="rejectDormantBlockingPins" classname="org.freeplane.plugin.graph.layout.BoundaryConflictShould" time="0.001"/>
+  <testcase name="normalizeThePairIntoCanonicalOrder" classname="org.freeplane.plugin.graph.layout.BoundaryConflictShould" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

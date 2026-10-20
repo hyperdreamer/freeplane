@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" tests="34" skipped="0" failures="0" errors="0" timestamp="2026-10-20T16:57:54.527Z" hostname="Arch-MSSD0" time="0.514">
+  <properties/>
+  <testcase name="translatesTheWholeFreeMapForANonRootCrossMapPair" classname="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" time="0.015"/>
+  <testcase name="candidateSelectionStopsWhenNoSideHasAMovableContributor" classname="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" time="0.005"/>
+  <testcase name="fastPathPublishesInputPositionsWithZeroRounds" classname="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" time="0.002"/>
+  <testcase name="frozenRealCaseViolatesBeforeAndSettlesInOneRoundAfterCorrection" classname="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" time="0.03"/>
+  <testcase name="ancestorContainmentIsMemoizedAcrossIdenticalFrames" classname="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" time="0.01"/>
+  <testcase name="stageTimingsAttributeHullMeasurementOutsideThePlanStage" classname="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" time="0.25"/>
+  <testcase name="roundLimitCoverageRecomputesReasonsOnTheFinalResidualSet" classname="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" time="0.01"/>
+  <testcase name="movesEveryContributorInTheCapSetByTheSameVector" classname="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" time="0.009"/>
+  <testcase name="reportsOneConflictPerRigidMapPairInViolationOrder" classname="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" time="0.005"/>
+  <testcase name="aTieAtTheAppliedMagnitudeIsValidAndTheTiedPinIsNotDisplaced" classname="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" time="0.009"/>
+  <testcase name="ancestorEscapePairKeysReportEscapingChildren" classname="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" time="0.001"/>
+  <testcase name="translatesBothFreeMapsByHalfTheMinimumTranslation" classname="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" time="0.006"/>
+  <testcase name="movesOnlyTheOtherMapWhenTheFirstMapHasAnActivePin" classname="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" time="0.004"/>
+  <testcase name="dormantPinsDoNotCreateRigidity" classname="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" time="0.006"/>
+  <testcase name="canonicalKeysUseTheCapturedRealHullStrings" classname="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" time="0.0"/>
+  <testcase name="recursesIntoNestedChildHullsWhenMoving" classname="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" time="0.01"/>
+  <testcase name="pinnedMaximumContributorsOnBothSidesReportImmovableSides" classname="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" time="0.007"/>
+  <testcase name="ancestorContainmentMemoRechecksAHullWhoseGeometryChanged" classname="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" time="0.006"/>
+  <testcase name="movesOnlyTheFirstMapWhenTheSecondMapHasAnActivePin" classname="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" time="0.006"/>
+  <testcase name="repeatedRunsAreDeterministic" classname="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" time="0.021"/>
+  <testcase name="bothRigidMapsReportOneImmovableConflictWithBothPins" classname="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" time="0.005"/>
+  <testcase name="suppressedEnclosuresAreNotEnforced" classname="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" time="0.005"/>
+  <testcase name="coincidentPinnedHullsAreContainmentViolationsWithOneConflict" classname="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" time="0.004"/>
+  <testcase name="bareContactIsNotAViolation" classname="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" time="0.004"/>
+  <testcase name="accumulatesAllPairDeltasFromTheRoundSnapshot" classname="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" time="0.008"/>
+  <testcase name="resolvesTheAttemptFiveBothSidesHalfCase" classname="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" time="0.008"/>
+  <testcase name="guardedMstFailureIsWrappedWithItsCause" classname="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" time="0.001"/>
+  <testcase name="resolvesTheMixedComplementarySplitWithATieMove" classname="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" time="0.009"/>
+  <testcase name="subEpsilonOverlapIsContactByTolerance" classname="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" time="0.0"/>
+  <testcase name="recursiveCapabilityFindsTheNestedPinDepth" classname="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" time="0.016"/>
+  <testcase name="capSetsAreReusedWithinAFrame" classname="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" time="0.015"/>
+  <testcase name="movesAnEmptyEnclosureByItsAnchor" classname="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" time="0.014"/>
+  <testcase name="subEpsilonOverlappingEnclosuresAreContactByTolerance" classname="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" time="0.005"/>
+  <testcase name="resolvesAPinnedMaximumContributorWithTheSecondSideFullCandidate" classname="org.freeplane.plugin.graph.layout.BoundarySeparationCorrectionShould" time="0.007"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.performance.PerformanceTripwiresShould" tests="16" skipped="0" failures="0" errors="0" timestamp="2026-10-20T17:25:24.146Z" hostname="Arch-MSSD0" time="13.131">
+  <properties/>
+  <testcase name="serializeCorrectedVisibleLeafLabelsIntoFixtureBytes" classname="org.freeplane.plugin.graph.performance.PerformanceTripwiresShould" time="0.336"/>
+  <testcase name="generateTheExactVariantMatrix" classname="org.freeplane.plugin.graph.performance.PerformanceTripwiresShould" time="0.259"/>
+  <testcase name="rejectsAFrameWhoseRoutingExceedsTheCompleteFrameBound" classname="org.freeplane.plugin.graph.performance.PerformanceTripwiresShould" time="10.85"/>
+  <testcase name="computeNearestRankWithoutMutatingTheInput" classname="org.freeplane.plugin.graph.performance.PerformanceTripwiresShould" time="0.007"/>
+  <testcase name="generateTheReferenceStructuralCounts" classname="org.freeplane.plugin.graph.performance.PerformanceTripwiresShould" time="0.401"/>
+  <testcase name="referenceFixtureStaysInsideTheStrictWorkerAndFirstFrameGates" classname="org.freeplane.plugin.graph.performance.PerformanceTripwiresShould" time="0.035"/>
+  <testcase name="writeOnlyTheThreeDeterministicFixtureFiles" classname="org.freeplane.plugin.graph.performance.PerformanceTripwiresShould" time="0.85"/>
+  <testcase name="rejectInvalidPercentileSamples" classname="org.freeplane.plugin.graph.performance.PerformanceTripwiresShould" time="0.012"/>
+  <testcase name="retainTheInjectedClockAndPublishAcceptedFirstFramesAsSettling" classname="org.freeplane.plugin.graph.performance.PerformanceTripwiresShould" time="0.011"/>
+  <testcase name="referenceFixtureStaysBoundedAndFlagVisible" classname="org.freeplane.plugin.graph.performance.PerformanceTripwiresShould" time="0.003"/>
+  <testcase name="labelEveryGeneratedProjectedNodeFromItsPersistedIdentifier" classname="org.freeplane.plugin.graph.performance.PerformanceTripwiresShould" time="0.28"/>
+  <testcase name="acceptOnlyTheExactSkewedMapAllocation" classname="org.freeplane.plugin.graph.performance.PerformanceTripwiresShould" time="0.007"/>
+  <testcase name="serializeCompleteRowsInStableCsvOrder" classname="org.freeplane.plugin.graph.performance.PerformanceTripwiresShould" time="0.005"/>
+  <testcase name="rejectFramesWhoseNodeAndAnchorKeysDoNotExactlyCoverTheProjection" classname="org.freeplane.plugin.graph.performance.PerformanceTripwiresShould" time="0.006"/>
+  <testcase name="permitOnlyTheDocumentedEmptyBucketsOnTheSkewedFinalMap" classname="org.freeplane.plugin.graph.performance.PerformanceTripwiresShould" time="0.059"/>
+  <testcase name="exposeTheCanonicalStageOrderAndThresholds" classname="org.freeplane.plugin.graph.performance.PerformanceTripwiresShould" time="0.006"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

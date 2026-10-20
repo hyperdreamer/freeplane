@@ -1,0 +1,239 @@
+[
+  {
+    "label": "compile-C0",
+    "command": [
+      "/home/henry/.sdkman/candidates/java/21.0.8-zulu/bin/javac",
+      "--release",
+      "8",
+      "-encoding",
+      "UTF-8",
+      "-implicit:none",
+      "-sourcepath",
+      "/tmp/initial-spacing-replay-wyd72d8p/empty",
+      "-classpath",
+      "/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/gs-core/1.3/1199c349ae387742426ee216bcebcc0b5a51b2fa/gs-core-1.3.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/pherd/1.0/def146e11a24b48f88e8af5fa14ca383f8ee4dd2/pherd-1.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/mbox2/1.0/c20049788c1bde824e17cd8e26c2f515a1eab352/mbox2-1.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/junit/junit/4.13.2/8ac9e16d933b6fb43bc7f576336b8f4d7eb5ba12/junit-4.13.2.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.hamcrest/hamcrest-core/1.3/42a25dc3219429f0e5d060061f71acb49bf010a0/hamcrest-core-1.3.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.assertj/assertj-core/3.27.3/31f5d58a202bd5df4993fb10fa2cffd610c20d6f/assertj-core-3.27.3.jar",
+      "-d",
+      "/tmp/initial-spacing-replay-wyd72d8p/C0",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/AwtGeometryTextMetrics.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/GeometryTextMetrics.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/GraphGeometry.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/GraphGeometryEngine.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/HullGeometry.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/HullIntersection.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/LayoutPoint.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/LayoutPositions.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/NodeGeometry.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/BoundaryConflict.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/BoundaryInvariants.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/BoundarySeparationCorrection.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/BoundarySeparationDiagnostics.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/BoundarySeparationException.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/BoundarySeparationResult.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/BoundarySeparationTimings.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/CountedViolatingPairs.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrection.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/EdgeConflictDiagnostics.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/EdgeConflictException.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/EdgeConflictResult.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/EdgeConflictTimings.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/LayoutCalibration.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/LayoutEngine.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/LayoutFrame.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/LayoutRequest.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/LayoutWorker.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/NodeSeparationProjection.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/NodeSeparationResult.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/PerceptualIdlePolicy.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/ReferenceRepulsionFixture.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/TypedForcesShould.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/BoundaryFootprintShould.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/ClusterPacking.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/ClusterPackingShould.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/ClusterProximityShould.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/GraphStreamLayoutEngine.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/GraphStreamLayoutFactory.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/TypedNodeParticle.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/TypedSpringBox.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/projection/BoundaryTier.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/projection/CanonicalKeys.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/projection/ContributorKey.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/projection/EdgeContributor.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/projection/EnclosureHullKey.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/projection/EnclosureKey.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/projection/GraphProjection.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/projection/NodeProminence.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/projection/PinProjection.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/projection/ProjectedEdge.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/projection/ProjectedEdgeKey.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/projection/ProjectedEnclosure.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/projection/ProjectedEndpointKey.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/projection/ProjectedEndpointVisibility.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/projection/ProjectedNode.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/projection/ProjectedNodeKey.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/projection/ProjectionDiff.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/projection/ProminenceCalculator.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/projection/RecoverableReason.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/projection/RelationshipResolution.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/projection/RelationshipStatus.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/projection/input/ConnectorDescriptor.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/projection/input/ConnectorSnapshot.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/projection/input/SafeNodeLabel.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/projection/input/SourceNodeKey.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/workspace/model/GraphRelationshipRecord.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/workspace/model/MapReferenceId.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/workspace/model/NodeReference.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/workspace/model/PersistedNodeId.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/workspace/model/PinRecord.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/workspace/model/RelationshipDirection.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/workspace/model/RelationshipId.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/workspace/model/UnknownXml.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/workspace/model/WorkspaceId.java"
+    ],
+    "returncode": 0,
+    "elapsed_s": 3.4264670370030217
+  },
+  {
+    "label": "compile-candidate",
+    "command": [
+      "/home/henry/.sdkman/candidates/java/21.0.8-zulu/bin/javac",
+      "--release",
+      "8",
+      "-encoding",
+      "UTF-8",
+      "-implicit:none",
+      "-sourcepath",
+      "/tmp/initial-spacing-replay-wyd72d8p/empty",
+      "-classpath",
+      "/tmp/initial-spacing-replay-wyd72d8p/C0:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/gs-core/1.3/1199c349ae387742426ee216bcebcc0b5a51b2fa/gs-core-1.3.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/pherd/1.0/def146e11a24b48f88e8af5fa14ca383f8ee4dd2/pherd-1.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/mbox2/1.0/c20049788c1bde824e17cd8e26c2f515a1eab352/mbox2-1.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/junit/junit/4.13.2/8ac9e16d933b6fb43bc7f576336b8f4d7eb5ba12/junit-4.13.2.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.hamcrest/hamcrest-core/1.3/42a25dc3219429f0e5d060061f71acb49bf010a0/hamcrest-core-1.3.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.assertj/assertj-core/3.27.3/31f5d58a202bd5df4993fb10fa2cffd610c20d6f/assertj-core-3.27.3.jar",
+      "-d",
+      "/tmp/initial-spacing-replay-wyd72d8p/candidate",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/GraphStreamLayoutEngine.java",
+      "/tmp/initial-spacing-replay-wyd72d8p/src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/ClusterPacking.java"
+    ],
+    "returncode": 0,
+    "elapsed_s": 1.3180014999816194
+  },
+  {
+    "label": "compile-probes",
+    "command": [
+      "/home/henry/.sdkman/candidates/java/21.0.8-zulu/bin/javac",
+      "--release",
+      "8",
+      "-encoding",
+      "UTF-8",
+      "-implicit:none",
+      "-sourcepath",
+      "/tmp/initial-spacing-replay-wyd72d8p/empty",
+      "-classpath",
+      "/tmp/initial-spacing-replay-wyd72d8p/C0:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/gs-core/1.3/1199c349ae387742426ee216bcebcc0b5a51b2fa/gs-core-1.3.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/pherd/1.0/def146e11a24b48f88e8af5fa14ca383f8ee4dd2/pherd-1.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/mbox2/1.0/c20049788c1bde824e17cd8e26c2f515a1eab352/mbox2-1.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/junit/junit/4.13.2/8ac9e16d933b6fb43bc7f576336b8f4d7eb5ba12/junit-4.13.2.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.hamcrest/hamcrest-core/1.3/42a25dc3219429f0e5d060061f71acb49bf010a0/hamcrest-core-1.3.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.assertj/assertj-core/3.27.3/31f5d58a202bd5df4993fb10fa2cffd610c20d6f/assertj-core-3.27.3.jar",
+      "-d",
+      "/tmp/initial-spacing-replay-wyd72d8p/probes",
+      "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/reports/frontier-review-5/SpacingProbe.java",
+      "/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/reports/frontier-review-5/ReviewSeedProbe.java"
+    ],
+    "returncode": 0,
+    "elapsed_s": 1.2689475750084966
+  },
+  {
+    "label": "C0-reference",
+    "command": [
+      "/home/henry/.sdkman/candidates/java/21.0.8-zulu/bin/java",
+      "-cp",
+      "/tmp/initial-spacing-replay-wyd72d8p/C0:/tmp/initial-spacing-replay-wyd72d8p/probes:/tmp/initial-spacing-replay-wyd72d8p/C0:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/gs-core/1.3/1199c349ae387742426ee216bcebcc0b5a51b2fa/gs-core-1.3.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/pherd/1.0/def146e11a24b48f88e8af5fa14ca383f8ee4dd2/pherd-1.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/mbox2/1.0/c20049788c1bde824e17cd8e26c2f515a1eab352/mbox2-1.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/junit/junit/4.13.2/8ac9e16d933b6fb43bc7f576336b8f4d7eb5ba12/junit-4.13.2.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.hamcrest/hamcrest-core/1.3/42a25dc3219429f0e5d060061f71acb49bf010a0/hamcrest-core-1.3.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.assertj/assertj-core/3.27.3/31f5d58a202bd5df4993fb10fa2cffd610c20d6f/assertj-core-3.27.3.jar",
+      "org.freeplane.plugin.graph.layout.graphstream.ReviewSeedProbe",
+      "reference",
+      "6000"
+    ],
+    "returncode": 0,
+    "elapsed_s": 1.26815198402619
+  },
+  {
+    "label": "C0-S1",
+    "command": [
+      "/home/henry/.sdkman/candidates/java/21.0.8-zulu/bin/java",
+      "-cp",
+      "/tmp/initial-spacing-replay-wyd72d8p/C0:/tmp/initial-spacing-replay-wyd72d8p/probes:/tmp/initial-spacing-replay-wyd72d8p/C0:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/gs-core/1.3/1199c349ae387742426ee216bcebcc0b5a51b2fa/gs-core-1.3.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/pherd/1.0/def146e11a24b48f88e8af5fa14ca383f8ee4dd2/pherd-1.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/mbox2/1.0/c20049788c1bde824e17cd8e26c2f515a1eab352/mbox2-1.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/junit/junit/4.13.2/8ac9e16d933b6fb43bc7f576336b8f4d7eb5ba12/junit-4.13.2.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.hamcrest/hamcrest-core/1.3/42a25dc3219429f0e5d060061f71acb49bf010a0/hamcrest-core-1.3.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.assertj/assertj-core/3.27.3/31f5d58a202bd5df4993fb10fa2cffd610c20d6f/assertj-core-3.27.3.jar",
+      "org.freeplane.plugin.graph.layout.graphstream.ReviewSeedProbe",
+      "S1",
+      "6000"
+    ],
+    "returncode": 0,
+    "elapsed_s": 1.9702442180132493
+  },
+  {
+    "label": "C0-cross",
+    "command": [
+      "/home/henry/.sdkman/candidates/java/21.0.8-zulu/bin/java",
+      "-cp",
+      "/tmp/initial-spacing-replay-wyd72d8p/C0:/tmp/initial-spacing-replay-wyd72d8p/probes:/tmp/initial-spacing-replay-wyd72d8p/C0:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/gs-core/1.3/1199c349ae387742426ee216bcebcc0b5a51b2fa/gs-core-1.3.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/pherd/1.0/def146e11a24b48f88e8af5fa14ca383f8ee4dd2/pherd-1.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/mbox2/1.0/c20049788c1bde824e17cd8e26c2f515a1eab352/mbox2-1.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/junit/junit/4.13.2/8ac9e16d933b6fb43bc7f576336b8f4d7eb5ba12/junit-4.13.2.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.hamcrest/hamcrest-core/1.3/42a25dc3219429f0e5d060061f71acb49bf010a0/hamcrest-core-1.3.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.assertj/assertj-core/3.27.3/31f5d58a202bd5df4993fb10fa2cffd610c20d6f/assertj-core-3.27.3.jar",
+      "org.freeplane.plugin.graph.layout.graphstream.ReviewSeedProbe",
+      "cross",
+      "6000"
+    ],
+    "returncode": 0,
+    "elapsed_s": 118.84324407303939
+  },
+  {
+    "label": "C0-rest",
+    "command": [
+      "/home/henry/.sdkman/candidates/java/21.0.8-zulu/bin/java",
+      "-cp",
+      "/tmp/initial-spacing-replay-wyd72d8p/C0:/tmp/initial-spacing-replay-wyd72d8p/probes:/tmp/initial-spacing-replay-wyd72d8p/C0:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/gs-core/1.3/1199c349ae387742426ee216bcebcc0b5a51b2fa/gs-core-1.3.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/pherd/1.0/def146e11a24b48f88e8af5fa14ca383f8ee4dd2/pherd-1.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/mbox2/1.0/c20049788c1bde824e17cd8e26c2f515a1eab352/mbox2-1.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/junit/junit/4.13.2/8ac9e16d933b6fb43bc7f576336b8f4d7eb5ba12/junit-4.13.2.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.hamcrest/hamcrest-core/1.3/42a25dc3219429f0e5d060061f71acb49bf010a0/hamcrest-core-1.3.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.assertj/assertj-core/3.27.3/31f5d58a202bd5df4993fb10fa2cffd610c20d6f/assertj-core-3.27.3.jar",
+      "org.freeplane.plugin.graph.layout.graphstream.ReviewSeedProbe",
+      "rest"
+    ],
+    "returncode": 0,
+    "elapsed_s": 0.21512477099895477
+  },
+  {
+    "label": "candidate-reference",
+    "command": [
+      "/home/henry/.sdkman/candidates/java/21.0.8-zulu/bin/java",
+      "-cp",
+      "/tmp/initial-spacing-replay-wyd72d8p/candidate:/tmp/initial-spacing-replay-wyd72d8p/probes:/tmp/initial-spacing-replay-wyd72d8p/C0:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/gs-core/1.3/1199c349ae387742426ee216bcebcc0b5a51b2fa/gs-core-1.3.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/pherd/1.0/def146e11a24b48f88e8af5fa14ca383f8ee4dd2/pherd-1.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/mbox2/1.0/c20049788c1bde824e17cd8e26c2f515a1eab352/mbox2-1.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/junit/junit/4.13.2/8ac9e16d933b6fb43bc7f576336b8f4d7eb5ba12/junit-4.13.2.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.hamcrest/hamcrest-core/1.3/42a25dc3219429f0e5d060061f71acb49bf010a0/hamcrest-core-1.3.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.assertj/assertj-core/3.27.3/31f5d58a202bd5df4993fb10fa2cffd610c20d6f/assertj-core-3.27.3.jar",
+      "org.freeplane.plugin.graph.layout.graphstream.ReviewSeedProbe",
+      "reference",
+      "6000"
+    ],
+    "returncode": 0,
+    "elapsed_s": 1.0176188030163758
+  },
+  {
+    "label": "candidate-S1",
+    "command": [
+      "/home/henry/.sdkman/candidates/java/21.0.8-zulu/bin/java",
+      "-cp",
+      "/tmp/initial-spacing-replay-wyd72d8p/candidate:/tmp/initial-spacing-replay-wyd72d8p/probes:/tmp/initial-spacing-replay-wyd72d8p/C0:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/gs-core/1.3/1199c349ae387742426ee216bcebcc0b5a51b2fa/gs-core-1.3.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/pherd/1.0/def146e11a24b48f88e8af5fa14ca383f8ee4dd2/pherd-1.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/mbox2/1.0/c20049788c1bde824e17cd8e26c2f515a1eab352/mbox2-1.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/junit/junit/4.13.2/8ac9e16d933b6fb43bc7f576336b8f4d7eb5ba12/junit-4.13.2.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.hamcrest/hamcrest-core/1.3/42a25dc3219429f0e5d060061f71acb49bf010a0/hamcrest-core-1.3.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.assertj/assertj-core/3.27.3/31f5d58a202bd5df4993fb10fa2cffd610c20d6f/assertj-core-3.27.3.jar",
+      "org.freeplane.plugin.graph.layout.graphstream.ReviewSeedProbe",
+      "S1",
+      "6000"
+    ],
+    "returncode": 0,
+    "elapsed_s": 0.8169604730210267
+  },
+  {
+    "label": "candidate-cross",
+    "command": [
+      "/home/henry/.sdkman/candidates/java/21.0.8-zulu/bin/java",
+      "-cp",
+      "/tmp/initial-spacing-replay-wyd72d8p/candidate:/tmp/initial-spacing-replay-wyd72d8p/probes:/tmp/initial-spacing-replay-wyd72d8p/C0:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/gs-core/1.3/1199c349ae387742426ee216bcebcc0b5a51b2fa/gs-core-1.3.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/pherd/1.0/def146e11a24b48f88e8af5fa14ca383f8ee4dd2/pherd-1.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/mbox2/1.0/c20049788c1bde824e17cd8e26c2f515a1eab352/mbox2-1.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/junit/junit/4.13.2/8ac9e16d933b6fb43bc7f576336b8f4d7eb5ba12/junit-4.13.2.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.hamcrest/hamcrest-core/1.3/42a25dc3219429f0e5d060061f71acb49bf010a0/hamcrest-core-1.3.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.assertj/assertj-core/3.27.3/31f5d58a202bd5df4993fb10fa2cffd610c20d6f/assertj-core-3.27.3.jar",
+      "org.freeplane.plugin.graph.layout.graphstream.ReviewSeedProbe",
+      "cross",
+      "6000"
+    ],
+    "returncode": 0,
+    "elapsed_s": 194.60353778098943
+  },
+  {
+    "label": "candidate-rest",
+    "command": [
+      "/home/henry/.sdkman/candidates/java/21.0.8-zulu/bin/java",
+      "-cp",
+      "/tmp/initial-spacing-replay-wyd72d8p/candidate:/tmp/initial-spacing-replay-wyd72d8p/probes:/tmp/initial-spacing-replay-wyd72d8p/C0:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/gs-core/1.3/1199c349ae387742426ee216bcebcc0b5a51b2fa/gs-core-1.3.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/pherd/1.0/def146e11a24b48f88e8af5fa14ca383f8ee4dd2/pherd-1.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/mbox2/1.0/c20049788c1bde824e17cd8e26c2f515a1eab352/mbox2-1.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/junit/junit/4.13.2/8ac9e16d933b6fb43bc7f576336b8f4d7eb5ba12/junit-4.13.2.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.hamcrest/hamcrest-core/1.3/42a25dc3219429f0e5d060061f71acb49bf010a0/hamcrest-core-1.3.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.assertj/assertj-core/3.27.3/31f5d58a202bd5df4993fb10fa2cffd610c20d6f/assertj-core-3.27.3.jar",
+      "org.freeplane.plugin.graph.layout.graphstream.ReviewSeedProbe",
+      "rest"
+    ],
+    "returncode": 0,
+    "elapsed_s": 0.1645078290021047
+  }
+]

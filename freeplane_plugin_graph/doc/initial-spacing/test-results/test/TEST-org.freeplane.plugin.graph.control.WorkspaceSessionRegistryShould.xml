@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.control.WorkspaceSessionRegistryShould" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-10-20T16:57:38.402Z" hostname="Arch-MSSD0" time="0.028">
+  <properties/>
+  <testcase name="canonicalOwnershipLetsDuplicateOpenFindTheOriginalSession" classname="org.freeplane.plugin.graph.control.WorkspaceSessionRegistryShould" time="0.002"/>
+  <testcase name="rejectsOwnedAndReservedTargetsBeforeTheCallerWritesBytes" classname="org.freeplane.plugin.graph.control.WorkspaceSessionRegistryShould" time="0.001"/>
+  <testcase name="closingAfterSaveFailureReleasesOnlyThePendingTarget" classname="org.freeplane.plugin.graph.control.WorkspaceSessionRegistryShould" time="0.001"/>
+  <testcase name="validatesIdentityChangeAndReservationLifecycle" classname="org.freeplane.plugin.graph.control.WorkspaceSessionRegistryShould" time="0.013"/>
+  <testcase name="serializesConcurrentReservationsForOneCanonicalTarget" classname="org.freeplane.plugin.graph.control.WorkspaceSessionRegistryShould" time="0.004"/>
+  <testcase name="unregisterReleasesCommittedAndPendingOwnership" classname="org.freeplane.plugin.graph.control.WorkspaceSessionRegistryShould" time="0.004"/>
+  <testcase name="commitRekeysWithoutObservableUnownedWindow" classname="org.freeplane.plugin.graph.control.WorkspaceSessionRegistryShould" time="0.003"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.window.MapSidebarPanelShould" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-10-20T17:25:49.326Z" hostname="Arch-MSSD0" time="0.075">
+  <properties/>
+  <testcase name="notifiesTheCollapseListenerOncePerRealChange" classname="org.freeplane.plugin.graph.window.MapSidebarPanelShould" time="0.009"/>
+  <testcase name="updatesTheRailBadgeFromTheActiveMapCount" classname="org.freeplane.plugin.graph.window.MapSidebarPanelShould" time="0.003"/>
+  <testcase name="railRestoreButtonHasNoPanelOwnedListener" classname="org.freeplane.plugin.graph.window.MapSidebarPanelShould" time="0.002"/>
+  <testcase name="paintsTheRotatedRailLabelAcrossItsFullHeight" classname="org.freeplane.plugin.graph.window.MapSidebarPanelShould" time="0.01"/>
+  <testcase name="givesTheRotatedRailLabelItsFullRotatedSizeDuringLayout" classname="org.freeplane.plugin.graph.window.MapSidebarPanelShould" time="0.006"/>
+  <testcase name="flipsThePreferredAndMinimumWidthsWithTheCollapsedFlag" classname="org.freeplane.plugin.graph.window.MapSidebarPanelShould" time="0.005"/>
+  <testcase name="showsOnlyOneOfRailAndMapList" classname="org.freeplane.plugin.graph.window.MapSidebarPanelShould" time="0.004"/>
+  <testcase name="forwardsReadOnlyToTheMapListWithoutChangingVisibility" classname="org.freeplane.plugin.graph.window.MapSidebarPanelShould" time="0.005"/>
+  <testcase name="modelOwnsRailRestoreUserPath" classname="org.freeplane.plugin.graph.window.MapSidebarPanelShould" time="0.025"/>
+  <testcase name="programmaticCollapsedListenerRemainsUnchanged" classname="org.freeplane.plugin.graph.window.MapSidebarPanelShould" time="0.006"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

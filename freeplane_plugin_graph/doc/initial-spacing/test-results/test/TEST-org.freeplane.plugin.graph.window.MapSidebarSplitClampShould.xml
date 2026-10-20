@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.window.MapSidebarSplitClampShould" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-10-20T17:25:49.404Z" hostname="Arch-MSSD0" time="0.012">
+  <properties/>
+  <testcase name="commitsNothingForAPressAndReleaseWithoutMovement" classname="org.freeplane.plugin.graph.window.MapSidebarSplitClampShould" time="0.004"/>
+  <testcase name="reclampsAProgrammaticEndMoveToTheAllowedMaximum" classname="org.freeplane.plugin.graph.window.MapSidebarSplitClampShould" time="0.002"/>
+  <testcase name="reportsTheExactInteractiveCeilingAsMaximumWidth" classname="org.freeplane.plugin.graph.window.MapSidebarSplitClampShould" time="0.002"/>
+  <testcase name="reportsMinimumDividerLocationAtOrAboveTheSidebarMinimum" classname="org.freeplane.plugin.graph.window.MapSidebarSplitClampShould" time="0.001"/>
+  <testcase name="commitsOneClampedWidthForOneDividerDrag" classname="org.freeplane.plugin.graph.window.MapSidebarSplitClampShould" time="0.001"/>
+  <testcase name="holdsTheSqueezedRegimeWithoutCommits" classname="org.freeplane.plugin.graph.window.MapSidebarSplitClampShould" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

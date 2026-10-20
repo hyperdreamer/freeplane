@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.window.MapListSelectionPersistenceShould" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-10-20T17:25:49.070Z" hostname="Arch-MSSD0" time="0.248">
+  <properties/>
+  <testcase name="inactiveRowSelectionSurvivesNeutralRefresh" classname="org.freeplane.plugin.graph.window.MapListSelectionPersistenceShould" time="0.011"/>
+  <testcase name="clickedRowMustNotSnapBackToStaleGraphSelectionDuringRefresh" classname="org.freeplane.plugin.graph.window.MapListSelectionPersistenceShould" time="0.006"/>
+  <testcase name="laterRowClickWinsOverAnEarlierDeactivateTarget" classname="org.freeplane.plugin.graph.window.MapListSelectionPersistenceShould" time="0.075"/>
+  <testcase name="reactivateClickMustSurviveAnInterleavedSettleFrameAndThePartitionTransition" classname="org.freeplane.plugin.graph.window.MapListSelectionPersistenceShould" time="0.076"/>
+  <testcase name="activeRowSelectionSurvivesNeutralRefresh" classname="org.freeplane.plugin.graph.window.MapListSelectionPersistenceShould" time="0.007"/>
+  <testcase name="deactivateClickMustSurviveAnInterleavedSettleFrameAndThePartitionTransition" classname="org.freeplane.plugin.graph.window.MapListSelectionPersistenceShould" time="0.073"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

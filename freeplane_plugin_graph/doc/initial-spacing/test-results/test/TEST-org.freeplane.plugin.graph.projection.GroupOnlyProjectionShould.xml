@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.projection.GroupOnlyProjectionShould" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-10-20T17:25:37.535Z" hostname="Arch-MSSD0" time="0.007">
+  <properties/>
+  <testcase name="atomizeOuterGroupMarkerInUnaryGroupChain" classname="org.freeplane.plugin.graph.projection.GroupOnlyProjectionShould" time="0.001"/>
+  <testcase name="placeGroupMarkedDescendantsUnderNearestRetainedAncestor" classname="org.freeplane.plugin.graph.projection.GroupOnlyProjectionShould" time="0.001"/>
+  <testcase name="excludedGroupsStayHidden" classname="org.freeplane.plugin.graph.projection.GroupOnlyProjectionShould" time="0.001"/>
+  <testcase name="pinsActivateOnlyForGroupMarkedNodes" classname="org.freeplane.plugin.graph.projection.GroupOnlyProjectionShould" time="0.001"/>
+  <testcase name="projectOnlyGroupMarkedNodesAsVertices" classname="org.freeplane.plugin.graph.projection.GroupOnlyProjectionShould" time="0.001"/>
+  <testcase name="atomizeOuterGroupMarkerAndOmitInnerGroupMarker" classname="org.freeplane.plugin.graph.projection.GroupOnlyProjectionShould" time="0.001"/>
+  <testcase name="mapWithoutGroupsProjectsOnlyItsFrame" classname="org.freeplane.plugin.graph.projection.GroupOnlyProjectionShould" time="0.001"/>
+  <testcase name="togglingTheMarkerAddsAndRemovesTheNode" classname="org.freeplane.plugin.graph.projection.GroupOnlyProjectionShould" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

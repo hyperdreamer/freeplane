@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.canvas.AdaptiveRenderingPolicyShould" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-10-20T16:57:27.368Z" hostname="Arch-MSSD0" time="0.004">
+  <properties/>
+  <testcase name="rejectNegativeCounts" classname="org.freeplane.plugin.graph.canvas.AdaptiveRenderingPolicyShould" time="0.002"/>
+  <testcase name="useFullRenderingBelowTheNodeTarget" classname="org.freeplane.plugin.graph.canvas.AdaptiveRenderingPolicyShould" time="0.0"/>
+  <testcase name="reportTheEngineeringTargetAtTheExactBoundary" classname="org.freeplane.plugin.graph.canvas.AdaptiveRenderingPolicyShould" time="0.0"/>
+  <testcase name="useOverTargetRenderingAfterEitherEngineeringTarget" classname="org.freeplane.plugin.graph.canvas.AdaptiveRenderingPolicyShould" time="0.0"/>
+  <testcase name="useDenseRenderingAtTheNodeOrEdgeTarget" classname="org.freeplane.plugin.graph.canvas.AdaptiveRenderingPolicyShould" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

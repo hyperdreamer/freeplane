@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.workspace.GraphWorkspaceStoreShould" tests="23" skipped="0" failures="0" errors="0" timestamp="2026-10-20T17:25:51.352Z" hostname="Arch-MSSD0" time="0.116">
+  <properties/>
+  <testcase name="preserveHistoryAcrossNormalSavesAndAutosaveUndoAndRedo" classname="org.freeplane.plugin.graph.workspace.GraphWorkspaceStoreShould" time="0.008"/>
+  <testcase name="autosaveAfterExactlyOneHundredFiftyMillisecondsAndIgnoreStaleRunnables" classname="org.freeplane.plugin.graph.workspace.GraphWorkspaceStoreShould" time="0.006"/>
+  <testcase name="restoresAnAlreadyDirtyEnvelopeWhenCompensationSucceeds" classname="org.freeplane.plugin.graph.workspace.GraphWorkspaceStoreShould" time="0.004"/>
+  <testcase name="dirtyCloseSavesSynchronouslyBeforeClosing" classname="org.freeplane.plugin.graph.workspace.GraphWorkspaceStoreShould" time="0.007"/>
+  <testcase name="mapTransitionsAndKeepCommandResultModifiersImmutable" classname="org.freeplane.plugin.graph.workspace.GraphWorkspaceStoreShould" time="0.002"/>
+  <testcase name="retriesCompensationAfterRestorePersistsBeforeBytesThenThrows" classname="org.freeplane.plugin.graph.workspace.GraphWorkspaceStoreShould" time="0.003"/>
+  <testcase name="keepsCompensationRetryableAfterATransientRestoreWriteFailure" classname="org.freeplane.plugin.graph.workspace.GraphWorkspaceStoreShould" time="0.002"/>
+  <testcase name="retainPriorBytesAndDirtyStateAfterFailureThenAllowExplicitRetry" classname="org.freeplane.plugin.graph.workspace.GraphWorkspaceStoreShould" time="0.006"/>
+  <testcase name="compensatesAfterAutosaveAndRestoresTheCapturedPersistedBytes" classname="org.freeplane.plugin.graph.workspace.GraphWorkspaceStoreShould" time="0.002"/>
+  <testcase name="preserveOldStateHistoryAndTargetBytesWhenSaveAsFails" classname="org.freeplane.plugin.graph.workspace.GraphWorkspaceStoreShould" time="0.005"/>
+  <testcase name="rejectCreatingOverAnExistingWorkspaceWithoutReplacingIt" classname="org.freeplane.plugin.graph.workspace.GraphWorkspaceStoreShould" time="0.003"/>
+  <testcase name="publishSchedulerRejectionAsASaveFailureWithoutRejectingTheAppliedCommand" classname="org.freeplane.plugin.graph.workspace.GraphWorkspaceStoreShould" time="0.002"/>
+  <testcase name="createSynchronouslyWritesAVersionOneDocumentAndStartsClean" classname="org.freeplane.plugin.graph.workspace.GraphWorkspaceStoreShould" time="0.005"/>
+  <testcase name="saveAsClearsHistorySoUndoRedoCannotRestoreOldIdentityOrUris" classname="org.freeplane.plugin.graph.workspace.GraphWorkspaceStoreShould" time="0.012"/>
+  <testcase name="updateViewportWithoutChangingHistoryAndReportAnEqualViewportAsNoOp" classname="org.freeplane.plugin.graph.workspace.GraphWorkspaceStoreShould" time="0.002"/>
+  <testcase name="openLoadsTheExactDocumentWithoutWriting" classname="org.freeplane.plugin.graph.workspace.GraphWorkspaceStoreShould" time="0.004"/>
+  <testcase name="rejectAllMutationAndSaveOperationsForReadOnlyNewerDocumentsWithoutInvokingCommands" classname="org.freeplane.plugin.graph.workspace.GraphWorkspaceStoreShould" time="0.012"/>
+  <testcase name="rejectsCompensationAfterInterpositionOrSaveAsWithoutChangingCurrentState" classname="org.freeplane.plugin.graph.workspace.GraphWorkspaceStoreShould" time="0.007"/>
+  <testcase name="executeWithCompensationRestoresCleanPersistedBytesAndIsIdempotent" classname="org.freeplane.plugin.graph.workspace.GraphWorkspaceStoreShould" time="0.001"/>
+  <testcase name="allowCrossThreadReadsToCompleteDuringDocumentChangedCallbacks" classname="org.freeplane.plugin.graph.workspace.GraphWorkspaceStoreShould" time="0.003"/>
+  <testcase name="leaveFailedCloseOpenForRetryAndAllowExplicitDiscardWithoutWriting" classname="org.freeplane.plugin.graph.workspace.GraphWorkspaceStoreShould" time="0.005"/>
+  <testcase name="deliverEventsInOrderRemoveListenersAndAllowReentrantSaveWithoutRecursion" classname="org.freeplane.plugin.graph.workspace.GraphWorkspaceStoreShould" time="0.007"/>
+  <testcase name="saveOnlyTheWorkspaceAndNeverRequireSourceMapContents" classname="org.freeplane.plugin.graph.workspace.GraphWorkspaceStoreShould" time="0.007"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
