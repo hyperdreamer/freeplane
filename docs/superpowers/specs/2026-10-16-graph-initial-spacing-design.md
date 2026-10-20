@@ -358,11 +358,18 @@ Two facts follow, and neither is a claim of impossibility:
   and after 100 further frames (+0.55).
 - The settled gate is reachable at other parameter values, but only with a particular
   same-map fixture: ring 40 clears the relationship-free case (+35.00), all six cross-map
-  enclosures, and the 4-connector same-map fixture (+11.09). It does not clear the
-  2-connector same-map fixture, whose median moves only +0.61 across rings 24 to 56.
+  enclosures, and the 4-connector same-map fixture (+11.09). It does not clear the 2-connector
+  same-map fixture: at post-100 its median improves +0.61 relative to C0, and raising the ring
+  from 24 to 56 moves that same post-100 median only from 6.552148 to 6.619966, a change of
+  +0.068. At first idle the same comparison runs 7.086 to 6.937. Every figure in this paragraph
+  names its observation stage and its comparator.
 
-The cause of the residual gap is structural: a pair chained by a relationship is pulled
-toward its rest length `r₁ + r₂ + MIN_GAP`, which this feature deliberately leaves unchanged.
+The cause of the residual gap is structural: a pair of **nodes** chained by a relationship is
+pulled toward its rest length `r₁ + r₂ + MIN_GAP`, whose additive term this feature leaves
+unchanged — but only for node–node endpoints of unchanged rendered radius. Where an endpoint is
+an enclosure, its radius is the content ring radius, so the total rest **does** change: a
+production-topology probe measured an enclosure–enclosure rest moving from 37.112698 to
+62.568542 while the additive `MIN_GAP` term stayed 6.0. See E2-A6 item 3.
 An enclosure can also be compressed toward the collision floor by *external* connector
 tension even when none of its own nearest pairs carry an edge: cross-map `B-sub 0` sits at
 exactly `MIN_GAP` under ring 24 and ring 30, while `A-sub 0` measures 8.708 at ring 24 and is
@@ -525,7 +532,10 @@ starting point.
    containment rest lengths; enclosure endpoint radii inside relationship rest lengths;
    hierarchy rest lengths derived from placements; anchor extents and anchor repulsion
    (`TypedSpringBox` 185/188); and worker geometry and correction. Same-map and cross-map
-   endpoint types must be tested separately.
+   endpoint types must be tested separately. Receipt: a production-topology probe measured an
+   enclosure–enclosure rest length rising from 37.112698 to 62.568542 under ring 24 while the
+   additive `MIN_GAP` term stayed 6.0, so the unchanged-total phrasing is false for any endpoint
+   that is an enclosure and must never be restated unqualified.
 4. **Fixtures and metric conventions (review minors 6 and 7).** The specification must freeze
    each required fixture: generator, node/enclosure/edge counts and ordering, nesting,
    endpoint and contributor types, workspace ids, labels and label metrics, calibration,
@@ -552,6 +562,7 @@ The approved body is preserved byte-identical above. The following surviving sen
 | Lines 90-95: the "18 units at 0.005 per step, therefore at least 3600 steps" lower bound | E2-A6 item 2 (argument withdrawn as unsound) |
 | Lines 110-112: the last-ulp roundoff rationale for the `ClusterProximityShould` allowance | E2-A6 item 1 (replaced by a corrected-frame contract) |
 | Line 151: the required "same-map relationship case" | E2-A5 (single-map native-connector case; relationships cannot be same-map) |
+| Lines 233-237: "On a fully fresh or reset engine seed frame, adjacent unpinned equal-radius direct nodes in every enclosure with at least two direct nodes have a 24-unit disc-edge gap within numerical tolerance" | E2-A2 (superseded in full: the requirement now carries the uniform-unmodified-ring eligibility conditions, the `i ≠ j` exclusion, the even-count median definition, the explicit tolerance 1e-6, and the mixed-prominence formula `24 + 2·maxRadius − rᵢ − rⱼ`. An independent probe measured 27.2 units between adjacent radius-8 nodes when another node's radius was 9.6, exactly as the formula predicts, so the unqualified version is false) |
 | Lines 145 and 244: "2000 worker steps and 30 seconds per fixture" | E2-A4 (6000 steps / 600 s test observation bounds, one authoritative table) |
 | Lines 165-169: every qualifying enclosure must improve by at least 6.0 at first idle | E2-A2 (the same requirement moved to the seed frame) plus E2-A3 (settled behaviour reported, not gated) |
 | Lines 200-204: settled acceptance bullet ("idle within 2000 steps", "at least 6 units of median improvement") | E2-A2 and E2-A4 |
@@ -561,3 +572,7 @@ The approved body is preserved byte-identical above. The following surviving sen
 Everything else in the approved body stands, including the 24-unit user choice, scope B,
 the ring-only confinement, the unchanged 8-unit packing gutter, and the requirement that the
 schematic is not presented as a settled measurement.
+
+The exact-gap acceptance bullet at lines 233-237 is the one bullet that is superseded even
+though it looks compatible: it is the sentence E2-A2 replaces. Nothing in E2-A8 is meant to
+leave it operative.
