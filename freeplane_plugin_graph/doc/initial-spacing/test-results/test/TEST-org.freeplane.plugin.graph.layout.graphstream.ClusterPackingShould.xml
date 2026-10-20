@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.layout.graphstream.ClusterPackingShould" tests="17" skipped="0" failures="0" errors="0" timestamp="2026-10-20T17:04:03.786Z" hostname="Arch-MSSD0" time="0.264">
+  <properties/>
+  <testcase name="placementsAreDeterministicAcrossRepeatedCalls" classname="org.freeplane.plugin.graph.layout.graphstream.ClusterPackingShould" time="0.001"/>
+  <testcase name="twoHundredChildrenPackWithinThreeSeconds" classname="org.freeplane.plugin.graph.layout.graphstream.ClusterPackingShould" time="0.253"/>
+  <testcase name="emptyInputProducesNoPlacements" classname="org.freeplane.plugin.graph.layout.graphstream.ClusterPackingShould" time="0.0"/>
+  <testcase name="duplicateAnchorKeysAreRejected" classname="org.freeplane.plugin.graph.layout.graphstream.ClusterPackingShould" time="0.002"/>
+  <testcase name="singleItemIsPlacedAtTheOrigin" classname="org.freeplane.plugin.graph.layout.graphstream.ClusterPackingShould" time="0.0"/>
+  <testcase name="recordedContactsSatisfyTheContactPredicate" classname="org.freeplane.plugin.graph.layout.graphstream.ClusterPackingShould" time="0.0"/>
+  <testcase name="contentItemIsOrderedFirstAndPlacedAtTheOrigin" classname="org.freeplane.plugin.graph.layout.graphstream.ClusterPackingShould" time="0.0"/>
+  <testcase name="invalidDimensionsAndGapAreRejected" classname="org.freeplane.plugin.graph.layout.graphstream.ClusterPackingShould" time="0.005"/>
+  <testcase name="everyPairIsSeparatedOnAtLeastOneAxis" classname="org.freeplane.plugin.graph.layout.graphstream.ClusterPackingShould" time="0.0"/>
+  <testcase name="equalAreaCandidatesTieBreakByDistanceFromTheOrigin" classname="org.freeplane.plugin.graph.layout.graphstream.ClusterPackingShould" time="0.0"/>
+  <testcase name="selectionMinimisesTheAssemblyBoundingBoxArea" classname="org.freeplane.plugin.graph.layout.graphstream.ClusterPackingShould" time="0.0"/>
+  <testcase name="remainingItemsAreOrderedByDescendingAreaThenProjectionOrder" classname="org.freeplane.plugin.graph.layout.graphstream.ClusterPackingShould" time="0.0"/>
+  <testcase name="centreLineCandidateIsUsed" classname="org.freeplane.plugin.graph.layout.graphstream.ClusterPackingShould" time="0.0"/>
+  <testcase name="twoItemsAreSeparatedByExactlyTheGap" classname="org.freeplane.plugin.graph.layout.graphstream.ClusterPackingShould" time="0.0"/>
+  <testcase name="inputListOrderDoesNotAffectPlacements" classname="org.freeplane.plugin.graph.layout.graphstream.ClusterPackingShould" time="0.001"/>
+  <testcase name="equalAreaAndDistanceCandidatesTieBreakByEnumerationOrder" classname="org.freeplane.plugin.graph.layout.graphstream.ClusterPackingShould" time="0.0"/>
+  <testcase name="assemblyBoxEdgeCandidateIsUsed" classname="org.freeplane.plugin.graph.layout.graphstream.ClusterPackingShould" time="0.0"/>
+  <system-out><![CDATA[wideProjection submit (apply + packing): 0.251 s
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

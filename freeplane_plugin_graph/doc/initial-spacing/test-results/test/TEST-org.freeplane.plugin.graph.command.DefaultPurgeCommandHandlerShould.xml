@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.command.DefaultPurgeCommandHandlerShould" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-10-20T16:57:31.451Z" hostname="Arch-MSSD0" time="0.667">
+  <properties/>
+  <testcase name="rejectsWhenAReloadQueuesBeforeTheFinalExactRecordValidation" classname="org.freeplane.plugin.graph.command.DefaultPurgeCommandHandlerShould" time="0.007"/>
+  <testcase name="rejectsAnEmptyRelationshipSetWithoutMutatingTheStore" classname="org.freeplane.plugin.graph.command.DefaultPurgeCommandHandlerShould" time="0.001"/>
+  <testcase name="rejectsWhenARealCoordinatorReportsARebuildFailure" classname="org.freeplane.plugin.graph.command.DefaultPurgeCommandHandlerShould" time="0.63"/>
+  <testcase name="rejectsAStaleDisplayedGenerationWithoutMutatingTheStore" classname="org.freeplane.plugin.graph.command.DefaultPurgeCommandHandlerShould" time="0.004"/>
+  <testcase name="rejectsWhenARequestedRelationshipHasNoCurrentRecord" classname="org.freeplane.plugin.graph.command.DefaultPurgeCommandHandlerShould" time="0.003"/>
+  <testcase name="rejectsWhenTheCoordinatorProjectionIsUnavailable" classname="org.freeplane.plugin.graph.command.DefaultPurgeCommandHandlerShould" time="0.003"/>
+  <testcase name="revalidatesExactCurrentRecordsImmediatelyBeforeTheWorkspaceTransition" classname="org.freeplane.plugin.graph.command.DefaultPurgeCommandHandlerShould" time="0.004"/>
+  <testcase name="rejectsWhenAQueuedMapChangeCouldInvalidateTheCurrentRecord" classname="org.freeplane.plugin.graph.command.DefaultPurgeCommandHandlerShould" time="0.003"/>
+  <testcase name="workspaceUndoRestoresEveryPurgedRelationship" classname="org.freeplane.plugin.graph.command.DefaultPurgeCommandHandlerShould" time="0.006"/>
+  <testcase name="rejectsActiveAndRecoverableRelationshipsAsAWholeRequest" classname="org.freeplane.plugin.graph.command.DefaultPurgeCommandHandlerShould" time="0.003"/>
+  <testcase name="validatesAndExecutesOneTransitionOnTheEdtWithOnlyMissingRelationships" classname="org.freeplane.plugin.graph.command.DefaultPurgeCommandHandlerShould" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

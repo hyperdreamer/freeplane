@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.layout.BoundarySeparationShould" tests="19" skipped="0" failures="0" errors="0" timestamp="2026-10-20T16:57:55.053Z" hostname="Arch-MSSD0" time="57.839">
+  <properties/>
+  <testcase name="repeatedSettlesAreDeterministic" classname="org.freeplane.plugin.graph.layout.BoundarySeparationShould" time="0.065"/>
+  <testcase name="unpinTransitionSettlesAfterFormerPinReleased" classname="org.freeplane.plugin.graph.layout.BoundarySeparationShould" time="8.882"/>
+  <testcase name="pinnedFixtureSettlesWithPinPositionUnchanged" classname="org.freeplane.plugin.graph.layout.BoundarySeparationShould" time="9.744"/>
+  <testcase name="coincidentParentChildAnchorsStayExcluded" classname="org.freeplane.plugin.graph.layout.BoundarySeparationShould" time="0.023"/>
+  <testcase name="directNodesLieInsideTheirParentHullAfterGeometryComputation" classname="org.freeplane.plugin.graph.layout.BoundarySeparationShould" time="0.014"/>
+  <testcase name="pinnedNodesKeepTheirForcedPositions" classname="org.freeplane.plugin.graph.layout.BoundarySeparationShould" time="0.004"/>
+  <testcase name="rebuildsThePublishedBoundaryRecordAfterARelocation" classname="org.freeplane.plugin.graph.layout.BoundarySeparationShould" time="8.063"/>
+  <testcase name="settledSiblingBoundariesRemainSeparated" classname="org.freeplane.plugin.graph.layout.BoundarySeparationShould" time="0.019"/>
+  <testcase name="reproducedCasePipelineFixturePublishesRepairedFrames" classname="org.freeplane.plugin.graph.layout.BoundarySeparationShould" time="12.636"/>
+  <testcase name="reparentedBoundaryRefreshesAncestorExclusion" classname="org.freeplane.plugin.graph.layout.BoundarySeparationShould" time="0.043"/>
+  <testcase name="reproducedCaseSettleSequenceReachesIdleWithStableCorrectionDeltas" classname="org.freeplane.plugin.graph.layout.BoundarySeparationShould" time="11.006"/>
+  <testcase name="directParentChildAnchorsSatisfyTheProximityInvariantAfterSettling" classname="org.freeplane.plugin.graph.layout.BoundarySeparationShould" time="0.015"/>
+  <testcase name="siblingAnchorsRemainSeparatedAfterSettling" classname="org.freeplane.plugin.graph.layout.BoundarySeparationShould" time="0.014"/>
+  <testcase name="reproducedCasePipelineFixtureCrossesAtTheRawSettle" classname="org.freeplane.plugin.graph.layout.BoundarySeparationShould" time="0.013"/>
+  <testcase name="rebuiltNodeResidualIsOrderIndependent" classname="org.freeplane.plugin.graph.layout.BoundarySeparationShould" time="7.282"/>
+  <testcase name="grandchildAnchorsAreExcludedFromBoundaryRepulsion" classname="org.freeplane.plugin.graph.layout.BoundarySeparationShould" time="0.011"/>
+  <testcase name="rootFramesSeparateOnTheTopRing" classname="org.freeplane.plugin.graph.layout.BoundarySeparationShould" time="0.0"/>
+  <testcase name="siblingBoundariesSeedWithoutOverlap" classname="org.freeplane.plugin.graph.layout.BoundarySeparationShould" time="0.001"/>
+  <testcase name="nestedGroupRingsDoNotInterleave" classname="org.freeplane.plugin.graph.layout.BoundarySeparationShould" time="0.001"/>
+  <system-out><![CDATA[unpin firstIdle=107 releasedPinMovement=15.975883280812646
+pinned fixture firstIdle=1609 worstRms=0.049061516010904055 worstMax=0.07358905430982142
+coincident anchor distance root-zfc=36.955451586106
+direct node positions LayoutPoint{x=19.97439216974644, y=-1.606129021549731E-14} LayoutPoint{x=-23.777468200687057, y=2.073158588441036E-15}
+settled sibling pair 0/1 boxGapX=15.845235623661551 boxGapY=-40.0
+settled sibling pair 0/2 boxGapX=7.763216674473597 boxGapY=-40.0
+settled sibling pair 0/3 boxGapX=72.50377807736578 boxGapY=-40.0
+settled sibling pair 1/2 boxGapX=599.6084522981351 boxGapY=-40.0
+settled sibling pair 1/3 boxGapX=8.658542453704229 boxGapY=-40.0
+settled sibling pair 2/3 boxGapX=656.2669947518393 boxGapY=-40.0
+reparented anchor distance axioms-definitions=81.39735510578214
+settled anchor offset child=ZFC dx=36.48084075296724 dy=-5.903698831213296 footprintOverflow=-81.19031193637174
+settled anchor offset child=Axioms dx=4.886251512440758 dy=8.20519441598307 footprintOverflow=-62.88881635160197
+settled anchor offset child=Basic Definitions and Theorems dx=-94.79248315667911 dy=6.039256985505935 footprintOverflow=-48.301527610905936
+worst footprint overflow=0.0
+grandchild anchor distance root-axioms=41.431065692563266
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

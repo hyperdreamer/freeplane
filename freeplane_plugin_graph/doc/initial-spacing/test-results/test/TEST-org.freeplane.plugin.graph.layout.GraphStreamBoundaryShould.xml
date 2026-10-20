@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.layout.GraphStreamBoundaryShould" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-10-20T16:59:01.094Z" hostname="Arch-MSSD0" time="2.118">
+  <properties/>
+  <testcase name="provideOrderedPositiveCalibrationStrengths" classname="org.freeplane.plugin.graph.layout.GraphStreamBoundaryShould" time="1.93"/>
+  <testcase name="neverDependOnTheGraphStreamLayoutRunner" classname="org.freeplane.plugin.graph.layout.GraphStreamBoundaryShould" time="0.138"/>
+  <testcase name="createEnginesOnlyThroughThePublicLayoutInterface" classname="org.freeplane.plugin.graph.layout.GraphStreamBoundaryShould" time="0.0"/>
+  <testcase name="keepGraphStreamDependenciesInsideThePrivateAdapterPackage" classname="org.freeplane.plugin.graph.layout.GraphStreamBoundaryShould" time="0.044"/>
+  <testcase name="exposeOnlyGraphStreamFreePublicLayoutSignatures" classname="org.freeplane.plugin.graph.layout.GraphStreamBoundaryShould" time="0.005"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

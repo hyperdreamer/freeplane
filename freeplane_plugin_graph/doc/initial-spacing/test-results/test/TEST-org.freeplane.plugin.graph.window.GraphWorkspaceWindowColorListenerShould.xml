@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.window.GraphWorkspaceWindowColorListenerShould" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-10-20T17:25:42.274Z" hostname="Arch-MSSD0" time="0.003">
+  <properties/>
+  <testcase name="ignoresUnrelatedPropertyChanges" classname="org.freeplane.plugin.graph.window.GraphWorkspaceWindowColorListenerShould" time="0.002"/>
+  <testcase name="repaintsWhenTheGroupColorPreferenceChanges" classname="org.freeplane.plugin.graph.window.GraphWorkspaceWindowColorListenerShould" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

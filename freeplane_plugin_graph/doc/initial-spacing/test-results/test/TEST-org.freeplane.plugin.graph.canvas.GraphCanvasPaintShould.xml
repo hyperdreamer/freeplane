@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" tests="49" skipped="0" failures="0" errors="0" timestamp="2026-10-20T16:57:27.390Z" hostname="Arch-MSSD0" time="1.613">
+  <properties/>
+  <testcase name="skipConnectionPreviewForEnclosureWhoseCurrentHullIsMissing" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.383"/>
+  <testcase name="skipNonForcedHoverOnlyLabelsAtFull" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.011"/>
+  <testcase name="doNotApplyTheConfiguredGroupColorToStructuralBoundaries" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.042"/>
+  <testcase name="doNotPaintOrHitEdgesToSuppressedEndpoints" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.154"/>
+  <testcase name="paintedArrowHeadCapBaseAndBidirectionalSplitAtPaintLevel" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.048"/>
+  <testcase name="drawThePublishedSamplesForABowAndKeepArrowheadsOnTheTerminalSegment" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.182"/>
+  <testcase name="skipEdgesWhenANodeHasOnlyALayoutPosition" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.026"/>
+  <testcase name="deferSameGenerationSurfaceContractionUntilIdle" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.016"/>
+  <testcase name="paintOnlyActivePinsAtTheirRecordedNodePositions" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.009"/>
+  <testcase name="paintedArrowHeadShrinksWhenZoomedOut" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.016"/>
+  <testcase name="dimUnrelatedNodesWhenTransientTriggerAndPreferenceAreEnabled" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.012"/>
+  <testcase name="translatePhysicalScrollIntoVisibleWorldViewportWithoutMovingTheRenderingAnchor" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.01"/>
+  <testcase name="keepNodesUndimmedUntilATransientDimmingTriggerIsActive" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.01"/>
+  <testcase name="resolveReadableDistinctLightAndDarkThemesWithoutChangingSwingDefaults" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.032"/>
+  <testcase name="paintsCarriedGlyphFacesAndSkipsNonForcedHoverOnlyLabels" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.032"/>
+  <testcase name="skipEnclosureLabelWhenCurrentHullIsMissing" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.012"/>
+  <testcase name="rejectPaintingAnUnregisteredMapColor" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.004"/>
+  <testcase name="paintNodeSelectionAndPinTreatmentFromNodeGeometry" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.014"/>
+  <testcase name="preserveVisibleWorldCenterWhenTheSurfaceGrows" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.007"/>
+  <testcase name="paintsNoCrossingForTheReportedFixture" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.036"/>
+  <testcase name="keepBothWorldExtremaReachableAfterOffCenterUserPan" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.007"/>
+  <testcase name="resolveHullColorsFromRegisteredMapsAndTierTreatment" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.005"/>
+  <testcase name="useTheSuppliedNodeRadiusWithoutChangingGeometry" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.013"/>
+  <testcase name="fitGraphUsesTheScrollableViewportExtentInsteadOfTheFullSurface" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.006"/>
+  <testcase name="drawMultiplicityOnlyForAnEdgeWithMultipleContributors" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.008"/>
+  <testcase name="paintOpaqueLayeredProjectionUsingGeometryAndProminence" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.013"/>
+  <testcase name="paintsCarriedPlacementFontsAndPreservesLevelSpecificVisibility" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.267"/>
+  <testcase name="keepUnrelatedNodesUndimmedWhenTransientTriggerMeetsDisabledPreference" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.009"/>
+  <testcase name="fitFiniteViewportAndResetToUnitOrigin" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.007"/>
+  <testcase name="suppressAndRestoreDirectionalArrowheadsInThePaintedCanvas" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.019"/>
+  <testcase name="paintedArrowHeadLengthTracksTheZoomRule" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.026"/>
+  <testcase name="skipActivePinsForNodesWithoutCurrentGeometry" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.015"/>
+  <testcase name="continuePaintingSelectedContentWhenAboveTarget" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.015"/>
+  <testcase name="arrowHeadRuleCapAndBidirectionalSplitAreSelectedInTheHelpers" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.002"/>
+  <testcase name="keepBothWorldExtremaScrollableAfterOffCenterZoom" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.009"/>
+  <testcase name="paintVisibleEnclosureUsingPersistedPaletteInput" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.006"/>
+  <testcase name="skipOrdinaryEdgeWhenCurrentEnclosureHullIsMissing" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.022"/>
+  <testcase name="doNotPaintConnectionPreviewForUnavailableSources" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.019"/>
+  <testcase name="paintedArrowHeadInteriorUsesTheDarkThemeEdgeColour" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.005"/>
+  <testcase name="paintsTheLeaderStrokeScreenConstantThroughTheProductionCallSite" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.004"/>
+  <testcase name="keepPaintStateImmutableAndLimitSelectionToHighlightLayers" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.018"/>
+  <testcase name="reportsNoPaintedCrossingResidualForTheReportedFixture" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.012"/>
+  <testcase name="keepsPublishedGeometryStableAcrossPlacementChanges" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.027"/>
+  <testcase name="suppressedRootKeepsContainmentGeometryButAddsNoEndpointHitEntry" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.004"/>
+  <testcase name="capsTheArrowheadAtTheTerminalSegmentOfARoutedPath" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.002"/>
+  <testcase name="keepsTheLeaderStrokeScreenConstant" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.001"/>
+  <testcase name="drawMultiplicityAtTheArcLengthMidpointOfABow" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.004"/>
+  <testcase name="paintNodeDiscAndLabelFromNodeGeometryWithTierBasedStructuralHulls" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.005"/>
+  <testcase name="exposeThemeBindingAsAPublicMethod" classname="org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

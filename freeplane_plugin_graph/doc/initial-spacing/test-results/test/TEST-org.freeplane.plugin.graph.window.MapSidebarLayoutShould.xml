@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.window.MapSidebarLayoutShould" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-10-20T17:25:49.321Z" hostname="Arch-MSSD0" time="0.003">
+  <properties/>
+  <testcase name="keepsTheClampRangeNonEmptyAtEverySplitWidth" classname="org.freeplane.plugin.graph.window.MapSidebarLayoutShould" time="0.001"/>
+  <testcase name="computesMaximumWidthAsHalfTheSplitWidthWithTheMinimumFloor" classname="org.freeplane.plugin.graph.window.MapSidebarLayoutShould" time="0.0"/>
+  <testcase name="exposesTheApprovedWidthConstants" classname="org.freeplane.plugin.graph.window.MapSidebarLayoutShould" time="0.001"/>
+  <testcase name="computesTheCanvasMinimumFromTheLayoutGeometry" classname="org.freeplane.plugin.graph.window.MapSidebarLayoutShould" time="0.0"/>
+  <testcase name="computesTheEffectiveMinimumFromTheLayoutGeometry" classname="org.freeplane.plugin.graph.window.MapSidebarLayoutShould" time="0.0"/>
+  <testcase name="keepsCanvasMinimumWidthNonNegativeAndMonotonic" classname="org.freeplane.plugin.graph.window.MapSidebarLayoutShould" time="0.001"/>
+  <testcase name="clampsWidthsIntoTheEffectiveRange" classname="org.freeplane.plugin.graph.window.MapSidebarLayoutShould" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

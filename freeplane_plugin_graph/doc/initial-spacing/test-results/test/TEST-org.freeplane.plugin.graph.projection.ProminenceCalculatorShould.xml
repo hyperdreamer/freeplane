@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.projection.ProminenceCalculatorShould" tests="20" skipped="0" failures="0" errors="0" timestamp="2026-10-20T17:25:37.700Z" hostname="Arch-MSSD0" time="0.015">
+  <properties/>
+  <testcase name="scaleReachTwoDistinctVisibleTargetsOnTheSourceNode" classname="org.freeplane.plugin.graph.projection.ProminenceCalculatorShould" time="0.0"/>
+  <testcase name="countUndirectedEdgesForNeitherEndpoint" classname="org.freeplane.plugin.graph.projection.ProminenceCalculatorShould" time="0.001"/>
+  <testcase name="ignoreSuppressedEnclosureTargets" classname="org.freeplane.plugin.graph.projection.ProminenceCalculatorShould" time="0.0"/>
+  <testcase name="countBidirectionalEdgesForBothEndpoints" classname="org.freeplane.plugin.graph.projection.ProminenceCalculatorShould" time="0.001"/>
+  <testcase name="countDirectedOutgoingTargetsOnlyForTheSourceEndpoint" classname="org.freeplane.plugin.graph.projection.ProminenceCalculatorShould" time="0.0"/>
+  <testcase name="rejectNegativeTargetCounts" classname="org.freeplane.plugin.graph.projection.ProminenceCalculatorShould" time="0.001"/>
+  <testcase name="includeEveryZeroDegreeNodeInTheProminenceMap" classname="org.freeplane.plugin.graph.projection.ProminenceCalculatorShould" time="0.001"/>
+  <testcase name="countDuplicateContributorsReachingOneTargetOnce" classname="org.freeplane.plugin.graph.projection.ProminenceCalculatorShould" time="0.0"/>
+  <testcase name="countEnclosureSourcesAsZeroAndKeepEnclosuresOutOfTheProminenceMap" classname="org.freeplane.plugin.graph.projection.ProminenceCalculatorShould" time="0.001"/>
+  <testcase name="rejectIdenticalProjectedEdgeEndpointsBeforeAnySelfContributorReachesTheCalculator" classname="org.freeplane.plugin.graph.projection.ProminenceCalculatorShould" time="0.001"/>
+  <testcase name="returnAnUnmodifiableProminenceMap" classname="org.freeplane.plugin.graph.projection.ProminenceCalculatorShould" time="0.002"/>
+  <testcase name="skipEnclosureTargetsAbsentFromTheSuppliedEnclosuresWithoutThrowing" classname="org.freeplane.plugin.graph.projection.ProminenceCalculatorShould" time="0.0"/>
+  <testcase name="projectGroupNodesAndDeriveProminence" classname="org.freeplane.plugin.graph.projection.ProminenceCalculatorShould" time="0.001"/>
+  <testcase name="fullyProjectedProjectionDerivesProminenceCoveringNodesInProjectedOrder" classname="org.freeplane.plugin.graph.projection.ProminenceCalculatorShould" time="0.0"/>
+  <testcase name="countTwoCollapsedAncestorsSharingOneVisibleBoundaryOnceWhileBothRemainAddressable" classname="org.freeplane.plugin.graph.projection.ProminenceCalculatorShould" time="0.001"/>
+  <testcase name="applyTheExactCappedLogarithmicScale" classname="org.freeplane.plugin.graph.projection.ProminenceCalculatorShould" time="0.001"/>
+  <testcase name="keepTheScaleMonotonicFiniteAndCapped" classname="org.freeplane.plugin.graph.projection.ProminenceCalculatorShould" time="0.001"/>
+  <testcase name="preserveProjectedNodeOrderingRegardlessOfEdgeAndEnclosureArgumentOrder" classname="org.freeplane.plugin.graph.projection.ProminenceCalculatorShould" time="0.0"/>
+  <testcase name="keepStructureAndResolvedProjectionsFreeOfProminence" classname="org.freeplane.plugin.graph.projection.ProminenceCalculatorShould" time="0.001"/>
+  <testcase name="exposeNoPublicCallerSuppliedProminenceFactory" classname="org.freeplane.plugin.graph.projection.ProminenceCalculatorShould" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

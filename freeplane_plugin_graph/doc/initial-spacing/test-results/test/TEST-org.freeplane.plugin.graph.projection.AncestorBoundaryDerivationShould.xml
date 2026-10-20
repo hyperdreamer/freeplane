@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.projection.AncestorBoundaryDerivationShould" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-10-20T17:25:37.387Z" hostname="Arch-MSSD0" time="0.018">
+  <properties/>
+  <testcase name="omitExcludedBranchesAndBranchesWithoutReachableMarkedNodesExceptMapRoot" classname="org.freeplane.plugin.graph.projection.AncestorBoundaryDerivationShould" time="0.006"/>
+  <testcase name="projectOneMapMathShapeTreeWithExactTiersAndDirectNodes" classname="org.freeplane.plugin.graph.projection.AncestorBoundaryDerivationShould" time="0.004"/>
+  <testcase name="atomizeMarkedNodeWithDescendantsAndOmitDescendantNodesAndEnclosures" classname="org.freeplane.plugin.graph.projection.AncestorBoundaryDerivationShould" time="0.001"/>
+  <testcase name="countProjectedNodesAsMarkedProjectedNodesNotVisibleNonRootEnclosures" classname="org.freeplane.plugin.graph.projection.AncestorBoundaryDerivationShould" time="0.002"/>
+  <testcase name="projectMarkedNodeAtRawDepth1AsDirectNodeOfRootNotAsBoundary" classname="org.freeplane.plugin.graph.projection.AncestorBoundaryDerivationShould" time="0.001"/>
+  <testcase name="preserveLevel1AndLevel2BoundariesAndForwardMarkedNodeThroughTransparentLevel3" classname="org.freeplane.plugin.graph.projection.AncestorBoundaryDerivationShould" time="0.002"/>
+  <testcase name="useRegisteredActiveMapCountToSelectMultiMapTiersEvenWithOnlyOneAvailableSnapshot" classname="org.freeplane.plugin.graph.projection.AncestorBoundaryDerivationShould" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

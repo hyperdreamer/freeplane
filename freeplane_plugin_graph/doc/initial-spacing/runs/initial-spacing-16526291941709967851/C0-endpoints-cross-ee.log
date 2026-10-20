@@ -1,0 +1,343 @@
+Picked up JAVA_TOOL_OPTIONS: -Djava.awt.headless=true
+INPUT_NODE	n:m:00000000-0000-0000-0000-000000000001|p:left0	Node 0	Map	true	8.0
+INPUT_NODE	n:m:00000000-0000-0000-0000-000000000001|p:left1	Node 1	Map	true	8.0
+INPUT_NODE	n:m:00000000-0000-0000-0000-000000000001|p:left2	Node 2	Map	true	8.0
+INPUT_NODE	n:m:00000000-0000-0000-0000-000000000001|p:left3	Node 3	Map	true	8.0
+INPUT_NODE	n:m:00000000-0000-0000-0000-000000000002|p:right0	Node 0	Map	true	8.0
+INPUT_NODE	n:m:00000000-0000-0000-0000-000000000002|p:right1	Node 1	Map	true	8.0
+INPUT_NODE	n:m:00000000-0000-0000-0000-000000000002|p:right2	Node 2	Map	true	8.0
+INPUT_NODE	n:m:00000000-0000-0000-0000-000000000002|p:right3	Node 3	Map	true	8.0
+INPUT_HULL	m:00000000-0000-0000-0000-000000000001|p:left	[left]	Map	true	SUBTLE	absent	[n:m:00000000-0000-0000-0000-000000000001|p:left0, n:m:00000000-0000-0000-0000-000000000001|p:left1, n:m:00000000-0000-0000-0000-000000000001|p:left2, n:m:00000000-0000-0000-0000-000000000001|p:left3]	[]
+INPUT_HULL	m:00000000-0000-0000-0000-000000000002|p:right	[right]	Map	true	SUBTLE	absent	[n:m:00000000-0000-0000-0000-000000000002|p:right0, n:m:00000000-0000-0000-0000-000000000002|p:right1, n:m:00000000-0000-0000-0000-000000000002|p:right2, n:m:00000000-0000-0000-0000-000000000002|p:right3]	[]
+INPUT_EDGE	e:m:00000000-0000-0000-0000-000000000001|p:left	e:m:00000000-0000-0000-0000-000000000002|p:right	false	e:m:00000000-0000-0000-0000-000000000001|p:left	e:m:00000000-0000-0000-0000-000000000002|p:right	false	true			
+CONFIG	C0	endpoints-cross-ee	6.0	6.0	8.0	00000000-0000-0000-0000-0000000000aa	21.0.8	/data/home/henry-arch/.sdkman/candidates/java/21.0.8-zulu	Dialog/PLAIN/12;FRC(null,true,true)
+CODE_SOURCE	org.freeplane.plugin.graph.layout.graphstream.GraphStreamLayoutEngine	file:/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane_plugin_graph/build/initial-spacing-16526291941709967851/C0-classes/
+CODE_SOURCE	org.freeplane.plugin.graph.layout.graphstream.ClusterPacking	file:/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane_plugin_graph/build/initial-spacing-16526291941709967851/C0-classes/
+CODE_SOURCE	org.freeplane.plugin.graph.layout.LayoutWorker	file:/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane_plugin_graph/build/initial-spacing-16526291941709967851/C0-classes/
+CODE_SOURCE	org.freeplane.plugin.graph.layout.graphstream.InitialSpacingFixtures	file:/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane_plugin_graph/build/classes/java/test/
+CONTROL_HEADER	fixture	stage	step_index	exhausted_control	index_budget_exhausted	verification_budget_exhausted	detection_truncated	verifications	verification_cap	edge_rounds	round_cap	index_inserted_items	index_items_cap	index_pair_checks	pair_checks_cap	verification_work	work_cap	conflicts_detected	conflicts_cap	residual_conflict_keys	repairs_applied	boundary_rounds	raw_node_residual_pairs	frame_node_residual	node_residual_diagnostic_matches	gated_frames	exhausted_frames
+CONTROL	endpoints-cross-ee	seed	0	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	1	0
+REST	e:m:00000000-0000-0000-0000-000000000001|p:left	e:m:00000000-0000-0000-0000-000000000002|p:right	true	15.556349186104047	15.556349186104047	37.112698372208094
+ELIGIBILITY_NODE	endpoints-cross-ee	m:00000000-0000-0000-0000-000000000001|p:left	n:m:00000000-0000-0000-0000-000000000001|p:left0	8.0	15.556349186104047	0.0	15.556349186104047	0.0	15.556349186104047	0.0	15.556349186104047	0.0	false
+ELIGIBILITY_NODE	endpoints-cross-ee	m:00000000-0000-0000-0000-000000000001|p:left	n:m:00000000-0000-0000-0000-000000000001|p:left1	8.0	15.556349186104047	1.5707963267948966	9.525516618590428E-16	15.556349186104047	9.525516618590428E-16	15.556349186104047	9.525516618590428E-16	15.556349186104047	false
+ELIGIBILITY_NODE	endpoints-cross-ee	m:00000000-0000-0000-0000-000000000001|p:left	n:m:00000000-0000-0000-0000-000000000001|p:left2	8.0	15.556349186104047	3.141592653589793	-15.556349186104047	1.9051033237180856E-15	-15.556349186104047	1.9051033237180856E-15	-15.556349186104047	1.9051033237180856E-15	false
+ELIGIBILITY_NODE	endpoints-cross-ee	m:00000000-0000-0000-0000-000000000001|p:left	n:m:00000000-0000-0000-0000-000000000001|p:left3	8.0	15.556349186104047	4.71238898038469	-2.857654985577128E-15	-15.556349186104047	-2.857654985577128E-15	-15.556349186104047	-2.857654985577128E-15	-15.556349186104047	false
+ELIGIBILITY	endpoints-cross-ee	m:00000000-0000-0000-0000-000000000001|p:left	left	0.0	0.0	0.0	0.0	0.0	false	false	false	true
+ELIGIBILITY_NODE	endpoints-cross-ee	m:00000000-0000-0000-0000-000000000002|p:right	n:m:00000000-0000-0000-0000-000000000002|p:right0	8.0	15.556349186104047	0.0	-87.55634918610404	0.0	-87.55634918610404	0.0	-87.55634918610404	0.0	false
+ELIGIBILITY_NODE	endpoints-cross-ee	m:00000000-0000-0000-0000-000000000002|p:right	n:m:00000000-0000-0000-0000-000000000002|p:right1	8.0	15.556349186104047	1.5707963267948966	-103.11269837220809	15.556349186104047	-103.11269837220809	15.556349186104049	-103.11269837220809	15.556349186104049	false
+ELIGIBILITY_NODE	endpoints-cross-ee	m:00000000-0000-0000-0000-000000000002|p:right	n:m:00000000-0000-0000-0000-000000000002|p:right2	8.0	15.556349186104047	3.141592653589793	-118.66904755831213	1.9051033237180856E-15	-118.66904755831213	6.490293567710654E-16	-118.66904755831213	6.490293567710654E-16	false
+ELIGIBILITY_NODE	endpoints-cross-ee	m:00000000-0000-0000-0000-000000000002|p:right	n:m:00000000-0000-0000-0000-000000000002|p:right3	8.0	15.556349186104047	4.71238898038469	-103.11269837220809	-15.556349186104047	-103.11269837220809	-15.556349186104047	-103.11269837220809	-15.556349186104047	false
+ELIGIBILITY	endpoints-cross-ee	m:00000000-0000-0000-0000-000000000002|p:right	right	0.0	0.0	-103.11269837220809	0.0	1.7763568394002505E-15	false	true	false	false
+POINT	endpoints-cross-ee	raw	node	n:m:00000000-0000-0000-0000-000000000001|p:left0	15.556349186104047	0.0	8.0
+POINT	endpoints-cross-ee	raw	node	n:m:00000000-0000-0000-0000-000000000001|p:left1	9.525516618590428E-16	15.556349186104047	8.0
+POINT	endpoints-cross-ee	raw	node	n:m:00000000-0000-0000-0000-000000000001|p:left2	-15.556349186104047	1.9051033237180856E-15	8.0
+POINT	endpoints-cross-ee	raw	node	n:m:00000000-0000-0000-0000-000000000001|p:left3	-2.857654985577128E-15	-15.556349186104047	8.0
+POINT	endpoints-cross-ee	raw	node	n:m:00000000-0000-0000-0000-000000000002|p:right0	-87.55634918610404	0.0	8.0
+POINT	endpoints-cross-ee	raw	node	n:m:00000000-0000-0000-0000-000000000002|p:right1	-103.11269837220809	15.556349186104047	8.0
+POINT	endpoints-cross-ee	raw	node	n:m:00000000-0000-0000-0000-000000000002|p:right2	-118.66904755831213	1.9051033237180856E-15	8.0
+POINT	endpoints-cross-ee	raw	node	n:m:00000000-0000-0000-0000-000000000002|p:right3	-103.11269837220809	-15.556349186104047	8.0
+POINT	endpoints-cross-ee	raw	enclosure	m:00000000-0000-0000-0000-000000000001|p:left	0.0	0.0	15.556349186104047
+POINT	endpoints-cross-ee	raw	enclosure	m:00000000-0000-0000-0000-000000000002|p:right	-103.11269837220809	0.0	15.556349186104047
+METRIC	endpoints-cross-ee	raw	m:00000000-0000-0000-0000-000000000001|p:left	left	6.0	6.0	[6.0, 6.0, 6.0, 6.0]	true	0	0
+METRIC	endpoints-cross-ee	raw	m:00000000-0000-0000-0000-000000000002|p:right	right	5.9999999999999964	5.999999999999998	[6.0, 5.9999999999999964, 5.9999999999999964, 6.0]	true	0	0
+DIAGNOSTICS	endpoints-cross-ee	raw	false	-1	true	true	0	0	0	0	0	[]	0	0	0	false	false	false
+POINT	endpoints-cross-ee	seed	node	n:m:00000000-0000-0000-0000-000000000001|p:left0	15.556349186104047	0.0	8.0
+POINT	endpoints-cross-ee	seed	node	n:m:00000000-0000-0000-0000-000000000001|p:left1	9.525516618590428E-16	15.556349186104047	8.0
+POINT	endpoints-cross-ee	seed	node	n:m:00000000-0000-0000-0000-000000000001|p:left2	-15.556349186104047	1.9051033237180856E-15	8.0
+POINT	endpoints-cross-ee	seed	node	n:m:00000000-0000-0000-0000-000000000001|p:left3	-2.857654985577128E-15	-15.556349186104047	8.0
+POINT	endpoints-cross-ee	seed	node	n:m:00000000-0000-0000-0000-000000000002|p:right0	-87.55634918610404	0.0	8.0
+POINT	endpoints-cross-ee	seed	node	n:m:00000000-0000-0000-0000-000000000002|p:right1	-103.11269837220809	15.556349186104049	8.0
+POINT	endpoints-cross-ee	seed	node	n:m:00000000-0000-0000-0000-000000000002|p:right2	-118.66904755831213	6.490293567710654E-16	8.0
+POINT	endpoints-cross-ee	seed	node	n:m:00000000-0000-0000-0000-000000000002|p:right3	-103.11269837220809	-15.556349186104047	8.0
+POINT	endpoints-cross-ee	seed	enclosure	m:00000000-0000-0000-0000-000000000001|p:left	0.0	0.0	15.556349186104047
+POINT	endpoints-cross-ee	seed	enclosure	m:00000000-0000-0000-0000-000000000002|p:right	-103.11269837220809	0.0	15.556349186104047
+METRIC	endpoints-cross-ee	seed	m:00000000-0000-0000-0000-000000000001|p:left	left	6.0	6.0	[6.0, 6.0, 6.0, 6.0]	true	0	0
+METRIC	endpoints-cross-ee	seed	m:00000000-0000-0000-0000-000000000002|p:right	right	6.0	6.0	[6.0, 6.0, 6.0, 6.0]	true	0	0
+DIAGNOSTICS	endpoints-cross-ee	seed	false	0	true	true	0	0	0	0	0	[]	13	1	0	false	false	false
+CONTROL	endpoints-cross-ee	sample	0	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	2	0
+SAMPLE	endpoints-cross-ee	1	0	false	0.002236067977498773	0.005
+CONTROL	endpoints-cross-ee	sample	1	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	3	0
+SAMPLE	endpoints-cross-ee	2	1	false	0.11534958709770332	0.13484722355583045
+CONTROL	endpoints-cross-ee	sample	2	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	4	0
+SAMPLE	endpoints-cross-ee	3	2	false	0.10769768571638057	0.12595421063936563
+CONTROL	endpoints-cross-ee	sample	3	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	5	0
+SAMPLE	endpoints-cross-ee	4	3	false	0.10059681697305081	0.11771393423790322
+CONTROL	endpoints-cross-ee	sample	4	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	6	0
+SAMPLE	endpoints-cross-ee	5	4	false	0.09400113266049663	0.11005445762693
+CONTROL	endpoints-cross-ee	sample	5	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	7	0
+SAMPLE	endpoints-cross-ee	6	5	false	0.08786964192177096	0.1029305017519988
+CONTROL	endpoints-cross-ee	sample	6	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	8	0
+SAMPLE	endpoints-cross-ee	7	6	false	0.0821654644457078	0.09629931548210635
+CONTROL	endpoints-cross-ee	sample	7	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	9	0
+SAMPLE	endpoints-cross-ee	8	7	false	0.0768553029330642	0.09012252481555905
+CONTROL	endpoints-cross-ee	sample	8	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	10	0
+SAMPLE	endpoints-cross-ee	9	8	false	0.07190899739003406	0.08436535278039514
+CONTROL	endpoints-cross-ee	sample	9	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	11	0
+SAMPLE	endpoints-cross-ee	10	9	false	0.06729923564979859	0.07899621185774919
+CONTROL	endpoints-cross-ee	sample	10	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	12	0
+SAMPLE	endpoints-cross-ee	11	10	false	0.06300247509999285	0.07398918169877788
+CONTROL	endpoints-cross-ee	sample	11	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	13	0
+SAMPLE	endpoints-cross-ee	12	11	false	0.058996190385581376	0.06934619098119299
+CONTROL	endpoints-cross-ee	sample	12	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	14	0
+SAMPLE	endpoints-cross-ee	13	12	false	0.05525924870280954	0.0650367950263302
+CONTROL	endpoints-cross-ee	sample	13	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	15	0
+SAMPLE	endpoints-cross-ee	14	13	false	0.05177233027378435	0.0610336424383604
+CONTROL	endpoints-cross-ee	sample	14	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	16	0
+SAMPLE	endpoints-cross-ee	15	14	false	0.0485177351560024	0.05731209249105973
+CONTROL	endpoints-cross-ee	sample	15	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	17	0
+SAMPLE	endpoints-cross-ee	16	15	false	0.045479216372120324	0.05384988766775933
+CONTROL	endpoints-cross-ee	sample	16	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	18	0
+SAMPLE	endpoints-cross-ee	17	16	false	0.042641834989023956	0.05062687247250608
+CONTROL	endpoints-cross-ee	sample	17	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	19	0
+SAMPLE	endpoints-cross-ee	18	17	false	0.039991833600669296	0.04762475120322307
+CONTROL	endpoints-cross-ee	sample	18	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	20	0
+SAMPLE	endpoints-cross-ee	19	18	false	0.0375165253239664	0.044826878642741264
+CONTROL	endpoints-cross-ee	sample	19	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	21	0
+SAMPLE	endpoints-cross-ee	20	19	false	0.03520419593832552	0.04221807864746552
+CONTROL	endpoints-cross-ee	sample	20	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	22	0
+SAMPLE	endpoints-cross-ee	21	20	false	0.03304401721676986	0.03978448644830124
+CONTROL	endpoints-cross-ee	sample	21	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	23	0
+SAMPLE	endpoints-cross-ee	22	21	true	0.031025969831283213	0.0375134111621378
+FIRST_IDLE	endpoints-cross-ee	22	430217087
+CONTROL	endpoints-cross-ee	follow	22	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	24	0
+FOLLOW	endpoints-cross-ee	1	23	true	0.029140774485055726	0.03539321557527231
+CONTROL	endpoints-cross-ee	follow	23	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	25	0
+FOLLOW	endpoints-cross-ee	2	24	true	0.02737983014274659	0.03341321072576875
+CONTROL	endpoints-cross-ee	follow	24	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	26	0
+FOLLOW	endpoints-cross-ee	3	25	true	0.02573515840723235	0.03156356319797737
+CONTROL	endpoints-cross-ee	follow	25	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	27	0
+FOLLOW	endpoints-cross-ee	4	26	true	0.02419935323618053	0.0298352133643931
+CONTROL	endpoints-cross-ee	follow	26	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	28	0
+FOLLOW	endpoints-cross-ee	5	27	true	0.022765535310507113	0.02821980307853167
+CONTROL	endpoints-cross-ee	follow	27	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	29	0
+FOLLOW	endpoints-cross-ee	6	28	true	0.0214273104647389	0.02670961154777629
+CONTROL	endpoints-cross-ee	follow	28	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	30	0
+FOLLOW	endpoints-cross-ee	7	29	true	0.02017873167086389	0.025297498303672228
+CONTROL	endpoints-cross-ee	follow	29	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	31	0
+FOLLOW	endpoints-cross-ee	8	30	true	0.019014264135775286	0.023976852346383026
+CONTROL	endpoints-cross-ee	follow	30	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	32	0
+FOLLOW	endpoints-cross-ee	9	31	true	0.01792875313100709	0.022741546673845647
+CONTROL	endpoints-cross-ee	follow	31	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	33	0
+FOLLOW	endpoints-cross-ee	10	32	true	0.01691739422428735	0.021585897519106112
+CONTROL	endpoints-cross-ee	follow	32	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	34	0
+FOLLOW	endpoints-cross-ee	11	33	true	0.015975705627993806	0.02050462771532935
+CONTROL	endpoints-cross-ee	follow	33	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	35	0
+FOLLOW	endpoints-cross-ee	12	34	true	0.01509950242128271	0.019492833688889988
+CONTROL	endpoints-cross-ee	follow	34	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	36	0
+FOLLOW	endpoints-cross-ee	13	35	true	0.014284872442183372	0.01854595564988415
+CONTROL	endpoints-cross-ee	follow	35	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	37	0
+FOLLOW	endpoints-cross-ee	14	36	true	0.013528153684365305	0.017659750607990077
+CONTROL	endpoints-cross-ee	follow	36	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	38	0
+FOLLOW	endpoints-cross-ee	15	37	true	0.01282591307148765	0.01683026789148201
+CONTROL	endpoints-cross-ee	follow	37	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	39	0
+FOLLOW	endpoints-cross-ee	16	38	true	0.012174926520190997	0.01605382688981649
+CONTROL	endpoints-cross-ee	follow	38	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	40	0
+FOLLOW	endpoints-cross-ee	17	39	true	0.011572160240772842	0.015326996776451551
+CONTROL	endpoints-cross-ee	follow	39	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	41	0
+FOLLOW	endpoints-cross-ee	18	40	true	0.01101475326163304	0.014646578000053978
+CONTROL	endpoints-cross-ee	follow	40	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	42	0
+FOLLOW	endpoints-cross-ee	19	41	true	0.010500001197783363	0.014009585358422783
+CONTROL	endpoints-cross-ee	follow	41	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	43	0
+FOLLOW	endpoints-cross-ee	20	42	true	0.010025341313422738	0.013413232493050486
+CONTROL	endpoints-cross-ee	follow	42	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	44	0
+FOLLOW	endpoints-cross-ee	21	43	true	0.009588338950619602	0.01285491766151381
+CONTROL	endpoints-cross-ee	follow	43	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	45	0
+FOLLOW	endpoints-cross-ee	22	44	true	0.009186675408019132	0.012332210662094667
+CONTROL	endpoints-cross-ee	follow	44	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	46	0
+FOLLOW	endpoints-cross-ee	23	45	true	0.008818137352579134	0.011842840799957344
+CONTROL	endpoints-cross-ee	follow	45	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	47	0
+FOLLOW	endpoints-cross-ee	24	46	true	0.008480607831648704	0.011384685796549832
+CONTROL	endpoints-cross-ee	follow	46	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	48	0
+FOLLOW	endpoints-cross-ee	25	47	true	0.008172058922258436	0.010955761555397459
+CONTROL	endpoints-cross-ee	follow	47	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	49	0
+FOLLOW	endpoints-cross-ee	26	48	true	0.00789054601022969	0.010554212706743726
+CONTROL	endpoints-cross-ee	follow	48	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	50	0
+FOLLOW	endpoints-cross-ee	27	49	true	0.007634203637483315	0.010178303862108606
+CONTROL	endpoints-cross-ee	follow	49	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	51	0
+FOLLOW	endpoints-cross-ee	28	50	true	0.0074012427963385564	0.009826411517053657
+CONTROL	endpoints-cross-ee	follow	50	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	52	0
+FOLLOW	endpoints-cross-ee	29	51	true	0.00718994949159814	0.009497016546845316
+CONTROL	endpoints-cross-ee	follow	51	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	53	0
+FOLLOW	endpoints-cross-ee	30	52	true	0.006998684341091602	0.009188697245367194
+CONTROL	endpoints-cross-ee	follow	52	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	54	0
+FOLLOW	endpoints-cross-ee	31	53	true	0.006825882949214375	0.008900122862698367
+CONTROL	endpoints-cross-ee	follow	53	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	55	0
+FOLLOW	endpoints-cross-ee	32	54	true	0.006670056770130376	0.008630047600803437
+CONTROL	endpoints-cross-ee	follow	54	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	56	0
+FOLLOW	endpoints-cross-ee	33	55	true	0.006529794179535857	0.00837730503113221
+CONTROL	endpoints-cross-ee	follow	55	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	57	0
+FOLLOW	endpoints-cross-ee	34	56	true	0.006403761495364982	0.00814080290081165
+CONTROL	endpoints-cross-ee	follow	56	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	58	0
+FOLLOW	endpoints-cross-ee	35	57	true	0.0062907037255477746	0.007919518297626382
+CONTROL	endpoints-cross-ee	follow	57	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	59	0
+FOLLOW	endpoints-cross-ee	36	58	true	0.0061894448700357185	0.007712493146360799
+CONTROL	endpoints-cross-ee	follow	58	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	60	0
+FOLLOW	endpoints-cross-ee	37	59	true	0.006098887659053875	0.0075188300116195705
+CONTROL	endpoints-cross-ee	follow	59	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	61	0
+FOLLOW	endpoints-cross-ee	38	60	true	0.006018012664519206	0.007337688184396285
+CONTROL	endpoints-cross-ee	follow	60	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	62	0
+FOLLOW	endpoints-cross-ee	39	61	true	0.005945876772041322	0.007168280031596197
+CONTROL	endpoints-cross-ee	follow	61	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	63	0
+FOLLOW	endpoints-cross-ee	40	62	true	0.005881611043360914	0.007035824986548991
+CONTROL	endpoints-cross-ee	follow	62	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	64	0
+FOLLOW	endpoints-cross-ee	41	63	true	0.005824418031731989	0.006963372185203921
+CONTROL	endpoints-cross-ee	follow	63	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	65	0
+FOLLOW	endpoints-cross-ee	42	64	true	0.005773568634960666	0.006897914603638959
+CONTROL	endpoints-cross-ee	follow	64	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	66	0
+FOLLOW	endpoints-cross-ee	43	65	true	0.005728398583120442	0.0068387334314575655
+CONTROL	endpoints-cross-ee	follow	65	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	67	0
+FOLLOW	endpoints-cross-ee	44	66	true	0.005688304661874125	0.006785176266966224
+CONTROL	endpoints-cross-ee	follow	66	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	68	0
+FOLLOW	endpoints-cross-ee	45	67	true	0.005652740769289209	0.006736652556623324
+CONTROL	endpoints-cross-ee	follow	67	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	69	0
+FOLLOW	endpoints-cross-ee	46	68	true	0.0056212138963291835	0.006692629040988576
+CONTROL	endpoints-cross-ee	follow	68	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	70	0
+FOLLOW	endpoints-cross-ee	47	69	true	0.005593280110139879	0.006652625276424903
+CONTROL	endpoints-cross-ee	follow	69	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	71	0
+FOLLOW	endpoints-cross-ee	48	70	true	0.005568540606726942	0.006616209289235399
+CONTROL	endpoints-cross-ee	follow	70	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	72	0
+FOLLOW	endpoints-cross-ee	49	71	true	0.005546637886636611	0.0065829934065738775
+CONTROL	endpoints-cross-ee	follow	71	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	73	0
+FOLLOW	endpoints-cross-ee	50	72	true	0.005527252094626685	0.006552630296735535
+CONTROL	endpoints-cross-ee	follow	72	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	74	0
+FOLLOW	endpoints-cross-ee	51	73	true	0.005510097553014796	0.006524809241081251
+CONTROL	endpoints-cross-ee	follow	73	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	75	0
+FOLLOW	endpoints-cross-ee	52	74	true	0.005494919508058478	0.0064992526508533665
+CONTROL	endpoints-cross-ee	follow	74	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	76	0
+FOLLOW	endpoints-cross-ee	53	75	true	0.005481491100398517	0.006475712834578655
+CONTROL	endpoints-cross-ee	follow	75	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	77	0
+FOLLOW	endpoints-cross-ee	54	76	true	0.005469610563441604	0.006453969015748514
+CONTROL	endpoints-cross-ee	follow	76	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	78	0
+FOLLOW	endpoints-cross-ee	55	77	true	0.005459098648010602	0.006433824595548763
+CONTROL	endpoints-cross-ee	follow	77	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	79	0
+FOLLOW	endpoints-cross-ee	56	78	true	0.0054497962674620246	0.006415104652197725
+CONTROL	endpoints-cross-ee	follow	78	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	80	0
+FOLLOW	endpoints-cross-ee	57	79	true	0.00544156235417065	0.006397653665340232
+CONTROL	endpoints-cross-ee	follow	79	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	81	0
+FOLLOW	endpoints-cross-ee	58	80	true	0.0054342719163333365	0.0063813334528763236
+CONTROL	endpoints-cross-ee	follow	80	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	82	0
+FOLLOW	endpoints-cross-ee	59	81	true	0.0054278142824807215	0.006366021306018761
+CONTROL	endpoints-cross-ee	follow	81	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	83	0
+FOLLOW	endpoints-cross-ee	60	82	true	0.005422091520580142	0.006351608308356691
+CONTROL	endpoints-cross-ee	follow	82	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	84	0
+FOLLOW	endpoints-cross-ee	61	83	true	0.0054170170181164455	0.006337997824366111
+CONTROL	endpoints-cross-ee	follow	83	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	85	0
+FOLLOW	endpoints-cross-ee	62	84	true	0.005412514209869868	0.006325104143201542
+CONTROL	endpoints-cross-ee	follow	84	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	86	0
+FOLLOW	endpoints-cross-ee	63	85	true	0.005408515440393872	0.006312851264229615
+CONTROL	endpoints-cross-ee	follow	85	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	87	0
+FOLLOW	endpoints-cross-ee	64	86	true	0.0054049609487896695	0.0063011718111680715
+CONTROL	endpoints-cross-ee	follow	86	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	88	0
+FOLLOW	endpoints-cross-ee	65	87	true	0.005401797964101332	0.0062900060627551265
+CONTROL	endpoints-cross-ee	follow	87	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	89	0
+FOLLOW	endpoints-cross-ee	66	88	true	0.005398979900436628	0.00627930108851107
+CONTROL	endpoints-cross-ee	follow	88	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	90	0
+FOLLOW	endpoints-cross-ee	67	89	true	0.0053964656417100085	0.006269009979157363
+CONTROL	endpoints-cross-ee	follow	89	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	91	0
+FOLLOW	endpoints-cross-ee	68	90	true	0.005394218906667806	0.00625909116185972
+CONTROL	endpoints-cross-ee	follow	90	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	92	0
+FOLLOW	endpoints-cross-ee	69	91	true	0.005392207685852755	0.00624950779171462
+CONTROL	endpoints-cross-ee	follow	91	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	93	0
+FOLLOW	endpoints-cross-ee	70	92	true	0.005390403742635637	0.006240227211202687
+CONTROL	endpoints-cross-ee	follow	92	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	94	0
+FOLLOW	endpoints-cross-ee	71	93	true	0.005388782171491601	0.006231220470517953
+CONTROL	endpoints-cross-ee	follow	93	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	95	0
+FOLLOW	endpoints-cross-ee	72	94	true	0.005387321007060285	0.0062224619020023785
+CONTROL	endpoints-cross-ee	follow	94	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	96	0
+FOLLOW	endpoints-cross-ee	73	95	true	0.005386000878527336	0.00621392874299726
+CONTROL	endpoints-cross-ee	follow	95	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	97	0
+FOLLOW	endpoints-cross-ee	74	96	true	0.005384804704040867	0.0062056008015177935
+CONTROL	endpoints-cross-ee	follow	96	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	98	0
+FOLLOW	endpoints-cross-ee	75	97	true	0.005383717420802373	0.00619746016024411
+CONTROL	endpoints-cross-ee	follow	97	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	99	0
+FOLLOW	endpoints-cross-ee	76	98	true	0.005382725746671397	0.006189490914337892
+CONTROL	endpoints-cross-ee	follow	98	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	100	0
+FOLLOW	endpoints-cross-ee	77	99	true	0.005381817969679941	0.006181678939385103
+CONTROL	endpoints-cross-ee	follow	99	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	101	0
+FOLLOW	endpoints-cross-ee	78	100	true	0.0053809837623000805	0.006174011686087433
+CONTROL	endpoints-cross-ee	follow	100	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	102	0
+FOLLOW	endpoints-cross-ee	79	101	true	0.005380214017540812	0.0061664779985748965
+CONTROL	endpoints-cross-ee	follow	101	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	103	0
+FOLLOW	endpoints-cross-ee	80	102	true	0.005379500704360891	0.006159067953687146
+CONTROL	endpoints-cross-ee	follow	102	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	104	0
+FOLLOW	endpoints-cross-ee	81	103	true	0.005378836740148892	0.0061517727188656595
+CONTROL	endpoints-cross-ee	follow	103	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	105	0
+FOLLOW	endpoints-cross-ee	82	104	true	0.005378215878285585	0.006144584426468264
+CONTROL	endpoints-cross-ee	follow	104	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	106	0
+FOLLOW	endpoints-cross-ee	83	105	true	0.005377632608991206	0.006137496062643254
+CONTROL	endpoints-cross-ee	follow	105	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	107	0
+FOLLOW	endpoints-cross-ee	84	106	true	0.005377082071935643	0.006130501369083392
+CONTROL	endpoints-cross-ee	follow	106	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	108	0
+FOLLOW	endpoints-cross-ee	85	107	true	0.005376559979185804	0.006123594756161054
+CONTROL	endpoints-cross-ee	follow	107	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	109	0
+FOLLOW	endpoints-cross-ee	86	108	true	0.005376062547314257	0.006116771226163075
+CONTROL	endpoints-cross-ee	follow	108	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	110	0
+FOLLOW	endpoints-cross-ee	87	109	true	0.005375586437556864	0.006110026305403329
+CONTROL	endpoints-cross-ee	follow	109	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	111	0
+FOLLOW	endpoints-cross-ee	88	110	true	0.0053751287030656065	0.0061033559842156564
+CONTROL	endpoints-cross-ee	follow	110	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	112	0
+FOLLOW	endpoints-cross-ee	89	111	true	0.005374686742459877	0.0060967566639491206
+CONTROL	endpoints-cross-ee	follow	111	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	113	0
+FOLLOW	endpoints-cross-ee	90	112	true	0.005374258258862359	0.006090225110045928
+CONTROL	endpoints-cross-ee	follow	112	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	114	0
+FOLLOW	endpoints-cross-ee	91	113	true	0.005373841223830696	0.006083758410621138
+CONTROL	endpoints-cross-ee	follow	113	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	115	0
+FOLLOW	endpoints-cross-ee	92	114	true	0.005373433845576277	0.006077353939812507
+CONTROL	endpoints-cross-ee	follow	114	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	116	0
+FOLLOW	endpoints-cross-ee	93	115	true	0.005373034540938916	0.0060710093253708184
+CONTROL	endpoints-cross-ee	follow	115	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	117	0
+FOLLOW	endpoints-cross-ee	94	116	true	0.0053726419107363735	0.006064722420055857
+CONTROL	endpoints-cross-ee	follow	116	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	118	0
+FOLLOW	endpoints-cross-ee	95	117	true	0.005372254718013123	0.006058491276269481
+CONTROL	endpoints-cross-ee	follow	117	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	119	0
+FOLLOW	endpoints-cross-ee	96	118	true	0.005371871868884218	0.006052314123684248
+CONTROL	endpoints-cross-ee	follow	118	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	120	0
+FOLLOW	endpoints-cross-ee	97	119	true	0.005371492395669357	0.0060461893494010155
+CONTROL	endpoints-cross-ee	follow	119	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	121	0
+FOLLOW	endpoints-cross-ee	98	120	true	0.0053711154420298555	0.006040115480470255
+CONTROL	endpoints-cross-ee	follow	120	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	122	0
+FOLLOW	endpoints-cross-ee	99	121	true	0.005370740249866311	0.006034091168366582
+CONTROL	endpoints-cross-ee	follow	121	true	false	false	false	0	64	0	4	15	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	123	0
+FOLLOW	endpoints-cross-ee	100	122	true	0.005370366147777873	0.006028115175265162
+POST	endpoints-cross-ee	122	100	0.029140774485055726	0.03539321557527231	851462592
+LABEL	m:00000000-0000-0000-0000-000000000001|p:left	left	SUBTLE	18.324142456054688	16.344114303588867
+LABEL	m:00000000-0000-0000-0000-000000000002|p:right	right	SUBTLE	27.180191040039062	16.344114303588867
+LABEL_SHA256	0ebd97f1db5857f44c305a852c9a56bad2485b3d64da9a61c5472406b301bb71
+CONTROL	endpoints-cross-ee	repeat-seed	0	true	false	false	false	0	64	0	4	13	262144	1	131072	0	65536	0	4096	0	0	0	0	0	true	124	0
+POINT	endpoints-cross-ee	idle	node	n:m:00000000-0000-0000-0000-000000000001|p:left0	17.14079518773172	-1.414537770315404E-16	8.0
+POINT	endpoints-cross-ee	idle	node	n:m:00000000-0000-0000-0000-000000000001|p:left1	0.15403186195216487	17.078137275199968	8.0
+POINT	endpoints-cross-ee	idle	node	n:m:00000000-0000-0000-0000-000000000001|p:left2	-16.920100835993285	2.041530067413106E-15	8.0
+POINT	endpoints-cross-ee	idle	node	n:m:00000000-0000-0000-0000-000000000001|p:left3	0.15403186195216068	-17.078137275199968	8.0
+POINT	endpoints-cross-ee	idle	node	n:m:00000000-0000-0000-0000-000000000002|p:right0	-86.19259753621479	6.572758634827194E-18	8.0
+POINT	endpoints-cross-ee	idle	node	n:m:00000000-0000-0000-0000-000000000002|p:right1	-103.26673023416026	17.078137275199968	8.0
+POINT	endpoints-cross-ee	idle	node	n:m:00000000-0000-0000-0000-000000000002|p:right2	-120.25349355993977	1.8007818747958113E-15	8.0
+POINT	endpoints-cross-ee	idle	node	n:m:00000000-0000-0000-0000-000000000002|p:right3	-103.26673023416026	-17.078137275199968	8.0
+POINT	endpoints-cross-ee	idle	enclosure	m:00000000-0000-0000-0000-000000000001|p:left	0.03332792936827631	3.0243118249870134E-16	15.556349186104047
+POINT	endpoints-cross-ee	idle	enclosure	m:00000000-0000-0000-0000-000000000002|p:right	-103.14602630157633	1.3942202912509538E-16	15.556349186104047
+METRIC	endpoints-cross-ee	idle	m:00000000-0000-0000-0000-000000000001|p:left	left	8.087608870052332	8.087608870052334	[8.087608870052332, 8.087608870052332, 8.14930185694039, 8.087608870052335]	false	0	0
+METRIC	endpoints-cross-ee	idle	m:00000000-0000-0000-0000-000000000002|p:right	right	8.087608870052296	8.087608870052298	[8.149301856940404, 8.087608870052296, 8.087608870052296, 8.0876088700523]	false	0	0
+DIAGNOSTICS	endpoints-cross-ee	idle	false	0	true	true	0	0	0	0	0	[]	13	1	0	false	false	false
+POINT	endpoints-cross-ee	post100	node	n:m:00000000-0000-0000-0000-000000000001|p:left0	18.09273708148058	-4.869895430362649E-16	8.0
+POINT	endpoints-cross-ee	post100	node	n:m:00000000-0000-0000-0000-000000000001|p:left1	0.7988323717155984	17.602755744041882	8.0
+POINT	endpoints-cross-ee	post100	node	n:m:00000000-0000-0000-0000-000000000001|p:left2	-16.973582678858957	2.155108423151197E-15	8.0
+POINT	endpoints-cross-ee	post100	node	n:m:00000000-0000-0000-0000-000000000001|p:left3	0.7988323717155943	-17.60275574404188	8.0
+POINT	endpoints-cross-ee	post100	node	n:m:00000000-0000-0000-0000-000000000002|p:right0	-86.13911569334911	1.0718256722578309E-16	8.0
+POINT	endpoints-cross-ee	post100	node	n:m:00000000-0000-0000-0000-000000000002|p:right1	-103.91153074392366	17.60275574404188	8.0
+POINT	endpoints-cross-ee	post100	node	n:m:00000000-0000-0000-0000-000000000002|p:right2	-121.20543545368864	1.3837393426379148E-15	8.0
+POINT	endpoints-cross-ee	post100	node	n:m:00000000-0000-0000-0000-000000000002|p:right3	-103.91153074392366	-17.60275574404188	8.0
+POINT	endpoints-cross-ee	post100	enclosure	m:00000000-0000-0000-0000-000000000001|p:left	0.4954290021615883	1.9349027379493902E-15	15.556349186104047
+POINT	endpoints-cross-ee	post100	enclosure	m:00000000-0000-0000-0000-000000000002|p:right	-103.60812737436966	2.404757241100935E-16	15.556349186104047
+METRIC	endpoints-cross-ee	post100	m:00000000-0000-0000-0000-000000000001|p:left	left	8.67663165618093	8.676631656180932	[8.67663165618093, 8.676631656180934, 9.014310834286206, 8.67663165618093]	false	0	0
+METRIC	endpoints-cross-ee	post100	m:00000000-0000-0000-0000-000000000002|p:right	right	8.676631656180923	8.676631656180923	[9.014310834286203, 8.676631656180923, 8.676631656180923, 8.676631656180923]	false	0	0
+DIAGNOSTICS	endpoints-cross-ee	post100	false	0	true	true	0	0	0	0	0	[]	15	1	0	false	false	false
+ENDPOINT	endpoints-cross-ee	idle	e:m:00000000-0000-0000-0000-000000000001|p:left	e:m:00000000-0000-0000-0000-000000000002|p:right	graphRelationship	true	enclosure	enclosure	72.06665585873651	enclosure-enclosure
+ENDPOINT_AGGREGATE	endpoints-cross-ee	idle	node-node	NOT_APPLICABLE	NOT_APPLICABLE
+ENDPOINT_AGGREGATE	endpoints-cross-ee	idle	node-enclosure	NOT_APPLICABLE	NOT_APPLICABLE
+ENDPOINT_AGGREGATE	endpoints-cross-ee	idle	enclosure-enclosure	72.06665585873651	72.06665585873651
+ENDPOINT	endpoints-cross-ee	post100	e:m:00000000-0000-0000-0000-000000000001|p:left	e:m:00000000-0000-0000-0000-000000000002|p:right	graphRelationship	true	enclosure	enclosure	72.99085800432316	enclosure-enclosure
+ENDPOINT_AGGREGATE	endpoints-cross-ee	post100	node-node	NOT_APPLICABLE	NOT_APPLICABLE
+ENDPOINT_AGGREGATE	endpoints-cross-ee	post100	node-enclosure	NOT_APPLICABLE	NOT_APPLICABLE
+ENDPOINT_AGGREGATE	endpoints-cross-ee	post100	enclosure-enclosure	72.99085800432316	72.99085800432316
+NOTE	Descriptive endpoint gaps; additive MIN_GAP remains 6.0; total rests with enclosure endpoints change.
+CONTROL_SUMMARY	endpoints-cross-ee	C0	exhausted_control	true	gated_frames	124	exhausted_frames	0	verification_cap	64	max_verifications_observed	0	round_cap	4	max_residual_conflict_keys	0	max_repairs_observed	0	boundary_covered_frames	124	hull_invariant_frames	124	node_residual_mismatch_frames	0
+CONTROL_NOTE	endpoints-cross-ee	C0	exhausted_control	true	disposition	recorded_not_rejected	cause	pre-existing behaviour of the unmodified pre-change engine	observed_first_idle_step	22	shipped_pre_change_baseline	not-applicable	match	not-applicable	node_residual_mismatch_frames	0	recorded_not_rejected	verification-budget exhaustion; residual edge-conflict keys; repair counts; frame node-residual diagnostic versus the raw geometric scan	authorisation	ruling-A-amendment-1.md condition 4 covers the frame node-residual diagnostic disagreement: C0 records it, never rejects it	scope	baseline observation, not a candidate defect, regression or waived gate

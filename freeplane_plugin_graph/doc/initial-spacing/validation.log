@@ -1,0 +1,1440 @@
+Script started on 2026-10-21 00:36:04+08:00 [COMMAND="bash --noprofile --norc -v /tmp/spec-k-input.sh" <not executed on terminal>]
+export JAVA_HOME=/home/henry/.sdkman/candidates/java/21.0.8-zulu
+export PATH="$JAVA_HOME/bin:$PATH"
+export JAVA_TOOL_OPTIONS=-Djava.awt.headless=true
+java -version
+Picked up JAVA_TOOL_OPTIONS: -Djava.awt.headless=true
+openjdk version "21.0.8" 2025-07-15 LTS
+OpenJDK Runtime Environment Zulu21.44+17-CA (build 21.0.8+9-LTS)
+OpenJDK 64-Bit Server VM Zulu21.44+17-CA (build 21.0.8+9-LTS, mixed mode, sharing)
+gradle --version
+Picked up JAVA_TOOL_OPTIONS: -Djava.awt.headless=true
+
+------------------------------------------------------------
+Gradle 9.0.0
+------------------------------------------------------------
+
+Build time:    2025-07-31 16:35:12 UTC
+Revision:      328772c6bae126949610a8beb59cb227ee580241
+
+Kotlin:        2.2.0
+Groovy:        4.0.27
+Ant:           Apache Ant(TM) version 1.10.15 compiled on August 25 2024
+Launcher JVM:  21.0.8 (Azul Systems, Inc. 21.0.8+9-LTS)
+Daemon JVM:    /data/home/henry-arch/.sdkman/candidates/java/21.0.8-zulu (no JDK specified, using current Java home)
+OS:            Linux 6.18.57-1-lts amd64
+
+gradle --no-daemon --max-workers=1 :freeplane_plugin_graph:compileTestJava
+Picked up JAVA_TOOL_OPTIONS: -Djava.awt.headless=true
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.0.0/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+> Task :freeplane_api:compileJava UP-TO-DATE
+> Task :JOrtho_0.4_freeplane:compileJava UP-TO-DATE
+> Task :freeplane:compileJava UP-TO-DATE
+> Task :freeplane_plugin_graph:compileJava UP-TO-DATE
+> Task :freeplane_plugin_graph:processResources UP-TO-DATE
+> Task :freeplane_plugin_graph:classes UP-TO-DATE
+> Task :freeplane_plugin_graph:compileTestJava UP-TO-DATE
+
+[Incubating] Problems report is available at: file:///data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.0.0/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 23s
+6 actionable tasks: 6 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.0.0/userguide/configuration_cache_enabling.html
+gradle --no-daemon --max-workers=1 :freeplane_plugin_graph:test --rerun-tasks -PTestLoggingFull --tests 'org.freeplane.plugin.graph.layout.graphstream.InitialSpacingShould'
+Picked up JAVA_TOOL_OPTIONS: -Djava.awt.headless=true
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.0.0/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+
+> Task :freeplane_api:compileJava
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane_api/src/main/java/org/freeplane/api/swing/JFileChooser.java:9: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+import java.security.AccessController;
+                    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane_api/src/main/java/org/freeplane/api/swing/JFileChooser.java:144: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+		AccessController.doPrivileged((PrivilegedAction<Void>)()
+		^
+Note: /data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane_api/src/main/java/org/freeplane/api/Controller.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+5 warnings
+
+> Task :JOrtho_0.4_freeplane:compileJava
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/JOrtho_0.4_freeplane/src/main/java/SampleApplet.java:23: warning: [removal] JApplet in javax.swing has been deprecated and marked for removal
+import javax.swing.JApplet;
+                  ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/JOrtho_0.4_freeplane/src/main/java/SampleApplet.java:29: warning: [removal] JApplet in javax.swing has been deprecated and marked for removal
+public class SampleApplet extends JApplet {
+                                  ^
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+5 warnings
+
+> Task :freeplane:compileJava
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/map/NodeModel.java:25: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+import java.security.AccessController;
+                    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/view/swing/map/ZoomableLabel.java:14: warning: [removal] AccessControlException in java.security has been deprecated and marked for removal
+import java.security.AccessControlException;
+                    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/filter/condition/ASelectableCondition.java:7: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+import java.security.AccessController;
+                    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/view/swing/map/TextualTooltipRendererFactory.java:10: warning: [removal] AccessControlException in java.security has been deprecated and marked for removal
+import java.security.AccessControlException;
+                    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/main/application/ApplicationResourceController.java:26: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+import java.security.AccessController;
+                    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/main/application/LastOpenedList.java:30: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+import java.security.AccessController;
+                    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/view/swing/features/filepreview/BitmapViewerComponent.java:37: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+import java.security.AccessController;
+                    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/url/mindmapmode/MFileManager.java:47: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+import java.security.AccessController;
+                    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/url/UrlManager.java:38: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+import java.security.AccessController;
+                    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/core/ui/svgicons/FreeplaneIconFactory.java:6: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+import java.security.AccessController;
+                    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/main/applet/FreeplaneApplet.java:41: warning: [removal] JApplet in javax.swing has been deprecated and marked for removal
+import javax.swing.JApplet;
+                  ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/filter/FilterController.java:42: warning: [removal] AccessControlException in java.security has been deprecated and marked for removal
+import java.security.AccessControlException;
+                    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/clipboard/ClipboardAccessor.java:8: warning: [removal] AccessControlException in java.security has been deprecated and marked for removal
+import java.security.AccessControlException;
+                    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/url/mindmapmode/MapLoader.java:14: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+import java.security.AccessController;
+                    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/export/mindmapmode/XsltExportEngine.java:10: warning: [removal] Policy in java.security has been deprecated and marked for removal
+import java.security.Policy;
+                    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/link/icons/LinkDecorationConfig.java:9: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+import java.security.AccessController;
+                    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/XMLException.java:160: warning: [removal] finalize() in Object has been deprecated and marked for removal
+	protected void finalize() throws Throwable {
+	               ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/XMLException.java:163: warning: [removal] finalize() in Object has been deprecated and marked for removal
+		super.finalize();
+		     ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/NonValidator.java:138: warning: [removal] finalize() in Object has been deprecated and marked for removal
+	protected void finalize() throws Throwable {
+	               ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/NonValidator.java:144: warning: [removal] finalize() in Object has been deprecated and marked for removal
+		super.finalize();
+		     ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/XMLWriter.java:70: warning: [removal] finalize() in Object has been deprecated and marked for removal
+	protected void finalize() throws Throwable {
+	               ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/XMLWriter.java:72: warning: [removal] finalize() in Object has been deprecated and marked for removal
+		super.finalize();
+		     ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/XMLElement.java:327: warning: [removal] finalize() in Object has been deprecated and marked for removal
+	protected void finalize() throws Throwable {
+	               ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/XMLElement.java:337: warning: [removal] finalize() in Object has been deprecated and marked for removal
+		super.finalize();
+		     ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/StdXMLParser.java:66: warning: [removal] finalize() in Object has been deprecated and marked for removal
+	protected void finalize() throws Throwable {
+	               ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/StdXMLParser.java:71: warning: [removal] finalize() in Object has been deprecated and marked for removal
+		super.finalize();
+		     ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/StdXMLReader.java:218: warning: [removal] finalize() in Object has been deprecated and marked for removal
+	protected void finalize() throws Throwable {
+	               ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/StdXMLReader.java:225: warning: [removal] finalize() in Object has been deprecated and marked for removal
+		super.finalize();
+		     ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/ContentReader.java:106: warning: [removal] finalize() in Object has been deprecated and marked for removal
+	protected void finalize() throws Throwable {
+	               ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/ContentReader.java:110: warning: [removal] finalize() in Object has been deprecated and marked for removal
+		super.finalize();
+		     ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/ValidatorPlugin.java:117: warning: [removal] finalize() in Object has been deprecated and marked for removal
+	protected void finalize() throws Throwable {
+	               ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/ValidatorPlugin.java:119: warning: [removal] finalize() in Object has been deprecated and marked for removal
+		super.finalize();
+		     ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/StdXMLBuilder.java:202: warning: [removal] finalize() in Object has been deprecated and marked for removal
+	protected void finalize() throws Throwable {
+	               ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/StdXMLBuilder.java:209: warning: [removal] finalize() in Object has been deprecated and marked for removal
+		super.finalize();
+		     ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/CDATAReader.java:93: warning: [removal] finalize() in Object has been deprecated and marked for removal
+	protected void finalize() throws Throwable {
+	               ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/CDATAReader.java:95: warning: [removal] finalize() in Object has been deprecated and marked for removal
+		super.finalize();
+		     ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/XMLEntityResolver.java:81: warning: [removal] finalize() in Object has been deprecated and marked for removal
+	protected void finalize() throws Throwable {
+	               ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/XMLEntityResolver.java:84: warning: [removal] finalize() in Object has been deprecated and marked for removal
+		super.finalize();
+		     ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/PIReader.java:73: warning: [removal] finalize() in Object has been deprecated and marked for removal
+	protected void finalize() throws Throwable {
+	               ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/PIReader.java:75: warning: [removal] finalize() in Object has been deprecated and marked for removal
+		super.finalize();
+		     ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/map/NodeModel.java:207: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+	    AccessController.doPrivileged( (PrivilegedAction<Void>) () -> {
+	    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/map/NodeModel.java:226: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+	    AccessController.doPrivileged( (PrivilegedAction<Void>) () -> {
+	    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/map/NodeModel.java:246: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+	    AccessController.doPrivileged( (PrivilegedAction<Void>) () -> {
+	    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/map/NodeModel.java:256: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+	    AccessController.doPrivileged( (PrivilegedAction<Void>) () -> {
+	    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/map/NodeModel.java:268: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+	    AccessController.doPrivileged( (PrivilegedAction<Void>) () -> {
+	    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/view/swing/map/ZoomableLabel.java:103: warning: [removal] AccessControlException in java.security has been deprecated and marked for removal
+			if(e1 instanceof AccessControlException)
+			                 ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/edge/EdgeController.java:141: warning: [removal] Integer(int) in Integer has been deprecated and marked for removal
+				return new Integer(EdgeModel.STANDARD_WIDTH);
+				       ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/core/io/xml/XMLWriter.java:75: warning: [removal] finalize() in Object has been deprecated and marked for removal
+	protected void finalize() throws Throwable {
+	               ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/core/io/xml/XMLWriter.java:78: warning: [removal] finalize() in Object has been deprecated and marked for removal
+		super.finalize();
+		     ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/view/swing/map/attribute/ReducedAttributeTableModelDecorator.java:117: warning: [removal] Integer(int) in Integer has been deprecated and marked for removal
+					index.add(new Integer(i));
+					          ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/filter/condition/ConditionFactory.java:136: warning: [removal] Integer(int) in Integer has been deprecated and marked for removal
+		final IElementaryConditionController old = conditionControllers.put(new Integer(position), controller);
+		                                                                    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/filter/condition/ASelectableCondition.java:73: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+			return AccessController.doPrivileged(new PrivilegedExceptionAction<Boolean>() {
+			       ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/view/swing/map/TextualTooltipRendererFactory.java:92: warning: [removal] AccessControlException in java.security has been deprecated and marked for removal
+        	if(e1 instanceof AccessControlException)
+        	                 ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/main/application/ApplicationResourceController.java:202: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+		return AccessController.doPrivileged(new PrivilegedAction<URL>() {
+		       ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/main/application/ApplicationPropertyStore.java:223: warning: [removal] SecurityManager in java.lang has been deprecated and marked for removal
+		SecurityManager sm = System.getSecurityManager();
+		^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/main/application/ApplicationPropertyStore.java:223: warning: [removal] getSecurityManager() in System has been deprecated and marked for removal
+		SecurityManager sm = System.getSecurityManager();
+		                           ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/main/application/LastOpenedList.java:253: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+				|| !AccessController.doPrivileged(new PrivilegedAction<Boolean>() {
+				    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/com/thebuzzmedia/imgscalr/AsyncScalr.java:505: warning: [removal] SecurityManager in java.lang has been deprecated and marked for removal
+			SecurityManager manager = System.getSecurityManager();
+			^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/com/thebuzzmedia/imgscalr/AsyncScalr.java:505: warning: [removal] getSecurityManager() in System has been deprecated and marked for removal
+			SecurityManager manager = System.getSecurityManager();
+			                                ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/view/swing/features/filepreview/BitmapViewerComponent.java:157: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+	    AccessController.doPrivileged(//
+	    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/view/swing/features/filepreview/BitmapViewerComponent.java:365: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+	    AccessController.doPrivileged(new PrivilegedAction<Void>() {
+	    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/view/swing/features/filepreview/BitmapViewerComponent.java:393: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+	        AccessController.doPrivileged(new PrivilegedAction<Void>() {
+	        ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/url/UrlManager.java:181: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+		JFreeplaneCustomizableFileChooser choosery = AccessController.doPrivileged((PrivilegedAction<JFreeplaneCustomizableFileChooser>)() -> {
+		                                             ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/url/mindmapmode/MFileManager.java:654: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+		return AccessController.doPrivileged(new PrivilegedAction<MapModel>() {
+		       ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/url/mindmapmode/MFileManager.java:686: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+		return AccessController.doPrivileged(new PrivilegedAction<MapModel>() {
+		       ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/map/mindmapmode/MMapController.java:785: warning: [removal] Integer(int) in Integer has been deprecated and marked for removal
+                range.add(new Integer(sortedChildren.indexOf(node)));
+                          ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/view/swing/features/time/mindmapmode/nodelist/FlatNodeTableFilterModel.java:153: warning: [removal] Integer(int) in Integer has been deprecated and marked for removal
+				newIndexArray.add(new Integer(i));
+				                  ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/view/swing/features/time/mindmapmode/nodelist/FlatNodeTableFilterModel.java:165: warning: [removal] Integer(int) in Integer has been deprecated and marked for removal
+	                newIndexArray.add(new Integer(i));
+	                                  ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/core/ui/components/calendar/JDayChooser.java:253: warning: [removal] Integer(String) in Integer has been deprecated and marked for removal
+		final int day = new Integer(buttonText).intValue();
+		                ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/core/ui/components/calendar/JSpinField.java:346: warning: [removal] Integer(int) in Integer has been deprecated and marked for removal
+		spinner.setValue(new Integer(value));
+		                 ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/core/ui/components/calendar/JYearChooser.java:143: warning: [removal] Integer(int) in Integer has been deprecated and marked for removal
+		spinner.setValue(new Integer(value));
+		                 ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/core/io/xml/StdXMLBuilder.java:206: warning: [removal] finalize() in Object has been deprecated and marked for removal
+	protected void finalize() throws Throwable {
+	               ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/core/io/xml/StdXMLBuilder.java:212: warning: [removal] finalize() in Object has been deprecated and marked for removal
+		super.finalize();
+		     ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/core/ui/svgicons/FreeplaneIconFactory.java:24: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+		return AccessController.doPrivileged(new PrivilegedAction<Icon>() {
+		       ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/core/ui/svgicons/FreeplaneIconFactory.java:41: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+		return AccessController.doPrivileged(new PrivilegedAction<Icon>() {
+		       ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/core/ui/svgicons/FreeplaneIconFactory.java:50: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+		return AccessController.doPrivileged(new PrivilegedAction<Icon>() {
+		       ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/core/ui/svgicons/FreeplaneIconFactory.java:59: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+		return AccessController.doPrivileged(new PrivilegedAction<Icon>() {
+		       ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/core/ui/components/FrameResynchronizer.java:157: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+			final long shell = java.security.AccessController.doPrivileged(
+			                                ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/main/applet/FreeplaneApplet.java:72: warning: [removal] JApplet in javax.swing has been deprecated and marked for removal
+public class FreeplaneApplet extends JApplet {
+                                     ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/main/filemode/FModeControllerFactory.java:86: warning: [removal] Integer(int) in Integer has been deprecated and marked for removal
+		NodeStyleController.getController().shapeHandlers.addGetter(new Integer(0), new IPropertyHandler<NodeGeometryModel, NodeModel>() {
+		                                                            ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/main/osgi/ActivatorImpl.java:192: warning: [removal] SecurityManager in java.lang has been deprecated and marked for removal
+		SecurityManager securityManager = System.getSecurityManager();
+		^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/main/osgi/ActivatorImpl.java:192: warning: [removal] getSecurityManager() in System has been deprecated and marked for removal
+		SecurityManager securityManager = System.getSecurityManager();
+		                                        ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/main/osgi/ActivatorImpl.java:193: warning: [removal] setSecurityManager(SecurityManager) in System has been deprecated and marked for removal
+		System.setSecurityManager(null);
+		      ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/main/osgi/ActivatorImpl.java:231: warning: [removal] setSecurityManager(SecurityManager) in System has been deprecated and marked for removal
+		        System.setSecurityManager(securityManager);
+		              ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/filter/FilterController.java:1041: warning: [removal] AccessControlException in java.security has been deprecated and marked for removal
+		catch (final AccessControlException e) {
+		             ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/clipboard/ClipboardAccessor.java:41: warning: [removal] AccessControlException in java.security has been deprecated and marked for removal
+		catch (final AccessControlException e) {
+		             ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/map/mindmapmode/clipboard/MMapClipboardController.java:889: warning: [removal] Integer(int) in Integer has been deprecated and marked for removal
+		parentNodesDepths.add(new Integer(-1));
+		                      ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/map/mindmapmode/clipboard/MMapClipboardController.java:954: warning: [removal] Integer(int) in Integer has been deprecated and marked for removal
+				parentNodesDepths.add(new Integer(textFragment.depth));
+				                      ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/url/mindmapmode/MapLoader.java:221: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+			AccessController.doPrivileged(new PrivilegedExceptionAction<Void>() {
+			^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/export/mindmapmode/XsltExportEngine.java:29: warning: [removal] Policy in java.security has been deprecated and marked for removal
+	static class XsltExportPolicy extends Policy {
+	                                      ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/export/mindmapmode/XsltExportEngine.java:31: warning: [removal] Policy in java.security has been deprecated and marked for removal
+		final Policy alternativePolicy;
+		      ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/export/mindmapmode/XsltExportEngine.java:33: warning: [removal] Policy in java.security has been deprecated and marked for removal
+			this(Policy.getPolicy());
+			     ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/export/mindmapmode/XsltExportEngine.java:35: warning: [removal] Policy in java.security has been deprecated and marked for removal
+		public XsltExportPolicy(Policy alternativePolicy) {
+		                        ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/export/mindmapmode/XsltExportEngine.java:45: warning: [removal] Policy in java.security has been deprecated and marked for removal
+			 if(Policy.getPolicy() != this)
+			    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/export/mindmapmode/XsltExportEngine.java:47: warning: [removal] Policy in java.security has been deprecated and marked for removal
+			Policy.setPolicy(alternativePolicy);
+			^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/export/mindmapmode/XsltExportEngine.java:90: warning: [removal] Policy in java.security has been deprecated and marked for removal
+		Policy.setPolicy(xsltExportPolicy);
+		^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/link/icons/LinkDecorationConfig.java:48: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+	        AccessController.doPrivileged((PrivilegedAction<?>)()-> {
+	        ^
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+100 warnings
+
+> Task :freeplane:processResources NO-SOURCE
+> Task :freeplane:classes
+> Task :freeplane:cleanBUILD
+> Task :freeplane:editorJar
+> Task :freeplane:osgiJar
+> Task :freeplane:compileViewerJava NO-SOURCE
+> Task :freeplane:createEmojiList
+> Task :freeplane:processViewerResources
+> Task :freeplane:viewerClasses
+> Task :freeplane:viewerJar
+> Task :freeplane_api:processResources NO-SOURCE
+> Task :freeplane_api:classes
+> Task :freeplane_api:jar
+
+> Task :freeplane_ant:compileJava
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+3 warnings
+
+> Task :freeplane_ant:processResources NO-SOURCE
+> Task :freeplane_ant:classes
+> Task :freeplane_ant:jar
+> Task :JOrtho_0.4_freeplane:check_translation
+> Task :JOrtho_0.4_freeplane:processResources
+> Task :JOrtho_0.4_freeplane:classes
+> Task :JOrtho_0.4_freeplane:jar
+
+> Task :freeplane:jar
+warning: No sub JAR or directory lib/freeplaneviewer.jar
+warning: No sub JAR or directory lib/freeplaneeditor-1.13.4.jar
+warning: No sub JAR or directory lib/freeplane_mac-1.13.4.jar
+warning: No sub JAR or directory lib/freeplaneosgi-1.13.4.jar
+warning: No sub JAR or directory lib/twemoji-12.1.4.jar
+warning: No sub JAR or directory lib/svgSalamander-1.1.4.jar
+warning: No sub JAR or directory lib/data-url-2.0.1.jar
+warning: No sub JAR or directory lib/flatlaf-3.7.2.jar
+warning: No sub JAR or directory lib/imageio-jpeg-3.12.0.jar
+warning: No sub JAR or directory lib/jna-platform-5.19.1.jar
+warning: No sub JAR or directory lib/jortho-1.13.4.jar
+warning: No sub JAR or directory lib/simplyhtml-0.19.12.jar
+warning: No sub JAR or directory lib/commons-lang-2.6.jar
+warning: No sub JAR or directory lib/commons-io-2.19.0.jar
+warning: No sub JAR or directory lib/commons-codec-1.18.0.jar
+warning: No sub JAR or directory lib/jgoodies-forms-1.9.0.jar
+warning: No sub JAR or directory lib/jgoodies-common-1.8.1.jar
+warning: No sub JAR or directory lib/idw-gpl-1.6.1.jar
+warning: No sub JAR or directory lib/imageio-metadata-3.12.0.jar
+warning: No sub JAR or directory lib/imageio-core-3.12.0.jar
+warning: No sub JAR or directory lib/common-image-3.12.0.jar
+warning: No sub JAR or directory lib/common-io-3.12.0.jar
+warning: No sub JAR or directory lib/common-lang-3.12.0.jar
+warning: No sub JAR or directory lib/jna-5.19.1.jar
+warning: No sub JAR or directory lib/vaqua-13.jar
+warning: No sub JAR or directory lib/jnr-14.jar
+warning: No sub JAR or directory lib/vappearances-4.jar
+warning: No sub JAR or directory lib/javax.activation-1.2.0.jar
+warning: Unused Import-Package instructions: [nothing.*] 
+warning: Export org.freeplane.features.filter.hidden,  has 1,  private references [org.freeplane.core.enumeration]
+
+> Task :freeplane_plugin_graph:compileJava
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+Note: /data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindow.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+3 warnings
+
+> Task :freeplane_plugin_graph:processResources
+> Task :freeplane_plugin_graph:classes
+
+> Task :freeplane_plugin_graph:compileTestJava
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/control/EdgeNodeClearanceReplay.java:633: warning: [removal] getSecurityManager() in System has been deprecated and marked for removal
+                && System.getSecurityManager() == null, "E3 helper security prerequisite failed");
+                         ^
+Note: /data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/command/SourceNavigationShould.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+4 warnings
+
+> Task :freeplane_plugin_graph:processTestResources
+> Task :freeplane_plugin_graph:testClasses
+
+> Task :freeplane_plugin_graph:test
+Picked up JAVA_TOOL_OPTIONS: -Djava.awt.headless=true
+
+PASS C0-S1 first-idle 84
+PASS C0-reference first-idle 42
+PASS C0-cross first-idle 756
+PASS C0-mixed first-idle 45
+PASS C0-two first-idle 22
+PASS C0-endpoints-cross-ne first-idle 22
+PASS C0-endpoints-cross-ee first-idle 22
+PASS C0-matrix-same-nn first-idle CONSUMER_ONLY
+PASS C0-matrix-same-ne first-idle CONSUMER_ONLY
+PASS C0-matrix-same-ee first-idle CONSUMER_ONLY
+PASS C0-matrix-cross-nn first-idle CONSUMER_ONLY
+PASS C0-matrix-cross-ne first-idle CONSUMER_ONLY
+PASS C0-matrix-cross-ee first-idle CONSUMER_ONLY
+PASS candidate-S1 first-idle 58
+PASS candidate-reference first-idle 37
+PASS candidate-cross first-idle 3455
+PASS candidate-mixed first-idle 77
+PASS candidate-two first-idle 7
+PASS candidate-endpoints-cross-ne first-idle 7
+PASS candidate-endpoints-cross-ee first-idle 7
+PASS candidate-matrix-same-nn first-idle CONSUMER_ONLY
+PASS candidate-matrix-same-ne first-idle CONSUMER_ONLY
+PASS candidate-matrix-same-ee first-idle CONSUMER_ONLY
+PASS candidate-matrix-cross-nn first-idle CONSUMER_ONLY
+PASS candidate-matrix-cross-ne first-idle CONSUMER_ONLY
+PASS candidate-matrix-cross-ee first-idle CONSUMER_ONLY
+
+[Incubating] Problems report is available at: file:///data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.0.0/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 8m 25s
+21 actionable tasks: 21 executed
+gradle --no-daemon --max-workers=1 :freeplane_plugin_graph:test --rerun-tasks -PTestLoggingFull --tests 'org.freeplane.plugin.graph.layout.TypedForcesShould' --tests 'org.freeplane.plugin.graph.layout.graphstream.ClusterProximityShould' --tests 'org.freeplane.plugin.graph.layout.graphstream.ClusterPackingShould' --tests 'org.freeplane.plugin.graph.layout.BoundarySeparationShould' --tests 'org.freeplane.plugin.graph.layout.LayoutWorkerShould'
+Picked up JAVA_TOOL_OPTIONS: -Djava.awt.headless=true
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.0.0/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+
+> Task :freeplane_api:compileJava
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane_api/src/main/java/org/freeplane/api/swing/JFileChooser.java:9: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+import java.security.AccessController;
+                    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane_api/src/main/java/org/freeplane/api/swing/JFileChooser.java:144: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+		AccessController.doPrivileged((PrivilegedAction<Void>)()
+		^
+Note: /data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane_api/src/main/java/org/freeplane/api/Controller.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+5 warnings
+
+> Task :JOrtho_0.4_freeplane:compileJava
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/JOrtho_0.4_freeplane/src/main/java/SampleApplet.java:23: warning: [removal] JApplet in javax.swing has been deprecated and marked for removal
+import javax.swing.JApplet;
+                  ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/JOrtho_0.4_freeplane/src/main/java/SampleApplet.java:29: warning: [removal] JApplet in javax.swing has been deprecated and marked for removal
+public class SampleApplet extends JApplet {
+                                  ^
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+5 warnings
+
+> Task :freeplane:compileJava
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/map/NodeModel.java:25: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+import java.security.AccessController;
+                    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/view/swing/map/ZoomableLabel.java:14: warning: [removal] AccessControlException in java.security has been deprecated and marked for removal
+import java.security.AccessControlException;
+                    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/filter/condition/ASelectableCondition.java:7: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+import java.security.AccessController;
+                    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/view/swing/map/TextualTooltipRendererFactory.java:10: warning: [removal] AccessControlException in java.security has been deprecated and marked for removal
+import java.security.AccessControlException;
+                    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/main/application/ApplicationResourceController.java:26: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+import java.security.AccessController;
+                    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/main/application/LastOpenedList.java:30: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+import java.security.AccessController;
+                    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/view/swing/features/filepreview/BitmapViewerComponent.java:37: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+import java.security.AccessController;
+                    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/url/mindmapmode/MFileManager.java:47: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+import java.security.AccessController;
+                    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/url/UrlManager.java:38: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+import java.security.AccessController;
+                    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/core/ui/svgicons/FreeplaneIconFactory.java:6: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+import java.security.AccessController;
+                    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/main/applet/FreeplaneApplet.java:41: warning: [removal] JApplet in javax.swing has been deprecated and marked for removal
+import javax.swing.JApplet;
+                  ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/filter/FilterController.java:42: warning: [removal] AccessControlException in java.security has been deprecated and marked for removal
+import java.security.AccessControlException;
+                    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/clipboard/ClipboardAccessor.java:8: warning: [removal] AccessControlException in java.security has been deprecated and marked for removal
+import java.security.AccessControlException;
+                    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/url/mindmapmode/MapLoader.java:14: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+import java.security.AccessController;
+                    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/export/mindmapmode/XsltExportEngine.java:10: warning: [removal] Policy in java.security has been deprecated and marked for removal
+import java.security.Policy;
+                    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/link/icons/LinkDecorationConfig.java:9: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+import java.security.AccessController;
+                    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/XMLException.java:160: warning: [removal] finalize() in Object has been deprecated and marked for removal
+	protected void finalize() throws Throwable {
+	               ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/XMLException.java:163: warning: [removal] finalize() in Object has been deprecated and marked for removal
+		super.finalize();
+		     ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/NonValidator.java:138: warning: [removal] finalize() in Object has been deprecated and marked for removal
+	protected void finalize() throws Throwable {
+	               ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/NonValidator.java:144: warning: [removal] finalize() in Object has been deprecated and marked for removal
+		super.finalize();
+		     ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/XMLWriter.java:70: warning: [removal] finalize() in Object has been deprecated and marked for removal
+	protected void finalize() throws Throwable {
+	               ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/XMLWriter.java:72: warning: [removal] finalize() in Object has been deprecated and marked for removal
+		super.finalize();
+		     ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/XMLElement.java:327: warning: [removal] finalize() in Object has been deprecated and marked for removal
+	protected void finalize() throws Throwable {
+	               ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/XMLElement.java:337: warning: [removal] finalize() in Object has been deprecated and marked for removal
+		super.finalize();
+		     ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/StdXMLParser.java:66: warning: [removal] finalize() in Object has been deprecated and marked for removal
+	protected void finalize() throws Throwable {
+	               ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/StdXMLParser.java:71: warning: [removal] finalize() in Object has been deprecated and marked for removal
+		super.finalize();
+		     ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/StdXMLReader.java:218: warning: [removal] finalize() in Object has been deprecated and marked for removal
+	protected void finalize() throws Throwable {
+	               ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/StdXMLReader.java:225: warning: [removal] finalize() in Object has been deprecated and marked for removal
+		super.finalize();
+		     ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/ContentReader.java:106: warning: [removal] finalize() in Object has been deprecated and marked for removal
+	protected void finalize() throws Throwable {
+	               ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/ContentReader.java:110: warning: [removal] finalize() in Object has been deprecated and marked for removal
+		super.finalize();
+		     ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/ValidatorPlugin.java:117: warning: [removal] finalize() in Object has been deprecated and marked for removal
+	protected void finalize() throws Throwable {
+	               ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/ValidatorPlugin.java:119: warning: [removal] finalize() in Object has been deprecated and marked for removal
+		super.finalize();
+		     ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/StdXMLBuilder.java:202: warning: [removal] finalize() in Object has been deprecated and marked for removal
+	protected void finalize() throws Throwable {
+	               ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/StdXMLBuilder.java:209: warning: [removal] finalize() in Object has been deprecated and marked for removal
+		super.finalize();
+		     ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/CDATAReader.java:93: warning: [removal] finalize() in Object has been deprecated and marked for removal
+	protected void finalize() throws Throwable {
+	               ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/CDATAReader.java:95: warning: [removal] finalize() in Object has been deprecated and marked for removal
+		super.finalize();
+		     ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/XMLEntityResolver.java:81: warning: [removal] finalize() in Object has been deprecated and marked for removal
+	protected void finalize() throws Throwable {
+	               ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/XMLEntityResolver.java:84: warning: [removal] finalize() in Object has been deprecated and marked for removal
+		super.finalize();
+		     ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/PIReader.java:73: warning: [removal] finalize() in Object has been deprecated and marked for removal
+	protected void finalize() throws Throwable {
+	               ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/n3/nanoxml/PIReader.java:75: warning: [removal] finalize() in Object has been deprecated and marked for removal
+		super.finalize();
+		     ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/map/NodeModel.java:207: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+	    AccessController.doPrivileged( (PrivilegedAction<Void>) () -> {
+	    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/map/NodeModel.java:226: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+	    AccessController.doPrivileged( (PrivilegedAction<Void>) () -> {
+	    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/map/NodeModel.java:246: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+	    AccessController.doPrivileged( (PrivilegedAction<Void>) () -> {
+	    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/map/NodeModel.java:256: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+	    AccessController.doPrivileged( (PrivilegedAction<Void>) () -> {
+	    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/map/NodeModel.java:268: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+	    AccessController.doPrivileged( (PrivilegedAction<Void>) () -> {
+	    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/view/swing/map/ZoomableLabel.java:103: warning: [removal] AccessControlException in java.security has been deprecated and marked for removal
+			if(e1 instanceof AccessControlException)
+			                 ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/edge/EdgeController.java:141: warning: [removal] Integer(int) in Integer has been deprecated and marked for removal
+				return new Integer(EdgeModel.STANDARD_WIDTH);
+				       ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/core/io/xml/XMLWriter.java:75: warning: [removal] finalize() in Object has been deprecated and marked for removal
+	protected void finalize() throws Throwable {
+	               ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/core/io/xml/XMLWriter.java:78: warning: [removal] finalize() in Object has been deprecated and marked for removal
+		super.finalize();
+		     ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/view/swing/map/attribute/ReducedAttributeTableModelDecorator.java:117: warning: [removal] Integer(int) in Integer has been deprecated and marked for removal
+					index.add(new Integer(i));
+					          ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/filter/condition/ConditionFactory.java:136: warning: [removal] Integer(int) in Integer has been deprecated and marked for removal
+		final IElementaryConditionController old = conditionControllers.put(new Integer(position), controller);
+		                                                                    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/filter/condition/ASelectableCondition.java:73: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+			return AccessController.doPrivileged(new PrivilegedExceptionAction<Boolean>() {
+			       ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/view/swing/map/TextualTooltipRendererFactory.java:92: warning: [removal] AccessControlException in java.security has been deprecated and marked for removal
+        	if(e1 instanceof AccessControlException)
+        	                 ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/main/application/ApplicationResourceController.java:202: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+		return AccessController.doPrivileged(new PrivilegedAction<URL>() {
+		       ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/main/application/ApplicationPropertyStore.java:223: warning: [removal] SecurityManager in java.lang has been deprecated and marked for removal
+		SecurityManager sm = System.getSecurityManager();
+		^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/main/application/ApplicationPropertyStore.java:223: warning: [removal] getSecurityManager() in System has been deprecated and marked for removal
+		SecurityManager sm = System.getSecurityManager();
+		                           ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/main/application/LastOpenedList.java:253: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+				|| !AccessController.doPrivileged(new PrivilegedAction<Boolean>() {
+				    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/com/thebuzzmedia/imgscalr/AsyncScalr.java:505: warning: [removal] SecurityManager in java.lang has been deprecated and marked for removal
+			SecurityManager manager = System.getSecurityManager();
+			^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/com/thebuzzmedia/imgscalr/AsyncScalr.java:505: warning: [removal] getSecurityManager() in System has been deprecated and marked for removal
+			SecurityManager manager = System.getSecurityManager();
+			                                ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/view/swing/features/filepreview/BitmapViewerComponent.java:157: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+	    AccessController.doPrivileged(//
+	    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/view/swing/features/filepreview/BitmapViewerComponent.java:365: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+	    AccessController.doPrivileged(new PrivilegedAction<Void>() {
+	    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/view/swing/features/filepreview/BitmapViewerComponent.java:393: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+	        AccessController.doPrivileged(new PrivilegedAction<Void>() {
+	        ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/url/UrlManager.java:181: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+		JFreeplaneCustomizableFileChooser choosery = AccessController.doPrivileged((PrivilegedAction<JFreeplaneCustomizableFileChooser>)() -> {
+		                                             ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/url/mindmapmode/MFileManager.java:654: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+		return AccessController.doPrivileged(new PrivilegedAction<MapModel>() {
+		       ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/url/mindmapmode/MFileManager.java:686: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+		return AccessController.doPrivileged(new PrivilegedAction<MapModel>() {
+		       ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/map/mindmapmode/MMapController.java:785: warning: [removal] Integer(int) in Integer has been deprecated and marked for removal
+                range.add(new Integer(sortedChildren.indexOf(node)));
+                          ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/view/swing/features/time/mindmapmode/nodelist/FlatNodeTableFilterModel.java:153: warning: [removal] Integer(int) in Integer has been deprecated and marked for removal
+				newIndexArray.add(new Integer(i));
+				                  ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/view/swing/features/time/mindmapmode/nodelist/FlatNodeTableFilterModel.java:165: warning: [removal] Integer(int) in Integer has been deprecated and marked for removal
+	                newIndexArray.add(new Integer(i));
+	                                  ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/core/ui/components/calendar/JDayChooser.java:253: warning: [removal] Integer(String) in Integer has been deprecated and marked for removal
+		final int day = new Integer(buttonText).intValue();
+		                ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/core/ui/components/calendar/JSpinField.java:346: warning: [removal] Integer(int) in Integer has been deprecated and marked for removal
+		spinner.setValue(new Integer(value));
+		                 ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/core/ui/components/calendar/JYearChooser.java:143: warning: [removal] Integer(int) in Integer has been deprecated and marked for removal
+		spinner.setValue(new Integer(value));
+		                 ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/core/io/xml/StdXMLBuilder.java:206: warning: [removal] finalize() in Object has been deprecated and marked for removal
+	protected void finalize() throws Throwable {
+	               ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/core/io/xml/StdXMLBuilder.java:212: warning: [removal] finalize() in Object has been deprecated and marked for removal
+		super.finalize();
+		     ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/core/ui/svgicons/FreeplaneIconFactory.java:24: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+		return AccessController.doPrivileged(new PrivilegedAction<Icon>() {
+		       ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/core/ui/svgicons/FreeplaneIconFactory.java:41: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+		return AccessController.doPrivileged(new PrivilegedAction<Icon>() {
+		       ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/core/ui/svgicons/FreeplaneIconFactory.java:50: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+		return AccessController.doPrivileged(new PrivilegedAction<Icon>() {
+		       ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/core/ui/svgicons/FreeplaneIconFactory.java:59: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+		return AccessController.doPrivileged(new PrivilegedAction<Icon>() {
+		       ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/core/ui/components/FrameResynchronizer.java:157: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+			final long shell = java.security.AccessController.doPrivileged(
+			                                ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/main/applet/FreeplaneApplet.java:72: warning: [removal] JApplet in javax.swing has been deprecated and marked for removal
+public class FreeplaneApplet extends JApplet {
+                                     ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/main/filemode/FModeControllerFactory.java:86: warning: [removal] Integer(int) in Integer has been deprecated and marked for removal
+		NodeStyleController.getController().shapeHandlers.addGetter(new Integer(0), new IPropertyHandler<NodeGeometryModel, NodeModel>() {
+		                                                            ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/main/osgi/ActivatorImpl.java:192: warning: [removal] SecurityManager in java.lang has been deprecated and marked for removal
+		SecurityManager securityManager = System.getSecurityManager();
+		^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/main/osgi/ActivatorImpl.java:192: warning: [removal] getSecurityManager() in System has been deprecated and marked for removal
+		SecurityManager securityManager = System.getSecurityManager();
+		                                        ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/main/osgi/ActivatorImpl.java:193: warning: [removal] setSecurityManager(SecurityManager) in System has been deprecated and marked for removal
+		System.setSecurityManager(null);
+		      ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/main/osgi/ActivatorImpl.java:231: warning: [removal] setSecurityManager(SecurityManager) in System has been deprecated and marked for removal
+		        System.setSecurityManager(securityManager);
+		              ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/filter/FilterController.java:1041: warning: [removal] AccessControlException in java.security has been deprecated and marked for removal
+		catch (final AccessControlException e) {
+		             ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/clipboard/ClipboardAccessor.java:41: warning: [removal] AccessControlException in java.security has been deprecated and marked for removal
+		catch (final AccessControlException e) {
+		             ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/map/mindmapmode/clipboard/MMapClipboardController.java:889: warning: [removal] Integer(int) in Integer has been deprecated and marked for removal
+		parentNodesDepths.add(new Integer(-1));
+		                      ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/map/mindmapmode/clipboard/MMapClipboardController.java:954: warning: [removal] Integer(int) in Integer has been deprecated and marked for removal
+				parentNodesDepths.add(new Integer(textFragment.depth));
+				                      ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/url/mindmapmode/MapLoader.java:221: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+			AccessController.doPrivileged(new PrivilegedExceptionAction<Void>() {
+			^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/export/mindmapmode/XsltExportEngine.java:29: warning: [removal] Policy in java.security has been deprecated and marked for removal
+	static class XsltExportPolicy extends Policy {
+	                                      ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/export/mindmapmode/XsltExportEngine.java:31: warning: [removal] Policy in java.security has been deprecated and marked for removal
+		final Policy alternativePolicy;
+		      ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/export/mindmapmode/XsltExportEngine.java:33: warning: [removal] Policy in java.security has been deprecated and marked for removal
+			this(Policy.getPolicy());
+			     ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/export/mindmapmode/XsltExportEngine.java:35: warning: [removal] Policy in java.security has been deprecated and marked for removal
+		public XsltExportPolicy(Policy alternativePolicy) {
+		                        ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/export/mindmapmode/XsltExportEngine.java:45: warning: [removal] Policy in java.security has been deprecated and marked for removal
+			 if(Policy.getPolicy() != this)
+			    ^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/export/mindmapmode/XsltExportEngine.java:47: warning: [removal] Policy in java.security has been deprecated and marked for removal
+			Policy.setPolicy(alternativePolicy);
+			^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/export/mindmapmode/XsltExportEngine.java:90: warning: [removal] Policy in java.security has been deprecated and marked for removal
+		Policy.setPolicy(xsltExportPolicy);
+		^
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/src/main/java/org/freeplane/features/link/icons/LinkDecorationConfig.java:48: warning: [removal] AccessController in java.security has been deprecated and marked for removal
+	        AccessController.doPrivileged((PrivilegedAction<?>)()-> {
+	        ^
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+100 warnings
+
+> Task :freeplane:processResources NO-SOURCE
+> Task :freeplane:classes
+> Task :freeplane:cleanBUILD
+> Task :freeplane:editorJar
+> Task :freeplane:osgiJar
+> Task :freeplane:compileViewerJava NO-SOURCE
+> Task :freeplane:createEmojiList
+> Task :freeplane:processViewerResources
+> Task :freeplane:viewerClasses
+> Task :freeplane:viewerJar
+> Task :freeplane_api:processResources NO-SOURCE
+> Task :freeplane_api:classes
+> Task :freeplane_api:jar
+
+> Task :freeplane_ant:compileJava
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+3 warnings
+
+> Task :freeplane_ant:processResources NO-SOURCE
+> Task :freeplane_ant:classes
+> Task :freeplane_ant:jar
+> Task :JOrtho_0.4_freeplane:check_translation
+> Task :JOrtho_0.4_freeplane:processResources
+> Task :JOrtho_0.4_freeplane:classes
+> Task :JOrtho_0.4_freeplane:jar
+
+> Task :freeplane:jar
+warning: No sub JAR or directory lib/freeplaneviewer.jar
+warning: No sub JAR or directory lib/freeplaneeditor-1.13.4.jar
+warning: No sub JAR or directory lib/freeplane_mac-1.13.4.jar
+warning: No sub JAR or directory lib/freeplaneosgi-1.13.4.jar
+warning: No sub JAR or directory lib/twemoji-12.1.4.jar
+warning: No sub JAR or directory lib/svgSalamander-1.1.4.jar
+warning: No sub JAR or directory lib/data-url-2.0.1.jar
+warning: No sub JAR or directory lib/flatlaf-3.7.2.jar
+warning: No sub JAR or directory lib/imageio-jpeg-3.12.0.jar
+warning: No sub JAR or directory lib/jna-platform-5.19.1.jar
+warning: No sub JAR or directory lib/jortho-1.13.4.jar
+warning: No sub JAR or directory lib/simplyhtml-0.19.12.jar
+warning: No sub JAR or directory lib/commons-lang-2.6.jar
+warning: No sub JAR or directory lib/commons-io-2.19.0.jar
+warning: No sub JAR or directory lib/commons-codec-1.18.0.jar
+warning: No sub JAR or directory lib/jgoodies-forms-1.9.0.jar
+warning: No sub JAR or directory lib/jgoodies-common-1.8.1.jar
+warning: No sub JAR or directory lib/idw-gpl-1.6.1.jar
+warning: No sub JAR or directory lib/imageio-metadata-3.12.0.jar
+warning: No sub JAR or directory lib/imageio-core-3.12.0.jar
+warning: No sub JAR or directory lib/common-image-3.12.0.jar
+warning: No sub JAR or directory lib/common-io-3.12.0.jar
+warning: No sub JAR or directory lib/common-lang-3.12.0.jar
+warning: No sub JAR or directory lib/jna-5.19.1.jar
+warning: No sub JAR or directory lib/vaqua-13.jar
+warning: No sub JAR or directory lib/jnr-14.jar
+warning: No sub JAR or directory lib/vappearances-4.jar
+warning: No sub JAR or directory lib/javax.activation-1.2.0.jar
+warning: Unused Import-Package instructions: [nothing.*] 
+warning: Export org.freeplane.features.filter.hidden,  has 1,  private references [org.freeplane.core.enumeration]
+
+> Task :freeplane_plugin_graph:compileJava
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+Note: /data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/window/GraphWorkspaceWindow.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+3 warnings
+
+> Task :freeplane_plugin_graph:processResources
+> Task :freeplane_plugin_graph:classes
+
+> Task :freeplane_plugin_graph:compileTestJava
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/control/EdgeNodeClearanceReplay.java:633: warning: [removal] getSecurityManager() in System has been deprecated and marked for removal
+                && System.getSecurityManager() == null, "E3 helper security prerequisite failed");
+                         ^
+Note: /data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/command/SourceNavigationShould.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+4 warnings
+
+> Task :freeplane_plugin_graph:processTestResources
+> Task :freeplane_plugin_graph:testClasses
+
+> Task :freeplane_plugin_graph:test
+Picked up JAVA_TOOL_OPTIONS: -Djava.awt.headless=true
+
+[Incubating] Problems report is available at: file:///data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.0.0/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 11m 51s
+21 actionable tasks: 21 executed
+gradle --no-daemon --max-workers=1 :freeplane_plugin_graph:test -PTestLoggingFull
+Picked up JAVA_TOOL_OPTIONS: -Djava.awt.headless=true
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.0.0/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+> Task :freeplane_api:compileJava UP-TO-DATE
+> Task :JOrtho_0.4_freeplane:compileJava UP-TO-DATE
+> Task :freeplane:compileJava UP-TO-DATE
+> Task :freeplane:processResources NO-SOURCE
+> Task :freeplane:classes UP-TO-DATE
+> Task :freeplane:cleanBUILD
+> Task :freeplane:editorJar
+> Task :freeplane:osgiJar
+> Task :freeplane:compileViewerJava NO-SOURCE
+> Task :freeplane:createEmojiList UP-TO-DATE
+> Task :freeplane:processViewerResources UP-TO-DATE
+> Task :freeplane:viewerClasses UP-TO-DATE
+> Task :freeplane:viewerJar
+> Task :freeplane_api:processResources NO-SOURCE
+> Task :freeplane_api:classes UP-TO-DATE
+> Task :freeplane_api:jar UP-TO-DATE
+> Task :freeplane_ant:compileJava UP-TO-DATE
+> Task :freeplane_ant:processResources NO-SOURCE
+> Task :freeplane_ant:classes UP-TO-DATE
+> Task :freeplane_ant:jar UP-TO-DATE
+> Task :JOrtho_0.4_freeplane:check_translation
+> Task :JOrtho_0.4_freeplane:processResources UP-TO-DATE
+> Task :JOrtho_0.4_freeplane:classes UP-TO-DATE
+> Task :JOrtho_0.4_freeplane:jar UP-TO-DATE
+
+> Task :freeplane:jar
+warning: No sub JAR or directory lib/freeplaneviewer.jar
+warning: No sub JAR or directory lib/freeplaneeditor-1.13.4.jar
+warning: No sub JAR or directory lib/freeplane_mac-1.13.4.jar
+warning: No sub JAR or directory lib/freeplaneosgi-1.13.4.jar
+warning: No sub JAR or directory lib/twemoji-12.1.4.jar
+warning: No sub JAR or directory lib/svgSalamander-1.1.4.jar
+warning: No sub JAR or directory lib/data-url-2.0.1.jar
+warning: No sub JAR or directory lib/flatlaf-3.7.2.jar
+warning: No sub JAR or directory lib/imageio-jpeg-3.12.0.jar
+warning: No sub JAR or directory lib/jna-platform-5.19.1.jar
+warning: No sub JAR or directory lib/jortho-1.13.4.jar
+warning: No sub JAR or directory lib/simplyhtml-0.19.12.jar
+warning: No sub JAR or directory lib/commons-lang-2.6.jar
+warning: No sub JAR or directory lib/commons-io-2.19.0.jar
+warning: No sub JAR or directory lib/commons-codec-1.18.0.jar
+warning: No sub JAR or directory lib/jgoodies-forms-1.9.0.jar
+warning: No sub JAR or directory lib/jgoodies-common-1.8.1.jar
+warning: No sub JAR or directory lib/idw-gpl-1.6.1.jar
+warning: No sub JAR or directory lib/imageio-metadata-3.12.0.jar
+warning: No sub JAR or directory lib/imageio-core-3.12.0.jar
+warning: No sub JAR or directory lib/common-image-3.12.0.jar
+warning: No sub JAR or directory lib/common-io-3.12.0.jar
+warning: No sub JAR or directory lib/common-lang-3.12.0.jar
+warning: No sub JAR or directory lib/jna-5.19.1.jar
+warning: No sub JAR or directory lib/vaqua-13.jar
+warning: No sub JAR or directory lib/jnr-14.jar
+warning: No sub JAR or directory lib/vappearances-4.jar
+warning: No sub JAR or directory lib/javax.activation-1.2.0.jar
+warning: Unused Import-Package instructions: [nothing.*] 
+warning: Export org.freeplane.features.filter.hidden,  has 1,  private references [org.freeplane.core.enumeration]
+
+> Task :freeplane_plugin_graph:compileJava UP-TO-DATE
+> Task :freeplane_plugin_graph:processResources UP-TO-DATE
+> Task :freeplane_plugin_graph:classes UP-TO-DATE
+> Task :freeplane_plugin_graph:compileTestJava UP-TO-DATE
+> Task :freeplane_plugin_graph:processTestResources UP-TO-DATE
+> Task :freeplane_plugin_graph:testClasses UP-TO-DATE
+
+> Task :freeplane_plugin_graph:test
+Picked up JAVA_TOOL_OPTIONS: -Djava.awt.headless=true
+
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+
+> Task :freeplane_plugin_graph:test
+
+AccessibleGraphCanvasShould > receiveTabThroughSwingDispatchAndRestoreFocusTraversalConfiguration FAILED
+    java.awt.HeadlessException
+        at java.desktop/java.awt.GraphicsEnvironment.checkHeadless(GraphicsEnvironment.java:164)
+        at java.desktop/java.awt.Window.<init>(Window.java:553)
+        at java.desktop/java.awt.Frame.<init>(Frame.java:428)
+        at java.desktop/java.awt.Frame.<init>(Frame.java:393)
+        at java.desktop/javax.swing.JFrame.<init>(JFrame.java:180)
+        at org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould$3.run(AccessibleGraphCanvasShould.java:495)
+
+AccessibleGraphCanvasShould > ignoreEnterForSelectionsAbsentFromCurrentVisibleOrderAfterStateReplacement FAILED
+    java.awt.HeadlessException
+        at java.desktop/java.awt.GraphicsEnvironment.checkHeadless(GraphicsEnvironment.java:164)
+        at java.desktop/java.awt.Window.<init>(Window.java:553)
+        at java.desktop/java.awt.Frame.<init>(Frame.java:428)
+        at java.desktop/java.awt.Frame.<init>(Frame.java:393)
+        at java.desktop/javax.swing.JFrame.<init>(JFrame.java:180)
+        at org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould$3.run(AccessibleGraphCanvasShould.java:495)
+
+GraphInteractionControllerShould > doNotPanWhenAProgrammaticScrollMovesTheViewportUnderAStationaryPointer FAILED
+    org.junit.ComparisonFailure: expected:<java.awt.Point[x=[201,y=3]1]> but was:<java.awt.Point[x=[161,y=1]1]>
+        at app//org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould.doNotPanWhenAProgrammaticScrollMovesTheViewportUnderAStationaryPointer(GraphInteractionControllerShould.java:744)
+
+PASS C0-S1 first-idle 84
+PASS C0-reference first-idle 42
+PASS C0-cross first-idle 756
+PASS C0-mixed first-idle 45
+PASS C0-two first-idle 22
+PASS C0-endpoints-cross-ne first-idle 22
+PASS C0-endpoints-cross-ee first-idle 22
+PASS C0-matrix-same-nn first-idle CONSUMER_ONLY
+PASS C0-matrix-same-ne first-idle CONSUMER_ONLY
+PASS C0-matrix-same-ee first-idle CONSUMER_ONLY
+PASS C0-matrix-cross-nn first-idle CONSUMER_ONLY
+PASS C0-matrix-cross-ne first-idle CONSUMER_ONLY
+PASS C0-matrix-cross-ee first-idle CONSUMER_ONLY
+PASS candidate-S1 first-idle 58
+PASS candidate-reference first-idle 37
+PASS candidate-cross first-idle 3455
+PASS candidate-mixed first-idle 77
+PASS candidate-two first-idle 7
+PASS candidate-endpoints-cross-ne first-idle 7
+PASS candidate-endpoints-cross-ee first-idle 7
+PASS candidate-matrix-same-nn first-idle CONSUMER_ONLY
+PASS candidate-matrix-same-ne first-idle CONSUMER_ONLY
+PASS candidate-matrix-same-ee first-idle CONSUMER_ONLY
+PASS candidate-matrix-cross-nn first-idle CONSUMER_ONLY
+PASS candidate-matrix-cross-ne first-idle CONSUMER_ONLY
+PASS candidate-matrix-cross-ee first-idle CONSUMER_ONLY
+PASS C0-S1 first-idle 84
+PASS C0-reference first-idle 42
+PASS C0-cross first-idle 756
+PASS C0-mixed first-idle 45
+PASS C0-two first-idle 22
+PASS C0-endpoints-cross-ne first-idle 22
+PASS C0-endpoints-cross-ee first-idle 22
+PASS C0-matrix-same-nn first-idle CONSUMER_ONLY
+PASS C0-matrix-same-ne first-idle CONSUMER_ONLY
+PASS C0-matrix-same-ee first-idle CONSUMER_ONLY
+PASS C0-matrix-cross-nn first-idle CONSUMER_ONLY
+PASS C0-matrix-cross-ne first-idle CONSUMER_ONLY
+PASS C0-matrix-cross-ee first-idle CONSUMER_ONLY
+PASS candidate-S1 first-idle 58
+PASS candidate-reference first-idle 37
+PASS candidate-cross first-idle 3455
+PASS candidate-mixed first-idle 77
+PASS candidate-two first-idle 7
+PASS candidate-endpoints-cross-ne first-idle 7
+PASS candidate-endpoints-cross-ee first-idle 7
+PASS candidate-matrix-same-nn first-idle CONSUMER_ONLY
+PASS candidate-matrix-same-ne first-idle CONSUMER_ONLY
+PASS candidate-matrix-same-ee first-idle CONSUMER_ONLY
+PASS candidate-matrix-cross-nn first-idle CONSUMER_ONLY
+PASS candidate-matrix-cross-ne first-idle CONSUMER_ONLY
+PASS candidate-matrix-cross-ee first-idle CONSUMER_ONLY
+
+> Task :freeplane_plugin_graph:test
+
+1431 tests completed, 3 failed, 18 skipped
+
+> Task :freeplane_plugin_graph:test FAILED
+
+[Incubating] Problems report is available at: file:///data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/build/reports/problems/problems-report.html
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':freeplane_plugin_graph:test'.
+> There were failing tests. See the report at: file:///data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane_plugin_graph/build/reports/tests/test/index.html
+
+* Try:
+> Run with --scan to generate a Build Scan (Powered by Develocity).
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.0.0/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD FAILED in 29m 5s
+21 actionable tasks: 7 executed, 14 up-to-date
+gradle --no-daemon --max-workers=1 :freeplane_plugin_graph:verifyGraphBundle
+Picked up JAVA_TOOL_OPTIONS: -Djava.awt.headless=true
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.0.0/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+> Task :freeplane_api:compileJava UP-TO-DATE
+> Task :JOrtho_0.4_freeplane:compileJava UP-TO-DATE
+> Task :freeplane:compileJava UP-TO-DATE
+> Task :freeplane:processResources NO-SOURCE
+> Task :freeplane:classes UP-TO-DATE
+> Task :freeplane:cleanBUILD
+> Task :freeplane:editorJar
+> Task :freeplane:osgiJar
+> Task :freeplane:compileViewerJava NO-SOURCE
+> Task :freeplane:createEmojiList UP-TO-DATE
+> Task :freeplane:processViewerResources UP-TO-DATE
+> Task :freeplane:viewerClasses UP-TO-DATE
+> Task :freeplane:viewerJar
+> Task :freeplane_api:processResources NO-SOURCE
+> Task :freeplane_api:classes UP-TO-DATE
+> Task :freeplane_api:jar UP-TO-DATE
+> Task :freeplane_ant:compileJava UP-TO-DATE
+> Task :freeplane_ant:processResources NO-SOURCE
+> Task :freeplane_ant:classes UP-TO-DATE
+> Task :freeplane_ant:jar UP-TO-DATE
+> Task :JOrtho_0.4_freeplane:check_translation
+> Task :JOrtho_0.4_freeplane:processResources UP-TO-DATE
+> Task :JOrtho_0.4_freeplane:classes UP-TO-DATE
+> Task :JOrtho_0.4_freeplane:jar UP-TO-DATE
+
+> Task :freeplane:jar
+warning: No sub JAR or directory lib/freeplaneviewer.jar
+warning: No sub JAR or directory lib/freeplaneeditor-1.13.4.jar
+warning: No sub JAR or directory lib/freeplane_mac-1.13.4.jar
+warning: No sub JAR or directory lib/freeplaneosgi-1.13.4.jar
+warning: No sub JAR or directory lib/twemoji-12.1.4.jar
+warning: No sub JAR or directory lib/svgSalamander-1.1.4.jar
+warning: No sub JAR or directory lib/data-url-2.0.1.jar
+warning: No sub JAR or directory lib/flatlaf-3.7.2.jar
+warning: No sub JAR or directory lib/imageio-jpeg-3.12.0.jar
+warning: No sub JAR or directory lib/jna-platform-5.19.1.jar
+warning: No sub JAR or directory lib/jortho-1.13.4.jar
+warning: No sub JAR or directory lib/simplyhtml-0.19.12.jar
+warning: No sub JAR or directory lib/commons-lang-2.6.jar
+warning: No sub JAR or directory lib/commons-io-2.19.0.jar
+warning: No sub JAR or directory lib/commons-codec-1.18.0.jar
+warning: No sub JAR or directory lib/jgoodies-forms-1.9.0.jar
+warning: No sub JAR or directory lib/jgoodies-common-1.8.1.jar
+warning: No sub JAR or directory lib/idw-gpl-1.6.1.jar
+warning: No sub JAR or directory lib/imageio-metadata-3.12.0.jar
+warning: No sub JAR or directory lib/imageio-core-3.12.0.jar
+warning: No sub JAR or directory lib/common-image-3.12.0.jar
+warning: No sub JAR or directory lib/common-io-3.12.0.jar
+warning: No sub JAR or directory lib/common-lang-3.12.0.jar
+warning: No sub JAR or directory lib/jna-5.19.1.jar
+warning: No sub JAR or directory lib/vaqua-13.jar
+warning: No sub JAR or directory lib/jnr-14.jar
+warning: No sub JAR or directory lib/vappearances-4.jar
+warning: No sub JAR or directory lib/javax.activation-1.2.0.jar
+warning: Unused Import-Package instructions: [nothing.*] 
+warning: Export org.freeplane.features.filter.hidden,  has 1,  private references [org.freeplane.core.enumeration]
+
+> Task :freeplane_plugin_graph:compileJava UP-TO-DATE
+> Task :freeplane_plugin_graph:processResources UP-TO-DATE
+> Task :freeplane_plugin_graph:classes UP-TO-DATE
+> Task :freeplane_plugin_graph:cleanBUILD UP-TO-DATE
+> Task :freeplane_plugin_graph:pluginJar
+
+> Task :freeplane_plugin_graph:jar
+warning: No sub JAR or directory lib/plugin-1.13.4.jar
+warning: No sub JAR or directory lib/gs-core-1.3.jar
+warning: No sub JAR or directory lib/pherd-1.0.jar
+warning: No sub JAR or directory lib/mbox2-1.0.jar
+warning: Unused Import-Package instructions: [nothing.*] 
+
+> Task :freeplane_plugin_graph:verifyGraphBundle
+
+[Incubating] Problems report is available at: file:///data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.0.0/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 54s
+22 actionable tasks: 9 executed, 13 up-to-date
+git diff --check
+WARNING: terminal is not fully functional
+Press RETURN to continue git diff -- freeplane_plugin_graph/src/main/java
+WARNING: terminal is not fully functional
+Press RETURN to continue git diff -- freeplane_plugin_graph/src/test/java
+WARNING: terminal is not fully functional
+Press RETURN to continue python3 - <<'PY'
+import hashlib, json, os, pathlib, subprocess, tempfile, time
+repo = pathlib.Path.cwd()
+reports = pathlib.Path('/data/home/henry-arch/.local/state/pi/project-manager/runs/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/reports')
+r5 = reports / 'frontier-review-5'
+base = 'cb8782fb3742f378b2907198fd2343292415da95'
+prov = json.loads((r5 / 'provenance.json').read_text())
+cmds = {r['label']: r['command'] for r in json.loads((r5 / 'commands.json').read_text())}
+root = pathlib.Path(tempfile.mkdtemp(prefix='initial-spacing-replay-'))
+for d in ('src', 'empty', 'C0', 'candidate', 'probes'):
+    (root / d).mkdir()
+sources = []
+for relative, expected in prov['source_sha256'].items():
+    data = subprocess.check_output(['git', 'show', base + ':' + relative], cwd=repo)
+    assert hashlib.sha256(data).hexdigest() == expected, relative
+    p = root / 'src' / relative
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(data)
+    sources.append(str(p))
+java = '/home/henry/.sdkman/candidates/java/21.0.8-zulu/bin/java'
+javac = java + 'c'
+recorded = cmds['compile-C0']
+jars = recorded[recorded.index('-classpath') + 1]
+assert all(pathlib.Path(p).is_file() for p in jars.split(':')), 'resolve pinned jars first'
+env = dict(os.environ, JAVA_TOOL_OPTIONS='-Djava.awt.headless=true')
+receipts = []
+def run(label, argv, timeout=600):
+    start = time.monotonic()
+    with (root / (label + '.log')).open('w') as out:
+        result = subprocess.run(argv, env=env, stdout=out, stderr=subprocess.STDOUT, timeout=timeout)
+    receipts.append(dict(label=label, command=argv, returncode=result.returncode,
+                         elapsed_s=time.monotonic()-start))
+    (root / 'commands.json').write_text(json.dumps(receipts, indent=2) + '\n')
+    assert result.returncode == 0, (label, root)
+def compile_to(label, out, cp, files):
+    run(label, [javac, '--release', '8', '-encoding', 'UTF-8', '-implicit:none',
+        '-sourcepath', str(root/'empty'), '-classpath', cp, '-d', str(out)] + files)
+compile_to('compile-C0', root/'C0', jars, sources)
+engine = root/'src/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/GraphStreamLayoutEngine.java'
+packing = engine.with_name('ClusterPacking.java')
+# Edit only scratch copies, with unique old-text checks.
+e = engine.read_text()
+old = 'static final double NODE_RADIUS = 8.0;'
+assert e.count(old) == 1
+e = e.replace(old, old + '\n    static final double PREFERRED_NODE_GAP = 24.0;')
+old = '(2.0 * maxRadius + NodeSeparationProjection.MIN_GAP)'
+assert e.count(old) == 1
+e = e.replace(old, '(2.0 * maxRadius + PREFERRED_NODE_GAP)')
+engine.write_text(e)
+s = packing.read_text()
+old = 'clearanceX < gap && clearanceY < gap'
+assert s.count(old) == 1
+packing.write_text(s.replace(old, 'clearanceX < gap - CANDIDATE_EPSILON && clearanceY < gap - CANDIDATE_EPSILON'))
+compile_to('compile-candidate', root/'candidate', str(root/'C0')+':'+jars,
+           [str(engine), str(packing)])
+compile_to('compile-probes', root/'probes', str(root/'C0')+':'+jars,
+           [str(r5/'SpacingProbe.java'), str(r5/'ReviewSeedProbe.java')])
+for config in ('C0', 'candidate'):
+    cp = ':'.join([str(root/config), str(root/'probes'), str(root/'C0'), jars])
+    for fixture in ('reference', 'S1', 'cross', 'rest'):
+        args = [java, '-cp', cp, 'org.freeplane.plugin.graph.layout.graphstream.ReviewSeedProbe', fixture]
+        if fixture != 'rest':
+            args.append('6000')
+        run(config+'-'+fixture, args)
+print(root)
+PY
+/tmp/initial-spacing-replay-wyd72d8p
+exit
+
+Script done on 2026-10-21 01:35:15+08:00 [COMMAND_EXIT_CODE="0"]
+Script started on 2026-10-21 01:37:41+08:00 [COMMAND="bash --noprofile --norc -v /tmp/cont-input.sh" <not executed on terminal>]
+export JAVA_HOME=/home/henry/.sdkman/candidates/java/21.0.8-zulu
+export PATH="$JAVA_HOME/bin:$PATH"
+export JAVA_TOOL_OPTIONS=-Djava.awt.headless=true
+export GIT_PAGER=cat
+echo '=== continuation: pager-free re-run of the three spec K git diff commands ==='
+=== continuation: pager-free re-run of the three spec K git diff commands ===
+git diff --check
+git diff -- freeplane_plugin_graph/src/main/java
+git diff -- freeplane_plugin_graph/src/test/java
+echo '=== diagnostic probe: isolated GraphInteractionControllerShould (headless) ==='
+=== diagnostic probe: isolated GraphInteractionControllerShould (headless) ===
+java -cp '/data/home/henry-arch/.gradle/caches/9.0.0/workerMain/gradle-worker.jar:/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane_plugin_graph/build/classes/java/test:/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane_plugin_graph/build/resources/test:/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane_plugin_graph/build/classes/java/main:/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane_plugin_graph/build/resources/main:/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/build/libs/freeplane-1.13.4.jar:/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/build/emoji/xml:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.knopflerfish.kf6/framework/8.0.11/2129bb3cc6a56de10e61e9350e8cf427b1564acc/framework-8.0.11.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/gs-core/1.3/1199c349ae387742426ee216bcebcc0b5a51b2fa/gs-core-1.3.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/pherd/1.0/def146e11a24b48f88e8af5fa14ca383f8ee4dd2/pherd-1.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/mbox2/1.0/c20049788c1bde824e17cd8e26c2f515a1eab352/mbox2-1.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/junit/junit/4.13.2/8ac9e16d933b6fb43bc7f576336b8f4d7eb5ba12/junit-4.13.2.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.hamcrest/hamcrest-all/1.3/63a21ebc981131004ad02e0434e799fd7f3a8d5a/hamcrest-all-1.3.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.mockito/mockito-core/5.18.0/ab47dbbf954ffa2501f29000600742098617272d/mockito-core-5.18.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.assertj/assertj-core/3.27.3/31f5d58a202bd5df4993fb10fa2cffd610c20d6f/assertj-core-3.27.3.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/com.tngtech.archunit/archunit/1.4.1/6ba9a48e48eb3f1fc3223fae073afad29774894e/archunit-1.4.1.jar:/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane_api/build/libs/freeplane_api-1.13.4.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.freeplane.emoji/twemoji/12.1.4/1411c727b84bc3c0f9bfea14c6b8826dad488573/twemoji-12.1.4.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/com.formdev/svgSalamander/1.1.4/e61742cb8baaf9ecf57a9779763d1de21ca9db5a/svgSalamander-1.1.4.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/com.github.robtimus/data-url/2.0.1/20e0a0d391c2e594d76023daf20e867b8f44ea02/data-url-2.0.1.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/com.formdev/flatlaf/3.7.2/fcf9f3f276b11c7f5fc525838073ddcd80abda6a/flatlaf-3.7.2.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/com.twelvemonkeys.imageio/imageio-jpeg/3.12.0/5f2878646e1cb148a29599466b90ac3e5554b905/imageio-jpeg-3.12.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/net.java.dev.jna/jna-platform/5.19.1/d1e54d9231da5ca3fa730d52960deaa555475468/jna-platform-5.19.1.jar:/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/JOrtho_0.4_freeplane/build/libs/jortho-1.13.4.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.freeplane.lightdev/simplyhtml/0.19.12/143260584a9c66ec5aff05b2594bbe964d23f00d/simplyhtml-0.19.12.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/commons-lang/commons-lang/2.6/ce1edb914c94ebc388f086c6827e8bdeec71ac2/commons-lang-2.6.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/commons-io/commons-io/2.19.0/1f8d4a99ba72b77aa69101175efc79b0c7dcdd7e/commons-io-2.19.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/commons-codec/commons-codec/1.18.0/ee45d1cf6ec2cc2b809ff04b4dc7aec858e0df8f/commons-codec-1.18.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/com.jgoodies/jgoodies-forms/1.9.0/eda960be2f88d47d14a81b742772b07684abc7d0/jgoodies-forms-1.9.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/com.jgoodies/jgoodies-common/1.8.1/dffc159cf71bde5dcbb65916305684f6b43d45b1/jgoodies-common-1.8.1.jar:/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/lib/idw-gpl-1.6.1.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.violetlib/vaqua/13/69cb3ca80dce9473f4b4a9fb2e11423b97afc4ce/vaqua-13.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.freeplane.dpolivaev.mnemonicsetter/mnemonicsetter/0.6/9605469b27f6878a958625ffe601e0f1493f6f96/mnemonicsetter-0.6.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.hamcrest/hamcrest-core/1.3/42a25dc3219429f0e5d060061f71acb49bf010a0/hamcrest-core-1.3.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/net.bytebuddy/byte-buddy/1.17.5/88450f120903b7e72470462cdbd2b75a3842223c/byte-buddy-1.17.5.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/net.bytebuddy/byte-buddy-agent/1.17.5/58f9507f5f28d1d3e7adfb4ec2fe37c29d332c9b/byte-buddy-agent-1.17.5.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.objenesis/objenesis/3.3/1049c09f1de4331e8193e579448d0916d75b7631/objenesis-3.3.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.slf4j/slf4j-api/2.0.17/d9e58ac9c7779ba3bf8142aff6c830617a7fe60f/slf4j-api-2.0.17.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/com.twelvemonkeys.imageio/imageio-metadata/3.12.0/6997264db25396a2c8fddf6520174c9a907e3403/imageio-metadata-3.12.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/com.twelvemonkeys.imageio/imageio-core/3.12.0/4a57990b52fd36fe60c356a3e5fd57054a85a502/imageio-core-3.12.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/com.twelvemonkeys.common/common-image/3.12.0/1ffc9fb885eea7f0bdab0f6e7f780d3e41b5ad01/common-image-3.12.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/com.twelvemonkeys.common/common-io/3.12.0/1f739ad65a48fd2bc7b8c0a8bb54218c0e219c84/common-io-3.12.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/com.twelvemonkeys.common/common-lang/3.12.0/170b88f23daa4d4d64189285ebebe4eb59d51c93/common-lang-3.12.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/net.java.dev.jna/jna/5.19.1/ca303052cd617c1af2e2c8d344c98a706fb63143/jna-5.19.1.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.violetlib/jnr/14/d2d1c38d65699324d5c40da437c94b0fd0a5c310/jnr-14.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.violetlib/vappearances/4/e519a90fd008491e4dbca620c22706d6164b700d/vappearances-4.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/com.sun.activation/javax.activation/1.2.0/bf744c1e2776ed1de3c55c8dac1057ec331ef744/javax.activation-1.2.0.jar' org.junit.runner.JUnitCore org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould
+Picked up JAVA_TOOL_OPTIONS: -Djava.awt.headless=true
+JUnit version 4.13.2
+.......................Oct 21, 2026 1:37:42 AM org.freeplane.plugin.graph.canvas.GraphCanvas drainViewportSettledCallback
+WARNING: Viewport settle callback failed
+java.lang.RuntimeException: callback runtime
+	at org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould.viewportSettledCallbackExceptionDoesNotEscapeCompletion(GraphInteractionControllerShould.java:162)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+	at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.junit.runners.Suite.runChild(Suite.java:128)
+	at org.junit.runners.Suite.runChild(Suite.java:27)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.junit.runner.JUnitCore.run(JUnitCore.java:137)
+	at org.junit.runner.JUnitCore.run(JUnitCore.java:115)
+	at org.junit.runner.JUnitCore.runMain(JUnitCore.java:77)
+	at org.junit.runner.JUnitCore.main(JUnitCore.java:36)
+
+Oct 21, 2026 1:37:42 AM org.freeplane.plugin.graph.canvas.GraphCanvas drainViewportSettledCallback
+WARNING: Viewport settle callback failed
+java.lang.AssertionError: callback error
+	at org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould.viewportSettledCallbackExceptionDoesNotEscapeCompletion(GraphInteractionControllerShould.java:162)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+	at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.junit.runners.Suite.runChild(Suite.java:128)
+	at org.junit.runners.Suite.runChild(Suite.java:27)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.junit.runner.JUnitCore.run(JUnitCore.java:137)
+	at org.junit.runner.JUnitCore.run(JUnitCore.java:115)
+	at org.junit.runner.JUnitCore.runMain(JUnitCore.java:77)
+	at org.junit.runner.JUnitCore.main(JUnitCore.java:36)
+
+...........................
+Time: 0.708
+
+OK (50 tests)
+
+echo '=== diagnostic probe: isolated AccessibleGraphCanvasShould (headless) ==='
+=== diagnostic probe: isolated AccessibleGraphCanvasShould (headless) ===
+java -cp '/data/home/henry-arch/.gradle/caches/9.0.0/workerMain/gradle-worker.jar:/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane_plugin_graph/build/classes/java/test:/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane_plugin_graph/build/resources/test:/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane_plugin_graph/build/classes/java/main:/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane_plugin_graph/build/resources/main:/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/build/libs/freeplane-1.13.4.jar:/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/build/emoji/xml:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.knopflerfish.kf6/framework/8.0.11/2129bb3cc6a56de10e61e9350e8cf427b1564acc/framework-8.0.11.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/gs-core/1.3/1199c349ae387742426ee216bcebcc0b5a51b2fa/gs-core-1.3.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/pherd/1.0/def146e11a24b48f88e8af5fa14ca383f8ee4dd2/pherd-1.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.graphstream/mbox2/1.0/c20049788c1bde824e17cd8e26c2f515a1eab352/mbox2-1.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/junit/junit/4.13.2/8ac9e16d933b6fb43bc7f576336b8f4d7eb5ba12/junit-4.13.2.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.hamcrest/hamcrest-all/1.3/63a21ebc981131004ad02e0434e799fd7f3a8d5a/hamcrest-all-1.3.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.mockito/mockito-core/5.18.0/ab47dbbf954ffa2501f29000600742098617272d/mockito-core-5.18.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.assertj/assertj-core/3.27.3/31f5d58a202bd5df4993fb10fa2cffd610c20d6f/assertj-core-3.27.3.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/com.tngtech.archunit/archunit/1.4.1/6ba9a48e48eb3f1fc3223fae073afad29774894e/archunit-1.4.1.jar:/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane_api/build/libs/freeplane_api-1.13.4.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.freeplane.emoji/twemoji/12.1.4/1411c727b84bc3c0f9bfea14c6b8826dad488573/twemoji-12.1.4.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/com.formdev/svgSalamander/1.1.4/e61742cb8baaf9ecf57a9779763d1de21ca9db5a/svgSalamander-1.1.4.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/com.github.robtimus/data-url/2.0.1/20e0a0d391c2e594d76023daf20e867b8f44ea02/data-url-2.0.1.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/com.formdev/flatlaf/3.7.2/fcf9f3f276b11c7f5fc525838073ddcd80abda6a/flatlaf-3.7.2.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/com.twelvemonkeys.imageio/imageio-jpeg/3.12.0/5f2878646e1cb148a29599466b90ac3e5554b905/imageio-jpeg-3.12.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/net.java.dev.jna/jna-platform/5.19.1/d1e54d9231da5ca3fa730d52960deaa555475468/jna-platform-5.19.1.jar:/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/JOrtho_0.4_freeplane/build/libs/jortho-1.13.4.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.freeplane.lightdev/simplyhtml/0.19.12/143260584a9c66ec5aff05b2594bbe964d23f00d/simplyhtml-0.19.12.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/commons-lang/commons-lang/2.6/ce1edb914c94ebc388f086c6827e8bdeec71ac2/commons-lang-2.6.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/commons-io/commons-io/2.19.0/1f8d4a99ba72b77aa69101175efc79b0c7dcdd7e/commons-io-2.19.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/commons-codec/commons-codec/1.18.0/ee45d1cf6ec2cc2b809ff04b4dc7aec858e0df8f/commons-codec-1.18.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/com.jgoodies/jgoodies-forms/1.9.0/eda960be2f88d47d14a81b742772b07684abc7d0/jgoodies-forms-1.9.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/com.jgoodies/jgoodies-common/1.8.1/dffc159cf71bde5dcbb65916305684f6b43d45b1/jgoodies-common-1.8.1.jar:/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/lib/idw-gpl-1.6.1.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.violetlib/vaqua/13/69cb3ca80dce9473f4b4a9fb2e11423b97afc4ce/vaqua-13.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.freeplane.dpolivaev.mnemonicsetter/mnemonicsetter/0.6/9605469b27f6878a958625ffe601e0f1493f6f96/mnemonicsetter-0.6.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.hamcrest/hamcrest-core/1.3/42a25dc3219429f0e5d060061f71acb49bf010a0/hamcrest-core-1.3.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/net.bytebuddy/byte-buddy/1.17.5/88450f120903b7e72470462cdbd2b75a3842223c/byte-buddy-1.17.5.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/net.bytebuddy/byte-buddy-agent/1.17.5/58f9507f5f28d1d3e7adfb4ec2fe37c29d332c9b/byte-buddy-agent-1.17.5.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.objenesis/objenesis/3.3/1049c09f1de4331e8193e579448d0916d75b7631/objenesis-3.3.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.slf4j/slf4j-api/2.0.17/d9e58ac9c7779ba3bf8142aff6c830617a7fe60f/slf4j-api-2.0.17.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/com.twelvemonkeys.imageio/imageio-metadata/3.12.0/6997264db25396a2c8fddf6520174c9a907e3403/imageio-metadata-3.12.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/com.twelvemonkeys.imageio/imageio-core/3.12.0/4a57990b52fd36fe60c356a3e5fd57054a85a502/imageio-core-3.12.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/com.twelvemonkeys.common/common-image/3.12.0/1ffc9fb885eea7f0bdab0f6e7f780d3e41b5ad01/common-image-3.12.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/com.twelvemonkeys.common/common-io/3.12.0/1f739ad65a48fd2bc7b8c0a8bb54218c0e219c84/common-io-3.12.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/com.twelvemonkeys.common/common-lang/3.12.0/170b88f23daa4d4d64189285ebebe4eb59d51c93/common-lang-3.12.0.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/net.java.dev.jna/jna/5.19.1/ca303052cd617c1af2e2c8d344c98a706fb63143/jna-5.19.1.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.violetlib/jnr/14/d2d1c38d65699324d5c40da437c94b0fd0a5c310/jnr-14.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/org.violetlib/vappearances/4/e519a90fd008491e4dbca620c22706d6164b700d/vappearances-4.jar:/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/com.sun.activation/javax.activation/1.2.0/bf744c1e2776ed1de3c55c8dac1057ec331ef744/javax.activation-1.2.0.jar' org.junit.runner.JUnitCore org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould
+Picked up JAVA_TOOL_OPTIONS: -Djava.awt.headless=true
+JUnit version 4.13.2
+...Mockito is currently self-attaching to enable the inline-mock-maker. This will no longer work in future releases of the JDK. Please add Mockito as an agent to your build as described in Mockito's documentation: https://javadoc.io/doc/org.mockito/mockito-core/latest/org.mockito/org/mockito/Mockito.html#0.3
+WARNING: A Java agent has been loaded dynamically (/data/home/henry-arch/.gradle/caches/modules-2/files-2.1/net.bytebuddy/byte-buddy-agent/1.17.5/58f9507f5f28d1d3e7adfb4ec2fe37c29d332c9b/byte-buddy-agent-1.17.5.jar)
+WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
+WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
+WARNING: Dynamic loading of agents will be disallowed by default in a future release
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+..E.E.....
+Time: 1.517
+There were 2 failures:
+1) receiveTabThroughSwingDispatchAndRestoreFocusTraversalConfiguration(org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould)
+java.awt.HeadlessException
+	at java.desktop/java.awt.GraphicsEnvironment.checkHeadless(GraphicsEnvironment.java:164)
+	at java.desktop/java.awt.Window.<init>(Window.java:553)
+	at java.desktop/java.awt.Frame.<init>(Frame.java:428)
+	at java.desktop/java.awt.Frame.<init>(Frame.java:393)
+	at java.desktop/javax.swing.JFrame.<init>(JFrame.java:180)
+	at org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould$3.run(AccessibleGraphCanvasShould.java:495)
+	at java.desktop/java.awt.event.InvocationEvent.dispatch(InvocationEvent.java:308)
+	at java.desktop/java.awt.EventQueue.dispatchEventImpl(EventQueue.java:773)
+	at java.desktop/java.awt.EventQueue$4.run(EventQueue.java:720)
+	at java.desktop/java.awt.EventQueue$4.run(EventQueue.java:714)
+	at java.base/java.security.AccessController.doPrivileged(AccessController.java:400)
+	at java.base/java.security.ProtectionDomain$JavaSecurityAccessImpl.doIntersectionPrivilege(ProtectionDomain.java:87)
+	at java.desktop/java.awt.EventQueue.dispatchEvent(EventQueue.java:742)
+	at java.desktop/java.awt.EventDispatchThread.pumpOneEventForFilters(EventDispatchThread.java:203)
+	at java.desktop/java.awt.EventDispatchThread.pumpEventsForFilter(EventDispatchThread.java:124)
+	at java.desktop/java.awt.EventDispatchThread.pumpEventsForHierarchy(EventDispatchThread.java:113)
+	at java.desktop/java.awt.EventDispatchThread.pumpEvents(EventDispatchThread.java:109)
+	at java.desktop/java.awt.EventDispatchThread.pumpEvents(EventDispatchThread.java:101)
+	at java.desktop/java.awt.EventDispatchThread.run(EventDispatchThread.java:90)
+2) ignoreEnterForSelectionsAbsentFromCurrentVisibleOrderAfterStateReplacement(org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould)
+java.awt.HeadlessException
+	at java.desktop/java.awt.GraphicsEnvironment.checkHeadless(GraphicsEnvironment.java:164)
+	at java.desktop/java.awt.Window.<init>(Window.java:553)
+	at java.desktop/java.awt.Frame.<init>(Frame.java:428)
+	at java.desktop/java.awt.Frame.<init>(Frame.java:393)
+	at java.desktop/javax.swing.JFrame.<init>(JFrame.java:180)
+	at org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould$3.run(AccessibleGraphCanvasShould.java:495)
+	at java.desktop/java.awt.event.InvocationEvent.dispatch(InvocationEvent.java:308)
+	at java.desktop/java.awt.EventQueue.dispatchEventImpl(EventQueue.java:773)
+	at java.desktop/java.awt.EventQueue$4.run(EventQueue.java:720)
+	at java.desktop/java.awt.EventQueue$4.run(EventQueue.java:714)
+	at java.base/java.security.AccessController.doPrivileged(AccessController.java:400)
+	at java.base/java.security.ProtectionDomain$JavaSecurityAccessImpl.doIntersectionPrivilege(ProtectionDomain.java:87)
+	at java.desktop/java.awt.EventQueue.dispatchEvent(EventQueue.java:742)
+	at java.desktop/java.awt.EventDispatchThread.pumpOneEventForFilters(EventDispatchThread.java:203)
+	at java.desktop/java.awt.EventDispatchThread.pumpEventsForFilter(EventDispatchThread.java:124)
+	at java.desktop/java.awt.EventDispatchThread.pumpEventsForHierarchy(EventDispatchThread.java:113)
+	at java.desktop/java.awt.EventDispatchThread.pumpEvents(EventDispatchThread.java:109)
+	at java.desktop/java.awt.EventDispatchThread.pumpEvents(EventDispatchThread.java:101)
+	at java.desktop/java.awt.EventDispatchThread.run(EventDispatchThread.java:90)
+
+FAILURES!!!
+Tests run: 11,  Failures: 2
+
+exit
+
+Script done on 2026-10-21 01:37:44+08:00 [COMMAND_EXIT_CODE="1"]

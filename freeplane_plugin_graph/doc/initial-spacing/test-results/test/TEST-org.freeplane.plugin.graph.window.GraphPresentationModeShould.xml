@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.window.GraphPresentationModeShould" tests="21" skipped="0" failures="0" errors="0" timestamp="2026-10-20T17:25:38.904Z" hostname="Arch-MSSD0" time="0.123">
+  <properties/>
+  <testcase name="failedLaterChromeCaptureRetainsOlderUsableSnapshot" classname="org.freeplane.plugin.graph.window.GraphPresentationModeShould" time="0.022"/>
+  <testcase name="unavailableModeDoesNothingAndLeavesMenuUnchecked" classname="org.freeplane.plugin.graph.window.GraphPresentationModeShould" time="0.002"/>
+  <testcase name="exitRestoresChromeAndDeactivatesAfterWindowedSurvival" classname="org.freeplane.plugin.graph.window.GraphPresentationModeShould" time="0.002"/>
+  <testcase name="frameRecoveryAttemptsAtMostOneInverseOperation" classname="org.freeplane.plugin.graph.window.GraphPresentationModeShould" time="0.003"/>
+  <testcase name="exitRestoresChromeAndDeactivatesWhenSurvivalIsUnknown" classname="org.freeplane.plugin.graph.window.GraphPresentationModeShould" time="0.003"/>
+  <testcase name="closeDisposesHintDiscardsSnapshotAndInvalidatesCallbacks" classname="org.freeplane.plugin.graph.window.GraphPresentationModeShould" time="0.009"/>
+  <testcase name="exitKeepsFullscreenOwnershipWhenRecoveryReentersFullscreen" classname="org.freeplane.plugin.graph.window.GraphPresentationModeShould" time="0.003"/>
+  <testcase name="failureBeforeFrameApplicationRestoresChromeAndCompensates" classname="org.freeplane.plugin.graph.window.GraphPresentationModeShould" time="0.01"/>
+  <testcase name="closeDuringRecoveryStopsFurtherTransitionCallbacks" classname="org.freeplane.plugin.graph.window.GraphPresentationModeShould" time="0.006"/>
+  <testcase name="hintShowRestartsInjectedTimerAndExpiryHidesPanel" classname="org.freeplane.plugin.graph.window.GraphPresentationModeShould" time="0.004"/>
+  <testcase name="frameStateDefensivelyCopiesBoundsAndPreservesExtendedState" classname="org.freeplane.plugin.graph.window.GraphPresentationModeShould" time="0.001"/>
+  <testcase name="enterCapturesBeforeMutationAndActivatesAfterFullscreenSurvival" classname="org.freeplane.plugin.graph.window.GraphPresentationModeShould" time="0.002"/>
+  <testcase name="rapidToggleDuringTransitionRunsOnlyOneTransition" classname="org.freeplane.plugin.graph.window.GraphPresentationModeShould" time="0.003"/>
+  <testcase name="enterRestoresChromeAndStaysInactiveWhenFrameSurvivalIsUnknown" classname="org.freeplane.plugin.graph.window.GraphPresentationModeShould" time="0.001"/>
+  <testcase name="failureDuringExitBookkeepingNeverEscapesToTheEdt" classname="org.freeplane.plugin.graph.window.GraphPresentationModeShould" time="0.029"/>
+  <testcase name="exitCaptureFailureKeepsFullscreenSnapshotForRetry" classname="org.freeplane.plugin.graph.window.GraphPresentationModeShould" time="0.003"/>
+  <testcase name="failureAfterFullscreenEntryKeepsChromeHiddenAndModeActive" classname="org.freeplane.plugin.graph.window.GraphPresentationModeShould" time="0.008"/>
+  <testcase name="enterRestoresChromeAndStaysInactiveWhenFrameRecoveryLeavesWindowed" classname="org.freeplane.plugin.graph.window.GraphPresentationModeShould" time="0.002"/>
+  <testcase name="hintNeverAcceptsFocusOrInterceptsMouse" classname="org.freeplane.plugin.graph.window.GraphPresentationModeShould" time="0.001"/>
+  <testcase name="hintHideStopsTimerAndDisposeMakesExpiryInert" classname="org.freeplane.plugin.graph.window.GraphPresentationModeShould" time="0.005"/>
+  <testcase name="requestExitDoesNothingWhenInactive" classname="org.freeplane.plugin.graph.window.GraphPresentationModeShould" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

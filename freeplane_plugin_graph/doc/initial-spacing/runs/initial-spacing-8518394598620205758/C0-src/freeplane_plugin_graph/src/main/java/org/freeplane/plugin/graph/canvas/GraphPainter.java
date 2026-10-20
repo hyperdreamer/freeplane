@@ -1,0 +1,440 @@
+package org.freeplane.plugin.graph.canvas;
+
+import java.awt.AlphaComposite;
+import java.awt.BasicStroke;
+import java.awt.Color;
+import java.awt.Font;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.Shape;
+import java.awt.geom.AffineTransform;
+import java.awt.geom.Ellipse2D;
+import java.awt.geom.Line2D;
+import java.awt.geom.Path2D;
+import java.awt.geom.Point2D;
+import java.awt.geom.Rectangle2D;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+
+import org.freeplane.plugin.graph.control.CanvasState;
+import org.freeplane.plugin.graph.geometry.EdgePath;
+import org.freeplane.plugin.graph.geometry.GraphGeometry;
+import org.freeplane.plugin.graph.geometry.HullGeometry;
+import org.freeplane.plugin.graph.geometry.LayoutPoint;
+import org.freeplane.plugin.graph.geometry.NodeGeometry;
+import org.freeplane.plugin.graph.projection.BoundaryTier;
+import org.freeplane.plugin.graph.projection.EnclosureHullKey;
+import org.freeplane.plugin.graph.projection.EnclosureKey;
+import org.freeplane.plugin.graph.projection.PinProjection;
+import org.freeplane.plugin.graph.projection.ProjectedEdge;
+import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
+import org.freeplane.plugin.graph.projection.ProjectedEndpointVisibility;
+import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
+import org.freeplane.plugin.graph.projection.ProjectedNode;
+
+final class GraphPainter {
+    // World units. 12.5 / 14.0 ~ 0.8929 of the maximum node radius:
+    // GraphGeometryEngine.BASE_RADIUS 8.0 x NodeProminence.MAX_SCALE 1.75 = 14.0 world.
+    private static final double ARROW_HEAD_WORLD_LENGTH = 12.5;
+    // Head base is 0.84 x length; the aspect is preserved when the cap shrinks a head.
+    private static final double ARROW_HEAD_HALF_BASE_RATIO = 0.42;
+    void paint(final Graphics2D graphics, final CanvasState state, final GraphPaintState paintState,
+            final GraphViewport viewport, final java.awt.Dimension size, final GraphTheme theme,
+            final List<PlacedLabel> labels) {
+        paint(graphics, state, paintState, viewport, size, theme, labels, true, true);
+    }
+
+    void paint(final Graphics2D graphics, final CanvasState state, final GraphPaintState paintState,
+            final GraphViewport viewport, final java.awt.Dimension size, final GraphTheme theme,
+            final List<PlacedLabel> labels, final boolean showArrowheads, final boolean dimUnrelatedEnabled) {
+        Objects.requireNonNull(graphics, "graphics");
+        Objects.requireNonNull(paintState, "paintState");
+        final GraphViewport currentViewport = Objects.requireNonNull(viewport, "viewport");
+        final java.awt.Dimension componentSize = Objects.requireNonNull(size, "size");
+        final GraphTheme currentTheme = Objects.requireNonNull(theme, "theme");
+        if (componentSize.width < 0 || componentSize.height < 0) {
+            throw new IllegalArgumentException("Component dimensions must not be negative");
+        }
+        final Graphics2D copy = (Graphics2D) graphics.create();
+        try {
+            copy.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            copy.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_SPEED);
+            copy.setColor(currentTheme.background());
+            copy.fillRect(0, 0, componentSize.width, componentSize.height);
+            if (state == null || componentSize.width == 0 || componentSize.height == 0) {
+                return;
+            }
+            copy.transform(worldTransform(currentViewport, componentSize));
+            final boolean dimUnrelated = paintState.dimUnrelated() && dimUnrelatedEnabled;
+            final Set<ProjectedEndpointKey> visibleEndpoints =
+                ProjectedEndpointVisibility.visibleEndpoints(state.projection().nodes(),
+                    state.projection().enclosures());
+            paintHulls(copy, state, paintState, currentTheme, dimUnrelated);
+            paintEdges(copy, state, paintState, currentViewport, currentTheme, dimUnrelated,
+                showArrowheads, visibleEndpoints);
+            paintNodes(copy, state, paintState, currentTheme, dimUnrelated);
+            paintPins(copy, state, paintState, currentTheme, dimUnrelated, visibleEndpoints);
+            paintLabels(copy, labels, paintState, currentTheme, currentViewport, componentSize, dimUnrelated);
+            paintHighlights(copy, state, paintState, currentTheme);
+            paintConnectionPreview(copy, state, paintState, currentTheme, visibleEndpoints);
+        }
+        finally {
+            copy.dispose();
+        }
+    }
+
+    private static AffineTransform worldTransform(final GraphViewport viewport,
+            final java.awt.Dimension size) {
+        final AffineTransform transform = new AffineTransform();
+        transform.translate(size.getWidth() * 0.5, size.getHeight() * 0.5);
+        transform.scale(viewport.zoom(), viewport.zoom());
+        transform.translate(-viewport.centerX(), -viewport.centerY());
+        return transform;
+    }
+
+    private static void paintHulls(final Graphics2D graphics, final CanvasState state,
+            final GraphPaintState paintState, final GraphTheme theme, final boolean dimUnrelated) {
+        final GraphGeometry geometry = state.geometry();
+        for (final ProjectedEnclosure enclosure : state.projection().enclosures()) {
+            if (enclosure.boundaryTier() == BoundaryTier.SUPPRESSED) {
+                continue;
+            }
+            final HullGeometry hull = geometry.hulls().get(enclosure.hullKey());
+            if (hull == null) {
+                continue;
+            }
+            final Shape path = hull.smoothPath();
+            final boolean dim = dimUnrelated && !isEnclosureRelated(enclosure, paintState);
+            final AlphaComposite oldComposite = setOpacity(graphics, dim);
+            graphics.setColor(theme.hullFill(enclosure.mapReferenceId(), enclosure.boundaryTier()));
+            graphics.fill(path);
+            graphics.setColor(theme.hullStroke(enclosure.mapReferenceId(), enclosure.boundaryTier()));
+            graphics.setStroke(theme.hullStrokeStyle(enclosure.boundaryTier()));
+            graphics.draw(path);
+            graphics.setComposite(oldComposite);
+        }
+    }
+
+    private static void paintEdges(final Graphics2D graphics, final CanvasState state,
+            final GraphPaintState paintState, final GraphViewport viewport, final GraphTheme theme,
+            final boolean dimUnrelated, final boolean showArrowheads,
+            final Set<ProjectedEndpointKey> visibleEndpoints) {
+        for (final ProjectedEdge edge : state.projection().edges()) {
+            if (!visibleEndpoints.contains(edge.first()) || !visibleEndpoints.contains(edge.second())) {
+                continue;
+            }
+            final EdgePath path = state.edgePaths().path(edge.key()).orElse(null);
+            if (path == null) {
+                continue;
+            }
+            final boolean related = isRelated(edge.first(), paintState) || isRelated(edge.second(), paintState);
+            final AlphaComposite oldComposite = setOpacity(graphics, dimUnrelated && !related);
+            graphics.setColor(theme.edgeColor());
+            graphics.setStroke(theme.edgeStroke());
+            graphics.draw(polyline(path.samples()));
+            if (showArrowheads && edge.arrowAtFirst()) {
+                paintArrow(graphics, path.start(), path.arrowAnchor(true), theme.edgeColor(), viewport.zoom(),
+                    edge.arrowAtFirst(), edge.arrowAtSecond(), path.terminalSegmentLength(true));
+            }
+            if (showArrowheads && edge.arrowAtSecond()) {
+                paintArrow(graphics, path.end(), path.arrowAnchor(false), theme.edgeColor(), viewport.zoom(),
+                    edge.arrowAtFirst(), edge.arrowAtSecond(), path.terminalSegmentLength(false));
+            }
+            if (edge.hasMultiplicityCue()) {
+                paintMultiplicity(graphics, path.arcLengthMidpoint(), edge.contributorCount(), theme,
+                    viewport.zoom());
+            }
+            graphics.setComposite(oldComposite);
+        }
+    }
+
+    private static Shape polyline(final List<LayoutPoint> samples) {
+        final Path2D.Double path = new Path2D.Double();
+        path.moveTo(samples.get(0).x(), samples.get(0).y());
+        for (int index = 1; index < samples.size(); index++) {
+            path.lineTo(samples.get(index).x(), samples.get(index).y());
+        }
+        return path;
+    }
+
+    // Screen px.
+    static double arrowHeadLengthPx(final double zoom) {
+        return ARROW_HEAD_WORLD_LENGTH * zoom;
+    }
+
+    // World units in, world units out.
+    static double availableArrowHeadWorldLength(final double attachmentDistanceWorld,
+            final boolean arrowAtFirst, final boolean arrowAtSecond) {
+        return arrowAtFirst && arrowAtSecond ? attachmentDistanceWorld / 2.0 : attachmentDistanceWorld;
+    }
+
+    // Screen px.
+    static double effectiveArrowHeadLengthPx(final double zoom, final double availableWorldLength) {
+        return Math.min(arrowHeadLengthPx(zoom), availableWorldLength * zoom);
+    }
+
+    // Screen px.
+    static double arrowHeadHalfBasePx(final double lengthPx) {
+        return ARROW_HEAD_HALF_BASE_RATIO * lengthPx;
+    }
+
+    private static void paintArrow(final Graphics2D graphics, final LayoutPoint tip, final LayoutPoint from,
+            final Color color, final double zoom, final boolean arrowAtFirst, final boolean arrowAtSecond,
+            final double terminalSegmentLength) {
+        final double dx = tip.x() - from.x();
+        final double dy = tip.y() - from.y();
+        final double length = Math.sqrt(dx * dx + dy * dy);
+        if (!(length > 0.0) || !Double.isFinite(length)) {
+            return;
+        }
+        final double unitX = dx / length;
+        final double unitY = dy / length;
+        final double perpendicularX = -unitY;
+        final double perpendicularY = unitX;
+        final double availableWorldLength =
+            availableArrowHeadWorldLength(terminalSegmentLength, arrowAtFirst, arrowAtSecond);
+        final double arrowLengthPx = effectiveArrowHeadLengthPx(zoom, availableWorldLength);
+        final double arrowLength = arrowLengthPx / zoom;
+        final double arrowWidth = arrowHeadHalfBasePx(arrowLengthPx) / zoom;
+        final Path2D.Double arrow = new Path2D.Double();
+        arrow.moveTo(tip.x(), tip.y());
+        arrow.lineTo(tip.x() - unitX * arrowLength + perpendicularX * arrowWidth,
+            tip.y() - unitY * arrowLength + perpendicularY * arrowWidth);
+        arrow.lineTo(tip.x() - unitX * arrowLength - perpendicularX * arrowWidth,
+            tip.y() - unitY * arrowLength - perpendicularY * arrowWidth);
+        arrow.closePath();
+        graphics.setColor(color);
+        graphics.fill(arrow);
+    }
+
+    private static void paintMultiplicity(final Graphics2D graphics, final LayoutPoint midpoint,
+            final int count, final GraphTheme theme, final double zoom) {
+        final Font font = theme.denseLabelFont().deriveFont(Math.max(1.0f, 9.0f / (float) zoom));
+        graphics.setFont(font);
+        graphics.setColor(theme.labelColor());
+        graphics.drawString("x" + count, (float) (midpoint.x() + 4.0 / zoom),
+            (float) (midpoint.y() - 4.0 / zoom));
+    }
+
+    private static void paintNodes(final Graphics2D graphics, final CanvasState state,
+            final GraphPaintState paintState, final GraphTheme theme, final boolean dimUnrelated) {
+        final GraphGeometry geometry = state.geometry();
+        for (final ProjectedNode node : state.projection().nodes()) {
+            final NodeGeometry nodeGeometry = geometry.nodes().get(node.key());
+            if (nodeGeometry == null) {
+                continue;
+            }
+            final boolean dim = dimUnrelated
+                && !isRelated(ProjectedEndpointKey.ofNode(node.key()), paintState);
+            final AlphaComposite oldComposite = setOpacity(graphics, dim);
+            final double diameter = nodeGeometry.radius() * 2.0;
+            final Ellipse2D.Double circle = new Ellipse2D.Double(nodeGeometry.center().x() - nodeGeometry.radius(),
+                nodeGeometry.center().y() - nodeGeometry.radius(), diameter, diameter);
+            graphics.setColor(theme.nodeFill());
+            graphics.fill(circle);
+            graphics.setColor(theme.nodeStroke());
+            graphics.setStroke(theme.edgeStroke());
+            graphics.draw(circle);
+            graphics.setComposite(oldComposite);
+        }
+    }
+
+    private static void paintPins(final Graphics2D graphics, final CanvasState state,
+            final GraphPaintState paintState, final GraphTheme theme, final boolean dimUnrelated,
+            final Set<ProjectedEndpointKey> visibleEndpoints) {
+        for (final PinProjection pin : state.projection().pins()) {
+            if (!pin.active() || !pin.projectedNode().isPresent()) {
+                continue;
+            }
+            final ProjectedEndpointKey endpoint =
+                ProjectedEndpointKey.ofNode(pin.projectedNode().get());
+            if (!visibleEndpoints.contains(endpoint)
+                    || state.geometry().nodes().get(pin.projectedNode().get()) == null) {
+                continue;
+            }
+            final boolean dim = dimUnrelated && !isRelated(endpoint, paintState);
+            final AlphaComposite oldComposite = setOpacity(graphics, dim);
+            graphics.setColor(theme.pinColor());
+            graphics.setStroke(theme.edgeStroke());
+            final double radius = 4.0;
+            graphics.draw(new Line2D.Double(pin.x() - radius, pin.y(), pin.x() + radius, pin.y()));
+            graphics.draw(new Line2D.Double(pin.x(), pin.y() - radius, pin.x(), pin.y() + radius));
+            graphics.setComposite(oldComposite);
+        }
+    }
+
+    private static void paintLabels(final Graphics2D graphics, final List<PlacedLabel> labels,
+            final GraphPaintState paintState, final GraphTheme theme, final GraphViewport viewport,
+            final java.awt.Dimension size, final boolean dimUnrelated) {
+        final BasicStroke leaderStroke = leaderStroke(theme, viewport.zoom());
+        for (final PlacedLabel label : labels) {
+            if (label.mode() == PlacedLabel.Mode.HOVER_ONLY && !label.forced()) {
+                continue;
+            }
+            final boolean forced = label.forced() || isRelated(label.endpoint(), paintState);
+            final boolean dim = dimUnrelated && !forced;
+            final AlphaComposite oldComposite = setOpacity(graphics, dim);
+            final Font font = label.font().deriveFont(Math.max(1.0f,
+                label.font().getSize2D() / (float) viewport.zoom()));
+            graphics.setFont(font);
+            graphics.setColor(theme.labelColor());
+            final double anchorX = worldX(label.anchorX(), viewport, size);
+            final double anchorY = worldY(label.anchorY(), viewport, size);
+            if (label.leader().isPresent()) {
+                final LeaderLine line = label.leader().get();
+                graphics.setStroke(leaderStroke);
+                graphics.draw(new Line2D.Double(
+                    worldX(line.start().x(), viewport, size), worldY(line.start().y(), viewport, size),
+                    worldX(line.end().x(), viewport, size), worldY(line.end().y(), viewport, size)));
+            }
+            drawCentered(graphics, font, label.text(), anchorX, anchorY);
+            graphics.setComposite(oldComposite);
+        }
+    }
+
+    static BasicStroke leaderStroke(final GraphTheme theme, final double zoom) {
+        return new BasicStroke((float) (theme.edgeStroke().getLineWidth() / zoom),
+            BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND);
+    }
+
+    private static double worldX(final double screenX, final GraphViewport viewport,
+            final java.awt.Dimension size) {
+        return viewport.centerX() + (screenX - size.getWidth() * 0.5) / viewport.zoom();
+    }
+
+    private static double worldY(final double screenY, final GraphViewport viewport,
+            final java.awt.Dimension size) {
+        return viewport.centerY() + (screenY - size.getHeight() * 0.5) / viewport.zoom();
+    }
+
+    private static void drawCentered(final Graphics2D graphics, final Font font, final String text,
+            final double x, final double y) {
+        final Rectangle2D bounds = font.getStringBounds(text, ScreenLabelPlacement.SCREEN_FRC);
+        final java.awt.font.LineMetrics line = font.getLineMetrics(text, ScreenLabelPlacement.SCREEN_FRC);
+        final float baseline = (line.getAscent() - line.getDescent()) * 0.5f;
+        graphics.drawString(text, (float) (x - bounds.getWidth() * 0.5), (float) (y + baseline));
+    }
+
+    private static void paintHighlights(final Graphics2D graphics, final CanvasState state,
+            final GraphPaintState paintState, final GraphTheme theme) {
+        final GraphGeometry geometry = state.geometry();
+        for (final ProjectedNode node : state.projection().nodes()) {
+            final ProjectedEndpointKey endpoint = ProjectedEndpointKey.ofNode(node.key());
+            final NodeGeometry nodeGeometry = geometry.nodes().get(node.key());
+            if (nodeGeometry == null) {
+                continue;
+            }
+            paintEndpointOutline(graphics, nodeGeometry, endpoint, paintState, theme);
+        }
+        for (final ProjectedEnclosure enclosure : state.projection().enclosures()) {
+            if (enclosure.boundaryTier() == BoundaryTier.SUPPRESSED) {
+                continue;
+            }
+            final HullGeometry hull = geometry.hulls().get(enclosure.hullKey());
+            if (hull == null) {
+                continue;
+            }
+            for (final EnclosureKey endpointKey : enclosure.endpointKeys()) {
+                paintEndpointOutline(graphics, hull, ProjectedEndpointKey.ofEnclosure(endpointKey),
+                    paintState, theme);
+            }
+        }
+    }
+
+    private static void paintEndpointOutline(final Graphics2D graphics, final NodeGeometry geometry,
+            final ProjectedEndpointKey endpoint, final GraphPaintState paintState, final GraphTheme theme) {
+        final double radius = geometry.radius();
+        final Ellipse2D.Double outline = new Ellipse2D.Double(geometry.center().x() - radius,
+            geometry.center().y() - radius, radius * 2.0, radius * 2.0);
+        paintShapeOutlines(graphics, outline, endpoint, paintState, theme);
+    }
+
+    private static void paintEndpointOutline(final Graphics2D graphics, final HullGeometry geometry,
+            final ProjectedEndpointKey endpoint, final GraphPaintState paintState, final GraphTheme theme) {
+        paintShapeOutlines(graphics, geometry.smoothPath(), endpoint, paintState, theme);
+    }
+
+    private static void paintShapeOutlines(final Graphics2D graphics, final Shape shape,
+            final ProjectedEndpointKey endpoint, final GraphPaintState paintState, final GraphTheme theme) {
+        if (paintState.selection().isPresent() && paintState.selection().get().equals(endpoint)) {
+            graphics.setColor(theme.selectionColor());
+            graphics.setStroke(theme.selectionStroke());
+            graphics.draw(shape);
+        }
+        if (paintState.hover().isPresent() && paintState.hover().get().equals(endpoint)) {
+            graphics.setColor(theme.hoverColor());
+            graphics.setStroke(theme.hoverStroke());
+            graphics.draw(shape);
+        }
+        if (paintState.searchMatches().contains(endpoint)) {
+            graphics.setColor(theme.searchColor());
+            graphics.setStroke(theme.searchStroke());
+            graphics.draw(shape);
+        }
+    }
+
+    private static void paintConnectionPreview(final Graphics2D graphics, final CanvasState state,
+            final GraphPaintState paintState, final GraphTheme theme,
+            final Set<ProjectedEndpointKey> visibleEndpoints) {
+        final Optional<GraphPaintState.ConnectionPreview> preview = paintState.connectionPreview();
+        if (!preview.isPresent()) {
+            return;
+        }
+        final GraphPaintState.ConnectionPreview value = preview.get();
+        if (!visibleEndpoints.contains(value.source())
+                || previewEndpointAnchor(state, value.source()) == null) {
+            return;
+        }
+        graphics.setColor(theme.previewColor());
+        graphics.setStroke(theme.hoverStroke());
+        graphics.draw(new Line2D.Double(value.from().x(), value.from().y(), value.to().x(), value.to().y()));
+    }
+
+    private static LayoutPoint previewEndpointAnchor(final CanvasState state,
+            final ProjectedEndpointKey endpoint) {
+        if (endpoint.isNode()) {
+            final NodeGeometry node = state.geometry().nodes().get(endpoint.node().get());
+            return node == null ? null : node.center();
+        }
+        final EnclosureKey enclosureKey = endpoint.enclosure().get();
+        for (final ProjectedEnclosure enclosure : state.projection().enclosures()) {
+            if (!enclosure.endpointKeys().contains(enclosureKey)) {
+                continue;
+            }
+            final EnclosureHullKey hullKey = enclosure.hullKey();
+            final HullGeometry hull = state.geometry().hulls().get(hullKey);
+            if (hull == null) {
+                return null;
+            }
+            final LayoutPoint position = state.layout().positions().anchors().get(hullKey);
+            return position == null ? hull.labelAnchor() : position;
+        }
+        return null;
+    }
+
+    private static boolean isEnclosureRelated(final ProjectedEnclosure enclosure,
+            final GraphPaintState paintState) {
+        for (final EnclosureKey endpoint : enclosure.endpointKeys()) {
+            if (isRelated(ProjectedEndpointKey.ofEnclosure(endpoint), paintState)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isRelated(final ProjectedEndpointKey endpoint, final GraphPaintState paintState) {
+        return paintState.selection().isPresent() && paintState.selection().get().equals(endpoint)
+            || paintState.hover().isPresent() && paintState.hover().get().equals(endpoint)
+            || paintState.searchMatches().contains(endpoint);
+    }
+
+    private static AlphaComposite setOpacity(final Graphics2D graphics, final boolean dim) {
+        final AlphaComposite old = (AlphaComposite) graphics.getComposite();
+        if (dim) {
+            graphics.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.28f));
+        }
+        return old;
+    }
+}

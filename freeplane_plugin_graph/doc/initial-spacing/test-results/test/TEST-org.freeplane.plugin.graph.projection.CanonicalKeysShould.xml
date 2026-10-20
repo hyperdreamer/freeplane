@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.projection.CanonicalKeysShould" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-10-20T17:25:37.414Z" hostname="Arch-MSSD0" time="0.016">
+  <properties/>
+  <testcase name="orderPairsCanonicallyAndSymmetrically" classname="org.freeplane.plugin.graph.projection.CanonicalKeysShould" time="0.003"/>
+  <testcase name="buildHullKeysIndependentOfEndpointOrder" classname="org.freeplane.plugin.graph.projection.CanonicalKeysShould" time="0.001"/>
+  <testcase name="encodeEndpointOfEnclosureWithTheEnclosurePrefix" classname="org.freeplane.plugin.graph.projection.CanonicalKeysShould" time="0.0"/>
+  <testcase name="distinguishTwoPassedOverNodesOnOneEdge" classname="org.freeplane.plugin.graph.projection.CanonicalKeysShould" time="0.001"/>
+  <testcase name="prefixNodeAndAnchorFields" classname="org.freeplane.plugin.graph.projection.CanonicalKeysShould" time="0.0"/>
+  <testcase name="encodeEdgesAndEdgePairsSymmetrically" classname="org.freeplane.plugin.graph.projection.CanonicalKeysShould" time="0.0"/>
+  <testcase name="orderNodePairsCanonicallyAndSymmetrically" classname="org.freeplane.plugin.graph.projection.CanonicalKeysShould" time="0.0"/>
+  <testcase name="keepTildeContainingIdsInjectiveWithoutEscapingTilde" classname="org.freeplane.plugin.graph.projection.CanonicalKeysShould" time="0.0"/>
+  <testcase name="recoverTheMapFromADisplacementField" classname="org.freeplane.plugin.graph.projection.CanonicalKeysShould" time="0.002"/>
+  <testcase name="encodePersistedAndTransientEndpointsDistinctly" classname="org.freeplane.plugin.graph.projection.CanonicalKeysShould" time="0.0"/>
+  <testcase name="escapeReservedCharactersInFixedOrder" classname="org.freeplane.plugin.graph.projection.CanonicalKeysShould" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.group.GraphGroupPersistenceShould" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-10-20T16:57:45.442Z" hostname="Arch-MSSD0" time="0.038">
+  <properties/>
+  <testcase name="writesKnownMarkerForLeafWithoutCreatingAnIdentityOrStamp" classname="org.freeplane.plugin.graph.group.GraphGroupPersistenceShould" time="0.003"/>
+  <testcase name="removesOnlyTheKnownMarkerAndRetainsExistingFixtureContent" classname="org.freeplane.plugin.graph.group.GraphGroupPersistenceShould" time="0.008"/>
+  <testcase name="preservesCompleteUnsupportedMarkerAndUnrelatedContentWithPluginEnabled" classname="org.freeplane.plugin.graph.group.GraphGroupPersistenceShould" time="0.007"/>
+  <testcase name="persistsMarkerAcrossAnIndependentXmlCopy" classname="org.freeplane.plugin.graph.group.GraphGroupPersistenceShould" time="0.002"/>
+  <testcase name="loadSaveAndReloadKnownMarkerFixtureWithoutChangingUnrelatedContent" classname="org.freeplane.plugin.graph.group.GraphGroupPersistenceShould" time="0.008"/>
+  <testcase name="preservesCompleteUnsupportedMarkerAndUnrelatedContentThroughDisabledPluginSaveThenEnabledReload" classname="org.freeplane.plugin.graph.group.GraphGroupPersistenceShould" time="0.008"/>
+  <testcase name="unregistersBothVersionDispatchHandlersAndWriter" classname="org.freeplane.plugin.graph.group.GraphGroupPersistenceShould" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

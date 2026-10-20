@@ -1,0 +1,7 @@
+# This directory stores raw captured evidence byte-for-byte: probe receipts are tab-separated
+# (trailing empty fields), transcripts keep the terminal echo, and JUnit XML keeps console output.
+# Whitespace hygiene checks apply to source, not to captured tool output.
+*.log  -whitespace
+*.xml  -whitespace
+*.json -whitespace
+*.md   -whitespace

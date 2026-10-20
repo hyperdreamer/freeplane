@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould" tests="11" skipped="0" failures="2" errors="0" timestamp="2026-10-20T16:57:27.127Z" hostname="Arch-MSSD0" time="0.238">
+  <properties/>
+  <testcase name="reportNodeLabelMapNameBoundsSelectionPinAndOutgoingTargetCount" classname="org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould" time="0.056"/>
+  <testcase name="panNormallyAndClearStaleVisualSelectionForUnmodifiedArrows" classname="org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould" time="0.019"/>
+  <testcase name="makeRetainedVirtualChildUnavailableAfterCurrentProjectionRemovesEndpoint" classname="org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould" time="0.078"/>
+  <testcase name="tolerateStateReplacementBetweenAccessibleOrderAndChildLookup" classname="org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould" time="0.007"/>
+  <testcase name="receiveTabThroughSwingDispatchAndRestoreFocusTraversalConfiguration" classname="org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould" time="0.015">
+    <failure message="java.awt.HeadlessException" type="java.awt.HeadlessException">java.awt.HeadlessException
+	at java.desktop/java.awt.GraphicsEnvironment.checkHeadless(GraphicsEnvironment.java:164)
+	at java.desktop/java.awt.Window.&lt;init&gt;(Window.java:553)
+	at java.desktop/java.awt.Frame.&lt;init&gt;(Frame.java:428)
+	at java.desktop/java.awt.Frame.&lt;init&gt;(Frame.java:393)
+	at java.desktop/javax.swing.JFrame.&lt;init&gt;(JFrame.java:180)
+	at org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould$3.run(AccessibleGraphCanvasShould.java:495)
+	at java.desktop/java.awt.event.InvocationEvent.dispatch(InvocationEvent.java:308)
+	at java.desktop/java.awt.EventQueue.dispatchEventImpl(EventQueue.java:773)
+	at java.desktop/java.awt.EventQueue$4.run(EventQueue.java:720)
+	at java.desktop/java.awt.EventQueue$4.run(EventQueue.java:714)
+	at java.base/java.security.AccessController.doPrivileged(AccessController.java:400)
+	at java.base/java.security.ProtectionDomain$JavaSecurityAccessImpl.doIntersectionPrivilege(ProtectionDomain.java:87)
+	at java.desktop/java.awt.EventQueue.dispatchEvent(EventQueue.java:742)
+	at java.desktop/java.awt.EventDispatchThread.pumpOneEventForFilters(EventDispatchThread.java:203)
+	at java.desktop/java.awt.EventDispatchThread.pumpEventsForFilter(EventDispatchThread.java:124)
+	at java.desktop/java.awt.EventDispatchThread.pumpEventsForHierarchy(EventDispatchThread.java:113)
+	at java.desktop/java.awt.EventDispatchThread.pumpEvents(EventDispatchThread.java:109)
+	at java.desktop/java.awt.EventDispatchThread.pumpEvents(EventDispatchThread.java:101)
+	at java.desktop/java.awt.EventDispatchThread.run(EventDispatchThread.java:90)
+</failure>
+  </testcase>
+  <testcase name="ignoreEnterForSelectionsAbsentFromCurrentVisibleOrderAfterStateReplacement" classname="org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould" time="0.008">
+    <failure message="java.awt.HeadlessException" type="java.awt.HeadlessException">java.awt.HeadlessException
+	at java.desktop/java.awt.GraphicsEnvironment.checkHeadless(GraphicsEnvironment.java:164)
+	at java.desktop/java.awt.Window.&lt;init&gt;(Window.java:553)
+	at java.desktop/java.awt.Frame.&lt;init&gt;(Frame.java:428)
+	at java.desktop/java.awt.Frame.&lt;init&gt;(Frame.java:393)
+	at java.desktop/javax.swing.JFrame.&lt;init&gt;(JFrame.java:180)
+	at org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould$3.run(AccessibleGraphCanvasShould.java:495)
+	at java.desktop/java.awt.event.InvocationEvent.dispatch(InvocationEvent.java:308)
+	at java.desktop/java.awt.EventQueue.dispatchEventImpl(EventQueue.java:773)
+	at java.desktop/java.awt.EventQueue$4.run(EventQueue.java:720)
+	at java.desktop/java.awt.EventQueue$4.run(EventQueue.java:714)
+	at java.base/java.security.AccessController.doPrivileged(AccessController.java:400)
+	at java.base/java.security.ProtectionDomain$JavaSecurityAccessImpl.doIntersectionPrivilege(ProtectionDomain.java:87)
+	at java.desktop/java.awt.EventQueue.dispatchEvent(EventQueue.java:742)
+	at java.desktop/java.awt.EventDispatchThread.pumpOneEventForFilters(EventDispatchThread.java:203)
+	at java.desktop/java.awt.EventDispatchThread.pumpEventsForFilter(EventDispatchThread.java:124)
+	at java.desktop/java.awt.EventDispatchThread.pumpEventsForHierarchy(EventDispatchThread.java:113)
+	at java.desktop/java.awt.EventDispatchThread.pumpEvents(EventDispatchThread.java:109)
+	at java.desktop/java.awt.EventDispatchThread.pumpEvents(EventDispatchThread.java:101)
+	at java.desktop/java.awt.EventDispatchThread.run(EventDispatchThread.java:90)
+</failure>
+  </testcase>
+  <testcase name="traverseSelectionAndPreservePanAndEscapeKeyboardSemantics" classname="org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould" time="0.018"/>
+  <testcase name="resolveAccessibleParentAndIndexFromTheLiveSwingHierarchy" classname="org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould" time="0.008"/>
+  <testcase name="orderVisibleGeometryAndChooseStrictNearestTieByEndpointKey" classname="org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould" time="0.005"/>
+  <testcase name="exposeCurrentVirtualChildrenWithSafeTextBoundsAndActions" classname="org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould" time="0.012"/>
+  <testcase name="keepRetainedVirtualChildUnavailableWhenCurrentGeometryDisappears" classname="org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould" time="0.01"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

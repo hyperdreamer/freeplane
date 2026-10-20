@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.layout.graphstream.InitialSpacingLifecycleShould" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-10-20T17:17:19.362Z" hostname="Arch-MSSD0" time="0.636">
+  <properties/>
+  <testcase name="healthyRestartPreservesTheTrajectoryInsteadOfReseeding" classname="org.freeplane.plugin.graph.layout.graphstream.InitialSpacingLifecycleShould" time="0.115"/>
+  <testcase name="explicitRawResetRestoresFreshSeedsAndKeepsPinsExactly" classname="org.freeplane.plugin.graph.layout.graphstream.InitialSpacingLifecycleShould" time="0.004"/>
+  <testcase name="initialiseANewWorkspaceAsAFreshEngine" classname="org.freeplane.plugin.graph.layout.graphstream.InitialSpacingLifecycleShould" time="0.001"/>
+  <testcase name="retainExistingParticlesOnReparentingAndSeedOnlyAnAddedParticle" classname="org.freeplane.plugin.graph.layout.graphstream.InitialSpacingLifecycleShould" time="0.042"/>
+  <testcase name="handleEmptyProjectionEmptyEnclosureSingletonTwoNodesAndFiniteExtremes" classname="org.freeplane.plugin.graph.layout.graphstream.InitialSpacingLifecycleShould" time="0.04"/>
+  <testcase name="healthyRestartPreservesTheTrajectoryInsteadOfReseeding" classname="org.freeplane.plugin.graph.layout.graphstream.InitialSpacingLifecycleShould" time="0.035"/>
+  <testcase name="explicitRawResetRestoresFreshSeedsAndKeepsPinsExactly" classname="org.freeplane.plugin.graph.layout.graphstream.InitialSpacingLifecycleShould" time="0.003"/>
+  <testcase name="initialiseANewWorkspaceAsAFreshEngine" classname="org.freeplane.plugin.graph.layout.graphstream.InitialSpacingLifecycleShould" time="0.001"/>
+  <testcase name="retainExistingParticlesOnReparentingAndSeedOnlyAnAddedParticle" classname="org.freeplane.plugin.graph.layout.graphstream.InitialSpacingLifecycleShould" time="0.056"/>
+  <testcase name="handleEmptyProjectionEmptyEnclosureSingletonTwoNodesAndFiniteExtremes" classname="org.freeplane.plugin.graph.layout.graphstream.InitialSpacingLifecycleShould" time="0.03"/>
+  <system-out><![CDATA[REST	n:m:00000000-0000-0000-0000-000000000001|p:n0	n:m:00000000-0000-0000-0000-000000000001|p:n1	false	8.0000000000000000	8.0000000000000000	22.000000000000000
+REST	n:m:00000000-0000-0000-0000-000000000001|p:n2	n:m:00000000-0000-0000-0000-000000000001|p:n3	false	8.0000000000000000	8.0000000000000000	22.000000000000000
+REST	n:m:00000000-0000-0000-0000-000000000001|p:n0	n:m:00000000-0000-0000-0000-000000000001|p:n1	false	8.0000000000000000	8.0000000000000000	22.000000000000000
+REST	n:m:00000000-0000-0000-0000-000000000001|p:n2	n:m:00000000-0000-0000-0000-000000000001|p:n3	false	8.0000000000000000	8.0000000000000000	22.000000000000000
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

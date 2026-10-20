@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.integration.GraphWorkspaceModelAcceptanceShould" tests="19" skipped="0" failures="0" errors="0" timestamp="2026-10-20T16:57:54.247Z" hostname="Arch-MSSD0" time="0.213">
+  <properties/>
+  <testcase name="scenario26_reopensMovedWorkspaceWithItsRelativeMapsTree" classname="org.freeplane.plugin.graph.integration.GraphWorkspaceModelAcceptanceShould" time="0.008"/>
+  <testcase name="scenario23_cloneMarkerCompositionCollapsesEveryCloneAndUnmarkingRestoresThem" classname="org.freeplane.plugin.graph.integration.GraphWorkspaceModelAcceptanceShould" time="0.014"/>
+  <testcase name="scenario05_consolidatesDuplicateConnectorsWithoutChangingTheirRecords" classname="org.freeplane.plugin.graph.integration.GraphWorkspaceModelAcceptanceShould" time="0.001"/>
+  <testcase name="scenario03_preservesRequiredEnclosuresAndInteriorFixtureLabels" classname="org.freeplane.plugin.graph.integration.GraphWorkspaceModelAcceptanceShould" time="0.008"/>
+  <testcase name="scenario04_nestedMarkersAtomizeTheOuterAndPromoteInnerWhenOuterIsPlain" classname="org.freeplane.plugin.graph.integration.GraphWorkspaceModelAcceptanceShould" time="0.002"/>
+  <testcase name="scenario29_rendersNestedInactiveMarkerVisibleAndMuted" classname="org.freeplane.plugin.graph.integration.GraphWorkspaceModelAcceptanceShould" time="0.021"/>
+  <testcase name="scenario19_secondActiveMapRestylesWithoutLoadingOrMissingFlicker" classname="org.freeplane.plugin.graph.integration.GraphWorkspaceModelAcceptanceShould" time="0.005"/>
+  <testcase name="scenario27_stockReaderPreservesMarkerUntilTheGraphReaderRestoresIt" classname="org.freeplane.plugin.graph.integration.GraphWorkspaceModelAcceptanceShould" time="0.008"/>
+  <testcase name="scenario28_keepsOneCoralMarkerAppearanceAcrossAllFourCloudShapes" classname="org.freeplane.plugin.graph.integration.GraphWorkspaceModelAcceptanceShould" time="0.062"/>
+  <testcase name="scenario30_mathNotebookAncestorBoundariesProjectGroupsHullsAndGeometry" classname="org.freeplane.plugin.graph.integration.GraphWorkspaceModelAcceptanceShould" time="0.007"/>
+  <testcase name="scenario06_unionsOppositeDirectedContributorsIntoTwoArrowheads" classname="org.freeplane.plugin.graph.integration.GraphWorkspaceModelAcceptanceShould" time="0.003"/>
+  <testcase name="scenario02_projectsGroupMarkedNodesAndKeepsPlainSubtreesHidden" classname="org.freeplane.plugin.graph.integration.GraphWorkspaceModelAcceptanceShould" time="0.012"/>
+  <testcase name="scenario10_removedMapMakesRelationshipDormantThenReactivatesItExactly" classname="org.freeplane.plugin.graph.integration.GraphWorkspaceModelAcceptanceShould" time="0.004"/>
+  <testcase name="scenario01_reopenRestoresMapsViewportPinsColorsAndSettings" classname="org.freeplane.plugin.graph.integration.GraphWorkspaceModelAcceptanceShould" time="0.011"/>
+  <testcase name="scenario07_omitsConnectorsResolvedInsideAnAtomicGroupNode" classname="org.freeplane.plugin.graph.integration.GraphWorkspaceModelAcceptanceShould" time="0.002"/>
+  <testcase name="scenario12_ungroupingLeavesRelationshipsUnresolvedUntilRemarked" classname="org.freeplane.plugin.graph.integration.GraphWorkspaceModelAcceptanceShould" time="0.003"/>
+  <testcase name="scenario18_suppressesTheOnlyMapRootAndHostsFirstLevelGroupNodes" classname="org.freeplane.plugin.graph.integration.GraphWorkspaceModelAcceptanceShould" time="0.002"/>
+  <testcase name="scenario15_consumesTheRecordedStrictPerformancePassWithoutRerunningTheDiagnostic" classname="org.freeplane.plugin.graph.integration.GraphWorkspaceModelAcceptanceShould" time="0.026"/>
+  <testcase name="scenario13_reopenedPinRemainsFixedWhileItsNeighborSettles" classname="org.freeplane.plugin.graph.integration.GraphWorkspaceModelAcceptanceShould" time="0.011"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

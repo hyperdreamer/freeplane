@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.geometry.EdgeRouterShould" tests="23" skipped="0" failures="0" errors="0" timestamp="2026-10-20T16:57:38.452Z" hostname="Arch-MSSD0" time="4.456">
+  <properties/>
+  <testcase name="rejectsAProperCrossingInsideTheFanRegion" classname="org.freeplane.plugin.graph.geometry.EdgeRouterShould" time="0.007"/>
+  <testcase name="isDeterministicAcrossRunsAndPermutedEdgeOrder" classname="org.freeplane.plugin.graph.geometry.EdgeRouterShould" time="0.003"/>
+  <testcase name="rejectNullInputsAndEmptyEdgeSets" classname="org.freeplane.plugin.graph.geometry.EdgeRouterShould" time="0.001"/>
+  <testcase name="rejectsAnAlternatingBendDogleg" classname="org.freeplane.plugin.graph.geometry.EdgeRouterShould" time="0.008"/>
+  <testcase name="keepClearOfAParallelPathInTheNeighbouringCell" classname="org.freeplane.plugin.graph.geometry.EdgeRouterShould" time="0.002"/>
+  <testcase name="rejectsTheDeadDoglegRungAndFallsBack" classname="org.freeplane.plugin.graph.geometry.EdgeRouterShould" time="0.005"/>
+  <testcase name="omitAnEdgeWhoseGeometryIsNotResolvableAndDoNotUseItAsAnObstacle" classname="org.freeplane.plugin.graph.geometry.EdgeRouterShould" time="0.001"/>
+  <testcase name="routesTheFirstEdgeAroundALaterChordsCrossing" classname="org.freeplane.plugin.graph.geometry.EdgeRouterShould" time="0.001"/>
+  <testcase name="acceptsTheSameSideDoglegWhenStraightAndBowsAreBlocked" classname="org.freeplane.plugin.graph.geometry.EdgeRouterShould" time="0.003"/>
+  <testcase name="exposeEdgePathsInCanonicalEdgeOrder" classname="org.freeplane.plugin.graph.geometry.EdgeRouterShould" time="0.0"/>
+  <testcase name="exemptAPathWhoseEndpointTheHullContains" classname="org.freeplane.plugin.graph.geometry.EdgeRouterShould" time="0.001"/>
+  <testcase name="fallsBackWhenTheObstacleBudgetExhausts" classname="org.freeplane.plugin.graph.geometry.EdgeRouterShould" time="0.199"/>
+  <testcase name="findEveryCrossingWhenAllChordsMeetAtTheSameCellCorner" classname="org.freeplane.plugin.graph.geometry.EdgeRouterShould" time="0.003"/>
+  <testcase name="boundsTheRouterCountedWorkOnADenseFrame" classname="org.freeplane.plugin.graph.geometry.EdgeRouterShould" time="1.009"/>
+  <testcase name="attachBowsAndDoglegsAtTheRimFacingTheRung" classname="org.freeplane.plugin.graph.geometry.EdgeRouterShould" time="0.008"/>
+  <testcase name="countAPathCrossingAHullWhenNeitherEndpointIsContained" classname="org.freeplane.plugin.graph.geometry.EdgeRouterShould" time="0.002"/>
+  <testcase name="reconcilesEveryRouterCapAtEachStopPoint" classname="org.freeplane.plugin.graph.geometry.EdgeRouterShould" time="0.008"/>
+  <testcase name="truncatesTheResidualPassAndPublishesALowerBound" classname="org.freeplane.plugin.graph.geometry.EdgeRouterShould" time="3.178"/>
+  <testcase name="exposeStraightFallbackForAStraightOnlyScaffold" classname="org.freeplane.plugin.graph.geometry.EdgeRouterShould" time="0.006"/>
+  <testcase name="detectAProperCrossingWithTheExponentNormalisedPredicate" classname="org.freeplane.plugin.graph.geometry.EdgeRouterShould" time="0.0"/>
+  <testcase name="waivesTheDistanceRequirementForATightFan" classname="org.freeplane.plugin.graph.geometry.EdgeRouterShould" time="0.002"/>
+  <testcase name="keepEverySampleWithinTheSagittaTolerance" classname="org.freeplane.plugin.graph.geometry.EdgeRouterShould" time="0.001"/>
+  <testcase name="waivesTheDistanceRequirementInsideTheFanRegion" classname="org.freeplane.plugin.graph.geometry.EdgeRouterShould" time="0.006"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

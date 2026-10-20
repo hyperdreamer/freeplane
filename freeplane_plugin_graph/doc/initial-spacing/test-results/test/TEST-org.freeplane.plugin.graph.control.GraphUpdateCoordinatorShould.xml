@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.control.GraphUpdateCoordinatorShould" tests="28" skipped="0" failures="0" errors="0" timestamp="2026-10-20T16:57:34.609Z" hostname="Arch-MSSD0" time="1.311">
+  <properties/>
+  <testcase name="rebuildsAfterADeferredLeaseAttachmentWithoutSourceListeners" classname="org.freeplane.plugin.graph.control.GraphUpdateCoordinatorShould" time="0.45"/>
+  <testcase name="closesSourceRegistrationsWhenLeaseAttachmentRegistrationFails" classname="org.freeplane.plugin.graph.control.GraphUpdateCoordinatorShould" time="0.002"/>
+  <testcase name="loadsAnEmptyInitialFrameWithAZeroResidual" classname="org.freeplane.plugin.graph.control.GraphUpdateCoordinatorShould" time="0.003"/>
+  <testcase name="suppressesQueuedProjectionObserversAfterNewerGenerationIsAccepted" classname="org.freeplane.plugin.graph.control.GraphUpdateCoordinatorShould" time="0.007"/>
+  <testcase name="publishesEmptyForAnAcceptedEmptyProjection" classname="org.freeplane.plugin.graph.control.GraphUpdateCoordinatorShould" time="0.005"/>
+  <testcase name="closesOwnedResourcesWhenSourceRegistrationFailsDuringConstruction" classname="org.freeplane.plugin.graph.control.GraphUpdateCoordinatorShould" time="0.144"/>
+  <testcase name="closesFromTheEdtWithoutWaitingForABlockedAcceptedBatch" classname="org.freeplane.plugin.graph.control.GraphUpdateCoordinatorShould" time="0.01"/>
+  <testcase name="stopsRemainingProjectionObserversWhenANewerGenerationIsAcceptedDuringDelivery" classname="org.freeplane.plugin.graph.control.GraphUpdateCoordinatorShould" time="0.004"/>
+  <testcase name="queuesMapStateRebuildForAdapterEvent" classname="org.freeplane.plugin.graph.control.GraphUpdateCoordinatorShould" time="0.006"/>
+  <testcase name="retainsTheCurrentProjectionGenerationWhenRebuildFails" classname="org.freeplane.plugin.graph.control.GraphUpdateCoordinatorShould" time="0.008"/>
+  <testcase name="closesSuppliedResourcesWhenAConstructionSourceIsMissing" classname="org.freeplane.plugin.graph.control.GraphUpdateCoordinatorShould" time="0.001"/>
+  <testcase name="retainsFailedStateAndSuppressesDelayedCanvasFromAnOlderAcceptedGeneration" classname="org.freeplane.plugin.graph.control.GraphUpdateCoordinatorShould" time="0.005"/>
+  <testcase name="stopsRemainingCanvasObserversWhenANewerGenerationIsAcceptedDuringDelivery" classname="org.freeplane.plugin.graph.control.GraphUpdateCoordinatorShould" time="0.006"/>
+  <testcase name="queuedChangeIsVisibleBeforeDebounceAcceptance" classname="org.freeplane.plugin.graph.control.GraphUpdateCoordinatorShould" time="0.008"/>
+  <testcase name="replacementProjectionRetainsMarkedKeysPinsAndTiersAndDropsTheRemovedHull" classname="org.freeplane.plugin.graph.control.GraphUpdateCoordinatorShould" time="0.037"/>
+  <testcase name="closesOwnedResourcesWhenPublicConstructionSourceIsMissing" classname="org.freeplane.plugin.graph.control.GraphUpdateCoordinatorShould" time="0.001"/>
+  <testcase name="closesCoordinatorOwnedMapsWhenPublicConstructionFails" classname="org.freeplane.plugin.graph.control.GraphUpdateCoordinatorShould" time="0.001"/>
+  <testcase name="ordersListenersAndSuppressesCallbacksAfterClose" classname="org.freeplane.plugin.graph.control.GraphUpdateCoordinatorShould" time="0.003"/>
+  <testcase name="queuesRebuildForIdentityStoreEvent" classname="org.freeplane.plugin.graph.control.GraphUpdateCoordinatorShould" time="0.002"/>
+  <testcase name="continuesOrderedObservationAfterTheFirstObserverThrows" classname="org.freeplane.plugin.graph.control.GraphUpdateCoordinatorShould" time="0.005"/>
+  <testcase name="rebuildsAfterADeferredLeaseAttachment" classname="org.freeplane.plugin.graph.control.GraphUpdateCoordinatorShould" time="0.46"/>
+  <testcase name="resetsAnIdleRunWithANewCurrentProjectionSubmission" classname="org.freeplane.plugin.graph.control.GraphUpdateCoordinatorShould" time="0.011"/>
+  <testcase name="ignoresLowerAcceptedGenerationsForProjectionAndCanvasState" classname="org.freeplane.plugin.graph.control.GraphUpdateCoordinatorShould" time="0.021"/>
+  <testcase name="doesNotBlockTheCoordinatorEdtOnPhysicalReset" classname="org.freeplane.plugin.graph.control.GraphUpdateCoordinatorShould" time="0.07"/>
+  <testcase name="publishesLoadingThenProjectionAndCanvasInOrder" classname="org.freeplane.plugin.graph.control.GraphUpdateCoordinatorShould" time="0.006"/>
+  <testcase name="queuesRebuildForDocumentStoreEvent" classname="org.freeplane.plugin.graph.control.GraphUpdateCoordinatorShould" time="0.007"/>
+  <testcase name="releasesCoordinatorOwnedSourceRegistrationsOnClose" classname="org.freeplane.plugin.graph.control.GraphUpdateCoordinatorShould" time="0.004"/>
+  <testcase name="recoversFailedLayoutThroughTheCoordinatorRestartCommand" classname="org.freeplane.plugin.graph.control.GraphUpdateCoordinatorShould" time="0.024"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

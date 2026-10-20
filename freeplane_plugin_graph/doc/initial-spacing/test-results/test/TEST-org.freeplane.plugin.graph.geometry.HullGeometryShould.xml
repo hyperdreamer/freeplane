@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.geometry.HullGeometryShould" tests="43" skipped="0" failures="0" errors="0" timestamp="2026-10-20T16:57:42.958Z" hostname="Arch-MSSD0" time="0.182">
+  <properties/>
+  <testcase name="keepsSmoothTangentsWithinFourWhenOneUlpExceedsFour" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.001"/>
+  <testcase name="acceptsMixedMagnitudeFiniteTriangleWithoutLosingOrientation" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.0"/>
+  <testcase name="rejectsDuplicateProjectedNodeAndEnclosureKeys" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.003"/>
+  <testcase name="keepsBoundaryTowardFiniteForOppositeSignNearLimitCoordinates" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.001"/>
+  <testcase name="rejectsFiveUnitPublishedTangentAtBinadeTransition" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.0"/>
+  <testcase name="preservesSubnormalSmoothingTangentAtExtremeCoordinates" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.011"/>
+  <testcase name="emptyEnclosuresSizeTheirOctagonFromTheLabel" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.004"/>
+  <testcase name="resolvesNearestBoundaryNearTiesToTheEarlierCanonicalEdge" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.001"/>
+  <testcase name="acceptsFiniteTriangleJustAboveAbsoluteOrientationThreshold" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.01"/>
+  <testcase name="computesChildHullsBeforeParentsButPublishesProjectionOrder" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.02"/>
+  <testcase name="preservesDiagonalSmoothingTangentAfterFinalRounding" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.001"/>
+  <testcase name="preservesDominantBoundaryCorrectionAcrossExtremeExponents" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.001"/>
+  <testcase name="containsVerticesOfANearLimitConvexHull" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.002"/>
+  <testcase name="rejectsAScaledSelfIntersectingStarPolygon" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.001"/>
+  <testcase name="roundsNearbyPublicExpandedHullCentroidWithFullRemainder" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.022"/>
+  <testcase name="preservesFiniteMinorBoundaryResidual" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.001"/>
+  <testcase name="scalesNodeExtentFromPublishedProminenceWithoutScalingHullClearance" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.006"/>
+  <testcase name="roundsFiniteBoundaryRayToNearestEvenCoordinate" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.0"/>
+  <testcase name="computesRepresentableCentroidForLargeOffsetHull" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.001"/>
+  <testcase name="preservesFourUnitTangentWithRepresentableMinorComponent" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.004"/>
+  <testcase name="limitsEverySmoothPathTangentToFourWorldUnits" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.001"/>
+  <testcase name="attachesToTheScaledNodeBoundaryAndNearestExactHullBoundary" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.007"/>
+  <testcase name="findsNearestBoundaryForFarFiniteTargets" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.001"/>
+  <testcase name="rejectsASelfIntersectingStarPolygon" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.001"/>
+  <testcase name="doesNotTreatBoundsOnlyEndpointAsSegmentIntersection" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.004"/>
+  <testcase name="preservesSubnormalDominantBoundaryCorrectionAfterCancellation" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.001"/>
+  <testcase name="keepsHugeFiniteCircleMathOverflowSafe" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.0"/>
+  <testcase name="handlesFiniteAdjacentSubnormalRayWithoutIntermediateOverflow" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.0"/>
+  <testcase name="createsASmoothDeterministicClosedPathWithoutCuttingDirectChildren" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.013"/>
+  <testcase name="preservesDominantAxisLengthResidualAfterBoundaryCancellation" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.0"/>
+  <testcase name="mapsEveryAddressableAncestorInAUnaryHullToOneVisibleBoundary" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.006"/>
+  <testcase name="containsACappedProminenceNodeInItsDirectHull" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.007"/>
+  <testcase name="preservesSubtractionResidualAfterBoundaryCenterCancellation" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.0"/>
+  <testcase name="preservesRepresentableMinorBoundaryDisplacementOnANearLimitRay" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.0"/>
+  <testcase name="anchorsAnEmptyEnclosureAtItsSuppliedLayoutAnchor" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.004"/>
+  <testcase name="preservesDominantTieWhenMinorDirectionUnderflowsBeforeScaling" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.001"/>
+  <testcase name="roundsPublicExpandedHullCentroidToCorrectAdjacentValue" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.016"/>
+  <testcase name="canonicalizesEquivalentConvexPolygonsAndPublishesDeepImmutableValues" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.007"/>
+  <testcase name="preservesNormalBoundaryCoordinateWhileRetainingSubnormalCorrection" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.0"/>
+  <testcase name="findsRepresentableInteriorProjectionAfterLargeProductCancellation" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.001"/>
+  <testcase name="rejectsAdjacentCollinearBacktrackingBeforeCanonicalization" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.001"/>
+  <testcase name="containsEveryDirectNodeAndChildHullWithFixedClearance" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.009"/>
+  <testcase name="rejectsNonFinitePointsInvalidRadiiAndMutableOrMismatchedPositionState" classname="org.freeplane.plugin.graph.geometry.HullGeometryShould" time="0.008"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
